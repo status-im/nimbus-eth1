@@ -121,16 +121,6 @@ proc activateWrTrigger*(
   else:
     err(RdbBeTypeUnsupported)
 
-
-proc getRocksDbFamily*(
-    gdb: GuestDbRef;
-    instance = 0;
-      ): Result[ColFamilyReadWrite,void] {.deprecated.} =
-  ## Database pigiback feature
-  if not gdb.isNil and gdb.beKind == BackendRocksDB:
-    return ok RdbGuestDbRef(gdb).guestDb
-  err()
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

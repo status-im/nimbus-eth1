@@ -75,14 +75,6 @@ proc init*(
   ok()
 
 
-proc init*(
-    rdb: var RdbInst;
-    store: ColFamilyReadWrite;
-      ) =
-  ## Piggyback on other database
-  rdb.store[KvtGeneric] = store # that's it
-
-
 proc piggyBackInit*(
     rdb: var RdbInst;
     adb: AristoDbRef;

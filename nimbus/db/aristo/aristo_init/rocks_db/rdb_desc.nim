@@ -46,19 +46,6 @@ type
     opts*: DbOptions                   ## Just a copy here for re-opening
     trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
 
-  # Alien interface
-  RdbGuest* = enum
-    ## The guest CF was worth a try, but there are better solutions and this
-    ## item will be removed in future.
-    GuestFamily0 = "Guest0"            ## Guest family (e.g. for Kvt)
-    GuestFamily1 = "Guest1"            ## Ditto
-    GuestFamily2 = "Guest2"            ## Ditto
-
-  RdbGuestDbRef* = ref object of GuestDbRef
-    ## The guest CF was worth a try, but there are better solutions and this
-    ## item will be removed in future.
-    guestDb*: ColFamilyReadWrite       ## Pigiback feature references
-
   AristoCFs* = enum
     ## Column family symbols/handles and names used on the database
     AdmCF = "AriAdm"                   ## Admin column family name

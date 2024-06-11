@@ -223,15 +223,6 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
         return err(error[0])
       ok()
 
-proc guestDbFn(db: RdbBackendRef): GuestDbFn =
-  result =
-    proc(instance: int): Result[RootRef,AristoError] =
-      let gdb = db.rdb.initGuestDb(instance).valueOr:
-        when extraTraceMessages:
-          trace logTxt "guestDbFn", error=error[0], info=error[1]
-        return err(error[0])
-      ok gdb
-
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
     proc(flush: bool) =
@@ -273,15 +264,6 @@ proc rocksDbBackend*(
            error=rc.error[0], info=rc.error[1]
       return err(rc.error[0])
 
-  # Provide guest access for KVT
-  block:
-    let rc = db.rdb.reinitGuestCFs()
-    if rc.isErr:
-      when extraTraceMessages:
-        trace logTxt "constructor failed",
-           error=rc.error[0], info=rc.error[1]
-      return err(rc.error[0])
-
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
   db.getTuvFn = getTuvFn db
@@ -294,7 +276,6 @@ proc rocksDbBackend*(
   db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
 
-  db.guestDbFn = guestDbFn db
   db.closeFn = closeFn db
   ok db
 

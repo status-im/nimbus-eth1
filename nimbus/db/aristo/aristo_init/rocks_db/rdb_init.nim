@@ -231,41 +231,6 @@ proc reinit*(
   ok guestCols
 
 
-proc reinitGuestCFs*(
-    rdb: var RdbInst;
-      ): Result[void,(AristoError,string)] =
-  ## Initialise `Guest` family
-  ##
-  ## Thus was a worth a try, but there are better solutions and this item
-  ## will be removed in future.
-  ##
-  let (cfOpts,_) = rdb.opts.getInitOptions
-  let rc = rdb.reinit RdbGuest.toSeq.mapIt(initColFamilyDescriptor($it, cfOpts))
-  if rc.isErr:
-    return err(rc.error)
-  ok()
-
-proc initGuestDb*(
-    rdb: RdbInst;
-    instance: int;
-      ): Result[RootRef,(AristoError,string)] =
-  ## Initialise `Guest` family
-  ##
-  ## Thus was a worth a try, but there are better solutions and this item
-  ## will be removed in future.
-  ##
-  if high(RdbGuest).ord < instance:
-    return err((RdbGuestInstanceUnsupported,""))
-  let
-    guestSym = $RdbGuest(instance)
-    guestDb = rdb.baseDb.withColFamily(guestSym).valueOr:
-      raiseAssert "RocksDb/initGuestDb() failed: " & error
-
-  ok RdbGuestDbRef(
-    beKind: BackendRocksDB,
-    guestDb: guestDb)
-
-
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor
   rdb.baseDb.close()

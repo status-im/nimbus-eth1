@@ -25,9 +25,6 @@ import
   ../kvt_desc,
   "."/[rocks_db, memory_only]
 
-from ../../aristo/aristo_persistent
-  import GuestDbRef, getRocksDbFamily
-
 export
   RdbBackendRef,
   memory_only
@@ -43,16 +40,6 @@ proc init*(
   ## Generic constructor for `RocksDb` backend
   ##
   ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbKvtBackend basePath)
-
-proc init*(
-    T: type KvtDbRef;
-    B: type RdbBackendRef;
-    guestDb: GuestDbRef;
-      ): Result[KvtDbRef,KvtError] {.deprecated.} =
-  ## ..
-  let gdb = guestDb.getRocksDbFamily().valueOr:
-    return err(RdbBePiggyBackHostError)
-  ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbKvtBackend gdb)
 
 proc init*(
     T: type KvtDbRef;

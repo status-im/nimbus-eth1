@@ -169,15 +169,6 @@ proc rocksDbKvtBackend*(
   ok db
 
 proc rocksDbKvtBackend*(
-    store: ColFamilyReadWrite;
-      ): Result[BackendRef,KvtError] {.deprecated.} =
-  let db = RdbBackendRef(
-    beKind: BackendRocksDB)
-  db.rdb.init(store)
-  db.setup()
-  ok db
-
-proc rocksDbKvtBackend*(
     adb: AristoDbRef;
     opts: DbOptions;
       ): Result[BackendRef,KvtError] =
