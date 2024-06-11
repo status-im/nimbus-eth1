@@ -15,13 +15,16 @@
 
 import
   std/os,
+  ../../kvt_desc,
   rocksdb
 
 type
   RdbInst* = object
     store*: KvtCfStore               ## Rocks DB database handler
     session*: WriteBatchRef          ## For batched `put()`
+
     basePath*: string                ## Database directory
+    delayedPersist*: KvtDbRef        ## Enable next proggyback write session
 
   KvtCFs* = enum
     ## Column family symbols/handles and names used on the database

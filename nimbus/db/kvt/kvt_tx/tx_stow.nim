@@ -22,6 +22,21 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc txStowOk*(
+    db: KvtDbRef;                     # Database
+    persistent: bool;                 # Stage only unless `true`
+      ): Result[void,KvtError] =
+  ## Verify that `txStow()` can go ahead
+  if not db.txRef.isNil:
+    return err(TxPendingTx)
+  if 0 < db.stack.len:
+    return err(TxStackGarbled)
+
+  if persistent and not db.deltaUpdateOk():
+    return err(TxBackendNotWritable)
+
+  ok()
+
 proc txStow*(
     db: KvtDbRef;                     # Database
     persistent: bool;                 # Stage only unless `true`
@@ -32,13 +47,7 @@ proc txStow*(
   ## If there is no backend the function returns immediately with an error.
   ## The same happens if there is a pending transaction.
   ##
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
-
-  if persistent and not db.deltaUpdateOk():
-    return err(TxBackendNotWritable)
+  ? db.txStowOk persistent
 
   if 0 < db.top.delta.sTab.len:
     db.deltaMerge db.top.delta

@@ -204,10 +204,13 @@ proc persistent*(
     rc = api.persist(kvt)
   if rc.isOk:
     ok()
-  elif api.level(kvt) == 0:
-    err(rc.error.toError(base, info))
-  else:
+  elif api.level(kvt) != 0:
     err(rc.error.toError(base, info, TxPending))
+  elif rc.error == TxPersistDelayed:
+    # This is OK: Piggybacking on `Aristo` backend
+    ok()
+  else:
+    err(rc.error.toError(base, info))
 
 # ------------------------------------------------------------------------------
 # Public constructors and related

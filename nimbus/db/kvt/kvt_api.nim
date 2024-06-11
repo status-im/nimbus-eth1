@@ -156,7 +156,7 @@ proc dup(be: BackendRef): BackendRef =
   of BackendMemory:
     return MemBackendRef(be).dup
 
-  of BackendRocksDB:
+  of BackendRocksDB, BackendRdbTriggered:
     when KvtPersistentBackendOk:
       return RdbBackendRef(be).dup
 

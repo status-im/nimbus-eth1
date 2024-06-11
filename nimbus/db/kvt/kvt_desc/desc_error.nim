@@ -19,12 +19,15 @@ type
 
     # RocksDB backend
     RdbBeCantCreateDataDir
+    RdbBeDelayedAlreadyRegistered
+    RdbBeDelayedLocked
+    RdbBeDelayedNotReady
     RdbBeDriverDelError
     RdbBeDriverGetError
     RdbBeDriverInitError
     RdbBeDriverPutError
     RdbBeDriverWriteError
-    RdbBePiggyBackHostError
+    RdbBeHostError
 
     # Transaction wrappers
     TxArgStaleTx
@@ -34,6 +37,7 @@ type
     TxNoPendingTx
     TxNotTopTx
     TxPendingTx
+    TxPersistDelayed
     TxStackGarbled
     TxStackUnderflow
 

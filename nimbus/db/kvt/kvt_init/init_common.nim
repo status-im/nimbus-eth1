@@ -23,6 +23,7 @@ type
     BackendVoid = 0                  ## For providing backend-less constructor
     BackendMemory                    ## Same as Aristo
     BackendRocksDB                   ## Same as Aristo
+    BackendRdbTriggered              ## Piggybacked on remote write session
 
   TypedBackendRef* = ref TypedBackendObj
   TypedBackendObj* = object of BackendObj

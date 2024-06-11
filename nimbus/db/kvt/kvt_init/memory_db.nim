@@ -120,6 +120,11 @@ proc closeFn(db: MemBackendRef): CloseFn =
     proc(ignore: bool) =
       discard
 
+proc canModFn(db: MemBackendRef): CanModFn =
+  result =
+    proc(): Result[void,KvtError] =
+      ok()
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -136,6 +141,7 @@ proc memoryBackend*: BackendRef =
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
+  db.canModFn = canModFn db
 
   db
 

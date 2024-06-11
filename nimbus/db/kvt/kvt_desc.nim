@@ -62,6 +62,17 @@ type
     ## Generic call back function/closure.
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc canMod(db: KvtDbRef): Result[void,KvtError] =
+  ## Ask for permission before doing nasty stuff
+  if db.backend.isNil:
+    ok()
+  else:
+    db.backend.canModFn()
+
+# ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
@@ -111,6 +122,7 @@ proc reCentre*(db: KvtDbRef): Result[void,KvtError] =
   ## returns `false` must be single destructed with `forget()`.
   ##
   if not db.dudes.isNil and db.dudes.centre != db:
+    ? db.canMod()
     db.dudes.centre = db
   ok()
 
@@ -177,6 +189,7 @@ proc forget*(db: KvtDbRef): Result[void,KvtError] =
   elif db notin db.dudes.peers:
     err(StaleDescriptor)
   else:
+    ? db.canMod()
     db.dudes.peers.excl db         # Unlink argument `db` from peers list
     ok()
 
@@ -187,7 +200,7 @@ proc forgetOthers*(db: KvtDbRef): Result[void,KvtError] =
   if not db.dudes.isNil:
     if db.dudes.centre != db:
       return err(MustBeOnCentre)
-
+    ? db.canMod()
     db.dudes = DudesRef(nil)
   ok()
 
