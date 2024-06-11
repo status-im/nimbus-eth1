@@ -47,7 +47,7 @@ type
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    roFilter*: LayerDeltaRef          ## Apply read filter (locks writing)
+    balancer*: LayerDeltaRef          ## Apply read filter (locks writing)
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: KvtTxRef                  ## Latest active transaction
@@ -140,7 +140,7 @@ proc fork*(
     dudes:   db.dudes)
 
   if not noFilter:
-    clone.roFilter = db.roFilter # Ref is ok here (filters are immutable)
+    clone.balancer = db.balancer # Ref is ok here (filters are immutable)
 
   if not noTopLayer:
     clone.top = LayerRef.init()

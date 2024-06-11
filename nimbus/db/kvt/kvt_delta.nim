@@ -17,29 +17,29 @@ import
   results,
   ./kvt_desc,
   ./kvt_desc/desc_backend,
-  ./kvt_filter/[filter_merge, filter_reverse]
+  ./kvt_delta/[delta_merge, delta_reverse]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc filterMerge*(
+proc deltaMerge*(
     db: KvtDbRef;                      # Database
-    filter: LayerDeltaRef;             # Filter to apply to database
+    delta: LayerDeltaRef;             # Filter to apply to database
       ) =
-  ## Merge the argument `filter` into the read-only filter layer. Note that
+  ## Merge the argument `delta` into the balancer filter layer. Note that
   ## this function has no control of the filter source. Having merged the
-  ## argument `filter`, all the `top` and `stack` layers should be cleared.
+  ## argument `delta`, all the `top` and `stack` layers should be cleared.
   ##
-  db.merge(filter, db.roFilter)
+  db.merge(delta, db.balancer)
 
 
-proc filterUpdateOk*(db: KvtDbRef): bool =
-  ## Check whether the read-only filter can be merged into the backend
+proc deltaUpdateOk*(db: KvtDbRef): bool =
+  ## Check whether the balancer filter can be merged into the backend
   not db.backend.isNil and db.isCentre
 
 
-proc filterUpdate*(
+proc deltaUpdate*(
     db: KvtDbRef;                      # Database
     reCentreOk = false;
       ): Result[void,KvtError] =
@@ -58,7 +58,7 @@ proc filterUpdate*(
     return err(FilBackendMissing)
 
   # Blind or missing filter
-  if db.roFilter.isNil:
+  if db.balancer.isNil:
     return ok()
 
   # Make sure that the argument `db` is at the centre so the backend is in
@@ -73,15 +73,15 @@ proc filterUpdate*(
 
   # Store structural single trie entries
   let writeBatch = be.putBegFn()
-  be.putKvpFn(writeBatch, db.roFilter.sTab.pairs.toSeq)
+  be.putKvpFn(writeBatch, db.balancer.sTab.pairs.toSeq)
   ? be.putEndFn writeBatch
 
   # Update peer filter balance.
-  let rev = db.filterReverse db.roFilter
+  let rev = db.deltaReverse db.balancer
   for w in db.forked:
-    db.merge(rev, w.roFilter)
+    db.merge(rev, w.balancer)
 
-  db.roFilter = LayerDeltaRef(nil)
+  db.balancer = LayerDeltaRef(nil)
   ok()
 
 # ------------------------------------------------------------------------------
