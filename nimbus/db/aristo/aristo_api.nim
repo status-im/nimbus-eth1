@@ -495,7 +495,7 @@ proc dup(be: BackendRef): BackendRef =
   of BackendMemory:
     return MemBackendRef(be).dup
 
-  of BackendRocksDB:
+  of BackendRocksDB, BackendRdbHosting:
     when AristoPersistentBackendOk:
       return RdbBackendRef(be).dup
 

@@ -21,13 +21,15 @@
 import
   results,
   rocksdb,
+  ../../opts,
   ../aristo_desc,
   ./rocks_db/rdb_desc,
-  "."/[rocks_db, memory_only],
-  ../../opts
+  "."/[rocks_db, memory_only]
 
 export
+  AristoDbRef,
   RdbBackendRef,
+  RdbWriteEventCb,
   memory_only
 
 # ------------------------------------------------------------------------------
@@ -56,24 +58,74 @@ proc newAristoRdbDbRef(
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc init*[W: RdbBackendRef](
+proc init*(
     T: type AristoDbRef;
-    B: type W;
+    B: type RdbBackendRef;
     basePath: string;
     opts: DbOptions
       ): Result[T, AristoError] =
   ## Generic constructor, `basePath` argument is ignored for memory backend
   ## databases (which also unconditionally succeed initialising.)
   ##
-  when B is RdbBackendRef:
-    basePath.newAristoRdbDbRef opts
+  basePath.newAristoRdbDbRef opts
+
+proc reinit*(
+    db: AristoDbRef;
+    cfs: openArray[ColFamilyDescriptor];
+      ): Result[seq[ColFamilyReadWrite],AristoError] =
+  ## Re-initialise the `RocksDb` backend database with additional or changed
+  ## column family settings. This can be used to make space for guest use of
+  ## the backend used by `Aristo`. The function returns a list of column family
+  ## descriptors in the same order as the `cfs` argument.
+  ##
+  ## The argument `cfs` list replaces and extends the CFs already on disk by
+  ## its options except for the ones defined for use with `Aristo`.
+  ##
+  ## Even though tx layers and filters might not be affected by this function,
+  ## it is prudent to have them clean and saved on the backend database before
+  ## changing it. On error conditions, data might get lost.
+  ##
+  case db.backend.kind:
+  of BackendRocksDB:
+    db.backend.rocksDbUpdateCfs cfs
+  of BackendRdbHosting:
+    err(RdbBeWrTriggerActiveAlready)
+  else:
+    return err(RdbBeTypeUnsupported)
+
+proc activateWrTrigger*(
+    db: AristoDbRef;
+    hdl: RdbWriteEventCb;
+      ): Result[void,AristoError] =
+  ## This function allows to link an application to the `Aristo` storage event
+  ## for the `RocksDb` backend via call back argument function `hdl`.
+  ##
+  ## The argument handler `hdl` of type
+  ## ::
+  ##    proc(session: WriteBatchRef): bool
+  ##
+  ## will be invoked when a write batch for the `Aristo` database is opened in
+  ## order to save current changes to the backend. The `session` argument passed
+  ## to the handler in conjunction with a list of `ColFamilyReadWrite` items
+  ## (as returned from `reinit()`) might be used to store additional items
+  ## to the database with the same write batch.
+  ##
+  ## If the handler returns `true` upon return from running, the write batch
+  ## will proceed saving. Otherwise it is aborted and no data are saved at all.
+  ##
+  case db.backend.kind:
+  of BackendRocksDB:
+    db.backend.rocksDbSetEventTrigger hdl
+  of BackendRdbHosting:
+    err(RdbBeWrTriggerActiveAlready)
   else:
     err(RdbBeTypeUnsupported)
+
 
 proc getRocksDbFamily*(
     gdb: GuestDbRef;
     instance = 0;
-      ): Result[ColFamilyReadWrite,void] =
+      ): Result[ColFamilyReadWrite,void] {.deprecated.} =
   ## Database pigiback feature
   if not gdb.isNil and gdb.beKind == BackendRocksDB:
     return ok RdbGuestDbRef(gdb).guestDb

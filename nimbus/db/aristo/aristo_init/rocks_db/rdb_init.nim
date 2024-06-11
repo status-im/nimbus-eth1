@@ -130,8 +130,7 @@ proc initImpl(
     opts: DbOptions;
     guestCFs: openArray[ColFamilyDescriptor] = [];
       ): Result[void,(AristoError,string)] =
-  ## Constructor c ode inspired by `RocksStoreRef.init()` from
-  ## kvstore_rocksdb.nim
+  ## Database backend constructor
   const initFailed = "RocksDB/init() failed"
 
   rdb.basePath = basePath
@@ -144,11 +143,12 @@ proc initImpl(
   except OSError, IOError:
     return err((RdbBeCantCreateDataDir, ""))
 
-  let (cfOpts,dbOpts) = opts.getInitOptions()
+  # Expand argument `opts` to rocksdb options
+  let (cfOpts, dbOpts) = opts.getInitOptions()
 
   # Column familiy names to allocate when opening the database. This list
   # might be extended below.
-  var useCFs = AristoCFs.toSeq.mapIt($it).toHashSet
+  var useCFs = AristoCFs.mapIt($it).toHashSet
 
   # The `guestCFs` list must not overwrite `AristoCFs` options
   let guestCFs = guestCFs.filterIt(it.name notin useCFs)
@@ -169,7 +169,7 @@ proc initImpl(
   useCFs = useCFs - guestCFs.mapIt(it.name).toHashSet
 
   # Finalise list of column families
-  let cfs = useCFs.toSeq.mapIt(initColFamilyDescriptor(it, cfOpts)) & guestCFq
+  let cfs = useCFs.toSeq.mapIt(it.initColFamilyDescriptor cfOpts) & guestCFq
 
   # Open database for the extended family :)
   let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
@@ -214,7 +214,7 @@ proc reinit*(
   const initFailed = "RocksDB/reinit() failed"
 
   if not rdb.session.isNil:
-    return err((RdbBeWriteSessionUnfinished,""))
+    return err((RdbBeWrSessionUnfinished,""))
   if not rdb.baseDb.isClosed():
     rdb.baseDb.close()
 

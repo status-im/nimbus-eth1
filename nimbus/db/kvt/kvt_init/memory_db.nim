@@ -86,8 +86,8 @@ proc getKvpFn(db: MemBackendRef): GetKvpFn =
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
-      db.newSession()
+    proc(): Result[PutHdlRef,KvtError] =
+      ok db.newSession()
 
 proc putKvpFn(db: MemBackendRef): PutKvpFn =
   result =

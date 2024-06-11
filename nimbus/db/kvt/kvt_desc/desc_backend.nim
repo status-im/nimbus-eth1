@@ -33,7 +33,7 @@ type
     ## by any library function using the backend.
 
   PutBegFn* =
-    proc(): PutHdlRef {.gcsafe, raises: [].}
+    proc(): Result[PutHdlRef,KvtError] {.gcsafe, raises: [].}
       ## Generic transaction initialisation function
 
   PutKvpFn* =

@@ -74,7 +74,7 @@ proc deltaPersistent*(
     serial: nxtFid)
 
   # Store structural single trie entries
-  let writeBatch = be.putBegFn()
+  let writeBatch = ? be.putBegFn()
   be.putVtxFn(writeBatch, db.balancer.sTab.pairs.toSeq)
   be.putKeyFn(writeBatch, db.balancer.kMap.pairs.toSeq)
   be.putTuvFn(writeBatch, db.balancer.vTop)

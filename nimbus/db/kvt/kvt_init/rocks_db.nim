@@ -98,9 +98,9 @@ proc getKvpFn(db: RdbBackendRef): GetKvpFn =
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
+    proc(): Result[PutHdlRef,KvtError] =
       db.rdb.begin()
-      db.newSession()
+      ok db.newSession()
 
 proc putKvpFn(db: RdbBackendRef): PutKvpFn =
   result =

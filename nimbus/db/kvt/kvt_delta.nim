@@ -72,7 +72,7 @@ proc deltaUpdate*(
   defer: discard parent.reCentre()
 
   # Store structural single trie entries
-  let writeBatch = be.putBegFn()
+  let writeBatch = ? be.putBegFn()
   be.putKvpFn(writeBatch, db.balancer.sTab.pairs.toSeq)
   ? be.putEndFn writeBatch
 

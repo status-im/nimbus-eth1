@@ -126,8 +126,8 @@ proc getLstFn(db: MemBackendRef): GetLstFn =
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
-      db.newSession()
+    proc(): Result[PutHdlRef,AristoError] =
+      ok db.newSession()
 
 
 proc putVtxFn(db: MemBackendRef): PutVtxFn =

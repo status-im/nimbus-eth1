@@ -48,7 +48,7 @@ type
     ## by any library function using the backend.
 
   PutBegFn* =
-    proc(): PutHdlRef {.gcsafe, raises: [].}
+    proc(): Result[PutHdlRef,AristoError] {.gcsafe, raises: [].}
       ## Generic transaction initialisation function
 
   PutVtxFn* =

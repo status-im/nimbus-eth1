@@ -23,15 +23,16 @@ import
   ../init_common
 
 type
-  RdbWriteEventCb* = proc(session: WriteBatchRef): bool {.gcsafe.}
-    ## Call back closure function that passes the the write session handle
-    ## to a guest peer right after it was opened. The guest may store any
-    ## data on its own column family and return `true` if that worked
-    ## all right. Then the `Aristo` handler will stor its own columns and
-    ## finalise the write session.
-    ##
-    ## In case of an error when `false` is returned, `Aristo` will abort the
-    ## write session and return a session error.
+  RdbWriteEventCb* =
+    proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
+      ## Call back closure function that passes the the write session handle
+      ## to a guest peer right after it was opened. The guest may store any
+      ## data on its own column family and return `true` if that worked
+      ## all right. Then the `Aristo` handler will stor its own columns and
+      ## finalise the write session.
+      ##
+      ## In case of an error when `false` is returned, `Aristo` will abort the
+      ## write session and return a session error.
 
   RdbInst* = object
     admCol*: ColFamilyReadWrite        ## Admin column family handler
@@ -43,7 +44,7 @@ type
 
     basePath*: string                  ## Database directory
     opts*: DbOptions                   ## Just a copy here for re-opening
-    guestTrigger*: RdbWriteEventCb     ## Database piggiback call back handler
+    trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
 
   # Alien interface
   RdbGuest* = enum
