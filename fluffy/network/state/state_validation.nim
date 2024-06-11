@@ -30,7 +30,7 @@ proc isValidNextNode(thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
   nextNode.hashEquals(nextHash)
 
 proc validateTrieProof*(
-    expectedRootHash: KeccakHash,
+    expectedRootHash: Opt[KeccakHash],
     path: Nibbles,
     proof: TrieProof,
     allowKeyEndInPathForLeafs = false,
@@ -38,8 +38,10 @@ proc validateTrieProof*(
   if proof.len() == 0:
     return err("proof is empty")
 
-  if not proof[0].hashEquals(expectedRootHash):
-    return err("hash of proof root node doesn't match the expected root hash")
+  # TODO: Remove this once the hive tests support passing in state roots from the history network
+  if expectedRootHash.isSome():
+    if not proof[0].hashEquals(expectedRootHash.get()):
+      return err("hash of proof root node doesn't match the expected root hash")
 
   let nibbles = path.unpackNibbles()
   if nibbles.len() == 0:
@@ -131,14 +133,18 @@ proc validateRetrieval*(
     err("hash of bytecode doesn't match the expected code hash")
 
 proc validateOffer*(
-    trustedStateRoot: KeccakHash, key: AccountTrieNodeKey, offer: AccountTrieNodeOffer
+    trustedStateRoot: Opt[KeccakHash],
+    key: AccountTrieNodeKey,
+    offer: AccountTrieNodeOffer,
 ): Result[void, string] =
   ?validateTrieProof(trustedStateRoot, key.path, offer.proof)
 
   validateRetrieval(key, offer.toRetrievalValue())
 
 proc validateOffer*(
-    trustedStateRoot: KeccakHash, key: ContractTrieNodeKey, offer: ContractTrieNodeOffer
+    trustedStateRoot: Opt[KeccakHash],
+    key: ContractTrieNodeKey,
+    offer: ContractTrieNodeOffer,
 ): Result[void, string] =
   ?validateTrieProof(
     trustedStateRoot,
@@ -149,12 +155,12 @@ proc validateOffer*(
 
   let account = ?offer.accountProof.toAccount()
 
-  ?validateTrieProof(account.storageRoot, key.path, offer.storageProof)
+  ?validateTrieProof(Opt.some(account.storageRoot), key.path, offer.storageProof)
 
   validateRetrieval(key, offer.toRetrievalValue())
 
 proc validateOffer*(
-    trustedStateRoot: KeccakHash, key: ContractCodeKey, offer: ContractCodeOffer
+    trustedStateRoot: Opt[KeccakHash], key: ContractCodeKey, offer: ContractCodeOffer
 ): Result[void, string] =
   ?validateTrieProof(
     trustedStateRoot,
