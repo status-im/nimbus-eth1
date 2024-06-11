@@ -12,16 +12,10 @@ from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
 
-def readStats(name: str, min_block_number: int):
+def readStats(name: str):
     df = pd.read_csv(name).convert_dtypes()
     # at least one item - let it lag in the beginning until we reach the min
     # block number or the table will be empty
-    if df.block_number.iloc[-1] > min_block_number + df.block_number.iloc[0]:
-        cutoff = min(
-            df.block_number.iloc[-1] - min_block_number,
-            min_block_number,
-        )
-        df = df[df.block_number >= cutoff]
     df.set_index("block_number", inplace=True)
     df.time /= 1000000000
     df.drop(columns=["gas"], inplace=True)
@@ -72,19 +66,27 @@ parser.add_argument(
     help="Skip block blocks below the given number",
 )
 args = parser.parse_args()
+min_block_number = args.min_block_number
 
-baseline = readStats(args.baseline, 0)
-contender = readStats(args.contender, args.min_block_number)
+baseline = readStats(args.baseline)
+contender = readStats(args.contender)
 
 # Pick out the rows to match - a more sophisticated version of this would
 # interpolate, perhaps - also, maybe should check for non-matching block/tx counts
 df = baseline.merge(contender, on=("block_number", "blocks", "txs"))
+df.reset_index(inplace=True)
+
+if df.block_number.iloc[-1] > min_block_number + df.block_number.iloc[0]:
+    cutoff = min(
+        df.block_number.iloc[-1] - min_block_number,
+        min_block_number,
+    )
+    df = df[df.block_number >= cutoff]
 
 df["bpsd"] = ((df.bps_y - df.bps_x) / df.bps_x)
 df["tpsd"] = ((df.tps_y - df.tps_x) / df.tps_x.replace(0, 1))
 df["timed"] = (df.time_y - df.time_x) / df.time_x
 
-df.reset_index(inplace=True)
 
 if args.plot:
     plt.rcParams["axes.grid"] = True

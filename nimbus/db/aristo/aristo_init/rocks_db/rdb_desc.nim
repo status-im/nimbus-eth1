@@ -32,9 +32,6 @@ type
     basePath*: string                  ## Database directory
     noFq*: bool                        ## No filter queues available
 
-  RdbKey* = array[1 + sizeof VertexID, byte]
-    ## Sub-table key, <pfx> + VertexID
-
   # Alien interface
   RdbGuest* = enum
     ## The guest CF was worth a try, but there are better solutions and this

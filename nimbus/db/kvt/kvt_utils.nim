@@ -106,7 +106,7 @@ proc hasKey*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  if db.layersHasKey @key:
+  if db.layersHasKey key:
     return ok(true)
 
   let rc = db.getBe key
