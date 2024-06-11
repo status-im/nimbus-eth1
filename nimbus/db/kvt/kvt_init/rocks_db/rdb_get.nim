@@ -43,7 +43,7 @@ proc get*(
   let onData: DataProc = proc(data: openArray[byte]) =
     res = @data
 
-  let gotData = rdb.store.get(key, onData).valueOr:
+  let gotData = rdb.store[KvtGeneric].get(key, onData).valueOr:
     const errSym = RdbBeDriverGetError
     when extraTraceMessages:
       trace logTxt "get", error=errSym, info=error

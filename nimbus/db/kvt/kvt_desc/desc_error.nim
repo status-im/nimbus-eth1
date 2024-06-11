@@ -24,6 +24,7 @@ type
     RdbBeDriverInitError
     RdbBeDriverPutError
     RdbBeDriverWriteError
+    RdbBePiggyBackHostError
 
     # Transaction wrappers
     TxArgStaleTx

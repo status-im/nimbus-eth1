@@ -30,6 +30,8 @@ import
   eth/common,
   rocksdb,
   results,
+  ../../aristo,
+  ../../opts,
   ../kvt_desc,
   ../kvt_desc/desc_backend,
   ./init_common,
@@ -168,10 +170,21 @@ proc rocksDbKvtBackend*(
 
 proc rocksDbKvtBackend*(
     store: ColFamilyReadWrite;
-      ): Result[BackendRef,KvtError] =
+      ): Result[BackendRef,KvtError] {.deprecated.} =
   let db = RdbBackendRef(
     beKind: BackendRocksDB)
   db.rdb.init(store)
+  db.setup()
+  ok db
+
+proc rocksDbKvtBackend*(
+    adb: AristoDbRef;
+    opts: DbOptions;
+      ): Result[BackendRef,KvtError] =
+  let db = RdbBackendRef(
+    beKind: BackendRocksDB)
+  db.rdb.piggyBackInit(adb, opts).isOkOr:
+    return err(error[0])
   db.setup()
   ok db
 

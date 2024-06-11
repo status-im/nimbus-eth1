@@ -14,10 +14,13 @@
 {.push raises: [].}
 
 import
-  std/os,
+  std/[sequtils, os],
   rocksdb,
   results,
+  ../../../aristo/aristo_init/persistent,
+  ../../../opts,
   ../../kvt_desc,
+  ../../kvt_desc/desc_error as kdb,
   ./rdb_desc
 
 const
@@ -49,10 +52,10 @@ proc init*(
   try:
     dataDir.createDir
   except OSError, IOError:
-    return err((RdbBeCantCreateDataDir, ""))
+    return err((kdb.RdbBeCantCreateDataDir, ""))
 
   let
-    cfs = @[initColFamilyDescriptor KvtFamily]
+    cfs = @[initColFamilyDescriptor $KvtGeneric]
     opts = defaultDbOptions()
   opts.setMaxOpenFiles(openMax)
 
@@ -64,24 +67,46 @@ proc init*(
     return err((errSym, error))
 
   # Initialise `Kvt` family
-  rdb.store = baseDb.withColFamily(KvtFamily).valueOr:
+  rdb.store[KvtGeneric] = baseDb.withColFamily($KvtGeneric).valueOr:
     let errSym = RdbBeDriverInitError
     when extraTraceMessages:
       debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
     return err((errSym, error))
   ok()
 
+
 proc init*(
     rdb: var RdbInst;
     store: ColFamilyReadWrite;
       ) =
   ## Piggyback on other database
-  rdb.store = store # that's it
+  rdb.store[KvtGeneric] = store # that's it
+
+
+proc piggyBackInit*(
+    rdb: var RdbInst;
+    adb: AristoDbRef;
+    opts: DbOptions;
+      ): Result[void,(KvtError,string)] =
+  ## Initalise column handlers piggy-backing on the `Aristo` backend.
+  ##
+  let cfOpts = defaultColFamilyOptions()
+  if opts.writeBufferSize > 0:
+    cfOpts.setWriteBufferSize(opts.writeBufferSize)
+  let
+    iCfs = KvtCFs.toSeq.mapIt(initColFamilyDescriptor($it, cfOpts))
+    oCfs = adb.reinit(iCfs).valueOr:
+      return err((RdbBePiggyBackHostError,$error))
+  for n in KvtCFs:
+    assert oCfs[n.ord].name != "" # debugging only
+    rdb.store[n] = oCfs[n.ord]
+  ok()
+
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor (no need to do anything if piggybacked)
   if 0 < rdb.basePath.len:
-    rdb.store.db.close()
+    rdb.baseDb.close()
 
     if flush:
       try:

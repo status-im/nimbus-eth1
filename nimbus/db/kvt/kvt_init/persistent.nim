@@ -20,6 +20,8 @@
 
 import
   results,
+  ../../aristo,
+  ../../opts,
   ../kvt_desc,
   "."/[rocks_db, memory_only]
 
@@ -34,29 +36,33 @@ export
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc init*[W: MemOnlyBackend|RdbBackendRef](
+proc init*(
     T: type KvtDbRef;
-    B: type W;
-    basePath: string;
-    guestDb = GuestDbRef(nil);
+    B: type RdbBackendRef;
       ): Result[KvtDbRef,KvtError] =
-  ## Generic constructor, `basePath` argument is ignored for `BackendNone` and
-  ## `BackendMemory`  type backend database. Also, both of these backends
-  ## aways succeed initialising.
+  ## Generic constructor for `RocksDb` backend
   ##
-  ## If the argument `guestDb` is set and is a RocksDB column familly, the
-  ## `Kvt`batabase is built upon this column familly. Othewise it is newly
-  ## created with `basePath` as storage location.
-  ##
-  when B is RdbBackendRef:
-    let rc = guestDb.getRocksDbFamily()
-    if rc.isOk:
-      ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbKvtBackend rc.value)
-    else:
-      ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbKvtBackend basePath)
+  ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbKvtBackend basePath)
 
-  else:
-    ok KvtDbRef.init B
+proc init*(
+    T: type KvtDbRef;
+    B: type RdbBackendRef;
+    guestDb: GuestDbRef;
+      ): Result[KvtDbRef,KvtError] {.deprecated.} =
+  ## ..
+  let gdb = guestDb.getRocksDbFamily().valueOr:
+    return err(RdbBePiggyBackHostError)
+  ok KvtDbRef(top: LayerRef.init(), backend: ? rocksDbKvtBackend gdb)
+
+proc init*(
+    T: type KvtDbRef;
+    B: type RdbBackendRef;
+    adb: AristoDbRef;
+    opts: DbOptions;
+      ): Result[KvtDbRef,KvtError] =
+  ## Constructor for `RocksDb` backend which piggybacks on the `Aristo`
+  ## backend.
+  ok KvtDbRef(top: LayerRef.init(), backend: ? adb.rocksDbKvtBackend opts)
 
 # ------------------------------------------------------------------------------
 # End
