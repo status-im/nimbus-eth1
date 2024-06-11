@@ -33,8 +33,7 @@ import
 proc processBlock(
     vmState: BaseVMState;  ## Parent environment of header/body block
     blk:     EthBlock;  ## Header/body block to add to the blockchain
-    ): ValidationResult
-    {.gcsafe, raises: [CatchableError].} =
+    ): Result[void, string] =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not.
   ##
@@ -53,13 +52,9 @@ proc processBlock(
       db.applyDAOHardFork()
 
   if header.parentBeaconBlockRoot.isSome:
-    let r = vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
-    if r.isErr:
-      error("error in processing beaconRoot", err=r.error)
+    ? vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
 
-  let r = processTransactions(vmState, header, blk.transactions)
-  if r.isErr:
-    error("error in processing transactions", err=r.error)
+  ? processTransactions(vmState, header, blk.transactions)
 
   if vmState.determineFork >= FkShanghai:
     for withdrawal in blk.withdrawals.get:
@@ -78,7 +73,7 @@ proc processBlock(
 
   dbTx.commit()
 
-  ValidationResult.OK
+  ok()
 
 proc getVmState(c: ChainRef, header: BlockHeader):
                  Result[BaseVMState, void] =
@@ -95,8 +90,7 @@ proc getVmState(c: ChainRef, header: BlockHeader):
 
 # A stripped down version of persistBlocks without validation
 # intended to accepts invalid block
-proc setBlock*(c: ChainRef; blk: EthBlock): ValidationResult
-                          {.inline, raises: [CatchableError].} =
+proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
   template header: BlockHeader = blk.header
   let dbTx = c.db.newTransaction()
   defer: dbTx.dispose()
@@ -106,20 +100,20 @@ proc setBlock*(c: ChainRef; blk: EthBlock): ValidationResult
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
     vmState = c.getVmState(header).valueOr:
-      return ValidationResult.Error
+      return err("no vmstate")
     stateRootChpt = vmState.parent.stateRoot # Check point
-    validationResult = vmState.processBlock(blk)
+  ? vmState.processBlock(blk)
 
-  if validationResult != ValidationResult.OK:
-    return validationResult
+  try:
+    c.db.persistHeaderToDb(
+      header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
+    discard c.db.persistTransactions(header.blockNumber, blk.transactions)
+    discard c.db.persistReceipts(vmState.receipts)
 
-  c.db.persistHeaderToDb(
-    header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
-  discard c.db.persistTransactions(header.blockNumber, blk.transactions)
-  discard c.db.persistReceipts(vmState.receipts)
-
-  if blk.withdrawals.isSome:
-    discard c.db.persistWithdrawals(blk.withdrawals.get)
+    if blk.withdrawals.isSome:
+      discard c.db.persistWithdrawals(blk.withdrawals.get)
+  except CatchableError as exc:
+    return err(exc.msg)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result
@@ -137,7 +131,7 @@ proc setBlock*(c: ChainRef; blk: EthBlock): ValidationResult
   # `persistent()` together with the respective block number.
   c.db.persistent(header.blockNumber - 1)
 
-  ValidationResult.OK
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

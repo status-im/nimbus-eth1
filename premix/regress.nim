@@ -40,8 +40,9 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
       vmState = BaseVMState.new(parent, blocks[i].header, com)
       validationResult = vmState.processBlock(blocks[i])
 
-    if validationResult != ValidationResult.OK:
-      error "block validation error", validationResult, blockNumber = blockNumber + i.u256
+    if validationResult.isErr:
+      error "block validation error",
+        err = validationResult.error(), blockNumber = blockNumber + i.u256
 
     parent = blocks[i].header
 

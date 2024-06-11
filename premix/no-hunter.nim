@@ -95,7 +95,7 @@ proc putAncestorsIntoDB(vmState: HunterVMState, db: CoreDbRef) =
   for header in vmState.headers.values:
     db.addBlockNumberToHashLookup(header)
 
-proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
+proc huntProblematicBlock(blockNumber: UInt256): Result[void,  string] =
   let
     # prepare needed state from previous block
     parentNumber = blockNumber - 1
@@ -114,12 +114,12 @@ proc huntProblematicBlock(blockNumber: UInt256): ValidationResult =
     vmState = HunterVMState.new(parentBlock.header, thisBlock.header, com)
     validationResult = vmState.processBlock(thisBlock.header, thisBlock.body)
 
-  if validationResult != ValidationResult.OK:
+  if validationResult.isErr():
     transaction.rollback()
     putAncestorsIntoDB(vmState, com.db)
     vmState.dumpDebuggingMetaData(thisBlock.header, thisBlock.body, false)
 
-  result = validationResult
+  validationResult
 
 proc main() {.used.} =
   let conf = getConfiguration()
@@ -138,7 +138,7 @@ proc main() {.used.} =
 
   while true:
     echo blockNumber
-    if huntProblematicBlock(blockNumber) != ValidationResult.OK:
+    if huntProblematicBlock(blockNumber).isErr:
       echo "shot down problematic block: ", blockNumber
       problematicBlocks.add blockNumber
     blockNumber = blockNumber + 1
