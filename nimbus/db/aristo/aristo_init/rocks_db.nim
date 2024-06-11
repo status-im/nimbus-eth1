@@ -30,7 +30,6 @@ import
   eth/common,
   rocksdb,
   results,
-  ../aristo_constants,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
   ../aristo_blobify,

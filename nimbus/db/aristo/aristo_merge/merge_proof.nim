@@ -162,9 +162,9 @@ proc mergeProof*(
     ## Check for embedded nodes, i.e. fully encoded node instead of a hash.
     ## They need to be treated as full nodes, here.
     if key.isValid and key.len < 32:
-      let lid = @(key.data).digestTo(HashKey)
+      let lid = key.data.digestTo(HashKey)
       if not seen.hasKey lid:
-        let node = @(key.data).decode(NodeRef)
+        let node = key.data.decode(NodeRef)
         discard todo.append node
         seen[lid] = node
 

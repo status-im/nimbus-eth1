@@ -62,39 +62,39 @@ func nLayersKey*(db: AristoDbRef): int =
 # Public functions: getter variants
 # ------------------------------------------------------------------------------
 
-func layersGetVtx*(db: AristoDbRef; vid: VertexID): Result[VertexRef,void] =
+func layersGetVtx*(db: AristoDbRef; vid: VertexID): Opt[VertexRef] =
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
-  if db.top.delta.sTab.hasKey vid:
-    return ok(db.top.delta.sTab.getOrVoid vid)
+  db.top.delta.sTab.withValue(vid, item):
+    return Opt.some(item[])
 
   for w in db.rstack:
-    if w.delta.sTab.hasKey vid:
-      return ok(w.delta.sTab.getOrVoid vid)
+    w.delta.sTab.withValue(vid, item):
+      return Opt.some(item[])
 
-  err()
+  Opt.none(VertexRef)
 
 func layersGetVtxOrVoid*(db: AristoDbRef; vid: VertexID): VertexRef =
   ## Simplified version of `layersGetVtx()`
   db.layersGetVtx(vid).valueOr: VertexRef(nil)
 
 
-func layersGetKey*(db: AristoDbRef; vid: VertexID): Result[HashKey,void] =
+func layersGetKey*(db: AristoDbRef; vid: VertexID): Opt[HashKey] =
   ## Find a hash key on the cache layers. An `ok()` result might contain a void
   ## hash key if it is stored on the cache that way.
   ##
-  if db.top.delta.kMap.hasKey vid:
+  db.top.delta.kMap.withValue(vid, item):
     # This is ok regardless of the `dirty` flag. If this vertex has become
     # dirty, there is an empty `kMap[]` entry on this layer.
-    return ok(db.top.delta.kMap.getOrVoid vid)
+    return Opt.some(item[])
 
   for w in db.rstack:
-    if w.delta.kMap.hasKey vid:
+    w.delta.kMap.withValue(vid, item):
       # Same reasoning as above regarding the `dirty` flag.
-      return ok(w.delta.kMap.getOrVoid vid)
+      return ok(item[])
 
-  err()
+  Opt.none(HashKey)
 
 func layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
   ## Simplified version of `layersGetkey()`

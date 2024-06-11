@@ -31,29 +31,34 @@ func nLayersKeys*(db: KvtDbRef): int =
 # Public functions: get function
 # ------------------------------------------------------------------------------
 
-func layersHasKey*(db: KvtDbRef; key: openArray[byte]): bool =
+func layersHasKey*(db: KvtDbRef; key: openArray[byte]|seq[byte]): bool =
   ## Return `true` id the argument key is cached.
   ##
-  if db.top.delta.sTab.hasKey @key:
+  when key isnot seq[byte]:
+    let key = @key
+  if db.top.delta.sTab.hasKey key:
     return true
 
   for w in db.rstack:
-    if w.delta.sTab.hasKey @key:
+    if w.delta.sTab.hasKey key:
       return true
 
 
-func layersGet*(db: KvtDbRef; key: openArray[byte]): Result[Blob,void] =
+func layersGet*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[Blob] =
   ## Find an item on the cache layers. An `ok()` result might contain an
   ## empty value if it is stored on the cache  that way.
   ##
-  if db.top.delta.sTab.hasKey @key:
-    return ok(db.top.delta.sTab.getOrVoid @key)
+  when key isnot seq[byte]:
+    let key = @key
+
+  db.top.delta.sTab.withValue(key, item):
+    return Opt.some(item[])
 
   for w in db.rstack:
-    if w.delta.sTab.hasKey @key:
-      return ok(w.delta.sTab.getOrVoid @key)
+    w.delta.sTab.withValue(key, item):
+      return Opt.some(item[])
 
-  err()
+  Opt.none(Blob)
 
 # ------------------------------------------------------------------------------
 # Public functions: put function

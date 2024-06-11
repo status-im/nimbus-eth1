@@ -64,9 +64,10 @@ proc getKey*(
     return ok(move(rc.value))
 
   # Otherwise fetch from backend database
-  var res: Blob
+  var res: Result[HashKey,(AristoError,string)]
   let onData = proc(data: openArray[byte]) =
-    res = @data
+    res = HashKey.fromBytes(data).mapErr(proc(): auto =
+      (RdbHashKeyExpected,""))
 
   let gotData = rdb.keyCol.get(vid.toOpenArray, onData).valueOr:
      const errSym = RdbBeDriverGetKeyError
@@ -75,16 +76,13 @@ proc getKey*(
      return err((errSym,error))
 
   # Correct result if needed
-  let key = block:
-    if gotData:
-      HashKey.fromBytes(res).valueOr:
-        return err((RdbHashKeyExpected,""))
-    else:
-      VOID_HASH_KEY
+  if not gotData:
+    res = ok(VOID_HASH_KEY)
+  elif res.isErr():
+    return res # Parsing failed
 
   # Update cache and return
-  ok rdb.rdKeyLru.lruAppend(vid, key, RdKeyLruMaxSize)
-
+  ok rdb.rdKeyLru.lruAppend(vid, res.value(), RdKeyLruMaxSize)
 
 proc getVtx*(
     rdb: var RdbInst;
@@ -96,9 +94,10 @@ proc getVtx*(
     return ok(move(rc.value))
 
   # Otherwise fetch from backend database
-  var res: Blob
+  var res: Result[VertexRef,(AristoError,string)]
   let onData = proc(data: openArray[byte]) =
-    res = @data
+    res = data.deblobify(VertexRef).mapErr(proc(error: AristoError): auto =
+      (error,""))
 
   let gotData = rdb.vtxCol.get(vid.toOpenArray, onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
@@ -106,15 +105,13 @@ proc getVtx*(
       trace logTxt "getVtx", vid, error=errSym, info=error
     return err((errSym,error))
 
-  var vtx = VertexRef(nil)
-  if gotData:
-    let rc = res.deblobify VertexRef
-    if rc.isErr:
-      return err((rc.error,""))
-    vtx = rc.value
+  if not gotData:
+    res = ok(VertexRef(nil))
+  elif res.isErr():
+    return res # Parsing failed
 
   # Update cache and return
-  ok rdb.rdVtxLru.lruAppend(vid, vtx, RdVtxLruMaxSize)
+  ok rdb.rdVtxLru.lruAppend(vid, res.value(), RdVtxLruMaxSize)
 
 # ------------------------------------------------------------------------------
 # End

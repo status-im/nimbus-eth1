@@ -453,7 +453,7 @@ proc buildAccumulator*(f: Era1File): Result[EpochAccumulatorCached, string] =
       HeaderRecord(blockHash: blockHeader.blockHash(), totalDifficulty: totalDifficulty)
     )
 
-  ok(EpochAccumulatorCached.init(@headerRecords))
+  ok(EpochAccumulatorCached.init(headerRecords))
 
 proc verify*(f: Era1File): Result[Digest, string] =
   let
