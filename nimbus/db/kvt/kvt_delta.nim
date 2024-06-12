@@ -67,9 +67,9 @@ proc deltaUpdate*(
   if db != parent:
     if not reCentreOk:
       return err(FilBackendRoMode)
-    db.reCentre
+    ? db.reCentre()
   # Always re-centre to `parent` (in case `reCentreOk` was set)
-  defer: parent.reCentre
+  defer: discard parent.reCentre()
 
   # Store structural single trie entries
   let writeBatch = be.putBegFn()

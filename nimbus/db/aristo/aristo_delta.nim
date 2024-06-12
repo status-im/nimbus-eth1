@@ -60,9 +60,9 @@ proc deltaPersistent*(
   if db != parent:
     if not reCentreOk:
       return err(FilBackendRoMode)
-    db.reCentre
+    ? db.reCentre()
   # Always re-centre to `parent` (in case `reCentreOk` was set)
-  defer: parent.reCentre
+  defer: discard parent.reCentre()
 
   # Initialise peer filter balancer.
   let updateSiblings = ? UpdateSiblingsRef.init db

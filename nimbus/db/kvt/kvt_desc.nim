@@ -42,8 +42,7 @@ type
     centre: KvtDbRef                  ## Link to peer with write permission
     peers: HashSet[KvtDbRef]          ## List of all peers
 
-  KvtDbRef* = ref KvtDbObj
-  KvtDbObj* = object
+  KvtDbRef* = ref object
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
@@ -97,7 +96,7 @@ func getCentre*(db: KvtDbRef): KvtDbRef =
   ##
   if db.dudes.isNil: db else: db.dudes.centre
 
-proc reCentre*(db: KvtDbRef) =
+proc reCentre*(db: KvtDbRef): Result[void,KvtError] =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -111,8 +110,9 @@ proc reCentre*(db: KvtDbRef) =
   ## accessing the same backend database. Descriptors where `isCentre()`
   ## returns `false` must be single destructed with `forget()`.
   ##
-  if not db.dudes.isNil:
+  if not db.dudes.isNil and db.dudes.centre != db:
     db.dudes.centre = db
+  ok()
 
 proc fork*(
     db: KvtDbRef;

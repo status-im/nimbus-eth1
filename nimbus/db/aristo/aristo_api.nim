@@ -300,7 +300,8 @@ type
 
   AristoApiReCentreFn* =
     proc(db: AristoDbRef;
-        ) {.noRaise.}
+        ): Result[void,AristoError]
+        {.noRaise.}
       ## Re-focus the `db` argument descriptor so that it becomes the centre.
       ## Nothing is done if the `db` descriptor is the centre, already.
       ##
@@ -705,9 +706,9 @@ func init*(
         result = api.persist(a, b, c)
 
   profApi.reCentre =
-    proc(a: AristoDbRef) =
+    proc(a: AristoDbRef): auto =
       AristoApiProfReCentreFn.profileRunner:
-        api.reCentre(a)
+        result = api.reCentre(a)
 
   profApi.rollback =
     proc(a: AristoTxRef): auto =
