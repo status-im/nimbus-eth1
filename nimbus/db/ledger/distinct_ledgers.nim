@@ -174,7 +174,6 @@ proc init*(
     T: type StorageLedger;
     al: AccountLedger;
     account: CoreDbAccount;
-    reHashOk = true;
       ): T =
   ## Storage trie constructor.
   ##
@@ -183,11 +182,6 @@ proc init*(
   let
     db = al.distinctBase.parent
     stt = account.storage
-  if not stt.isNil and reHashOk:
-    let rc = al.distinctBase.getColumn.state()
-    if rc.isErr:
-      raiseAssert "re-hash oops, error=" & $$rc.error
-  let
     ctx = db.ctx
     trie = if stt.isNil: ctx.newColumn(account.address) else: stt
     mpt = block:
