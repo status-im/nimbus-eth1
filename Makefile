@@ -225,6 +225,10 @@ libbacktrace:
 ifneq ($(USE_SYSTEM_ROCKSDB), 0)
 ifeq ($(OS), Windows_NT)
 rocksdb: fetch-dlls
+	+ vendor/nim-rocksdb/scripts/build_dlls_windows.bat && \
+	rm build/librocksdb.dll
+	cp -a vendor/nim-rocksdb/build/librocksdb.dll build
+
 else
 rocksdb:
 	+ vendor/nim-rocksdb/scripts/build_static_deps.sh
