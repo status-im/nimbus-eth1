@@ -131,16 +131,22 @@ Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash" shell
 
 Install [cmake](https://cmake.org/).
 
-If you don't want to compile RocksDB and SQLite separately, you can fetch pre-compiled DLLs with:
+After adding the Git bin directory to your path you can open a bash shell which should be used when building Nimbus on Windows:
 ```bash
-mingw32-make fetch-dlls # this will place the right DLLs for your architecture in the "build/" directory
+bash
 ```
 
-You can now follow those instructions in the previous section by replacing `make` with `mingw32-make` (regardless of your 32-bit or 64-bit architecture):
+After installing Mingw-w64 and adding it to your path you should have the `mingw32-make` tool available. Next create a link from `make` to `mingw32-make`:
 
 ```bash
-mingw32-make nimbus # build the Nimbus binary
-mingw32-make test # run the test suite
+ln mingw32-make make
+```
+
+You can now follow those instructions in the previous section. For example:
+
+```bash
+make nimbus # build the Nimbus binary
+make test # run the test suite
 # etc.
 ```
 
