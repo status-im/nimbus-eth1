@@ -127,11 +127,11 @@ installation directory to "C:\mingw-w64" and add it to your system PATH in "My
 Computer"/"This PC" -> Properties -> Advanced system settings -> Environment
 Variables -> Path -> Edit -> New -> C:\mingw-w64\mingw64\bin (it's "C:\mingw-w64\mingw32\bin" on 32-bit)
 
-Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash" shell to clone and build Nimbus.
+Install [Git for Windows](https://gitforwindows.org/) and use it to clone Nimbus.
 
 Install [cmake](https://cmake.org/).
 
-After adding the Git bin directory to your path you can open a bash shell which should be used when building Nimbus on Windows:
+After adding the Git bin directory to your path open a "Git Bash" shell:
 ```bash
 bash
 ```
@@ -139,7 +139,7 @@ bash
 After installing Mingw-w64 and adding it to your path you should have the `mingw32-make` tool available. Next create a link from `make` to `mingw32-make`:
 
 ```bash
-ln mingw32-make make
+ln -s mingw32-make.exe make.exe
 ```
 
 You can now follow those instructions in the previous section. For example:
