@@ -45,7 +45,7 @@ jobs:
     - name: Build Docker image
       shell: bash
       run: docker build . -t localtestnet
-        
+
 
     - name: Set up Kurtosis
       shell: bash
@@ -60,12 +60,12 @@ jobs:
       id: services
       run: |
         export github_sha=${{ github.sha }}
-        export github_repository=${{ github.repository }} 
+        export github_repository=${{ github.repository }}
 
         cat kurtosis-network-params.yml | envsubst > assertoor.yaml
         sed -i "s/el_image: .*/el_image: localtestnet/" assertoor.yaml
 
-        kurtosis run github.com/kurtosis-tech/ethereum-package --enclave assertoor-${{ github.run_id }} --args-file assertoor.yaml
+        kurtosis run github.com/ethpandaops/ethereum-package --enclave assertoor-${{ github.run_id }} --args-file assertoor.yaml
 
         enclave_dump=$(kurtosis enclave inspect assertoor-${{ github.run_id }})
 
@@ -124,7 +124,7 @@ jobs:
             elif [ "$task_result" == "failure" ]; then
               task_result="${RED}failure${NC}"
             fi
-            
+
             printf " $(printf '%-4s' "$task_id")\t$task_status\t$task_result\t$(printf '%-50s' "$task_graph$task_name") \t$task_title \n"
           done <<< $(echo "$tasks")
         }
@@ -185,7 +185,7 @@ jobs:
             echo "$task_lines"
           fi
 
-          if [ $failed_tests -gt 0 ]; then 
+          if [ $failed_tests -gt 0 ]; then
             final_test_result="failure"
             break
           fi
@@ -229,7 +229,7 @@ jobs:
       with:
         name: "kurtosis-enclave-dump-${{ github.run_id }}"
         path: ./temp/dump
-    
+
     - name: Return test result
       shell: bash
       run: |
