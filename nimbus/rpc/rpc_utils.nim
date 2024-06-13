@@ -48,7 +48,7 @@ proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
     of "pending":
       #TODO: Implement get pending block
       # We currently fall back to `latest` so that the `tx-spammer` in
-      # `kurtosis-tech/ethereum-package` can make progress. A real
+      # `ethpandaops/ethereum-package` can make progress. A real
       # implementation is still required that takes into account any
       # pending transactions that have not yet been bundled into a block.
       result = chain.getCanonicalHead()
@@ -84,7 +84,7 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
   # TODO: This should properly incorporate the base fee in the block data,
   # and recommend a gas fee that likely gets the block to confirm.
   # This also has to work on Genesis where no prior transaction data exists.
-  # For compatibility with `kurtosis-tech/ethereum-package`, set this to a
+  # For compatibility with `ethpandaops/ethereum-package`, set this to a
   # sane minimum for compatibility to unblock testing.
   # Note: When this is fixed, update `tests/graphql/queries.toml` and
   # re-enable the "query.gasPrice" test case (remove `skip = true`).

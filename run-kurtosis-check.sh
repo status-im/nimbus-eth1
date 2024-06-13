@@ -45,7 +45,7 @@ else
 fi
 
 # Install jq if not installed already
-if [ "$(which jq)" != "" ]; 
+if [ "$(which jq)" != "" ];
 then
   echo "jq is already installed"
 else
@@ -87,7 +87,7 @@ sed -i "s/el_image: .*/el_image: $new_el_image/" assertoor.yaml
 
 sudo kurtosis run \
   --enclave nimbus-localtestnet \
-  github.com/kurtosis-tech/ethereum-package \
+  github.com/ethpandaops/ethereum-package \
   --args-file assertoor.yaml
 
 enclave_dump=$(kurtosis enclave inspect nimbus-localtestnet)
@@ -156,7 +156,7 @@ else
       elif [ "$task_result" == "failure" ]; then
         task_result="${RED}failure${NC}"
       fi
-      
+
       echo -e " $(printf '%-4s' "$task_id")\t$task_status\t$task_result\t$(printf '%-50s' "$task_graph$task_name") \t$task_title"
     done <<< $(echo "$tasks")
   }
@@ -217,7 +217,7 @@ else
       echo "$task_lines"
     fi
 
-    if [ "$failed_tests" -gt 0 ]; then 
+    if [ "$failed_tests" -gt 0 ]; then
       final_test_result="failure"
       break
     fi

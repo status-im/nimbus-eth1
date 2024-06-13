@@ -77,7 +77,7 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
       return err(txInfoErrUnspecified)
     current = rc.value.data
 
-  # TODO: To unblock `kurtosis-tech/ethereum-package` based testing,
+  # TODO: To unblock `ethpandaops/ethereum-package` based testing,
   # we have to accept superseding transactions temporarily until `rpc_utils.nim`
   # supports the 'pending' tag by incorporating pending transactions from the
   # mempool when returning the current account nonce. Until that is fixed,
