@@ -105,7 +105,7 @@ proc parseHeader(blockHeader: JsonNode, testStatusIMPL: var TestStatus): BlockHe
   result = normalizeBlockHeader(blockHeader).parseBlockHeader
   var blockHash: Hash256
   blockHeader.fromJson "hash", blockHash
-  check blockHash == hash(result)
+  check blockHash == rlpHash(result)
 
 proc parseWithdrawals(withdrawals: JsonNode): Option[seq[Withdrawal]] =
   case withdrawals.kind
