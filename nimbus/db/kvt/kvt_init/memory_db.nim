@@ -125,6 +125,11 @@ proc canModFn(db: MemBackendRef): CanModFn =
     proc(): Result[void,KvtError] =
       ok()
 
+proc setWrReqFn(db: MemBackendRef): SetWrReqFn =
+  result =
+    proc(kvt: RootRef): Result[void,KvtError] =
+      err(RdbBeHostNotApplicable)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -142,7 +147,7 @@ proc memoryBackend*: BackendRef =
 
   db.closeFn = closeFn db
   db.canModFn = canModFn db
-
+  db.setWrReqFn = setWrReqFn db
   db
 
 proc dup*(db: MemBackendRef): MemBackendRef =

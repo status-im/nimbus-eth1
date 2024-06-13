@@ -42,7 +42,7 @@ type
     centre: KvtDbRef                  ## Link to peer with write permission
     peers: HashSet[KvtDbRef]          ## List of all peers
 
-  KvtDbRef* = ref object
+  KvtDbRef* = ref object of RootRef
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers

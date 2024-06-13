@@ -28,6 +28,7 @@ type
     RdbBeDriverPutError
     RdbBeDriverWriteError
     RdbBeHostError
+    RdbBeHostNotApplicable
 
     # Transaction wrappers
     TxArgStaleTx

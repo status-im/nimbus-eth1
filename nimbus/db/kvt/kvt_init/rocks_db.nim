@@ -142,6 +142,11 @@ proc canModFn(db: RdbBackendRef): CanModFn =
     proc(): Result[void,KvtError] =
       ok()
 
+proc setWrReqFn(db: RdbBackendRef): SetWrReqFn =
+  result =
+    proc(kvt: RootRef): Result[void,KvtError] =
+      err(RdbBeHostNotApplicable)
+
 # ------------------------------------------------------------------------------
 # Private functions: triggered interface changes
 # ------------------------------------------------------------------------------
@@ -193,6 +198,15 @@ proc canModTriggeredFn(db: RdbBackendRef): CanModFn =
       if not db.rdb.delayedPersist.isNil:
         return err(RdbBeDelayedLocked)
       ok()
+
+proc setWrReqTriggeredFn(db: RdbBackendRef): SetWrReqFn =
+  result =
+    proc(kvt: RootRef): Result[void,KvtError] =
+      if db.rdb.delayedPersist.isNil:
+        db.rdb.delayedPersist = KvtDbRef(kvt)
+        ok()
+      else:
+        err(RdbBeDelayedAlreadyRegistered)
 
 # ------------------------------------------------------------------------------
 # Private function: trigger handler
@@ -260,6 +274,7 @@ proc rocksDbKvtBackend*(
 
   db.closeFn = closeFn db
   db.canModFn = canModFn db
+  db.setWrReqFn = setWrReqFn db
   ok db
 
 
@@ -288,19 +303,8 @@ proc rocksDbKvtTriggeredBackend*(
 
   db.closeFn = closeTriggeredFn db
   db.canModFn = canModTriggeredFn db
+  db.setWrReqFn = setWrReqTriggeredFn db
   ok db
-
-
-proc setDelayedPersist*(
-    be: BackendRef;
-    kvt: KvtDbRef;
-      ): Result[void,KvtError] =
-  let db = RdbBackendRef(be)
-  if db.rdb.delayedPersist.isNil:
-    db.rdb.delayedPersist = kvt
-    ok()
-  else:
-    err(RdbBeDelayedAlreadyRegistered)
 
 
 proc dup*(db: RdbBackendRef): RdbBackendRef =

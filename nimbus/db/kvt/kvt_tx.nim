@@ -16,7 +16,7 @@
 import
   results,
   ./kvt_tx/[tx_fork, tx_frame, tx_stow],
-  ./kvt_init/[memory_only, rocks_db],
+  ./kvt_init/memory_only,
   ./kvt_desc
 
 # ------------------------------------------------------------------------------
@@ -181,7 +181,7 @@ proc persist*(
   # Register for saving if piggybacked on remote database
   if db.backend.kind == BackendRdbTriggered:
     ? db.txStowOk(persistent=true)
-    ? db.backend.setDelayedPersist db
+    ? db.backend.setWrReqFn db
     return err(TxPersistDelayed)
 
   db.txStow(persistent=true)
