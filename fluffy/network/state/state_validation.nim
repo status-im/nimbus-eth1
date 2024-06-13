@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import results, eth/common, ../../common/common_utils, ./state_content, ./state_utils
 
 export results, state_content
@@ -13,16 +15,16 @@ proc hashEquals(value: TrieNode | Bytecode, expectedHash: KeccakHash): bool {.in
   keccakHash(value.asSeq()) == expectedHash
 
 proc isValidNextNode(thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
-  let hashOrShortRlp = thisNodeRlp.listElem(rlpIdx)
+  let hashOrShortRlp = thisNodeRlp.listElem(rlpIdx).expectOk()
   if hashOrShortRlp.isEmpty():
     return false
 
   let nextHash =
     if hashOrShortRlp.isList():
       # is a short node
-      keccakHash(rlp.encode(hashOrShortRlp))
+      keccakHash(rlp.encode(hashOrShortRlp).expectOk())
     else:
-      let hash = hashOrShortRlp.toBytes()
+      let hash = hashOrShortRlp.toBytes().expectOk()
       if hash.len() != 32:
         return false
       KeccakHash.fromBytes(hash)
@@ -63,9 +65,9 @@ proc validateTrieProof*(
       else:
         return err("proof has more nodes then expected for given path")
 
-    case thisNodeRlp.listLen()
+    case thisNodeRlp.listLen().expectOk()
     of 2:
-      let nodePrefixRlp = thisNodeRlp.listElem(0)
+      let nodePrefixRlp = thisNodeRlp.listElem(0).expectOk()
       if nodePrefixRlp.isEmpty():
         return err("node prefix is empty")
 

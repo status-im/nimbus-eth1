@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   results,
   chronos,
@@ -29,38 +31,40 @@ proc getNextNodeHash(
   let trieNodeRlp = rlpFromBytes(trieNode.asSeq())
   # the trie node should have already been validated
   doAssert(not trieNodeRlp.isEmpty())
-  doAssert(trieNodeRlp.listLen() == 2 or trieNodeRlp.listLen() == 17)
+  doAssert(
+    trieNodeRlp.listLen().expectOk() == 2 or trieNodeRlp.listLen().expectOk() == 17
+  )
 
-  if trieNodeRlp.listLen() == 17:
+  if trieNodeRlp.listLen().expectOk() == 17:
     let nextNibble = nibbles[nibbleIdx]
     doAssert(nextNibble < 16)
 
-    let nextHashBytes = trieNodeRlp.listElem(nextNibble.int)
+    let nextHashBytes = trieNodeRlp.listElem(nextNibble.int).expectOk()
     doAssert(not nextHashBytes.isEmpty())
 
     nibbleIdx += 1
     return Opt.some(
       (
         nibbles[0 ..< nibbleIdx].packNibbles(),
-        KeccakHash.fromBytes(nextHashBytes.toBytes()),
+        KeccakHash.fromBytes(nextHashBytes.toBytes().expectOk()),
       )
     )
 
   # leaf or extension node
-  let (_, isLeaf, prefix) = decodePrefix(trieNodeRlp.listElem(0))
+  let (_, isLeaf, prefix) = decodePrefix(trieNodeRlp.listElem(0).expectOk())
   if isLeaf:
     return Opt.none((Nibbles, NodeHash))
 
   # extension node
   nibbleIdx += prefix.unpackNibbles().len()
 
-  let nextHashBytes = trieNodeRlp.listElem(1)
+  let nextHashBytes = trieNodeRlp.listElem(1).expectOk()
   doAssert(not nextHashBytes.isEmpty())
 
   Opt.some(
     (
       nibbles[0 ..< nibbleIdx].packNibbles(),
-      KeccakHash.fromBytes(nextHashBytes.toBytes()),
+      KeccakHash.fromBytes(nextHashBytes.toBytes().expectOk()),
     )
   )
 

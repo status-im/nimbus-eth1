@@ -5,15 +5,26 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import results, eth/common, ./state_content
 
 export results, common
+
+# For now we simply convert these Rlp errors to Defects
+# because they generally shouldn't occur in practice.
+# If and when they do occur, we can add more specific logic to handle them
+template expectOk*(statements: untyped): auto =
+  try:
+    statements
+  except RlpError as e:
+    raiseAssert(e.msg)
 
 func decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
   doAssert(not nodePrefixRlp.isEmpty())
 
   let
-    rlpBytes = nodePrefixRlp.toBytes()
+    rlpBytes = nodePrefixRlp.toBytes().expectOk()
     firstNibble = (rlpBytes[0] and 0xF0) shr 4
     isLeaf = firstNibble == 2 or firstNibble == 3
     isEven = firstNibble == 0 or firstNibble == 2
@@ -23,11 +34,11 @@ func decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
   (firstNibble.byte, isLeaf, nibbles)
 
 func rlpDecodeAccountTrieNode*(accountTrieNode: TrieNode): Result[Account, string] =
-  let accNodeRlp = rlpFromBytes(accountTrieNode.asSeq())
-  if accNodeRlp.isEmpty() or accNodeRlp.listLen() != 2:
+  let accNodeRlp = rlpFromBytes(accountTrieNode.asSeq()).expectOk()
+  if accNodeRlp.isEmpty() or accNodeRlp.listLen().expectOk() != 2:
     return err("invalid account trie node - malformed")
 
-  let accNodePrefixRlp = accNodeRlp.listElem(0)
+  let accNodePrefixRlp = accNodeRlp.listElem(0).expectOk()
   if accNodePrefixRlp.isEmpty():
     return err("invalid account trie node - empty prefix")
 
@@ -35,16 +46,14 @@ func rlpDecodeAccountTrieNode*(accountTrieNode: TrieNode): Result[Account, strin
   if not isLeaf:
     return err("invalid account trie node - leaf prefix expected")
 
-  decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
-
-# TODO: test the below functions
+  decodeRlp(accNodeRlp.listElem(1).toBytes().expectOk(), Account)
 
 func rlpDecodeContractTrieNode*(contractTrieNode: TrieNode): Result[UInt256, string] =
-  let storageNodeRlp = rlpFromBytes(contractTrieNode.asSeq())
-  if storageNodeRlp.isEmpty() or storageNodeRlp.listLen() != 2:
+  let storageNodeRlp = rlpFromBytes(contractTrieNode.asSeq()).expectOk()
+  if storageNodeRlp.isEmpty() or storageNodeRlp.listLen().expectOk() != 2:
     return err("invalid contract trie node - malformed")
 
-  let storageNodePrefixRlp = storageNodeRlp.listElem(0)
+  let storageNodePrefixRlp = storageNodeRlp.listElem(0).expectOk()
   if storageNodePrefixRlp.isEmpty():
     return err("invalid contract trie node - empty prefix")
 
@@ -52,7 +61,7 @@ func rlpDecodeContractTrieNode*(contractTrieNode: TrieNode): Result[UInt256, str
   if not isLeaf:
     return err("invalid contract trie node - leaf prefix expected")
 
-  decodeRlp(storageNodeRlp.listElem(1).toBytes(), UInt256)
+  decodeRlp(storageNodeRlp.listElem(1).toBytes().expectOk(), UInt256)
 
 func toAccount*(accountProof: TrieProof): Result[Account, string] {.inline.} =
   doAssert(accountProof.len() > 1)

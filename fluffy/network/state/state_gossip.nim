@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   results,
   chronos,
@@ -49,16 +51,18 @@ func getParent(p: ProofWithPath): ProofWithPath =
     parentEndNode = rlpFromBytes(parentProof[^1].asSeq())
 
   # the trie proof should have already been validated when receiving the offer content
-  doAssert(parentEndNode.listLen() == 2 or parentEndNode.listLen() == 17)
+  doAssert(
+    parentEndNode.listLen().expectOk() == 2 or parentEndNode.listLen().expectOk() == 17
+  )
 
   var unpackedNibbles = p.path.unpackNibbles()
 
-  if parentEndNode.listLen() == 17:
+  if parentEndNode.listLen().expectOk() == 17:
     # branch node so only need to remove a single nibble
     return parentProof.withPath(unpackedNibbles.dropN(1).packNibbles())
 
   # leaf or extension node so we need to remove one or more nibbles
-  let prefixNibbles = decodePrefix(parentEndNode.listElem(0))[2]
+  let (_, _, prefixNibbles) = decodePrefix(parentEndNode.listElem(0)).expectOk()
 
   parentProof.withPath(unpackedNibbles.dropN(prefixNibbles.len()).packNibbles())
 
