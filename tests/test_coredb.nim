@@ -159,8 +159,9 @@ proc initRunnerDB(
     case dbType:
     of AristoDbMemory: AristoDbMemory.newCoreDbRef()
     of AristoDbRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+    of AristoDbDualRocks: AristoDbDualRocks.newCoreDbRef(path, DbOptions.init())
     of AristoDbVoid: AristoDbVoid.newCoreDbRef()
-    else: raiseAssert "Oops"
+    of Ooops: raiseAssert "Ooops"
 
   when false: # or true:
     setDebugLevel()
@@ -336,7 +337,7 @@ when isMainModule:
 
   setErrorLevel()
 
-  when true: # and false:
+  when true and false:
     false.coreDbMain()
 
   # This one uses the readily available dump: `bulkTest0` and some huge replay
@@ -353,6 +354,7 @@ when isMainModule:
     for n,capture in sampleList:
       noisy.profileSection("@sample #" & $n, state):
         noisy.chainSyncRunner(
+          #dbType = AristoDbDualRocks,
           capture = capture,
           pruneHistory = true,
           #profilingOk = true,

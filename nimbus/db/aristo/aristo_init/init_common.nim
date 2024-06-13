@@ -22,6 +22,7 @@ type
     BackendVoid = 0                  ## For providing backend-less constructor
     BackendMemory
     BackendRocksDB
+    BackendRdbHosting                ## Allowed piggybacking write session
 
   StorageType* = enum
     ## Storage types, key prefix

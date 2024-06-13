@@ -58,7 +58,7 @@ type
   KvtApiNForkedFn* = proc(db: KvtDbRef): int {.noRaise.}
   KvtApiPutFn* = proc(db: KvtDbRef,
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
-  KvtApiReCentreFn* = proc(db: KvtDbRef) {.noRaise.}
+  KvtApiReCentreFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
   KvtApiPersistFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
@@ -156,7 +156,7 @@ proc dup(be: BackendRef): BackendRef =
   of BackendMemory:
     return MemBackendRef(be).dup
 
-  of BackendRocksDB:
+  of BackendRocksDB, BackendRdbTriggered:
     when KvtPersistentBackendOk:
       return RdbBackendRef(be).dup
 
@@ -306,9 +306,9 @@ func init*(
         result = api.put(a, b, c)
 
   profApi.reCentre =
-    proc(a: KvtDbRef) =
+    proc(a: KvtDbRef): auto =
       KvtApiProfReCentreFn.profileRunner:
-        api.reCentre(a)
+        result = api.reCentre(a)
 
   profApi.rollback =
     proc(a: KvtTxRef): auto =

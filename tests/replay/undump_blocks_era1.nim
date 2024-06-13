@@ -20,6 +20,7 @@ iterator undumpBlocksEra1*(
     dir: string,
     least = low(uint64), # First block to extract
     stopAfter = high(uint64), # Last block to extract
+    doAssertOk = false;
 ): seq[EthBlock] =
   let db = Era1DbRef.init(dir, "mainnet").expect("Era files present")
   defer:
@@ -32,7 +33,8 @@ iterator undumpBlocksEra1*(
 
   for i in 0 ..< stopAfter:
     var bck = db.getEthBlock(least + i).valueOr:
-      doAssert i > 0, "expected at least one block"
+      if doAssertOk:
+        doAssert i > 0, "expected at least one block"
       break
 
     tmp.add move(bck)

@@ -39,10 +39,22 @@ const
 # ------------------------------------------------------------------------------
 
 proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
+  ## This funcion piggybacks the `KVT` on the `Aristo` backend.
   let
-    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, opts).expect aristoFail
-    gdb = adb.guestDb().valueOr: GuestDbRef(nil)
-    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, gdb).expect kvtFail
+    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, opts).valueOr:
+      raiseAssert aristoFail & ": " & $error
+    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, adb, opts).valueOr:
+      raiseAssert kvtFail & ": " & $error
+  AristoDbRocks.create(kdb, adb)
+
+proc newAristoDualRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
+  ## This is mainly for debugging. The KVT is run on a completely separate
+  ## database backend.
+  let
+    adb = AristoDbRef.init(use_ari.RdbBackendRef, path, opts).valueOr:
+      raiseAssert aristoFail & ": " & $error
+    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, opts).valueOr:
+      raiseAssert kvtFail & ": " & $error
   AristoDbRocks.create(kdb, adb)
 
 # ------------------------------------------------------------------------------

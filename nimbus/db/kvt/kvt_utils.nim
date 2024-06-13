@@ -41,8 +41,8 @@ proc getBe*(
     key: openArray[byte];             # Key of database record
       ): Result[Blob,KvtError] =
   ## Get the vertex from the (filtered) backened if available.
-  if not db.roFilter.isNil:
-    db.roFilter.sTab.withValue(@key, w):
+  if not db.balancer.isNil:
+    db.balancer.sTab.withValue(@key, w):
       if w[].len == 0:
         return err(GetNotFound)
       return ok(w[])

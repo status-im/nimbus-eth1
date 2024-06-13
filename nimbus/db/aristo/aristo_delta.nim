@@ -60,9 +60,9 @@ proc deltaPersistent*(
   if db != parent:
     if not reCentreOk:
       return err(FilBackendRoMode)
-    db.reCentre
+    ? db.reCentre()
   # Always re-centre to `parent` (in case `reCentreOk` was set)
-  defer: parent.reCentre
+  defer: discard parent.reCentre()
 
   # Initialise peer filter balancer.
   let updateSiblings = ? UpdateSiblingsRef.init db
@@ -74,7 +74,7 @@ proc deltaPersistent*(
     serial: nxtFid)
 
   # Store structural single trie entries
-  let writeBatch = be.putBegFn()
+  let writeBatch = ? be.putBegFn()
   be.putVtxFn(writeBatch, db.balancer.sTab.pairs.toSeq)
   be.putKeyFn(writeBatch, db.balancer.kMap.pairs.toSeq)
   be.putTuvFn(writeBatch, db.balancer.vTop)

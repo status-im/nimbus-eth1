@@ -15,22 +15,35 @@
 
 import
   std/os,
+  ../../kvt_desc,
   rocksdb
 
 type
   RdbInst* = object
-    store*: ColFamilyReadWrite       ## Rocks DB database handler
+    store*: KvtCfStore               ## Rocks DB database handler
     session*: WriteBatchRef          ## For batched `put()`
+
     basePath*: string                ## Database directory
+    delayedPersist*: KvtDbRef        ## Enable next proggyback write session
+
+  KvtCFs* = enum
+    ## Column family symbols/handles and names used on the database
+    KvtGeneric = "KvtGen"            ## Generic column family
+
+  KvtCfStore* = array[KvtCFs,ColFamilyReadWrite]
+    ## List of column family handlers
 
 const
-  KvtFamily* = "Kvt"                 ## RocksDB column family
   BaseFolder* = "nimbus"             ## Same as for Legacy DB
   DataFolder* = "kvt"                ## Legacy DB has "data"
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+template logTxt*(info: static[string]): static[string] =
+   "RocksDB/" & info
+
 
 func baseDir*(rdb: RdbInst): string =
   rdb.basePath / BaseFolder
@@ -39,8 +52,8 @@ func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
 
 
-template logTxt*(info: static[string]): static[string] =
-   "RocksDB/" & info
+template baseDb*(rdb: RdbInst): RocksDbReadWriteRef =
+  rdb.store[KvtGeneric].db
 
 # ------------------------------------------------------------------------------
 # End

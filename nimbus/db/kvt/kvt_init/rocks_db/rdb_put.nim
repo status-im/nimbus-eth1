@@ -50,7 +50,7 @@ when extraTraceMessages:
 
 proc begin*(rdb: var RdbInst) =
   if rdb.session.isNil:
-    rdb.session = rdb.store.openWriteBatch()
+    rdb.session = rdb.baseDb.openWriteBatch()
 
 proc rollback*(rdb: var RdbInst) =
   if not rdb.session.isClosed():
@@ -59,7 +59,7 @@ proc rollback*(rdb: var RdbInst) =
 proc commit*(rdb: var RdbInst): Result[void,(KvtError,string)] =
   if not rdb.session.isClosed():
     defer: rdb.disposeSession()
-    rdb.store.write(rdb.session).isOkOr:
+    rdb.baseDb.write(rdb.session).isOkOr:
       const errSym = RdbBeDriverWriteError
       when extraTraceMessages:
         trace logTxt "commit", error=errSym, info=error
@@ -70,16 +70,15 @@ proc put*(
     rdb: RdbInst;
     data: openArray[(Blob,Blob)];
       ): Result[void,(Blob,KvtError,string)] =
-  let dsc = rdb.session
   for (key,val) in data:
     if val.len == 0:
-      dsc.delete(key, rdb.store.name).isOkOr:
+      rdb.session.delete(key, $KvtGeneric).isOkOr:
         const errSym = RdbBeDriverDelError
         when extraTraceMessages:
           trace logTxt "del", key, error=errSym, info=error
         return err((key,errSym,error))
     else:
-      dsc.put(key, val, rdb.store.name).isOkOr:
+      rdb.session.put(key, val, $KvtGeneric).isOkOr:
         const errSym = RdbBeDriverPutError
         when extraTraceMessages:
           trace logTxt "put", key, error=errSym, info=error

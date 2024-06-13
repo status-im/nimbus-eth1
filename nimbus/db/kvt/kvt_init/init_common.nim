@@ -11,18 +11,20 @@
 {.push raises: [].}
 
 import
-  ../../aristo/aristo_init/init_common,
   ../kvt_desc,
   ../kvt_desc/desc_backend
-
-export
-  BackendType # borrowed from Aristo
 
 const
   verifyIxId = true # and false
     ## Enforce session tracking
 
 type
+  BackendType* = enum
+    BackendVoid = 0                  ## For providing backend-less constructor
+    BackendMemory                    ## Same as Aristo
+    BackendRocksDB                   ## Same as Aristo
+    BackendRdbTriggered              ## Piggybacked on remote write session
+
   TypedBackendRef* = ref TypedBackendObj
   TypedBackendObj* = object of BackendObj
     beKind*: BackendType             ## Backend type identifier
