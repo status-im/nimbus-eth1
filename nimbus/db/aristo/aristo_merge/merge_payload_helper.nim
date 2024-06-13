@@ -454,7 +454,7 @@ proc mergePayloadImpl*(
     leafTie: LeafTie;                  # Leaf item to add to the database
     payload: PayloadRef;               # Payload value
     accPath: PathID;                   # Needed for accounts payload
-      ): Result[Hike,AristoError] =
+      ): Result[bool,AristoError] =
   ## Merge the argument `leafTie` key-value-pair into the top level vertex
   ## table of the database `db`. The field `path` of the `leafTie` argument is
   ## used to address the leaf vertex with the payload. It is stored or updated
@@ -474,6 +474,9 @@ proc mergePayloadImpl*(
   ## leaf of which must have payload type `AccountData`. If the  payload field
   ## `storageID` does not have a valid entry, a new sub-trie is created and
   ## the `storageID` field is updated on disk.
+  ##
+  ## The function returns `true` iff a new sub-tree was linked to an account
+  ## leaf record.
   ##
   let wp = block:
     if leafTie.root.distinctBase < LEAST_FREE_VID:
@@ -532,14 +535,15 @@ proc mergePayloadImpl*(
       if rc.isErr or rc.value != leafTie.path:
         return err(MergeAssemblyFailed) # Ooops
 
-  # Make sure that there is an accounts that refers to that storage trie
+  # Make sure that there is an account that refers to that storage trie
   if wp.vid.isValid and not wp.vtx.lData.account.storageID.isValid:
     let leaf = wp.vtx.dup # Dup on modify
     leaf.lData.account.storageID = leafTie.root
     db.layersPutVtx(VertexID(1), wp.vid, leaf)
     db.layersResKey(VertexID(1), wp.vid)
+    return ok true
 
-  ok okHike
+  ok false
 
 # ------------------------------------------------------------------------------
 # End

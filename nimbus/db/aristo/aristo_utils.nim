@@ -15,7 +15,7 @@
 
 import
   std/[sequtils, sets, typetraits],
-  eth/common,
+  eth/[common, trie/nibbles],
   results,
   "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
 
@@ -176,7 +176,7 @@ proc registerAccount*(
     db: AristoDbRef;                   # Database, top layer
     stoRoot: VertexID;                 # Storage root ID
     accPath: PathID;                   # Needed for accounts payload
-       ): Result[VidVtxPair,AristoError] =
+      ): Result[VidVtxPair,AristoError] =
   ## Verify that the `stoRoot` argument is properly referred to by the
   ## account data (if any) implied to by the `accPath` argument.
   ##
@@ -191,13 +191,14 @@ proc registerAccount*(
 
   # Get account leaf with account data
   let hike = LeafTie(root: VertexID(1), path: accPath).hikeUp(db).valueOr:
-    return err(UtilsAccUnaccessible)
+    return err(UtilsAccInaccessible)
 
+  # Check account payload
   let wp = hike.legs[^1].wp
   if wp.vtx.vType != Leaf:
     return err(UtilsAccPathWithoutLeaf)
   if wp.vtx.lData.pType != AccountData:
-    return ok(VidVtxPair()) # nothing to do
+    return err(UtilsAccLeafPayloadExpected)
 
   # Check whether the `stoRoot` exists on the databse
   let stoVtx = block:
@@ -217,6 +218,40 @@ proc registerAccount*(
   else:
     if stoID.isValid:
       return err(UtilsAccWrongStorageRoot)
+
+  # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
+  for w in hike.legs.mapIt(it.wp.vid):
+    db.layersResKey(hike.root, w)
+
+  # Signal to `hashify()` where to start rebuilding Merkel hashes
+  db.top.final.dirty.incl hike.root
+  db.top.final.dirty.incl wp.vid
+
+  ok(wp)
+
+
+proc registerAccountForUpdate*(
+    db: AristoDbRef;                   # Database, top layer
+    accPath: PathID;                   # Needed for accounts payload
+      ): Result[VidVtxPair,AristoError] =
+  ## ...
+  ##
+  # Expand vertex path to account leaf
+  let hike = (@accPath).initNibbleRange.hikeUp(VertexID(1), db).valueOr:
+    return err(UtilsAccInaccessible)
+
+  # Extract the account payload fro the leaf
+  let wp = hike.legs[^1].wp
+  if wp.vtx.vType != Leaf:
+    return err(UtilsAccPathWithoutLeaf)
+  assert wp.vtx.lData.pType == AccountData            # debugging only
+  let acc = wp.vtx.lData.account
+
+  # Check whether storage ID exists, at all
+  if acc.storageID.isValid:
+    # Verify that the storage root `acc.storageID` exists on the databse
+    discard db.getVtxRc(acc.storageID).valueOr:
+      return err(UtilsStoRootInaccessible)
 
   # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
   for w in hike.legs.mapIt(it.wp.vid):

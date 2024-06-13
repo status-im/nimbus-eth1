@@ -86,6 +86,9 @@ type
 
     # Merge leaf `merge()`
     MergeAssemblyFailed # Ooops, internal error
+    MergeAccLeafPathWithoutLeaf
+    MergeAccLeafPayloadExpected
+    MergeAccUnaccessible
     MergeBranchGarbledNibble
     MergeBranchGarbledTail
     MergeBranchLinkLeafGarbled
@@ -121,13 +124,6 @@ type
     MergeNodeVtxDuplicates
     MergeRootKeyMissing
     MergeRootArgsIncomplete
-
-    # Utils
-    UtilsAccPathMissing
-    UtilsAccPathWithoutLeaf
-    UtilsAccUnaccessible
-    UtilsAccWrongStorageRoot
-    UtilsStoRootMissing
 
     # Update `Merkle` hashes `hashify()`
     HashifyVtxUnresolved
@@ -289,6 +285,14 @@ type
     AccVtxUnsupported
     AccNodeUnsupported
     PayloadTypeUnsupported
+
+    UtilsAccPathMissing
+    UtilsAccPathWithoutLeaf
+    UtilsAccInaccessible
+    UtilsAccWrongStorageRoot
+    UtilsStoRootInaccessible
+    UtilsStoRootMissing
+    UtilsAccLeafPayloadExpected
 
     # Miscelaneous handy helpers
     AccRootUnacceptable

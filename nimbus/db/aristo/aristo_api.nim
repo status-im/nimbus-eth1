@@ -100,7 +100,8 @@ type
         ): Result[PayloadRef,(VertexID,AristoError)]
         {.noRaise.}
       ## Cascaded attempt to traverse the `Aristo Trie` and fetch the value
-      ## of a leaf vertex. This function is complementary to `mergePayload()`.
+      ## of a leaf vertex. This function is complementary to some `mergeXXX()`
+      ## function.
 
   AristoApiFindTxFn* =
     proc(db: AristoDbRef;
@@ -238,8 +239,31 @@ type
          accPath: PathID;
         ): Result[bool,AristoError]
         {.noRaise.}
-      ## Veriant of `mergePayload()` where the `data` argument will be
+      ## Variant of `mergePayload()` where the `data` argument will be
       ## converted to a `RawBlob` type `PayloadRef` value.
+
+  AristoApiMergeAccountPayloadFn* =
+    proc(db: AristoDbRef;
+         accPath: openArray[byte];
+         accPayload: AristoAccount;
+        ): Result[bool,AristoError]
+        {.noRaise.}
+      ## Merge the  key-value-pair argument `(accKey,accPayload)` as an account
+      ## ledger value, i.e. the the sub-tree starting at `VertexID(1)`.
+      ##
+      ## The payload argument `accPayload` must have the `storageID` field
+      ## either unset/invalid or referring to a existing vertex which will be
+      ## assumed to be a storage tree.
+
+  AristoApiMergeGenericDataFn* =
+    proc( db: AristoDbRef;
+          root: VertexID;
+          path: openArray[byte];
+          data: openArray[byte];
+        ): Result[bool,AristoError]
+        {.noRaise.}
+      ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
+      ## `root` different form `VertexID(1)` and smaller than `LEAST_FREE_VID`.
 
   AristoApiMergePayloadFn* =
     proc(db: AristoDbRef;
@@ -269,6 +293,23 @@ type
       ## the leaf of which must have payload type `AccountData`. If the payload
       ## field `storageID` does not have a valid entry, a new sub-trie is
       ## created and the `storageID` field is updated on disk.
+
+  AristoApiMergeStorageDataFn* =
+    proc(db: AristoDbRef;
+         stoKey: openArray[byte];
+         stoData: openArray[byte];
+         accPath: PathID;
+        ): Result[VertexID,AristoError]
+        {.noRaise.}
+      ## Merge the  key-value-pair argument `(stoKey,stoData)` as a storage
+      ## value. This means, the root vertex will be derived from the `accPath`
+      ## argument, the Patricia tree path for the storage tree is given by
+      ## `stoKey` and the leaf value with the payload will be stored as a
+      ## `PayloadRef` object of type `RawData`.
+      ##
+      ## If the storage tree does not exist yet it will be created and the
+      ## payload leaf accessed by `accPath` will be updated with the storage
+      ## tree vertex ID.
 
   AristoApiPathAsBlobFn* =
     proc(tag: PathID;
@@ -400,7 +441,10 @@ type
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
     merge*: AristoApiMergeFn
+    mergeAccountPayload*: AristoApiMergeAccountPayloadFn
+    mergeGenericData*: AristoApiMergeGenericDataFn
     mergePayload*: AristoApiMergePayloadFn
+    mergeStorageData*: AristoApiMergeStorageDataFn
     pathAsBlob*: AristoApiPathAsBlobFn
     persist*: AristoApiPersistFn
     reCentre*: AristoApiReCentreFn
@@ -433,7 +477,10 @@ type
     AristoApiProfLevelFn               = "level"
     AristoApiProfNForkedFn             = "nForked"
     AristoApiProfMergeFn               = "merge"
+    AristoApiProfMergeAccountPayloadFn = "mergeAccountPayload"
+    AristoApiProfMergeGenericDataFn    = "mergeGenericData"
     AristoApiProfMergePayloadFn        = "mergePayload"
+    AristoApiProfMergeStorageDataFn    = "mergeStorageData"
     AristoApiProfPathAsBlobFn          = "pathAsBlob"
     AristoApiProfPersistFn             = "persist"
     AristoApiProfReCentreFn            = "reCentre"
@@ -482,7 +529,10 @@ when AutoValidateApiHooks:
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
     doAssert not api.merge.isNil
+    doAssert not api.mergeAccountPayload.isNil
+    doAssert not api.mergeGenericData.isNil
     doAssert not api.mergePayload.isNil
+    doAssert not api.mergeStorageData.isNil
     doAssert not api.pathAsBlob.isNil
     doAssert not api.persist.isNil
     doAssert not api.reCentre.isNil
@@ -535,7 +585,10 @@ func init*(api: var AristoApiObj) =
   api.level = level
   api.nForked = nForked
   api.merge = merge
+  api.mergeAccountPayload = mergeAccountPayload
+  api.mergeGenericData = mergeGenericData
   api.mergePayload = mergePayload
+  api.mergeStorageData = mergeStorageData
   api.pathAsBlob = pathAsBlob
   api.persist = persist
   api.reCentre = reCentre
@@ -571,7 +624,10 @@ func dup*(api: AristoApiRef): AristoApiRef =
     level:               api.level,
     nForked:             api.nForked,
     merge:               api.merge,
+    mergeAccountPayload: api.mergeAccountPayload,
+    mergeGenericData:    api.mergeGenericData,
     mergePayload:        api.mergePayload,
+    mergeStorageData:    api.mergeStorageData,
     pathAsBlob:          api.pathAsBlob,
     persist:             api.persist,
     reCentre:            api.reCentre,
@@ -696,11 +752,26 @@ func init*(
       AristoApiProfMergeFn.profileRunner:
          result = api.merge(a, b, c, d ,e)
 
+  profApi.mergeAccountPayload =
+    proc(a: AristoDbRef; b, c: openArray[byte]): auto =
+      AristoApiProfMergeAccountPayloadFn.profileRunner:
+        result = api.mergeAccountPayload(a, b, c)
+
+  profApi.mergeGenericData =
+    proc(a: AristoDbRef; b: VertexID, c, d: openArray[byte]): auto =
+      AristoApiProfMergeGenericDataFn.profileRunner:
+        result = api.mergeGenericData(a, b, c, d)
+
   profApi.mergePayload =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]; d: PayloadRef;
          e = VOID_PATH_ID): auto =
       AristoApiProfMergePayloadFn.profileRunner:
         result = api.mergePayload(a, b, c, d ,e)
+
+  profApi.mergeStorageData =
+    proc(a: AristoDbRef; b, c: openArray[byte]; d: PathID): auto =
+      AristoApiProfMergeStorageDataFn.profileRunner:
+        result = api.mergeStorageData(a, b, c, d)
 
   profApi.pathAsBlob =
     proc(a: PathID): auto =
