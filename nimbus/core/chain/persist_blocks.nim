@@ -86,7 +86,9 @@ proc persistBlocksImpl(
     toBlock = blocks[blocks.high()].header.blockNumber
   trace "Persisting blocks", fromBlock, toBlock
 
-  var txs = 0
+  var
+    txs = 0
+    gas = GasInt(0)
   for blk in blocks:
     template header(): BlockHeader =
       blk.header
@@ -130,6 +132,7 @@ proc persistBlocksImpl(
     c.com.syncCurrent = header.blockNumber
 
     txs += blk.transactions.len
+    gas += blk.header.gasUsed
 
   dbTx.commit()
 
@@ -147,7 +150,7 @@ proc persistBlocksImpl(
       except CatchableError as exc:
         warn "Could not clean up old blocks from history", err = exc.msg
 
-  ok((blocks.len, txs, vmState.cumulativeGasUsed))
+  ok((blocks.len, txs, gas))
 
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods
