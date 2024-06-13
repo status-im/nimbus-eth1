@@ -193,8 +193,10 @@ NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 update: | update-common
+	+ vendor/nim-rocksdb/scripts/clean_build_artifacts.sh
 	rm -rf nimbus.nims && \
 		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
+
 
 update-from-ci: | sanity-checks update-test
 	rm -rf nimbus.nims && \
