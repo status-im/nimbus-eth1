@@ -48,10 +48,9 @@ suite "History Content Encodings":
       # Go over all content keys and headers with generated proofs and compare
       # them with the ones from the test vectors.
       let
-        blockNumber = blockHeaders[i].blockNumber
-        contentKeyEncoded = content[blockNumber.toString()].content_key.hexToSeqByte()
-        contentValueEncoded =
-          content[blockNumber.toString()].content_value.hexToSeqByte()
+        blockNumber = blockHeaders[i].number
+        contentKeyEncoded = content[$blockNumber].content_key.hexToSeqByte()
+        contentValueEncoded = content[$blockNumber].content_value.hexToSeqByte()
 
       check:
         contentKeyEncoded == headerContentKey

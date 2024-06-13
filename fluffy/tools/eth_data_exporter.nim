@@ -63,18 +63,16 @@ chronicles.formatIt(IoErrorCode):
   $it
 
 proc downloadHeader(client: RpcClient, i: uint64): BlockHeader =
-  let blockNumber = u256(i)
   try:
-    let jsonHeader = requestHeader(blockNumber, some(client))
+    let jsonHeader = requestHeader(i, some(client))
     parseBlockHeader(jsonHeader)
   except CatchableError as e:
     fatal "Error while requesting BlockHeader", error = e.msg, number = i
     quit 1
 
 proc downloadBlock(i: uint64, client: RpcClient): Block =
-  let num = u256(i)
   try:
-    return requestBlock(num, flags = {DownloadReceipts}, client = some(client))
+    return requestBlock(i, flags = {DownloadReceipts}, client = some(client))
   except CatchableError as e:
     fatal "Error while requesting Block", error = e.msg, number = i
     quit 1
@@ -248,9 +246,7 @@ proc cmdExportEra1(config: ExporterConf) =
             # TODO: Not sure about the errors that can occur here. But the whole
             # block requests over json-rpc should be reworked here (and can be
             # used in the bridge also then)
-            requestBlock(
-              blockNumber.u256, flags = {DownloadReceipts}, client = some(client)
-            )
+            requestBlock(blockNumber, flags = {DownloadReceipts}, client = some(client))
           except CatchableError as e:
             error "Failed retrieving block, skip creation of era1 file",
               blockNumber, era, error = e.msg
