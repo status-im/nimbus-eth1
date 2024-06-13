@@ -116,8 +116,12 @@ proc buildAcceptConnection(
     t: ref Table[SKey, UtpSocket[NodeAddress]]
 ): AcceptConnectionCallback[NodeAddress] =
   return (
-    proc(server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
-      let fut = newFuture[void]()
+    proc(
+        server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]
+    ): Future[void] {.async: (raw: true, raises: []).} =
+      let fut = noCancel Future[void].Raising([CancelledError]).init(
+        "utp_test_app.AcceptConnectionCallback"
+      )
       let key = client.socketKey.toSKey()
       t[key] = client
       fut.complete()
