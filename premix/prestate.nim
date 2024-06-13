@@ -23,7 +23,7 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent: Blo
     kvt = chainDB.newKvt()
 
   discard chainDB.setHead(parent, true)
-  discard chainDB.persistTransactions(blockNumber, blk.transactions)
+  chainDB.persistTransactions(blockNumber, blk.transactions)
   discard chainDB.persistUncles(blk.uncles)
 
   kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:

@@ -117,13 +117,13 @@ proc persistBlocksImpl(
         )
 
       if NoSaveTxs notin flags:
-        discard c.db.persistTransactions(header.blockNumber, blk.transactions)
+        c.db.persistTransactions(header.blockNumber, blk.transactions)
 
       if NoSaveReceipts notin flags:
-        discard c.db.persistReceipts(vmState.receipts)
+        c.db.persistReceipts(vmState.receipts)
 
       if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
-        discard c.db.persistWithdrawals(blk.withdrawals.get)
+        c.db.persistWithdrawals(blk.withdrawals.get)
     except CatchableError as exc:
       return err(exc.msg)
 

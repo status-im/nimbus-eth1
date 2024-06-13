@@ -72,10 +72,6 @@ proc getBlockHeader*(
       ): bool
       {.gcsafe.}
 
-# Copied from `utils/utils` which cannot be imported here in order to
-# avoid circular imports.
-func hash(b: BlockHeader): Hash256
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -103,7 +99,7 @@ iterator findNewAncestors(
   var h = header
   var orig: BlockHeader
   while true:
-    if db.getBlockHeader(h.blockNumber, orig) and orig.hash == h.hash:
+    if db.getBlockHeader(h.blockNumber, orig) and orig.rlpHash == h.rlpHash:
       break
 
     yield h
@@ -231,9 +227,6 @@ iterator getReceipts*(
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-func hash(b: BlockHeader): Hash256 =
-  rlpHash(b)
 
 proc removeTransactionFromCanonicalChain(
     db: CoreDbRef;
@@ -549,12 +542,12 @@ proc getAncestorsHashes*(
   result = newSeq[Hash256](ancestorCount)
   while ancestorCount > 0:
     h = db.getBlockHeader(h.parentHash)
-    result[ancestorCount - 1] = h.hash
+    result[ancestorCount - 1] = h.rlpHash
     dec ancestorCount
 
 proc addBlockNumberToHashLookup*(db: CoreDbRef; header: BlockHeader) =
   let blockNumberKey = blockNumberToHashKey(header.blockNumber)
-  db.newKvt.put(blockNumberKey.toOpenArray, rlp.encode(header.hash)).isOkOr:
+  db.newKvt.put(blockNumberKey.toOpenArray, rlp.encode(header.rlpHash)).isOkOr:
     warn logTxt "addBlockNumberToHashLookup()",
       blockNumberKey, action="put()", error=($$error)
 
@@ -562,12 +555,12 @@ proc persistTransactions*(
     db: CoreDbRef;
     blockNumber: BlockNumber;
     transactions: openArray[Transaction];
-      ): Hash256 =
+      ) =
   const
     info = "persistTransactions()"
 
   if transactions.len == 0:
-    return EMPTY_ROOT_HASH
+    return
 
   let
     mpt = db.ctx.getMpt(CtTxs)
@@ -577,19 +570,15 @@ proc persistTransactions*(
     let
       encodedKey = rlp.encode(idx)
       encodedTx = rlp.encode(tx)
-      txHash = rlpHash(tx)
+      txHash = keccakHash(encodedTx)
       blockKey = transactionHashToBlockKey(txHash)
       txKey: TransactionKey = (blockNumber, idx)
     mpt.merge(encodedKey, encodedTx).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
-      return EMPTY_ROOT_HASH
+      return
     kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       trace logTxt info, blockKey, action="put()", error=($$error)
-      return EMPTY_ROOT_HASH
-  mpt.getColumn.state.valueOr:
-    when extraTraceMessages:
-      warn logTxt info, action="state()"
-    return EMPTY_ROOT_HASH
+      return
 
 proc forgetHistory*(
     db: CoreDbRef;
@@ -695,19 +684,16 @@ proc getUncles*(
 proc persistWithdrawals*(
     db: CoreDbRef;
     withdrawals: openArray[Withdrawal];
-      ): Hash256 =
+      ) =
   const info = "persistWithdrawals()"
   if withdrawals.len == 0:
-    return EMPTY_ROOT_HASH
+    return
 
   let mpt = db.ctx.getMpt(CtWithdrawals)
   for idx, wd in withdrawals:
     mpt.merge(rlp.encode(idx), rlp.encode(wd)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
-      return EMPTY_ROOT_HASH
-  mpt.getColumn.state.valueOr:
-    warn logTxt info, action="state()"
-    return EMPTY_ROOT_HASH
+      return
 
 proc getWithdrawals*(
     db: CoreDbRef;
@@ -791,7 +777,7 @@ proc getUncleHashes*(
       ): seq[Hash256]
       {.gcsafe, raises: [RlpError,ValueError].} =
   for blockHash in blockHashes:
-    result &= db.getBlockBody(blockHash).uncles.mapIt(it.hash)
+    result &= db.getBlockBody(blockHash).uncles.mapIt(it.rlpHash)
 
 proc getUncleHashes*(
     db: CoreDbRef;
@@ -806,7 +792,7 @@ proc getUncleHashes*(
           warn logTxt "getUncleHashes()",
             ommersHash=header.ommersHash, action="get()", `error`=($$error)
         return @[]
-    return rlp.decode(encodedUncles, seq[BlockHeader]).mapIt(it.hash)
+    return rlp.decode(encodedUncles, seq[BlockHeader]).mapIt(it.rlpHash)
 
 proc getTransactionKey*(
     db: CoreDbRef;
@@ -869,19 +855,15 @@ proc setHead*(
 proc persistReceipts*(
     db: CoreDbRef;
     receipts: openArray[Receipt];
-      ): Hash256 =
+      ) =
   const info = "persistReceipts()"
   if receipts.len == 0:
-    return EMPTY_ROOT_HASH
+    return
 
   let mpt = db.ctx.getMpt(CtReceipts)
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx), rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
-  mpt.getColumn.state.valueOr:
-    when extraTraceMessages:
-      trace logTxt info, action="state()"
-    return EMPTY_ROOT_HASH
 
 proc getReceipts*(
     db: CoreDbRef;
@@ -923,7 +905,7 @@ proc persistHeaderToDb*(
   if not forceCanonical:
     var canonHeader: BlockHeader
     if db.getCanonicalHead canonHeader:
-      let headScore = db.getScore(canonHeader.hash)
+      let headScore = db.getScore(canonHeader.rlpHash)
       if score <= headScore:
         return
 

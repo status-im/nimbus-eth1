@@ -107,11 +107,11 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
   try:
     c.db.persistHeaderToDb(
       header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
-    discard c.db.persistTransactions(header.blockNumber, blk.transactions)
-    discard c.db.persistReceipts(vmState.receipts)
+    c.db.persistTransactions(header.blockNumber, blk.transactions)
+    c.db.persistReceipts(vmState.receipts)
 
     if blk.withdrawals.isSome:
-      discard c.db.persistWithdrawals(blk.withdrawals.get)
+      c.db.persistWithdrawals(blk.withdrawals.get)
   except CatchableError as exc:
     return err(exc.msg)
 
