@@ -125,7 +125,7 @@ print(
     .to_string(
         formatters=dict(
             dict.fromkeys(["bpsd", "tpsd", "timed"], "{:,.2%}".format),
-            **dict.fromkeys(["bps_x", "bps_y", "tps_x"], "{:,.2f}".format),
+            **dict.fromkeys(["bps_x", "bps_y", "tps_x", "tps_y"], "{:,.2f}".format),
         )
     )
 )
