@@ -97,12 +97,11 @@ proc persistBlocksImpl(
       debug "Cannot update VmState", blockNumber = header.blockNumber
       return err("Cannot update VmState to block " & $header.blockNumber)
 
-    if c.validateBlock and c.extraValidation and c.verifyFrom <= header.blockNumber:
+    if c.extraValidation and c.verifyFrom <= header.blockNumber:
       # TODO: how to checkseal from here
       ?c.com.validateHeaderAndKinship(blk, checkSealOK = false)
 
-    if c.validateBlock:
-      ?vmState.processBlock(blk)
+    ?vmState.processBlock(blk)
 
     # when defined(nimbusDumpDebuggingMetaData):
     #   if validationResult == ValidationResult.Error and
