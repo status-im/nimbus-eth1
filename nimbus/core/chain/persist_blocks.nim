@@ -49,6 +49,9 @@ const CleanUpEpoch = 30_000.toBlockNumber
 # ------------------------------------------------------------------------------
 
 proc getVmState(c: ChainRef, header: BlockHeader): Result[BaseVMState, string] =
+  if not c.vmState.isNil:
+    return ok(c.vmState)
+
   let vmState = BaseVMState()
   if not vmState.init(header, c.com):
     return err("Could not initialise VMState")
