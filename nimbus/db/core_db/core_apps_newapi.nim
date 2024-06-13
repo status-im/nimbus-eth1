@@ -73,6 +73,8 @@ proc getBlockHeader*(
       ): bool
       {.gcsafe.}
 
+proc getCanonicalHeaderHash*(db: CoreDbRef): Opt[Hash256] {.gcsafe.}
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -244,24 +246,29 @@ proc setAsCanonicalChainHead(
     header: BlockHeader;
       ) =
   ## Sets the header as the canonical chain HEAD.
-  var newCanonicalHeaders = sequtils.toSeq(db.findNewAncestors(header))
-  reverse(newCanonicalHeaders)
-  for h in newCanonicalHeaders:
-    var oldHash: Hash256
-    if not db.getBlockHash(h.blockNumber, oldHash):
-      break
 
-    try:
-      let oldHeader = db.getBlockHeader(oldHash)
-      for txHash in db.getBlockTransactionHashes(oldHeader):
-        db.removeTransactionFromCanonicalChain(txHash)
-        # TODO re-add txn to internal pending pool (only if local sender)
-    except BlockNotFound:
-      warn "Could not load old header", oldHash
+  # TODO This code handles reorgs - this should be moved elsewhere because we'll
+  #      be handling reorgs mainly in-memory
+  if header.blockNumber == 0 or
+      db.getCanonicalHeaderHash().valueOr(Hash256()) != header.parentHash:
+    var newCanonicalHeaders = sequtils.toSeq(db.findNewAncestors(header))
+    reverse(newCanonicalHeaders)
+    for h in newCanonicalHeaders:
+      var oldHash: Hash256
+      if not db.getBlockHash(h.blockNumber, oldHash):
+        break
 
-  for h in newCanonicalHeaders:
-    # TODO don't recompute block hash
-    db.addBlockNumberToHashLookup(h.blockNumber, h.blockHash)
+      try:
+        let oldHeader = db.getBlockHeader(oldHash)
+        for txHash in db.getBlockTransactionHashes(oldHeader):
+          db.removeTransactionFromCanonicalChain(txHash)
+          # TODO re-add txn to internal pending pool (only if local sender)
+      except BlockNotFound:
+        warn "Could not load old header", oldHash
+
+    for h in newCanonicalHeaders:
+      # TODO don't recompute block hash
+      db.addBlockNumberToHashLookup(h.blockNumber, h.blockHash)
 
   let canonicalHeadHash = canonicalHeadHashKey()
   db.newKvt.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
