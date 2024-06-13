@@ -338,14 +338,14 @@ func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.get
 
-proc isBlockAfterTtd*(com: CommonRef, header: BlockHeader): bool
-                      {.gcsafe, raises: [CatchableError].} =
+proc isBlockAfterTtd*(com: CommonRef, header: BlockHeader): bool =
   if com.config.terminalTotalDifficulty.isNone:
     return false
 
   let
     ttd = com.config.terminalTotalDifficulty.get()
-    ptd = com.db.getScore(header.parentHash)
+    ptd = com.db.getScore(header.parentHash).valueOr:
+      return false
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
 
@@ -358,15 +358,13 @@ func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.pragueTime.isSome and t >= com.config.pragueTime.get
 
-proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
-                {.gcsafe, raises: [CatchableError].} =
+proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType =
   if com.isBlockAfterTtd(header):
     return ConsensusType.POS
 
   return com.config.consensusType
 
-proc initializeEmptyDb*(com: CommonRef)
-    {.gcsafe, raises: [CatchableError].} =
+proc initializeEmptyDb*(com: CommonRef) =
   let kvt = com.db.newKvt()
   proc contains(kvt: CoreDxKvtRef; key: openArray[byte]): bool =
     kvt.hasKey(key).expect "valid bool"
@@ -374,8 +372,10 @@ proc initializeEmptyDb*(com: CommonRef)
     info "Writing genesis to DB"
     doAssert(com.genesisHeader.blockNumber.isZero,
       "can't commit genesis block with number > 0")
-    com.db.persistHeaderToDb(com.genesisHeader,
-      com.consensusType == ConsensusType.POS)
+    doAssert(com.db.persistHeader(com.genesisHeader,
+      com.consensusType == ConsensusType.POS,
+      startOfHistory=com.genesisHeader.parentHash),
+      "can persist genesis header")
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
 proc syncReqNewHead*(com: CommonRef; header: BlockHeader)

@@ -195,7 +195,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
   let uncles = [header]
   header.ommersHash = com.db.persistUncles(uncles)
 
-  com.db.persistHeaderToDb(header,
+  doAssert com.db.persistHeader(header,
     com.consensus == ConsensusType.POS)
   com.db.persistFixtureBlock()
   result = TestEnv(

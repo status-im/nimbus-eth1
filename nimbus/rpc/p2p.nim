@@ -492,7 +492,7 @@ proc setupEthRpc*(
       return nil
 
     result = populateBlockObject(uncles[index], chainDB, false, true)
-    result.totalDifficulty = chainDB.getScore(header.hash)
+    result.totalDifficulty = chainDB.getScore(header.blockHash).valueOr(0.u256)
 
   server.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: BlockTag, quantity: Web3Quantity) -> BlockObject:
     # Returns information about a uncle of a block by number and uncle index position.
@@ -509,7 +509,7 @@ proc setupEthRpc*(
       return nil
 
     result = populateBlockObject(uncles[index], chainDB, false, true)
-    result.totalDifficulty = chainDB.getScore(header.hash)
+    result.totalDifficulty = chainDB.getScore(header.blockHash).valueOr(0.u256)
 
   proc getLogsForBlock(
       chain: CoreDbRef,

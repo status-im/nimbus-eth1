@@ -28,7 +28,7 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent: Blo
 
   kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
     raiseAssert "generatePrestate(): put() failed " & $$error
-  chainDB.addBlockNumberToHashLookup(header)
+  chainDB.addBlockNumberToHashLookup(header.blockNumber, headerHash)
 
   for k, v in state:
     let key = hexToSeqByte(k)

@@ -110,12 +110,13 @@ proc persistBlocksImpl(
     #     vmState.dumpDebuggingMetaData(header, body)
     #     warn "Validation error. Debugging metadata dumped."
 
-    try:
-      if NoPersistHeader notin flags:
-        c.db.persistHeaderToDb(
-          header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
-        )
+    if NoPersistHeader notin flags:
+      if not c.db.persistHeader(
+        header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
+      ):
+        return err("Could not persist header")
 
+    try:
       if NoSaveTxs notin flags:
         c.db.persistTransactions(header.blockNumber, blk.transactions)
 
@@ -162,11 +163,10 @@ proc persistBlocksImpl(
 proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string] =
   discard ?c.persistBlocksImpl([blk], {NoPersistHeader, NoSaveReceipts})
 
-  try:
-    c.db.persistHeaderToDbWithoutSetHead(blk.header, c.com.startOfHistory)
-    ok()
-  except RlpError as exc:
-    err(exc.msg)
+  if not c.db.persistHeader(blk.header.blockHash, blk.header, c.com.startOfHistory):
+    return err("Could not persist header")
+
+  ok()
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
   if header.parentHash == Hash256():

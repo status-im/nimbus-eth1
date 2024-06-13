@@ -139,7 +139,7 @@ proc populateTransactionObject*(tx: Transaction,
   result.`type` = some w3Qty(tx.txType.ord)
   if optionalHeader.isSome:
     let header = optionalHeader.get
-    result.blockHash = some(w3Hash header.hash)
+    result.blockHash = some(w3Hash header.blockHash)
     result.blockNumber = some(w3BlockNumber(header.blockNumber))
 
   result.`from` = w3Addr tx.getSender()
@@ -197,7 +197,7 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
                          else:
                            none(UInt256)
   if not isUncle:
-    result.totalDifficulty = chain.getScore(blockHash)
+    result.totalDifficulty = chain.getScore(blockHash).valueOr(0.u256)
     result.uncles = w3Hashes chain.getUncleHashes(header)
 
     if fullTx:
@@ -228,7 +228,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
   result = ReceiptObject()
   result.transactionHash = w3Hash tx.rlpHash
   result.transactionIndex = w3Qty(txIndex)
-  result.blockHash = w3Hash header.hash
+  result.blockHash = w3Hash header.blockHash
   result.blockNumber = w3BlockNumber(header.blockNumber)
   result.`from` = w3Addr tx.getSender()
   result.to = some(w3Addr tx.destination)

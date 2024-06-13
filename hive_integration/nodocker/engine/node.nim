@@ -104,9 +104,11 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
     stateRootChpt = vmState.parent.stateRoot # Check point
   ? vmState.processBlock(blk)
 
+  if not c.db.persistHeader(
+      header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory):
+    return err("Could not persist header")
+
   try:
-    c.db.persistHeaderToDb(
-      header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
     c.db.persistTransactions(header.blockNumber, blk.transactions)
     c.db.persistReceipts(vmState.receipts)
 
