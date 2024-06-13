@@ -65,23 +65,22 @@ func getParent(p: ProofWithPath): ProofWithPath =
 func getParent*(offerWithKey: AccountTrieOfferWithKey): AccountTrieOfferWithKey =
   let
     (key, offer) = offerWithKey
-    (parentPath, parentProof) = offer.proof.withPath(key.path).getParent()
-
-    parentKey = AccountTrieNodeKey.init(parentPath, keccakHash(parentProof[^1].asSeq()))
-    parentOffer = AccountTrieNodeOffer.init(parentProof, offer.blockHash)
+    parent = offer.proof.withPath(key.path).getParent()
+    parentKey =
+      AccountTrieNodeKey.init(parent.path, keccakHash(parent.proof[^1].asSeq()))
+    parentOffer = AccountTrieNodeOffer.init(parent.proof, offer.blockHash)
 
   parentOffer.withKey(parentKey)
 
 func getParent*(offerWithKey: ContractTrieOfferWithKey): ContractTrieOfferWithKey =
   let
     (key, offer) = offerWithKey
-    (parentPath, parentProof) = offer.storageProof.withPath(key.path).getParent()
-
+    parent = offer.storageProof.withPath(key.path).getParent()
     parentKey = ContractTrieNodeKey.init(
-      key.address, parentPath, keccakHash(parentProof[^1].asSeq())
+      key.address, parent.path, keccakHash(parent.proof[^1].asSeq())
     )
     parentOffer =
-      ContractTrieNodeOffer.init(parentProof, offer.accountProof, offer.blockHash)
+      ContractTrieNodeOffer.init(parent.proof, offer.accountProof, offer.blockHash)
 
   parentOffer.withKey(parentKey)
 
@@ -98,21 +97,6 @@ proc gossipOffer*(
   )
   info "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
 
-  # root node, recursive gossip is finished
-  if key.path.unpackNibbles().len() == 0:
-    return
-
-  # continue the recursive gossip by sharing the parent offer with peers
-  let
-    (parentKey, parentOffer) = offer.withKey(key).getParent()
-    parentKeyBytes = parentKey.toContentKey().encode()
-    req2Peers = await p.neighborhoodGossip(
-      srcNodeId, ContentKeysList.init(@[parentKeyBytes]), @[parentOffer.encode()]
-    )
-
-  info "Offered content parent gossipped successfully with peers",
-    parentKeyBytes, peers = req2Peers
-
 proc gossipOffer*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
@@ -126,21 +110,6 @@ proc gossipOffer*(
   )
   info "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
 
-  # root node, recursive gossip is finished
-  if key.path.unpackNibbles().len() == 0:
-    return
-
-  # continue the recursive gossip by sharing the parent offer with peers
-  let
-    (parentKey, parentOffer) = offer.withKey(key).getParent()
-    parentKeyBytes = parentKey.toContentKey().encode()
-    req2Peers = await p.neighborhoodGossip(
-      srcNodeId, ContentKeysList.init(@[parentKeyBytes]), @[parentOffer.encode()]
-    )
-
-  info "Offered content parent gossipped successfully with peers",
-    parentKeyBytes, peers = req2Peers
-
 proc gossipOffer*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
@@ -153,3 +122,53 @@ proc gossipOffer*(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
   info "Offered content gossipped successfully with peers", keyBytes, peers
+
+# Currently only used for testing to gossip an entire account trie proof
+# This may also be useful for the state network bridge
+proc recursiveGossipOffer*(
+    p: PortalProtocol,
+    srcNodeId: Opt[NodeId],
+    keyBytes: ByteList,
+    offerBytes: seq[byte],
+    key: AccountTrieNodeKey,
+    offer: AccountTrieNodeOffer,
+) {.async.} =
+  asyncSpawn gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
+
+  # root node, recursive gossip is finished
+  if key.path.unpackNibbles().len() == 0:
+    return
+
+  # continue the recursive gossip by sharing the parent offer with peers
+  let
+    (parentKey, parentOffer) = offer.withKey(key).getParent()
+    parentKeyBytes = parentKey.toContentKey().encode()
+
+  asyncSpawn recursiveGossipOffer(
+    p, srcNodeId, parentKeyBytes, parentOffer.encode(), parentKey, parentOffer
+  )
+
+# Currently only used for testing to gossip an entire contract trie proof
+# This may also be useful for the state network bridge
+proc recursiveGossipOffer*(
+    p: PortalProtocol,
+    srcNodeId: Opt[NodeId],
+    keyBytes: ByteList,
+    offerBytes: seq[byte],
+    key: ContractTrieNodeKey,
+    offer: ContractTrieNodeOffer,
+) {.async.} =
+  asyncSpawn gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
+
+  # root node, recursive gossip is finished
+  if key.path.unpackNibbles().len() == 0:
+    return
+
+  # continue the recursive gossip by sharing the parent offer with peers
+  let
+    (parentKey, parentOffer) = offer.withKey(key).getParent()
+    parentKeyBytes = parentKey.toContentKey().encode()
+
+  asyncSpawn recursiveGossipOffer(
+    p, srcNodeId, parentKeyBytes, parentOffer.encode(), parentKey, parentOffer
+  )

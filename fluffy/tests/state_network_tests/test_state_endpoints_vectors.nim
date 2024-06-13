@@ -62,7 +62,7 @@ procSuite "State Endpoints":
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
-      await stateNode1.portalProtocol.gossipOffer(
+      await stateNode1.portalProtocol.recursiveGossipOffer(
         Opt.none(NodeId),
         contentKeyBytes,
         contentValueBytes,
@@ -167,7 +167,7 @@ procSuite "State Endpoints":
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
-      await stateNode1.portalProtocol.gossipOffer(
+      await stateNode1.portalProtocol.recursiveGossipOffer(
         Opt.none(NodeId),
         contentKeyBytes,
         contentValueBytes,
@@ -192,7 +192,7 @@ procSuite "State Endpoints":
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
-      await stateNode1.portalProtocol.gossipOffer(
+      await stateNode1.portalProtocol.recursiveGossipOffer(
         Opt.none(NodeId),
         contentKeyBytes,
         contentValueBytes,
