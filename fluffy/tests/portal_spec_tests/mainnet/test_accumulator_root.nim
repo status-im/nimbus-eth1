@@ -43,7 +43,7 @@ suite "Header Accumulator Root":
       let res = v.readBlockHeader()
       check res.isOk()
       let header = res.get()
-      headers[header.number.truncate(int)] = header
+      headers[header.number] = header
 
     var accumulator: Accumulator
 
