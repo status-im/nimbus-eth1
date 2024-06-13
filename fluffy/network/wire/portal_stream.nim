@@ -161,14 +161,16 @@ proc connectTo*(
 
 proc writeContentRequest(
     socket: UtpSocket[NodeAddress], stream: PortalStream, request: ContentRequest
-) {.async.} =
+) {.async: (raises: [CancelledError]).} =
   let dataWritten = await socket.write(request.content)
   if dataWritten.isErr():
     debug "Error writing requested data", error = dataWritten.error
 
   await socket.closeWait()
 
-proc readVarint(socket: UtpSocket[NodeAddress]): Future[Opt[uint32]] {.async.} =
+proc readVarint(
+    socket: UtpSocket[NodeAddress]
+): Future[Opt[uint32]] {.async: (raises: [CancelledError]).} =
   var buffer: array[5, byte]
 
   for i in 0 ..< len(buffer):
@@ -186,7 +188,9 @@ proc readVarint(socket: UtpSocket[NodeAddress]): Future[Opt[uint32]] {.async.} =
     else:
       return err()
 
-proc readContentItem(socket: UtpSocket[NodeAddress]): Future[Opt[seq[byte]]] {.async.} =
+proc readContentItem(
+    socket: UtpSocket[NodeAddress]
+): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
   let len = await socket.readVarint()
 
   if len.isOk():
@@ -200,7 +204,7 @@ proc readContentItem(socket: UtpSocket[NodeAddress]): Future[Opt[seq[byte]]] {.a
 
 proc readContentOffer(
     socket: UtpSocket[NodeAddress], stream: PortalStream, offer: ContentOffer
-) {.async.} =
+) {.async: (raises: [CancelledError]).} =
   # Read number of content items according to amount of ContentKeys accepted.
   # This will either end with a FIN, or because the read action times out or
   # because the number of expected items was read (if this happens and no FIN
@@ -220,7 +224,7 @@ proc readContentOffer(
   for i in 0 ..< amount:
     let contentItemFut = socket.readContentItem()
     if await contentItemFut.withTimeout(stream.contentReadTimeout):
-      let contentItem = contentItemFut.read
+      let contentItem = await contentItemFut
 
       if contentItem.isOk():
         contentItems.add(contentItem.get())
@@ -291,7 +295,7 @@ proc allowedConnection(
 
 proc handleIncomingConnection(
     server: UtpRouter[NodeAddress], socket: UtpSocket[NodeAddress]
-): Future[void] =
+): Future[void] {.async: (raw: true, raises: []).} =
   let manager = getUserData[NodeAddress, StreamManager](server)
 
   for stream in manager.streams:
@@ -303,14 +307,14 @@ proc handleIncomingConnection(
           request.nodeId == socket.remoteAddress.nodeId:
         let fut = socket.writeContentRequest(stream, request)
         stream.contentRequests.del(i)
-        return fut
+        return noCancel(fut)
 
     for i, offer in stream.contentOffers:
       if offer.connectionId == socket.connectionId and
           offer.nodeId == socket.remoteAddress.nodeId:
         let fut = socket.readContentOffer(stream, offer)
         stream.contentOffers.del(i)
-        return fut
+        return noCancel(fut)
 
   # TODO: Is there a scenario where this can happen,
   # considering `allowRegisteredIdCallback`? If not, doAssert?

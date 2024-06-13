@@ -305,7 +305,7 @@ procSuite "Portal testnet tests":
           doAssert(tx.kind == tohTx)
           check tx.tx.blockHash.get == w3Hash hash
 
-        let filterOptions = FilterOptions(blockHash: some(w3Hash hash))
+        let filterOptions = FilterOptions(blockHash: Opt.some(w3Hash hash))
 
         let logs = await retryUntil(
           proc(): Future[seq[LogObject]] {.async.} =
@@ -326,7 +326,7 @@ procSuite "Portal testnet tests":
 
         for l in logs:
           check:
-            l.blockHash == some(w3Hash hash)
+            l.blockHash == Opt.some(w3Hash hash)
 
         # TODO: Check ommersHash, need the headers and not just the hashes
         # for uncle in blockObj.uncles:
