@@ -115,25 +115,19 @@ proc persistBlocksImpl(
       ):
         return err("Could not persist header")
 
-    try:
-      if NoSaveTxs notin flags:
-        c.db.persistTransactions(header.blockNumber, blk.transactions)
+    if NoSaveTxs notin flags:
+      c.db.persistTransactions(header.blockNumber, blk.transactions)
 
-      if NoSaveReceipts notin flags:
-        c.db.persistReceipts(vmState.receipts)
+    if NoSaveReceipts notin flags:
+      c.db.persistReceipts(vmState.receipts)
 
-      if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
-        c.db.persistWithdrawals(blk.withdrawals.get)
-    except CatchableError as exc:
-      return err(exc.msg)
+    if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
+      c.db.persistWithdrawals(blk.withdrawals.get)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
     c.com.syncCurrent = header.blockNumber
-
-    # Done with this block
-    # lapTx.commit()
 
     txs += blk.transactions.len
 

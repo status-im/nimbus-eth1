@@ -335,8 +335,7 @@ proc exists*(db: CoreDbRef, hash: Hash256): bool =
 proc getSavedStateBlockNumber*(
     db: CoreDbRef;
     relax = false;
-      ): BlockNumber
-      {.gcsafe, raises: [RlpError].} =
+      ): BlockNumber =
   ## Returns the block number registered when the database was last time
   ## updated, or `BlockNumber(0)` if there was no updata found.
   ##
@@ -507,8 +506,7 @@ proc getTd*(db: CoreDbRef; blockHash: Hash256, td: var UInt256): bool =
 
 proc headTotalDifficulty*(
     db: CoreDbRef;
-      ): UInt256
-      {.gcsafe, raises: [RlpError].} =
+      ): UInt256 =
   let blockHash = db.getCanonicalHeaderHash().valueOr:
     return 0.u256
 
@@ -588,8 +586,7 @@ proc getTransaction*(
     txRoot: Hash256;
     txIndex: int;
     res: var Transaction;
-      ): bool
-      {.gcsafe, raises: [RlpError].} =
+      ): bool =
   const
     info = "getTransaction()"
   let
@@ -605,7 +602,12 @@ proc getTransaction*(
       if error.error != MptNotFound:
         warn logTxt info, txIndex, action="fetch()", error=($$error)
       return false
-  res = rlp.decode(txData, Transaction)
+  try:
+    res = rlp.decode(txData, Transaction)
+  except RlpError as exc:
+    warn logTxt info,
+      txRoot, action="rlp.decode()", col=($$col), error=exc.msg
+    return false
   true
 
 proc getTransactionCount*(

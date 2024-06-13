@@ -59,13 +59,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   setControlCHook(controlCHandler)
 
   let
-    start =
-      try:
-        com.db.getSavedStateBlockNumber().truncate(uint64) + 1
-      except RlpError as exc:
-        error "Could not read block number", err = exc.msg
-        quit(QuitFailure)
-
+    start = com.db.getSavedStateBlockNumber().truncate(uint64) + 1
     chain = com.newChain()
 
   var
