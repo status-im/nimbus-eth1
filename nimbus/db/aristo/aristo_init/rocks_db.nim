@@ -137,9 +137,9 @@ proc getLstFn(db: RdbBackendRef): GetLstFn =
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
+    proc(): Result[PutHdlRef,AristoError] =
       db.rdb.begin()
-      db.newSession()
+      ok db.newSession()
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
@@ -212,7 +212,7 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
           of AdmPfx: trace logTxt "putEndFn: admin failed",
             pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
           of Oops: trace logTxt "putEndFn: oops",
-            error=hdl.error.code
+            pfx=hdl.error.pfx, error=hdl.error.code
         db.rdb.rollback()
         return err(hdl.error.code)
 
@@ -223,19 +223,26 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
         return err(error[0])
       ok()
 
-proc guestDbFn(db: RdbBackendRef): GuestDbFn =
-  result =
-    proc(instance: int): Result[RootRef,AristoError] =
-      let gdb = db.rdb.initGuestDb(instance).valueOr:
-        when extraTraceMessages:
-          trace logTxt "guestDbFn", error=error[0], info=error[1]
-        return err(error[0])
-      ok gdb
-
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
     proc(flush: bool) =
       db.rdb.destroy(flush)
+
+# ------------------------------------------------------------------------------
+# Private functions: hosting interface changes
+# ------------------------------------------------------------------------------
+
+proc putBegHostingFn(db: RdbBackendRef): PutBegFn =
+  result =
+    proc(): Result[PutHdlRef,AristoError] =
+      db.rdb.begin()
+      if db.rdb.trgWriteEvent(db.rdb.session):
+        ok db.newSession()
+      else:
+        when extraTraceMessages:
+          trace logTxt "putBegFn: guest trigger aborted session"
+        db.rdb.rollback()
+        err(RdbGuestInstanceAborted)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -269,9 +276,36 @@ proc rocksDbBackend*(
   db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
 
-  db.guestDbFn = guestDbFn db
   db.closeFn = closeFn db
   ok db
+
+
+proc rocksDbUpdateCfs*(
+    be: BackendRef;
+    cfs: openArray[ColFamilyDescriptor];
+      ): Result[seq[ColFamilyReadWrite],AristoError] =
+  ## Reopen with extended column families given as argument.
+  let
+    db = RdbBackendRef(be)
+    rCfs = db.rdb.reinit(cfs).valueOr:
+      return err(error[0])
+  ok rCfs
+
+
+proc rocksDbSetEventTrigger*(
+    be: BackendRef;
+    hdl: RdbWriteEventCb;
+     ): Result[void,AristoError] =
+  ## Store event trigger. This also changes the backend type.
+  if hdl.isNil:
+    err(RdbBeWrTriggerNilFn)
+  else:
+    let db = RdbBackendRef(be)
+    db.rdb.trgWriteEvent = hdl
+    db.beKind = BackendRdbHosting
+    db.putBegFn = putBegHostingFn db
+    ok()
+
 
 proc dup*(db: RdbBackendRef): RdbBackendRef =
   ## Duplicate descriptor shell as needed for API debugging

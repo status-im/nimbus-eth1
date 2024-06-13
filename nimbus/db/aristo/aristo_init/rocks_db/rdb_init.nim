@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, os],
+  std/[sets, sequtils, os],
   rocksdb,
   results,
   ../../aristo_desc,
@@ -22,27 +22,12 @@ import
   ../../../opts
 
 # ------------------------------------------------------------------------------
-# Public constructor
+# Private constructor
 # ------------------------------------------------------------------------------
 
-proc init*(
-    rdb: var RdbInst;
-    basePath: string;
+proc getInitOptions(
     opts: DbOptions;
-      ): Result[void,(AristoError,string)] =
-  ## Constructor c ode inspired by `RocksStoreRef.init()` from
-  ## kvstore_rocksdb.nim
-  const initFailed = "RocksDB/init() failed"
-
-  rdb.basePath = basePath
-
-  let
-    dataDir = rdb.dataDir
-  try:
-    dataDir.createDir
-  except OSError, IOError:
-    return err((RdbBeCantCreateDataDir, ""))
-
+      ): tuple[cfOpts: ColFamilyOptionsRef, dbOpts: DbOptionsRef] =
   # TODO the configuration options below have not been tuned but are rather
   #      based on gut feeling, guesses and by looking at other clients - it
   #      would make sense to test different settings and combinations once the
@@ -86,13 +71,7 @@ proc init*(
   # https://github.com/facebook/rocksdb/wiki/Compression
   cfOpts.setBottommostCompression(Compression.lz4Compression)
 
-  let
-    cfs = @[initColFamilyDescriptor(AdmCF, cfOpts),
-            initColFamilyDescriptor(VtxCF, cfOpts),
-            initColFamilyDescriptor(KeyCF, cfOpts)] &
-          RdbGuest.mapIt(initColFamilyDescriptor($it, cfOpts))
-    dbOpts = defaultDbOptions()
-
+  let dbOpts = defaultDbOptions()
   dbOpts.setMaxOpenFiles(opts.maxOpenFiles)
   dbOpts.setMaxBytesForLevelBase(opts.writeBufferSize)
 
@@ -109,6 +88,7 @@ proc init*(
   # https://github.com/EighteenZi/rocksdb_wiki/blob/master/Memory-usage-in-RocksDB.md#indexes-and-filter-blocks
   # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/advanced_options.h#L696
   dbOpts.setOptimizeFiltersForHits(true)
+
 
   let tableOpts = defaultTableOptions()
   # This bloom filter helps avoid having to read multiple SST files when looking
@@ -141,39 +121,114 @@ proc init*(
 
   dbOpts.setBlockBasedTableFactory(tableOpts)
 
-  # Reserve a family corner for `Aristo` on the database
-  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies = cfs).valueOr:
+  (cfOpts,dbOpts)
+
+
+proc initImpl(
+    rdb: var RdbInst;
+    basePath: string;
+    opts: DbOptions;
+    guestCFs: openArray[ColFamilyDescriptor] = [];
+      ): Result[void,(AristoError,string)] =
+  ## Database backend constructor
+  const initFailed = "RocksDB/init() failed"
+
+  rdb.basePath = basePath
+  rdb.opts = opts
+
+  let
+    dataDir = rdb.dataDir
+  try:
+    dataDir.createDir
+  except OSError, IOError:
+    return err((RdbBeCantCreateDataDir, ""))
+
+  # Expand argument `opts` to rocksdb options
+  let (cfOpts, dbOpts) = opts.getInitOptions()
+
+  # Column familiy names to allocate when opening the database. This list
+  # might be extended below.
+  var useCFs = AristoCFs.mapIt($it).toHashSet
+
+  # The `guestCFs` list must not overwrite `AristoCFs` options
+  let guestCFs = guestCFs.filterIt(it.name notin useCFs)
+
+  # If the database exists already, check for missing column families and
+  # allocate them for opening. Otherwise rocksdb might reject the peristent
+  # database.
+  if (dataDir / "CURRENT").fileExists:
+    let hdCFs = dataDir.listColumnFamilies.valueOr:
+      raiseAssert initFailed & " cannot read existing CFs: " & error
+    # Update list of column families for opener.
+    useCFs = useCFs + hdCFs.toHashSet
+
+  # The `guestCFs` list might come with a different set of options. So it is
+  # temporarily removed from `useCFs` and will be re-added with appropriate
+  # options.
+  let guestCFq = @guestCFs
+  useCFs = useCFs - guestCFs.mapIt(it.name).toHashSet
+
+  # Finalise list of column families
+  let cfs = useCFs.toSeq.mapIt(it.initColFamilyDescriptor cfOpts) & guestCFq
+
+  # Open database for the extended family :)
+  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
     raiseAssert initFailed & " cannot create base descriptor: " & error
 
   # Initialise column handlers (this stores implicitely `baseDb`)
-  rdb.admCol = baseDb.withColFamily(AdmCF).valueOr:
+  rdb.admCol = baseDb.withColFamily($AdmCF).valueOr:
     raiseAssert initFailed & " cannot initialise AdmCF descriptor: " & error
-  rdb.vtxCol = baseDb.withColFamily(VtxCF).valueOr:
+  rdb.vtxCol = baseDb.withColFamily($VtxCF).valueOr:
     raiseAssert initFailed & " cannot initialise VtxCF descriptor: " & error
-  rdb.keyCol = baseDb.withColFamily(KeyCF).valueOr:
+  rdb.keyCol = baseDb.withColFamily($KeyCF).valueOr:
     raiseAssert initFailed & " cannot initialise KeyCF descriptor: " & error
 
   ok()
 
-proc initGuestDb*(
-    rdb: RdbInst;
-    instance: int;
-      ): Result[RootRef,(AristoError,string)] =
-  ## Initialise `Guest` family
-  ##
-  ## Thus was a worth a try, but there are better solutions and this item
-  ## will be removed in future.
-  ##
-  if high(RdbGuest).ord < instance:
-    return err((RdbGuestInstanceUnsupported,""))
-  let
-    guestSym = $RdbGuest(instance)
-    guestDb = rdb.baseDb.withColFamily(guestSym).valueOr:
-      raiseAssert "RocksDb/initGuestDb() failed: " & error
+# ------------------------------------------------------------------------------
+# Public constructor
+# ------------------------------------------------------------------------------
 
-  ok RdbGuestDbRef(
-    beKind: BackendRocksDB,
-    guestDb: guestDb)
+proc init*(
+    rdb: var RdbInst;
+    basePath: string;
+    opts: DbOptions;
+      ): Result[void,(AristoError,string)] =
+  ## Temporarily define a guest CF list here.
+  rdb.initImpl(basePath, opts)
+
+proc reinit*(
+    rdb: var RdbInst;
+    cfs: openArray[ColFamilyDescriptor];
+      ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
+  ## Re-open database with changed parameters. Even though tx layers and
+  ## filters might not be affected it is prudent to have them clean and
+  ## saved on the backend database before changing it.
+  ##
+  ## The function returns a list of column family descriptors in the same
+  ## order as the `cfs` argument.
+  ##
+  ## The `cfs` list replaces and extends the CFs already on disk by its
+  ## options except for the ones defined with `AristoCFs`.
+  ##
+  const initFailed = "RocksDB/reinit() failed"
+
+  if not rdb.session.isNil:
+    return err((RdbBeWrSessionUnfinished,""))
+  if not rdb.baseDb.isClosed():
+    rdb.baseDb.close()
+
+  rdb.initImpl(rdb.basePath, rdb.opts, cfs).isOkOr:
+    return err(error)
+
+  # Assemble list of column family descriptors
+  var guestCols = newSeq[ColFamilyReadWrite](cfs.len)
+  for n,col in cfs:
+    guestCols[n] = rdb.baseDb.withColFamily(col.name).valueOr:
+      raiseAssert initFailed & " cannot initialise " &
+        col.name & " descriptor: " & error
+
+  ok guestCols
 
 
 proc destroy*(rdb: var RdbInst; flush: bool) =

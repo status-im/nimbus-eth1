@@ -74,7 +74,7 @@ proc checkBE*(
   case db.backend.kind:
   of BackendMemory:
     return MemBackendRef.checkBE(db, cache=cache, relax=relax)
-  of BackendRocksDB:
+  of BackendRocksDB, BackendRdbHosting:
     return RdbBackendRef.checkBE(db, cache=cache, relax=relax)
   of BackendVoid:
     return VoidBackendRef.checkBE(db, cache=cache, relax=relax)

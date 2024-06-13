@@ -137,7 +137,8 @@ proc persistBlocksImpl(
   dbTx.commit()
 
   # Save and record the block number before the last saved block state.
-  c.db.persistent(toBlock)
+  c.db.persistent(toBlock).isOkOr:
+    return err("Failed to save state: " & $$error)
 
   if c.com.pruneHistory:
     # There is a feature for test systems to regularly clean up older blocks

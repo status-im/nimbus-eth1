@@ -32,7 +32,7 @@ export
 # Public helpers
 # -----------------------------------------------------------------------------
 
-proc kind*(
+func kind*(
     be: BackendRef;
       ): BackendType =
   ## Retrieves the backend type symbol for a `be` backend database argument

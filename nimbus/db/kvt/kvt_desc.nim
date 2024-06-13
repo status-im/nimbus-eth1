@@ -42,12 +42,11 @@ type
     centre: KvtDbRef                  ## Link to peer with write permission
     peers: HashSet[KvtDbRef]          ## List of all peers
 
-  KvtDbRef* = ref KvtDbObj
-  KvtDbObj* = object
+  KvtDbRef* = ref object of RootRef
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    roFilter*: LayerDeltaRef          ## Apply read filter (locks writing)
+    balancer*: LayerDeltaRef          ## Apply read filter (locks writing)
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: KvtTxRef                  ## Latest active transaction
@@ -61,6 +60,17 @@ type
 
   KvtDbAction* = proc(db: KvtDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc canMod(db: KvtDbRef): Result[void,KvtError] =
+  ## Ask for permission before doing nasty stuff
+  if db.backend.isNil:
+    ok()
+  else:
+    db.backend.canModFn()
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -97,7 +107,7 @@ func getCentre*(db: KvtDbRef): KvtDbRef =
   ##
   if db.dudes.isNil: db else: db.dudes.centre
 
-proc reCentre*(db: KvtDbRef) =
+proc reCentre*(db: KvtDbRef): Result[void,KvtError] =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -111,8 +121,10 @@ proc reCentre*(db: KvtDbRef) =
   ## accessing the same backend database. Descriptors where `isCentre()`
   ## returns `false` must be single destructed with `forget()`.
   ##
-  if not db.dudes.isNil:
+  if not db.dudes.isNil and db.dudes.centre != db:
+    ? db.canMod()
     db.dudes.centre = db
+  ok()
 
 proc fork*(
     db: KvtDbRef;
@@ -140,7 +152,7 @@ proc fork*(
     dudes:   db.dudes)
 
   if not noFilter:
-    clone.roFilter = db.roFilter # Ref is ok here (filters are immutable)
+    clone.balancer = db.balancer # Ref is ok here (filters are immutable)
 
   if not noTopLayer:
     clone.top = LayerRef.init()
@@ -177,6 +189,7 @@ proc forget*(db: KvtDbRef): Result[void,KvtError] =
   elif db notin db.dudes.peers:
     err(StaleDescriptor)
   else:
+    ? db.canMod()
     db.dudes.peers.excl db         # Unlink argument `db` from peers list
     ok()
 
@@ -187,7 +200,7 @@ proc forgetOthers*(db: KvtDbRef): Result[void,KvtError] =
   if not db.dudes.isNil:
     if db.dudes.centre != db:
       return err(MustBeOnCentre)
-
+    ? db.canMod()
     db.dudes = DudesRef(nil)
   ok()
 

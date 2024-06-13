@@ -249,9 +249,14 @@ type
     RdbBeDriverGetVtxError
     RdbBeDriverGuestError
     RdbBeDriverPutAdmError
-    RdbBeDriverPutVtxError
     RdbBeDriverPutKeyError
+    RdbBeDriverPutVtxError
     RdbBeDriverWriteError
+    RdbBeTypeUnsupported
+    RdbBeWrSessionUnfinished
+    RdbBeWrTriggerActiveAlready
+    RdbBeWrTriggerNilFn
+    RdbGuestInstanceAborted
     RdbGuestInstanceUnsupported
     RdbHashKeyExpected
 

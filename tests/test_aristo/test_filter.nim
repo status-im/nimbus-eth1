@@ -288,7 +288,7 @@ proc testDistributedAccess*(
       xCheck db2.balancer != db3.balancer
 
       # Clause (11) from `aristo/README.md` example
-      db2.reCentre()
+      discard db2.reCentre()
       block:
         let rc = db2.persist()
         xCheckRc rc.error == 0
@@ -321,7 +321,7 @@ proc testDistributedAccess*(
         dy.cleanUp()
 
       # Build clause (12) from `aristo/README.md` example
-      db2.reCentre()
+      discard db2.reCentre()
       block:
         let rc = db2.persist()
         xCheckRc rc.error == 0

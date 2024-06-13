@@ -679,7 +679,8 @@ proc swapCtx*(base: AristoBaseRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
 
   # Set read-write access and install
   base.ctx = AristoCoreDbCtxRef(ctx)
-  base.api.reCentre(base.ctx.mpt)
+  base.api.reCentre(base.ctx.mpt).isOkOr:
+    raiseAssert "swapCtx() failed: " & $error
 
 
 proc persistent*(

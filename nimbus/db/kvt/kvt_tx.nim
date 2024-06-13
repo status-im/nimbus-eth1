@@ -16,6 +16,7 @@
 import
   results,
   ./kvt_tx/[tx_fork, tx_frame, tx_stow],
+  ./kvt_init/memory_only,
   ./kvt_desc
 
 # ------------------------------------------------------------------------------
@@ -177,6 +178,12 @@ proc persist*(
   ## and the staged data area is cleared. Wile performing this last step,
   ## the recovery journal is updated (if available.)
   ##
+  # Register for saving if piggybacked on remote database
+  if db.backend.kind == BackendRdbTriggered:
+    ? db.txStowOk(persistent=true)
+    ? db.backend.setWrReqFn db
+    return err(TxPersistDelayed)
+
   db.txStow(persistent=true)
 
 proc stow*(

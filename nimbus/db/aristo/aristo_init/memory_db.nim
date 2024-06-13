@@ -126,8 +126,8 @@ proc getLstFn(db: MemBackendRef): GetLstFn =
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
-      db.newSession()
+    proc(): Result[PutHdlRef,AristoError] =
+      ok db.newSession()
 
 
 proc putVtxFn(db: MemBackendRef): PutVtxFn =
@@ -215,11 +215,6 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
 # -------------
 
-proc guestDbFn(db: MemBackendRef): GuestDbFn =
-  result =
-    proc(instance: int): Result[RootRef,AristoError] =
-      ok(RootRef nil)
-
 proc closeFn(db: MemBackendRef): CloseFn =
   result =
     proc(ignore: bool) =
@@ -246,7 +241,6 @@ proc memoryBackend*(): BackendRef =
   db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
 
-  db.guestDbFn = guestDbFn db
   db.closeFn = closeFn db
   db
 
