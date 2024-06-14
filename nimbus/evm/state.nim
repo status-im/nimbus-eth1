@@ -82,11 +82,13 @@ proc new*(
 
 proc reinit*(self:     BaseVMState;     ## Object descriptor
              parent:   BlockHeader;     ## parent header, account sync pos.
-             blockCtx: BlockContext
+             blockCtx: BlockContext;
+             linear: bool
              ): bool =
   ## Re-initialise state descriptor. The `LedgerRef` database is
   ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
-  ## already. Accumulated state data are reset.
+  ## already. Accumulated state data are reset. When linear, we assume that
+  ## the state recently processed the parent block.
   ##
   ## This function returns `true` unless the `LedgerRef` database could be
   ## queries about its `rootHash`, i.e. `isTopLevelClean` evaluated `true`. If
@@ -97,7 +99,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
       tracer = self.tracer
       com    = self.com
       db     = com.db
-      ac     = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
+      ac     = if linear or self.stateDB.rootHash == parent.stateRoot: self.stateDB
                else: LedgerRef.init(db, parent.stateRoot)
       flags  = self.flags
     self[].reset
@@ -114,6 +116,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
 proc reinit*(self:   BaseVMState; ## Object descriptor
              parent: BlockHeader; ## parent header, account sync pos.
              header: BlockHeader; ## header with tx environment data fields
+             linear: bool
              ): bool =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
   ## cache and the `header` is used as a container to pass the `timestamp`,
@@ -121,9 +124,10 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
-  result = self.reinit(
+  self.reinit(
     parent   = parent,
     blockCtx = self.com.blockCtx(header),
+    linear = linear
     )
 
 proc reinit*(self:      BaseVMState; ## Object descriptor
@@ -133,10 +137,11 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `update()` variant, above.
   var parent: BlockHeader
-  if self.com.db.getBlockHeader(header.parentHash, parent):
-    return self.reinit(
+  self.com.db.getBlockHeader(header.parentHash, parent) and
+    self.reinit(
       parent    = parent,
-      header    = header)
+      header    = header,
+      linear    = false)
 
 proc init*(
       self:   BaseVMState;     ## Object descriptor
