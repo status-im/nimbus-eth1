@@ -143,9 +143,9 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     ok()
 
   CoreDbBaseFns(
-    destroyFn: proc(flush: bool) =
-      aBase.destroy(flush)
-      kBase.destroy(flush),
+    destroyFn: proc(eradicate: bool) =
+      aBase.destroy(eradicate)
+      kBase.destroy(eradicate),
 
     levelFn: proc(): int =
       aBase.getLevel,

@@ -112,7 +112,7 @@ proc innerCleanUp(db: var AristoDbRef): bool {.discardable.}  =
     if rx.isOk:
       let rc = rx.value.collapse(commit=false)
       xCheckRc rc.error == 0
-    db.finish(flush=true)
+    db.finish(eradicate=true)
     db = AristoDbRef(nil)
 
 proc schedStow(
@@ -340,7 +340,7 @@ proc testTxMergeAndDeleteOneByOne*(
     fwdRevVfyToggle = true
   defer:
     if not db.isNil:
-      db.finish(flush=true)
+      db.finish(eradicate=true)
 
   for n,w in list:
     # Start with brand new persistent database.
@@ -448,7 +448,7 @@ proc testTxMergeAndDeleteSubTree*(
     db = AristoDbRef(nil)
   defer:
     if not db.isNil:
-      db.finish(flush=true)
+      db.finish(eradicate=true)
 
   for n,w in list:
     # Start with brand new persistent database.
@@ -546,7 +546,7 @@ proc testTxMergeProofAndKvpList*(
     count = 0
   defer:
     if not db.isNil:
-      db.finish(flush=true)
+      db.finish(eradicate=true)
 
   for n,w in list:
 

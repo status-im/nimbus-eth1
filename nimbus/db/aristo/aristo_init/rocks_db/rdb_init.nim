@@ -231,11 +231,11 @@ proc reinit*(
   ok guestCols
 
 
-proc destroy*(rdb: var RdbInst; flush: bool) =
+proc destroy*(rdb: var RdbInst; eradicate: bool) =
   ## Destructor
   rdb.baseDb.close()
 
-  if flush:
+  if eradicate:
     try:
       rdb.dataDir.removeDir
 

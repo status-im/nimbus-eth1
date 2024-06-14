@@ -702,8 +702,8 @@ proc persistent*(
 # Public constructors and related
 # ------------------------------------------------------------------------------
 
-proc destroy*(base: AristoBaseRef; flush: bool) =
-  base.api.finish(base.ctx.mpt, flush)
+proc destroy*(base: AristoBaseRef; eradicate: bool) =
+  base.api.finish(base.ctx.mpt, eradicate)
 
 
 func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =

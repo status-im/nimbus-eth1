@@ -148,12 +148,12 @@ proc init*(
   ok()
  
 
-proc destroy*(rdb: var RdbInst; flush: bool) =
+proc destroy*(rdb: var RdbInst; eradicate: bool) =
   ## Destructor (no need to do anything if piggybacked)
   if 0 < rdb.basePath.len:
     rdb.baseDb.close()
 
-    if flush:
+    if eradicate:
       try:
         rdb.dataDir.removeDir
 

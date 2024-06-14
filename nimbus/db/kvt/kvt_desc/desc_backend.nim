@@ -47,11 +47,11 @@ type
   # -------------
 
   CloseFn* =
-    proc(flush: bool) {.gcsafe, raises: [].}
-      ## Generic destructor for the `Kvt DB` backend. The argument `flush`
+    proc(eradicate: bool) {.gcsafe, raises: [].}
+      ## Generic destructor for the `Kvt DB` backend. The argument `eradicate`
       ## indicates that a full database deletion is requested. If passed
       ## `false` the outcome might differ depending on the type of backend
-      ## (e.g. in-memory backends would flush on close.)
+      ## (e.g. in-memory backends would eradicate on close.)
 
   CanModFn* =
     proc(): Result[void,KvtError] {.gcsafe, raises: [].}
@@ -64,9 +64,10 @@ type
       ## This function stores a request function for the piggiback mode
       ## writing to the `Aristo` set of column families.
       ##
-      ## If used at all, this function would run `rocks_db.setWrReqTriggeredFn()()`
-      ## with a `KvtDbRef` type argument for `db`. This allows to run the `Kvt`
-      ## without linking to the rocksdb interface unless it is really needed.
+      ## If used at all, this function would run thee function closure
+      ## `rocks_db.setWrReqTriggeredFn()()` with a `KvtDbRef` type argument
+      ## for `db`. This allows to run the `Kvt` without linking to the
+      ## rocksdb interface unless it is really needed.
 
   # -------------
 

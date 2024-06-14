@@ -239,7 +239,7 @@ proc chainSyncRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
-        com.db.finish(flush = finalDiskCleanUpOk)
+        com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
         if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
 
@@ -293,7 +293,7 @@ proc persistentSyncPreLoadAndResumeRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
-        com.db.finish(flush = finalDiskCleanUpOk)
+        com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
 
       if noisy:
@@ -309,7 +309,7 @@ proc persistentSyncPreLoadAndResumeRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
-        com.db.finish(flush = finalDiskCleanUpOk)
+        com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
         if finalDiskCleanUpOk: dbDir.flushDbDir
 

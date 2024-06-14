@@ -244,16 +244,16 @@ proc backend*(dsc: CoreDxKvtRef | CoreDxMptRef): auto =
   result = dsc.methods.backendFn()
   dsc.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-proc finish*(db: CoreDbRef; flush = false) =
-  ## Database destructor. If the argument `flush` is set `false`, the database
-  ## is left as-is and only the in-memory handlers are cleaned up.
+proc finish*(db: CoreDbRef; eradicate = false) =
+  ## Database destructor. If the argument `eradicate` is set `false`, the
+  ## database is left as-is and only the in-memory handlers are cleaned up.
   ##
   ## Otherwise the destructor is allowed to remove the database. This feature
   ## depends on the backend database. Currently, only the `AristoDbRocks` type
   ## backend removes the database on `true`.
   ##
   db.setTrackNewApi BaseFinishFn
-  db.methods.destroyFn flush
+  db.methods.destroyFn eradicate
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc `$$`*(e: CoreDbErrorRef): string =

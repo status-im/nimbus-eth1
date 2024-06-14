@@ -134,8 +134,8 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
 
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
-    proc(flush: bool) =
-      db.rdb.destroy(flush)
+    proc(eradicate: bool) =
+      db.rdb.destroy(eradicate)
 
 proc canModFn(db: RdbBackendRef): CanModFn =
   result =
@@ -186,7 +186,7 @@ proc putEndTriggeredFn(db: RdbBackendRef): PutEndFn =
 proc closeTriggeredFn(db: RdbBackendRef): CloseFn =
   ## Variant of `closeFn()` for piggyback write batch
   result =
-    proc(flush: bool) =
+    proc(eradicate: bool) =
       # Nothing to do here as we do not own the backend
       discard
 

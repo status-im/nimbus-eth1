@@ -45,7 +45,7 @@ proc newAristoRdbDbRef(
     vTop = block:
       let rc = be.getTuvFn()
       if rc.isErr:
-        be.closeFn(flush = false)
+        be.closeFn(eradicate = false)
         return err(rc.error)
       rc.value
   ok AristoDbRef(

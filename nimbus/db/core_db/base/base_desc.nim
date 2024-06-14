@@ -89,7 +89,7 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
-  CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
+  CoreDbBaseDestroyFn* = proc(eradicate = true) {.noRaise.}
   CoreDbBaseColStateFn* = proc(
     col: CoreDbColRef): CoreDbRc[Hash256] {.noRaise.}
   CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
