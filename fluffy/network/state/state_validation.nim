@@ -24,7 +24,7 @@ proc isValidNextNode(
   let nextHash =
     if hashOrShortRlp.isList():
       # is a short node
-      keccakHash(rlp.encode(hashOrShortRlp))
+      rlpHash(hashOrShortRlp)
     else:
       let hash = hashOrShortRlp.toBytes()
       if hash.len() != 32:

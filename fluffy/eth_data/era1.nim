@@ -467,7 +467,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
         ?f.getBlockTuple(blockNumber)
 
       txRoot = calcTxRoot(blockBody.transactions)
-      ommershHash = keccakHash(rlp.encode(blockBody.uncles))
+      ommershHash = rlpHash(blockBody.uncles)
 
     if blockHeader.txRoot != txRoot:
       return err("Invalid transactions root")
