@@ -26,9 +26,8 @@ proc setupTxContext(host: TransactionHost) =
   # anyway.  Largest ever so far may be 100,000,000.
   # https://medium.com/amberdata/most-expensive-transaction-in-ethereum-blockchain-history-99d9a30d8e02
   #
-  # `txContext.block_number` is 64-bit signed.  This is actually too small for
-  # the Nimbus `BlockNumber` type which is 256-bit (for now), so we truncate
-  # the other way.
+  # `txContext.block_number` is 64-bit signed. Nimbus `BlockNumber` is
+  #  64-bit unsigned, so we use int64.saturate to avoid overflow assertion.
   #
   # `txContext.chain_id` is 256-bit, but `vmState.chaindb.config.chainId` is
   # 64-bit or 32-bit depending on the target CPU architecture (Nim `uint`).
@@ -39,10 +38,11 @@ proc setupTxContext(host: TransactionHost) =
   # `txContext.tx_origin` and `txContext.block_coinbase` are 20-byte Ethereum
   # addresses, no issues with these.
   #
-  # `txContext.block_timestamp` is 64-bit signed.  `vmState.timestamp.toUnix`
-  # is from Nim `std/times` and returns `int64` so this matches.  (It's
-  # overkill that we store a full seconds and nanoseconds object in
-  # `vmState.timestamp` though.)
+  # `txContext.block_timestamp` is 64-bit signed. Nimbus `EthTime` is
+  # `distinct uint64`, but the wrapped value comes from std/times
+  # `getTime().utc.toTime.toUnix` when EthTime.now() called.
+  # So the wrapped value is actually in int64 range.
+  # Value from other sources e.g. test vectors can overflow this int64.
   #
   # `txContext.block_gas_limit` is 64-bit signed (EVMC assumes
   # [EIP-1985](https://eips.ethereum.org/EIPS/eip-1985) although it's not
@@ -59,7 +59,17 @@ proc setupTxContext(host: TransactionHost) =
   # vmState.number now unused
   host.txContext.block_number     = int64.saturate(vmState.blockNumber)
   # vmState.timestamp now unused
-  host.txContext.block_timestamp  = int64.saturate(distinctBase(vmState.blockCtx.timestamp))
+
+  # TODO: do not use int64.saturate for timestamp for the moment
+  # while the choice of using int64 in evmc will not affect the evm/evmc operations
+  # but some of the tests will fail if the value from test vector overflow
+  # see getTimestamp of computation.nim too.
+  # probably block timestamp should be checked before entering EVM
+  # problematic test vectors:
+  #  - BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4788_beacon_root/beacon_root_contract_timestamps.json
+  #  - BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4788_beacon_root/beacon_root_equal_to_timestamp.json
+  host.txContext.block_timestamp  = cast[int64](vmState.blockCtx.timestamp)
+
   # vmState.gasLimit now unused
   host.txContext.block_gas_limit  = vmState.blockCtx.gasLimit
   # vmState.difficulty now unused

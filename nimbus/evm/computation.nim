@@ -68,6 +68,13 @@ template getCoinbase*(c: Computation): EthAddress =
 
 template getTimestamp*(c: Computation): uint64 =
   when evmc_enabled:
+    # TODO:
+    # while the choice of using int64 in evmc will not affect
+    # normal evm/evmc operations.
+    # the reason why cast[uint64] is being used here because
+    # some of the tests will fail if the value from test vector overflow
+    # see setupTxContext of host_services.nim too
+    # block timestamp overflow should be checked before entering EVM
     cast[uint64](c.host.getTxContext().block_timestamp)
   else:
     c.vmState.blockCtx.timestamp.uint64
