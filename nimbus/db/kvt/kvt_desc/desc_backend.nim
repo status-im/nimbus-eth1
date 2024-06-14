@@ -33,7 +33,7 @@ type
     ## by any library function using the backend.
 
   PutBegFn* =
-    proc(): PutHdlRef {.gcsafe, raises: [].}
+    proc(): Result[PutHdlRef,KvtError] {.gcsafe, raises: [].}
       ## Generic transaction initialisation function
 
   PutKvpFn* =
@@ -53,6 +53,21 @@ type
       ## `false` the outcome might differ depending on the type of backend
       ## (e.g. in-memory backends would flush on close.)
 
+  CanModFn* =
+    proc(): Result[void,KvtError] {.gcsafe, raises: [].}
+      ## This function returns OK if there is nothing to prevent the main
+      ## `KVT` descriptors being modified (e.g. by `reCentre()`) or by
+      ## adding/removing a new peer (e.g. by `fork()` or `forget()`.)
+
+  SetWrReqFn* =
+    proc(db: RootRef): Result[void,KvtError] {.gcsafe, raises: [].}
+      ## This function stores a request function for the piggiback mode
+      ## writing to the `Aristo` set of column families.
+      ##
+      ## If used at all, this function would run `rocks_db.setWrReqTriggeredFn()()`
+      ## with a `KvtDbRef` type argument for `db`. This allows to run the `Kvt`
+      ## without linking to the rocksdb interface unless it is really needed.
+
   # -------------
 
   BackendRef* = ref BackendObj
@@ -66,6 +81,9 @@ type
     putEndFn*: PutEndFn              ## Commit bulk store session
 
     closeFn*: CloseFn                ## Generic destructor
+    canModFn*: CanModFn              ## Lock-alike
+
+    setWrReqFn*: SetWrReqFn          ## Register main descr for write request
 
 proc init*(trg: var BackendObj; src: BackendObj) =
   trg.getKvpFn = src.getKvpFn
@@ -73,6 +91,7 @@ proc init*(trg: var BackendObj; src: BackendObj) =
   trg.putKvpFn = src.putKvpFn
   trg.putEndFn = src.putEndFn
   trg.closeFn = src.closeFn
+  trg.canModFn = src.canModFn
 
 # ------------------------------------------------------------------------------
 # End

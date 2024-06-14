@@ -59,18 +59,12 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   setControlCHook(controlCHandler)
 
   let
-    start =
-      try:
-        com.db.getSavedStateBlockNumber() + 1
-      except RlpError as exc:
-        error "Could not read block number", err = exc.msg
-        quit(QuitFailure)
-
+    start = com.db.getSavedStateBlockNumber() + 1
     chain = com.newChain()
 
   var
     imported = 0'u64
-    gas = 0.u256
+    gas = GasInt(0)
     txs = 0
     time0 = Moment.now()
     csv =
@@ -121,7 +115,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           quit(QuitFailure)
 
         txs += statsRes[].txs
-        gas += uint64 statsRes[].gas
+        gas += statsRes[].gas
         let
           time2 = Moment.now()
           diff1 = (time2 - time1).nanoseconds().float / 1000000000
@@ -131,13 +125,13 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           blockNumber,
           blocks = imported,
           txs,
-          gas,
+          mgas = f(gas.float / 1000000),
           bps = f(blocks.len.float / diff1),
           tps = f(statsRes[].txs.float / diff1),
-          gps = f(statsRes[].gas.float / diff1),
+          mgps = f(statsRes[].gas.float / 1000000 / diff1),
           avgBps = f(imported.float / diff0),
           avgTps = f(txs.float / diff0),
-          avgGps = f(gas.truncate(uint64).float / diff0), # TODO fix truncate
+          avgMGps = f(gas.float / 1000000 / diff0),
           elapsed = shortLog(time2 - time0, 3)
 
         if csv != nil:

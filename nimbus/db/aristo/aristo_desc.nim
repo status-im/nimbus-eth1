@@ -58,8 +58,7 @@ type
     centre: AristoDbRef               ## Link to peer with write permission
     peers: HashSet[AristoDbRef]       ## List of all peers
 
-  AristoDbRef* = ref AristoDbObj
-  AristoDbObj* = object
+  AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
@@ -150,7 +149,7 @@ func getCentre*(db: AristoDbRef): AristoDbRef =
   ##
   if db.dudes.isNil: db else: db.dudes.centre
 
-proc reCentre*(db: AristoDbRef) =
+proc reCentre*(db: AristoDbRef): Result[void,AristoError] =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -166,6 +165,7 @@ proc reCentre*(db: AristoDbRef) =
   ##
   if not db.dudes.isNil:
     db.dudes.centre = db
+  ok()
 
 proc fork*(
     db: AristoDbRef;

@@ -174,11 +174,10 @@ proc tooLargeRequest*(msg: string): ref InvalidRequest =
 
 proc latestValidHash*(db: CoreDbRef,
                       parent: common.BlockHeader,
-                      ttd: DifficultyInt): common.Hash256
-                       {.gcsafe, raises: [RlpError].} =
+                      ttd: DifficultyInt): common.Hash256 =
   if parent.isGenesis:
     return common.Hash256()
-  let ptd = db.getScore(parent.parentHash)
+  let ptd = db.getScore(parent.parentHash).valueOr(0.u256)
   if ptd >= ttd:
     parent.blockHash
   else:

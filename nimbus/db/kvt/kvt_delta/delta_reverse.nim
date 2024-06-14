@@ -17,21 +17,21 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc filterReverse*(
+proc deltaReverse*(
     db: KvtDbRef;                      # Database
-    filter: LayerDeltaRef;             # Filter to revert
+    delta: LayerDeltaRef;             # Filter to revert
       ): LayerDeltaRef =
-  ## Assemble reverse filter for the `filter` argument, i.e. changes to the
-  ## backend that reverse the effect of applying the this read-only filter.
+  ## Assemble a reverse filter for the `delta` argument, i.e. changes to the
+  ## backend that reverse the effect of applying this to the balancer filter.
   ## The resulting filter is calculated against the current *unfiltered*
-  ## backend (excluding optionally installed read-only filter.)
+  ## backend (excluding optionally installed balancer filters.)
   ##
-  ## If `filter` is `nil`, the result will be `nil` as well.
-  if not filter.isNil:
+  ## If `delta` is `nil`, the result will be `nil` as well.
+  if not delta.isNil:
     result = LayerDeltaRef()
 
     # Calculate reverse changes for the `sTab[]` structural table
-    for key in filter.sTab.keys:
+    for key in delta.sTab.keys:
       let rc = db.getUbe key
       if rc.isOk:
         result.sTab[key] = rc.value

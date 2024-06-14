@@ -87,8 +87,8 @@ proc persistFixtureBlock(chainDB: CoreDbRef) =
   # Manually inserting header to avoid any parent checks
   chainDB.kvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
-  discard chainDB.persistTransactions(header.number, getBlockBody4514995().transactions)
-  discard chainDB.persistReceipts(getReceipts4514995())
+  chainDB.persistTransactions(header.number, getBlockBody4514995().transactions)
+  chainDB.persistReceipts(getReceipts4514995())
 
 proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
   var
@@ -153,7 +153,9 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     signedTx1 = signTransaction(unsignedTx1, acc.privateKey, com.chainId, eip155)
     signedTx2 = signTransaction(unsignedTx2, acc.privateKey, com.chainId, eip155)
     txs = [signedTx1, signedTx2]
-    txRoot = com.db.persistTransactions(blockNumber, txs)
+  com.db.persistTransactions(blockNumber, txs)
+
+  let txRoot = com.db.ctx.getMpt(CtTxs).getColumn().state().valueOr(EMPTY_ROOT_HASH)
 
   vmState.receipts = newSeq[Receipt](txs.len)
   vmState.cumulativeGasUsed = 0
@@ -163,8 +165,9 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     doAssert(rc.isOk, "Invalid transaction: " & rc.error)
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
+  com.db.persistReceipts(vmState.receipts)
   let
-    receiptsRoot = com.db.persistReceipts(vmState.receipts)
+    receiptRoot = com.db.ctx.getMpt(CtReceipts).getColumn().state().valueOr(EMPTY_ROOT_HASH)
     date        = dateTime(2017, mMar, 30)
     timeStamp   = date.toTime.toUnix.EthTime
     difficulty  = com.calcDifficulty(timeStamp, parent)
@@ -192,7 +195,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
   let uncles = [header]
   header.ommersHash = com.db.persistUncles(uncles)
 
-  com.db.persistHeaderToDb(header,
+  doAssert com.db.persistHeader(header,
     com.consensus == ConsensusType.POS)
   com.db.persistFixtureBlock()
   result = TestEnv(

@@ -117,7 +117,7 @@ func miningHash(header: BlockHeader): Hash256 =
     timestamp:   header.timestamp,
     extraData:   header.extraData)
 
-  rlp.encode(miningHeader).keccakHash
+  rlpHash(miningHeader)
 
 # ---------------
 

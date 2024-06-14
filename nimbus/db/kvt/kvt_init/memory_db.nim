@@ -86,8 +86,8 @@ proc getKvpFn(db: MemBackendRef): GetKvpFn =
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
-      db.newSession()
+    proc(): Result[PutHdlRef,KvtError] =
+      ok db.newSession()
 
 proc putKvpFn(db: MemBackendRef): PutKvpFn =
   result =
@@ -120,6 +120,16 @@ proc closeFn(db: MemBackendRef): CloseFn =
     proc(ignore: bool) =
       discard
 
+proc canModFn(db: MemBackendRef): CanModFn =
+  result =
+    proc(): Result[void,KvtError] =
+      ok()
+
+proc setWrReqFn(db: MemBackendRef): SetWrReqFn =
+  result =
+    proc(kvt: RootRef): Result[void,KvtError] =
+      err(RdbBeHostNotApplicable)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -136,7 +146,8 @@ proc memoryBackend*: BackendRef =
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
-
+  db.canModFn = canModFn db
+  db.setWrReqFn = setWrReqFn db
   db
 
 proc dup*(db: MemBackendRef): MemBackendRef =

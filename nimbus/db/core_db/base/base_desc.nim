@@ -27,6 +27,7 @@ type
     Ooops
     AristoDbMemory            ## Memory backend emulator
     AristoDbRocks             ## RocksDB backend
+    AristoDbDualRocks         ## Dual RocksDB backends for `Kvt` and `Aristo`
     AristoDbVoid              ## No backend
 
 const

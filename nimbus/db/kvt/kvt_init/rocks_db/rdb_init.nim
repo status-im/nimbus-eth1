@@ -14,21 +14,37 @@
 {.push raises: [].}
 
 import
-  std/os,
+  std/[sequtils, os],
   rocksdb,
   results,
+  ../../../aristo/aristo_init/persistent,
+  ../../../opts,
   ../../kvt_desc,
+  ../../kvt_desc/desc_error as kdb,
   ./rdb_desc
 
-const
-  extraTraceMessages = false
-    ## Enabled additional logging noise
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
 
-when extraTraceMessages:
-  import chronicles
+proc getCFInitOptions(opts: DbOptions): ColFamilyOptionsRef =
+  result = defaultColFamilyOptions()
+  if opts.writeBufferSize > 0:
+    result.setWriteBufferSize(opts.writeBufferSize)
 
-  logScope:
-    topics = "kvt-backend"
+
+proc getDbInitOptions(opts: DbOptions): DbOptionsRef =
+  result = defaultDbOptions()
+  result.setMaxOpenFiles(opts.maxOpenFiles)
+  result.setMaxBytesForLevelBase(opts.writeBufferSize)
+
+  if opts.rowCacheSize > 0:
+    result.setRowCache(cacheCreateLRU(opts.rowCacheSize))
+
+  if opts.blockCacheSize > 0:
+    let tableOpts = defaultTableOptions()
+    tableOpts.setBlockCache(cacheCreateLRU(opts.rowCacheSize))
+    result.setBlockBasedTableFactory(tableOpts)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -37,51 +53,64 @@ when extraTraceMessages:
 proc init*(
     rdb: var RdbInst;
     basePath: string;
-    openMax: int;
+    opts: DbOptions;
       ): Result[void,(KvtError,string)] =
-  ## Constructor c ode inspired by `RocksStoreRef.init()` from
-  ## kvstore_rocksdb.nim
+  ## Database backend constructor for stand-alone version
+  ##
+  const initFailed = "RocksDB/init() failed"
+
   rdb.basePath = basePath
 
   let
     dataDir = rdb.dataDir
-
   try:
     dataDir.createDir
   except OSError, IOError:
-    return err((RdbBeCantCreateDataDir, ""))
+    return err((kdb.RdbBeCantCreateDataDir, ""))
 
-  let
-    cfs = @[initColFamilyDescriptor KvtFamily]
-    opts = defaultDbOptions()
-  opts.setMaxOpenFiles(openMax)
+  # Expand argument `opts` to rocksdb options
+  let (cfOpts, dbOpts) = (opts.getCFInitOptions, opts.getDbInitOptions)
+    
+  # Column familiy names to allocate when opening the database.
+  let cfs = KvtCFs.mapIt(($it).initColFamilyDescriptor cfOpts)
 
-  # Reserve a family corner for `Kvt` on the database
-  let baseDb = openRocksDb(dataDir, opts, columnFamilies=cfs).valueOr:
-    let errSym = RdbBeDriverInitError
-    when extraTraceMessages:
-      debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
-    return err((errSym, error))
+  # Open database for the extended family :)
+  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
+    raiseAssert initFailed & " cannot create base descriptor: " & error
 
-  # Initialise `Kvt` family
-  rdb.store = baseDb.withColFamily(KvtFamily).valueOr:
-    let errSym = RdbBeDriverInitError
-    when extraTraceMessages:
-      debug logTxt "init failed", dataDir, openMax, error=errSym, info=error
-    return err((errSym, error))
+  # Initialise column handlers (this stores implicitely `baseDb`)
+  for col in KvtCFs:
+    rdb.store[col] = baseDb.withColFamily($col).valueOr:
+      raiseAssert initFailed & " cannot initialise " &
+        $col & " descriptor: " & error
   ok()
+
 
 proc init*(
     rdb: var RdbInst;
-    store: ColFamilyReadWrite;
-      ) =
-  ## Piggyback on other database
-  rdb.store = store # that's it
+    adb: AristoDbRef;
+    opts: DbOptions;
+      ): Result[void,(KvtError,string)] =
+  ## Initalise column handlers piggy-backing on the `Aristo` backend.
+  ##
+  let
+    cfOpts = opts.getCFInitOptions()
+    iCfs = KvtCFs.toSeq.mapIt(initColFamilyDescriptor($it, cfOpts))
+    oCfs = adb.reinit(iCfs).valueOr:
+      return err((RdbBeHostError,$error))
+
+  # Collect column family descriptors (this stores implicitely `baseDb`)
+  for n in KvtCFs:
+    assert oCfs[n.ord].name != "" # debugging only
+    rdb.store[n] = oCfs[n.ord]
+
+  ok()
+ 
 
 proc destroy*(rdb: var RdbInst; flush: bool) =
   ## Destructor (no need to do anything if piggybacked)
   if 0 < rdb.basePath.len:
-    rdb.store.db.close()
+    rdb.baseDb.close()
 
     if flush:
       try:

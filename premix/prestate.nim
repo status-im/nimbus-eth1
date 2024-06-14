@@ -24,12 +24,12 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: BlockNumber, parent:
     kvt = chainDB.newKvt()
 
   discard chainDB.setHead(parent, true)
-  discard chainDB.persistTransactions(blockNumber, blk.transactions)
+  chainDB.persistTransactions(blockNumber, blk.transactions)
   discard chainDB.persistUncles(blk.uncles)
 
   kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
     raiseAssert "generatePrestate(): put() failed " & $$error
-  chainDB.addBlockNumberToHashLookup(header)
+  chainDB.addBlockNumberToHashLookup(header.number, headerHash)
 
   for k, v in state:
     let key = hexToSeqByte(k)

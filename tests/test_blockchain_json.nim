@@ -105,7 +105,7 @@ proc parseHeader(blockHeader: JsonNode, testStatusIMPL: var TestStatus): BlockHe
   result = normalizeBlockHeader(blockHeader).parseBlockHeader
   var blockHash: Hash256
   blockHeader.fromJson "hash", blockHash
-  check blockHash == hash(result)
+  check blockHash == rlpHash(result)
 
 proc parseWithdrawals(withdrawals: JsonNode): Option[seq[Withdrawal]] =
   case withdrawals.kind
@@ -256,7 +256,7 @@ proc collectDebugData(ctx: var TestCtx) =
   }
 
 proc runTestCtx(ctx: var TestCtx, com: CommonRef, testStatusIMPL: var TestStatus) =
-  com.db.persistHeaderToDb(ctx.genesisHeader,
+  doAssert com.db.persistHeader(ctx.genesisHeader,
     com.consensus == ConsensusType.POS)
   check com.db.getCanonicalHead().blockHash == ctx.genesisHeader.blockHash
   let checkSeal = ctx.shouldCheckSeal

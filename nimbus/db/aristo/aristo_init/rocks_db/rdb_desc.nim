@@ -18,10 +18,22 @@ import
   eth/common,
   rocksdb,
   stew/[endians2, keyed_queue],
+  ../../../opts,
   ../../aristo_desc,
   ../init_common
 
 type
+  RdbWriteEventCb* =
+    proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
+      ## Call back closure function that passes the the write session handle
+      ## to a guest peer right after it was opened. The guest may store any
+      ## data on its own column family and return `true` if that worked
+      ## all right. Then the `Aristo` handler will stor its own columns and
+      ## finalise the write session.
+      ##
+      ## In case of an error when `false` is returned, `Aristo` will abort the
+      ## write session and return a session error.
+
   RdbInst* = object
     admCol*: ColFamilyReadWrite        ## Admin column family handler
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
@@ -29,26 +41,18 @@ type
     session*: WriteBatchRef            ## For batched `put()`
     rdKeyLru*: KeyedQueue[VertexID,HashKey] ## Read cache
     rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
+
     basePath*: string                  ## Database directory
-    noFq*: bool                        ## No filter queues available
+    opts*: DbOptions                   ## Just a copy here for re-opening
+    trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
 
-  # Alien interface
-  RdbGuest* = enum
-    ## The guest CF was worth a try, but there are better solutions and this
-    ## item will be removed in future.
-    GuestFamily0 = "Guest0"            ## Guest family (e.g. for Kvt)
-    GuestFamily1 = "Guest1"            ## Ditto
-    GuestFamily2 = "Guest2"            ## Ditto
-
-  RdbGuestDbRef* = ref object of GuestDbRef
-    ## The guest CF was worth a try, but there are better solutions and this
-    ## item will be removed in future.
-    guestDb*: ColFamilyReadWrite       ## Pigiback feature references
+  AristoCFs* = enum
+    ## Column family symbols/handles and names used on the database
+    AdmCF = "AriAdm"                   ## Admin column family name
+    VtxCF = "AriVtx"                   ## Vertex column family name
+    KeyCF = "AriKey"                   ## Hash key column family name
 
 const
-  AdmCF* = "AdmAri"                    ## Admin column family name
-  VtxCF* = "VtxAri"                    ## Vertex column family name
-  KeyCF* = "KeyAri"                    ## Hash key column family name
   BaseFolder* = "nimbus"               ## Same as for Legacy DB
   DataFolder* = "aristo"               ## Legacy DB has "data"
   RdKeyLruMaxSize* = 4096              ## Max size of read cache for keys

@@ -818,7 +818,7 @@ proc level*(db: CoreDbRef): int =
 
 proc persistent*(
     db: CoreDbRef;
-      ): CoreDbRc[void] {.discardable.} =
+      ): CoreDbRc[void] =
   ## For the legacy database, this function has no effect and succeeds always.
   ## It will nevertheless return a discardable error if there is a pending
   ## transaction (i.e. `db.level() == 0`.)

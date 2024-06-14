@@ -863,7 +863,7 @@ proc runTxPackerTests(noisy = true) =
           check bdy == blockBody
         else:
           # The canonical head will be set to hdr if it scores high enough
-          # (see implementation of db_chain.persistHeaderToDb()).
+          # (see implementation of db_chain.persistHeader()).
           let
             canonScore = xq.chain.com.db.getScore(canonicalHead.blockHash)
             headerScore = xq.chain.com.db.getScore(hdr.blockHash)
