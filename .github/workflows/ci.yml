@@ -91,12 +91,24 @@ jobs:
           case '${{ runner.os }}' in
           'Linux')
             ncpu=$(nproc)
+            echo "Number of cores: ${ncpu}"
+            echo "$(grep MemTotal /proc/meminfo)"
+            echo -e "Partition sizes:\n$(df -k -h .)"
             ;;
           'macOS')
             ncpu=$(sysctl -n hw.ncpu)
+            hwmemsize=$(sysctl -n hw.memsize)
+            ramsize=$(expr $hwmemsize / $((1024**3)))
+            echo "Number of cores: ${ncpu}"
+            echo "Physical memory: ${ramsize} GB"
+            echo -e "Partition sizes:\n$(df -k -h .)"
             ;;
           'Windows')
             ncpu=${NUMBER_OF_PROCESSORS}
+            CD=${PWD:1:1}
+            echo "Number of cores: ${NUMBER_OF_PROCESSORS}"
+            echo "Physical memory: $(wmic ComputerSystem get TotalPhysicalMemory)"
+            echo -e "Partition sizes:\n$(wmic logicaldisk get name,size,freespace | grep -e "${CD^}" -e "FreeSpace")"
             ;;
           esac
           [[ -z "$ncpu" || $ncpu -le 0 ]] && ncpu=1
