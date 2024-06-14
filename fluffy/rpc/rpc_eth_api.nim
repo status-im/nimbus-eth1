@@ -12,9 +12,10 @@ import
   json_rpc/[rpcproxy, rpcserver],
   web3/conversions, # sigh, for FixedBytes marshalling
   web3/eth_api_types,
-  eth/[common/eth_types, rlp],
+  eth/common/eth_types,
   beacon_chain/spec/forks,
   ../network/history/[history_network, history_content],
+  ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client
 
 from ../../nimbus/transaction import getSender, ValidationError
@@ -127,6 +128,7 @@ proc installEthApiHandlers*(
     rpcServerWithProxy: var RpcProxy,
     historyNetwork: HistoryNetwork,
     beaconLightClient: Opt[LightClient],
+    stateNetwork: Opt[StateNetwork],
 ) =
   # Supported API
   rpcServerWithProxy.registerProxyMethod("eth_blockNumber")
@@ -343,65 +345,121 @@ proc installEthApiHandlers*(
       return filteredLogs
     else:
       # bloomfilter returned false, there are no logs matching the criteria
-      return
-        @[]
+      return @[]
 
-          # rpcServerWithProxy.rpc("eth_getBalance") do(
-          #   data: Address, quantityTag: RtBlockIdentifier
-          # ) -> UInt256:
-          #   ## Returns the balance of the account of given address.
-          #   ##
-          #   ## data: address to check for balance.
-          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-          #   ## Returns integer of the current balance in wei.
-          #   # TODO
-          #   raiseAssert("Not implemented")
+  rpcServerWithProxy.rpc("eth_getBalance") do(
+    data: EthAddress, quantityTag: RtBlockIdentifier
+  ) -> UInt256:
+    ## Returns the balance of the account of given address.
+    ##
+    ## data: address to check for balance.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns integer of the current balance in wei.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not running")
 
-          # rpcServerWithProxy.rpc("eth_getTransactionCount") do(
-          #   data: Address, quantityTag: RtBlockIdentifier
-          # ) -> Quantity:
-          #   ## Returns the number of transactions sent from an address.
-          #   ##
-          #   ## data: address.
-          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-          #   ## Returns integer of the number of transactions send from this address.
-          #   # TODO
-          #   raiseAssert("Not implemented")
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+    else:
+      let
+        blockNumber = quantityTag.number.uint64.u256
+        blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
+          raise newException(ValueError, error)
 
-          # rpcServerWithProxy.rpc("eth_getStorageAt") do(
-          #   data: Address, slot: UInt256, quantityTag: RtBlockIdentifier
-          # ) -> FixedBytes[32]:
-          #   ## Returns the value from a storage position at a given address.
-          #   ##
-          #   ## data: address of the storage.
-          #   ## slot: integer of the position in the storage.
-          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-          #   ## Returns: the value at this storage position.
-          #   # TODO
-          #   raiseAssert("Not implemented")
+        balance = (await stateNetwork.get().getBalance(blockHash, data)).valueOr:
+          # Should we return 0 here or throw a more detailed error?
+          raise newException(ValueError, "Unable to get balance")
 
-          # rpcServerWithProxy.rpc("eth_getCode") do(
-          #   data: Address, quantityTag: RtBlockIdentifier
-          # ) -> seq[byte]:
-          #   ## Returns code at a given address.
-          #   ##
-          #   ## data: address
-          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-          #   ## Returns the code from the given address.
-          #   # TODO
-          #   raiseAssert("Not implemented")
+      return balance
 
-          # rpcServerWithProxy.rpc("eth_getProof") do(
-          #   address: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
-          # ) -> ProofResponse:
-          #   ## Returns information about an account and storage slots (if the account is a contract
-          #   ## and the slots are requested) along with account and storage proofs which prove the
-          #   ## existence of the values in the state.
-          #   ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
-          #   ##
-          #   ## data: address of the account.
-          #   ## slots: integers of the positions in the storage to return with storage proofs.
-          #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-          #   ## Returns: the proof response containing the account, account proof and storage proof
-          #   # TODO
-          #   raiseAssert("Not implemented")
+  rpcServerWithProxy.rpc("eth_getTransactionCount") do(
+    data: EthAddress, quantityTag: RtBlockIdentifier
+  ) -> Quantity:
+    ## Returns the number of transactions sent from an address.
+    ##
+    ## data: address.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns integer of the number of transactions send from this address.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not running")
+
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+    else:
+      let
+        blockNumber = quantityTag.number.uint64.u256
+        blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
+          raise newException(ValueError, error)
+
+        nonce = (await stateNetwork.get().getTransactionCount(blockHash, data)).valueOr:
+          # Should we return 0 here or throw a more detailed error?
+          raise newException(ValueError, "Unable to get transaction count")
+      return nonce.Quantity
+
+  rpcServerWithProxy.rpc("eth_getStorageAt") do(
+    data: EthAddress, slot: UInt256, quantityTag: RtBlockIdentifier
+  ) -> FixedBytes[32]:
+    ## Returns the value from a storage position at a given address.
+    ##
+    ## data: address of the storage.
+    ## slot: integer of the position in the storage.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns: the value at this storage position.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not running")
+
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+    else:
+      let
+        blockNumber = quantityTag.number.uint64.u256
+        blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
+          raise newException(ValueError, error)
+
+        slotValue = (await stateNetwork.get().getStorageAt(blockHash, data, slot)).valueOr:
+          # Should we return 0 here or throw a more detailed error?
+          raise newException(ValueError, "Unable to get storage slot")
+      return FixedBytes[32](slotValue.toBytesBE())
+
+  rpcServerWithProxy.rpc("eth_getCode") do(
+    data: EthAddress, quantityTag: RtBlockIdentifier
+  ) -> seq[byte]:
+    ## Returns code at a given address.
+    ##
+    ## data: address
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns the code from the given address.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not running")
+
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+    else:
+      let
+        blockNumber = quantityTag.number.uint64.u256
+        blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
+          raise newException(ValueError, error)
+
+        bytecode = (await stateNetwork.get().getCode(blockHash, data)).valueOr:
+          # Should we return empty sequence here or throw a more detailed error?
+          raise newException(ValueError, "Unable to get code")
+      return bytecode.asSeq()
+
+        # rpcServerWithProxy.rpc("eth_getProof") do(
+        #   address: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
+        # ) -> ProofResponse:
+        #   ## Returns information about an account and storage slots (if the account is a contract
+        #   ## and the slots are requested) along with account and storage proofs which prove the
+        #   ## existence of the values in the state.
+        #   ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
+        #   ##
+        #   ## data: address of the account.
+        #   ## slots: integers of the positions in the storage to return with storage proofs.
+        #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+        #   ## Returns: the proof response containing the account, account proof and storage proof
+        #   # TODO
+        #   raiseAssert("Not implemented")
