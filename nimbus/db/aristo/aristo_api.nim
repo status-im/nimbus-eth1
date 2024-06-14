@@ -439,11 +439,11 @@ type
 
     AristoApiProfBeGetVtxFn            = "be/getVtx"
     AristoApiProfBeGetKeyFn            = "be/getKey"
-    AristoApiProfBeGetIdgFn            = "be/getIfg"
+    AristoApiProfBeGetTuvFn            = "be/getTuv"
     AristoApiProfBeGetLstFn            = "be/getLst"
     AristoApiProfBePutVtxFn            = "be/putVtx"
     AristoApiProfBePutKeyFn            = "be/putKey"
-    AristoApiProfBePutIdgFn            = "be/putIdg"
+    AristoApiProfBePutTuvFn            = "be/putTuv"
     AristoApiProfBePutLstFn            = "be/putLst"
     AristoApiProfBePutEndFn            = "be/putEnd"
 
@@ -757,11 +757,11 @@ func init*(
           result = be.getKeyFn(a)
     data.list[AristoApiProfBeGetKeyFn.ord].masked = true
 
-    beDup.getIdgFn =
+    beDup.getTuvFn =
       proc(): auto =
-        AristoApiProfBeGetIdgFn.profileRunner:
-          result = be.getIdgFn()
-    data.list[AristoApiProfBeGetIdgFn.ord].masked = true
+        AristoApiProfBeGetTuvFn.profileRunner:
+          result = be.getTuvFn()
+    data.list[AristoApiProfBeGetTuvFn.ord].masked = true
 
     beDup.getLstFn =
       proc(): auto =
@@ -781,11 +781,11 @@ func init*(
           be.putKeyFn(a,b)
     data.list[AristoApiProfBePutKeyFn.ord].masked = true
 
-    beDup.putIdgFn =
-      proc(a: PutHdlRef; b: openArray[VertexID]) =
-        AristoApiProfBePutIdgFn.profileRunner:
-          be.putIdgFn(a,b)
-    data.list[AristoApiProfBePutIdgFn.ord].masked = true
+    beDup.putTuvFn =
+      proc(a: PutHdlRef; b: VertexID) =
+        AristoApiProfBePutTuvFn.profileRunner:
+          be.putTuvFn(a,b)
+    data.list[AristoApiProfBePutTuvFn.ord].masked = true
 
     beDup.putLstFn =
       proc(a: PutHdlRef; b: SavedState) =
