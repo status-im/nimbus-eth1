@@ -13,14 +13,11 @@
 import
   eth/common,
   ../aristo,
-  ./backend/aristo_db
+  ./backend/aristo_db,
+  "."/[base_iterators, core_apps]
 
 import
-  ./core_apps_newapi as core_apps
-import
   ./base except bless
-import
-  ./base_iterators
 
 export
   EmptyBlob,

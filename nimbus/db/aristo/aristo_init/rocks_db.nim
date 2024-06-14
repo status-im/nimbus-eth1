@@ -225,8 +225,8 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
 
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
-    proc(flush: bool) =
-      db.rdb.destroy(flush)
+    proc(eradicate: bool) =
+      db.rdb.destroy(eradicate)
 
 # ------------------------------------------------------------------------------
 # Private functions: hosting interface changes

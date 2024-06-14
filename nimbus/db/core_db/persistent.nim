@@ -42,16 +42,8 @@ proc newCoreDbRef*(
   ## The production database type is `AristoDbRocks` which uses a single
   ## `RocksDb` backend for both, `Aristo` and `KVT`.
   ##
-  ## For debugging, there is the `AristoDbDualRocks` database with split
-  ## backends for `Aristo` and `KVT`. This database is not compatible with
-  ## `AristoDbRocks` so it cannot be reliably switched between both versions
-  ## with consecutive sessions.
-  ##
   when dbType == AristoDbRocks:
     newAristoRocksDbCoreDbRef path, opts
-
-  elif dbType == AristoDbDualRocks:
-    newAristoDualRocksDbCoreDbRef path, opts
 
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}

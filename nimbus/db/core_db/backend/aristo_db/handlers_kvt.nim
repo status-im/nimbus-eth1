@@ -223,8 +223,8 @@ proc newKvtHandler*(
     ok(base.cache)
 
 
-proc destroy*(base: KvtBaseRef; flush: bool) =
-  base.api.finish(base.kdb, flush)  # Close descriptor
+proc destroy*(base: KvtBaseRef; eradicate: bool) =
+  base.api.finish(base.kdb, eradicate)  # Close descriptor
 
 
 func init*(T: type KvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =

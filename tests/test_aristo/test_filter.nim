@@ -110,7 +110,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   block:
     let report = db.mergeList w[0]
     if report.error != 0:
-      db.finish(flush=true)
+      db.finish(eradicate=true)
       check report.error == 0
       return err(report.error)
     let rc = db.persist()
@@ -130,7 +130,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   for n in 0 ..< dx.len:
     let report = dx[n].mergeList w[n+1]
     if report.error != 0:
-      db.finish(flush=true)
+      db.finish(eradicate=true)
       check (n, report.error) == (n,0)
       return err(report.error)
 
@@ -140,7 +140,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
 
 proc cleanUp(dx: var DbTriplet) =
   if not dx[0].isNil:
-    dx[0].finish(flush=true)
+    dx[0].finish(eradicate=true)
     dx.reset
 
 proc isDbEq(a, b: LayerDeltaRef; db: AristoDbRef; noisy = true): bool =

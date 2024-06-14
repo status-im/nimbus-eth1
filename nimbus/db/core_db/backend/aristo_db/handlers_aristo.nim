@@ -367,8 +367,8 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       return err(rc.error.toError(base, info))
     ok()
 
-  proc accStoFlush(address: EthAddress): CoreDbRc[void] =
-    const info = "stoFlushFn()"
+  proc accStoDelete(address: EthAddress): CoreDbRc[void] =
+    const info = "stoDeleteFn()"
 
     let
       key = address.keccakHash.data
@@ -405,8 +405,8 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     deleteFn: proc(address: EthAddress): CoreDbRc[void] =
       accDelete(address),
 
-    stoFlushFn: proc(address: EthAddress): CoreDbRc[void] =
-      accStoFlush(address),
+    stoDeleteFn: proc(address: EthAddress): CoreDbRc[void] =
+      accStoDelete(address),
 
     mergeFn: proc(acc: CoreDbAccount): CoreDbRc[void] =
       accMerge(acc),
@@ -702,8 +702,8 @@ proc persistent*(
 # Public constructors and related
 # ------------------------------------------------------------------------------
 
-proc destroy*(base: AristoBaseRef; flush: bool) =
-  base.api.finish(base.ctx.mpt, flush)
+proc destroy*(base: AristoBaseRef; eradicate: bool) =
+  base.api.finish(base.ctx.mpt, eradicate)
 
 
 func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =

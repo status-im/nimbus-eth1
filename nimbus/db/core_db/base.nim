@@ -20,9 +20,6 @@ from ../aristo
   import EmptyBlob, PayloadRef, isValid
 
 const
-  ProvideLegacyAPI = false
-    ## Enable legacy API. For now everybody would want this enabled.
-
   EnableApiTracking = false
     ## When enabled, functions using this tracking facility need to import
     ## `chronicles`, as well. Tracking is enabled by setting `true` the flags
@@ -61,18 +58,8 @@ export
   PayloadRef
 
 const
-  CoreDbProvideLegacyAPI* = ProvideLegacyAPI
   CoreDbEnableApiTracking* = EnableApiTracking
   CoreDbEnableApiProfiling* = EnableApiTracking and EnableApiProfiling
-
-when ProvideLegacyAPI:
-  import
-    std/typetraits
-  type
-    TxWrapperApiError* = object of CoreDbApiError
-      ## For re-routing exception on tx/action template
-  export
-    CoreDbKvtRef, CoreDbMptRef, CoreDbPhkRef, CoreDbTxRef, CoreDbCaptRef
 
 when AutoValidateDescriptors:
   import ./base/validate
@@ -105,35 +92,6 @@ when EnableApiTracking:
   proc `$`(e: EthAddress): string = e.toStr
   proc `$`(v: CoreDbColRef): string = v.toStr
   proc `$`(h: Hash256): string = h.toStr
-
-when ProvideLegacyAPI:
-  when EnableApiTracking:
-    proc `$`(k: CoreDbKvtRef): string = k.toStr
-
-  template setTrackLegaApi(
-      w: CoreDbApiTrackRef;
-      s: static[CoreDbFnInx];
-      code: untyped;
-        ) =
-    ## Template with code section that will be discarded if logging is
-    ## disabled at compile time when `EnableApiTracking` is `false`.
-    when EnableApiTracking:
-      w.beginLegaApi(s)
-      code
-    const api {.inject,used.} = s
-
-  template setTrackLegaApi*(
-      w: CoreDbApiTrackRef;
-      s: static[CoreDbFnInx];
-        ) =
-    w.setTrackLegaApi(s):
-      discard
-
-  template ifTrackLegaApi*(w: CoreDbApiTrackRef; code: untyped) =
-    when EnableApiTracking:
-      w.endLegaApiIf:
-        code
-
 
 template setTrackNewApi(
     w: CoreDxApiTrackRef;
@@ -286,16 +244,16 @@ proc backend*(dsc: CoreDxKvtRef | CoreDxMptRef): auto =
   result = dsc.methods.backendFn()
   dsc.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-proc finish*(db: CoreDbRef; flush = false) =
-  ## Database destructor. If the argument `flush` is set `false`, the database
-  ## is left as-is and only the in-memory handlers are cleaned up.
+proc finish*(db: CoreDbRef; eradicate = false) =
+  ## Database destructor. If the argument `eradicate` is set `false`, the
+  ## database is left as-is and only the in-memory handlers are cleaned up.
   ##
   ## Otherwise the destructor is allowed to remove the database. This feature
   ## depends on the backend database. Currently, only the `AristoDbRocks` type
   ## backend removes the database on `true`.
   ##
   db.setTrackNewApi BaseFinishFn
-  db.methods.destroyFn flush
+  db.methods.destroyFn eradicate
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc `$$`*(e: CoreDbErrorRef): string =
@@ -746,7 +704,7 @@ proc delete*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
   result = acc.methods.deleteFn address
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
-proc stoFlush*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
+proc stoDelete*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
   ## Recursively delete all data elements from the storage trie associated to
   ## the account identified by the argument `address`. After successful run,
   ## the storage trie will be empty.
@@ -757,8 +715,8 @@ proc stoFlush*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
   ##   shared by several accounts whereas they are unique on the `Aristo`
   ##   backend.
   ##
-  acc.setTrackNewApi AccStoFlushFn
-  result = acc.methods.stoFlushFn address
+  acc.setTrackNewApi AccStoDeleteFn
+  result = acc.methods.stoDeleteFn address
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
 
@@ -958,206 +916,6 @@ proc forget*(cp: CoreDxCaptRef) =
   cp.setTrackNewApi CptForgetFn
   cp.methods.forgetFn()
   cp.ifTrackNewApi: debug newApiTxt, api, elapsed
-
-# ------------------------------------------------------------------------------
-# Public methods, legacy API
-# ------------------------------------------------------------------------------
-
-when ProvideLegacyAPI:
-
-  proc parent*[T: CoreDbKvtRef | CoreDbMptRef | CoreDbPhkRef |
-                  CoreDbTxRef | CoreDbCaptRef](
-      cld: T): CoreDbRef =
-    ## Getter, common method for all sub-modules
-    result = cld.distinctBase.parent
-
-  # ----------------
-
-  proc kvt*(db: CoreDbRef): CoreDbKvtRef =
-    ## Legacy pseudo constructor, see `toKvt()` for production constructor
-    db.setTrackLegaApi LegaNewKvtFn
-    result = db.newKvt().CoreDbKvtRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, result
-
-  proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): Blob =
-    kvt.setTrackLegaApi LegaKvtGetFn
-    result = kvt.distinctBase.getOrEmpty(key).expect $api
-    kvt.ifTrackLegaApi: debug legaApiTxt, api, elapsed, key=key.toStr, result
-
-  proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): void =
-    kvt.setTrackLegaApi LegaKvtDelFn
-    kvt.distinctBase.del(key).expect $api
-    kvt.ifTrackLegaApi: debug legaApiTxt, api, elapsed, key=key.toStr
-
-  proc put*(kvt: CoreDbKvtRef; key: openArray[byte]; val: openArray[byte]) =
-    kvt.setTrackLegaApi LegaKvtPutFn
-    kvt.distinctBase.parent.newKvt().put(key, val).expect $api
-    kvt.ifTrackLegaApi:
-      debug legaApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr
-
-  proc contains*(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
-    kvt.setTrackLegaApi LegaKvtContainsFn
-    result = kvt.distinctBase.hasKey(key).expect $api
-    kvt.ifTrackLegaApi: debug legaApiTxt, api, elapsed, key=key.toStr, result
-
-  # ----------------
-
-  proc toMpt*(phk: CoreDbPhkRef): CoreDbMptRef =
-    phk.setTrackLegaApi LegaToMptFn
-    result = phk.distinctBase.toMpt.CoreDbMptRef
-    phk.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  proc mptPrune*(db: CoreDbRef; root: Hash256): CoreDbMptRef =
-    db.setTrackLegaApi LegaNewMptFn
-    let
-      trie = db.ctx.methods.newColFn(
-          CtGeneric, root, Opt.none(EthAddress)).valueOr:
-        raiseAssert error.prettyText() & ": " & $api
-      mpt = db.ctx.getMpt(trie).valueOr:
-        raiseAssert error.prettyText() & ": " & $api
-    result = mpt.CoreDbMptRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root
-
-  proc mptPrune*(db: CoreDbRef): CoreDbMptRef =
-    db.setTrackLegaApi LegaNewMptFn
-    result = db.ctx.getMpt(CtGeneric, Opt.none(EthAddress)).CoreDbMptRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  # ----------------
-
-  proc toPhk*(mpt: CoreDbMptRef): CoreDbPhkRef =
-    mpt.setTrackLegaApi LegaToPhkFn
-    result = mpt.distinctBase.toPhk.CoreDbPhkRef
-    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  proc phkPrune*(db: CoreDbRef; root: Hash256): CoreDbPhkRef =
-    db.setTrackLegaApi LegaNewPhkFn
-    let
-      trie = db.ctx.methods.newColFn(
-          CtGeneric, root, Opt.none(EthAddress)).valueOr:
-        raiseAssert error.prettyText() & ": " & $api
-      phk = db.ctx.getMpt(trie).valueOr:
-        raiseAssert error.prettyText() & ": " & $api
-    result = phk.toCoreDxPhkRef.CoreDbPhkRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed, root
-
-  proc phkPrune*(db: CoreDbRef): CoreDbPhkRef =
-    db.setTrackLegaApi LegaNewPhkFn
-    result = db.ctx.getMpt(
-      CtGeneric, Opt.none(EthAddress)).toCoreDxPhkRef.CoreDbPhkRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  # ----------------
-
-  proc get*(mpt: CoreDbMptRef; key: openArray[byte]): Blob =
-    mpt.setTrackLegaApi LegaMptGetFn
-    result = mpt.distinctBase.fetchOrEmpty(key).expect $api
-    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed, key=key.toStr, result
-
-  proc get*(phk: CoreDbPhkRef; key: openArray[byte]): Blob =
-    phk.setTrackLegaApi LegaPhkGetFn
-    result = phk.distinctBase.fetchOrEmpty(key).expect $api
-    phk.ifTrackLegaApi:
-      debug legaApiTxt, api, elapsed, key=key.toStr, result
-
-
-  proc del*(mpt: CoreDbMptRef; key: openArray[byte]) =
-    mpt.setTrackLegaApi LegaMptDelFn
-    mpt.distinctBase.delete(key).expect $api
-    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed, key=key.toStr
-
-  proc del*(phk: CoreDbPhkRef; key: openArray[byte]) =
-    phk.setTrackLegaApi LegaPhkDelFn
-    phk.distinctBase.delete(key).expect $api
-    phk.ifTrackLegaApi: debug legaApiTxt, api, elapsed, key=key.toStr
-
-
-  proc put*(mpt: CoreDbMptRef; key: openArray[byte]; val: openArray[byte]) =
-    mpt.setTrackLegaApi LegaMptPutFn
-    mpt.distinctBase.merge(key, val).expect $api
-    mpt.ifTrackLegaApi:
-      debug legaApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr
-
-  proc put*(phk: CoreDbPhkRef; key: openArray[byte]; val: openArray[byte]) =
-    phk.setTrackLegaApi LegaPhkPutFn
-    phk.distinctBase.merge(key, val).expect $api
-    phk.ifTrackLegaApi:
-      debug legaApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr
-
-
-  proc contains*(mpt: CoreDbMptRef; key: openArray[byte]): bool =
-    mpt.setTrackLegaApi LegaMptContainsFn
-    result = mpt.distinctBase.hasPath(key).expect $api
-    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed, key=key.toStr, result
-
-  proc contains*(phk: CoreDbPhkRef; key: openArray[byte]): bool =
-    phk.setTrackLegaApi LegaPhkContainsFn
-    result = phk.distinctBase.hasPath(key).expect $api
-    phk.ifTrackLegaApi: debug legaApiTxt, api, elapsed, key=key.toStr, result
-
-
-  proc rootHash*(mpt: CoreDbMptRef): Hash256 =
-    mpt.setTrackLegaApi LegaMptRootHashFn
-    result = mpt.distinctBase.methods.getColFn().state.valueOr:
-      raiseAssert error.prettyText() & ": " & $api
-    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed, result
-
-  proc rootHash*(phk: CoreDbPhkRef): Hash256 =
-    phk.setTrackLegaApi LegaPhkRootHashFn
-    result = phk.distinctBase.methods.getColFn().state.valueOr:
-      raiseAssert error.prettyText() & ": " & $api
-    phk.ifTrackLegaApi: debug legaApiTxt, api, elapsed, result
-
-  # ----------------
-
-  proc beginTransaction*(db: CoreDbRef): CoreDbTxRef =
-    db.setTrackLegaApi LegaBeginTxFn
-    result = db.distinctBase.methods.beginFn().CoreDbTxRef
-    db.ifTrackLegaApi:
-      debug legaApiTxt, api, elapsed, newLevel=db.methods.levelFn()
-
-  proc commit*(tx: CoreDbTxRef, applyDeletes = true) =
-    tx.setTrackLegaApi LegaTxCommitFn:
-      let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.commit()
-    tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
-
-  proc rollback*(tx: CoreDbTxRef) =
-    tx.setTrackLegaApi LegaTxCommitFn:
-      let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.rollback()
-    tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
-
-  proc dispose*(tx: CoreDbTxRef) =
-    tx.setTrackLegaApi LegaTxDisposeFn:
-      let prvLevel {.used.} = tx.distinctBase.methods.levelFn()
-    tx.distinctBase.dispose()
-    tx.ifTrackLegaApi: debug legaApiTxt, api, elapsed, prvLevel
-
-  # ----------------
-
-  proc capture*(
-      db: CoreDbRef;
-      flags: set[CoreDbCaptFlags] = {};
-        ): CoreDbCaptRef =
-    db.setTrackLegaApi LegaCaptureFn
-    result = db.newCapture(flags).expect($api).CoreDbCaptRef
-    db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  proc recorder*(cp: CoreDbCaptRef): CoreDbRef =
-    cp.setTrackLegaApi LegaCptRecorderFn
-    result = cp.distinctBase.recorder()
-    cp.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  proc logDb*(cp: CoreDbCaptRef): TableRef[Blob,Blob] =
-    cp.setTrackLegaApi LegaCptLogDbFn
-    result = cp.distinctBase.logDb()
-    cp.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  proc flags*(cp: CoreDbCaptRef): set[CoreDbCaptFlags] =
-    cp.setTrackLegaApi LegaCptFlagsFn
-    result = cp.distinctBase.flags()
-    cp.ifTrackLegaApi: debug legaApiTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------
 # End

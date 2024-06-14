@@ -85,11 +85,11 @@ proc init*(
   AristoDbRef.init VoidBackendRef
 
 
-proc finish*(db: AristoDbRef; flush = false) =
-  ## Backend destructor. The argument `flush` indicates that a full database
-  ## deletion is requested. If set `false` the outcome might differ depending
-  ## on the type of backend (e.g. the `BackendMemory` backend will always
-  ## flush on close.)
+proc finish*(db: AristoDbRef; eradicate = false) =
+  ## Backend destructor. The argument `eradicate` indicates that a full
+  ## database deletion is requested. If set `false` the outcome might differ
+  ## depending on the type of backend (e.g. the `BackendMemory` backend will
+  ## always eradicate on close.)
   ##
   ## In case of distributed descriptors accessing the same backend, all
   ## distributed descriptors will be destroyed.
@@ -97,7 +97,7 @@ proc finish*(db: AristoDbRef; flush = false) =
   ## This distructor may be used on already *destructed* descriptors.
   ##
   if not db.backend.isNil:
-    db.backend.closeFn flush
+    db.backend.closeFn eradicate
   discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------

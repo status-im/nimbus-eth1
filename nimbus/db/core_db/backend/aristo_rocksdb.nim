@@ -48,7 +48,7 @@ proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
   AristoDbRocks.create(kdb, adb)
 
 proc newAristoDualRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
-  ## This is mainly for debugging. The KVT is run on a completely separate
+  ## This is only for debugging. The KVT is run on a completely separate
   ## database backend.
   let
     adb = AristoDbRef.init(use_ari.RdbBackendRef, path, opts).valueOr:

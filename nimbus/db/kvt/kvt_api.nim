@@ -44,7 +44,7 @@ type
   KvtApiCommitFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
   KvtApiDelFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[void,KvtError] {.noRaise.}
-  KvtApiFinishFn* = proc(db: KvtDbRef, flush = false) {.noRaise.}
+  KvtApiFinishFn* = proc(db: KvtDbRef, eradicate = false) {.noRaise.}
   KvtApiForgetFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiForkTxFn* = proc(db: KvtDbRef,
     backLevel: int): Result[KvtDbRef,KvtError] {.noRaise.}

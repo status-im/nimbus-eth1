@@ -144,8 +144,8 @@ proc subBalance*(db: AccountStateDB, eAddr: EthAddress, delta: UInt256) =
 
 proc clearStorage*(db: AccountStateDB, eAddr: EthAddress) =
   # Flush associated storage trie (will update account record on disk)
-  db.trie.distinctBase.stoFlush(eAddr).isOkOr:
-    raiseAssert "clearStorage():  stoFlush() failed, " & $$error
+  db.trie.distinctBase.stoDelete(eAddr).isOkOr:
+    raiseAssert "clearStorage():  stoDelete() failed, " & $$error
   # Reset storage info locally so that `Aristo` would not complain when
   # updating the account record on disk
   var account = db.getAccount(eAddr)

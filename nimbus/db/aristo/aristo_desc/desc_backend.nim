@@ -82,11 +82,11 @@ type
   # -------------
 
   CloseFn* =
-    proc(flush: bool) {.gcsafe, raises: [].}
-      ## Generic destructor for the `Aristo DB` backend. The argument `flush`
-      ## indicates that a full database deletion is requested. If passed
-      ## `false` the outcome might differ depending on the type of backend
-      ## (e.g. in-memory backends would flush on close.)
+    proc(eradicate: bool) {.gcsafe, raises: [].}
+      ## Generic destructor for the `Aristo DB` backend. The argument
+      ## `eradicate` indicates that a full database deletion is requested. If
+      ## passed `false` the outcome might differ depending on the type of
+      ## backend (e.g. in-memory backends will always eradicate on close.)
 
   # -------------
 
