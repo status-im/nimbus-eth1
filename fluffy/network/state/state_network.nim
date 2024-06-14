@@ -223,7 +223,8 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
     trace "processContentLoop canceled"
 
 proc start*(n: StateNetwork) =
-  info "Starting Portal State Network", protocolId = n.portalProtocol.protocolId
+  info "Starting Portal execution state network",
+    protocolId = n.portalProtocol.protocolId
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
