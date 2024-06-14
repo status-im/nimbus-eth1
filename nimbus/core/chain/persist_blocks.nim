@@ -80,25 +80,40 @@ proc persistBlocksImpl(
   c.com.hardForkTransition(blocks[0].header)
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
-  let vmState = ?c.getVmState(blocks[0].header)
-
   let
+    vmState = ?c.getVmState(blocks[0].header)
     fromBlock = blocks[0].header.number
     toBlock = blocks[blocks.high()].header.number
   trace "Persisting blocks", fromBlock, toBlock
 
   var
+    blks = 0
     txs = 0
     gas = GasInt(0)
+    parentHash: Hash256 # only needed after the first block
   for blk in blocks:
     template header(): BlockHeader =
       blk.header
 
     c.com.hardForkTransition(header)
 
-    if not vmState.reinit(header):
-      debug "Cannot update VmState", blockNumber = header.number
-      return err("Cannot update VmState to block " & $header.number)
+    if blks > 0:
+      template parent(): BlockHeader = blocks[blks - 1].header
+      let updated =
+        if header.number == parent.number + 1 and header.parentHash == parentHash:
+          vmState.reinit(parent = parent, header = header, linear = true)
+        else:
+          # TODO remove this code path and process only linear histories in this
+          #      function
+          vmState.reinit(header = header)
+
+      if not updated:
+        debug "Cannot update VmState", blockNumber = header.number
+        return err("Cannot update VmState to block " & $header.number)
+    else:
+      # TODO weirdly, some tests depend on this reinit being called, even though
+      #      in theory it's a fresh instance that should not need it (?)
+      doAssert vmState.reinit(header = header)
 
     if c.extraValidation and c.verifyFrom <= header.number:
       # TODO: how to checkseal from here
@@ -111,10 +126,11 @@ proc persistBlocksImpl(
     #      body.transactions.calcTxRoot == header.txRoot:
     #     vmState.dumpDebuggingMetaData(header, body)
     #     warn "Validation error. Debugging metadata dumped."
-
+    let blockHash = header.blockHash()
     if NoPersistHeader notin flags:
       if not c.db.persistHeader(
-        header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
+        blockHash, header, c.com.consensus == ConsensusType.POS,
+        c.com.startOfHistory
       ):
         return err("Could not persist header")
 
@@ -132,9 +148,10 @@ proc persistBlocksImpl(
     # between eth_blockNumber and eth_syncing
     c.com.syncCurrent = header.number
 
+    blks += 1
     txs += blk.transactions.len
     gas += blk.header.gasUsed
-
+    parentHash = blockHash
   dbTx.commit()
 
   # Save and record the block number before the last saved block state.
@@ -152,7 +169,7 @@ proc persistBlocksImpl(
       except CatchableError as exc:
         warn "Could not clean up old blocks from history", err = exc.msg
 
-  ok((blocks.len, txs, gas))
+  ok((blks, txs, gas))
 
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods

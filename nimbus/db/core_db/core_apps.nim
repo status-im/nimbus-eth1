@@ -922,13 +922,11 @@ proc persistHeader*(
 
 proc persistHeader*(
     db: CoreDbRef;
+    blockHash: Hash256;
     header: BlockHeader;
     forceCanonical: bool;
     startOfHistory = GENESIS_PARENT_HASH;
       ): bool =
-  let
-    blockHash = header.blockHash
-
   if not db.persistHeader(blockHash, header, startOfHistory):
     return false
 
@@ -947,6 +945,16 @@ proc persistHeader*(
 
   db.setAsCanonicalChainHead(blockHash, header)
   true
+
+proc persistHeader*(
+    db: CoreDbRef;
+    header: BlockHeader;
+    forceCanonical: bool;
+    startOfHistory = GENESIS_PARENT_HASH;
+      ): bool =
+  let
+    blockHash = header.blockHash
+  db.persistHeader(blockHash, header, forceCanonical, startOfHistory)
 
 proc persistUncles*(db: CoreDbRef, uncles: openArray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.
