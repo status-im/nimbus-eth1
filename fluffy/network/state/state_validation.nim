@@ -14,17 +14,19 @@ export results, state_content
 proc hashEquals(value: TrieNode | Bytecode, expectedHash: KeccakHash): bool {.inline.} =
   keccakHash(value.asSeq()) == expectedHash
 
-proc isValidNextNode(thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode): bool =
-  let hashOrShortRlp = thisNodeRlp.listElem(rlpIdx).expectOk()
+proc isValidNextNode(
+    thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode
+): bool {.raises: RlpError.} =
+  let hashOrShortRlp = thisNodeRlp.listElem(rlpIdx)
   if hashOrShortRlp.isEmpty():
     return false
 
   let nextHash =
     if hashOrShortRlp.isList():
       # is a short node
-      keccakHash(rlp.encode(hashOrShortRlp).expectOk())
+      keccakHash(rlp.encode(hashOrShortRlp))
     else:
-      let hash = hashOrShortRlp.toBytes().expectOk()
+      let hash = hashOrShortRlp.toBytes()
       if hash.len() != 32:
         return false
       KeccakHash.fromBytes(hash)
@@ -65,45 +67,48 @@ proc validateTrieProof*(
       else:
         return err("proof has more nodes then expected for given path")
 
-    case thisNodeRlp.listLen().expectOk()
-    of 2:
-      let nodePrefixRlp = thisNodeRlp.listElem(0).expectOk()
-      if nodePrefixRlp.isEmpty():
-        return err("node prefix is empty")
+    try:
+      case thisNodeRlp.listLen()
+      of 2:
+        let nodePrefixRlp = thisNodeRlp.listElem(0)
+        if nodePrefixRlp.isEmpty():
+          return err("node prefix is empty")
 
-      let (prefix, isLeaf, prefixNibbles) = decodePrefix(nodePrefixRlp)
-      if prefix >= 4:
-        return err("invalid prefix in node")
+        let (prefix, isLeaf, prefixNibbles) = decodePrefix(nodePrefixRlp)
+        if prefix >= 4:
+          return err("invalid prefix in node")
 
-      if not isLastNode or (isLeaf and allowKeyEndInPathForLeafs):
-        let unpackedPrefix = prefixNibbles.unpackNibbles()
-        if remainingNibbles < unpackedPrefix.len():
-          return err("not enough nibbles to validate node prefix")
+        if not isLastNode or (isLeaf and allowKeyEndInPathForLeafs):
+          let unpackedPrefix = prefixNibbles.unpackNibbles()
+          if remainingNibbles < unpackedPrefix.len():
+            return err("not enough nibbles to validate node prefix")
 
-        let nibbleEndIdx = nibbleIdx + unpackedPrefix.len()
-        if nibbles[nibbleIdx ..< nibbleEndIdx] != unpackedPrefix:
-          return err("nibbles don't match node prefix")
-        nibbleIdx += unpackedPrefix.len()
+          let nibbleEndIdx = nibbleIdx + unpackedPrefix.len()
+          if nibbles[nibbleIdx ..< nibbleEndIdx] != unpackedPrefix:
+            return err("nibbles don't match node prefix")
+          nibbleIdx += unpackedPrefix.len()
 
-      if not isLastNode:
-        if isLeaf:
-          return err("leaf node must be last node in the proof")
-        else: # is extension node
-          if not isValidNextNode(thisNodeRlp, 1, proof[proofIdx + 1]):
-            return
-              err("hash of next node doesn't match the expected extension node hash")
-    of 17:
-      if not isLastNode:
-        let nextNibble = nibbles[nibbleIdx]
-        if nextNibble >= 16:
-          return err("invalid next nibble for branch node")
+        if not isLastNode:
+          if isLeaf:
+            return err("leaf node must be last node in the proof")
+          else: # is extension node
+            if not isValidNextNode(thisNodeRlp, 1, proof[proofIdx + 1]):
+              return
+                err("hash of next node doesn't match the expected extension node hash")
+      of 17:
+        if not isLastNode:
+          let nextNibble = nibbles[nibbleIdx]
+          if nextNibble >= 16:
+            return err("invalid next nibble for branch node")
 
-        if not isValidNextNode(thisNodeRlp, nextNibble.int, proof[proofIdx + 1]):
-          return err("hash of next node doesn't match the expected branch node hash")
+          if not isValidNextNode(thisNodeRlp, nextNibble.int, proof[proofIdx + 1]):
+            return err("hash of next node doesn't match the expected branch node hash")
 
-        inc nibbleIdx
-    else:
-      return err("invalid rlp node, expected 2 or 17 elements")
+          inc nibbleIdx
+      else:
+        return err("invalid rlp node, expected 2 or 17 elements")
+    except RlpError as e:
+      return err(e.msg)
 
   if nibbleIdx < nibbles.len():
     err("path contains more nibbles than expected for proof")

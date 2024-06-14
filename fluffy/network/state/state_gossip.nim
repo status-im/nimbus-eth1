@@ -43,28 +43,31 @@ func withKey*(
   (key: key, offer: offer)
 
 func getParent(p: ProofWithPath): ProofWithPath =
-  doAssert(p.path.len() > 0, "nibbles too short")
-  doAssert(p.proof.len() > 1, "proof too short")
+  # this function assumes that the proof contains valid rlp therefore
+  # if required these proofs should be validated beforehand
+  try:
+    doAssert(p.path.len() > 0, "nibbles too short")
+    doAssert(p.proof.len() > 1, "proof too short")
 
-  let
-    parentProof = TrieProof.init(p.proof[0 ..^ 2])
-    parentEndNode = rlpFromBytes(parentProof[^1].asSeq())
+    let
+      parentProof = TrieProof.init(p.proof[0 ..^ 2])
+      parentEndNode = rlpFromBytes(parentProof[^1].asSeq())
 
-  # the trie proof should have already been validated when receiving the offer content
-  doAssert(
-    parentEndNode.listLen().expectOk() == 2 or parentEndNode.listLen().expectOk() == 17
-  )
+    # the trie proof should have already been validated when receiving the offer content
+    doAssert(parentEndNode.listLen() == 2 or parentEndNode.listLen() == 17)
 
-  var unpackedNibbles = p.path.unpackNibbles()
+    var unpackedNibbles = p.path.unpackNibbles()
 
-  if parentEndNode.listLen().expectOk() == 17:
-    # branch node so only need to remove a single nibble
-    return parentProof.withPath(unpackedNibbles.dropN(1).packNibbles())
+    if parentEndNode.listLen() == 17:
+      # branch node so only need to remove a single nibble
+      return parentProof.withPath(unpackedNibbles.dropN(1).packNibbles())
 
-  # leaf or extension node so we need to remove one or more nibbles
-  let (_, _, prefixNibbles) = decodePrefix(parentEndNode.listElem(0)).expectOk()
+    # leaf or extension node so we need to remove one or more nibbles
+    let (_, _, prefixNibbles) = decodePrefix(parentEndNode.listElem(0))
 
-  parentProof.withPath(unpackedNibbles.dropN(prefixNibbles.len()).packNibbles())
+    parentProof.withPath(unpackedNibbles.dropN(prefixNibbles.len()).packNibbles())
+  except RlpError as e:
+    raiseAssert(e.msg)
 
 func getParent*(offerWithKey: AccountTrieOfferWithKey): AccountTrieOfferWithKey =
   let

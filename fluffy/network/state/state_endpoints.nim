@@ -25,48 +25,51 @@ logScope:
 proc getNextNodeHash(
     trieNode: TrieNode, nibbles: UnpackedNibbles, nibbleIdx: var int
 ): Opt[(Nibbles, NodeHash)] =
-  doAssert(nibbles.len() > 0)
-  doAssert(nibbleIdx < nibbles.len())
+  # the trie node should have already been validated against the lookup hash
+  # so we expect that no rlp errors should be possible
+  try:
+    doAssert(nibbles.len() > 0)
+    doAssert(nibbleIdx < nibbles.len())
 
-  let trieNodeRlp = rlpFromBytes(trieNode.asSeq())
-  # the trie node should have already been validated
-  doAssert(not trieNodeRlp.isEmpty())
-  doAssert(
-    trieNodeRlp.listLen().expectOk() == 2 or trieNodeRlp.listLen().expectOk() == 17
-  )
+    let trieNodeRlp = rlpFromBytes(trieNode.asSeq())
 
-  if trieNodeRlp.listLen().expectOk() == 17:
-    let nextNibble = nibbles[nibbleIdx]
-    doAssert(nextNibble < 16)
+    doAssert(not trieNodeRlp.isEmpty())
+    doAssert(trieNodeRlp.listLen() == 2 or trieNodeRlp.listLen() == 17)
 
-    let nextHashBytes = trieNodeRlp.listElem(nextNibble.int).expectOk()
+    if trieNodeRlp.listLen() == 17:
+      let nextNibble = nibbles[nibbleIdx]
+      doAssert(nextNibble < 16)
+
+      let nextHashBytes = trieNodeRlp.listElem(nextNibble.int)
+      doAssert(not nextHashBytes.isEmpty())
+
+      nibbleIdx += 1
+      return Opt.some(
+        (
+          nibbles[0 ..< nibbleIdx].packNibbles(),
+          KeccakHash.fromBytes(nextHashBytes.toBytes()),
+        )
+      )
+
+    # leaf or extension node
+    let (_, isLeaf, prefix) = decodePrefix(trieNodeRlp.listElem(0))
+    if isLeaf:
+      return Opt.none((Nibbles, NodeHash))
+
+    # extension node
+    nibbleIdx += prefix.unpackNibbles().len()
+
+    let nextHashBytes = trieNodeRlp.listElem(1)
     doAssert(not nextHashBytes.isEmpty())
 
-    nibbleIdx += 1
-    return Opt.some(
+    Opt.some(
       (
         nibbles[0 ..< nibbleIdx].packNibbles(),
-        KeccakHash.fromBytes(nextHashBytes.toBytes().expectOk()),
+        KeccakHash.fromBytes(nextHashBytes.toBytes()),
       )
     )
-
-  # leaf or extension node
-  let (_, isLeaf, prefix) = decodePrefix(trieNodeRlp.listElem(0).expectOk())
-  if isLeaf:
-    return Opt.none((Nibbles, NodeHash))
-
-  # extension node
-  nibbleIdx += prefix.unpackNibbles().len()
-
-  let nextHashBytes = trieNodeRlp.listElem(1).expectOk()
-  doAssert(not nextHashBytes.isEmpty())
-
-  Opt.some(
-    (
-      nibbles[0 ..< nibbleIdx].packNibbles(),
-      KeccakHash.fromBytes(nextHashBytes.toBytes().expectOk()),
-    )
-  )
+  except RlpError as e:
+    raiseAssert(e.msg)
 
 proc getAccountProof(
     n: StateNetwork, stateRoot: KeccakHash, address: Address

@@ -11,20 +11,11 @@ import results, eth/common, ./state_content
 
 export results, common
 
-# For now we simply convert these Rlp errors to Defects
-# because they generally shouldn't occur in practice.
-# If and when they do occur, we can add more specific logic to handle them
-template expectOk*(statements: untyped): auto =
-  try:
-    statements
-  except RlpError as e:
-    raiseAssert(e.msg)
-
-func decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
+func decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) {.raises: RlpError.} =
   doAssert(not nodePrefixRlp.isEmpty())
 
   let
-    rlpBytes = nodePrefixRlp.toBytes().expectOk()
+    rlpBytes = nodePrefixRlp.toBytes()
     firstNibble = (rlpBytes[0] and 0xF0) shr 4
     isLeaf = firstNibble == 2 or firstNibble == 3
     isEven = firstNibble == 0 or firstNibble == 2
@@ -34,34 +25,40 @@ func decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) =
   (firstNibble.byte, isLeaf, nibbles)
 
 func rlpDecodeAccountTrieNode*(accountTrieNode: TrieNode): Result[Account, string] =
-  let accNodeRlp = rlpFromBytes(accountTrieNode.asSeq()).expectOk()
-  if accNodeRlp.isEmpty() or accNodeRlp.listLen().expectOk() != 2:
-    return err("invalid account trie node - malformed")
+  try:
+    let accNodeRlp = rlpFromBytes(accountTrieNode.asSeq())
+    if accNodeRlp.isEmpty() or accNodeRlp.listLen() != 2:
+      return err("invalid account trie node - malformed")
 
-  let accNodePrefixRlp = accNodeRlp.listElem(0).expectOk()
-  if accNodePrefixRlp.isEmpty():
-    return err("invalid account trie node - empty prefix")
+    let accNodePrefixRlp = accNodeRlp.listElem(0)
+    if accNodePrefixRlp.isEmpty():
+      return err("invalid account trie node - empty prefix")
 
-  let (_, isLeaf, _) = decodePrefix(accNodePrefixRlp)
-  if not isLeaf:
-    return err("invalid account trie node - leaf prefix expected")
+    let (_, isLeaf, _) = decodePrefix(accNodePrefixRlp)
+    if not isLeaf:
+      return err("invalid account trie node - leaf prefix expected")
 
-  decodeRlp(accNodeRlp.listElem(1).toBytes().expectOk(), Account)
+    decodeRlp(accNodeRlp.listElem(1).toBytes(), Account)
+  except RlpError as e:
+    err(e.msg)
 
 func rlpDecodeContractTrieNode*(contractTrieNode: TrieNode): Result[UInt256, string] =
-  let storageNodeRlp = rlpFromBytes(contractTrieNode.asSeq()).expectOk()
-  if storageNodeRlp.isEmpty() or storageNodeRlp.listLen().expectOk() != 2:
-    return err("invalid contract trie node - malformed")
+  try:
+    let storageNodeRlp = rlpFromBytes(contractTrieNode.asSeq())
+    if storageNodeRlp.isEmpty() or storageNodeRlp.listLen() != 2:
+      return err("invalid contract trie node - malformed")
 
-  let storageNodePrefixRlp = storageNodeRlp.listElem(0).expectOk()
-  if storageNodePrefixRlp.isEmpty():
-    return err("invalid contract trie node - empty prefix")
+    let storageNodePrefixRlp = storageNodeRlp.listElem(0)
+    if storageNodePrefixRlp.isEmpty():
+      return err("invalid contract trie node - empty prefix")
 
-  let (_, isLeaf, _) = decodePrefix(storageNodePrefixRlp)
-  if not isLeaf:
-    return err("invalid contract trie node - leaf prefix expected")
+    let (_, isLeaf, _) = decodePrefix(storageNodePrefixRlp)
+    if not isLeaf:
+      return err("invalid contract trie node - leaf prefix expected")
 
-  decodeRlp(storageNodeRlp.listElem(1).toBytes().expectOk(), UInt256)
+    decodeRlp(storageNodeRlp.listElem(1).toBytes(), UInt256)
+  except RlpError as e:
+    err(e.msg)
 
 func toAccount*(accountProof: TrieProof): Result[Account, string] {.inline.} =
   doAssert(accountProof.len() > 1)
@@ -76,8 +73,8 @@ func toSlot*(storageProof: TrieProof): Result[UInt256, string] {.inline.} =
 func toPath*(hash: KeccakHash): Nibbles {.inline.} =
   Nibbles.init(hash.data, isEven = true)
 
-func toPath*(address: Address): Nibbles =
+func toPath*(address: Address): Nibbles {.inline.} =
   keccakHash(address).toPath()
 
-func toPath*(slotKey: UInt256): Nibbles =
+func toPath*(slotKey: UInt256): Nibbles {.inline.} =
   keccakHash(toBytesBE(slotKey)).toPath()
