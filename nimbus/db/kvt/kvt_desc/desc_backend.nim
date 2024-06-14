@@ -92,6 +92,7 @@ proc init*(trg: var BackendObj; src: BackendObj) =
   trg.putEndFn = src.putEndFn
   trg.closeFn = src.closeFn
   trg.canModFn = src.canModFn
+  trg.setWrReqFn = src.setWrReqFn
 
 # ------------------------------------------------------------------------------
 # End
