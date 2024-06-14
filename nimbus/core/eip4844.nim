@@ -17,12 +17,12 @@ import
   ../constants,
   ../common/common
 
+from std/sequtils import mapIt
+
 {.push raises: [].}
 
 type
-  Bytes32 = array[32, byte]
   Bytes64 = array[64, byte]
-  Bytes48 = array[48, byte]
 
 const
   BLS_MODULUS_STR = "52435875175126190479447740508185965837690552500527637822603658699938581184513"
@@ -40,7 +40,7 @@ const
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
 proc kzgToVersionedHash*(kzg: kzg.KZGCommitment): VersionedHash =
-  result = sha256.digest(kzg)
+  result = sha256.digest(kzg.bytes)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
@@ -55,19 +55,19 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
     return err("invalid input length")
 
   var
-    versionedHash: Bytes32
-    z: Bytes32
-    y: Bytes32
-    commitment: Bytes48
-    kzgProof: Bytes48
+    versionedHash: KzgBytes32
+    z: KzgBytes32
+    y: KzgBytes32
+    commitment: KzgBytes48
+    kzgProof: KzgBytes48
 
-  versionedHash[0..<32] = input[0..<32]
-  z[0..<32] = input[32..<64]
-  y[0..<32] = input[64..<96]
-  commitment[0..<48] = input[96..<144]
-  kzgProof[0..<48]   = input[144..<192]
+  versionedHash.bytes[0..<32] = input[0..<32]
+  z.bytes[0..<32] = input[32..<64]
+  y.bytes[0..<32] = input[64..<96]
+  commitment.bytes[0..<48] = input[96..<144]
+  kzgProof.bytes[0..<48]   = input[144..<192]
 
-  if kzgToVersionedHash(commitment).data != versionedHash:
+  if kzgToVersionedHash(commitment).data != versionedHash.bytes:
     return err("versionedHash should equal to kzgToVersionedHash(commitment)")
 
   # Verify KZG proof
@@ -183,9 +183,15 @@ proc validateBlobTransactionWrapper*(tx: PooledTransaction):
   if not goodFormatted:
     return err("tx wrapper is ill formatted")
 
+  let commitments = tx.networkPayload.commitments.mapIt(
+                      kzg.KzgCommitment(bytes: it))
+
   # Verify that commitments match the blobs by checking the KZG proof
-  let res = kzg.verifyBlobKzgProofBatch(tx.networkPayload.blobs,
-              tx.networkPayload.commitments, tx.networkPayload.proofs)
+  let res = kzg.verifyBlobKzgProofBatch(
+              tx.networkPayload.blobs.mapIt(kzg.KzgBlob(bytes: it)),
+              commitments,
+              tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it)))
+
   if res.isErr:
     return err(res.error)
 
@@ -199,8 +205,7 @@ proc validateBlobTransactionWrapper*(tx: PooledTransaction):
     if tx.tx.versionedHashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
       return err("wrong kzg version in versioned hash at index " & $i)
 
-    if tx.tx.versionedHashes[i] !=
-        kzgToVersionedHash(tx.networkPayload.commitments[i]):
+    if tx.tx.versionedHashes[i] != kzgToVersionedHash(commitments[i]):
       return err("tx versioned hash not match commitments at index " & $i)
 
   ok()
