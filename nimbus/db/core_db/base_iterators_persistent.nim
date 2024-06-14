@@ -20,13 +20,8 @@ import
 when CoreDbEnableApiTracking:
   import chronicles
 
-const
-  ProvideLegacyAPI = CoreDbProvideLegacyAPI
-
-when ProvideLegacyAPI and CoreDbEnableApiTracking:
   const
     logTxt = "CoreDb/itp "
-    legaApiTxt = logTxt & "legacy API"
     newApiTxt = logTxt & "API"
 
 # Annotation helper(s)
@@ -55,14 +50,6 @@ iterator replicatePersistent*(mpt: CoreDxMptRef): (Blob, Blob) {.rlpRaise.} =
   mpt.ifTrackNewApi:
     let trie = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, trie
-
-when ProvideLegacyAPI:
-
-  iterator replicatePersistent*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
-    ## Low level trie dump, not supported for `CoreDbPhkRef`
-    mpt.setTrackLegaApi LegaMptReplicateIt
-    for k,v in mpt.distinctBase.replicatePersistent(): yield (k,v)
-    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

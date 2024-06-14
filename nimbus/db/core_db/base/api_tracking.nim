@@ -19,10 +19,6 @@ import
   ./base_desc
 
 type
-  CoreDbApiTrackRef* =
-    CoreDbRef | CoreDbKvtRef | CoreDbMptRef | CoreDbPhkRef |
-    CoreDbTxRef | CoreDbCaptRef
-
   CoreDxApiTrackRef* =
     CoreDbRef | CoreDxKvtRef | CoreDbColRef |
     CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
@@ -78,44 +74,6 @@ type
     KvtPairsIt          = "kvt/pairs"
     KvtPutFn            = "kvt/put"
 
-    LegaBeginTxFn       = "lega/beginTransaction"
-    LegaCaptureFn       = "lega/cpt/capture"
-    LegaCptFlagsFn      = "lega/cpt/flags"
-    LegaCptLogDbFn      = "lega/cpt/logDb"
-    LegaCptRecorderFn   = "lega/cpt/recorder"
-
-    LegaKvtContainsFn   = "lega/kvt/contains"
-    LegaKvtDelFn        = "lega/kvt/del"
-    LegaKvtGetFn        = "lega/kvt/get"
-    LegaKvtPairsIt      = "lega/kvt/pairs"
-    LegaKvtPutFn        = "lega/kvt/put"
-
-    LegaMptContainsFn   = "lega/mpt/contains"
-    LegaMptDelFn        = "lega/mpt/del"
-    LegaMptGetFn        = "lega/mpt/get"
-    LegaMptPutFn        = "lega/mpt/put"
-    LegaMptRootHashFn   = "lega/mpt/rootHash"
-    LegaMptPairsIt      = "lega/mpt/pairs"
-    LegaMptReplicateIt  = "lega/mpt/replicate"
-
-    LegaNewKvtFn        = "lega/kvt"
-    LegaNewMptFn        = "lega/mptPrune"
-    LegaNewPhkFn        = "lega/phkPrune"
-
-    LegaPhkContainsFn   = "lega/phk/contains"
-    LegaPhkDelFn        = "lega/phk/del"
-    LegaPhkGetFn        = "lega/phk/get"
-    LegaPhkPutFn        = "lega/phk/put"
-    LegaPhkRootHashFn   = "lega/phk/rootHash"
-
-    LegaToMptFn         = "lega/phk/toMpt"
-    LegaToPhkFn         = "lega/mpt/toPhk"
-
-    LegaTxCommitFn      = "lega/commit"
-    LegaTxDisposeFn     = "lega/dispose"
-    LegaTxRollbackFn    = "lega/rollback"
-    LegaTxSaveDisposeFn = "lega/safeDispose"
-
     MptDeleteFn         = "mpt/delete"
     MptFetchFn          = "mpt/fetch"
     MptFetchOrEmptyFn   = "mpt/fetchOrEmpty"
@@ -164,9 +122,6 @@ proc toStr*(p: CoreDbColRef): string =
     w = if p.isNil or not p.ready: "nil" else: p.parent.methods.colPrintFn(p)
     (a,b) = if 0 < w.len and w[0] == '(': ("","") else: ("(",")")
   "Col" & a & w & b
-
-func toStr*(w: CoreDbKvtRef): string =
-  if w.distinctBase.isNil: "kvt(nil)" else: "kvt"
 
 func toLenStr*(w: openArray[byte]): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
@@ -218,38 +173,6 @@ proc toStr*(rc: CoreDbRc[CoreDxAccRef]): string = rc.toStr "acc"
 
 func toStr*(ela: Duration): string =
   aristo_profile.toStr(ela)
-
-# ------------------------------------------------------------------------------
-# Public legacy API logging framework
-# ------------------------------------------------------------------------------
-
-template beginLegaApi*(w: CoreDbApiTrackRef; s: static[CoreDbFnInx]) =
-  when typeof(w) is CoreDbRef:
-    let db = w
-  else:
-    let db = w.distinctBase.parent
-  # Prevent from cascaded logging
-  let save = db.trackNewApi
-  db.trackNewApi = false
-  defer: db.trackNewApi = save
-
-  when CoreDbEnableApiProfiling:
-    const blaCtx {.inject.} = s       # Local use only
-  let blaStart {.inject.} = getTime() # Local use only
-
-template endLegaApiIf*(w: CoreDbApiTrackRef; code: untyped) =
-  block:
-    when typeof(w) is CoreDbRef:
-      let db = w
-    else:
-      let db = w.distinctBase.parent
-    when CoreDbEnableApiProfiling:
-      let elapsed {.inject,used.} = getTime() - blaStart
-      aristo_profile.update(db.profTab, blaCtx.ord, elapsed)
-    if db.trackLegaApi:
-      when not CoreDbEnableApiProfiling: # otherwise use variable above
-        let elapsed {.inject,used.} = getTime() - blaStart
-      code
 
 # ------------------------------------------------------------------------------
 # Public new API logging framework

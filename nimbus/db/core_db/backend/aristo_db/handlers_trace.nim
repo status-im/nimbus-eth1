@@ -719,7 +719,7 @@ proc traceRecorder(
       # Delete from DB
       api.delTree(mpt, root, accPath).isOkOr:
         when EnableDebugLog:
-          debug logTxt, level, flags, key, error
+          debug logTxt, level, flags, error
         return err(error)
 
       # Update journal
