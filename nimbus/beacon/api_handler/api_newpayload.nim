@@ -156,7 +156,8 @@ proc newPayload*(ben: BeaconEngineRef,
   let ttd = com.ttd.get(high(common.BlockNumber))
 
   if version == Version.V1:
-    let td  = db.getScore(header.parentHash)
+    let td  = db.getScore(header.parentHash).valueOr:
+      0.u256
     if (not com.forkGTE(MergeFork)) and td < ttd:
       warn "Ignoring pre-merge payload",
         number = header.blockNumber, hash = blockHash, td, ttd

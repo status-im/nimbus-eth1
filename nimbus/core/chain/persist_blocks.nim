@@ -86,7 +86,9 @@ proc persistBlocksImpl(
     toBlock = blocks[blocks.high()].header.blockNumber
   trace "Persisting blocks", fromBlock, toBlock
 
-  var txs = 0
+  var
+    txs = 0
+    gas = GasInt(0)
   for blk in blocks:
     template header(): BlockHeader =
       blk.header
@@ -97,12 +99,11 @@ proc persistBlocksImpl(
       debug "Cannot update VmState", blockNumber = header.blockNumber
       return err("Cannot update VmState to block " & $header.blockNumber)
 
-    if c.validateBlock and c.extraValidation and c.verifyFrom <= header.blockNumber:
+    if c.extraValidation and c.verifyFrom <= header.blockNumber:
       # TODO: how to checkseal from here
       ?c.com.validateHeaderAndKinship(blk, checkSealOK = false)
 
-    if c.validateBlock:
-      ?vmState.processBlock(blk)
+    ?vmState.processBlock(blk)
 
     # when defined(nimbusDumpDebuggingMetaData):
     #   if validationResult == ValidationResult.Error and
@@ -110,32 +111,28 @@ proc persistBlocksImpl(
     #     vmState.dumpDebuggingMetaData(header, body)
     #     warn "Validation error. Debugging metadata dumped."
 
-    try:
-      if NoPersistHeader notin flags:
-        c.db.persistHeaderToDb(
-          header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
-        )
+    if NoPersistHeader notin flags:
+      if not c.db.persistHeader(
+        header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
+      ):
+        return err("Could not persist header")
 
-      if NoSaveTxs notin flags:
-        discard c.db.persistTransactions(header.blockNumber, blk.transactions)
+    if NoSaveTxs notin flags:
+      c.db.persistTransactions(header.blockNumber, blk.transactions)
 
-      if NoSaveReceipts notin flags:
-        discard c.db.persistReceipts(vmState.receipts)
+    if NoSaveReceipts notin flags:
+      c.db.persistReceipts(vmState.receipts)
 
-      if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
-        discard c.db.persistWithdrawals(blk.withdrawals.get)
-    except CatchableError as exc:
-      return err(exc.msg)
+    if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
+      c.db.persistWithdrawals(blk.withdrawals.get)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
     c.com.syncCurrent = header.blockNumber
 
-    # Done with this block
-    # lapTx.commit()
-
     txs += blk.transactions.len
+    gas += blk.header.gasUsed
 
   dbTx.commit()
 
@@ -154,7 +151,7 @@ proc persistBlocksImpl(
       except CatchableError as exc:
         warn "Could not clean up old blocks from history", err = exc.msg
 
-  ok((blocks.len, txs, vmState.cumulativeGasUsed))
+  ok((blocks.len, txs, gas))
 
 # ------------------------------------------------------------------------------
 # Public `ChainDB` methods
@@ -163,11 +160,10 @@ proc persistBlocksImpl(
 proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string] =
   discard ?c.persistBlocksImpl([blk], {NoPersistHeader, NoSaveReceipts})
 
-  try:
-    c.db.persistHeaderToDbWithoutSetHead(blk.header, c.com.startOfHistory)
-    ok()
-  except RlpError as exc:
-    err(exc.msg)
+  if not c.db.persistHeader(blk.header.blockHash, blk.header, c.com.startOfHistory):
+    return err("Could not persist header")
+
+  ok()
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
   if header.parentHash == Hash256():

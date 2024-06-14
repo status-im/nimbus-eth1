@@ -84,9 +84,6 @@ func generateSafeAddress*(address: EthAddress, salt: ContractSalt,
 
   result[0..19] = hashResult.data.toOpenArray(12, 31)
 
-func hash*(b: BlockHeader): Hash256 {.inline.} =
-  rlpHash(b)
-
 proc crc32*(crc: uint32, buf: openArray[byte]): uint32 =
   const kcrc32 = [ 0'u32, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190,
     0x6b6b51f4, 0x4db26158, 0x5005713c, 0xedb88320'u32, 0xf00f9344'u32, 0xd6d6a3e8'u32,

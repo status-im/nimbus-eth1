@@ -25,10 +25,6 @@ type
       ## common block chain configuration
       ## used throughout entire app
 
-    validateBlock: bool ##\
-      ## If turn off, `persistBlocks` will always return
-      ## ValidationResult.OK and disable extraValidation too.
-
     extraValidation: bool ##\
       ## Trigger extra validation, currently within `persistBlocks()`
       ## function only.
@@ -53,7 +49,6 @@ proc newChain*(com: CommonRef,
   ## chain validation if set `true`.
   ChainRef(
     com: com,
-    validateBlock: true,
     extraValidation: extraValidation,
     vmState: vmState
   )
@@ -64,7 +59,6 @@ func newChain*(com: CommonRef): ChainRef =
   let extraValidation = com.consensus == ConsensusType.POS
   ChainRef(
     com: com,
-    validateBlock: true,
     extraValidation: extraValidation,
   )
 
@@ -87,10 +81,6 @@ proc com*(c: ChainRef): CommonRef =
   ## Getter
   c.com
 
-proc validateBlock*(c: ChainRef): bool =
-  ## Getter
-  c.validateBlock
-
 proc extraValidation*(c: ChainRef): bool =
   ## Getter
   c.extraValidation
@@ -109,10 +99,6 @@ proc currentBlock*(c: ChainRef): BlockHeader
 # ------------------------------------------------------------------------------
 # Public `Chain` setters
 # ------------------------------------------------------------------------------
-proc `validateBlock=`*(c: ChainRef; validateBlock: bool) =
-  ## Setter. If set `true`, the assignment value `validateBlock` enables
-  ## block execution, else it will always return ValidationResult.OK
-  c.validateBlock = validateBlock
 
 proc `extraValidation=`*(c: ChainRef; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables

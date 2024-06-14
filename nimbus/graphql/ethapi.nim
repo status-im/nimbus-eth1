@@ -238,10 +238,10 @@ proc resp(data: openArray[byte]): RespResult =
   ok(resp("0x" & data.toHex))
 
 proc getTotalDifficulty(ctx: GraphqlContextRef, blockHash: common.Hash256): RespResult =
-  try:
-    bigIntNode(getScore(ctx.chainDB, blockHash))
-  except CatchableError as e:
-    err("can't get total difficulty: " & e.msg)
+  let score = getScore(ctx.chainDB, blockHash).valueOr:
+    return err("can't get total difficulty")
+
+  bigIntNode(score)
 
 proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: common.Hash256): RespResult =
   try:
