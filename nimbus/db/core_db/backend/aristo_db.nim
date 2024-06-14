@@ -18,7 +18,7 @@ import
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk],
   ".."/[base, base/base_desc],
-  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt, handlers_trace]
+  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
 
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
@@ -41,11 +41,11 @@ type
     ## Main descriptor
     kdbBase: KvtBaseRef                      ## Kvt subsystem
     adbBase: AristoBaseRef                   ## Aristo subsystem
-    tracer: AristoTracerRef                  ## Currently active recorder
+    #tracer: AristoTracerRef                  ## Currently active recorder
 
-  AristoTracerRef = ref object of TraceRecorderRef
-    ## Sub-handle for tracer
-    parent: AristoCoreDbRef
+  #AristoTracerRef = ref object of TraceRecorderRef
+  #  ## Sub-handle for tracer
+  #  parent: AristoCoreDbRef
 
 proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
 

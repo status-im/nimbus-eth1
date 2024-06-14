@@ -40,57 +40,6 @@ const
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc mergePayload*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # MPT state root
-    path: openArray[byte];             # Even nibbled byte path
-    payload: PayloadRef;               # Payload value
-    accPath = VOID_PATH_ID;            # Needed for accounts payload
-      ): Result[bool,AristoError] =
-  ## Merge the `(root,path)` arguments into the MPT starting at `root`. The
-  ## argument`path` is used as key to address the leaf vertex with the
-  ## payload argument `payload`. It is stored or updated on the database `db`
-  ## accordingly.
-  ##
-  ## If the `root` argument is `VertexID(1)` the payload argument must be of
-  ## type `AccountData`. In that case, the `storageID` field of the leaf entry
-  ## must refer to an existing vertex if it holds a valid vertex ID. The
-  ## argument `accPath` must be void.
-  ##
-  ## Otherwise, if the `root` argument belongs to a well known sub trie (i.e.
-  ## it does not exceed `LEAST_FREE_VID`) the `accPath` argument is ignored
-  ## and the entry will just be merged.  The argument `accPath` must be void.
-  ##
-  ## Otherwise, a valid `accPath` (i.e. different from `VOID_PATH_ID`.) is
-  ## required leading to an account leaf entry (starting at `VertexID(1)`) the
-  ## leaf of which must have payload type `AccountData`. If the  payload field
-  ## `storageID` does not have a valid entry, a new sub-trie is created and
-  ## the `storageID` field is updated on disk.
-  ##
-  let
-    lty = LeafTie(root: root, path: ? path.pathToTag)
-    rc = db.mergePayloadImpl(lty, payload, accPath)
-  if rc.isOk:
-    ok true
-  elif rc.error in MergeNoAction:
-    ok false
-  else:
-    err(rc.error)
-
-proc merge*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # MPT state root
-    path: openArray[byte];             # Leaf item to add to the database
-    data: openArray[byte];             # Raw data payload value
-    accPath: PathID;                   # Needed for accounts payload
-      ): Result[bool,AristoError] =
-  ## Variant of `merge()` for `(root,path)` arguments instead of a `LeafTie`.
-  ## The argument `data` is stored as-is as a `RawData` payload value.
-  let pyl = PayloadRef(pType: RawData, rawBlob: @data)
-  db.mergePayload(root, path, pyl, accPath)
-
-# --------------
-
 proc mergeAccountPayload*(
     db: AristoDbRef;                   # Database, top layer
     accKey: openArray[byte];          # Even nibbled byte path
@@ -134,7 +83,6 @@ proc mergeGenericData*(
     ok false
   else:
     err(rc.error)
-
 
 
 proc mergeStorageData*(

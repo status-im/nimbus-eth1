@@ -352,7 +352,7 @@ proc testTxMergeAndDeleteOneByOne*(
       # e.g. lst.setLen(min(5,lst.len))
       lst
     for i,leaf in kvpLeafs:
-      let rc = db.mergeStoLeaf leaf
+      let rc = db.mergeGenericData leaf
       xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database
@@ -468,7 +468,7 @@ proc testTxMergeAndDeleteSubTree*(
       # e.g. lst.setLen(min(5,lst.len))
       lst
     for i,leaf in kvpLeafs:
-      let rc = db.mergeStoLeaf leaf
+      let rc = db.mergeGenericData leaf
       xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database

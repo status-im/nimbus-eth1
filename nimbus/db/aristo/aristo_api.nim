@@ -20,7 +20,7 @@ import
   ./aristo_init/memory_db,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
        aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
-       aristo_serialise, aristo_tx, aristo_vid]
+       aristo_serialise, aristo_tx]
 
 export
   AristoDbProfListRef
@@ -231,17 +231,6 @@ type
       ## `reCentre()` for details.) This function is a fast version of
       ## `db.forked.toSeq.len`.
 
-  AristoApiMergeFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-         data: openArray[byte];
-         accPath: PathID;
-        ): Result[bool,AristoError]
-        {.noRaise.}
-      ## Variant of `mergePayload()` where the `data` argument will be
-      ## converted to a `RawBlob` type `PayloadRef` value.
-
   AristoApiMergeAccountPayloadFn* =
     proc(db: AristoDbRef;
          accPath: openArray[byte];
@@ -263,36 +252,7 @@ type
         ): Result[bool,AristoError]
         {.noRaise.}
       ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
-      ## `root` different form `VertexID(1)` and smaller than `LEAST_FREE_VID`.
-
-  AristoApiMergePayloadFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-         payload: PayloadRef;
-         accPath = VOID_PATH_ID;
-        ): Result[bool,AristoError]
-        {.noRaise.}
-      ## Merge the `(root,path)` arguments into the MPT starting at `root`.
-      ## The argument`path` is used as key to address the leaf vertex with the
-      ## payload argument `payload`. It is stored or updated on the database
-      ## `db` accordingly.
-      ##
-      ## If the `root` argument is `VertexID(1)` the payload argument must be
-      ## of type `AccountData`. In that case, the `storageID` field of the leaf
-      ## entry must refer to an existing vertex if it holds a valid vertex ID.
-      ## The argument `accPath` must be void.
-      ##
-      ## Otherwise, if the `root` argument belongs to a well known sub trie
-      ## (i.e. it does not exceed `LEAST_FREE_VID`) the `accPath` argument is
-      ## ignored and the entry will just be merged.  The argument `accPath`
-      ## must be void.
-      ##
-      ## Otherwise, a valid `accPath` (i.e. different from `VOID_PATH_ID`.) is
-      ## required leading to an account leaf entry (starting at `VertexID(1)`)
-      ## the leaf of which must have payload type `AccountData`. If the payload
-      ## field `storageID` does not have a valid entry, a new sub-trie is
-      ## created and the `storageID` field is updated on disk.
+      ## `root` greater than `VertexID(1)` and smaller than `LEAST_FREE_VID`.
 
   AristoApiMergeStorageDataFn* =
     proc(db: AristoDbRef;
@@ -399,28 +359,6 @@ type
         {.noRaise.}
       ## Getter, returns top level transaction if there is any.
 
-  AristoApiVidFetchFn* =
-    proc(db: AristoDbRef;
-         pristine = false;
-        ): VertexID
-        {.noRaise.}
-      ## Recycle or create a new `VertexID`. Reusable vertex *ID*s are kept
-      ## in a list where the top entry *ID* has the property that any other
-      ## *ID* larger is also not used on the database.
-      ##
-      ## The function prefers to return recycled vertex *ID*s if there are
-      ## any. When the argument `pristine` is set `true`, the function
-      ## guarantees to return a non-recycled, brand new vertex *ID* which
-      ## is the preferred mode when creating leaf vertices.
-
-  AristoApiVidDisposeFn* =
-    proc(db: AristoDbRef;
-         vid: VertexID;
-        ) {.noRaise.}
-      ## Recycle the argument `vtxID` which is useful after deleting entries
-      ## from the vertex table to prevent the `VertexID` type key values
-      ## small.
-
   AristoApiRef* = ref AristoApiObj
   AristoApiObj* = object of RootObj
     ## Useful set of `Aristo` fuctions that can be filtered, stacked etc.
@@ -440,10 +378,8 @@ type
     isTop*: AristoApiIsTopFn
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
-    merge*: AristoApiMergeFn
     mergeAccountPayload*: AristoApiMergeAccountPayloadFn
     mergeGenericData*: AristoApiMergeGenericDataFn
-    mergePayload*: AristoApiMergePayloadFn
     mergeStorageData*: AristoApiMergeStorageDataFn
     pathAsBlob*: AristoApiPathAsBlobFn
     persist*: AristoApiPersistFn
@@ -452,8 +388,6 @@ type
     serialise*: AristoApiSerialiseFn
     txBegin*: AristoApiTxBeginFn
     txTop*: AristoApiTxTopFn
-    vidFetch*: AristoApiVidFetchFn
-    vidDispose*: AristoApiVidDisposeFn
 
 
   AristoApiProfNames* = enum
@@ -476,10 +410,8 @@ type
     AristoApiProfIsTopFn               = "isTop"
     AristoApiProfLevelFn               = "level"
     AristoApiProfNForkedFn             = "nForked"
-    AristoApiProfMergeFn               = "merge"
     AristoApiProfMergeAccountPayloadFn = "mergeAccountPayload"
     AristoApiProfMergeGenericDataFn    = "mergeGenericData"
-    AristoApiProfMergePayloadFn        = "mergePayload"
     AristoApiProfMergeStorageDataFn    = "mergeStorageData"
     AristoApiProfPathAsBlobFn          = "pathAsBlob"
     AristoApiProfPersistFn             = "persist"
@@ -488,8 +420,6 @@ type
     AristoApiProfSerialiseFn           = "serialise"
     AristoApiProfTxBeginFn             = "txBegin"
     AristoApiProfTxTopFn               = "txTop"
-    AristoApiProfVidFetchFn            = "vidFetch"
-    AristoApiProfVidDisposeFn          = "vidDispose"
 
     AristoApiProfBeGetVtxFn            = "be/getVtx"
     AristoApiProfBeGetKeyFn            = "be/getKey"
@@ -528,10 +458,8 @@ when AutoValidateApiHooks:
     doAssert not api.isTop.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
-    doAssert not api.merge.isNil
     doAssert not api.mergeAccountPayload.isNil
     doAssert not api.mergeGenericData.isNil
-    doAssert not api.mergePayload.isNil
     doAssert not api.mergeStorageData.isNil
     doAssert not api.pathAsBlob.isNil
     doAssert not api.persist.isNil
@@ -540,8 +468,6 @@ when AutoValidateApiHooks:
     doAssert not api.serialise.isNil
     doAssert not api.txBegin.isNil
     doAssert not api.txTop.isNil
-    doAssert not api.vidFetch.isNil
-    doAssert not api.vidDispose.isNil
 
   proc validate(prf: AristoApiProfRef) =
     prf.AristoApiRef.validate
@@ -584,10 +510,8 @@ func init*(api: var AristoApiObj) =
   api.isTop = isTop
   api.level = level
   api.nForked = nForked
-  api.merge = merge
   api.mergeAccountPayload = mergeAccountPayload
   api.mergeGenericData = mergeGenericData
-  api.mergePayload = mergePayload
   api.mergeStorageData = mergeStorageData
   api.pathAsBlob = pathAsBlob
   api.persist = persist
@@ -596,8 +520,6 @@ func init*(api: var AristoApiObj) =
   api.serialise = serialise
   api.txBegin = txBegin
   api.txTop = txTop
-  api.vidFetch = vidFetch
-  api.vidDispose = vidDispose
   when AutoValidateApiHooks:
     api.validate
 
@@ -623,10 +545,8 @@ func dup*(api: AristoApiRef): AristoApiRef =
     isTop:               api.isTop,
     level:               api.level,
     nForked:             api.nForked,
-    merge:               api.merge,
     mergeAccountPayload: api.mergeAccountPayload,
     mergeGenericData:    api.mergeGenericData,
-    mergePayload:        api.mergePayload,
     mergeStorageData:    api.mergeStorageData,
     pathAsBlob:          api.pathAsBlob,
     persist:             api.persist,
@@ -634,9 +554,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     rollback:            api.rollback,
     serialise:           api.serialise,
     txBegin:             api.txBegin,
-    txTop:               api.txTop,
-    vidFetch:            api.vidFetch,
-    vidDispose:          api.vidDispose)
+    txTop:               api.txTop)
   when AutoValidateApiHooks:
     api.validate
 
@@ -747,11 +665,6 @@ func init*(
       AristoApiProfNForkedFn.profileRunner:
          result = api.nForked(a)
 
-  profApi.merge =
-    proc(a: AristoDbRef; b: VertexID; c,d: openArray[byte]; e: PathID): auto =
-      AristoApiProfMergeFn.profileRunner:
-         result = api.merge(a, b, c, d ,e)
-
   profApi.mergeAccountPayload =
     proc(a: AristoDbRef; b, c: openArray[byte]): auto =
       AristoApiProfMergeAccountPayloadFn.profileRunner:
@@ -761,12 +674,6 @@ func init*(
     proc(a: AristoDbRef; b: VertexID, c, d: openArray[byte]): auto =
       AristoApiProfMergeGenericDataFn.profileRunner:
         result = api.mergeGenericData(a, b, c, d)
-
-  profApi.mergePayload =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]; d: PayloadRef;
-         e = VOID_PATH_ID): auto =
-      AristoApiProfMergePayloadFn.profileRunner:
-        result = api.mergePayload(a, b, c, d ,e)
 
   profApi.mergeStorageData =
     proc(a: AristoDbRef; b, c: openArray[byte]; d: PathID): auto =
@@ -807,16 +714,6 @@ func init*(
     proc(a: AristoDbRef): auto =
       AristoApiProfTxTopFn.profileRunner:
         result = api.txTop(a)
-
-  profApi.vidFetch =
-    proc(a: AristoDbRef; b = false): auto =
-      AristoApiProfVidFetchFn.profileRunner:
-        result = api.vidFetch(a, b)
-
-  profApi.vidDispose =
-    proc(a: AristoDbRef;b: VertexID) =
-      AristoApiProfVidDisposeFn.profileRunner:
-        api.vidDispose(a, b)
 
   let beDup = be.dup()
   if beDup.isNil:
