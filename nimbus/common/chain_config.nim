@@ -465,7 +465,8 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       arrowGlacierBlock:   some(13_773_000.toBlockNumber), # 2021-12-09 19:55:23 UTC
       grayGlacierBlock:    some(15_050_000.toBlockNumber), # 2022-06-30 10:54:04 UTC
       terminalTotalDifficulty: some(mainNetTTD),
-      shanghaiTime:        some(1_681_338_455.EthTime)
+      shanghaiTime:        some(1_681_338_455.EthTime),    # 2023-04-12 10:27:35 UTC
+      cancunTime:          some(1_710_338_135.EthTime)     # 2024-03-13 13:55:35 UTC
     )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)

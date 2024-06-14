@@ -42,8 +42,10 @@ const
     (number: 15049999'u64, time: 0'u64, id: (crc: 0x20c327fc'u32, next: 15050000'u64)), # Last Arrow Glacier block
     (number: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # First Gray Glacier block
     (number: 20000000'u64, time: 1681338454'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # Last Gray Glacier block
-    (number: 20000000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64)),          # First Shanghai block
-    (number: 30000000'u64, time: 2000000000'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64)),          # Future Shanghai block
+    (number: 20000000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # First Shanghai block
+    (number: 30000000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai block
+    (number: 40000000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64)),          # First Cancun block
+    (number: 50000000'u64, time: 2000000000'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64)),          # Future Cancun block
   ]
 
   SepoliaNetIDs = [
@@ -54,6 +56,7 @@ const
     (number: 1735372'u64, time: 1677557088'u64, id: (crc: 0xf7f9bc08'u32, next: 1706655072'u64)), # First Shanghai block
     (number: 1735372'u64, time: 1706655071'u64, id: (crc: 0xf7f9bc08'u32, next: 1706655072'u64)), # Last Shanghai block
     (number: 1735372'u64, time: 1706655072'u64, id: (crc: 0x88cf81d9'u32, next: 0'u64)),          # First Cancun block
+    (number: 1735372'u64, time: 2706655072'u64, id: (crc: 0x88cf81d9'u32, next: 0'u64)),          # Future Cancun block
   ]
 
   HoleskyNetIDs = [
@@ -62,6 +65,7 @@ const
     (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # First Shanghai block
     (number: 123'u64, time: 1707305663'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # Last Shanghai block
     (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # First Cancun block
+    (number: 123'u64, time: 2707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # Future Cancun block
   ]
 
 template runTest(network: untyped, name: string) =
