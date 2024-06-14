@@ -38,19 +38,6 @@ proc getInitOptions(
   if opts.writeBufferSize > 0:
     cfOpts.setWriteBufferSize(opts.writeBufferSize)
 
-  # Without this option, the WAL might never get flushed since a small column
-  # family (like the admin CF) with only tiny writes might keep it open - this
-  # negatively affects startup times since the WAL is replayed on every startup.
-  # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L719
-  # Flushing the oldest
-  let writeBufferSize =
-    if opts.writeBufferSize > 0:
-      opts.writeBufferSize
-    else:
-      64 * 1024 * 1024 # TODO read from rocksdb?
-
-  cfOpts.setMaxTotalWalSize(2 * writeBufferSize)
-
   # When data is written to rocksdb, it is first put in an in-memory table
   # whose index is a skip list. Since the mem table holds the most recent data,
   # all reads must go through this skiplist which results in slow lookups for
@@ -89,6 +76,18 @@ proc getInitOptions(
   # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/advanced_options.h#L696
   dbOpts.setOptimizeFiltersForHits(true)
 
+  # Without this option, WAL files might never get removed since a small column
+  # family (like the admin CF) with only tiny writes might keep it open - this
+  # negatively affects startup times since the WAL is replayed on every startup.
+  # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L719
+  # Flushing the oldest
+  let writeBufferSize =
+    if opts.writeBufferSize > 0:
+      opts.writeBufferSize
+    else:
+      64 * 1024 * 1024 # TODO read from rocksdb?
+
+  dbOpts.setMaxTotalWalSize(2 * writeBufferSize)
 
   let tableOpts = defaultTableOptions()
   # This bloom filter helps avoid having to read multiple SST files when looking
