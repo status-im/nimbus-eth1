@@ -20,6 +20,8 @@ import
   ../../../nimbus/common,
   ../../../nimbus/utils/utils
 
+from std/sequtils import mapIt
+
 type
   BaseTx* = object of RootObj
     recipient* : Opt[EthAddress]
@@ -193,9 +195,9 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         versionedHashes: system.move(blobData.hashes),
       ),
       networkPayload: NetworkPayload(
-        blobs: system.move(blobData.blobs),
-        commitments: system.move(blobData.commitments),
-        proofs: system.move(blobData.proofs),
+        blobs: blobData.blobs.mapIt(it.bytes),
+        commitments: blobData.commitments.mapIt(it.bytes),
+        proofs: blobData.proofs.mapIt(it.bytes),
       )
     )
   else:
@@ -337,9 +339,9 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
   PooledTransaction(
     tx: signTransaction(unsignedTx, params.key, params.chainId, eip155 = true),
     networkPayload: NetworkPayload(
-      blobs      : data.blobs,
-      commitments: data.commitments,
-      proofs     : data.proofs,
+      blobs      : data.blobs.mapIt(it.bytes),
+      commitments: data.commitments.mapIt(it.bytes),
+      proofs     : data.proofs.mapIt(it.bytes),
     ),
   )
 

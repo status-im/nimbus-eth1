@@ -89,7 +89,7 @@ func verifyBlob*(blobId: BlobID, blob: kzg.KzgBlob): bool =
           # This chunk is greater than the modulus, but we can't reduce it in this byte position, so we will try in the next byte position
           expectedFieldElem[blobByteIdx] = BLS_MODULUS[i]
 
-    if not equalMem(blob[chunkIdx*32].unsafeaddr, expectedFieldElem[0].addr, 32):
+    if not equalMem(blob.bytes[chunkIdx*32].unsafeaddr, expectedFieldElem[0].addr, 32):
       return false
 
     # Hash the current hash
@@ -109,24 +109,24 @@ proc fillBlob(blobId: BlobID): KzgBlob =
   var currentHashed = sha256.digest(blobIdBytes)
 
   for chunkIdx in 0..<FIELD_ELEMENTS_PER_BLOB:
-    copyMem(result[chunkIdx*32].addr, currentHashed.data[0].addr, 32)
+    copyMem(result.bytes[chunkIdx*32].addr, currentHashed.data[0].addr, 32)
 
     # Check that no 32 bytes chunks are greater than the BLS modulus
     for i in 0..<32:
       #blobByteIdx = ((chunkIdx + 1) * 32) - i - 1
       let blobByteIdx = (chunkIdx * 32) + i
-      if result[blobByteIdx] < BLS_MODULUS[i]:
+      if result.bytes[blobByteIdx] < BLS_MODULUS[i]:
         # go to next chunk
         break
-      elif result[blobByteIdx] >= BLS_MODULUS[i]:
+      elif result.bytes[blobByteIdx] >= BLS_MODULUS[i]:
         if BLS_MODULUS[i] > 0:
           # This chunk is greater than the modulus, and we can reduce it in this byte position
-          result[blobByteIdx] = BLS_MODULUS[i] - 1
+          result.bytes[blobByteIdx] = BLS_MODULUS[i] - 1
           # go to next chunk
           break
         else:
           # This chunk is greater than the modulus, but we can't reduce it in this byte position, so we will try in the next byte position
-          result[blobByteIdx] = BLS_MODULUS[i]
+          result.bytes[blobByteIdx] = BLS_MODULUS[i]
 
     # Hash the current hash
     currentHashed = sha256.digest(currentHashed.data)
@@ -140,7 +140,7 @@ proc generateBlob(blobid: BlobID): BlobCommitment =
 
 proc getVersionedHash*(blobid: BlobID, commitmentVersion: byte): Hash256 =
   let res = blobid.generateBlob()
-  result = sha256.digest(res.commitment)
+  result = sha256.digest(res.commitment.bytes)
   result.data[0] = commitmentVersion
 
 proc blobDataGenerator*(startBlobId: BlobID, blobCount: int): BlobTxWrapData =

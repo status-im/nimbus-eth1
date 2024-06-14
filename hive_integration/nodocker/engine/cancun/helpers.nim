@@ -186,9 +186,9 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
     for i in 0..<blobTx.tx.versionedHashes.len:
       blobData.data.add BlobWrapData(
         versionedHash: blobTx.tx.versionedHashes[i],
-        commitment   : np.commitments[i],
-        blob         : np.blobs[i],
-        proof        : np.proofs[i],
+        commitment   : kzg.KzgCommitment(bytes: np.commitments[i]),
+        blob         : kzg.KzgBlob(bytes: np.blobs[i]),
+        proof        : kzg.KzgProof(bytes: np.proofs[i]),
       )
     blobData.txs.add blobTx.tx
 

@@ -161,15 +161,15 @@ proc verifyBlobBundle(step: NewPayloads,
     let bundleBlob = blobBundle.blobs[i].bytes
     let bundleProof = blobBundle.proofs[i].bytes
 
-    if bundleCommitment != blobData.commitment:
+    if bundleCommitment != blobData.commitment.bytes:
       error "KZG mismatch at index of the bundle", index=i
       return false
 
-    if bundleBlob != blobData.blob:
+    if bundleBlob != blobData.blob.bytes:
       error "blob mismatch at index of the bundle", index=i
       return false
 
-    if bundleProof != blobData.proof:
+    if bundleProof != blobData.proof.bytes:
       error "proof mismatch at index of the bundle", index=i
       return false
 
