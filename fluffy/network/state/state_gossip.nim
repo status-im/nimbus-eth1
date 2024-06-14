@@ -98,7 +98,7 @@ proc gossipOffer*(
     offerBytes: seq[byte],
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
-) {.async.} =
+) {.async: (raises: [CancelledError]).} =
   let req1Peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
@@ -111,7 +111,7 @@ proc gossipOffer*(
     offerBytes: seq[byte],
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
-) {.async.} =
+) {.async: (raises: [CancelledError]).} =
   let req1Peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
@@ -124,7 +124,7 @@ proc gossipOffer*(
     offerBytes: seq[byte],
     key: ContractCodeKey,
     offer: ContractCodeOffer,
-) {.async.} =
+) {.async: (raises: [CancelledError]).} =
   let peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
@@ -139,7 +139,7 @@ proc recursiveGossipOffer*(
     offerBytes: seq[byte],
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
-) {.async.} =
+) {.async: (raises: [CancelledError]).} =
   asyncSpawn gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
 
   # root node, recursive gossip is finished
@@ -164,7 +164,7 @@ proc recursiveGossipOffer*(
     offerBytes: seq[byte],
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
-) {.async.} =
+) {.async: (raises: [CancelledError]).} =
   asyncSpawn gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
 
   # root node, recursive gossip is finished

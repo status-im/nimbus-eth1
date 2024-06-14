@@ -138,7 +138,7 @@ proc addContentRequest*(
 
 proc connectTo*(
     stream: PortalStream, nodeAddress: NodeAddress, connectionId: uint16
-): Future[Result[UtpSocket[NodeAddress], string]] {.async.} =
+): Future[Result[UtpSocket[NodeAddress], string]] {.async: (raises: [CancelledError]).} =
   let connectRes = await stream.transport.connectTo(nodeAddress, connectionId)
   if connectRes.isErr():
     case connectRes.error

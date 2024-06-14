@@ -564,7 +564,7 @@ proc new*(
 # validates the proper response, and updates the Portal Network routing table.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     p: PortalProtocol, dst: Node, request: Request
-): Future[PortalResult[Response]] {.async.} =
+): Future[PortalResult[Response]] {.async: (raises: [CancelledError]).} =
   logScope:
     protocolId = p.protocolId
 
@@ -613,7 +613,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
 
 proc pingImpl*(
     p: PortalProtocol, dst: Node
-): Future[PortalResult[PongMessage]] {.async.} =
+): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
   let ping = PingMessage(
     enrSeq: p.localNode.record.seqNum,
@@ -624,7 +624,7 @@ proc pingImpl*(
 
 proc findNodesImpl*(
     p: PortalProtocol, dst: Node, distances: List[uint16, 256]
-): Future[PortalResult[NodesMessage]] {.async.} =
+): Future[PortalResult[NodesMessage]] {.async: (raises: [CancelledError]).} =
   let fn = FindNodesMessage(distances: distances)
 
   # TODO Add nodes validation
@@ -632,14 +632,14 @@ proc findNodesImpl*(
 
 proc findContentImpl*(
     p: PortalProtocol, dst: Node, contentKey: ByteList
-): Future[PortalResult[ContentMessage]] {.async.} =
+): Future[PortalResult[ContentMessage]] {.async: (raises: [CancelledError]).} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   return await reqResponse[FindContentMessage, ContentMessage](p, dst, fc)
 
 proc offerImpl*(
     p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
-): Future[PortalResult[AcceptMessage]] {.async.} =
+): Future[PortalResult[AcceptMessage]] {.async: (raises: [CancelledError]).} =
   let offer = OfferMessage(contentKeys: contentKeys)
 
   return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
@@ -657,7 +657,9 @@ proc recordsFromBytes*(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]
 
   ok(records)
 
-proc ping*(p: PortalProtocol, dst: Node): Future[PortalResult[PongMessage]] {.async.} =
+proc ping*(
+    p: PortalProtocol, dst: Node
+): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
   let pongResponse = await p.pingImpl(dst)
 
   if pongResponse.isOk():
@@ -669,7 +671,7 @@ proc ping*(p: PortalProtocol, dst: Node): Future[PortalResult[PongMessage]] {.as
     let customPayloadDecoded =
       try:
         SSZ.decode(pong.customPayload.asSeq(), CustomPayload)
-      except MalformedSszError, SszSizeMismatchError:
+      except SerializationError:
         # invalid custom payload
         return err("Pong message contains invalid custom payload")
 
@@ -679,7 +681,7 @@ proc ping*(p: PortalProtocol, dst: Node): Future[PortalResult[PongMessage]] {.as
 
 proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
-): Future[PortalResult[seq[Node]]] {.async.} =
+): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
   let nodesMessage = await p.findNodesImpl(dst, List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
@@ -693,7 +695,7 @@ proc findNodes*(
 
 proc findContent*(
     p: PortalProtocol, dst: Node, contentKey: ByteList
-): Future[PortalResult[FoundContent]] {.async.} =
+): Future[PortalResult[FoundContent]] {.async: (raises: [CancelledError]).} =
   logScope:
     node = dst
     contentKey
@@ -735,7 +737,7 @@ proc findContent*(
           socket.close()
 
         if await readFut.withTimeout(p.stream.contentReadTimeout):
-          let content = readFut.read
+          let content = await readFut
           # socket received remote FIN and drained whole buffer, it can be
           # safely destroyed without notifing remote
           debug "Socket read fully", socketKey = socket.socketKey
@@ -805,7 +807,7 @@ func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
 
 proc offer(
     p: PortalProtocol, o: OfferRequest
-): Future[PortalResult[ContentKeysBitList]] {.async.} =
+): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
   ## Offer triggers offer-accept interaction with one peer
   ## Whole flow has two phases:
   ## 1. Come to an agreement on what content to transfer, by using offer and
@@ -885,10 +887,14 @@ proc offer(
       for i, b in m.contentKeys:
         if b:
           let content = o.contentList[i].content
+          # TODO: stop using faststreams for this
           var output = memoryOutput()
-
-          output.write(toBytes(content.lenu32, Leb128).toOpenArray())
-          output.write(content)
+          try:
+            output.write(toBytes(content.lenu32, Leb128).toOpenArray())
+            output.write(content)
+          except IOError as e:
+            # This should not happen in case of in-memory streams
+            raiseAssert e.msg
 
           let dataWritten = (await socket.write(output.getOutput)).valueOr:
             debug "Error writing requested data", error
@@ -911,12 +917,18 @@ proc offer(
             var output = memoryOutput()
             if contentResult.isOk():
               let content = contentResult.get()
-
-              output.write(toBytes(content.lenu32, Leb128).toOpenArray())
-              output.write(content)
+              try:
+                output.write(toBytes(content.lenu32, Leb128).toOpenArray())
+                output.write(content)
+              except IOError as e:
+                # This should not happen in case of in-memory streams
+                raiseAssert e.msg
             else:
-              # When data turns out missing, add a 0 size varint
-              output.write(toBytes(0'u8, Leb128).toOpenArray())
+              try:
+                # When data turns out missing, add a 0 size varint
+                output.write(toBytes(0'u8, Leb128).toOpenArray())
+              except IOError as e:
+                raiseAssert e.msg
 
             let dataWritten = (await socket.write(output.getOutput)).valueOr:
               debug "Error writing requested data", error
@@ -936,13 +948,13 @@ proc offer(
 
 proc offer*(
     p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
-): Future[PortalResult[ContentKeysBitList]] {.async.} =
+): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
   let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
   return await p.offer(req)
 
 proc offer*(
     p: PortalProtocol, dst: Node, content: seq[ContentKV]
-): Future[PortalResult[ContentKeysBitList]] {.async.} =
+): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
   if len(content) > contentKeysLimit:
     return err("Cannot offer more than 64 content items")
 
@@ -950,7 +962,7 @@ proc offer*(
   let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)
   return await p.offer(req)
 
-proc offerWorker(p: PortalProtocol) {.async.} =
+proc offerWorker(p: PortalProtocol) {.async: (raises: [CancelledError]).} =
   while true:
     let req = await p.offerQueue.popFirst()
 
@@ -965,7 +977,7 @@ proc offerQueueEmpty*(p: PortalProtocol): bool =
 
 proc lookupWorker(
     p: PortalProtocol, dst: Node, target: NodeId
-): Future[seq[Node]] {.async.} =
+): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
   let distances = lookupDistances(target, dst.id)
   let nodesMessage = await p.findNodes(dst, distances)
   if nodesMessage.isOk():
@@ -977,7 +989,9 @@ proc lookupWorker(
   else:
     return @[]
 
-proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
+proc lookup*(
+    p: PortalProtocol, target: NodeId
+): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -990,7 +1004,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
   var requestAmount = 0'i64
 
   while true:
@@ -1009,7 +1023,12 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
     if pendingQueries.len == 0:
       break
 
-    let query = await one(pendingQueries)
+    let query =
+      try:
+        await one(pendingQueries)
+      except ValueError:
+        raiseAssert("pendingQueries should not have been empty")
+
     trace "Got lookup query response"
 
     let index = pendingQueries.find(query)
@@ -1018,7 +1037,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
     else:
       error "Resulting query should have been in the pending queries"
 
-    let nodes = query.read
+    let nodes = await query
     # TODO: Remove node on timed-out query?
     for n in nodes:
       if not seen.containsOrIncl(n.id):
@@ -1070,7 +1089,7 @@ proc triggerPoke*(
 # and make it more generaic
 proc contentLookup*(
     p: PortalProtocol, target: ByteList, targetId: UInt256
-): Future[Opt[ContentLookupResult]] {.async.} =
+): Future[Opt[ContentLookupResult]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -1086,7 +1105,8 @@ proc contentLookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[PortalResult[FoundContent]].Raising([CancelledError])](alpha)
   var requestAmount = 0'i64
 
   var nodesWithoutContent: seq[Node] = newSeq[Node]()
@@ -1107,7 +1127,12 @@ proc contentLookup*(
     if pendingQueries.len == 0:
       break
 
-    let query = await one(pendingQueries)
+    let query =
+      try:
+        await one(pendingQueries)
+      except ValueError:
+        raiseAssert("pendingQueries should not have been empty")
+
     trace "Got lookup query response"
 
     let index = pendingQueries.find(query)
@@ -1116,8 +1141,7 @@ proc contentLookup*(
     else:
       error "Resulting query should have been in the pending queries"
 
-    let contentResult = query.read
-
+    let contentResult = await query
     if contentResult.isOk():
       let content = contentResult.get()
 
@@ -1169,7 +1193,7 @@ proc contentLookup*(
 
 proc traceContentLookup*(
     p: PortalProtocol, target: ByteList, targetId: UInt256
-): Future[TraceContentLookupResult] {.async.} =
+): Future[TraceContentLookupResult] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -1203,7 +1227,8 @@ proc traceContentLookup*(
     metadata["0x" & $cn.id] =
       NodeMetadata(enr: cn.record, distance: p.distance(cn.id, targetId))
 
-  var pendingQueries = newSeqOfCap[Future[PortalResult[FoundContent]]](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[PortalResult[FoundContent]].Raising([CancelledError])](alpha)
   var pendingNodes = newSeq[Node]()
   var requestAmount = 0'i64
 
@@ -1226,7 +1251,11 @@ proc traceContentLookup*(
     if pendingQueries.len == 0:
       break
 
-    let query = await one(pendingQueries)
+    let query =
+      try:
+        await one(pendingQueries)
+      except ValueError:
+        raiseAssert("pendingQueries should not have been empty")
     trace "Got lookup query response"
 
     let index = pendingQueries.find(query)
@@ -1236,7 +1265,7 @@ proc traceContentLookup*(
     else:
       error "Resulting query should have been in the pending queries"
 
-    let contentResult = query.read
+    let contentResult = await query
 
     if contentResult.isOk():
       let content = contentResult.get()
@@ -1346,7 +1375,7 @@ proc traceContentLookup*(
 
 proc query*(
     p: PortalProtocol, target: NodeId, k = BUCKET_SIZE
-): Future[seq[Node]] {.async.} =
+): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
   ## Query k nodes for the given target, returns all nodes found, including the
   ## nodes queried.
   ##
@@ -1361,7 +1390,7 @@ proc query*(
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
 
   while true:
     var i = 0
@@ -1376,7 +1405,11 @@ proc query*(
     if pendingQueries.len == 0:
       break
 
-    let query = await one(pendingQueries)
+    let query =
+      try:
+        await one(pendingQueries)
+      except ValueError:
+        raiseAssert("pendingQueries should not have been empty")
     trace "Got lookup query response"
 
     let index = pendingQueries.find(query)
@@ -1385,7 +1418,7 @@ proc query*(
     else:
       error "Resulting query should have been in the pending queries"
 
-    let nodes = query.read
+    let nodes = await query
     # TODO: Remove node on timed-out query?
     for n in nodes:
       if not seen.containsOrIncl(n.id):
@@ -1394,7 +1427,9 @@ proc query*(
   p.lastLookup = now(chronos.Moment)
   return queryBuffer
 
-proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
+proc queryRandom*(
+    p: PortalProtocol
+): Future[seq[Node]] {.async: (raw: true, raises: [CancelledError]).} =
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
@@ -1416,7 +1451,7 @@ proc neighborhoodGossip*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
-): Future[int] {.async.} =
+): Future[int] {.async: (raises: [CancelledError]).} =
   ## Run neighborhood gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
   if content.len() == 0:
@@ -1486,7 +1521,7 @@ proc neighborhoodGossipDiscardPeers*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
-): Future[void] {.async.} =
+): Future[void] {.async: (raises: [CancelledError]).} =
   discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
 
 proc randomGossip*(
@@ -1494,7 +1529,7 @@ proc randomGossip*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
-): Future[int] {.async.} =
+): Future[int] {.async: (raises: [CancelledError]).} =
   ## Run random gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
   if content.len() == 0:
@@ -1518,7 +1553,7 @@ proc randomGossipDiscardPeers*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
-): Future[void] {.async.} =
+): Future[void] {.async: (raises: [CancelledError]).} =
   discard await p.randomGossip(srcNodeId, contentKeys, content)
 
 proc storeContent*(
@@ -1546,7 +1581,7 @@ proc seedTable*(p: PortalProtocol) =
       error "Bootstrap node could not be added",
         uri = toURI(record), protocolId = p.protocolId
 
-proc populateTable(p: PortalProtocol) {.async.} =
+proc populateTable(p: PortalProtocol) {.async: (raises: [CancelledError]).} =
   ## Do a set of initial lookups to quickly populate the table.
   # start with a self target query (neighbour nodes)
   logScope:
@@ -1561,7 +1596,7 @@ proc populateTable(p: PortalProtocol) {.async.} =
 
   debug "Total nodes in routing table after populate", total = p.routingTable.len()
 
-proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
+proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledError]).} =
   let pong = await p.ping(n)
 
   if pong.isOk():
@@ -1587,7 +1622,7 @@ proc getNodeForRevalidation(p: PortalProtocol): Opt[Node] =
   else:
     Opt.none(Node)
 
-proc revalidateLoop(p: PortalProtocol) {.async.} =
+proc revalidateLoop(p: PortalProtocol) {.async: (raises: []).} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
   ## message.
   try:
@@ -1599,7 +1634,7 @@ proc revalidateLoop(p: PortalProtocol) {.async.} =
   except CancelledError:
     trace "revalidateLoop canceled"
 
-proc refreshLoop(p: PortalProtocol) {.async.} =
+proc refreshLoop(p: PortalProtocol) {.async: (raises: []).} =
   ## Loop that refreshes the routing table by starting a random query in case
   ## no queries were done since `refreshInterval` or more.
   ## It also refreshes the majority address voted for via pong responses.
@@ -1642,7 +1677,9 @@ proc stop*(p: PortalProtocol) =
     worker.cancelSoon()
   p.offerWorkers = @[]
 
-proc resolve*(p: PortalProtocol, id: NodeId): Future[Opt[Node]] {.async.} =
+proc resolve*(
+    p: PortalProtocol, id: NodeId
+): Future[Opt[Node]] {.async: (raises: [CancelledError]).} =
   ## Resolve a `Node` based on provided `NodeId`.
   ##
   ## This will first look in the own routing table. If the node is known, it
@@ -1671,7 +1708,7 @@ proc resolve*(p: PortalProtocol, id: NodeId): Future[Opt[Node]] {.async.} =
 
 proc resolveWithRadius*(
     p: PortalProtocol, id: NodeId
-): Future[Opt[(Node, UInt256)]] {.async.} =
+): Future[Opt[(Node, UInt256)]] {.async: (raises: [CancelledError]).} =
   ## Resolve a `Node` based on provided `NodeId`, also try to establish what
   ## is known radius of found node.
   ##
