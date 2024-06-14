@@ -704,7 +704,7 @@ proc delete*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
   result = acc.methods.deleteFn address
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
-proc stoFlush*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
+proc stoDelete*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
   ## Recursively delete all data elements from the storage trie associated to
   ## the account identified by the argument `address`. After successful run,
   ## the storage trie will be empty.
@@ -715,8 +715,8 @@ proc stoFlush*(acc: CoreDxAccRef; address: EthAddress): CoreDbRc[void] =
   ##   shared by several accounts whereas they are unique on the `Aristo`
   ##   backend.
   ##
-  acc.setTrackNewApi AccStoFlushFn
-  result = acc.methods.stoFlushFn address
+  acc.setTrackNewApi AccStoDeleteFn
+  result = acc.methods.stoDeleteFn address
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
 

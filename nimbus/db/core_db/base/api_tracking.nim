@@ -35,7 +35,7 @@ type
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
     AccGetMptFn         = "acc/getMpt"
-    AccStoFlushFn       = "acc/stoFlush"
+    AccStoDeleteFn      = "acc/stoDelete"
     AccToMptFn          = "acc/toMpt"
 
     AnyBackendFn        = "any/backend"

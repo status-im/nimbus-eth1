@@ -207,7 +207,7 @@ type
   CoreDbAccGetMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
   CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccStoFlushFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccStoDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccGetColFn* = proc(): CoreDbColRef {.noRaise.}
@@ -218,7 +218,7 @@ type
     getMptFn*:     CoreDbAccGetMptFn
     fetchFn*:      CoreDbAccFetchFn
     deleteFn*:     CoreDbAccDeleteFn
-    stoFlushFn*:   CoreDbAccStoFlushFn
+    stoDeleteFn*:  CoreDbAccStoDeleteFn
     mergeFn*:      CoreDbAccMergeFn
     hasPathFn*:    CoreDbAccHasPathFn
     getColFn*:     CoreDbAccGetColFn

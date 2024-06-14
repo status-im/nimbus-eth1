@@ -367,8 +367,8 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       return err(rc.error.toError(base, info))
     ok()
 
-  proc accStoFlush(address: EthAddress): CoreDbRc[void] =
-    const info = "stoFlushFn()"
+  proc accStoDelete(address: EthAddress): CoreDbRc[void] =
+    const info = "stoDeleteFn()"
 
     let
       key = address.keccakHash.data
@@ -405,8 +405,8 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     deleteFn: proc(address: EthAddress): CoreDbRc[void] =
       accDelete(address),
 
-    stoFlushFn: proc(address: EthAddress): CoreDbRc[void] =
-      accStoFlush(address),
+    stoDeleteFn: proc(address: EthAddress): CoreDbRc[void] =
+      accStoDelete(address),
 
     mergeFn: proc(acc: CoreDbAccount): CoreDbRc[void] =
       accMerge(acc),
