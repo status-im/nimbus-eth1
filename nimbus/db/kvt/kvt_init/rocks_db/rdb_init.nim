@@ -28,9 +28,50 @@ import
 # ------------------------------------------------------------------------------
 
 proc getCFInitOptions(opts: DbOptions): ColFamilyOptionsRef =
-  result = defaultColFamilyOptions()
+ # TODO the configuration options below have not been tuned but are rather
+  #      based on gut feeling, guesses and by looking at other clients - it
+  #      would make sense to test different settings and combinations once the
+  #      data model itself has settled down as their optimal values will depend
+  #      on the shape of the data - it'll also be different per column family..
+  let cfOpts = defaultColFamilyOptions()
+
   if opts.writeBufferSize > 0:
-    result.setWriteBufferSize(opts.writeBufferSize)
+    cfOpts.setWriteBufferSize(opts.writeBufferSize)
+
+  # Without this option, the WAL might never get flushed since a small column
+  # family (like the admin CF) with only tiny writes might keep it open - this
+  # negatively affects startup times since the WAL is replayed on every startup.
+  # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L719
+  # Flushing the oldest
+  let writeBufferSize =
+    if opts.writeBufferSize > 0:
+      opts.writeBufferSize
+    else:
+      64 * 1024 * 1024 # TODO read from rocksdb?
+
+  cfOpts.setMaxTotalWalSize(2 * writeBufferSize)
+
+  # When data is written to rocksdb, it is first put in an in-memory table
+  # whose index is a skip list. Since the mem table holds the most recent data,
+  # all reads must go through this skiplist which results in slow lookups for
+  # already-written data.
+  # We enable a bloom filter on the mem table to avoid this lookup in the cases
+  # where the data is actually on disk already (ie wasn't updated recently).
+  # TODO there's also a hashskiplist that has both a hash index and a skip list
+  #      which maybe could be used - uses more memory, requires a key prefix
+  #      extractor
+  cfOpts.setMemtableWholeKeyFiltering(true)
+  cfOpts.setMemtablePrefixBloomSizeRatio(0.1)
+
+  # LZ4 seems to cut database size to 2/3 roughly, at the time of writing
+  # Using it for the bottom-most level means it applies to 90% of data but
+  # delays compression until data has settled a bit, which seems like a
+  # reasonable tradeoff.
+  # TODO evaluate zstd compression with a trained dictionary
+  # https://github.com/facebook/rocksdb/wiki/Compression
+  cfOpts.setBottommostCompression(Compression.lz4Compression)
+
+  cfOpts
 
 
 proc getDbInitOptions(opts: DbOptions): DbOptionsRef =
