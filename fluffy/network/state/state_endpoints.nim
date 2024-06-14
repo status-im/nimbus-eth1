@@ -73,7 +73,7 @@ proc getNextNodeHash(
 
 proc getAccountProof(
     n: StateNetwork, stateRoot: KeccakHash, address: Address
-): Future[Opt[TrieProof]] {.async.} =
+): Future[Opt[TrieProof]] {.async: (raises: [CancelledError]).} =
   let nibbles = address.toPath().unpackNibbles()
 
   var
@@ -100,7 +100,7 @@ proc getAccountProof(
 
 proc getStorageProof(
     n: StateNetwork, storageRoot: KeccakHash, address: Address, storageKey: UInt256
-): Future[Opt[TrieProof]] {.async.} =
+): Future[Opt[TrieProof]] {.async: (raises: [CancelledError]).} =
   let nibbles = storageKey.toPath().unpackNibbles()
 
   var
@@ -127,7 +127,7 @@ proc getStorageProof(
 
 proc getAccount(
     n: StateNetwork, blockHash: BlockHash, address: Address
-): Future[Opt[Account]] {.async.} =
+): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
   let
     stateRoot = (await n.getStateRootByBlockHash(blockHash)).valueOr:
       warn "Failed to get state root by block hash"
@@ -144,7 +144,7 @@ proc getAccount(
 # Used by: eth_getBalance,
 proc getBalance*(
     n: StateNetwork, blockHash: BlockHash, address: Address
-): Future[Opt[UInt256]] {.async.} =
+): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
   let account = (await n.getAccount(blockHash, address)).valueOr:
     return Opt.none(UInt256)
 
@@ -153,7 +153,7 @@ proc getBalance*(
 # Used by: eth_getTransactionCount
 proc getTransactionCount*(
     n: StateNetwork, blockHash: BlockHash, address: Address
-): Future[Opt[AccountNonce]] {.async.} =
+): Future[Opt[AccountNonce]] {.async: (raises: [CancelledError]).} =
   let account = (await n.getAccount(blockHash, address)).valueOr:
     return Opt.none(AccountNonce)
 
@@ -162,7 +162,7 @@ proc getTransactionCount*(
 # Used by: eth_getStorageAt
 proc getStorageAt*(
     n: StateNetwork, blockHash: BlockHash, address: Address, slotKey: UInt256
-): Future[Opt[UInt256]] {.async.} =
+): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
   let
     account = (await n.getAccount(blockHash, address)).valueOr:
       return Opt.none(UInt256)
@@ -178,7 +178,7 @@ proc getStorageAt*(
 # Used by: eth_getCode
 proc getCode*(
     n: StateNetwork, blockHash: BlockHash, address: Address
-): Future[Opt[Bytecode]] {.async.} =
+): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
   let
     account = (await n.getAccount(blockHash, address)).valueOr:
       return Opt.none(Bytecode)

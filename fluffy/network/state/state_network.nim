@@ -78,7 +78,7 @@ proc getContent(
     n: StateNetwork,
     key: AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey,
     V: type ContentRetrievalType,
-): Future[Opt[V]] {.async.} =
+): Future[Opt[V]] {.async: (raises: [CancelledError]).} =
   let
     contentKeyBytes = key.toContentKey().encode()
     contentId = contentKeyBytes.toContentId()
@@ -114,22 +114,26 @@ proc getContent(
 
 proc getAccountTrieNode*(
     n: StateNetwork, key: AccountTrieNodeKey
-): Future[Opt[AccountTrieNodeRetrieval]] {.inline.} =
+): Future[Opt[AccountTrieNodeRetrieval]] {.
+    async: (raw: true, raises: [CancelledError])
+.} =
   n.getContent(key, AccountTrieNodeRetrieval)
 
 proc getContractTrieNode*(
     n: StateNetwork, key: ContractTrieNodeKey
-): Future[Opt[ContractTrieNodeRetrieval]] {.inline.} =
+): Future[Opt[ContractTrieNodeRetrieval]] {.
+    async: (raw: true, raises: [CancelledError])
+.} =
   n.getContent(key, ContractTrieNodeRetrieval)
 
 proc getContractCode*(
     n: StateNetwork, key: ContractCodeKey
-): Future[Opt[ContractCodeRetrieval]] {.inline.} =
+): Future[Opt[ContractCodeRetrieval]] {.async: (raw: true, raises: [CancelledError]).} =
   n.getContent(key, ContractCodeRetrieval)
 
 proc getStateRootByBlockHash*(
     n: StateNetwork, hash: BlockHash
-): Future[Opt[KeccakHash]] {.async.} =
+): Future[Opt[KeccakHash]] {.async: (raises: [CancelledError]).} =
   if n.historyNetwork.isNone():
     warn "History network is not available. Unable to get state root by block hash"
     return Opt.none(KeccakHash)
@@ -147,7 +151,7 @@ proc processOffer*(
     contentValueBytes: seq[byte],
     contentKey: AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey,
     V: type ContentOfferType,
-): Future[Result[void, string]] {.async.} =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let contentValue = V.decode(contentValueBytes).valueOr:
     return err("Unable to decode offered content value")
 
@@ -178,7 +182,7 @@ proc processOffer*(
 
   ok()
 
-proc processContentLoop(n: StateNetwork) {.async.} =
+proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()

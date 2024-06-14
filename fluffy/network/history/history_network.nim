@@ -424,7 +424,7 @@ func verifyHeader(
 
 proc getVerifiedBlockHeader*(
     n: HistoryNetwork, hash: BlockHash
-): Future[Opt[BlockHeader]] {.async.} =
+): Future[Opt[BlockHeader]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = ContentKey.init(blockHeader, hash).encode()
     contentId = contentKey.toContentId()
@@ -473,7 +473,7 @@ proc getVerifiedBlockHeader*(
 
 proc getBlockBody*(
     n: HistoryNetwork, hash: BlockHash, header: BlockHeader
-): Future[Opt[BlockBody]] {.async.} =
+): Future[Opt[BlockBody]] {.async: (raises: [CancelledError]).} =
   if header.txRoot == EMPTY_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
     # Short path for empty body indicated by txRoot and ommersHash
     return Opt.some(BlockBody(transactions: @[], uncles: @[]))
@@ -513,7 +513,9 @@ proc getBlockBody*(
   # Bodies were requested `requestRetries` times and all failed on validation
   return Opt.none(BlockBody)
 
-proc getBlock*(n: HistoryNetwork, hash: BlockHash): Future[Opt[Block]] {.async.} =
+proc getBlock*(
+    n: HistoryNetwork, hash: BlockHash
+): Future[Opt[Block]] {.async: (raises: [CancelledError]).} =
   debug "Trying to retrieve block with hash", hash
 
   # Note: Using `getVerifiedBlockHeader` instead of getBlockHeader even though
@@ -531,7 +533,7 @@ proc getBlock*(n: HistoryNetwork, hash: BlockHash): Future[Opt[Block]] {.async.}
 
 proc getReceipts*(
     n: HistoryNetwork, hash: BlockHash, header: BlockHeader
-): Future[Opt[seq[Receipt]]] {.async.} =
+): Future[Opt[seq[Receipt]]] {.async: (raises: [CancelledError]).} =
   if header.receiptsRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root
     return Opt.some(newSeq[Receipt]())
@@ -569,7 +571,7 @@ proc getReceipts*(
 
 proc getEpochAccumulator(
     n: HistoryNetwork, epochHash: Digest
-): Future[Opt[EpochAccumulator]] {.async.} =
+): Future[Opt[EpochAccumulator]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = ContentKey.init(epochAccumulator, epochHash).encode()
     contentId = contentKey.toContentId()
@@ -592,7 +594,7 @@ proc getEpochAccumulator(
       epochAccumulator =
         try:
           SSZ.decode(accumulatorContent.content, EpochAccumulator)
-        except SszError:
+        except SerializationError:
           continue
 
     let hash = hash_tree_root(epochAccumulator)
@@ -612,7 +614,7 @@ proc getEpochAccumulator(
 
 proc getBlockHashByNumber*(
     n: HistoryNetwork, bn: UInt256
-): Future[Result[BlockHash, string]] {.async.} =
+): Future[Result[BlockHash, string]] {.async: (raises: [CancelledError]).} =
   let
     epochData = n.accumulator.getBlockEpochDataForBlockNumber(bn).valueOr:
       return err(error)
@@ -624,7 +626,7 @@ proc getBlockHashByNumber*(
 
 proc getBlock*(
     n: HistoryNetwork, bn: UInt256
-): Future[Result[Opt[Block], string]] {.async.} =
+): Future[Result[Opt[Block], string]] {.async: (raises: [CancelledError]).} =
   let
     blockHash = ?(await n.getBlockHashByNumber(bn))
     maybeBlock = await n.getBlock(blockHash)
@@ -633,7 +635,7 @@ proc getBlock*(
 
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKey: ByteList
-): Future[bool] {.async.} =
+): Future[bool] {.async: (raises: [CancelledError]).} =
   let key = contentKey.decode().valueOr:
     return false
 
@@ -687,7 +689,7 @@ proc validateContent(
     let epochAccumulator =
       try:
         SSZ.decode(content, EpochAccumulator)
-      except SszError:
+      except SerializationError:
         warn "Failed decoding epoch accumulator"
         return false
 
@@ -737,7 +739,7 @@ proc new*(
 
 proc validateContent(
     n: HistoryNetwork, contentKeys: ContentKeysList, contentItems: seq[seq[byte]]
-): Future[bool] {.async.} =
+): Future[bool] {.async: (raises: [CancelledError]).} =
   # content passed here can have less items then contentKeys, but not more.
   for i, contentItem in contentItems:
     let contentKey = contentKeys[i]
@@ -755,7 +757,7 @@ proc validateContent(
 
   return true
 
-proc processContentLoop(n: HistoryNetwork) {.async.} =
+proc processContentLoop(n: HistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
@@ -771,7 +773,7 @@ proc processContentLoop(n: HistoryNetwork) {.async.} =
   except CancelledError:
     trace "processContentLoop canceled"
 
-proc statusLogLoop(n: HistoryNetwork) {.async.} =
+proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
       # This is the data radius percentage compared to full storage. This will
@@ -804,3 +806,6 @@ proc stop*(n: HistoryNetwork) =
 
   if not n.processContentLoop.isNil:
     n.processContentLoop.cancelSoon()
+
+  if not n.processContentLoop.isNil:
+    n.statusLogLoop.cancelSoon()

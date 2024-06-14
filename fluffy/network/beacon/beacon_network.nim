@@ -59,7 +59,7 @@ proc validateHistoricalSummaries(
 
 proc getContent(
     n: BeaconNetwork, contentKey: ContentKey
-): Future[results.Opt[seq[byte]]] {.async.} =
+): Future[results.Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
   let
     contentKeyEncoded = encode(contentKey)
     contentId = toContentId(contentKeyEncoded)
@@ -79,7 +79,7 @@ proc getContent(
 
 proc getLightClientBootstrap*(
     n: BeaconNetwork, trustedRoot: Digest
-): Future[results.Opt[ForkedLightClientBootstrap]] {.async.} =
+): Future[results.Opt[ForkedLightClientBootstrap]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = bootstrapContentKey(trustedRoot)
     contentResult = await n.getContent(contentKey)
@@ -100,7 +100,9 @@ proc getLightClientBootstrap*(
 
 proc getLightClientUpdatesByRange*(
     n: BeaconNetwork, startPeriod: SyncCommitteePeriod, count: uint64
-): Future[results.Opt[ForkedLightClientUpdateList]] {.async.} =
+): Future[results.Opt[ForkedLightClientUpdateList]] {.
+    async: (raises: [CancelledError])
+.} =
   let
     contentKey = updateContentKey(distinctBase(startPeriod), count)
     contentResult = await n.getContent(contentKey)
@@ -121,7 +123,9 @@ proc getLightClientUpdatesByRange*(
 
 proc getLightClientFinalityUpdate*(
     n: BeaconNetwork, finalizedSlot: uint64
-): Future[results.Opt[ForkedLightClientFinalityUpdate]] {.async.} =
+): Future[results.Opt[ForkedLightClientFinalityUpdate]] {.
+    async: (raises: [CancelledError])
+.} =
   let
     contentKey = finalityUpdateContentKey(finalizedSlot)
     contentResult = await n.getContent(contentKey)
@@ -141,7 +145,9 @@ proc getLightClientFinalityUpdate*(
 
 proc getLightClientOptimisticUpdate*(
     n: BeaconNetwork, optimisticSlot: uint64
-): Future[results.Opt[ForkedLightClientOptimisticUpdate]] {.async.} =
+): Future[results.Opt[ForkedLightClientOptimisticUpdate]] {.
+    async: (raises: [CancelledError])
+.} =
   let
     contentKey = optimisticUpdateContentKey(optimisticSlot)
     contentResult = await n.getContent(contentKey)
@@ -161,7 +167,7 @@ proc getLightClientOptimisticUpdate*(
 
 proc getHistoricalSummaries*(
     n: BeaconNetwork, epoch: uint64
-): Future[results.Opt[HistoricalSummaries]] {.async.} =
+): Future[results.Opt[HistoricalSummaries]] {.async: (raises: [CancelledError]).} =
   # Note: when taken from the db, it does not need to verify the proof.
   let
     contentKey = historicalSummariesContentKey(epoch)
@@ -279,7 +285,7 @@ proc validateContent(
 
 proc validateContent(
     n: BeaconNetwork, contentKeys: ContentKeysList, contentItems: seq[seq[byte]]
-): Future[bool] {.async.} =
+): Future[bool] {.async: (raises: [CancelledError]).} =
   # content passed here can have less items then contentKeys, but not more.
   for i, contentItem in contentItems:
     let
@@ -302,7 +308,7 @@ proc validateContent(
 
   return true
 
-proc processContentLoop(n: BeaconNetwork) {.async.} =
+proc processContentLoop(n: BeaconNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
