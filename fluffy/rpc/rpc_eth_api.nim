@@ -119,7 +119,7 @@ func init*(
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add txOrHash(w3Hash keccakHash(rlp.encode(tx)))
+        blockObject.transactions.add txOrHash(w3Hash rlpHash(tx))
 
   blockObject
 
