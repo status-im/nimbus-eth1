@@ -12,6 +12,7 @@ import
   json_rpc/[rpcproxy, rpcserver],
   web3/conversions, # sigh, for FixedBytes marshalling
   web3/eth_api_types,
+  web3/primitives as web3types,
   eth/common/eth_types,
   beacon_chain/spec/forks,
   ../network/history/[history_network, history_content],
@@ -348,7 +349,7 @@ proc installEthApiHandlers*(
       return @[]
 
   rpcServerWithProxy.rpc("eth_getBalance") do(
-    data: EthAddress, quantityTag: RtBlockIdentifier
+    data: web3Types.Address, quantityTag: RtBlockIdentifier
   ) -> UInt256:
     ## Returns the balance of the account of given address.
     ##
@@ -356,7 +357,7 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
     if stateNetwork.isNone():
-      raise newException(ValueError, "State sub-network not running")
+      raise newException(ValueError, "State sub-network not enabled")
 
     if quantityTag.kind == bidAlias:
       # TODO: Implement
@@ -367,14 +368,14 @@ proc installEthApiHandlers*(
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
           raise newException(ValueError, error)
 
-        balance = (await stateNetwork.get().getBalance(blockHash, data)).valueOr:
+        balance = (await stateNetwork.get().getBalance(blockHash, data.EthAddress)).valueOr:
           # Should we return 0 here or throw a more detailed error?
           raise newException(ValueError, "Unable to get balance")
 
       return balance
 
   rpcServerWithProxy.rpc("eth_getTransactionCount") do(
-    data: EthAddress, quantityTag: RtBlockIdentifier
+    data: web3Types.Address, quantityTag: RtBlockIdentifier
   ) -> Quantity:
     ## Returns the number of transactions sent from an address.
     ##
@@ -382,7 +383,7 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
     if stateNetwork.isNone():
-      raise newException(ValueError, "State sub-network not running")
+      raise newException(ValueError, "State sub-network not enabled")
 
     if quantityTag.kind == bidAlias:
       # TODO: Implement
@@ -393,13 +394,15 @@ proc installEthApiHandlers*(
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
           raise newException(ValueError, error)
 
-        nonce = (await stateNetwork.get().getTransactionCount(blockHash, data)).valueOr:
+        nonce = (
+          await stateNetwork.get().getTransactionCount(blockHash, data.EthAddress)
+        ).valueOr:
           # Should we return 0 here or throw a more detailed error?
           raise newException(ValueError, "Unable to get transaction count")
       return nonce.Quantity
 
   rpcServerWithProxy.rpc("eth_getStorageAt") do(
-    data: EthAddress, slot: UInt256, quantityTag: RtBlockIdentifier
+    data: web3Types.Address, slot: UInt256, quantityTag: RtBlockIdentifier
   ) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     ##
@@ -408,7 +411,7 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
     if stateNetwork.isNone():
-      raise newException(ValueError, "State sub-network not running")
+      raise newException(ValueError, "State sub-network not enabled")
 
     if quantityTag.kind == bidAlias:
       # TODO: Implement
@@ -419,13 +422,15 @@ proc installEthApiHandlers*(
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
           raise newException(ValueError, error)
 
-        slotValue = (await stateNetwork.get().getStorageAt(blockHash, data, slot)).valueOr:
+        slotValue = (
+          await stateNetwork.get().getStorageAt(blockHash, data.EthAddress, slot)
+        ).valueOr:
           # Should we return 0 here or throw a more detailed error?
           raise newException(ValueError, "Unable to get storage slot")
       return FixedBytes[32](slotValue.toBytesBE())
 
   rpcServerWithProxy.rpc("eth_getCode") do(
-    data: EthAddress, quantityTag: RtBlockIdentifier
+    data: web3Types.Address, quantityTag: RtBlockIdentifier
   ) -> seq[byte]:
     ## Returns code at a given address.
     ##
@@ -433,7 +438,7 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     if stateNetwork.isNone():
-      raise newException(ValueError, "State sub-network not running")
+      raise newException(ValueError, "State sub-network not enabled")
 
     if quantityTag.kind == bidAlias:
       # TODO: Implement
@@ -444,7 +449,7 @@ proc installEthApiHandlers*(
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
           raise newException(ValueError, error)
 
-        bytecode = (await stateNetwork.get().getCode(blockHash, data)).valueOr:
+        bytecode = (await stateNetwork.get().getCode(blockHash, data.EthAddress)).valueOr:
           # Should we return empty sequence here or throw a more detailed error?
           raise newException(ValueError, "Unable to get code")
       return bytecode.asSeq()
