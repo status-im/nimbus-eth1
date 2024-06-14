@@ -208,6 +208,10 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(logFile, fmAppend)
 
+  info "Launching execution client",
+      version = FullVersionStr,
+      conf
+
   when defined(evmc_enabled):
     evmcSetLibraryPath(conf.evm)
 

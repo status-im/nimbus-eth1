@@ -28,7 +28,7 @@ import
   common/chain_config,
   db/opts
 
-export net
+export net, defs
 
 const
   # TODO: fix this agent-string format to match other

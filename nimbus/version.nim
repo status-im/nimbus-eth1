@@ -60,3 +60,5 @@ const
   GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
   NimVersion* = "Nim version " & $NimMajor & "." & $NimMinor & "." & $NimPatch
+
+  FullVersionStr* = "v" & NimbusVersion & "-" & GitRevision
