@@ -40,7 +40,7 @@ type
     payloadProductionClientDelay*: int
 
     # Block production related
-    blockTimestampIncrement*: Option[int]
+    blockTimestampIncrement*: Opt[int]
 
     # Block Production State
     clients                 : ClientPool
@@ -64,21 +64,21 @@ type
     latestHeadNumber*       : uint64
     latestHeader*           : common.BlockHeader
     latestPayloadBuilt*     : ExecutionPayload
-    latestBlockValue*       : Option[UInt256]
-    latestBlobsBundle*      : Option[BlobsBundleV1]
-    latestShouldOverrideBuilder*: Option[bool]
+    latestBlockValue*       : Opt[UInt256]
+    latestBlobsBundle*      : Opt[BlobsBundleV1]
+    latestShouldOverrideBuilder*: Opt[bool]
     latestPayloadAttributes*: PayloadAttributes
     latestExecutedPayload*  : ExecutableData
     latestForkchoice*       : ForkchoiceStateV1
 
     # Merge related
-    firstPoSBlockNumber*      : Option[uint64]
+    firstPoSBlockNumber*      : Opt[uint64]
     ttdReached*               : bool
-    transitionPayloadTimestamp: Option[int]
+    transitionPayloadTimestamp: Opt[int]
     chainTotalDifficulty      : UInt256
 
     # Shanghai related
-    nextWithdrawals*          : Option[seq[WithdrawalV1]]
+    nextWithdrawals*          : Opt[seq[WithdrawalV1]]
 
   BlockProcessCallbacks* = object
     onPayloadProducerSelected* : proc(): bool {.gcsafe.}
@@ -102,7 +102,7 @@ func latestExecutableData*(cl: CLMocker): ExecutableData =
     basePayload: cl.latestPayloadBuilt,
     beaconRoot : ethHash cl.latestPayloadAttributes.parentBeaconBlockRoot,
     attr       : cl.latestPayloadAttributes,
-    versionedHashes: some(collectBlobHashes(cl.latestPayloadBuilt.transactions)),
+    versionedHashes: Opt.some(collectBlobHashes(cl.latestPayloadBuilt.transactions)),
   )
 
 func latestPayloadNumber*(h: Table[uint64, ExecutionPayload]): uint64 =
@@ -153,10 +153,10 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
     error "CLMocker: timeout while waiting for TTD"
     return false
 
-  echo "CLMocker: TTD has been reached at block ", header.blockNumber
+  echo "CLMocker: TTD has been reached at block ", header.number
 
   cl.latestHeader = header
-  cl.headerHistory[header.blockNumber.truncate(uint64)] = header
+  cl.headerHistory[header.number] = header
   cl.ttdReached = true
 
   let headerHash = BlockHash(common.blockHash(cl.latestHeader).data)
@@ -167,9 +167,9 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
     cl.latestForkchoice.finalizedBlockHash = headerHash
 
   # Reset transition values
-  cl.latestHeadNumber = cl.latestHeader.blockNumber.truncate(uint64)
+  cl.latestHeadNumber = cl.latestHeader.number
   cl.headHashHistory = @[]
-  cl.firstPoSBlockNumber = none(uint64)
+  cl.firstPoSBlockNumber = Opt.none(uint64)
 
   # Prepare initial forkchoice, to be sent to the transition payload producer
   cl.latestForkchoice = ForkchoiceStateV1()
@@ -195,7 +195,6 @@ proc isBlockPoS*(cl: CLMocker, bn: common.BlockNumber): bool =
     return false
 
   let number = cl.firstPoSBlockNumber.get()
-  let bn = bn.truncate(uint64)
   if number > bn:
     return false
 
@@ -226,7 +225,7 @@ func getNextBlockTimestamp(cl: CLMocker): EthTime =
     return EthTime cl.transitionPayloadTimestamp.get
   return cl.latestHeader.timestamp + cl.getTimestampIncrement()
 
-func setNextWithdrawals(cl: CLMocker, nextWithdrawals: Option[seq[WithdrawalV1]]) =
+func setNextWithdrawals(cl: CLMocker, nextWithdrawals: Opt[seq[WithdrawalV1]]) =
   cl.nextWithdrawals = nextWithdrawals
 
 func isShanghai(cl: CLMocker, timestamp: Quantity): bool =
@@ -259,7 +258,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
     let latestHeader = res.get
     let lastBlockHash = latestHeader.blockHash
     if cl.latestHeader.blockHash != lastBlockHash or
-       cl.latestHeadNumber != latestHeader.blockNumber.truncate(uint64):
+       cl.latestHeadNumber != latestHeader.number:
       # Selected client latest block hash does not match canonical chain, try again
       cl.nextBlockProducer = nil
       continue
@@ -285,16 +284,16 @@ proc generatePayloadAttributes(cl: CLMocker) =
   if cl.isCancun(timestamp):
     # Write a deterministic hash based on the block number
     let beaconRoot = timestampToBeaconRoot(timestamp)
-    cl.latestPayloadAttributes.parentBeaconBlockRoot = some(beaconRoot)
+    cl.latestPayloadAttributes.parentBeaconBlockRoot = Opt.some(beaconRoot)
 
   # Save random value
-  let number = cl.latestHeader.blockNumber.truncate(uint64) + 1
+  let number = cl.latestHeader.number + 1
   cl.prevRandaoHistory[number] = nextPrevRandao
 
 proc requestNextPayload(cl: CLMocker): bool =
   let version = cl.latestPayloadAttributes.version
   let client = cl.nextBlockProducer.client
-  let res = client.forkchoiceUpdated(version, cl.latestForkchoice, some(cl.latestPayloadAttributes))
+  let res = client.forkchoiceUpdated(version, cl.latestForkchoice, Opt.some(cl.latestPayloadAttributes))
   if res.isErr:
     error "CLMocker: Could not send forkchoiceUpdated", version=version, msg=res.error
     return false
@@ -371,10 +370,10 @@ proc getNextPayload(cl: CLMocker): bool =
       get=cl.latestHeader.blockHash
     return false
 
-  if cl.latestPayloadBuilt.blockNumber.uint64.toBlockNumber != cl.latestHeader.blockNumber + 1.toBlockNumber:
+  if cl.latestPayloadBuilt.blockNumber.uint64 != cl.latestHeader.number + 1'u64:
     error "CLMocker: Incorrect Number on payload built",
       expect=cl.latestPayloadBuilt.blockNumber.uint64,
-      get=cl.latestHeader.blockNumber+1.toBlockNumber
+      get=cl.latestHeader.number+1'u64
     return false
 
   return true
@@ -459,7 +458,7 @@ proc broadcastForkchoiceUpdated(cl: CLMocker,
                                 version: Version,
                                 update: ForkchoiceStateV1):
                                   Result[ForkchoiceUpdatedResponse, string] =
-  eng.client.forkchoiceUpdated(version, update, none(PayloadAttributes))
+  eng.client.forkchoiceUpdated(version, update, Opt.none(PayloadAttributes))
 
 proc broadcastForkchoiceUpdated*(cl: CLMocker,
                                  version: Version,
@@ -522,7 +521,7 @@ proc makeNextWithdrawals(cl: CLMocker): seq[WithdrawalV1] =
     withdrawalIndex += 1
     withdrawals[i] = WithdrawalV1(
       index:          w3Qty withdrawalIndex,
-      validatorIndex: w3Qty i,
+      validatorIndex: Quantity i,
       address:        w3Address i,
       amount:         w3Qty 100'u64,
     )
@@ -532,7 +531,7 @@ proc makeNextWithdrawals(cl: CLMocker): seq[WithdrawalV1] =
 proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe.} =
   doAssert(cl.ttdReached)
 
-  cl.currentPayloadNumber = cl.latestHeader.blockNumber.truncate(uint64) + 1'u64
+  cl.currentPayloadNumber = cl.latestHeader.number + 1'u64
   if not cl.pickNextPayloadProducer():
     return false
 
@@ -540,7 +539,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   # `OnPayloadProducerSelected` callback
   if cl.nextWithdrawals.isNone:
     let nw = cl.makeNextWithdrawals()
-    cl.setNextWithdrawals(some(nw))
+    cl.setNextWithdrawals(Opt.some(nw))
 
   if cb.onPayloadProducerSelected != nil:
     if not cb.onPayloadProducerSelected():
@@ -557,7 +556,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   if not cl.requestNextPayload():
     return false
 
-  cl.setNextWithdrawals(none(seq[WithdrawalV1]))
+  cl.setNextWithdrawals(Opt.none(seq[WithdrawalV1]))
 
   if cb.onRequestNextPayload != nil:
     if not cb.onRequestNextPayload():
@@ -624,8 +623,8 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   # Broadcast forkchoice updated with new FinalizedBlock to all clients
   # Save the number of the first PoS block
   if cl.firstPoSBlockNumber.isNone:
-    let number = cl.latestHeader.blockNumber.truncate(uint64) + 1
-    cl.firstPoSBlockNumber = some(number)
+    let number = cl.latestHeader.number + 1
+    cl.firstPoSBlockNumber = Opt.some(number)
 
   # Save the header of the latest block in the PoS chain
   cl.latestHeadNumber = cl.latestHeadNumber + 1
@@ -655,9 +654,9 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     return false
 
   # mixHash == prevRandao
-  if newHeader.mixDigest != cl.prevRandaoHistory[cl.latestHeadNumber]:
+  if newHeader.mixHash != cl.prevRandaoHistory[cl.latestHeadNumber]:
     error "CLMocker: Client produced a new header with incorrect mixHash",
-      get = newHeader.mixDigest.data.toHex,
+      get = newHeader.mixHash.data.toHex,
       expect = cl.prevRandaoHistory[cl.latestHeadNumber].data.toHex
     return false
 
@@ -675,7 +674,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   cl.latestHeader = newHeader
   cl.headerHistory[cl.latestHeadNumber] = cl.latestHeader
 
-  echo "CLMocker: New block produced: number=", newHeader.blockNumber,
+  echo "CLMocker: New block produced: number=", newHeader.number,
     " hash=", newHeader.blockHash
 
   return true

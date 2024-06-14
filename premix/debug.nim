@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, os],
+  std/[json, os, strutils],
   stew/byteutils,
   chronicles,
   results,
@@ -28,7 +28,7 @@ proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
     kvt.put(key, value).isOkOr:
       raiseAssert "prepareBlockEnv(): put() (loop) failed " & $$error
 
-proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256) =
+proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: BlockNumber) =
   var
     parentNumber = blockNumber - 1
     com = CommonRef.new(memoryDB)
@@ -70,7 +70,8 @@ proc main() =
   let
     blockEnv = json.parseFile(paramStr(1))
     memoryDB = newCoreDbRef(DefaultDbMemory)
-    blockNumber = UInt256.fromHex(blockEnv["blockNumber"].getStr())
+    blockNumberHex = blockEnv["blockNumber"].getStr()
+    blockNumber = parseHexInt(blockNumberHex).uint64
 
   prepareBlockEnv(blockEnv, memoryDB)
   executeBlock(blockEnv, memoryDB, blockNumber)

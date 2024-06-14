@@ -21,12 +21,12 @@ proc startAt*(
     start: uint64;
       ): seq[EthBlock] =
   ## Filter out blocks with smaller `blockNumber`
-  if start.toBlockNumber <= h[0].header.blockNumber:
+  if start.BlockNumber <= h[0].header.number:
     return h.toSeq()
-  if start.toBlockNumber <= h[^1].header.blockNumber:
+  if start.BlockNumber <= h[^1].header.number:
     # There are at least two headers, find the least acceptable one
     var n = 1
-    while h[n].header.blockNumber < start.toBlockNumber:
+    while h[n].header.number < start.BlockNumber:
       n.inc
     return h[n ..< h.len]
 
@@ -35,12 +35,12 @@ proc stopAfter*(
     last: uint64;
       ): seq[EthBlock] =
   ## Filter out blocks with larger `blockNumber`
-  if h[^1].header.blockNumber <= last.toBlockNumber:
+  if h[^1].header.number <= last.BlockNumber:
     return h.toSeq()
-  if h[0].header.blockNumber <= last.toBlockNumber:
+  if h[0].header.number <= last.BlockNumber:
     # There are at least two headers, find the last acceptable one
     var n = 1
-    while h[n].header.blockNumber <= last.toBlockNumber:
+    while h[n].header.number <= last.BlockNumber:
       n.inc
     return h[0 ..< n]
 

@@ -25,7 +25,6 @@ import
     core/executor/process_block
   ],
   chronicles,
-  stint,
   results
 
 {.push raises: [].}
@@ -47,7 +46,7 @@ proc processBlock(
   defer: dbTx.dispose()
 
   if vmState.com.daoForkSupport and
-     vmState.com.daoForkBlock.get == header.blockNumber:
+     vmState.com.daoForkBlock.get == header.number:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
@@ -83,7 +82,7 @@ proc getVmState(c: ChainRef, header: BlockHeader):
   let vmState = BaseVMState()
   if not vmState.init(header, c.com):
     debug "Cannot initialise VmState",
-      number = header.blockNumber
+      number = header.number
     return err()
 
   return ok(vmState)
@@ -109,7 +108,7 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
     return err("Could not persist header")
 
   try:
-    c.db.persistTransactions(header.blockNumber, blk.transactions)
+    c.db.persistTransactions(header.number, blk.transactions)
     c.db.persistReceipts(vmState.receipts)
 
     if blk.withdrawals.isSome:
@@ -120,7 +119,7 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
   # update currentBlock *after* we persist it
   # so the rpc return consistent result
   # between eth_blockNumber and eth_syncing
-  c.com.syncCurrent = header.blockNumber
+  c.com.syncCurrent = header.number
 
   dbTx.commit()
 
@@ -131,7 +130,7 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with
   # `persistent()` together with the respective block number.
-  c.db.persistent(header.blockNumber - 1)
+  c.db.persistent(header.number - 1)
 
   ok()
 

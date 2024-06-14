@@ -41,7 +41,7 @@ proc execute*(ws: BlockValueSpec, env: TestEnv): bool =
 
     let
       rec = r.get
-      txTip = tx.effectiveGasTip(blk.header.baseFee)
+      txTip = tx.effectiveGasTip(blk.header.baseFeePerGas)
 
     totalValue += txTip.uint64.u256 * rec.gasUsed.u256
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -17,7 +17,7 @@ import
   ../../nimbus/sync/beacon/skeleton_db
 
 proc ccm(cc: NetworkParams) =
-  cc.config.terminalTotalDifficulty = some(262000.u256)
+  cc.config.terminalTotalDifficulty = Opt.some(262000.u256)
   cc.genesis.extraData = hexToSeqByte("0x000000000000000000")
   cc.genesis.difficulty = 1.u256
 

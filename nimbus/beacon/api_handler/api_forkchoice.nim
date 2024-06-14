@@ -72,7 +72,7 @@ template validateHeaderTimestamp(header, com, apiVersion) =
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
                         update: ForkchoiceStateV1,
-                        attrsOpt: Option[PayloadAttributes]):
+                        attrsOpt: Opt[PayloadAttributes]):
                              ForkchoiceUpdatedResponse =
   let
     com   = ben.com
@@ -111,7 +111,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       # TODO: cancel downloader
 
     info "Forkchoice requested sync to new head",
-      number = header.blockNumber,
+      number = header.number,
       hash   = blockHash.short
 
     # Update sync header (if any)
@@ -126,11 +126,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # Disable terminal PoW block conditions validation for fCUV2 and later.
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
   if apiVersion == Version.V1:
-    let blockNumber = header.blockNumber.truncate(uint64)
+    let blockNumber = header.number
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
       var
         td, ptd: DifficultyInt
-        ttd = com.ttd.get(high(common.BlockNumber))
+        ttd = com.ttd.get(high(UInt256))
 
       if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
         error "TDs unavailable for TTD check",
@@ -156,11 +156,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # See point 2 of fCUV1 specification
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
   var canonHash: common.Hash256
-  if db.getBlockHash(header.blockNumber, canonHash) and canonHash == blockHash:
+  if db.getBlockHash(header.number, canonHash) and canonHash == blockHash:
     notice "Ignoring beacon update to old head",
       blockHash=blockHash.short,
-      blockNumber=header.blockNumber
-    return validFCU(none(PayloadID), blockHash)
+      blockNumber=header.number
+    return validFCU(Opt.none(PayloadID), blockHash)
 
   chain.setCanonical(header).isOkOr:
     return invalidFCU(error, com, header)
@@ -179,14 +179,14 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block header not available")
     var finalHash: common.Hash256
-    if not db.getBlockHash(finalBlock.blockNumber, finalHash):
+    if not db.getBlockHash(finalBlock.number, finalHash):
       warn "Final block not in canonical chain",
-        number=finalBlock.blockNumber,
+        number=finalBlock.number,
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block hash not available")
     if finalHash != finalizedBlockHash:
       warn "Final block not in canonical chain",
-        number=finalBlock.blockNumber,
+        number=finalBlock.number,
         expect=finalizedBlockHash.short,
         get=finalHash.short
       raise invalidForkChoiceState("finalized block not canonical")
@@ -200,13 +200,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
         hash = safeBlockHash.short
       raise invalidForkChoiceState("safe head not available")
     var safeHash: common.Hash256
-    if not db.getBlockHash(safeBlock.blockNumber, safeHash):
+    if not db.getBlockHash(safeBlock.number, safeHash):
       warn "Safe block hash not available in database",
         hash = safeHash.short
       raise invalidForkChoiceState("safe block hash not available")
     if safeHash != safeBlockHash:
       warn "Safe block not in canonical chain",
-        blockNumber=safeBlock.blockNumber,
+        blockNumber=safeBlock.number,
         expect=safeBlockHash.short,
         get=safeHash.short
       raise invalidForkChoiceState("safe head not canonical")
@@ -231,6 +231,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       hash = bundle.executionPayload.blockHash.short,
       number = bundle.executionPayload.blockNumber
 
-    return validFCU(some(id), blockHash)
+    return validFCU(Opt.some(id), blockHash)
 
-  return validFCU(none(PayloadID), blockHash)
+  return validFCU(Opt.none(PayloadID), blockHash)

@@ -78,12 +78,12 @@ type
     ## Storage root header
     accKey*: NodeKey                ## Owner account, maybe unnecessary
     storageRoot*: Hash256           ## Start of storage tree
-    subRange*: Option[NodeTagRange] ## Sub-range of slot range covered
+    subRange*: Opt[NodeTagRange] ## Sub-range of slot range covered
 
   AccountSlotsChanged* = object
     ## Variant of `AccountSlotsHeader` representing some transition
     account*: AccountSlotsHeader    ## Account header
-    newRange*: Option[NodeTagRange] ## New sub-range (if-any)
+    newRange*: Opt[NodeTagRange] ## New sub-range (if-any)
 
   AccountStorageRange* = object
     ## List of storage descriptors, the last `AccountSlots` storage data might
@@ -282,14 +282,14 @@ proc emptyFactor*(lrs: openArray[NodeTagRangeSet]): float =
   if accu == 0.to(NodeTag):
     1.0
   else:
-    ((high(NodeTag) - accu).u256 + 1).to(float) / (2.0^256)
+    ((high(NodeTag) - accu) + 1).to(float) / (2.0^256)
 
 
 proc fullFactor*(lrs: NodeTagRangeSet): float =
   ## Relative covered total, i.e. `#points-covered / 2^256` to be used
   ## in statistics or triggers
   if 0 < lrs.total:
-    lrs.total.u256.to(float) / (2.0^256)
+    lrs.total.to(float) / (2.0^256)
   elif lrs.chunks == 0:
     0.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
@@ -314,7 +314,7 @@ proc fullFactor*(lrs: openArray[NodeTagRangeSet]): float =
 proc fullFactor*(iv: NodeTagRange): float =
   ## Relative covered length of an inetrval, i.e. `#points-covered / 2^256`
   if 0 < iv.len:
-    iv.len.u256.to(float) / (2.0^256)
+    iv.len.to(float) / (2.0^256)
   else:
     1.0 # number of points in `iv` is `2^256 + 1`
 

@@ -295,8 +295,8 @@ proc runner(noisy = true; capture = goerliCapture) =
     test &"Import from {fileInfo}":
       # Import minimum amount of blocks, then collect transactions
       for chain in filePath.undumpBlocks:
-        let leadBlkNum = chain[0].header.blockNumber
-        topNumber = chain[^1].header.blockNumber
+        let leadBlkNum = chain[0].header.number
+        topNumber = chain[^1].header.number
 
         if loadTxs <= txs.len:
           break
@@ -325,7 +325,7 @@ proc runner(noisy = true; capture = goerliCapture) =
 
 
     test &"Collect unique sender addresses from {txs.len} txs," &
-        &" head=#{xdb.getCanonicalHead.blockNumber}, top=#{topNumber}":
+        &" head=#{xdb.getCanonicalHead.number}, top=#{topNumber}":
       var seen: Table[EthAddress,bool]
       for n,tx in txs:
         let a = tx.getSender
@@ -337,14 +337,14 @@ proc runner(noisy = true; capture = goerliCapture) =
       let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.number)
         vmState.runTrial2ok(n)
 
     test &"Run {txi.len} three-step trials with rollback":
       let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.number)
         vmState.runTrial3(n, rollback = true)
 
     test &"Run {txi.len} three-step trials with extra db frame rollback" &
@@ -352,7 +352,7 @@ proc runner(noisy = true; capture = goerliCapture) =
       let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.number)
         expect AssertionDefect:
           vmState.runTrial3crash(n, noisy)
 
@@ -360,14 +360,14 @@ proc runner(noisy = true; capture = goerliCapture) =
       let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.number)
         vmState.runTrial3(n, rollback = false)
 
     test &"Run {txi.len} four-step trials with rollback and db frames":
       let dbTx = xdb.beginTransaction()
       defer: dbTx.dispose()
       for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.blockNumber)
+        let vmState = com.getVmState(xdb.getCanonicalHead.number)
         vmState.runTrial4(n, rollback = true)
 
 # ------------------------------------------------------------------------------

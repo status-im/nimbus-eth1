@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -29,26 +29,26 @@ type
 
   EnvStruct* = object
     currentCoinbase*: EthAddress
-    currentDifficulty*: Option[DifficultyInt]
-    currentRandom*: Option[Hash256]
-    parentDifficulty*: Option[DifficultyInt]
+    currentDifficulty*: Opt[DifficultyInt]
+    currentRandom*: Opt[Hash256]
+    parentDifficulty*: Opt[DifficultyInt]
     currentGasLimit*: GasInt
     currentNumber*: BlockNumber
     currentTimestamp*: EthTime
     parentTimestamp*: EthTime
     blockHashes*: Table[uint64, Hash256]
     ommers*: seq[Ommer]
-    currentBaseFee*: Option[UInt256]
+    currentBaseFee*: Opt[UInt256]
     parentUncleHash*: Hash256
-    parentBaseFee*: Option[UInt256]
-    parentGasUsed*: Option[GasInt]
-    parentGasLimit*: Option[GasInt]
-    withdrawals*: Option[seq[Withdrawal]]
-    currentBlobGasUsed*: Option[uint64]
-    currentExcessBlobGas*: Option[uint64]
-    parentBlobGasUsed*: Option[uint64]
-    parentExcessBlobGas*: Option[uint64]
-    parentBeaconBlockRoot*: Option[Hash256]
+    parentBaseFee*: Opt[UInt256]
+    parentGasUsed*: Opt[GasInt]
+    parentGasLimit*: Opt[GasInt]
+    withdrawals*: Opt[seq[Withdrawal]]
+    currentBlobGasUsed*: Opt[uint64]
+    currentExcessBlobGas*: Opt[uint64]
+    parentBlobGasUsed*: Opt[uint64]
+    parentExcessBlobGas*: Opt[uint64]
+    parentBeaconBlockRoot*: Opt[Hash256]
 
   TxsType* = enum
     TxsNone
@@ -90,15 +90,15 @@ type
     txRoot*: Hash256
     receiptsRoot*: Hash256
     logsHash*: Hash256
-    bloom*: BloomFilter
+    logsBloom*: BloomFilter
     receipts*: seq[TxReceipt]
     rejected*: seq[RejectedTx]
-    currentDifficulty*: Option[DifficultyInt]
+    currentDifficulty*: Opt[DifficultyInt]
     gasUsed*: GasInt
-    currentBaseFee*: Option[UInt256]
-    withdrawalsRoot*: Option[Hash256]
-    blobGasUsed*: Option[uint64]
-    currentExcessBlobGas*: Option[uint64]
+    currentBaseFee*: Opt[UInt256]
+    withdrawalsRoot*: Opt[Hash256]
+    blobGasUsed*: Opt[uint64]
+    currentExcessBlobGas*: Opt[uint64]
 
 const
   ErrorEVM*              = 2.T8NExitCode

@@ -38,15 +38,15 @@ proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
     result = result + gasFees[fork][GasTXCreate]
     if fork >= FkShanghai:
       # cannot use wordCount here, it will raise unlisted exception
-      let numWords = toWordSize(tx.payload.len)
+      let numWords = toWordSize(GasInt tx.payload.len)
       result = result + (gasFees[fork][GasInitcodeWord] * numWords)
 
   if tx.txType > TxLegacy:
-    result = result + tx.accessList.len * ACCESS_LIST_ADDRESS_COST
+    result = result + GasInt(tx.accessList.len) * ACCESS_LIST_ADDRESS_COST
     var numKeys = 0
     for n in tx.accessList:
       inc(numKeys, n.storageKeys.len)
-    result = result + numKeys * ACCESS_LIST_STORAGE_KEY_COST
+    result = result + GasInt(numKeys) * ACCESS_LIST_STORAGE_KEY_COST
 
 proc getSignature*(tx: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
@@ -98,8 +98,8 @@ proc getRecipient*(tx: Transaction, sender: EthAddress): EthAddress =
 
 proc validateTxLegacy(tx: Transaction, fork: EVMFork) =
   var
-    vMin = 27'i64
-    vMax = 28'i64
+    vMin = 27'u64
+    vMax = 28'u64
 
   if tx.V >= EIP155_CHAIN_ID_OFFSET:
     let chainId = (tx.V - EIP155_CHAIN_ID_OFFSET) div 2
@@ -120,7 +120,7 @@ proc validateTxLegacy(tx: Transaction, fork: EVMFork) =
     raise newException(ValidationError, "Invalid legacy transaction")
 
 proc validateTxEip2930(tx: Transaction) =
-  var isValid = tx.V == 0'i64 or tx.V == 1'i64
+  var isValid = tx.V == 0'u64 or tx.V == 1'u64
   isValid = isValid and tx.S >= UInt256.one
   isValid = isValid and tx.S < SECPK1_N
   isValid = isValid and tx.R < SECPK1_N
@@ -173,7 +173,7 @@ proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId,
   result = tx
   if eip155:
     # trigger rlpEncodeEIP155 in nim-eth
-    result.V = chainId.int64 * 2'i64 + 35'i64
+    result.V = chainId.uint64 * 2'u64 + 35'u64
 
   let
     rlpTx = rlpEncode(result)
@@ -182,17 +182,17 @@ proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId,
   case tx.txType
   of TxLegacy:
     if eip155:
-      result.V = sig[64].int64 + result.V
+      result.V = sig[64].uint64 + result.V
     else:
-      result.V = sig[64].int64 + 27'i64
+      result.V = sig[64].uint64 + 27'u64
   else:
-    result.V = sig[64].int64
+    result.V = sig[64].uint64
 
   result.R = UInt256.fromBytesBE(sig[0..31])
   result.S = UInt256.fromBytesBE(sig[32..63])
 
 # deriveChainId derives the chain id from the given v parameter
-func deriveChainId*(v: int64, chainId: ChainId): ChainId =
+func deriveChainId*(v: uint64, chainId: ChainId): ChainId =
   if v == 27 or v == 28:
     chainId
   else:
@@ -205,28 +205,29 @@ func validateChainId*(tx: Transaction, chainId: ChainId): bool =
     chainId.uint64 == tx.chainId.uint64
 
 func eip1559TxNormalization*(tx: Transaction;
-                             baseFee: GasInt): Transaction =
+                             baseFeePerGas: GasInt): Transaction =
   ## This function adjusts a legacy transaction to EIP-1559 standard. This
   ## is needed particularly when using the `validateTransaction()` utility
   ## with legacy transactions.
   result = tx
   if tx.txType < TxEip1559:
-    result.maxPriorityFee = tx.gasPrice
-    result.maxFee = tx.gasPrice
+    result.maxPriorityFeePerGas = tx.gasPrice
+    result.maxFeePerGas = tx.gasPrice
   else:
-    result.gasPrice = baseFee + min(result.maxPriorityFee, result.maxFee - baseFee)
+    result.gasPrice = baseFeePerGas +
+      min(result.maxPriorityFeePerGas, result.maxFeePerGas - baseFeePerGas)
 
-func effectiveGasTip*(tx: Transaction; baseFee: Option[UInt256]): GasInt =
+func effectiveGasTip*(tx: Transaction; baseFeePerGas: Opt[UInt256]): GasInt =
   var
-    maxPriorityFee = tx.maxPriorityFee
-    maxFee = tx.maxFee
-    baseFee = baseFee.get(0.u256).truncate(GasInt)
+    maxPriorityFeePerGas = tx.maxPriorityFeePerGas
+    maxFeePerGas = tx.maxFeePerGas
+    baseFeePerGas = baseFeePerGas.get(0.u256).truncate(GasInt)
 
   if tx.txType < TxEip1559:
-    maxPriorityFee = tx.gasPrice
-    maxFee = tx.gasPrice
+    maxPriorityFeePerGas = tx.gasPrice
+    maxFeePerGas = tx.gasPrice
 
-  min(maxPriorityFee, maxFee - baseFee)
+  min(maxPriorityFeePerGas, maxFeePerGas - baseFeePerGas)
 
 proc decodeTx*(bytes: openArray[byte]): Transaction =
   var rlp = rlpFromBytes(bytes)

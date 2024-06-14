@@ -132,12 +132,12 @@ proc put*(ben: BeaconEngineRef,
 
 proc put*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: UInt256, payload: ExecutionPayload,
-          blobsBundle: Option[BlobsBundleV1]) =
+          blobsBundle: Opt[BlobsBundleV1]) =
   ben.queue.put(id, blockValue, payload, blobsBundle)
 
 proc put*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: UInt256, payload: SomeExecutionPayload,
-          blobsBundle: Option[BlobsBundleV1]) =
+          blobsBundle: Opt[BlobsBundleV1]) =
   doAssert blobsBundle.isNone == (payload is
     ExecutionPayloadV1 | ExecutionPayloadV2)
   ben.queue.put(id, blockValue, payload, blobsBundle)
@@ -146,7 +146,7 @@ proc put*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: UInt256,
           payload: ExecutionPayloadV1 | ExecutionPayloadV2) =
   ben.queue.put(
-    id, blockValue, payload, blobsBundle = options.none(BlobsBundleV1))
+    id, blockValue, payload, blobsBundle = Opt.none(BlobsBundleV1))
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -177,7 +177,7 @@ proc get*(ben: BeaconEngineRef, hash: common.Hash256,
 proc get*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayload,
-          blobsBundle: var Option[BlobsBundleV1]): bool =
+          blobsBundle: var Opt[BlobsBundleV1]): bool =
   ben.queue.get(id, blockValue, payload, blobsBundle)
 
 proc get*(ben: BeaconEngineRef, id: PayloadID,
@@ -207,7 +207,7 @@ proc get*(ben: BeaconEngineRef, id: PayloadID,
 
 type ExecutionPayloadAndBlobsBundle* = object
   executionPayload*: ExecutionPayload
-  blobsBundle*: Option[BlobsBundleV1]
+  blobsBundle*: Opt[BlobsBundleV1]
 
 proc generatePayload*(ben: BeaconEngineRef,
                       attrs: PayloadAttributes):
@@ -243,10 +243,10 @@ proc generatePayload*(ben: BeaconEngineRef,
     if bundle.blk.header.extraData.len > 32:
       return err "extraData length should not exceed 32 bytes"
 
-    var blobsBundle: Option[BlobsBundleV1]
+    var blobsBundle: Opt[BlobsBundleV1]
     if bundle.blobsBundle.isSome:
       template blobData: untyped = bundle.blobsBundle.get
-      blobsBundle = options.some BlobsBundleV1(
+      blobsBundle = Opt.some BlobsBundleV1(
         commitments: blobData.commitments.mapIt it.Web3KZGCommitment,
         proofs: blobData.proofs.mapIt it.Web3KZGProof,
         blobs: blobData.blobs.mapIt it.Web3Blob)
@@ -272,7 +272,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
     inc ben.invalidBlocksHits.mgetOrPut(badHash, 0)
     if ben.invalidBlocksHits.getOrDefault(badHash) >= invalidBlockHitEviction:
       warn "Too many bad block import attempt, trying",
-        number=invalid.blockNumber, hash=badHash.short
+        number=invalid.number, hash=badHash.short
 
       ben.invalidBlocksHits.del(badHash)
 
@@ -289,7 +289,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
     # Not too many failures yet, mark the head of the invalid chain as invalid
     if check != head:
       warn "Marked new chain head as invalid",
-        hash=head, badnumber=invalid.blockNumber, badhash=badHash
+        hash=head, badnumber=invalid.number, badhash=badHash
 
       if ben.invalidTipsets.len >= invalidTipsetsCap:
         let size = invalidTipsetsCap - ben.invalidTipsets.len

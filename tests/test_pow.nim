@@ -62,11 +62,11 @@ proc runPowTests(noisy = true; file = specsDump;
       test "Loading from capture":
         for (lno,line) in gunzipLines(filePath):
           let specs = line.undumpPowSpecs
-          if 0 < specs.blockNumber:
+          if 0 < specs.number:
             specsList.add specs
             check line == specs.dumpPowSpecs
         noisy.say "***", " block range #",
-          specsList[0].blockNumber, " .. #", specsList[^1].blockNumber
+          specsList[0].number, " .. #", specsList[^1].number
 
     # Adjust number of tests
     let
@@ -80,7 +80,7 @@ proc runPowTests(noisy = true; file = specsDump;
         else:
           noisy.showElapsed(&"first getPowDigest() instance"):
             let p = specsList[startVerify]
-            check pow.getPowDigest(p).mixDigest == p.mixDigest
+            check pow.getPowDigest(p).mixDigest == p.mixHash
 
       test &"Running getPowDigest() on {nDoVerify} specs records":
         if nVerify <= 0:
@@ -89,7 +89,7 @@ proc runPowTests(noisy = true; file = specsDump;
           noisy.showElapsed(&"all {nDoVerify} getPowDigest() instances"):
             for n in startVerify ..< specsList.len:
               let p = specsList[n]
-              check pow.getPowDigest(p).mixDigest == p.mixDigest
+              check pow.getPowDigest(p).mixDigest == p.mixHash
 
 # ------------------------------------------------------------------------------
 # Main function(s)

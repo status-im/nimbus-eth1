@@ -10,9 +10,10 @@
 
 import
   std/[tables, sets, strutils],
-  eth/common/eth_types,
+  eth/common/eth_types as common,
   json_rpc/[rpcclient],
-  stew/[byteutils, results],
+  stew/byteutils,
+  results,
   ../engine_client,
   ../../../../nimbus/utils/utils,
   ../../../../nimbus/beacon/web3_eth_conv
@@ -78,7 +79,9 @@ func getWithdrawnAccounts*(wh: WDHistory, blockHeight: uint64): Table[EthAddress
         result[wd.address] = wd.weiAmount
 
 # Verify all withdrawals on a client at a given height
-proc verifyWithdrawals*(wh: WDHistory, blockNumber: uint64, rpcBlock: Option[UInt256], client: RpcClient): Result[void, string] =
+proc verifyWithdrawals*(wh: WDHistory, blockNumber: uint64,
+                        rpcBlock: Opt[common.BlockNumber],
+                        client: RpcClient): Result[void, string] =
   let accounts = wh.getWithdrawnAccounts(blockNumber)
   for account, expectedBalance in accounts:
     let res =  if rpcBlock.isSome:

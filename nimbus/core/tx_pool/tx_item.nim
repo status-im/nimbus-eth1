@@ -168,7 +168,7 @@ proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
     (tx.gasPrice - baseFee.int64).GasPriceEx
   else:
     # London, EIP1559
-    min(tx.maxPriorityFee, tx.maxFee - baseFee.int64).GasPriceEx
+    min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee.int64).GasPriceEx
 
 proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
   ## Variant of `effectiveGasTip()`

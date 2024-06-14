@@ -62,7 +62,7 @@ proc main() {.used.} =
     conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
-  if conf.head != 0.u256:
+  if conf.head != 0'u64:
     var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
     discard com.db.setHead(parentBlock.header)
 
@@ -73,13 +73,13 @@ proc main() {.used.} =
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
   var head = com.db.getCanonicalHead()
-  var blockNumber = head.blockNumber + 1
+  var blockNumber = head.number + 1
   var chain = newChain(com)
 
   let numBlocksToCommit = conf.numCommits
 
   var blocks = newSeqOfCap[EthBlock](numBlocksToCommit)
-  var one    = 1.u256
+  var one    = 1'u64
 
   var numBlocks = 0
   var counter = 0

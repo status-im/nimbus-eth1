@@ -32,7 +32,7 @@ type
 
   PremixConfiguration* = ref object
     dataDir*: string
-    head*: UInt256
+    head*: BlockNumber
     maxBlocks*: int
     numCommits*: int
     netId*: NetworkId
@@ -55,7 +55,7 @@ proc initConfiguration(): PremixConfiguration =
   const dataDir = defaultDataDir()
 
   result.dataDir = dataDir
-  result.head = 0.u256
+  result.head = 0'u64
   result.maxBlocks = 0
   result.numCommits = 128
   result.netId = MainNet
@@ -65,11 +65,11 @@ proc getConfiguration*(): PremixConfiguration =
     premixConfig = initConfiguration()
   result = premixConfig
 
-proc processU256(val: string, o: var UInt256): ConfigStatus =
+proc processBlockNumber(val: string, o: var BlockNumber): ConfigStatus =
   if val.len > 2 and val[0] == '0' and val[1] == 'x':
-    o = UInt256.fromHex(val)
+    o = UInt256.fromHex(val).truncate(BlockNumber)
   else:
-    o = parse(val, UInt256)
+    o = parse(val, UInt256).truncate(BlockNumber)
   result = Success
 
 func processNetId(val: string, o: var NetworkId): ConfigStatus =
@@ -112,7 +112,7 @@ proc processArguments*(msg: var string): ConfigStatus =
       of "maxblocks":
         checkArgument(processInteger, config.maxBlocks, value)
       of "head":
-        checkArgument(processU256, config.head, value)
+        checkArgument(processBlockNumber, config.head, value)
       of "numcommits":
         checkArgument(processInteger, config.numCommits, value)
         config.numCommits = max(config.numCommits, 512)

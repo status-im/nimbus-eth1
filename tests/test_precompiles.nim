@@ -29,14 +29,17 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: EVMFork, address:
       expectedErr = test.hasKey("ExpectedError")
       expected = if test.hasKey("Expected"): hexToSeqByte(test["Expected"].getStr) else: @[]
       dataStr = test["Input"].getStr
-      gasExpected = if test.hasKey("Gas"): test["Gas"].getInt else: -1
+      gasExpected = if test.hasKey("Gas"):
+                      Opt.some(GasInt test["Gas"].getInt)
+                    else:
+                      Opt.none(GasInt)
 
     let unsignedTx = Transaction(
       txType: TxLegacy,
       nonce: 0,
       gasPrice: 1.GasInt,
       gasLimit: 1_000_000_000.GasInt,
-      to: initAddress(address.byte).some,
+      to: Opt.some initAddress(address.byte),
       value: 0.u256,
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
@@ -51,10 +54,10 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: EVMFork, address:
       if not c: echo "Output  : " & fixtureResult.output.toHex & "\nExpected: " & expected.toHex
       check c
 
-      if gasExpected >= 0:
-        if fixtureResult.gasUsed != gasExpected:
-          debugEcho "GAS: ", fixtureResult.gasUsed, " ", gasExpected
-        check fixtureResult.gasUsed == gasExpected
+      if gasExpected.isSome:
+        if fixtureResult.gasUsed != gasExpected.get:
+          debugEcho "GAS: ", fixtureResult.gasUsed, " ", gasExpected.get
+        check fixtureResult.gasUsed == gasExpected.get
 
 proc parseFork(x: string): EVMFork =
   let x = x.toLowerAscii
@@ -71,7 +74,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
     com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = ChainConfig())
     vmState = BaseVMState.new(
-      BlockHeader(blockNumber: 1.u256, stateRoot: emptyRlpHash),
+      BlockHeader(number: 1'u64, stateRoot: emptyRlpHash),
       BlockHeader(),
       com
     )

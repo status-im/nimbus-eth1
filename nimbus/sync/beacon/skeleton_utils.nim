@@ -26,7 +26,7 @@ const
 # ------------------------------------------------------------------------------
 
 func u64*(h: BlockHeader): uint64 =
-  h.blockNumber.truncate(uint64)
+  h.number
 
 func blockHash*(x: Opt[BlockHeader]): Hash256 =
   if x.isSome: x.get.blockHash
@@ -79,7 +79,7 @@ func notEmpty*(sk: SkeletonRef): bool =
   sk.progress.segments.len > 0
 
 func blockHeight*(sk: SkeletonRef): uint64 =
-  sk.chain.com.syncCurrent.truncate(uint64)
+  sk.chain.com.syncCurrent
 
 func genesisHash*(sk: SkeletonRef): Hash256 =
   sk.chain.com.genesisHash

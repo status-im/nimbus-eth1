@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -40,7 +40,7 @@ proc exchangeConf*(ben: BeaconEngineRef,
       $ttd.get, $conf.terminalTotalDifficulty])
 
   let
-    terminalBlockNumber = u256 conf.terminalBlockNumber
+    terminalBlockNumber = common.BlockNumber conf.terminalBlockNumber
     terminalBlockHash   = ethHash conf.terminalBlockHash
 
   if terminalBlockHash != common.Hash256():
@@ -62,10 +62,10 @@ proc exchangeConf*(ben: BeaconEngineRef,
     return TransitionConfigurationV1(
       terminalTotalDifficulty: ttd.get,
       terminalBlockHash      : w3Hash headerHash,
-      terminalBlockNumber    : w3Qty header.blockNumber
+      terminalBlockNumber    : w3Qty header.number
     )
 
-  if terminalBlockNumber.isZero.not:
+  if terminalBlockNumber != 0'u64:
     raise newException(ValueError, "invalid terminal block number: $1" % [
       $terminalBlockNumber])
 

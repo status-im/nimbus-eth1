@@ -11,10 +11,8 @@
 {.push raises: [].}
 
 import
-  std/options,
   chronicles,
   eth/common,
-  results,
   "../.."/[constants, errors],
   ./base/[api_tracking, base_desc]
 
@@ -418,7 +416,7 @@ proc newColumn*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;
     colState: Hash256;
-    address = none(EthAddress);
+    address = Opt.none(EthAddress);
       ): CoreDbRc[CoreDbColRef] =
   ## Retrieve a new column descriptor.
   ##
@@ -463,7 +461,7 @@ proc newColumn*(
   ## Shortcut for `ctx.newColumn(CtStorage,colState,some(address))`.
   ##
   ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(CtStorage, colState, some(address))
+  result = ctx.methods.newColFn(CtStorage, colState, Opt.some(address))
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, colState, address, result
 
 proc newColumn*(
@@ -476,7 +474,7 @@ proc newColumn*(
   ##
   ctx.setTrackNewApi CtxNewColFn
   result = ctx.methods.newColFn(
-      CtStorage, EMPTY_ROOT_HASH, some(address)).valueOr:
+      CtStorage, EMPTY_ROOT_HASH, Opt.some(address)).valueOr:
     raiseAssert error.prettyText()
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
@@ -533,7 +531,7 @@ proc getMpt*(
 proc getMpt*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;
-    address = none(EthAddress);
+    address = Opt.none(EthAddress);
       ): CoreDxMptRef =
   ## Shortcut for `getMpt(col)` where the `col` argument is
   ## `db.getColumn(colType,EMPTY_ROOT_HASH).value`. This function will always
@@ -830,7 +828,7 @@ proc persistent*(
   ## is no transaction pending.
   ##
   db.setTrackNewApi BasePersistentFn
-  result = db.methods.persistentFn none(BlockNumber)
+  result = db.methods.persistentFn Opt.none(BlockNumber)
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc persistent*(
@@ -859,7 +857,7 @@ proc persistent*(
   ##   db.persistent(stateBlockNumber)
   ##
   db.setTrackNewApi BasePersistentFn
-  result = db.methods.persistentFn some(blockNumber)
+  result = db.methods.persistentFn Opt.some(blockNumber)
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, blockNumber, result
 
 proc newTransaction*(db: CoreDbRef): CoreDxTxRef =
@@ -1013,7 +1011,7 @@ when ProvideLegacyAPI:
     db.setTrackLegaApi LegaNewMptFn
     let
       trie = db.ctx.methods.newColFn(
-          CtGeneric, root, none(EthAddress)).valueOr:
+          CtGeneric, root, Opt.none(EthAddress)).valueOr:
         raiseAssert error.prettyText() & ": " & $api
       mpt = db.ctx.getMpt(trie).valueOr:
         raiseAssert error.prettyText() & ": " & $api
@@ -1022,7 +1020,7 @@ when ProvideLegacyAPI:
 
   proc mptPrune*(db: CoreDbRef): CoreDbMptRef =
     db.setTrackLegaApi LegaNewMptFn
-    result = db.ctx.getMpt(CtGeneric, none(EthAddress)).CoreDbMptRef
+    result = db.ctx.getMpt(CtGeneric, Opt.none(EthAddress)).CoreDbMptRef
     db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   # ----------------
@@ -1036,7 +1034,7 @@ when ProvideLegacyAPI:
     db.setTrackLegaApi LegaNewPhkFn
     let
       trie = db.ctx.methods.newColFn(
-          CtGeneric, root, none(EthAddress)).valueOr:
+          CtGeneric, root, Opt.none(EthAddress)).valueOr:
         raiseAssert error.prettyText() & ": " & $api
       phk = db.ctx.getMpt(trie).valueOr:
         raiseAssert error.prettyText() & ": " & $api
@@ -1046,7 +1044,7 @@ when ProvideLegacyAPI:
   proc phkPrune*(db: CoreDbRef): CoreDbPhkRef =
     db.setTrackLegaApi LegaNewPhkFn
     result = db.ctx.getMpt(
-      CtGeneric, none(EthAddress)).toCoreDxPhkRef.CoreDbPhkRef
+      CtGeneric, Opt.none(EthAddress)).toCoreDxPhkRef.CoreDbPhkRef
     db.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
   # ----------------

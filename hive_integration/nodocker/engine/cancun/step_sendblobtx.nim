@@ -60,7 +60,7 @@ method execute*(step: SendBlobTransactions, ctx: CancunTestContext): bool =
   #  Send the blob transactions
   for _ in 0..<step.transactionCount:
     let tc = BlobTx(
-      recipient:  some(DATAHASH_START_ADDRESS),
+      recipient:  Opt.some(DATAHASH_START_ADDRESS),
       gasLimit:   100000.GasInt,
       gasTip:     step.blobTransactionGasTipCap,
       gasFee:     step.blobTransactionGasFeeCap,

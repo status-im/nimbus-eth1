@@ -16,49 +16,54 @@ export
   types
 
 const
-  BlockNumberZero: BlockNumber = 0.toBlockNumber
-  BlockNumberFive: BlockNumber = 5.toBlockNumber
+  BlockNumberZero = 0.BlockNumber
+  BlockNumberFive = 5.BlockNumber
   TimeZero = EthTime(0)
 
-proc createForkTransitionTable(transitionFork: HardFork, b: Option[BlockNumber], t: Option[EthTime], ttd: Option[DifficultyInt]): ForkTransitionTable =
+proc createForkTransitionTable(transitionFork: HardFork,
+                               b: Opt[BlockNumber],
+                               t: Opt[EthTime],
+                               ttd: Opt[DifficultyInt]): ForkTransitionTable =
 
-  proc blockNumberToUse(f: HardFork): Option[BlockNumber] =
+  proc blockNumberToUse(f: HardFork): Opt[BlockNumber] =
     if f < transitionFork:
-      some(BlockNumberZero)
+      Opt.some(BlockNumberZero)
     elif f == transitionFork:
       b
     else:
-      none(BlockNumber)
+      Opt.none(BlockNumber)
 
-  proc timeToUse(f: HardFork): Option[EthTime] =
+  proc timeToUse(f: HardFork): Opt[EthTime] =
     if f < transitionFork:
-      some(TimeZero)
+      Opt.some(TimeZero)
     elif f == transitionFork:
       t
     else:
-      none(EthTime)
+      Opt.none(EthTime)
 
   for f in low(HardFork) .. lastPurelyBlockNumberBasedFork:
     result.blockNumberThresholds[f] = blockNumberToUse(f)
 
-  result.mergeForkTransitionThreshold.blockNumber = blockNumberToUse(HardFork.MergeFork)
+  result.mergeForkTransitionThreshold.number = blockNumberToUse(HardFork.MergeFork)
   result.mergeForkTransitionThreshold.ttd = ttd
 
   for f in firstTimeBasedFork .. high(HardFork):
     result.timeThresholds[f] = timeToUse(f)
 
 proc assignNumber(c: ChainConfig, transitionFork: HardFork, n: BlockNumber) =
-  let table = createForkTransitionTable(transitionFork, some(n), none(EthTime), none(DifficultyInt))
+  let table = createForkTransitionTable(transitionFork,
+    Opt.some(n), Opt.none(EthTime), Opt.none(DifficultyInt))
   c.populateFromForkTransitionTable(table)
 
 proc assignTime(c: ChainConfig, transitionFork: HardFork, t: EthTime) =
-  let table = createForkTransitionTable(transitionFork, none(BlockNumber), some(t), none(DifficultyInt))
+  let table = createForkTransitionTable(transitionFork,
+    Opt.none(BlockNumber), Opt.some(t), Opt.none(DifficultyInt))
   c.populateFromForkTransitionTable(table)
 
 func getChainConfig*(network: string, c: ChainConfig) =
   c.daoForkSupport = false
   c.chainId = 1.ChainId
-  c.terminalTotalDifficulty = none(UInt256)
+  c.terminalTotalDifficulty = Opt.none(UInt256)
 
   case network
   of $TestFork.Frontier:
@@ -90,7 +95,7 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignNumber(HardFork.Constantinople, BlockNumberFive)
   of $TestFork.ByzantiumToConstantinopleFixAt5:
     c.assignNumber(HardFork.Petersburg, BlockNumberFive)
-    c.constantinopleBlock = some(BlockNumberFive)
+    c.constantinopleBlock = Opt.some(BlockNumberFive)
   of $TestFork.ConstantinopleFixToIstanbulAt5:
     c.assignNumber(HardFork.Istanbul, BlockNumberFive)
   of $TestFork.Berlin:
@@ -107,7 +112,7 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignNumber(HardFork.MergeFork, BlockNumberZero)
   of $TestFork.ArrowGlacierToParisAtDiffC0000:
     c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
-    c.terminalTotalDifficulty = some(0xC0000.u256)
+    c.terminalTotalDifficulty = Opt.some(0xC0000.u256)
   of $TestFork.Shanghai:
     c.assignTime(HardFork.Shanghai, TimeZero)
   of $TestFork.ParisToShanghaiAtTime15k:

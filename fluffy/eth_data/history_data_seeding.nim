@@ -280,7 +280,7 @@ iterator headersWithProof*(
       ).encode()
 
       headerWithProof = buildHeaderWithProof(blockHeader, epochAccumulator).valueOr:
-        raiseAssert "Failed to build header with proof: " & $blockHeader.blockNumber
+        raiseAssert "Failed to build header with proof: " & $blockHeader.number
 
       contentValue = SSZ.encode(headerWithProof)
 

@@ -32,23 +32,23 @@ type
 
 let
   block49* = BlockHeader(
-    blockNumber: 49.toBlockNumber
+    number: 49.BlockNumber
   )
   block49B* = BlockHeader(
-    blockNumber: 49.toBlockNumber,
+    number: 49.BlockNumber,
     extraData: @['B'.byte]
   )
   block50* = BlockHeader(
-    blockNumber: 50.toBlockNumber,
+    number: 50.BlockNumber,
     parentHash: block49.blockHash
   )
   block50B* = BlockHeader(
-    blockNumber: 50.toBlockNumber,
+    number: 50.BlockNumber,
     parentHash: block49.blockHash,
     gasLimit: 999.GasInt,
   )
   block51* = BlockHeader(
-    blockNumber: 51.toBlockNumber,
+    number: 51.BlockNumber,
     parentHash: block50.blockHash
   )
 
@@ -80,19 +80,19 @@ func subchain*(head, tail: uint64): Subchain =
 
 func header*(bn: uint64, temp, parent: BlockHeader, diff: uint64): BlockHeader =
   BlockHeader(
-    blockNumber: bn.toBlockNumber,
+    number: bn.BlockNumber,
     parentHash : parent.blockHash,
     difficulty : diff.u256,
     timestamp  : parent.timestamp + 1,
     gasLimit   : temp.gasLimit,
     stateRoot  : temp.stateRoot,
     txRoot     : temp.txRoot,
-    fee        : temp.fee,
-    receiptRoot: temp.receiptRoot,
-    ommersHash : temp.ommersHash,
+    baseFeePerGas  : temp.baseFeePerGas,
+    receiptsRoot   : temp.receiptsRoot,
+    ommersHash     : temp.ommersHash,
     withdrawalsRoot: temp.withdrawalsRoot,
-    blobGasUsed: temp.blobGasUsed,
-    excessBlobGas: temp.excessBlobGas,
+    blobGasUsed    : temp.blobGasUsed,
+    excessBlobGas  : temp.excessBlobGas,
     parentBeaconBlockRoot: temp.parentBeaconBlockRoot,
   )
 
@@ -114,7 +114,7 @@ func emptyBody*(): BlockBody =
   BlockBody(
     transactions: @[],
     uncles: @[],
-    withdrawals: none(seq[Withdrawal]),
+    withdrawals: Opt.none(seq[Withdrawal]),
   )
 
 template fillCanonical(skel, z, stat) =

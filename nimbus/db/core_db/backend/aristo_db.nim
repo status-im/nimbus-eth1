@@ -13,7 +13,6 @@
 import
   std/tables,
   eth/common,
-  results,
   ../../aristo as use_ari,
   ../../aristo/aristo_walk,
   ../../kvt as use_kvt,
@@ -134,11 +133,11 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
       db.tracer.push(flags)
     CoreDxCaptRef(methods: db.tracer.cptMethods)
 
-  proc persistent(bn: Option[BlockNumber]): CoreDbRc[void] =
+  proc persistent(bn: Opt[BlockNumber]): CoreDbRc[void] =
     const info = "persistentFn()"
     let sid =
       if bn.isNone: 0u64
-      else: bn.unsafeGet.truncate(uint64)
+      else: bn.unsafeGet
     ? kBase.persistent info
     ? aBase.persistent(sid, info)
     ok()
@@ -183,7 +182,7 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
       ok(db.bless flags.tracerSetup()),
 
-    persistentFn: proc(bn: Option[BlockNumber]): CoreDbRc[void] =
+    persistentFn: proc(bn: Opt[BlockNumber]): CoreDbRc[void] =
       persistent(bn))
 
 # ------------------------------------------------------------------------------
@@ -247,8 +246,8 @@ proc toAristoSavedStateBlockNumber*(
   if not mBe.isNil and mBe.parent.isAristo:
     let rc = mBe.parent.AristoCoreDbRef.adbBase.getSavedState()
     if rc.isOk:
-      return (rc.value.src.to(Hash256), rc.value.serial.toBlockNumber)
-  (EMPTY_ROOT_HASH, 0.toBlockNumber)
+      return (rc.value.src.to(Hash256), rc.value.serial.BlockNumber)
+  (EMPTY_ROOT_HASH, 0.BlockNumber)
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators

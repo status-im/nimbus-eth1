@@ -185,7 +185,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
          "Latest item: <", xp.txDB.byItemID.last.value.data.info, ">"
 
       # make sure that the block chain was initialised
-      check capture.numBlocks.u256 <= bcCom.db.getCanonicalHead.blockNumber
+      check capture.numBlocks.u256 <= bcCom.db.getCanonicalHead.number
 
       check xp.nItems.total == foldl(@[0]&statCount.toSeq, a+b)
       #                        ^^^ sum up statCount[] values
@@ -714,7 +714,7 @@ proc runTxPackerTests(noisy = true) =
         # at least `nTrgTxs` txs and `nTrgAccounts` known accounts
         let
           (backHeader,backTxs,accLst) = xq.getBackHeader(nTrgTxs,nTrgAccounts)
-          nBackBlocks = xq.head.blockNumber - backHeader.blockNumber
+          nBackBlocks = xq.head.number - backHeader.number
           stats = xq.nItems
 
         # verify that the test would not degenerate

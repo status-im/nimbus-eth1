@@ -159,7 +159,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
   xp.chain.maxMode = (packItemsMaxGasLimit in xp.pFlags)
 
   if xp.chain.com.daoForkSupport and
-     xp.chain.com.daoForkBlock.get == xp.chain.head.blockNumber + 1:
+     xp.chain.com.daoForkBlock.get == xp.chain.head.number + 1:
     xp.chain.vmState.mutateStateDB:
       db.applyDAOHardFork()
 
@@ -261,8 +261,8 @@ proc vmExecCommit(pst: TxPackerStateRef)
 
   if vmState.com.forkGTE(Cancun):
     # EIP-4844
-    xp.chain.excessBlobGas = some(vmState.blockCtx.excessBlobGas)
-    xp.chain.blobGasUsed = some(pst.blobGasUsed)
+    xp.chain.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
+    xp.chain.blobGasUsed = Opt.some(pst.blobGasUsed)
 
   proc balanceDelta: UInt256 =
     let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient)

@@ -20,7 +20,7 @@ import
   ../network/history/accumulator
 
 from nimcrypto/hash import fromHex
-from ../../nimbus/utils/utils import calcTxRoot, calcReceiptRoot
+from ../../nimbus/utils/utils import calcTxRoot, calcReceiptsRoot
 
 export e2store.readRecord
 
@@ -475,7 +475,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
     if blockHeader.ommersHash != ommershHash:
       return err("Invalid ommers hash")
 
-    if blockHeader.receiptRoot != calcReceiptRoot(receipts):
+    if blockHeader.receiptsRoot != calcReceiptsRoot(receipts):
       return err("Invalid receipts root")
 
     headerRecords.add(

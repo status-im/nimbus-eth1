@@ -41,7 +41,7 @@ iterator undumpBlocksEra1*(
 
     # Genesis block requires a chunk of its own, for compatibility with current
     # test setup (a bit weird, that...)
-    if tmp.len mod blocksPerYield == 0 or tmp[0].header.blockNumber == 0:
+    if tmp.len mod blocksPerYield == 0 or tmp[0].header.number == 0:
       yield tmp
       tmp.setLen(0)
 

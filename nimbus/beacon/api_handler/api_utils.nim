@@ -60,15 +60,15 @@ proc validateBlockHash*(header: common.BlockHeader,
 
     let res = PayloadStatusV1(
       status: status,
-      validationError: some("blockhash mismatch, want $1, got $2" % [
+      validationError: Opt.some("blockhash mismatch, want $1, got $2" % [
        $wantHash, $gotHash])
     )
     return err(res)
 
   return ok()
 
-template toValidHash*(x: common.Hash256): Option[Web3Hash] =
-  some(w3Hash x)
+template toValidHash*(x: common.Hash256): Opt[Web3Hash] =
+  Opt.some(w3Hash x)
 
 proc simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: status)
@@ -81,7 +81,7 @@ proc simpleFCU*(status: PayloadExecutionStatus,
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
       status: status,
-      validationError: some(msg)
+      validationError: Opt.some(msg)
     )
   )
 
@@ -92,11 +92,11 @@ proc invalidFCU*(
     PayloadStatusV1(
       status: PayloadExecutionStatus.invalid,
       latestValidHash: toValidHash(hash),
-      validationError: some validationError
+      validationError: Opt.some validationError
     )
   )
 
-proc validFCU*(id: Option[PayloadID],
+proc validFCU*(id: Opt[PayloadID],
                validHash: common.Hash256): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
@@ -110,7 +110,7 @@ proc invalidStatus*(validHash: common.Hash256, msg: string): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash),
-    validationError: some(msg)
+    validationError: Opt.some(msg)
   )
 
 proc invalidStatus*(validHash = common.Hash256()): PayloadStatusV1 =
@@ -193,7 +193,7 @@ proc invalidFCU*(validationError: string,
     return invalidFCU(validationError)
 
   let blockHash = try:
-    latestValidHash(com.db, parent, com.ttd.get(high(common.BlockNumber)))
+    latestValidHash(com.db, parent, com.ttd.get(high(UInt256)))
   except RlpError:
     default(common.Hash256)
 

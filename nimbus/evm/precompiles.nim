@@ -336,11 +336,11 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   ok()
 
 func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
-  let msglen = len(c.msg.data)
+  let msglen = c.msg.data.len
   if msglen mod 192 != 0:
     return err(prcErr(PrcInvalidParam))
 
-  let numPoints = msglen div 192
+  let numPoints = GasInt msglen div 192
   let gasFee = if fork < FkIstanbul:
                  GasECPairingBase + numPoints * GasECPairingPerPoint
                else:
@@ -452,7 +452,7 @@ const
     179, 179, 178, 177, 176, 176, 175, 174
   ]
 
-func calcBlsMultiExpGas(K: int, gasCost: GasInt): GasInt =
+func calcBlsMultiExpGas(K: GasInt, gasCost: GasInt): GasInt =
   # Calculate G1 point, scalar value pair length
   if K == 0:
     # Return 0 gas for small input length
@@ -460,8 +460,8 @@ func calcBlsMultiExpGas(K: int, gasCost: GasInt): GasInt =
 
   const dLen = Bls12381MultiExpDiscountTable.len
   # Lookup discount value for G1 point, scalar value pair length
-  let discount = if K < dLen: Bls12381MultiExpDiscountTable[K-1]
-                 else: Bls12381MultiExpDiscountTable[dLen-1]
+  let discount = if K < dLen: GasInt Bls12381MultiExpDiscountTable[K-1]
+                 else: GasInt Bls12381MultiExpDiscountTable[dLen-1]
 
   # Calculate gas and return the result
   result = (K * gasCost * discount) div 1000
@@ -476,7 +476,7 @@ func blsG1MultiExp*(c: Computation): EvmResultVoid =
 
   let
     K = input.len div L
-    gas = K.calcBlsMultiExpGas(Bls12381G1MulGas)
+    gas = calcBlsMultiExpGas(GasInt K, Bls12381G1MulGas)
 
   ? c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
 
@@ -565,7 +565,7 @@ func blsG2MultiExp*(c: Computation): EvmResultVoid =
 
   let
     K = input.len div L
-    gas = K.calcBlsMultiExpGas(Bls12381G2MulGas)
+    gas = calcBlsMultiExpGas(GasInt K, Bls12381G2MulGas)
 
   ? c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
 

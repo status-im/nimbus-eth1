@@ -68,11 +68,11 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
         let newWithdrawal = WithdrawalV1()
         var wd = attr.withdrawals.get
         wd.add newWithdrawal
-        attr.withdrawals = some(wd)
+        attr.withdrawals = Opt.some(wd)
       of PayloadAttributesRemoveWithdrawal:
         var wd = attr.withdrawals.get
         wd.delete(0)
-        attr.withdrawals = some(wd)
+        attr.withdrawals = Opt.some(wd)
       of PayloadAttributesModifyWithdrawalAmount,
         PayloadAttributesModifyWithdrawalIndex,
         PayloadAttributesModifyWithdrawalValidator,
@@ -98,16 +98,16 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
           return false
 
         wds[0] = wd
-        attr.withdrawals = some(wds)
+        attr.withdrawals = Opt.some(wds)
       of PayloadAttributesParentBeaconRoot:
         testCond attr.parentBeaconBlockRoot.isSome:
           fatal "Cannot modify parent beacon root when there is no parent beacon root"
         let newBeaconRoot = attr.parentBeaconBlockRoot.get.plusOne
-        attr.parentBeaconBlockRoot = some(newBeaconRoot)
+        attr.parentBeaconBlockRoot = Opt.some(newBeaconRoot)
 
       # Request the payload with the modified attributes and add the payload ID to the list of known IDs
       let version = env.engine.version(env.clMock.latestHeader.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(attr))
+      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
       r.expectNoError()
       testCond env.clMock.addPayloadID(env.engine, r.get.payloadID.get)
       return true

@@ -49,11 +49,11 @@ method execute(cs: InconsistentForkchoiceTest, env: TestEnv): bool =
     onGetPayload: proc(): bool =
       # Generate and send an alternative side chain
       var customData = CustomPayloadData(
-        extraData: some(@[0x01.byte])
+        extraData: Opt.some(@[0x01.byte])
       )
 
       if shadow.alt.len > 0:
-        customData.parentHash = some(ethHash shadow.alt[^1].blockHash)
+        customData.parentHash = Opt.some(ethHash shadow.alt[^1].blockHash)
 
       let altPayload = customData.customizePayload(env.clMock.latestExecutableData)
       shadow.alt.add altPayload
@@ -140,9 +140,9 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
     payloadAttributes.timestamp = w3Qty(payloadAttributes.timestamp, 1)
 
     # Test again using PayloadAttributes, should also return SYNCING and no PayloadID
-    r = env.engine.client.forkchoiceUpdated(version, fcu, some(payloadAttributes))
+    r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(payloadAttributes))
     r.expectPayloadStatus(PayloadExecutionStatus.syncing)
-    r.expectPayloadID(none(PayloadID))
+    r.expectPayloadID(Opt.none(PayloadID))
   else:
     let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       # Run test after a new payload has been broadcast
@@ -167,7 +167,7 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
         payloadAttributes.suggestedFeeRecipient = w3Address()
 
         # Test again using PayloadAttributes, should also return INVALID and no PayloadID
-        r = env.engine.client.forkchoiceUpdated(version, fcu, some(payloadAttributes))
+        r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(payloadAttributes))
         r.expectError()
         return true
     ))

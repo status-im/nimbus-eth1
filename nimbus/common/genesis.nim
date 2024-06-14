@@ -111,19 +111,19 @@ proc toGenesisHeader*(
     extraData: g.extraData,
     gasLimit: g.gasLimit,
     difficulty: g.difficulty,
-    mixDigest: g.mixHash,
+    mixHash: g.mixHash,
     coinbase: g.coinbase,
     stateRoot: sdb.rootHash(),
     parentHash: GENESIS_PARENT_HASH,
     txRoot: EMPTY_ROOT_HASH,
-    receiptRoot: EMPTY_ROOT_HASH,
+    receiptsRoot: EMPTY_ROOT_HASH,
     ommersHash: EMPTY_UNCLE_HASH
   )
 
   if g.baseFeePerGas.isSome:
-    result.baseFee = g.baseFeePerGas.get()
+    result.baseFeePerGas = Opt.some(g.baseFeePerGas.get)
   elif fork >= London:
-    result.baseFee = EIP1559_INITIAL_BASE_FEE.u256
+    result.baseFeePerGas = Opt.some(EIP1559_INITIAL_BASE_FEE)
 
   if g.gasLimit == 0:
     result.gasLimit = GENESIS_GAS_LIMIT
@@ -132,12 +132,12 @@ proc toGenesisHeader*(
     result.difficulty = GENESIS_DIFFICULTY
 
   if fork >= Shanghai:
-    result.withdrawalsRoot = some(EMPTY_ROOT_HASH)
+    result.withdrawalsRoot = Opt.some(EMPTY_ROOT_HASH)
 
   if fork >= Cancun:
-    result.blobGasUsed = g.blobGasUsed.get(0'u64).some
-    result.excessBlobGas = g.excessBlobGas.get(0'u64).some
-    result.parentBeaconBlockRoot = g.parentBeaconBlockRoot.get(Hash256()).some
+    result.blobGasUsed           = Opt.some g.blobGasUsed.get(0'u64)
+    result.excessBlobGas         = Opt.some g.excessBlobGas.get(0'u64)
+    result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(Hash256())
 
 proc toGenesisHeader*(
     genesis: Genesis;
@@ -159,7 +159,7 @@ proc toGenesisHeader*(
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let map  = toForkTransitionTable(params.config)
-  let fork = map.toHardFork(forkDeterminationInfo(0.toBlockNumber, params.genesis.timestamp))
+  let fork = map.toHardFork(forkDeterminationInfo(0.BlockNumber, params.genesis.timestamp))
   toGenesisHeader(params.genesis, fork, db)
 
 # ------------------------------------------------------------------------------

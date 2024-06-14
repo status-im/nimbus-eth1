@@ -10,11 +10,11 @@
 
 import
   std/[json, strutils, os],
-  downloader, stint,
+  downloader,
   ../nimbus/tracer, prestate,
   eth/common, premixcore
 
-proc generateGethData(thisBlock: Block, blockNumber: UInt256, accounts: JsonNode): JsonNode =
+proc generateGethData(thisBlock: Block, blockNumber: BlockNumber, accounts: JsonNode): JsonNode =
   let
     receipts = toJson(thisBlock.receipts)
 
@@ -28,7 +28,7 @@ proc generateGethData(thisBlock: Block, blockNumber: UInt256, accounts: JsonNode
 
   result = geth
 
-proc printDebugInstruction(blockNumber: UInt256) =
+proc printDebugInstruction(blockNumber: BlockNumber) =
   var text = """
 
 Successfully created debugging environment for block $1.
@@ -48,11 +48,12 @@ proc main() =
   try:
     let
       nimbus      = json.parseFile(paramStr(1))
-      blockNumber = UInt256.fromHex(nimbus["blockNumber"].getStr())
+      blockNumberHex = nimbus["blockNumber"].getStr()
+      blockNumber = parseHexInt(blockNumberHex).uint64
       thisBlock   = requestBlock(blockNumber, {DownloadReceipts, DownloadTxTrace})
       accounts    = requestPostState(thisBlock)
       geth        = generateGethData(thisBlock, blockNumber, accounts)
-      parentNumber = blockNumber - 1.u256
+      parentNumber = blockNumber - 1
       parentBlock  = requestBlock(parentNumber)
 
     processNimbusData(nimbus)

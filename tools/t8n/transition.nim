@@ -83,24 +83,24 @@ proc dispatchOutput(ctx: var TransContext, conf: T8NConf, res: ExecOutput) =
     stderr.write(dis.stderr.pretty)
     stderr.write("\n")
 
-proc calcWithdrawalsRoot(w: Option[seq[Withdrawal]]): Option[Hash256] =
+proc calcWithdrawalsRoot(w: Opt[seq[Withdrawal]]): Opt[Hash256] =
   if w.isNone:
-    return none(Hash256)
-  calcWithdrawalsRoot(w.get).some()
+    return Opt.none(Hash256)
+  Opt.some calcWithdrawalsRoot(w.get)
 
 proc envToHeader(env: EnvStruct): BlockHeader =
   BlockHeader(
     coinbase   : env.currentCoinbase,
     difficulty : env.currentDifficulty.get(0.u256),
-    mixDigest  : env.currentRandom.get(Hash256()),
-    blockNumber: env.currentNumber,
+    mixHash    : env.currentRandom.get(Hash256()),
+    number     : env.currentNumber,
     gasLimit   : env.currentGasLimit,
     timestamp  : env.currentTimestamp,
     stateRoot  : emptyRlpHash,
-    fee        : env.currentBaseFee,
+    baseFeePerGas  : env.currentBaseFee,
     withdrawalsRoot: env.withdrawals.calcWithdrawalsRoot(),
-    blobGasUsed: env.currentBlobGasUsed,
-    excessBlobGas: env.currentExcessBlobGas,
+    blobGasUsed    : env.currentBlobGasUsed,
+    excessBlobGas  : env.currentExcessBlobGas,
   )
 
 proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
@@ -131,7 +131,7 @@ proc toTxReceipt(rec: Receipt,
     root: if rec.isHash: rec.hash else: Hash256(),
     status: rec.status,
     cumulativeGasUsed: rec.cumulativeGasUsed,
-    logsBloom: rec.bloom,
+    logsBloom: rec.logsBloom,
     logs: rec.logs,
     transactionHash: rlpHash(tx),
     contractAddress: contractAddress,
@@ -292,25 +292,25 @@ proc exec(ctx: var TransContext,
   result.result = ExecutionResult(
     stateRoot   : stateDB.rootHash,
     txRoot      : includedTx.calcTxRoot,
-    receiptsRoot: calcReceiptRoot(vmState.receipts),
+    receiptsRoot: calcReceiptsRoot(vmState.receipts),
     logsHash    : calcLogsHash(vmState.receipts),
-    bloom       : createBloom(vmState.receipts),
+    logsBloom   : createBloom(vmState.receipts),
     receipts    : system.move(receipts),
     rejected    : system.move(rejected),
     # geth using both vmContext.Difficulty and vmContext.Random
     # therefore we cannot use vmState.difficulty
     currentDifficulty: ctx.env.currentDifficulty,
-    gasUsed     : vmState.cumulativeGasUsed,
-    currentBaseFee: ctx.env.currentBaseFee,
-    withdrawalsRoot: header.withdrawalsRoot
+    gasUsed          : vmState.cumulativeGasUsed,
+    currentBaseFee   : ctx.env.currentBaseFee,
+    withdrawalsRoot  : header.withdrawalsRoot
   )
 
   if fork >= FkCancun:
-    result.result.blobGasUsed = some blobGasUsed
+    result.result.blobGasUsed = Opt.some blobGasUsed
     if ctx.env.currentExcessBlobGas.isSome:
       result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
     elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
-      result.result.currentExcessBlobGas = some calcExcessBlobGas(vmState.parent)
+      result.result.currentExcessBlobGas = Opt.some calcExcessBlobGas(vmState.parent)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -337,18 +337,17 @@ proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
-  let num = blockNumber.truncate(uint64)
   var h = Hash256()
   if vmState.blockHashes.len == 0:
     vmState.hashError = "getAncestorHash(" &
-      $num & ") invoked, no blockhashes provided"
+      $blockNumber & ") invoked, no blockhashes provided"
     return h
 
-  vmState.blockHashes.withValue(num, val) do:
+  vmState.blockHashes.withValue(blockNumber, val) do:
     h = val[]
   do:
     vmState.hashError = "getAncestorHash(" &
-      $num & ") invoked, blockhash for that block not provided"
+      $blockNumber & ") invoked, blockhash for that block not provided"
 
   return h
 
@@ -416,7 +415,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       timestamp: ctx.env.parentTimestamp,
       difficulty: ctx.env.parentDifficulty.get(0.u256),
       ommersHash: uncleHash,
-      blockNumber: ctx.env.currentNumber - 1.toBlockNumber,
+      number: ctx.env.currentNumber - 1'u64,
       blobGasUsed: ctx.env.parentBlobGasUsed,
       excessBlobGas: ctx.env.parentExcessBlobGas,
     )
@@ -427,7 +426,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         # Already set, currentBaseFee has precedent over parentBaseFee.
         discard
       elif ctx.env.parentBaseFee.isSome:
-        ctx.env.currentBaseFee = some(calcBaseFee(ctx.env))
+        ctx.env.currentBaseFee = Opt.some(calcBaseFee(ctx.env))
       else:
         raise newError(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section")
 
@@ -443,7 +442,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         raise newError(ErrorConfig, res.error)
     else:
       # un-set it if it has been set too early
-      ctx.env.parentBeaconBlockRoot = none(Hash256)
+      ctx.env.parentBeaconBlockRoot = Opt.none(Hash256)
 
     if com.forkGTE(MergeFork):
       if ctx.env.currentRandom.isNone:
@@ -451,13 +450,13 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
 
       if ctx.env.currentDifficulty.isSome and ctx.env.currentDifficulty.get() != 0:
         raise newError(ErrorConfig, "post-merge difficulty must be zero (or omitted) in env")
-      ctx.env.currentDifficulty = none(DifficultyInt)
+      ctx.env.currentDifficulty = Opt.none(DifficultyInt)
 
     elif ctx.env.currentDifficulty.isNone:
       if ctx.env.parentDifficulty.isNone:
         raise newError(ErrorConfig, "currentDifficulty was not provided, and cannot be calculated due to missing parentDifficulty")
 
-      if ctx.env.currentNumber == 0.toBlockNumber:
+      if ctx.env.currentNumber == 0.BlockNumber:
         raise newError(ErrorConfig, "currentDifficulty needs to be provided for block number 0")
 
       if ctx.env.currentTimestamp <= ctx.env.parentTimestamp:
@@ -465,7 +464,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
           "currentDifficulty cannot be calculated -- currentTime ($1) needs to be after parent time ($2)" %
             [$ctx.env.currentTimestamp, $ctx.env.parentTimestamp])
 
-      ctx.env.currentDifficulty = some(calcDifficulty(com,
+      ctx.env.currentDifficulty = Opt.some(calcDifficulty(com,
         ctx.env.currentTimestamp, parent))
 
     let header  = envToHeader(ctx.env)

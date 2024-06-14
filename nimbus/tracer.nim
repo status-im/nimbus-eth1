@@ -44,7 +44,7 @@ proc toJson(receipt: Receipt): JsonNode =
   result = newJObject()
 
   result["cumulativeGasUsed"] = %receipt.cumulativeGasUsed
-  result["bloom"] = %receipt.bloom
+  result["bloom"] = %receipt.logsBloom
   result["logs"] = %receipt.logs
 
   if receipt.hasStateRoot:
@@ -54,7 +54,7 @@ proc toJson(receipt: Receipt): JsonNode =
 
 proc dumpReceipts*(chainDB: CoreDbRef, header: BlockHeader): JsonNode =
   result = newJArray()
-  for receipt in chainDB.getReceipts(header.receiptRoot):
+  for receipt in chainDB.getReceipts(header.receiptsRoot):
     result.add receipt.toJson
 
 proc toJson*(receipts: seq[Receipt]): JsonNode =
@@ -110,7 +110,7 @@ const
   internalTxName = "internalTx"
 
 proc traceTransaction*(com: CommonRef, header: BlockHeader,
-                       transactions: openArray[Transaction], txIndex: int,
+                       transactions: openArray[Transaction], txIndex: uint64,
                        tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
     # we add a memory layer between backend/lower layer db
@@ -147,7 +147,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     let sender = tx.getSender
     let recipient = tx.getRecipient(sender)
 
-    if idx == txIndex:
+    if idx.uint64 == txIndex:
       vmState.tracer = tracerInst # only enable tracer on target tx
       before.captureAccount(stateDb, sender, senderName)
       before.captureAccount(stateDb, recipient, recipientName)
@@ -160,7 +160,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     let rc = vmState.processTransaction(tx, sender, header)
     gasUsed = if rc.isOk: rc.value else: 0
 
-    if idx == txIndex:
+    if idx.uint64 == txIndex:
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, miner, minerName)
@@ -293,14 +293,14 @@ proc traceBlock*(com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = 
 proc traceTransactions*(com: CommonRef, header: BlockHeader, transactions: openArray[Transaction]): JsonNode =
   result = newJArray()
   for i in 0 ..< transactions.len:
-    result.add traceTransaction(com, header, transactions, i, {DisableState})
+    result.add traceTransaction(com, header, transactions, i.uint64, {DisableState})
 
 
 proc dumpDebuggingMetaData*(vmState: BaseVMState, blk: EthBlock, launchDebugger = true) =
   template header: BlockHeader = blk.header
   let
     com = vmState.com
-    blockNumber = header.blockNumber
+    blockNumber = header.number
     capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
     bloom = createBloom(vmState.receipts)
@@ -308,7 +308,7 @@ proc dumpDebuggingMetaData*(vmState: BaseVMState, blk: EthBlock, launchDebugger 
     capture.forget()
 
   let blockSummary = %{
-    "receiptsRoot": %("0x" & toHex(calcReceiptRoot(vmState.receipts).data)),
+    "receiptsRoot": %("0x" & toHex(calcReceiptsRoot(vmState.receipts).data)),
     "stateRoot": %("0x" & toHex(vmState.stateDB.rootHash.data)),
     "logsBloom": %("0x" & toHex(bloom))
   }

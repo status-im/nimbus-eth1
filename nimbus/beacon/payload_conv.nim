@@ -24,11 +24,11 @@ func wdRoot(list: openArray[WithdrawalV1]): common.Hash256
   {.noSideEffect.}:
     calcWithdrawalsRoot(ethWithdrawals list)
 
-func wdRoot(x: Option[seq[WithdrawalV1]]): Option[common.Hash256]
+func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[common.Hash256]
              {.gcsafe, raises:[].} =
   {.noSideEffect.}:
-    if x.isNone: none(common.Hash256)
-    else: some(wdRoot x.get)
+    if x.isNone: Opt.none(common.Hash256)
+    else: Opt.some(wdRoot x.get)
 
 func txRoot(list: openArray[Web3Tx]): common.Hash256
              {.gcsafe, raises:[RlpError].} =
@@ -46,15 +46,15 @@ func executionPayload*(blk: EthBlock): ExecutionPayload =
     parentHash   : w3Hash blk.header.parentHash,
     feeRecipient : w3Addr blk.header.coinbase,
     stateRoot    : w3Hash blk.header.stateRoot,
-    receiptsRoot : w3Hash blk.header.receiptRoot,
-    logsBloom    : w3Bloom blk.header.bloom,
+    receiptsRoot : w3Hash blk.header.receiptsRoot,
+    logsBloom    : w3Bloom blk.header.logsBloom,
     prevRandao   : w3PrevRandao blk.header.prevRandao,
-    blockNumber  : w3Qty blk.header.blockNumber,
+    blockNumber  : w3Qty blk.header.number,
     gasLimit     : w3Qty blk.header.gasLimit,
     gasUsed      : w3Qty blk.header.gasUsed,
     timestamp    : w3Qty blk.header.timestamp,
     extraData    : w3ExtraData blk.header.extraData,
-    baseFeePerGas: blk.header.fee.get(0.u256),
+    baseFeePerGas: blk.header.baseFeePerGas.get(0.u256),
     blockHash    : w3Hash blk.header,
     transactions : w3Txs blk.txs,
     withdrawals  : w3Withdrawals blk.withdrawals,
@@ -67,22 +67,22 @@ func executionPayloadV1V2*(blk: EthBlock): ExecutionPayloadV1OrV2 =
     parentHash   : w3Hash blk.header.parentHash,
     feeRecipient : w3Addr blk.header.coinbase,
     stateRoot    : w3Hash blk.header.stateRoot,
-    receiptsRoot : w3Hash blk.header.receiptRoot,
-    logsBloom    : w3Bloom blk.header.bloom,
+    receiptsRoot : w3Hash blk.header.receiptsRoot,
+    logsBloom    : w3Bloom blk.header.logsBloom,
     prevRandao   : w3PrevRandao blk.header.prevRandao,
-    blockNumber  : w3Qty blk.header.blockNumber,
+    blockNumber  : w3Qty blk.header.number,
     gasLimit     : w3Qty blk.header.gasLimit,
     gasUsed      : w3Qty blk.header.gasUsed,
     timestamp    : w3Qty blk.header.timestamp,
     extraData    : w3ExtraData blk.header.extraData,
-    baseFeePerGas: blk.header.fee.get(0.u256),
+    baseFeePerGas: blk.header.baseFeePerGas.get(0.u256),
     blockHash    : w3Hash blk.header,
     transactions : w3Txs blk.txs,
     withdrawals  : w3Withdrawals blk.withdrawals,
   )
 
 func blockHeader*(p: ExecutionPayload,
-                  beaconRoot: Option[common.Hash256]):
+                  beaconRoot: Opt[common.Hash256]):
                     common.BlockHeader {.gcsafe, raises:[RlpError].} =
   common.BlockHeader(
     parentHash     : ethHash p.parentHash,
@@ -90,17 +90,17 @@ func blockHeader*(p: ExecutionPayload,
     coinbase       : ethAddr p.feeRecipient,
     stateRoot      : ethHash p.stateRoot,
     txRoot         : txRoot p.transactions,
-    receiptRoot    : ethHash p.receiptsRoot,
-    bloom          : ethBloom p.logsBloom,
+    receiptsRoot   : ethHash p.receiptsRoot,
+    logsBloom      : ethBloom p.logsBloom,
     difficulty     : 0.u256,
-    blockNumber    : u256 p.blockNumber,
+    number         : common.BlockNumber(p.blockNumber),
     gasLimit       : ethGasInt p.gasLimit,
     gasUsed        : ethGasInt p.gasUsed,
     timestamp      : ethTime p.timestamp,
     extraData      : ethBlob p.extraData,
-    mixDigest      : ethHash p.prevRandao,
+    mixHash        : ethHash p.prevRandao,
     nonce          : default(BlockNonce),
-    fee            : some(p.baseFeePerGas),
+    baseFeePerGas  : Opt.some(p.baseFeePerGas),
     withdrawalsRoot: wdRoot p.withdrawals,
     blobGasUsed    : u64(p.blobGasUsed),
     excessBlobGas  : u64(p.excessBlobGas),
@@ -116,7 +116,7 @@ func blockBody*(p: ExecutionPayload):
   )
 
 func ethBlock*(p: ExecutionPayload,
-               beaconRoot: Option[common.Hash256]):
+               beaconRoot: Opt[common.Hash256]):
                  common.EthBlock {.gcsafe, raises:[RlpError].} =
   common.EthBlock(
     header      : blockHeader(p, beaconRoot),

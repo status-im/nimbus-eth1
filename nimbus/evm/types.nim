@@ -41,7 +41,7 @@ type
   BlockContext* = object
     timestamp*        : EthTime
     gasLimit*         : GasInt
-    fee*              : Option[UInt256]
+    baseFeePerGas*    : Opt[UInt256]
     prevRandao*       : Hash256
     difficulty*       : UInt256
     coinbase*         : EthAddress
@@ -95,7 +95,7 @@ type
     evmcStatus*: evmc_status_code
     info*      : string
     burnsGas*  : bool
-
+  
   GasMeter* = object
     gasRefunded*: GasInt
     gasRemaining*: GasInt

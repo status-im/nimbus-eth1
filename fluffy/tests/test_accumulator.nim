@@ -41,7 +41,7 @@ suite "Header Accumulator":
       # Note: These test headers will not be a blockchain, as the parent hashes
       # are not properly filled in. That's fine however for this test, as that
       # is not the way the headers are verified with the accumulator.
-      headers.add(BlockHeader(blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
+      headers.add(BlockHeader(number: i, difficulty: 1.stuint(256)))
 
     let accumulatorRes = buildAccumulatorData(headers)
     check accumulatorRes.isOk()
@@ -58,7 +58,7 @@ suite "Header Accumulator":
     block: # Test invalid headers
       # Post merge block number must fail (> than latest header in accumulator)
       var proof: AccumulatorProof
-      let header = BlockHeader(blockNumber: mergeBlockNumber.stuint(256))
+      let header = BlockHeader(number: mergeBlockNumber)
       check verifyAccumulatorProof(accumulator, header, proof).isErr()
 
       # Test altered block headers by altering the difficulty
@@ -67,7 +67,7 @@ suite "Header Accumulator":
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches
-        let header = BlockHeader(blockNumber: i.stuint(256), difficulty: 2.stuint(256))
+        let header = BlockHeader(number: i.uint64, difficulty: 2.stuint(256))
 
         check verifyAccumulatorProof(accumulator, header, proof.get()).isErr()
 
@@ -83,7 +83,7 @@ suite "Header Accumulator":
 
     var headers: seq[BlockHeader]
     for i in 0 ..< amount:
-      headers.add(BlockHeader(blockNumber: i.stuint(256), difficulty: 1.stuint(256)))
+      headers.add(BlockHeader(number: i, difficulty: 1.stuint(256)))
 
     let accumulatorRes = buildAccumulator(headers)
 
@@ -98,7 +98,7 @@ suite "Header Accumulator":
       headers: seq[BlockHeader]
 
     for i in 0 ..< amount:
-      let header = BlockHeader(blockNumber: u256(i), difficulty: u256(1))
+      let header = BlockHeader(number: i, difficulty: u256(1))
       headers.add(header)
       headerHashes.add(header.blockHash())
 

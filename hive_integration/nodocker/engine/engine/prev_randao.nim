@@ -41,7 +41,7 @@ method execute(cs: PrevRandaoTransactionTest, env: TestEnv): bool =
   testCond env.clMock.produceSingleBlock(BlockProcessCallbacks())
 
   var shadow = Shadow(
-    startBlockNumber: env.clMock.latestHeader.blockNumber.truncate(uint64) + 1,
+    startBlockNumber: env.clMock.latestHeader.number + 1,
     # Send transactions in PoS, the value of the storage in these blocks must match the prevRandao value
     blockCount: 10,
     currentTxIndex: 0,
@@ -53,7 +53,7 @@ method execute(cs: PrevRandaoTransactionTest, env: TestEnv): bool =
   let pbRes = env.clMock.produceBlocks(shadow.blockCount, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
       let tc = BaseTx(
-        recipient:  some(prevRandaoContractAddr),
+        recipient:  Opt.some(prevRandaoContractAddr),
         amount:     0.u256,
         txType:     cs.txType,
         gasLimit:   75000,
@@ -69,7 +69,7 @@ method execute(cs: PrevRandaoTransactionTest, env: TestEnv): bool =
     ,
     onForkchoiceBroadcast: proc(): bool =
       # Check the transaction tracing, which is client specific
-      let expectedPrevRandao = env.clMock.prevRandaoHistory[env.clMock.latestHeader.blockNumber.truncate(uint64)+1]
+      let expectedPrevRandao = env.clMock.prevRandaoHistory[env.clMock.latestHeader.number+1]
       let res = debugPrevRandaoTransaction(env.engine.client, shadow.txs[shadow.currentTxIndex-1], expectedPrevRandao)
       testCond res.isOk:
         fatal "Error during transaction tracing", msg=res.error

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,7 +9,6 @@
 # according to those terms.
 
 import
-  std/[options],
   eth/common,
   ./clmock,
   ./types,
@@ -31,7 +30,7 @@ proc configureCLMock*(s: BaseSpec, cl: CLMocker) =
   if s.safeSlotsToImportOptimistically != 0:
     cl.safeSlotsToImportOptimistically = s.safeSlotsToImportOptimistically
 
-  cl.blockTimestampIncrement = some(s.getBlockTimeIncrements())
+  cl.blockTimestampIncrement = Opt.some(s.getBlockTimeIncrements())
 
 func getMainFork*(s: BaseSpec): EngineFork =
   let mainFork = s.mainFork
@@ -75,10 +74,10 @@ method getForkConfig*(s: BaseSpec): ChainConfig {.base.} =
     # Cannot configure a fork before Shanghai
     if previousForkTime != 0:
       return nil
-    forkConfig.shanghaiTime = some(forkTime.EthTime)
+    forkConfig.shanghaiTime = Opt.some(forkTime.EthTime)
   elif mainFork == ForkCancun:
-    forkConfig.shanghaiTime = some(previousForkTime.EthTime)
-    forkConfig.cancunTime = some(forkTime.EthTime)
+    forkConfig.shanghaiTime = Opt.some(previousForkTime.EthTime)
+    forkConfig.cancunTime = Opt.some(forkTime.EthTime)
   else:
     doAssert(false, "unknown fork: " & $mainFork)
 

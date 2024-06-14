@@ -39,7 +39,7 @@ proc overflowMain*() =
   test "GasCall unhandled overflow":
     let header = BlockHeader(
       stateRoot: emptyRlpHash,
-      blockNumber: u256(1150000),
+      number: 1150000'u64,
       coinBase: coinbase,
       gasLimit: 30000000,
       timeStamp: EthTime(123456),
@@ -59,7 +59,7 @@ proc overflowMain*() =
       chainId: MainNet.ChainId,
       gasPrice: 0.GasInt,
       gasLimit: 30000000,
-      to: codeAddress.some,
+      to: Opt.some codeAddress,
       value: 0.u256,
       payload: @data
     )

@@ -82,8 +82,7 @@ func getEpochAccumulatorRoot*(headerRecords: openArray[HeaderRecord]): Digest =
 
 func updateAccumulator*(a: var Accumulator, header: BlockHeader) =
   doAssert(
-    header.blockNumber.truncate(uint64) < mergeBlockNumber,
-    "No post merge blocks for header accumulator",
+    header.number < mergeBlockNumber, "No post merge blocks for header accumulator"
   )
 
   let lastTotalDifficulty =
@@ -126,9 +125,8 @@ func getEpochIndex*(blockNumber: uint64): uint64 =
   blockNumber div epochSize
 
 func getEpochIndex*(header: BlockHeader): uint64 =
-  let blockNumber = header.blockNumber.truncate(uint64)
   ## Get the index for the historical epochs
-  getEpochIndex(blockNumber)
+  getEpochIndex(header.number)
 
 func getHeaderRecordIndex*(blockNumber: uint64, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
@@ -136,13 +134,13 @@ func getHeaderRecordIndex*(blockNumber: uint64, epochIndex: uint64): uint64 =
 
 func getHeaderRecordIndex*(header: BlockHeader, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
-  getHeaderRecordIndex(header.blockNumber.truncate(uint64), epochIndex)
+  getHeaderRecordIndex(header.number, epochIndex)
 
 func isPreMerge*(blockNumber: uint64): bool =
   blockNumber < mergeBlockNumber
 
 func isPreMerge*(header: BlockHeader): bool =
-  isPreMerge(header.blockNumber.truncate(uint64))
+  isPreMerge(header.number)
 
 func verifyProof(
     a: FinishedAccumulator, header: BlockHeader, proof: openArray[Digest]

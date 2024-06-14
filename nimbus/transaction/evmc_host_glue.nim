@@ -65,7 +65,7 @@ proc getBlockHash(p: evmc_host_context, number: int64): evmc_bytes32
     {.cdecl.} =
   # TODO: `HostBlockNumber` is 256-bit unsigned.  It should be changed to match
   # EVMC which is more sensible.
-  toHost(p).getBlockHash(number.uint64.u256).toEvmc
+  toHost(p).getBlockHash(number.uint64).toEvmc
 
 proc emitLog(p: evmc_host_context, address: var evmc_address,
              data: ptr byte, data_size: csize_t,

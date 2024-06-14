@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,7 +9,8 @@
 # according to those terms.
 
 import
-  std/[parseopt, strutils, options]
+  std/[parseopt, strutils],
+  results
 
 type
   ConfigStatus* = enum
@@ -24,7 +25,7 @@ type
   Configuration = ref object
     testSubject*: string
     fork*: string
-    index*: Option[int]
+    index*: Opt[int]
     trace*: bool
     legacy*: bool
     pruning*: bool
@@ -55,7 +56,7 @@ proc processArguments*(msg: var string): ConfigStatus =
     of cmdLongOption, cmdShortOption:
       case key.toLowerAscii()
       of "fork": config.fork = value
-      of "index": config.index = some(parseInt(value))
+      of "index": config.index = Opt.some(parseInt(value))
       of "trace": config.trace = parseBool(value)
       of "legacy": config.legacy = parseBool(value)
       of "pruning": config.pruning = parseBool(value)

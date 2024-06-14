@@ -42,7 +42,7 @@ func blockCtx(com: CommonRef, header: BlockHeader):
   BlockContext(
     timestamp    : header.timestamp,
     gasLimit     : header.gasLimit,
-    fee          : header.fee,
+    baseFeePerGas: header.baseFeePerGas,
     prevRandao   : header.prevRandao,
     difficulty   : header.difficulty,
     coinbase     : com.minerAddress(header),
@@ -57,7 +57,7 @@ proc `$`*(vmState: BaseVMState): string
     result = "nil"
   else:
     result = &"VMState:"&
-             &"\n  blockNumber: {vmState.parent.blockNumber + 1}"
+             &"\n  blockNumber: {vmState.parent.number + 1}"
 
 proc new*(
       T:        type BaseVMState;
@@ -216,8 +216,8 @@ proc coinbase*(vmState: BaseVMState): EthAddress =
 
 proc blockNumber*(vmState: BaseVMState): BlockNumber =
   # it should return current block number
-  # and not head.blockNumber
-  vmState.parent.blockNumber + 1
+  # and not head.number
+  vmState.parent.number + 1
 
 proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   if vmState.com.consensus == ConsensusType.POS:
@@ -226,8 +226,8 @@ proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   else:
     vmState.blockCtx.difficulty
 
-proc baseFee*(vmState: BaseVMState): UInt256 =
-  vmState.blockCtx.fee.get(0.u256)
+proc baseFeePerGas*(vmState: BaseVMState): UInt256 =
+  vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base.} =

@@ -39,10 +39,11 @@ type
 
   PersistStats = tuple[blocks: int, txs: int, gas: GasInt]
 
-const CleanUpEpoch = 30_000.toBlockNumber
-  ## Regular checks for history clean up (applies to single state DB). This
-  ## is mainly a debugging/testing feature so that the database can be held
-  ## a bit smaller. It is not applicable to a full node.
+const
+  CleanUpEpoch = 30_000.BlockNumber
+    ## Regular checks for history clean up (applies to single state DB). This
+    ## is mainly a debugging/testing feature so that the database can be held
+    ## a bit smaller. It is not applicable to a full node.
 
 # ------------------------------------------------------------------------------
 # Private
@@ -82,8 +83,8 @@ proc persistBlocksImpl(
   let vmState = ?c.getVmState(blocks[0].header)
 
   let
-    fromBlock = blocks[0].header.blockNumber
-    toBlock = blocks[blocks.high()].header.blockNumber
+    fromBlock = blocks[0].header.number
+    toBlock = blocks[blocks.high()].header.number
   trace "Persisting blocks", fromBlock, toBlock
 
   var
@@ -96,10 +97,10 @@ proc persistBlocksImpl(
     c.com.hardForkTransition(header)
 
     if not vmState.reinit(header):
-      debug "Cannot update VmState", blockNumber = header.blockNumber
-      return err("Cannot update VmState to block " & $header.blockNumber)
+      debug "Cannot update VmState", blockNumber = header.number
+      return err("Cannot update VmState to block " & $header.number)
 
-    if c.extraValidation and c.verifyFrom <= header.blockNumber:
+    if c.extraValidation and c.verifyFrom <= header.number:
       # TODO: how to checkseal from here
       ?c.com.validateHeaderAndKinship(blk, checkSealOK = false)
 
@@ -118,7 +119,7 @@ proc persistBlocksImpl(
         return err("Could not persist header")
 
     if NoSaveTxs notin flags:
-      c.db.persistTransactions(header.blockNumber, blk.transactions)
+      c.db.persistTransactions(header.number, blk.transactions)
 
     if NoSaveReceipts notin flags:
       c.db.persistReceipts(vmState.receipts)
@@ -129,7 +130,7 @@ proc persistBlocksImpl(
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
-    c.com.syncCurrent = header.blockNumber
+    c.com.syncCurrent = header.number
 
     txs += blk.transactions.len
     gas += blk.header.gasUsed

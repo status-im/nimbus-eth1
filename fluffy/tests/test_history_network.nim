@@ -52,7 +52,7 @@ proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
   var headers: seq[BlockHeader]
   for i in fromNum .. toNum:
     var bh = BlockHeader()
-    bh.blockNumber = u256(i)
+    bh.number = BlockNumber(i)
     bh.difficulty = u256(i)
     # empty so that we won't care about creating fake block bodies
     bh.ommersHash = EMPTY_UNCLE_HASH

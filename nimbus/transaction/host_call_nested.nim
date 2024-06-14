@@ -25,7 +25,7 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
   let childMsg = Message(
     kind: CallKind(m.kind.ord),
     depth: m.depth,
-    gas: m.gas,
+    gas: GasInt m.gas,
     sender: m.sender.fromEvmc,
     value: m.value.fromEvmc,
     data: @(makeOpenArray(m.inputData, m.inputSize.int))
@@ -56,7 +56,7 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
   let childMsg = Message(
     kind: CallKind(m.kind.ord),
     depth: m.depth,
-    gas: m.gas,
+    gas: GasInt m.gas,
     sender: m.sender.fromEvmc,
     codeAddress: m.code_address.fromEvmc,
     contractAddress: if m.kind == EVMC_CALL:

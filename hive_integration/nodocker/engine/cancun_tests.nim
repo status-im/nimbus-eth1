@@ -527,7 +527,7 @@ let cancunTestListA* = [
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: UpgradeForkchoiceUpdatedVersion(
-            beaconRoot: some(common.Hash256()),
+            beaconRoot: Opt.some(common.Hash256()),
             expectedError: engineApiUnsupportedFork,
           ),
           expectationDescription: """
@@ -555,7 +555,7 @@ let cancunTestListA* = [
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
-            beaconRoot: some(common.Hash256()),
+            beaconRoot: Opt.some(common.Hash256()),
             expectedError: engineApiInvalidPayloadAttributes,
           ),
           expectationDescription: """
@@ -583,7 +583,7 @@ let cancunTestListA* = [
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
-            beaconRoot: some(common.Hash256()),
+            beaconRoot: Opt.some(common.Hash256()),
             expectedError: engineApiInvalidPayloadAttributes,
           ),
           expectationDescription: """
@@ -641,7 +641,7 @@ let cancunTestListA* = [
         NewPayloads(
           expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
           fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
-            beaconRoot: some(common.Hash256()),
+            beaconRoot: Opt.some(common.Hash256()),
           ),
         ),
         SendBlobTransactions(
@@ -652,7 +652,7 @@ let cancunTestListA* = [
         NewPayloads(
           expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
           fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
-             beaconRoot: some(toHash(1.u256)),
+             beaconRoot: Opt.some(toHash(1.u256)),
           ),
         ),
       ]
@@ -756,7 +756,7 @@ let cancunTestListA* = [
         NewPayloads(
           newPayloadCustomizer: UpgradeNewPayloadVersion(
             payloadCustomizer: CustomPayloadData(
-              blobGasUsed: some(0'u64),
+              blobGasUsed: Opt.some(0'u64),
             ),
             expectedError: engineApiInvalidParams,
           ),
@@ -786,7 +786,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: UpgradeNewPayloadVersion(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(newSeq[BlobID]()),
+                blobs: Opt.some(newSeq[BlobID]()),
               ),
             ),
             expectedError: engineApiInvalidParams,
@@ -816,11 +816,11 @@ let cancunTestListA* = [
         NewPayloads(
           newPayloadCustomizer: UpgradeNewPayloadVersion(
             payloadCustomizer: CustomPayloadData(
-              excessBlobGas:    some(0'u64),
-              blobGasUsed:      some(0'u64),
-              parentBeaconRoot: some(common.Hash256()),
+              excessBlobGas:    Opt.some(0'u64),
+              blobGasUsed:      Opt.some(0'u64),
+              parentBeaconRoot: Opt.some(common.Hash256()),
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(newSeq[BlobID]()),
+                blobs: Opt.some(newSeq[BlobID]()),
               ),
             ),
             expectedError: engineApiUnsupportedFork,
@@ -920,7 +920,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1)),
+                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1)),
               ),
             ),
             expectInvalidStatus: true,
@@ -955,7 +955,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobList(0, TARGET_BLOBS_PER_BLOCK+1)),
+                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK+1)),
               ),
             ),
             expectInvalidStatus: true,
@@ -988,7 +988,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobListByIndex(BlobID(TARGET_BLOBS_PER_BLOCK-1), 0)),
+                blobs: Opt.some(getBlobListByIndex(BlobID(TARGET_BLOBS_PER_BLOCK-1), 0)),
               ),
             ),
             expectInvalidStatus: true,
@@ -1021,7 +1021,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobList(0, TARGET_BLOBS_PER_BLOCK, BlobID(TARGET_BLOBS_PER_BLOCK-1))),
+                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK, BlobID(TARGET_BLOBS_PER_BLOCK-1))),
               ),
             ),
             expectInvalidStatus: true,
@@ -1054,7 +1054,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1, BlobID(TARGET_BLOBS_PER_BLOCK))),
+                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1, BlobID(TARGET_BLOBS_PER_BLOCK))),
               ),
             ),
             expectInvalidStatus: true,
@@ -1087,7 +1087,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs:        some(getBlobList(0, TARGET_BLOBS_PER_BLOCK)),
+                blobs:        Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK)),
                 hashVersions: @[VERSIONED_HASH_VERSION_KZG.byte, (VERSIONED_HASH_VERSION_KZG + 1).byte],
               ),
             ),
@@ -1121,7 +1121,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: none(seq[BlobID]),
+                blobs: Opt.none(seq[BlobID]),
               ),
             ),
             expectedError: engineApiInvalidParams,
@@ -1154,7 +1154,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(newSeq[BlobID]()),
+                blobs: Opt.some(newSeq[BlobID]()),
               ),
             ),
             expectInvalidStatus: true,
@@ -1182,7 +1182,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(@[BlobID(0)]),
+                blobs: Opt.some(@[BlobID(0)]),
               ),
             ),
             expectInvalidStatus: true,
@@ -1226,7 +1226,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1)),
+                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1)),
               ),
             ),
             expectInvalidStatus: true,
@@ -1268,7 +1268,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobList(0, TARGET_BLOBS_PER_BLOCK+1)),
+                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK+1)),
               ),
             ),
             expectInvalidStatus: true,
@@ -1308,7 +1308,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobListByIndex(BlobID(TARGET_BLOBS_PER_BLOCK-1), 0)),
+                blobs: Opt.some(getBlobListByIndex(BlobID(TARGET_BLOBS_PER_BLOCK-1), 0)),
               ),
             ),
             expectInvalidStatus: true,
@@ -1348,7 +1348,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobList(0, TARGET_BLOBS_PER_BLOCK, BlobID(TARGET_BLOBS_PER_BLOCK-1))),
+                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK, BlobID(TARGET_BLOBS_PER_BLOCK-1))),
               ),
             ),
             expectInvalidStatus: true,
@@ -1388,7 +1388,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1, BlobID(TARGET_BLOBS_PER_BLOCK))),
+                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1, BlobID(TARGET_BLOBS_PER_BLOCK))),
               ),
             ),
             expectInvalidStatus: true,
@@ -1428,7 +1428,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs:        some(getBlobList(0, TARGET_BLOBS_PER_BLOCK)),
+                blobs:        Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK)),
                 hashVersions: @[VERSIONED_HASH_VERSION_KZG.byte, (VERSIONED_HASH_VERSION_KZG + 1).byte],
               ),
             ),
@@ -1469,7 +1469,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: none(seq[BlobID]),
+                blobs: Opt.none(seq[BlobID]),
               ),
             ),
             expectedError: engineApiInvalidParams,
@@ -1509,7 +1509,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(newSeq[BlobID]()),
+                blobs: Opt.some(newSeq[BlobID]()),
               ),
             ),
             expectInvalidStatus: true,
@@ -1543,7 +1543,7 @@ let cancunTestListA* = [
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
               versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: some(@[BlobID(0)]),
+                blobs: Opt.some(@[BlobID(0)]),
               ),
             ),
             expectInvalidStatus: true,
@@ -1568,7 +1568,7 @@ let cancunTestListA* = [
         NewPayloads(
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
-              blobGasUsed: some(1'u64),
+              blobGasUsed: Opt.some(1'u64),
             ),
             expectInvalidStatus: true,
           ),
@@ -1589,7 +1589,7 @@ let cancunTestListA* = [
         NewPayloads(
           newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
             payloadCustomizer: CustomPayloadData(
-              blobGasUsed: some(GAS_PER_BLOB.uint64),
+              blobGasUsed: Opt.some(GAS_PER_BLOB.uint64),
             ),
             expectInvalidStatus: true,
           ),
@@ -1905,7 +1905,7 @@ proc makeCancunTest(): seq[EngineSpec] =
 
       result.add InvalidPayloadTestCase(
         mainFork             : ForkCancun,
-        txType               : some(TxEIP4844),
+        txType               : Opt.some(TxEIP4844),
         invalidField         : invalidField,
         syncing              : syncing,
         invalidDetectedOnSync: invalidDetectedOnSync,
@@ -1915,26 +1915,26 @@ proc makeCancunTest(): seq[EngineSpec] =
   # Invalid Transaction ChainID Tests
   result.add InvalidTxChainIDTest(
     mainFork: ForkCancun,
-    txType  : some(TxEIP4844),
+    txType  : Opt.some(TxEIP4844),
   )
 
   result.add PayloadBuildAfterInvalidPayloadTest(
     mainFork: ForkCancun,
-    txType  : some(TxEIP4844),
+    txType  : Opt.some(TxEIP4844),
     invalidField: InvalidParentBeaconBlockRoot,
   )
 
   # Suggested Fee Recipient Tests (New Transaction Type)
   result.add SuggestedFeeRecipientTest(
     mainFork: ForkCancun,
-    txType  : some(TxEIP4844),
+    txType  : Opt.some(TxEIP4844),
     transactionCount: 1, # Only one blob tx gets through due to blob gas limit
   )
 
   # Prev Randao Tests (New Transaction Type)
   result.add PrevRandaoTransactionTest(
     mainFork: ForkCancun,
-    txType  : some(TxEIP4844),
+    txType  : Opt.some(TxEIP4844),
   )
 
 proc getGenesisProc(cs: BaseSpec, param: NetworkParams) =

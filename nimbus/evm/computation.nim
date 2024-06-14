@@ -68,15 +68,22 @@ template getCoinbase*(c: Computation): EthAddress =
 
 template getTimestamp*(c: Computation): uint64 =
   when evmc_enabled:
+    # TODO:
+    # while the choice of using int64 in evmc will not affect
+    # normal evm/evmc operations.
+    # the reason why cast[uint64] is being used here because
+    # some of the tests will fail if the value from test vector overflow
+    # see setupTxContext of host_services.nim too
+    # block timestamp overflow should be checked before entering EVM
     cast[uint64](c.host.getTxContext().block_timestamp)
   else:
     c.vmState.blockCtx.timestamp.uint64
 
 template getBlockNumber*(c: Computation): UInt256 =
   when evmc_enabled:
-    c.host.getBlockNumber()
+    c.host.getBlockNumber().u256
   else:
-    c.vmState.blockNumber.blockNumberToVmWord
+    c.vmState.blockNumber.u256
 
 template getDifficulty*(c: Computation): DifficultyInt =
   when evmc_enabled:
@@ -94,7 +101,7 @@ template getBaseFee*(c: Computation): UInt256 =
   when evmc_enabled:
     UInt256.fromEvmc c.host.getTxContext().block_base_fee
   else:
-    c.vmState.blockCtx.fee.get(0.u256)
+    c.vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 template getChainId*(c: Computation): uint64 =
   when evmc_enabled:
@@ -132,10 +139,10 @@ template getBlobBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.txCtx.blobBaseFee
 
-proc getBlockHash*(c: Computation, number: UInt256): Hash256 =
+proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 =
   when evmc_enabled:
     let
-      blockNumber = c.host.getTxContext().block_number.u256
+      blockNumber = BlockNumber c.host.getTxContext().block_number
       ancestorDepth  = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
       return Hash256()
@@ -150,7 +157,7 @@ proc getBlockHash*(c: Computation, number: UInt256): Hash256 =
       return Hash256()
     if number >= blockNumber:
       return Hash256()
-    c.vmState.getAncestorHash(number.vmWordToBlockNumber)
+    c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
   when evmc_enabled:
@@ -395,6 +402,8 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
 func addLogEntry*(c: Computation, log: Log) =
   c.vmState.stateDB.addLogEntry(log)
 
+# some gasRefunded operations still relying
+# on negative number
 func getGasRefund*(c: Computation): GasInt =
   if c.isSuccess:
     result = c.gasMeter.gasRefunded

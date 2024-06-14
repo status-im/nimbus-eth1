@@ -104,7 +104,7 @@ proc toXX(a: EthAddress): string =
 proc toXX(h: Hash256): string =
   h.data.mapIt(it.toHex2).joinXX
 
-proc toXX(v: int64; r,s: UInt256): string =
+proc toXX(v: uint64; r,s: UInt256): string =
   v.toXX & ":" & ($r).joinXX & ":" & ($s).joinXX
 
 # ------------------------------------------------------------------------------
@@ -127,10 +127,10 @@ proc pp*(tx: Transaction): string =
   result &= ",nonce=" & tx.nonce.toXX
   if tx.gasPrice != 0:
     result &= ",gasPrice=" & tx.gasPrice.toKMG
-  if tx.maxPriorityFee != 0:
-    result &= ",maxPrioFee=" & tx.maxPriorityFee.toKMG
-  if tx.maxFee != 0:
-    result &= ",maxFee=" & tx.maxFee.toKMG
+  if tx.maxPriorityFeePerGas != 0:
+    result &= ",maxPrioFee=" & tx.maxPriorityFeePerGas.toKMG
+  if tx.maxFeePerGas != 0:
+    result &= ",maxFee=" & tx.maxFeePerGas.toKMG
   if tx.gasLimit != 0:
     result &= ",gasLimit=" & tx.gasLimit.toKMG
   if tx.to.isSome:

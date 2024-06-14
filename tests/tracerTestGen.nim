@@ -9,17 +9,14 @@
 # according to those terms.
 
 import
-  json,
+  std/[json, strutils],
   results,
   ../nimbus/common/common, # must be early (compilation annoyance)
   ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   ../nimbus/[config, tracer, vm_types]
 
-proc dumpTest(com: CommonRef, blockNumber: int) =
-  let
-    blockNumber = blockNumber.u256
-
+proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
   var
     capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)

@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  json, strutils, options, os,
+  json, strutils, os,
   eth/common, httputils, nimcrypto/utils,
   stint, stew/byteutils
 
@@ -100,11 +100,11 @@ proc fromJson*(n: JsonNode, name: string, x: var EthTime) =
   x = EthTime(hexToInt(n[name].getStr(), uint64))
   doAssert(x.uint64.prefixHex == toLowerAscii(n[name].getStr()), name)
 
-proc fromJson*[T](n: JsonNode, name: string, x: var Option[T]) =
+proc fromJson*[T](n: JsonNode, name: string, x: var Opt[T]) =
   if name in n:
     var val: T
     n.fromJson(name, val)
-    x = some(val)
+    x = Opt.some(val)
 
 proc fromJson*(n: JsonNode, name: string, x: var TxType) =
   let node = n[name]
@@ -127,25 +127,25 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "miner", result.coinbase
   n.fromJson "stateRoot", result.stateRoot
   n.fromJson "transactionsRoot", result.txRoot
-  n.fromJson "receiptsRoot", result.receiptRoot
-  n.fromJson "logsBloom", result.bloom
+  n.fromJson "receiptsRoot", result.receiptsRoot
+  n.fromJson "logsBloom", result.logsBloom
   n.fromJson "difficulty", result.difficulty
-  n.fromJson "number", result.blockNumber
+  n.fromJson "number", result.number
   n.fromJson "gasLimit", result.gasLimit
   n.fromJson "gasUsed", result.gasUsed
   n.fromJson "timestamp", result.timestamp
   n.fromJson "extraData", result.extraData
-  n.fromJson "mixHash", result.mixDigest
+  n.fromJson "mixHash", result.mixHash
   n.fromJson "nonce", result.nonce
-  n.fromJson "baseFeePerGas", result.fee
+  n.fromJson "baseFeePerGas", result.baseFeePerGas
   n.fromJson "withdrawalsRoot", result.withdrawalsRoot
   n.fromJson "blobGasUsed", result.blobGasUsed
   n.fromJson "excessBlobGas", result.excessBlobGas
   n.fromJson "parentBeaconBlockRoot", result.parentBeaconBlockRoot
 
-  if result.baseFee == 0.u256:
+  if result.baseFeePerGas.get(0.u256) == 0.u256:
     # probably geth bug
-    result.fee = none(UInt256)
+    result.baseFeePerGas = Opt.none(UInt256)
 
 proc parseAccessPair(n: JsonNode): AccessPair =
   n.fromJson "address", result.address
@@ -162,7 +162,7 @@ proc parseTransaction*(n: JsonNode): Transaction =
   if n["to"].kind != JNull:
     var to: EthAddress
     n.fromJson "to", to
-    tx.to = some(to)
+    tx.to = Opt.some(to)
 
   n.fromJson "value", tx.value
   n.fromJson "input", tx.payload
@@ -174,8 +174,8 @@ proc parseTransaction*(n: JsonNode): Transaction =
     n.fromJson "type", tx.txType
 
   if tx.txType >= TxEip1559:
-    n.fromJson "maxPriorityFeePerGas", tx.maxPriorityFee
-    n.fromJson "maxFeePerGas", tx.maxFee
+    n.fromJson "maxPriorityFeePerGas", tx.maxPriorityFeePerGas
+    n.fromJson "maxFeePerGas", tx.maxFeePerGas
 
   if tx.txType >= TxEip2930:
     if n.hasKey("chainId"):
@@ -248,7 +248,7 @@ proc parseReceipt*(n: JsonNode): Receipt =
     rec.status = status == 1
 
   n.fromJson "cumulativeGasUsed", rec.cumulativeGasUsed
-  n.fromJson "logsBloom", rec.bloom
+  n.fromJson "logsBloom", rec.logsBloom
   rec.logs = parseLogs(n["logs"])
   rec
 

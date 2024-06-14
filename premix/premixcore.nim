@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +10,7 @@
 
 import
   json, strutils, os,
-  stint, chronicles, eth/common,
+  chronicles, eth/common,
   ../nimbus/transaction, ../nimbus/launcher,
   ./js_tracer, ./parser, ./downloader
 
@@ -78,7 +78,7 @@ proc generatePremixData*(nimbus, geth: JsonNode) =
   var data = "var premixData = " & premixData.pretty & "\n"
   writeFile(getFileDir("index.html") / "premixData.js", data)
 
-proc hasInternalTx(tx: Transaction, blockNumber: UInt256, sender: EthAddress): bool =
+proc hasInternalTx(tx: Transaction, blockNumber: BlockNumber, sender: EthAddress): bool =
   let
     number = %(blockNumber.prefixHex)
     recipient = tx.getRecipient(sender)
@@ -100,7 +100,7 @@ proc requestInternalTx(txHash, tracer: JsonNode): JsonNode =
     raise newException(ValueError, "Error when retrieving transaction postState")
   result = txTrace
 
-proc requestAccount*(premix: JsonNode, blockNumber: UInt256, address: EthAddress) =
+proc requestAccount*(premix: JsonNode, blockNumber: BlockNumber, address: EthAddress) =
   let
     number = %(blockNumber.prefixHex)
     address = address.prefixHex
@@ -124,7 +124,7 @@ proc padding(x: string): JsonNode =
   let pad = repeat('0', 64 - val.len)
   result = newJString("0x" & pad & val)
 
-proc updateAccount*(address: string, account: JsonNode, blockNumber: UInt256) =
+proc updateAccount*(address: string, account: JsonNode, blockNumber: BlockNumber) =
   let number = %(blockNumber.prefixHex)
 
   var storage = newJArray()
@@ -143,7 +143,7 @@ proc updateAccount*(address: string, account: JsonNode, blockNumber: UInt256) =
     x["value"] = padding(x["value"].getStr())
     account["storage"][x["key"].getStr] = x["value"]
 
-proc requestPostState*(premix, n: JsonNode, blockNumber: UInt256) =
+proc requestPostState*(premix, n: JsonNode, blockNumber: BlockNumber) =
   type
     TxKind {.pure.} = enum
       Regular
@@ -172,7 +172,7 @@ proc requestPostState*(premix, n: JsonNode, blockNumber: UInt256) =
     t["txKind"] = %($txKind)
 
 proc requestPostState*(thisBlock: Block): JsonNode =
-  let blockNumber = thisBlock.header.blockNumber
+  let blockNumber = thisBlock.header.number
   var premix = newJArray()
 
   premix.requestPostState(thisBlock.jsonData, blockNumber)

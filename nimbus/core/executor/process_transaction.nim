@@ -32,7 +32,7 @@ proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
   ## function just plays safe. In particular, the `test_general_state_json.nim`
   ## module modifies this block header `baseFee` field unconditionally :(.
   if FkLondon <= fork:
-    result = header.baseFee
+    result = header.baseFeePerGas.get(0.u256)
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
@@ -79,7 +79,7 @@ proc processTransactionImpl(
     baseFee256 = header.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
     tx = eip1559TxNormalization(tx, baseFee)
-    priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
+    priorityFee = min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee)
     excessBlobGas = header.excessBlobGas.get(0'u64)
 
   # Return failure unless explicitely set `ok()`

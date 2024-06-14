@@ -241,8 +241,8 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     #   M(currentMemSize, f, l) = currentMemSize
 
     let
-      prevWords: int64 = currentMemSize.wordCount
-      newWords: int64 = (memOffset + memLength).wordCount
+      prevWords = GasInt currentMemSize.wordCount
+      newWords  = GasInt (memOffset + memLength).wordCount
 
     if memLength == 0 or newWords <= prevWords:
       # Special subcase of memory-expansion cost
@@ -321,8 +321,9 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     when defined(evmc_enabled):
       const c = SstoreCost[fork]
       let sc  = c[gasParams.s_status]
-      res.gasCost   = sc.gasCost
-      res.gasRefund = sc.gasRefund
+      res.gasCost = GasInt sc.gasCost
+      # refund is used in host_services.setStorage
+      # res.gasRefund = sc.gasRefund
       ok(res)
     else:
       when fork >= FkBerlin:
@@ -759,7 +760,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 const
   BaseGasFees: GasFeeSchedule = [
     # Fee Schedule for the initial Ethereum forks
-    GasZero:            0'i64,
+    GasZero:            0.GasInt,
     GasBase:            2,
     GasVeryLow:         3,
     GasLow:             5,
@@ -937,32 +938,32 @@ proc forkToSchedule*(fork: EVMFork): GasCosts =
 
 const
   ## Precompile costs
-  GasSHA256* =            60
-  GasSHA256Word* =        12
-  GasRIPEMD160* =         600
-  GasRIPEMD160Word* =     120
-  GasIdentity* =          15
-  GasIdentityWord* =      3
-  GasECRecover* =         3000
-  GasECAdd* =             500
-  GasECAddIstanbul* =     150
-  GasECMul* =             40000
-  GasECMulIstanbul* =     6000
-  GasECPairingBase* =     100000
-  GasECPairingBaseIstanbul* = 45000
-  GasECPairingPerPoint* = 80000
-  GasECPairingPerPointIstanbul* = 34000
+  GasSHA256* =            GasInt 60
+  GasSHA256Word* =        GasInt 12
+  GasRIPEMD160* =         GasInt 600
+  GasRIPEMD160Word* =     GasInt 120
+  GasIdentity* =          GasInt 15
+  GasIdentityWord* =      GasInt 3
+  GasECRecover* =         GasInt 3000
+  GasECAdd* =             GasInt 500
+  GasECAddIstanbul* =     GasInt 150
+  GasECMul* =             GasInt 40000
+  GasECMulIstanbul* =     GasInt 6000
+  GasECPairingBase* =     GasInt 100000
+  GasECPairingBaseIstanbul* = GasInt 45000
+  GasECPairingPerPoint* = GasInt 80000
+  GasECPairingPerPointIstanbul* = GasInt 34000
   # The Yellow Paper is special casing the GasQuadDivisor.
   # It is defined in Appendix G with the other GasFeeKind constants
   # instead of Appendix E for precompiled contracts
   GasQuadDivisor*        = 20
   GasQuadDivisorEIP2565* = 3
   # https://eips.ethereum.org/EIPS/eip-2537
-  Bls12381G1AddGas*          = 500
-  Bls12381G1MulGas*          = 12000
-  Bls12381G2AddGas*          = 800
-  Bls12381G2MulGas*          = 45000
-  Bls12381PairingBaseGas*    = 115000
-  Bls12381PairingPerPairGas* = 23000
-  Bls12381MapG1Gas*          = 5500
-  Bls12381MapG2Gas*          = 110000
+  Bls12381G1AddGas*          = GasInt 500
+  Bls12381G1MulGas*          = GasInt 12000
+  Bls12381G2AddGas*          = GasInt 800
+  Bls12381G2MulGas*          = GasInt 45000
+  Bls12381PairingBaseGas*    = GasInt 115000
+  Bls12381PairingPerPairGas* = GasInt 23000
+  Bls12381MapG1Gas*          = GasInt 5500
+  Bls12381MapG2Gas*          = GasInt 110000

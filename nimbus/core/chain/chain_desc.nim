@@ -111,10 +111,6 @@ proc `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
   ## `true`.
   c.verifyFrom = verifyFrom
 
-proc `verifyFrom=`*(c: ChainRef; verifyFrom: uint64) =
-  ## Variant of `verifyFrom=`
-  c.verifyFrom = verifyFrom.u256
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

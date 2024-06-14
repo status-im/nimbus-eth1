@@ -24,7 +24,7 @@ import
 
 proc setupTxContext*(vmState: BaseVMState,
                      txCtx: sink TxContext,
-                     forkOverride=none(EVMFork)) =
+                     forkOverride=Opt.none(EVMFork)) =
   ## this proc will be called each time a new transaction
   ## is going to be executed
   vmState.txCtx = system.move(txCtx)

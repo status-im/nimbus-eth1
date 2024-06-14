@@ -40,10 +40,10 @@ proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): CoreDbRef =
     accounts     = requestPostState(thisBlock)
     memoryDB     = newCoreDbRef DefaultDbMemory
     accountDB    = newAccountStateDB(memoryDB, parent.stateRoot)
-    parentNumber = %(parent.blockNumber.prefixHex)
+    parentNumber = %(parent.number.prefixHex)
 
   for address, account in accounts:
-    updateAccount(address, account, parent.blockNumber)
+    updateAccount(address, account, parent.number)
     let
       accountProof = account["accountProof"]
       storageProof = account["storageProof"]

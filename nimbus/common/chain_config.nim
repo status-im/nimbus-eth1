@@ -10,10 +10,10 @@
 {.push raises: [].}
 
 import
-  std/[tables, strutils, options, times, macros],
+  std/[tables, strutils, times, macros],
   eth/[common, rlp, p2p], stint, stew/[byteutils],
   json_serialization, chronicles,
-  json_serialization/std/options as jsoptions,
+  json_serialization/stew/results,
   json_serialization/lexer,
   "."/[genesis_alloc, hardforks]
 
@@ -33,10 +33,10 @@ type
     number*     : BlockNumber
     gasUser*    : GasInt
     parentHash* : Hash256
-    baseFeePerGas*: Option[UInt256]   # EIP-1559
-    blobGasUsed*  : Option[uint64]    # EIP-4844
-    excessBlobGas*: Option[uint64]    # EIP-4844
-    parentBeaconBlockRoot*: Option[Hash256]   # EIP-4788
+    baseFeePerGas*: Opt[UInt256]   # EIP-1559
+    blobGasUsed*  : Opt[uint64]    # EIP-4844
+    excessBlobGas*: Opt[uint64]    # EIP-4844
+    parentBeaconBlockRoot*: Opt[Hash256]   # EIP-4788
 
   GenesisAlloc* = Table[EthAddress, GenesisAccount]
   GenesisStorage* = Table[UInt256, UInt256]
@@ -77,7 +77,7 @@ derefType(ChainConfig).useDefaultReaderIn JGenesis
 # ------------------------------------------------------------------------------
 
 # used by chronicles json writer
-proc writeValue(writer: var JsonWriter, value: Option[EthTime])
+proc writeValue(writer: var JsonWriter, value: Opt[EthTime])
      {.gcsafe, raises: [IOError].} =
   mixin writeValue
 
@@ -225,10 +225,11 @@ proc readValue(reader: var JsonReader[JGenesis], value: var EthTime)
     if data.len > 2 and data[1] == 'x':
       value = fromHex[int64](data).EthTime
     else:
+      # TODO: use safer uint64 parser
       value = parseInt(data).EthTime
 
 # but shanghaiTime and cancunTime in config is in int literal
-proc readValue(reader: var JsonReader[JGenesis], value: var Option[EthTime])
+proc readValue(reader: var JsonReader[JGenesis], value: var Opt[EthTime])
     {.gcsafe, raises: [IOError, JsonReaderError].} =
   if reader.tokKind == JsonValueKind.Null:
     reset value
@@ -237,7 +238,7 @@ proc readValue(reader: var JsonReader[JGenesis], value: var Option[EthTime])
     # both readValue(GasInt/AccountNonce) will be called if
     # we use readValue(int64/uint64)
     let val = EthTime reader.parseInt(uint64)
-    value = some val
+    value = Opt.some val
 
 proc readValue(reader: var JsonReader[JGenesis], value: var seq[byte])
     {.gcsafe, raises: [SerializationError, IOError].} =
@@ -254,10 +255,18 @@ proc readValue(reader: var JsonReader[JGenesis], value: var EthAddress)
   wrapError:
     value = parseAddress(reader.readValue(string))
 
-proc readValue(reader: var JsonReader[JGenesis], value: var AccountNonce)
+proc readValue(reader: var JsonReader[JGenesis], value: var uint64)
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
-    value = fromHex[uint64](reader.readValue(string))
+    if reader.tokKind == JsonValueKind.Number:
+      value = reader.parseInt(uint64)
+    else:
+      let data = reader.readValue(string)
+      if data.len > 2 and data[1] == 'x':
+        value = fromHex[uint64](data)
+      else:
+        # TODO: use safer uint64 parser
+        value = parseInt(data).uint64
 
 proc readValue(reader: var JsonReader[JGenesis], value: var GenesisStorage)
     {.gcsafe, raises: [SerializationError, IOError].} =
@@ -447,69 +456,69 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       consensusType:       ConsensusType.POW,
       chainId:             MainNet.ChainId,
       # Genesis (Frontier):                                # 2015-07-30 15:26:13 UTC
-      # Frontier Thawing:  200_000.toBlockNumber,          # 2015-09-07 21:33:09 UTC
-      homesteadBlock:      some(1_150_000.toBlockNumber),  # 2016-03-14 18:49:53 UTC
-      daoForkBlock:        some(1_920_000.toBlockNumber),  # 2016-07-20 13:20:40 UTC
+      # Frontier Thawing:  200_000.BlockNumber,          # 2015-09-07 21:33:09 UTC
+      homesteadBlock:      Opt.some(1_150_000.BlockNumber),  # 2016-03-14 18:49:53 UTC
+      daoForkBlock:        Opt.some(1_920_000.BlockNumber),  # 2016-07-20 13:20:40 UTC
       daoForkSupport:      true,
-      eip150Block:         some(2_463_000.toBlockNumber),  # 2016-10-18 13:19:31 UTC
+      eip150Block:         Opt.some(2_463_000.BlockNumber),  # 2016-10-18 13:19:31 UTC
       eip150Hash:          toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
-      eip155Block:         some(2_675_000.toBlockNumber),  # Same as EIP-158
-      eip158Block:         some(2_675_000.toBlockNumber),  # 2016-11-22 16:15:44 UTC
-      byzantiumBlock:      some(4_370_000.toBlockNumber),  # 2017-10-16 05:22:11 UTC
-      constantinopleBlock: some(7_280_000.toBlockNumber),  # Skipped on Mainnet
-      petersburgBlock:     some(7_280_000.toBlockNumber),  # 2019-02-28 19:52:04 UTC
-      istanbulBlock:       some(9_069_000.toBlockNumber),  # 2019-12-08 00:25:09 UTC
-      muirGlacierBlock:    some(9_200_000.toBlockNumber),  # 2020-01-02 08:30:49 UTC
-      berlinBlock:         some(12_244_000.toBlockNumber), # 2021-04-15 10:07:03 UTC
-      londonBlock:         some(12_965_000.toBlockNumber), # 2021-08-05 12:33:42 UTC
-      arrowGlacierBlock:   some(13_773_000.toBlockNumber), # 2021-12-09 19:55:23 UTC
-      grayGlacierBlock:    some(15_050_000.toBlockNumber), # 2022-06-30 10:54:04 UTC
-      terminalTotalDifficulty: some(mainNetTTD),
-      shanghaiTime:        some(1_681_338_455.EthTime),    # 2023-04-12 10:27:35 UTC
-      cancunTime:          some(1_710_338_135.EthTime)     # 2024-03-13 13:55:35 UTC
+      eip155Block:         Opt.some(2_675_000.BlockNumber),  # Same as EIP-158
+      eip158Block:         Opt.some(2_675_000.BlockNumber),  # 2016-11-22 16:15:44 UTC
+      byzantiumBlock:      Opt.some(4_370_000.BlockNumber),  # 2017-10-16 05:22:11 UTC
+      constantinopleBlock: Opt.some(7_280_000.BlockNumber),  # Skipped on Mainnet
+      petersburgBlock:     Opt.some(7_280_000.BlockNumber),  # 2019-02-28 19:52:04 UTC
+      istanbulBlock:       Opt.some(9_069_000.BlockNumber),  # 2019-12-08 00:25:09 UTC
+      muirGlacierBlock:    Opt.some(9_200_000.BlockNumber),  # 2020-01-02 08:30:49 UTC
+      berlinBlock:         Opt.some(12_244_000.BlockNumber), # 2021-04-15 10:07:03 UTC
+      londonBlock:         Opt.some(12_965_000.BlockNumber), # 2021-08-05 12:33:42 UTC
+      arrowGlacierBlock:   Opt.some(13_773_000.BlockNumber), # 2021-12-09 19:55:23 UTC
+      grayGlacierBlock:    Opt.some(15_050_000.BlockNumber), # 2022-06-30 10:54:04 UTC
+      terminalTotalDifficulty: Opt.some(mainNetTTD),
+      shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
+      cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC
     )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
     ChainConfig(
       consensusType:       ConsensusType.POW,
       chainId:             SepoliaNet.ChainId,
-      homesteadBlock:      some(0.toBlockNumber),
+      homesteadBlock:      Opt.some(0.BlockNumber),
       daoForkSupport:      false,
-      eip150Block:         some(0.toBlockNumber),
+      eip150Block:         Opt.some(0.BlockNumber),
       eip150Hash:          toDigest("0000000000000000000000000000000000000000000000000000000000000000"),
-      eip155Block:         some(0.toBlockNumber),
-      eip158Block:         some(0.toBlockNumber),
-      byzantiumBlock:      some(0.toBlockNumber),
-      constantinopleBlock: some(0.toBlockNumber),
-      petersburgBlock:     some(0.toBlockNumber),
-      istanbulBlock:       some(0.toBlockNumber),
-      muirGlacierBlock:    some(0.toBlockNumber),
-      berlinBlock:         some(0.toBlockNumber),
-      londonBlock:         some(0.toBlockNumber),
-      mergeForkBlock:      some(1735371.toBlockNumber),
-      terminalTotalDifficulty: some(sepoliaTTD),
-      shanghaiTime:        some(1_677_557_088.EthTime),
-      cancunTime:          some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
+      eip155Block:         Opt.some(0.BlockNumber),
+      eip158Block:         Opt.some(0.BlockNumber),
+      byzantiumBlock:      Opt.some(0.BlockNumber),
+      constantinopleBlock: Opt.some(0.BlockNumber),
+      petersburgBlock:     Opt.some(0.BlockNumber),
+      istanbulBlock:       Opt.some(0.BlockNumber),
+      muirGlacierBlock:    Opt.some(0.BlockNumber),
+      berlinBlock:         Opt.some(0.BlockNumber),
+      londonBlock:         Opt.some(0.BlockNumber),
+      mergeForkBlock:      Opt.some(1735371.BlockNumber),
+      terminalTotalDifficulty: Opt.some(sepoliaTTD),
+      shanghaiTime:        Opt.some(1_677_557_088.EthTime),
+      cancunTime:          Opt.some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
     )
   of HoleskyNet:
     ChainConfig(
       consensusType:       ConsensusType.POS,
       chainId:             HoleskyNet.ChainId,
-      homesteadBlock:      some(0.toBlockNumber),
-      eip150Block:         some(0.toBlockNumber),
-      eip155Block:         some(0.toBlockNumber),
-      eip158Block:         some(0.toBlockNumber),
-      byzantiumBlock:      some(0.toBlockNumber),
-      constantinopleBlock: some(0.toBlockNumber),
-      petersburgBlock:     some(0.toBlockNumber),
-      istanbulBlock:       some(0.toBlockNumber),
-      berlinBlock:         some(0.toBlockNumber),
-      londonBlock:         some(0.toBlockNumber),
-      mergeForkBlock:      some(0.toBlockNumber),
-      terminalTotalDifficulty: some(0.u256),
-      terminalTotalDifficultyPassed: some(true),
-      shanghaiTime:        some(1_696_000_704.EthTime),
-      cancunTime:          some(1_707_305_664.EthTime), # 2024-02-07 11:34:24
+      homesteadBlock:      Opt.some(0.BlockNumber),
+      eip150Block:         Opt.some(0.BlockNumber),
+      eip155Block:         Opt.some(0.BlockNumber),
+      eip158Block:         Opt.some(0.BlockNumber),
+      byzantiumBlock:      Opt.some(0.BlockNumber),
+      constantinopleBlock: Opt.some(0.BlockNumber),
+      petersburgBlock:     Opt.some(0.BlockNumber),
+      istanbulBlock:       Opt.some(0.BlockNumber),
+      berlinBlock:         Opt.some(0.BlockNumber),
+      londonBlock:         Opt.some(0.BlockNumber),
+      mergeForkBlock:      Opt.some(0.BlockNumber),
+      terminalTotalDifficulty: Opt.some(0.u256),
+      terminalTotalDifficultyPassed: Opt.some(true),
+      shanghaiTime:        Opt.some(1_696_000_704.EthTime),
+      cancunTime:          Opt.some(1_707_305_664.EthTime), # 2024-02-07 11:34:24
     )
   else:
     ChainConfig()

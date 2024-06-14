@@ -46,8 +46,7 @@ type
     code*    : seq[byte]
     logs*    : seq[Log]
     success* : bool
-    gasLimit*: GasInt
-    gasUsed* : GasInt
+    gasUsed* : Opt[GasInt]
     data*    : seq[byte]
     output*  : seq[byte]
 
@@ -195,14 +194,14 @@ proc parseFork(fork: NimNode): string =
   fork[0].expectKind({nnkIdent, nnkStrLit})
   fork[0].strVal
 
-proc parseGasUsed(gas: NimNode): GasInt =
+proc parseGasUsed(gas: NimNode): Opt[GasInt] =
   gas[0].expectKind(nnkIntLit)
-  result = gas[0].intVal
+  result = Opt.some(GasInt gas[0].intVal)
 
 proc parseAssembler(list: NimNode): MacroAssembler =
   result.forkStr = "Frontier"
   result.asmBlock.success = true
-  result.asmBlock.gasUsed = -1
+  result.asmBlock.gasUsed = Opt.none(GasInt)
   list.expectKind nnkStmtList
   for callSection in list:
     callSection.expectKind(nnkCall)
@@ -272,7 +271,7 @@ proc initVMEnv*(network: string): BaseVMState =
     parent = BlockHeader(stateRoot: EMPTY_ROOT_HASH)
     parentHash = rlpHash(parent)
     header = BlockHeader(
-      blockNumber: 1.u256,
+      number: 1'u64,
       stateRoot: EMPTY_ROOT_HASH,
       parentHash: parentHash,
       coinbase: coinbase,
@@ -295,9 +294,9 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
       error "different success value", expected=boa.success, actual=false
       return false
 
-  if boa.gasUsed != -1:
-    if boa.gasUsed != asmResult.gasUsed:
-      error "different gasUsed", expected=boa.gasUsed, actual=asmResult.gasUsed
+  if boa.gasUsed.isSome:
+    if boa.gasUsed.get != asmResult.gasUsed:
+      error "different gasUsed", expected=boa.gasUsed.get, actual=asmResult.gasUsed
       return false
 
   if boa.stack.len != asmResult.stack.len:
@@ -387,7 +386,7 @@ proc createSignedTx(payload: Blob, chainId: ChainId): Transaction =
     nonce: 0,
     gasPrice: 1.GasInt,
     gasLimit: 500_000_000.GasInt,
-    to: codeAddress.some,
+    to: Opt.some codeAddress,
     value: 500.u256,
     payload: payload,
     versionedHashes: @[EMPTY_UNCLE_HASH, EMPTY_SHA3]

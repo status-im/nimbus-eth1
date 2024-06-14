@@ -66,11 +66,11 @@ method execute(cs: InvalidPayloadAttributesTest, env: TestEnv): bool =
       let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
       if cs.syncing:
         # If we are SYNCING, the outcome should be SYNCING regardless of the validity of the payload atttributes
-        let r = env.engine.client.forkchoiceUpdated(version, fcu, some(attr))
+        let r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(attr))
         r.expectPayloadStatus(PayloadExecutionStatus.syncing)
-        r.expectPayloadID(none(PayloadID))
+        r.expectPayloadID(Opt.none(PayloadID))
       else:
-        let r = env.engine.client.forkchoiceUpdated(version, fcu, some(attr))
+        let r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(attr))
         r.expectErrorCode(engineApiInvalidPayloadAttributes)
 
         # Check that the forkchoice was applied, regardless of the error

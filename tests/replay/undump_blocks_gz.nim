@@ -28,7 +28,7 @@ template say(args: varargs[untyped]) =
 # ------------------------------------------------------------------------------
 
 proc dumpBlocksBegin*(headers: openArray[BlockHeader]): string =
-  & "transaction #{headers[0].blockNumber} {headers.len}"
+  & "transaction #{headers[0].number} {headers.len}"
 
 proc dumpBlocksList*(header: BlockHeader; body: BlockBody): string =
   & "block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
@@ -45,9 +45,9 @@ proc dumpBlocksListNl*(header: BlockHeader; body: BlockBody): string =
 
 proc dumpBlocksBeginNl*(db: CoreDbRef;
                        headers: openArray[BlockHeader]): string =
-  if headers[0].blockNumber == 1.u256:
+  if headers[0].number == 1'u64:
     let
-      h0 = db.getBlockHeader(0.u256)
+      h0 = db.getBlockHeader(0'u64)
       b0 = db.getBlockBody(h0.blockHash)
     result = "" &
       dumpBlocksBegin(@[h0]) & "\n" &

@@ -57,24 +57,22 @@ import
 
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
-from ../../nimbus/utils/utils import calcTxRoot, calcReceiptRoot
+from ../../nimbus/utils/utils import calcTxRoot, calcreceiptsRoot
 
 chronicles.formatIt(IoErrorCode):
   $it
 
 proc downloadHeader(client: RpcClient, i: uint64): BlockHeader =
-  let blockNumber = u256(i)
   try:
-    let jsonHeader = requestHeader(blockNumber, some(client))
+    let jsonHeader = requestHeader(i, some(client))
     parseBlockHeader(jsonHeader)
   except CatchableError as e:
     fatal "Error while requesting BlockHeader", error = e.msg, number = i
     quit 1
 
 proc downloadBlock(i: uint64, client: RpcClient): Block =
-  let num = u256(i)
   try:
-    return requestBlock(num, flags = {DownloadReceipts}, client = some(client))
+    return requestBlock(i, flags = {DownloadReceipts}, client = some(client))
   except CatchableError as e:
     fatal "Error while requesting Block", error = e.msg, number = i
     quit 1
@@ -248,9 +246,7 @@ proc cmdExportEra1(config: ExporterConf) =
             # TODO: Not sure about the errors that can occur here. But the whole
             # block requests over json-rpc should be reworked here (and can be
             # used in the bridge also then)
-            requestBlock(
-              blockNumber.u256, flags = {DownloadReceipts}, client = some(client)
-            )
+            requestBlock(blockNumber, flags = {DownloadReceipts}, client = some(client))
           except CatchableError as e:
             error "Failed retrieving block, skip creation of era1 file",
               blockNumber, era, error = e.msg
@@ -406,7 +402,7 @@ when isMainModule:
 
               headerHash = to0xHex(rlpHash(blockHeader).data)
             debug "Header decoded successfully",
-              hash = headerHash, blockNumber = blockHeader.blockNumber
+              hash = headerHash, blockNumber = blockHeader.number
           else:
             warn "Skipping record, not a block header", typ = toHex(header.typ)
 
@@ -464,10 +460,10 @@ when isMainModule:
                   return err("Invalid block header in " & file & ": " & e.msg)
 
               # Quick sanity check
-              if blockHeader.blockNumber.truncate(uint64) != i * epochSize + count:
+              if blockHeader.number != i * epochSize + count:
                 fatal "Incorrect block headers in file",
                   file = file,
-                  blockNumber = blockHeader.blockNumber,
+                  blockNumber = blockHeader.number,
                   expectedBlockNumber = i * epochSize + count
                 quit 1
 
@@ -478,7 +474,7 @@ when isMainModule:
               # a header for the next epoch (or on finishing the epoch).
               if writeEpochAccumulators:
                 if accumulator.currentEpoch.len() == epochSize or
-                    blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+                    blockHeader.number == mergeBlockNumber - 1:
                   let file =
                     try:
                       dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
@@ -495,7 +491,7 @@ when isMainModule:
                 info "Updated an epoch", epoch = i
               count.inc()
 
-              if blockHeader.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+              if blockHeader.number == mergeBlockNumber - 1:
                 let finishedAccumulator = finishAccumulator(accumulator)
                 info "Updated last epoch, finished building master accumulator",
                   epoch = i

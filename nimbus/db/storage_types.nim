@@ -135,4 +135,3 @@ template toOpenArray*(k: DbKey): openArray[byte] =
 
 func `==`*(a, b: DbKey): bool {.inline.} =
   a.toOpenArray == b.toOpenArray
-

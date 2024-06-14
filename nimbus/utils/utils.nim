@@ -24,7 +24,7 @@ export eth_types_rlp
 proc calcRootHash[T](items: openArray[T]): Hash256 {.gcsafe.} =
   let sig = merkleSignBegin()
   for i, t in items:
-    sig.merkleSignAdd(rlp.encode(i), rlp.encode(t))
+    sig.merkleSignAdd(rlp.encode(i.uint), rlp.encode(t))
   sig.merkleSignCommit.value.to(Hash256)
 
 template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
@@ -33,7 +33,7 @@ template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
 template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Hash256 =
   calcRootHash(withdrawals)
 
-template calcReceiptRoot*(receipts: openArray[Receipt]): Hash256 =
+template calcReceiptsRoot*(receipts: openArray[Receipt]): Hash256 =
   calcRootHash(receipts)
 
 func sumHash*(hashes: varargs[Hash256]): Hash256 =
@@ -135,5 +135,5 @@ func weiAmount*(w: Withdrawal): UInt256 =
   w.amount.u256 * (10'u64 ^ 9'u64).u256
 
 func isGenesis*(header: BlockHeader): bool =
-  header.blockNumber == 0.u256 and
+  header.number == 0'u64 and
     header.parentHash == GENESIS_PARENT_HASH

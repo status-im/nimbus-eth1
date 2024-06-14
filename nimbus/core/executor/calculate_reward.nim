@@ -22,8 +22,8 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
   var mainReward = blockReward
 
   for uncle in uncles:
-    var uncleReward = uncle.blockNumber.u256 + 8.u256
-    uncleReward -= number
+    var uncleReward = uncle.number.u256 + 8.u256
+    uncleReward -= number.u256
     uncleReward = uncleReward * blockReward
     uncleReward = uncleReward div 8.u256
     vmState.mutateStateDB:
@@ -36,6 +36,6 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
 
 proc calculateReward*(vmState: BaseVMState;
                       header: BlockHeader; uncles: openArray[BlockHeader]) =
-  vmState.calculateReward(header.coinbase, header.blockNumber, uncles)
+  vmState.calculateReward(header.coinbase, header.number, uncles)
 
 # End

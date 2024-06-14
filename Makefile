@@ -137,6 +137,7 @@ GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submod
   git submodule update --init vendor/sepolia; \
   git submodule update --init vendor/gnosis-chain-configs; \
   git submodule update --init --recursive vendor/nim-kzg4844; \
+  git submodule update --init vendor/mainnet; \
   cd ../..
 
 .DEFAULT:

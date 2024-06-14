@@ -51,11 +51,11 @@ type
 
   TxNode = ref object of Node
     tx: Transaction
-    index: int
+    index: uint64
     blockNumber: common.BlockNumber
     receipt: Receipt
     gasUsed: GasInt
-    baseFee: Option[UInt256]
+    baseFee: Opt[UInt256]
 
   LogNode = ref object of Node
     log: Log
@@ -85,9 +85,9 @@ proc toHash(n: Node): common.Hash256 {.gcsafe, raises: [ValueError].} =
 
 proc toBlockNumber(n: Node): common.BlockNumber {.gcsafe, raises: [ValueError].} =
   if n.kind == nkInt:
-    result = parse(n.intVal, UInt256, radix = 10)
+    result = parse(n.intVal, UInt256, radix = 10).truncate(common.BlockNumber)
   elif n.kind == nkString:
-    result = parse(n.stringVal, UInt256, radix = 16)
+    result = parse(n.stringVal, UInt256, radix = 16).truncate(common.BlockNumber)
   else:
     doAssert(false, "unknown node type: " & $n.kind)
 
@@ -109,7 +109,7 @@ proc accountNode(ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: 
     db: db
   )
 
-proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: int, blockNumber: common.BlockNumber, baseFee: Option[UInt256]): Node =
+proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: uint64, blockNumber: common.BlockNumber, baseFee: Opt[UInt256]): Node =
   TxNode(
     kind: nkMap,
     typeName: ctx.ids[ethTransaction],
@@ -281,15 +281,15 @@ proc getTxs(ctx: GraphqlContextRef, header: common.BlockHeader): RespResult =
     if txCount == 0:
       return ok(respNull())
     var list = respList()
-    var index = 0
+    var index = 0'u64
     for n in getBlockTransactionData(ctx.chainDB, header.txRoot):
       let tx = decodeTx(n)
-      list.add txNode(ctx, tx, index, header.blockNumber, header.fee)
+      list.add txNode(ctx, tx, index, header.number, header.baseFeePerGas)
       inc index
 
-    index = 0
+    index = 0'u64
     var prevUsed = 0.GasInt
-    for r in getReceipts(ctx.chainDB, header.receiptRoot):
+    for r in getReceipts(ctx.chainDB, header.receiptsRoot):
       let tx = TxNode(list.sons[index])
       tx.receipt = r
       tx.gasUsed = r.cumulativeGasUsed - prevUsed
@@ -313,15 +313,15 @@ proc getWithdrawals(ctx: GraphqlContextRef, header: common.BlockHeader): RespRes
   except CatchableError as e:
     err("can't get transactions: " & e.msg)
 
-proc getTxAt(ctx: GraphqlContextRef, header: common.BlockHeader, index: int): RespResult =
+proc getTxAt(ctx: GraphqlContextRef, header: common.BlockHeader, index: uint64): RespResult =
   try:
     var tx: Transaction
     if getTransaction(ctx.chainDB, header.txRoot, index, tx):
-      let txn = txNode(ctx, tx, index, header.blockNumber, header.fee)
+      let txn = txNode(ctx, tx, index, header.number, header.baseFeePerGas)
 
-      var i = 0
+      var i = 0'u64
       var prevUsed = 0.GasInt
-      for r in getReceipts(ctx.chainDB, header.receiptRoot):
+      for r in getReceipts(ctx.chainDB, header.receiptsRoot):
         if i == index:
           let tx = TxNode(txn)
           tx.receipt = r
@@ -619,14 +619,14 @@ proc txNonce(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} 
 
 proc txIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  ok(resp(tx.index))
+  ok(resp(tx.index.int))
 
 proc txFrom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
 
   let blockNumber = if params[0].val.kind != nkEmpty:
-    parseU64(params[0].val).toBlockNumber
+    parseU64(params[0].val)
   else:
     tx.blockNumber
 
@@ -644,7 +644,7 @@ proc txTo(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
 
   let blockNumber = if params[0].val.kind != nkEmpty:
-    parseU64(params[0].val).toBlockNumber
+    parseU64(params[0].val)
   else:
     tx.blockNumber
 
@@ -662,27 +662,27 @@ proc txValue(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} 
 
 proc txGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType == TxEip1559:
+  if tx.tx.txType >= TxEip1559:
     if tx.baseFee.isNone:
       return bigIntNode(tx.tx.gasPrice)
 
     let baseFee = tx.baseFee.get().truncate(GasInt)
-    let priorityFee = min(tx.tx.maxPriorityFee, tx.tx.maxFee - baseFee)
+    let priorityFee = min(tx.tx.maxPriorityFeePerGas, tx.tx.maxFeePerGas - baseFee)
     bigIntNode(priorityFee + baseFee)
   else:
     bigIntNode(tx.tx.gasPrice)
 
 proc txMaxFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType == TxEip1559:
-    bigIntNode(tx.tx.maxFee)
+  if tx.tx.txType >= TxEip1559:
+    bigIntNode(tx.tx.maxFeePerGas)
   else:
     ok(respNull())
 
 proc txMaxPriorityFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType == TxEip1559:
-    bigIntNode(tx.tx.maxPriorityFee)
+  if tx.tx.txType >= TxEip1559:
+    bigIntNode(tx.tx.maxPriorityFeePerGas)
   else:
     ok(respNull())
 
@@ -692,7 +692,7 @@ proc txEffectiveGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.
     return bigIntNode(tx.tx.gasPrice)
 
   let baseFee = tx.baseFee.get().truncate(GasInt)
-  let priorityFee = min(tx.tx.maxPriorityFee, tx.tx.maxFee - baseFee)
+  let priorityFee = min(tx.tx.maxPriorityFeePerGas, tx.tx.maxFeePerGas - baseFee)
   bigIntNode(priorityFee + baseFee)
 
 proc txChainId(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -885,7 +885,7 @@ const wdProcs = {
 
 proc blockNumberImpl(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
-  longNode(h.header.blockNumber)
+  longNode(h.header.number)
 
 proc blockHashImpl(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
@@ -916,7 +916,7 @@ proc blockStateRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
 
 proc blockReceiptsRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
-  resp(h.header.receiptRoot)
+  resp(h.header.receiptsRoot)
 
 proc blockMiner(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -941,11 +941,11 @@ proc blockTimestamp(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
 
 proc blockLogsBloom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
-  resp(h.header.bloom)
+  resp(h.header.logsBloom)
 
 proc blockMixHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
-  resp(h.header.mixDigest)
+  resp(h.header.mixHash)
 
 proc blockDifficulty(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
@@ -989,7 +989,7 @@ proc blockTransactionAt(ud: RootRef, params: Args, parent: Node): RespResult {.a
   try:
     let index = parseU64(params[0].val)
     {.cast(noSideEffect).}:
-      getTxAt(ctx, h.header, index.int)
+      getTxAt(ctx, h.header, index)
   except ValueError as ex:
     err(ex.msg)
 
@@ -1027,24 +1027,24 @@ template fieldString(n: Node, field: int): string =
 template optionalAddress(dstField: untyped, n: Node, field: int) =
   if isSome(n, field):
     let address = Address.fromHex(fieldString(n, field))
-    dstField = some(address)
+    dstField = Opt.some(address)
 
 template optionalGasInt(dstField: untyped, n: Node, field: int) =
   if isSome(n, field):
-    dstField = some(parseU64(n[field][1]).Quantity)
+    dstField = Opt.some(parseU64(n[field][1]).Quantity)
 
 template optionalGasHex(dstField: untyped, n: Node, field: int) =
   if isSome(n, field):
     let gas = parse(fieldString(n, field), UInt256, radix = 16)
-    dstField = some(gas.truncate(uint64).Quantity)
+    dstField = Opt.some(gas.truncate(uint64).Quantity)
 
 template optionalHexU256(dstField: untyped, n: Node, field: int) =
   if isSome(n, field):
-    dstField = some(parse(fieldString(n, field), UInt256, radix = 16))
+    dstField = Opt.some(parse(fieldString(n, field), UInt256, radix = 16))
 
 template optionalBytes(dstField: untyped, n: Node, field: int) =
   if isSome(n, field):
-    dstField = some(hexToSeqByte(fieldString(n, field)))
+    dstField = Opt.some(hexToSeqByte(fieldString(n, field)))
 
 proc toTxArgs(n: Node): TransactionArgs {.gcsafe, raises: [ValueError].} =
   optionalAddress(result.source, n, fFrom)
@@ -1093,8 +1093,8 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
 
 proc blockBaseFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
-  if h.header.fee.isSome:
-    bigIntNode(h.header.fee.get)
+  if h.header.baseFeePerGas.isSome:
+    bigIntNode(h.header.baseFeePerGas.get)
   else:
     ok(respNull())
 
@@ -1243,7 +1243,7 @@ proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): common.BlockNumber =
   if number.kind == nkEmpty:
     ctx.com.syncCurrent
   else:
-    parseU64(number).toBlockNumber
+    parseU64(number)
 
 proc queryAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -1279,17 +1279,17 @@ proc queryBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma
 
 proc queryBlocks(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let fromNumber = parseU64(params[0].val).toBlockNumber
+  let fromNumber = parseU64(params[0].val)
 
   let to = params[1].val
   let toNumber = pickBlockNumber(ctx, to)
 
   if fromNumber > toNumber:
-    return err("from(" & fromNumber.toString &
-      ") is bigger than to(" & toNumber.toString & ")")
+    return err("from(" & $fromNumber &
+      ") is bigger than to(" & $toNumber & ")")
 
   # TODO: what is the maximum number here?
-  if toNumber - fromNumber > 32.toBlockNumber:
+  if toNumber - fromNumber > 32'u64:
     return err("can't get more than 32 blocks at once")
 
   var list = respList()
@@ -1300,7 +1300,7 @@ proc queryBlocks(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
       list.add respNull()
     else:
       list.add n.get()
-    number += 1.toBlockNumber
+    number += 1'u64
 
   ok(list)
 

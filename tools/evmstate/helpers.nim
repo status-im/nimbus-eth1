@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[options, json, strutils],
+  std/[json, strutils],
   eth/[common, keys],
   eth/trie/trie_defs,
   stint,
@@ -91,9 +91,9 @@ template omitZero(T: type, nField: string, index: int): auto =
 
 template optional(T: type, nField: string): auto =
   if n.hasKey(nField):
-    some(T.fromJson(n[nField]))
+    Opt.some(T.fromJson(n[nField]))
   else:
-    none(T)
+    Opt.none(T)
 
 proc txType(n: JsonNode): TxType =
   if "blobVersionedHashes" in n:
@@ -108,14 +108,14 @@ proc parseHeader*(n: JsonNode): BlockHeader =
   BlockHeader(
     coinbase   : required(EthAddress, "currentCoinbase"),
     difficulty : required(DifficultyInt, "currentDifficulty"),
-    blockNumber: required(BlockNumber, "currentNumber"),
+    number     : required(BlockNumber, "currentNumber"),
     gasLimit   : required(GasInt, "currentGasLimit"),
     timestamp  : required(EthTime, "currentTimestamp"),
     stateRoot  : emptyRlpHash,
-    mixDigest  : omitZero(Hash256, "currentRandom"),
-    fee        : optional(UInt256, "currentBaseFee"),
+    mixHash    : omitZero(Hash256, "currentRandom"),
+    baseFeePerGas  : optional(UInt256, "currentBaseFee"),
     withdrawalsRoot: optional(Hash256, "currentWithdrawalsRoot"),
-    excessBlobGas: optional(uint64, "currentExcessBlobGas"),
+    excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
     parentBeaconBlockRoot: optional(Hash256, "currentBeaconRoot"),
   )
 
@@ -135,16 +135,16 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     payload : required(Blob, "data", dataIndex),
     chainId : ChainId(1),
     gasPrice: omitZero(GasInt, "gasPrice"),
-    maxFee  : omitZero(GasInt, "maxFeePerGas"),
-    accessList: omitZero(AccessList, "accessLists", dataIndex),
-    maxPriorityFee: omitZero(GasInt, "maxPriorityFeePerGas"),
-    maxFeePerBlobGas: omitZero(UInt256, "maxFeePerBlobGas"),
-    versionedHashes: omitZero(VersionedHashes, "blobVersionedHashes")
+    maxFeePerGas        : omitZero(GasInt, "maxFeePerGas"),
+    accessList          : omitZero(AccessList, "accessLists", dataIndex),
+    maxPriorityFeePerGas: omitZero(GasInt, "maxPriorityFeePerGas"),
+    maxFeePerBlobGas    : omitZero(UInt256, "maxFeePerBlobGas"),
+    versionedHashes     : omitZero(VersionedHashes, "blobVersionedHashes")
   )
 
   let rawTo = n["to"].getStr
   if rawTo != "":
-    tx.to = some(hexToByteArray(rawTo, 20))
+    tx.to = Opt.some(hexToByteArray(rawTo, 20))
 
   let secretKey = required(PrivateKey, "secretKey")
   signTransaction(tx, secretKey, tx.chainId, false)

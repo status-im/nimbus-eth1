@@ -300,9 +300,13 @@ func to*(key: Hash256; T: type HashKey): T =
   else:
     T(len: 32, buf: key.data)
 
-func to*(n: SomeUnsignedInt|UInt256; T: type PathID): T =
+func to*(n: SomeUnsignedInt; T: type PathID): T =
   ## Representation of a scalar as `PathID` (preserving full information)
   T(pfx: n.u256, length: 64)
+
+func to*(n: UInt256; T: type PathID): T =
+  ## Representation of a scalar as `PathID` (preserving full information)
+  T(pfx: n, length: 64)
 
 # ------------------------------------------------------------------------------
 # Public helpers: Miscellaneous mappings

@@ -57,7 +57,7 @@ func buildAccumulator*(headers: seq[BlockHeader]): Result[FinishedAccumulator, s
   for header in headers:
     updateAccumulator(accumulator, header)
 
-    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+    if header.number == mergeBlockNumber - 1:
       return ok(finishAccumulator(accumulator))
 
   err("Not enough headers provided to finish the accumulator")
@@ -73,7 +73,7 @@ func buildAccumulatorData*(
     if accumulator.currentEpoch.len() == epochSize:
       epochAccumulators.add(accumulator.currentEpoch)
 
-    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+    if header.number == mergeBlockNumber - 1:
       epochAccumulators.add(accumulator.currentEpoch)
 
       return ok((finishAccumulator(accumulator), epochAccumulators))
