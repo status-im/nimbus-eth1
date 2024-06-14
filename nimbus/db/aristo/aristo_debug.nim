@@ -210,8 +210,6 @@ proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
     case p.pType:
     of RawData:
       result &= p.rawBlob.toHex.squeeze(hex=true)
-    of RlpData:
-      result &= "[#" & p.rlpBlob.toHex.squeeze(hex=true) & "]"
     of AccountData:
       result = "("
       result &= ($p.account.nonce).stripZeros(toExp=true) & ","

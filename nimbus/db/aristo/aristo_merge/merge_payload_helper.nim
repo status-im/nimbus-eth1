@@ -34,43 +34,6 @@ proc xPfx(vtx: VertexRef): NibblesSeq =
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc differ(
-    db: AristoDbRef;                   # Database, top layer
-    p1, p2: PayloadRef;                # Payload values
-      ): bool =
-  ## Check whether payloads differ on the database.
-  ## If `p1` is `RLP` serialised and `p2` is a raw blob compare serialsations.
-  ## If `p1` is of account type and `p2` is serialised, translate `p2`
-  ## to an account type and compare.
-  ##
-  if p1 == p2:
-    return false
-
-  # Adjust abd check for divergent types.
-  if p1.pType != p2.pType:
-    if p1.pType == AccountData:
-      try:
-        let
-          blob = (if p2.pType == RlpData: p2.rlpBlob else: p2.rawBlob)
-          acc = rlp.decode(blob, Account)
-        if acc.nonce == p1.account.nonce and
-           acc.balance == p1.account.balance and
-           acc.codeHash == p1.account.codeHash and
-           acc.storageRoot.isValid == p1.account.storageID.isValid:
-          if not p1.account.storageID.isValid or
-             acc.storageRoot.to(HashKey) == db.getKey p1.account.storageID:
-            return false
-      except RlpError:
-        discard
-
-    elif p1.pType == RlpData:
-      if p2.pType == RawData and p1.rlpBlob == p2.rawBlob:
-        return false
-
-  true
-
-# -----------
-
 proc clearMerkleKeys(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Implied vertex IDs to clear hashes for
@@ -452,17 +415,15 @@ proc mergePayloadUpdate(
   let leafLeg = hike.legs[^1]
 
   # Update payloads if they differ
-  if db.differ(leafLeg.wp.vtx.lData, payload):
+  if leafLeg.wp.vtx.lData != payload:
     let vid = leafLeg.wp.vid
     if vid in db.pPrf:
       return err(MergeLeafProofModeLock)
 
-    # Verify that the account leaf can be replaced
+    # Make certain that the account leaf can be replaced
     if leafTie.root == VertexID(1):
-      if leafLeg.wp.vtx.lData.pType != payload.pType:
-        return err(MergeLeafCantChangePayloadType)
-      if payload.pType == AccountData and
-         payload.account.storageID != leafLeg.wp.vtx.lData.account.storageID:
+      # Only `AccountData` payload on `VertexID(1)` tree
+      if payload.account.storageID != leafLeg.wp.vtx.lData.account.storageID:
         return err(MergeLeafCantChangeStorageID)
 
     # Update vertex and hike
@@ -530,8 +491,8 @@ proc mergePayloadImpl*(
   case payload.pType:
   of AccountData:
     if leafTie.root != VertexID(1):
-      return err(MergeLeafTypeNonAccountDataRequired)
-  of RawData,RlpData:
+      return err(MergeLeafTypeRawDataRequired)
+  of RawData:
     if leafTie.root == VertexID(1):
       return err(MergeLeafTypeAccountRequired)
 

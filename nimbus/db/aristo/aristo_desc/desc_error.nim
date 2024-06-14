@@ -94,14 +94,13 @@ type
     MergeBranchLinkVtxPfxTooShort
     MergeBranchProofModeLock
     MergeBranchRootExpected
-    MergeLeafCantChangePayloadType
     MergeLeafCantChangeStorageID
     MergeLeafGarbledHike
     MergeLeafPathCachedAlready
     MergeLeafPathOnBackendAlready
     MergeLeafProofModeLock
     MergeLeafTypeAccountRequired
-    MergeLeafTypeNonAccountDataRequired
+    MergeLeafTypeRawDataRequired
     MergeNonBranchProofModeLock
     MergeRootBranchLinkBusy
     MergeRootMissing

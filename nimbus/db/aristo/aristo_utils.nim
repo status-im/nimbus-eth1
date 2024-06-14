@@ -30,13 +30,7 @@ proc toAccount*(
   ## Converts the argument `payload` to an `Account` type. If the implied
   ## account das a storage slots system associated, the database `db` must
   ## contain the Merkle hash key of the root vertex.
-  case payload.pType:
-  of RlpData:
-    try:
-      return ok(rlp.decode(payload.rlpBlob, Account))
-    except RlpError:
-      return err(AccRlpDecodingError)
-  of AccountData:
+  if payload.pType == AccountData:
     var acc = Account(
       nonce:       payload.account.nonce,
       balance:     payload.account.balance,
@@ -45,8 +39,6 @@ proc toAccount*(
     if payload.account.storageID.isValid:
       acc.storageRoot = (? db.getKeyRc payload.account.storageID).to(Hash256)
     return ok(acc)
-  else:
-    discard
 
   err PayloadTypeUnsupported
 
@@ -65,13 +57,7 @@ proc toAccount*(
   ## Variant of `toAccount()` for a `Leaf` node which must be complete (i.e.
   ## a potential Merkle hash key must have been initialised.)
   if node.isValid and node.vType == Leaf:
-    case node.lData.pType:
-    of RlpData:
-      try:
-        return ok(rlp.decode(node.lData.rlpBlob, Account))
-      except RlpError:
-        return err(AccRlpDecodingError)
-    of AccountData:
+    if node.lData.pType == AccountData:
       var acc = Account(
         nonce:       node.lData.account.nonce,
         balance:     node.lData.account.balance,
