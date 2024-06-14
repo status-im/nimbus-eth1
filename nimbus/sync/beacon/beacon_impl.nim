@@ -81,8 +81,14 @@ proc mapBodiesToHeader(buddy: BeaconBuddyRef,
                        job: BeaconJob,
                        bodies: openArray[BlockBody],
                        reqBodies: openArray[bool]) {.raises: [].} =
+  doAssert(job.mode == bjmGetBlocks or
+           job.mode == bjmGetBodies,
+           "mapBodiesToHeader doesn't allow this job: " & $job.mode)
   var
-    headers = system.move(job.getBlocksJob.headers)
+    headers = if job.mode == bjmGetBlocks:
+                system.move(job.getBlocksJob.headers)
+              else:
+                system.move(job.getBodiesJob.headers)
     map = Table[Hash256, int]()
 
   for i, x in bodies:
