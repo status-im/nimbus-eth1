@@ -38,7 +38,7 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.newCtxFromTxFn.isNil
   doAssert not base.swapCtxFn.isNil
   doAssert not base.beginFn.isNil
-  doAssert not base.newCaptureFn.isNil
+  # doAssert not base.newCaptureFn.isNil # currently disabled
   doAssert not base.persistentFn.isNil
 
 proc validateMethodsDesc(kvt: CoreDbKvtFns) =
@@ -113,12 +113,13 @@ proc validateMethodsDesc(phk: CoreDxPhkRef) =
   doAssert not phk.toMpt.isNil
   phk.methods.validateMethodsDesc
 
-proc validateMethodsDesc(cpt: CoreDxCaptRef) =
-  doAssert not cpt.isNil
-  doAssert not cpt.parent.isNil
-  doAssert not cpt.methods.recorderFn.isNil
-  doAssert not cpt.methods.getFlagsFn.isNil
-  doAssert not cpt.methods.forgetFn.isNil
+when false: # currently disabled
+  proc validateMethodsDesc(cpt: CoreDxCaptRef) =
+    doAssert not cpt.isNil
+    doAssert not cpt.parent.isNil
+    doAssert not cpt.methods.recorderFn.isNil
+    doAssert not cpt.methods.getFlagsFn.isNil
+    doAssert not cpt.methods.forgetFn.isNil
 
 proc validateMethodsDesc(tx: CoreDxTxRef) =
   doAssert not tx.isNil

@@ -873,66 +873,67 @@ proc dispose*(tx: CoreDxTxRef) =
 # Public tracer methods
 # ------------------------------------------------------------------------------
 
-proc newCapture*(
-    db: CoreDbRef;
-    flags: set[CoreDbCaptFlags] = {};
-      ): CoreDbRc[CoreDxCaptRef] =
-  ## Trace constructor providing an overlay on top of the argument database
-  ## `db`. This overlay provides a replacement database handle that can be
-  ## retrieved via `db.recorder()` (which can in turn be ovelayed.) While
-  ## running the overlay stores data in a log-table which can be retrieved
-  ## via `db.logDb()`.
-  ##
-  ## Caveat:
-  ##   The original database argument `db` should not be used while the tracer
-  ##   is active (i.e. exists as overlay). The behaviour for this situation
-  ##   is undefined and depends on the backend implementation of the tracer.
-  ##
-  db.setTrackNewApi BaseNewCaptureFn
-  result = db.methods.newCaptureFn flags
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+when false: # currently disabled
+  proc newCapture*(
+      db: CoreDbRef;
+      flags: set[CoreDbCaptFlags] = {};
+        ): CoreDbRc[CoreDxCaptRef] =
+    ## Trace constructor providing an overlay on top of the argument database
+    ## `db`. This overlay provides a replacement database handle that can be
+    ## retrieved via `db.recorder()` (which can in turn be ovelayed.) While
+    ## running the overlay stores data in a log-table which can be retrieved
+    ## via `db.logDb()`.
+    ##
+    ## Caveat:
+    ##   The original database argument `db` should not be used while the tracer
+    ##   is active (i.e. exists as overlay). The behaviour for this situation
+    ##   is undefined and depends on the backend implementation of the tracer.
+    ##
+    db.setTrackNewApi BaseNewCaptureFn
+    result = db.methods.newCaptureFn flags
+    db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc recorder*(cpt: CoreDxCaptRef): CoreDbRef =
-  ## Getter, returns a tracer replacement handle to be used as new database.
-  ## It records every action like fetch, store, hasKey, hasPath and delete.
-  ## This descriptor can be superseded by a new overlay tracer (using
-  ## `newCapture()`, again.)
-  ##
-  ## Caveat:
-  ##   Unless the desriptor `cpt` referes to the top level overlay tracer, the
-  ##   result is undefined and depends on the backend implementation of the
-  ##   tracer.
-  ##
-  cpt.setTrackNewApi CptRecorderFn
-  result = cpt.methods.recorderFn()
-  cpt.ifTrackNewApi: debug newApiTxt, api, elapsed
+  proc recorder*(cpt: CoreDxCaptRef): CoreDbRef =
+    ## Getter, returns a tracer replacement handle to be used as new database.
+    ## It records every action like fetch, store, hasKey, hasPath and delete.
+    ## This descriptor can be superseded by a new overlay tracer (using
+    ## `newCapture()`, again.)
+    ##
+    ## Caveat:
+    ##   Unless the desriptor `cpt` referes to the top level overlay tracer, the
+    ##   result is undefined and depends on the backend implementation of the
+    ##   tracer.
+    ##
+    cpt.setTrackNewApi CptRecorderFn
+    result = cpt.methods.recorderFn()
+    cpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-proc logDb*(cp: CoreDxCaptRef): TableRef[Blob,Blob] =
-  ## Getter, returns the logger table for the overlay tracer database.
-  ##
-  ## Caveat:
-  ##   Unless the desriptor `cpt` referes to the top level overlay tracer, the
-  ##   result is undefined and depends on the backend implementation of the
-  ##   tracer.
-  ##
-  cp.setTrackNewApi CptLogDbFn
-  result = cp.methods.logDbFn()
-  cp.ifTrackNewApi: debug newApiTxt, api, elapsed
+  proc logDb*(cp: CoreDxCaptRef): TableRef[Blob,Blob] =
+    ## Getter, returns the logger table for the overlay tracer database.
+    ##
+    ## Caveat:
+    ##   Unless the desriptor `cpt` referes to the top level overlay tracer, the
+    ##   result is undefined and depends on the backend implementation of the
+    ##   tracer.
+    ##
+    cp.setTrackNewApi CptLogDbFn
+    result = cp.methods.logDbFn()
+    cp.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-proc flags*(cp: CoreDxCaptRef):set[CoreDbCaptFlags] =
-  ## Getter
-  ##
-  cp.setTrackNewApi CptFlagsFn
-  result = cp.methods.getFlagsFn()
-  cp.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+  proc flags*(cp: CoreDxCaptRef):set[CoreDbCaptFlags] =
+    ## Getter
+    ##
+    cp.setTrackNewApi CptFlagsFn
+    result = cp.methods.getFlagsFn()
+    cp.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc forget*(cp: CoreDxCaptRef) =
-  ## Explicitely stop recording the current tracer instance and reset to
-  ## previous level.
-  ##
-  cp.setTrackNewApi CptForgetFn
-  cp.methods.forgetFn()
-  cp.ifTrackNewApi: debug newApiTxt, api, elapsed
+  proc forget*(cp: CoreDxCaptRef) =
+    ## Explicitely stop recording the current tracer instance and reset to
+    ## previous level.
+    ##
+    cp.setTrackNewApi CptForgetFn
+    cp.methods.forgetFn()
+    cp.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

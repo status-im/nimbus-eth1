@@ -96,28 +96,29 @@ proc txMethods(
           raiseAssert info & ": " & $error
       discard)
 
-proc cptMethods(
-    tracer: AristoTracerRef;
-      ): CoreDbCaptFns =
-  let
-    tr = tracer         # So it can savely be captured
-    db = tr.parent      # Will not change and can be captured
-    log = tr.topInst()  # Ditto
+when false: # currently disabled
+  proc cptMethods(
+      tracer: AristoTracerRef;
+        ): CoreDbCaptFns =
+    let
+      tr = tracer         # So it can savely be captured
+      db = tr.parent      # Will not change and can be captured
+      log = tr.topInst()  # Ditto
 
-  CoreDbCaptFns(
-    recorderFn: proc(): CoreDbRef =
-      db,
+    CoreDbCaptFns(
+      recorderFn: proc(): CoreDbRef =
+        db,
 
-    logDbFn: proc(): TableRef[Blob,Blob] =
-      log.kLog,
+      logDbFn: proc(): TableRef[Blob,Blob] =
+        log.kLog,
 
-    getFlagsFn: proc(): set[CoreDbCaptFlags] =
-      log.flags,
+      getFlagsFn: proc(): set[CoreDbCaptFlags] =
+        log.flags,
 
-    forgetFn: proc() =
-      if not tracer.pop():
-        tr.parent.tracer = AristoTracerRef(nil)
-        tr.restore())
+      forgetFn: proc() =
+        if not tracer.pop():
+          tr.parent.tracer = AristoTracerRef(nil)
+          tr.restore())
 
 
 proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
@@ -125,13 +126,14 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     aBase = db.adbBase
     kBase = db.kdbBase
 
-  proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDxCaptRef =
-    if db.tracer.isNil:
-      db.tracer = AristoTracerRef(parent: db)
-      db.tracer.init(kBase, aBase, flags)
-    else:
-      db.tracer.push(flags)
-    CoreDxCaptRef(methods: db.tracer.cptMethods)
+  when false: # currently disabled
+    proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDxCaptRef =
+      if db.tracer.isNil:
+        db.tracer = AristoTracerRef(parent: db)
+        db.tracer.init(kBase, aBase, flags)
+      else:
+        db.tracer.push(flags)
+      CoreDxCaptRef(methods: db.tracer.cptMethods)
 
   proc persistent(bn: Opt[BlockNumber]): CoreDbRc[void] =
     const info = "persistentFn()"
@@ -182,8 +184,9 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
         dsc = CoreDxTxRef(methods: db.txMethods(aTx, kTx))
       db.bless(dsc),
 
-    newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
-      ok(db.bless flags.tracerSetup()),
+    # # currently disabled
+    #  newCaptureFn: proc(flags:set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
+    #    ok(db.bless flags.tracerSetup()),
 
     persistentFn: proc(bn: Opt[BlockNumber]): CoreDbRc[void] =
       persistent(bn))

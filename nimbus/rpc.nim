@@ -13,7 +13,7 @@ import
   json_rpc/rpcserver,
   graphql/httpserver,
   ./rpc/common,
-  ./rpc/debug,
+  #./rpc/debug,
   ./rpc/engine_api,
   ./rpc/p2p,
   ./rpc/jwt_auth,
@@ -59,8 +59,9 @@ proc installRPC(server: RpcServer,
   if RpcFlag.Eth in flags:
     setupEthRpc(nimbus.ethNode, nimbus.ctx, com, nimbus.txPool, oracle, server)
 
-  if RpcFlag.Debug in flags:
-    setupDebugRpc(com, nimbus.txPool, server)
+  #  # Tracer is currently disabled
+  # if RpcFlag.Debug in flags:
+  #   setupDebugRpc(com, nimbus.txPool, server)
 
   if RpcFlag.Exp in flags:
     setupExpRpc(com, server)
