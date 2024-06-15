@@ -36,20 +36,20 @@ when not defined(evmc_enabled):
 # ------------------------------------------------------------------------------
 
 const
-  addressOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  addressOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x30, Get address of currently executing account.
     k.cpt.stack.push k.cpt.msg.contractAddress
 
   # ------------------
 
-  balanceOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  balanceOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x31, Get balance of the given account.
     let
       cpt = k.cpt
       address = ? cpt.stack.popAddress
     cpt.stack.push cpt.getBalance(address)
 
-  balanceEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  balanceEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x31, EIP292: Get balance of the given account for Berlin and later
     let
       cpt = k.cpt
@@ -61,20 +61,20 @@ const
 
   # ------------------
 
-  originOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  originOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x32, Get execution origination address.
     k.cpt.stack.push k.cpt.getOrigin()
 
-  callerOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  callerOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x33, Get caller address.
     k.cpt.stack.push k.cpt.msg.sender
 
-  callValueOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  callValueOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x34, Get deposited value by the instruction/transaction
     ##       responsible for this execution
     k.cpt.stack.push k.cpt.msg.value
 
-  callDataLoadOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  callDataLoadOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x35, Get input data of current environment
     let
       startPos = ? k.cpt.stack.popInt()
@@ -94,12 +94,12 @@ const
     k.cpt.stack.push value
 
 
-  callDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  callDataSizeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x36, Get size of input data in current environment.
     k.cpt.stack.push k.cpt.msg.data.len.u256
 
 
-  callDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  callDataCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x37, Copy input data in current environment to memory.
     let (memStartPos, copyStartPos, size) = ? k.cpt.stack.popInt(3)
 
@@ -115,13 +115,13 @@ const
     ok()
 
 
-  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  codeSizeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x38, Get size of code running in current environment.
     let cpt = k.cpt
     cpt.stack.push cpt.code.len
 
 
-  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  codeCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x39, Copy code running in current environment to memory.
     let
       cpt = k.cpt
@@ -138,13 +138,13 @@ const
     cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
     ok()
 
-  gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  gasPriceOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3A, Get price of gas in current environment.
     k.cpt.stack.push k.cpt.getGasPrice()
 
   # -----------
 
-  extCodeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  extCodeSizeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3b, Get size of an account's code
     let
       cpt = k.cpt
@@ -152,7 +152,7 @@ const
 
     cpt.stack.push cpt.getCodeSize(address)
 
-  extCodeSizeEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  extCodeSizeEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3b, Get size of an account's code
     let
       cpt = k.cpt
@@ -164,7 +164,7 @@ const
 
   # -----------
 
-  extCodeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  extCodeCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3c, Copy an account's code to memory.
     let
       cpt = k.cpt
@@ -182,7 +182,7 @@ const
     ok()
 
 
-  extCodeCopyEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  extCodeCopyEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3c, Copy an account's code to memory.
     let
       cpt = k.cpt
@@ -201,13 +201,13 @@ const
 
   # -----------
 
-  returnDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  returnDataSizeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3d, Get size of output data from the previous call from the
     ##       current environment.
     k.cpt.stack.push k.cpt.returnData.len
 
 
-  returnDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  returnDataCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3e, Copy output data from the previous call to memory.
     let
       (memStartPos, copyStartPos, size) = ? k.cpt.stack.popInt(3)
@@ -225,7 +225,7 @@ const
 
   # ---------------
 
-  extCodeHashOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  extCodeHashOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3f, Returns the keccak256 hash of a contract’s code
     let
       cpt = k.cpt
@@ -233,7 +233,7 @@ const
 
     cpt.stack.push cpt.getCodeHash(address)
 
-  extCodeHashEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  extCodeHashEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
     let
       cpt = k.cpt
@@ -248,169 +248,169 @@ const
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpExecEnvInfo*: seq[Vm2OpExec] = @[
+  VmOpExecEnvInfo*: seq[VmOpExec] = @[
 
     (opCode: Address,         ## 0x20, Address
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "address",
      info: "Get address of currently executing account",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  addressOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Balance,         ## 0x31, Balance
-     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     forks: VmOpAllForks - VmOpBerlinAndLater,
      name: "balance",
      info: "Get balance of the given account",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  balanceOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Balance,         ## 0x31, Balance for Berlin and later
-     forks: Vm2OpBerlinAndLater,
+     forks: VmOpBerlinAndLater,
      name: "balanceEIP2929",
      info: "EIP2929: Get balance of the given account",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  balanceEIP2929Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Origin,          ## 0x32, Origination address
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "origin",
      info: "Get execution origination address",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  originOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Caller,          ## 0x33, Caller address
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "caller",
      info: "Get caller address",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  callerOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: CallValue,       ## 0x34, Execution deposited value
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "callValue",
      info: "Get deposited value by the instruction/transaction " &
            "responsible for this execution",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  callValueOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: CallDataLoad,    ## 0x35, Input data
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "callDataLoad",
      info: "Get input data of current environment",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  callDataLoadOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: CallDataSize,    ## 0x36, Size of input data
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "callDataSize",
      info: "Get size of input data in current environment",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  callDataSizeOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: CallDataCopy,    ## 0x37, Copy input data to memory.
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "callDataCopy",
      info: "Copy input data in current environment to memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  callDataCopyOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: CodeSize,       ## 0x38, Size of code
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "codeSize",
      info: "Get size of code running in current environment",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  codeSizeOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: CodeCopy,       ## 0x39, Copy code to memory.
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "codeCopy",
      info: "Copy code running in current environment to memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  codeCopyOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: GasPrice,       ## 0x3a, Gas price
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "gasPrice",
      info: "Get price of gas in current environment",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  gasPriceOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size
-     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     forks: VmOpAllForks - VmOpBerlinAndLater,
      name: "extCodeSize",
      info: "Get size of an account's code",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  extCodeSizeOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin and later
-     forks: Vm2OpBerlinAndLater,
+     forks: VmOpBerlinAndLater,
      name: "extCodeSizeEIP2929",
      info: "EIP2929: Get size of an account's code",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  extCodeSizeEIP2929Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account code copy to memory.
-     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     forks: VmOpAllForks - VmOpBerlinAndLater,
      name: "extCodeCopy",
      info: "Copy an account's code to memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  extCodeCopyOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin and later
-     forks: Vm2OpBerlinAndLater,
+     forks: VmOpBerlinAndLater,
      name: "extCodeCopyEIP2929",
      info: "EIP2929: Copy an account's code to memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  extCodeCopyEIP2929Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ReturnDataSize, ## 0x3d, Previous call output data size
-     forks: Vm2OpByzantiumAndLater,
+     forks: VmOpByzantiumAndLater,
      name: "returnDataSize",
      info: "Get size of output data from the previous call " &
            "from the current environment",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  returnDataSizeOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ReturnDataCopy, ## 0x3e, Previous call output data copy to memory
-     forks: Vm2OpByzantiumAndLater,
+     forks: VmOpByzantiumAndLater,
      name: "returnDataCopy",
      info: "Copy output data from the previous call to memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  returnDataCopyOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash
-     forks: Vm2OpConstantinopleAndLater - Vm2OpBerlinAndLater,
+     forks: VmOpConstantinopleAndLater - VmOpBerlinAndLater,
      name: "extCodeHash",
      info: "Returns the keccak256 hash of a contract’s code",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  extCodeHashOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash for berlin and later
-     forks: Vm2OpBerlinAndLater,
+     forks: VmOpBerlinAndLater,
      name: "extCodeHashEIP2929",
      info: "EIP2929: Returns the keccak256 hash of a contract’s code",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  extCodeHashEIP2929Op,
-            post: vm2OpIgnore))]
+            post: VmOpIgnore))]
 
 # ------------------------------------------------------------------------------
 # End

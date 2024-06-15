@@ -95,7 +95,7 @@ const
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc wrapperFn(k: var Vm2Ctx; n: int): EvmResultVoid =
+proc wrapperFn(k: var VmCtx; n: int): EvmResultVoid =
   logImpl(k.cpt, logOpArg[n], n)
 
 genOphHandlers fnName, fnInfo, inxRange, wrapperFn
@@ -104,7 +104,7 @@ genOphHandlers fnName, fnInfo, inxRange, wrapperFn
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "vm2OpExecLog", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecLog", opName
 
 # ------------------------------------------------------------------------------
 # End

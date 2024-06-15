@@ -40,7 +40,7 @@ when optimizationCondition:
 
 proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool): EvmResultVoid =
   ## Op code execution handler main loop.
-  var desc: Vm2Ctx
+  var desc: VmCtx
   desc.cpt = c
 
   # It's important not to re-prepare the tracer after

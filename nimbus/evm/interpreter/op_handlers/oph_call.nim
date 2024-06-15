@@ -199,7 +199,7 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  callOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  callOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xf1, Message-Call into an account
     let cpt = k.cpt
 
@@ -283,7 +283,7 @@ const
 
   # ---------------------
 
-  callCodeOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  callCodeOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xf2, Message-call into this account with an alternative account's code.
     let
       cpt = k.cpt
@@ -360,7 +360,7 @@ const
 
   # ---------------------
 
-  delegateCallOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  delegateCallOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xf4, Message-call into this account with an alternative account's
     ##       code, but persisting the current values for sender and value.
     let
@@ -432,7 +432,7 @@ const
 
   # ---------------------
 
-  staticCallOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  staticCallOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xfa, Static message-call into an account.
 
     let
@@ -508,40 +508,40 @@ const
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpExecCall*: seq[Vm2OpExec] = @[
+  VmOpExecCall*: seq[VmOpExec] = @[
 
     (opCode: Call,         ## 0xf1, Message-Call into an account
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "call",
      info: "Message-Call into an account",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: callOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: CallCode,     ## 0xf2, Message-Call with alternative code
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "callCode",
      info: "Message-call into this account with alternative account's code",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: callCodeOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: DelegateCall, ## 0xf4, CallCode with persisting sender and value
-     forks: Vm2OpHomesteadAndLater,
+     forks: VmOpHomesteadAndLater,
      name: "delegateCall",
      info: "Message-call into this account with an alternative account's " &
            "code but persisting the current values for sender and value.",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: delegateCallOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: StaticCall,   ## 0xfa, Static message-call into an account
-     forks: Vm2OpByzantiumAndLater,
+     forks: VmOpByzantiumAndLater,
      name: "staticCall",
      info: "Static message-call into an account",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: staticCallOp,
-            post: vm2OpIgnore))]
+            post: VmOpIgnore))]
 
 # ------------------------------------------------------------------------------
 # End

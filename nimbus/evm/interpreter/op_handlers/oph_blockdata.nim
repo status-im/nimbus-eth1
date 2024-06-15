@@ -30,7 +30,7 @@ when not defined(evmc_enabled):
 # ------------------------------------------------------------------------------
 
 const
-  blockhashOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  blockhashOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x40, Get the hash of one of the 256 most recent complete blocks.
     let
       cpt = k.cpt
@@ -39,40 +39,40 @@ const
 
     cpt.stack.push blockHash
 
-  coinBaseOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  coinBaseOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x41, Get the block's beneficiary address.
     k.cpt.stack.push k.cpt.getCoinbase
 
-  timestampOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  timestampOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x42, Get the block's timestamp.
     k.cpt.stack.push k.cpt.getTimestamp
 
-  blocknumberOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  blocknumberOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x43, Get the block's number.
     k.cpt.stack.push k.cpt.getBlockNumber
 
-  difficultyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  difficultyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x44, Get the block's difficulty
     k.cpt.stack.push k.cpt.getDifficulty
 
-  gasLimitOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  gasLimitOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x45, Get the block's gas limit
     k.cpt.stack.push k.cpt.getGasLimit
 
-  chainIdOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  chainIdOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x46, Get current chain’s EIP-155 unique identifier.
     k.cpt.stack.push k.cpt.getChainId
 
-  selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  selfBalanceOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x47, Get current contract's balance.
     let cpt = k.cpt
     cpt.stack.push cpt.getBalance(cpt.msg.contractAddress)
 
-  baseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  baseFeeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x48, Get the block's base fee.
     k.cpt.stack.push k.cpt.getBaseFee
 
-  blobHashOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  blobHashOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x49, Get current transaction's EIP-4844 versioned hash.
     let
       index = ? k.cpt.stack.popSafeInt()
@@ -83,7 +83,7 @@ const
     else:
       k.cpt.stack.push 0
 
-  blobBaseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  blobBaseFeeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x4a, Get the block's base fee.
     k.cpt.stack.push k.cpt.getBlobBaseFee
 
@@ -93,95 +93,95 @@ const
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpExecBlockData*: seq[Vm2OpExec] = @[
+  VmOpExecBlockData*: seq[VmOpExec] = @[
 
     (opCode: Blockhash,       ## 0x40, Hash of some most recent complete block
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "blockhash",
      info: "Get the hash of one of the 256 most recent complete blocks",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  blockhashOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Coinbase,        ## 0x41, Beneficiary address
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "coinbase",
      info: "Get the block's beneficiary address",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  coinBaseOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Timestamp,       ## 0x42, Block timestamp.
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "timestamp",
      info: "Get the block's timestamp",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  timestampOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Number,          ## 0x43, Block number
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "blockNumber",
      info: "Get the block's number",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  blocknumberOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Difficulty,      ## 0x44, Block difficulty
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "difficulty",
      info: "Get the block's difficulty",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  difficultyOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: GasLimit,        ## 0x45, Block gas limit
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "gasLimit",
      info: "Get the block's gas limit",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  gasLimitOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: ChainIdOp,       ## 0x46, EIP-155 chain identifier
-     forks: Vm2OpIstanbulAndLater,
+     forks: VmOpIstanbulAndLater,
      name: "chainId",
      info: "Get current chain’s EIP-155 unique identifier",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  chainIdOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: SelfBalance,     ## 0x47, Contract balance.
-     forks: Vm2OpIstanbulAndLater,
+     forks: VmOpIstanbulAndLater,
      name: "selfBalance",
      info: "Get current contract's balance",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  selfBalanceOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: BaseFee,         ## 0x48, EIP-1559 Block base fee.
-     forks: Vm2OpLondonAndLater,
+     forks: VmOpLondonAndLater,
      name: "baseFee",
      info: "Get current block's EIP-1559 base fee",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  baseFeeOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: BlobHash,        ## 0x49, EIP-4844 Transaction versioned hash
-     forks: Vm2OpCancunAndLater,
+     forks: VmOpCancunAndLater,
      name: "blobHash",
      info: "Get current transaction's EIP-4844 versioned hash",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  blobHashOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: BlobBaseFee,     ## 0x4a, EIP-7516 Returns the current data-blob base-fee
-     forks: Vm2OpCancunAndLater,
+     forks: VmOpCancunAndLater,
      name: "blobBaseFee",
      info: "Returns the current data-blob base-fee",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  blobBaseFeeOp,
-            post: vm2OpIgnore))]
+            post: VmOpIgnore))]
 
 # ------------------------------------------------------------------------------
 # End

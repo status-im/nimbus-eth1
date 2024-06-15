@@ -36,7 +36,7 @@ export
 # Helpers
 # ------------------------------------------------------------------------------
 
-template handleStopDirective(k: var Vm2Ctx) =
+template handleStopDirective(k: var VmCtx) =
   #trace "op: Stop"
   if not k.cpt.code.atEnd() and k.cpt.tracingEnabled:
     # we only trace `REAL STOP` and ignore `FAKE STOP`
@@ -44,7 +44,7 @@ template handleStopDirective(k: var Vm2Ctx) =
     k.cpt.traceOpCodeEnded(Stop, k.cpt.opIndex)
 
 
-template handleFixedGasCostsDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
+template handleFixedGasCostsDirective(fork: EVMFork; op: Op; k: var VmCtx) =
   if k.cpt.tracingEnabled:
     k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
@@ -56,7 +56,7 @@ template handleFixedGasCostsDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
     k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
 
 
-template handleOtherDirective(fork: EVMFork; op: Op; k: var Vm2Ctx) =
+template handleOtherDirective(fork: EVMFork; op: Op; k: var VmCtx) =
   if k.cpt.tracingEnabled:
     k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
@@ -124,11 +124,11 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
 # Public macros/functions
 # ------------------------------------------------------------------------------
 
-macro genOptimisedDispatcher*(fork: EVMFork; op: Op; k: Vm2Ctx): untyped =
+macro genOptimisedDispatcher*(fork: EVMFork; op: Op; k: VmCtx): untyped =
   result = fork.toCaseStmt(op, k)
 
 
-template genLowMemDispatcher*(fork: EVMFork; op: Op; k: Vm2Ctx) =
+template genLowMemDispatcher*(fork: EVMFork; op: Op; k: VmCtx) =
   if op == Stop:
     handleStopDirective(k)
     break
@@ -155,7 +155,7 @@ when isMainModule and isChatty:
   import ../types
 
   proc optimised(c: Computation, fork: EVMFork): EvmResultVoid {.compileTime.} =
-    var desc: Vm2Ctx
+    var desc: VmCtx
     while true:
       genOptimisedDispatcher(fork, desc.cpt.instr, desc)
 

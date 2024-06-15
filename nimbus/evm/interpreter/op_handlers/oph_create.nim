@@ -12,7 +12,7 @@
 ## ======================================
 ##
 
-{.push raises: [].} # basically the annotation type of a `Vm2OpFn`
+{.push raises: [].} # basically the annotation type of a `VmOpFn`
 
 import
   ../../../constants,
@@ -82,7 +82,7 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  createOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  createOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xf0, Create a new account with associated code
     ? checkInStaticContext(k.cpt)
 
@@ -161,7 +161,7 @@ const
 
   # ---------------------
 
-  create2Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  create2Op: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xf5, Behaves identically to CREATE, except using keccak256
     ? checkInStaticContext(k.cpt)
 
@@ -248,23 +248,23 @@ const
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpExecCreate*: seq[Vm2OpExec] = @[
+  VmOpExecCreate*: seq[VmOpExec] = @[
 
     (opCode: Create,    ## 0xf0, Create a new account with associated code
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "create",
      info: "Create a new account with associated code",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: createOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Create2,   ## 0xf5, Create using keccak256
-     forks: Vm2OpConstantinopleAndLater,
+     forks: VmOpConstantinopleAndLater,
      name: "create2",
      info: "Behaves identically to CREATE, except using keccak256",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: create2Op,
-            post: vm2OpIgnore))]
+            post: VmOpIgnore))]
 
 # ------------------------------------------------------------------------------
 # End

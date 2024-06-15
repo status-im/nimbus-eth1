@@ -21,75 +21,75 @@ import
   ../op_codes
 
 type
-  Vm2Ctx* = tuple
+  VmCtx* = tuple
     cpt: Computation          ## computation text
 
-  Vm2OpFn* =                  ## general op handler, return codes are passed
+  VmOpFn* =                   ## general op handler, return codes are passed
                               ## back via argument descriptor ``k``
-    proc(k: var Vm2Ctx): EvmResultVoid {.nimcall, gcsafe, raises:[].}
+    proc(k: var VmCtx): EvmResultVoid {.nimcall, gcsafe, raises:[].}
 
 
-  Vm2OpHanders* = tuple       ## three step op code execution, typically
+  VmOpHanders* = tuple        ## three step op code execution, typically
                               ## only the ``run`` entry is activated
-    prep: Vm2OpFn
-    run:  Vm2OpFn
-    post: Vm2OpFn
+    prep: VmOpFn
+    run:  VmOpFn
+    post: VmOpFn
 
 
-  Vm2OpExec* = tuple          ## op code handler entry
+  VmOpExec* = tuple           ## op code handler entry
     opCode: Op                ## index back-reference
     forks: set[EVMFork]       ## forks applicable for this operation
     name: string              ## handler name
     info: string              ## handter info, explainer
-    exec: Vm2OpHanders
+    exec: VmOpHanders
 
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpIgnore*: Vm2OpFn =      ## No operation, placeholder function
-    proc(k: var Vm2Ctx): EvmResultVoid = ok()
+  VmOpIgnore*: VmOpFn =      ## No operation, placeholder function
+    proc(k: var VmCtx): EvmResultVoid = ok()
 
   # similar to: toSeq(Fork).mapIt({it}).foldl(a+b)
-  Vm2OpAllForks* =
+  VmOpAllForks* =
     {EVMFork.low .. EVMFork.high}
 
-  Vm2OpHomesteadAndLater* =    ## Set of all fork symbols
-    Vm2OpAllForks - {FkFrontier}
+  VmOpHomesteadAndLater* =    ## Set of all fork symbols
+    VmOpAllForks - {FkFrontier}
 
-  Vm2OpTangerineAndLater* =    ## Set of fork symbols starting from Homestead
-    Vm2OpHomesteadAndLater - {FkHomestead}
+  VmOpTangerineAndLater* =    ## Set of fork symbols starting from Homestead
+    VmOpHomesteadAndLater - {FkHomestead}
 
-  Vm2OpSpuriousAndLater* =     ## ditto ...
-    Vm2OpTangerineAndLater - {FkTangerine}
+  VmOpSpuriousAndLater* =     ## ditto ...
+    VmOpTangerineAndLater - {FkTangerine}
 
-  Vm2OpByzantiumAndLater* =
-    Vm2OpSpuriousAndLater - {FkSpurious}
+  VmOpByzantiumAndLater* =
+    VmOpSpuriousAndLater - {FkSpurious}
 
-  Vm2OpConstantinopleAndLater* =
-    Vm2OpByzantiumAndLater - {FkByzantium}
+  VmOpConstantinopleAndLater* =
+    VmOpByzantiumAndLater - {FkByzantium}
 
-  Vm2OpPetersburgAndLater* =
-    Vm2OpConstantinopleAndLater - {FkConstantinople}
+  VmOpPetersburgAndLater* =
+    VmOpConstantinopleAndLater - {FkConstantinople}
 
-  Vm2OpIstanbulAndLater* =
-    Vm2OpPetersburgAndLater - {FkPetersburg}
+  VmOpIstanbulAndLater* =
+    VmOpPetersburgAndLater - {FkPetersburg}
 
-  Vm2OpBerlinAndLater* =
-    Vm2OpIstanbulAndLater - {FkIstanbul}
+  VmOpBerlinAndLater* =
+    VmOpIstanbulAndLater - {FkIstanbul}
 
-  Vm2OpLondonAndLater* =
-    Vm2OpBerlinAndLater - {FkBerlin}
+  VmOpLondonAndLater* =
+    VmOpBerlinAndLater - {FkBerlin}
 
-  Vm2OpParisAndLater* =
-    Vm2OpLondonAndLater - {FkLondon}
+  VmOpParisAndLater* =
+    VmOpLondonAndLater - {FkLondon}
 
-  Vm2OpShanghaiAndLater* =
-    Vm2OpParisAndLater - {FkParis}
+  VmOpShanghaiAndLater* =
+    VmOpParisAndLater - {FkParis}
 
-  Vm2OpCancunAndLater* =
-    Vm2OpShanghaiAndLater - {FkShanghai}
+  VmOpCancunAndLater* =
+    VmOpShanghaiAndLater - {FkShanghai}
 
 # ------------------------------------------------------------------------------
 # End

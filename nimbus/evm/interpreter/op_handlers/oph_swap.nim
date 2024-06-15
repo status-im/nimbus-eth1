@@ -41,7 +41,7 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Exchange first and " & blurb & " stack items"
 
 
-func swapImpl(k: var Vm2Ctx; n: int): EvmResultVoid =
+func swapImpl(k: var VmCtx; n: int): EvmResultVoid =
   k.cpt.stack.swap(n)
 
 const
@@ -57,7 +57,7 @@ genOphHandlers fnName, fnInfo, inxRange, swapImpl
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "vm2OpExecSwap", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecSwap", opName
 
 # ------------------------------------------------------------------------------
 # End
