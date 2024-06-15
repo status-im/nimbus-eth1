@@ -31,10 +31,6 @@ type
     blockNumber: BlockNumber
     index: uint
 
-const
-  extraTraceMessages = false
-    ## Enabled additional logging noise
-
 # ------------------------------------------------------------------------------
 # Forward declarations
 # ------------------------------------------------------------------------------

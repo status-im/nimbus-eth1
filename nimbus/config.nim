@@ -516,6 +516,29 @@ type
         desc: "Save performance statistics to CSV"
         name: "debug-csv-stats".}: Option[string]
 
+      # TODO validation and storage options should be made non-hidden when the
+      #      UX has stabilised and era1 storage is in the app
+      fullValidation* {.
+        hidden
+        desc: "Enable full per-block validation (slow)"
+        defaultValue: false
+        name: "debug-full-validation".}: bool
+
+      storeBodies* {.
+        hidden
+        desc: "Store block blodies in database"
+        defaultValue: false
+        name: "debug-store-bodies".}: bool
+
+      # TODO this option should probably only cover the redundant parts, ie
+      #      those that are in era1 files - era files presently do not store
+      #      receipts
+      storeReceipts* {.
+        hidden
+        desc: "Store receipts in database"
+        defaultValue: false
+        name: "debug-store-receipts".}: bool
+
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
   parseInt(p).T

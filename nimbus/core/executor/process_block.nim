@@ -28,9 +28,12 @@ import
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.
 proc processTransactions*(
-    vmState: BaseVMState, header: BlockHeader, transactions: seq[Transaction]
+    vmState: BaseVMState,
+    header: BlockHeader,
+    transactions: seq[Transaction],
+    skipReceipts = false,
 ): Result[void, string] =
-  vmState.receipts = newSeq[Receipt](transactions.len)
+  vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
 
   for txIndex, tx in transactions:
@@ -40,10 +43,17 @@ proc processTransactions*(
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
-    vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+    if skipReceipts:
+      # TODO don't generate logs at all if we're not going to put them in
+      #      receipts
+      discard vmState.getAndClearLogEntries()
+    else:
+      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
   ok()
 
-proc procBlkPreamble(vmState: BaseVMState, blk: EthBlock): Result[void, string] =
+proc procBlkPreamble(
+    vmState: BaseVMState, blk: EthBlock, skipValidation, skipReceipts, skipUncles: bool
+): Result[void, string] =
   template header(): BlockHeader =
     blk.header
 
@@ -51,8 +61,9 @@ proc procBlkPreamble(vmState: BaseVMState, blk: EthBlock): Result[void, string] 
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
-  if blk.transactions.calcTxRoot != header.txRoot:
-    return err("Mismatched txRoot")
+  if not skipValidation: # Expensive!
+    if blk.transactions.calcTxRoot != header.txRoot:
+      return err("Mismatched txRoot")
 
   if vmState.determineFork >= FkCancun:
     if header.parentBeaconBlockRoot.isNone:
@@ -67,7 +78,7 @@ proc procBlkPreamble(vmState: BaseVMState, blk: EthBlock): Result[void, string] 
     if blk.transactions.len == 0:
       return err("Transactions missing from body")
 
-    ?processTransactions(vmState, header, blk.transactions)
+    ?processTransactions(vmState, header, blk.transactions, skipReceipts)
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
 
@@ -92,15 +103,22 @@ proc procBlkPreamble(vmState: BaseVMState, blk: EthBlock): Result[void, string] 
     return err("gasUsed mismatch")
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    let h = vmState.com.db.persistUncles(blk.uncles)
-    if h != header.ommersHash:
+    # TODO It's strange that we persist uncles before processing block but the
+    #      rest after...
+    if not skipUncles:
+      let h = vmState.com.db.persistUncles(blk.uncles)
+      if h != header.ommersHash:
+        return err("ommersHash mismatch")
+    elif not skipValidation and rlpHash(blk.uncles) != header.ommersHash:
       return err("ommersHash mismatch")
   elif blk.uncles.len > 0:
     return err("Uncles in block with empty uncle hash")
 
   ok()
 
-proc procBlkEpilogue(vmState: BaseVMState, header: BlockHeader): Result[void, string] =
+proc procBlkEpilogue(
+    vmState: BaseVMState, header: BlockHeader, skipValidation: bool
+): Result[void, string] =
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.collectWitnessData:
@@ -108,28 +126,30 @@ proc procBlkEpilogue(vmState: BaseVMState, header: BlockHeader): Result[void, st
 
     db.persist(clearEmptyAccount = vmState.determineFork >= FkSpurious)
 
-  let stateDB = vmState.stateDB
-  if header.stateRoot != stateDB.rootHash:
-    # TODO replace logging with better error
-    debug "wrong state root in block",
-      blockNumber = header.number,
-      expected = header.stateRoot,
-      actual = stateDB.rootHash,
-      arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
-    return err("stateRoot mismatch")
+  if not skipValidation:
+    let stateDB = vmState.stateDB
+    if header.stateRoot != stateDB.rootHash:
+      # TODO replace logging with better error
+      debug "wrong state root in block",
+        blockNumber = header.number,
+        expected = header.stateRoot,
+        actual = stateDB.rootHash,
+        arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
+      return err("stateRoot mismatch")
 
-  let bloom = createBloom(vmState.receipts)
-  if header.logsBloom != bloom:
-    return err("bloom mismatch")
+    let bloom = createBloom(vmState.receipts)
 
-  let receiptsRoot = calcReceiptsRoot(vmState.receipts)
-  if header.receiptsRoot != receiptsRoot:
-    # TODO replace logging with better error
-    debug "wrong receiptRoot in block",
-      blockNumber = header.number,
-      actual = receiptsRoot,
-      expected = header.receiptsRoot
-    return err("receiptRoot mismatch")
+    if header.logsBloom != bloom:
+      return err("bloom mismatch")
+
+    let receiptsRoot = calcReceiptsRoot(vmState.receipts)
+    if header.receiptsRoot != receiptsRoot:
+      # TODO replace logging with better error
+      debug "wrong receiptRoot in block",
+        blockNumber = header.number,
+        actual = receiptsRoot,
+        expected = header.receiptsRoot
+      return err("receiptRoot mismatch")
 
   ok()
 
@@ -140,19 +160,22 @@ proc procBlkEpilogue(vmState: BaseVMState, header: BlockHeader): Result[void, st
 proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: EthBlock, ## Header/body block to add to the blockchain
+    skipValidation: bool = false,
+    skipReceipts: bool = false,
+    skipUncles: bool = false,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
   var dbTx = vmState.com.db.newTransaction()
   defer:
     dbTx.dispose()
 
-  ?vmState.procBlkPreamble(blk)
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
 
   # EIP-3675: no reward for miner in POA/POS
   if vmState.com.consensus == ConsensusType.POW:
     vmState.calculateReward(blk.header, blk.uncles)
 
-  ?vmState.procBlkEpilogue(blk.header)
+  ?vmState.procBlkEpilogue(blk.header, skipValidation)
 
   dbTx.commit()
 

@@ -29,17 +29,21 @@ when not defined(release):
 export results
 
 type
-  PersistBlockFlag = enum
+  PersistBlockFlag* = enum
+    NoFullValidation # Validate the batch instead of validating each block in it
     NoPersistHeader
-    NoSaveTxs
-    NoSaveReceipts
-    NoSaveWithdrawals
+    NoPersistTransactions
+    NoPersistUncles
+    NoPersistWithdrawals
+    NoPersistReceipts
 
-  PersistBlockFlags = set[PersistBlockFlag]
+  PersistBlockFlags* = set[PersistBlockFlag]
 
   PersistStats = tuple[blocks: int, txs: int, gas: GasInt]
 
 const
+  NoPersistBodies* = {NoPersistTransactions, NoPersistUncles, NoPersistWithdrawals}
+
   CleanUpEpoch = 30_000.BlockNumber
     ## Regular checks for history clean up (applies to single state DB). This
     ## is mainly a debugging/testing feature so that the database can be held
@@ -95,10 +99,30 @@ proc persistBlocksImpl(
     template header(): BlockHeader =
       blk.header
 
+    # Full validation means validating the state root at every block and
+    # performing the more expensive hash computations on the block itself, ie
+    # verifying that the transaction and receipts roots are valid - when not
+    # doing full validation, we skip these expensive checks relying instead
+    # on the source of the data to have performed them previously or because
+    # the cost of failure is low.
+    # TODO Figure out the right balance for header fields - in particular, if
+    #      we receive instruction from the CL while syncing that a block is
+    #      CL-valid, do we skip validation while "far from head"? probably yes.
+    #      This requires performing a header-chain validation from that CL-valid
+    #      block which the current code doesn't express.
+    #      Also, the potential avenues for corruption should be described with
+    #      more rigor, ie if the txroot doesn't match but everything else does,
+    #      can the state root of the last block still be correct? Dubious, but
+    #      what would be the consequences? We would roll back the full set of
+    #      blocks which is fairly low-cost.
+    let skipValidation = NoFullValidation in flags and header.number != toBlock
+
     c.com.hardForkTransition(header)
 
     if blks > 0:
-      template parent(): BlockHeader = blocks[blks - 1].header
+      template parent(): BlockHeader =
+        blocks[blks - 1].header
+
       let updated =
         if header.number == parent.number + 1 and header.parentHash == parentHash:
           vmState.reinit(parent = parent, header = header, linear = true)
@@ -115,32 +139,43 @@ proc persistBlocksImpl(
       #      in theory it's a fresh instance that should not need it (?)
       doAssert vmState.reinit(header = header)
 
-    if c.extraValidation and c.verifyFrom <= header.number:
+    # TODO even if we're skipping validation, we should perform basic sanity
+    #      checks on the block and header - that fields are sanely set for the
+    #      given hard fork and similar path-independent checks - these same
+    #      sanity checks should be performed early in the processing pipeline no
+    #      matter their provenance.
+    if not skipValidation and c.extraValidation and c.verifyFrom <= header.number:
       # TODO: how to checkseal from here
-      ?c.com.validateHeaderAndKinship(blk, checkSealOK = false)
+      ?c.com.validateHeaderAndKinship(blk, vmState.parent, checkSealOK = false)
 
-    ?vmState.processBlock(blk)
+    # Generate receipts for storage or validation but skip them otherwise
+    ?vmState.processBlock(
+      blk,
+      skipValidation,
+      skipReceipts = skipValidation and NoPersistReceipts in flags,
+      skipUncles = NoPersistUncles in flags,
+    )
 
     # when defined(nimbusDumpDebuggingMetaData):
     #   if validationResult == ValidationResult.Error and
     #      body.transactions.calcTxRoot == header.txRoot:
     #     vmState.dumpDebuggingMetaData(header, body)
     #     warn "Validation error. Debugging metadata dumped."
+
     let blockHash = header.blockHash()
     if NoPersistHeader notin flags:
       if not c.db.persistHeader(
-        blockHash, header, c.com.consensus == ConsensusType.POS,
-        c.com.startOfHistory
+        blockHash, header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
       ):
         return err("Could not persist header")
 
-    if NoSaveTxs notin flags:
+    if NoPersistTransactions notin flags:
       c.db.persistTransactions(header.number, blk.transactions)
 
-    if NoSaveReceipts notin flags:
+    if NoPersistReceipts notin flags:
       c.db.persistReceipts(vmState.receipts)
 
-    if NoSaveWithdrawals notin flags and blk.withdrawals.isSome:
+    if NoPersistWithdrawals notin flags and blk.withdrawals.isSome:
       c.db.persistWithdrawals(blk.withdrawals.get)
 
     # update currentBlock *after* we persist it
@@ -176,7 +211,7 @@ proc persistBlocksImpl(
 # ------------------------------------------------------------------------------
 
 proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string] =
-  discard ?c.persistBlocksImpl([blk], {NoPersistHeader, NoSaveReceipts})
+  discard ?c.persistBlocksImpl([blk], {NoPersistHeader, NoPersistReceipts})
 
   if not c.db.persistHeader(blk.header.blockHash, blk.header, c.com.startOfHistory):
     return err("Could not persist header")
@@ -203,7 +238,7 @@ proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
 
   discard
     ?c.persistBlocksImpl(
-      [EthBlock.init(header, move(body))], {NoPersistHeader, NoSaveTxs}
+      [EthBlock.init(header, move(body))], {NoPersistHeader, NoPersistTransactions}
     )
 
   try:
@@ -221,14 +256,14 @@ proc setCanonical*(c: ChainRef, blockHash: Hash256): Result[void, string] =
   setCanonical(c, header)
 
 proc persistBlocks*(
-    c: ChainRef, blocks: openArray[EthBlock]
+    c: ChainRef, blocks: openArray[EthBlock], flags: PersistBlockFlags = {}
 ): Result[PersistStats, string] =
   # Run the VM here
   if blocks.len == 0:
     debug "Nothing to do"
     return ok(default(PersistStats)) # TODO not nice to return nil
 
-  c.persistBlocksImpl(blocks)
+  c.persistBlocksImpl(blocks, flags)
 
 # ------------------------------------------------------------------------------
 # End
