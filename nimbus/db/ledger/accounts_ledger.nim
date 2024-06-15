@@ -152,8 +152,8 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
   result.witnessCache = Table[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
-proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef, pruneTrie = true): AccountsLedgerRef =
-  init(x, db, EMPTY_ROOT_HASH, pruneTrie)
+proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
+  init(x, db, EMPTY_ROOT_HASH)
 
 # Renamed `rootHash()` => `state()`
 proc state*(ac: AccountsLedgerRef): KeccakHash =
@@ -783,6 +783,17 @@ func getAccessList*(ac: AccountsLedgerRef): common.AccessList =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   ac.savePoint.accessList.getAccessList()
+
+proc getEthAccount*(ac: AccountsLedgerRef, address: EthAddress): Account =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return emptyEthAccount
+
+  ## Convert to legacy object, will throw an assert if that fails
+  let rc = acc.statement.recast()
+  if rc.isErr:
+    raiseAssert "getAccount(): cannot convert account: " & $$rc.error
+  rc.value
 
 proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}

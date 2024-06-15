@@ -15,7 +15,7 @@ import
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
   graphql/instruments/query_complexity,
-  ../db/[state_db],
+  ../db/[ledger],
   ../rpc/rpc_types,
   ../rpc/rpc_utils,
   ".."/[transaction, vm_state, config, constants],
@@ -47,7 +47,7 @@ type
   AccountNode = ref object of Node
     address: EthAddress
     account: Account
-    db: ReadOnlyStateDB
+    db: LedgerRef
 
   TxNode = ref object of Node
     tx: Transaction
@@ -99,7 +99,7 @@ proc headerNode(ctx: GraphqlContextRef, header: common.BlockHeader): Node =
     header: header
   )
 
-proc accountNode(ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: ReadOnlyStateDB): Node =
+proc accountNode(ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: LedgerRef): Node =
   AccountNode(
     kind: nkMap,
     typeName: ctx.ids[ethAccount],
@@ -146,11 +146,10 @@ proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
     wd: wd
   )
 
-proc getStateDB(com: CommonRef, header: common.BlockHeader): ReadOnlyStateDB =
+proc getStateDB(com: CommonRef, header: common.BlockHeader): LedgerRef =
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
-  let ac = newAccountStateDB(com.db, header.stateRoot)
-  ReadOnlyStateDB(ac)
+  LedgerRef.init(com.db, header.stateRoot)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
   try:
@@ -353,8 +352,8 @@ proc accountNode(ctx: GraphqlContextRef, header: common.BlockHeader, address: Et
       # but hive test case demand something
       if not db.accountExists(address):
         return ok(respNull())
-    let acc = db.getAccount(address)
-    ok(accountNode(ctx, acc.to(Account), address, db))
+    let acc = db.getEthAccount(address)
+    ok(accountNode(ctx, acc, address, db))
   except RlpError as ex:
     err(ex.msg)
 
@@ -552,7 +551,7 @@ proc accountStorage(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
   let acc = AccountNode(parent)
   try:
     let slot = parse(params[0].val.stringVal, UInt256, radix = 16)
-    let val = acc.db.getStorage(acc.address, slot).valueOr: 0.u256
+    let val = acc.db.getStorage(acc.address, slot)
     byte32Node(val)
   except RlpError as ex:
     err(ex.msg)

@@ -33,7 +33,7 @@ import
   ../nimbus/db/opts,
   ../nimbus/db/core_db,
   ../nimbus/db/core_db/persistent,
-  ../nimbus/db/state_db/base,
+  ../nimbus/db/ledger,
   ./rpc/experimental_rpc_client
 
 const
@@ -53,7 +53,7 @@ template toHash256(hash: untyped): Hash256 =
   fromHex(Hash256, hash.toHex())
 
 proc updateStateUsingProofsAndCheckStateRoot(
-    stateDB: AccountStateDB,
+    stateDB: LedgerRef,
     expectedStateRoot: Hash256,
     proofs: seq[ProofResponse]) =
 
@@ -125,7 +125,7 @@ proc rpcGetProofsTrackStateChangesMain*() =
 
       let
         blockHeader = waitFor client.eth_getBlockByNumber(blockId(START_BLOCK), false)
-        stateDB = newAccountStateDB(com.db, blockHeader.stateRoot.toHash256())
+        stateDB = LedgerRef.init(com.db, blockHeader.stateRoot.toHash256())
 
       for i in START_BLOCK..END_BLOCK:
         let

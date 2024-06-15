@@ -356,6 +356,11 @@ proc getMpt*(ldg: LedgerRef): CoreDxMptRef =
   result = ldg.ac.rawTrie.CoreDxAccRef.getMpt
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
+proc getEthAccount*(ldg: LedgerRef, eAddr: EthAddress): Account =
+  ldg.beginTrackApi LdgGetAthAccountFn
+  result = ldg.ac.getEthAccount(eAddr)
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, result
+
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
