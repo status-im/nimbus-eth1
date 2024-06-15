@@ -19,10 +19,10 @@ import
 
 type
   OphNumToTextFn* = proc(n: int): string
-  OpHanldlerImplFn* = proc(k: var Vm2Ctx; n: int): EvmResultVoid
+  OpHanldlerImplFn* = proc(k: var VmCtx; n: int): EvmResultVoid
 
 const
-  recForkSet = "Vm2OpAllForks"
+  recForkSet = "VmOpAllForks"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -48,7 +48,7 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
                       body: static[OpHanldlerImplFn]): untyped =
   ## Generate the equivalent of
   ## ::
-  ##  const <runHandler>: Vm2OpFn = proc (k: var Vm2Ctx) =
+  ##  const <runHandler>: VmOpFn = proc (k: var VmCtx) =
   ##    ## <itemInfo(n)>,
   ##    <body(k,n)>
   ##
@@ -61,9 +61,9 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
       fnName = ident(n.runHandler)
       comment = newCommentStmtNode(n.itemInfo)
 
-    # => push##Op: Vm2OpFn = proc (k: var Vm2Ctx) = ...
+    # => push##Op: VmOpFn = proc (k: var VmCtx) = ...
     result.add quote do:
-      const `fnName`: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+      const `fnName`: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
         `comment`
         `body`(k,`n`)
   # echo ">>>", result.repr
@@ -76,16 +76,16 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
                   opCode: static[OphNumToTextFn]): untyped =
   ## Generate
   ## ::
-  ##   const <varName>*: seq[Vm2OpExec] = @[ <records> ]
+  ##   const <varName>*: seq[VmOpExec] = @[ <records> ]
   ##
   ## where <records> is a sequence of <record(n)> items like
   ## ::
   ##   (opCode: <opCode(n)>,
-  ##    forks: Vm2OpAllForks,
+  ##    forks: VmOpAllForks,
   ##    info: <handlerInfo(n)>,
-  ##    exec: (prep: vm2OpIgnore,
+  ##    exec: (prep: VmOpIgnore,
   ##           run: <runHandler(n)>,
-  ##           post: vm2OpIgnore))
+  ##           post: VmOpIgnore))
   ##
   ## for all `n` in `inxList`
   ##
@@ -100,11 +100,11 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
                   nnkExprColonExpr.newTree(
                     newIdentNode("exec"),
                     nnkPar.newTree(
-                      "prep".asIdent("vm2OpIgnore"),
+                      "prep".asIdent("VmOpIgnore"),
                       "run".asIdent(n.runHandler),
-                      "post".asIdent("vm2OpIgnore"))))
+                      "post".asIdent("VmOpIgnore"))))
 
-  # => const <varName>*: seq[Vm2OpExec] = @[ <records> ]
+  # => const <varName>*: seq[VmOpExec] = @[ <records> ]
   result = nnkStmtList.newTree(
              nnkConstSection.newTree(
                nnkConstDef.newTree(
@@ -113,7 +113,7 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
                    newIdentNode(varName)),
                  nnkBracketExpr.newTree(
                    newIdentNode("seq"),
-                   newIdentNode("Vm2OpExec")),
+                   newIdentNode("VmOpExec")),
                  nnkPrefix.newTree(
                    newIdentNode("@"), records))))
   # echo ">>> ", result.repr

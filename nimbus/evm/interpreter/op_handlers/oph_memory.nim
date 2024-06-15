@@ -123,13 +123,13 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
 # ------------------------------------------------------------------------------
 
 const
-  popOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid =
+  popOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
     ## 0x50, Remove item from stack.
     k.cpt.stack.popInt.isOkOr:
       return err(error)
     ok()
 
-  mloadOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  mloadOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x51, Load word from memory
     let memStartPos = ? k.cpt.stack.popInt()
 
@@ -142,7 +142,7 @@ const
     k.cpt.stack.push k.cpt.memory.read32Bytes(memPos)
 
 
-  mstoreOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  mstoreOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x52, Save word to memory
     let (memStartPos, value) = ? k.cpt.stack.popInt(2)
 
@@ -155,7 +155,7 @@ const
     k.cpt.memory.write(memPos, value.toBytesBE)
 
 
-  mstore8Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  mstore8Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x53, Save byte to memory
     let (memStartPos, value) = ? k.cpt.stack.popInt(2)
 
@@ -170,14 +170,14 @@ const
 
   # -------
 
-  sloadOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  sloadOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x54, Load word from storage.
     let
       cpt = k.cpt
       slot = ? cpt.stack.popInt()
     cpt.stack.push cpt.getStorage(slot)
 
-  sloadEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  sloadEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x54, EIP2929: Load word from storage for Berlin and later
     let
       cpt = k.cpt
@@ -188,7 +188,7 @@ const
 
   # -------
 
-  sstoreOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  sstoreOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x55, Save word to storage.
     let
       cpt = k.cpt
@@ -198,7 +198,7 @@ const
     sstoreEvmcOrSstore(cpt, slot, newValue)
 
 
-  sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  sstoreEIP1283Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x55, EIP1283: sstore for Constantinople and later
     let
       cpt = k.cpt
@@ -208,7 +208,7 @@ const
     sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
-  sstoreEIP2200Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  sstoreEIP2200Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x55, EIP2200: sstore for Istanbul and later
     let
       cpt = k.cpt
@@ -223,7 +223,7 @@ const
     sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
-  sstoreEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  sstoreEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x55, EIP2929: sstore for Berlin and later
     let
       cpt = k.cpt
@@ -251,46 +251,46 @@ const
 
   # -------
 
-  jumpOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid =
+  jumpOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
     ## 0x56, Alter the program counter
     let jumpTarget = ? k.cpt.stack.popInt()
     jumpImpl(k.cpt, jumpTarget)
 
 
-  jumpIOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid =
+  jumpIOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
     ## 0x57, Conditionally alter the program counter.
     let (jumpTarget, testedValue) = ? k.cpt.stack.popInt(2)
     if testedValue.isZero:
       return ok()
     jumpImpl(k.cpt, jumpTarget)
 
-  pcOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid =
+  pcOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
     ## 0x58, Get the value of the program counter prior to the increment
     ##       corresponding to this instruction.
     k.cpt.stack.push max(k.cpt.code.pc - 1, 0)
 
-  msizeOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid =
+  msizeOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
     ## 0x59, Get the size of active memory in bytes.
     k.cpt.stack.push k.cpt.memory.len
 
-  gasOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid =
+  gasOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
     ## 0x5a, Get the amount of available gas, including the corresponding
     ##       reduction for the cost of this instruction.
     k.cpt.stack.push k.cpt.gasMeter.gasRemaining
 
-  jumpDestOp: Vm2OpFn = func (k: var Vm2Ctx): EvmResultVoid =
+  jumpDestOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
     ## 0x5b, Mark a valid destination for jumps. This operation has no effect
     ##       on machine state during execution.
     ok()
 
-  tloadOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  tloadOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x5c, Load word from transient storage.
     let
       slot = ? k.cpt.stack.popInt()
       val  = k.cpt.getTransientStorage(slot)
     k.cpt.stack.push val
 
-  tstoreOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  tstoreOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x5d, Save word to transient storage.
     ? checkInStaticContext(k.cpt)
 
@@ -300,7 +300,7 @@ const
     k.cpt.setTransientStorage(slot, val)
     ok()
 
-  mCopyOp: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  mCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x5e, Copy memory
     let (dst, src, size) = ? k.cpt.stack.popInt(3)
 
@@ -319,170 +319,170 @@ const
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpExecMemory*: seq[Vm2OpExec] = @[
+  VmOpExecMemory*: seq[VmOpExec] = @[
 
     (opCode: Pop,       ## x50, Remove item from stack
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "pop",
      info: "Remove item from stack",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  popOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Mload,     ## 0x51, Load word from memory
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "mload",
      info: "Load word from memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  mloadOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Mstore,    ## 0x52, Save word to memory
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "mstore",
      info: "Save word to memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  mstoreOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Mstore8,   ## 0x53, Save byte to memory
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "mstore8",
      info: "Save byte to memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  mstore8Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Sload,     ## 0x54, Load word from storage
-     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     forks: VmOpAllForks - VmOpBerlinAndLater,
      name: "sload",
      info: "Load word from storage",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  sloadOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Sload,     ## 0x54, sload for Berlin and later
-     forks: Vm2OpBerlinAndLater,
+     forks: VmOpBerlinAndLater,
      name: "sloadEIP2929",
      info: "EIP2929: sload for Berlin and later",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  sloadEIP2929Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Sstore,    ## 0x55, Save word
-     forks: Vm2OpAllForks - Vm2OpConstantinopleAndLater,
+     forks: VmOpAllForks - VmOpConstantinopleAndLater,
      name: "sstore",
      info: "Save word to storage",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  sstoreOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Sstore,    ## 0x55, sstore for Constantinople and later
-     forks: Vm2OpConstantinopleAndLater - Vm2OpPetersburgAndLater,
+     forks: VmOpConstantinopleAndLater - VmOpPetersburgAndLater,
      name: "sstoreEIP1283",
      info: "EIP1283: sstore for Constantinople and later",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  sstoreEIP1283Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Sstore,    ## 0x55, sstore for Petersburg and later
-     forks: Vm2OpPetersburgAndLater - Vm2OpIstanbulAndLater,
+     forks: VmOpPetersburgAndLater - VmOpIstanbulAndLater,
      name: "sstore",
      info: "sstore for Constantinople and later",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  sstoreOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Sstore,    ##  0x55, sstore for Istanbul and later
-     forks: Vm2OpIstanbulAndLater - Vm2OpBerlinAndLater,
+     forks: VmOpIstanbulAndLater - VmOpBerlinAndLater,
      name: "sstoreEIP2200",
      info: "EIP2200: sstore for Istanbul and later",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  sstoreEIP2200Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Sstore,    ##  0x55, sstore for Berlin and later
-     forks: Vm2OpBerlinAndLater,
+     forks: VmOpBerlinAndLater,
      name: "sstoreEIP2929",
      info: "EIP2929: sstore for Istanbul and later",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  sstoreEIP2929Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Jump,      ## 0x56, Jump
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "jump",
      info: "Alter the program counter",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  jumpOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: JumpI,     ## 0x57, Conditional jump
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "jumpI",
      info: "Conditionally alter the program counter",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  jumpIOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Pc,        ## 0x58, Program counter prior to instruction
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "pc",
      info: "Get the value of the program counter prior to the increment "&
            "corresponding to this instruction",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  pcOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Msize,     ## 0x59, Memory size
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "msize",
      info: "Get the size of active memory in bytes",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  msizeOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Gas,       ##  0x5a, Get available gas
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "gas",
      info: "Get the amount of available gas, including the corresponding "&
            "reduction for the cost of this instruction",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  gasOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: JumpDest,  ## 0x5b, Mark jump target. This operation has no effect
                         ##       on machine state during execution
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "jumpDest",
      info: "Mark a valid destination for jumps",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  jumpDestOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Tload,     ## 0x5c, Load word from transient storage.
-     forks: Vm2OpCancunAndLater,
+     forks: VmOpCancunAndLater,
      name: "tLoad",
      info: "Load word from transient storage",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  tloadOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Tstore,     ## 0x5d, Save word to transient storage.
-     forks: Vm2OpCancunAndLater,
+     forks: VmOpCancunAndLater,
      name: "tStore",
      info: "Save word to transient storage",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  tstoreOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Mcopy,     ## 0x5e, Copy memory
-     forks: Vm2OpCancunAndLater,
+     forks: VmOpCancunAndLater,
      name: "MCopy",
      info: "Copy memory",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  mCopyOp,
-            post: vm2OpIgnore))]
+            post: VmOpIgnore))]
 
 # ------------------------------------------------------------------------------
 # End

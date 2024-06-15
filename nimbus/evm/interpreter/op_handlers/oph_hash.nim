@@ -31,7 +31,7 @@ import
 # ------------------------------------------------------------------------------
 
 const
-  sha3Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  sha3Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x20, Compute Keccak-256 hash.
     let
       (startPos, length) = ? k.cpt.stack.popInt(2)
@@ -57,15 +57,15 @@ const
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpExecHash*: seq[Vm2OpExec] = @[
+  VmOpExecHash*: seq[VmOpExec] = @[
 
     (opCode: Op.Sha3,     ## 0x20, Keccak-256
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "sha3",
      info: "Compute Keccak-256 hash",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  sha3Op,
-            post: vm2OpIgnore))]
+            post: VmOpIgnore))]
 
 # ------------------------------------------------------------------------------
 # End

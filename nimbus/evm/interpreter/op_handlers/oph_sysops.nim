@@ -38,7 +38,7 @@ when not defined(evmc_enabled):
 # ------------------------------------------------------------------------------
 
 const
-  returnOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  returnOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xf3, Halt execution returning output data.
     let (startPos, size) = ? k.cpt.stack.popInt(2)
 
@@ -51,7 +51,7 @@ const
     ok()
 
 
-  revertOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  revertOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xfd, Halt execution reverting state changes but returning data
     ##       and remaining gas.
     let (startPos, size) = ? k.cpt.stack.popInt(2)
@@ -67,12 +67,12 @@ const
     k.cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
     ok()
 
-  invalidOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  invalidOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     err(opErr(InvalidInstruction))
 
   # -----------
 
-  selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  selfDestructOp: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## 0xff, Halt execution and register account for later deletion.
     let cpt = k.cpt
     let beneficiary = ? cpt.stack.popAddress()
@@ -84,7 +84,7 @@ const
         cpt.selfDestruct(beneficiary)
     ok()
 
-  selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  selfDestructEIP150Op: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## selfDestructEip150 (auto generated comment)
     let cpt = k.cpt
     let beneficiary = ? cpt.stack.popAddress()
@@ -99,7 +99,7 @@ const
       cpt.selfDestruct(beneficiary)
     ok()
 
-  selfDestructEIP161Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  selfDestructEIP161Op: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## selfDestructEip161 (auto generated comment)
     let cpt = k.cpt
     ? checkInStaticContext(cpt)
@@ -120,7 +120,7 @@ const
       cpt.selfDestruct(beneficiary)
     ok()
 
-  selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx): EvmResultVoid =
+  selfDestructEIP2929Op: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
     ## selfDestructEIP2929 (auto generated comment)
     let cpt = k.cpt
     ? checkInStaticContext(cpt)
@@ -158,64 +158,64 @@ const
 # ------------------------------------------------------------------------------
 
 const
-  vm2OpExecSysOp*: seq[Vm2OpExec] = @[
+  VmOpExecSysOp*: seq[VmOpExec] = @[
 
     (opCode: Return,       ## 0xf3, Halt execution returning output data.
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "returnOp",
      info: "Halt execution returning output data",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: returnOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Revert,       ## 0xfd, Halt and revert state changes
-     forks: Vm2OpByzantiumAndLater,
+     forks: VmOpByzantiumAndLater,
      name: "revert",
      info: "Halt execution reverting state changes but returning data " &
            "and remaining gas",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: revertOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: Invalid,      ## 0xfe, invalid instruction.
-     forks: Vm2OpAllForks,
+     forks: VmOpAllForks,
      name: "invalidInstruction",
      info: "Designated invalid instruction",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run: invalidOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: SelfDestruct, ## 0xff, Halt execution, prep for later deletion
-     forks: Vm2OpAllForks - Vm2OpTangerineAndLater,
+     forks: VmOpAllForks - VmOpTangerineAndLater,
      name: "selfDestruct",
      info: "Halt execution and register account for later deletion",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  selfDestructOp,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: SelfDestruct, ## 0xff, EIP150: self destruct, Tangerine
-     forks: Vm2OpTangerineAndLater - Vm2OpSpuriousAndLater,
+     forks: VmOpTangerineAndLater - VmOpSpuriousAndLater,
      name: "selfDestructEIP150",
      info: "EIP150: Halt execution and register account for later deletion",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  selfDestructEIP150Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: SelfDestruct, ## 0xff, EIP161: self destruct, Spurious and later
-     forks: Vm2OpSpuriousAndLater - Vm2OpBerlinAndLater,
+     forks: VmOpSpuriousAndLater - VmOpBerlinAndLater,
      name: "selfDestructEIP161",
      info: "EIP161: Halt execution and register account for later deletion",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  selfDestructEIP161Op,
-            post: vm2OpIgnore)),
+            post: VmOpIgnore)),
 
     (opCode: SelfDestruct, ## 0xff, EIP2929: self destruct, Berlin and later
-     forks: Vm2OpBerlinAndLater,
+     forks: VmOpBerlinAndLater,
      name: "selfDestructEIP2929",
      info: "EIP2929: Halt execution and register account for later deletion",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  selfDestructEIP2929Op,
-            post: vm2OpIgnore))]
+            post: VmOpIgnore))]
 
 # ------------------------------------------------------------------------------
 # End

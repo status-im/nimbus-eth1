@@ -41,7 +41,7 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Duplicate " & blurb & " item in the stack"
 
 
-proc dupImpl(k: var Vm2Ctx; n: int): EvmResultVoid =
+proc dupImpl(k: var VmCtx; n: int): EvmResultVoid =
   k.cpt.stack.dup(n)
 
 const
@@ -57,7 +57,7 @@ genOphHandlers fnName, fnInfo, inxRange, dupImpl
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "vm2OpExecDup", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecDup", opName
 
 # ------------------------------------------------------------------------------
 # End

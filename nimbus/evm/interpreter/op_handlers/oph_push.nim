@@ -40,7 +40,7 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Push " & blurb & " on the stack"
 
 
-proc pushImpl(k: var Vm2Ctx; n: int): EvmResultVoid =
+proc pushImpl(k: var VmCtx; n: int): EvmResultVoid =
   k.cpt.stack.push k.cpt.code.readVmWord(n)
 
 const
@@ -56,7 +56,7 @@ genOphHandlers fnName, fnInfo, inxRange, pushImpl
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "vm2OpExecPush", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName
 
 
 # Push0 needs to be slightly different because it's only available after
@@ -66,19 +66,19 @@ genOphList fnName, fnInfo, inxRange, "vm2OpExecPush", opName
 # just adding Push0 here as a special case.)
 
 const
-  push0Op: Vm2OpFn = proc (k: var Vm2Ctx): EvmResultVoid =
+  push0Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
     ## 0x5f, push 0 onto the stack
     k.cpt.stack.push(0)
 
-  vm2OpExecPushZero*: seq[Vm2OpExec] = @[
+  VmOpExecPushZero*: seq[VmOpExec] = @[
 
     (opCode: Push0,       ## 0x5f, push 0 onto the stack
-     forks: Vm2OpShanghaiAndLater,
+     forks: VmOpShanghaiAndLater,
      name: "Push0",
      info: "Push 0 on the stack",
-     exec: (prep: vm2OpIgnore,
+     exec: (prep: VmOpIgnore,
             run:  push0Op,
-            post: vm2OpIgnore))]
+            post: VmOpIgnore))]
 
 # ------------------------------------------------------------------------------
 # End
