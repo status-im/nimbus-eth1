@@ -18,8 +18,8 @@ import
   ../../transaction/call_evm,
   ../../transaction/call_common,
   ../../transaction,
-  ../../vm_state,
-  ../../vm_types,
+  ../../evm/state,
+  ../../evm/types,
   ../../constants,
   ../validate
 

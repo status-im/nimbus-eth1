@@ -12,7 +12,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   nimcrypto/[keccak, hash],
   eth/[rlp, keys, trie/hexary_proof_verification],
-  ../nimbus/[constants, transaction, config, vm_state, vm_types, version],
+  ../nimbus/[constants, transaction, config, evm/state, evm/types, version],
   ../nimbus/db/[ledger, storage_types],
   ../nimbus/sync/protocol,
   ../nimbus/core/[tx_pool, chain, executor, executor/executor_helpers, pow/difficulty],

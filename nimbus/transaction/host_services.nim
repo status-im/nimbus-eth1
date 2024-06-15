@@ -13,7 +13,7 @@ import
   stint, chronicles,
   eth/common/eth_types, ../db/ledger,
   ../common/[evmforks, common],
-  ".."/[vm_state, vm_computation, vm_internals, vm_gas_costs],
+  ".."/[evm/state, evm/computation, evm/internals],
   ./host_types, ./host_trace, ./host_call_nested,
   stew/saturation_arith
 

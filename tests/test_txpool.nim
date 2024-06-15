@@ -13,7 +13,7 @@ import
   ../nimbus/core/chain, # must be early (compilation annoyance)
   ../nimbus/common/common,
   ../nimbus/core/[executor, casper, tx_pool, tx_pool/tx_item],
-  ../nimbus/[config, vm_state, vm_types],
+  ../nimbus/[config, evm/state, evm/types],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[keys, p2p],

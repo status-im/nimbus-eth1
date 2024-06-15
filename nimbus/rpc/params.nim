@@ -13,7 +13,7 @@ import
   chronicles,
   ../common/common,
   ../transaction/call_common,
-  ../vm_types,
+  ../evm/types,
   ../beacon/web3_eth_conv,
   ../evm/evm_errors,
   ./rpc_types

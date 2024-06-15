@@ -91,7 +91,7 @@ proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
 proc successorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
-                     skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
+                     skip = 0'u): bool =
   let offset = 1 + skip.BlockNumber
   if h.number <= (not 0.BlockNumber) - offset:
     result = db.getBlockHeader(h.number + offset, output)
@@ -99,15 +99,14 @@ proc successorHeader(db: CoreDbRef,
 proc ancestorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
-                     skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
+                     skip = 0'u): bool =
   let offset = 1 + skip.BlockNumber
   if h.number >= offset:
     result = db.getBlockHeader(h.number - offset, output)
 
 proc blockHeader(db: CoreDbRef,
                  b: HashOrNum,
-                 output: var BlockHeader): bool
-                 {.gcsafe, raises: [RlpError].} =
+                 output: var BlockHeader): bool =
   if b.isHash:
     db.getBlockHeader(b.hash, output)
   else:

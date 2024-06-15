@@ -10,7 +10,7 @@
 
 import
   chronicles,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/core/executor,
   ../nimbus/common/common,
   ../nimbus/db/opts,

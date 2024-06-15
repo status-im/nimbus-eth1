@@ -12,7 +12,7 @@ import
   eth/common/eth_types,
   stew/ptrops,
   stint,
-  ".."/[vm_types, vm_computation],
+  ".."/[evm/types, evm/computation],
   ../utils/utils,
   "."/[host_types, host_trace]
 

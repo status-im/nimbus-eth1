@@ -10,7 +10,7 @@
 
 import
   ../../nimbus/common/common,
-  ../../nimbus/[vm_state, vm_types],
+  ../../nimbus/[evm/state, evm/types],
   ../../nimbus/db/ledger
 
 proc coinbaseStateClearing*(vmState: BaseVMState,

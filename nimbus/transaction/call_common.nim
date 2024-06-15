@@ -12,9 +12,9 @@ import
   eth/common/eth_types, stint, stew/ptrops,
   chronos,
   results,
-  ".."/[vm_types, vm_state, vm_computation],
-  ".."/[vm_internals, vm_precompiles, vm_gas_costs],
-  ".."/[db/ledger],
+  ../evm/[types, state, computation],
+  ../evm/[precompiles, internals],
+  ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
   ./host_types
@@ -23,7 +23,7 @@ when defined(evmc_enabled):
   import ../utils/utils
   import ./host_services
 else:
-  import ../vm_state_transactions
+  import ../evm/state_transactions
 
 type
   # Standard call parameters.

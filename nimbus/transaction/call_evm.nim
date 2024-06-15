@@ -12,7 +12,7 @@ import
   chronicles,
   chronos,
   eth/common/eth_types_rlp,
-  ".."/[vm_types, vm_state, vm_gas_costs],
+  ../evm/[types, state, internals],
   ../db/ledger,
   ../common/common,
   ../evm/evm_errors,

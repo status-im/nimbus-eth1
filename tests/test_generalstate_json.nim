@@ -10,7 +10,7 @@ import
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/core/executor, test_config,
   ../nimbus/transaction,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/db/ledger,
   ../nimbus/common/common,
   ../nimbus/utils/[utils, debug],
