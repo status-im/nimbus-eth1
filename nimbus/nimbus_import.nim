@@ -62,6 +62,12 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     start = com.db.getSavedStateBlockNumber() + 1
     chain = com.newChain()
 
+  template boolFlag(flags, b): PersistBlockFlags =
+    if b:
+      flags
+    else:
+      {}
+
   var
     imported = 0'u64
     gas = GasInt(0)
@@ -80,6 +86,11 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           quit(QuitFailure)
       else:
         File(nil)
+    flags =
+      boolFlag({PersistBlockFlag.NoFullValidation}, not conf.fullValidation) +
+      boolFlag(NoPersistBodies, not conf.storeBodies) +
+      boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts)
+
   defer:
     if csv != nil:
       close(csv)
@@ -109,7 +120,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       template process() =
         let
           time1 = Moment.now()
-          statsRes = chain.persistBlocks(blocks)
+          statsRes = chain.persistBlocks(blocks, flags)
         if statsRes.isErr():
           error "Failed to persist blocks", error = statsRes.error
           quit(QuitFailure)

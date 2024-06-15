@@ -373,6 +373,7 @@ proc validateTransaction*(
 proc validateHeaderAndKinship*(
     com: CommonRef;
     blk: EthBlock;
+    parent: BlockHeader;
     checkSealOK: bool;
       ): Result[void, string]
       {.gcsafe, raises: [].} =
@@ -382,12 +383,6 @@ proc validateHeaderAndKinship*(
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
     return ok()
-
-  let chainDB = com.db
-  let parent = try:
-    chainDB.getBlockHeader(header.parentHash)
-  except CatchableError as err:
-    return err("Failed to load block header from DB")
 
   ? com.validateHeader(blk, parent, checkSealOK)
 
