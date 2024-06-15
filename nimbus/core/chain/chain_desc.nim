@@ -13,8 +13,7 @@
 import
   ../../common/common,
   ../../utils/utils,
-  ../../vm_types,
-  ../pow
+  ../../vm_types
 
 export
   common
@@ -41,7 +40,7 @@ type
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc newChain*(com: CommonRef,
+func newChain*(com: CommonRef,
                extraValidation: bool,
                vmState = BaseVMState(nil)): ChainRef =
   ## Constructor for the `Chain` descriptor object.
@@ -65,27 +64,23 @@ func newChain*(com: CommonRef): ChainRef =
 # ------------------------------------------------------------------------------
 # Public `Chain` getters
 # ------------------------------------------------------------------------------
-proc vmState*(c: ChainRef): BaseVMState =
+func vmState*(c: ChainRef): BaseVMState =
   ## Getter
   c.vmState
 
-proc pow*(c: ChainRef): PowRef =
-  ## Getter
-  c.com.pow
-
-proc db*(c: ChainRef): CoreDbRef =
+func db*(c: ChainRef): CoreDbRef =
   ## Getter
   c.com.db
 
-proc com*(c: ChainRef): CommonRef =
+func com*(c: ChainRef): CommonRef =
   ## Getter
   c.com
 
-proc extraValidation*(c: ChainRef): bool =
+func extraValidation*(c: ChainRef): bool =
   ## Getter
   c.extraValidation
 
-proc verifyFrom*(c: ChainRef): BlockNumber =
+func verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
 
@@ -100,12 +95,12 @@ proc currentBlock*(c: ChainRef): BlockHeader
 # Public `Chain` setters
 # ------------------------------------------------------------------------------
 
-proc `extraValidation=`*(c: ChainRef; extraValidation: bool) =
+func `extraValidation=`*(c: ChainRef; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables
   ## extra block chain validation.
   c.extraValidation = extraValidation
 
-proc `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
+func `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
   ## Setter. The  assignment value `verifyFrom` defines the first block where
   ## validation should start if the `Clique` field `extraValidation` was set
   ## `true`.

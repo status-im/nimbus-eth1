@@ -39,7 +39,6 @@ cliBuilder:
           ./test_multi_keys,
           ./test_misc,
           #./test_graphql,                         -- fails
-          ./test_pow,
           ./test_configuration,
           #./test_txpool,                          -- fails
           ./test_txpool2,

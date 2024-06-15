@@ -18,7 +18,6 @@ import
   ../utils/utils,
   "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
-  ./pow,
   nimcrypto/utils as cryptoutils,
   stew/objects,
   results
@@ -34,34 +33,8 @@ const
     byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
 
 # ------------------------------------------------------------------------------
-# Pivate validator functions
+# Private validator functions
 # ------------------------------------------------------------------------------
-
-proc validateSeal(pow: PowRef; header: BlockHeader): Result[void,string] =
-  try:
-    let (expmixHash, miningValue) = pow.getPowDigest(header)
-
-    if expmixHash != header.mixHash:
-      let
-        miningHash = header.getPowSpecs.miningHash
-        (size, cachedHash) = try: pow.getPowCacheLookup(header.number)
-                            except KeyError: return err("Unknown block")
-                            except CatchableError as e: return err(e.msg)
-      return err("mixHash mismatch. actual=$1, expected=$2," &
-                " blockNumber=$3, miningHash=$4, nonce=$5, difficulty=$6," &
-                " size=$7, cachedHash=$8" % [
-                $header.mixHash, $expmixHash, $header.number,
-                $miningHash, header.nonce.toHex, $header.difficulty,
-                $size, $cachedHash])
-
-    let value = UInt256.fromBytesBE(miningValue.data)
-    if value > UInt256.high div header.difficulty:
-      return err("mining difficulty error")
-
-  except CatchableError as err:
-    return err(err.msg)
-
-  ok()
 
 proc validateHeader(
     com: CommonRef;
@@ -117,9 +90,6 @@ proc validateHeader(
     let calcDiffc = com.calcDifficulty(header.timestamp, parentHeader)
     if header.difficulty < calcDiffc:
       return err("provided header difficulty is too low")
-
-    if checkSealOK:
-      return com.pow.validateSeal(header)
 
   ? com.validateWithdrawals(header, blk.withdrawals)
   ? com.validateEip4844Header(header, parentHeader, blk.transactions)
@@ -194,10 +164,6 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
       return err("Uncle's parent has gone missing")
     if uncle.timestamp <= parent.timestamp:
       return err("Uncle's parent must me older")
-
-    # Now perform VM level validation of the uncle
-    if checkSealOK:
-      ? com.pow.validateSeal(uncle)
 
     let uncleParent = try:
       chainDB.getBlockHeader(uncle.parentHash)
