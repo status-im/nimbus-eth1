@@ -14,7 +14,6 @@ import
   json_rpc/rpcserver, stint, web3/conversions,
   eth/p2p,
   ../[transaction, vm_state, constants, vm_types],
-  ../db/state_db,
   rpc_types, rpc_utils,
   ../common/common,
   ../utils/utils,
@@ -27,13 +26,12 @@ import
 
 type
   BlockHeader = eth_types.BlockHeader
-  ReadOnlyStateDB = state_db.ReadOnlyStateDB
 
 proc getMultiKeys*(
     com: CommonRef,
     blockHeader: BlockHeader,
     statePostExecution: bool): MultiKeysRef
-    {.raises: [RlpError, BlockNotFound, ValueError, CatchableError].} =
+    {.raises: [RlpError, BlockNotFound, ValueError].} =
 
   let
     chainDB = com.db
@@ -60,8 +58,8 @@ proc getMultiKeys*(
   mkeys
 
 proc getBlockProofs*(
-    accDB: ReadOnlyStateDB,
-    mkeys: MultiKeysRef): seq[ProofResponse] {.raises: [RlpError].} =
+    accDB: LedgerRef,
+    mkeys: MultiKeysRef): seq[ProofResponse] =
 
   var blockProofs = newSeq[ProofResponse]()
 
@@ -81,11 +79,10 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
 
   let chainDB = com.db
 
-  proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
+  proc getStateDB(header: BlockHeader): LedgerRef =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
-    let ac = newAccountStateDB(chainDB, header.stateRoot)
-    result = ReadOnlyStateDB(ac)
+    LedgerRef.init(chainDB, header.stateRoot)
 
   server.rpc("exp_getProofsByBlockNumber") do(quantityTag: BlockTag, statePostExecution: bool) -> seq[ProofResponse]:
     ## Returns the block proofs for a block by block number or tag.

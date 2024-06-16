@@ -12,14 +12,12 @@ import
   web3/eth_api,
   nimcrypto/[keccak, hash],
   eth/[common, rlp, keys, trie/trie_defs, trie/hexary_proof_verification],
-  ../nimbus/db/state_db,
   ../nimbus/db/[ledger, core_db],
   ../nimbus/common/chain_config,
   ../nimbus/rpc/p2p
 
 type
   Hash256 = eth_types.Hash256
-  ReadOnlyStateDB = state_db.ReadOnlyStateDB
 
 func ethAddr*(x: Address): EthAddress =
   EthAddress x
@@ -79,7 +77,7 @@ proc setupStateDB(genAccounts: GenesisAlloc, stateDB: LedgerRef): Hash256 =
 
 proc checkProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
-    accDB: ReadOnlyStateDB,
+    accDB: LedgerRef,
     stateRoot: Hash256) =
 
   for address, account in genAccounts:
@@ -106,7 +104,7 @@ proc checkProofsForExistingLeafs(
 
 proc checkProofsForMissingLeafs(
     genAccounts: GenesisAlloc,
-    accDB: ReadOnlyStateDB,
+    accDB: LedgerRef,
     stateRoot: Hash256) =
 
   let
@@ -137,10 +135,9 @@ proc getProofJsonMain*() =
           coreDb = newCoreDbRef(DefaultDbMemory)
           accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
           stateRootHash = setupStateDB(accounts, accountsCache)
-          accountDb = newAccountStateDB(coreDb, stateRootHash)
-          readOnlyDb = ReadOnlyStateDB(accountDb)
+          accountDb = LedgerRef.init(coreDb, stateRootHash)
 
-        checkProofsForExistingLeafs(accounts, readOnlyDb, stateRootHash)
+        checkProofsForExistingLeafs(accounts, accountDb, stateRootHash)
 
     test "Get proofs for missing leafs":
       for file in genesisFiles:
@@ -150,10 +147,9 @@ proc getProofJsonMain*() =
           coreDb = newCoreDbRef(DefaultDbMemory)
           accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
           stateRootHash = setupStateDB(accounts, accountsCache)
-          accountDb = newAccountStateDB(coreDb, stateRootHash)
-          readOnlyDb = ReadOnlyStateDB(accountDb)
+          accountDb = LedgerRef.init(coreDb, stateRootHash)
 
-        checkProofsForMissingLeafs(accounts, readOnlyDb, stateRootHash)
+        checkProofsForMissingLeafs(accounts, accountDb, stateRootHash)
 
 when isMainModule:
   getProofJsonMain()

@@ -50,6 +50,7 @@ type
     LdgGetStorageFn            = "getStorage"
     LdgGetStorageRootFn        = "getStorageRoot"
     LdgGetTransientStorageFn   = "getTransientStorage"
+    LdgGetAthAccountFn         = "getEthAccount"
     LdgInAccessListFn          = "inAccessList"
     LdgIncNonceFn              = "incNonce"
     LdgIsDeadAccountFn         = "isDeadAccount"

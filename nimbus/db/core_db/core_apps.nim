@@ -988,7 +988,7 @@ proc finalizedHeaderHash*(db: CoreDbRef, headerHash: Hash256) =
 proc safeHeader*(
     db: CoreDbRef;
       ): BlockHeader
-      {.gcsafe, raises: [RlpError,BlockNotFound].} =
+      {.gcsafe, raises: [BlockNotFound].} =
   db.getBlockHeader(db.safeHeaderHash)
 
 proc finalizedHeader*(

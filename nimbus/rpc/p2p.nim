@@ -16,7 +16,7 @@ import
   eth/common/eth_types_json_serialization,
   eth/[keys, rlp, p2p],
   ".."/[transaction, vm_state, constants],
-  ../db/state_db,
+  ../db/ledger,
   ./rpc_types, ./rpc_utils, ./oracle,
   ../transaction/call_evm,
   ../core/tx_pool,
@@ -42,23 +42,23 @@ when not AccountAndStorageProofAvailableAndWorking:
     AccountProof = seq[MptNodeRlpBytes]
     SlotProof = seq[MptNodeRlpBytes]
   func getAccountProof(
-      db: ReadOnlyStateDB;
+      db: LedgerRef;
       eAddr: EthAddress;
         ): AccountProof =
     discard
   func getStorageProof(
-      db: ReadOnlyStateDB;
+      db: LedgerRef;
       eAddr: EthAddress;
       slot: seq[UInt256];
         ): seq[SlotProof] =
     discard
 
 proc getProof*(
-    accDB: ReadOnlyStateDB,
+    accDB: LedgerRef,
     address: EthAddress,
-    slots: seq[UInt256]): ProofResponse {.raises: [RlpError].} =
+    slots: seq[UInt256]): ProofResponse =
   let
-    acc = accDB.getAccount(address)
+    acc = accDB.getEthAccount(address)
     accExists = accDB.accountExists(address)
     accountProof = accDB.getAccountProof(address)
     slotProofs = accDB.getStorageProof(address, slots)
@@ -66,7 +66,7 @@ proc getProof*(
   var storage = newSeqOfCap[StorageProof](slots.len)
 
   for i, slotKey in slots:
-    let slotValue = accDB.getStorage(address, slotKey).valueOr: 0.u256
+    let slotValue = accDB.getStorage(address, slotKey)
     storage.add(StorageProof(
         key: slotKey,
         value: slotValue,
@@ -79,7 +79,7 @@ proc getProof*(
           balance: acc.balance,
           nonce: w3Qty(acc.nonce),
           codeHash: w3Hash(acc.codeHash),
-          storageHash: w3Hash(acc.to(Account).storageRoot),
+          storageHash: w3Hash(acc.storageRoot),
           storageProof: storage)
   else:
     ProofResponse(
@@ -92,13 +92,12 @@ proc setupEthRpc*(
     txPool: TxPoolRef, oracle: Oracle, server: RpcServer) =
 
   let chainDB = com.db
-  proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
+  proc getStateDB(header: BlockHeader): LedgerRef =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
-    let ac = newAccountStateDB(chainDB, header.stateRoot)
-    result = ReadOnlyStateDB(ac)
+    LedgerRef.init(chainDB, header.stateRoot)
 
-  proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): ReadOnlyStateDB
+  proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): LedgerRef
       {.gcsafe, raises: [CatchableError].} =
     result = getStateDB(chainDB.headerFromTag(quantityTag))
 
@@ -182,7 +181,7 @@ proc setupEthRpc*(
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
-      data = accDB.getStorage(address, slot).valueOr: 0.u256
+      data = accDB.getStorage(address, slot)
     result = data.w3FixedBytes
 
   server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: BlockTag) -> Web3Quantity:

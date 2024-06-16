@@ -16,7 +16,7 @@ import
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
   ../nimbus/[vm_state, vm_types, errors, constants],
-  ../nimbus/db/[ledger, state_db],
+  ../nimbus/db/ledger,
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,
   ../nimbus/evm/tracer/json_tracer,
@@ -187,8 +187,8 @@ proc testGetMultiKeys(chain: ChainRef, parentHeader, currentHeader: BlockHeader)
 
   # use the MultiKeysRef to build the block proofs
   let
-    ac = newAccountStateDB(chain.com.db, currentHeader.stateRoot)
-    blockProofs = getBlockProofs(state_db.ReadOnlyStateDB(ac), mkeys)
+    ac = LedgerRef.init(chain.com.db, currentHeader.stateRoot)
+    blockProofs = getBlockProofs(ac, mkeys)
   if blockProofs.len() != 0:
     raise newException(ValidationError, "Expected blockProofs.len() == 0")
 
