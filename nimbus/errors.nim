@@ -12,9 +12,6 @@ type
   BlockNotFound* = object of EVMError
     ## The block with the given number/hash does not exist.
 
-  ParentNotFound* = object of EVMError
-    ## The parent of a given block does not exist.
-
   CanonicalHeadNotFound* = object of EVMError
     ## The chain has no canonical head.
 

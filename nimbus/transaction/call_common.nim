@@ -12,18 +12,20 @@ import
   eth/common/eth_types, stint, stew/ptrops,
   chronos,
   results,
-  ../evm/[types, state, computation],
+  ../evm/[types, state, state_transactions],
   ../evm/[precompiles, internals],
   ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
   ./host_types
 
+import ../evm/computation except fromEvmc, toEvmc
+
 when defined(evmc_enabled):
   import ../utils/utils
   import ./host_services
-else:
-  import ../evm/state_transactions
+#else:
+  #import ../evm/state_transactions
 
 type
   # Standard call parameters.

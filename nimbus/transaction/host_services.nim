@@ -13,9 +13,11 @@ import
   stint, chronicles,
   eth/common/eth_types, ../db/ledger,
   ../common/[evmforks, common],
-  ".."/[evm/state, evm/computation, evm/internals],
+  ../evm/[state, internals],
   ./host_types, ./host_trace, ./host_call_nested,
   stew/saturation_arith
+
+import ../evm/computation except fromEvmc, toEvmc
 
 proc setupTxContext(host: TransactionHost) =
   # Conversion issues:

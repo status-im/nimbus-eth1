@@ -12,9 +12,12 @@ import
   eth/common/eth_types,
   stew/ptrops,
   stint,
-  ".."/[evm/types, evm/computation],
+  ../evm/types,
+  ../evm/interpreter_dispatch,
   ../utils/utils,
   "."/[host_types, host_trace]
+
+import ../evm/computation except fromEvmc, toEvmc
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
   dealloc(res.output_data)
