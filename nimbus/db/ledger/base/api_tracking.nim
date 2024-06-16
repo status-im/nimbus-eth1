@@ -79,7 +79,7 @@ type
     LdgAdressesIt              = "addresses"
     LdgCachedStorageIt         = "cachedStorage"
     LdgPairsIt                 = "pairs"
-    LdgStorageIt               = "storage"    
+    LdgStorageIt               = "storage"
 
 # ------------------------------------------------------------------------------
 # Private helpers
