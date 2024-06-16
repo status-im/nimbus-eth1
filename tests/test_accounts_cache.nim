@@ -9,12 +9,16 @@
 # according to those terms.
 
 import
-  std/[os, strformat, strutils, tables],
+  std/[strformat, strutils],
+  eth/keys,
   chronicles,
   stew/byteutils,
+  stew/endians2,
   ../nimbus/db/ledger,
   ../nimbus/common/common,
   ../nimbus/core/chain,
+  ../nimbus/core/tx_pool,
+  ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
   ../nimbus/evm/state,
@@ -22,46 +26,26 @@ import
   ./replay/undump_blocks,
   unittest2
 
-type
-  CaptureSpecs = tuple
-    network: NetworkId
-    file: string
-    numBlocks: int
-    numTxs: int
-
 const
-  baseDir = [".", "tests", ".." / "tests", $DirSep] # path containg repo
-  repoDir = ["replay", "status", "test_clique"]     # alternative repo paths
+  genesisFile = "tests/customgenesis/cancun123.json"
+  hexPrivKey  = "af1a9be9f1a54421cac82943820a0fe0f601bb5f4f6d0bccc81c613f0ce6ae22"
+  senderAddr  = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
 
-  goerliCapture: CaptureSpecs = (
-    network: GoerliNet,
-    file: "goerli68161.txt.gz",
-    numBlocks: 5500,  # unconditionally load blocks
-    numTxs:      10)  # txs following (not in block chain)
-
-when false:
-  goerliCapture1: CaptureSpecs = (
-    GoerliNet, goerliCapture.file, 5500, 10000)
-
-  mainCapture: CaptureSpecs = (
-    MainNet, "mainnet843841.txt.gz", 50000, 3000)
-
-var
-  xdb: CoreDbRef
-  txs: seq[Transaction]
-  txi: seq[int] # selected index into txs[] (crashable sender addresses)
+type
+  TestEnv = object
+    com: CommonRef
+    xdb: CoreDbRef
+    txs: seq[Transaction]
+    txi: seq[int] # selected index into txs[] (crashable sender addresses)
+    vaultKey: PrivateKey
+    nonce   : uint64
+    chainId : ChainId
+    xp      : TxPoolRef
+    chain   : ChainRef
 
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
-
-proc findFilePath(file: string): string =
-  result = "?unknown?" / file
-  for dir in baseDir:
-    for repo in repoDir:
-      let path = dir / repo / file
-      if path.fileExists:
-        return path
 
 proc pp*(a: EthAddress): string =
   a.toHex[32 .. 39].toLowerAscii
@@ -73,15 +57,15 @@ proc pp*(tx: Transaction): string =
 proc pp*(h: KeccakHash): string =
   h.data.toHex[52 .. 63].toLowerAscii
 
-proc pp*(tx: Transaction; vmState: BaseVMState): string =
+proc pp*(tx: Transaction; ledger: LedgerRef): string =
   let address = tx.getSender
   "(" & address.pp &
     "," & $tx.nonce &
-    ";" & $vmState.readOnlyStateDB.getNonce(address) &
-    "," & $vmState.readOnlyStateDB.getBalance(address) &
+    ";" & $ledger.getNonce(address) &
+    "," & $ledger.getBalance(address) &
     ")"
 
-when false:
+when isMainModule:
   proc setTraceLevel =
     discard
     when defined(chronicles_runtime_filtering) and loggingEnabled:
@@ -95,20 +79,76 @@ when false:
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+proc privKey(keyHex: string): PrivateKey =
+  let kRes = PrivateKey.fromHex(keyHex)
+  if kRes.isErr:
+    echo kRes.error
+    quit(QuitFailure)
 
-proc blockChainForTesting*(network: NetworkId): CommonRef =
-  result = CommonRef.new(
-    newCoreDbRef LegacyDbMemory,
-    networkId = network,
-    params = network.networkParams)
-  initializeEmptyDb(result)
+  kRes.get()
 
-proc importBlocks(com: CommonRef; h: seq[BlockHeader]; b: seq[BlockBody]) =
-  if com.newChain.persistBlocks(h,b).isErr:
-    raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
+proc initEnv(): TestEnv =
+  let
+    conf = makeConfig(@[
+      "--custom-network:" & genesisFile
+    ])
 
-proc getVmState(com: CommonRef; number: BlockNumber): BaseVMState =
-  BaseVMState.new(com.db.getBlockHeader(number), com)
+  let
+    com = CommonRef.new(
+      newCoreDbRef DefaultDbMemory,
+      conf.networkId,
+      conf.networkParams
+    )
+  com.initializeEmptyDb()
+
+  TestEnv(
+    com     : com,
+    xdb     : com.db,
+    vaultKey: privKey(hexPrivKey),
+    nonce   : 0'u64,
+    chainId : conf.networkParams.config.chainId,
+    xp      : TxPoolRef.new(com),
+    chain   : newChain(com),
+  )
+
+func makeTx(
+    env: var TestEnv,
+    recipient: EthAddress,
+    amount: UInt256,
+    payload: openArray[byte] = []): Transaction =
+  const
+    gasLimit = 75000.GasInt
+    gasPrice = 30.gwei
+
+  let tx = Transaction(
+    txType  : TxLegacy,
+    chainId : env.chainId,
+    nonce   : AccountNonce(env.nonce),
+    gasPrice: gasPrice,
+    gasLimit: gasLimit,
+    to      : Opt.some(recipient),
+    value   : amount,
+    payload : @payload
+  )
+
+  inc env.nonce
+  signTransaction(tx, env.vaultKey, env.chainId, eip155 = true)
+
+func initAddr(z: int): EthAddress =
+  const L = sizeof(result)
+  result[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
+
+proc importBlocks(env: TestEnv; blk: EthBlock) =
+  let res = env.chain.persistBlocks([blk])
+  if res.isErr:
+    debugEcho res.error
+    raiseAssert "persistBlocks() failed at block #" & $blk.header.number
+
+proc getLedger(com: CommonRef; header: BlockHeader): LedgerRef =
+  LedgerRef.init(com.db, header.stateRoot)
+
+func getRecipient(tx: Transaction): EthAddress =
+  tx.to.expect("transaction have no recipient")
 
 # ------------------------------------------------------------------------------
 # Crash test function, finding out about how the transaction framework works ..
@@ -121,156 +161,128 @@ proc modBalance(ac: LedgerRef, address: EthAddress) =
   ac.addBalance(address, 1.u256)
 
 
-proc runTrial2ok(vmState: BaseVMState; inx: int) =
+proc runTrial2ok(env: TestEnv, ledger: LedgerRef; inx: int) =
   ## Run two blocks, the first one with *rollback*.
-  let eAddr = txs[inx].getSender
+  let eAddr = env.txs[inx].getRecipient
 
   block:
-    let accTx = vmState.stateDB.beginSavepoint
-    vmState.stateDB.modBalance(eAddr)
-    vmState.stateDB.rollback(accTx)
+    let accTx = ledger.beginSavepoint
+    ledger.modBalance(eAddr)
+    ledger.rollback(accTx)
 
   block:
-    let accTx = vmState.stateDB.beginSavepoint
-    vmState.stateDB.modBalance(eAddr)
-    vmState.stateDB.commit(accTx)
+    let accTx = ledger.beginSavepoint
+    ledger.modBalance(eAddr)
+    ledger.commit(accTx)
 
-  vmState.stateDB.persist()
+  ledger.persist()
 
 
-proc runTrial3(vmState: BaseVMState; inx: int; rollback: bool) =
+proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
   ## Run three blocks, the second one optionally with *rollback*.
-  let eAddr = txs[inx].getSender
+  let eAddr = env.txs[inx].getRecipient
 
   block:
-    let accTx = vmState.stateDB.beginSavepoint
-    vmState.stateDB.modBalance(eAddr)
-    vmState.stateDB.commit(accTx)
-    vmState.stateDB.persist()
+    let accTx = ledger.beginSavepoint
+    ledger.modBalance(eAddr)
+    ledger.commit(accTx)
+    ledger.persist()
 
   block:
-    let accTx = vmState.stateDB.beginSavepoint
-    vmState.stateDB.modBalance(eAddr)
+    let accTx = ledger.beginSavepoint
+    ledger.modBalance(eAddr)
 
     if rollback:
-      vmState.stateDB.rollback(accTx)
+      ledger.rollback(accTx)
       break
 
-    vmState.stateDB.commit(accTx)
-    vmState.stateDB.persist()
+    ledger.commit(accTx)
+    ledger.persist()
 
   block:
-    let accTx = vmState.stateDB.beginSavepoint
-    vmState.stateDB.modBalance(eAddr)
-    vmState.stateDB.commit(accTx)
-    vmState.stateDB.persist()
+    let accTx = ledger.beginSavepoint
+    ledger.modBalance(eAddr)
+    ledger.commit(accTx)
+    ledger.persist()
 
 
-proc runTrial3crash(vmState: BaseVMState; inx: int; noisy = false) =
+proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) =
   ## Run three blocks with extra db frames and *rollback*.
-  let eAddr = txs[inx].getSender
+  let eAddr = env.txs[inx].getRecipient
 
   block:
-    let dbTx = xdb.beginTransaction()
+    let dbTx = env.xdb.newTransaction()
 
     block:
-      let accTx = vmState.stateDB.beginSavepoint
-      vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist()
+      let accTx = ledger.beginSavepoint
+      ledger.modBalance(eAddr)
+      ledger.commit(accTx)
+      ledger.persist()
 
     block:
-      let accTx = vmState.stateDB.beginSavepoint
-      vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.rollback(accTx)
+      let accTx = ledger.beginSavepoint
+      ledger.modBalance(eAddr)
+      ledger.rollback(accTx)
 
-    # The following statement will cause a crash at the next `persist()` call.
     dbTx.rollback()
 
-  # In order to survive without an exception in the next `persist()` call, the
-  # following function could be added to `db/ledger`:
-  #
-  #   proc clobberRootHash*(ac: LedgerRef; root: KeccakHash; prune = true) =
-  #     ac.trie = initAccountsTrie(ac.db, rootHash, prune)
-  #
-  # Then, beginning this very function `runTrial3crash()` with
-  #
-  #   let stateRoot = vmState.stateDB.rootHash
-  #
-  # the survival statement would be to re-assign the state-root via
-  #
-  #   vmState.stateDB.clobberRootHash(stateRoot)
-  #
-  # Also mind this comment from Andri:
-  #
-  #   [..] but as a reminder, only reinit the ac.trie is not enough, you
-  #   should consider the accounts in the cache too. if there is any accounts
-  #   in the cache they must in sync with the new rootHash.
-  #
   block:
-    let dbTx = xdb.beginTransaction()
+    let dbTx = env.xdb.newTransaction()
 
     block:
-      let accTx = vmState.stateDB.beginSavepoint
-      vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.commit(accTx)
+      let accTx = ledger.beginSavepoint
+      ledger.modBalance(eAddr)
+      ledger.commit(accTx)
 
-      try:
-        vmState.stateDB.persist()
-      except AssertionDefect as e:
-        if noisy:
-          let msg = e.msg.rsplit($DirSep,1)[^1]
-          echo &"*** runVmExec({eAddr.pp}): {e.name}: {msg}"
-        dbTx.dispose()
-        raise e
+      ledger.persist()
 
-      vmState.stateDB.persist()
+      ledger.persist()
 
     dbTx.commit()
 
 
-proc runTrial4(vmState: BaseVMState; inx: int; rollback: bool) =
+proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
   ## Like `runTrial3()` but with four blocks and extra db transaction frames.
-  let eAddr = txs[inx].getSender
+  let eAddr = env.txs[inx].getRecipient
 
   block:
-    let dbTx = xdb.beginTransaction()
+    let dbTx = env.xdb.newTransaction()
 
     block:
-      let accTx = vmState.stateDB.beginSavepoint
-      vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist()
+      let accTx = ledger.beginSavepoint
+      ledger.modBalance(eAddr)
+      ledger.commit(accTx)
+      ledger.persist()
 
     block:
-      let accTx = vmState.stateDB.beginSavepoint
-      vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist()
+      let accTx = ledger.beginSavepoint
+      ledger.modBalance(eAddr)
+      ledger.commit(accTx)
+      ledger.persist()
 
     block:
-      let accTx = vmState.stateDB.beginSavepoint
-      vmState.stateDB.modBalance(eAddr)
+      let accTx = ledger.beginSavepoint
+      ledger.modBalance(eAddr)
 
       if rollback:
-        vmState.stateDB.rollback(accTx)
+        ledger.rollback(accTx)
         break
 
-      vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist()
+      ledger.commit(accTx)
+      ledger.persist()
 
-    # There must be no dbTx.rollback() here unless `vmState.stateDB` is
+    # There must be no dbTx.rollback() here unless `ledger` is
     # discarded and/or re-initialised.
     dbTx.commit()
 
   block:
-    let dbTx = xdb.beginTransaction()
+    let dbTx = env.xdb.newTransaction()
 
     block:
-      let accTx = vmState.stateDB.beginSavepoint
-      vmState.stateDB.modBalance(eAddr)
-      vmState.stateDB.commit(accTx)
-      vmState.stateDB.persist()
+      let accTx = ledger.beginSavepoint
+      ledger.modBalance(eAddr)
+      ledger.commit(accTx)
+      ledger.persist()
 
     dbTx.commit()
 
@@ -278,97 +290,106 @@ proc runTrial4(vmState: BaseVMState; inx: int; rollback: bool) =
 # Test Runner
 # ------------------------------------------------------------------------------
 
-proc runner(noisy = true; capture = goerliCapture) =
-  let
-    loadBlocks = capture.numBlocks.u256
-    loadTxs = capture.numTxs
-    fileInfo = capture.file.splitFile.name.split(".")[0]
-    filePath = capture.file.findFilePath
-    com = capture.network.blockChainForTesting
+const
+  NumTransactions = 17
+  NumBlocks = 13
+  feeRecipient = initAddr(401)
+  prevRandao = EMPTY_UNCLE_HASH # it can be any valid hash
 
-  txs.reset
-  xdb = com.db
+proc runner(noisy = true) =
+  suite "StateDB nesting scenarios":
+    var env = initEnv()
 
-  suite &"StateDB nesting scenarios":
-    var topNumber: BlockNumber
+    test "Create transactions and blocks":
+      var
+        recipientSeed = 501
+        blockTime = EthTime.now()
 
-    test &"Import from {fileInfo}":
-      # Import minimum amount of blocks, then collect transactions
-      for chain in filePath.undumpBlocks:
-        let leadBlkNum = chain[0].header.number
-        topNumber = chain[^1].header.number
+      for _ in 0..<NumBlocks:
+        for _ in 0..<NumTransactions:
+          let recipient = initAddr(recipientSeed)
+          let tx = env.makeTx(recipient, 1.u256)
+          let res = env.xp.addLocal(PooledTransaction(tx: tx), force = true)
+          check res.isOk
+          if res.isErr:
+            debugEcho res.error
+            return
 
-        if loadTxs <= txs.len:
-          break
+          inc recipientSeed
 
-        # Verify Genesis
-        if leadBlkNum == 0.u256:
-          doAssert chain[0][0] == xdb.getBlockHeader(0.u256)
-          continue
+        check env.xp.nItems.total == NumTransactions
+        env.com.pos.prevRandao = prevRandao
+        env.com.pos.feeRecipient = feeRecipient
+        env.com.pos.timestamp = blockTime
 
-        # Import block chain blocks
-        if leadBlkNum < loadBlocks:
-          com.importBlocks(chain)
-          continue
+        blockTime = EthTime(blockTime.uint64 + 1'u64)
 
-        # Import transactions
-        for inx in 0 ..< chain.len:
-          let blkTxs = chain[inx].transactions
+        let r = env.xp.assembleBlock()
+        if r.isErr:
+          debugEcho r.error
+          check false
+          return
 
-          # Continue importing up until first non-trivial block
-          if txs.len == 0 and blkTxs.len == 0:
-            com.importBlocks([chain[inx]])
-            continue
+        let blk = r.get.blk
+        let body = BlockBody(
+          transactions: blk.txs,
+          uncles: blk.uncles,
+          withdrawals: Opt.some(newSeq[Withdrawal]())
+        )
+        env.importBlocks(EthBlock.init(blk.header, body))
 
-          # Load transactions
-          txs.add blkTxs
+        check env.xp.smartHead(blk.header)
+        for tx in body.transactions:
+          env.txs.add tx
 
+    test &"Collect unique recipient addresses from {env.txs.len} txs," &
+        &" head=#{env.xdb.getCanonicalHead.number}":
+      # since we generate our own transactions instead of replaying
+      # from testnet blocks, the recipients already unique.
+      for n,tx in env.txs:
+        #let a = tx.getRecipient
+        env.txi.add n
 
-    test &"Collect unique sender addresses from {txs.len} txs," &
-        &" head=#{xdb.getCanonicalHead.number}, top=#{topNumber}":
-      var seen: Table[EthAddress,bool]
-      for n,tx in txs:
-        let a = tx.getSender
-        if not seen.hasKey(a):
-          seen[a] = true
-          txi.add n
+    test &"Run {env.txi.len} two-step trials with rollback":
+      let head = env.xdb.getCanonicalHead()
+      for n in env.txi:
+        let dbTx = env.xdb.newTransaction()
+        defer: dbTx.dispose()
+        let ledger = env.com.getLedger(head)
+        env.runTrial2ok(ledger, n)
 
-    test &"Run {txi.len} two-step trials with rollback":
-      let dbTx = xdb.beginTransaction()
-      defer: dbTx.dispose()
-      for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.number)
-        vmState.runTrial2ok(n)
+    test &"Run {env.txi.len} three-step trials with rollback":
+      let head = env.xdb.getCanonicalHead()
+      for n in env.txi:
+        let dbTx = env.xdb.newTransaction()
+        defer: dbTx.dispose()
+        let ledger = env.com.getLedger(head)
+        env.runTrial3(ledger, n, rollback = true)
 
-    test &"Run {txi.len} three-step trials with rollback":
-      let dbTx = xdb.beginTransaction()
-      defer: dbTx.dispose()
-      for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.number)
-        vmState.runTrial3(n, rollback = true)
-
-    test &"Run {txi.len} three-step trials with extra db frame rollback" &
+    test &"Run {env.txi.len} three-step trials with extra db frame rollback" &
         " throwing Exceptions":
-      let dbTx = xdb.beginTransaction()
-      defer: dbTx.dispose()
-      for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.number)
-        expect AssertionDefect:
-          vmState.runTrial3crash(n, noisy)
+      let head = env.xdb.getCanonicalHead()
+      for n in env.txi:
+        let dbTx = env.xdb.newTransaction()
+        defer: dbTx.dispose()
+        let ledger = env.com.getLedger(head)
+        env.runTrial3Survive(ledger, n, noisy)
 
-    test &"Run {txi.len} tree-step trials without rollback":
-      let dbTx = xdb.beginTransaction()
-      defer: dbTx.dispose()
-      for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.number)
-        vmState.runTrial3(n, rollback = false)
+    test &"Run {env.txi.len} tree-step trials without rollback":
+      let head = env.xdb.getCanonicalHead()
+      for n in env.txi:
+        let dbTx = env.xdb.newTransaction()
+        defer: dbTx.dispose()
+        let ledger = env.com.getLedger(head)
+        env.runTrial3(ledger, n, rollback = false)
 
-    test &"Run {txi.len} four-step trials with rollback and db frames":
-      let dbTx = xdb.beginTransaction()
-      defer: dbTx.dispose()
-      for n in txi:
-        let vmState = com.getVmState(xdb.getCanonicalHead.number)
-        vmState.runTrial4(n, rollback = true)
+    test &"Run {env.txi.len} four-step trials with rollback and db frames":
+      let head = env.xdb.getCanonicalHead()
+      for n in env.txi:
+        let dbTx = env.xdb.newTransaction()
+        defer: dbTx.dispose()
+        let ledger = env.com.getLedger(head)
+        env.runTrial4(ledger, n, rollback = true)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -379,11 +400,9 @@ proc accountsCacheMain*(noisy = defined(debug)) =
 
 when isMainModule:
   var noisy = defined(debug)
-  #noisy = true
 
   setErrorLevel()
-  noisy.runner # mainCapture
-  # noisy.runner goerliCapture2
+  noisy.runner
 
 # ------------------------------------------------------------------------------
 # End

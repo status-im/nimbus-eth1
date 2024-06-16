@@ -11,7 +11,7 @@ import ./all_tests_macro
 
 cliBuilder:
   import  ./test_code_stream,
-          #./test_accounts_cache,                  -- does not compile
+          ./test_accounts_cache,
           ./test_jwt_auth,
           ./test_gas_meter,
           ./test_memory,
@@ -34,7 +34,7 @@ cliBuilder:
           ./test_transaction_json,
           # TODO: some of test_blockchain_json's test cases failing
           # see issue #2260
-          ./test_blockchain_json, 
+          ./test_blockchain_json,
           ./test_forkid,
           ./test_multi_keys,
           ./test_misc,
