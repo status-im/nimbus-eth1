@@ -395,7 +395,7 @@ proc runner(noisy = true) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc accountsCacheMain*(noisy = defined(debug)) =
+proc ledgerMain*(noisy = defined(debug)) =
   noisy.runner
 
 when isMainModule:
