@@ -12,7 +12,7 @@
 import
   chronicles,
   eth/trie/trie_defs,
-  ../core/[pow, casper],
+  ../core/casper,
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils, ec_recover],
   ".."/[constants, errors],
@@ -81,9 +81,6 @@ type
       ## installing a snapshot pivot. The default value for this field is
       ## `GENESIS_PARENT_HASH` to start at the very beginning.
 
-    pow: PowRef
-      ## Wrapper around `hashimotoLight()` and lookup cache
-
     pos: CasperRef
       ## Proof Of Stake descriptor
 
@@ -141,9 +138,6 @@ proc init(com         : CommonRef,
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
   com.pruneHistory= pruneHistory
-
-  # Always initialise the PoW epoch cache even though it migh no be used
-  com.pow = PowRef.new
   com.pos = CasperRef.new
 
   # com.currentFork and com.consensusType
@@ -253,7 +247,6 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     networkId    : com.networkId,
     currentFork  : com.currentFork,
     consensusType: com.consensusType,
-    pow          : com.pow,
     pos          : com.pos,
     pruneHistory : com.pruneHistory)
 
@@ -395,10 +388,6 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
 func startOfHistory*(com: CommonRef): Hash256 =
   ## Getter
   com.startOfHistory
-
-func pow*(com: CommonRef): PowRef =
-  ## Getter
-  com.pow
 
 func pos*(com: CommonRef): CasperRef =
   ## Getter
