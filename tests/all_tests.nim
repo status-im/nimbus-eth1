@@ -11,7 +11,7 @@ import ./all_tests_macro
 
 cliBuilder:
   import  ./test_code_stream,
-          ./test_accounts_cache,
+          ./test_ledger,
           ./test_jwt_auth,
           ./test_gas_meter,
           ./test_memory,
