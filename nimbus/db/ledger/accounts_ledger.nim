@@ -376,9 +376,9 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
   acc.statement.storage = storageLedger.getColumn()
 
   # No need to hold descriptors for longer than needed
-  let state = acc.statement.storage.state.valueOr:
+  let stateEmpty = acc.statement.storage.stateEmpty.valueOr:
     raiseAssert "Storage column state error: " & $$error
-  if state == EMPTY_ROOT_HASH:
+  if stateEmpty:
     acc.statement.storage = CoreDbColRef(nil)
 
 
@@ -540,8 +540,8 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
 
-  let accHash = acc.statement.storage.state.valueOr: return
-  if accHash != EMPTY_ROOT_HASH:
+  let empty = acc.statement.storage.stateEmpty.valueOr: return
+  if not empty:
     # need to clear the storage from the database first
     let acc = ac.makeDirty(address, cloneStorage = false)
     ac.ledger.freeStorage address
@@ -613,7 +613,7 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
     ac.ripemdSpecial = false
 
 proc persist*(ac: AccountsLedgerRef,
-              clearEmptyAccount: bool = false) =
+              clearEmptyAccount: bool = false) {.deprecated.} =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
 

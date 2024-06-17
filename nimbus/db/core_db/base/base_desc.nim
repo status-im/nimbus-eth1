@@ -92,6 +92,8 @@ type
   CoreDbBaseDestroyFn* = proc(eradicate = true) {.noRaise.}
   CoreDbBaseColStateFn* = proc(
     col: CoreDbColRef): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbBaseColStateEmptyFn* = proc(
+    col: CoreDbColRef): CoreDbRc[bool] {.noRaise.}
   CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
@@ -110,6 +112,7 @@ type
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
     colStateFn*:     CoreDbBaseColStateFn
+    colStateEmptyFn*: CoreDbBaseColStateEmptyFn
     colPrintFn*:     CoreDbBaseColPrintFn
     errorPrintFn*:   CoreDbBaseErrorPrintFn
     levelFn*:        CoreDbBaseLevelFn
