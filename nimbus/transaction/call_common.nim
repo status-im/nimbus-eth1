@@ -215,7 +215,6 @@ when defined(evmc_enabled):
 
     if callResult.status_code == EVMC_SUCCESS:
       c.error = nil
-      c.logEntries = callResult.logEntries
     elif callResult.status_code == EVMC_REVERT:
       c.setError(EVMC_REVERT, false)
     else:
