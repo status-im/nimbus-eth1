@@ -94,26 +94,36 @@ type
       name: "listen-address"
     .}: IpAddress
 
-    portalNetwork* {.
+    portalNetworkDeprecated* {.
+      hidden,
+      desc:
+        "DEPRECATED: The --portal-network flag will be removed in the future, " &
+        "please use the drop in replacement --network flag instead",
+      defaultValue: PortalNetwork.none,
+      name: "portal-network"
+    .}: PortalNetwork
+
+    network* {.
       desc:
         "Select which Portal network to join. This will set the " &
         "Portal network specific bootstrap nodes automatically",
       defaultValue: PortalNetwork.mainnet,
-      name: "portal-network"
+      name: "network"
     .}: PortalNetwork
 
-    portalNetworkDeprecated* {.
+    networksDeprecated* {.
       hidden,
       desc:
-        "DEPRECATED: The --network flag will be removed in the future, please use the drop in replacement --portal-network flag instead",
-      defaultValue: none(PortalNetwork),
-      name: "network"
-    .}: Option[PortalNetwork.mainnet]
+        "DEPRECATED: The --networks flag will be removed in the future, " &
+        "please use the drop in replacement --portal-subnetworks flag instead",
+      defaultValue: {},
+      name: "networks"
+    .}: set[Network]
 
-    networks* {.
+    portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
       defaultValue: {Network.history},
-      name: "networks"
+      name: "portal-subnetworks"
     .}: set[Network]
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
