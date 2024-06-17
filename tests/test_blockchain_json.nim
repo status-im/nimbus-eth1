@@ -15,7 +15,7 @@ import
   stew/byteutils,
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
-  ../nimbus/[vm_state, vm_types, errors, constants],
+  ../nimbus/[evm/state, evm/types, errors, constants],
   ../nimbus/db/ledger,
   ../nimbus/utils/[utils, debug],
   ../nimbus/evm/tracer/legacy_tracer,

@@ -13,7 +13,7 @@
 import
   ../../common/common,
   ../../utils/utils,
-  ../../vm_types
+  ../../evm/types
 
 export
   common

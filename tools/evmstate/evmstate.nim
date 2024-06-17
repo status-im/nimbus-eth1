@@ -16,7 +16,7 @@ import
   results,
   stint,
   eth/trie/[trie_defs],
-  ../../nimbus/[vm_types, vm_state],
+  ../../nimbus/[evm/types, evm/state],
   ../../nimbus/db/ledger,
   ../../nimbus/transaction,
   ../../nimbus/core/executor,

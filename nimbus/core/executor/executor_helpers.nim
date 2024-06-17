@@ -13,8 +13,8 @@
 import
   ../../common/common,
   ../../db/ledger,
-  ../../vm_state,
-  ../../vm_types,
+  ../../evm/state,
+  ../../evm/types,
   eth/[bloom]
 
 type

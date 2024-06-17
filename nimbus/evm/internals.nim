@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,10 +9,19 @@
 # according to those terms.
 
 import
-  evm/state_transactions as vmx
+  ./interpreter/utils/utils_numeric,
+  ./interpreter/gas_costs,
+  ./interpreter/gas_meter,
+  ./interpreter/op_codes,
+  ./code_stream,
+  ./stack,
+  ./memory
 
 export
-  vmx.execComputation,
-  vmx.execSysCall
-
-# End
+  utils_numeric,
+  code_stream,
+  gas_costs,
+  gas_meter,
+  op_codes,
+  memory,
+  stack

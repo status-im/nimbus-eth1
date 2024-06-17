@@ -19,7 +19,7 @@ import
   ../nimbus/core/casper,
   ../nimbus/common/common,
   ../nimbus/utils/utils,
-  ../nimbus/vm_types,
+  ../nimbus/evm/types,
   ./test_txpool/helpers,
   ./macro_assembler
 

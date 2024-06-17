@@ -18,7 +18,7 @@ import
   ../db/[ledger],
   ../rpc/rpc_types,
   ../rpc/rpc_utils,
-  ".."/[transaction, vm_state, config, constants],
+  ".."/[transaction, evm/state, config, constants],
   ../common/common,
   ../transaction/call_evm,
   ../core/[tx_pool, tx_pool/tx_item],

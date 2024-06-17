@@ -13,8 +13,8 @@
 import
   results,
   ../../db/ledger,
-  ../../vm_state,
-  ../../vm_types,
+  ../../evm/state,
+  ../../evm/types,
   ../executor,
   ../validate,
   ./chain_desc,

@@ -14,7 +14,7 @@ import
   stint, results,
   "."/[config, types, helpers],
   ../common/state_clearing,
-  ../../nimbus/[vm_types, vm_state, transaction],
+  ../../nimbus/[evm/types, evm/state, transaction],
   ../../nimbus/common/common,
   ../../nimbus/db/ledger,
   ../../nimbus/utils/utils,

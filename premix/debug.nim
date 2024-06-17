@@ -13,7 +13,7 @@ import
   stew/byteutils,
   chronicles,
   results,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/core/executor,
   ./premixcore, ./prestate,
   ../nimbus/tracer,

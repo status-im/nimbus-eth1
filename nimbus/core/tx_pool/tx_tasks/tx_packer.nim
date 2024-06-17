@@ -25,8 +25,8 @@ import
   "../.."/[dao, executor, validate, eip4844, casper],
   ../../../transaction/call_evm,
   ../../../transaction,
-  ../../../vm_state,
-  ../../../vm_types,
+  ../../../evm/state,
+  ../../../evm/types,
   ".."/[tx_chain, tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
   "."/[tx_bucket, tx_classify]
 

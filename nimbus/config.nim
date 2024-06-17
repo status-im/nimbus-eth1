@@ -24,7 +24,7 @@ import
     confutils/std/net
   ],
   eth/[common, net/utils, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
-  "."/[constants, vm_compile_info, version],
+  "."/[constants, compile_info, version],
   common/chain_config,
   db/opts
 

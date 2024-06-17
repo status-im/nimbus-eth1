@@ -14,7 +14,7 @@ import
   ../nimbus/common/common, # must be early (compilation annoyance)
   ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
-  ../nimbus/[config, tracer, vm_types]
+  ../nimbus/[config, tracer, evm/types]
 
 proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
   var

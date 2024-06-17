@@ -11,8 +11,8 @@
 import
   ../../db/ledger,
   ../../common/common,
-  ../../vm_state,
-  ../../vm_types
+  ../../evm/state,
+  ../../evm/types
 
 {.push raises: [].}
 

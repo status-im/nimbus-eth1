@@ -12,7 +12,7 @@ import
   json_rpc/rpcserver,
   ./rpc_utils,
   ./rpc_types,
-  ../tracer, ../vm_types,
+  ../tracer, ../evm/types,
   ../common/common,
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
