@@ -59,10 +59,10 @@ type
   PortalNetwork* = enum
     none
     mainnet
-    testnet
+    angelfood
 
-  # The networks alias Portal sub-protocols
-  Network* = enum
+  # The Portal sub-protocols
+  PortalSubnetwork* = enum
     beacon
     history
     state
@@ -99,9 +99,9 @@ type
       desc:
         "DEPRECATED: The --portal-network flag will be removed in the future, " &
         "please use the drop in replacement --network flag instead",
-      defaultValue: PortalNetwork.none,
+      defaultValue: none(PortalNetwork),
       name: "portal-network"
-    .}: PortalNetwork
+    .}: Option[PortalNetwork]
 
     network* {.
       desc:
@@ -118,13 +118,13 @@ type
         "please use the drop in replacement --portal-subnetworks flag instead",
       defaultValue: {},
       name: "networks"
-    .}: set[Network]
+    .}: set[PortalSubnetwork]
 
     portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {Network.history},
+      defaultValue: {PortalSubnetwork.history},
       name: "portal-subnetworks"
-    .}: set[Network]
+    .}: set[PortalSubnetwork]
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
     # enabled Portal network. No distinction is made on bootstrap nodes per
@@ -373,21 +373,23 @@ proc parseCmdArg*(T: type ClientConfig, p: string): T {.raises: [ValueError].} =
 proc completeCmdArg*(T: type ClientConfig, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type set[Network], p: string): T {.raises: [ValueError].} =
-  var res: set[Network] = {}
+proc parseCmdArg*(
+    T: type set[PortalSubnetwork], p: string
+): T {.raises: [ValueError].} =
+  var res: set[PortalSubnetwork] = {}
   let values = p.split({' ', ','})
   for value in values:
     let stripped = value.strip()
     let network =
       try:
-        parseEnum[Network](stripped)
+        parseEnum[PortalSubnetwork](stripped)
       except ValueError:
         raise newException(ValueError, "Invalid network: " & stripped)
 
     res.incl(network)
   res
 
-proc completeCmdArg*(T: type set[Network], val: string): seq[string] =
+proc completeCmdArg*(T: type set[PortalSubnetwork], val: string): seq[string] =
   return @[]
 
 chronicles.formatIt(InputDir):
