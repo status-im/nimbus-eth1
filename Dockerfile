@@ -20,7 +20,7 @@ RUN ldd --version ldd
 ADD . /root/nimbus-eth1
 
 RUN cd /root/nimbus-eth1 \
- && make -j$(nproc) update \
+ && make -j$(nproc) update-from-ci \
  && make -j$(nproc) V=1 LOG_LEVEL=TRACE nimbus
 
 # --------------------------------- #
