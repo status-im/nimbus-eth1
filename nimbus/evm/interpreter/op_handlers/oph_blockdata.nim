@@ -29,63 +29,62 @@ when not defined(evmc_enabled):
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-const
-  blockhashOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x40, Get the hash of one of the 256 most recent complete blocks.
-    let
-      cpt = k.cpt
-      blockNumber = ? cpt.stack.popInt()
-      blockHash = cpt.getBlockHash(blockNumber.truncate(BlockNumber))
+proc blockhashOp (k: var VmCtx): EvmResultVoid =
+  ## 0x40, Get the hash of one of the 256 most recent complete blocks.
+  let
+    cpt = k.cpt
+    blockNumber = ? cpt.stack.popInt()
+    blockHash = cpt.getBlockHash(blockNumber.truncate(BlockNumber))
 
-    cpt.stack.push blockHash
+  cpt.stack.push blockHash
 
-  coinBaseOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x41, Get the block's beneficiary address.
-    k.cpt.stack.push k.cpt.getCoinbase
+proc coinBaseOp (k: var VmCtx): EvmResultVoid =
+  ## 0x41, Get the block's beneficiary address.
+  k.cpt.stack.push k.cpt.getCoinbase
 
-  timestampOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x42, Get the block's timestamp.
-    k.cpt.stack.push k.cpt.getTimestamp
+proc timestampOp (k: var VmCtx): EvmResultVoid =
+  ## 0x42, Get the block's timestamp.
+  k.cpt.stack.push k.cpt.getTimestamp
 
-  blocknumberOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x43, Get the block's number.
-    k.cpt.stack.push k.cpt.getBlockNumber
+proc blocknumberOp (k: var VmCtx): EvmResultVoid =
+  ## 0x43, Get the block's number.
+  k.cpt.stack.push k.cpt.getBlockNumber
 
-  difficultyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x44, Get the block's difficulty
-    k.cpt.stack.push k.cpt.getDifficulty
+proc difficultyOp (k: var VmCtx): EvmResultVoid =
+  ## 0x44, Get the block's difficulty
+  k.cpt.stack.push k.cpt.getDifficulty
 
-  gasLimitOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x45, Get the block's gas limit
-    k.cpt.stack.push k.cpt.getGasLimit
+proc gasLimitOp (k: var VmCtx): EvmResultVoid =
+  ## 0x45, Get the block's gas limit
+  k.cpt.stack.push k.cpt.getGasLimit
 
-  chainIdOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x46, Get current chain’s EIP-155 unique identifier.
-    k.cpt.stack.push k.cpt.getChainId
+proc chainIdOp (k: var VmCtx): EvmResultVoid =
+  ## 0x46, Get current chain’s EIP-155 unique identifier.
+  k.cpt.stack.push k.cpt.getChainId
 
-  selfBalanceOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x47, Get current contract's balance.
-    let cpt = k.cpt
-    cpt.stack.push cpt.getBalance(cpt.msg.contractAddress)
+proc selfBalanceOp (k: var VmCtx): EvmResultVoid =
+  ## 0x47, Get current contract's balance.
+  let cpt = k.cpt
+  cpt.stack.push cpt.getBalance(cpt.msg.contractAddress)
 
-  baseFeeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x48, Get the block's base fee.
-    k.cpt.stack.push k.cpt.getBaseFee
+proc baseFeeOp (k: var VmCtx): EvmResultVoid =
+  ## 0x48, Get the block's base fee.
+  k.cpt.stack.push k.cpt.getBaseFee
 
-  blobHashOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x49, Get current transaction's EIP-4844 versioned hash.
-    let
-      index = ? k.cpt.stack.popSafeInt()
-      len = k.cpt.getVersionedHashesLen
+proc blobHashOp (k: var VmCtx): EvmResultVoid =
+  ## 0x49, Get current transaction's EIP-4844 versioned hash.
+  let
+    index = ? k.cpt.stack.popSafeInt()
+    len = k.cpt.getVersionedHashesLen
 
-    if index < len:
-      k.cpt.stack.push k.cpt.getVersionedHash(index)
-    else:
-      k.cpt.stack.push 0
+  if index < len:
+    k.cpt.stack.push k.cpt.getVersionedHash(index)
+  else:
+    k.cpt.stack.push 0
 
-  blobBaseFeeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x4a, Get the block's base fee.
-    k.cpt.stack.push k.cpt.getBlobBaseFee
+proc blobBaseFeeOp (k: var VmCtx): EvmResultVoid =
+  ## 0x4a, Get the block's base fee.
+  k.cpt.stack.push k.cpt.getBlobBaseFee
 
 
 # ------------------------------------------------------------------------------

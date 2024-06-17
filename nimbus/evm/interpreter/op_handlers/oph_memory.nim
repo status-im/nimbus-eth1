@@ -122,197 +122,196 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-const
-  popOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
-    ## 0x50, Remove item from stack.
-    k.cpt.stack.popInt.isOkOr:
-      return err(error)
-    ok()
+proc popOp(k: var VmCtx): EvmResultVoid =
+  ## 0x50, Remove item from stack.
+  k.cpt.stack.popInt.isOkOr:
+    return err(error)
+  ok()
 
-  mloadOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x51, Load word from memory
-    let memStartPos = ? k.cpt.stack.popInt()
+proc mloadOp (k: var VmCtx): EvmResultVoid =
+  ## 0x51, Load word from memory
+  let memStartPos = ? k.cpt.stack.popInt()
 
-    let memPos = memStartPos.cleanMemRef
-    ? k.cpt.opcodeGastCost(Mload,
-      k.cpt.gasCosts[Mload].m_handler(k.cpt.memory.len, memPos, 32),
-      reason = "MLOAD: GasVeryLow + memory expansion")
+  let memPos = memStartPos.cleanMemRef
+  ? k.cpt.opcodeGastCost(Mload,
+    k.cpt.gasCosts[Mload].m_handler(k.cpt.memory.len, memPos, 32),
+    reason = "MLOAD: GasVeryLow + memory expansion")
 
-    k.cpt.memory.extend(memPos, 32)
-    k.cpt.stack.push k.cpt.memory.read32Bytes(memPos)
-
-
-  mstoreOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x52, Save word to memory
-    let (memStartPos, value) = ? k.cpt.stack.popInt(2)
-
-    let memPos = memStartPos.cleanMemRef
-    ? k.cpt.opcodeGastCost(Mstore,
-      k.cpt.gasCosts[Mstore].m_handler(k.cpt.memory.len, memPos, 32),
-      reason = "MSTORE: GasVeryLow + memory expansion")
-
-    k.cpt.memory.extend(memPos, 32)
-    k.cpt.memory.write(memPos, value.toBytesBE)
+  k.cpt.memory.extend(memPos, 32)
+  k.cpt.stack.push k.cpt.memory.read32Bytes(memPos)
 
 
-  mstore8Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x53, Save byte to memory
-    let (memStartPos, value) = ? k.cpt.stack.popInt(2)
+proc mstoreOp (k: var VmCtx): EvmResultVoid =
+  ## 0x52, Save word to memory
+  let (memStartPos, value) = ? k.cpt.stack.popInt(2)
 
-    let memPos = memStartPos.cleanMemRef
-    ? k.cpt.opcodeGastCost(Mstore8,
-      k.cpt.gasCosts[Mstore8].m_handler(k.cpt.memory.len, memPos, 1),
-      reason = "MSTORE8: GasVeryLow + memory expansion")
+  let memPos = memStartPos.cleanMemRef
+  ? k.cpt.opcodeGastCost(Mstore,
+    k.cpt.gasCosts[Mstore].m_handler(k.cpt.memory.len, memPos, 32),
+    reason = "MSTORE: GasVeryLow + memory expansion")
 
-    k.cpt.memory.extend(memPos, 1)
-    k.cpt.memory.write(memPos, value.toByteArrayBE[31])
-
-
-  # -------
-
-  sloadOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x54, Load word from storage.
-    let
-      cpt = k.cpt
-      slot = ? cpt.stack.popInt()
-    cpt.stack.push cpt.getStorage(slot)
-
-  sloadEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x54, EIP2929: Load word from storage for Berlin and later
-    let
-      cpt = k.cpt
-      slot = ? cpt.stack.popInt()
-      gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
-    ? cpt.opcodeGastCost(Sload, gasCost, reason = "sloadEIP2929")
-    cpt.stack.push cpt.getStorage(slot)
-
-  # -------
-
-  sstoreOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x55, Save word to storage.
-    let
-      cpt = k.cpt
-      (slot, newValue) = ? cpt.stack.popInt(2)
-
-    ? checkInStaticContext(cpt)
-    sstoreEvmcOrSstore(cpt, slot, newValue)
+  k.cpt.memory.extend(memPos, 32)
+  k.cpt.memory.write(memPos, value.toBytesBE)
 
 
-  sstoreEIP1283Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x55, EIP1283: sstore for Constantinople and later
-    let
-      cpt = k.cpt
-      (slot, newValue) = ? cpt.stack.popInt(2)
+proc mstore8Op (k: var VmCtx): EvmResultVoid =
+  ## 0x53, Save byte to memory
+  let (memStartPos, value) = ? k.cpt.stack.popInt(2)
 
-    ? checkInStaticContext(cpt)
-    sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+  let memPos = memStartPos.cleanMemRef
+  ? k.cpt.opcodeGastCost(Mstore8,
+    k.cpt.gasCosts[Mstore8].m_handler(k.cpt.memory.len, memPos, 1),
+    reason = "MSTORE8: GasVeryLow + memory expansion")
 
-
-  sstoreEIP2200Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x55, EIP2200: sstore for Istanbul and later
-    let
-      cpt = k.cpt
-      (slot, newValue) = ? cpt.stack.popInt(2)
-
-    ? checkInStaticContext(cpt)
-    const SentryGasEIP2200 = 2300
-
-    if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
-      return err(opErr(OutOfGas))
-
-    sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+  k.cpt.memory.extend(memPos, 1)
+  k.cpt.memory.write(memPos, value.toByteArrayBE[31])
 
 
-  sstoreEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x55, EIP2929: sstore for Berlin and later
-    let
-      cpt = k.cpt
-      (slot, newValue) = ? cpt.stack.popInt(2)
+# -------
 
-    ? checkInStaticContext(cpt)
+proc sloadOp (k: var VmCtx): EvmResultVoid =
+  ## 0x54, Load word from storage.
+  let
+    cpt = k.cpt
+    slot = ? cpt.stack.popInt()
+  cpt.stack.push cpt.getStorage(slot)
 
-    # Minimum gas required to be present for an SSTORE call, not consumed
-    const SentryGasEIP2200 = 2300
+proc sloadEIP2929Op (k: var VmCtx): EvmResultVoid =
+  ## 0x54, EIP2929: Load word from storage for Berlin and later
+  let
+    cpt = k.cpt
+    slot = ? cpt.stack.popInt()
+    gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
+  ? cpt.opcodeGastCost(Sload, gasCost, reason = "sloadEIP2929")
+  cpt.stack.push cpt.getStorage(slot)
 
-    if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
-      return err(opErr(OutOfGas))
+# -------
 
-    var coldAccessGas = 0.GasInt
-    when evmc_enabled:
-      if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
+proc sstoreOp (k: var VmCtx): EvmResultVoid =
+  ## 0x55, Save word to storage.
+  let
+    cpt = k.cpt
+    (slot, newValue) = ? cpt.stack.popInt(2)
+
+  ? checkInStaticContext(cpt)
+  sstoreEvmcOrSstore(cpt, slot, newValue)
+
+
+proc sstoreEIP1283Op (k: var VmCtx): EvmResultVoid =
+  ## 0x55, EIP1283: sstore for Constantinople and later
+  let
+    cpt = k.cpt
+    (slot, newValue) = ? cpt.stack.popInt(2)
+
+  ? checkInStaticContext(cpt)
+  sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+
+
+proc sstoreEIP2200Op (k: var VmCtx): EvmResultVoid =
+  ## 0x55, EIP2200: sstore for Istanbul and later
+  let
+    cpt = k.cpt
+    (slot, newValue) = ? cpt.stack.popInt(2)
+
+  ? checkInStaticContext(cpt)
+  const SentryGasEIP2200 = 2300
+
+  if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+    return err(opErr(OutOfGas))
+
+  sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+
+
+proc sstoreEIP2929Op (k: var VmCtx): EvmResultVoid =
+  ## 0x55, EIP2929: sstore for Berlin and later
+  let
+    cpt = k.cpt
+    (slot, newValue) = ? cpt.stack.popInt(2)
+
+  ? checkInStaticContext(cpt)
+
+  # Minimum gas required to be present for an SSTORE call, not consumed
+  const SentryGasEIP2200 = 2300
+
+  if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+    return err(opErr(OutOfGas))
+
+  var coldAccessGas = 0.GasInt
+  when evmc_enabled:
+    if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
+      coldAccessGas = ColdSloadCost
+  else:
+    cpt.vmState.mutateStateDB:
+      if not db.inAccessList(cpt.msg.contractAddress, slot):
+        db.accessList(cpt.msg.contractAddress, slot)
         coldAccessGas = ColdSloadCost
-    else:
-      cpt.vmState.mutateStateDB:
-        if not db.inAccessList(cpt.msg.contractAddress, slot):
-          db.accessList(cpt.msg.contractAddress, slot)
-          coldAccessGas = ColdSloadCost
 
-    sstoreEvmcOrNetGasMetering(cpt, slot, newValue, coldAccessGas)
+  sstoreEvmcOrNetGasMetering(cpt, slot, newValue, coldAccessGas)
 
-  # -------
+# -------
 
-  jumpOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
-    ## 0x56, Alter the program counter
-    let jumpTarget = ? k.cpt.stack.popInt()
-    jumpImpl(k.cpt, jumpTarget)
+proc jumpOp (k: var VmCtx): EvmResultVoid =
+  ## 0x56, Alter the program counter
+  let jumpTarget = ? k.cpt.stack.popInt()
+  jumpImpl(k.cpt, jumpTarget)
 
 
-  jumpIOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
-    ## 0x57, Conditionally alter the program counter.
-    let (jumpTarget, testedValue) = ? k.cpt.stack.popInt(2)
-    if testedValue.isZero:
-      return ok()
-    jumpImpl(k.cpt, jumpTarget)
+proc jumpIOp (k: var VmCtx): EvmResultVoid =
+  ## 0x57, Conditionally alter the program counter.
+  let (jumpTarget, testedValue) = ? k.cpt.stack.popInt(2)
+  if testedValue.isZero:
+    return ok()
+  jumpImpl(k.cpt, jumpTarget)
 
-  pcOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
-    ## 0x58, Get the value of the program counter prior to the increment
-    ##       corresponding to this instruction.
-    k.cpt.stack.push max(k.cpt.code.pc - 1, 0)
+proc pcOp (k: var VmCtx): EvmResultVoid =
+  ## 0x58, Get the value of the program counter prior to the increment
+  ##       corresponding to this instruction.
+  k.cpt.stack.push max(k.cpt.code.pc - 1, 0)
 
-  msizeOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
-    ## 0x59, Get the size of active memory in bytes.
-    k.cpt.stack.push k.cpt.memory.len
+proc msizeOp (k: var VmCtx): EvmResultVoid =
+  ## 0x59, Get the size of active memory in bytes.
+  k.cpt.stack.push k.cpt.memory.len
 
-  gasOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
-    ## 0x5a, Get the amount of available gas, including the corresponding
-    ##       reduction for the cost of this instruction.
-    k.cpt.stack.push k.cpt.gasMeter.gasRemaining
+proc gasOp (k: var VmCtx): EvmResultVoid =
+  ## 0x5a, Get the amount of available gas, including the corresponding
+  ##       reduction for the cost of this instruction.
+  k.cpt.stack.push k.cpt.gasMeter.gasRemaining
 
-  jumpDestOp: VmOpFn = func (k: var VmCtx): EvmResultVoid =
-    ## 0x5b, Mark a valid destination for jumps. This operation has no effect
-    ##       on machine state during execution.
-    ok()
+proc jumpDestOp (k: var VmCtx): EvmResultVoid =
+  ## 0x5b, Mark a valid destination for jumps. This operation has no effect
+  ##       on machine state during execution.
+  ok()
 
-  tloadOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x5c, Load word from transient storage.
-    let
-      slot = ? k.cpt.stack.popInt()
-      val  = k.cpt.getTransientStorage(slot)
-    k.cpt.stack.push val
+proc tloadOp (k: var VmCtx): EvmResultVoid =
+  ## 0x5c, Load word from transient storage.
+  let
+    slot = ? k.cpt.stack.popInt()
+    val  = k.cpt.getTransientStorage(slot)
+  k.cpt.stack.push val
 
-  tstoreOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x5d, Save word to transient storage.
-    ? checkInStaticContext(k.cpt)
+proc tstoreOp (k: var VmCtx): EvmResultVoid =
+  ## 0x5d, Save word to transient storage.
+  ? checkInStaticContext(k.cpt)
 
-    let
-      slot = ? k.cpt.stack.popInt()
-      val  = ? k.cpt.stack.popInt()
-    k.cpt.setTransientStorage(slot, val)
-    ok()
+  let
+    slot = ? k.cpt.stack.popInt()
+    val  = ? k.cpt.stack.popInt()
+  k.cpt.setTransientStorage(slot, val)
+  ok()
 
-  mCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x5e, Copy memory
-    let (dst, src, size) = ? k.cpt.stack.popInt(3)
+proc mCopyOp (k: var VmCtx): EvmResultVoid =
+  ## 0x5e, Copy memory
+  let (dst, src, size) = ? k.cpt.stack.popInt(3)
 
-    let (dstPos, srcPos, len) =
-      (dst.cleanMemRef, src.cleanMemRef, size.cleanMemRef)
+  let (dstPos, srcPos, len) =
+    (dst.cleanMemRef, src.cleanMemRef, size.cleanMemRef)
 
-    ? k.cpt.opcodeGastCost(Mcopy,
-      k.cpt.gasCosts[Mcopy].m_handler(k.cpt.memory.len, max(dstPos, srcPos), len),
-      reason = "Mcopy fee")
+  ? k.cpt.opcodeGastCost(Mcopy,
+    k.cpt.gasCosts[Mcopy].m_handler(k.cpt.memory.len, max(dstPos, srcPos), len),
+    reason = "Mcopy fee")
 
-    k.cpt.memory.copy(dstPos, srcPos, len)
-    ok()
+  k.cpt.memory.copy(dstPos, srcPos, len)
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
@@ -326,7 +325,7 @@ const
      name: "pop",
      info: "Remove item from stack",
      exec: (prep: VmOpIgnore,
-            run:  popOp,
+            run:  VmOpFn popOp,
             post: VmOpIgnore)),
 
     (opCode: Mload,     ## 0x51, Load word from memory

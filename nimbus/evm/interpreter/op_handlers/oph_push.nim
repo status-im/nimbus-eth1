@@ -65,11 +65,11 @@ genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName
 # about which opcodes are for which forks, but that seems uglier than
 # just adding Push0 here as a special case.)
 
-const
-  push0Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x5f, push 0 onto the stack
-    k.cpt.stack.push(0)
+proc push0Op(k: var VmCtx): EvmResultVoid =
+  ## 0x5f, push 0 onto the stack
+  k.cpt.stack.push(0)
 
+const
   VmOpExecPushZero*: seq[VmOpExec] = @[
 
     (opCode: Push0,       ## 0x5f, push 0 onto the stack
