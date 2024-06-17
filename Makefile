@@ -129,15 +129,20 @@ ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
 # selectively download nimbus-eth2 submodules because we don't need all of it's modules
 # also holesky already exceeds github LFS quota
+
+# We don't need these `vendor/holesky` files but fetching them
+# may trigger 'This repository is over its data quota' from GitHub
+GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/custom_config_data/genesis.ssz
+
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
-  git submodule update vendor/nimbus-eth2; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
   cd vendor/nimbus-eth2; \
-  git submodule update --init vendor/eth2-networks; \
-  git submodule update --init vendor/holesky; \
-  git submodule update --init vendor/sepolia; \
-  git submodule update --init vendor/gnosis-chain-configs; \
-  git submodule update --init --recursive vendor/nim-kzg4844; \
-  git submodule update --init vendor/mainnet; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/eth2-networks; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/holesky; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/gnosis-chain-configs; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init --recursive vendor/nim-kzg4844; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/mainnet; \
   cd ../..
 
 .DEFAULT:
