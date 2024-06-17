@@ -86,17 +86,16 @@ type
 
     # Merge leaf `merge()`
     MergeAssemblyFailed # Ooops, internal error
-    MergeAccLeafPathWithoutLeaf
-    MergeAccLeafPayloadExpected
-    MergeAccUnaccessible
+    MergeAccRootNotAccepted
+    MergeStoRootNotAccepted
     MergeBranchGarbledNibble
     MergeBranchGarbledTail
     MergeBranchLinkLeafGarbled
-    MergeBranchLinkLockedKey
-    MergeBranchLinkProofModeLock
     MergeBranchLinkVtxPfxTooShort
     MergeBranchProofModeLock
     MergeBranchRootExpected
+    MergeHashKeyDiffersFromCached
+    MergeHashKeyInvalid
     MergeLeafCantChangeStorageID
     MergeLeafGarbledHike
     MergeLeafPathCachedAlready
@@ -104,26 +103,21 @@ type
     MergeLeafProofModeLock
     MergeLeafTypeAccountRequired
     MergeLeafTypeRawDataRequired
+    MergeNodeAccountPayloadError
+    MergeNodeVidMissing
+    MergeNodeVtxDiffersFromExisting
     MergeNonBranchProofModeLock
+    MergeProofInitMissing
+    MergeRevVidMustHaveBeenCached
+    MergeRootArgsIncomplete
     MergeRootBranchLinkBusy
-    MergeRootMissing
-
-    MergeHashKeyInvalid
-    MergeHashKeyDiffersFromCached
-    MergeHashKeyRevLookUpGarbled
+    MergeRootKeyDiffersForVid
     MergeRootKeyInvalid
+    MergeRootKeyMissing
     MergeRootKeyNotInProof
     MergeRootKeysMissing
     MergeRootKeysOverflow
-    MergeProofInitMissing
-    MergeRevVidMustHaveBeenCached
-    MergeNodeVtxDiffersFromExisting
-    MergeNodeVidMissing
-    MergeNodeAccountPayloadError
-    MergeRootKeyDiffersForVid
-    MergeNodeVtxDuplicates
-    MergeRootKeyMissing
-    MergeRootArgsIncomplete
+    MergeRootVidMissing
 
     # Update `Merkle` hashes `hashify()`
     HashifyVtxUnresolved

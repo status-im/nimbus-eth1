@@ -15,7 +15,7 @@ import
   eth/[common, trie/nibbles],
   results,
   ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
-        aristo_utils, aristo_vid]
+        aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private getters & setters
@@ -407,8 +407,7 @@ proc mergePayloadTopIsEmptyAddLeaf(
 
 proc mergePayloadUpdate(
     db: AristoDbRef;                   # Database, top layer
-    hike: Hike;                        # No path legs
-    leafTie: LeafTie;                  # Leaf item to add to the database
+    hike: Hike;                        # Path to payload
     payload: PayloadRef;               # Payload value to add
       ): Result[Hike,AristoError] =
   ## Update leaf vertex if payloads differ
@@ -421,7 +420,7 @@ proc mergePayloadUpdate(
       return err(MergeLeafProofModeLock)
 
     # Make certain that the account leaf can be replaced
-    if leafTie.root == VertexID(1):
+    if hike.root == VertexID(1):
       # Only `AccountData` payload on `VertexID(1)` tree
       if payload.account.storageID != leafLeg.wp.vtx.lData.account.storageID:
         return err(MergeLeafCantChangeStorageID)
@@ -451,55 +450,39 @@ proc mergePayloadUpdate(
 
 proc mergePayloadImpl*(
     db: AristoDbRef;                   # Database, top layer
-    leafTie: LeafTie;                  # Leaf item to add to the database
+    root: VertexID;                    # MPT state root
+    path: openArray[byte];             # Leaf item to add to the database
     payload: PayloadRef;               # Payload value
-    accPath: PathID;                   # Needed for accounts payload
-      ): Result[bool,AristoError] =
-  ## Merge the argument `leafTie` key-value-pair into the top level vertex
-  ## table of the database `db`. The field `path` of the `leafTie` argument is
-  ## used to address the leaf vertex with the payload. It is stored or updated
-  ## on the database accordingly.
+    wpAcc: VidVtxPair;                 # Needed for storage tree
+      ): Result[void,AristoError] =
+  ## Merge the argument `(root,path)` key-value-pair into the top level vertex
+  ## table of the database `db`. The `path` argument is used to address the
+  ## leaf vertex with the payload. It is stored or updated on the database
+  ## accordingly.
   ##
-  ## If the `leafTie.root` argument is `VertexID(1)` the payload argument must
-  ## be of type `AccountData`. In that case, the `storageID` field of the leaf
-  ## entry must refer to an existing vertex if it holds a valid vertex ID. The
-  ## argument `accPath` must be void.
+  ## If the `root` argument is `VertexID(1)` this function relies upon that the
+  ## payload argument is of type `AccountData`. If the payload exists already
+  ## on the database, the `storageID` field of the `payload` and on the database
+  ## must be the same or an error is returned. The argument `wpAcc` will be
+  ## ignored for accounts.
   ##
   ## Otherwise, if the `root` argument belongs to a well known sub trie (i.e.
-  ## it does not exceed `LEAST_FREE_VID`) the `accPath` argument is ignored
-  ## and the entry will just be merged.  The argument `accPath` must be void.
+  ## it does not exceed `LEAST_FREE_VID`) the entry will just be merged. The
+  ## argument `wpAcc` will be ignored .
   ##
-  ## Otherwise, a valid `accPath` (i.e. different from `VOID_PATH_ID`.) is
-  ## required leading to an account leaf entry (starting at `VertexID(1)`) the
-  ## leaf of which must have payload type `AccountData`. If the  payload field
-  ## `storageID` does not have a valid entry, a new sub-trie is created and
-  ## the `storageID` field is updated on disk.
+  ## Otherwise, a valid `wpAcc` must be given referring to an `AccountData`
+  ## payload type leaf vertex.  If the `storageID` field of that payload
+  ## does not have a valid entry, a new sub-trie will be created. Otherwise
+  ## this function expects that the `root` argument is the same as the
+  ## `storageID` field.
   ##
   ## The function returns `true` iff a new sub-tree was linked to an account
   ## leaf record.
   ##
-  let wp = block:
-    if leafTie.root.distinctBase < LEAST_FREE_VID:
-      if not leafTie.root.isValid:
-        return err(MergeRootMissing)
-      VidVtxPair()
-    else:
-      let rc = db.registerAccount(leafTie.root, accPath)
-      if rc.isErr:
-        return err(rc.error)
-      else:
-        rc.value
+  let
+    nibblesPath = path.initNibbleRange
+    hike = nibblesPath.hikeUp(root, db).to(Hike)
 
-  # Verify acceptable leaf types
-  case payload.pType:
-  of AccountData:
-    if leafTie.root != VertexID(1):
-      return err(MergeLeafTypeRawDataRequired)
-  of RawData:
-    if leafTie.root == VertexID(1):
-      return err(MergeLeafTypeAccountRequired)
-
-  let hike = leafTie.hikeUp(db).to(Hike)
   var okHike: Hike
   if 0 < hike.legs.len:
     case hike.legs[^1].wp.vtx.vType:
@@ -508,7 +491,7 @@ proc mergePayloadImpl*(
     of Leaf:
       if 0 < hike.tail.len:          # `Leaf` vertex problem?
         return err(MergeLeafGarbledHike)
-      okHike = ? db.mergePayloadUpdate(hike, leafTie, payload)
+      okHike = ? db.mergePayloadUpdate(hike, payload)
     of Extension:
       okHike = ? db.mergePayloadTopIsExtAddLeaf(hike, payload)
 
@@ -524,26 +507,16 @@ proc mergePayloadImpl*(
         vid: hike.root,
         vtx: VertexRef(
           vType: Leaf,
-          lPfx:  leafTie.path.to(NibblesSeq),
+          lPfx:  nibblesPath,
           lData: payload))
       db.setVtxAndKey(hike.root, wp.vid, wp.vtx)
       okHike = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
 
-    # Double check the result until the code is more reliable
-    block:
-      let rc = okHike.to(NibblesSeq).pathToTag
-      if rc.isErr or rc.value != leafTie.path:
-        return err(MergeAssemblyFailed) # Ooops
+    # Double check the result (may be removed in future)
+    if okHike.to(NibblesSeq) != nibblesPath:
+      return err(MergeAssemblyFailed) # Ooops
 
-  # Make sure that there is an account that refers to that storage trie
-  if wp.vid.isValid and not wp.vtx.lData.account.storageID.isValid:
-    let leaf = wp.vtx.dup # Dup on modify
-    leaf.lData.account.storageID = leafTie.root
-    db.layersPutVtx(VertexID(1), wp.vid, leaf)
-    db.layersResKey(VertexID(1), wp.vid)
-    return ok true
-
-  ok false
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

@@ -25,9 +25,10 @@
 {.push raises: [].}
 
 import
+  std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_path, aristo_utils, aristo_vid],
+  "."/[aristo_desc, aristo_layers, aristo_utils, aristo_vid],
   ./aristo_merge/[merge_payload_helper, merge_proof]
 
 export
@@ -53,9 +54,8 @@ proc mergeAccountPayload*(
   ## to be a storage tree.
   ##
   let
-    lty = LeafTie(root: VertexID(1), path: ? accKey.pathToTag)
     pyl =  PayloadRef(pType: AccountData, account: accPayload)
-    rc = db.mergePayloadImpl(lty, pyl, VOID_PATH_ID)
+    rc = db.mergePayloadImpl(VertexID(1), accKey, pyl, VidVtxPair())
   if rc.isOk:
     ok true
   elif rc.error in MergeNoAction:
@@ -73,10 +73,17 @@ proc mergeGenericData*(
   ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
   ## `root` greater than `VertexID(1)` and smaller than `LEAST_FREE_VID`.
   ##
+  # Verify that `root` is neither an accounts tree nor a strorage tree.
+  if not root.isValid:
+    return err(MergeRootVidMissing)
+  elif root == VertexID(1):
+    return err(MergeAccRootNotAccepted)
+  elif LEAST_FREE_VID <= root.distinctBase:
+    return err(MergeStoRootNotAccepted)
+
   let
     pyl = PayloadRef(pType: RawData, rawBlob: @data)
-    lty = LeafTie(root: root, path: ? path.pathToTag)
-    rc = db.mergePayloadImpl(lty, pyl, VOID_PATH_ID)
+    rc = db.mergePayloadImpl(root, path, pyl, VidVtxPair())
   if rc.isOk:
     ok true
   elif rc.error in MergeNoAction:
@@ -105,29 +112,33 @@ proc mergeStorageData*(
   ## otherwise `VertexID(0)`.
   ##
   let
-    stoTag = ? stoKey.pathToTag()
-    wp = ? db.registerAccountForUpdate accPath
-    stoID = wp.vtx.lData.account.storageID
+    wpAcc = ? db.registerAccountForUpdate accPath
+    stoID = wpAcc.vtx.lData.account.storageID
 
     # Provide new storage ID when needed
     useID = if stoID.isValid: stoID else: db.vidFetch()
 
     # Call merge
-    lty = LeafTie(root: useID, path: stoTag)
     pyl = PayloadRef(pType: RawData, rawBlob: @stoData)
-    rc = db.mergePayloadImpl(lty, pyl, accPath)
+    rc = db.mergePayloadImpl(useID, stoKey, pyl, wpAcc)
 
   if rc.isOk:
-    if rc.value:
-      doAssert not stoID.isValid
+    if stoID.isValid:
+      return ok VertexID(0)
+
+    else:
+      # Make sure that there is an account that refers to that storage trie
+      let leaf = wpAcc.vtx.dup # Dup on modify
+      leaf.lData.account.storageID = useID
+      db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
+      db.layersResKey(VertexID(1), wpAcc.vid)
       return ok useID
-    doAssert stoID.isValid
-    return ok VertexID(0)
 
   elif rc.error in MergeNoAction:
-    doAssert stoID.isValid
+    assert stoID.isValid         # debugging only
     return ok VertexID(0)
 
+  # else
   err(rc.error)
 
 # ------------------------------------------------------------------------------
