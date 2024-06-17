@@ -250,11 +250,11 @@ proc exec(ctx: var TransContext,
       )
       continue
 
-    let gasUsed = rc.get()
-    let rec = vmState.makeReceipt(tx.txType)
+    let callResult = rc.get()
+    let rec = vmState.makeReceipt(tx.txType, callResult.logEntries)
     vmState.receipts.add rec
     receipts.add toTxReceipt(
-      rec, tx, sender, txIndex, gasUsed
+      rec, tx, sender, txIndex, callResult.gasUsed
     )
     includedTx.add tx
     blobGasUsed += tx.getTotalBlobGas

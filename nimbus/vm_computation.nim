@@ -33,6 +33,7 @@ export
   vmc.getDifficulty,
   vmc.getGasLimit,
   vmc.getGasPrice,
+  vmc.addLogEntry,
   vmc.getGasRefund,
   vmc.getOrigin,
   vmc.getStorage,

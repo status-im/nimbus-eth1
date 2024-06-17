@@ -163,7 +163,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     let sender = tx.getSender()
     let rc = vmState.processTransaction(tx, sender, vmHeader)
     doAssert(rc.isOk, "Invalid transaction: " & rc.error)
-    vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
+    vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType, rc.value.logEntries())
 
   com.db.persistReceipts(vmState.receipts)
   let
