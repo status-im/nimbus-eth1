@@ -41,6 +41,7 @@ type
     AnyBackendFn        = "any/backend"
 
     BaseColPrintFn      = "$$"
+    BaseColStateEmptyFn = "stateEmpty"
     BaseColStateFn      = "state"
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"

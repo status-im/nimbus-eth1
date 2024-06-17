@@ -445,6 +445,23 @@ proc `$$`*(col: CoreDbColRef): string =
   result = col.prettyText()
   #col.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
+proc stateEmpty*(col: CoreDbColRef): CoreDbRc[bool] =
+  ## Getter (well, sort of). It retrieves the column state hash for the
+  ## argument `col` descriptor. The function might fail unless the current
+  ## state is available (e.g. on `Aristo`.)
+  ##
+  ## The value `EMPTY_ROOT_HASH` is returned on the void `col` descriptor
+  ## argument `CoreDbColRef(nil)`.
+  ##
+  col.setTrackNewApi BaseColStateEmptyFn
+  result = block:
+    if not col.isNil and col.ready:
+      col.parent.methods.colStateEmptyFn col
+    else:
+      ok true
+  # Note: tracker will be silent if `vid` is NIL
+  col.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
+
 proc state*(col: CoreDbColRef): CoreDbRc[Hash256] =
   ## Getter (well, sort of). It retrieves the column state hash for the
   ## argument `col` descriptor. The function might fail unless the current

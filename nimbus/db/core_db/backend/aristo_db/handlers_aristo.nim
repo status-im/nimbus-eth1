@@ -645,6 +645,20 @@ proc colPrint*(
     result &= "$?"
 
 
+proc rootHashEmpty*(
+    base: AristoBaseRef;
+    col: CoreDbColRef;
+    info: static[string];
+      ): CoreDbRc[bool] =
+  let col = AristoColRef(col)
+  if not col.isValid:
+    return err(TrieInvalid.toError(base, info, HashNotAvailable))
+
+  let root = col.to(VertexID)
+  if not root.isValid:
+    return ok(true)
+  return ok(false)
+
 proc rootHash*(
     base: AristoBaseRef;
     col: CoreDbColRef;
