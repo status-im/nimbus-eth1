@@ -11,9 +11,9 @@
 import
   std/[strformat, strutils],
   eth/keys,
-  chronicles,
   stew/byteutils,
   stew/endians2,
+  ../nimbus/config,
   ../nimbus/db/ledger,
   ../nimbus/common/common,
   ../nimbus/core/chain,
@@ -21,9 +21,6 @@ import
   ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
-  ../nimbus/evm/state,
-  ../nimbus/evm/types,
-  ./replay/undump_blocks,
   unittest2
 
 const
@@ -66,6 +63,8 @@ proc pp*(tx: Transaction; ledger: LedgerRef): string =
     ")"
 
 when isMainModule:
+  import chronicles
+  
   proc setTraceLevel =
     discard
     when defined(chronicles_runtime_filtering) and loggingEnabled:
