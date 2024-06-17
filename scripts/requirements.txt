@@ -11,7 +11,7 @@ esbonio==0.16.4
 fonttools==4.53.0
 idna==3.7
 imagesize==1.4.1
-Jinja2==3.1.3
+Jinja2==3.1.4
 kiwisolver==1.4.5
 lsprotocol==2023.0.1
 MarkupSafe==2.1.5
@@ -27,7 +27,7 @@ pyparsing==3.1.2
 pyspellchecker==0.8.1
 python-dateutil==2.9.0.post0
 pytz==2024.1
-requests==2.31.0
+requests==2.32.2
 six==1.16.0
 snowballstemmer==2.2.0
 Sphinx==7.3.7
