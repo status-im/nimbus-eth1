@@ -51,7 +51,6 @@ func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
 proc forkTx*(
     db: AristoDbRef;
     backLevel: int;                   # Backward location of transaction
-    dontHashify = false;              # Process/fix MPT hashes
       ): Result[AristoDbRef,AristoError] =
   ## Fork a new descriptor obtained from parts of the argument database
   ## as described by arguments `db` and `backLevel`.
@@ -71,18 +70,15 @@ proc forkTx*(
   ## If there were no transactions that could be squashed, an empty
   ## transaction is added.
   ##
-  ## If the arguent flag `dontHashify` is passed `true`, the forked descriptor
-  ## will *NOT* be hashified right after construction.
-  ##
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   # Fork top layer (with or without pending transaction)?
   if backLevel == 0:
-    return db.txForkTop dontHashify
+    return db.txForkTop()
 
   # Fork bottom layer (=> 0 < db.stack.len)
   if backLevel == db.stack.len:
-    return db.txForkBase dontHashify
+    return db.txForkBase()
 
   # Inspect transaction stack
   if 0 < backLevel:
@@ -95,7 +91,7 @@ proc forkTx*(
       tx = tx.parent
       if tx.isNil:
         return err(TxStackGarbled)
-    return tx.txFork dontHashify
+    return tx.txFork()
 
   # Plain fork, include `balancer`
   if backLevel == -1:

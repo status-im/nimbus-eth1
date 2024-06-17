@@ -151,7 +151,6 @@ type
   AristoApiForkTxFn* =
     proc(db: AristoDbRef;
          backLevel: int;
-         dontHashify = false;
         ): Result[AristoDbRef,AristoError]
         {.noRaise.}
     ## Fork a new descriptor obtained from parts of the argument database
@@ -172,9 +171,6 @@ type
     ## The returned database descriptor will always have transaction level one.
     ## If there were no transactions that could be squashed, an empty
     ## transaction is added.
-    ##
-    ## If the arguent flag `dontHashify` is passed `true`, the forked descriptor
-    ## will *NOT* be hashified right after construction.
     ##
     ## Use `aristo_desc.forget()` to clean up this descriptor.
 
@@ -524,7 +520,7 @@ func init*(api: var AristoApiObj) =
   api.hashify = hashify
   api.hasPath = hasPath
   api.hikeUp = hikeUp
-  api.isTop = isTop 
+  api.isTop = isTop
   api.level = level
   api.nForked = nForked
   api.merge = merge
