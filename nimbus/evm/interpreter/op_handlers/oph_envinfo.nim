@@ -35,213 +35,212 @@ when not defined(evmc_enabled):
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-const
-  addressOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x30, Get address of currently executing account.
-    k.cpt.stack.push k.cpt.msg.contractAddress
+proc addressOp (k: var VmCtx): EvmResultVoid =
+  ## 0x30, Get address of currently executing account.
+  k.cpt.stack.push k.cpt.msg.contractAddress
 
-  # ------------------
+# ------------------
 
-  balanceOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x31, Get balance of the given account.
-    let
-      cpt = k.cpt
-      address = ? cpt.stack.popAddress
-    cpt.stack.push cpt.getBalance(address)
+proc balanceOp (k: var VmCtx): EvmResultVoid =
+  ## 0x31, Get balance of the given account.
+  let
+    cpt = k.cpt
+    address = ? cpt.stack.popAddress
+  cpt.stack.push cpt.getBalance(address)
 
-  balanceEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x31, EIP292: Get balance of the given account for Berlin and later
-    let
-      cpt = k.cpt
-      address = ? cpt.stack.popAddress()
-      gasCost = cpt.gasEip2929AccountCheck(address)
+proc balanceEIP2929Op (k: var VmCtx): EvmResultVoid =
+  ## 0x31, EIP292: Get balance of the given account for Berlin and later
+  let
+    cpt = k.cpt
+    address = ? cpt.stack.popAddress()
+    gasCost = cpt.gasEip2929AccountCheck(address)
 
-    ? cpt.opcodeGastCost(Balance, gasCost, reason = "Balance EIP2929")
-    cpt.stack.push cpt.getBalance(address)
+  ? cpt.opcodeGastCost(Balance, gasCost, reason = "Balance EIP2929")
+  cpt.stack.push cpt.getBalance(address)
 
-  # ------------------
+# ------------------
 
-  originOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x32, Get execution origination address.
-    k.cpt.stack.push k.cpt.getOrigin()
+proc originOp (k: var VmCtx): EvmResultVoid =
+  ## 0x32, Get execution origination address.
+  k.cpt.stack.push k.cpt.getOrigin()
 
-  callerOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x33, Get caller address.
-    k.cpt.stack.push k.cpt.msg.sender
+proc callerOp (k: var VmCtx): EvmResultVoid =
+  ## 0x33, Get caller address.
+  k.cpt.stack.push k.cpt.msg.sender
 
-  callValueOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x34, Get deposited value by the instruction/transaction
-    ##       responsible for this execution
-    k.cpt.stack.push k.cpt.msg.value
+proc callValueOp (k: var VmCtx): EvmResultVoid =
+  ## 0x34, Get deposited value by the instruction/transaction
+  ##       responsible for this execution
+  k.cpt.stack.push k.cpt.msg.value
 
-  callDataLoadOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x35, Get input data of current environment
-    let
-      startPos = ? k.cpt.stack.popInt()
-      start = startPos.cleanMemRef
+proc callDataLoadOp (k: var VmCtx): EvmResultVoid =
+  ## 0x35, Get input data of current environment
+  let
+    startPos = ? k.cpt.stack.popInt()
+    start = startPos.cleanMemRef
 
-    if start >= k.cpt.msg.data.len:
-      return k.cpt.stack.push 0
+  if start >= k.cpt.msg.data.len:
+    return k.cpt.stack.push 0
 
-    # If the data does not take 32 bytes, pad with zeros
-    let
-      endRange = min(k.cpt.msg.data.len - 1, start + 31)
-      presentBytes = endRange - start
+  # If the data does not take 32 bytes, pad with zeros
+  let
+    endRange = min(k.cpt.msg.data.len - 1, start + 31)
+    presentBytes = endRange - start
 
-    # We rely on value being initialized with 0 by default
-    var value: array[32, byte]
-    value[0 .. presentBytes] = k.cpt.msg.data.toOpenArray(start, endRange)
-    k.cpt.stack.push value
-
-
-  callDataSizeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x36, Get size of input data in current environment.
-    k.cpt.stack.push k.cpt.msg.data.len.u256
+  # We rely on value being initialized with 0 by default
+  var value: array[32, byte]
+  value[0 .. presentBytes] = k.cpt.msg.data.toOpenArray(start, endRange)
+  k.cpt.stack.push value
 
 
-  callDataCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x37, Copy input data in current environment to memory.
-    let (memStartPos, copyStartPos, size) = ? k.cpt.stack.popInt(3)
+proc callDataSizeOp (k: var VmCtx): EvmResultVoid =
+  ## 0x36, Get size of input data in current environment.
+  k.cpt.stack.push k.cpt.msg.data.len.u256
 
-    # TODO tests: https://github.com/status-im/nimbus/issues/67
-    let (memPos, copyPos, len) =
+
+proc callDataCopyOp (k: var VmCtx): EvmResultVoid =
+  ## 0x37, Copy input data in current environment to memory.
+  let (memStartPos, copyStartPos, size) = ? k.cpt.stack.popInt(3)
+
+  # TODO tests: https://github.com/status-im/nimbus/issues/67
+  let (memPos, copyPos, len) =
+    (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
+
+  ? k.cpt.opcodeGastCost(CallDataCopy,
+    k.cpt.gasCosts[CallDataCopy].m_handler(k.cpt.memory.len, memPos, len),
+    reason = "CallDataCopy fee")
+
+  k.cpt.memory.writePadded(k.cpt.msg.data, memPos, copyPos, len)
+  ok()
+
+
+proc codeSizeOp (k: var VmCtx): EvmResultVoid =
+  ## 0x38, Get size of code running in current environment.
+  let cpt = k.cpt
+  cpt.stack.push cpt.code.len
+
+
+proc codeCopyOp (k: var VmCtx): EvmResultVoid =
+  ## 0x39, Copy code running in current environment to memory.
+  let
+    cpt = k.cpt
+    (memStartPos, copyStartPos, size) = ? cpt.stack.popInt(3)
+
+  # TODO tests: https://github.com/status-im/nimbus/issues/67
+  let (memPos, copyPos, len) =
+    (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
+
+  ? cpt.opcodeGastCost(CodeCopy,
+    cpt.gasCosts[CodeCopy].m_handler(cpt.memory.len, memPos, len),
+    reason = "CodeCopy fee")
+
+  cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
+  ok()
+
+proc gasPriceOp (k: var VmCtx): EvmResultVoid =
+  ## 0x3A, Get price of gas in current environment.
+  k.cpt.stack.push k.cpt.getGasPrice()
+
+# -----------
+
+proc extCodeSizeOp (k: var VmCtx): EvmResultVoid =
+  ## 0x3b, Get size of an account's code
+  let
+    cpt = k.cpt
+    address = ? k.cpt.stack.popAddress()
+
+  cpt.stack.push cpt.getCodeSize(address)
+
+proc extCodeSizeEIP2929Op (k: var VmCtx): EvmResultVoid =
+  ## 0x3b, Get size of an account's code
+  let
+    cpt = k.cpt
+    address = ? cpt.stack.popAddress()
+    gasCost = cpt.gasEip2929AccountCheck(address)
+
+  ? cpt.opcodeGastCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
+  cpt.stack.push cpt.getCodeSize(address)
+
+# -----------
+
+proc extCodeCopyOp (k: var VmCtx): EvmResultVoid =
+  ## 0x3c, Copy an account's code to memory.
+  let
+    cpt = k.cpt
+    address = ? cpt.stack.popAddress()
+    (memStartPos, codeStartPos, size) = ? cpt.stack.popInt(3)
+    (memPos, codePos, len) =
+      (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
+
+  ? cpt.opcodeGastCost(ExtCodeCopy,
+      cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len),
+      reason = "ExtCodeCopy fee")
+
+  let codeBytes = cpt.getCode(address)
+  cpt.memory.writePadded(codeBytes, memPos, codePos, len)
+  ok()
+
+
+proc extCodeCopyEIP2929Op (k: var VmCtx): EvmResultVoid =
+  ## 0x3c, Copy an account's code to memory.
+  let
+    cpt = k.cpt
+    address = ? cpt.stack.popAddress()
+    (memStartPos, codeStartPos, size) = ? cpt.stack.popInt(3)
+    (memPos, codePos, len) = (memStartPos.cleanMemRef,
+                                  codeStartPos.cleanMemRef, size.cleanMemRef)
+
+    gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
+                    cpt.gasEip2929AccountCheck(address)
+  ? cpt.opcodeGastCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
+
+  let codeBytes = cpt.getCode(address)
+  cpt.memory.writePadded(codeBytes, memPos, codePos, len)
+  ok()
+
+# -----------
+
+proc returnDataSizeOp (k: var VmCtx): EvmResultVoid =
+  ## 0x3d, Get size of output data from the previous call from the
+  ##       current environment.
+  k.cpt.stack.push k.cpt.returnData.len
+
+
+proc returnDataCopyOp (k: var VmCtx): EvmResultVoid =
+  ## 0x3e, Copy output data from the previous call to memory.
+  let
+    (memStartPos, copyStartPos, size) = ? k.cpt.stack.popInt(3)
+    (memPos, copyPos, len) =
       (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
+    gasCost = k.cpt.gasCosts[ReturnDataCopy].m_handler(
+      k.cpt.memory.len, memPos, len)
 
-    ? k.cpt.opcodeGastCost(CallDataCopy,
-      k.cpt.gasCosts[CallDataCopy].m_handler(k.cpt.memory.len, memPos, len),
-      reason = "CallDataCopy fee")
+  ? k.cpt.opcodeGastCost(ReturnDataCopy, gasCost, reason = "returnDataCopy fee")
 
-    k.cpt.memory.writePadded(k.cpt.msg.data, memPos, copyPos, len)
-    ok()
+  if copyPos + len > k.cpt.returnData.len:
+    return err(opErr(OutOfBounds))
+  k.cpt.memory.writePadded(k.cpt.returnData, memPos, copyPos, len)
+  ok()
 
+# ---------------
 
-  codeSizeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x38, Get size of code running in current environment.
-    let cpt = k.cpt
-    cpt.stack.push cpt.code.len
+proc extCodeHashOp (k: var VmCtx): EvmResultVoid =
+  ## 0x3f, Returns the keccak256 hash of a contract’s code
+  let
+    cpt = k.cpt
+    address = ? k.cpt.stack.popAddress()
 
+  cpt.stack.push cpt.getCodeHash(address)
 
-  codeCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x39, Copy code running in current environment to memory.
-    let
-      cpt = k.cpt
-      (memStartPos, copyStartPos, size) = ? cpt.stack.popInt(3)
+proc extCodeHashEIP2929Op (k: var VmCtx): EvmResultVoid =
+  ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
+  let
+    cpt = k.cpt
+    address = ? k.cpt.stack.popAddress()
+    gasCost = cpt.gasEip2929AccountCheck(address)
 
-    # TODO tests: https://github.com/status-im/nimbus/issues/67
-    let (memPos, copyPos, len) =
-      (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
-
-    ? cpt.opcodeGastCost(CodeCopy,
-      cpt.gasCosts[CodeCopy].m_handler(cpt.memory.len, memPos, len),
-      reason = "CodeCopy fee")
-
-    cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
-    ok()
-
-  gasPriceOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3A, Get price of gas in current environment.
-    k.cpt.stack.push k.cpt.getGasPrice()
-
-  # -----------
-
-  extCodeSizeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3b, Get size of an account's code
-    let
-      cpt = k.cpt
-      address = ? k.cpt.stack.popAddress()
-
-    cpt.stack.push cpt.getCodeSize(address)
-
-  extCodeSizeEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3b, Get size of an account's code
-    let
-      cpt = k.cpt
-      address = ? cpt.stack.popAddress()
-      gasCost = cpt.gasEip2929AccountCheck(address)
-
-    ? cpt.opcodeGastCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
-    cpt.stack.push cpt.getCodeSize(address)
-
-  # -----------
-
-  extCodeCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3c, Copy an account's code to memory.
-    let
-      cpt = k.cpt
-      address = ? cpt.stack.popAddress()
-      (memStartPos, codeStartPos, size) = ? cpt.stack.popInt(3)
-      (memPos, codePos, len) =
-        (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
-
-    ? cpt.opcodeGastCost(ExtCodeCopy,
-        cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len),
-        reason = "ExtCodeCopy fee")
-
-    let codeBytes = cpt.getCode(address)
-    cpt.memory.writePadded(codeBytes, memPos, codePos, len)
-    ok()
-
-
-  extCodeCopyEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3c, Copy an account's code to memory.
-    let
-      cpt = k.cpt
-      address = ? cpt.stack.popAddress()
-      (memStartPos, codeStartPos, size) = ? cpt.stack.popInt(3)
-      (memPos, codePos, len) = (memStartPos.cleanMemRef,
-                                    codeStartPos.cleanMemRef, size.cleanMemRef)
-
-      gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
-                      cpt.gasEip2929AccountCheck(address)
-    ? cpt.opcodeGastCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
-
-    let codeBytes = cpt.getCode(address)
-    cpt.memory.writePadded(codeBytes, memPos, codePos, len)
-    ok()
-
-  # -----------
-
-  returnDataSizeOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3d, Get size of output data from the previous call from the
-    ##       current environment.
-    k.cpt.stack.push k.cpt.returnData.len
-
-
-  returnDataCopyOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3e, Copy output data from the previous call to memory.
-    let
-      (memStartPos, copyStartPos, size) = ? k.cpt.stack.popInt(3)
-      (memPos, copyPos, len) =
-        (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
-      gasCost = k.cpt.gasCosts[ReturnDataCopy].m_handler(
-       k.cpt.memory.len, memPos, len)
-
-    ? k.cpt.opcodeGastCost(ReturnDataCopy, gasCost, reason = "returnDataCopy fee")
-
-    if copyPos + len > k.cpt.returnData.len:
-      return err(opErr(OutOfBounds))
-    k.cpt.memory.writePadded(k.cpt.returnData, memPos, copyPos, len)
-    ok()
-
-  # ---------------
-
-  extCodeHashOp: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3f, Returns the keccak256 hash of a contract’s code
-    let
-      cpt = k.cpt
-      address = ? k.cpt.stack.popAddress()
-
-    cpt.stack.push cpt.getCodeHash(address)
-
-  extCodeHashEIP2929Op: VmOpFn = proc (k: var VmCtx): EvmResultVoid =
-    ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
-    let
-      cpt = k.cpt
-      address = ? k.cpt.stack.popAddress()
-      gasCost = cpt.gasEip2929AccountCheck(address)
-
-    ? cpt.opcodeGastCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
-    cpt.stack.push cpt.getCodeHash(address)
+  ? cpt.opcodeGastCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
+  cpt.stack.push cpt.getCodeHash(address)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
@@ -255,7 +254,7 @@ const
      name: "address",
      info: "Get address of currently executing account",
      exec: (prep: VmOpIgnore,
-            run:  addressOp,
+            run:  VmOpFn addressOp,
             post: VmOpIgnore)),
 
     (opCode: Balance,         ## 0x31, Balance
