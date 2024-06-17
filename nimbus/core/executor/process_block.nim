@@ -165,10 +165,6 @@ proc processBlock*(
     skipUncles: bool = false,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  var dbTx = vmState.com.db.newTransaction()
-  defer:
-    dbTx.dispose()
-
   ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
 
   # EIP-3675: no reward for miner in POA/POS
@@ -176,8 +172,6 @@ proc processBlock*(
     vmState.calculateReward(blk.header, blk.uncles)
 
   ?vmState.procBlkEpilogue(blk.header, skipValidation)
-
-  dbTx.commit()
 
   ok()
 
