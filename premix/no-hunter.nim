@@ -12,7 +12,7 @@ import
   std/[json, tables, hashes],
   eth/trie/trie_defs,
   stint, stew/byteutils, chronicles,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/utils/utils,
   ../nimbus/tracer,
   ../nimbus/db/[core_db, state_db/read_write],

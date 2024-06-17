@@ -11,7 +11,7 @@
 import
   macro_assembler, unittest2,
   stew/byteutils, ../nimbus/common/common,
-  ../nimbus/[vm_state, constants],
+  ../nimbus/[evm/state, constants],
   ../nimbus/db/ledger
 
 proc opEnvMain*() =

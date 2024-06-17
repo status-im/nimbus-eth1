@@ -12,8 +12,8 @@ import
   std/[options, json],
   ../common/common,
   stew/byteutils,
-  ../vm_state,
-  ../vm_types,
+  ../evm/state,
+  ../evm/types,
   ../db/ledger,
   ./utils,
   ./state_dump

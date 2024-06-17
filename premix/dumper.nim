@@ -19,7 +19,7 @@ import
   ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   ../nimbus/core/executor,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/tracer,
   ./configuration # must be late (compilation annoyance)
 

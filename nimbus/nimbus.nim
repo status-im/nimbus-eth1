@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  ../nimbus/vm_compile_info
+  ../nimbus/compile_info
 
 import
   std/[os, strutils, net],

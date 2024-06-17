@@ -12,8 +12,8 @@ import eth/[keys, trie]
 import stew/byteutils
 import unittest2
 import ../nimbus/common
-import ../nimbus/vm_state
-import ../nimbus/vm_types
+import ../nimbus/evm/state
+import ../nimbus/evm/types
 import ../nimbus/transaction
 import ../nimbus/transaction/call_evm
 import ../nimbus/db/core_db

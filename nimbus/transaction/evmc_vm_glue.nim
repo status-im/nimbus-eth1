@@ -10,7 +10,7 @@
 
 import
   ./host_types, evmc/evmc,
-  ".."/[vm_types, vm_computation, vm_state_transactions]
+  ".."/[evm/types, evm/computation, evm/state_transactions]
 
 proc evmcReleaseResult(result: var evmc_result) {.cdecl.} =
   dealloc(result.output_data)

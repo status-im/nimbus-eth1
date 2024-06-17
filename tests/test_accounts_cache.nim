@@ -17,8 +17,8 @@ import
   ../nimbus/core/chain,
   ../nimbus/transaction,
   ../nimbus/constants,
-  ../nimbus/vm_state,
-  ../nimbus/vm_types,
+  ../nimbus/evm/state,
+  ../nimbus/evm/types,
   ./replay/undump_blocks,
   unittest2
 

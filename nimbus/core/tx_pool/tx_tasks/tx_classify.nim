@@ -14,8 +14,8 @@
 
 import
   ../../../common/common,
-  ../../../vm_state,
-  ../../../vm_types,
+  ../../../evm/state,
+  ../../../evm/types,
   ../../validate,
   ../../eip4844,
   ../tx_chain,

@@ -19,7 +19,7 @@ import
   ../nimbus/db/aristo/aristo_merge,
   ../nimbus/db/kvt/kvt_utils,
   ../nimbus/db/aristo,
-  ../nimbus/[tracer, vm_types],
+  ../nimbus/[tracer, evm/types],
   ../nimbus/common/common
 
 proc setErrorLevel {.used.} =

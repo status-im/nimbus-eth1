@@ -19,9 +19,9 @@ import
 import
   ../nimbus/db/ledger,
   ../nimbus/evm/types,
-  ../nimbus/vm_internals,
+  ../nimbus/evm/internals,
   ../nimbus/transaction/[call_common, call_evm],
-  ../nimbus/[vm_types, vm_state],
+  ../nimbus/evm/state,
   ../nimbus/core/pow/difficulty
 
 from ../nimbus/db/aristo

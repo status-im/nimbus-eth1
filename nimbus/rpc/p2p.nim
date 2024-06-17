@@ -15,7 +15,7 @@ import
   json_serialization, web3/conversions, json_serialization/stew/results,
   eth/common/eth_types_json_serialization,
   eth/[keys, rlp, p2p],
-  ".."/[transaction, vm_state, constants],
+  ".."/[transaction, evm/state, constants],
   ../db/ledger,
   ./rpc_types, ./rpc_utils, ./oracle,
   ../transaction/call_evm,

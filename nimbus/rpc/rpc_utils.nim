@@ -22,8 +22,8 @@ import
   ../transaction/call_evm,
   ../core/eip4844,
   ../beacon/web3_eth_conv,
-  ../vm_types,
-  ../vm_state,
+  ../evm/types,
+  ../evm/state,
   ../evm/precompiles,
   ../evm/tracer/access_list_tracer,
   ../evm/evm_errors
