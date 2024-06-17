@@ -114,7 +114,6 @@ type
     cache: Table[Address, AccountRef]
     dirty: Table[Address, AccountRef]
     selfDestruct: HashSet[Address]
-    logEntries: seq[Log]
     accessList: ac_access_list.AccessList
     transientStorage: TransientStorage
     state: TransactionState
@@ -440,7 +439,6 @@ proc commit*(ac: LedgerRef, sp: LedgerSpRef) =
   ac.savePoint.transientStorage.mergeAndReset(sp.transientStorage)
   ac.savePoint.accessList.mergeAndReset(sp.accessList)
   ac.savePoint.selfDestruct.mergeAndReset(sp.selfDestruct)
-  ac.savePoint.logEntries.mergeAndReset(sp.logEntries)
   sp.state = Committed
 
   when debugLedgerRef:
@@ -698,12 +696,6 @@ proc selfDestruct6780*(ac: LedgerRef, address: Address) =
 
 proc selfDestructLen*(ac: LedgerRef): int =
   ac.savePoint.selfDestruct.len
-
-proc addLogEntry*(ac: LedgerRef, log: Log) =
-  ac.savePoint.logEntries.add log
-
-proc getAndClearLogEntries*(ac: LedgerRef): seq[Log] =
-  swap(result, ac.savePoint.logEntries)
 
 proc ripemdSpecial*(ac: LedgerRef) =
   ac.ripemdSpecial = true

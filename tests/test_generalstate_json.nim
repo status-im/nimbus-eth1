@@ -92,7 +92,13 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     )
 
   var gasUsed: GasInt
+<<<<<<< HEAD
   let sender = ctx.tx.recoverSender().expect("valid signature")
+=======
+  var logEntries: seq[Log]
+  let sender = ctx.tx.getSender()
+  let fork = com.toEVMFork(ctx.header.forkDeterminationInfo)
+>>>>>>> 291a72b21 (Move `logEntries` back to `Computation`)
 
   vmState.mutateLedger:
     setupLedger(ctx.pre, db)
@@ -105,7 +111,8 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let rc = vmState.processTransaction(
                 ctx.tx, sender, ctx.header)
   if rc.isOk:
-    gasUsed = rc.value
+    gasUsed = rc.value.gasUsed
+    logEntries = rc.value.logEntries
 
   let miner = ctx.header.coinbase
   coinbaseStateClearing(vmState, miner)
@@ -113,7 +120,6 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   block post:
     let obtainedHash = vmState.readOnlyLedger.getStateRoot()
     check obtainedHash == ctx.expectedHash
-    let logEntries = vmState.getAndClearLogEntries()
     let actualLogsHash = rlpHash(logEntries)
     check(ctx.expectedLogs == actualLogsHash)
     if ctx.debugMode:

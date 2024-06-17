@@ -248,7 +248,7 @@ template chainTo*(c: Computation,
   c.continuation = proc(): EvmResultVoid {.gcsafe, raises: [].} =
     c.continuation = nil
     after
-
+  
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
   c.vmState.mutateLedger:
     let localBalance = c.getBalance(c.msg.contractAddress)
@@ -275,7 +275,14 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
 
 # Using `proc` as `addLogEntry()` might be `proc` in logging mode
 proc addLogEntry*(c: Computation, log: Log) =
-  c.vmState.ledger.addLogEntry(log)
+  c.logEntries.add log
+
+func merge*(c, child: Computation) =
+  if c.logEntries.len == 0:
+    c.logEntries = move(child.logEntries)
+  else:
+    c.logEntries.add(child.logEntries)
+  c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
 # some gasRefunded operations still relying
 # on negative number

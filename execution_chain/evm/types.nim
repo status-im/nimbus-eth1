@@ -65,6 +65,7 @@ type
     code*:                  CodeStream
     output*:                seq[byte]
     returnData*:            seq[byte]
+    logEntries*:            seq[Log]
     error*:                 Error
     savePoint*:             LedgerSpRef
     instr*:                 Op

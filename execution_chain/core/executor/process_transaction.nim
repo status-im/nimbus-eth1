@@ -25,6 +25,9 @@ import
   ../eip7691,
   ../validate
 
+
+export results, call_common
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -44,7 +47,7 @@ proc commitOrRollbackDependingOnGasUsed(
     gasBurned: GasInt;
     priorityFee: GasInt;
     blobGasUsed: GasInt;
-      ): Result[GasInt, string] =
+      ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
@@ -62,14 +65,14 @@ proc commitOrRollbackDependingOnGasUsed(
     # available for the next transaction.
     vmState.gasPool += tx.gasLimit - gasBurned
     vmState.blobGasUsed += blobGasUsed
-    ok(gasBurned)
+    ok()
 
 proc processTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
     header:  Header; ## Header for the block containing the current tx
-      ): Result[GasInt, string] =
+      ): Result[CallResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
