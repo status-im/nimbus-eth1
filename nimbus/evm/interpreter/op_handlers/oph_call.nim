@@ -276,7 +276,7 @@ proc callOp(k: var VmCtx): EvmResultVoid =
         contractAddress: p.contractAddress,
         codeAddress:     p.codeAddress,
         value:           p.value,
-        data:            cpt.memory.read(p.memInPos, p.memInLen),
+        data:            @(cpt.memory.read(p.memInPos, p.memInLen)),
         flags:           p.flags))
   ok()
 
@@ -353,7 +353,7 @@ proc callCodeOp(k: var VmCtx): EvmResultVoid =
         contractAddress: p.contractAddress,
         codeAddress:     p.codeAddress,
         value:           p.value,
-        data:            cpt.memory.read(p.memInPos, p.memInLen),
+        data:            @(cpt.memory.read(p.memInPos, p.memInLen)),
         flags:           p.flags))
   ok()
 
@@ -425,7 +425,7 @@ proc delegateCallOp(k: var VmCtx): EvmResultVoid =
         contractAddress: p.contractAddress,
         codeAddress:     p.codeAddress,
         value:           p.value,
-        data:            cpt.memory.read(p.memInPos, p.memInLen),
+        data:            @(cpt.memory.read(p.memInPos, p.memInLen)),
         flags:           p.flags))
   ok()
 
@@ -498,7 +498,7 @@ proc staticCallOp(k: var VmCtx): EvmResultVoid =
         contractAddress: p.contractAddress,
         codeAddress:     p.codeAddress,
         value:           p.value,
-        data:            cpt.memory.read(p.memInPos, p.memInLen),
+        data:            @(cpt.memory.read(p.memInPos, p.memInLen)),
         flags:           p.flags))
   ok()
 

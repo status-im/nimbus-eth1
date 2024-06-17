@@ -156,7 +156,7 @@ proc createOp(k: var VmCtx): EvmResultVoid =
         gas:    createMsgGas,
         sender: cpt.msg.contractAddress,
         value:  endowment,
-        data:   cpt.memory.read(memPos, memLen)))
+        data:   @(cpt.memory.read(memPos, memLen))))
   ok()
 
 # ---------------------
@@ -240,7 +240,7 @@ proc create2Op(k: var VmCtx): EvmResultVoid =
         gas:    createMsgGas,
         sender: cpt.msg.contractAddress,
         value:  endowment,
-        data:   cpt.memory.read(memPos, memLen)))
+        data:   @(cpt.memory.read(memPos, memLen))))
   ok()
 
 # ------------------------------------------------------------------------------

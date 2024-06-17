@@ -15,6 +15,7 @@
 {.push raises: [].}
 
 import
+  stew/assign2,
   ../../../constants,
   ../../evm_errors,
   ../../computation,
@@ -77,7 +78,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int): EvmResultVoid =
       let topic = ? c.stack.popTopic()
       log.topics.add topic
 
-    log.data = c.memory.read(memPos, len)
+    assign(log.data, c.memory.read(memPos, len))
     log.address = c.msg.contractAddress
     c.addLogEntry(log)
 

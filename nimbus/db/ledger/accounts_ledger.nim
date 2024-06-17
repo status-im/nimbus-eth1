@@ -613,7 +613,7 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
     ac.ripemdSpecial = false
 
 proc persist*(ac: AccountsLedgerRef,
-              clearEmptyAccount: bool = false) {.deprecated.} =
+              clearEmptyAccount: bool = false) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
 
