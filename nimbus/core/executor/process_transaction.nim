@@ -41,7 +41,7 @@ proc commitOrRollbackDependingOnGasUsed(
     tx: Transaction;
     gasBurned: GasInt;
     priorityFee: GasInt;
-      ): Result[GasInt, string] =
+      ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
@@ -49,10 +49,10 @@ proc commitOrRollbackDependingOnGasUsed(
   if header.gasLimit < vmState.cumulativeGasUsed + gasBurned:
     try:
       vmState.stateDB.rollback(accTx)
-      return err("invalid tx: block header gasLimit reached. gasLimit=$1, gasUsed=$2, addition=$3" % [
+      err("invalid tx: block header gasLimit reached. gasLimit=$1, gasUsed=$2, addition=$3" % [
         $header.gasLimit, $vmState.cumulativeGasUsed, $gasBurned])
     except ValueError as ex:
-      return err(ex.msg)
+      err(ex.msg)
   else:
     # Accept transaction and collect mining fee.
     vmState.stateDB.commit(accTx)
@@ -62,7 +62,7 @@ proc commitOrRollbackDependingOnGasUsed(
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
     vmState.gasPool += tx.gasLimit - gasBurned
-    return ok(gasBurned)
+    ok()
 
 proc processTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
@@ -70,7 +70,7 @@ proc processTransactionImpl(
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
     fork:    EVMFork;
-      ): Result[GasInt, string] =
+      ): Result[CallResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
@@ -83,7 +83,7 @@ proc processTransactionImpl(
     excessBlobGas = header.excessBlobGas.get(0'u64)
 
   # Return failure unless explicitely set `ok()`
-  var res: Result[GasInt, string] = err("")
+  var res: Result[CallResult, string]
 
   # buy gas, then the gas goes into gasMeter
   if vmState.gasPool < tx.gasLimit:
@@ -108,10 +108,17 @@ proc processTransactionImpl(
     vmState.captureTxStart(tx.gasLimit)
     let
       accTx = vmState.stateDB.beginSavepoint
-      gasBurned = tx.txCallEvm(sender, vmState, fork)
+    var
+      callResult = tx.txCallEvm(sender, vmState, fork)
+      gasBurned = callResult.gasUsed
     vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
-    res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
+    let tmp = commitOrRollbackDependingOnGasUsed(
+      vmState, accTx, header, tx, gasBurned, priorityFee)
+    if tmp.isErr():
+      res = err(tmp.error)
+    else:
+      res = ok(move(callResult))
   else:
     res = err(txRes.error)
 
@@ -163,7 +170,7 @@ proc processTransaction*(
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
     fork:    EVMFork;
-      ): Result[GasInt,string] =
+      ): Result[CallResult,string] =
   vmState.processTransactionImpl(tx, sender, header, fork)
 
 proc processTransaction*(
@@ -171,7 +178,7 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader;
-      ): Result[GasInt,string] =
+      ): Result[CallResult,string] =
   let fork = vmState.com.toEVMFork(header.forkDeterminationInfo)
   vmState.processTransaction(tx, sender, header, fork)
 

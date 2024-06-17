@@ -67,7 +67,7 @@ proc toBytes(x: string): seq[byte] =
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
   keccakHash(toBytes($blockNumber))
 
-proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =
+proc verifyResult(ctx: var StateContext, vmState: BaseVMState, callResult: CallResult) =
   ctx.error = ""
   let obtainedHash = vmState.readOnlyStateDB.rootHash
   if obtainedHash != ctx.expectedHash:
@@ -75,7 +75,7 @@ proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =
       [($obtainedHash).toLowerAscii, $ctx.expectedHash]
     return
 
-  let logEntries = vmState.getAndClearLogEntries()
+  let logEntries = callResult.logEntries
   let actualLogsHash = rlpHash(logEntries)
   if actualLogsHash != ctx.expectedLogs:
     ctx.error = "post state log hash mismatch: got $1, want $2" %
@@ -159,8 +159,9 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     setupStateDB(pre, db)
     db.persist(clearEmptyAccount = false) # settle accounts storage
 
+  var callResult: CallResult
   defer:
-    ctx.verifyResult(vmState)
+    ctx.verifyResult(vmState, callResult)
     result = StateResult(
       name : ctx.name,
       pass : ctx.error.len == 0,
@@ -177,7 +178,8 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     let rc = vmState.processTransaction(
                   ctx.tx, sender, ctx.header, fork)
     if rc.isOk:
-      gasUsed = rc.value
+      gasUsed = rc.value.gasUsed
+      callResult = rc.value
 
     let miner = ctx.header.coinbase
     coinbaseStateClearing(vmState, miner, fork)

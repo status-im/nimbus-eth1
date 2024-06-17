@@ -285,7 +285,7 @@ proc emitLog(host: TransactionHost, address: HostAddress,
     copyMem(log.data[0].addr, data, data_size.int)
 
   log.address = address
-  host.vmState.stateDB.addLogEntry(log)
+  host.computation.addLogEntry(log)
 
 proc accessAccount(host: TransactionHost, address: HostAddress): EvmcAccessStatus {.show.} =
   host.vmState.mutateStateDB:

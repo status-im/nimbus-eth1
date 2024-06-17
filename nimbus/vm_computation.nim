@@ -17,7 +17,6 @@ export
 
 export
   vmc.accountExists,
-  vmc.addLogEntry,
   vmc.chainTo,
   vmc.commit,
   vmc.dispose,

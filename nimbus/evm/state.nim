@@ -254,9 +254,6 @@ template mutateStateDB*(vmState: BaseVMState, body: untyped) =
     var db {.inject.} = vmState.stateDB
     body
 
-proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
-  vmState.stateDB.getAndClearLogEntries()
-
 proc status*(vmState: BaseVMState): bool =
   ExecutionOK in vmState.flags
 

@@ -158,7 +158,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
       beforeCtx = com.newCtx beforeRoot
 
     let rc = vmState.processTransaction(tx, sender, header)
-    gasUsed = if rc.isOk: rc.value else: 0
+    gasUsed = if rc.isOk: rc.value.gasUsed else: 0
 
     if idx.uint64 == txIndex:
       after.captureAccount(stateDb, sender, senderName)
@@ -282,7 +282,7 @@ proc traceBlock*(com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = 
       sender = tx.getSender
       rc = vmState.processTransaction(tx, sender, header)
     if rc.isOk:
-      gasUsed = gasUsed + rc.value
+      gasUsed = gasUsed + rc.value.gasUsed
 
   result = tracerInst.getTracingResult()
   result["gas"] = %gasUsed

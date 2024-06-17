@@ -213,6 +213,7 @@ when defined(evmc_enabled):
 
     if callResult.status_code == EVMC_SUCCESS:
       c.error = nil
+      c.logEntries = callResult.logEntries
     elif callResult.status_code == EVMC_REVERT:
       c.setError(EVMC_REVERT, false)
     else:
@@ -285,11 +286,13 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
 
   if c.isError:
     result.error = c.error.info
+  else:
+    result.logEntries = c.logEntries
+
   result.gasUsed = call.gasLimit - gasRemaining
   result.output = system.move(c.output)
   result.contractAddress = if call.isCreate: c.msg.contractAddress
                            else: default(HostAddress)
-  result.logEntries = host.vmState.stateDB.logEntries()
   result.stack = c.stack
   result.memory = c.memory
 

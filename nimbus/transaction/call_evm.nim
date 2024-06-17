@@ -191,11 +191,10 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
 proc txCallEvm*(tx: Transaction,
                 sender: EthAddress,
                 vmState: BaseVMState,
-                fork: EVMFork): GasInt =
-  let
-    call = callParamsForTx(tx, sender, vmState, fork)
-    res = runComputation(call)
-  res.gasUsed
+                fork: EVMFork): CallResult =
+  let call = callParamsForTx(tx, sender, vmState, fork)
+  runComputation(call)
+
 
 proc testCallEvm*(tx: Transaction,
                   sender: EthAddress,

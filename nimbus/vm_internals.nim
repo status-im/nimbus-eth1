@@ -71,7 +71,6 @@ export
   aCst.readVmWord,
   aCst.updatePc,
   bChp.accountExists,
-  bChp.addLogEntry,
   bChp.chainTo,
   bChp.commit,
   bChp.dispose,

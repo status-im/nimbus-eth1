@@ -25,7 +25,6 @@ export
   vms.collectWitnessData,
   vms.`collectWitnessData=`,
   vms.getAncestorHash,
-  vms.getAndClearLogEntries,
   vms.init,
   vms.mutateStateDB,
   vms.new,

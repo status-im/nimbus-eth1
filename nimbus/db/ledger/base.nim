@@ -125,11 +125,6 @@ proc addBalance*(ldg: LedgerRef, eAddr: EthAddress, delta: UInt256) =
   ldg.ac.addBalance(eAddr, delta)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, delta
 
-proc addLogEntry*(ldg: LedgerRef, log: Log) =
-  ldg.beginTrackApi LdgAddLogEntryFn
-  ldg.ac.addLogEntry(log)
-  ldg.ifTrackApi: debug apiTxt, api, elapsed
-
 proc beginSavepoint*(ldg: LedgerRef): LedgerSpRef =
   ldg.beginTrackApi LdgBeginSavepointFn
   result = ldg.ac.beginSavepoint()
@@ -163,11 +158,6 @@ proc deleteAccount*(ldg: LedgerRef, eAddr: EthAddress) =
 proc dispose*(ldg: LedgerRef, sp: LedgerSpRef) =
   ldg.beginTrackApi LdgDisposeFn
   ldg.ac.dispose(sp)
-  ldg.ifTrackApi: debug apiTxt, api, elapsed
-
-proc getAndClearLogEntries*(ldg: LedgerRef): seq[Log] =
-  ldg.beginTrackApi LdgGetAndClearLogEntriesFn
-  result = ldg.ac.getAndClearLogEntries()
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 proc getBalance*(ldg: LedgerRef, eAddr: EthAddress): UInt256 =
@@ -256,11 +246,6 @@ proc isEmptyAccount*(ldg: LedgerRef, eAddr: EthAddress): bool =
 proc isTopLevelClean*(ldg: LedgerRef): bool =
   ldg.beginTrackApi LdgIsTopLevelCleanFn
   result = ldg.ac.isTopLevelClean()
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, result
-
-proc logEntries*(ldg: LedgerRef): seq[Log] =
-  ldg.beginTrackApi LdgLogEntriesFn
-  result = ldg.ac.logEntries()
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
 proc makeMultiKeys*(ldg: LedgerRef): MultiKeysRef =

@@ -373,6 +373,10 @@ template chainTo*(c: Computation,
     after
 
 func merge*(c, child: Computation) =
+  if c.logEntries.len == 0:
+    c.logEntries = move(child.logEntries)
+  else:
+    c.logEntries.add(child.logEntries)
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
@@ -400,7 +404,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
       beneficiary = beneficiary.toHex
 
 func addLogEntry*(c: Computation, log: Log) =
-  c.vmState.stateDB.addLogEntry(log)
+  c.logEntries.add log
 
 # some gasRefunded operations still relying
 # on negative number

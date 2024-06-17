@@ -78,7 +78,7 @@ proc persist(pst: TxPackerStateRef)
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
+proc runTx(pst: TxPackerStateRef; item: TxItemRef): CallResult =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
   let
@@ -86,12 +86,13 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
     baseFee = pst.xp.chain.baseFee
     tx = item.tx.eip1559TxNormalization(baseFee.GasInt)
 
-  let gasUsed = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
+  let callResult = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
   pst.cleanState = false
-  doAssert 0 <= gasUsed
-  gasUsed
+  doAssert 0 <= callResult.gasUsed
+  callResult
 
-proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
+proc runTxCommit(
+    pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt, logEntries: seq[Log])
     {.gcsafe,raises: [CatchableError].} =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
@@ -129,7 +130,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
 
   # gasUsed accounting
   vmState.cumulativeGasUsed += gasBurned
-  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
+  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType, logEntries)
 
   # EIP-4844, count blobGasUsed
   if item.tx.txType >= TxEip4844:
@@ -211,7 +212,8 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
 
   let
     accTx = vmState.stateDB.beginSavepoint
-    gasUsed = pst.runTx(item) # this is the crucial part, running the tx
+    callResult = pst.runTx(item) # this is the crucial part, running the tx
+    gasUsed = callResult.gasUsed
 
   # Find out what to do next: accepting this tx or trying the next account
   if not xp.classifyPacked(vmState.cumulativeGasUsed, gasUsed):
@@ -227,7 +229,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   # let midRoot = vmState.stateDB.rootHash -- notused
 
   # Finish book-keeping and move item to `packed` bucket
-  pst.runTxCommit(item, gasUsed)
+  pst.runTxCommit(item, gasUsed, callResult.logEntries)
 
   ok(true) # fetch the very next item
 

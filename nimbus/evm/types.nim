@@ -78,6 +78,7 @@ type
     code*:                  CodeStream
     output*:                seq[byte]
     returnData*:            seq[byte]
+    logEntries*:            seq[Log]
     error*:                 Error
     savePoint*:             LedgerSpRef
     instr*:                 Op
@@ -95,7 +96,7 @@ type
     evmcStatus*: evmc_status_code
     info*      : string
     burnsGas*  : bool
-  
+
   GasMeter* = object
     gasRefunded*: GasInt
     gasRemaining*: GasInt

@@ -46,8 +46,8 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
     bloom.value = bloom.value or logsBloom(rec.logs).value
   result = bloom.value.toBytesBE
 
-proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
-
+proc makeReceipt*(
+    vmState: BaseVMState; txType: TxType, logs: seq[Log]): Receipt =
   var rec: Receipt
   if vmState.com.forkGTE(Byzantium):
     rec.isHash = false
@@ -60,7 +60,7 @@ proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
 
   rec.receiptType = txType
   rec.cumulativeGasUsed = vmState.cumulativeGasUsed
-  rec.logs = vmState.getAndClearLogEntries()
+  rec.logs = logs
   rec.logsBloom = logsBloom(rec.logs).value.toBytesBE
   rec
 
