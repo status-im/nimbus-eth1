@@ -36,8 +36,6 @@ proc initImpl(
   const initFailed = "RocksDB/init() failed"
 
   rdb.basePath = basePath
-  rdb.dbOpts = dbOpts
-  rdb.cfOpts = cfOpts
 
   let
     dataDir = rdb.dataDir
