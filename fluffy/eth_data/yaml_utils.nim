@@ -7,7 +7,12 @@
 
 {.push raises: [].}
 
-import std/streams, yaml, results
+import
+  std/streams,
+  yaml,
+  results,
+  yaml/parser,
+  yaml/presenter
 
 export yaml
 
