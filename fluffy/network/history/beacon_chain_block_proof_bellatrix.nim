@@ -101,6 +101,14 @@ func getHistoricalRootsIndex*(slot: Slot): uint64 =
 func getHistoricalRootsIndex*(blockHeader: BeaconBlockHeader): uint64 =
   getHistoricalRootsIndex(blockHeader.slot)
 
+template `[]`(x: openArray[Eth2Digest], chunk: Limit): Eth2Digest =
+  # Nim 2.0 requires arrays to be indexed by the same type they're declared with.
+  # Both HistoricalBatch.block_roots and HistoricalBatch.state_roots
+  # are declared with uint64. But `Limit = int64`.
+  # Looks like this template can be used as a workaround.
+  # See https://github.com/status-im/nimbus-eth1/pull/2384
+  x[chunk]
+
 # Builds proof to be able to verify that a BeaconBlock root is part of the
 # HistoricalBatch for given root.
 func buildProof*(
