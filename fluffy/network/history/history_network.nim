@@ -47,8 +47,6 @@ export accumulator
 proc `$`(x: BlockHeader): string =
   $x
 
-const historyProtocolId* = [byte 0x50, 0x0B]
-
 type
   HistoryNetwork* = ref object
     portalProtocol*: PortalProtocol
@@ -703,6 +701,7 @@ proc validateContent(
 
 proc new*(
     T: type HistoryNetwork,
+    portalNetwork: PortalNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
     streamManager: StreamManager,
@@ -718,7 +717,7 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      historyProtocolId,
+      getProtocolId(portalNetwork, PortalSubnetwork.history),
       toContentIdHandler,
       createGetHandler(contentDB),
       stream,

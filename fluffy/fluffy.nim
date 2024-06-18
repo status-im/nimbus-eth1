@@ -35,7 +35,7 @@ import
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
   ./network/beacon/[beacon_init_loader, beacon_light_client],
-  ./network/wire/[portal_stream, portal_protocol_config],
+  ./network/wire/[portal_stream, portal_protocol_config, portal_protocol],
   ./eth_data/history_data_ssz_e2s,
   ./database/content_db,
   ./version,
@@ -130,8 +130,6 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       var record: Record
       if fromURI(record, enrURI):
         bootstrapRecords.add(record)
-  else:
-    raiseAssert("Error: unsupported network")
 
   let
     discoveryConfig =
@@ -226,6 +224,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       if PortalSubnetwork.history in portalSubnetworks:
         Opt.some(
           HistoryNetwork.new(
+            portalNetwork,
             d,
             db,
             streamManager,
@@ -241,6 +240,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       if PortalSubnetwork.state in portalSubnetworks:
         Opt.some(
           StateNetwork.new(
+            portalNetwork,
             d,
             db,
             streamManager,
@@ -264,6 +264,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
           networkData = loadNetworkData("mainnet")
           beaconDb = BeaconDb.new(networkData, config.dataDir / "db" / "beacon_db")
           beaconNetwork = BeaconNetwork.new(
+            portalNetwork,
             d,
             beaconDb,
             streamManager,

@@ -33,8 +33,7 @@ const
   #TODO currently we are using value for history network, but this should be
   #caluculated per netowork basis
   maxItemsPerOfferBySize = getMaxOfferedContentKeys(
-    uint32(len(history_network.historyProtocolId)),
-    uint32(history_content.maxContentKeySize),
+    uint32(len(PortalProtocolId)), uint32(history_content.maxContentKeySize)
   )
 
   # Offering is restricted to max 64 items

@@ -23,8 +23,6 @@ export beacon_content, beacon_db
 logScope:
   topics = "beacon_network"
 
-const lightClientProtocolId* = [byte 0x50, 0x1A]
-
 type BeaconNetwork* = ref object
   portalProtocol*: PortalProtocol
   beaconDb*: BeaconDb
@@ -183,6 +181,7 @@ proc getHistoricalSummaries*(
 
 proc new*(
     T: type BeaconNetwork,
+    portalNetwork: PortalNetwork,
     baseProtocol: protocol.Protocol,
     beaconDb: BeaconDb,
     streamManager: StreamManager,
@@ -206,7 +205,7 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      lightClientProtocolId,
+      getProtocolId(portalNetwork, PortalSubnetwork.beacon),
       toContentIdHandler,
       createGetHandler(beaconDb),
       stream,

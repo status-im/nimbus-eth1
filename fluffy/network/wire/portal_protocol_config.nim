@@ -10,6 +10,20 @@
 import std/strutils, confutils, chronos, stint, eth/p2p/discoveryv5/routing_table
 
 type
+  PortalNetwork* = enum
+    none
+    mainnet
+    angelfood
+
+  # The Portal sub-protocols
+  PortalSubnetwork* = enum
+    state
+    history
+    beacon
+    transactionIndex
+    verkleState
+    transactionGossip
+
   RadiusConfigKind* = enum
     Static
     Dynamic

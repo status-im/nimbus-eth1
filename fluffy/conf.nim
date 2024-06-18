@@ -56,17 +56,6 @@ type
   PortalCmd* = enum
     noCommand
 
-  PortalNetwork* = enum
-    none
-    mainnet
-    angelfood
-
-  # The Portal sub-protocols
-  PortalSubnetwork* = enum
-    beacon
-    history
-    state
-
   PortalConf* = object
     logLevel* {.
       desc:

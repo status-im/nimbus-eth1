@@ -28,7 +28,8 @@ proc newHistoryNode(
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new("", uint32.high, inMemory = true)
     streamManager = StreamManager.new(node)
-    historyNetwork = HistoryNetwork.new(node, db, streamManager, accumulator)
+    historyNetwork =
+      HistoryNetwork.new(PortalNetwork.none, node, db, streamManager, accumulator)
 
   return HistoryNode(discoveryProtocol: node, historyNetwork: historyNetwork)
 
@@ -187,7 +188,7 @@ procSuite "History Content Network":
     historyNode2.start()
 
     let maxOfferedHistoryContent =
-      getMaxOfferedContentKeys(uint32(len(historyProtocolId)), maxContentKeySize)
+      getMaxOfferedContentKeys(uint32(len(PortalProtocolId)), maxContentKeySize)
 
     let headersWithProof =
       buildHeadersWithProof(headers[0 .. maxOfferedHistoryContent], epochAccumulators)
