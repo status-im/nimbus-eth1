@@ -15,6 +15,7 @@
 {.push raises: [].}
 
 import
+  stew/assign2,
   ../../evm_errors,
   ../../computation,
   ../../memory,
@@ -46,7 +47,7 @@ proc returnOp(k: var VmCtx): EvmResultVoid =
     k.cpt.gasCosts[Return].m_handler(k.cpt.memory.len, pos, len),
     reason = "RETURN")
   k.cpt.memory.extend(pos, len)
-  k.cpt.output = k.cpt.memory.read(pos, len)
+  assign(k.cpt.output, k.cpt.memory.read(pos, len))
   ok()
 
 
@@ -61,7 +62,7 @@ proc revertOp(k: var VmCtx): EvmResultVoid =
     reason = "REVERT")
 
   k.cpt.memory.extend(pos, len)
-  k.cpt.output = k.cpt.memory.read(pos, len)
+  assign(k.cpt.output, k.cpt.memory.read(pos, len))
   # setError(msg, false) will signal cheap revert
   k.cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
   ok()

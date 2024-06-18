@@ -45,9 +45,9 @@ proc memoryMain*() =
     test "read returns correct bytes":
       var mem = memory32()
       check mem.write(startPos = 5, value = @[1.byte, 0.byte, 1.byte, 0.byte]).isOk
-      check(mem.read(startPos = 5, size = 4) == @[1.byte, 0.byte, 1.byte, 0.byte])
-      check(mem.read(startPos = 6, size = 4) == @[0.byte, 1.byte, 0.byte, 0.byte])
-      check(mem.read(startPos = 1, size = 3) == @[0.byte, 0.byte, 0.byte])
+      check(@(mem.read(startPos = 5, size = 4)) == @[1.byte, 0.byte, 1.byte, 0.byte])
+      check(@(mem.read(startPos = 6, size = 4)) == @[0.byte, 1.byte, 0.byte, 0.byte])
+      check(@(mem.read(startPos = 1, size = 3)) == @[0.byte, 0.byte, 0.byte])
 
 when isMainModule:
   memoryMain()

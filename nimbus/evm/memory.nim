@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  stew/assign2,
   ./evm_errors,
   ./interpreter/utils/utils_numeric
 
@@ -20,13 +21,12 @@ type
 
 func new*(_: type EvmMemoryRef): EvmMemoryRef =
   new(result)
-  result.bytes = @[]
 
 func len*(memory: EvmMemoryRef): int =
-  result = memory.bytes.len
+  memory.bytes.len
 
-func extend*(memory: EvmMemoryRef; startPos: Natural; size: Natural) =
-  if size == 0:
+func extend*(memory: EvmMemoryRef; startPos, size: int) =
+  if size <= 0:
     return
   let newSize = ceil32(startPos + size)
   if newSize <= len(memory):
@@ -37,12 +37,10 @@ func new*(_: type EvmMemoryRef, size: Natural): EvmMemoryRef =
   result = EvmMemoryRef.new()
   result.extend(0, size)
 
-func read*(memory: EvmMemoryRef, startPos: Natural, size: Natural): seq[byte] =
-  result = newSeq[byte](size)
-  if size > 0:
-    copyMem(result[0].addr, memory.bytes[startPos].addr, size)
+template read*(memory: EvmMemoryRef, startPos, size: int): openArray[byte] =
+  memory.bytes.toOpenArray(startPos, startPos + size - 1)
 
-template read32Bytes*(memory: EvmMemoryRef, startPos): auto =
+template read32Bytes*(memory: EvmMemoryRef, startPos: int): openArray[byte] =
   memory.bytes.toOpenArray(startPos, startPos + 31)
 
 when defined(evmc_enabled):
@@ -56,8 +54,8 @@ func write*(memory: EvmMemoryRef, startPos: Natural, value: openArray[byte]): Ev
     return
   if startPos + size > memory.len:
     return err(memErr(MemoryFull))
-  for z, b in value:
-    memory.bytes[z + startPos] = b
+
+  assign(memory.bytes.toOpenArray(startPos, int(startPos + size) - 1), value)
   ok()
 
 func write*(memory: EvmMemoryRef, startPos: Natural, value: byte): EvmResultVoid =
@@ -71,19 +69,16 @@ func copy*(memory: EvmMemoryRef, dst, src, len: Natural) =
   memory.extend(max(dst, src), len)
   if dst == src:
     return
-  elif dst < src:
-    for i in 0..<len:
-      memory.bytes[dst+i] = memory.bytes[src+i]
-  else: # src > dst
-    for i in countdown(len-1, 0):
-      memory.bytes[dst+i] = memory.bytes[src+i]
+  assign(
+    memory.bytes.toOpenArray(dst, dst + len - 1),
+    memory.bytes.toOpenArray(src, src + len - 1))
 
 func writePadded*(memory: EvmMemoryRef, data: openArray[byte],
                   memPos, dataPos, len: Natural) =
 
   memory.extend(memPos, len)
   let
-    dataEndPos = dataPos.int64 + len
+    dataEndPos = dataPos + len
     dataStart  = min(dataPos, data.len)
     dataEnd    = min(data.len, dataEndPos)
     dataLen    = dataEnd - dataStart
@@ -95,10 +90,10 @@ func writePadded*(memory: EvmMemoryRef, data: openArray[byte],
     di = dataStart
     mi = memPos
 
-  while di < dataEnd:
-    memory.bytes[mi] = data[di]
-    inc di
-    inc mi
+  assign(
+    memory.bytes.toOpenArray(mi, mi + dataLen - 1),
+    data.toOpenArray(di, di + dataLen - 1))
+  mi += dataLen
 
   # although memory.extend already pad new block of memory
   # with zeros, it can be rewrite by some opcode

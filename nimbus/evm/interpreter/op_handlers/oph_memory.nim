@@ -112,7 +112,7 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
   if nextOpcode != JumpDest:
     return err(opErr(InvalidJumpDest))
 
-  # TODO: next check seems redundant
+  # Jump destination must be a valid opcode
   if not c.code.isValidOpcode(jt):
     return err(opErr(InvalidJumpDest))
 
