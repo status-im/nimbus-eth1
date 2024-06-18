@@ -67,6 +67,57 @@ type
       ##
       ## The return code is `true` iff the trie has become empty.
 
+  AristoApiDeleteAccountPayloadFn* =
+    proc(db: AristoDbRef;
+         path: openArray[byte];
+        ): Result[void,AristoError]
+        {.noRaise.}
+      ## Delete the account leaf entry addressed by the argument `path`. If
+      ## this leaf entry referres to a storage tree, this one will be deleted
+      ## as well.
+
+  AristoApiDeleteGenericDataFn* =
+    proc(db: AristoDbRef;
+         root: VertexID;
+         path: openArray[byte];
+        ): Result[bool,AristoError]
+        {.noRaise.}
+      ## Delete the leaf data entry addressed by the argument `path`.  The MPT
+      ## sub-tree the leaf data entry is subsumed under is passed as argument
+      ## `root` which must be greater than `VertexID(1)` and smaller than
+      ## `LEAST_FREE_VID`.
+      ##
+      ## The return value is `true` if the argument `path` deleted was the last
+      ## one and the tree does not exist anymore.
+
+  AristoApiDeleteGenericTreeFn* =
+    proc(db: AristoDbRef;
+         root: VertexID;
+        ): Result[void,AristoError]
+        {.noRaise.}
+      ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
+
+  AristoApiDeleteStorageDataFn* =
+    proc(db: AristoDbRef;
+         path: openArray[byte];
+         accPath: PathID;
+        ): Result[bool,AristoError]
+        {.noRaise.}
+      ## For a given account argument `accPath`, this function deletes the
+      ## argument `path` from the associated storage tree (if any, at all.) If
+      ## the if the argument `path` deleted was the last one on the storage
+      ## tree, account leaf referred to by `accPath` will be updated so that
+      ## it will not refer to a storage tree anymore. In the latter case only
+      ## the function will return `true`.
+
+  AristoApiDeleteStorageTreeFn* =
+    proc(db: AristoDbRef;
+         accPath: PathID;
+        ): Result[void,AristoError]
+        {.noRaise.}
+      ## Variant of `deleteStorageData()` for purging the whole storage tree
+      ## associated to the account argument `accPath`.
+
   AristoApiDelTreeFn* =
     proc(db: AristoDbRef;
          root: VertexID;
@@ -364,6 +415,11 @@ type
     ## Useful set of `Aristo` fuctions that can be filtered, stacked etc.
     commit*: AristoApiCommitFn
     delete*: AristoApiDeleteFn
+    deleteAccountPayload*: AristoApiDeleteAccountPayloadFn
+    deleteGenericData*: AristoApiDeleteGenericDataFn
+    deleteGenericTree*: AristoApiDeleteGenericTreeFn
+    deleteStorageData*: AristoApiDeleteStorageDataFn
+    deleteStorageTree*: AristoApiDeleteStorageTreeFn
     delTree*: AristoApiDelTreeFn
     fetchLastSavedState*: AristoApiFetchLastSavedStateFn
     fetchPayload*: AristoApiFetchPayloadFn
@@ -396,6 +452,11 @@ type
 
     AristoApiProfCommitFn              = "commit"
     AristoApiProfDeleteFn              = "delete"
+    AristoApiProfDeleteAccountPayloadFn = "deleteAccountPayload"
+    AristoApiProfDeleteGenericDataFn   = "deleteGnericData"
+    AristoApiProfDeleteGenericTreeFn   = "deleteGnericTree"
+    AristoApiProfDeleteStorageDataFn   = "deleteStorageData"
+    AristoApiProfDeleteStorageTreeFn   = "deleteStorageTree"
     AristoApiProfDelTreeFn             = "delTree"
     AristoApiProfFetchLastSavedStateFn = "fetchPayload"
     AristoApiProfFetchPayloadFn        = "fetchPayload"
@@ -444,6 +505,11 @@ when AutoValidateApiHooks:
   proc validate(api: AristoApiObj|AristoApiRef) =
     doAssert not api.commit.isNil
     doAssert not api.delete.isNil
+    doAssert not api.deleteAccountPayload.isNil
+    doAssert not api.deleteGenericData.isNil
+    doAssert not api.deleteGenericTree.isNil
+    doAssert not api.deleteStorageData.isNil
+    doAssert not api.deleteStorageTree.isNil
     doAssert not api.delTree.isNil
     doAssert not api.fetchLastSavedState.isNil
     doAssert not api.fetchPayload.isNil
@@ -496,6 +562,11 @@ func init*(api: var AristoApiObj) =
     api.reset
   api.commit = commit
   api.delete = delete
+  api.deleteAccountPayload = deleteAccountPayload
+  api.deleteGenericData = deleteGenericData
+  api.deleteGenericTree = deleteGenericTree
+  api.deleteStorageData = deleteStorageData
+  api.deleteStorageTree = deleteStorageTree
   api.delTree = delTree
   api.fetchLastSavedState = fetchLastSavedState
   api.fetchPayload = fetchPayload
@@ -531,6 +602,11 @@ func dup*(api: AristoApiRef): AristoApiRef =
   result = AristoApiRef(
     commit:              api.commit,
     delete:              api.delete,
+    deleteAccountPayload: api.deleteAccountPayload,
+    deleteGenericData:   api.deleteGenericData,
+    deleteGenericTree:   api.deleteGenericTree,
+    deleteStorageData:   api.deleteStorageData,
+    deleteStorageTree:   api.deleteStorageTree,
     delTree:             api.delTree,
     fetchLastSavedState: api.fetchLastSavedState,
     fetchPayload:        api.fetchPayload,
@@ -594,6 +670,31 @@ func init*(
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]; d: PathID): auto =
       AristoApiProfDeleteFn.profileRunner:
         result = api.delete(a, b, c, d)
+
+  profApi.deleteAccountPayload =
+    proc(a: AristoDbRef; b: openArray[byte]): auto =
+      AristoApiProfDeleteAccountPayloadFn.profileRunner:
+        result = api.deleteAccountPayload(a, b)
+
+  profApi.deleteGenericData =
+    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
+      AristoApiProfDeleteGenericDataFn.profileRunner:
+        result = api.deleteGenericData(a, b, c)
+
+  profApi.deleteGenericTree =
+    proc(a: AristoDbRef; b: VertexID): auto =
+      AristoApiProfDeleteGenericTreeFn.profileRunner:
+        result = api.deleteGenericTree(a, b)
+
+  profApi.deleteStorageData =
+    proc(a: AristoDbRef; b: openArray[byte]; c: PathID): auto =
+      AristoApiProfDeleteStorageDataFn.profileRunner:
+        result = api.deleteStorageData(a, b, c)
+
+  profApi.deleteStorageTree =
+    proc(a: AristoDbRef; b: PathID): auto =
+      AristoApiProfDeleteStorageTreeFn.profileRunner:
+        result = api.deleteStorageTree(a, b)
 
   profApi.delTree =
     proc(a: AristoDbRef; b: VertexID; c: PathID): auto =

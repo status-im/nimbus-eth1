@@ -13,8 +13,7 @@ import
   eth/common,
   stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_delete,
-    aristo_hashify, aristo_hike, aristo_merge],
+    aristo_debug, aristo_desc, aristo_hashify, aristo_hike, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,
   ../replay/[pp, undump_accounts, undump_storages],
@@ -210,42 +209,6 @@ proc hashify*(
     aristo_hashify.exec(noisy, aristo_hashify.hashify(db))
   else:
     aristo_hashify.hashify(db)
-
-
-proc delete*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-    accPath: PathID;
-    noisy: bool;
-      ): Result[bool,(VertexID,AristoError)] =
-  when declared(aristo_delete.noisy):
-    aristo_delete.exec(noisy, aristo_delete.delete(db, root, path, accPath))
-  else:
-    aristo_delete.delete(db, root, path, accPath)
-
-proc delete*(
-    db: AristoDbRef;
-    lty: LeafTie;
-    accPath: PathID;
-    noisy: bool;
-      ): Result[bool,(VertexID,AristoError)] =
-  when declared(aristo_delete.noisy):
-    aristo_delete.exec(noisy, aristo_delete.delete(db, lty, accPath))
-  else:
-    aristo_delete.delete(db, lty, accPath)
-
-proc delTree*(
-    db: AristoDbRef;
-    root: VertexID;
-    accPath: PathID;
-    noisy: bool;
-      ): Result[void,(VertexID,AristoError)] =
-  when declared(aristo_delete.noisy):
-    aristo_delete.exec(noisy, aristo_delete.delTree(db, root, accPath))
-  else:
-    aristo_delete.delTree(db, root, accPath)
-
 
 proc mergeGenericData*(
     db: AristoDbRef;                   # Database, top layer

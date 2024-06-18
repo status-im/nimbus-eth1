@@ -190,6 +190,7 @@ type
     NearbyVidInvalid
 
     # Deletion of vertices, `delete()`
+    DelAccRootNotAccepted
     DelBranchExpexted
     DelBranchLocked
     DelBranchWithoutRefs
@@ -200,6 +201,10 @@ type
     DelLeafUnexpected
     DelPathNotFound
     DelPathTagError
+    DelRootVidMissing
+    DelStoAccMissing
+    DelStoRootMissing
+    DelStoRootNotAccepted
     DelSubTreeAccRoot
     DelSubTreeVoidRoot
     DelVidStaleVtx

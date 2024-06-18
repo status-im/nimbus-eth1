@@ -256,19 +256,25 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
   proc mptDelete(key: openArray[byte]): CoreDbRc[void] =
     const info = "deleteFn()"
 
-    if not cMpt.mptRoot.isValid and cMpt.accPath.isValid:
-      # This is insane but legit. A storage column was announced for an account
-      # but no data have been added, yet.
-      return ok()
-    let rc = api.delete(mpt, cMpt.mptRoot, key, cMpt.accPath)
+    let rc = block:
+      if cMpt.accPath.isValid:
+        api.deleteStorageData(mpt, key, cMpt.accPath)
+      else:
+        api.deleteGenericData(mpt, cMpt.mptRoot, key)
+
     if rc.isErr:
-      if rc.error[1] == DelPathNotFound:
+      if rc.error == DelPathNotFound:
         return err(rc.error.toError(base, info, MptNotFound))
+      if rc.error == DelStoRootMissing:
+        # This is insane but legit. A storage column was announced for an
+        # account but no data have been added, yet.
+        return ok()
       return err(rc.error.toError(base, info))
 
     if rc.value:
       # Column has become empty
       cMpt.mptRoot = VoidVID
+
     ok()
 
   proc mptHasPath(key: openArray[byte]): CoreDbRc[bool] =
@@ -357,30 +363,21 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
   proc accDelete(address: EthAddress): CoreDbRc[void] =
     const info = "acc/deleteFn()"
 
-    let
-      key = address.keccakHash.data
-      rc = api.delete(mpt, AccountsVID, key, VOID_PATH_ID)
-    if rc.isErr:
-      if rc.error[1] == DelPathNotFound:
-        return err(rc.error.toError(base, info, AccNotFound))
-      return err(rc.error.toError(base, info))
+    let key = address.keccakHash.data
+    api.deleteAccountPayload(mpt, key).isOkOr:
+      if error == DelPathNotFound:
+        return err(error.toError(base, info, AccNotFound))
+      return err(error.toError(base, info))
+
     ok()
 
   proc accStoDelete(address: EthAddress): CoreDbRc[void] =
     const info = "stoDeleteFn()"
 
-    let
-      key = address.keccakHash.data
-      pyl = api.fetchPayload(mpt, AccountsVID, key).valueOr:
-        return ok()
+    let rc = api.deleteStorageTree(mpt, address.to(PathID))
+    if rc.isErr and rc.error notin {DelStoRootMissing,DelStoAccMissing}:
+      return err(rc.error.toError(base, info))
 
-    # Use storage ID from account and delete that column
-    if pyl.pType == AccountData:
-      let stoID = pyl.account.storageID
-      if stoID.isValid:
-        let rc = api.delTree(mpt, stoID, address.to(PathID))
-        if rc.isErr:
-          return err(rc.error.toError(base, info))
     ok()
 
   proc accHasPath(address: EthAddress): CoreDbRc[bool] =
@@ -500,8 +497,9 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     # Reset column. This a emulates the behaviour of a new empty MPT on the
     # legacy database.
     if reset:
-      let rc = api.delTree(mpt, newMpt.mptRoot, VOID_PATH_ID)
+      let rc = api.deleteGenericTree(mpt, newMpt.mptRoot)
       if rc.isErr:
+        raiseAssert "find me"
         return err(rc.error.toError(base, info, AutoFlushFailed))
       col.reset = false
 

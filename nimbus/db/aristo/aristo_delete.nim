@@ -254,6 +254,7 @@ proc delSubTreeImpl(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
     accPath: PathID;                   # Needed for real storage tries
+    ignoreAccPathOk = false;           # Temporary, will go away
       ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* sub-trie.
   let wp = block:
@@ -262,6 +263,8 @@ proc delSubTreeImpl(
         return err((root,DelSubTreeVoidRoot))
       if root == VertexID(1):
         return err((root,DelSubTreeAccRoot))
+      VidVtxPair()
+    elif ignoreAccPathOk:
       VidVtxPair()
     else:
       let rc = db.registerAccount(root, accPath)
@@ -307,11 +310,14 @@ proc deleteImpl(
     hike: Hike;                        # Fully expanded path
     lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
     accPath: PathID;                   # Needed for accounts payload
+    ignoreStoID = false;               # Temporary, will go away
       ): Result[bool,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
 
   let wp = block:
     if lty.root.distinctBase < LEAST_FREE_VID:
+      VidVtxPair()
+    elif ignoreStoID:
       VidVtxPair()
     else:
       let rc = db.registerAccount(lty.root, accPath)
@@ -328,7 +334,7 @@ proc deleteImpl(
     return err((lf.vid, DelLeafLocked))
 
   # Verify that there is no dangling storage trie
-  block:
+  if not ignoreStoID:
     let data = lf.vtx.lData
     if data.pType == AccountData:
       let vid = data.account.storageID
@@ -427,7 +433,7 @@ proc delete*(
   ## code will be `true` iff the sub-trie starting at `hike.root` will have
   ## become empty.
   ##
-  ## If the `hike` argument referes to aa account entrie (i.e. `hike.root`
+  ## If the `hike` argument referes to an account entrie (i.e. `hike.root`
   ## equals `VertexID(1)`) and the leaf entry has an `AccountData` payload,
   ## its `storageID` field must have been reset to `VertexID(0)`. the
   ## `accPath` argument will be ignored.
@@ -472,6 +478,154 @@ proc delete*(
   if rc.error[1] in HikeAcceptableStopsNotFound:
     return err((rc.error[0], DelPathNotFound))
   err((rc.error[0],rc.error[1]))
+
+# ----------------
+
+proc deleteAccountPayload*(
+    db: AristoDbRef;
+    path: openArray[byte];
+      ): Result[void,AristoError] =
+  ## Delete the account leaf entry addressed by the argument `path`. If this
+  ## leaf entry referres to a storage tree, this one will be deleted as well.
+  ##
+  let
+    hike = path.initNibbleRange.hikeUp(VertexID(1), db).valueOr:
+      if error[1] in HikeAcceptableStopsNotFound:
+        return err(DelPathNotFound)
+      return err(error[1])
+    lty = LeafTie(root: VertexID(1), path: ? path.pathToTag())
+    stoID = hike.legs[^1].wp.vtx.lData.account.storageID
+
+  # Delete storage tree if present
+  if stoID.isValid:
+    db.delSubTreeImpl(stoID, lty.path).isOkOr:
+      return err(error[1])
+
+  discard db.deleteImpl(hike, lty, VOID_PATH_ID, ignoreStoID=true).valueOr:
+    return err(error[1])
+
+  ok()
+
+
+proc deleteGenericData*(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+      ): Result[bool,AristoError] =
+  ## Delete the leaf data entry addressed by the argument `path`.  The MPT
+  ## sub-tree the leaf data entry is subsumed under is passed as argument
+  ## `root` which must be greater than `VertexID(1)` and smaller than
+  ## `LEAST_FREE_VID`.
+  ##
+  ## The return value is `true` if the argument `path` deleted was the last
+  ## one and the tree does not exist anymore.
+  ##
+  # Verify that `root` is neither an accounts tree nor a strorage tree.
+  if not root.isValid:
+    return err(DelRootVidMissing)
+  elif root == VertexID(1):
+    return err(DelAccRootNotAccepted)
+  elif LEAST_FREE_VID <= root.distinctBase:
+    return err(DelStoRootNotAccepted)
+
+  let
+    hike = path.initNibbleRange.hikeUp(root, db).valueOr:
+      if error[1] in HikeAcceptableStopsNotFound:
+        return err(DelPathNotFound)
+      return err(error[1])
+    lty = LeafTie(root: root, path: ? path.pathToTag())
+
+  let emptyTreeOk = db.deleteImpl(
+        hike, lty, VOID_PATH_ID, ignoreStoID=true).valueOr:
+    return err(error[1])
+
+  ok emptyTreeOk
+
+proc deleteGenericTree*(
+    db: AristoDbRef;                   # Database, top layer
+    root: VertexID;                    # Root vertex
+      ): Result[void,AristoError] =
+  ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
+  ##
+  # Verify that `root` is neither an accounts tree nor a strorage tree.
+  if not root.isValid:
+    return err(DelRootVidMissing)
+  elif root == VertexID(1):
+    return err(DelAccRootNotAccepted)
+  elif LEAST_FREE_VID <= root.distinctBase:
+    return err(DelStoRootNotAccepted)
+
+  db.delSubTreeImpl(root, VOID_PATH_ID, ignoreAccPathOk=true).isOkOr:
+    return err(error[1])
+  ok()
+
+
+proc deleteStorageData*(
+    db: AristoDbRef;
+    path: openArray[byte];
+    accPath: PathID;                   # Needed for accounts payload
+      ): Result[bool,AristoError] =
+  ## For a given account argument `accPath`, this function deletes the
+  ## argument `path` from the associated storage tree (if any, at all.) If
+  ## the if the argument `path` deleted was the last one on the storage tree,
+  ## account leaf referred to by `accPath` will be updated so that it will
+  ## not refer to a storage tree anymore. In the latter case only the function
+  ## will return `true`.
+  ##
+  let
+    wpAcc = ? db.registerAccountForUpdate accPath
+    stoID = wpAcc.vtx.lData.account.storageID
+
+  if not stoID.isValid:
+    return err(DelStoRootMissing)
+
+  let
+    hike = path.initNibbleRange.hikeUp(stoID, db).valueOr:
+      if error[1] in HikeAcceptableStopsNotFound:
+        return err(DelPathNotFound)
+      return err(error[1])
+
+    lty = LeafTie(root: stoID, path: ? path.pathToTag())
+    emptyTreeOk = db.deleteImpl(
+      hike, lty, VOID_PATH_ID, ignoreStoID=true).valueOr:
+        return err(error[1])
+
+  # Make sure that an account leaf has no dangling sub-trie
+  if emptyTreeOk:
+    let leaf = wpAcc.vtx.dup           # Dup on modify
+    leaf.lData.account.storageID = VertexID(0)
+    db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
+    db.layersResKey(VertexID(1), wpAcc.vid)
+
+  ok emptyTreeOk
+
+proc deleteStorageTree*(
+    db: AristoDbRef;                   # Database, top layer
+    accPath: PathID;                   # Needed for accounts payload
+      ): Result[void,AristoError] =
+  ## Variant of `deleteStorageData()` for purging the whole storage tree
+  ## associated to the account argument `accPath`.
+  ##
+  let
+    wpAcc = db.registerAccountForUpdate(accPath).valueOr:
+      if error == UtilsAccInaccessible:
+        return err(DelStoAccMissing)
+      return err(error)
+    stoID = wpAcc.vtx.lData.account.storageID
+
+  if not stoID.isValid:
+    return err(DelStoRootMissing)
+
+  db.delSubTreeImpl(stoID, VOID_PATH_ID, ignoreAccPathOk=true).isOkOr:
+    return err(error[1])
+
+  # De-register the deleted tree from the accounts recotd
+  let leaf = wpAcc.vtx.dup             # Dup on modify
+  leaf.lData.account.storageID = VertexID(0)
+  db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
+  db.layersResKey(VertexID(1), wpAcc.vid)
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

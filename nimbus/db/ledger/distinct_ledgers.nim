@@ -157,10 +157,7 @@ proc freeStorage*(al: AccountLedger, eAddr: EthAddress) =
 
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
   const info = "AccountLedger/delete()"
-  # Flush associated storage trie
-  al.distinctBase.stoDelete(eAddr).isOkOr:
-    raiseAssert info & $$error
-  # Clear account
+  # Delete account and associated storage tree (if any)
   al.distinctBase.delete(eAddr).isOkOr:
     if error.error == MptNotFound:
       return

@@ -394,8 +394,8 @@ proc testTxMergeAndDeleteOneByOne*(
 
       # Delete leaf
       block:
-        let rc = db.delete(leaf, VOID_PATH_ID)
-        xCheckRc rc.error == (0,0)
+        let rc = db.deleteGenericData(leaf.root, @(leaf.path))
+        xCheckRc rc.error == 0
 
       # Update list of remaininf leafs
       leafsLeft.excl leaf
@@ -492,8 +492,8 @@ proc testTxMergeAndDeleteSubTree*(
           ""
     # Delete sub-tree
     block:
-      let rc = db.delTree(testRootVid, VOID_PATH_ID)
-      xCheckRc rc.error == (0,0):
+      let rc = db.deleteGenericTree testRootVid
+      xCheckRc rc.error == 0:
         noisy.say "***", "del(2)",
           " n=", n, "/", list.len,
           "\n    db\n    ", db.pp(backendOk=true),
