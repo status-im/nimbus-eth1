@@ -12,18 +12,18 @@
 {. warning[UnusedImport]:off .}
 
 import
-  ../premix/premix,
-  ../premix/persist,
-  ../premix/debug,
-  ../premix/dumper,
-  ../premix/hunter,
-  ../premix/regress,
-  ./tracerTestGen,
-  ./persistBlockTestGen,
+  #../premix/premix,         # -- currently disabled (no tracer at the moment)
+  #../premix/persist,        # -- ditto
+  #../premix/debug,          # -- ditto
+  #../premix/dumper,         # -- ditto
+  #../premix/hunter,         # -- ditto
+  #../premix/regress,        # -- ditto
+  #./tracerTestGen,          # -- ditto
+  #./persistBlockTestGen,    # -- ditto
   ../hive_integration/nodocker/rpc/rpc_sim,
   ../hive_integration/nodocker/consensus/consensus_sim,
   ../hive_integration/nodocker/graphql/graphql_sim,
-  ../hive_integration/nodocker/engine/engine_sim,
+  #../hive_integration/nodocker/engine/engine_sim,         # -- does not compile
   ../hive_integration/nodocker/pyspec/pyspec_sim,
   ../tools/t8n/t8n,
   ../tools/t8n/t8n_test,

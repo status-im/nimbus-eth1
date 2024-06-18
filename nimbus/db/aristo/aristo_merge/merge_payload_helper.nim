@@ -14,8 +14,7 @@ import
   std/[sequtils, sets, typetraits],
   eth/[common, trie/nibbles],
   results,
-  ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
-        aristo_vid]
+  ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private getters & setters
