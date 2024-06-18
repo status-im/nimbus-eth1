@@ -37,7 +37,7 @@ type
   AristoCoreDxMptRef = ref object of CoreDxMptRef
     base: AristoBaseRef          ## Local base descriptor
     mptRoot: VertexID            ## State root, may be zero unless account
-    accPath: PathID              ## Needed for storage columns
+    accPath: PathID              ## Needed for storage tree/columns
     address: EthAddress          ## For storage tree debugging
 
   AristoColRef* = ref object of CoreDbColRef
@@ -240,18 +240,17 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
   proc mptMerge(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
     const info = "mergeFn()"
 
-    # Provide root ID on-the-fly
-    let rootOk = cMpt.mptRoot.isValid
-    if not rootOk:
-      cMpt.mptRoot = api.vidFetch(mpt, pristine=true)
+    if cMpt.accPath.isValid:
+      let rc = api.mergeStorageData(mpt, k, v, cMpt.accPath)
+      if rc.isErr:
+        return err(rc.error.toError(base, info))
+      if rc.value.isValid:
+        cMpt.mptRoot = rc.value
+    else:
+      let rc = api.mergeGenericData(mpt, cMpt.mptRoot, k, v)
+      if rc.isErr:
+        return err(rc.error.toError(base, info))
 
-    let rc = api.merge(mpt, cMpt.mptRoot, k, v, cMpt.accPath)
-    if rc.isErr:
-      # Re-cycle unused ID (prevents from leaking IDs)
-      if not rootOk:
-        api.vidDispose(mpt, cMpt.mptRoot)
-        cMpt.mptRoot = VoidVID
-      return err(rc.error.toError(base, info))
     ok()
 
   proc mptDelete(key: openArray[byte]): CoreDbRc[void] =
@@ -350,7 +349,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
     let
       key = account.address.keccakHash.data
       val = account.toPayloadRef()
-      rc = api.mergePayload(mpt, AccountsVID, key, val)
+      rc = api.mergeAccountPayload(mpt, key, val.account)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok()

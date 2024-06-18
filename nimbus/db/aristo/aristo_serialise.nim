@@ -41,8 +41,6 @@ proc serialise(
   case pyl.pType:
   of RawData:
     ok pyl.rawBlob
-  of RlpData:
-    ok pyl.rlpBlob
   of AccountData:
     let
       vid = pyl.account.storageID

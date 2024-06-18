@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets],
+  std/[sequtils, sets, typetraits],
   eth/[common, trie/nibbles],
   results,
   ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_vid]
@@ -32,43 +32,6 @@ proc xPfx(vtx: VertexRef): NibblesSeq =
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc differ(
-    db: AristoDbRef;                   # Database, top layer
-    p1, p2: PayloadRef;                # Payload values
-      ): bool =
-  ## Check whether payloads differ on the database.
-  ## If `p1` is `RLP` serialised and `p2` is a raw blob compare serialsations.
-  ## If `p1` is of account type and `p2` is serialised, translate `p2`
-  ## to an account type and compare.
-  ##
-  if p1 == p2:
-    return false
-
-  # Adjust abd check for divergent types.
-  if p1.pType != p2.pType:
-    if p1.pType == AccountData:
-      try:
-        let
-          blob = (if p2.pType == RlpData: p2.rlpBlob else: p2.rawBlob)
-          acc = rlp.decode(blob, Account)
-        if acc.nonce == p1.account.nonce and
-           acc.balance == p1.account.balance and
-           acc.codeHash == p1.account.codeHash and
-           acc.storageRoot.isValid == p1.account.storageID.isValid:
-          if not p1.account.storageID.isValid or
-             acc.storageRoot.to(HashKey) == db.getKey p1.account.storageID:
-            return false
-      except RlpError:
-        discard
-
-    elif p1.pType == RlpData:
-      if p2.pType == RawData and p1.rlpBlob == p2.rawBlob:
-        return false
-
-  true
-
-# -----------
 
 proc clearMerkleKeys(
     db: AristoDbRef;                   # Database, top layer
@@ -270,10 +233,10 @@ proc setVtxAndKey*(
   db.layersResKey(root, vid)
 
 # ------------------------------------------------------------------------------
-# Public functions: add Particia Trie leaf vertex
+# Private functions: add Particia Trie leaf vertex
 # ------------------------------------------------------------------------------
 
-proc mergePayloadTopIsBranchAddLeaf*(
+proc mergePayloadTopIsBranchAddLeaf(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Path top has a `Branch` vertex
     payload: PayloadRef;               # Leaf data payload
@@ -333,7 +296,7 @@ proc mergePayloadTopIsBranchAddLeaf*(
   db.insertBranch(hike, linkID, linkVtx, payload)
 
 
-proc mergePayloadTopIsExtAddLeaf*(
+proc mergePayloadTopIsExtAddLeaf(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Path top has an `Extension` vertex
     payload: PayloadRef;               # Leaf data payload
@@ -404,7 +367,7 @@ proc mergePayloadTopIsExtAddLeaf*(
   ok okHike
 
 
-proc mergePayloadTopIsEmptyAddLeaf*(
+proc mergePayloadTopIsEmptyAddLeaf(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # No path legs
     rootVtx: VertexRef;                # Root vertex
@@ -440,31 +403,25 @@ proc mergePayloadTopIsEmptyAddLeaf*(
 
   db.insertBranch(hike, hike.root, rootVtx, payload)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
 
-proc mergePayloadUpdate*(
+proc mergePayloadUpdate(
     db: AristoDbRef;                   # Database, top layer
-    hike: Hike;                        # No path legs
-    leafTie: LeafTie;                  # Leaf item to add to the database
+    hike: Hike;                        # Path to payload
     payload: PayloadRef;               # Payload value to add
       ): Result[Hike,AristoError] =
   ## Update leaf vertex if payloads differ
   let leafLeg = hike.legs[^1]
 
   # Update payloads if they differ
-  if db.differ(leafLeg.wp.vtx.lData, payload):
+  if leafLeg.wp.vtx.lData != payload:
     let vid = leafLeg.wp.vid
     if vid in db.pPrf:
       return err(MergeLeafProofModeLock)
 
-    # Verify that the account leaf can be replaced
-    if leafTie.root == VertexID(1):
-      if leafLeg.wp.vtx.lData.pType != payload.pType:
-        return err(MergeLeafCantChangePayloadType)
-      if payload.pType == AccountData and
-         payload.account.storageID != leafLeg.wp.vtx.lData.account.storageID:
+    # Make certain that the account leaf can be replaced
+    if hike.root == VertexID(1):
+      # Only `AccountData` payload on `VertexID(1)` tree
+      if payload.account.storageID != leafLeg.wp.vtx.lData.account.storageID:
         return err(MergeLeafCantChangeStorageID)
 
     # Update vertex and hike
@@ -485,6 +442,80 @@ proc mergePayloadUpdate*(
 
   else:
     err(MergeLeafPathCachedAlready)
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc mergePayloadImpl*(
+    db: AristoDbRef;                   # Database, top layer
+    root: VertexID;                    # MPT state root
+    path: openArray[byte];             # Leaf item to add to the database
+    payload: PayloadRef;               # Payload value
+    wpAcc: VidVtxPair;                 # Needed for storage tree
+      ): Result[void,AristoError] =
+  ## Merge the argument `(root,path)` key-value-pair into the top level vertex
+  ## table of the database `db`. The `path` argument is used to address the
+  ## leaf vertex with the payload. It is stored or updated on the database
+  ## accordingly.
+  ##
+  ## If the `root` argument is `VertexID(1)` this function relies upon that the
+  ## payload argument is of type `AccountData`. If the payload exists already
+  ## on the database, the `storageID` field of the `payload` and on the database
+  ## must be the same or an error is returned. The argument `wpAcc` will be
+  ## ignored for accounts.
+  ##
+  ## Otherwise, if the `root` argument belongs to a well known sub trie (i.e.
+  ## it does not exceed `LEAST_FREE_VID`) the entry will just be merged. The
+  ## argument `wpAcc` will be ignored .
+  ##
+  ## Otherwise, a valid `wpAcc` must be given referring to an `AccountData`
+  ## payload type leaf vertex.  If the `storageID` field of that payload
+  ## does not have a valid entry, a new sub-trie will be created. Otherwise
+  ## this function expects that the `root` argument is the same as the
+  ## `storageID` field.
+  ##
+  ## The function returns `true` iff a new sub-tree was linked to an account
+  ## leaf record.
+  ##
+  let
+    nibblesPath = path.initNibbleRange
+    hike = nibblesPath.hikeUp(root, db).to(Hike)
+
+  var okHike: Hike
+  if 0 < hike.legs.len:
+    case hike.legs[^1].wp.vtx.vType:
+    of Branch:
+      okHike = ? db.mergePayloadTopIsBranchAddLeaf(hike, payload)
+    of Leaf:
+      if 0 < hike.tail.len:          # `Leaf` vertex problem?
+        return err(MergeLeafGarbledHike)
+      okHike = ? db.mergePayloadUpdate(hike, payload)
+    of Extension:
+      okHike = ? db.mergePayloadTopIsExtAddLeaf(hike, payload)
+
+  else:
+    # Empty hike
+    let rootVtx = db.getVtx hike.root
+    if rootVtx.isValid:
+      okHike = ? db.mergePayloadTopIsEmptyAddLeaf(hike,rootVtx, payload)
+
+    else:
+      # Bootstrap for existing root ID
+      let wp = VidVtxPair(
+        vid: hike.root,
+        vtx: VertexRef(
+          vType: Leaf,
+          lPfx:  nibblesPath,
+          lData: payload))
+      db.setVtxAndKey(hike.root, wp.vid, wp.vtx)
+      okHike = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
+
+    # Double check the result (may be removed in future)
+    if okHike.to(NibblesSeq) != nibblesPath:
+      return err(MergeAssemblyFailed) # Ooops
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

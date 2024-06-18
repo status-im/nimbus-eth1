@@ -46,9 +46,6 @@ proc blobifyTo*(pyl: PayloadRef, data: var Blob) =
   of RawData:
     data &= pyl.rawBlob
     data &= [0x6b.byte]
-  of RlpData:
-    data &= pyl.rlpBlob
-    data &= @[0x6a.byte]
 
   of AccountData:
     var mask: byte
@@ -193,9 +190,6 @@ proc deblobifyTo(
   let mask = data[^1]
   if mask == 0x6b: # unstructured payload
     pyl = PayloadRef(pType: RawData, rawBlob: data[0 .. ^2])
-    return ok()
-  if mask == 0x6a: # RLP encoded payload
-    pyl = PayloadRef(pType: RlpData, rlpBlob: data[0 .. ^2])
     return ok()
 
   var

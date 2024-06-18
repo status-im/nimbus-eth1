@@ -22,11 +22,10 @@ Contents
   + [4.2 Extension record serialisation](#ch4x2)
   + [4.3 Leaf record serialisation](#ch4x3)
   + [4.4 Leaf record payload serialisation for account data](#ch4x4)
-  + [4.5 Leaf record payload serialisation for RLP encoded data](#ch4x5)
-  + [4.6 Leaf record payload serialisation for unstructured data](#ch4x6)
-  + [4.7 Serialisation of the top used vertex ID](#ch4x7)
-  + [4.8 Serialisation of a last saved state record](#ch4x8)
-  + [4.9 Serialisation record identifier identification](#ch4x9)
+  + [4.5 Leaf record payload serialisation for unstructured data](#ch4x5)
+  + [4.6 Serialisation of the top used vertex ID](#ch4x6)
+  + [4.7 Serialisation of a last saved state record](#ch4x7)
+  + [4.8 Serialisation record identifier identification](#ch4x8)
 
 * [5. *Patricia Trie* implementation notes](#ch5)
   + [5.1 Database decriptor representation](#ch5x1)
@@ -327,19 +326,7 @@ fields. So, joining the *4 x bitmask(2)* word array to a single byte, the
 maximum value of that byte is 0x99.
 
 <a name="ch4x5"></a>
-### 4.5 Leaf record payload serialisation for RLP encoded data
-
-        0 +--+ .. --+
-          |  |      |                        -- data, at least one byte
-          +--+ .. --+
-          |  |                               -- marker(8), 0x6a
-          +--+
-
-        where
-          marker(8) is the eight bit array *0110-1010*
-
-<a name="ch4x6"></a>
-### 4.6 Leaf record payload serialisation for unstructured data
+### 4.5 Leaf record payload serialisation for unstructured data
 
         0 +--+ .. --+
           |  |      |                        -- data, at least one byte
@@ -350,8 +337,8 @@ maximum value of that byte is 0x99.
         where
           marker(8) is the eight bit array *0110-1011*
 
-<a name="ch4x7"></a>
-### 4.7 Serialisation of the top used vertex ID
+<a name="ch4x6"></a>
+### 4.6 Serialisation of the top used vertex ID
 
         0 +--+--+--+--+--+--+--+--+
           |                       |          -- last used vertex IDs
@@ -367,8 +354,8 @@ indicates that all ID values greater or equal than this value are free and can
 be used as vertex IDs. If this record is missing, the value *(1u64,0x01)* is
 assumed, i.e. the list with the single vertex ID *1*.
 
-<a name="ch4x8"></a>
-### 4.8 Serialisation of a last saved state record
+<a name="ch4x7"></a>
+### 4.7 Serialisation of a last saved state record
 
          0 +--+--+--+--+--+ .. --+--+ .. --+
            |                               | -- 32 bytes source state hash
@@ -383,8 +370,8 @@ assumed, i.e. the list with the single vertex ID *1*.
         where
           marker(8) is the eight bit array *0111-111f*
 
-<a name="ch4x10"></a>
-### 4.9 Serialisation record identifier tags
+<a name="ch4x8"></a>
+### 4.8 Serialisation record identifier tags
 
 Any of the above records can uniquely be identified by its trailing marker,
 i.e. the last byte of a serialised record.
@@ -395,10 +382,9 @@ i.e. the last byte of a serialised record.
 |   10xx xxxx | 0x80 + x(6)      | Extension record     | [4.2](#ch4x2)       |
 |   11xx xxxx | 0xC0 + x(6)      | Leaf record          | [4.3](#ch4x3)       |
 |   0xxx 0yyy | (x(3)<<4) + y(3) | Account payload      | [4.4](#ch4x4)       |
-|   0110 1010 | 0x6a             | RLP encoded payload  | [4.5](#ch4x5)       |
-|   0110 1011 | 0x6b             | Unstructured payload | [4.6](#ch4x6)       |
-|   0111 1100 | 0x7c             | Last used vertex ID  | [4.7](#ch4x7)       |
-|   0111 1111 | 0x7f             | Last saved state     | [4.8](#ch4x8)       |
+|   0110 1011 | 0x6b             | Unstructured payload | [4.5](#ch4x5)       |
+|   0111 1100 | 0x7c             | Last used vertex ID  | [4.6](#ch4x6)       |
+|   0111 1111 | 0x7f             | Last saved state     | [4.7](#ch4x7)       |
 
 <a name="ch5"></a>
 5. *Patricia Trie* implementation notes

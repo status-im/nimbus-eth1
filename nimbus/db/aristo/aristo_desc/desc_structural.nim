@@ -41,15 +41,15 @@ type
   PayloadType* = enum
     ## Type of leaf data.
     RawData                          ## Generic data
-    RlpData                          ## Marked RLP encoded
     AccountData                      ## `Aristo account` with vertex IDs links
 
   PayloadRef* = ref object of RootRef
+    ## The payload type depends on the sub-tree used. The `VertesID(1)` rooted
+    ## sub-tree only has `AccountData` type payload, while all other sub-trees
+    ## have `RawData` payload.
     case pType*: PayloadType
     of RawData:
       rawBlob*: Blob                 ## Opaque data, default value
-    of RlpData:
-      rlpBlob*: Blob                 ## Opaque data marked RLP encoded
     of AccountData:
       account*: AristoAccount
 
@@ -162,9 +162,6 @@ proc `==`*(a, b: PayloadRef): bool =
     of RawData:
       if a.rawBlob != b.rawBlob:
         return false
-    of RlpData:
-      if a.rlpBlob != b.rlpBlob:
-        return false
     of AccountData:
       if a.account != b.account:
         return false
@@ -219,10 +216,6 @@ func dup*(pld: PayloadRef): PayloadRef =
     PayloadRef(
       pType:    RawData,
       rawBlob:  pld.rawBlob)
-  of RlpData:
-    PayloadRef(
-      pType:    RlpData,
-      rlpBlob:  pld.rlpBlob)
   of AccountData:
     PayloadRef(
       pType:   AccountData,

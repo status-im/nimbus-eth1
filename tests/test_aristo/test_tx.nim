@@ -43,6 +43,9 @@ const
   MaxFilterBulk = 150_000
     ## Policy settig for `pack()`
 
+  testRootVid = VertexID(2)
+    ## Need to reconfigure for the test, root ID 1 cannot be deleted as a trie
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -306,25 +309,6 @@ proc revWalkVerify(
 
   true
 
-proc mergeRlpData*(
-    db: AristoDbRef;                   # Database, top layer
-    path: PathID;                      # Path into database
-    rlpData: openArray[byte];          # RLP encoded payload data
-      ): Result[void,AristoError] =
-  block body:
-    discard db.mergeLeaf(
-      LeafTiePayload(
-        leafTie: LeafTie(
-          root:    VertexID(1),
-          path:    path.normal),
-        payload: PayloadRef(
-          pType:   RlpData,
-          rlpBlob: @rlpData))).valueOr:
-      if error in {MergeLeafPathCachedAlready,MergeLeafPathOnBackendAlready}:
-        break body
-      return err(error)
-  ok()
-
 # ------------------------------------------------------------------------------
 # Public test function
 # ------------------------------------------------------------------------------
@@ -361,14 +345,14 @@ proc testTxMergeAndDeleteOneByOne*(
     # Reset database so that the next round has a clean setup
     defer: db.innerCleanUp
 
-    # Merge leaf data into main trie (w/vertex ID 1)
+    # Merge leaf data into main trie
     let kvpLeafs = block:
-      var lst = w.kvpLst.mapRootVid VertexID(1)
+      var lst = w.kvpLst.mapRootVid testRootVid
       # The list might be reduced for isolation of particular properties,
       # e.g. lst.setLen(min(5,lst.len))
       lst
     for i,leaf in kvpLeafs:
-      let rc = db.mergeLeaf leaf
+      let rc = db.mergeGenericData leaf
       xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database
@@ -394,14 +378,17 @@ proc testTxMergeAndDeleteOneByOne*(
         doSaveBeOk = ((u mod saveMod) == saveRest)
         (leaf, lid) = lvp
 
+      # Add a dummy entry so the balancer logic can be triggered
+      let rc = db.mergeDummyAccLeaf(n, runID)
+      xCheckRc rc.error == 0
+
       if doSaveBeOk:
         let saveBeOk = tx.saveToBackend(
           chunkedMpt=false, relax=relax, noisy=noisy, runID)
         xCheck saveBeOk:
-          noisy.say "***", "del(2)",
+          noisy.say "***", "del1by1(2)",
             " u=", u,
             " n=", n, "/", list.len,
-            "\n    leaf=", leaf.pp(db),
             "\n    db\n    ", db.pp(backendOk=true),
             ""
 
@@ -414,7 +401,8 @@ proc testTxMergeAndDeleteOneByOne*(
       leafsLeft.excl leaf
 
       let deletedVtx = tx.db.getVtx lid
-      xCheck deletedVtx.isValid == false
+      xCheck deletedVtx.isValid == false:
+        noisy.say "***", "del1by1(8)"
 
       # Walking the database is too slow for large tables. So the hope is that
       # potential errors will not go away and rather pop up later, as well.
@@ -430,7 +418,9 @@ proc testTxMergeAndDeleteOneByOne*(
               return
 
     when true and false:
-      noisy.say "***", "del(9) n=", n, "/", list.len, " nLeafs=", kvpLeafs.len
+      noisy.say "***", "del1by1(9)",
+        " n=", n, "/", list.len,
+        " nLeafs=", kvpLeafs.len
 
   true
 
@@ -440,9 +430,6 @@ proc testTxMergeAndDeleteSubTree*(
     list: openArray[ProofTrieData];
     rdbPath: string;                          # Rocks DB storage directory
        ): bool =
-  const
-    # Need to reconfigure for the test, root ID 1 cannot be deleted as a trie
-    testRootVid = VertexID(2)
   var
     prng = PrngDesc.init 42
     db = AristoDbRef(nil)
@@ -460,9 +447,10 @@ proc testTxMergeAndDeleteSubTree*(
       else:
         AristoDbRef.init(MemBackendRef)
 
-    if testRootVid != VertexID(1):
-      # Add a dummy entry so the journal logic can be triggered
-      discard db.merge(VertexID(1), @[n.byte], @[42.byte], VOID_PATH_ID)
+    # Add a dummy entry so the balancer logic can be triggered
+    block:
+      let rc = db.mergeDummyAccLeaf(n, 42)
+      xCheckRc rc.error == 0
 
     # Start transaction (double frame for testing)
     xCheck db.txTop.isErr
@@ -480,7 +468,7 @@ proc testTxMergeAndDeleteSubTree*(
       # e.g. lst.setLen(min(5,lst.len))
       lst
     for i,leaf in kvpLeafs:
-      let rc = db.mergeLeaf leaf
+      let rc = db.mergeGenericData leaf
       xCheckRc rc.error == 0
 
     # List of all leaf entries that should be on the database
@@ -511,9 +499,10 @@ proc testTxMergeAndDeleteSubTree*(
           "\n    db\n    ", db.pp(backendOk=true),
           ""
 
-    if testRootVid != VertexID(1):
-      # Update dummy entry so the journal logic can be triggered
-      discard db.merge(VertexID(1), @[n.byte], @[43.byte], VOID_PATH_ID)
+    # Update dummy entry so the journal logic can be triggered
+    block:
+      let rc = db.mergeDummyAccLeaf(n, 43)
+      xCheckRc rc.error == 0
 
     block:
       let saveBeOk = tx.saveToBackend(
@@ -571,15 +560,22 @@ proc testTxMergeProofAndKvpList*(
       count = 0
     count.inc
 
+    # Add a dummy entry so the balancer logic can be triggered
+    block:
+      let rc = db.mergeDummyAccLeaf(n, 42)
+      xCheckRc rc.error == 0
+
     let
       testId = idPfx & "#" & $w.id & "." & $n
       runID = n
       sTabLen = db.nLayersVtx()
-      leafs = w.kvpLst.mapRootVid VertexID(1) # merge into main trie
+      leafs = w.kvpLst.mapRootVid testRootVid # merge into main trie
+
+    # var lst = w.kvpLst.mapRootVid testRootVid
 
     if 0 < w.proof.len:
       let root = block:
-        let rc = db.mergeProof(rootKey, VertexID(1))
+        let rc = db.mergeProof(rootKey, testRootVid)
         xCheckRc rc.error == 0
         rc.value
 
@@ -596,13 +592,14 @@ proc testTxMergeProofAndKvpList*(
     xCheck merged.merged + merged.dups == leafs.len
 
     block:
-      let oops = oopsTab.getOrDefault(testId,(0,AristoError(0)))
-      if not tx.saveToBackendWithOops(
-          chunkedMpt=true, noisy=noisy, debugID=runID, oops):
-        return
+      let
+        oops = oopsTab.getOrDefault(testId,(0,AristoError(0)))
+        saveBeOk = tx.saveToBackendWithOops(
+          chunkedMpt=true, noisy=noisy, debugID=runID, oops)
+      xCheck saveBeOk
 
     when true and false:
-      noisy.say "***", "testTxMergeProofAndKvpList (1)",
+      noisy.say "***", "testTxMergeProofAndKvpList (9)",
         " <", n, "/", list.len-1, ">",
         " runID=", runID,
         " groups=", count, " merged=", merged

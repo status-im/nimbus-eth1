@@ -86,47 +86,38 @@ type
 
     # Merge leaf `merge()`
     MergeAssemblyFailed # Ooops, internal error
+    MergeAccRootNotAccepted
+    MergeStoRootNotAccepted
     MergeBranchGarbledNibble
     MergeBranchGarbledTail
     MergeBranchLinkLeafGarbled
-    MergeBranchLinkLockedKey
-    MergeBranchLinkProofModeLock
     MergeBranchLinkVtxPfxTooShort
     MergeBranchProofModeLock
     MergeBranchRootExpected
-    MergeLeafCantChangePayloadType
+    MergeHashKeyDiffersFromCached
+    MergeHashKeyInvalid
     MergeLeafCantChangeStorageID
     MergeLeafGarbledHike
     MergeLeafPathCachedAlready
     MergeLeafPathOnBackendAlready
     MergeLeafProofModeLock
+    MergeLeafTypeAccountRequired
+    MergeLeafTypeRawDataRequired
+    MergeNodeAccountPayloadError
+    MergeNodeVidMissing
+    MergeNodeVtxDiffersFromExisting
     MergeNonBranchProofModeLock
+    MergeProofInitMissing
+    MergeRevVidMustHaveBeenCached
+    MergeRootArgsIncomplete
     MergeRootBranchLinkBusy
-    MergeRootMissing
-
-    MergeHashKeyInvalid
-    MergeHashKeyDiffersFromCached
-    MergeHashKeyRevLookUpGarbled
+    MergeRootKeyDiffersForVid
     MergeRootKeyInvalid
+    MergeRootKeyMissing
     MergeRootKeyNotInProof
     MergeRootKeysMissing
     MergeRootKeysOverflow
-    MergeProofInitMissing
-    MergeRevVidMustHaveBeenCached
-    MergeNodeVtxDiffersFromExisting
-    MergeNodeVidMissing
-    MergeNodeAccountPayloadError
-    MergeRootKeyDiffersForVid
-    MergeNodeVtxDuplicates
-    MergeRootKeyMissing
-    MergeRootArgsIncomplete
-
-    # Utils
-    UtilsAccPathMissing
-    UtilsAccPathWithoutLeaf
-    UtilsAccUnaccessible
-    UtilsAccWrongStorageRoot
-    UtilsStoRootMissing
+    MergeRootVidMissing
 
     # Update `Merkle` hashes `hashify()`
     HashifyVtxUnresolved
@@ -288,6 +279,14 @@ type
     AccVtxUnsupported
     AccNodeUnsupported
     PayloadTypeUnsupported
+
+    UtilsAccPathMissing
+    UtilsAccPathWithoutLeaf
+    UtilsAccInaccessible
+    UtilsAccWrongStorageRoot
+    UtilsStoRootInaccessible
+    UtilsStoRootMissing
+    UtilsAccLeafPayloadExpected
 
     # Miscelaneous handy helpers
     AccRootUnacceptable

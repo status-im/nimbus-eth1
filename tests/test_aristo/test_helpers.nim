@@ -11,7 +11,7 @@
 import
   std/[os, sequtils],
   eth/common,
-  rocksdb,
+  stew/endians2,
   ../../nimbus/db/aristo/[
     aristo_debug, aristo_desc, aristo_delete,
     aristo_hashify, aristo_hike, aristo_merge],
@@ -247,31 +247,13 @@ proc delTree*(
     aristo_delete.delTree(db, root, accPath)
 
 
-proc merge*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-    data: openArray[byte];
-    accPath: PathID;
-    noisy: bool;
-      ): Result[bool, AristoError] =
-  when declared(aristo_merge.noisy):
-    aristo_merge.exec(noisy, aristo_merge.merge(db, root, path, data, accPath))
-  else:
-    aristo_merge.merge(db, root, path, data, accPath)
-
-proc mergePayload*(
-    db: AristoDbRef;
-    lty: LeafTie;
-    pyl: PayloadRef;
-    accPath: PathID;
-    noisy: bool;
-      ): Result[Hike,AristoError] =
-  when declared(aristo_merge.noisy):
-    aristo_merge.exec(noisy, aristo_merge.mergePayload(db, lty, pyl, accPath))
-  else:
-    aristo_merge.mergePayload(db, lty, pyl, accPath)
-
+proc mergeGenericData*(
+    db: AristoDbRef;                   # Database, top layer
+    leaf: LeafTiePayload;              # Leaf item to add to the database
+      ): Result[bool,AristoError] =
+  ## Variant of `mergeGenericData()`.
+  db.mergeGenericData(
+    leaf.leafTie.root, @(leaf.leafTie.path), leaf.payload.rawBlob)
 
 proc mergeList*(
     db: AristoDbRef;                   # Database, top layer
@@ -283,19 +265,35 @@ proc mergeList*(
   for n,w in leafs:
     noisy.say "*** mergeList",
       " n=", n, "/", leafs.len
-    let rc = db.mergePayload(w.leafTie, w.payload, VOID_PATH_ID, noisy=noisy)
+    let rc = db.mergeGenericData w
     noisy.say "*** mergeList",
       " n=", n, "/", leafs.len,
       " rc=", (if rc.isOk: "ok" else: $rc.error),
       "\n    -------------\n"
-    if rc.isOk:
-      merged.inc
-    elif rc.error in {MergeLeafPathCachedAlready,MergeLeafPathOnBackendAlready}:
-      dups.inc
-    else:
+    if rc.isErr:
       return (n,dups,rc.error)
+    elif rc.value:
+      merged.inc
+    else:
+      dups.inc
 
   (merged, dups, AristoError(0))
+
+
+proc mergeDummyAccLeaf*(
+    db: AristoDbRef;
+    pathID: int;
+    nonce: int;
+      ): Result[void,AristoError] =
+  # Add a dummy entry so the balancer logic can be triggered
+  let
+    acc = AristoAccount(nonce: nonce.AccountNonce)
+    rc = db.mergeAccountPayload(pathID.uint64.toBytesBE, acc)
+  if rc.isOk:
+    ok()
+  else:
+    err(rc.error)
+
 
 # ------------------------------------------------------------------------------
 # End
