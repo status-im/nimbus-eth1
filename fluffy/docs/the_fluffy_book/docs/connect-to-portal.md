@@ -6,15 +6,14 @@ Connecting to the current Portal network is as easy as running following command
 ./build/fluffy --rpc
 ```
 
-This will connect to the public [Portal testnet](https://github.com/ethereum/portal-network-specs/blob/master/testnet.md#portal-network-testnet)
-which contains nodes of the different clients.
+This will connect to the public Portal mainnet which contains nodes of the different clients.
 
 !!! note
-    Default the Fluffy node will connect to the
-    [bootstrap nodes](https://github.com/ethereum/portal-network-specs/blob/master/testnet.md#bootnodes) of the public testnet.
+    By default the Fluffy node will connect to the
+    [bootstrap nodes](https://github.com/ethereum/portal-network-specs/blob/master/bootnodes.md#bootnodes-mainnet) of the public mainnet.
 
-    When testing locally the `--portal-network:none` option can be provided to avoid
-    connecting to any of the testnet bootstrap nodes.
+    When testing locally the `--network:none` option can be provided to avoid
+    connecting to any of the default bootstrap nodes.
 
 The `--rpc` option will also enable the different JSON-RPC interfaces through
 which you can access the Portal Network.
@@ -32,4 +31,3 @@ Fluffy also supports a small subset of the [Execution JSON-RPC API](https://ethe
 
 <!-- TODO: Explain some of the more important cli options here? Or in a separate
 page? -->
-

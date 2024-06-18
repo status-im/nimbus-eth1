@@ -35,7 +35,7 @@ import
   ./network/state/[state_network, state_content],
   ./network/history/[history_network, history_content],
   ./network/beacon/[beacon_init_loader, beacon_light_client],
-  ./network/wire/[portal_stream, portal_protocol_config],
+  ./network/wire/[portal_stream, portal_protocol_config, portal_protocol],
   ./eth_data/history_data_ssz_e2s,
   ./database/content_db,
   ./version,
@@ -101,24 +101,35 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
-  var portalNetwork: PortalNetwork
-  if config.portalNetworkDeprecated.isSome():
-    warn "DEPRECATED: The --network flag will be removed in the future, please use the drop in replacement --portal-network flag instead"
-    portalNetwork = config.portalNetworkDeprecated.get()
-  else:
-    portalNetwork = config.portalNetwork
+  let portalNetwork =
+    if config.portalNetworkDeprecated.isNone():
+      config.network
+    else:
+      warn "DEPRECATED: The --portal-network flag will be removed in the future, " &
+        "please use the drop in replacement --network flag instead"
+      config.portalNetworkDeprecated.get()
+
+  let portalSubnetworks =
+    if config.networksDeprecated == {}:
+      config.portalSubnetworks
+    else:
+      warn "DEPRECATED: The --networks flag will be removed in the future, " &
+        "please use the drop in replacement --portal-subnetworks flag instead"
+      config.networksDeprecated
 
   case portalNetwork
-  of mainnet:
+  of PortalNetwork.none:
+    discard # don't connect to any network bootstrap nodes
+  of PortalNetwork.mainnet:
     for enrURI in mainnetBootstrapNodes:
       var record: Record
       if fromURI(record, enrURI):
         bootstrapRecords.add(record)
-  of testnet:
-    # TODO: add testnet repo with bootstrap file.
-    discard
-  else:
-    discard
+  of PortalNetwork.angelfood:
+    for enrURI in angelfoodBootstrapNodes:
+      var record: Record
+      if fromURI(record, enrURI):
+        bootstrapRecords.add(record)
 
   let
     discoveryConfig =
@@ -210,9 +221,10 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         loadAccumulator()
 
     historyNetwork =
-      if Network.history in config.networks:
+      if PortalSubnetwork.history in portalSubnetworks:
         Opt.some(
           HistoryNetwork.new(
+            portalNetwork,
             d,
             db,
             streamManager,
@@ -225,9 +237,10 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         Opt.none(HistoryNetwork)
 
     stateNetwork =
-      if Network.state in config.networks:
+      if PortalSubnetwork.state in portalSubnetworks:
         Opt.some(
           StateNetwork.new(
+            portalNetwork,
             d,
             db,
             streamManager,
@@ -243,12 +256,15 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     beaconLightClient =
       # TODO: Currently disabled by default as it is not sufficiently polished.
       # Eventually this should be always-on functionality.
-      if Network.beacon in config.networks and config.trustedBlockRoot.isSome():
+      if PortalSubnetwork.beacon in portalSubnetworks and
+          config.trustedBlockRoot.isSome():
         let
           # Portal works only over mainnet data currently
+          # TODO: investigate this load network data function
           networkData = loadNetworkData("mainnet")
           beaconDb = BeaconDb.new(networkData, config.dataDir / "db" / "beacon_db")
           beaconNetwork = BeaconNetwork.new(
+            portalNetwork,
             d,
             beaconDb,
             streamManager,

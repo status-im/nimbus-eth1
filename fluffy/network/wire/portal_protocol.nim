@@ -254,6 +254,41 @@ func init*(
     nodesInterestedInContent: nodesInterestedInContent,
   )
 
+func getProtocolId*(
+    network: PortalNetwork, subnetwork: PortalSubnetwork
+): PortalProtocolId =
+  const portalPrefix = byte(0x50)
+
+  case network
+  of PortalNetwork.none, PortalNetwork.mainnet:
+    case subnetwork
+    of PortalSubnetwork.state:
+      [portalPrefix, 0x0A]
+    of PortalSubnetwork.history:
+      [portalPrefix, 0x0B]
+    of PortalSubnetwork.beacon:
+      [portalPrefix, 0x0C]
+    of PortalSubnetwork.transactionIndex:
+      [portalPrefix, 0x0D]
+    of PortalSubnetwork.verkleState:
+      [portalPrefix, 0x0E]
+    of PortalSubnetwork.transactionGossip:
+      [portalPrefix, 0x0F]
+  of PortalNetwork.angelfood:
+    case subnetwork
+    of PortalSubnetwork.state:
+      [portalPrefix, 0x4A]
+    of PortalSubnetwork.history:
+      [portalPrefix, 0x4B]
+    of PortalSubnetwork.beacon:
+      [portalPrefix, 0x4C]
+    of PortalSubnetwork.transactionIndex:
+      [portalPrefix, 0x4D]
+    of PortalSubnetwork.verkleState:
+      [portalPrefix, 0x4E]
+    of PortalSubnetwork.transactionGossip:
+      [portalPrefix, 0x4F]
+
 func `$`(id: PortalProtocolId): string =
   id.toHex()
 

@@ -119,7 +119,7 @@ type
     .}: Port
 
     protocolId* {.
-      defaultValue: historyProtocolId,
+      defaultValue: getProtocolId(PortalNetwork.mainnet, PortalSubnetwork.history),
       desc: "Portal wire protocol id for the network to connect to",
       name: "protocol-id"
     .}: PortalProtocolId

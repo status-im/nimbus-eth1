@@ -148,8 +148,9 @@ proc newStateNode*(
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new("", uint32.high, inMemory = true)
     sm = StreamManager.new(node)
-    hn = HistoryNetwork.new(node, db, sm, FinishedAccumulator())
-    sn = StateNetwork.new(node, db, sm, historyNetwork = Opt.some(hn))
+    hn = HistoryNetwork.new(PortalNetwork.none, node, db, sm, FinishedAccumulator())
+    sn =
+      StateNetwork.new(PortalNetwork.none, node, db, sm, historyNetwork = Opt.some(hn))
 
   return StateNode(discoveryProtocol: node, stateNetwork: sn)
 

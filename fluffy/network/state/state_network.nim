@@ -26,8 +26,6 @@ export results, state_content
 logScope:
   topics = "portal_state"
 
-const stateProtocolId* = [byte 0x50, 0x0A]
-
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
@@ -41,6 +39,7 @@ func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
 
 proc new*(
     T: type StateNetwork,
+    portalNetwork: PortalNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
     streamManager: StreamManager,
@@ -55,7 +54,7 @@ proc new*(
 
   let portalProtocol = PortalProtocol.new(
     baseProtocol,
-    stateProtocolId,
+    getProtocolId(portalNetwork, PortalSubnetwork.state),
     toContentIdHandler,
     createGetHandler(contentDB),
     s,

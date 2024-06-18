@@ -369,7 +369,6 @@ proc installEthApiHandlers*(
           raise newException(ValueError, error)
 
         balance = (await stateNetwork.get().getBalance(blockHash, data.EthAddress)).valueOr:
-          # Should we return 0 here or throw a more detailed error?
           raise newException(ValueError, "Unable to get balance")
 
       return balance
@@ -397,7 +396,6 @@ proc installEthApiHandlers*(
         nonce = (
           await stateNetwork.get().getTransactionCount(blockHash, data.EthAddress)
         ).valueOr:
-          # Should we return 0 here or throw a more detailed error?
           raise newException(ValueError, "Unable to get transaction count")
       return nonce.Quantity
 
@@ -425,7 +423,6 @@ proc installEthApiHandlers*(
         slotValue = (
           await stateNetwork.get().getStorageAt(blockHash, data.EthAddress, slot)
         ).valueOr:
-          # Should we return 0 here or throw a more detailed error?
           raise newException(ValueError, "Unable to get storage slot")
       return FixedBytes[32](slotValue.toBytesBE())
 
@@ -450,7 +447,6 @@ proc installEthApiHandlers*(
           raise newException(ValueError, error)
 
         bytecode = (await stateNetwork.get().getCode(blockHash, data.EthAddress)).valueOr:
-          # Should we return empty sequence here or throw a more detailed error?
           raise newException(ValueError, "Unable to get code")
       return bytecode.asSeq()
 

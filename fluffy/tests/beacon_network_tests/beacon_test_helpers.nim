@@ -9,7 +9,7 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
-  ../../network/wire/[portal_protocol, portal_stream],
+  ../../network/wire/[portal_protocol, portal_protocol_config, portal_stream],
   ../../network/beacon/[beacon_init_loader, beacon_network],
   ../test_helpers
 
@@ -24,7 +24,8 @@ proc newLCNode*(
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = BeaconDb.new(networkData, "", inMemory = true)
     streamManager = StreamManager.new(node)
-    network = BeaconNetwork.new(node, db, streamManager, networkData.forks)
+    network =
+      BeaconNetwork.new(PortalNetwork.none, node, db, streamManager, networkData.forks)
 
   return BeaconNode(discoveryProtocol: node, beaconNetwork: network)
 

@@ -56,17 +56,6 @@ type
   PortalCmd* = enum
     noCommand
 
-  PortalNetwork* = enum
-    none
-    mainnet
-    testnet
-
-  # The networks alias Portal sub-protocols
-  Network* = enum
-    beacon
-    history
-    state
-
   PortalConf* = object
     logLevel* {.
       desc:
@@ -94,27 +83,37 @@ type
       name: "listen-address"
     .}: IpAddress
 
-    portalNetwork* {.
+    portalNetworkDeprecated* {.
+      hidden,
+      desc:
+        "DEPRECATED: The --portal-network flag will be removed in the future, " &
+        "please use the drop in replacement --network flag instead",
+      defaultValue: none(PortalNetwork),
+      name: "portal-network"
+    .}: Option[PortalNetwork]
+
+    network* {.
       desc:
         "Select which Portal network to join. This will set the " &
         "Portal network specific bootstrap nodes automatically",
       defaultValue: PortalNetwork.mainnet,
-      name: "portal-network"
+      name: "network"
     .}: PortalNetwork
 
-    portalNetworkDeprecated* {.
+    networksDeprecated* {.
       hidden,
       desc:
-        "DEPRECATED: The --network flag will be removed in the future, please use the drop in replacement --portal-network flag instead",
-      defaultValue: none(PortalNetwork),
-      name: "network"
-    .}: Option[PortalNetwork.mainnet]
-
-    networks* {.
-      desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {Network.history},
+        "DEPRECATED: The --networks flag will be removed in the future, " &
+        "please use the drop in replacement --portal-subnetworks flag instead",
+      defaultValue: {},
       name: "networks"
-    .}: set[Network]
+    .}: set[PortalSubnetwork]
+
+    portalSubnetworks* {.
+      desc: "Select which networks (Portal sub-protocols) to enable",
+      defaultValue: {PortalSubnetwork.history},
+      name: "portal-subnetworks"
+    .}: set[PortalSubnetwork]
 
     # Note: This will add bootstrap nodes for both Discovery v5 network and each
     # enabled Portal network. No distinction is made on bootstrap nodes per
@@ -363,21 +362,23 @@ proc parseCmdArg*(T: type ClientConfig, p: string): T {.raises: [ValueError].} =
 proc completeCmdArg*(T: type ClientConfig, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type set[Network], p: string): T {.raises: [ValueError].} =
-  var res: set[Network] = {}
+proc parseCmdArg*(
+    T: type set[PortalSubnetwork], p: string
+): T {.raises: [ValueError].} =
+  var res: set[PortalSubnetwork] = {}
   let values = p.split({' ', ','})
   for value in values:
     let stripped = value.strip()
     let network =
       try:
-        parseEnum[Network](stripped)
+        parseEnum[PortalSubnetwork](stripped)
       except ValueError:
         raise newException(ValueError, "Invalid network: " & stripped)
 
     res.incl(network)
   res
 
-proc completeCmdArg*(T: type set[Network], val: string): seq[string] =
+proc completeCmdArg*(T: type set[PortalSubnetwork], val: string): seq[string] =
   return @[]
 
 chronicles.formatIt(InputDir):
