@@ -53,6 +53,10 @@ proc mergeAccountPayload*(
   ## unset/invalid or referring to a existing vertex which will be assumed
   ## to be a storage tree.
   ##
+  ## On success, the function returns `true` if the `accPayload` argument was
+  ## merged into the database ot updated, and `false` if it was on the database
+  ## already.
+  ##
   let
     pyl =  PayloadRef(pType: AccountData, account: accPayload)
     rc = db.mergePayloadImpl(VertexID(1), accKey, pyl, VidVtxPair())
@@ -72,6 +76,10 @@ proc mergeGenericData*(
       ): Result[bool,AristoError] =
   ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
   ## `root` greater than `VertexID(1)` and smaller than `LEAST_FREE_VID`.
+  ##
+  ## On success, the function returns `true` if the `data` argument was merged
+  ## into the database ot updated, and `false` if it was on the database
+  ## already.
   ##
   # Verify that `root` is neither an accounts tree nor a strorage tree.
   if not root.isValid:
@@ -112,7 +120,8 @@ proc mergeStorageData*(
   ## otherwise `VertexID(0)`.
   ##
   let
-    wpAcc = ? db.registerAccountForUpdate accPath
+    accHike = ?db.retrieveStoAccHike accPath
+    wpAcc = accHike.legs[^1].wp
     stoID = wpAcc.vtx.lData.account.storageID
 
     # Provide new storage ID when needed
@@ -123,6 +132,9 @@ proc mergeStorageData*(
     rc = db.mergePayloadImpl(useID, stoKey, pyl, wpAcc)
 
   if rc.isOk:
+    # Mark account path for update for `hashify()`
+    db.updateAccountForHasher accHike
+
     if stoID.isValid:
       return ok VertexID(0)
 
@@ -138,7 +150,8 @@ proc mergeStorageData*(
     assert stoID.isValid         # debugging only
     return ok VertexID(0)
 
-  # else
+  # Error: mark account path for update for `hashify()`
+  db.updateAccountForHasher accHike
   err(rc.error)
 
 # ------------------------------------------------------------------------------

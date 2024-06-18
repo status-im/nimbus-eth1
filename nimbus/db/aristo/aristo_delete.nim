@@ -431,18 +431,22 @@ proc deleteStorageData*(
   ## will return `true`.
   ##
   let
-    wpAcc = ? db.registerAccountForUpdate accPath
+    accHike = ? db.retrieveStoAccHike accPath
+    wpAcc = accHike.legs[^1].wp
     stoID = wpAcc.vtx.lData.account.storageID
 
   if not stoID.isValid:
     return err(DelStoRootMissing)
 
-  let hike = path.initNibbleRange.hikeUp(stoID, db).valueOr:
+  let stoHike = path.initNibbleRange.hikeUp(stoID, db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return err(DelPathNotFound)
     return err(error[1])
 
-  db.deleteImpl(hike).isOkOr:
+  # Mark account path for update for `hashify()`
+  db.updateAccountForHasher accHike
+
+  db.deleteImpl(stoHike).isOkOr:
     return err(error[1])
 
   # Make sure that an account leaf has no dangling sub-trie
@@ -464,14 +468,18 @@ proc deleteStorageTree*(
   ## associated to the account argument `accPath`.
   ##
   let
-    wpAcc = db.registerAccountForUpdate(accPath).valueOr:
+    accHike = db.retrieveStoAccHike(accPath).valueOr:
       if error == UtilsAccInaccessible:
         return err(DelStoAccMissing)
       return err(error)
+    wpAcc = accHike.legs[^1].wp
     stoID = wpAcc.vtx.lData.account.storageID
 
   if not stoID.isValid:
     return err(DelStoRootMissing)
+
+  # Mark account path for update for `hashify()`
+  db.updateAccountForHasher accHike
 
   ? db.delSubTreeImpl stoID
 

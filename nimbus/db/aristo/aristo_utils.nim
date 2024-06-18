@@ -172,10 +172,10 @@ proc subVids*(vtx: VertexRef): seq[VertexID] =
 
 # ---------------------
 
-proc registerAccountForUpdate*(
-    db: AristoDbRef;                   # Database, top layer
-    accPath: PathID;                   # Needed for accounts payload
-      ): Result[VidVtxPair,AristoError] =
+proc retrieveStoAccHike*(
+    db: AristoDbRef;                   # Database
+    accPath: PathID;                   # Implies a storage ID (if any)
+      ): Result[Hike,AristoError] =
   ## Verify that the `accPath` argument properly referres to a storage root
   ## vertex ID. The function will reset the keys along the `accPath` for
   ## being modified.
@@ -200,15 +200,23 @@ proc registerAccountForUpdate*(
     discard db.getVtxRc(acc.storageID).valueOr:
       return err(UtilsStoRootInaccessible)
 
+  ok(hike)
+
+proc updateAccountForHasher*(
+    db: AristoDbRef;                   # Database
+    hike: Hike;                        # Return value from `retrieveStorageID()`
+      ) =
+  ## For a successful run of `retrieveStoAccHike()`, the argument `hike` is
+  ## used to mark/reset the keys along the `accPath` for being re-calculated
+  ## by `hashify()`.
+  ##
   # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
   for w in hike.legs.mapIt(it.wp.vid):
     db.layersResKey(hike.root, w)
 
   # Signal to `hashify()` where to start rebuilding Merkel hashes
   db.top.final.dirty.incl hike.root
-  db.top.final.dirty.incl wp.vid
-
-  ok(wp)
+  db.top.final.dirty.incl hike.legs[^1].wp.vid
 
 # ------------------------------------------------------------------------------
 # End
