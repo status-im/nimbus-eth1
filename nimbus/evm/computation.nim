@@ -139,7 +139,7 @@ template getBlobBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.txCtx.blobBaseFee
 
-proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 =
+proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 {.gcsafe, raises:[].} =
   when evmc_enabled:
     let
       blockNumber = BlockNumber c.host.getTxContext().block_number

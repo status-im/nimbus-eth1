@@ -12,7 +12,7 @@
 ## ===============================
 ##
 
-{.push raises: [].}
+{.push gcsafe raises: [].}
 
 import
   eth/common,

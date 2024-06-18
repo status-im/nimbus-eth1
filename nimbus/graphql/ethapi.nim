@@ -78,7 +78,7 @@ type
 
 {.push gcsafe, raises: [].}
 {.pragma: apiRaises, raises: [].}
-{.pragma: apiPragma, cdecl, gcsafe, apiRaises, locks:0.}
+{.pragma: apiPragma, cdecl, gcsafe, apiRaises.}
 
 proc toHash(n: Node): common.Hash256 {.gcsafe, raises: [ValueError].} =
   result.data = hexToByteArray[32](n.stringVal)

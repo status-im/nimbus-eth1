@@ -25,7 +25,7 @@ proc setEthHandlerNewBlocksAndHashes*(
     blockHandler: NewBlockHandler;
     hashesHandler: NewBlockHashesHandler;
     arg: pointer;
-      ) {.gcsafe, raises: [CatchableError].} =
+      ) {.gcsafe, raises: [].} =
   let w = EthWireRef(node.protocolState protocol.eth)
   w.setNewBlockHandler(blockHandler, arg)
   w.setNewBlockHashesHandler(hashesHandler, arg)
