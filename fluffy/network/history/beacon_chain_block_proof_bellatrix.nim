@@ -107,7 +107,7 @@ template `[]`(x: openArray[Eth2Digest], chunk: Limit): Eth2Digest =
   # are declared with uint64. But `Limit = int64`.
   # Looks like this template can be used as a workaround.
   # See https://github.com/status-im/nimbus-eth1/pull/2384
-  x[chunk]
+  x[chunk.uint64]
 
 # Builds proof to be able to verify that a BeaconBlock root is part of the
 # HistoricalBatch for given root.
