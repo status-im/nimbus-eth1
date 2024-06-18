@@ -172,69 +172,16 @@ proc subVids*(vtx: VertexRef): seq[VertexID] =
 
 # ---------------------
 
-proc registerAccount*(
-    db: AristoDbRef;                   # Database, top layer
-    stoRoot: VertexID;                 # Storage root ID
-    accPath: PathID;                   # Needed for accounts payload
-      ): Result[VidVtxPair,AristoError] =
-  ## Verify that the `stoRoot` argument is properly referred to by the
-  ## account data (if any) implied to by the `accPath` argument.
-  ##
-  ## The function will return an account leaf node if there was any, or an empty
-  ## `VidVtxPair()` object.
-  ##
-  # Verify storage root and account path
-  if not stoRoot.isValid:
-    return err(UtilsStoRootMissing)
-  if not accPath.isValid:
-    return err(UtilsAccPathMissing)
-
-  # Get account leaf with account data
-  let hike = LeafTie(root: VertexID(1), path: accPath).hikeUp(db).valueOr:
-    return err(UtilsAccInaccessible)
-
-  # Check account payload
-  let wp = hike.legs[^1].wp
-  if wp.vtx.vType != Leaf:
-    return err(UtilsAccPathWithoutLeaf)
-  if wp.vtx.lData.pType != AccountData:
-    return err(UtilsAccLeafPayloadExpected)
-
-  # Check whether the `stoRoot` exists on the databse
-  let stoVtx = block:
-    let rc = db.getVtxRc stoRoot
-    if rc.isOk:
-      rc.value
-    elif rc.error == GetVtxNotFound:
-      VertexRef(nil)
-    else:
-      return err(rc.error)
-
-  # Verify `stoVtx` against storage root
-  let stoID = wp.vtx.lData.account.storageID
-  if stoVtx.isValid:
-    if stoID != stoRoot:
-      return err(UtilsAccWrongStorageRoot)
-  else:
-    if stoID.isValid:
-      return err(UtilsAccWrongStorageRoot)
-
-  # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
-  for w in hike.legs.mapIt(it.wp.vid):
-    db.layersResKey(hike.root, w)
-
-  # Signal to `hashify()` where to start rebuilding Merkel hashes
-  db.top.final.dirty.incl hike.root
-  db.top.final.dirty.incl wp.vid
-
-  ok(wp)
-
-
 proc registerAccountForUpdate*(
     db: AristoDbRef;                   # Database, top layer
     accPath: PathID;                   # Needed for accounts payload
       ): Result[VidVtxPair,AristoError] =
-  ## ...
+  ## Verify that the `accPath` argument properly referres to a storage root
+  ## vertex ID. The function will reset the keys along the `accPath` for
+  ## being modified.
+  ##
+  ## On success, the function will return an account leaf pair with the leaf
+  ## vertex and the vertex ID.
   ##
   # Expand vertex path to account leaf
   let hike = (@accPath).initNibbleRange.hikeUp(VertexID(1), db).valueOr:

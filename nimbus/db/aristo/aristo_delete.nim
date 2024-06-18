@@ -253,31 +253,14 @@ proc collapseLeaf(
 proc delSubTreeImpl(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
-    accPath: PathID;                   # Needed for real storage tries
-    ignoreAccPathOk = false;           # Temporary, will go away
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[void,AristoError] =
   ## Implementation of *delete* sub-trie.
-  let wp = block:
-    if root.distinctBase < LEAST_FREE_VID:
-      if not root.isValid:
-        return err((root,DelSubTreeVoidRoot))
-      if root == VertexID(1):
-        return err((root,DelSubTreeAccRoot))
-      VidVtxPair()
-    elif ignoreAccPathOk:
-      VidVtxPair()
-    else:
-      let rc = db.registerAccount(root, accPath)
-      if rc.isErr:
-        return err((root,rc.error))
-      else:
-        rc.value
   var
     dispose = @[root]
     rootVtx = db.getVtxRc(root).valueOr:
       if error == GetVtxNotFound:
         return ok()
-      return err((root,error))
+      return err(error)
     follow = @[rootVtx]
 
   # Collect list of nodes to delete
@@ -286,21 +269,14 @@ proc delSubTreeImpl(
     for vtx in follow:
       for vid in vtx.subVids:
         # Exiting here leaves the tree as-is
-        let vtx = ? db.getVtxRc(vid).mapErr toVae(vid)
+        let vtx = ? db.getVtxRc(vid)
         redo.add vtx
         dispose.add vid
     redo.swap follow
 
-  # Mark nodes deleted
+  # Mark collected vertices to be deleted
   for vid in dispose:
     db.disposeOfVtx(root, vid)
-
-  # Make sure that an account leaf has no dangling sub-trie
-  if wp.vid.isValid:
-    let leaf = wp.vtx.dup # Dup on modify
-    leaf.lData.account.storageID = VertexID(0)
-    db.layersPutVtx(VertexID(1), wp.vid, leaf)
-    db.layersResKey(VertexID(1), wp.vid)
 
   ok()
 
@@ -308,38 +284,15 @@ proc delSubTreeImpl(
 proc deleteImpl(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
-    lty: LeafTie;                      # `Patricia Trie` path root-to-leaf
-    accPath: PathID;                   # Needed for accounts payload
-    ignoreStoID = false;               # Temporary, will go away
-      ): Result[bool,(VertexID,AristoError)] =
+      ): Result[void,(VertexID,AristoError)] =
   ## Implementation of *delete* functionality.
 
-  let wp = block:
-    if lty.root.distinctBase < LEAST_FREE_VID:
-      VidVtxPair()
-    elif ignoreStoID:
-      VidVtxPair()
-    else:
-      let rc = db.registerAccount(lty.root, accPath)
-      if rc.isErr:
-        return err((lty.root,rc.error))
-      else:
-        rc.value
-
-  # Remove leaf entry on the top
+  # Remove leaf entry
   let lf =  hike.legs[^1].wp
   if lf.vtx.vType != Leaf:
     return err((lf.vid,DelLeafExpexted))
   if lf.vid in db.pPrf:
     return err((lf.vid, DelLeafLocked))
-
-  # Verify that there is no dangling storage trie
-  if not ignoreStoID:
-    let data = lf.vtx.lData
-    if data.pType == AccountData:
-      let vid = data.account.storageID
-      if vid.isValid and db.getVtx(vid).isValid:
-        return err((vid,DelDanglingStoTrie))
 
   db.disposeOfVtx(hike.root, lf.vid)
 
@@ -356,7 +309,7 @@ proc deleteImpl(
     br.vtx.bVid[hike.legs[^2].nibble] = VertexID(0)
     db.layersPutVtx(hike.root, br.vid, br.vtx)
 
-    # Clear all keys up to the root key
+    # Clear all Merkle hash keys up to the root key
     for n in 0 .. hike.legs.len - 2:
       let vid = hike.legs[n].wp.vid
       if vid in db.top.final.pPrf:
@@ -387,16 +340,7 @@ proc deleteImpl(
       of Leaf:
         ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
 
-  let emptySubTreeOk = not db.getVtx(hike.root).isValid
-
-  # Make sure that an account leaf has no dangling sub-trie
-  if emptySubTreeOk and wp.vid.isValid:
-    let leaf = wp.vtx.dup # Dup on modify
-    leaf.lData.account.storageID = VertexID(0)
-    db.layersPutVtx(VertexID(1), wp.vid, leaf)
-    db.layersResKey(VertexID(1), wp.vid)
-
-  ok(emptySubTreeOk)
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -414,15 +358,13 @@ proc deleteAccountPayload*(
       if error[1] in HikeAcceptableStopsNotFound:
         return err(DelPathNotFound)
       return err(error[1])
-    lty = LeafTie(root: VertexID(1), path: ? path.pathToTag())
     stoID = hike.legs[^1].wp.vtx.lData.account.storageID
 
   # Delete storage tree if present
   if stoID.isValid:
-    db.delSubTreeImpl(stoID, lty.path).isOkOr:
-      return err(error[1])
+    ? db.delSubTreeImpl stoID
 
-  discard db.deleteImpl(hike, lty, VOID_PATH_ID, ignoreStoID=true).valueOr:
+  db.deleteImpl(hike).isOkOr:
     return err(error[1])
 
   ok()
@@ -449,18 +391,15 @@ proc deleteGenericData*(
   elif LEAST_FREE_VID <= root.distinctBase:
     return err(DelStoRootNotAccepted)
 
-  let
-    hike = path.initNibbleRange.hikeUp(root, db).valueOr:
-      if error[1] in HikeAcceptableStopsNotFound:
-        return err(DelPathNotFound)
-      return err(error[1])
-    lty = LeafTie(root: root, path: ? path.pathToTag())
-
-  let emptyTreeOk = db.deleteImpl(
-        hike, lty, VOID_PATH_ID, ignoreStoID=true).valueOr:
+  let hike = path.initNibbleRange.hikeUp(root, db).valueOr:
+    if error[1] in HikeAcceptableStopsNotFound:
+      return err(DelPathNotFound)
     return err(error[1])
 
-  ok emptyTreeOk
+  db.deleteImpl(hike).isOkOr:
+    return err(error[1])
+
+  ok(not db.getVtx(root).isValid)
 
 proc deleteGenericTree*(
     db: AristoDbRef;                   # Database, top layer
@@ -476,9 +415,7 @@ proc deleteGenericTree*(
   elif LEAST_FREE_VID <= root.distinctBase:
     return err(DelStoRootNotAccepted)
 
-  db.delSubTreeImpl(root, VOID_PATH_ID, ignoreAccPathOk=true).isOkOr:
-    return err(error[1])
-  ok()
+  db.delSubTreeImpl root
 
 
 proc deleteStorageData*(
@@ -500,25 +437,24 @@ proc deleteStorageData*(
   if not stoID.isValid:
     return err(DelStoRootMissing)
 
-  let
-    hike = path.initNibbleRange.hikeUp(stoID, db).valueOr:
-      if error[1] in HikeAcceptableStopsNotFound:
-        return err(DelPathNotFound)
-      return err(error[1])
+  let hike = path.initNibbleRange.hikeUp(stoID, db).valueOr:
+    if error[1] in HikeAcceptableStopsNotFound:
+      return err(DelPathNotFound)
+    return err(error[1])
 
-    lty = LeafTie(root: stoID, path: ? path.pathToTag())
-    emptyTreeOk = db.deleteImpl(
-      hike, lty, VOID_PATH_ID, ignoreStoID=true).valueOr:
-        return err(error[1])
+  db.deleteImpl(hike).isOkOr:
+    return err(error[1])
 
   # Make sure that an account leaf has no dangling sub-trie
-  if emptyTreeOk:
-    let leaf = wpAcc.vtx.dup           # Dup on modify
-    leaf.lData.account.storageID = VertexID(0)
-    db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
-    db.layersResKey(VertexID(1), wpAcc.vid)
+  if db.getVtx(stoID).isValid:
+    return ok(false)
 
-  ok emptyTreeOk
+  # De-register the deleted storage tree from the account record
+  let leaf = wpAcc.vtx.dup           # Dup on modify
+  leaf.lData.account.storageID = VertexID(0)
+  db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
+  db.layersResKey(VertexID(1), wpAcc.vid)
+  ok(true)
 
 proc deleteStorageTree*(
     db: AristoDbRef;                   # Database, top layer
@@ -537,15 +473,13 @@ proc deleteStorageTree*(
   if not stoID.isValid:
     return err(DelStoRootMissing)
 
-  db.delSubTreeImpl(stoID, VOID_PATH_ID, ignoreAccPathOk=true).isOkOr:
-    return err(error[1])
+  ? db.delSubTreeImpl stoID
 
-  # De-register the deleted tree from the accounts recotd
+  # De-register the deleted storage tree from the accounts record
   let leaf = wpAcc.vtx.dup             # Dup on modify
   leaf.lData.account.storageID = VertexID(0)
   db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
   db.layersResKey(VertexID(1), wpAcc.vid)
-
   ok()
 
 # ------------------------------------------------------------------------------
