@@ -40,7 +40,7 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Push " & blurb & " on the stack"
 
 
-proc pushImpl(k: var VmCtx; n: int): EvmResultVoid =
+proc pushImpl(k: var VmCtx; n: static int): EvmResultVoid =
   k.cpt.stack.push k.cpt.code.readVmWord(n)
 
 const

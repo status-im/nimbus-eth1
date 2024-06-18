@@ -49,8 +49,8 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Append log record with " & $n & " " & blurb
 
 
-proc logImpl(c: Computation, opcode: Op, topicCount: int): EvmResultVoid =
-  doAssert(topicCount in 0 .. 4)
+proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid =
+  static: doAssert(topicCount in 0 .. 4)
   ? checkInStaticContext(c)
   let (memStartPosition, size) = ? c.stack.popInt(2)
   let (memPos, len) = (memStartPosition.cleanMemRef, size.cleanMemRef)
@@ -96,7 +96,7 @@ const
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc wrapperFn(k: var VmCtx; n: int): EvmResultVoid =
+proc wrapperFn(k: var VmCtx; n: static int): EvmResultVoid =
   logImpl(k.cpt, logOpArg[n], n)
 
 genOphHandlers fnName, fnInfo, inxRange, wrapperFn

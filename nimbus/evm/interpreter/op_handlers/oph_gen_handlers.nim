@@ -19,7 +19,7 @@ import
 
 type
   OphNumToTextFn* = proc(n: int): string
-  OpHanldlerImplFn* = proc(k: var VmCtx; n: int): EvmResultVoid
+  # OpHanldlerImplFn* = proc(k: var VmCtx; n: static int): EvmResultVoid
 
 const
   recForkSet = "VmOpAllForks"
@@ -45,7 +45,7 @@ proc asText(id, name: string): NimNode {.compileTime.} =
 macro genOphHandlers*(runHandler: static[OphNumToTextFn];
                       itemInfo: static[OphNumToTextFn];
                       inxList: static[openArray[int]];
-                      body: static[OpHanldlerImplFn]): untyped =
+                      body: untyped): untyped =
   ## Generate the equivalent of
   ## ::
   ##  const <runHandler>: VmOpFn = proc (k: var VmCtx) =
@@ -63,7 +63,7 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
 
     # => push##Op: VmOpFn = proc (k: var VmCtx) = ...
     result.add quote do:
-      const `fnName`: VmOpFn = proc(k: var VmCtx): EvmResultVoid =
+      proc `fnName`(k: var VmCtx): EvmResultVoid =
         `comment`
         `body`(k,`n`)
   # echo ">>>", result.repr

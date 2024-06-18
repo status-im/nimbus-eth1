@@ -60,7 +60,7 @@ template read*(c: CodeStream, size: int): openArray[byte] =
     c.pc = c.bytes.len
     c.bytes.toOpenArray(0, -1)
 
-proc readVmWord*(c: var CodeStream, n: int): UInt256 =
+proc readVmWord*(c: var CodeStream, n: static int): UInt256 =
   ## Reads `n` bytes from the code stream and pads
   ## the remaining bytes with zeros.
   let result_bytes = cast[ptr array[32, byte]](addr result)
