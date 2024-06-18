@@ -137,7 +137,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     d = newProtocol(
       netkey,
       extIp,
-      none(Port),
+      Opt.none(Port),
       extUdpPort,
       # Note: The addition of default clientInfo to the ENR is a temporary
       # measure to easily identify & debug the clients used in the testnet.
@@ -147,9 +147,9 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       previousRecord =
         # TODO: discv5/enr code still uses Option, to be changed.
         if previousEnr.isSome():
-          some(previousEnr.get())
+          Opt.some(previousEnr.get())
         else:
-          none(enr.Record)
+          Opt.none(enr.Record)
       ,
       bindIp = bindIp,
       bindPort = udpPort,
