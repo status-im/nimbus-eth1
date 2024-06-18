@@ -18,8 +18,6 @@ import
 
 export kvstore
 
-const maxOpenFiles = 512
-
 type
   RocksStoreRef* = ref object of RootObj
     db: RocksDbReadWriteRef
@@ -86,7 +84,6 @@ proc init*(
     return err("RocksStoreRef: cannot create database directory")
 
   let dbOpts = defaultDbOptions()
-  dbOpts.setMaxOpenFiles(maxOpenFiles)
 
   let db = ? openRocksDb(dataDir, dbOpts,
       columnFamilies = namespaces.mapIt(initColFamilyDescriptor(it)))

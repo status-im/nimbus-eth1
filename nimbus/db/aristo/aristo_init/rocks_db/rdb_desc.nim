@@ -18,7 +18,6 @@ import
   eth/common,
   rocksdb,
   stew/[endians2, keyed_queue],
-  ../../../opts,
   ../../aristo_desc,
   ../init_common
 
@@ -43,7 +42,6 @@ type
     rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
 
     basePath*: string                  ## Database directory
-    opts*: DbOptions                   ## Just a copy here for re-opening
     trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
 
   AristoCFs* = enum

@@ -17,6 +17,7 @@ import
   results,
   unittest2,
   ../../nimbus/db/opts,
+  ../../nimbus/db/core_db/backend/aristo_rocksdb,
   ../../nimbus/db/aristo/[
     aristo_check,
     aristo_debug,
@@ -104,10 +105,11 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
 proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let db = block:
     if 0 < rdbPath.len:
-      let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
+      let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
+      let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
       xCheckRc rc.error == 0:
         result = err(rc.error)
-      rc.value
+      rc.value()[0]
     else:
       AristoDbRef.init MemBackendRef
 

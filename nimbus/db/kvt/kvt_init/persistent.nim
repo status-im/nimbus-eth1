@@ -19,6 +19,7 @@
 {.push raises: [].}
 
 import
+  rocksdb,
   results,
   ../../aristo,
   ../../opts,
@@ -44,19 +45,20 @@ proc init*(
     T: type KvtDbRef;
     B: type RdbBackendRef;
     basePath: string;
-    opts: DbOptions;
+    dbOpts: DbOptionsRef;
+    cfOpts: ColFamilyOptionsRef;
       ): Result[KvtDbRef,KvtError] =
   ## Generic constructor for `RocksDb` backend
   ##
   ok KvtDbRef(
     top: LayerRef.init(),
-    backend: ? rocksDbKvtBackend(basePath, opts).mapErr toErr0)
+    backend: ? rocksDbKvtBackend(basePath, dbOpts, cfOpts).mapErr toErr0)
 
 proc init*(
     T: type KvtDbRef;
     B: type RdbBackendRef;
     adb: AristoDbRef;
-    opts: DbOptions;
+    oCfs: openArray[ColFamilyReadWrite];
       ): Result[KvtDbRef,KvtError] =
   ## Constructor for `RocksDb` backend which piggybacks on the `Aristo`
   ## backend. The following changes will occur after successful instantiation:
@@ -83,7 +85,7 @@ proc init*(
   ##
   ok KvtDbRef(
     top: LayerRef.init(),
-    backend: ? rocksDbKvtTriggeredBackend(adb, opts).mapErr toErr0)
+    backend: ? rocksDbKvtTriggeredBackend(adb, oCfs).mapErr toErr0)
 
 # ------------------------------------------------------------------------------
 # End
