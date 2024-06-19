@@ -146,7 +146,9 @@ proc calcLogsHash(receipts: openArray[Receipt]): Hash256 =
     logs.add rec.logs
   rlpHash(logs)
 
-proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash256): Stream =
+proc defaultTraceStreamFilename(conf: T8NConf,
+                                txIndex: int,
+                                txHash: Hash256): (string, string) =
   let
     txHash = "0x" & toLowerAscii($txHash)
     baseDir = if conf.outputBaseDir.len > 0:
@@ -154,6 +156,11 @@ proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash256): Stream =
               else:
                 "."
     fName = "$1/trace-$2-$3.jsonl" % [baseDir, $txIndex, txHash]
+  (baseDir, fName)
+
+proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash256): Stream =
+  let (baseDir, fName) = defaultTraceStreamFilename(conf, txIndex, txHash)
+  createDir(baseDir)
   newFileStream(fName, fmWrite)
 
 proc traceToFileStream(path: string, txIndex: int): Stream =
@@ -161,6 +168,7 @@ proc traceToFileStream(path: string, txIndex: int): Stream =
   let
     file = path.splitFile
     fName = "$1/$2-$3.jsonl" % [file.dir, file.name, $txIndex]
+  createDir(file.dir)
   newFileStream(fName, fmWrite)
 
 proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMState) =
@@ -185,6 +193,15 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMSta
                  traceToFileStream(traceMode, txIndex)
                else:
                  defaultTraceStream(conf, txIndex, txHash)
+
+  if stream.isNil:
+    let traceLoc =
+      if traceMode.len > 0:
+        traceMode
+      else:
+        defaultTraceStreamFilename(conf, txIndex, txHash)[1]
+    raise newError(ErrorConfig, "Unable to open tracer stream: " & traceLoc)
+
   vmState.tracer = newJsonTracer(stream, tracerFlags, false)
 
 proc closeTrace(vmState: BaseVMState) =
