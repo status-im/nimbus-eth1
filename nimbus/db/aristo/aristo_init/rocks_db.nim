@@ -250,19 +250,22 @@ proc putBegHostingFn(db: RdbBackendRef): PutBegFn =
 
 proc rocksDbBackend*(
     path: string;
-    opts: DbOptions
-      ): Result[BackendRef,AristoError] =
+    dbOpts: DbOptionsRef;
+    cfOpts: ColFamilyOptionsRef;
+    guestCFs: openArray[ColFamilyDescriptor];
+      ): Result[(BackendRef, seq[ColFamilyReadWrite]),AristoError] =
   let db = RdbBackendRef(
     beKind: BackendRocksDB)
 
   # Initialise RocksDB
-  block:
-    let rc = db.rdb.init(path, opts)
+  let oCfs = block:
+    let rc = db.rdb.init(path, dbOpts, cfOpts, guestCFs)
     if rc.isErr:
       when extraTraceMessages:
         trace logTxt "constructor failed",
            error=rc.error[0], info=rc.error[1]
       return err(rc.error[0])
+    rc.value()
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
@@ -277,19 +280,7 @@ proc rocksDbBackend*(
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
-  ok db
-
-
-proc rocksDbUpdateCfs*(
-    be: BackendRef;
-    cfs: openArray[ColFamilyDescriptor];
-      ): Result[seq[ColFamilyReadWrite],AristoError] =
-  ## Reopen with extended column families given as argument.
-  let
-    db = RdbBackendRef(be)
-    rCfs = db.rdb.reinit(cfs).valueOr:
-      return err(error[0])
-  ok rCfs
+  ok((db, oCfs))
 
 
 proc rocksDbSetEventTrigger*(

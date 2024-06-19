@@ -17,6 +17,7 @@ import
   unittest2,
   stew/endians2,
   ../../nimbus/db/opts,
+  ../../nimbus/db/core_db/backend/aristo_rocksdb,
   ../../nimbus/db/aristo/[
     aristo_check,
     aristo_debug,
@@ -330,9 +331,10 @@ proc testTxMergeAndDeleteOneByOne*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
+        let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
         xCheckRc rc.error == 0
-        rc.value
+        rc.value()[0]
       else:
         AristoDbRef.init(MemBackendRef)
 
@@ -441,9 +443,10 @@ proc testTxMergeAndDeleteSubTree*(
     # Start with brand new persistent database.
     db = block:
       if 0 < rdbPath.len:
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
+        let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
         xCheckRc rc.error == 0
-        rc.value
+        rc.value()[0]
       else:
         AristoDbRef.init(MemBackendRef)
 
@@ -545,9 +548,10 @@ proc testTxMergeProofAndKvpList*(
       db = block:
         # New DB with disabled filter slots management
         if 0 < rdbPath.len:
-          let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init())
+          let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
+          let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
           xCheckRc rc.error == 0
-          rc.value
+          rc.value()[0]
         else:
           AristoDbRef.init(MemBackendRef)
 

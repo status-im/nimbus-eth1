@@ -255,13 +255,14 @@ proc writeEvCb(db: RdbBackendRef): RdbWriteEventCb =
 
 proc rocksDbKvtBackend*(
     path: string;
-    opts: DbOptions;
+    dbOpts: DbOptionsRef;
+    cfOpts: ColFamilyOptionsRef;
       ): Result[BackendRef,(KvtError,string)] =
   let db = RdbBackendRef(
     beKind: BackendRocksDB)
 
   # Initialise RocksDB
-  db.rdb.init(path, opts).isOkOr:
+  db.rdb.init(path, dbOpts, cfOpts).isOkOr:
     when extraTraceMessages:
       trace logTxt "constructor failed", error=error[0], info=error[1]
     return err(error)
@@ -280,13 +281,13 @@ proc rocksDbKvtBackend*(
 
 proc rocksDbKvtTriggeredBackend*(
     adb: AristoDbRef;
-    opts: DbOptions;
+    oCfs: openArray[ColFamilyReadWrite];
       ): Result[BackendRef,(KvtError,string)] =
   let db = RdbBackendRef(
     beKind: BackendRdbTriggered)
 
   # Initialise RocksDB piggy-backed on `Aristo` backend.
-  db.rdb.init(adb, opts).isOkOr:
+  db.rdb.init(oCfs).isOkOr:
     when extraTraceMessages:
       trace logTxt "constructor failed", error=error[0], info=error[1]
     return err(error)

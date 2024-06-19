@@ -38,21 +38,23 @@ export
 
 proc newAristoRdbDbRef(
     basePath: string;
-    opts: DbOptions;
-      ): Result[AristoDbRef, AristoError]=
+    dbOpts: DbOptionsRef;
+    cfOpts: ColFamilyOptionsRef;
+    guestCFs: openArray[ColFamilyDescriptor];
+      ): Result[(AristoDbRef, seq[ColFamilyReadWrite]), AristoError]=
   let
-    be = ? rocksDbBackend(basePath, opts)
+    (be, oCfs) = ? rocksDbBackend(basePath, dbOpts, cfOpts, guestCFs)
     vTop = block:
       let rc = be.getTuvFn()
       if rc.isErr:
         be.closeFn(eradicate = false)
         return err(rc.error)
       rc.value
-  ok AristoDbRef(
+  ok((AristoDbRef(
     top: LayerRef(
       delta: LayerDeltaRef(vTop: vTop),
       final: LayerFinalRef()),
-    backend: be)
+    backend: be), oCfs))
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
@@ -62,36 +64,14 @@ proc init*(
     T: type AristoDbRef;
     B: type RdbBackendRef;
     basePath: string;
-    opts: DbOptions
-      ): Result[T, AristoError] =
+    dbOpts: DbOptionsRef;
+    cfOpts: ColFamilyOptionsRef;
+    guestCFs: openArray[ColFamilyDescriptor];
+      ): Result[(T, seq[ColFamilyReadWrite]), AristoError] =
   ## Generic constructor, `basePath` argument is ignored for memory backend
   ## databases (which also unconditionally succeed initialising.)
   ##
-  basePath.newAristoRdbDbRef opts
-
-proc reinit*(
-    db: AristoDbRef;
-    cfs: openArray[ColFamilyDescriptor];
-      ): Result[seq[ColFamilyReadWrite],AristoError] =
-  ## Re-initialise the `RocksDb` backend database with additional or changed
-  ## column family settings. This can be used to make space for guest use of
-  ## the backend used by `Aristo`. The function returns a list of column family
-  ## descriptors in the same order as the `cfs` argument.
-  ##
-  ## The argument `cfs` list replaces and extends the CFs already on disk by
-  ## its options except for the ones defined for use with `Aristo`.
-  ##
-  ## Even though tx layers and filters might not be affected by this function,
-  ## it is prudent to have them clean and saved on the backend database before
-  ## changing it. On error conditions, data might get lost.
-  ##
-  case db.backend.kind:
-  of BackendRocksDB:
-    db.backend.rocksDbUpdateCfs cfs
-  of BackendRdbHosting:
-    err(RdbBeWrTriggerActiveAlready)
-  else:
-    return err(RdbBeTypeUnsupported)
+  basePath.newAristoRdbDbRef dbOpts, cfOpts, guestCFs
 
 proc activateWrTrigger*(
     db: AristoDbRef;
