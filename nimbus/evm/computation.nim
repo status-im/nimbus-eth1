@@ -372,9 +372,6 @@ template chainTo*(c: Computation,
     c.continuation = nil
     after
 
-func merge*(c, child: Computation) =
-  c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
   c.vmState.mutateStateDB:
     let localBalance = c.getBalance(c.msg.contractAddress)
