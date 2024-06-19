@@ -31,12 +31,10 @@ type
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
     AccForgetFn         = "acc/forget"
-    AccGetColFn         = "acc/getColumn"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
-    AccGetMptFn         = "acc/getMpt"
+    AccStateFn          = "acc/state"
     AccStoDeleteFn      = "acc/stoDelete"
-    AccToMptFn          = "acc/toMpt"
 
     AnyBackendFn        = "any/backend"
 

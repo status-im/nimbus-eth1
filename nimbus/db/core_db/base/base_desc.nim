@@ -165,8 +165,7 @@ type
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
     cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
-  CoreDbCtxGetAccFn* = proc(
-    cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbAccRef] {.noRaise.}
+  CoreDbCtxGetAccFn* = proc(cCtx: CoreDbCtxRef): CoreDbAccRef {.noRaise.}
   CoreDbCtxForgetFn* = proc(cCtx: CoreDbCtxRef) {.noRaise.}
 
   CoreDbCtxFns* = object
@@ -205,25 +204,25 @@ type
 
 
   # ----------------------------------------------------
-  # Sub-descriptor: Mpt/hexary trie methods for accounts
+  # Sub-descriptor: Account column methods
   # ------------------------------------------------------
-  CoreDbAccGetMptFn* = proc(cAcc: CoreDbAccRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
+  CoreDbAccBackendFn* = proc(cAcc: CoreDbAccRef,): CoreDbAccBackendRef {.noRaise.}
   CoreDbAccFetchFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccStoDeleteFn* = proc(cAcc: CoreDbAccRef,k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(cAcc: CoreDbAccRef, v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccGetColFn* = proc(cAcc: CoreDbAccRef): CoreDbColRef {.noRaise.}
+  CoreDbAccStateFn* = proc(cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects
-    getMptFn*:     CoreDbAccGetMptFn
-    fetchFn*:      CoreDbAccFetchFn
+    backendFn*:    CoreDbAccBackendFn
     deleteFn*:     CoreDbAccDeleteFn
-    stoDeleteFn*:  CoreDbAccStoDeleteFn
-    mergeFn*:      CoreDbAccMergeFn
+    fetchFn*:      CoreDbAccFetchFn
     hasPathFn*:    CoreDbAccHasPathFn
-    getColFn*:     CoreDbAccGetColFn
+    mergeFn*:      CoreDbAccMergeFn
+    stateFn*:      CoreDbAccStateFn
+    stoDeleteFn*:  CoreDbAccStoDeleteFn
 
 
   # --------------------------------------------------
@@ -279,6 +278,10 @@ type
     parent*: CoreDbRef
 
   CoreDbMptBackendRef* = ref object of RootRef
+    ## Backend wrapper for direct backend access
+    parent*: CoreDbRef
+
+  CoreDbAccBackendRef* = ref object of RootRef
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
