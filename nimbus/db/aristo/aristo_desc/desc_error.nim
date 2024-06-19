@@ -11,21 +11,16 @@
 type
   AristoError* = enum
     NothingSerious = 0
+
+    # Miscelaneous/unclassified handy helpers
     GenericError
 
-    # Rlp decoder, `read()`
-    Rlp2Or17ListEntries
-    RlpBlobExpected
-    RlpBranchHashKeyExpected
-    RlpEmptyBlobExpected
-    RlpExtHashKeyExpected
-    RlpHashKeyExpected
-    RlpNonEmptyBlobExpected
-    RlpOtherException
-    RlpRlpException
+    AccRootUnacceptable
+    MptRootUnacceptable
+    MptRootMissing
+    NotImplemented
+    TrieInvalid
 
-    # Serialise decoder
-    SerCantResolveStorageRoot
 
     # Data record transcoders, `deblobify()` and `blobify()`
     BlobifyBranchMissingRefs
@@ -37,6 +32,51 @@ type
     BlobifyStateSrcLenGarbled
     BlobifyStateTrgLenGarbled
 
+
+    # Cache checker `checkCache()`
+    CheckAnyVidDeadStorageRoot
+    CheckAnyVidSharedStorageRoot
+    CheckAnyVtxEmptyKeyMissing
+    CheckAnyVtxEmptyKeyExpected
+    CheckAnyVtxEmptyKeyMismatch
+    CheckAnyVtxBranchLinksMissing
+    CheckAnyVtxExtPfxMissing
+    CheckAnyVtxLockWithoutKey
+    CheckAnyVTopUnset
+
+    CheckBeCacheGarbledVTop
+    CheckBeCacheIsDirty
+    CheckBeCacheKeyCantCompile
+    CheckBeCacheKeyDangling
+    CheckBeCacheKeyMismatch
+    CheckBeCacheKeyMissing
+    CheckBeCacheKeyNonEmpty
+    CheckBeCacheVidUnsynced
+    CheckBeCacheVtxDangling
+    CheckBeFifoSrcTrgMismatch
+    CheckBeFifoTrgNotStateRoot
+    CheckBeGarbledVTop
+    CheckBeKeyCantCompile
+    CheckBeKeyInvalid
+    CheckBeKeyMismatch
+    CheckBeKeyMissing
+    CheckBeVtxBranchLinksMissing
+    CheckBeVtxExtPfxMissing
+    CheckBeVtxInvalid
+    CheckBeVtxMissing
+
+    CheckStkKeyStrayZeroEntry
+    CheckStkVtxIncomplete
+    CheckStkVtxKeyMismatch
+    CheckStkVtxKeyMissing
+
+    CheckRlxVidVtxMismatch
+    CheckRlxVtxIncomplete
+    CheckRlxVtxKeyMissing
+    CheckRlxVtxKeyMismatch
+
+
+    # De-serialiser from `blobify.nim`
     DeblobNilArgument
     DeblobUnknown
     DeblobVtxTooShort
@@ -64,8 +104,68 @@ type
     DeblobFilterTrpVtxSizeGarbled
     DeblobFilterSizeGarbled
 
-    # Converter `asNode()`, currenly for unit tests only
-    CacheMissingNodekeys
+
+    # Deletion of vertex paths, `deleteXxx()`
+    DelAccRootNotAccepted
+    DelBranchExpexted
+    DelBranchLocked
+    DelBranchWithoutRefs
+    DelDanglingStoTrie
+    DelExtLocked
+    DelLeafExpexted
+    DelLeafLocked
+    DelLeafUnexpected
+    DelPathNotFound
+    DelPathTagError
+    DelRootVidMissing
+    DelStoAccMissing
+    DelStoRootMissing
+    DelStoRootNotAccepted
+    DelSubTreeAccRoot
+    DelSubTreeVoidRoot
+    DelVidStaleVtx
+
+
+    # Functions from `aristo_desc.nim`
+    DescMustBeOnCentre
+    DescNotAllowedOnCentre
+    DescStaleDescriptor
+
+
+    # Functions from  `aristo_filter.nim`
+    FilBackendMissing
+    FilBackendRoMode
+    FilNilFilterRejected
+    FilSiblingsCommitUnfinshed
+    FilSrcTrgInconsistent
+    FilStateRootMismatch
+    FilTrgSrcMismatch
+
+
+    # Fetch functions from `aristo_fetch.nim`
+    FetchPathNotFound
+    FetchLeafKeyInvalid
+    FetchPathInvalid
+    FetchRootVidMissing
+    FetchAccRootNotAccepted
+    FetchStoRootNotAccepted
+
+
+    # Get functions from `aristo_get.nim`
+    GetFilNotFound
+    GetFqsNotFound
+    GetKeyNotFound
+    GetKeyUpdateNeeded
+    GetLstNotFound
+    GetTuvNotFound
+    GetVtxNotFound
+
+
+    # Update `Merkle` hashes `hashify()`
+    HashifyVtxUnresolved
+    HashifyRootVtxUnresolved
+    HashifyProofHashMismatch
+
 
     # Path function `hikeUp()`
     HikeBranchMissingEdge
@@ -79,10 +179,6 @@ type
     HikeNoLegs
     HikeRootMissing
 
-    # Path/nibble/key conversions in `aisto_path.nim`
-    PathExpected64Nibbles
-    PathAtMost64Nibbles
-    PathExpectedLeaf
 
     # Merge leaf `merge()`
     MergeAssemblyFailed # Ooops, internal error
@@ -119,61 +215,6 @@ type
     MergeRootKeysOverflow
     MergeRootVidMissing
 
-    # Update `Merkle` hashes `hashify()`
-    HashifyVtxUnresolved
-    HashifyRootVtxUnresolved
-    HashifyProofHashMismatch
-
-    # Cache checker `checkCache()`
-    CheckStkKeyStrayZeroEntry
-    CheckStkVtxIncomplete
-    CheckStkVtxKeyMismatch
-    CheckStkVtxKeyMissing
-
-    CheckRlxVidVtxMismatch
-    CheckRlxVtxIncomplete
-    CheckRlxVtxKeyMissing
-    CheckRlxVtxKeyMismatch
-
-    CheckAnyVidDeadStorageRoot
-    CheckAnyVidSharedStorageRoot
-    CheckAnyVtxEmptyKeyMissing
-    CheckAnyVtxEmptyKeyExpected
-    CheckAnyVtxEmptyKeyMismatch
-    CheckAnyVtxBranchLinksMissing
-    CheckAnyVtxExtPfxMissing
-    CheckAnyVtxLockWithoutKey
-    CheckAnyVTopUnset
-
-    # Backend structural check `checkBE()`
-    CheckBeVtxInvalid
-    CheckBeVtxMissing
-    CheckBeVtxBranchLinksMissing
-    CheckBeVtxExtPfxMissing
-    CheckBeKeyInvalid
-    CheckBeKeyMissing
-    CheckBeKeyCantCompile
-    CheckBeKeyMismatch
-    CheckBeGarbledVTop
-
-    CheckBeCacheIsDirty
-    CheckBeCacheKeyMissing
-    CheckBeCacheKeyNonEmpty
-    CheckBeCacheVidUnsynced
-    CheckBeCacheKeyDangling
-    CheckBeCacheVtxDangling
-    CheckBeCacheKeyCantCompile
-    CheckBeCacheKeyMismatch
-    CheckBeCacheGarbledVTop
-
-    CheckBeFifoSrcTrgMismatch
-    CheckBeFifoTrgNotStateRoot
-
-    # Jornal check `checkJournal()`
-    CheckJrnCachedQidOverlap
-    CheckJrnSavedQidMissing
-    CheckJrnSavedQidStale
-    CheckJrnLinkingGap
 
     # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
     NearbyBeyondRange
@@ -189,54 +230,12 @@ type
     NearbyUnexpectedVtx
     NearbyVidInvalid
 
-    # Deletion of vertices, `delete()`
-    DelAccRootNotAccepted
-    DelBranchExpexted
-    DelBranchLocked
-    DelBranchWithoutRefs
-    DelDanglingStoTrie
-    DelExtLocked
-    DelLeafExpexted
-    DelLeafLocked
-    DelLeafUnexpected
-    DelPathNotFound
-    DelPathTagError
-    DelRootVidMissing
-    DelStoAccMissing
-    DelStoRootMissing
-    DelStoRootNotAccepted
-    DelSubTreeAccRoot
-    DelSubTreeVoidRoot
-    DelVidStaleVtx
 
-    # Functions from  `aristo_filter.nim`
-    FilBackendMissing
-    FilBackendRoMode
-    FilNilFilterRejected
-    FilSiblingsCommitUnfinshed
-    FilSrcTrgInconsistent
-    FilStateRootMismatch
-    FilTrgSrcMismatch
+    # Path/nibble/key conversions in `aisto_path.nim`
+    PathExpected64Nibbles
+    PathAtMost64Nibbles
+    PathExpectedLeaf
 
-    # Get functions from `aristo_get.nim`
-    GetLeafMissing
-    GetKeyUpdateNeeded
-
-    GetLeafNotFound
-    GetVtxNotFound
-    GetKeyNotFound
-    GetFilNotFound
-    GetTuvNotFound
-    GetLstNotFound
-    GetFqsNotFound
-
-    # Fetch functions from `aristo_fetch.nim`
-    FetchPathNotFound
-    FetchLeafKeyInvalid
-    FetchPathInvalid
-    FetchRootVidMissing
-    FetchAccRootNotAccepted
-    FetchStoRootNotAccepted
 
     # RocksDB backend
     RdbBeCantCreateDataDir
@@ -260,6 +259,23 @@ type
     RdbGuestInstanceUnsupported
     RdbHashKeyExpected
 
+
+    # Rlp decoder, `read()`
+    Rlp2Or17ListEntries
+    RlpBlobExpected
+    RlpBranchHashKeyExpected
+    RlpEmptyBlobExpected
+    RlpExtHashKeyExpected
+    RlpHashKeyExpected
+    RlpNonEmptyBlobExpected
+    RlpOtherException
+    RlpRlpException
+
+
+    # Serialise decoder
+    SerCantResolveStorageRoot
+
+
     # Transaction wrappers
     TxAccRootMissing
     TxArgStaleTx
@@ -271,38 +287,23 @@ type
     TxNotFound
     TxNotTopTx
     TxPendingTx
+    TxPrettyPointlessLayer
     TxStackGarbled
     TxStackUnderflow
-
-    TxPrettyPointlessLayer
     TxStateRootMismatch
 
-    # Functions from `aristo_desc.nim`
-    MustBeOnCentre
-    NotAllowedOnCentre
-    StaleDescriptor
 
     # Functions from `aristo_utils.nim`
-    AccRlpDecodingError
-    AccStorageKeyMissing
-    AccVtxUnsupported
-    AccNodeUnsupported
-    PayloadTypeUnsupported
-
+    UtilsAccInaccessible
+    UtilsAccLeafPayloadExpected
+    UtilsAccNodeUnsupported
     UtilsAccPathMissing
     UtilsAccPathWithoutLeaf
-    UtilsAccInaccessible
+    UtilsAccStorageKeyMissing
+    UtilsAccVtxUnsupported
     UtilsAccWrongStorageRoot
+    UtilsPayloadTypeUnsupported
     UtilsStoRootInaccessible
     UtilsStoRootMissing
-    UtilsAccLeafPayloadExpected
-
-    # Miscelaneous handy helpers
-    AccRootUnacceptable
-    MptRootUnacceptable
-    MptRootMissing
-    NotImplemented
-    TrieInvalid
-    VidContextLocked
 
 # End

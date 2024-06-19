@@ -97,7 +97,7 @@ func layersGetKey*(db: AristoDbRef; vid: VertexID): Opt[HashKey] =
   Opt.none(HashKey)
 
 func layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
-  ## Simplified version of `layersGetkey()`
+  ## Simplified version of `layersGetKey()`
   db.layersGetKey(vid).valueOr: VOID_HASH_KEY
 
 

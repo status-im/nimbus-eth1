@@ -501,7 +501,6 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     if reset:
       let rc = api.deleteGenericTree(mpt, newMpt.mptRoot)
       if rc.isErr:
-        raiseAssert "find me"
         return err(rc.error.toError(base, info, AutoFlushFailed))
       col.reset = false
 
