@@ -42,7 +42,7 @@ proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
     res.gas_left = child.gasMeter.gasRemaining
 
   if child.isSuccess:
-    host.computation.merge(child)
+    res.gas_refund = child.gasMeter.gasRefunded
     res.status_code = EVMC_SUCCESS
     res.create_address = child.msg.contractAddress.toEvmc
   else:
@@ -78,7 +78,7 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
     res.gas_left = child.gasMeter.gasRemaining
 
   if child.isSuccess:
-    host.computation.merge(child)
+    res.gas_refund = child.gasMeter.gasRefunded
     res.status_code = EVMC_SUCCESS
   else:
     res.status_code = child.evmcStatus

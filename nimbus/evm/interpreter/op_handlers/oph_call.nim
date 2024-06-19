@@ -162,7 +162,8 @@ when evmc_enabled:
         ? c.memory.write(p.memOutPos,
           c.returnData.toOpenArray(0, actualOutputSize - 1))
 
-      c.gasMeter.returnGas(GasInt c.res.gas_left)
+      c.gasMeter.returnGas(c.res.gas_left)
+      c.gasMeter.refundGas(c.res.gas_refund)
 
       if c.res.status_code == EVMC_SUCCESS:
         ? c.stack.top(1)
@@ -185,7 +186,7 @@ else:
         c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
-        c.merge(child)
+        c.gasMeter.refundGas(child.gasMeter.gasRefunded)
         ? c.stack.top(1)
 
       c.returnData = child.output

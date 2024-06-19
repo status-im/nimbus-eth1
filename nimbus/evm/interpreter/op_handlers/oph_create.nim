@@ -45,7 +45,8 @@ when not defined(evmc_enabled):
 when evmc_enabled:
   template execSubCreate(c: Computation; msg: ref nimbus_message) =
     c.chainTo(msg):
-      c.gasMeter.returnGas(GasInt c.res.gas_left)
+      c.gasMeter.returnGas(c.res.gas_left)
+      c.gasMeter.refundGas(c.res.gas_refund)
       if c.res.status_code == EVMC_SUCCESS:
         ? c.stack.top(c.res.create_address)
       elif c.res.status_code == EVMC_REVERT:
@@ -69,7 +70,7 @@ else:
         c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
-        c.merge(child)
+        c.gasMeter.refundGas(child.gasMeter.gasRefunded)
         ? c.stack.top child.msg.contractAddress
       elif not child.error.burnsGas: # Means return was `REVERT`.
         # From create, only use `outputData` if child returned with `REVERT`.
