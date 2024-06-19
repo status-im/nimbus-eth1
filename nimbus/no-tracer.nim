@@ -104,7 +104,7 @@ proc dumpMemoryDB*(node: JsonNode, kvt: TableRef[common.Blob, common.Blob]) =
     n[k.toHex(false)] = %v
   node["state"] = n
 
-proc dumpMemoryDB*(node: JsonNode, capture: CoreDxCaptRef) =
+proc dumpMemoryDB*(node: JsonNode, capture: CoreDbCaptRef) =
   node.dumpMemoryDB capture.logDb
 
 const

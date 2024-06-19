@@ -36,7 +36,7 @@ type
 
   TxPackerStateRef = ref object
     xp: TxPoolRef
-    tr: CoreDxMptRef
+    tr: CoreDbMptRef
     cleanState: bool
     balance: UInt256
     blobGasUsed: uint64

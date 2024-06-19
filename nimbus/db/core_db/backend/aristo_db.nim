@@ -127,13 +127,13 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     kBase = db.kdbBase
 
   when false: # currently disabled
-    proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDxCaptRef =
+    proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDbCaptRef =
       if db.tracer.isNil:
         db.tracer = AristoTracerRef(parent: db)
         db.tracer.init(kBase, aBase, flags)
       else:
         db.tracer.push(flags)
-      CoreDxCaptRef(methods: db.tracer.cptMethods)
+      CoreDbCaptRef(methods: db.tracer.cptMethods)
 
   proc persistent(bn: Opt[BlockNumber]): CoreDbRc[void] =
     const info = "persistentFn()"
@@ -164,7 +164,7 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
 
-    newKvtFn: proc(): CoreDbRc[CoreDxKvtRef] =
+    newKvtFn: proc(): CoreDbRc[CoreDbKvtRef] =
       kBase.newKvtHandler("newKvtFn()"),
 
     newCtxFn: proc(): CoreDbCtxRef =
@@ -176,16 +176,16 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
       aBase.swapCtx(ctx),
 
-    beginFn: proc(): CoreDxTxRef =
+    beginFn: proc(): CoreDbTxRef =
       const info = "beginFn()"
       let
         aTx = aBase.txBegin info
         kTx = kBase.txBegin info
-        dsc = CoreDxTxRef(methods: db.txMethods(aTx, kTx))
+        dsc = CoreDbTxRef(methods: db.txMethods(aTx, kTx))
       db.bless(dsc),
 
     # # currently disabled
-    #  newCaptureFn: proc(flags:set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
+    #  newCaptureFn: proc(flags:set[CoreDbCaptFlags]): CoreDbRc[CoreDbCaptRef] =
     #    ok(db.bless flags.tracerSetup()),
 
     persistentFn: proc(bn: Opt[BlockNumber]): CoreDbRc[void] =
@@ -230,11 +230,11 @@ func toAristoProfData*(
       result.aristo = db.AristoCoreDbRef.adbBase.api.AristoApiProfRef.data
       result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
 
-func toAristoApi*(kvt: CoreDxKvtRef): KvtApiRef =
+func toAristoApi*(kvt: CoreDbKvtRef): KvtApiRef =
   if kvt.parent.isAristo:
     return AristoCoreDbRef(kvt.parent).kdbBase.api
 
-func toAristoApi*(mpt: CoreDxMptRef): AristoApiRef =
+func toAristoApi*(mpt: CoreDbMptRef): AristoApiRef =
   if mpt.parent.isAristo:
     return mpt.to(AristoApiRef)
 
@@ -264,7 +264,7 @@ include
 
 # ------------------------
 
-iterator aristoKvtPairsVoid*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoKvtPairsVoid*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
     api = dsc.toAristoApi()
     p = api.forkTx(dsc.to(KvtDbRef),0).valueOrApiError "aristoKvtPairs()"
@@ -272,7 +272,7 @@ iterator aristoKvtPairsVoid*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
   for (k,v) in use_kvt.VoidBackendRef.walkPairs p:
     yield (k,v)
 
-iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoKvtPairsMem*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
     api = dsc.toAristoApi()
     p = api.forkTx(dsc.to(KvtDbRef),0).valueOrApiError "aristoKvtPairs()"
@@ -280,19 +280,19 @@ iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
   for (k,v) in use_kvt.MemBackendRef.walkPairs p:
     yield (k,v)
 
-iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.noRaise.} =
+iterator aristoMptPairs*(dsc: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
   let
     api = dsc.to(AristoApiRef)
     mpt = dsc.to(AristoDbRef)
   for (k,v) in mpt.rightPairs LeafTie(root: dsc.rootID):
     yield (api.pathAsBlob(k.path), api.serialise(mpt, v).valueOr(EmptyBlob))
 
-iterator aristoReplicateMem*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoReplicateMem*(dsc: CoreDbMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `MemBackendRef`
   for k,v in aristoReplicate[use_ari.MemBackendRef](dsc):
     yield (k,v)
 
-iterator aristoReplicateVoid*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoReplicateVoid*(dsc: CoreDbMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `VoidBackendRef`
   for k,v in aristoReplicate[use_ari.VoidBackendRef](dsc):
     yield (k,v)

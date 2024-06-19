@@ -40,7 +40,7 @@ else:
 template persistToDb(db: CoreDbRef, body: untyped) =
   block: body
 
-proc contains(kvt: CoreDxKvtRef; key: openArray[byte]): bool =
+proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
   kvt.hasKey(key).expect "valid bool"
 
 proc main() {.used.} =
