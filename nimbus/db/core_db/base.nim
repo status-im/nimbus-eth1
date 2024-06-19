@@ -479,9 +479,9 @@ proc state*(col: CoreDbColRef): CoreDbRc[Hash256] =
   # Note: tracker will be silent if `vid` is NIL
   col.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
-proc stateOrVoid*(col: CoreDbColRef): Hash256 =
-  ## Convenience wrapper, returns `EMPTY_ROOT_HASH` where `state()` would fail.
-  col.state.valueOr: EMPTY_ROOT_HASH
+proc stateEmptyOrVoid*(col: CoreDbColRef): bool =
+  ## Convenience wrapper, returns `true` where `stateEmpty()` would fail.
+  col.stateEmpty.valueOr: true
 
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree, hexary trie constructors
