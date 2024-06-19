@@ -120,7 +120,7 @@ proc mergeStorageData*(
   ## otherwise `VertexID(0)`.
   ##
   let
-    accHike = ?db.retrieveStoAccHike accPath
+    accHike = ? db.retrieveStoAccHike accPath # checks for `AccountData`
     wpAcc = accHike.legs[^1].wp
     stoID = wpAcc.vtx.lData.account.storageID
 

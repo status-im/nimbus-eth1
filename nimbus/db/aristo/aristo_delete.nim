@@ -19,7 +19,7 @@ import
   std/[sets, typetraits],
   eth/[common, trie/nibbles],
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_path,
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
        aristo_utils, aristo_vid]
 
 type

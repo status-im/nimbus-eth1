@@ -40,7 +40,7 @@ proc toAccount*(
       acc.storageRoot = (? db.getKeyRc payload.account.storageID).to(Hash256)
     return ok(acc)
 
-  err PayloadTypeUnsupported
+  err UtilsPayloadTypeUnsupported
 
 proc toAccount*(
     vtx: VertexRef;
@@ -49,7 +49,7 @@ proc toAccount*(
   ## Variant of `toAccount()` for a `Leaf` vertex.
   if vtx.isValid and vtx.vType == Leaf:
     return vtx.lData.toAccount db
-  err AccVtxUnsupported
+  err UtilsAccVtxUnsupported
 
 proc toAccount*(
     node: NodeRef;
@@ -65,13 +65,13 @@ proc toAccount*(
         storageRoot: EMPTY_ROOT_HASH)
       if node.lData.account.storageID.isValid:
         if not node.key[0].isValid:
-          return err(AccStorageKeyMissing)
+          return err(UtilsAccStorageKeyMissing)
         acc.storageRoot = node.key[0].to(Hash256)
       return ok(acc)
     else:
-      return err(PayloadTypeUnsupported)
+      return err(UtilsPayloadTypeUnsupported)
 
-  err AccNodeUnsupported
+  err UtilsAccNodeUnsupported
 
 # ---------------------
 

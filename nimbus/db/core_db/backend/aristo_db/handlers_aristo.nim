@@ -155,6 +155,7 @@ func toRc[T](
       return ok(rc.value)
   err rc.error.toError(base, info, error)
 
+
 func toRc[T](
     rc: Result[T,AristoError];
     base: AristoBaseRef;
@@ -206,12 +207,11 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
       # The mpt might have become empty
       let
         key = cMpt.address.keccakHash.data
-        pyl = api.fetchPayload(mpt, AccountsVID, key).valueOr:
-          raiseAssert "mptColFn(): " & $error[1] & " at " & $error[0]
+        acc = api.fetchAccountPayload(mpt, key).valueOr:
+          raiseAssert "mptColFn(): " & $error
 
       # Update by accounts data
-      doAssert pyl.pType == AccountData
-      cMpt.mptRoot = pyl.account.storageID
+      cMpt.mptRoot = acc.storageID
 
     db.bless AristoColRef(
       base:    base,
@@ -222,20 +222,24 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
   proc mptFetch(key: openArray[byte]): CoreDbRc[Blob] =
     const info = "fetchFn()"
 
-    # Some pathological behaviour observed with storage column due to lazy
-    # update. The `fetchPayload()` does not now about this and would complain
-    # an error different from `FetchPathNotFound`.
-    let rootVID = cMpt.mptRoot
-    if not rootVID.isValid:
-      return err((VoidVID,MptRootMissing).toError(base, info, MptNotFound))
+    let rc = block:
+      if cMpt.accPath.isValid:
+        api.fetchStorageData(mpt, key, cMpt.accPath)
+      elif cMpt.mptRoot.isValid:
+        api.fetchGenericData(mpt, cMpt.mptRoot, key)
+      else:
+        # Some pathological behaviour observed with storage column due to lazy
+        # update. The `fetchXxxPayload()` does not now about this and would
+        # complain an error different from `FetchPathNotFound`.
+        return err(MptRootMissing.toError(base, info, MptNotFound))
 
-    let rc = api.fetchPayload(mpt, rootVID, key)
+    # let rc = api.fetchPayload(mpt, rootVID, key)
     if rc.isOk:
-      api.serialise(mpt, rc.value).toRc(base, info)
-    elif rc.error[1] != FetchPathNotFound:
+      ok rc.value
+    elif rc.error != FetchPathNotFound:
       err(rc.error.toError(base, info))
     else:
-      err rc.error.toError(base, info, MptNotFound)
+      err(rc.error.toError(base, info, MptNotFound))
 
   proc mptMerge(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
     const info = "mergeFn()"
@@ -280,7 +284,13 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
   proc mptHasPath(key: openArray[byte]): CoreDbRc[bool] =
     const info = "hasPathFn()"
 
-    let rc = api.hasPath(mpt, cMpt.mptRoot, key)
+    let rc = block:
+      if cMpt.accPath.isValid:
+        api.hasPathStorage(mpt, key, cMpt.accPath)
+      else:
+        api.hasPathGeneric(mpt, cMpt.mptRoot, key)
+
+    #let rc = api.hasPath(mpt, cMpt.mptRoot, key)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok(rc.value)
@@ -333,21 +343,14 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
   proc accFetch(address: EthAddress): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
 
-    let pyl = block:
-      let
-        key = address.keccakHash.data
-        rc = api.fetchPayload(mpt, AccountsVID, key)
-      if rc.isOk:
-        rc.value
-      elif rc.error[1] != FetchPathNotFound:
-        return err(rc.error.toError(base, info))
-      else:
-        return err(rc.error.toError(base, info, AccNotFound))
+    let
+      key = address.keccakHash.data
+      acc = api.fetchAccountPayload(mpt, key).valueOr:
+        if error != FetchPathNotFound:
+          return err(error.toError(base, info))
+        return err(error.toError(base, info, AccNotFound))
 
-    if pyl.pType != AccountData:
-      let vidErrPair = (pyl.account.storageID, PayloadTypeUnsupported)
-      return err(vidErrPair.toError(base, info & "/" & $pyl.pType))
-    ok cAcc.toCoreDbAccount(pyl.account, address)
+    ok cAcc.toCoreDbAccount(acc, address)
 
   proc accMerge(account: CoreDbAccount): CoreDbRc[void] =
     const info = "acc/mergeFn()"
@@ -385,10 +388,9 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
 
     let
       key = address.keccakHash.data
-      rc = api.hasPath(mpt, AccountsVID, key)
-    if rc.isErr:
-      return err(rc.error.toError(base, info))
-    ok(rc.value)
+      yn = api.hasPathAccount(mpt, key).valueOr:
+        return err(error.toError(base, info))
+    ok(yn)
 
 
   CoreDbAccFns(
@@ -499,7 +501,6 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     if reset:
       let rc = api.deleteGenericTree(mpt, newMpt.mptRoot)
       if rc.isErr:
-        raiseAssert "find me"
         return err(rc.error.toError(base, info, AutoFlushFailed))
       col.reset = false
 

@@ -239,9 +239,9 @@ proc forget*(db: AristoDbRef): Result[void,AristoError] =
   ## comments on `fork()`.)
   ##
   if db.isCentre:
-    err(NotAllowedOnCentre)
+    err(DescNotAllowedOnCentre)
   elif db notin db.dudes.peers:
-    err(StaleDescriptor)
+    err(DescStaleDescriptor)
   else:
     db.dudes.peers.excl db         # Unlink argument `db` from peers list
     ok()
@@ -252,7 +252,7 @@ proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
   ##
   if not db.dudes.isNil:
     if db.dudes.centre != db:
-      return err(MustBeOnCentre)
+      return err(DescMustBeOnCentre)
 
     db.dudes = DudesRef(nil)
   ok()

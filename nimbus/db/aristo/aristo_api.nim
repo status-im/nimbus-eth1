@@ -108,15 +108,30 @@ type
       ## Merkle hash tag for vertex with ID 1 and a bespoke `uint64` identifier
       ## (may be interpreted as block number.)
 
-  AristoApiFetchPayloadFn* =
+  AristoApiFetchAccountPayloadFn* =
+    proc(db: AristoDbRef;
+         path: openArray[byte];
+        ): Result[AristoAccount,AristoError]
+        {.noRaise.}
+      ## Fetch an account record from the database indexed by `path`.
+
+  AristoApiFetchGenericDataFn* =
     proc(db: AristoDbRef;
          root: VertexID;
          path: openArray[byte];
-        ): Result[PayloadRef,(VertexID,AristoError)]
+        ): Result[Blob,AristoError]
         {.noRaise.}
-      ## Cascaded attempt to traverse the `Aristo Trie` and fetch the value
-      ## of a leaf vertex. This function is complementary to some `mergeXXX()`
-      ## function.
+      ## For a generic sub-tree starting at `root`, fetch the data record
+      ## indexed by `path`.
+
+  AristoApiFetchStorageDataFn* =
+    proc(db: AristoDbRef;
+         path: openArray[byte];
+         accPath: PathID;
+        ): Result[Blob,AristoError]
+        {.noRaise.}
+      ## For a storage tree related to account `accPath`, fetch the data
+      ## record from the database indexed by `path`.
 
   AristoApiFindTxFn* =
     proc(db: AristoDbRef;
@@ -205,15 +220,31 @@ type
       ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle
       ## Patricia Tree`.
 
-  AristoApiHasPathFn* =
+  AristoApiHasPathAccountFn* =
+    proc(db: AristoDbRef;
+         path: openArray[byte];
+        ): Result[bool,AristoError]
+        {.noRaise.}
+      ## For an account record indexed by `path` query whether this record
+      ## exists on the database.
+
+  AristoApiHasPathGenericFn* =
     proc(db: AristoDbRef;
          root: VertexID;
          path: openArray[byte];
-        ): Result[bool,(VertexID,AristoError)]
+        ): Result[bool,AristoError]
         {.noRaise.}
-      ## Variant of `fetchPayload()` without returning data. It returns
-      ## `true` iff the database `db` contains a leaf item with the argument
-      ## path.
+      ## For a generic sub-tree starting at `root` and indexed by `path`,
+      ## mquery whether this record exists on the database.
+
+  AristoApiHasPathStorageFn* =
+    proc(db: AristoDbRef;
+         path: openArray[byte];
+         accPath: PathID;
+        ): Result[bool,AristoError]
+        {.noRaise.}
+      ## For a storage tree related to account `accPath`, query whether the
+      ## data record indexed by `path` exists on the database.
 
   AristoApiHikeUpFn* =
     proc(path: NibblesSeq;
@@ -384,14 +415,18 @@ type
     deleteStorageData*: AristoApiDeleteStorageDataFn
     deleteStorageTree*: AristoApiDeleteStorageTreeFn
     fetchLastSavedState*: AristoApiFetchLastSavedStateFn
-    fetchPayload*: AristoApiFetchPayloadFn
+    fetchAccountPayload*: AristoApiFetchAccountPayloadFn
+    fetchGenericData*: AristoApiFetchGenericDataFn
+    fetchStorageData*: AristoApiFetchStorageDataFn
     findTx*: AristoApiFindTxFn
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
     forkTx*: AristoApiForkTxFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
-    hasPath*: AristoApiHasPathFn
+    hasPathAccount*: AristoApiHasPathAccountFn
+    hasPathGeneric*: AristoApiHasPathGenericFn
+    hasPathStorage*: AristoApiHasPathStorageFn
     hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
     level*: AristoApiLevelFn
@@ -419,14 +454,18 @@ type
     AristoApiProfDeleteStorageDataFn    = "deleteStorageData"
     AristoApiProfDeleteStorageTreeFn    = "deleteStorageTree"
     AristoApiProfFetchLastSavedStateFn  = "fetchPayload"
-    AristoApiProfFetchPayloadFn         = "fetchPayload"
+    AristoApiProfFetchAccountPayloadFn  = "fetchAccountPayload"
+    AristoApiProfFetchGenericDataFn     = "fetchGenericData"
+    AristoApiProfFetchStorageDataFn     = "fetchStorageData"
     AristoApiProfFindTxFn               = "findTx"
     AristoApiProfFinishFn               = "finish"
     AristoApiProfForgetFn               = "forget"
     AristoApiProfForkTxFn               = "forkTx"
     AristoApiProfGetKeyRcFn             = "getKeyRc"
     AristoApiProfHashifyFn              = "hashify"
-    AristoApiProfHasPathFn              = "hasPath"
+    AristoApiProfHasPathAccountFn       = "hasPathAccount"
+    AristoApiProfHasPathGenericFn       = "hasPathGeneric"
+    AristoApiProfHasPathStorageFn       = "hasPathStorage"
     AristoApiProfHikeUpFn               = "hikeUp"
     AristoApiProfIsTopFn                = "isTop"
     AristoApiProfLevelFn                = "level"
@@ -470,14 +509,18 @@ when AutoValidateApiHooks:
     doAssert not api.deleteStorageData.isNil
     doAssert not api.deleteStorageTree.isNil
     doAssert not api.fetchLastSavedState.isNil
-    doAssert not api.fetchPayload.isNil
+    doAssert not api.fetchAccountPayload.isNil
+    doAssert not api.fetchGenericData.isNil
+    doAssert not api.fetchStorageData.isNil
     doAssert not api.findTx.isNil
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
     doAssert not api.forkTx.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
-    doAssert not api.hasPath.isNil
+    doAssert not api.hasPathAccount.isNil
+    doAssert not api.hasPathGeneric.isNil
+    doAssert not api.hasPathStorage.isNil
     doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
     doAssert not api.level.isNil
@@ -525,14 +568,18 @@ func init*(api: var AristoApiObj) =
   api.deleteStorageData = deleteStorageData
   api.deleteStorageTree = deleteStorageTree
   api.fetchLastSavedState = fetchLastSavedState
-  api.fetchPayload = fetchPayload
+  api.fetchAccountPayload = fetchAccountPayload
+  api.fetchGenericData = fetchGenericData
+  api.fetchStorageData = fetchStorageData
   api.findTx = findTx
   api.finish = finish
   api.forget = forget
   api.forkTx = forkTx
   api.getKeyRc = getKeyRc
   api.hashify = hashify
-  api.hasPath = hasPath
+  api.hasPathAccount = hasPathAccount
+  api.hasPathGeneric = hasPathGeneric
+  api.hasPathStorage = hasPathStorage
   api.hikeUp = hikeUp
   api.isTop = isTop
   api.level = level
@@ -563,14 +610,18 @@ func dup*(api: AristoApiRef): AristoApiRef =
     deleteStorageData:    api.deleteStorageData,
     deleteStorageTree:    api.deleteStorageTree,
     fetchLastSavedState:  api.fetchLastSavedState,
-    fetchPayload:         api.fetchPayload,
+    fetchAccountPayload:  api.fetchAccountPayload,
+    fetchGenericData:     api.fetchGenericData,
+    fetchStorageData:     api.fetchStorageData,
     findTx:               api.findTx,
     finish:               api.finish,
     forget:               api.forget,
     forkTx:               api.forkTx,
     getKeyRc:             api.getKeyRc,
     hashify:              api.hashify,
-    hasPath:              api.hasPath,
+    hasPathAccount:       api.hasPathAccount,
+    hasPathGeneric:       api.hasPathGeneric,
+    hasPathStorage:       api.hasPathStorage,
     hikeUp:               api.hikeUp,
     isTop:                api.isTop,
     level:                api.level,
@@ -650,10 +701,20 @@ func init*(
       AristoApiProfFetchLastSavedStateFn.profileRunner:
         result = api.fetchLastSavedState(a)
 
-  profApi.fetchPayload =
+  profApi.fetchAccountPayload =
+    proc(a: AristoDbRef; b: openArray[byte]): auto =
+      AristoApiProfFetchAccountPayloadFn.profileRunner:
+        result = api.fetchAccountPayload(a, b)
+
+  profApi.fetchGenericData =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfFetchPayloadFn.profileRunner:
-        result = api.fetchPayload(a, b, c)
+      AristoApiProfFetchGenericDataFn.profileRunner:
+        result = api.fetchGenericData(a, b, c)
+
+  profApi.fetchStorageData =
+    proc(a: AristoDbRef; b: openArray[byte]; c: PathID;): auto =
+      AristoApiProfFetchStorageDataFn.profileRunner:
+        result = api.fetchStorageData(a, b, c)
 
   profApi.findTx =
     proc(a: AristoDbRef; b: VertexID; c: HashKey): auto =
@@ -685,10 +746,20 @@ func init*(
       AristoApiProfHashifyFn.profileRunner:
         result = api.hashify(a)
 
-  profApi.hasPath =
+  profApi.hasPathAccount =
+    proc(a: AristoDbRef; b: openArray[byte]): auto =
+      AristoApiProfHasPathAccountFn.profileRunner:
+        result = api.hasPathAccount(a, b)
+
+  profApi.hasPathGeneric =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfHasPathFn.profileRunner:
-        result = api.hasPath(a, b, c)
+      AristoApiProfHasPathGenericFn.profileRunner:
+        result = api.hasPathGeneric(a, b, c)
+
+  profApi.hasPathStorage =
+    proc(a: AristoDbRef; b: openArray[byte]; c: PathID;): auto =
+      AristoApiProfHasPathStorageFn.profileRunner:
+        result = api.hasPathStorage(a, b, c)
 
   profApi.hikeUp =
     proc(a: NibblesSeq; b: VertexID; c: AristoDbRef): auto =
