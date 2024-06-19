@@ -232,7 +232,11 @@ type
 
     # Fetch functions from `aristo_fetch.nim`
     FetchPathNotFound
-    LeafKeyInvalid
+    FetchLeafKeyInvalid
+    FetchPathInvalid
+    FetchRootVidMissing
+    FetchAccRootNotAccepted
+    FetchStoRootNotAccepted
 
     # RocksDB backend
     RdbBeCantCreateDataDir

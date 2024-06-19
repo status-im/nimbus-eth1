@@ -14,9 +14,10 @@
 {.push raises: [].}
 
 import
-  eth/trie/nibbles,
+  std/typetraits,
+  eth/[common, trie/nibbles],
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike]
+  "."/[aristo_desc, aristo_get, aristo_hike, aristo_utils]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -37,6 +38,65 @@ proc fetchPayloadImpl(
     path: openArray[byte];
       ): Result[PayloadRef,(VertexID,AristoError)] =
   path.initNibbleRange.hikeUp(root, db).fetchPayloadImpl
+
+# ---------------
+
+func mustBeGeneric(
+    root: VertexID;
+      ): Result[void,AristoError] =
+  ## Verify that `root` is neither from an accounts tree nor a strorage tree.
+  if not root.isValid:
+    return err(FetchRootVidMissing)
+  elif root == VertexID(1):
+    return err(FetchAccRootNotAccepted)
+  elif LEAST_FREE_VID <= root.distinctBase:
+    return err(FetchStoRootNotAccepted)
+  ok()
+
+
+proc retrievePayload(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+      ): Result[PayloadRef,AristoError] =
+  if path.len == 0:
+    return err(FetchPathInvalid)
+
+  let hike = path.initNibbleRange.hikeUp(root, db).valueOr:
+    if error[1] in HikeAcceptableStopsNotFound:
+      return err(FetchPathNotFound)
+    return err(error[1])
+
+  ok hike.legs[^1].wp.vtx.lData
+
+
+proc retrieveStoID(
+    db: AristoDbRef;
+    accPath: PathID;
+      ): Result[VertexID,AristoError] =
+  let
+    accHike = ? db.retrieveStoAccHike accPath # checks for `AccountData`
+    stoID = accHike.legs[^1].wp.vtx.lData.account.storageID
+
+  if not stoID.isValid:
+    return err(FetchPathNotFound)
+
+  ok stoID
+
+
+proc hasPayload(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+      ): Result[bool,AristoError] =
+  if path.len == 0:
+    return err(FetchPathInvalid)
+
+  let hike = path.initNibbleRange.hikeUp(VertexID(1), db).valueOr:
+    if error[1] in HikeAcceptableStopsNotFound:
+      return ok(false)
+    return err(error[1])
+  ok(true)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -59,7 +119,7 @@ proc fetchPayload*(
   ## Variant of `fetchPayload()`
   ##
   if path.len == 0:
-    return err((VertexID(0),LeafKeyInvalid))
+    return err((VertexID(0),FetchLeafKeyInvalid))
   db.fetchPayloadImpl(root, path)
 
 proc hasPath*(
@@ -70,13 +130,15 @@ proc hasPath*(
   ## Variant of `fetchPayload()`
   ##
   if path.len == 0:
-    return err((VertexID(0),LeafKeyInvalid))
+    return err((VertexID(0),FetchLeafKeyInvalid))
   let rc = db.fetchPayloadImpl(root, path)
   if rc.isOk:
     return ok(true)
   if rc.error[1] == FetchPathNotFound:
     return ok(false)
   err(rc.error)
+
+# -----------------------
 
 proc fetchLastSavedState*(
     db: AristoDbRef;
@@ -85,6 +147,74 @@ proc fetchLastSavedState*(
   ## saved state. This is a Merkle hash tag for vertex with ID 1 and a bespoke
   ## `uint64` identifier (may be interpreted as block number.)
   db.getLstUbe()
+
+
+proc fetchAccountPayload*(
+    db: AristoDbRef;
+    path: openArray[byte];
+      ): Result[AristoAccount,AristoError] =
+  ## Fetch an account record from the database indexed by `path`.
+  ##
+  let pyl = ? db.retrievePayload(VertexID(1), path)
+  assert pyl.pType == AccountData   # debugging only
+  ok pyl.account
+
+proc hasPathAccount*(
+    db: AristoDbRef;
+    path: openArray[byte];
+      ): Result[bool,AristoError] =
+  ## For an account record indexed by `path` query whether this record exists
+  ## on the database.
+  ##
+  db.hasPayload(VertexID(1), path)
+
+
+proc fetchGenericData*(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+      ): Result[Blob,AristoError] =
+  ## For a generic sub-tree starting at `root`, fetch the data record
+  ## indexed by `path`.
+  ##
+  ? root.mustBeGeneric()
+  let pyl = ? db.retrievePayload(root, path)
+  assert pyl.pType == RawData   # debugging only
+  ok pyl.rawBlob
+
+proc hasPathGeneric*(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+      ): Result[bool,AristoError] =
+  ## For a generic sub-tree starting at `root` and indexed by `path`, query
+  ## whether this record exists on the database.
+  ##
+  ? root.mustBeGeneric()
+  db.hasPayload(root, path)
+
+
+proc fetchStorageData*(
+    db: AristoDbRef;
+    path: openArray[byte];
+    accPath: PathID;
+      ): Result[Blob,AristoError] =
+  ## For a storage tree related to account `accPath`, fetch the data record
+  ## from the database indexed by `path`.
+  ##
+  let pyl = ? db.retrievePayload(? db.retrieveStoID accPath, path)
+  assert pyl.pType == RawData   # debugging only
+  ok pyl.rawBlob
+
+proc hasPathStorage*(
+    db: AristoDbRef;
+    path: openArray[byte];
+    accPath: PathID;
+      ): Result[bool,AristoError] =
+  ## For a storage tree related to account `accPath`, query whether the data
+  ## record indexed by `path` exists on the database.
+  ##
+  db.hasPayload(? db.retrieveStoID accPath, path)
 
 # ------------------------------------------------------------------------------
 # End
