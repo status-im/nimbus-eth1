@@ -23,24 +23,6 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc fetchPayloadImpl(
-    rc: Result[Hike,(VertexID,AristoError,Hike)];
-      ): Result[PayloadRef,(VertexID,AristoError)] =
-  if rc.isErr:
-    if rc.error[1] in HikeAcceptableStopsNotFound:
-      return err((rc.error[0], FetchPathNotFound))
-    return err((rc.error[0], rc.error[1]))
-  ok rc.value.legs[^1].wp.vtx.lData
-
-proc fetchPayloadImpl(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[PayloadRef,(VertexID,AristoError)] =
-  path.initNibbleRange.hikeUp(root, db).fetchPayloadImpl
-
-# ---------------
-
 func mustBeGeneric(
     root: VertexID;
       ): Result[void,AristoError] =
@@ -101,44 +83,6 @@ proc hasPayload(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc fetchPayload*(
-    db: AristoDbRef;
-    key: LeafTie;
-      ): Result[PayloadRef,(VertexID,AristoError)] =
-  ## Cascaded attempt to traverse the `Aristo Trie` and fetch the value of a
-  ## leaf vertex. This function is complementary to `mergePayload()`.
-  ##
-  key.hikeUp(db).fetchPayloadImpl
-
-proc fetchPayload*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[PayloadRef,(VertexID,AristoError)] =
-  ## Variant of `fetchPayload()`
-  ##
-  if path.len == 0:
-    return err((VertexID(0),FetchLeafKeyInvalid))
-  db.fetchPayloadImpl(root, path)
-
-proc hasPath*(
-    db: AristoDbRef;                  # Database
-    root: VertexID;
-    path: openArray[byte];            # Key of database record
-      ): Result[bool,(VertexID,AristoError)] =
-  ## Variant of `fetchPayload()`
-  ##
-  if path.len == 0:
-    return err((VertexID(0),FetchLeafKeyInvalid))
-  let rc = db.fetchPayloadImpl(root, path)
-  if rc.isOk:
-    return ok(true)
-  if rc.error[1] == FetchPathNotFound:
-    return ok(false)
-  err(rc.error)
-
-# -----------------------
 
 proc fetchLastSavedState*(
     db: AristoDbRef;
