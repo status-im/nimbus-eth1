@@ -53,6 +53,9 @@ type
   AristoCoreDbMptBE* = ref object of CoreDbMptBackendRef
     adb*: AristoDbRef
 
+  AristoCoreDbAccBE* = ref object of CoreDbAccBackendRef
+    adb*: AristoDbRef
+
 const
   VoidVID = VertexID(0)
   # StorageVID = VertexID(CtStorage) -- currently unused
@@ -328,17 +331,8 @@ proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
     api = base.api     # Ditto
     mpt = base.ctx.mpt # Ditto
 
-  proc getColFn(): CoreDbColRef =
-    db.bless AristoColRef(
-      base: base,
-      colType: CtAccounts)
-
-  proc accCloneMpt(): CoreDbRc[CoreDbMptRef] =
-    var xpt = AristoCoreDbMptRef(
-      base:    base,
-      mptRoot: AccountsVID)
-    xpt.methods = xpt.mptMethods
-    ok(db.bless xpt)
+  proc accBackend(): CoreDbAccBackendRef =
+    db.bless AristoCoreDbAccBE(adb: mpt)
 
   proc accFetch(address: EthAddress): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
@@ -392,10 +386,23 @@ proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
         return err(error.toError(base, info))
     ok(yn)
 
+  proc accState(updateOk: bool): CoreDbRc[Hash256] =
+    const info = "accState()"
+
+    let rc = api.fetchAccountState(mpt)
+    if rc.isOk:
+      return ok(rc.value)
+    elif not updateOk and rc.error != GetKeyUpdateNeeded:
+      return err(rc.error.toError(base, info))
+
+    ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
+    let key = api.fetchAccountState(mpt).valueOr:
+      raiseAssert info & ": " & $error
+    ok(key)
 
   CoreDbAccFns(
-    getMptFn: proc(): CoreDbRc[CoreDbMptRef] =
-      accCloneMpt(),
+    backendFn: proc(): CoreDbAccBackendRef =
+      accBackend(),
 
     fetchFn: proc(address: EthAddress): CoreDbRc[CoreDbAccount] =
       accFetch(address),
@@ -412,8 +419,8 @@ proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
     hasPathFn: proc(address: EthAddress): CoreDbRc[bool] =
       accHasPath(address),
 
-    getColFn: proc(): CoreDbColRef =
-      getColFn())
+    stateFn: proc(updateOk: bool): CoreDbRc[Hash256] =
+      accState(updateOk))
 
 # ------------------------------------------------------------------------------
 # Private context call back functions
@@ -508,18 +515,10 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     newMpt.methods = newMpt.mptMethods()
     ok(db.bless newMpt)
 
-  proc ctxGetAcc(col: CoreDbColRef): CoreDbRc[CoreDbAccRef] =
-    const info = "getAccFn()"
-
-    let col = AristoColRef(col)
-    if col.colType != CtAccounts:
-      let error = (AccountsVID, AccRootUnacceptable)
-      return err(error.toError(base, info, RootUnacceptable))
-
+  proc ctxGetAcc(): CoreDbAccRef =
     let acc = AristoCoreDbAccRef(base: base)
     acc.methods = acc.accMethods()
-
-    ok(db.bless acc)
+    db.bless acc
 
   proc ctxForget() =
     api.forget(mpt).isOkOr:
@@ -537,8 +536,8 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     getMptFn: proc(col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
       ctxGetMpt(col),
 
-    getAccFn: proc(col: CoreDbColRef): CoreDbRc[CoreDbAccRef] =
-      ctxGetAcc(col),
+    getAccFn: proc(): CoreDbAccRef =
+      ctxGetAcc(),
 
     forgetFn: proc() =
       ctxForget())

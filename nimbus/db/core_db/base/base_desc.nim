@@ -165,8 +165,7 @@ type
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
     root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
-  CoreDbCtxGetAccFn* = proc(
-    root: CoreDbColRef): CoreDbRc[CoreDbAccRef] {.noRaise.}
+  CoreDbCtxGetAccFn* = proc(): CoreDbAccRef {.noRaise.}
   CoreDbCtxForgetFn* = proc() {.noRaise.}
 
   CoreDbCtxFns* = object
@@ -205,26 +204,25 @@ type
 
 
   # ----------------------------------------------------
-  # Sub-descriptor: Mpt/hexary trie methods for accounts
+  # Sub-descriptor: Account column methods
   # ------------------------------------------------------
-  CoreDbAccGetMptFn* = proc(): CoreDbRc[CoreDbMptRef] {.noRaise.}
+  CoreDbAccBackendFn* = proc(): CoreDbAccBackendRef {.noRaise.}
   CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccStoDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbAccStateFn* = proc(updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects
-    getMptFn*:     CoreDbAccGetMptFn
-    fetchFn*:      CoreDbAccFetchFn
+    backendFn*:    CoreDbAccBackendFn
     deleteFn*:     CoreDbAccDeleteFn
-    stoDeleteFn*:  CoreDbAccStoDeleteFn
-    mergeFn*:      CoreDbAccMergeFn
+    fetchFn*:      CoreDbAccFetchFn
     hasPathFn*:    CoreDbAccHasPathFn
-    getColFn*:     CoreDbAccGetColFn
+    mergeFn*:      CoreDbAccMergeFn
+    stateFn*:      CoreDbAccStateFn
+    stoDeleteFn*:  CoreDbAccStoDeleteFn
 
 
   # --------------------------------------------------
@@ -280,6 +278,10 @@ type
     parent*: CoreDbRef
 
   CoreDbMptBackendRef* = ref object of RootRef
+    ## Backend wrapper for direct backend access
+    parent*: CoreDbRef
+
+  CoreDbAccBackendRef* = ref object of RootRef
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 

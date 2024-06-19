@@ -146,7 +146,7 @@ proc bless*(db: CoreDbRef; kvt: CoreDbKvtRef): CoreDbKvtRef =
 proc bless*[T: CoreDbKvtRef |
                CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
                CoreDbTxRef  | CoreDbCaptRef |
-               CoreDbKvtBackendRef | CoreDbMptBackendRef](
+               CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef] (
     db: CoreDbRef;
     dsc: T;
       ): auto =
@@ -205,7 +205,7 @@ proc parent*[T: CoreDbKvtRef |
   ##
   result = child.parent
 
-proc backend*(dsc: CoreDbKvtRef | CoreDbMptRef): auto =
+proc backend*(dsc: CoreDbKvtRef | CoreDbMptRef | CoreDbAccRef): auto =
   ## Getter, retrieves the *raw* backend object for special/localised support.
   ##
   dsc.setTrackNewApi AnyBackendFn
@@ -487,52 +487,22 @@ proc getMpt*(
   ctx.ifTrackNewApi: debug newApiTxt, api, colType, elapsed
 
 
-proc getMpt*(acc: CoreDbAccRef): CoreDbMptRef =
-  ## Variant of `getMpt()`, will defect on failure.
-  ##
-  ## The needed sub-trie information is taken/implied from the current `acc`
-  ## argument.
-  ##
-  acc.setTrackNewApi AccToMptFn
-  result = acc.methods.getMptFn().valueOr:
-    raiseAssert error.prettyText()
-  acc.ifTrackNewApi:
-    let colState = result.methods.getColFn()
-    debug newApiTxt, api, elapsed, colState
-
-
-proc getAcc*(
-    ctx: CoreDbCtxRef;
-    col: CoreDbColRef;
-      ): CoreDbRc[CoreDbAccRef] =
-  ## Accounts trie constructor, will defect on failure.
-  ##
-  ## Example:
-  ## ::
-  ##   let col = db.getColumn(CtAccounts,<some-hash>).valueOr:
-  ##     ... # No node available with <some-hash>
-  ##     return
-  ##
-  ##   let acc = db.getAccMpt(col)
-  ##     ... # Was not the state root for the accounts column
-  ##     return
-  ##
-  ## This function works similar to `getMpt()` for handling accounts.
-  ##
-  ctx.setTrackNewApi CtxGetAccFn
-  result = ctx.methods.getAccFn col
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
+#proc getMpt*(acc: CoreDbAccRef): CoreDbMptRef =
+#  ## Variant of `getMpt()`, will defect on failure.
+#  ##
+#  ## The needed sub-trie information is taken/implied from the current `acc`
+#  ## argument.
+#  ##
+#  acc.setTrackNewApi AccToMptFn
+#  result = acc.methods.getMptFn().valueOr:
+#    raiseAssert error.prettyText()
+#  acc.ifTrackNewApi:
+#    let colState = result.methods.getColFn()
+#    debug newApiTxt, api, elapsed, colState
 
 # ------------------------------------------------------------------------------
 # Public common methods for all hexary trie databases (`mpt`, or `acc`)
 # ------------------------------------------------------------------------------
-
-proc getColumn*(acc: CoreDbAccRef): CoreDbColRef =
-  ## Getter, result is not `nil`
-  ##
-  acc.setTrackNewApi AccGetColFn
-  result = acc.methods.getColFn()
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc getColumn*(mpt: CoreDbMptRef): CoreDbColRef =
   ## Variant of `getColumn()`
@@ -596,8 +566,18 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
 
 # ------------------------------------------------------------------------------
-# Public trie database methods for accounts
+# Public methods for accounts
 # ------------------------------------------------------------------------------
+
+proc getAcc*(
+    ctx: CoreDbCtxRef;
+      ): CoreDbAccRef =
+  ## Accounts column constructor, will defect on failure.
+  ##
+  ctx.setTrackNewApi CtxGetAccFn
+  result = ctx.methods.getAccFn()
+  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
+
 
 proc fetch*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[CoreDbAccount] =
   ## Fetch data from the argument `acc`.
@@ -647,6 +627,18 @@ proc hasPath*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[bool] =
   acc.setTrackNewApi AccHasPathFn
   result = acc.methods.hasPathFn address
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
+
+
+proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
+  ## Getter (well, sort of). It retrieves the account column Merkle state
+  ## hash if acvailable.
+  ##
+  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
+  ## database will be updated first (if needed, at all).
+  ##
+  acc.setTrackNewApi AccStateFn
+  result = acc.methods.stateFn updateOk
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
 
 
 proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =

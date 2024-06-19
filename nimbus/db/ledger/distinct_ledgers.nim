@@ -86,7 +86,8 @@ when EnableMptDump:
       if db.isAristo:
         let adb = be.toAristo()
         if not adb.isNil:
-          return adb.pp(kMapOk=false,backendOK=true)
+          const kMapOk = false # or true
+          return adb.pp(kMapOk=kMapOk,backendOK=true)
 
     # Oops
     "<" & $db.dbType & ">"
@@ -98,15 +99,20 @@ when EnableMptDump:
 proc db*(led: SomeLedger): CoreDbRef =
   led.distinctBase.parent
 
-proc state*(led: SomeLedger): Hash256 =
-  when SomeLedger is AccountLedger:
-    const info = "AccountLedger/state(): "
-  else:
-    const info = "StorageLedger/state(): "
-  let rc = led.distinctBase.getColumn().state()
+proc state*(al: AccountLedger): Hash256 =
+  const info = "AccountLedger/state(): "
+  let rc = al.distinctBase.state()
   if rc.isErr:
     raiseAssert info & $$rc.error
   rc.value
+
+proc state*(sl: StorageLedger): Hash256 =
+  const info = "StorageLedger/state(): "
+  let rc = sl.distinctBase.getColumn().state()
+  if rc.isErr:
+    raiseAssert info & $$rc.error
+  rc.value
+
 
 proc getColumn*(led: SomeLedger): CoreDbColRef =
   led.distinctBase.getColumn()
@@ -122,19 +128,16 @@ proc init*(
       ): T =
   const
     info = "AccountLedger.init(): "
-  let
-    ctx = db.ctx
-    col = block:
-      let rc = ctx.newColumn(CtAccounts, root)
+  let acc = db.ctx.getAcc()
+  if root != EMPTY_ROOT_HASH:
+    let state = block:
+      let rc = acc.state(updateOk=true)
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
-    mpt =  block:
-      let rc = ctx.getAcc(col)
-      if rc.isErr:
-        raiseAssert info & $$rc.error
-      rc.value
-  mpt.T
+    if state != root:
+      raiseAssert info & ": wrong account state root"
+  acc.T
 
 proc fetch*(al: AccountLedger; eAddr: EthAddress): Result[CoreDbAccount,void] =
   ## Using `fetch()` for trie data retrieval

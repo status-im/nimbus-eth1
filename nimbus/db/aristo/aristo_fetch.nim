@@ -103,6 +103,16 @@ proc fetchAccountPayload*(
   assert pyl.pType == AccountData   # debugging only
   ok pyl.account
 
+proc fetchAccountState*(
+    db: AristoDbRef;
+      ): Result[Hash256,AristoError] =
+  ## Fetch the Merkle hash of the account root.
+  let key = db.getKeyRc(VertexID 1).valueOr:
+    if error == GetKeyNotFound:
+      return ok(EMPTY_ROOT_HASH) # empty database
+    return err(error)
+  ok key.to(Hash256)
+
 proc hasPathAccount*(
     db: AristoDbRef;
     path: openArray[byte];

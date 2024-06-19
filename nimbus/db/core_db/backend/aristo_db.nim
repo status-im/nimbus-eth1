@@ -246,6 +246,10 @@ func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
     return mBe.AristoCoreDbMptBE.adb
 
+func toAristo*(mBe: CoreDbAccBackendRef): AristoDbRef =
+  if not mBe.isNil and mBe.parent.isAristo:
+    return mBe.AristoCoreDbAccBE.adb
+
 proc toAristoSavedStateBlockNumber*(
     mBe: CoreDbMptBackendRef;
       ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =
