@@ -16,6 +16,10 @@ import
   ./evm_errors,
   ./interpreter/utils/utils_numeric
 
+const
+  # https://ethereum.org/en/developers/docs/evm/#evm-instructions
+  maxStackLen = 1024
+
 type
   EvmStackRef* = ref object
     values: seq[EvmStackElement]
@@ -31,21 +35,21 @@ func len*(stack: EvmStackRef): int {.inline.} =
 # Private functions
 # ------------------------------------------------------------------------------
 
-template toStackElem(v: UInt256, elem: EvmStackElement) =
-  elem = v
+template toStackElem(v: UInt256): EvmStackElement =
+  v
 
-template toStackElem(v: EvmStackInts, elem: EvmStackElement) =
-  elem = v.u256
+template toStackElem(v: EvmStackInts): EvmStackElement =
+  v.u256
 
-template toStackElem(v: EthAddress, elem: EvmStackElement) =
-  elem.initFromBytesBE(v)
+template toStackElem(v: EthAddress): EvmStackElement =
+  UInt256.fromBytesBE(v)
 
-template toStackElem(v: MDigest, elem: EvmStackElement) =
-  elem.initFromBytesBE(v.data)
+template toStackElem(v: MDigest): EvmStackElement =
+   UInt256.fromBytesBE(v.data)
 
-template toStackElem(v: openArray[byte], elem: EvmStackElement) =
+template toStackElem(v: openArray[byte]): EvmStackElement =
   doAssert(v.len <= 32)
-  elem.initFromBytesBE(v)
+  UInt256.fromBytesBE(v)
 
 template fromStackElem(elem: EvmStackElement, _: type UInt256): UInt256 =
   elem
@@ -60,24 +64,23 @@ template fromStackElem(elem: EvmStackElement, _: type EvmStackBytes32): EvmStack
   elem.toBytesBE()
 
 func pushAux[T](stack: EvmStackRef, value: T): EvmResultVoid =
-  if len(stack.values) > 1023:
+  if len(stack.values) >= maxStackLen:
     return err(stackErr(StackFull))
-  stack.values.setLen(stack.values.len + 1)
-  toStackElem(value, stack.values[^1])
+  stack.values.add(toStackElem(value))
   ok()
 
-func ensurePop(stack: EvmStackRef, expected: int): EvmResultVoid =
+func ensureLen(stack: EvmStackRef, expected: int): EvmResultVoid =
   if stack.values.len < expected:
     return err(stackErr(StackInsufficient))
   ok()
 
 func popAux(stack: EvmStackRef, T: type): EvmResult[T] =
-  ? ensurePop(stack, 1)
+  ? ensureLen(stack, 1)
   result = ok(fromStackElem(stack.values[^1], T))
   stack.values.setLen(stack.values.len - 1)
 
 func internalPopTuple(stack: EvmStackRef, T: type, tupleLen: static[int]): EvmResult[T] =
-  ? ensurePop(stack, tupleLen)
+  ? ensureLen(stack, tupleLen)
   var
     i = 0
     v: T
@@ -107,12 +110,12 @@ func popInt*(stack: EvmStackRef): EvmResult[UInt256] =
   popAux(stack, UInt256)
 
 func popSafeInt*(stack: EvmStackRef): EvmResult[int] =
-  ? ensurePop(stack, 1)
+  ? ensureLen(stack, 1)
   result = ok(fromStackElem(stack.values[^1], UInt256).safeInt)
   stack.values.setLen(stack.values.len - 1)
 
 func popMemRef*(stack: EvmStackRef): EvmResult[int] =
-  ? ensurePop(stack, 1)
+  ? ensureLen(stack, 1)
   result = ok(fromStackElem(stack.values[^1], UInt256).cleanMemRef)
   stack.values.setLen(stack.values.len - 1)
 
@@ -128,7 +131,7 @@ func popTopic*(stack: EvmStackRef): EvmResult[EvmStackBytes32] =
 
 func new*(_: type EvmStackRef): EvmStackRef =
   new(result)
-  result.values = @[]
+  result.values = newSeqOfCap[EvmStackElement](maxStackLen)
 
 func swap*(stack: EvmStackRef, position: int): EvmResultVoid =
   ##  Perform a SWAP operation on the stack
@@ -147,32 +150,29 @@ func dup*(stack: EvmStackRef, position: int): EvmResultVoid =
     err(stackErr(StackInsufficient))
 
 func peek*(stack: EvmStackRef): EvmResult[UInt256] =
-  if stack.values.len == 0:
-    return err(stackErr(StackInsufficient))
+  ? ensureLen(stack, 1)
   ok(fromStackElem(stack.values[^1], UInt256))
 
 func peekSafeInt*(stack: EvmStackRef): EvmResult[int] =
-  if stack.values.len == 0:
-    return err(stackErr(StackInsufficient))
+  ? ensureLen(stack, 1)
   ok(fromStackElem(stack.values[^1], UInt256).safeInt)
 
 func `[]`*(stack: EvmStackRef, i: BackwardsIndex, T: typedesc): EvmResult[T] =
-  ? ensurePop(stack, int(i))
+  ? ensureLen(stack, int(i))
   ok(fromStackElem(stack.values[i], T))
 
 func peekInt*(stack: EvmStackRef): EvmResult[UInt256] =
-  ? ensurePop(stack, 1)
+  ? ensureLen(stack, 1)
   ok(fromStackElem(stack.values[^1], Uint256))
 
 func peekAddress*(stack: EvmStackRef): EvmResult[EthAddress] =
-  ? ensurePop(stack, 1)
+  ? ensureLen(stack, 1)
   ok(fromStackElem(stack.values[^1], EthAddress))
 
 func top*(stack: EvmStackRef,
           value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
-  if stack.values.len == 0:
-    return err(stackErr(StackInsufficient))
-  toStackElem(value, stack.values[^1])
+  ? ensureLen(stack, 1)
+  stack.values[^1] = toStackElem(value)
   ok()
 
 iterator items*(stack: EvmStackRef): UInt256 =
