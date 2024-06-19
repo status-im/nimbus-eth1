@@ -85,8 +85,8 @@ func to(col: CoreDbColRef; T: type VertexID): T =
       return col.stoRoot
     return VertexID(col.colType)
 
-func to(address: EthAddress; T: type PathID): T =
-  HashKey.fromBytes(address.keccakHash.data).value.to(T)
+func to(eAddr: EthAddress; T: type PathID): T =
+  HashKey.fromBytes(eAddr.keccakHash.data).value.to(T)
 
 func resetCol(colType: CoreDbColType): bool =
   ## Check whether to reset some non-dynamic column when instantiating. It
@@ -292,7 +292,6 @@ proc mptMethods(): CoreDbMptFns =
       else:
         api.hasPathGeneric(mpt, cMpt.mptRoot, key)
 
-    #let rc = api.hasPath(mpt, cMpt.mptRoot, key)
     if rc.isErr:
       return err(rc.error.toError(base, info))
     ok(rc.value)
@@ -331,56 +330,48 @@ proc accMethods(): CoreDbAccFns =
   proc accBackend(cAcc: AristoCoreDbAccRef): CoreDbAccBackendRef =
     db.bless AristoCoreDbAccBE(adb: mpt)
 
-  proc accFetch(cAcc: AristoCoreDbAccRef, address: EthAddress): CoreDbRc[CoreDbAccount] =
+  proc accFetch(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
 
-    let
-      key = address.keccakHash.data
-      acc = api.fetchAccountPayload(mpt, key).valueOr:
-        if error != FetchPathNotFound:
-          return err(error.toError(base, info))
-        return err(error.toError(base, info, AccNotFound))
-
-    ok cAcc.toCoreDbAccount(acc, address)
+    let acc = api.fetchAccountPayload(mpt, eAddr.keccakHash.data).valueOr:
+      if error != FetchPathNotFound:
+        return err(error.toError(base, info))
+      return err(error.toError(base, info, AccNotFound))
+    ok cAcc.toCoreDbAccount(acc, eAddr)
 
   proc accMerge(cAcc: AristoCoreDbAccRef, account: CoreDbAccount): CoreDbRc[void] =
     const info = "acc/mergeFn()"
 
     let
       key = account.address.keccakHash.data
-      val = account.toPayloadRef()
-      rc = api.mergeAccountPayload(mpt, key, val.account)
-    if rc.isErr:
-      return err(rc.error.toError(base, info))
+      val = account.toPayloadRef().account
+    api.mergeAccountPayload(mpt, key, val).isOkOr:
+      return err(error.toError(base, info))
     ok()
 
-  proc accDelete(cAcc: AristoCoreDbAccRef, address: EthAddress): CoreDbRc[void] =
+  proc accDelete(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
     const info = "acc/deleteFn()"
 
-    let key = address.keccakHash.data
-    api.deleteAccountPayload(mpt, key).isOkOr:
+    api.deleteAccountPayload(mpt, eAddr.keccakHash.data).isOkOr:
       if error == DelPathNotFound:
+        # TODO: Would it be conseqient to just return `ok()` here?
         return err(error.toError(base, info, AccNotFound))
       return err(error.toError(base, info))
-
     ok()
 
-  proc accStoDelete(cAcc: AristoCoreDbAccRef, address: EthAddress): CoreDbRc[void] =
-    const info = "stoDeleteFn()"
+  proc accClearStorage(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+    const info = "acc/clearStoFn()"
 
-    let rc = api.deleteStorageTree(mpt, address.to(PathID))
-    if rc.isErr and rc.error notin {DelStoRootMissing,DelStoAccMissing}:
-      return err(rc.error.toError(base, info))
-
+    api.deleteStorageTree(mpt, eAddr.to(PathID)).isOkOr:
+      if error notin {DelStoRootMissing,DelStoAccMissing}:
+        return err(error.toError(base, info))
     ok()
 
-  proc accHasPath(cAcc: AristoCoreDbAccRef, address: EthAddress): CoreDbRc[bool] =
+  proc accHasPath(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
     const info = "hasPathFn()"
 
-    let
-      key = address.keccakHash.data
-      yn = api.hasPathAccount(mpt, key).valueOr:
-        return err(error.toError(base, info))
+    let yn = api.hasPathAccount(mpt, eAddr.keccakHash.data).valueOr:
+      return err(error.toError(base, info))
     ok(yn)
 
   proc accState(cAcc: AristoCoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] =
@@ -392,32 +383,103 @@ proc accMethods(): CoreDbAccFns =
     elif not updateOk and rc.error != GetKeyUpdateNeeded:
       return err(rc.error.toError(base, info))
 
+    # FIXME: `hashify()` should probably throw an assert on failure
     ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
-    let key = api.fetchAccountState(mpt).valueOr:
+
+    let state = api.fetchAccountState(mpt).valueOr:
       raiseAssert info & ": " & $error
-    ok(key)
+    ok(state)
+
+
+  proc slotFetch(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[Blob] =
+    const info = "acc/stoFetchFn()"
+
+    let data = api.fetchStorageData(mpt, key, eAddr.to(PathID)).valueOr:
+      if error != FetchPathNotFound:
+        return err(error.toError(base, info))
+      return err(error.toError(base, info, StoNotFound))
+    ok(data)
+
+  proc slotDelete(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[void] =
+    const info = "acc/stoDeleteFn()"
+
+    api.deleteStorageData(mpt, key, eAddr.to(PathID)).isOkOr:
+      if error == DelPathNotFound:
+        return err(error.toError(base, info, StoNotFound))
+      if error == DelStoRootMissing:
+        # This is insane but legit. A storage column was announced for an
+        # account but no data have been added, yet.
+        return ok()
+      return err(error.toError(base, info))
+    ok()
+
+  proc slotHasPath(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[bool] =
+    const info = "acc/stoHasPathFn()"
+
+    let yn = api.hasPathStorage(mpt, key, eAddr.to(PathID)).valueOr:
+      return err(error.toError(base, info))
+    ok(yn)
+
+  proc slotMerge(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key, val: openArray[byte]): CoreDbRc[void] =
+    const info = "acc/stoMergeFn()"
+
+    api.mergeStorageData(mpt, key, val, eAddr.to(PathID)).isOkOr:
+        return err(error.toError(base, info))
+    ok()
+
+  proc slotState(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; updateOk: bool): CoreDbRc[Hash256] =
+    const info = "acc/stoStateFn()"
+
+    let rc = api.fetchStorageState(mpt, eAddr.to(PathID))
+    if rc.isOk:
+      return ok(rc.value)
+    elif not updateOk and rc.error != GetKeyUpdateNeeded:
+      return err(rc.error.toError(base, info))
+
+    # FIXME: `hashify()` should probably throw an assert on failure
+    ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
+
+    let state = api.fetchStorageState(mpt, eAddr.to(PathID)).valueOr:
+      return err(error.toError(base, info))
+    ok(state)
+
 
   CoreDbAccFns(
     backendFn: proc(cAcc: CoreDbAccRef): CoreDbAccBackendRef =
       accBackend(AristoCoreDbAccRef(cAcc)),
 
-    fetchFn: proc(cAcc: CoreDbAccRef, address: EthAddress): CoreDbRc[CoreDbAccount] =
-      accFetch(AristoCoreDbAccRef(cAcc), address),
+    fetchFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
+      accFetch(AristoCoreDbAccRef(cAcc), eAddr),
 
-    deleteFn: proc(cAcc: CoreDbAccRef, address: EthAddress): CoreDbRc[void] =
-      accDelete(AristoCoreDbAccRef(cAcc), address),
+    deleteFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress): CoreDbRc[void] =
+      accDelete(AristoCoreDbAccRef(cAcc), eAddr),
 
-    stoDeleteFn: proc(cAcc: CoreDbAccRef, address: EthAddress): CoreDbRc[void] =
-      accStoDelete(AristoCoreDbAccRef(cAcc), address),
+    clearStorageFn: proc(cAcc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+      accClearStorage(AristoCoreDbAccRef(cAcc), eAddr),
 
     mergeFn: proc(cAcc: CoreDbAccRef, acc: CoreDbAccount): CoreDbRc[void] =
       accMerge(AristoCoreDbAccRef(cAcc), acc),
 
-    hasPathFn: proc(cAcc: CoreDbAccRef, address: EthAddress): CoreDbRc[bool] =
-      accHasPath(AristoCoreDbAccRef(cAcc), address),
+    hasPathFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress): CoreDbRc[bool] =
+      accHasPath(AristoCoreDbAccRef(cAcc), eAddr),
 
     stateFn: proc(cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] =
-      accState(AristoCoreDbAccRef(cAcc), updateOk))
+      accState(AristoCoreDbAccRef(cAcc), updateOk),
+
+    slotFetchFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; k: openArray[byte]): CoreDbRc[Blob] =
+      slotFetch(AristoCoreDbAccRef(cAcc), eAddr, k),
+
+    slotDeleteFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; k: openArray[byte]): CoreDbRc[void] =
+      slotDelete(AristoCoreDbAccRef(cAcc), eAddr, k),
+
+    slotHasPathFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; k: openArray[byte]): CoreDbRc[bool] =
+      slotHasPath(AristoCoreDbAccRef(cAcc), eAddr, k),
+
+    slotMergeFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; k,v: openArray[byte]): CoreDbRc[void] =
+      slotMerge(AristoCoreDbAccRef(cAcc), eAddr, k, v),
+
+    slotStateFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; updateOk: bool): CoreDbRc[Hash256] =
+      slotState(AristoCoreDbAccRef(cAcc), eAddr, updateOk))
 
 # ------------------------------------------------------------------------------
 # Private context call back functions
@@ -511,7 +573,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     newMpt.methods = mptMethods()
     ok(db.bless newMpt)
 
-  proc ctxGetAcc(cCtx: AristoCoreDbCtxRef): CoreDbAccRef =
+  proc ctxGetAccounts(cCtx: AristoCoreDbCtxRef): CoreDbAccRef =
     let acc = AristoCoreDbAccRef(base: base)
     acc.methods = accMethods()
     db.bless acc
@@ -533,9 +595,8 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     getMptFn: proc(cCtx: CoreDbCtxRef, col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
       ctxGetMpt(AristoCoreDbCtxRef(cCtx), col),
 
-
-    getAccFn: proc(cCtx: CoreDbCtxRef): CoreDbAccRef =
-      ctxGetAcc(AristoCoreDbCtxRef(cCtx)),
+    getAccountsFn: proc(cCtx: CoreDbCtxRef): CoreDbAccRef =
+      ctxGetAccounts(AristoCoreDbCtxRef(cCtx)),
 
     forgetFn: proc(cCtx: CoreDbCtxRef) =
       ctxForget(AristoCoreDbCtxRef(cCtx)))
@@ -579,8 +640,14 @@ proc getSavedState*(base: AristoBaseRef): Result[SavedState,void] =
 func to*(dsc: CoreDbMptRef, T: type AristoDbRef): T =
   AristoCoreDbMptRef(dsc).base.ctx.mpt
 
+func to*(dsc: CoreDbAccRef, T: type AristoDbRef): T =
+  AristoCoreDbAccRef(dsc).base.ctx.mpt
+
 func to*(dsc: CoreDbMptRef, T: type AristoApiRef): T =
   AristoCoreDbMptRef(dsc).base.api
+
+func to*(dsc: CoreDbAccRef, T: type AristoApiRef): T =
+  AristoCoreDbAccRef(dsc).base.api
 
 func rootID*(dsc: CoreDbMptRef): VertexID  =
   AristoCoreDbMptRef(dsc).mptRoot

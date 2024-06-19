@@ -59,7 +59,7 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.pre = node["pre"]
 
 proc rootExists(db: CoreDbRef; root: Hash256): bool =
-  let state = db.ctx.getAcc().state(updateOk=true).valueOr:
+  let state = db.ctx.getAccounts().state(updateOk=true).valueOr:
     return false
   state == root
 

@@ -139,6 +139,13 @@ type
       ## For a storage tree related to account `accPath`, fetch the data
       ## record from the database indexed by `path`.
 
+  AristoApiFetchStorageStateFn* =
+    proc(db: AristoDbRef;
+         accPath: PathID;
+        ): Result[Hash256,AristoError]
+        {.noRaise.}
+      ## Fetch the Merkle hash of the storage root related to `accPath`.
+
   AristoApiFindTxFn* =
     proc(db: AristoDbRef;
          vid: VertexID;
@@ -415,32 +422,41 @@ type
   AristoApiObj* = object of RootObj
     ## Useful set of `Aristo` fuctions that can be filtered, stacked etc.
     commit*: AristoApiCommitFn
+
     deleteAccountPayload*: AristoApiDeleteAccountPayloadFn
     deleteGenericData*: AristoApiDeleteGenericDataFn
     deleteGenericTree*: AristoApiDeleteGenericTreeFn
     deleteStorageData*: AristoApiDeleteStorageDataFn
     deleteStorageTree*: AristoApiDeleteStorageTreeFn
+
     fetchLastSavedState*: AristoApiFetchLastSavedStateFn
+
     fetchAccountPayload*: AristoApiFetchAccountPayloadFn
     fetchAccountState*: AristoApiFetchAccountStateFn
     fetchGenericData*: AristoApiFetchGenericDataFn
     fetchStorageData*: AristoApiFetchStorageDataFn
+    fetchStorageState*: AristoApiFetchStorageStateFn
+
     findTx*: AristoApiFindTxFn
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
     forkTx*: AristoApiForkTxFn
     getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
+
     hasPathAccount*: AristoApiHasPathAccountFn
     hasPathGeneric*: AristoApiHasPathGenericFn
     hasPathStorage*: AristoApiHasPathStorageFn
+
     hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
+
     mergeAccountPayload*: AristoApiMergeAccountPayloadFn
     mergeGenericData*: AristoApiMergeGenericDataFn
     mergeStorageData*: AristoApiMergeStorageDataFn
+
     pathAsBlob*: AristoApiPathAsBlobFn
     persist*: AristoApiPersistFn
     reCentre*: AristoApiReCentreFn
@@ -452,35 +468,43 @@ type
 
   AristoApiProfNames* = enum
     ## Index/name mapping for profile slots
-    AristoApiProfTotal          = "total"
-
+    AristoApiProfTotal                  = "total"
     AristoApiProfCommitFn               = "commit"
+
     AristoApiProfDeleteAccountPayloadFn = "deleteAccountPayload"
     AristoApiProfDeleteGenericDataFn    = "deleteGnericData"
     AristoApiProfDeleteGenericTreeFn    = "deleteGnericTree"
     AristoApiProfDeleteStorageDataFn    = "deleteStorageData"
     AristoApiProfDeleteStorageTreeFn    = "deleteStorageTree"
-    AristoApiProfFetchLastSavedStateFn  = "fetchPayload"
+
+    AristoApiProfFetchLastSavedStateFn  = "fetchLastSavedState"
+
     AristoApiProfFetchAccountPayloadFn  = "fetchAccountPayload"
     AristoApiProfFetchAccountStateFn    = "fetchAccountState"
     AristoApiProfFetchGenericDataFn     = "fetchGenericData"
     AristoApiProfFetchStorageDataFn     = "fetchStorageData"
+    AristoApiProfFetchStorageStateFn    = "fetchStorageState"
+
     AristoApiProfFindTxFn               = "findTx"
     AristoApiProfFinishFn               = "finish"
     AristoApiProfForgetFn               = "forget"
     AristoApiProfForkTxFn               = "forkTx"
     AristoApiProfGetKeyRcFn             = "getKeyRc"
     AristoApiProfHashifyFn              = "hashify"
+
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
     AristoApiProfHasPathGenericFn       = "hasPathGeneric"
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
+
     AristoApiProfHikeUpFn               = "hikeUp"
     AristoApiProfIsTopFn                = "isTop"
     AristoApiProfLevelFn                = "level"
     AristoApiProfNForkedFn              = "nForked"
+
     AristoApiProfMergeAccountPayloadFn  = "mergeAccountPayload"
     AristoApiProfMergeGenericDataFn     = "mergeGenericData"
     AristoApiProfMergeStorageDataFn     = "mergeStorageData"
+
     AristoApiProfPathAsBlobFn           = "pathAsBlob"
     AristoApiProfPersistFn              = "persist"
     AristoApiProfReCentreFn             = "reCentre"
@@ -511,32 +535,41 @@ type
 when AutoValidateApiHooks:
   proc validate(api: AristoApiObj|AristoApiRef) =
     doAssert not api.commit.isNil
+
     doAssert not api.deleteAccountPayload.isNil
     doAssert not api.deleteGenericData.isNil
     doAssert not api.deleteGenericTree.isNil
     doAssert not api.deleteStorageData.isNil
     doAssert not api.deleteStorageTree.isNil
+
     doAssert not api.fetchLastSavedState.isNil
+
     doAssert not api.fetchAccountPayload.isNil
     doAssert not api.fetchAccountState.isNil
     doAssert not api.fetchGenericData.isNil
     doAssert not api.fetchStorageData.isNil
+    doAssert not api.fetchStorageState.isNil
+
     doAssert not api.findTx.isNil
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
     doAssert not api.forkTx.isNil
     doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
+
     doAssert not api.hasPathAccount.isNil
     doAssert not api.hasPathGeneric.isNil
     doAssert not api.hasPathStorage.isNil
+
     doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
+
     doAssert not api.mergeAccountPayload.isNil
     doAssert not api.mergeGenericData.isNil
     doAssert not api.mergeStorageData.isNil
+
     doAssert not api.pathAsBlob.isNil
     doAssert not api.persist.isNil
     doAssert not api.reCentre.isNil
@@ -571,32 +604,41 @@ func init*(api: var AristoApiObj) =
   when AutoValidateApiHooks:
     api.reset
   api.commit = commit
+
   api.deleteAccountPayload = deleteAccountPayload
   api.deleteGenericData = deleteGenericData
   api.deleteGenericTree = deleteGenericTree
   api.deleteStorageData = deleteStorageData
   api.deleteStorageTree = deleteStorageTree
+
   api.fetchLastSavedState = fetchLastSavedState
+
   api.fetchAccountPayload = fetchAccountPayload
   api.fetchAccountState = fetchAccountState
   api.fetchGenericData = fetchGenericData
   api.fetchStorageData = fetchStorageData
+  api.fetchStorageState = fetchStorageState
+
   api.findTx = findTx
   api.finish = finish
   api.forget = forget
   api.forkTx = forkTx
   api.getKeyRc = getKeyRc
   api.hashify = hashify
+
   api.hasPathAccount = hasPathAccount
   api.hasPathGeneric = hasPathGeneric
   api.hasPathStorage = hasPathStorage
+
   api.hikeUp = hikeUp
   api.isTop = isTop
   api.level = level
   api.nForked = nForked
+
   api.mergeAccountPayload = mergeAccountPayload
   api.mergeGenericData = mergeGenericData
   api.mergeStorageData = mergeStorageData
+
   api.pathAsBlob = pathAsBlob
   api.persist = persist
   api.reCentre = reCentre
@@ -614,32 +656,40 @@ func init*(T: type AristoApiRef): T =
 func dup*(api: AristoApiRef): AristoApiRef =
   result = AristoApiRef(
     commit:               api.commit,
+
     deleteAccountPayload: api.deleteAccountPayload,
     deleteGenericData:    api.deleteGenericData,
     deleteGenericTree:    api.deleteGenericTree,
     deleteStorageData:    api.deleteStorageData,
     deleteStorageTree:    api.deleteStorageTree,
+
     fetchLastSavedState:  api.fetchLastSavedState,
     fetchAccountPayload:  api.fetchAccountPayload,
     fetchAccountState:    api.fetchAccountState,
     fetchGenericData:     api.fetchGenericData,
     fetchStorageData:     api.fetchStorageData,
+    fetchStorageState:    api.fetchStorageState,
+
     findTx:               api.findTx,
     finish:               api.finish,
     forget:               api.forget,
     forkTx:               api.forkTx,
     getKeyRc:             api.getKeyRc,
     hashify:              api.hashify,
+
     hasPathAccount:       api.hasPathAccount,
     hasPathGeneric:       api.hasPathGeneric,
     hasPathStorage:       api.hasPathStorage,
+
     hikeUp:               api.hikeUp,
     isTop:                api.isTop,
     level:                api.level,
     nForked:              api.nForked,
+
     mergeAccountPayload:  api.mergeAccountPayload,
     mergeGenericData:     api.mergeGenericData,
     mergeStorageData:     api.mergeStorageData,
+
     pathAsBlob:           api.pathAsBlob,
     persist:              api.persist,
     reCentre:             api.reCentre,
@@ -731,6 +781,11 @@ func init*(
     proc(a: AristoDbRef; b: openArray[byte]; c: PathID;): auto =
       AristoApiProfFetchStorageDataFn.profileRunner:
         result = api.fetchStorageData(a, b, c)
+
+  profApi.fetchStorageState =
+    proc(a: AristoDbRef; b: PathID;): auto =
+      AristoApiProfFetchStorageStateFn.profileRunner:
+        result = api.fetchStorageState(a, b)
 
   profApi.findTx =
     proc(a: AristoDbRef; b: VertexID; c: HashKey): auto =

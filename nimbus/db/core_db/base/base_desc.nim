@@ -71,6 +71,7 @@ type
     RlpException
     RootNotFound
     RootUnacceptable
+    StoNotFound
     StorageFailed
     TxPending
 
@@ -165,15 +166,15 @@ type
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
     cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
-  CoreDbCtxGetAccFn* = proc(cCtx: CoreDbCtxRef): CoreDbAccRef {.noRaise.}
+  CoreDbCtxGetAccountsFn* = proc(cCtx: CoreDbCtxRef): CoreDbAccRef {.noRaise.}
   CoreDbCtxForgetFn* = proc(cCtx: CoreDbCtxRef) {.noRaise.}
 
   CoreDbCtxFns* = object
     ## Methods for context maniulation
-    newColFn*: CoreDbCtxNewColFn
-    getMptFn*: CoreDbCtxGetMptFn
-    getAccFn*: CoreDbCtxGetAccFn
-    forgetFn*: CoreDbCtxForgetFn
+    newColFn*:      CoreDbCtxNewColFn
+    getMptFn*:      CoreDbCtxGetMptFn
+    getAccountsFn*: CoreDbCtxGetAccountsFn
+    forgetFn*:      CoreDbCtxForgetFn
 
   # --------------------------------------------------
   # Sub-descriptor: generic  Mpt/hexary trie methods
@@ -206,23 +207,40 @@ type
   # ----------------------------------------------------
   # Sub-descriptor: Account column methods
   # ------------------------------------------------------
-  CoreDbAccBackendFn* = proc(cAcc: CoreDbAccRef,): CoreDbAccBackendRef {.noRaise.}
+  CoreDbAccBackendFn* = proc(cAcc: CoreDbAccRef): CoreDbAccBackendRef {.noRaise.}
   CoreDbAccFetchFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccStoDeleteFn* = proc(cAcc: CoreDbAccRef,k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccClearStorageFn* = proc(cAcc: CoreDbAccRef,k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(cAcc: CoreDbAccRef, v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[bool] {.noRaise.}
   CoreDbAccStateFn* = proc(cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
+  CoreDbSlotFetchFn* =
+    proc(cAcc: CoreDbAccRef,a: EthAddress; k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbSlotDeleteFn* =
+    proc(cAcc: CoreDbAccRef,a: EthAddress; k: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbSlotHasPathFn* =
+    proc(cAcc: CoreDbAccRef,a: EthAddress; k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbSlotMergeFn* =
+    proc(cAcc: CoreDbAccRef,a: EthAddress; k, v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbSlotStateFn* =
+    proc(cAcc: CoreDbAccRef,a: EthAddress; updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
+
   CoreDbAccFns* = object
     ## Methods for trie objects
-    backendFn*:    CoreDbAccBackendFn
-    deleteFn*:     CoreDbAccDeleteFn
-    fetchFn*:      CoreDbAccFetchFn
-    hasPathFn*:    CoreDbAccHasPathFn
-    mergeFn*:      CoreDbAccMergeFn
-    stateFn*:      CoreDbAccStateFn
-    stoDeleteFn*:  CoreDbAccStoDeleteFn
+    backendFn*:      CoreDbAccBackendFn
+    fetchFn*:        CoreDbAccFetchFn
+    clearStorageFn*: CoreDbAccClearStorageFn
+    deleteFn*:       CoreDbAccDeleteFn
+    hasPathFn*:      CoreDbAccHasPathFn
+    mergeFn*:        CoreDbAccMergeFn
+    stateFn*:        CoreDbAccStateFn
+
+    slotFetchFn*:    CoreDbSlotFetchFn
+    slotDeleteFn*:   CoreDbSlotDeleteFn
+    slotHasPathFn*:  CoreDbSlotHasPathFn
+    slotMergeFn*:    CoreDbSlotMergeFn
+    slotStateFn*:    CoreDbSlotStateFn
 
 
   # --------------------------------------------------

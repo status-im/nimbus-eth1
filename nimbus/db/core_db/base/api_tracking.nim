@@ -34,7 +34,14 @@ type
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
     AccStateFn          = "acc/state"
-    AccStoDeleteFn      = "acc/stoDelete"
+    AccClearStorageFn   = "acc/clearStorage"
+
+    AccSlotFetchFn      = "slotFetch"
+    AccSlotDeleteFn     = "slotDelete"
+    AccSlotHasPathFn    = "slotHasPath"
+    AccSlotMergeFn      = "slotMerge"
+    AccSlotStateFn      = "slotState"
+    AccSlotPairsIt      = "slotPairs"
 
     AnyBackendFn        = "any/backend"
 
@@ -58,7 +65,7 @@ type
     CptForgetFn         = "cpt/forget"
 
     CtxForgetFn         = "ctx/forget"
-    CtxGetAccFn         = "ctx/getAcc"
+    CtxGetAccountsFn    = "getAccounts"
     CtxGetMptFn         = "ctx/getMpt"
     CtxNewColFn         = "ctx/newColumn"
 

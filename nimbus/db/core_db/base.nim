@@ -567,65 +567,55 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
 # Public methods for accounts
 # ------------------------------------------------------------------------------
 
-proc getAcc*(
-    ctx: CoreDbCtxRef;
-      ): CoreDbAccRef =
+proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
   ## Accounts column constructor, will defect on failure.
   ##
-  ctx.setTrackNewApi CtxGetAccFn
-  result = ctx.methods.getAccFn(ctx)
+  ctx.setTrackNewApi CtxGetAccountsFn
+  result = ctx.methods.getAccountsFn(ctx)
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
+# ----------- accounts ---------------
 
-proc fetch*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[CoreDbAccount] =
-  ## Fetch data from the argument `acc`.
+proc fetch*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
+  ## Fetch the account data record for the particular account indexed by
+  ## the address `eAddr`.
   ##
   acc.setTrackNewApi AccFetchFn
-  result = acc.methods.fetchFn(acc, address)
-  acc.ifTrackNewApi:
-    let storage = if result.isErr: "n/a" else: result.value.storage.prettyText()
-    debug newApiTxt, api, elapsed, address, storage, result
+  result = acc.methods.fetchFn(acc, eAddr)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
-
-proc delete*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[void] =
+proc delete*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+  ## Delete the particular account indexed by the address `eAddr`. This
+  ## will also destroy an associated storage area.
+  ##
   acc.setTrackNewApi AccDeleteFn
-  result = acc.methods.deleteFn(acc, address)
+  result = acc.methods.deleteFn(acc, eAddr)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
-proc stoDelete*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[void] =
-  ## Recursively delete all data elements from the storage trie associated to
-  ## the account identified by the argument `address`. After successful run,
-  ## the storage trie will be empty.
+proc clearStorage*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+  ## Delete all data slots from the storage area associated with the
+  ## particular account indexed by the address `eAddr`.
   ##
-  ## Caveat:
-  ##   This function has no effect on the legacy backend so it must not be
-  ##   relied upon in general. On the legacy backend, storage tries might be
-  ##   shared by several accounts whereas they are unique on the `Aristo`
-  ##   backend.
+  acc.setTrackNewApi AccClearStorageFn
+  result = acc.methods.clearStorageFn(acc, eAddr)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc merge*(acc: CoreDbAccRef; account: CoreDbAccount): CoreDbRc[void] =
+  ## Add or update the argument account data record `account`. Note that the
+  ## `account` argument uniquely idendifies the particular account address.
   ##
-  acc.setTrackNewApi AccStoDeleteFn
-  result = acc.methods.stoDeleteFn(acc, address)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
-
-
-proc merge*(
-    acc: CoreDbAccRef;
-    account: CoreDbAccount;
-      ): CoreDbRc[void] =
   acc.setTrackNewApi AccMergeFn
   result = acc.methods.mergeFn(acc, account)
   acc.ifTrackNewApi:
-    let address = account.address
-    debug newApiTxt, api, elapsed, address, result
+    let eAddr = account.address
+    debug newApiTxt, api, elapsed, eAddr, result
 
-
-proc hasPath*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[bool] =
+proc hasPath*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
   acc.setTrackNewApi AccHasPathFn
-  result = acc.methods.hasPathFn(acc, address)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
-
+  result = acc.methods.hasPathFn(acc, eAddr)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
   ## Getter (well, sort of). It retrieves the account column Merkle state
@@ -638,6 +628,55 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
   result = acc.methods.stateFn(acc, updateOk)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
 
+# ------------ storage ---------------
+
+proc slotFetch*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    slot: openArray[byte];
+      ):  CoreDbRc[Blob] =
+  acc.setTrackNewApi AccSlotFetchFn
+  result = acc.methods.slotFetchFn(acc, eAddr, slot)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc slotDelete*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    slot: openArray[byte];
+      ):  CoreDbRc[void] =
+  acc.setTrackNewApi AccSlotDeleteFn
+  result = acc.methods.slotDeleteFn(acc, eAddr, slot)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc slotHasPath*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    slot: openArray[byte];
+      ):  CoreDbRc[bool] =
+  acc.setTrackNewApi AccSlotHasPathFn
+  result = acc.methods.slotHasPathFn(acc, eAddr, slot)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc slotMerge*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    slot: openArray[byte];
+    data: openArray[byte];
+      ):  CoreDbRc[void] =
+  acc.setTrackNewApi AccSlotMergeFn
+  result = acc.methods.slotMergeFn(acc, eAddr, slot, data)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc slotState*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    updateOk = false;
+      ):  CoreDbRc[Hash256] =
+  acc.setTrackNewApi AccSlotStateFn
+  result = acc.methods.slotStateFn(acc, eAddr, updateOk)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+
+# ------------- other ----------------
 
 proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
   ## Convert the argument `statement` to the portable Ethereum representation

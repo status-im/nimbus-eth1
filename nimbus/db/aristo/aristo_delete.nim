@@ -22,26 +22,9 @@ import
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
        aristo_utils, aristo_vid]
 
-type
-  SaveToVaeVidFn =
-    proc(err: AristoError): (VertexID,AristoError) {.gcsafe, raises: [].}
-
 # ------------------------------------------------------------------------------
 # Private heplers
 # ------------------------------------------------------------------------------
-
-func toVae(err: AristoError): (VertexID,AristoError) =
-  ## Map single error to error pair with dummy vertex
-  (VertexID(0),err)
-
-func toVae(vid: VertexID): SaveToVaeVidFn =
-  ## Map single error to error pair with argument vertex
-  result =
-    proc(err: AristoError): (VertexID,AristoError) =
-      return (vid,err)
-
-func toVae(err: (VertexID,AristoError,Hike)): (VertexID,AristoError) =
-  (err[0], err[1])
 
 proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
   ## Returns the nibble if there is only one reference left.

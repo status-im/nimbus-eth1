@@ -37,7 +37,7 @@ type
   SomeLedger* = AccountLedger | StorageLedger
 
 const
-  EnableMptDump = false # or true
+  EnableMptDump = false or true
     ## Provide database dumper. Note that the dump function needs to link
     ## against the `rocksdb` library. The# dependency lies in import of
     ## `aristo_debug`.
@@ -128,7 +128,7 @@ proc init*(
       ): T =
   const
     info = "AccountLedger.init(): "
-  let acc = db.ctx.getAcc()
+  let acc = db.ctx.getAccounts()
   if root != EMPTY_ROOT_HASH:
     let state = block:
       let rc = acc.state(updateOk=true)
@@ -155,7 +155,7 @@ proc merge*(al: AccountLedger; account: CoreDbAccount) =
 proc freeStorage*(al: AccountLedger, eAddr: EthAddress) =
   const info = "AccountLedger/freeStorage()"
   # Flush associated storage trie
-  al.distinctBase.stoDelete(eAddr).isOkOr:
+  al.distinctBase.clearStorage(eAddr).isOkOr:
     raiseAssert info & $$error
 
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
