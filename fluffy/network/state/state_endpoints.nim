@@ -40,15 +40,13 @@ proc getNextNodeHash(
       let nextNibble = nibbles[nibbleIdx]
       doAssert(nextNibble < 16)
 
-      let nextHashBytes = trieNodeRlp.listElem(nextNibble.int)
-      doAssert(not nextHashBytes.isEmpty())
+      let nextHashBytes = trieNodeRlp.listElem(nextNibble.int).toBytes()
+      if nextHashBytes.len() == 0:
+        return Opt.none((Nibbles, NodeHash))
 
       nibbleIdx += 1
       return Opt.some(
-        (
-          nibbles[0 ..< nibbleIdx].packNibbles(),
-          KeccakHash.fromBytes(nextHashBytes.toBytes()),
-        )
+        (nibbles[0 ..< nibbleIdx].packNibbles(), KeccakHash.fromBytes(nextHashBytes))
       )
 
     # leaf or extension node
@@ -57,16 +55,13 @@ proc getNextNodeHash(
       return Opt.none((Nibbles, NodeHash))
 
     # extension node
+    let nextHashBytes = trieNodeRlp.listElem(1).toBytes()
+    if nextHashBytes.len() == 0:
+      return Opt.none((Nibbles, NodeHash))
+
     nibbleIdx += prefix.unpackNibbles().len()
-
-    let nextHashBytes = trieNodeRlp.listElem(1)
-    doAssert(not nextHashBytes.isEmpty())
-
     Opt.some(
-      (
-        nibbles[0 ..< nibbleIdx].packNibbles(),
-        KeccakHash.fromBytes(nextHashBytes.toBytes()),
-      )
+      (nibbles[0 ..< nibbleIdx].packNibbles(), KeccakHash.fromBytes(nextHashBytes))
     )
   except RlpError as e:
     raiseAssert(e.msg)
