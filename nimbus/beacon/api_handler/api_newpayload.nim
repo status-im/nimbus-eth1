@@ -83,9 +83,9 @@ template validatePayload(apiVersion, version, payload) =
         "excessBlobGas is expected from execution payload")
 
   if apiVersion >= Version.V4 or version >= Version.V4:
-    if payload.depositReceipts.isNone:
+    if payload.depositRequests.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "depositReceipts is expected from execution payload")
+        "depositRequests is expected from execution payload")
     if payload.exits.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "exits is expected from execution payload")

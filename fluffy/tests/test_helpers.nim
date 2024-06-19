@@ -24,16 +24,16 @@ proc initDiscoveryNode*(
     address: Address,
     bootstrapRecords: openArray[Record] = [],
     localEnrFields: openArray[(string, seq[byte])] = [],
-    previousRecord = none[enr.Record](),
+    previousRecord = Opt.none(enr.Record),
 ): discv5_protocol.Protocol {.raises: [CatchableError].} =
   # set bucketIpLimit to allow bucket split
   let config = DiscoveryConfig.init(1000, 24, 5)
 
   result = newProtocol(
     privKey,
-    some(address.ip),
-    some(address.port),
-    some(address.port),
+    Opt.some(address.ip),
+    Opt.some(address.port),
+    Opt.some(address.port),
     bindPort = address.port,
     bootstrapRecords = bootstrapRecords,
     localEnrFields = localEnrFields,

@@ -264,7 +264,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     portalRpcClient = newRpcHttpClient()
 
     optimisticHandler = proc(
-        signedBlock: ForkedMsgTrustedSignedBeaconBlock
+        signedBlock: ForkedSignedBeaconBlock
     ): Future[void] {.async: (raises: [CancelledError]).} =
       # TODO: Should not be gossiping optimistic blocks, but instead store them
       # in a cache and only gossip them after they are confirmed due to an LC
@@ -512,7 +512,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     withForkyHeader(optimisticHeader):
       when lcDataFork > LightClientDataFork.None:
         info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
-        optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader

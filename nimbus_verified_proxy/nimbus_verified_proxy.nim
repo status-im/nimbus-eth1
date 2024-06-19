@@ -46,7 +46,6 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
       chainId =
         case net
         of mainnet: 1.Quantity
-        of goerli: 5.Quantity
         of sepolia: 11155111.Quantity
         of holesky: 17000.Quantity
     return chainId
@@ -130,7 +129,7 @@ proc run*(
     verifiedProxy = VerifiedRpcProxy.new(rpcProxy, blockCache, chainId)
 
     optimisticHandler = proc(
-        signedBlock: ForkedMsgTrustedSignedBeaconBlock
+        signedBlock: ForkedSignedBeaconBlock
     ): Future[void] {.async: (raises: [CancelledError]).} =
       notice "New LC optimistic block",
         opt = signedBlock.toBlockId(), wallSlot = getBeaconTime().slotOrZero
@@ -214,7 +213,6 @@ proc run*(
     withForkyHeader(optimisticHeader):
       when lcDataFork > LightClientDataFork.None:
         info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
-        optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
         if headerCallback != nil:
           try:
             headerCallback(cstring(Json.encode(forkyHeader)), 1)

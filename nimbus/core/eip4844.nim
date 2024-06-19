@@ -10,6 +10,7 @@
 
 import
   std/[os, strutils],
+  stew/arrayops,
   nimcrypto/sha2,
   kzg4844/kzg_ex as kzg,
   results,
@@ -39,8 +40,8 @@ const
 
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
-proc kzgToVersionedHash*(kzg: kzg.KZGCommitment): VersionedHash =
-  result = sha256.digest(kzg.bytes)
+proc kzgToVersionedHash*(kzg: kzg.KzgCommitment): VersionedHash =
+  result = sha256.digest(kzg)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
@@ -54,20 +55,14 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   if input.len != PrecompileInputLength:
     return err("invalid input length")
 
-  var
-    versionedHash: KzgBytes32
-    z: KzgBytes32
-    y: KzgBytes32
-    commitment: KzgBytes48
-    kzgProof: KzgBytes48
+  let
+    versionedHash = KzgBytes32.initCopyFrom(input.toOpenArray(0, 31))
+    z =  KzgBytes32.initCopyFrom(input.toOpenArray(32, 63))
+    y =  KzgBytes32.initCopyFrom(input.toOpenArray(64, 95))
+    commitment =  KzgBytes48.initCopyFrom(input.toOpenArray(96, 143))
+    kzgProof =  KzgBytes48.initCopyFrom(input.toOpenArray(144, 191))
 
-  versionedHash.bytes[0..<32] = input[0..<32]
-  z.bytes[0..<32] = input[32..<64]
-  y.bytes[0..<32] = input[64..<96]
-  commitment.bytes[0..<48] = input[96..<144]
-  kzgProof.bytes[0..<48]   = input[144..<192]
-
-  if kzgToVersionedHash(commitment).data != versionedHash.bytes:
+  if kzgToVersionedHash(commitment).data != versionedHash:
     return err("versionedHash should equal to kzgToVersionedHash(commitment)")
 
   # Verify KZG proof
@@ -183,14 +178,13 @@ proc validateBlobTransactionWrapper*(tx: PooledTransaction):
   if not goodFormatted:
     return err("tx wrapper is ill formatted")
 
-  let commitments = tx.networkPayload.commitments.mapIt(
-                      kzg.KzgCommitment(bytes: it))
+  let commitments = tx.networkPayload.commitments
 
   # Verify that commitments match the blobs by checking the KZG proof
   let res = kzg.verifyBlobKzgProofBatch(
-              tx.networkPayload.blobs.mapIt(kzg.KzgBlob(bytes: it)),
+              tx.networkPayload.blobs,
               commitments,
-              tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it)))
+              tx.networkPayload.proofs)
 
   if res.isErr:
     return err(res.error)

@@ -231,7 +231,7 @@ proc run(config: PortalCliConf) =
   let d = newProtocol(
     config.networkKey,
     extIp,
-    none(Port),
+    Opt.none(Port),
     extUdpPort,
     bootstrapRecords = bootstrapRecords,
     bindIp = bindIp,
