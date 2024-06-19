@@ -21,7 +21,7 @@ import
 type
   CoreDxApiTrackRef* =
     CoreDbRef | CoreDxKvtRef | CoreDbColRef |
-    CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
+    CoreDbCtxRef | CoreDxMptRef | CoreDxAccRef |
     CoreDxTxRef | CoreDxCaptRef | CoreDbErrorRef
 
   CoreDbFnInx* = enum
@@ -84,16 +84,6 @@ type
     MptMergeFn          = "mpt/merge"
     MptPairsIt          = "mpt/pairs"
     MptReplicateIt      = "mpt/replicate"
-    MptToPhkFn          = "mpt/toPhk"
-
-    PhkDeleteFn         = "phk/delete"
-    PhkFetchFn          = "phk/fetch"
-    PhkFetchOrEmptyFn   = "phk/fetchOrEmpty"
-    PhkForgetFn         = "phk/forget"
-    PhkGetColFn         = "phk/getColumn"
-    PhkHasPathFn        = "phk/hasPath"
-    PhkMergeFn          = "phk/merge"
-    PhkToMptFn          = "phk/toMpt"
 
     TxCommitFn          = "commit"
     TxDisposeFn         = "dispose"

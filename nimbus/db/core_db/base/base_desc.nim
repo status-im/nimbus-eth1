@@ -312,13 +312,6 @@ type
     parent*: CoreDbRef
     ready*: bool              ## Must be set `true` to enable
 
-  CoreDxPhkRef* = ref object
-    ## Similar to `CoreDbMptRef` but with pre-hashed keys. That is, any
-    ## argument key for `merge()`, `fetch()` etc. will be hashed first
-    ## before being applied.
-    toMpt*: CoreDxMptRef
-    methods*: CoreDbMptFns
-
   CoreDxTxRef* = ref object of RootRef
     ## Transaction descriptor derived from `CoreDbRef`
     parent*: CoreDbRef

@@ -53,7 +53,6 @@ export
   CoreDxCaptRef,
   CoreDxKvtRef,
   CoreDxMptRef,
-  CoreDxPhkRef,
   CoreDxTxRef,
   PayloadRef
 
@@ -117,37 +116,6 @@ template ifTrackNewApi*(w: CoreDxApiTrackRef; code: untyped) =
     w.endNewApiIf:
       code
 
-# ---------
-
-func toCoreDxPhkRef(mpt: CoreDxMptRef): CoreDxPhkRef =
-  ## MPT => pre-hashed MPT (aka PHK)
-  result = CoreDxPhkRef(
-    toMpt: mpt,
-    methods: mpt.methods)
-
-  result.methods.fetchFn =
-    proc(k: openArray[byte]): CoreDbRc[Blob] =
-      mpt.methods.fetchFn(k.keccakHash.data)
-
-  result.methods.deleteFn =
-    proc(k: openArray[byte]): CoreDbRc[void] =
-      mpt.methods.deleteFn(k.keccakHash.data)
-
-  result.methods.mergeFn =
-    proc(k:openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
-      mpt.methods.mergeFn(k.keccakHash.data, v)
-
-  result.methods.hasPathFn =
-    proc(k: openArray[byte]): CoreDbRc[bool] =
-      mpt.methods.hasPathFn(k.keccakHash.data)
-
-  when AutoValidateDescriptors:
-    result.validate
-
-
-func parent(phk: CoreDxPhkRef): CoreDbRef =
-  phk.toMpt.parent
-
 # ------------------------------------------------------------------------------
 # Public constructor helper
 # ------------------------------------------------------------------------------
@@ -176,7 +144,7 @@ proc bless*(db: CoreDbRef; kvt: CoreDxKvtRef): CoreDxKvtRef =
   kvt
 
 proc bless*[T: CoreDxKvtRef |
-               CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
+               CoreDbCtxRef | CoreDxMptRef | CoreDxAccRef |
                CoreDxTxRef  | CoreDxCaptRef |
                CoreDbKvtBackendRef | CoreDbMptBackendRef](
     db: CoreDbRef;
@@ -228,7 +196,7 @@ proc dbType*(db: CoreDbRef): CoreDbType =
 
 proc parent*[T: CoreDxKvtRef |
                 CoreDbColRef |
-                CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef |
+                CoreDbCtxRef | CoreDxMptRef | CoreDxAccRef |
                 CoreDxTxRef |
                 CoreDxCaptRef |
                 CoreDbErrorRef](
@@ -549,34 +517,14 @@ proc getAcc*(
   ##     ... # Was not the state root for the accounts column
   ##     return
   ##
-  ## This function works similar to `getMpt()` for handling accounts. Although
-  ## one can emulate this function by means of `getMpt(..).toPhk()`, it is
-  ## recommended using `CoreDxAccRef` methods for accounts.
+  ## This function works similar to `getMpt()` for handling accounts.
   ##
   ctx.setTrackNewApi CtxGetAccFn
   result = ctx.methods.getAccFn col
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
-proc toMpt*(phk: CoreDxPhkRef): CoreDxMptRef =
-  ## Replaces the pre-hashed argument column `phk` by the non pre-hashed *MPT*.
-  ##
-  phk.setTrackNewApi PhkToMptFn
-  result = phk.toMpt
-  phk.ifTrackNewApi:
-    let col = result.methods.getColFn()
-    debug newApiTxt, api, elapsed, col
-
-proc toPhk*(mpt: CoreDxMptRef): CoreDxPhkRef =
-  ## Replaces argument `mpt` by a pre-hashed *MPT*.
-  ##
-  mpt.setTrackNewApi MptToPhkFn
-  result = mpt.toCoreDxPhkRef
-  mpt.ifTrackNewApi:
-    let col = result.methods.getColFn()
-    debug newApiTxt, api, elapsed, col
-
 # ------------------------------------------------------------------------------
-# Public common methods for all hexary trie databases (`mpt`, `phk`, or `acc`)
+# Public common methods for all hexary trie databases (`mpt`, or `acc`)
 # ------------------------------------------------------------------------------
 
 proc getColumn*(acc: CoreDxAccRef): CoreDbColRef =
@@ -593,15 +541,8 @@ proc getColumn*(mpt: CoreDxMptRef): CoreDbColRef =
   result = mpt.methods.getColFn()
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc getColumn*(phk: CoreDxPhkRef): CoreDbColRef =
-  ## Variant of `getColumn()`
-  ##
-  phk.setTrackNewApi PhkGetColFn
-  result = phk.methods.getColFn()
-  phk.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
 # ------------------------------------------------------------------------------
-# Public generic hexary trie database methods (`mpt` or `phk`)
+# Public generic hexary trie database methods
 # ------------------------------------------------------------------------------
 
 proc fetch*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[Blob] =
@@ -613,15 +554,6 @@ proc fetch*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   mpt.ifTrackNewApi:
     let col = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
-
-proc fetch*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[Blob] =
-  ## Variant of `fetch()"
-  phk.setTrackNewApi PhkFetchFn
-  result = phk.methods.fetchFn key
-  phk.ifTrackNewApi:
-    let col = phk.methods.getColFn()
-    debug newApiTxt, api, elapsed, col, key=key.toStr, result
-
 
 proc fetchOrEmpty*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function returns an empty `Blob` if the argument `key` is not found
@@ -635,31 +567,12 @@ proc fetchOrEmpty*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[Blob] =
     let col = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
 
-proc fetchOrEmpty*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[Blob] =
-  ## Variant of `fetchOrEmpty()`
-  phk.setTrackNewApi PhkFetchOrEmptyFn
-  result = phk.methods.fetchFn key
-  if result.isErr and result.error.error == MptNotFound:
-    result = CoreDbRc[Blob].ok(EmptyBlob)
-  phk.ifTrackNewApi:
-    let col = phk.methods.getColFn()
-    debug newApiTxt, api, elapsed, col, key=key.toStr, result
-
-
 proc delete*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[void] =
   mpt.setTrackNewApi MptDeleteFn
   result = mpt.methods.deleteFn key
   mpt.ifTrackNewApi:
     let col = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
-
-proc delete*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[void] =
-  phk.setTrackNewApi PhkDeleteFn
-  result = phk.methods.deleteFn key
-  phk.ifTrackNewApi:
-    let col = phk.methods.getColFn()
-    debug newApiTxt, api, elapsed, col, key=key.toStr, result
-
 
 proc merge*(
     mpt: CoreDxMptRef;
@@ -672,18 +585,6 @@ proc merge*(
     let col = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, col, key=key.toStr, val=val.toLenStr, result
 
-proc merge*(
-    phk: CoreDxPhkRef;
-    key: openArray[byte];
-    val: openArray[byte];
-      ): CoreDbRc[void] =
-  phk.setTrackNewApi PhkMergeFn
-  result = phk.methods.mergeFn(key, val)
-  phk.ifTrackNewApi:
-    let col = phk.methods.getColFn()
-    debug newApiTxt, api, elapsed, col, key=key.toStr, val=val.toLenStr, result
-
-
 proc hasPath*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[bool] =
   ## This function would be named `contains()` if it returned `bool` rather
   ## than a `Result[]`.
@@ -692,14 +593,6 @@ proc hasPath*(mpt: CoreDxMptRef; key: openArray[byte]): CoreDbRc[bool] =
   result = mpt.methods.hasPathFn key
   mpt.ifTrackNewApi:
     let col = mpt.methods.getColFn()
-    debug newApiTxt, api, elapsed, col, key=key.toStr, result
-
-proc hasPath*(phk: CoreDxPhkRef; key: openArray[byte]): CoreDbRc[bool] =
-  ## Variant of `hasPath()`
-  phk.setTrackNewApi PhkHasPathFn
-  result = phk.methods.hasPathFn key
-  phk.ifTrackNewApi:
-    let col = phk.methods.getColFn()
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
 
 # ------------------------------------------------------------------------------

@@ -17,7 +17,7 @@ type
 
   MethodsDesc =
     CoreDxKvtRef |
-    CoreDbCtxRef | CoreDxMptRef | CoreDxPhkRef | CoreDxAccRef  |
+    CoreDbCtxRef | CoreDxMptRef | CoreDxAccRef  |
     CoreDxTxRef  |
     CoreDxCaptRef
 
@@ -107,11 +107,6 @@ proc validateMethodsDesc(acc: CoreDxAccRef) =
   doAssert not acc.isNil
   doAssert not acc.parent.isNil
   acc.methods.validateMethodsDesc
-
-proc validateMethodsDesc(phk: CoreDxPhkRef) =
-  doAssert not phk.isNil
-  doAssert not phk.toMpt.isNil
-  phk.methods.validateMethodsDesc
 
 when false: # currently disabled
   proc validateMethodsDesc(cpt: CoreDxCaptRef) =

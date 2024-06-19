@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-# This implementation of getBranch on the CoreDbPhkRef type is a temporary solution
-# which can be removed once we get an equivient proc defined on the CoreDbPhkRef type
+# This implementation of getBranch on the CoreDbMptRef type is a temporary solution
+# which can be removed once we get an equivient proc defined on the CoreDbMptRef type
 # in the db layer.
 
 {.push raises: [].}
@@ -88,7 +88,12 @@ proc getBranchAux(
     raise newException(RlpError, "node has an unexpected number of children")
 
 proc getBranch*(
-    self: CoreDxPhkRef;
+    # self: CoreDxPhkRef;
+    # Note that PHK type has been removed. The difference PHK an MPT was that
+    # the keys of the PHK were pre-hased (as in the legacy `SecureHexaryTrie`
+    # object.) Can this code have worked at all? Looking at the `keyHash`
+    # below it would mean the `key` was double hashed? -- j
+    self: CoreDxMptRef;
     key: openArray[byte]): seq[seq[byte]] {.raises: [RlpError].} =
   let
     keyHash = keccakHash(key).data

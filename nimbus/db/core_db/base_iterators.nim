@@ -47,7 +47,7 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) =
-  ## Trie traversal, only supported for `CoreDxMptRef` (not `Phk`)
+  ## Trie traversal, only supported for `CoreDxMptRef`
   ##
   mpt.setTrackNewApi MptPairsIt
   case mpt.parent.dbType:
@@ -61,7 +61,7 @@ iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) =
     debug newApiTxt, api, elapsed, trie
 
 iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
-  ## Low level trie dump, only supported for `CoreDxMptRef` (not `Phk`)
+  ## Low level trie dump, only supported for `CoreDxMptRef`
   ##
   mpt.setTrackNewApi MptReplicateIt
   case mpt.parent.dbType:
