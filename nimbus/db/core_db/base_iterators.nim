@@ -42,7 +42,7 @@ iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
   of AristoDbVoid:
     for k,v in kvt.aristoKvtPairsVoid():
       yield (k,v)
-  else:
+  of Ooops, AristoDbRocks:
     raiseAssert: "Unsupported database type: " & $kvt.parent.dbType
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
@@ -54,14 +54,24 @@ iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
   of AristoDbMemory, AristoDbRocks, AristoDbVoid:
     for k,v in mpt.aristoMptPairs():
       yield (k,v)
-  else:
+  of Ooops:
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
-  mpt.ifTrackNewApi:
-    let trie = mpt.methods.getColFn()
-    debug newApiTxt, api, elapsed, trie
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
+
+iterator slotPairs*(acc: CoreDbAccRef; eAddr: EthAddress): (Blob, Blob) =
+  ## Trie traversal, only supported for `CoreDbMptRef`
+  ##
+  acc.setTrackNewApi AccSlotPairsIt
+  case acc.parent.dbType:
+  of AristoDbMemory, AristoDbRocks, AristoDbVoid:
+    for k,v in acc.aristoSlotPairs(eAddr):
+      yield (k,v)
+  of Ooops:
+    raiseAssert: "Unsupported database type: " & $acc.parent.dbType
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
-  ## Low level trie dump, only supported for `CoreDbMptRef`
+  ## Low level trie dump, only supported for non persistent `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptReplicateIt
   case mpt.parent.dbType:
@@ -71,11 +81,9 @@ iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
   of AristoDbVoid:
     for k,v in aristoReplicateVoid(mpt):
       yield (k,v)
-  else:
+  of Ooops, AristoDbRocks:
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
-  mpt.ifTrackNewApi:
-    let trie = mpt.methods.getColFn()
-    debug newApiTxt, api, elapsed, trie
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

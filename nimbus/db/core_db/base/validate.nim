@@ -53,7 +53,7 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
 proc validateMethodsDesc(ctx: CoreDbCtxFns) =
   doAssert not ctx.newColFn.isNil
   doAssert not ctx.getMptFn.isNil
-  doAssert not ctx.getAccFn.isNil
+  doAssert not ctx.getAccountsFn.isNil
   doAssert not ctx.forgetFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbMptFns) =
@@ -66,12 +66,18 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.backendFn.isNil
-  doAssert not fns.deleteFn.isNil
   doAssert not fns.fetchFn.isNil
+  doAssert not fns.clearStorageFn.isNil
+  doAssert not fns.deleteFn.isNil
   doAssert not fns.hasPathFn.isNil
   doAssert not fns.mergeFn.isNil
   doAssert not fns.stateFn.isNil
-  doAssert not fns.stoDeleteFn.isNil
+
+  doAssert not fns.slotFetchFn.isNil
+  doAssert not fns.slotDeleteFn.isNil
+  doAssert not fns.slotHasPathFn.isNil
+  doAssert not fns.slotMergeFn.isNil
+  doAssert not fns.slotStateFn.isNil
 
 # ------------
 
