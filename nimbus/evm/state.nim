@@ -52,7 +52,7 @@ func blockCtx(com: CommonRef, header: BlockHeader):
 # --------------
 
 proc `$`*(vmState: BaseVMState): string
-    {.gcsafe, raises: [ValueError].} =
+    {.gcsafe, raises: [].} =
   if vmState.isNil:
     result = "nil"
   else:
@@ -235,7 +235,7 @@ proc baseFeePerGas*(vmState: BaseVMState): UInt256 =
   vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
-    vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base.} =
+    vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.gcsafe, base.} =
   let db = vmState.com.db
   try:
     var blockHash: Hash256
