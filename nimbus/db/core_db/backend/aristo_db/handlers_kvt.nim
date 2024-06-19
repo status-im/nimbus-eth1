@@ -24,9 +24,9 @@ type
     parent: CoreDbRef            ## Opaque top level descriptor
     kdb: KvtDbRef                ## Shared key-value table
     api*: KvtApiRef              ## Api functions can be re-directed
-    cache: KvtCoreDxKvtRef       ## Shared transaction table wrapper
+    cache: KvtCoreDbKvtRef       ## Shared transaction table wrapper
 
-  KvtCoreDxKvtRef = ref object of CoreDxKvtRef
+  KvtCoreDbKvtRef = ref object of CoreDbKvtRef
     base: KvtBaseRef             ## Local base descriptor
     kvt: KvtDbRef                ## In most cases different from `base.kdb`
 
@@ -68,16 +68,16 @@ func toRc[T](
 # Private `kvt` call back functions
 # ------------------------------------------------------------------------------
 
-proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
+proc kvtMethods(cKvt: KvtCoreDbKvtRef): CoreDbKvtFns =
   ## Key-value database table handlers
 
   proc kvtBackend(
-      cKvt:KvtCoreDxKvtRef;
+      cKvt:KvtCoreDbKvtRef;
         ): CoreDbKvtBackendRef =
     cKvt.base.parent.bless AristoCoreDbKvtBE(kdb: cKvt.kvt)
 
   proc kvtForget(
-      cKvt: KvtCoreDxKvtRef;
+      cKvt: KvtCoreDbKvtRef;
       info: static[string];
         ): CoreDbRc[void] =
     let
@@ -95,7 +95,7 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
     ok()
 
   proc kvtGet(
-      cKvt: KvtCoreDxKvtRef;
+      cKvt: KvtCoreDbKvtRef;
       k: openArray[byte];
       info: static[string];
         ): CoreDbRc[Blob] =
@@ -108,7 +108,7 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
       rc.toRc(cKvt.base, info)
 
   proc kvtPut(
-      cKvt: KvtCoreDxKvtRef;
+      cKvt: KvtCoreDbKvtRef;
       k: openArray[byte];
       v: openArray[byte];
       info: static[string];
@@ -120,7 +120,7 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
       err(rc.error.toError(cKvt.base, info))
 
   proc kvtDel(
-      cKvt: KvtCoreDxKvtRef;
+      cKvt: KvtCoreDbKvtRef;
       k: openArray[byte];
       info: static[string];
         ): CoreDbRc[void] =
@@ -131,7 +131,7 @@ proc kvtMethods(cKvt: KvtCoreDxKvtRef): CoreDbKvtFns =
       err(rc.error.toError(cKvt.base, info))
 
   proc kvtHasKey(
-      cKvt: KvtCoreDxKvtRef;
+      cKvt: KvtCoreDbKvtRef;
       k: openArray[byte];
       info: static[string];
         ): CoreDbRc[bool] =
@@ -176,8 +176,8 @@ func toVoidRc*[T](
 
 # ---------------------
 
-func to*(dsc: CoreDxKvtRef; T: type KvtDbRef): T =
-  KvtCoreDxKvtRef(dsc).kvt
+func to*(dsc: CoreDbKvtRef; T: type KvtDbRef): T =
+  KvtCoreDbKvtRef(dsc).kvt
 
 func txTop*(
     base: KvtBaseRef;
@@ -219,7 +219,7 @@ proc persistent*(
 proc newKvtHandler*(
     base: KvtBaseRef;
     info: static[string];
-      ): CoreDbRc[CoreDxKvtRef] =
+      ): CoreDbRc[CoreDbKvtRef] =
     ok(base.cache)
 
 
@@ -234,7 +234,7 @@ func init*(T: type KvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =
     kdb:    kdb)
 
   # Preallocated shared descriptor
-  let dsc = KvtCoreDxKvtRef(
+  let dsc = KvtCoreDbKvtRef(
     base: result,
     kvt:  kdb)
   dsc.methods = dsc.kvtMethods()

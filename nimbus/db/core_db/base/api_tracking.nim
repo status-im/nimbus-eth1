@@ -19,10 +19,10 @@ import
   ./base_desc
 
 type
-  CoreDxApiTrackRef* =
-    CoreDbRef | CoreDxKvtRef | CoreDbColRef |
-    CoreDbCtxRef | CoreDxMptRef | CoreDxAccRef |
-    CoreDxTxRef | CoreDxCaptRef | CoreDbErrorRef
+  CoreDbApiTrackRef* =
+    CoreDbRef | CoreDbKvtRef | CoreDbColRef |
+    CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
+    CoreDbTxRef | CoreDbCaptRef | CoreDbErrorRef
 
   CoreDbFnInx* = enum
     ## Profiling table index
@@ -155,12 +155,12 @@ proc toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
 
 proc toStr*(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
 proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "acc"
-proc toStr*(rc: CoreDbRc[CoreDxKvtRef]): string = rc.toStr "kvt"
-proc toStr*(rc: CoreDbRc[CoreDxTxRef]): string = rc.toStr "tx"
-proc toStr*(rc: CoreDbRc[CoreDxCaptRef]): string = rc.toStr "capt"
+proc toStr*(rc: CoreDbRc[CoreDbKvtRef]): string = rc.toStr "kvt"
+proc toStr*(rc: CoreDbRc[CoreDbTxRef]): string = rc.toStr "tx"
+proc toStr*(rc: CoreDbRc[CoreDbCaptRef]): string = rc.toStr "capt"
 proc toStr*(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
-proc toStr*(rc: CoreDbRc[CoreDxMptRef]): string = rc.toStr "mpt"
-proc toStr*(rc: CoreDbRc[CoreDxAccRef]): string = rc.toStr "acc"
+proc toStr*(rc: CoreDbRc[CoreDbMptRef]): string = rc.toStr "mpt"
+proc toStr*(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"
 
 func toStr*(ela: Duration): string =
   aristo_profile.toStr(ela)
@@ -169,12 +169,12 @@ func toStr*(ela: Duration): string =
 # Public new API logging framework
 # ------------------------------------------------------------------------------
 
-template beginNewApi*(w: CoreDxApiTrackRef; s: static[CoreDbFnInx]) =
+template beginNewApi*(w: CoreDbApiTrackRef; s: static[CoreDbFnInx]) =
   when CoreDbEnableApiProfiling:
     const bnaCtx {.inject.} = s       # Local use only
   let bnaStart {.inject.} = getTime() # Local use only
 
-template endNewApiIf*(w: CoreDxApiTrackRef; code: untyped) =
+template endNewApiIf*(w: CoreDbApiTrackRef; code: untyped) =
   block:
     when typeof(w) is CoreDbRef:
       let db = w

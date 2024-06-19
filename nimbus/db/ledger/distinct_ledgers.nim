@@ -32,8 +32,8 @@ import
   ".."/[core_db, storage_types]
 
 type
-  AccountLedger* = distinct CoreDxAccRef
-  StorageLedger* = distinct CoreDxMptRef
+  AccountLedger* = distinct CoreDbAccRef
+  StorageLedger* = distinct CoreDbMptRef
   SomeLedger* = AccountLedger | StorageLedger
 
 const

@@ -31,10 +31,10 @@ type
     base: AristoBaseRef          ## Local base descriptor
     mpt*: AristoDbRef            ## Aristo MPT database
 
-  AristoCoreDxAccRef = ref object of CoreDxAccRef
+  AristoCoreDbAccRef = ref object of CoreDbAccRef
     base: AristoBaseRef          ## Local base descriptor
 
-  AristoCoreDxMptRef = ref object of CoreDxMptRef
+  AristoCoreDbMptRef = ref object of CoreDbMptRef
     base: AristoBaseRef          ## Local base descriptor
     mptRoot: VertexID            ## State root, may be zero unless account
     accPath: PathID              ## Needed for storage tree/columns
@@ -94,7 +94,7 @@ func resetCol(colType: CoreDbColType): bool =
 # -------------------------------
 
 func toCoreDbAccount(
-    cAcc: AristoCoreDxAccRef;
+    cAcc: AristoCoreDbAccRef;
     acc: AristoAccount;
     address: EthAddress;
       ): CoreDbAccount =
@@ -184,7 +184,7 @@ func toVoidRc[T](
 # Private `MPT` call back functions
 # ------------------------------------------------------------------------------
 
-proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
+proc mptMethods(cMpt: AristoCoreDbMptRef): CoreDbMptFns =
   ## Generic columns database handlers
   let
     cMpt = cMpt        # So it can savely be captured
@@ -319,7 +319,7 @@ proc mptMethods(cMpt: AristoCoreDxMptRef): CoreDbMptFns =
 # Private account call back functions
 # ------------------------------------------------------------------------------
 
-proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
+proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
   ## Account columns database handlers
   let
     cAcc = cAcc        # So it can savely be captured
@@ -333,8 +333,8 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
       base: base,
       colType: CtAccounts)
 
-  proc accCloneMpt(): CoreDbRc[CoreDxMptRef] =
-    var xpt = AristoCoreDxMptRef(
+  proc accCloneMpt(): CoreDbRc[CoreDbMptRef] =
+    var xpt = AristoCoreDbMptRef(
       base:    base,
       mptRoot: AccountsVID)
     xpt.methods = xpt.mptMethods
@@ -394,7 +394,7 @@ proc accMethods(cAcc: AristoCoreDxAccRef): CoreDbAccFns =
 
 
   CoreDbAccFns(
-    getMptFn: proc(): CoreDbRc[CoreDxMptRef] =
+    getMptFn: proc(): CoreDbRc[CoreDbMptRef] =
       accCloneMpt(),
 
     fetchFn: proc(address: EthAddress): CoreDbRc[CoreDbAccount] =
@@ -463,22 +463,22 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     err(aristo.GenericError.toError(base, info, RootNotFound))
 
 
-  proc ctxGetMpt(col: CoreDbColRef): CoreDbRc[CoreDxMptRef] =
+  proc ctxGetMpt(col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
     const
       info = "ctx/getMptFn()"
     let
       col = AristoColRef(col)
     var
       reset = false
-      newMpt: AristoCoreDxMptRef
+      newMpt: AristoCoreDbMptRef
     if not col.isValid:
       reset = true
-      newMpt = AristoCoreDxMptRef(
+      newMpt = AristoCoreDbMptRef(
         mptRoot: GenericVID,
         accPath: VOID_PATH_ID)
 
     elif col.colType == CtStorage:
-      newMpt = AristoCoreDxMptRef(
+      newMpt = AristoCoreDbMptRef(
         mptRoot: col.stoRoot,
         accPath: col.stoAddr.to(PathID),
         address: col.stoAddr)
@@ -492,7 +492,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
           return err(rc.error[1].toError(base, info, AccNotFound))
     else:
       reset = col.colType.resetCol()
-      newMpt = AristoCoreDxMptRef(
+      newMpt = AristoCoreDbMptRef(
         mptRoot: VertexID(col.colType),
         accPath: VOID_PATH_ID)
 
@@ -508,7 +508,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     newMpt.methods = newMpt.mptMethods()
     ok(db.bless newMpt)
 
-  proc ctxGetAcc(col: CoreDbColRef): CoreDbRc[CoreDxAccRef] =
+  proc ctxGetAcc(col: CoreDbColRef): CoreDbRc[CoreDbAccRef] =
     const info = "getAccFn()"
 
     let col = AristoColRef(col)
@@ -516,7 +516,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
       let error = (AccountsVID, AccRootUnacceptable)
       return err(error.toError(base, info, RootUnacceptable))
 
-    let acc = AristoCoreDxAccRef(base: base)
+    let acc = AristoCoreDbAccRef(base: base)
     acc.methods = acc.accMethods()
 
     ok(db.bless acc)
@@ -534,10 +534,10 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
           ): CoreDbRc[CoreDbColRef] =
       ctxNewCol(col, colState, address),
 
-    getMptFn: proc(col: CoreDbColRef): CoreDbRc[CoreDxMptRef] =
+    getMptFn: proc(col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
       ctxGetMpt(col),
 
-    getAccFn: proc(col: CoreDbColRef): CoreDbRc[CoreDxAccRef] =
+    getAccFn: proc(col: CoreDbColRef): CoreDbRc[CoreDbAccRef] =
       ctxGetAcc(col),
 
     forgetFn: proc() =
@@ -579,14 +579,14 @@ proc getSavedState*(base: AristoBaseRef): Result[SavedState,void] =
 
 # ---------------------
 
-func to*(dsc: CoreDxMptRef, T: type AristoDbRef): T =
-  AristoCoreDxMptRef(dsc).base.ctx.mpt
+func to*(dsc: CoreDbMptRef, T: type AristoDbRef): T =
+  AristoCoreDbMptRef(dsc).base.ctx.mpt
 
-func to*(dsc: CoreDxMptRef, T: type AristoApiRef): T =
-  AristoCoreDxMptRef(dsc).base.api
+func to*(dsc: CoreDbMptRef, T: type AristoApiRef): T =
+  AristoCoreDbMptRef(dsc).base.api
 
-func rootID*(dsc: CoreDxMptRef): VertexID  =
-  AristoCoreDxMptRef(dsc).mptRoot
+func rootID*(dsc: CoreDbMptRef): VertexID  =
+  AristoCoreDbMptRef(dsc).mptRoot
 
 func txTop*(
     base: AristoBaseRef;

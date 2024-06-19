@@ -64,7 +64,7 @@ type
 
   AccountsLedgerRef* = ref object
     ledger: AccountLedger
-    kvt: CoreDxKvtRef
+    kvt: CoreDbKvtRef
     savePoint: LedgerSavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
@@ -412,7 +412,7 @@ proc getNonce*(ac: AccountsLedgerRef, address: EthAddress): AccountNonce =
   if acc.isNil: emptyEthAccount.nonce
   else: acc.statement.nonce
 
-proc getCode(acc: AccountRef, kvt: CoreDxKvtRef): lent seq[byte] =
+proc getCode(acc: AccountRef, kvt: CoreDbKvtRef): lent seq[byte] =
   if CodeLoaded notin acc.flags and CodeChanged notin acc.flags:
     if acc.statement.codeHash != EMPTY_CODE_HASH:
       var rc = kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)

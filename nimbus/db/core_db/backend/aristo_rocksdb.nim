@@ -170,7 +170,7 @@ proc newAristoDualRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
 # Public aristo iterators
 # ------------------------------------------------------------------------------
 
-iterator aristoReplicateRdb*(dsc: CoreDxMptRef): (Blob, Blob) {.rlpRaise.} =
+iterator aristoReplicateRdb*(dsc: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
   ## Instantiation for `VoidBackendRef`
   for k, v in aristoReplicate[use_ari.RdbBackendRef](dsc):
     yield (k, v)

@@ -100,7 +100,7 @@ func toStr*(w: Hash256): string =
 
 when declared(CoreDbMptRef):
   func toStr*(w: CoreDbMptRef): string =
-    if w.CoreDxMptRef.isNil: "MptRef(nil)" else: "MptRef"
+    if w.CoreDbMptRef.isNil: "MptRef(nil)" else: "MptRef"
 
 func toStr*(w: Blob): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"

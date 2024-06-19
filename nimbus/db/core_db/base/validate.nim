@@ -16,10 +16,10 @@ type
   EphemMethodsDesc = CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbColRef
 
   MethodsDesc =
-    CoreDxKvtRef |
-    CoreDbCtxRef | CoreDxMptRef | CoreDxAccRef  |
-    CoreDxTxRef  |
-    CoreDxCaptRef
+    CoreDbKvtRef |
+    CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef  |
+    CoreDbTxRef  |
+    CoreDbCaptRef
 
   ValidateDesc* = MethodsDesc | EphemMethodsDesc | CoreDbErrorRef
 
@@ -88,7 +88,7 @@ proc validateMethodsDesc(eph: EphemMethodsDesc) =
   doAssert not eph.isNil
   doAssert not eph.parent.isNil
 
-proc validateMethodsDesc(kvt: CoreDxKvtRef) =
+proc validateMethodsDesc(kvt: CoreDbKvtRef) =
   doAssert not kvt.isNil
   doAssert not kvt.parent.isNil
   kvt.methods.validateMethodsDesc
@@ -98,25 +98,25 @@ proc validateMethodsDesc(ctx: CoreDbCtxRef) =
   doAssert not ctx.parent.isNil
   ctx.methods.validateMethodsDesc
 
-proc validateMethodsDesc(mpt: CoreDxMptRef) =
+proc validateMethodsDesc(mpt: CoreDbMptRef) =
   doAssert not mpt.isNil
   doAssert not mpt.parent.isNil
   mpt.methods.validateMethodsDesc
 
-proc validateMethodsDesc(acc: CoreDxAccRef) =
+proc validateMethodsDesc(acc: CoreDbAccRef) =
   doAssert not acc.isNil
   doAssert not acc.parent.isNil
   acc.methods.validateMethodsDesc
 
 when false: # currently disabled
-  proc validateMethodsDesc(cpt: CoreDxCaptRef) =
+  proc validateMethodsDesc(cpt: CoreDbCaptRef) =
     doAssert not cpt.isNil
     doAssert not cpt.parent.isNil
     doAssert not cpt.methods.recorderFn.isNil
     doAssert not cpt.methods.getFlagsFn.isNil
     doAssert not cpt.methods.forgetFn.isNil
 
-proc validateMethodsDesc(tx: CoreDxTxRef) =
+proc validateMethodsDesc(tx: CoreDbTxRef) =
   doAssert not tx.isNil
   doAssert not tx.parent.isNil
   doAssert not tx.methods.levelFn.isNil

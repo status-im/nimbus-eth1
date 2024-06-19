@@ -97,15 +97,15 @@ type
   CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseNewKvtFn* = proc(): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseNewKvtFn* = proc(): CoreDbRc[CoreDbKvtRef] {.noRaise.}
   CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
   CoreDbBaseNewCtxFromTxFn* = proc(
     colState: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
   CoreDbBaseSwapCtxFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
-  CoreDbBaseTxBeginFn* = proc(): CoreDxTxRef {.noRaise.}
+  CoreDbBaseTxBeginFn* = proc(): CoreDbTxRef {.noRaise.}
   CoreDbBaseNewCaptFn* =
-    proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
-  CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
+    proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDbCaptRef] {.noRaise.}
+  CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDbCaptRef] {.noRaise.}
   CoreDbBasePersistentFn* =
     proc(bn: Opt[BlockNumber]): CoreDbRc[void] {.noRaise.}
 
@@ -164,9 +164,9 @@ type
     colType: CoreDbColType; colState: Hash256; address: Opt[EthAddress];
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
-    root: CoreDbColRef): CoreDbRc[CoreDxMptRef] {.noRaise.}
+    root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
   CoreDbCtxGetAccFn* = proc(
-    root: CoreDbColRef): CoreDbRc[CoreDxAccRef] {.noRaise.}
+    root: CoreDbColRef): CoreDbRc[CoreDbAccRef] {.noRaise.}
   CoreDbCtxForgetFn* = proc() {.noRaise.}
 
   CoreDbCtxFns* = object
@@ -207,7 +207,7 @@ type
   # ----------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods for accounts
   # ------------------------------------------------------
-  CoreDbAccGetMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
+  CoreDbAccGetMptFn* = proc(): CoreDbRc[CoreDbMptRef] {.noRaise.}
   CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccStoDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
@@ -283,25 +283,24 @@ type
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
-  CoreDxKvtRef* = ref CoreDxKvtObj
-  CoreDxKvtObj* = object of RootObj
+  CoreDbKvtRef* = ref object of RootRef
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbKvtFns
 
   CoreDbCtxRef* = ref object of RootRef
-    ## Context for `CoreDxMptRef` and `CoreDxAccRef`
+    ## Context for `CoreDbMptRef` and `CoreDbAccRef`
     parent*: CoreDbRef
     methods*: CoreDbCtxFns
 
-  CoreDxMptRef* = ref object of RootRef
+  CoreDbMptRef* = ref object of RootRef
     ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
     ## initialised on-the-fly.
     parent*: CoreDbRef
     methods*: CoreDbMptFns
 
-  CoreDxAccRef* = ref object of RootRef
-    ## Similar to `CoreDxKvtRef`, only dealing with `CoreDbAccount` data
+  CoreDbAccRef* = ref object of RootRef
+    ## Similar to `CoreDbKvtRef`, only dealing with `CoreDbAccount` data
     ## rather than `Blob` values.
     parent*: CoreDbRef
     methods*: CoreDbAccFns
@@ -312,12 +311,12 @@ type
     parent*: CoreDbRef
     ready*: bool              ## Must be set `true` to enable
 
-  CoreDxTxRef* = ref object of RootRef
+  CoreDbTxRef* = ref object of RootRef
     ## Transaction descriptor derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbTxFns
 
-  CoreDxCaptRef* = ref object
+  CoreDbCaptRef* = ref object
     ## Db transaction tracer derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbCaptFns

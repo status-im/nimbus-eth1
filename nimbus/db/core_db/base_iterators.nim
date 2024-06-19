@@ -31,7 +31,7 @@ when CoreDbEnableApiTracking:
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
+iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
   ## Iterator supported on memory DB (otherwise implementation dependent)
   ##
   kvt.setTrackNewApi KvtPairsIt
@@ -46,8 +46,8 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
     raiseAssert: "Unsupported database type: " & $kvt.parent.dbType
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) =
-  ## Trie traversal, only supported for `CoreDxMptRef`
+iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
+  ## Trie traversal, only supported for `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptPairsIt
   case mpt.parent.dbType:
@@ -60,8 +60,8 @@ iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) =
     let trie = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, trie
 
-iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
-  ## Low level trie dump, only supported for `CoreDxMptRef`
+iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
+  ## Low level trie dump, only supported for `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptReplicateIt
   case mpt.parent.dbType:

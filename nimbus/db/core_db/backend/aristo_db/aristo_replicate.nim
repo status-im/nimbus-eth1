@@ -20,7 +20,7 @@ template valueOrApiError[U,V](rc: Result[U,V]; info: static[string]): U =
   rc.valueOr: raise (ref AristoApiRlpError)(msg: info)
 
 iterator aristoReplicate[T](
-    dsc: CoreDxMptRef;
+    dsc: CoreDbMptRef;
       ): (Blob,Blob)
       {.gcsafe, raises: [AristoApiRlpError].} =
   ## Generic iterator used for building dedicated backend iterators.

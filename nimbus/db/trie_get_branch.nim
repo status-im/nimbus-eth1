@@ -93,7 +93,7 @@ proc getBranch*(
     # the keys of the PHK were pre-hased (as in the legacy `SecureHexaryTrie`
     # object.) Can this code have worked at all? Looking at the `keyHash`
     # below it would mean the `key` was double hashed? -- j
-    self: CoreDxMptRef;
+    self: CoreDbMptRef;
     key: openArray[byte]): seq[seq[byte]] {.raises: [RlpError].} =
   let
     keyHash = keccakHash(key).data
