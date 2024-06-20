@@ -37,18 +37,11 @@ type
   AristoCoreDbMptRef = ref object of CoreDbMptRef
     base: AristoBaseRef          ## Local base descriptor
     mptRoot: VertexID            ## State root, may be zero unless account
-    accPath: PathID              ## Needed for storage tree/columns
-    address: EthAddress          ## For storage tree debugging
 
   AristoColRef* = ref object of CoreDbColRef
     ## Vertex ID wrapper, optionally with *MPT* context
     base: AristoBaseRef
-    case colType: CoreDbColType  ## Current column type
-    of CtStorage:
-      stoRoot: VertexID          ## State root, may be zero if unknown
-      stoAddr: EthAddress        ## Associated storage account address
-    else:
-      reset: bool                ## Internal delete request
+    stoRoot: VertexID            ## State root, may be zero if unknown
 
   AristoCoreDbMptBE* = ref object of CoreDbMptBackendRef
     adb*: AristoDbRef
@@ -58,17 +51,11 @@ type
 
 const
   VoidVID = VertexID(0)
-  # StorageVID = VertexID(CtStorage) -- currently unused
-  AccountsVID = VertexID(CtAccounts)
-  GenericVID = VertexID(CtGeneric)
 
 logScope:
   topics = "aristo-hdl"
 
 static:
-  doAssert CtStorage.ord == 0
-  doAssert CtAccounts.ord == 1
-  doAssert low(CoreDbColType).ord == 0
   doAssert high(CoreDbColType).ord < LEAST_FREE_VID
 
 # ------------------------------------------------------------------------------
@@ -80,10 +67,7 @@ func isValid(col: CoreDbColRef): bool =
 
 func to(col: CoreDbColRef; T: type VertexID): T =
   if col.isValid:
-    let col = AristoColRef(col)
-    if col.colType == CtStorage:
-      return col.stoRoot
-    return VertexID(col.colType)
+    return AristoColRef(col).stoRoot
 
 func to(eAddr: EthAddress; T: type PathID): T =
   HashKey.fromBytes(eAddr.keccakHash.data).value.to(T)
@@ -110,9 +94,7 @@ func toCoreDbAccount(
   if acc.storageID.isValid:
     result.storage = db.bless AristoColRef(
       base:    cAcc.base,
-      colType: CtStorage,
-      stoRoot: acc.storageID,
-      stoAddr: address)
+      stoRoot: acc.storageID)
 
 func toPayloadRef(acc: CoreDbAccount): PayloadRef =
   PayloadRef(
@@ -198,103 +180,49 @@ proc mptMethods(): CoreDbMptFns =
   proc mptBackend(cMpt: AristoCoreDbMptRef): CoreDbMptBackendRef =
     db.bless AristoCoreDbMptBE(adb: mpt)
 
-  proc mptColFn(cMpt: AristoCoreDbMptRef): CoreDbColRef =
-    if cMpt.mptRoot.distinctBase < LEAST_FREE_VID:
-      return db.bless(AristoColRef(
-        base:    base,
-        colType: CoreDbColType(cMpt.mptRoot)))
-
-    assert cMpt.accPath.isValid # debug mode only
-    if cMpt.mptRoot.isValid:
-      # The mpt might have become empty
-      let
-        key = cMpt.address.keccakHash.data
-        acc = api.fetchAccountPayload(mpt, key).valueOr:
-          raiseAssert "mptColFn(): " & $error
-
-      # Update by accounts data
-      cMpt.mptRoot = acc.storageID
-
-    db.bless AristoColRef(
-      base:    base,
-      colType: CtStorage,
-      stoRoot: cMpt.mptRoot,
-      stoAddr: cMpt.address)
-
   proc mptFetch(cMpt: AristoCoreDbMptRef, key: openArray[byte]): CoreDbRc[Blob] =
     const info = "fetchFn()"
-
-    let rc = block:
-      if cMpt.accPath.isValid:
-        api.fetchStorageData(mpt, key, cMpt.accPath)
-      elif cMpt.mptRoot.isValid:
-        api.fetchGenericData(mpt, cMpt.mptRoot, key)
-      else:
-        # Some pathological behaviour observed with storage column due to lazy
-        # update. The `fetchXxxPayload()` does not now about this and would
-        # complain an error different from `FetchPathNotFound`.
-        return err(MptRootMissing.toError(base, info, MptNotFound))
-
-    # let rc = api.fetchPayload(mpt, rootVID, key)
-    if rc.isOk:
-      ok rc.value
-    elif rc.error != FetchPathNotFound:
-      err(rc.error.toError(base, info))
-    else:
-      err(rc.error.toError(base, info, MptNotFound))
+    let data = api.fetchGenericData(mpt, cMpt.mptRoot, key).valueOr:
+      if error == FetchPathNotFound:
+        return err(error.toError(base, info, MptNotFound))
+      return err(error.toError(base, info))
+    ok(data)
 
   proc mptMerge(cMpt: AristoCoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
     const info = "mergeFn()"
-
-    if cMpt.accPath.isValid:
-      let rc = api.mergeStorageData(mpt, k, v, cMpt.accPath)
-      if rc.isErr:
-        return err(rc.error.toError(base, info))
-      if rc.value.isValid:
-        cMpt.mptRoot = rc.value
-    else:
-      let rc = api.mergeGenericData(mpt, cMpt.mptRoot, k, v)
-      if rc.isErr:
-        return err(rc.error.toError(base, info))
-
+    api.mergeGenericData(mpt, cMpt.mptRoot, k, v).isOkOr:
+      return err(error.toError(base, info))
     ok()
 
   proc mptDelete(cMpt: AristoCoreDbMptRef, key: openArray[byte]): CoreDbRc[void] =
     const info = "deleteFn()"
-
-    let rc = block:
-      if cMpt.accPath.isValid:
-        api.deleteStorageData(mpt, key, cMpt.accPath)
-      else:
-        api.deleteGenericData(mpt, cMpt.mptRoot, key)
-
-    if rc.isErr:
-      if rc.error == DelPathNotFound:
-        return err(rc.error.toError(base, info, MptNotFound))
-      if rc.error == DelStoRootMissing:
-        # This is insane but legit. A storage column was announced for an
-        # account but no data have been added, yet.
-        return ok()
-      return err(rc.error.toError(base, info))
-
-    if rc.value:
-      # Column has become empty
-      cMpt.mptRoot = VoidVID
-
+    api.deleteGenericData(mpt, cMpt.mptRoot, key).isOkOr:
+      if error == DelPathNotFound:
+        return err(error.toError(base, info, MptNotFound))
+      return err(error.toError(base, info))
     ok()
 
   proc mptHasPath(cMpt: AristoCoreDbMptRef, key: openArray[byte]): CoreDbRc[bool] =
     const info = "hasPathFn()"
+    let yn = api.hasPathGeneric(mpt, cMpt.mptRoot, key).valueOr:
+      return err(error.toError(base, info))
+    ok(yn)
 
-    let rc = block:
-      if cMpt.accPath.isValid:
-        api.hasPathStorage(mpt, key, cMpt.accPath)
-      else:
-        api.hasPathGeneric(mpt, cMpt.mptRoot, key)
+  proc mptState(cMpt: AristoCoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] =
+    const info = "mptState()"
 
-    if rc.isErr:
+    let rc = api.fetchGenericState(mpt, cMpt.mptRoot)
+    if rc.isOk:
+      return ok(rc.value)
+    elif not updateOk and rc.error != GetKeyUpdateNeeded:
       return err(rc.error.toError(base, info))
-    ok(rc.value)
+
+    # FIXME: `hashify()` should probably throw an assert on failure
+    ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
+
+    let state = api.fetchGenericState(mpt, cMpt.mptRoot).valueOr:
+      raiseAssert info & ": " & $error
+    ok(state)
 
   ## Generic columns database handlers
   CoreDbMptFns(
@@ -313,8 +241,8 @@ proc mptMethods(): CoreDbMptFns =
     hasPathFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[bool] =
       mptHasPath(AristoCoreDbMptRef(cMpt), k),
 
-    getColFn: proc(cMpt: CoreDbMptRef): CoreDbColRef =
-      mptColFn(AristoCoreDbMptRef(cMpt)))
+    stateFn: proc(cMpt: CoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] =
+      mptState(AristoCoreDbMptRef(cMpt), updateOk))
 
 # ------------------------------------------------------------------------------
 # Private account call back functions
@@ -485,98 +413,26 @@ proc accMethods(): CoreDbAccFns =
 # Private context call back functions
 # ------------------------------------------------------------------------------
 
-proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
+proc ctxMethods(): CoreDbCtxFns =
   template base: untyped = cCtx.base
   template db: untyped = base.parent
   template api: untyped = base.api
   template mpt: untyped = cCtx.mpt
 
-  proc ctxNewCol(
-      cCtx: AristoCoreDbCtxRef,
-      colType: CoreDbColType;
-      colState: Hash256;
-      address: Opt[EthAddress];
-        ): CoreDbRc[CoreDbColRef] =
-    const info = "ctx/newColFn()"
-
-    let col = AristoColRef(
+  proc ctxGetColumn(cCtx: AristoCoreDbCtxRef; colType: CoreDbColType; clearData: bool): CoreDbMptRef =
+    const info = "getColumnFn()"
+    if clearData:
+      api.deleteGenericTree(mpt, VertexID(colType)).isOkOr:
+        raiseAssert info & " clearing up failed: " & $error
+    db.bless AristoCoreDbMptRef(
+      methods: mptMethods(),
       base:    base,
-      colType: colType)
-
-    if colType == CtStorage:
-      if address.isNone:
-        let error = aristo.UtilsAccPathMissing
-        return err(error.toError(base, info, AccAddrMissing))
-      col.stoAddr = address.unsafeGet
-
-    if not colState.isValid:
-      return ok(db.bless col)
-
-    # Reset some non-dynamic col when instantiating. It emulates the behaviour
-    # of a new empty MPT on the legacy database.
-    col.reset = colType.resetCol()
-
-    # Update hashes in order to verify the column state.
-    ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
-
-    # Assure that hash is available as state for the main/accounts column
-    let rc = api.getKeyRc(mpt, VertexID colType)
-    if rc.isErr:
-      doAssert rc.error == GetKeyNotFound
-    elif rc.value == colState.to(HashKey):
-      return ok(db.bless col)
-    err(aristo.GenericError.toError(base, info, RootNotFound))
-
-
-  proc ctxGetMpt(cCtx: AristoCoreDbCtxRef, col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
-    const
-      info = "ctx/getMptFn()"
-    let
-      col = AristoColRef(col)
-    var
-      reset = false
-      newMpt: AristoCoreDbMptRef
-    if not col.isValid:
-      reset = true
-      newMpt = AristoCoreDbMptRef(
-        mptRoot: GenericVID,
-        accPath: VOID_PATH_ID)
-
-    elif col.colType == CtStorage:
-      newMpt = AristoCoreDbMptRef(
-        mptRoot: col.stoRoot,
-        accPath: col.stoAddr.to(PathID),
-        address: col.stoAddr)
-      if col.stoRoot.isValid:
-        if col.stoRoot.distinctBase < LEAST_FREE_VID:
-          let error = (col.stoRoot,MptRootUnacceptable)
-          return err(error.toError(base, info, RootUnacceptable))
-        # Verify path if there is a particular storge root VID
-        let rc = api.hikeUp(newMpt.accPath.to(NibblesBuf), AccountsVID, mpt)
-        if rc.isErr:
-          return err(rc.error[1].toError(base, info, AccNotFound))
-    else:
-      reset = col.colType.resetCol()
-      newMpt = AristoCoreDbMptRef(
-        mptRoot: VertexID(col.colType),
-        accPath: VOID_PATH_ID)
-
-    # Reset column. This a emulates the behaviour of a new empty MPT on the
-    # legacy database.
-    if reset:
-      let rc = api.deleteGenericTree(mpt, newMpt.mptRoot)
-      if rc.isErr:
-        return err(rc.error.toError(base, info, AutoFlushFailed))
-      col.reset = false
-
-    newMpt.base = base
-    newMpt.methods = mptMethods()
-    ok(db.bless newMpt)
+      mptRoot: VertexID(colType))
 
   proc ctxGetAccounts(cCtx: AristoCoreDbCtxRef): CoreDbAccRef =
-    let acc = AristoCoreDbAccRef(base: base)
-    acc.methods = accMethods()
-    db.bless acc
+    db.bless AristoCoreDbAccRef(
+      methods: accMethods(),
+      base:    base)
 
   proc ctxForget(cCtx: AristoCoreDbCtxRef) =
     api.forget(mpt).isOkOr:
@@ -584,16 +440,8 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
 
 
   CoreDbCtxFns(
-    newColFn: proc(
-        cCtx: CoreDbCtxRef;
-        col: CoreDbColType;
-        colState: Hash256;
-        address: Opt[EthAddress];
-          ): CoreDbRc[CoreDbColRef] =
-      ctxNewCol(AristoCoreDbCtxRef(cCtx), col, colState, address),
-
-    getMptFn: proc(cCtx: CoreDbCtxRef, col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
-      ctxGetMpt(AristoCoreDbCtxRef(cCtx), col),
+    getColumnFn: proc(cCtx: CoreDbCtxRef; colType: CoreDbColType; clearData: bool): CoreDbMptRef =
+      ctxGetColumn(AristoCoreDbCtxRef(cCtx), colType, clearData),
 
     getAccountsFn: proc(cCtx: CoreDbCtxRef): CoreDbAccRef =
       ctxGetAccounts(AristoCoreDbCtxRef(cCtx)),
@@ -680,15 +528,8 @@ proc colPrint*(
     let
       col = AristoColRef(col)
       root = col.to(VertexID)
-    result = "(" & $col.colType & ","
-
     # Do vertex ID and address/hash
-    if col.colType == CtStorage:
-      result &= col.stoRoot.toStr
-      if col.stoAddr != EthAddress.default:
-        result &= ",%" & $col.stoAddr.toHex
-    else:
-      result &= VertexID(col.colType).toStr
+    result = "(CtGeneric,"
 
     # Do the Merkle hash key
     if not root.isValid:
@@ -789,9 +630,9 @@ func init*(T: type AristoBaseRef; db: CoreDbRef; adb: AristoDbRef): T =
 
   # Create initial context
   let ctx = AristoCoreDbCtxRef(
-    base: result,
-    mpt:  adb)
-  ctx.methods = ctx.ctxMethods
+    methods: ctxMethods(),
+    base:    result,
+    mpt:     adb)
   result.ctx = db.bless ctx
 
   when CoreDbEnableApiProfiling:
@@ -831,9 +672,9 @@ proc init*(
 
   # Create new context
   let ctx = AristoCoreDbCtxRef(
-    base: base,
-    mpt:  newMpt)
-  ctx.methods = ctx.ctxMethods
+    methods: ctxMethods(),
+    base:    base,
+    mpt:     newMpt)
   ok(base.parent.bless ctx)
 
 # ------------------------------------------------------------------------------

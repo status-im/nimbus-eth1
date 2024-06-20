@@ -76,9 +76,7 @@ type
     TxPending
 
   CoreDbColType* = enum
-    CtStorage = 0
-    CtAccounts
-    CtGeneric
+    CtGeneric = 2 # columns smaller than 2 are not provided
     CtReceipts
     CtTxs
     CtWithdrawals
@@ -161,23 +159,19 @@ type
   # --------------------------------------------------
   # Sub-descriptor: MPT context methods
   # --------------------------------------------------
-  CoreDbCtxNewColFn* = proc(
-    cCtx: CoreDbCtxRef; colType: CoreDbColType; colState: Hash256; address: Opt[EthAddress];
-    ): CoreDbRc[CoreDbColRef] {.noRaise.}
-  CoreDbCtxGetMptFn* = proc(
-    cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
+  CoreDbCtxGetColumnFn* = proc(
+    cCtx: CoreDbCtxRef; colType: CoreDbColType; clearData: bool): CoreDbMptRef {.noRaise.}
   CoreDbCtxGetAccountsFn* = proc(cCtx: CoreDbCtxRef): CoreDbAccRef {.noRaise.}
   CoreDbCtxForgetFn* = proc(cCtx: CoreDbCtxRef) {.noRaise.}
 
   CoreDbCtxFns* = object
     ## Methods for context maniulation
-    newColFn*:      CoreDbCtxNewColFn
-    getMptFn*:      CoreDbCtxGetMptFn
+    getColumnFn*:   CoreDbCtxGetColumnFn
     getAccountsFn*: CoreDbCtxGetAccountsFn
     forgetFn*:      CoreDbCtxForgetFn
 
   # --------------------------------------------------
-  # Sub-descriptor: generic  Mpt/hexary trie methods
+  # Sub-descriptor: generic Mpt methods
   # --------------------------------------------------
   CoreDbMptBackendFn* = proc(cMpt: CoreDbMptRef): CoreDbMptBackendRef {.noRaise.}
   CoreDbMptFetchFn* =
@@ -188,11 +182,8 @@ type
     proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbMptMergeFn* =
     proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbMptMergeAccountFn* =
-    proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbMptHasPathFn* = proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptGetColFn* = proc(cMpt: CoreDbMptRef): CoreDbColRef {.noRaise.}
-  CoreDbMptForgetFn* = proc(cMpt: CoreDbMptRef): CoreDbRc[void] {.noRaise.}
+  CoreDbMptStateFn* = proc(cMpt: CoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects
@@ -201,7 +192,7 @@ type
     deleteFn*:    CoreDbMptDeleteFn
     mergeFn*:     CoreDbMptMergeFn
     hasPathFn*:   CoreDbMptHasPathFn
-    getColFn*:    CoreDbMptGetColFn
+    stateFn*:     CoreDbMptStateFn
 
 
   # ----------------------------------------------------

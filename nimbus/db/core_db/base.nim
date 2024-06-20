@@ -311,18 +311,18 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   result = db.methods.newCtxFn()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-proc ctxFromTx*(
-    db: CoreDbRef;
-    colState: Hash256;
-    colType = CtAccounts;
-      ): CoreDbRc[CoreDbCtxRef] =
-  ## Create new context derived from matching transaction of the currently
-  ## active column context. For the legacy backend, this function always
-  ## returns the currently active context (i.e. the same as `db.ctx()`.)
-  ##
-  db.setTrackNewApi BaseNewCtxFromTxFn
-  result = db.methods.newCtxFromTxFn(colState, colType)
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+#proc ctxFromTx*(
+#    db: CoreDbRef;
+#    colState: Hash256;
+#    colType = CtAccounts;
+#      ): CoreDbRc[CoreDbCtxRef] =
+#  ## Create new context derived from matching transaction of the currently
+#  ## active column context. For the legacy backend, this function always
+#  ## returns the currently active context (i.e. the same as `db.ctx()`.)
+#  ##
+#  db.setTrackNewApi BaseNewCtxFromTxFn
+#  result = db.methods.newCtxFromTxFn(colState, colType)
+#  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc swapCtx*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   ## Activate argument context `ctx` and return the previously active column
@@ -349,73 +349,6 @@ proc forget*(ctx: CoreDbCtxRef) =
 # ------------------------------------------------------------------------------
 # Public Merkle Patricia Tree sub-trie abstaction management
 # ------------------------------------------------------------------------------
-
-proc newColumn*(
-    ctx: CoreDbCtxRef;
-    colType: CoreDbColType;
-    colState: Hash256;
-    address = Opt.none(EthAddress);
-      ): CoreDbRc[CoreDbColRef] =
-  ## Retrieve a new column descriptor.
-  ##
-  ## The database is can be viewed as a matrix of rows and columns, potenially
-  ## with values at their intersection. A row is identified by a lookup key
-  ## and a column is identified by a state hash.
-  ##
-  ## Additionally, any column has a column type attribute given as `colType`
-  ## argument. Only storage columns also have an address attribute which must
-  ## be passed as argument `address` when the `colType` argument is `CtStorage`.
-  ##
-  ## If the state hash argument `colState` is passed as `EMPTY_ROOT_HASH`, this
-  ## function always succeeds. The result is the equivalent of a potential
-  ## column be incarnated later. If the column type is different from
-  ## `CtStorage` and `CtAccounts`, then the returned column descriptor will be
-  ## flagged to reset all column data when incarnated as MPT (see `newMpt()`.).
-  ##
-  ## Otherwise, the function will fail unless a column with the corresponding
-  ## argument `colState` identifier exists and can be found on the database.
-  ## Note that on a single state database like `Aristo`, the requested column
-  ## might exist but is buried in some history journal (which needs an extra
-  ## effort to unwrap.)
-  ##
-  ## This function is intended to open a column on the database as in:
-  ## ::
-  ##   proc openAccountLedger(db: CoreDbRef, colState: Hash256): CoreDbMptRef =
-  ##     let col = db.ctx.newColumn(CtAccounts, colState).valueOr:
-  ##       # some error handling
-  ##       return
-  ##     db.getAcc col
-  ##
-  ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(ctx, colType, colState, address)
-  ctx.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, colType, colState, address, result
-
-proc newColumn*(
-    ctx: CoreDbCtxRef;
-    colState: Hash256;
-    address: EthAddress;
-      ): CoreDbRc[CoreDbColRef] =
-  ## Shortcut for `ctx.newColumn(CtStorage,colState,some(address))`.
-  ##
-  ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(ctx, CtStorage, colState, Opt.some(address))
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, colState, address, result
-
-proc newColumn*(
-    ctx: CoreDbCtxRef;
-    address: EthAddress;
-      ): CoreDbColRef =
-  ## Shortcut for `ctx.newColumn(EMPTY_ROOT_HASH,address).value`. The function
-  ## will throw an exception on error. So the result will always be a valid
-  ## descriptor.
-  ##
-  ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(
-      ctx, CtStorage, EMPTY_ROOT_HASH, Opt.some(address)).valueOr:
-    raiseAssert error.prettyText()
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
-
 
 proc `$$`*(col: CoreDbColRef): string =
   ## Pretty print the column descriptor. Note that this directive may have side
@@ -464,54 +397,19 @@ proc stateEmptyOrVoid*(col: CoreDbColRef): bool =
   col.stateEmpty.valueOr: true
 
 # ------------------------------------------------------------------------------
-# Public Merkle Patricia Tree, hexary trie constructors
+# Public functions for generic columns
 # ------------------------------------------------------------------------------
 
-proc getMpt*(
-    ctx: CoreDbCtxRef;
-    col: CoreDbColRef;
-      ): CoreDbRc[CoreDbMptRef] =
-  ## Get an MPT sub-trie view.
-  ##
-  ## If the `col` argument descriptor was created for an `EMPTY_ROOT_HASH`
-  ## column state of type different form `CtStorage` or `CtAccounts`, all
-  ## column will be flushed. There is no need to hold the `col` argument for
-  ## later use. It can always be rerieved for this particular MPT using the
-  ## function `getColumn()`.
-  ##
-  ctx.setTrackNewApi CtxGetMptFn
-  result = ctx.methods.getMptFn(ctx, col)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
-
-proc getMpt*(
+proc getColumn*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;
-    address = Opt.none(EthAddress);
+    clearData = false;
       ): CoreDbMptRef =
-  ## Shortcut for `getMpt(col)` where the `col` argument is
-  ## `db.getColumn(colType,EMPTY_ROOT_HASH).value`. This function will always
-  ## return a non-nil descriptor or throw an exception.
+  ## ...
   ##
-  ctx.setTrackNewApi CtxGetMptFn
-  let col = ctx.methods.newColFn(ctx, colType, EMPTY_ROOT_HASH, address).value
-  result = ctx.methods.getMptFn(ctx, col).valueOr:
-    raiseAssert error.prettyText()
-  ctx.ifTrackNewApi: debug newApiTxt, api, colType, elapsed
-
-# ------------------------------------------------------------------------------
-# Public common methods for all hexary trie databases (`mpt`, or `acc`)
-# ------------------------------------------------------------------------------
-
-proc getColumn*(mpt: CoreDbMptRef): CoreDbColRef =
-  ## Variant of `getColumn()`
-  ##
-  mpt.setTrackNewApi MptGetColFn
-  result = mpt.methods.getColFn(mpt)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-# ------------------------------------------------------------------------------
-# Public generic hexary trie database methods
-# ------------------------------------------------------------------------------
+  ctx.setTrackNewApi CtxGetColumnFn
+  result = ctx.methods.getColumnFn(ctx, colType, clearData)
+  ctx.ifTrackNewApi: debug newApiTxt, api, colType, clearData, elapsed
 
 proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## Fetch data from the argument `mpt`. The function always returns a
@@ -562,6 +460,17 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
   mpt.ifTrackNewApi:
     let col = mpt.methods.getColFn(mpt)
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
+
+proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
+  ## This function retrieves the Merkle state hash of the argument
+  ## database column (if acvailable.)
+  ##
+  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
+  ## database will be updated first (if needed, at all).
+  ##
+  mpt.setTrackNewApi MptStateFn
+  result = mpt.methods.stateFn(mpt, updateOk)
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
 
 # ------------------------------------------------------------------------------
 # Public methods for accounts
@@ -618,8 +527,8 @@ proc hasPath*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
-  ## Getter (well, sort of). It retrieves the account column Merkle state
-  ## hash if acvailable.
+  ## This function retrieves the Merkle state hash of the accounts
+  ## column (if acvailable.)
   ##
   ## If the argument `updateOk` is set `true`, the Merkle hashes of the
   ## database will be updated first (if needed, at all).

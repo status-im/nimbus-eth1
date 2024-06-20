@@ -187,13 +187,13 @@ proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
     ledger.commit(accTx)
     ledger.persist()
 
-  block:
+  block body2:
     let accTx = ledger.beginSavepoint
     ledger.modBalance(eAddr)
 
     if rollback:
       ledger.rollback(accTx)
-      break
+      break body2
 
     ledger.commit(accTx)
     ledger.persist()
@@ -259,13 +259,13 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
       ledger.commit(accTx)
       ledger.persist()
 
-    block:
+    block body3:
       let accTx = ledger.beginSavepoint
       ledger.modBalance(eAddr)
 
       if rollback:
         ledger.rollback(accTx)
-        break
+        break body3
 
       ledger.commit(accTx)
       ledger.persist()

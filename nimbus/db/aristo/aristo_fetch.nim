@@ -66,6 +66,17 @@ proc retrieveStoID(
   ok stoID
 
 
+proc retrieveMerkleHash(
+    db: AristoDbRef;
+    root: VertexID;
+      ): Result[Hash256,AristoError] =
+  let key = db.getKeyRc(root).valueOr:
+    if error == GetKeyNotFound:
+      return ok(EMPTY_ROOT_HASH) # empty sub-tree
+    return err(error)
+  ok key.to(Hash256)
+
+
 proc hasPayload(
     db: AristoDbRef;
     root: VertexID;
@@ -107,11 +118,7 @@ proc fetchAccountState*(
     db: AristoDbRef;
       ): Result[Hash256,AristoError] =
   ## Fetch the Merkle hash of the account root.
-  let key = db.getKeyRc(VertexID 1).valueOr:
-    if error == GetKeyNotFound:
-      return ok(EMPTY_ROOT_HASH) # empty sub-tree
-    return err(error)
-  ok key.to(Hash256)
+  db.retrieveMerkleHash VertexID(1)
 
 proc hasPathAccount*(
     db: AristoDbRef;
@@ -135,6 +142,13 @@ proc fetchGenericData*(
   let pyl = ? db.retrievePayload(root, path)
   assert pyl.pType == RawData   # debugging only
   ok pyl.rawBlob
+
+proc fetchGenericState*(
+    db: AristoDbRef;
+    root: VertexID;
+      ): Result[Hash256,AristoError] =
+  ## Fetch the Merkle hash of the argument `root`.
+  db.retrieveMerkleHash root
 
 proc hasPathGeneric*(
     db: AristoDbRef;
@@ -165,18 +179,11 @@ proc fetchStorageState*(
     accPath: PathID;
       ): Result[Hash256,AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
-  let
-    stoID = db.retrieveStoID(accPath).valueOr:
-      if error == FetchPathNotFound:
-        return ok(EMPTY_ROOT_HASH) # no sub-tree
-      return err(error)
-
-    key = db.getKeyRc(stoID).valueOr:
-      if error == GetKeyNotFound:
-        return ok(EMPTY_ROOT_HASH) # empty or no sub-tree
-      return err(error)
-
-  ok key.to(Hash256)
+  let stoID = db.retrieveStoID(accPath).valueOr:
+    if error == FetchPathNotFound:
+      return ok(EMPTY_ROOT_HASH) # no sub-tree
+    return err(error)
+  db.retrieveMerkleHash stoID
 
 proc hasPathStorage*(
     db: AristoDbRef;
