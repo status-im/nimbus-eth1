@@ -258,6 +258,23 @@ type
       defaultValue: 10
       name: "log-metrics-interval" .}: int
 
+    metricsEnabled* {.
+      desc: "Enable the built-in metrics HTTP server"
+      defaultValue: false
+      name: "metrics" }: bool
+
+    metricsPort* {.
+      desc: "Listening port of the built-in metrics HTTP server"
+      defaultValue: defaultMetricsServerPort
+      defaultValueDesc: $defaultMetricsServerPort
+      name: "metrics-port" }: Port
+
+    metricsAddress* {.
+      desc: "Listening IP address of the built-in metrics HTTP server"
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: $defaultAdminListenAddressDesc
+      name: "metrics-address" }: IpAddress
+
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
       desc: "Specifies one or more bootstrap nodes(as enode URL) to use when connecting to the network"
@@ -477,23 +494,6 @@ type
           " is auto-generated."
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
-
-      metricsEnabled* {.
-        desc: "Enable the built-in metrics HTTP server"
-        defaultValue: false
-        name: "metrics" }: bool
-
-      metricsPort* {.
-        desc: "Listening port of the built-in metrics HTTP server"
-        defaultValue: defaultMetricsServerPort
-        defaultValueDesc: $defaultMetricsServerPort
-        name: "metrics-port" }: Port
-
-      metricsAddress* {.
-        desc: "Listening IP address of the built-in metrics HTTP server"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "metrics-address" }: IpAddress
 
     of `import`:
       blocksFile* {.

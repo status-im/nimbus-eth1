@@ -174,8 +174,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       waitForPeers = waitForPeers)
 
 
-proc localServices(nimbus: NimbusNode, conf: NimbusConf,
-                   com: CommonRef, protocols: set[ProtocolFlag]) =
+proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
   # metrics logging
   if conf.logMetricsEnabled:
     # https://github.com/nim-lang/Nim/issues/17369
@@ -186,8 +185,6 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       info "metrics", registry
       discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
     discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
-
-  nimbus.setupRpc(conf, com, protocols)
 
   # metrics server
   if conf.metricsEnabled:
@@ -235,6 +232,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     of Aristo,AriPrune:
       AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
 
+  setupMetrics(nimbus, conf)
+
   let com = CommonRef.new(
     db = coreDB,
     pruneHistory = (conf.chainDbMode == AriPrune),
@@ -255,7 +254,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
     setupP2P(nimbus, conf, com, protocols)
-    localServices(nimbus, conf, com, protocols)
+    setupRpc(nimbus, conf, com, protocols)
 
     if conf.maxPeers > 0:
       case conf.syncMode:
