@@ -11,6 +11,7 @@
 
 import
   chronicles,
+  metrics,
   chronos/timer,
   std/[strformat, strutils],
   stew/io2,
@@ -19,6 +20,15 @@ import
   ./core/[block_import, chain],
   ./db/era1_db,
   beacon_chain/era_db
+
+declareCounter nec_imported_blocks,
+  "Blocks processed during import"
+
+declareCounter nec_imported_transactions,
+  "Transactions processed during import"
+
+declareCounter nec_imported_gas,
+  "Gas processed during import"
 
 var running {.volatile.} = true
 
@@ -144,6 +154,10 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           avgTps = f(txs.float / diff0),
           avgMGps = f(gas.float / 1000000 / diff0),
           elapsed = shortLog(time2 - time0, 3)
+
+        nec_imported_blocks.inc(blocks.len)
+        nec_imported_transactions.inc(statsRes[].txs)
+        nec_imported_gas.inc(statsRes[].gas)
 
         if csv != nil:
           # In the CSV, we store a line for every chunk of blocks processed so
