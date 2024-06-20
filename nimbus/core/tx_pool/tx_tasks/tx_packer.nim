@@ -171,7 +171,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
 
   let packer = TxPackerStateRef( # return value
     xp: xp,
-    tr: AristoDbMemory.newCoreDbRef().ctx.getMpt CtGeneric,
+    tr: AristoDbMemory.newCoreDbRef().ctx.getColumn(CtGeneric, clearData=true),
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
     numBlobPerBlock: 0,
   )
@@ -255,7 +255,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
   vmState.receipts.setLen(nItems)
 
   xp.chain.receipts = vmState.receipts
-  xp.chain.txRoot = pst.tr.getColumn.state.valueOr:
+  xp.chain.txRoot = pst.tr.state.valueOr:
     raiseAssert "vmExecCommit(): state() failed " & $$error
   xp.chain.stateRoot = vmState.stateDB.rootHash
 

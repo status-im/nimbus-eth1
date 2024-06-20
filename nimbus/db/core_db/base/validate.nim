@@ -51,9 +51,8 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.forgetFn.isNil
 
 proc validateMethodsDesc(ctx: CoreDbCtxFns) =
-  doAssert not ctx.newColFn.isNil
-  doAssert not ctx.getMptFn.isNil
   doAssert not ctx.getAccountsFn.isNil
+  doAssert not ctx.getColumnFn.isNil
   doAssert not ctx.forgetFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbMptFns) =
@@ -62,7 +61,6 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.deleteFn.isNil
   doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
-  doAssert not fns.getColFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.backendFn.isNil

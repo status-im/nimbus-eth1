@@ -130,6 +130,13 @@ type
       ## For a generic sub-tree starting at `root`, fetch the data record
       ## indexed by `path`.
 
+  AristoApiFetchGenericStateFn* =
+    proc(db: AristoDbRef;
+         root: VertexID;
+        ): Result[Hash256,AristoError]
+        {.noRaise.}
+      ## Fetch the Merkle hash of the argument `root`.
+
   AristoApiFetchStorageDataFn* =
     proc(db: AristoDbRef;
          path: openArray[byte];
@@ -434,6 +441,7 @@ type
     fetchAccountPayload*: AristoApiFetchAccountPayloadFn
     fetchAccountState*: AristoApiFetchAccountStateFn
     fetchGenericData*: AristoApiFetchGenericDataFn
+    fetchGenericState*: AristoApiFetchGenericStateFn
     fetchStorageData*: AristoApiFetchStorageDataFn
     fetchStorageState*: AristoApiFetchStorageStateFn
 
@@ -482,6 +490,7 @@ type
     AristoApiProfFetchAccountPayloadFn  = "fetchAccountPayload"
     AristoApiProfFetchAccountStateFn    = "fetchAccountState"
     AristoApiProfFetchGenericDataFn     = "fetchGenericData"
+    AristoApiProfFetchGenericStateFn    = "fetchGenericState"
     AristoApiProfFetchStorageDataFn     = "fetchStorageData"
     AristoApiProfFetchStorageStateFn    = "fetchStorageState"
 
@@ -547,6 +556,7 @@ when AutoValidateApiHooks:
     doAssert not api.fetchAccountPayload.isNil
     doAssert not api.fetchAccountState.isNil
     doAssert not api.fetchGenericData.isNil
+    doAssert not api.fetchGenericState.isNil
     doAssert not api.fetchStorageData.isNil
     doAssert not api.fetchStorageState.isNil
 
@@ -616,6 +626,7 @@ func init*(api: var AristoApiObj) =
   api.fetchAccountPayload = fetchAccountPayload
   api.fetchAccountState = fetchAccountState
   api.fetchGenericData = fetchGenericData
+  api.fetchGenericState = fetchGenericState
   api.fetchStorageData = fetchStorageData
   api.fetchStorageState = fetchStorageState
 
@@ -667,6 +678,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     fetchAccountPayload:  api.fetchAccountPayload,
     fetchAccountState:    api.fetchAccountState,
     fetchGenericData:     api.fetchGenericData,
+    fetchGenericState:    api.fetchGenericState,
     fetchStorageData:     api.fetchStorageData,
     fetchStorageState:    api.fetchStorageState,
 
@@ -776,6 +788,11 @@ func init*(
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
       AristoApiProfFetchGenericDataFn.profileRunner:
         result = api.fetchGenericData(a, b, c)
+
+  profApi.fetchGenericState =
+    proc(a: AristoDbRef; b: VertexID;): auto =
+      AristoApiProfFetchGenericStateFn.profileRunner:
+        result = api.fetchGenericState(a, b)
 
   profApi.fetchStorageData =
     proc(a: AristoDbRef; b: openArray[byte]; c: PathID;): auto =

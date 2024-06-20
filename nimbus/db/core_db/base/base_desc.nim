@@ -76,9 +76,7 @@ type
     TxPending
 
   CoreDbColType* = enum
-    CtStorage = 0
-    CtAccounts
-    CtGeneric
+    CtGeneric = 2 # columns smaller than 2 are not provided
     CtReceipts
     CtTxs
     CtWithdrawals
@@ -161,23 +159,23 @@ type
   # --------------------------------------------------
   CoreDbCtxFromTxFn* =
     proc(root: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
-  CoreDbCtxNewColFn* = proc(
+  CoreDbCtxNewColFn* = proc( # <--- deprecated
     colType: CoreDbColType; colState: Hash256; address: Opt[EthAddress];
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
-  CoreDbCtxGetMptFn* = proc(
-    root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
+  CoreDbCtxGetColumnFn* = proc(
+    colType: CoreDbColType; clearData: bool): CoreDbMptRef {.noRaise.}
   CoreDbCtxGetAccountsFn* = proc(): CoreDbAccRef {.noRaise.}
   CoreDbCtxForgetFn* = proc() {.noRaise.}
 
   CoreDbCtxFns* = object
     ## Methods for context maniulation
-    newColFn*:      CoreDbCtxNewColFn
-    getMptFn*:      CoreDbCtxGetMptFn
+    #newColFn*:      CoreDbCtxNewColFn # <--- deprecated
+    getColumnFn*:   CoreDbCtxGetColumnFn
     getAccountsFn*: CoreDbCtxGetAccountsFn
     forgetFn*:      CoreDbCtxForgetFn
 
   # --------------------------------------------------
-  # Sub-descriptor: generic  Mpt/hexary trie methods
+  # Sub-descriptor: generic Mpt methods
   # --------------------------------------------------
   CoreDbMptBackendFn* = proc(): CoreDbMptBackendRef {.noRaise.}
   CoreDbMptFetchFn* =
@@ -191,8 +189,8 @@ type
   CoreDbMptMergeAccountFn* =
     proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptGetColFn* = proc(): CoreDbColRef {.noRaise.}
   CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbMptStateFn* = proc(updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects
@@ -201,7 +199,7 @@ type
     deleteFn*:    CoreDbMptDeleteFn
     mergeFn*:     CoreDbMptMergeFn
     hasPathFn*:   CoreDbMptHasPathFn
-    getColFn*:    CoreDbMptGetColFn
+    stateFn*:     CoreDbMptStateFn
 
 
   # ----------------------------------------------------

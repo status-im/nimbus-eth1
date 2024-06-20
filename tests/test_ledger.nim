@@ -181,24 +181,24 @@ proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
   ## Run three blocks, the second one optionally with *rollback*.
   let eAddr = env.txs[inx].getRecipient
 
-  block:
+  block body1:
     let accTx = ledger.beginSavepoint
     ledger.modBalance(eAddr)
     ledger.commit(accTx)
     ledger.persist()
 
-  block:
+  block body2:
     let accTx = ledger.beginSavepoint
     ledger.modBalance(eAddr)
 
     if rollback:
       ledger.rollback(accTx)
-      break
+      break body2
 
     ledger.commit(accTx)
     ledger.persist()
 
-  block:
+  block body3:
     let accTx = ledger.beginSavepoint
     ledger.modBalance(eAddr)
     ledger.commit(accTx)
