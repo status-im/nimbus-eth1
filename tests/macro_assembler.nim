@@ -328,15 +328,14 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
   stateDB.persist()
 
   let
-    al = AccountLedger.init(com.db, EMPTY_ROOT_HASH)
+    al = com.db.ctx.getAccounts()
     acc = al.fetch(codeAddress).expect "Valid Account Handle"
-    sl = StorageLedger.init(al, acc)
 
   for kv in boa.storage:
     let key = kv[0].toHex()
     let val = kv[1].toHex()
-    let slot = UInt256.fromBytesBE kv[0]
-    let data = sl.fetch(slot).valueOr: EmptyBlob
+    let slotKey = UInt256.fromBytesBE(kv[0]).toBytesBE.keccakHash.data
+    let data = al.slotFetch(codeAddress, slotKey).valueOr: EmptyBlob
     let actual = data.toHex
     let zerosLen = 64 - (actual.len)
     let value = repeat('0', zerosLen) & actual
