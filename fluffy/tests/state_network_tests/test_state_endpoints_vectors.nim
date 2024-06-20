@@ -71,7 +71,9 @@ procSuite "State Endpoints":
       )
 
       # wait for recursive gossip to complete
-      await sleepAsync(2000.milliseconds)
+      for node in testData.recursive_gossip:
+        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       let
         address =
@@ -201,7 +203,9 @@ procSuite "State Endpoints":
       )
 
       # wait for recursive gossip to complete
-      await sleepAsync(1000.milliseconds)
+      for node in testData.recursive_gossip:
+        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       let
         address = EthAddress.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
@@ -246,8 +250,8 @@ procSuite "State Endpoints":
         contentValue,
       )
 
-      # wait for recursive gossip to complete
-      await sleepAsync(1000.milliseconds)
+      # wait for gossip to complete
+      await stateNode2.waitUntilContentAvailable(contentId)
 
       let
         address = EthAddress.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")

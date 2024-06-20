@@ -167,7 +167,7 @@ proc stop*(sn: StateNode) {.async.} =
   sn.stateNetwork.stop()
   await sn.discoveryProtocol.closeWait()
 
-proc containsId*(sn: StateNode, contentId: ContentId): bool =
+proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =
   return sn.stateNetwork.contentDB.get(contentId).isSome()
 
 proc mockBlockHashToStateRoot*(
@@ -187,3 +187,11 @@ proc mockBlockHashToStateRoot*(
   sn.portalProtocol().storeContent(
     contentKeyBytes, contentId, SSZ.encode(blockHeaderWithProof)
   )
+
+proc waitUntilContentAvailable*(sn: StateNode, contentId: ContentId) {.async.} =
+  var waitCount = 0
+  while not sn.containsId(contentId):
+    await sleepAsync(10.milliseconds)
+    inc waitCount
+    if waitCount > 1000:
+      break
