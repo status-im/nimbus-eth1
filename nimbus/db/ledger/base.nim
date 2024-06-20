@@ -14,6 +14,7 @@
 
 import
   eth/common,
+  ../../evm/code_bytes,
   ../../stateless/multi_keys,
   ../core_db,
   ./base/[api_tracking, base_desc]
@@ -33,6 +34,7 @@ type
   ReadOnlyStateDB* = distinct LedgerRef
 
 export
+  code_bytes,
   LedgerFnInx,
   LedgerProfListRef,
   LedgerRef,
@@ -175,7 +177,7 @@ proc getBalance*(ldg: LedgerRef, eAddr: EthAddress): UInt256 =
   result = ldg.ac.getBalance(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, result
 
-proc getCode*(ldg: LedgerRef, eAddr: EthAddress): Blob =
+proc getCode*(ldg: LedgerRef, eAddr: EthAddress): CodeBytesRef =
   ldg.beginTrackApi LdgGetCodeFn
   result = ldg.ac.getCode(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, result=result.toStr
@@ -371,7 +373,7 @@ proc getStorageRoot*(db: ReadOnlyStateDB, eAddr: EthAddress): Hash256 {.borrow.}
 proc getBalance*(db: ReadOnlyStateDB, eAddr: EthAddress): UInt256 {.borrow.}
 proc getStorage*(db: ReadOnlyStateDB, eAddr: EthAddress, slot: UInt256): UInt256 {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, eAddr: EthAddress): AccountNonce {.borrow.}
-proc getCode*(db: ReadOnlyStateDB, eAddr: EthAddress): seq[byte] {.borrow.}
+proc getCode*(db: ReadOnlyStateDB, eAddr: EthAddress): CodeBytesRef {.borrow.}
 proc getCodeSize*(db: ReadOnlyStateDB, eAddr: EthAddress): int {.borrow.}
 proc contractCollision*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}

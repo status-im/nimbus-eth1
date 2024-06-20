@@ -246,7 +246,7 @@ proc setupEthRpc*(
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
-    result = accDB.getCode(address)
+    result = accDB.getCode(address).bytes()
 
   template sign(privateKey: PrivateKey, message: string): seq[byte] =
     # message length encoded as ASCII representation of decimal

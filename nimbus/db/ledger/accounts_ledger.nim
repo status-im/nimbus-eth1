@@ -25,6 +25,7 @@
 ##
 
 import
+  stew/keyed_queue,
   std/[tables, hashes, sets],
   chronicles,
   eth/[common, rlp],
@@ -33,10 +34,20 @@ import
   "../.."/[constants, utils/utils],
   ../access_list as ac_access_list,
   ".."/[core_db, storage_types, transient_storage],
+  ../../evm/code_bytes,
   ./distinct_ledgers
+
+export code_bytes
 
 const
   debugAccountsLedgerRef = false
+  codeLruSize = 16*1024
+    # An LRU cache of 16K items gives roughly 90% hit rate anecdotally on a
+    # small range of test blocks - this number could be studied in more detail
+    # Per EIP-170, a the code of a contract can be up to `MAX_CODE_SIZE` = 24kb,
+    # which would cause a worst case of 386MB memory usage though in reality
+    # code sizes are much smaller - it would make sense to study these numbers
+    # in greater detail.
 
 type
   AccountFlag = enum
@@ -44,7 +55,6 @@ type
     IsNew
     Dirty
     Touched
-    CodeLoaded
     CodeChanged
     StorageChanged
     NewlyCreated # EIP-6780: self destruct only in same transaction
@@ -54,7 +64,7 @@ type
   AccountRef = ref object
     statement: CoreDbAccount
     flags: AccountFlags
-    code: seq[byte]
+    code: CodeBytesRef
     originalStorage: TableRef[UInt256, UInt256]
     overlayStorage: Table[UInt256, UInt256]
 
@@ -69,6 +79,16 @@ type
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
     ripemdSpecial: bool
+    code: KeyedQueue[Hash256, CodeBytesRef]
+      ## The code cache provides two main benefits:
+      ##
+      ## * duplicate code is shared in memory beween accounts
+      ## * the jump destination table does not have to be recomputed for every
+      ##   execution, for commonly called called contracts
+      ##
+      ## The former feature is specially important in the 2.3-2.7M block range
+      ## when underpriced code opcodes are being run en masse - both advantages
+      ## help performance broadly as well.
 
   ReadOnlyStateDB* = distinct AccountsLedgerRef
 
@@ -330,7 +350,7 @@ proc persistMode(acc: AccountRef): PersistMode =
 proc persistCode(acc: AccountRef, ac: AccountsLedgerRef) =
   if acc.code.len != 0:
     let rc = ac.kvt.put(
-      contractHashKey(acc.statement.codeHash).toOpenArray, acc.code)
+      contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
     if rc.isErr:
       warn logTxt "persistCode()",
        codeHash=acc.statement.codeHash, error=($$rc.error)
@@ -412,33 +432,49 @@ proc getNonce*(ac: AccountsLedgerRef, address: EthAddress): AccountNonce =
   if acc.isNil: emptyEthAccount.nonce
   else: acc.statement.nonce
 
-proc getCode(acc: AccountRef, kvt: CoreDbKvtRef): lent seq[byte] =
-  if CodeLoaded notin acc.flags and CodeChanged notin acc.flags:
-    if acc.statement.codeHash != EMPTY_CODE_HASH:
-      var rc = kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
-      if rc.isErr:
-        warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
-      else:
-        acc.code = move(rc.value)
-        acc.flags.incl CodeLoaded
-  else:
-    acc.flags.incl CodeLoaded # avoid hash comparisons
-
-  acc.code
-
-proc getCode*(ac: AccountsLedgerRef, address: EthAddress): seq[byte] =
+proc getCode*(ac: AccountsLedgerRef, address: EthAddress): CodeBytesRef =
+  # Always returns non-nil!
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    return
+    return CodeBytesRef()
 
-  acc.getCode(ac.kvt)
+  if acc.code == nil:
+    acc.code =
+      if acc.statement.codeHash != EMPTY_CODE_HASH:
+        ac.code.lruFetch(acc.statement.codeHash).valueOr:
+          var rc = ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
+          if rc.isErr:
+            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+            CodeBytesRef()
+          else:
+            let newCode = CodeBytesRef.init(move(rc.value))
+            ac.code.lruAppend(acc.statement.codeHash, newCode, codeLruSize)
+      else:
+        CodeBytesRef()
+
+  acc.code
 
 proc getCodeSize*(ac: AccountsLedgerRef, address: EthAddress): int =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    return
+    return 0
 
-  acc.getCode(ac.kvt).len
+  if acc.code == nil:
+    if acc.statement.codeHash == EMPTY_CODE_HASH:
+      return 0
+    acc.code = ac.code.lruFetch(acc.statement.codeHash).valueOr:
+      # On a cache miss, we don't fetch the code - instead, we fetch just the
+      # length - should the code itself be needed, it will typically remain
+      # cached and easily accessible in the database layer - this is to prevent
+      # EXTCODESIZE calls from messing up the code cache and thus causing
+      # recomputation of the jump destination table
+      var rc = ac.kvt.len(contractHashKey(acc.statement.codeHash).toOpenArray)
+
+      return rc.valueOr:
+        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        0
+
+  acc.code.len()
 
 proc getCommittedStorage*(ac: AccountsLedgerRef, address: EthAddress, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
@@ -521,7 +557,9 @@ proc setCode*(ac: AccountsLedgerRef, address: EthAddress, code: seq[byte]) =
   if acc.statement.codeHash != codeHash:
     var acc = ac.makeDirty(address)
     acc.statement.codeHash = codeHash
-    acc.code = code
+    # Try to reuse cache entry if it exists, but don't save the code - it's not
+    # a given that it will be executed within LRU range
+    acc.code = ac.code.lruFetch(codeHash).valueOr(CodeBytesRef.init(code))
     acc.flags.incl CodeChanged
 
 proc setStorage*(ac: AccountsLedgerRef, address: EthAddress, slot, value: UInt256) =
@@ -701,7 +739,7 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
 proc update(wd: var WitnessData, acc: AccountRef) =
   # once the code is touched make sure it doesn't get reset back to false in another update
   if not wd.codeTouched:
-    wd.codeTouched = CodeChanged in acc.flags or CodeLoaded in acc.flags
+    wd.codeTouched = CodeChanged in acc.flags or acc.code != nil
 
   if not acc.originalStorage.isNil:
     for k, v in acc.originalStorage:
@@ -801,7 +839,7 @@ proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
-proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
+proc getCode*(db: ReadOnlyStateDB, address: EthAddress): CodeBytesRef {.borrow.}
 proc getCodeSize*(db: ReadOnlyStateDB, address: EthAddress): int {.borrow.}
 proc contractCollision*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}

@@ -107,6 +107,19 @@ proc kvtMethods(cKvt: KvtCoreDbKvtRef): CoreDbKvtFns =
     else:
       rc.toRc(cKvt.base, info)
 
+  proc kvtLen(
+      cKvt: KvtCoreDbKvtRef;
+      k: openArray[byte];
+      info: static[string];
+        ): CoreDbRc[int] =
+    let rc = cKvt.base.api.len(cKvt.kvt, k)
+    if rc.isOk:
+      ok(rc.value)
+    elif rc.error == GetNotFound:
+      err(rc.error.toError(cKvt.base, info, KvtNotFound))
+    else:
+      rc.toRc(cKvt.base, info)
+
   proc kvtPut(
       cKvt: KvtCoreDbKvtRef;
       k: openArray[byte];
@@ -147,6 +160,9 @@ proc kvtMethods(cKvt: KvtCoreDbKvtRef): CoreDbKvtFns =
 
     getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
       cKvt.kvtGet(k, "getFn()"),
+
+    lenFn: proc(k: openArray[byte]): CoreDbRc[int] =
+      cKvt.kvtLen(k, "lenFn()"),
 
     delFn: proc(k: openArray[byte]): CoreDbRc[void] =
       cKvt.kvtDel(k, "delFn()"),

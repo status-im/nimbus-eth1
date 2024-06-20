@@ -16,6 +16,7 @@ import
   "."/[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ./evm_errors,
+  ./code_bytes,
   ../common/[common, evmforks],
   ../utils/utils,
   stew/byteutils,
@@ -203,9 +204,9 @@ template selfDestruct*(c: Computation, address: EthAddress) =
   else:
     c.execSelfDestruct(address)
 
-template getCode*(c: Computation, address: EthAddress): seq[byte] =
+template getCode*(c: Computation, address: EthAddress): CodeBytesRef =
   when evmc_enabled:
-    c.host.copyCode(address)
+    CodeBytesRef.init(c.host.copyCode(address))
   else:
     c.vmState.readOnlyStateDB.getCode(address)
 
@@ -236,14 +237,14 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
 
   if result.msg.isCreate():
     result.msg.contractAddress = result.generateContractAddress(salt)
-    result.code = newCodeStream(message.data)
+    result.code = CodeStream.init(message.data)
     message.data = @[]
   else:
-    result.code = newCodeStream(
+    result.code = CodeStream.init(
       vmState.readOnlyStateDB.getCode(message.codeAddress))
 
 func newComputation*(vmState: BaseVMState, sysCall: bool,
-                     message: Message, code: seq[byte]): Computation =
+                     message: Message, code: CodeBytesRef): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -251,7 +252,7 @@ func newComputation*(vmState: BaseVMState, sysCall: bool,
   result.stack = EvmStackRef.new()
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
-  result.code = newCodeStream(code)
+  result.code = CodeStream.init(code)
   result.sysCall = sysCall
 
 template gasCosts*(c: Computation): untyped =

@@ -44,6 +44,7 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
 proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.backendFn.isNil
   doAssert not kvt.getFn.isNil
+  doAssert not kvt.lenFn.isNil
   doAssert not kvt.delFn.isNil
   doAssert not kvt.putFn.isNil
   doAssert not kvt.hasKeyFn.isNil

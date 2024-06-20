@@ -8,9 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import ../nimbus/vm/code_stream, strformat
+import ../nimbus/vm/code_bytes, strformat
 
-var c = newCodeStreamFromUnescaped("0x6003600202600055")
+var c = CodeBytes.fromHex("0x6003600202600055").expect("valid code")
 
 let opcodes = c.decompile()
 for op in opcodes:

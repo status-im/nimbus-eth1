@@ -50,6 +50,8 @@ type
     backLevel: int): Result[KvtDbRef,KvtError] {.noRaise.}
   KvtApiGetFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[Blob,KvtError] {.noRaise.}
+  KvtApiLenFn* = proc(db: KvtDbRef,
+    key: openArray[byte]): Result[int,KvtError] {.noRaise.}
   KvtApiHasKeyFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[bool,KvtError] {.noRaise.}
   KvtApiIsCentreFn* = proc(db: KvtDbRef): bool {.noRaise.}
@@ -76,6 +78,7 @@ type
     forget*: KvtApiForgetFn
     forkTx*: KvtApiForkTxFn
     get*: KvtApiGetFn
+    len*: KvtApiLenFn
     hasKey*: KvtApiHasKeyFn
     isCentre*: KvtApiIsCentreFn
     isTop*: KvtApiIsTopFn
@@ -100,6 +103,7 @@ type
     KvtApiProfForgetFn       = "forget"
     KvtApiProfForkTxFn       = "forkTx"
     KvtApiProfGetFn          = "get"
+    KvtApiProfLenFn          = "len"
     KvtApiProfHasKeyFn       = "hasKey"
     KvtApiProfIsCentreFn     = "isCentre"
     KvtApiProfIsTopFn        = "isTop"
@@ -114,6 +118,7 @@ type
     KvtApiProfTxTopFn        = "txTop"
 
     KvtApiProfBeGetKvpFn     = "be/getKvp"
+    KvtApiProfBeLenKvpFn     = "be/lenKvp"
     KvtApiProfBePutKvpFn     = "be/putKvp"
     KvtApiProfBePutEndFn     = "be/putEnd"
 
@@ -176,6 +181,7 @@ func init*(api: var KvtApiObj) =
   api.forget = forget
   api.forkTx = forkTx
   api.get = get
+  api.len = len
   api.hasKey = hasKey
   api.isCentre = isCentre
   api.isTop = isTop
@@ -203,6 +209,7 @@ func dup*(api: KvtApiRef): KvtApiRef =
     forget:     api.forget,
     forkTx:     api.forkTx,
     get:        api.get,
+    len:        api.len,
     hasKey:     api.hasKey,
     isCentre:   api.isCentre,
     isTop:      api.isTop,
@@ -275,6 +282,11 @@ func init*(
       KvtApiProfGetFn.profileRunner:
         result = api.get(a, b)
 
+  profApi.len =
+    proc(a: KvtDbRef, b: openArray[byte]): auto =
+      KvtApiProfLenFn.profileRunner:
+        result = api.len(a, b)
+
   profApi.hasKey =
     proc(a: KvtDbRef, b: openArray[byte]): auto =
       KvtApiProfHasKeyFn.profileRunner:
@@ -345,6 +357,12 @@ func init*(
         KvtApiProfBeGetKvpFn.profileRunner:
           result = be.getKvpFn(a)
     data.list[KvtApiProfBeGetKvpFn.ord].masked = true
+
+    beDup.lenKvpFn =
+      proc(a: openArray[byte]): auto =
+        KvtApiProfBeLenKvpFn.profileRunner:
+          result = be.lenKvpFn(a)
+    data.list[KvtApiProfBeLenKvpFn.ord].masked = true
 
     beDup.putKvpFn =
       proc(a: PutHdlRef; b: openArray[(Blob,Blob)]) =

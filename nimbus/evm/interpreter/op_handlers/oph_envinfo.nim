@@ -176,8 +176,8 @@ proc extCodeCopyOp (k: var VmCtx): EvmResultVoid =
       cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len),
       reason = "ExtCodeCopy fee")
 
-  let codeBytes = cpt.getCode(address)
-  cpt.memory.writePadded(codeBytes, memPos, codePos, len)
+  let code = cpt.getCode(address)
+  cpt.memory.writePadded(code.bytes, memPos, codePos, len)
   ok()
 
 
@@ -194,8 +194,8 @@ proc extCodeCopyEIP2929Op (k: var VmCtx): EvmResultVoid =
                     cpt.gasEip2929AccountCheck(address)
   ? cpt.opcodeGastCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
 
-  let codeBytes = cpt.getCode(address)
-  cpt.memory.writePadded(codeBytes, memPos, codePos, len)
+  let code = cpt.getCode(address)
+  cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
   ok()
 
 # -----------

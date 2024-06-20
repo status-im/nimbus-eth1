@@ -92,6 +92,22 @@ proc getKvpFn(db: RdbBackendRef): GetKvpFn =
 
       err(GetNotFound)
 
+proc lenKvpFn(db: RdbBackendRef): LenKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[int,KvtError] =
+
+      # Get data record
+      var len = db.rdb.len(key).valueOr:
+        when extraTraceMessages:
+          debug logTxt "lenKvpFn() failed", key, error=error[0], info=error[1]
+        return err(error[0])
+
+      # Return if non-empty
+      if 0 < len:
+        return ok(len)
+
+      err(GetNotFound)
+
 # -------------
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
@@ -268,6 +284,7 @@ proc rocksDbKvtBackend*(
     return err(error)
 
   db.getKvpFn = getKvpFn db
+  db.lenKvpFn = lenKvpFn db
 
   db.putBegFn = putBegFn db
   db.putKvpFn = putKvpFn db
@@ -297,6 +314,7 @@ proc rocksDbKvtTriggeredBackend*(
     return err((RdbBeHostError,$error))
 
   db.getKvpFn = getKvpFn db
+  db.lenKvpFn = lenKvpFn db
 
   db.putBegFn = putBegTriggeredFn db
   db.putKvpFn = putKvpFn db
