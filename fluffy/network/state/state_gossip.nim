@@ -140,7 +140,7 @@ proc recursiveGossipOffer*(
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
 ) {.async: (raises: [CancelledError]).} =
-  asyncSpawn gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
+  await gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
@@ -151,7 +151,7 @@ proc recursiveGossipOffer*(
     (parentKey, parentOffer) = offer.withKey(key).getParent()
     parentKeyBytes = parentKey.toContentKey().encode()
 
-  asyncSpawn recursiveGossipOffer(
+  await recursiveGossipOffer(
     p, srcNodeId, parentKeyBytes, parentOffer.encode(), parentKey, parentOffer
   )
 
@@ -165,7 +165,7 @@ proc recursiveGossipOffer*(
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
 ) {.async: (raises: [CancelledError]).} =
-  asyncSpawn gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
+  await gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
@@ -176,6 +176,6 @@ proc recursiveGossipOffer*(
     (parentKey, parentOffer) = offer.withKey(key).getParent()
     parentKeyBytes = parentKey.toContentKey().encode()
 
-  asyncSpawn recursiveGossipOffer(
+  await recursiveGossipOffer(
     p, srcNodeId, parentKeyBytes, parentOffer.encode(), parentKey, parentOffer
   )

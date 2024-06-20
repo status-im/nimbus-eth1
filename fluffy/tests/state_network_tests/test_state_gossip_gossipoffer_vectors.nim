@@ -76,9 +76,7 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
       # check that the offer was received by the second state instance
       let res1 =
@@ -151,9 +149,7 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
       # check that the offer was received by the second state instance
       let res1 = await stateNode2.stateNetwork.getContractTrieNode(
@@ -216,9 +212,7 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
       # check that the offer was received by the second state instance
       let res1 =
@@ -280,7 +274,9 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for recursive gossip to complete
-      await sleepAsync(1000.milliseconds)
+      for node in testData.recursive_gossip:
+        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       # check that all nodes were received by both state instances
       for kv in testData.recursive_gossip:
@@ -357,7 +353,9 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for recursive gossip to complete
-      await sleepAsync(1000.milliseconds)
+      for node in testData.recursive_gossip:
+        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       # check that all nodes were received by both state instances
       for kv in testData.recursive_gossip:

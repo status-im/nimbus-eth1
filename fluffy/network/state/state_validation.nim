@@ -33,6 +33,7 @@ proc isValidNextNode(
 
   nextNode.hashEquals(nextHash)
 
+# TODO: Refactor this function to improve maintainability
 proc validateTrieProof*(
     expectedRootHash: Opt[KeccakHash],
     path: Nibbles,

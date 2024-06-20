@@ -86,25 +86,26 @@ proc getContent(
     let contentFromDB = n.contentDB.get(contentId)
     if contentFromDB.isSome():
       let contentValue = V.decode(contentFromDB.get()).valueOr:
-        error "Unable to decode account trie node content value from database"
+        error "Unable to decode state content value from database"
         return Opt.none(V)
 
-      info "Fetched account trie node from database"
+      info "Fetched state content value from database"
       return Opt.some(contentValue)
 
   let
     contentLookupResult = (
       await n.portalProtocol.contentLookup(contentKeyBytes, contentId)
     ).valueOr:
+      warn "Failed fetching state content from the network"
       return Opt.none(V)
     contentValueBytes = contentLookupResult.content
 
   let contentValue = V.decode(contentValueBytes).valueOr:
-    error "Unable to decode account trie node content value from content lookup"
+    warn "Unable to decode state content value from content lookup"
     return Opt.none(V)
 
   validateRetrieval(key, contentValue).isOkOr:
-    error "Validation of retrieved content failed"
+    warn "Validation of retrieved state content failed"
     return Opt.none(V)
 
   n.portalProtocol.storeContent(contentKeyBytes, contentId, contentValueBytes)
@@ -134,7 +135,7 @@ proc getStateRootByBlockHash*(
     n: StateNetwork, hash: BlockHash
 ): Future[Opt[KeccakHash]] {.async: (raises: [CancelledError]).} =
   if n.historyNetwork.isNone():
-    warn "History network is not available. Unable to get state root by block hash"
+    warn "History network is not available"
     return Opt.none(KeccakHash)
 
   let header = (await n.historyNetwork.get().getVerifiedBlockHeader(hash)).valueOr:
@@ -174,7 +175,7 @@ proc processOffer*(
   )
   info "Offered content validated successfully", contentKeyBytes
 
-  asyncSpawn gossipOffer(
+  await gossipOffer(
     n.portalProtocol, maybeSrcNodeId, contentKeyBytes, contentValueBytes, contentKey,
     contentValue,
   )

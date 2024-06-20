@@ -79,7 +79,7 @@ proc getAccountProof(
   while nibblesIdx < nibbles.len():
     let
       accountTrieNode = (await n.getAccountTrieNode(key)).valueOr:
-        # log something here
+        warn "Failed to get account trie node when building account proof"
         return Opt.none(TrieProof)
       trieNode = accountTrieNode.node
 
@@ -106,7 +106,7 @@ proc getStorageProof(
   while nibblesIdx < nibbles.len():
     let
       contractTrieNode = (await n.getContractTrieNode(key)).valueOr:
-        # log something here
+        warn "Failed to get contract trie node when building account proof"
         return Opt.none(TrieProof)
       trieNode = contractTrieNode.node
 
@@ -131,7 +131,7 @@ proc getAccount(
       warn "Failed to get account proof"
       return Opt.none(Account)
     account = accountProof.toAccount().valueOr:
-      warn "Failed to get account from accountProof"
+      error "Failed to get account from accountProof"
       return Opt.none(Account)
 
   Opt.some(account)
@@ -165,7 +165,7 @@ proc getStorageAt*(
       warn "Failed to get storage proof"
       return Opt.none(UInt256)
     slotValue = storageProof.toSlot().valueOr:
-      warn "Failed to get slot from storageProof"
+      error "Failed to get slot from storageProof"
       return Opt.none(UInt256)
 
   Opt.some(slotValue)
