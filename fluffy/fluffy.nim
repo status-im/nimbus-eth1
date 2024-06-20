@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/os,
+  std/[os, enumutils],
   confutils,
   confutils/std/net,
   chronicles,
@@ -59,6 +59,12 @@ proc onOptimisticHeader(
   withForkyHeader(optimisticHeader):
     when lcDataFork > LightClientDataFork.None:
       info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
+
+proc getDbDirectory(network: PortalNetwork): string =
+  if network == PortalNetwork.mainnet:
+    "db"
+  else:
+    "db_" & network.symbolName()
 
 proc run(config: PortalConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout)
@@ -163,7 +169,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   # Force pruning
   if config.forcePrune:
     let db = ContentDB.new(
-      config.dataDir / "db" / "contentdb_" &
+      config.dataDir / portalNetwork.getDbDirectory() / "contentdb_" &
         d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacityMB * 1_000_000,
       manualCheckpoint = true,
@@ -195,7 +201,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   # the selected `Radius`.
   let
     db = ContentDB.new(
-      config.dataDir / "db" / "contentdb_" &
+      config.dataDir / portalNetwork.getDbDirectory() / "contentdb_" &
         d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacityMB * 1_000_000,
     )
@@ -260,7 +266,6 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
           config.trustedBlockRoot.isSome():
         let
           # Portal works only over mainnet data currently
-          # TODO: investigate this load network data function
           networkData = loadNetworkData("mainnet")
           beaconDb = BeaconDb.new(networkData, config.dataDir / "db" / "beacon_db")
           beaconNetwork = BeaconNetwork.new(

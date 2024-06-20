@@ -324,7 +324,7 @@ proc processContentLoop(n: BeaconNetwork) {.async: (raises: []).} =
     trace "processContentLoop canceled"
 
 proc start*(n: BeaconNetwork) =
-  info "Starting portal beacon chain network"
+  info "Starting Portal beacon chain network"
   n.portalProtocol.start()
   n.processContentLoop = processContentLoop(n)
 
