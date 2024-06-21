@@ -14,7 +14,7 @@ import
   evmc/evmc, ../config
 
 # The built-in Nimbus EVM, via imported C function.
-proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc, raises: [].}
+proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc, raises: [], gcsafe.}
 
 # Import this module to link in the definition of `evmc_create_nimbus_evm`.
 # Nim thinks the module is unused because the function is only called via

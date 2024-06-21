@@ -123,28 +123,11 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult =
   let hostContext = cast[evmc_host_context](host)
   host.hostInterface = hostInterface.unsafeAddr
 
-  # Without `{.gcsafe.}:` here, the call via `vm.execute` results in a Nim
-  # compile-time error in a far away function.  Starting here, a cascade of
-  # warnings takes place: "Warning: '...' is not GC-safe as it performs an
-  # indirect call here [GCUnsafe2]", then a list of "Warning: '...' is not
-  # GC-safe as it calls '...'" at each function up the call stack, to a high
-  # level function `persistBlocks` where it terminates compilation as an error
-  # instead of a warning.
-  #
-  # It is tempting to annotate all EVMC API functions with `{.cdecl, gcsafe.}`,
-  # overriding the function signatures from the Nim EVMC module.  Perhaps we
-  # will do that, though it's conceptually dubious, as the two sides of the
-  # EVMC ABI live in different GC worlds (when loaded as a shared library with
-  # its own Nim runtime), very similar to calling between threads.
-  #
-  # TODO: But wait: Why does the Nim EVMC test program compile fine without
-  # any `gcsafe`, even with `--threads:on`?
-  {.gcsafe.}:
-    result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
-                          evmc_revision(host.vmState.fork.ord), host.msg,
-                          if host.code.len > 0: host.code[0].unsafeAddr
-                          else: nil,
-                          host.code.len.csize_t)
+  result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
+                        evmc_revision(host.vmState.fork.ord), host.msg,
+                        if host.code.len > 0: host.code.bytes[0].unsafeAddr
+                        else: nil,
+                        host.code.len.csize_t)
 
   host.showCallReturn(result)
 
