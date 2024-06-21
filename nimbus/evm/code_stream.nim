@@ -5,7 +5,8 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import chronicles, eth/common, ./interpreter/op_codes, ./code_bytes
+import
+  std/[sequtils, strutils], chronicles, eth/common, ./interpreter/op_codes, ./code_bytes
 
 export code_bytes
 
@@ -78,6 +79,25 @@ func isValidOpcode*(c: CodeStream, position: int): bool =
 
 func bytes*(c: CodeStream): lent seq[byte] =
   c.code.bytes()
+
+proc decompile*(original: CodeStream): seq[(int, Op, string)] =
+  # behave as https://etherscan.io/opcode-tool
+  var c = CodeStream.init(original.bytes)
+  while true:
+    var op = c.next
+    if op >= Push1 and op <= Push32:
+      result.add(
+        (
+          c.pc - 1,
+          op,
+          "0x" & c.read(op.int - 95).mapIt($(it.BiggestInt.toHex(2))).join(""),
+        )
+      )
+    elif op != Op.Stop:
+      result.add((c.pc - 1, op, ""))
+    else:
+      result.add((-1, Op.Stop, ""))
+      break
 
 func atEnd*(c: CodeStream): bool =
   c.pc >= c.code.bytes.len

@@ -30,7 +30,7 @@ func init*(T: type CodeBytesRef, bytes: openArray[byte]): CodeBytesRef =
 func init*(T: type CodeBytesRef, bytes: openArray[char]): CodeBytesRef =
   CodeBytesRef.init(bytes.toOpenArrayByte(0, bytes.high()))
 
-func fromHex*(T: type CodeBytesRef, hex: openArray[char]): Opt[CodeBytesRef] =
+func fromHex*(T: type CodeBytesRef, hex: string): Opt[CodeBytesRef] =
   try:
     Opt.some(CodeBytesRef.init(hexToSeqByte(hex)))
   except ValueError:
