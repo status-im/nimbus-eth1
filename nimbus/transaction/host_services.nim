@@ -218,7 +218,7 @@ proc copyCode(host: TransactionHost, address: HostAddress,
   #
   # Note, when there is no code, `getCode` result is empty `seq`.  It was `nil`
   # when the DB was first implemented, due to Nim language changes since then.
-  var code: seq[byte] = host.vmState.readOnlyStateDB.getCode(address)
+  let code = host.vmState.readOnlyStateDB.getCode(address)
   var safe_len: int = code.len # It's safe to assume >= 0.
 
   if code_offset >= safe_len.HostSize:
@@ -230,7 +230,7 @@ proc copyCode(host: TransactionHost, address: HostAddress,
     safe_len = buffer_size.int
 
   if safe_len > 0:
-    copyMem(buffer_data, code[safe_offset].addr, safe_len)
+    copyMem(buffer_data, code.bytes()[safe_offset].addr, safe_len)
   return safe_len.HostSize
 
 proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.show.} =

@@ -75,7 +75,7 @@ proc dumpAccount*(db: LedgerRef, acc: EthAddress): DumpAccount =
     nonce   : db.getNonce(acc),
     root    : db.getStorageRoot(acc),
     codeHash: db.getCodeHash(acc),
-    code    : db.getCode(acc),
+    code    : db.getCode(acc).bytes(),
     key     : keccakHash(acc)
   )
   for k, v in db.cachedStorage(acc):
