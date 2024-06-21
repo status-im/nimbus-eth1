@@ -73,7 +73,7 @@ proc updateHead(c: var ForkedChain, blk: EthBlock) =
 
 proc validatePotentialHead(c: var ForkedChain,
           blk: EthBlock,
-          updateHead: bool = true): Result[void, string]  =
+          updateHead: bool = true)  =
   let dbTx = c.db.newTransaction()
   defer:
     dbTx.dispose()
@@ -81,12 +81,11 @@ proc validatePotentialHead(c: var ForkedChain,
   let res = c.processBlock(blk)
   if res.isErr:
     dbTx.rollback()
-    return res
+    return
 
   dbTx.commit()
   if updateHead:
     c.updateHead(blk)
-  ok()
 
 proc replaySegment(c: var ForkedChain,
                    head: Hash256): BlockNumber =
@@ -101,8 +100,7 @@ proc replaySegment(c: var ForkedChain,
   c.stagingTx.rollback()
   c.stagingTx = c.db.newTransaction()
   for i in countdown(chain.high, chain.low):
-    c.validatePotentialHead(chain[i], updateHead = false).
-      expect("have been validated before")
+    c.validatePotentialHead(chain[i], updateHead = false)
 
   chain[^1].header.number
 
@@ -131,15 +129,14 @@ proc addBlock*(c: var ForkedChain, blk: EthBlock) =
     blk.header
 
   if header.parentHash == c.head:
-    c.validatePotentialHead(blk).isOkOr:
-      # return if it's not a valid block
-      return
+    c.validatePotentialHead(blk)
+    return
 
   if header.parentHash == c.base:
     c.stagingTx.rollback()
     c.stagingTx = c.db.newTransaction()
-    c.validatePotentialHead(blk).isOkOr:
-      return
+    c.validatePotentialHead(blk)
+    return
 
   if header.parentHash notin c.blocks:
     # if it's parent is an invalid block
@@ -147,8 +144,7 @@ proc addBlock*(c: var ForkedChain, blk: EthBlock) =
     return
 
   discard c.replaySegment(header.parentHash)
-  c.validatePotentialHead(blk).isOkOr:
-    return
+  c.validatePotentialHead(blk)
 
 proc finalizeSegment*(c: var ForkedChain,
         finalized: Hash256): Result[void, string] =
