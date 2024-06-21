@@ -128,7 +128,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
       wantedNonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
 
-      actualCode = stateDB.getCode(account)
+      actualCode = stateDB.getCode(account).bytes()
       actualBalance = stateDB.getBalance(account)
       actualNonce = stateDB.getNonce(account)
 

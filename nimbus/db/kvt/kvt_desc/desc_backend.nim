@@ -23,6 +23,9 @@ type
   GetKvpFn* =
     proc(key: openArray[byte]): Result[Blob,KvtError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function
+  LenKvpFn* =
+    proc(key: openArray[byte]): Result[int,KvtError] {.gcsafe, raises: [].}
+      ## Generic backend database retrieval function
 
   # -------------
 
@@ -76,6 +79,7 @@ type
     ## Backend interface.
 
     getKvpFn*: GetKvpFn              ## Read key-value pair
+    lenKvpFn*: LenKvpFn              ## Read key-value pair length
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putKvpFn*: PutKvpFn              ## Bulk store key-value pairs
@@ -88,6 +92,7 @@ type
 
 proc init*(trg: var BackendObj; src: BackendObj) =
   trg.getKvpFn = src.getKvpFn
+  trg.lenKvpFn = src.lenKvpFn
   trg.putBegFn = src.putBegFn
   trg.putKvpFn = src.putKvpFn
   trg.putEndFn = src.putEndFn

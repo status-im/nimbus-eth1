@@ -255,6 +255,12 @@ proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   result = kvt.methods.getFn key
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
+proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
+  ## This function always returns a non-empty `Blob` or an error code.
+  kvt.setTrackNewApi KvtLenFn
+  result = kvt.methods.lenFn key
+  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+
 proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function sort of mimics the behaviour of the legacy database
   ## returning an empty `Blob` if the argument `key` is not found on the

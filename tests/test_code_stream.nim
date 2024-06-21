@@ -11,7 +11,7 @@ import  unittest2, sequtils,
 proc codeStreamMain*() =
   suite "parse bytecode":
     test "accepts bytes":
-      let codeStream = newCodeStream("\x01")
+      let codeStream = CodeStream.init("\x01")
       check(codeStream.len == 1)
 
 
@@ -22,14 +22,14 @@ proc codeStreamMain*() =
     #         CodeStream(code_bytes)
 
     test "next returns the correct opcode":
-      var codeStream = newCodeStream("\x01\x02\x30")
+      var codeStream = CodeStream.init("\x01\x02\x30")
       check(codeStream.next == Op.ADD)
       check(codeStream.next == Op.MUL)
       check(codeStream.next == Op.ADDRESS)
 
 
     test "peek returns next opcode without changing location":
-      var codeStream = newCodeStream("\x01\x02\x30")
+      var codeStream = CodeStream.init("\x01\x02\x30")
       check(codeStream.pc == 0)
       check(codeStream.peek == Op.ADD)
       check(codeStream.pc == 0)
@@ -40,14 +40,14 @@ proc codeStreamMain*() =
 
 
     test "stop opcode is returned when end reached":
-      var codeStream = newCodeStream("\x01\x02")
+      var codeStream = CodeStream.init("\x01\x02")
       discard codeStream.next
       discard codeStream.next
       check(codeStream.next == Op.STOP)
 
     # Seek has been dommented out for future deletion
     # test "seek reverts to original position on exit":
-    #   var codeStream = newCodeStream("\x01\x02\x30")
+    #   var codeStream = CodeStream.init("\x01\x02\x30")
     #   check(codeStream.pc == 0)
     #   codeStream.seek(1):
     #     check(codeStream.pc == 1)
@@ -56,13 +56,13 @@ proc codeStreamMain*() =
     #   check(codeStream.peek == Op.ADD)
 
     test "[] returns opcode":
-      let codeStream = newCodeStream("\x01\x02\x30")
+      let codeStream = CodeStream.init("\x01\x02\x30")
       check(codeStream[0] == Op.ADD)
       check(codeStream[1] == Op.MUL)
       check(codeStream[2] == Op.ADDRESS)
 
     test "isValidOpcode invalidates after PUSHXX":
-      var codeStream = newCodeStream("\x02\x60\x02\x04")
+      var codeStream = CodeStream.init("\x02\x60\x02\x04")
       check(codeStream.isValidOpcode(0))
       check(codeStream.isValidOpcode(1))
       check(not codeStream.isValidOpcode(2))
@@ -71,7 +71,7 @@ proc codeStreamMain*() =
 
 
     test "isValidOpcode 0":
-      var codeStream = newCodeStream(@[2.byte, 3.byte, 0x72.byte].concat(repeat(4.byte, 32)).concat(@[5.byte]))
+      var codeStream = CodeStream.init(@[2.byte, 3.byte, 0x72.byte].concat(repeat(4.byte, 32)).concat(@[5.byte]))
       # valid: 0 - 2 :: 22 - 35
       # invalid: 3-21 (PUSH19) :: 36+ (too long)
       check(codeStream.isValidOpcode(0))
@@ -86,7 +86,7 @@ proc codeStreamMain*() =
 
     test "isValidOpcode 1":
       let test = @[2.byte, 3.byte, 0x7d.byte].concat(repeat(4.byte, 32)).concat(@[5.byte, 0x7e.byte]).concat(repeat(4.byte, 35)).concat(@[1.byte, 0x61.byte, 1.byte, 1.byte, 1.byte])
-      var codeStream = newCodeStream(test)
+      var codeStream = CodeStream.init(test)
       # valid: 0 - 2 :: 33 - 36 :: 68 - 73 :: 76
       # invalid: 3 - 32 (PUSH30) :: 37 - 67 (PUSH31) :: 74, 75 (PUSH2) :: 77+ (too long)
       check(codeStream.isValidOpcode(0))
@@ -109,7 +109,7 @@ proc codeStreamMain*() =
 
 
     test "right number of bytes invalidates":
-      var codeStream = newCodeStream("\x02\x03\x60\x02\x02")
+      var codeStream = CodeStream.init("\x02\x03\x60\x02\x02")
       check(codeStream.isValidOpcode(0))
       check(codeStream.isValidOpcode(1))
       check(codeStream.isValidOpcode(2))

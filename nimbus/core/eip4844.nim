@@ -18,8 +18,6 @@ import
   ../constants,
   ../common/common
 
-from std/sequtils import mapIt
-
 {.push raises: [].}
 
 type

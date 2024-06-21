@@ -10,7 +10,7 @@ import
   std/sets,
   stint, evmc/evmc,
   eth/common/eth_types,
-  ../evm/types
+  ../evm/[code_bytes, types]
 
 # Object `TransactionHost` represents "EVMC host" to the EVM.  "Host services"
 # manage account state outside EVM such as balance transfers, storage, logs and
@@ -59,7 +59,7 @@ type
     computation*:     Computation
     msg*:             EvmcMessage
     input*:           seq[byte]
-    code*:            seq[byte]
+    code*:            CodeBytesRef
     cachedTxContext*: bool
     txContext*:       EvmcTxContext
     depth*:           int

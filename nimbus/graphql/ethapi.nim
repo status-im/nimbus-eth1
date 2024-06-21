@@ -543,7 +543,7 @@ proc accountCode(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
   let acc = AccountNode(parent)
   try:
     let code = acc.db.getCode(acc.address)
-    resp(code)
+    resp(code.bytes())
   except RlpError as ex:
     err(ex.msg)
 

@@ -140,6 +140,7 @@ type
   # --------------------------------------------------
   CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
   CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbKvtLenFn* = proc(k: openArray[byte]): CoreDbRc[int] {.noRaise.}
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
@@ -150,6 +151,7 @@ type
     ## Methods for key-value table
     backendFn*:     CoreDbKvtBackendFn
     getFn*:         CoreDbKvtGetFn
+    lenFn*:         CoreDbKvtLenFn
     delFn*:         CoreDbKvtDelFn
     putFn*:         CoreDbKvtPutFn
     hasKeyFn*:      CoreDbKvtHasKeyFn

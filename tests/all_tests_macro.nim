@@ -6,15 +6,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[times, macros, strutils, os, osproc, threadpool],
+  std/[times, macros, strutils, os, osproc],
   unittest2,
   ../nimbus/compile_info,
   ../nimbus/utils/utils
 
-export strutils, os, unittest2, osproc, threadpool
-
-# AppVeyor may go out of memory with the default of 4
-setMinPoolSize(2)
+export strutils, os, unittest2, osproc
 
 proc executeMyself(numModules: int, names: openArray[string]): int =
   let appName = getAppFilename()

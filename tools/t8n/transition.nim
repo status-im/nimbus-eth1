@@ -106,7 +106,7 @@ proc envToHeader(env: EnvStruct): BlockHeader =
 proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
   for accAddr in db.addresses():
     var acc = GenesisAccount(
-      code: db.getCode(accAddr),
+      code: db.getCode(accAddr).bytes(),
       balance: db.getBalance(accAddr),
       nonce: db.getNonce(accAddr)
     )

@@ -166,7 +166,7 @@ proc setupHost(call: CallParams): TransactionHost =
   # with the contract address.  This differs from the previous Nimbus EVM API.
   # Guarded under `evmc_enabled` for now so it doesn't break vm2.
   when defined(evmc_enabled):
-    var code: seq[byte]
+    var code: CodeBytesRef
     if call.isCreate:
       let sender = call.sender
       let contractAddress =
@@ -174,7 +174,7 @@ proc setupHost(call: CallParams): TransactionHost =
       host.msg.recipient = contractAddress.toEvmc
       host.msg.input_size = 0
       host.msg.input_data = nil
-      code = call.input
+      code = CodeBytesRef.init(call.input)
     else:
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
@@ -189,7 +189,7 @@ proc setupHost(call: CallParams): TransactionHost =
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, call.sysCall, cMsg, code)
 
-    host.code = system.move(code)
+    host.code = code
 
   else:
     if call.input.len > 0:

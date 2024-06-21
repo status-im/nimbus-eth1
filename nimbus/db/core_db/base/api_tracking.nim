@@ -70,6 +70,7 @@ type
     KvtDelFn            = "kvt/del"
     KvtForgetFn         = "kvt/forget"
     KvtGetFn            = "kvt/get"
+    KvtLenFn            = "kvt/len"
     KvtGetOrEmptyFn     = "kvt/getOrEmpty"
     KvtHasKeyFn         = "kvt/hasKey"
     KvtPairsIt          = "kvt/pairs"

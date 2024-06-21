@@ -11,7 +11,7 @@
 import
   std/[json, strutils],
   json_rpc/[rpcclient], httputils,
-  eth/[common, rlp], chronicles,
+  eth/common, chronicles,
   ../nimbus/utils/utils,
   ./parser
 

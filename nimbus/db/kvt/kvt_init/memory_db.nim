@@ -82,6 +82,16 @@ proc getKvpFn(db: MemBackendRef): GetKvpFn =
         return ok(move(data))
       err(GetNotFound)
 
+proc lenKvpFn(db: MemBackendRef): LenKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[int,KvtError] =
+      if key.len == 0:
+        return err(KeyInvalid)
+      var data = db.mdb.tab.getOrVoid @key
+      if data.isValid:
+        return ok(data.len)
+      err(GetNotFound)
+
 # -------------
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
@@ -140,6 +150,7 @@ proc memoryBackend*: BackendRef =
     mdb:    MemDbRef())
 
   db.getKvpFn = getKvpFn db
+  db.lenKvpFn = lenKvpFn db
 
   db.putBegFn = putBegFn db
   db.putKvpFn = putKvpFn db

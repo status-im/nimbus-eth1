@@ -53,6 +53,24 @@ proc get*(
     res = EmptyBlob
   ok move(res)
 
+proc len*(
+    rdb: RdbInst;
+    key: openArray[byte],
+      ): Result[int,(KvtError,string)] =
+  var res: int
+  let onData: DataProc = proc(data: openArray[byte]) =
+    res = data.len
+
+  let gotData = rdb.store[KvtGeneric].get(key, onData).valueOr:
+    const errSym = RdbBeDriverGetError
+    when extraTraceMessages:
+      trace logTxt "len", error=errSym, info=error
+    return err((errSym,error))
+
+  if not gotData:
+    res = 0
+  ok res
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
