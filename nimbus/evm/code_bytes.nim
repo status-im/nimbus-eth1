@@ -69,3 +69,6 @@ func isValidOpcode*(c: CodeBytesRef, position: int): bool =
     c.processed = i - 1
 
     not c.invalidPosition(position)
+
+func `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
+  a.bytes == b
