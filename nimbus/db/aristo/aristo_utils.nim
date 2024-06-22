@@ -15,7 +15,7 @@
 
 import
   std/[sequtils, sets, typetraits],
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
 
@@ -184,7 +184,7 @@ proc retrieveStoAccHike*(
   ## vertex and the vertex ID.
   ##
   # Expand vertex path to account leaf
-  let hike = (@accPath).initNibbleRange.hikeUp(VertexID(1), db).valueOr:
+  let hike = accPath.to(NibblesBuf).hikeUp(VertexID(1), db).valueOr:
     return err(UtilsAccInaccessible)
 
   # Extract the account payload fro the leaf

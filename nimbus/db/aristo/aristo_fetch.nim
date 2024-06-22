@@ -15,7 +15,7 @@
 
 import
   std/typetraits,
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_utils]
 
@@ -44,7 +44,7 @@ proc retrievePayload(
   if path.len == 0:
     return err(FetchPathInvalid)
 
-  let hike = path.initNibbleRange.hikeUp(root, db).valueOr:
+  let hike = NibblesBuf.fromBytes(path).hikeUp(root, db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return err(FetchPathNotFound)
     return err(error[1])
@@ -74,7 +74,7 @@ proc hasPayload(
   if path.len == 0:
     return err(FetchPathInvalid)
 
-  let hike = path.initNibbleRange.hikeUp(VertexID(1), db).valueOr:
+  let hike = NibblesBuf.fromBytes(path).hikeUp(VertexID(1), db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return ok(false)
     return err(error[1])

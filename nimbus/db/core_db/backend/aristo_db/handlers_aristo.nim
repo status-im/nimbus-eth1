@@ -13,7 +13,7 @@
 import
   std/[strutils, typetraits],
   chronicles,
-  eth/[common, trie/nibbles],
+  eth/common,
   stew/byteutils,
   ../../../aristo,
   ../../../aristo/aristo_desc,
@@ -487,7 +487,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
           let error = (col.stoRoot,MptRootUnacceptable)
           return err(error.toError(base, info, RootUnacceptable))
         # Verify path if there is a particular storge root VID
-        let rc = api.hikeUp(newMpt.accPath.to(NibblesSeq), AccountsVID, mpt)
+        let rc = api.hikeUp(newMpt.accPath.to(NibblesBuf), AccountsVID, mpt)
         if rc.isErr:
           return err(rc.error[1].toError(base, info, AccNotFound))
     else:

@@ -12,7 +12,7 @@
 
 import
   std/[algorithm, sequtils, sets, strutils, tables],
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   stew/[byteutils, interval_set],
   ./aristo_desc/desc_backend,
@@ -192,11 +192,11 @@ proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
     result &= @(key.data).toHex.squeeze(hex=true,ignLen=true) & tag
 
 proc ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
-  let pfx = lty.path.to(NibblesSeq)
+  let pfx = lty.path.to(NibblesBuf)
   "@" & lty.root.ppVid(pfx=false) & ":" &
     ($pfx).squeeze(hex=true,ignLen=(pfx.len==64))
 
-proc ppPathPfx(pfx: NibblesSeq): string =
+proc ppPathPfx(pfx: NibblesBuf): string =
   let s = $pfx
   if s.len < 20: s else: s[0 .. 5] & ".." & s[s.len-8 .. ^1] & ":" & $s.len
 

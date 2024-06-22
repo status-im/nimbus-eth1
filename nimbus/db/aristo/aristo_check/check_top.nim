@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, sets, typetraits],
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   ".."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise, aristo_utils]
 

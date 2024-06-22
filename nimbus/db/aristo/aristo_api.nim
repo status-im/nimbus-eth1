@@ -14,7 +14,7 @@
 
 import
   std/times,
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
@@ -247,7 +247,7 @@ type
       ## data record indexed by `path` exists on the database.
 
   AristoApiHikeUpFn* =
-    proc(path: NibblesSeq;
+    proc(path: NibblesBuf;
          root: VertexID;
          db: AristoDbRef;
         ): Result[Hike,(VertexID,AristoError,Hike)]
@@ -762,7 +762,7 @@ func init*(
         result = api.hasPathStorage(a, b, c)
 
   profApi.hikeUp =
-    proc(a: NibblesSeq; b: VertexID; c: AristoDbRef): auto =
+    proc(a: NibblesBuf; b: VertexID; c: AristoDbRef): auto =
       AristoApiProfHikeUpFn.profileRunner:
         result = api.hikeUp(a, b, c)
 

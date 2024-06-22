@@ -12,14 +12,11 @@
 
 import
   std/sets,
-  eth/[common, trie/nibbles],
+  eth/common,
   ./aristo_desc/desc_identifiers
 
 const
   EmptyBlob* = seq[byte].default
-    ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
-
-  EmptyNibbleSeq* = EmptyBlob.initNibbleRange
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
 
   EmptyVidSeq* = seq[VertexID].default
