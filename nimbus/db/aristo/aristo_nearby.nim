@@ -22,7 +22,7 @@
 
 import
   std/tables,
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_path]
 
@@ -30,7 +30,7 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc `<=`(a, b: NibblesSeq): bool =
+proc `<=`(a, b: NibblesBuf): bool =
   ## Compare nibbles, different lengths are padded to the right with zeros
   let abMin = min(a.len, b.len)
   for n in 0 ..< abMin:
@@ -47,7 +47,7 @@ proc `<=`(a, b: NibblesSeq): bool =
         return false
   true
 
-proc `<`(a, b: NibblesSeq): bool =
+proc `<`(a, b: NibblesBuf): bool =
   not (b <= a)
 
 # ------------------
@@ -75,7 +75,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
 proc toLeafTiePayload(hike: Hike): (LeafTie,PayloadRef) =
   ## Shortcut for iterators. This function will gloriously crash unless the
   ## `hike` argument is complete.
-  (LeafTie(root: hike.root, path: hike.to(NibblesSeq).pathToTag.value),
+  (LeafTie(root: hike.root, path: hike.to(NibblesBuf).pathToTag.value),
    hike.legs[^1].wp.vtx.lData)
 
 # ------------------------------------------------------------------------------
@@ -139,7 +139,7 @@ proc zeroAdjust(
   ## Adjust empty argument path to the first vertex entry to the right. Ths
   ## applies is the argument `hike` is before the first entry in the database.
   ## The result is a hike which is aligned with the first entry.
-  proc accept(p: Hike; pfx: NibblesSeq): bool =
+  proc accept(p: Hike; pfx: NibblesBuf): bool =
     when doLeast:
       p.tail <= pfx
     else:
@@ -151,7 +151,7 @@ proc zeroAdjust(
     else:
       w.branchNibbleMax n
 
-  proc toHike(pfx: NibblesSeq, root: VertexID, db: AristoDbRef): Hike =
+  proc toHike(pfx: NibblesBuf, root: VertexID, db: AristoDbRef): Hike =
     when doLeast:
       pfx.pathPfxPad(0).hikeUp(root, db).to(Hike)
     else:
@@ -163,7 +163,7 @@ proc zeroAdjust(
   let root = db.getVtx hike.root
   if root.isValid:
     block fail:
-      var pfx: NibblesSeq
+      var pfx: NibblesBuf
       case root.vType:
       of Branch:
         # Find first non-dangling link and assign it
@@ -179,7 +179,7 @@ proc zeroAdjust(
         if n < 0:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
-        pfx = @[n.byte].initNibbleRange.slice(1)
+        pfx = NibblesBuf.nibble(n.byte)
 
       of Extension:
         let ePfx = root.ePfx
@@ -210,7 +210,7 @@ proc finalise(
     moveRight: static[bool];            # Direction of next vertex
       ): Result[Hike,(VertexID,AristoError)] =
   ## Handle some pathological cases after main processing failed
-  proc beyond(p: Hike; pfx: NibblesSeq): bool =
+  proc beyond(p: Hike; pfx: NibblesBuf): bool =
     when moveRight:
       pfx < p.tail
     else:
@@ -239,14 +239,14 @@ proc finalise(
       if not vtx.isValid:
         return err((vid,NearbyDanglingLink))
 
-      var pfx: NibblesSeq
+      var pfx: NibblesBuf
       case vtx.vType:
       of Leaf:
         pfx = vtx.lPfx
       of Extension:
         pfx = vtx.ePfx
       of Branch:
-        pfx = @[vtx.branchBorderNibble.byte].initNibbleRange.slice(1)
+        pfx = NibblesBuf.nibble(vtx.branchBorderNibble.byte)
       if hike.beyond pfx:
         return err((vid,NearbyBeyondRange))
 
@@ -274,7 +274,7 @@ proc nearbyNext(
     else:
       0 < nibble
 
-  proc accept(p: Hike; pfx: NibblesSeq): bool =
+  proc accept(p: Hike; pfx: NibblesBuf): bool =
     when moveRight:
       p.tail <= pfx
     else:
@@ -356,7 +356,7 @@ proc nearbyNext(
         uHike.tail = uHikeTail
     else:
       # Pop current `Branch` vertex on top and append nibble to `tail`
-      uHike.tail = @[top.nibble.byte].initNibbleRange.slice(1) & uHike.tail
+      uHike.tail = NibblesBuf.nibble(top.nibble.byte) & uHike.tail
       uHike.legs.setLen(uHike.legs.len - 1)
     # End while
 
@@ -375,7 +375,7 @@ proc nearbyNextLeafTie(
   if 0 < hike.legs.len:
     if hike.legs[^1].wp.vtx.vType != Leaf:
       return err((hike.legs[^1].wp.vid,NearbyLeafExpected))
-    let rc = hike.legsTo(NibblesSeq).pathToTag
+    let rc = hike.legsTo(NibblesBuf).pathToTag
     if rc.isOk:
       return ok rc.value
     return err((VertexID(0),rc.error))
@@ -434,14 +434,14 @@ iterator rightPairs*(
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if topNibble < 15:
-          let newNibble = @[topNibble+1].initNibbleRange.slice(1)
+          let newNibble = NibblesBuf.nibble(topNibble+1)
           hike.tail = tail.slice(0, tail.len - 1) & newNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       if 1 < tail.len:
         let nxtNibble = tail[tail.len - 2]
         if nxtNibble < 15:
-          let dblNibble = @[((nxtNibble+1) shl 4) + 0].initNibbleRange
+          let dblNibble = NibblesBuf.fromBytes([((nxtNibble+1) shl 4) + 0])
           hike.tail = tail.slice(0, tail.len - 2) & dblNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
@@ -497,14 +497,14 @@ iterator leftPairs*(
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if 0 < topNibble:
-          let newNibble = @[topNibble - 1].initNibbleRange.slice(1)
+          let newNibble = NibblesBuf.nibble(topNibble - 1)
           hike.tail = tail.slice(0, tail.len - 1) & newNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       if 1 < tail.len:
         let nxtNibble = tail[tail.len - 2]
         if 0 < nxtNibble:
-          let dblNibble = @[((nxtNibble-1) shl 4) + 15].initNibbleRange
+          let dblNibble = NibblesBuf.fromBytes([((nxtNibble-1) shl 4) + 15])
           hike.tail = tail.slice(0, tail.len - 2) & dblNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike

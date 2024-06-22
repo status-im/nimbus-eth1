@@ -17,7 +17,7 @@
 
 import
   std/[sets, typetraits],
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
        aristo_utils, aristo_vid]
@@ -96,7 +96,7 @@ proc collapseBranch(
     vid: br.vid,
     vtx: VertexRef(
       vType: Extension,
-      ePfx:  @[nibble].initNibbleRange.slice(1),
+      ePfx:  NibblesBuf.nibble(nibble),
       eVid:  br.vtx.bVid[nibble]))
 
   if 2 < hike.legs.len:                                  # (1) or (2)
@@ -145,7 +145,7 @@ proc collapseExt(
     vid: br.vid,
     vtx: VertexRef(
       vType: Extension,
-      ePfx:  @[nibble].initNibbleRange.slice(1) & vtx.ePfx,
+      ePfx:  NibblesBuf.nibble(nibble) & vtx.ePfx,
       eVid:  vtx.eVid))
   db.disposeOfVtx(hike.root, br.vtx.bVid[nibble])        # `vtx` is obsolete now
 
@@ -198,7 +198,7 @@ proc collapseLeaf(
     vid: br.vtx.bVid[nibble],
     vtx: VertexRef(
       vType: Leaf,
-      lPfx:  @[nibble].initNibbleRange.slice(1) & vtx.lPfx,
+      lPfx:  NibblesBuf.nibble(nibble) & vtx.lPfx,
       lData: vtx.lData))
   db.layersResKey(hike.root, lf.vid)                     # `vtx` was modified
 
@@ -354,7 +354,7 @@ proc deleteAccountPayload*(
   ## leaf entry referres to a storage tree, this one will be deleted as well.
   ##
   let
-    hike = path.initNibbleRange.hikeUp(VertexID(1), db).valueOr:
+    hike = NibblesBuf.fromBytes(path).hikeUp(VertexID(1), db).valueOr:
       if error[1] in HikeAcceptableStopsNotFound:
         return err(DelPathNotFound)
       return err(error[1])
@@ -391,7 +391,7 @@ proc deleteGenericData*(
   elif LEAST_FREE_VID <= root.distinctBase:
     return err(DelStoRootNotAccepted)
 
-  let hike = path.initNibbleRange.hikeUp(root, db).valueOr:
+  let hike = NibblesBuf.fromBytes(path).hikeUp(root, db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return err(DelPathNotFound)
     return err(error[1])
@@ -438,7 +438,7 @@ proc deleteStorageData*(
   if not stoID.isValid:
     return err(DelStoRootMissing)
 
-  let stoHike = path.initNibbleRange.hikeUp(stoID, db).valueOr:
+  let stoHike = NibblesBuf.fromBytes(path).hikeUp(stoID, db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return err(DelPathNotFound)
     return err(error[1])

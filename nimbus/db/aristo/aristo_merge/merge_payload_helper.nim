@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, sets, typetraits],
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_vid]
 
@@ -20,7 +20,7 @@ import
 # Private getters & setters
 # ------------------------------------------------------------------------------
 
-proc xPfx(vtx: VertexRef): NibblesSeq =
+proc xPfx(vtx: VertexRef): NibblesBuf =
   case vtx.vType:
   of Leaf:
     return vtx.lPfx
@@ -106,7 +106,7 @@ proc insertBranch(
 
     if linkVtx.vType == Leaf:
       # Double check path prefix
-      if 64 < hike.legsTo(NibblesSeq).len + linkVtx.lPfx.len:
+      if 64 < hike.legsTo(NibblesBuf).len + linkVtx.lPfx.len:
         return err(MergeBranchLinkLeafGarbled)
 
       let
@@ -266,7 +266,7 @@ proc mergePayloadTopIsBranchAddLeaf(
     if db.pPrf.len == 0:
       # Not much else that can be done here
       raiseAssert "Dangling edge:" &
-        " pfx=" & $hike.legsTo(hike.legs.len-1,NibblesSeq) &
+        " pfx=" & $hike.legsTo(hike.legs.len-1,NibblesBuf) &
         " branch=" & $parent &
         " nibble=" & $nibble &
         " edge=" & $linkID &
@@ -479,7 +479,7 @@ proc mergePayloadImpl*(
   ## leaf record.
   ##
   let
-    nibblesPath = path.initNibbleRange
+    nibblesPath = NibblesBuf.fromBytes(path)
     hike = nibblesPath.hikeUp(root, db).to(Hike)
 
   var okHike: Hike
@@ -512,7 +512,7 @@ proc mergePayloadImpl*(
       okHike = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
 
     # Double check the result (may be removed in future)
-    if okHike.to(NibblesSeq) != nibblesPath:
+    if okHike.to(NibblesBuf) != nibblesPath:
       return err(MergeAssemblyFailed) # Ooops
 
   ok()

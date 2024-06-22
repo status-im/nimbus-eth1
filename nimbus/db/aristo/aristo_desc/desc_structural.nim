@@ -16,7 +16,7 @@
 
 import
   std/[hashes, sets, tables],
-  eth/[common, trie/nibbles],
+  eth/common,
   "."/[desc_error, desc_identifiers]
 
 type
@@ -57,10 +57,10 @@ type
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     case vType*: VertexType
     of Leaf:
-      lPfx*: NibblesSeq              ## Portion of path segment
+      lPfx*: NibblesBuf              ## Portion of path segment
       lData*: PayloadRef             ## Reference to data payload
     of Extension:
-      ePfx*: NibblesSeq              ## Portion of path segment
+      ePfx*: NibblesBuf              ## Portion of path segment
       eVid*: VertexID                ## Edge to vertex with ID `eVid`
     of Branch:
       bVid*: array[16,VertexID]      ## Edge list with vertex IDs

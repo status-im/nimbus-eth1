@@ -17,7 +17,7 @@
 import
   std/[tables],
   ../tx_info,
-  eth/[common],
+  eth/common,
   stew/[sorted_set],
   results
 

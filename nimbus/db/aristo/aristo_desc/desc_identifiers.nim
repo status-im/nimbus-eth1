@@ -16,11 +16,15 @@
 
 import
   std/[algorithm, sequtils, sets, strutils, hashes],
-  eth/[common, trie/nibbles],
+  eth/common,
   stew/byteutils,
   chronicles,
   results,
-  stint
+  stint,
+  ./desc_nibbles
+
+export
+  desc_nibbles
 
 type
   VertexID* = distinct uint64
@@ -267,9 +271,9 @@ func cmp*(a, b: LeafTie): int =
 # Public helpers: Reversible conversions between `PathID`, `HashKey`, etc.
 # ------------------------------------------------------------------------------
 
-func to*(pid: PathID; T: type NibblesSeq): T =
+func to*(pid: PathID; T: type NibblesBuf): T =
   ## Representation of a `PathID` as `NibbleSeq` (preserving full information)
-  let nibbles = pid.pfx.toBytesBE.toSeq.initNibbleRange()
+  let nibbles = NibblesBuf.fromBytes(pid.pfx.toBytesBE)
   if pid.length < 64:
     nibbles.slice(0, pid.length.int)
   else:

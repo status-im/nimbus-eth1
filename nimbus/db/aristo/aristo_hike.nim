@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   "."/[aristo_desc, aristo_get]
 
@@ -25,7 +25,7 @@ type
     ## Trie traversal path
     root*: VertexID                ## Handy for some fringe cases
     legs*: seq[Leg]                ## Chain of vertices and IDs
-    tail*: NibblesSeq              ## Portion of non completed path
+    tail*: NibblesBuf              ## Portion of non completed path
 
 const
   HikeAcceptableStopsNotFound* = {
@@ -43,13 +43,13 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesSeq =
+func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
   ## May be needed for partial rebuild, as well
   for n in start ..< min(hike.legs.len, maxLen):
     let leg = hike.legs[n]
     case leg.wp.vtx.vType:
     of Branch:
-      result = result & @[leg.nibble.byte].initNibbleRange.slice(1)
+      result = result & NibblesBuf.nibble(leg.nibble.byte)
     of Extension:
       result = result & leg.wp.vtx.ePfx
     of Leaf:
@@ -63,22 +63,22 @@ func to*(rc: Result[Hike,(VertexID,AristoError,Hike)]; T: type Hike): T =
   ## Extract `Hike` from either ok ot error part of argument `rc`.
   if rc.isOk: rc.value else: rc.error[2]
 
-func to*(hike: Hike; T: type NibblesSeq): T =
+func to*(hike: Hike; T: type NibblesBuf): T =
   ## Convert back
   hike.getNibblesImpl() & hike.tail
 
-func legsTo*(hike: Hike; T: type NibblesSeq): T =
+func legsTo*(hike: Hike; T: type NibblesBuf): T =
   ## Convert back
   hike.getNibblesImpl()
 
-func legsTo*(hike: Hike; numLegs: int; T: type NibblesSeq): T =
+func legsTo*(hike: Hike; numLegs: int; T: type NibblesBuf): T =
   ## variant of `legsTo()`
   hike.getNibblesImpl(0, numLegs)
 
 # --------
 
 proc hikeUp*(
-    path: NibblesSeq;                            # Partial path
+    path: NibblesBuf;                            # Partial path
     root: VertexID;                              # Start vertex
     db: AristoDbRef;                             # Database
       ): Result[Hike,(VertexID,AristoError,Hike)] =
@@ -114,7 +114,7 @@ proc hikeUp*(
       if hike.tail.len == hike.tail.sharedPrefixLen(leg.wp.vtx.lPfx):
         # Bingo, got full path
         hike.legs.add leg
-        hike.tail = EmptyNibbleSeq
+        hike.tail = NibblesBuf()
         # This is the only loop exit
         break
 
@@ -142,7 +142,7 @@ proc hikeUp*(
       # There must be some more data (aka `tail`) after an `Extension` vertex.
       if hike.tail.len == 0:
         hike.legs.add leg
-        hike.tail = EmptyNibbleSeq
+        hike.tail = NibblesBuf()
         return err((vid,HikeExtTailEmpty,hike))    # Well, somehow odd
 
       if leg.wp.vtx.ePfx.len != hike.tail.sharedPrefixLen(leg.wp.vtx.ePfx):
@@ -163,7 +163,7 @@ proc hikeUp*(
     db: AristoDbRef;
       ): Result[Hike,(VertexID,AristoError,Hike)] =
   ## Variant of `hike()`
-  lty.path.to(NibblesSeq).hikeUp(lty.root, db)
+  lty.path.to(NibblesBuf).hikeUp(lty.root, db)
 
 # ------------------------------------------------------------------------------
 # End

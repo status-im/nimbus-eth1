@@ -12,7 +12,7 @@
 
 import
   std/sequtils,
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   ./aristo_desc
 
@@ -30,7 +30,7 @@ import
 #
 # where the `ignored` part is typically expected a zero nibble.
 
-func pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq
+func pathPfxPad*(pfx: NibblesBuf; dblNibble: static[byte]): NibblesBuf
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -51,17 +51,7 @@ func pathAsBlob*(tag: PathID): Blob =
     else:
       return key[0 .. (tag.length - 1) div 2]
 
-func pathAsHEP*(tag: PathID; isLeaf = false): Blob =
-  ## Convert the `tag` argument to a hex encoded partial path as used in `eth`
-  ## or `snap` protocol where full paths of nibble length 64 are encoded as 32
-  ## byte `Blob` and non-leaf partial paths are *compact encoded* (i.e. per
-  ## the Ethereum wire protocol.)
-  if 64 <= tag.length:
-    @(tag.pfx.toBytesBE)
-  else:
-    tag.to(NibblesSeq).hexPrefixEncode(isLeaf=true)
-
-func pathToTag*(partPath: NibblesSeq): Result[PathID,AristoError] =
+func pathToTag*(partPath: NibblesBuf): Result[PathID,AristoError] =
   ## Convert the argument `partPath`  to a `PathID` type value.
   if partPath.len == 0:
     return ok VOID_PATH_ID
@@ -83,9 +73,9 @@ func pathToTag*(partPath: openArray[byte]): Result[PathID,AristoError] =
 
 # --------------------
 
-func pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq =
+func pathPfxPad*(pfx: NibblesBuf; dblNibble: static[byte]): NibblesBuf =
   ## Extend (or cut) the argument nibbles sequence `pfx` for generating a
-  ## `NibblesSeq` with exactly 64 nibbles, the equivalent of a path key.
+  ## `NibblesBuf` with exactly 64 nibbles, the equivalent of a path key.
   ##
   ## This function must be handled with some care regarding a meaningful value
   ## for the `dblNibble` argument. Currently, only static values `0` and `255`
@@ -95,11 +85,11 @@ func pathPfxPad*(pfx: NibblesSeq; dblNibble: static[byte]): NibblesSeq =
 
   let padLen = 64 - pfx.len
   if 0 <= padLen:
-    result = pfx & dblNibble.repeat(padLen div 2).mapIt(it.byte).initNibbleRange
+    result = pfx & NibblesBuf.fromBytes(dblNibble.repeat(padLen div 2).mapIt(it.byte))
     if (padLen and 1) == 1:
-      result = result & @[dblNibble.byte].initNibbleRange.slice(1)
+      result = result & NibblesBuf.nibble(dblNibble.byte)
   else:
-    let nope = seq[byte].default.initNibbleRange
+    let nope = NibblesBuf()
     result = pfx.slice(0,64) & nope # nope forces re-alignment
 
 # ------------------------------------------------------------------------------

@@ -12,7 +12,7 @@
 
 import
   std/bitops,
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   stew/endians2,
   ./aristo_desc
@@ -112,7 +112,7 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
     data &= [0x08u8]
   of Extension:
     let
-      pSegm = vtx.ePfx.hexPrefixEncode(isleaf = false)
+      pSegm = vtx.ePfx.toHexPrefix(isleaf = false)
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < psLen:
       return err(BlobifyExtPathOverflow)
@@ -123,7 +123,7 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
     data &= [0x80u8 or psLen]
   of Leaf:
     let
-      pSegm = vtx.lPfx.hexPrefixEncode(isleaf = true)
+      pSegm = vtx.lPfx.toHexPrefix(isleaf = true)
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < psLen:
       return err(BlobifyLeafPathOverflow)
@@ -280,7 +280,8 @@ proc deblobifyTo*(
       return err(DeblobExtTooShort)
     if 8 + sLen != rLen:                              # => slen is at least 1
       return err(DeblobExtSizeGarbled)
-    let (isLeaf, pathSegment) = hexPrefixDecode record.toOpenArray(8, rLen - 1)
+    let (isLeaf, pathSegment) =
+      NibblesBuf.fromHexPrefix record.toOpenArray(8, rLen - 1)
     if isLeaf:
       return err(DeblobExtGotLeafPrefix)
     vtx = VertexRef(
@@ -295,7 +296,8 @@ proc deblobifyTo*(
       pLen = rLen - sLen                              # payload length
     if rLen < sLen:
       return err(DeblobLeafSizeGarbled)
-    let (isLeaf, pathSegment) = hexPrefixDecode record.toOpenArray(pLen, rLen-1)
+    let (isLeaf, pathSegment) =
+      NibblesBuf.fromHexPrefix record.toOpenArray(pLen, rLen-1)
     if not isLeaf:
       return err(DeblobLeafGotExtPrefix)
     var pyl: PayloadRef

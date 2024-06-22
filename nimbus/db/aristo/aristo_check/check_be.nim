@@ -12,7 +12,7 @@
 
 import
   std/[sets, tables],
-  eth/[common, trie/nibbles],
+  eth/common,
   results,
   stew/interval_set,
   ../../aristo,
