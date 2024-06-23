@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -568,6 +568,15 @@ const
       ),
       output: T8nOutput(trace: true, result: true),
       expOut: "istanbul.txt",
+    ),
+    TestSpec(
+      name  : "Blob gas used exceeds max allowance",
+      base  : "testdata/00-523",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Cancun", "0",
+      ),
+      output: T8nOutput(result: true),
+      expOut: "exp.json",
     ),
   ]
 

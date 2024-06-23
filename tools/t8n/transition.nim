@@ -252,6 +252,14 @@ proc exec(ctx: var TransContext,
       )
       continue
 
+    blobGasUsed += tx.getTotalBlobGas
+    if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+      rejected.add RejectedTx(
+        index: txIndex,
+        error: "blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK
+      )
+      continue
+
     if conf.traceEnabled.isSome:
       setupTrace(conf, txIndex, rlpHash(tx), vmState)
 
@@ -274,7 +282,6 @@ proc exec(ctx: var TransContext,
       rec, tx, sender, txIndex, gasUsed
     )
     includedTx.add tx
-    blobGasUsed += tx.getTotalBlobGas
 
   # Add mining reward? (-1 means rewards are disabled)
   if stateReward.isSome and stateReward.get >= 0:
