@@ -183,20 +183,19 @@ func toVoidRc[T](
 # ------------------------------------------------------------------------------
 # Private `MPT` call back functions
 # ------------------------------------------------------------------------------
+proc mptMethods(): CoreDbMptFns =
+  # These templates are a hack to remove a closure environment that was using
+  # hundreds of mb of memory to have this syntactic convenience
+  # TODO remove methods / abstraction entirely - it is no longer needed
+  template base: untyped = cMpt.base
+  template db: untyped = base.parent   # Ditto
+  template api: untyped = base.api     # Ditto
+  template mpt: untyped = base.ctx.mpt # Ditto
 
-proc mptMethods(cMpt: AristoCoreDbMptRef): CoreDbMptFns =
-  ## Generic columns database handlers
-  let
-    cMpt = cMpt        # So it can savely be captured
-    base = cMpt.base   # Will not change and can be captured
-    db = base.parent   # Ditto
-    api = base.api     # Ditto
-    mpt = base.ctx.mpt # Ditto
-
-  proc mptBackend(): CoreDbMptBackendRef =
+  proc mptBackend(cMpt: AristoCoreDbMptRef): CoreDbMptBackendRef =
     db.bless AristoCoreDbMptBE(adb: mpt)
 
-  proc mptColFn(): CoreDbColRef =
+  proc mptColFn(cMpt: AristoCoreDbMptRef): CoreDbColRef =
     if cMpt.mptRoot.distinctBase < LEAST_FREE_VID:
       return db.bless(AristoColRef(
         base:    base,
@@ -219,7 +218,7 @@ proc mptMethods(cMpt: AristoCoreDbMptRef): CoreDbMptFns =
       stoRoot: cMpt.mptRoot,
       stoAddr: cMpt.address)
 
-  proc mptFetch(key: openArray[byte]): CoreDbRc[Blob] =
+  proc mptFetch(cMpt: AristoCoreDbMptRef, key: openArray[byte]): CoreDbRc[Blob] =
     const info = "fetchFn()"
 
     let rc = block:
@@ -241,7 +240,7 @@ proc mptMethods(cMpt: AristoCoreDbMptRef): CoreDbMptFns =
     else:
       err(rc.error.toError(base, info, MptNotFound))
 
-  proc mptMerge(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+  proc mptMerge(cMpt: AristoCoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
     const info = "mergeFn()"
 
     if cMpt.accPath.isValid:
@@ -257,7 +256,7 @@ proc mptMethods(cMpt: AristoCoreDbMptRef): CoreDbMptFns =
 
     ok()
 
-  proc mptDelete(key: openArray[byte]): CoreDbRc[void] =
+  proc mptDelete(cMpt: AristoCoreDbMptRef, key: openArray[byte]): CoreDbRc[void] =
     const info = "deleteFn()"
 
     let rc = block:
@@ -281,7 +280,7 @@ proc mptMethods(cMpt: AristoCoreDbMptRef): CoreDbMptFns =
 
     ok()
 
-  proc mptHasPath(key: openArray[byte]): CoreDbRc[bool] =
+  proc mptHasPath(cMpt: AristoCoreDbMptRef, key: openArray[byte]): CoreDbRc[bool] =
     const info = "hasPathFn()"
 
     let rc = block:
@@ -295,52 +294,50 @@ proc mptMethods(cMpt: AristoCoreDbMptRef): CoreDbMptFns =
       return err(rc.error.toError(base, info))
     ok(rc.value)
 
-
+  ## Generic columns database handlers
   CoreDbMptFns(
-    backendFn: proc(): CoreDbMptBackendRef =
-      mptBackend(),
+    backendFn: proc(cMpt: CoreDbMptRef): CoreDbMptBackendRef =
+      mptBackend(AristoCoreDbMptRef(cMpt)),
 
-    fetchFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
-      mptFetch(k),
+    fetchFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[Blob] =
+      mptFetch(AristoCoreDbMptRef(cMpt), k),
 
-    deleteFn: proc(k: openArray[byte]): CoreDbRc[void] =
-      mptDelete(k),
+    deleteFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[void] =
+      mptDelete(AristoCoreDbMptRef(cMpt), k),
 
-    mergeFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
-      mptMerge(k, v),
+    mergeFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+      mptMerge(AristoCoreDbMptRef(cMpt), k, v),
 
-    hasPathFn: proc(k: openArray[byte]): CoreDbRc[bool] =
-      mptHasPath(k),
+    hasPathFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[bool] =
+      mptHasPath(AristoCoreDbMptRef(cMpt), k),
 
-    getColFn: proc(): CoreDbColRef =
-      mptColFn())
+    getColFn: proc(cMpt: CoreDbMptRef): CoreDbColRef =
+      mptColFn(AristoCoreDbMptRef(cMpt)))
 
 # ------------------------------------------------------------------------------
 # Private account call back functions
 # ------------------------------------------------------------------------------
 
-proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
+proc accMethods(): CoreDbAccFns =
   ## Account columns database handlers
-  let
-    cAcc = cAcc        # So it can savely be captured
-    base = cAcc.base   # Will not change and can be captured
-    db = base.parent   # Ditto
-    api = base.api     # Ditto
-    mpt = base.ctx.mpt # Ditto
+  template base: untyped = cAcc.base
+  template db: untyped = base.parent
+  template api: untyped = base.api
+  template mpt: untyped = base.ctx.mpt
 
-  proc getColFn(): CoreDbColRef =
+  proc getColFn(cAcc: AristoCoreDbAccRef): CoreDbColRef =
     db.bless AristoColRef(
       base: base,
       colType: CtAccounts)
 
-  proc accCloneMpt(): CoreDbRc[CoreDbMptRef] =
+  proc accCloneMpt(cAcc: AristoCoreDbAccRef): CoreDbRc[CoreDbMptRef] =
     var xpt = AristoCoreDbMptRef(
       base:    base,
       mptRoot: AccountsVID)
-    xpt.methods = xpt.mptMethods
+    xpt.methods = mptMethods()
     ok(db.bless xpt)
 
-  proc accFetch(address: EthAddress): CoreDbRc[CoreDbAccount] =
+  proc accFetch(cAcc: AristoCoreDbAccRef, address: EthAddress): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
 
     let
@@ -352,7 +349,7 @@ proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
 
     ok cAcc.toCoreDbAccount(acc, address)
 
-  proc accMerge(account: CoreDbAccount): CoreDbRc[void] =
+  proc accMerge(cAcc: AristoCoreDbAccRef, account: CoreDbAccount): CoreDbRc[void] =
     const info = "acc/mergeFn()"
 
     let
@@ -363,7 +360,7 @@ proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
       return err(rc.error.toError(base, info))
     ok()
 
-  proc accDelete(address: EthAddress): CoreDbRc[void] =
+  proc accDelete(cAcc: AristoCoreDbAccRef, address: EthAddress): CoreDbRc[void] =
     const info = "acc/deleteFn()"
 
     let key = address.keccakHash.data
@@ -374,7 +371,7 @@ proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
 
     ok()
 
-  proc accStoDelete(address: EthAddress): CoreDbRc[void] =
+  proc accStoDelete(cAcc: AristoCoreDbAccRef, address: EthAddress): CoreDbRc[void] =
     const info = "stoDeleteFn()"
 
     let rc = api.deleteStorageTree(mpt, address.to(PathID))
@@ -383,7 +380,7 @@ proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
 
     ok()
 
-  proc accHasPath(address: EthAddress): CoreDbRc[bool] =
+  proc accHasPath(cAcc: AristoCoreDbAccRef, address: EthAddress): CoreDbRc[bool] =
     const info = "hasPathFn()"
 
     let
@@ -394,40 +391,39 @@ proc accMethods(cAcc: AristoCoreDbAccRef): CoreDbAccFns =
 
 
   CoreDbAccFns(
-    getMptFn: proc(): CoreDbRc[CoreDbMptRef] =
-      accCloneMpt(),
+    getMptFn: proc(cAcc: CoreDbAccRef): CoreDbRc[CoreDbMptRef] =
+      accCloneMpt(AristoCoreDbAccRef(cAcc)),
 
-    fetchFn: proc(address: EthAddress): CoreDbRc[CoreDbAccount] =
-      accFetch(address),
+    fetchFn: proc(cAcc: CoreDbAccRef, address: EthAddress): CoreDbRc[CoreDbAccount] =
+      accFetch(AristoCoreDbAccRef(cAcc), address),
 
-    deleteFn: proc(address: EthAddress): CoreDbRc[void] =
-      accDelete(address),
+    deleteFn: proc(cAcc: CoreDbAccRef, address: EthAddress): CoreDbRc[void] =
+      accDelete(AristoCoreDbAccRef(cAcc), address),
 
-    stoDeleteFn: proc(address: EthAddress): CoreDbRc[void] =
-      accStoDelete(address),
+    stoDeleteFn: proc(cAcc: CoreDbAccRef, address: EthAddress): CoreDbRc[void] =
+      accStoDelete(AristoCoreDbAccRef(cAcc), address),
 
-    mergeFn: proc(acc: CoreDbAccount): CoreDbRc[void] =
-      accMerge(acc),
+    mergeFn: proc(cAcc: CoreDbAccRef, acc: CoreDbAccount): CoreDbRc[void] =
+      accMerge(AristoCoreDbAccRef(cAcc), acc),
 
-    hasPathFn: proc(address: EthAddress): CoreDbRc[bool] =
-      accHasPath(address),
+    hasPathFn: proc(cAcc: CoreDbAccRef, address: EthAddress): CoreDbRc[bool] =
+      accHasPath(AristoCoreDbAccRef(cAcc), address),
 
-    getColFn: proc(): CoreDbColRef =
-      getColFn())
+    getColFn: proc(cAcc: CoreDbAccRef): CoreDbColRef =
+      getColFn(AristoCoreDbAccRef(cAcc)))
 
 # ------------------------------------------------------------------------------
 # Private context call back functions
 # ------------------------------------------------------------------------------
 
 proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
-  let
-    cCtx = cCtx      # So it can savely be captured
-    base = cCtx.base # Will not change and can be captured
-    db = base.parent # Ditto
-    api = base.api   # Ditto
-    mpt = cCtx.mpt   # Ditto
+  template base: untyped = cCtx.base
+  template db: untyped = base.parent
+  template api: untyped = base.api
+  template mpt: untyped = cCtx.mpt
 
   proc ctxNewCol(
+      cCtx: AristoCoreDbCtxRef,
       colType: CoreDbColType;
       colState: Hash256;
       address: Opt[EthAddress];
@@ -463,7 +459,7 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
     err(aristo.GenericError.toError(base, info, RootNotFound))
 
 
-  proc ctxGetMpt(col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
+  proc ctxGetMpt(cCtx: AristoCoreDbCtxRef, col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
     const
       info = "ctx/getMptFn()"
     let
@@ -505,10 +501,10 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
       col.reset = false
 
     newMpt.base = base
-    newMpt.methods = newMpt.mptMethods()
+    newMpt.methods = mptMethods()
     ok(db.bless newMpt)
 
-  proc ctxGetAcc(col: CoreDbColRef): CoreDbRc[CoreDbAccRef] =
+  proc ctxGetAcc(cCtx: AristoCoreDbCtxRef, col: CoreDbColRef): CoreDbRc[CoreDbAccRef] =
     const info = "getAccFn()"
 
     let col = AristoColRef(col)
@@ -517,31 +513,32 @@ proc ctxMethods(cCtx: AristoCoreDbCtxRef): CoreDbCtxFns =
       return err(error.toError(base, info, RootUnacceptable))
 
     let acc = AristoCoreDbAccRef(base: base)
-    acc.methods = acc.accMethods()
+    acc.methods = accMethods()
 
     ok(db.bless acc)
 
-  proc ctxForget() =
+  proc ctxForget(cCtx: AristoCoreDbCtxRef) =
     api.forget(mpt).isOkOr:
       raiseAssert "forgetFn(): " & $error
 
 
   CoreDbCtxFns(
     newColFn: proc(
+        cCtx: CoreDbCtxRef;
         col: CoreDbColType;
         colState: Hash256;
         address: Opt[EthAddress];
           ): CoreDbRc[CoreDbColRef] =
-      ctxNewCol(col, colState, address),
+      ctxNewCol(AristoCoreDbCtxRef(cCtx), col, colState, address),
 
-    getMptFn: proc(col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
-      ctxGetMpt(col),
+    getMptFn: proc(cCtx: CoreDbCtxRef, col: CoreDbColRef): CoreDbRc[CoreDbMptRef] =
+      ctxGetMpt(AristoCoreDbCtxRef(cCtx), col),
 
-    getAccFn: proc(col: CoreDbColRef): CoreDbRc[CoreDbAccRef] =
-      ctxGetAcc(col),
+    getAccFn: proc(cCtx: CoreDbCtxRef, col: CoreDbColRef): CoreDbRc[CoreDbAccRef] =
+      ctxGetAcc(AristoCoreDbCtxRef(cCtx), col),
 
-    forgetFn: proc() =
-      ctxForget())
+    forgetFn: proc(cCtx: CoreDbCtxRef) =
+      ctxForget(AristoCoreDbCtxRef(cCtx)))
 
 # ------------------------------------------------------------------------------
 # Public handlers and helpers
