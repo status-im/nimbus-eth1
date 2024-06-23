@@ -21,6 +21,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../constants,
+  ../eip4844,
   ../validate
 
 # ------------------------------------------------------------------------------
@@ -91,6 +92,12 @@ proc processTransactionImpl(
       ", gasNeeded=" & $tx.gasLimit)
 
   vmState.gasPool -= tx.gasLimit
+
+  let blobGasUsed = tx.getTotalBlobGas
+  if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+    return err("blobGasUsed " & $blobGasUsed &
+      " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+  vmState.blobGasUsed += blobGasUsed
 
   # Actually, the eip-1559 reference does not mention an early exit.
   #

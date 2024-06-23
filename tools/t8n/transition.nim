@@ -234,7 +234,6 @@ proc exec(ctx: var TransContext,
     vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
       raise newError(ErrorConfig, error)
 
-  var blobGasUsed = 0'u64
   for txIndex, txRes in txList:
     if txRes.isErr:
       rejected.add RejectedTx(
@@ -249,14 +248,6 @@ proc exec(ctx: var TransContext,
       rejected.add RejectedTx(
         index: txIndex,
         error: "Could not get sender"
-      )
-      continue
-
-    blobGasUsed += tx.getTotalBlobGas
-    if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-      rejected.add RejectedTx(
-        index: txIndex,
-        error: "blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK
       )
       continue
 
@@ -330,7 +321,7 @@ proc exec(ctx: var TransContext,
   )
 
   if fork >= FkCancun:
-    result.result.blobGasUsed = Opt.some blobGasUsed
+    result.result.blobGasUsed = Opt.some vmState.blobGasUsed
     if ctx.env.currentExcessBlobGas.isSome:
       result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
     elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:

@@ -66,6 +66,7 @@ type
     receipts*         : seq[Receipt]
     cumulativeGasUsed*: GasInt
     gasCosts*         : GasCosts
+    blobGasUsed*      : uint64
 
   Computation* = ref object
     # The execution computation
