@@ -36,6 +36,7 @@ proc init(
   self.tracer = tracer
   self.stateDB = ac
   self.flags = flags
+  self.blobGasUsed = 0'u64
 
 func blockCtx(com: CommonRef, header: BlockHeader):
                 BlockContext =

@@ -22,7 +22,7 @@ import
   ../../../common/common,
   ../../../utils/utils,
   ../../../constants,
-  "../.."/[dao, executor, validate, eip4844, casper],
+  "../.."/[dao, executor, validate, casper],
   ../../../transaction/call_evm,
   ../../../transaction,
   ../../../evm/state,
@@ -39,7 +39,6 @@ type
     tr: CoreDbMptRef
     cleanState: bool
     balance: UInt256
-    blobGasUsed: uint64
     numBlobPerBlock: int
 
 const
@@ -130,10 +129,6 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   # gasUsed accounting
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
-
-  # EIP-4844, count blobGasUsed
-  if item.tx.txType >= TxEip4844:
-    pst.blobGasUsed += item.tx.getTotalBlobGas
 
   # Update txRoot
   pst.tr.merge(rlp.encode(inx), rlp.encode(item.tx)).isOkOr:
@@ -262,7 +257,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
   if vmState.com.forkGTE(Cancun):
     # EIP-4844
     xp.chain.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
-    xp.chain.blobGasUsed = Opt.some(pst.blobGasUsed)
+    xp.chain.blobGasUsed = Opt.some(vmState.blobGasUsed)
 
   proc balanceDelta: UInt256 =
     let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient)

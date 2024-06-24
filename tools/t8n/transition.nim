@@ -234,7 +234,6 @@ proc exec(ctx: var TransContext,
     vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
       raise newError(ErrorConfig, error)
 
-  var blobGasUsed = 0'u64
   for txIndex, txRes in txList:
     if txRes.isErr:
       rejected.add RejectedTx(
@@ -274,7 +273,6 @@ proc exec(ctx: var TransContext,
       rec, tx, sender, txIndex, gasUsed
     )
     includedTx.add tx
-    blobGasUsed += tx.getTotalBlobGas
 
   # Add mining reward? (-1 means rewards are disabled)
   if stateReward.isSome and stateReward.get >= 0:
@@ -323,7 +321,7 @@ proc exec(ctx: var TransContext,
   )
 
   if fork >= FkCancun:
-    result.result.blobGasUsed = Opt.some blobGasUsed
+    result.result.blobGasUsed = Opt.some vmState.blobGasUsed
     if ctx.env.currentExcessBlobGas.isSome:
       result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
     elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
