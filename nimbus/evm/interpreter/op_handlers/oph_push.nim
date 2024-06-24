@@ -76,9 +76,7 @@ const
      forks: VmOpShanghaiAndLater,
      name: "Push0",
      info: "Push 0 on the stack",
-     exec: (prep: VmOpIgnore,
-            run:  push0Op,
-            post: VmOpIgnore))]
+     exec: push0Op)]
 
 # ------------------------------------------------------------------------------
 # End

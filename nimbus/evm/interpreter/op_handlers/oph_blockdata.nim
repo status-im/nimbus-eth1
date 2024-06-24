@@ -100,89 +100,77 @@ const
      forks: VmOpAllForks,
      name: "blockhash",
      info: "Get the hash of one of the 256 most recent complete blocks",
-     exec: (prep: VmOpIgnore,
-            run:  blockhashOp,
-            post: VmOpIgnore)),
+     exec: blockhashOp),
+
 
     (opCode: Coinbase,        ## 0x41, Beneficiary address
      forks: VmOpAllForks,
      name: "coinbase",
      info: "Get the block's beneficiary address",
-     exec: (prep: VmOpIgnore,
-            run:  coinBaseOp,
-            post: VmOpIgnore)),
+     exec: coinBaseOp),
+
 
     (opCode: Timestamp,       ## 0x42, Block timestamp.
      forks: VmOpAllForks,
      name: "timestamp",
      info: "Get the block's timestamp",
-     exec: (prep: VmOpIgnore,
-            run:  timestampOp,
-            post: VmOpIgnore)),
+     exec: timestampOp),
+
 
     (opCode: Number,          ## 0x43, Block number
      forks: VmOpAllForks,
      name: "blockNumber",
      info: "Get the block's number",
-     exec: (prep: VmOpIgnore,
-            run:  blocknumberOp,
-            post: VmOpIgnore)),
+     exec: blocknumberOp),
+
 
     (opCode: Difficulty,      ## 0x44, Block difficulty
      forks: VmOpAllForks,
      name: "difficulty",
      info: "Get the block's difficulty",
-     exec: (prep: VmOpIgnore,
-            run:  difficultyOp,
-            post: VmOpIgnore)),
+     exec: difficultyOp),
+
 
     (opCode: GasLimit,        ## 0x45, Block gas limit
      forks: VmOpAllForks,
      name: "gasLimit",
      info: "Get the block's gas limit",
-     exec: (prep: VmOpIgnore,
-            run:  gasLimitOp,
-            post: VmOpIgnore)),
+     exec: gasLimitOp),
+
 
     (opCode: ChainIdOp,       ## 0x46, EIP-155 chain identifier
      forks: VmOpIstanbulAndLater,
      name: "chainId",
      info: "Get current chain’s EIP-155 unique identifier",
-     exec: (prep: VmOpIgnore,
-            run:  chainIdOp,
-            post: VmOpIgnore)),
+     exec: chainIdOp),
+
 
     (opCode: SelfBalance,     ## 0x47, Contract balance.
      forks: VmOpIstanbulAndLater,
      name: "selfBalance",
      info: "Get current contract's balance",
-     exec: (prep: VmOpIgnore,
-            run:  selfBalanceOp,
-            post: VmOpIgnore)),
+     exec: selfBalanceOp),
+
 
     (opCode: BaseFee,         ## 0x48, EIP-1559 Block base fee.
      forks: VmOpLondonAndLater,
      name: "baseFee",
      info: "Get current block's EIP-1559 base fee",
-     exec: (prep: VmOpIgnore,
-            run:  baseFeeOp,
-            post: VmOpIgnore)),
+     exec: baseFeeOp),
+
 
     (opCode: BlobHash,        ## 0x49, EIP-4844 Transaction versioned hash
      forks: VmOpCancunAndLater,
      name: "blobHash",
      info: "Get current transaction's EIP-4844 versioned hash",
-     exec: (prep: VmOpIgnore,
-            run:  blobHashOp,
-            post: VmOpIgnore)),
+     exec: blobHashOp),
+
 
     (opCode: BlobBaseFee,     ## 0x4a, EIP-7516 Returns the current data-blob base-fee
      forks: VmOpCancunAndLater,
      name: "blobBaseFee",
      info: "Returns the current data-blob base-fee",
-     exec: (prep: VmOpIgnore,
-            run:  blobBaseFeeOp,
-            post: VmOpIgnore))]
+     exec: blobBaseFeeOp)]
 
 # ------------------------------------------------------------------------------
 # End

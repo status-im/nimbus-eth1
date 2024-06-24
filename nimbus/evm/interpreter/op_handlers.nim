@@ -97,7 +97,7 @@ const
   #
   #   to pick right function when <op> is a variable . Using
   #
-  #      VmOpHandlers[fork][op].exec.run
+  #      VmOpHandlers[fork][op].exec
   #
   #   only works when <op> is a constant. There seems to be some optimisation
   #   that garbles the <exec> sub-structures elements <prep>, <run>, and <post>.
@@ -113,7 +113,7 @@ const
         for op in Op:
           rc[fork][op].name = tab[op].name
           rc[fork][op].info = tab[op].info
-          rc[fork][op].run  = tab[op].exec.run
+          rc[fork][op].run  = tab[op].exec
       rc
 
 # ------------------------------------------------------------------------------

@@ -99,10 +99,7 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
                   "info".asText(n.handlerInfo),
                   nnkExprColonExpr.newTree(
                     newIdentNode("exec"),
-                    nnkPar.newTree(
-                      "prep".asIdent("VmOpIgnore"),
-                      "run".asIdent(n.runHandler),
-                      "post".asIdent("VmOpIgnore"))))
+                    newIdentNode(n.runHandler)))
 
   # => const <varName>*: seq[VmOpExec] = @[ <records> ]
   result = nnkStmtList.newTree(

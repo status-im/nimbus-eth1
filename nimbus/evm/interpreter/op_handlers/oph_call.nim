@@ -514,34 +514,29 @@ const
      forks: VmOpAllForks,
      name: "call",
      info: "Message-Call into an account",
-     exec: (prep: VmOpIgnore,
-            run: callOp,
-            post: VmOpIgnore)),
+     exec: callOp),
+
 
     (opCode: CallCode,     ## 0xf2, Message-Call with alternative code
      forks: VmOpAllForks,
      name: "callCode",
      info: "Message-call into this account with alternative account's code",
-     exec: (prep: VmOpIgnore,
-            run: callCodeOp,
-            post: VmOpIgnore)),
+     exec: callCodeOp),
+
 
     (opCode: DelegateCall, ## 0xf4, CallCode with persisting sender and value
      forks: VmOpHomesteadAndLater,
      name: "delegateCall",
      info: "Message-call into this account with an alternative account's " &
            "code but persisting the current values for sender and value.",
-     exec: (prep: VmOpIgnore,
-            run: delegateCallOp,
-            post: VmOpIgnore)),
+     exec: delegateCallOp),
+
 
     (opCode: StaticCall,   ## 0xfa, Static message-call into an account
      forks: VmOpByzantiumAndLater,
      name: "staticCall",
      info: "Static message-call into an account",
-     exec: (prep: VmOpIgnore,
-            run: staticCallOp,
-            post: VmOpIgnore))]
+     exec: staticCallOp)]
 
 # ------------------------------------------------------------------------------
 # End

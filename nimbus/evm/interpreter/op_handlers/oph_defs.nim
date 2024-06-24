@@ -28,20 +28,12 @@ type
                               ## back via argument descriptor ``k``
     proc(k: var VmCtx): EvmResultVoid {.nimcall, gcsafe, raises:[].}
 
-
-  VmOpHanders* = tuple        ## three step op code execution, typically
-                              ## only the ``run`` entry is activated
-    prep: VmOpFn
-    run:  VmOpFn
-    post: VmOpFn
-
-
   VmOpExec* = tuple           ## op code handler entry
     opCode: Op                ## index back-reference
     forks: set[EVMFork]       ## forks applicable for this operation
     name: string              ## handler name
     info: string              ## handter info, explainer
-    exec: VmOpHanders
+    exec: VmOpFn
 
 # ------------------------------------------------------------------------------
 # Public

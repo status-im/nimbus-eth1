@@ -62,9 +62,7 @@ const
      forks: VmOpAllForks,
      name: "sha3",
      info: "Compute Keccak-256 hash",
-     exec: (prep: VmOpIgnore,
-            run:  sha3Op,
-            post: VmOpIgnore))]
+     exec: sha3Op)]
 
 # ------------------------------------------------------------------------------
 # End

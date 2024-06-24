@@ -290,179 +290,157 @@ const
      forks: VmOpAllForks,
      name: "add",
      info: "Addition operation",
-     exec: (prep: VmOpIgnore,
-            run:  VmOpFn addOp,
-            post: VmOpIgnore)),
+     exec: VmOpFn addOp),
+
 
     (opCode: Mul,         ##  0x02, Multiplication
      forks: VmOpAllForks,
      name: "mul",
      info: "Multiplication operation",
-     exec: (prep: VmOpIgnore,
-            run:  mulOp,
-            post: VmOpIgnore)),
+     exec: mulOp),
+
 
     (opCode: Sub,         ## 0x03, Subtraction
      forks: VmOpAllForks,
      name: "sub",
      info: "Subtraction operation",
-     exec: (prep: VmOpIgnore,
-            run:  subOp,
-            post: VmOpIgnore)),
+     exec: subOp),
+
 
     (opCode: Div,         ## 0x04, Division
      forks: VmOpAllForks,
      name: "divide",
      info: "Integer division operation",
-     exec: (prep: VmOpIgnore,
-            run:  divideOp,
-            post: VmOpIgnore)),
+     exec: divideOp),
+
 
     (opCode: Sdiv,        ## 0x05, Signed division
      forks: VmOpAllForks,
      name: "sdiv",
      info: "Signed integer division operation (truncated)",
-     exec: (prep: VmOpIgnore,
-            run:  sdivOp,
-            post: VmOpIgnore)),
+     exec: sdivOp),
+
 
     (opCode: Mod,         ## 0x06, Modulo
      forks: VmOpAllForks,
      name: "modulo",
      info: "Modulo remainder operation",
-     exec: (prep: VmOpIgnore,
-            run:  moduloOp,
-            post: VmOpIgnore)),
+     exec: moduloOp),
+
 
     (opCode: Smod,        ## 0x07, Signed modulo
      forks: VmOpAllForks,
      name: "smod",
      info: "Signed modulo remainder operation",
-     exec: (prep: VmOpIgnore,
-            run:  smodOp,
-            post: VmOpIgnore)),
+     exec: smodOp),
+
 
     (opCode: Addmod,      ## 0x08, Modulo addition, Intermediate
                           ## computations do not roll over at 2^256
      forks: VmOpAllForks,
      name: "addmod",
      info: "Modulo addition operation",
-     exec: (prep: VmOpIgnore,
-            run:  addmodOp,
-            post: VmOpIgnore)),
+     exec: addmodOp),
+
 
     (opCode: Mulmod,      ## 0x09, Modulo multiplication, Intermediate
                           ## computations do not roll over at 2^256
      forks: VmOpAllForks,
      name: "mulmod",
      info: "Modulo multiplication operation",
-     exec: (prep: VmOpIgnore,
-            run:  mulmodOp,
-            post: VmOpIgnore)),
+     exec: mulmodOp),
+
 
     (opCode: Exp,         ## 0x0a, Exponentiation
      forks: VmOpAllForks,
      name: "exp",
      info: "Exponentiation operation",
-     exec: (prep: VmOpIgnore,
-            run:  expOp,
-            post: VmOpIgnore)),
+     exec: expOp),
+
 
     (opCode: SignExtend,  ## 0x0b, Extend 2's complemet length
      forks: VmOpAllForks,
      name: "signExtend",
      info: "Extend length of two’s complement signed integer",
-     exec: (prep: VmOpIgnore,
-            run:  signExtendOp,
-            post: VmOpIgnore)),
+     exec: signExtendOp),
+
 
     (opCode: Lt,          ## 0x10, Less-than
      forks: VmOpAllForks,
      name: "lt",
      info: "Less-than comparison",
-     exec: (prep: VmOpIgnore,
-            run:  ltOp,
-            post: VmOpIgnore)),
+     exec: ltOp),
+
 
     (opCode: Gt,          ## 0x11, Greater-than
      forks: VmOpAllForks,
      name: "gt",
      info: "Greater-than comparison",
-     exec: (prep: VmOpIgnore,
-            run:  gtOp,
-            post: VmOpIgnore)),
+     exec: gtOp),
+
 
     (opCode: Slt,         ## 0x12, Signed less-than
      forks: VmOpAllForks,
      name: "slt",
      info: "Signed less-than comparison",
-     exec: (prep: VmOpIgnore,
-            run:  sltOp,
-            post: VmOpIgnore)),
+     exec: sltOp),
+
 
     (opCode: Sgt,         ## 0x13, Signed greater-than
      forks: VmOpAllForks,
      name: "sgt",
      info: "Signed greater-than comparison",
-     exec: (prep: VmOpIgnore,
-            run:  sgtOp,
-            post: VmOpIgnore)),
+     exec: sgtOp),
+
 
     (opCode: Eq,          ## 0x14, Equality
      forks: VmOpAllForks,
      name: "eq",
      info: "Equality comparison",
-     exec: (prep: VmOpIgnore,
-            run:  eqOp,
-            post: VmOpIgnore)),
+     exec: eqOp),
+
 
     (opCode: IsZero,      ## 0x15, Not operator
      forks: VmOpAllForks,
      name: "isZero",
      info: "Simple not operator (Note: real Yellow Paper description)",
-     exec: (prep: VmOpIgnore,
-            run:  isZeroOp,
-            post: VmOpIgnore)),
+     exec: isZeroOp),
+
 
     (opCode: And,         ## 0x16, AND
      forks: VmOpAllForks,
      name: "andOp",
      info: "Bitwise AND operation",
-     exec: (prep: VmOpIgnore,
-            run:  andOp,
-            post: VmOpIgnore)),
+     exec: andOp),
+
 
     (opCode: Or,          ## 0x17, OR
      forks: VmOpAllForks,
      name: "orOp",
      info: "Bitwise OR operation",
-     exec: (prep: VmOpIgnore,
-            run:  orOp,
-            post: VmOpIgnore)),
+     exec: orOp),
+
 
     (opCode: Xor,         ## 0x18, XOR
      forks: VmOpAllForks,
      name: "xorOp",
      info: "Bitwise XOR operation",
-     exec: (prep: VmOpIgnore,
-            run:  xorOp,
-            post: VmOpIgnore)),
+     exec: xorOp),
+
 
     (opCode: Not,         ## 0x19, NOT
      forks: VmOpAllForks,
      name: "notOp",
      info: "Bitwise NOT operation",
-     exec: (prep: VmOpIgnore,
-            run:  notOp,
-            post: VmOpIgnore)),
+     exec: notOp),
+
 
     (opCode: Byte,        ## 0x1a, Retrieve byte
      forks: VmOpAllForks,
      name: "byteOp",
      info: "Retrieve single byte from word",
-     exec: (prep: VmOpIgnore,
-            run:  byteOp,
-            post: VmOpIgnore)),
+     exec: byteOp),
+
 
     # Constantinople's new opcodes
 
@@ -470,25 +448,21 @@ const
      forks: VmOpConstantinopleAndLater,
      name: "shlOp",
      info: "Shift left",
-     exec: (prep: VmOpIgnore,
-            run:  shlOp,
-            post: VmOpIgnore)),
+     exec: shlOp),
+
 
     (opCode: Shr,         ## 0x1c, Shift right logical
      forks: VmOpConstantinopleAndLater,
      name: "shrOp",
      info: "Logical shift right",
-     exec: (prep: VmOpIgnore,
-            run:  shrOp,
-            post: VmOpIgnore)),
+     exec: shrOp),
+
 
     (opCode: Sar,         ## 0x1d, Shift right arithmetic
      forks: VmOpConstantinopleAndLater,
      name: "sarOp",
      info: "Arithmetic shift right",
-     exec: (prep: VmOpIgnore,
-            run:  sarOp,
-            post: VmOpIgnore))]
+     exec: sarOp)]
 
 # ------------------------------------------------------------------------------
 # End
