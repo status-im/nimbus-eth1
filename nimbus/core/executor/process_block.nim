@@ -124,7 +124,11 @@ proc procBlkEpilogue(
     if vmState.collectWitnessData:
       db.collectWitnessData()
 
-    db.persist(clearEmptyAccount = vmState.determineFork >= FkSpurious)
+    # Clearing the account cache here helps manage its size when replaying
+    # large ranges of blocks, implicitly limiting its size using the gas limit
+    db.persist(
+      clearEmptyAccount = vmState.determineFork >= FkSpurious,
+      clearCache = true)
 
   if not skipValidation:
     let stateDB = vmState.stateDB
