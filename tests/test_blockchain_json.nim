@@ -48,6 +48,15 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.network = node["network"].getStr
   result.pre = node["pre"]
 
+proc rootExists(db: CoreDbRef; root: Hash256): bool =
+  let
+    ctx = db.ctx
+    col = ctx.newColumn(CtAccounts, root).valueOr:
+      return false
+  ctx.getAcc(col).isOkOr:
+    return false
+  true
+
 proc executeCase(node: JsonNode): bool =
   let
     env     = parseEnv(node)
@@ -69,7 +78,7 @@ proc executeCase(node: JsonNode): bool =
     return false
 
   var c = initForkedChain(com)
-  var lastStateRoot: Hash256
+  var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
     c.addBlock(blk)
     if env.lastBlockHash == blk.header.blockHash:
@@ -84,6 +93,10 @@ proc executeCase(node: JsonNode): bool =
   if headHash != env.lastBlockHash:
     debugEcho "lastestBlockHash mismatch, get: ", headHash,
       " expect: ", env.lastBlockHash
+    return false
+
+  if not memDB.rootExists(lastStateRoot):
+    debugEcho "Last stateRoot not exists"
     return false
 
   true
@@ -116,4 +129,6 @@ when isMainModule:
       let node = json.parseFile(name)
       executeFile(node, testStatusIMPL)
 
-  blockchainJsonMain()
+    executeFile("tests/fixtures/eth_tests/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/wrongTimestamp.json")
+  else:
+    blockchainJsonMain()
