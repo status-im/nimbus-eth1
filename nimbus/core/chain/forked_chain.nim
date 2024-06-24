@@ -26,6 +26,10 @@ type
     blk: EthBlock
     receipts: seq[Receipt]
 
+  ActiveChain = object
+    header: BlockHeader
+    hash: Hash256
+
   ForkedChain* = object
     stagingTx: CoreDbTxRef
     db: CoreDbRef
@@ -148,7 +152,7 @@ proc writeBaggage(c: var ForkedChain, blockHash: Hash256) =
 
 proc updateBase(c: var ForkedChain,
                 newBaseHash: Hash256, newBaseHeader: BlockHeader) =
-  # remove obsolete chains
+  # Remove obsolete chains
   for i in 0..<c.heads.len:
     if c.heads[i].number <= c.baseHeader.number:
       var prevHash = c.heads[i].hash
@@ -158,13 +162,28 @@ proc updateBase(c: var ForkedChain,
           prevHash = val.blk.header.parentHash
           c.blocks.del(rmHash)
         do:
-          # older chain segment have been deleted
+          # Older chain segment have been deleted
           # by previous head
           break
       c.heads.del(i)
 
   c.baseHeader = newBaseHeader
   c.baseHash = newBaseHash
+
+func findActiveChain(c: ForkedChain, hash: Hash256): Result[ActiveChain, string] =
+  # Find hash belong to which chain
+  for x in c.heads:
+    let header = c.blocks[x.hash].blk.header
+    if x.hash == hash:
+      return ok(ActiveChain(header: header, hash: x.hash))
+
+    var prevHash = header.parentHash
+    while prevHash != c.baseHash:
+      prevHash = c.blocks[prevHash].blk.header.parentHash
+      if prevHash == hash:
+        return ok(ActiveChain(header: header, hash: x.hash))
+
+  err("Finalized hash is not part of any active chain")
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -173,7 +192,10 @@ proc updateBase(c: var ForkedChain,
 proc initForkedChain*(com: CommonRef): ForkedChain =
   result.com = com
   result.db = com.db
+<<<<<<< HEAD
   result.stagingTx = com.db.newTransaction()
+=======
+>>>>>>> 0563e36d (foekr)
   result.baseHeader = com.db.getCanonicalHead()
   let headHash = result.baseHeader.blockHash
   result.headHash = headHash
@@ -181,6 +203,12 @@ proc initForkedChain*(com: CommonRef): ForkedChain =
   result.headHeader = result.baseHeader
 
 proc addBlock*(c: var ForkedChain, blk: EthBlock) =
+<<<<<<< HEAD
+=======
+  if c.stagingTx.isNil:
+    c.stagingTx = c.db.newTransaction()
+
+>>>>>>> 0563e36d (foekr)
   template header(): BlockHeader =
     blk.header
 
@@ -195,7 +223,7 @@ proc addBlock*(c: var ForkedChain, blk: EthBlock) =
     return
 
   if header.parentHash notin c.blocks:
-    # if it's parent is an invalid block
+    # If it's parent is an invalid block
     # there is no hope the descendant is valid
     return
 
@@ -204,10 +232,16 @@ proc addBlock*(c: var ForkedChain, blk: EthBlock) =
 
 proc finalizeSegment*(c: var ForkedChain,
         finalizedHash: Hash256): Result[void, string] =
+  if finalizedHash == c.baseHash:
+    # The base is not updated
+    return ok()
+
   if finalizedHash == c.headHash:
+    # Current segment is canonical chain
     c.writeBaggage(finalizedHash)
 
-    # the current segment is canonical chain
+    # Paranoid check
+    doAssert(not c.stagingTx.isNil)
     c.stagingTx.commit()
 
     # Save and record the block number before the last saved block state.
@@ -219,25 +253,29 @@ proc finalizeSegment*(c: var ForkedChain,
     c.updateBase(finalizedHash, c.headHeader)
     return ok()
 
+  # If there are multiple heads, find which chain finalizedHash belongs to
+  let ac = ?c.findActiveChain(finalizedHash)
+
   var
     newBaseHash: Hash256
     newBaseHeader: BlockHeader
 
   c.blocks.withValue(finalizedHash, val) do:
-    if c.headHeader.number <= 128:
-      if val.blk.header.number < c.headHeader.number:
+    if ac.header.number <= 128:
+      if val.blk.header.number < ac.header.number:
         newBaseHash = finalizedHash
         newBaseHeader = val.blk.header
       else:
-        newBaseHash = c.headHash
-        newBaseHeader = c.headHeader
-    elif val.blk.header.number < c.headHeader.number - 128:
+        newBaseHash = ac.hash
+        newBaseHeader = ac.header
+    elif val.blk.header.number < ac.header.number - 128:
       newBaseHash = finalizedHash
       newBaseHeader = val.blk.header
     else:
-      newBaseHash = c.headHash
-      newBaseHeader = c.headHeader
+      newBaseHash = ac.hash
+      newBaseHeader = ac.header
   do:
+    # Redundant check, already checked in in findActiveChain
     return err("Finalized head not in segments list")
 
   c.stagingTx.rollback()
@@ -246,10 +284,11 @@ proc finalizeSegment*(c: var ForkedChain,
   c.writeBaggage(newBaseHash)
 
   c.stagingTx.commit()
+  c.stagingTx = nil
+
   c.db.persistent(newBaseHeader.number).isOkOr:
     return err("Failed to save state: " & $$error)
 
-  c.stagingTx = c.db.newTransaction()
   c.updateBase(newBaseHash, newBaseHeader)
 
   ok()

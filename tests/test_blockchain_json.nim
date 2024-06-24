@@ -69,11 +69,21 @@ proc executeCase(node: JsonNode): bool =
     return false
 
   var c = initForkedChain(com)
+  var lastStateRoot: Hash256
   for blk in env.blocks:
     c.addBlock(blk)
+    if env.lastBlockHash == blk.header.blockHash:
+      lastStateRoot = blk.header.stateRoot
 
   c.finalizeSegment(env.lastBlockHash).isOkOr:
     debugEcho error
+    return false
+
+  let head = com.db.getCanonicalHead()
+  let headHash = head.blockHash
+  if headHash != env.lastBlockHash:
+    debugEcho "lastestBlockHash mismatch, get: ", headHash,
+      " expect: ", env.lastBlockHash
     return false
 
   true
@@ -100,4 +110,10 @@ proc blockchainJsonMain*() =
       jsonTest(newFolder, "newBlockchainTests", executeFile, skipNewBCTests)
 
 when isMainModule:
+  when false:
+    proc executeFile(name: string) =
+      var testStatusIMPL: TestStatus
+      let node = json.parseFile(name)
+      executeFile(node, testStatusIMPL)
+
   blockchainJsonMain()
