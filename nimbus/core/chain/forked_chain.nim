@@ -26,23 +26,21 @@ type
     head: Hash256
     base: Hash256
     headBlockNumber: BlockNumber
+    baseHeader: BlockHeader
+    headHeader: BlockHeader
 
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
 
-proc getVmState(c: ForkedChain,
-      header: BlockHeader): Result[BaseVMState, string] =
-  let vmState = BaseVMState()
-  if not vmState.init(header, c.com):
-    return err("Could not initialise VMState")
-  ok(vmState)
-
-proc processBlock(c: ForkedChain, blk: EthBlock): Result[void, string] =
+proc processBlock(c: ForkedChain,
+                  parent: BlockHeader,
+                  blk: EthBlock): Result[void, string] =
   template header(): BlockHeader =
     blk.header
 
-  let vmState = ?c.getVmState(header)
+  let vmState = BaseVMState()
+  vmState.init(parent, header, c.com)
   c.com.hardForkTransition(header)
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, checkSealOK = false)
@@ -67,18 +65,20 @@ proc updateHead(c: var ForkedChain, blk: EthBlock) =
   template header(): BlockHeader =
     blk.header
 
+  c.headHeader = header
   c.head = header.blockHash
   c.headBlockNumber = header.number
   c.blocks[c.head] = blk
 
 proc validatePotentialHead(c: var ForkedChain,
+          parent: BlockHeader,
           blk: EthBlock,
           updateHead: bool = true)  =
   let dbTx = c.db.newTransaction()
   defer:
     dbTx.dispose()
 
-  let res = c.processBlock(blk)
+  let res = c.processBlock(parent, blk)
   if res.isErr:
     dbTx.rollback()
     return
@@ -99,8 +99,10 @@ proc replaySegment(c: var ForkedChain,
 
   c.stagingTx.rollback()
   c.stagingTx = c.db.newTransaction()
+  c.headHeader = c.baseHeader
   for i in countdown(chain.high, chain.low):
-    c.validatePotentialHead(chain[i], updateHead = false)
+    c.validatePotentialHead(c.headHeader, chain[i], updateHead = false)
+    c.headHeader = chain[i].header
 
   chain[^1].header.number
 
@@ -119,23 +121,24 @@ proc initForkedChain*(com: CommonRef): ForkedChain =
   result.com = com
   result.db = com.db
   result.stagingTx = com.db.newTransaction()
-  let head = com.db.getCanonicalHead()
-  let headHash = head.blockHash
+  result.baseHeader = com.db.getCanonicalHead()
+  let headHash = result.baseHeader.blockHash
   result.head = headHash
   result.base = headHash
+  result.headHeader = result.baseHeader
 
 proc addBlock*(c: var ForkedChain, blk: EthBlock) =
   template header(): BlockHeader =
     blk.header
 
   if header.parentHash == c.head:
-    c.validatePotentialHead(blk)
+    c.validatePotentialHead(c.headHeader, blk)
     return
 
   if header.parentHash == c.base:
     c.stagingTx.rollback()
     c.stagingTx = c.db.newTransaction()
-    c.validatePotentialHead(blk)
+    c.validatePotentialHead(c.baseHeader, blk)
     return
 
   if header.parentHash notin c.blocks:
@@ -144,7 +147,7 @@ proc addBlock*(c: var ForkedChain, blk: EthBlock) =
     return
 
   discard c.replaySegment(header.parentHash)
-  c.validatePotentialHead(blk)
+  c.validatePotentialHead(c.headHeader, blk)
 
 proc finalizeSegment*(c: var ForkedChain,
         finalized: Hash256): Result[void, string] =
