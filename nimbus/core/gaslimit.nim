@@ -41,13 +41,6 @@ proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void,string] =
     return err("invalid gas limit below 5000")
   ok()
 
-proc validateGasLimit(com: CommonRef; header: BlockHeader): Result[void, string] =
-  let parent = try:
-    com.db.getBlockHeader(header.parentHash)
-  except CatchableError:
-    return err "Parent block not in database"
-  header.validateGasLimit(parent.gasLimit)
-
 # ------------------------------------------------------------------------------
 # Eip 1559 support
 # ------------------------------------------------------------------------------
@@ -103,13 +96,8 @@ proc validateGasLimitOrBaseFee*(com: CommonRef;
     let baseFeePerGas = header.baseFeePerGas.get(0.u256)
     if not baseFeePerGas.isZero:
       return err("invalid baseFee before London fork: have " & $baseFeePerGas & ", want <0>")
-    let rc = com.validateGasLimit(header)
-    if rc.isErr:
-      return rc
+    ?validateGasLimit(header, parent.gasLimit)
   else:
-    let rc = com.verifyEip1559Header(parent = parent,
-                                     header = header)
-    if rc.isErr:
-      return rc
+    ?com.verifyEip1559Header(parent = parent, header = header)
 
   return ok()
