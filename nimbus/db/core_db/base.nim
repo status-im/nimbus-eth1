@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  chronicles,
   eth/common,
   "../.."/[constants, errors],
   ./base/[api_tracking, base_desc]
@@ -205,12 +204,19 @@ proc parent*[T: CoreDbKvtRef |
   ##
   result = child.parent
 
-proc backend*(dsc: CoreDbKvtRef | CoreDbMptRef): auto =
+proc backend*(dsc: CoreDbKvtRef): auto =
   ## Getter, retrieves the *raw* backend object for special/localised support.
   ##
   dsc.setTrackNewApi AnyBackendFn
   result = dsc.methods.backendFn()
   dsc.ifTrackNewApi: debug newApiTxt, api, elapsed
+
+proc backend*(mpt: CoreDbMptRef): auto =
+  ## Getter, retrieves the *raw* backend object for special/localised support.
+  ##
+  mpt.setTrackNewApi AnyBackendFn
+  result = mpt.methods.backendFn(mpt)
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc finish*(db: CoreDbRef; eradicate = false) =
   ## Database destructor. If the argument `eradicate` is set `false`, the
@@ -337,7 +343,7 @@ proc forget*(ctx: CoreDbCtxRef) =
   ## context. This function fails if `ctx` is the default context.
   ##
   ctx.setTrackNewApi CtxForgetFn
-  ctx.methods.forgetFn()
+  ctx.methods.forgetFn(ctx)
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
@@ -381,7 +387,7 @@ proc newColumn*(
   ##     db.getAcc col
   ##
   ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(colType, colState, address)
+  result = ctx.methods.newColFn(ctx, colType, colState, address)
   ctx.ifTrackNewApi:
     debug newApiTxt, api, elapsed, colType, colState, address, result
 
@@ -393,7 +399,7 @@ proc newColumn*(
   ## Shortcut for `ctx.newColumn(CtStorage,colState,some(address))`.
   ##
   ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(CtStorage, colState, Opt.some(address))
+  result = ctx.methods.newColFn(ctx, CtStorage, colState, Opt.some(address))
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, colState, address, result
 
 proc newColumn*(
@@ -406,7 +412,7 @@ proc newColumn*(
   ##
   ctx.setTrackNewApi CtxNewColFn
   result = ctx.methods.newColFn(
-      CtStorage, EMPTY_ROOT_HASH, Opt.some(address)).valueOr:
+      ctx, CtStorage, EMPTY_ROOT_HASH, Opt.some(address)).valueOr:
     raiseAssert error.prettyText()
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
@@ -474,7 +480,7 @@ proc getMpt*(
   ## function `getColumn()`.
   ##
   ctx.setTrackNewApi CtxGetMptFn
-  result = ctx.methods.getMptFn col
+  result = ctx.methods.getMptFn(ctx, col)
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
 proc getMpt*(
@@ -487,8 +493,8 @@ proc getMpt*(
   ## return a non-nil descriptor or throw an exception.
   ##
   ctx.setTrackNewApi CtxGetMptFn
-  let col = ctx.methods.newColFn(colType, EMPTY_ROOT_HASH, address).value
-  result = ctx.methods.getMptFn(col).valueOr:
+  let col = ctx.methods.newColFn(ctx, colType, EMPTY_ROOT_HASH, address).value
+  result = ctx.methods.getMptFn(ctx, col).valueOr:
     raiseAssert error.prettyText()
   ctx.ifTrackNewApi: debug newApiTxt, api, colType, elapsed
 
@@ -500,7 +506,7 @@ proc getMpt*(acc: CoreDbAccRef): CoreDbMptRef =
   ## argument.
   ##
   acc.setTrackNewApi AccToMptFn
-  result = acc.methods.getMptFn().valueOr:
+  result = acc.methods.getMptFn(acc).valueOr:
     raiseAssert error.prettyText()
   acc.ifTrackNewApi:
     let colState = result.methods.getColFn()
@@ -526,7 +532,7 @@ proc getAcc*(
   ## This function works similar to `getMpt()` for handling accounts.
   ##
   ctx.setTrackNewApi CtxGetAccFn
-  result = ctx.methods.getAccFn col
+  result = ctx.methods.getAccFn(ctx, col)
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
 
 # ------------------------------------------------------------------------------
@@ -537,14 +543,14 @@ proc getColumn*(acc: CoreDbAccRef): CoreDbColRef =
   ## Getter, result is not `nil`
   ##
   acc.setTrackNewApi AccGetColFn
-  result = acc.methods.getColFn()
+  result = acc.methods.getColFn(acc)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc getColumn*(mpt: CoreDbMptRef): CoreDbColRef =
   ## Variant of `getColumn()`
   ##
   mpt.setTrackNewApi MptGetColFn
-  result = mpt.methods.getColFn()
+  result = mpt.methods.getColFn(mpt)
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------
@@ -556,9 +562,9 @@ proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## non-empty `Blob` or an error code.
   ##
   mpt.setTrackNewApi MptFetchFn
-  result = mpt.methods.fetchFn key
+  result = mpt.methods.fetchFn(mpt, key)
   mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn()
+    let col = mpt.methods.getColFn(mpt)
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
 
 proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
@@ -566,16 +572,16 @@ proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## on the database.
   ##
   mpt.setTrackNewApi MptFetchOrEmptyFn
-  result = mpt.methods.fetchFn key
+  result = mpt.methods.fetchFn(mpt, key)
   if result.isErr and result.error.error == MptNotFound:
     result = CoreDbRc[Blob].ok(EmptyBlob)
   mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn()
+    let col = mpt.methods.getColFn(mpt)
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
 
 proc delete*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[void] =
   mpt.setTrackNewApi MptDeleteFn
-  result = mpt.methods.deleteFn key
+  result = mpt.methods.deleteFn(mpt, key)
   mpt.ifTrackNewApi:
     let col = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
@@ -586,9 +592,9 @@ proc merge*(
     val: openArray[byte];
       ): CoreDbRc[void] =
   mpt.setTrackNewApi MptMergeFn
-  result = mpt.methods.mergeFn(key, val)
+  result = mpt.methods.mergeFn(mpt, key, val)
   mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn()
+    let col = mpt.methods.getColFn(mpt)
     debug newApiTxt, api, elapsed, col, key=key.toStr, val=val.toLenStr, result
 
 proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
@@ -596,9 +602,9 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
   ## than a `Result[]`.
   ##
   mpt.setTrackNewApi MptHasPathFn
-  result = mpt.methods.hasPathFn key
+  result = mpt.methods.hasPathFn(mpt, key)
   mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn()
+    let col = mpt.methods.getColFn(mpt)
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
 
 # ------------------------------------------------------------------------------
@@ -609,7 +615,7 @@ proc fetch*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[CoreDbAccount] =
   ## Fetch data from the argument `acc`.
   ##
   acc.setTrackNewApi AccFetchFn
-  result = acc.methods.fetchFn address
+  result = acc.methods.fetchFn(acc, address)
   acc.ifTrackNewApi:
     let storage = if result.isErr: "n/a" else: result.value.storage.prettyText()
     debug newApiTxt, api, elapsed, address, storage, result
@@ -617,7 +623,7 @@ proc fetch*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[CoreDbAccount] =
 
 proc delete*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[void] =
   acc.setTrackNewApi AccDeleteFn
-  result = acc.methods.deleteFn address
+  result = acc.methods.deleteFn(acc, address)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
 proc stoDelete*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[void] =
@@ -632,7 +638,7 @@ proc stoDelete*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[void] =
   ##   backend.
   ##
   acc.setTrackNewApi AccStoDeleteFn
-  result = acc.methods.stoDeleteFn address
+  result = acc.methods.stoDeleteFn(acc, address)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
 
@@ -641,7 +647,7 @@ proc merge*(
     account: CoreDbAccount;
       ): CoreDbRc[void] =
   acc.setTrackNewApi AccMergeFn
-  result = acc.methods.mergeFn account
+  result = acc.methods.mergeFn(acc, account)
   acc.ifTrackNewApi:
     let address = account.address
     debug newApiTxt, api, elapsed, address, result
@@ -651,7 +657,7 @@ proc hasPath*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
   acc.setTrackNewApi AccHasPathFn
-  result = acc.methods.hasPathFn address
+  result = acc.methods.hasPathFn(acc, address)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
 

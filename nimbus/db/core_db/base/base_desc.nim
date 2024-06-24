@@ -160,16 +160,14 @@ type
   # --------------------------------------------------
   # Sub-descriptor: MPT context methods
   # --------------------------------------------------
-  CoreDbCtxFromTxFn* =
-    proc(root: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
   CoreDbCtxNewColFn* = proc(
-    colType: CoreDbColType; colState: Hash256; address: Opt[EthAddress];
+    cCtx: CoreDbCtxRef; colType: CoreDbColType; colState: Hash256; address: Opt[EthAddress];
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
-    root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
+    cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
   CoreDbCtxGetAccFn* = proc(
-    root: CoreDbColRef): CoreDbRc[CoreDbAccRef] {.noRaise.}
-  CoreDbCtxForgetFn* = proc() {.noRaise.}
+    cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbAccRef] {.noRaise.}
+  CoreDbCtxForgetFn* = proc(cCtx: CoreDbCtxRef) {.noRaise.}
 
   CoreDbCtxFns* = object
     ## Methods for context maniulation
@@ -181,20 +179,20 @@ type
   # --------------------------------------------------
   # Sub-descriptor: generic  Mpt/hexary trie methods
   # --------------------------------------------------
-  CoreDbMptBackendFn* = proc(): CoreDbMptBackendRef {.noRaise.}
+  CoreDbMptBackendFn* = proc(cMpt: CoreDbMptRef): CoreDbMptBackendRef {.noRaise.}
   CoreDbMptFetchFn* =
-    proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbMptFetchAccountFn* =
-    proc(k: openArray[byte]): CoreDbRc[CoreDbAccount] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbMptDeleteFn* =
-    proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbMptMergeFn* =
-    proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbMptMergeAccountFn* =
-    proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
-  CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
+  CoreDbMptHasPathFn* = proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbMptGetColFn* = proc(cMpt: CoreDbMptRef): CoreDbColRef {.noRaise.}
+  CoreDbMptForgetFn* = proc(cMpt: CoreDbMptRef): CoreDbRc[void] {.noRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects
@@ -209,14 +207,13 @@ type
   # ----------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods for accounts
   # ------------------------------------------------------
-  CoreDbAccGetMptFn* = proc(): CoreDbRc[CoreDbMptRef] {.noRaise.}
-  CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
-  CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccStoDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
-  CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbAccGetMptFn* = proc(cAcc: CoreDbAccRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
+  CoreDbAccFetchFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
+  CoreDbAccDeleteFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccStoDeleteFn* = proc(cAcc: CoreDbAccRef,k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccMergeFn* = proc(cAcc: CoreDbAccRef, v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
+  CoreDbAccHasPathFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[bool] {.noRaise.}
+  CoreDbAccGetColFn* = proc(cAcc: CoreDbAccRef): CoreDbColRef {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects

@@ -21,6 +21,9 @@ import
   ./db/era1_db,
   beacon_chain/era_db
 
+declareGauge nec_import_block_number,
+  "Latest imported block number"
+
 declareCounter nec_imported_blocks,
   "Blocks processed during import"
 
@@ -105,6 +108,8 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     if csv != nil:
       close(csv)
 
+  nec_import_block_number.set(start.int64)
+
   template blockNumber(): uint64 =
     start + imported
 
@@ -155,6 +160,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           avgMGps = f(gas.float / 1000000 / diff0),
           elapsed = shortLog(time2 - time0, 3)
 
+        metrics.set(nec_import_block_number, int64(blockNumber))
         nec_imported_blocks.inc(blocks.len)
         nec_imported_transactions.inc(statsRes[].txs)
         nec_imported_gas.inc(statsRes[].gas)
