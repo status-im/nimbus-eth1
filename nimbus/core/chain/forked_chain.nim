@@ -22,11 +22,15 @@ type
     number: BlockNumber
     hash: Hash256
 
+  BlockDesc = object
+    blk: EthBlock
+    receipts: seq[Receipt]
+
   ForkedChain* = object
     stagingTx: CoreDbTxRef
     db: CoreDbRef
     com: CommonRef
-    blocks: Table[Hash256, EthBlock]
+    blocks: Table[Hash256, BlockDesc]
     headHash: Hash256
     baseHash: Hash256
     baseHeader: BlockHeader
@@ -39,7 +43,7 @@ type
 
 proc processBlock(c: ForkedChain,
                   parent: BlockHeader,
-                  blk: EthBlock): Result[void, string] =
+                  blk: EthBlock): Result[seq[Receipt], string] =
   template header(): BlockHeader =
     blk.header
 
@@ -56,6 +60,8 @@ proc processBlock(c: ForkedChain,
     skipUncles = true,
   )
 
+  # We still need to write header to database
+  # because validateUncles still need it
   let blockHash = header.blockHash()
   if not c.db.persistHeader(
         blockHash,
@@ -63,7 +69,7 @@ proc processBlock(c: ForkedChain,
         c.com.startOfHistory):
     return err("Could not persist header")
 
-  ok()
+  ok(move(vmState.receipts))
 
 proc updateHeads(c: var ForkedChain,
                  hash: Hash256,
@@ -81,13 +87,18 @@ proc updateHeads(c: var ForkedChain,
     number: header.number,
   )
 
-proc updateHead(c: var ForkedChain, blk: EthBlock) =
+proc updateHead(c: var ForkedChain,
+                blk: EthBlock,
+                receipts: sink seq[Receipt]) =
   template header(): BlockHeader =
     blk.header
 
   c.headHeader = header
   c.headHash = header.blockHash
-  c.blocks[c.headHash] = blk
+  c.blocks[c.headHash] = BlockDesc(
+    blk: blk,
+    receipts: move(receipts)
+  )
   c.updateHeads(c.headHash, header)
 
 proc validatePotentialHead(c: var ForkedChain,
@@ -98,14 +109,14 @@ proc validatePotentialHead(c: var ForkedChain,
   defer:
     dbTx.dispose()
 
-  let res = c.processBlock(parent, blk)
+  var res = c.processBlock(parent, blk)
   if res.isErr:
     dbTx.rollback()
     return
 
   dbTx.commit()
   if updateHead:
-    c.updateHead(blk)
+    c.updateHead(blk, move(res.value))
 
 proc replaySegment(c: var ForkedChain,
                    head: Hash256) =
@@ -114,7 +125,7 @@ proc replaySegment(c: var ForkedChain,
     chain = newSeq[EthBlock]()
 
   while prevHash != c.baseHash:
-    chain.add c.blocks[prevHash]
+    chain.add c.blocks[prevHash].blk
     prevHash = chain[^1].header.parentHash
 
   c.stagingTx.rollback()
@@ -123,6 +134,17 @@ proc replaySegment(c: var ForkedChain,
   for i in countdown(chain.high, chain.low):
     c.validatePotentialHead(c.headHeader, chain[i], updateHead = false)
     c.headHeader = chain[i].header
+
+proc writeBaggage(c: var ForkedChain, blockHash: Hash256) =
+  var prevHash = blockHash
+  while prevHash != c.baseHash:
+    let blk =  c.blocks[prevHash]
+    c.db.persistTransactions(blk.blk.header.number, blk.blk.transactions)
+    c.db.persistReceipts(blk.receipts)
+    discard c.db.persistUncles(blk.blk.uncles)
+    if blk.blk.withdrawals.isSome:
+      c.db.persistWithdrawals(blk.blk.withdrawals.get)
+    prevHash = blk.blk.header.parentHash
 
 proc updateBase(c: var ForkedChain,
                 newBaseHash: Hash256, newBaseHeader: BlockHeader) =
@@ -133,7 +155,7 @@ proc updateBase(c: var ForkedChain,
       while prevHash != c.baseHash:
         c.blocks.withValue(prevHash, val) do:
           let rmHash = prevHash
-          prevHash = val.header.parentHash
+          prevHash = val.blk.header.parentHash
           c.blocks.del(rmHash)
         do:
           # older chain segment have been deleted
@@ -143,7 +165,6 @@ proc updateBase(c: var ForkedChain,
 
   c.baseHeader = newBaseHeader
   c.baseHash = newBaseHash
-
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -184,6 +205,8 @@ proc addBlock*(c: var ForkedChain, blk: EthBlock) =
 proc finalizeSegment*(c: var ForkedChain,
         finalizedHash: Hash256): Result[void, string] =
   if finalizedHash == c.headHash:
+    c.writeBaggage(finalizedHash)
+
     # the current segment is canonical chain
     c.stagingTx.commit()
 
@@ -202,15 +225,15 @@ proc finalizeSegment*(c: var ForkedChain,
 
   c.blocks.withValue(finalizedHash, val) do:
     if c.headHeader.number <= 128:
-      if val.header.number < c.headHeader.number:
+      if val.blk.header.number < c.headHeader.number:
         newBaseHash = finalizedHash
-        newBaseHeader = val.header
+        newBaseHeader = val.blk.header
       else:
         newBaseHash = c.headHash
         newBaseHeader = c.headHeader
-    elif val.header.number < c.headHeader.number - 128:
+    elif val.blk.header.number < c.headHeader.number - 128:
       newBaseHash = finalizedHash
-      newBaseHeader = val.header
+      newBaseHeader = val.blk.header
     else:
       newBaseHash = c.headHash
       newBaseHeader = c.headHeader
@@ -220,6 +243,7 @@ proc finalizeSegment*(c: var ForkedChain,
   c.stagingTx.rollback()
   c.stagingTx = c.db.newTransaction()
   c.replaySegment(newBaseHash)
+  c.writeBaggage(newBaseHash)
 
   c.stagingTx.commit()
   c.db.persistent(newBaseHeader.number).isOkOr:
