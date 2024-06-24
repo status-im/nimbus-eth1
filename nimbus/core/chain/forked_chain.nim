@@ -18,16 +18,20 @@ import
   ../executor/process_block
 
 type
+  HeadDesc = object
+    number: BlockNumber
+    hash: Hash256
+
   ForkedChain* = object
     stagingTx: CoreDbTxRef
     db: CoreDbRef
     com: CommonRef
     blocks: Table[Hash256, EthBlock]
-    head: Hash256
-    base: Hash256
-    headBlockNumber: BlockNumber
+    headHash: Hash256
+    baseHash: Hash256
     baseHeader: BlockHeader
     headHeader: BlockHeader
+    heads: seq[HeadDesc]
 
 # ------------------------------------------------------------------------------
 # Private
@@ -61,14 +65,30 @@ proc processBlock(c: ForkedChain,
 
   ok()
 
+proc updateHeads(c: var ForkedChain,
+                 hash: Hash256,
+                 header: BlockHeader) =
+  for i in 0..<c.heads.len:
+    if c.heads[i].hash == header.parentHash:
+      c.heads[i] = HeadDesc(
+        hash: hash,
+        number: header.number,
+      )
+      return
+
+  c.heads.add HeadDesc(
+    hash: hash,
+    number: header.number,
+  )
+
 proc updateHead(c: var ForkedChain, blk: EthBlock) =
   template header(): BlockHeader =
     blk.header
 
   c.headHeader = header
-  c.head = header.blockHash
-  c.headBlockNumber = header.number
-  c.blocks[c.head] = blk
+  c.headHash = header.blockHash
+  c.blocks[c.headHash] = blk
+  c.updateHeads(c.headHash, header)
 
 proc validatePotentialHead(c: var ForkedChain,
           parent: BlockHeader,
@@ -88,12 +108,12 @@ proc validatePotentialHead(c: var ForkedChain,
     c.updateHead(blk)
 
 proc replaySegment(c: var ForkedChain,
-                   head: Hash256): BlockNumber =
+                   head: Hash256) =
   var
     prevHash = head
     chain = newSeq[EthBlock]()
 
-  while prevHash != c.base:
+  while prevHash != c.baseHash:
     chain.add c.blocks[prevHash]
     prevHash = chain[^1].header.parentHash
 
@@ -104,14 +124,26 @@ proc replaySegment(c: var ForkedChain,
     c.validatePotentialHead(c.headHeader, chain[i], updateHead = false)
     c.headHeader = chain[i].header
 
-  chain[^1].header.number
-
 proc updateBase(c: var ForkedChain,
-                head: Hash256, headBlockNumber: BlockNumber) =
-  c.base = head
-  c.head = head
-  c.headBlockNumber = headBlockNumber
-  c.blocks.clear()
+                newBaseHash: Hash256, newBaseHeader: BlockHeader) =
+  # remove obsolete chains
+  for i in 0..<c.heads.len:
+    if c.heads[i].number <= c.baseHeader.number:
+      var prevHash = c.heads[i].hash
+      while prevHash != c.baseHash:
+        c.blocks.withValue(prevHash, val) do:
+          let rmHash = prevHash
+          prevHash = val.header.parentHash
+          c.blocks.del(rmHash)
+        do:
+          # older chain segment have been deleted
+          # by previous head
+          break
+      c.heads.del(i)
+
+  c.baseHeader = newBaseHeader
+  c.baseHash = newBaseHash
+
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -123,19 +155,19 @@ proc initForkedChain*(com: CommonRef): ForkedChain =
   result.stagingTx = com.db.newTransaction()
   result.baseHeader = com.db.getCanonicalHead()
   let headHash = result.baseHeader.blockHash
-  result.head = headHash
-  result.base = headHash
+  result.headHash = headHash
+  result.baseHash = headHash
   result.headHeader = result.baseHeader
 
 proc addBlock*(c: var ForkedChain, blk: EthBlock) =
   template header(): BlockHeader =
     blk.header
 
-  if header.parentHash == c.head:
+  if header.parentHash == c.headHash:
     c.validatePotentialHead(c.headHeader, blk)
     return
 
-  if header.parentHash == c.base:
+  if header.parentHash == c.baseHash:
     c.stagingTx.rollback()
     c.stagingTx = c.db.newTransaction()
     c.validatePotentialHead(c.baseHeader, blk)
@@ -146,35 +178,54 @@ proc addBlock*(c: var ForkedChain, blk: EthBlock) =
     # there is no hope the descendant is valid
     return
 
-  discard c.replaySegment(header.parentHash)
+  c.replaySegment(header.parentHash)
   c.validatePotentialHead(c.headHeader, blk)
 
 proc finalizeSegment*(c: var ForkedChain,
-        finalized: Hash256): Result[void, string] =
-  if finalized == c.head:
+        finalizedHash: Hash256): Result[void, string] =
+  if finalizedHash == c.headHash:
     # the current segment is canonical chain
     c.stagingTx.commit()
 
     # Save and record the block number before the last saved block state.
-    c.db.persistent(c.headBlockNumber).isOkOr:
+    c.db.persistent(c.headHeader.number).isOkOr:
       return err("Failed to save state: " & $$error)
 
-    c.updateBase(finalized, c.headBlockNumber)
     c.stagingTx = c.db.newTransaction()
+
+    c.updateBase(finalizedHash, c.headHeader)
     return ok()
 
-  if finalized notin c.blocks:
+  var
+    newBaseHash: Hash256
+    newBaseHeader: BlockHeader
+
+  c.blocks.withValue(finalizedHash, val) do:
+    if c.headHeader.number <= 128:
+      if val.header.number < c.headHeader.number:
+        newBaseHash = finalizedHash
+        newBaseHeader = val.header
+      else:
+        newBaseHash = c.headHash
+        newBaseHeader = c.headHeader
+    elif val.header.number < c.headHeader.number - 128:
+      newBaseHash = finalizedHash
+      newBaseHeader = val.header
+    else:
+      newBaseHash = c.headHash
+      newBaseHeader = c.headHeader
+  do:
     return err("Finalized head not in segments list")
 
   c.stagingTx.rollback()
   c.stagingTx = c.db.newTransaction()
-  let headBlockNumber = c.replaySegment(finalized)
+  c.replaySegment(newBaseHash)
 
   c.stagingTx.commit()
-  c.db.persistent(headBlockNumber).isOkOr:
+  c.db.persistent(newBaseHeader.number).isOkOr:
     return err("Failed to save state: " & $$error)
 
-  c.updateBase(finalized, headBlockNumber)
   c.stagingTx = c.db.newTransaction()
+  c.updateBase(newBaseHash, newBaseHeader)
 
   ok()
