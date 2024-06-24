@@ -10,16 +10,16 @@
 
 import
   std/[json, os, sets, tables, strutils],
+  stew/byteutils,
   chronicles,
   unittest2,
-  stew/byteutils,
   results,
   ./test_helpers,
   ../nimbus/sync/protocol/snap/snap_types,
   ../nimbus/db/aristo/aristo_merge,
   ../nimbus/db/kvt/kvt_utils,
   ../nimbus/db/aristo,
-  ../nimbus/[tracer, vm_types],
+  ../nimbus/[tracer, evm/types],
   ../nimbus/common/common
 
 proc setErrorLevel {.used.} =
@@ -51,10 +51,10 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
         try:
           # Pull our particular header fields (if possible)
           let header = rlp.decode(val, BlockHeader)
-          if header.blockNumber == num:
+          if header.number == num:
             txRoot = header.txRoot
-            rcptRoot = header.receiptRoot
-          elif header.blockNumber == num-1:
+            rcptRoot = header.receiptsRoot
+          elif header.number == num-1:
             predRoot = header.stateRoot
         except RlpError:
           discard
@@ -62,13 +62,13 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
 
   # Install sub-trie roots onto production db
   if txRoot.isValid:
-    doAssert adb.merge(txRoot, VertexID(CtTxs)).isOk
+    doAssert adb.mergeProof(txRoot, VertexID(CtTxs)).isOk
   if rcptRoot.isValid:
-    doAssert adb.merge(rcptRoot, VertexID(CtReceipts)).isOk
-  doAssert adb.merge(predRoot, VertexID(CtAccounts)).isOk
+    doAssert adb.mergeProof(rcptRoot, VertexID(CtReceipts)).isOk
+  doAssert adb.mergeProof(predRoot, VertexID(CtAccounts)).isOk
 
   # Set up production MPT
-  doAssert adb.merge(proof).isOk
+  doAssert adb.mergeProof(proof).isOk
 
   # Remove locks so that hashify can re-assign changed nodes
   adb.top.final.pPrf.clear
@@ -80,25 +80,24 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   setErrorLevel()
 
   var
-    blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
+    blockNumberHex = node["blockNumber"].getStr()
+    blockNumber = parseHexInt(blockNumberHex).uint64
     com = CommonRef.new(memoryDB, chainConfigForNetwork(MainNet))
     state = node["state"]
     receipts = node["receipts"]
 
   # disable POS/post Merge feature
-  com.setTTD none(DifficultyInt)
+  com.setTTD Opt.none(DifficultyInt)
 
   # Import raw data into database
   # Some hack for `Aristo` using the `snap` protocol proof-loader
   memoryDB.preLoadAristoDb(state, blockNumber)
 
-  var header = com.db.getBlockHeader(blockNumber)
-  var headerHash = header.blockHash
-  var blockBody = com.db.getBlockBody(headerHash)
+  var blk = com.db.getEthBlock(blockNumber)
 
-  let txTraces = traceTransactions(com, header, blockBody)
-  let stateDump = dumpBlockState(com, header, blockBody)
-  let blockTrace = traceBlock(com, header, blockBody, {DisableState})
+  let txTraces = traceTransactions(com, blk.header, blk.transactions)
+  let stateDump = dumpBlockState(com, blk)
+  let blockTrace = traceBlock(com, blk, {DisableState})
 
   check node["txTraces"] == txTraces
   check node["stateDump"] == stateDump

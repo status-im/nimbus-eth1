@@ -18,9 +18,10 @@ import
   ../../transaction/call_evm,
   ../../transaction/call_common,
   ../../transaction,
-  ../../vm_state,
-  ../../vm_types,
+  ../../evm/state,
+  ../../evm/types,
   ../../constants,
+  ../eip4844,
   ../validate
 
 # ------------------------------------------------------------------------------
@@ -32,7 +33,7 @@ proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
   ## function just plays safe. In particular, the `test_general_state_json.nim`
   ## module modifies this block header `baseFee` field unconditionally :(.
   if FkLondon <= fork:
-    result = header.baseFee
+    result = header.baseFeePerGas.get(0.u256)
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
@@ -70,8 +71,7 @@ proc processTransactionImpl(
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
     fork:    EVMFork;
-      ): Result[GasInt, string]
-      {.raises: [CatchableError].} =
+      ): Result[GasInt, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
@@ -80,7 +80,7 @@ proc processTransactionImpl(
     baseFee256 = header.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
     tx = eip1559TxNormalization(tx, baseFee)
-    priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
+    priorityFee = min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee)
     excessBlobGas = header.excessBlobGas.get(0'u64)
 
   # Return failure unless explicitely set `ok()`
@@ -92,6 +92,12 @@ proc processTransactionImpl(
       ", gasNeeded=" & $tx.gasLimit)
 
   vmState.gasPool -= tx.gasLimit
+
+  let blobGasUsed = tx.getTotalBlobGas
+  if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+    return err("blobGasUsed " & $blobGasUsed &
+      " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+  vmState.blobGasUsed += blobGasUsed
 
   # Actually, the eip-1559 reference does not mention an early exit.
   #
@@ -116,11 +122,9 @@ proc processTransactionImpl(
   else:
     res = err(txRes.error)
 
-  if vmState.generateWitness:
+  if vmState.collectWitnessData:
     vmState.stateDB.collectWitnessData()
-  vmState.stateDB.persist(
-    clearEmptyAccount = fork >= FkSpurious,
-    clearCache = false)
+  vmState.stateDB.persist(clearEmptyAccount = fork >= FkSpurious)
 
   return res
 
@@ -129,7 +133,7 @@ proc processTransactionImpl(
 # ------------------------------------------------------------------------------
 
 proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
-                              Result[void, string] {.raises: [CatchableError].} =
+                              Result[void, string] =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
@@ -157,7 +161,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   if res.isError:
     return err("processBeaconBlockRoot: " & res.error)
 
-  statedb.persist(clearEmptyAccount = true, clearCache = false)
+  statedb.persist(clearEmptyAccount = true)
   ok()
 
 proc processTransaction*(
@@ -166,8 +170,7 @@ proc processTransaction*(
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
     fork:    EVMFork;
-      ): Result[GasInt,string]
-      {.raises: [CatchableError].} =
+      ): Result[GasInt,string] =
   vmState.processTransactionImpl(tx, sender, header, fork)
 
 proc processTransaction*(
@@ -175,8 +178,7 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader;
-      ): Result[GasInt,string]
-      {.raises: [CatchableError].} =
+      ): Result[GasInt,string] =
   let fork = vmState.com.toEVMFork(header.forkDeterminationInfo)
   vmState.processTransaction(tx, sender, header, fork)
 

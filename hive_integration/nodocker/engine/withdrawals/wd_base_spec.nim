@@ -9,7 +9,6 @@
 # according to those terms.
 
 import
-  std/[options],
   stint,
   chronicles,
   chronos,
@@ -34,7 +33,7 @@ type
     wdAbleAccountCount*: int          # Number of accounts to withdraw to (round-robin)
     wdHistory*:          WDHistory    # Internal withdrawals history that keeps track of all withdrawals
     wdAmounts*:          seq[uint64]  # Amounts of withdrawn wei on each withdrawal (round-robin)
-    txPerBlock*:         Option[int]  # Amount of test transactions to include in withdrawal blocks
+    txPerBlock*:         Opt[int]  # Amount of test transactions to include in withdrawal blocks
     testCorrupedHashPayloads*: bool   # Send a valid payload with corrupted hash
     skipBaseVerifications*:    bool   # For code reuse of the base spec procedure
 
@@ -90,7 +89,7 @@ func getWithdrawableAccountCount*(ws: WDBaseSpec):int =
 func getGenesis*(ws: WDBaseSpec, param: NetworkParams) =
   # Remove PoW altogether
   param.genesis.difficulty = 0.u256
-  param.config.terminalTotalDifficulty = some(0.u256)
+  param.config.terminalTotalDifficulty = Opt.some(0.u256)
   param.genesis.extraData = @[]
 
   # Add some accounts to withdraw to with unconditional SSTOREs
@@ -155,14 +154,14 @@ proc verifyContractsStorage(ws: WDBaseSpec, env: TestEnv): Result[void, string] 
 
   # Assume that forkchoice updated has been already sent
   let
-    latestPayloadNumber = env.clMock.latestExecutedPayload.blockNumber.uint64.u256
-    r = env.client.storageAt(WARM_COINBASE_ADDRESS, latestPayloadNumber, latestPayloadNumber)
+    latestPayloadNumber = env.clMock.latestExecutedPayload.blockNumber.uint64
+    r = env.client.storageAt(WARM_COINBASE_ADDRESS, latestPayloadNumber.u256, latestPayloadNumber)
     p = env.client.storageAt(PUSH0_ADDRESS, 0.u256, latestPayloadNumber)
 
-  if latestPayloadNumber.truncate(int) >= ws.forkHeight:
+  if latestPayloadNumber >= ws.forkHeight.uint64:
     # Shanghai
     r.expectStorageEqual(WARM_COINBASE_ADDRESS, 100.u256.w3FixedBytes)    # WARM_STORAGE_READ_COST
-    p.expectStorageEqual(PUSH0_ADDRESS, latestPayloadNumber.w3FixedBytes) # tx succeeded
+    p.expectStorageEqual(PUSH0_ADDRESS, latestPayloadNumber.u256.w3FixedBytes) # tx succeeded
   else:
     # Pre-Shanghai
     r.expectStorageEqual(WARM_COINBASE_ADDRESS, 2600.u256.w3FixedBytes) # COLD_ACCOUNT_ACCESS_COST
@@ -218,11 +217,11 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
 
     # Genesis should not contain `withdrawalsRoot` either
     let r = env.client.latestHeader()
-    r.expectWithdrawalsRoot(none(common.Hash256))
+    r.expectWithdrawalsRoot(Opt.none(common.Hash256))
   else:
     # Genesis is post shanghai, it should contain EmptyWithdrawalsRoot
     let r = env.client.latestHeader()
-    r.expectWithdrawalsRoot(some(EMPTY_ROOT_HASH))
+    r.expectWithdrawalsRoot(Opt.some(EMPTY_ROOT_HASH))
 
   # Produce any blocks necessary to reach withdrawals fork
   var pbRes = env.clMock.produceBlocks(ws.getPreWithdrawalsBlockCount, BlockProcessCallbacks(
@@ -234,7 +233,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         let ok = env.sendNextTx(
           env.clMock.nextBlockProducer,
           BaseTx(
-            recipient: some(destAddr),
+            recipient: Opt.some(destAddr),
             amount:    1.u256,
             txType:    ws.txType,
             gasLimit:  75000.GasInt,
@@ -250,11 +249,11 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           ForkchoiceStateV1(
             headBlockHash: w3Hash env.clMock.latestHeader,
           ),
-          some(PayloadAttributes(
+          Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
             prevRandao:            w3PrevRandao(),
             suggestedFeeRecipient: w3Address(),
-            withdrawals:           some(newSeq[WithdrawalV1]()),
+            withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
           ))
         )
         let expectationDescription = "Sent pre-shanghai Forkchoice using ForkchoiceUpdatedV2 + Withdrawals, error is expected"
@@ -266,11 +265,11 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           ForkchoiceStateV1(
             headBlockHash: w3Hash env.clMock.latestHeader,
           ),
-          some(PayloadAttributes(
+          Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
             prevRandao:            w3PrevRandao(),
             suggestedFeeRecipient: w3Address(),
-            withdrawals:           none(seq[WithdrawalV1]),
+            withdrawals:           Opt.none(seq[WithdrawalV1]),
           ))
         )
         let expectationDescription2 = "Sent pre-shanghai Forkchoice ForkchoiceUpdatedV2 + null withdrawals, no error is expected"
@@ -289,7 +288,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # `withdrawals`, it should fail.
         let emptyWithdrawalsList = newSeq[Withdrawal]()
         let customizer = CustomPayloadData(
-          withdrawals: some(emptyWithdrawalsList),
+          withdrawals: Opt.some(emptyWithdrawalsList),
           parentBeaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
         )
         let payloadPlusWithdrawals = customizer.customizePayload(env.clMock.latestExecutableData).basePayload
@@ -310,7 +309,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         let r = env.client.latestHeader()
         #r.ExpectationDescription = "Requested "latest" block expecting block to contain
         #" withdrawalRoot=nil, because (block %d).timestamp < shanghaiTime
-        r.expectWithdrawalsRoot(none(common.Hash256))
+        r.expectWithdrawalsRoot(Opt.none(common.Hash256))
       return true
     ,
     onForkchoiceBroadcast: proc(): bool =
@@ -338,11 +337,11 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           ForkchoiceStateV1(
             headBlockHash: w3Hash env.clMock.latestHeader,
           ),
-          some(PayloadAttributes(
+          Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
             prevRandao:            w3PrevRandao(),
             suggestedFeeRecipient: w3Address(),
-            withdrawals:           none(seq[WithdrawalV1]),
+            withdrawals:           Opt.none(seq[WithdrawalV1]),
           ))
         )
         let expectationDescription = "Sent shanghai fcu using PayloadAttributesV1, error is expected"
@@ -350,7 +349,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
 
       # Send some withdrawals
       let wfb = ws.generateWithdrawalsForBlock(nextIndex, startAccount)
-      env.clMock.nextWithdrawals = some(w3Withdrawals wfb.wds)
+      env.clMock.nextWithdrawals = Opt.some(w3Withdrawals wfb.wds)
       ws.wdHistory.put(env.clMock.currentPayloadNumber, wfb.wds)
 
       # Send some transactions
@@ -361,7 +360,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         let ok = env.sendNextTx(
           env.clMock.nextBlockProducer,
           BaseTx(
-            recipient: some(destAddr),
+            recipient: Opt.some(destAddr),
             amount:    1.u256,
             txType:    ws.txType,
             gasLimit:  75000.GasInt,
@@ -468,7 +467,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           r.expectBalanceEqual(expectedAccountBalance)
 
         let wds = ws.wdHistory.getWithdrawals(env.clMock.latestExecutedPayload.blockNumber.uint64)
-        let expectedWithdrawalsRoot = some(calcWithdrawalsRoot(wds.list))
+        let expectedWithdrawalsRoot = Opt.some(calcWithdrawalsRoot(wds.list))
 
         # Check the correct withdrawal root on `latest` block
         let r = env.client.latestHeader()
@@ -492,16 +491,16 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
   if not ws.skipBaseVerifications:
     let maxBlock = env.clMock.latestExecutedPayload.blockNumber.uint64
     for bn in 0..maxBlock:
-      let res = ws.wdHistory.verifyWithdrawals(bn, some(bn.u256), env.client)
+      let res = ws.wdHistory.verifyWithdrawals(bn, Opt.some(bn), env.client)
       testCond res.isOk:
         error "verify wd error", msg=res.error
 
       # Check the correct withdrawal root on past blocks
       let r = env.client.headerByNumber(bn)
-      var expectedWithdrawalsRoot: Option[common.Hash256]
+      var expectedWithdrawalsRoot: Opt[common.Hash256]
       if bn >= ws.forkHeight.uint64:
         let wds = ws.wdHistory.getWithdrawals(bn)
-        expectedWithdrawalsRoot = some(calcWithdrawalsRoot(wds.list))
+        expectedWithdrawalsRoot = Opt.some(calcWithdrawalsRoot(wds.list))
 
       #r.ExpectationDescription = fmt.Sprintf(`
       #      Requested block %d to verify withdrawalsRoot with the
@@ -511,6 +510,6 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
 
     # Verify on `latest`
     let bnu = env.clMock.latestExecutedPayload.blockNumber.uint64
-    let res = ws.wdHistory.verifyWithdrawals(bnu, none(UInt256), env.client)
+    let res = ws.wdHistory.verifyWithdrawals(bnu, Opt.none(uint64), env.client)
     testCond res.isOk:
       error "verify wd error", msg=res.error

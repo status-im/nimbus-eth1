@@ -14,7 +14,8 @@
 
 import
   eth/common,
-  ../../../stateless/multi_keys,
+  ../../evm/code_bytes,
+  ../../stateless/multi_keys,
   ../core_db,
   ./base/[api_tracking, base_desc]
 
@@ -33,6 +34,7 @@ type
   ReadOnlyStateDB* = distinct LedgerRef
 
 export
+  code_bytes,
   LedgerFnInx,
   LedgerProfListRef,
   LedgerRef,
@@ -175,7 +177,7 @@ proc getBalance*(ldg: LedgerRef, eAddr: EthAddress): UInt256 =
   result = ldg.ac.getBalance(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, result
 
-proc getCode*(ldg: LedgerRef, eAddr: EthAddress): Blob =
+proc getCode*(ldg: LedgerRef, eAddr: EthAddress): CodeBytesRef =
   ldg.beginTrackApi LdgGetCodeFn
   result = ldg.ac.getCode(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, result=result.toStr
@@ -268,10 +270,10 @@ proc makeMultiKeys*(ldg: LedgerRef): MultiKeysRef =
   result = ldg.ac.makeMultiKeys()
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
-proc persist*(ldg: LedgerRef, clearEmptyAccount = false, clearCache = true) =
+proc persist*(ldg: LedgerRef, clearEmptyAccount = false) =
   ldg.beginTrackApi LdgPersistFn
-  ldg.ac.persist(clearEmptyAccount, clearCache)
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, clearEmptyAccount, clearCache
+  ldg.ac.persist(clearEmptyAccount)
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, clearEmptyAccount
 
 proc ripemdSpecial*(ldg: LedgerRef) =
   ldg.beginTrackApi LdgRipemdSpecialFn
@@ -353,7 +355,12 @@ proc rootHash*(ldg: LedgerRef): KeccakHash =
 
 proc getMpt*(ldg: LedgerRef): CoreDbMptRef =
   ldg.beginTrackApi LdgGetMptFn
-  result = ldg.ac.rawTrie.CoreDxAccRef.getMpt.CoreDbMptRef
+  result = ldg.ac.rawTrie.CoreDbAccRef.getMpt
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, result
+
+proc getEthAccount*(ldg: LedgerRef, eAddr: EthAddress): Account =
+  ldg.beginTrackApi LdgGetAthAccountFn
+  result = ldg.ac.getEthAccount(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------
@@ -366,7 +373,7 @@ proc getStorageRoot*(db: ReadOnlyStateDB, eAddr: EthAddress): Hash256 {.borrow.}
 proc getBalance*(db: ReadOnlyStateDB, eAddr: EthAddress): UInt256 {.borrow.}
 proc getStorage*(db: ReadOnlyStateDB, eAddr: EthAddress, slot: UInt256): UInt256 {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, eAddr: EthAddress): AccountNonce {.borrow.}
-proc getCode*(db: ReadOnlyStateDB, eAddr: EthAddress): seq[byte] {.borrow.}
+proc getCode*(db: ReadOnlyStateDB, eAddr: EthAddress): CodeBytesRef {.borrow.}
 proc getCodeSize*(db: ReadOnlyStateDB, eAddr: EthAddress): int {.borrow.}
 proc contractCollision*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}

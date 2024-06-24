@@ -220,23 +220,23 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   # nim-web3 side
   lcProxy.proxy.rpc("eth_getBlockByNumber") do(
     quantityTag: BlockTag, fullTransactions: bool
-  ) -> Option[BlockObject]:
+  ) -> Opt[BlockObject]:
     let executionPayload = lcProxy.getPayloadByTag(quantityTag)
 
     if executionPayload.isErr:
-      return none(BlockObject)
+      return Opt.none(BlockObject)
 
-    return some(asBlockObject(executionPayload.get()))
+    return Opt.some(asBlockObject(executionPayload.get()))
 
   lcProxy.proxy.rpc("eth_getBlockByHash") do(
     blockHash: BlockHash, fullTransactions: bool
-  ) -> Option[BlockObject]:
+  ) -> Opt[BlockObject]:
     let executionPayload = lcProxy.blockCache.getPayloadByHash(blockHash)
 
     if executionPayload.isErr:
-      return none(BlockObject)
+      return Opt.none(BlockObject)
 
-    return some(asBlockObject(executionPayload.get()))
+    return Opt.some(asBlockObject(executionPayload.get()))
 
 proc new*(
     T: type VerifiedRpcProxy, proxy: RpcProxy, blockCache: BlockCache, chainId: Quantity

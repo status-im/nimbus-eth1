@@ -9,9 +9,7 @@
 # according to those terms.
 
 import
-  chronos,
-  json_rpc/rpcclient,
-  "."/[stack, memory, code_stream],
+  "."/[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ../db/ledger,
   ../common/[common, evmforks]
@@ -38,13 +36,12 @@ const vm_use_recursion* = defined(evmc_enabled)
 type
   VMFlag* = enum
     ExecutionOK
-    GenerateWitness
-    ClearCache
+    CollectWitnessData
 
   BlockContext* = object
     timestamp*        : EthTime
     gasLimit*         : GasInt
-    fee*              : Option[UInt256]
+    baseFeePerGas*    : Opt[UInt256]
     prevRandao*       : Hash256
     difficulty*       : UInt256
     coinbase*         : EthAddress
@@ -69,13 +66,14 @@ type
     receipts*         : seq[Receipt]
     cumulativeGasUsed*: GasInt
     gasCosts*         : GasCosts
+    blobGasUsed*      : uint64
 
   Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState
     msg*:                   Message
-    memory*:                Memory
-    stack*:                 Stack
+    memory*:                EvmMemoryRef
+    stack*:                 EvmStackRef
     returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
@@ -91,15 +89,14 @@ type
       res*:                 nimbus_result
     else:
       parent*, child*:      Computation
-    pendingAsyncOperation*: Future[void]
-    continuation*:          proc() {.gcsafe, raises: [CatchableError].}
+    continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     sysCall*:               bool
 
   Error* = ref object
     evmcStatus*: evmc_status_code
     info*      : string
     burnsGas*  : bool
-
+  
   GasMeter* = object
     gasRefunded*: GasInt
     gasRemaining*: GasInt
@@ -162,7 +159,7 @@ method captureStart*(ctx: TracerRef, comp: Computation,
   discard
 
 method captureEnd*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                   gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+                   gasUsed: GasInt, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Rest of call frames
@@ -173,7 +170,7 @@ method captureEnter*(ctx: TracerRef, comp: Computation, op: Op,
   discard
 
 method captureExit*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                    gasUsed: GasInt, error: Option[string]) {.base, gcsafe.} =
+                    gasUsed: GasInt, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Opcode level
@@ -196,7 +193,7 @@ method captureOpEnd*(ctx: TracerRef, comp: Computation,
 method captureFault*(ctx: TracerRef, comp: Computation,
                      fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
                      rData: openArray[byte],
-                     depth: int, error: Option[string]) {.base, gcsafe.} =
+                     depth: int, error: Opt[string]) {.base, gcsafe.} =
   discard
 
 # Called at the start of EVM interpreter loop

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -196,7 +196,7 @@ let wdTestList* = [
       wdBlockCount:    2,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: 1,
-      txPerBlock:     some(0),
+      txPerBlock:     Opt.some(0),
       syncSteps: 1,
   )),
   TestDesc(
@@ -241,7 +241,7 @@ let wdTestList* = [
       wdBlockCount:    2,
       wdPerBlock:      MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
       wdAbleAccountCount: MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK,
-      txPerBlock:      some(0),
+      txPerBlock:      Opt.some(0),
       syncSteps: 1,
   )),
   TestDesc(

@@ -80,6 +80,11 @@ proc init*(
 
   ok Era1DbRef(path: path, network: network, filenames: filenames)
 
+proc getEthBlock*(db: Era1DbRef, blockNumber: uint64): Result[EthBlock, string] =
+  let f = ?db.getEra1File(blockNumber.era)
+
+  f.getEthBlock(blockNumber)
+
 proc getBlockTuple*(db: Era1DbRef, blockNumber: uint64): Result[BlockTuple, string] =
   let f = ?db.getEra1File(blockNumber.era)
 

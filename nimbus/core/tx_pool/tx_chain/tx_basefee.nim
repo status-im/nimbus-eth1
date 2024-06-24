@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -51,7 +51,7 @@ proc baseFeeGet*(com: CommonRef; parent: BlockHeader): GasPrice =
   # or truncate the result?
   calcEip1599BaseFee(parent.gasLimit,
     parent.gasUsed,
-    parent.baseFee).truncate(uint64).GasPrice
+    parent.baseFeePerGas.get(0.u256)).truncate(uint64).GasPrice
 
 # ------------------------------------------------------------------------------
 # End

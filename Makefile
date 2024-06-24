@@ -129,15 +129,20 @@ ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
 # selectively download nimbus-eth2 submodules because we don't need all of it's modules
 # also holesky already exceeds github LFS quota
+
+# We don't need these `vendor/holesky` files but fetching them
+# may trigger 'This repository is over its data quota' from GitHub
+GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/custom_config_data/genesis.ssz
+
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
-  git submodule update vendor/nimbus-eth2; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
   cd vendor/nimbus-eth2; \
-  git submodule update --init vendor/eth2-networks; \
-  git submodule update --init vendor/holesky; \
-  git submodule update --init vendor/sepolia; \
-  git submodule update --init vendor/goerli; \
-  git submodule update --init vendor/gnosis-chain-configs; \
-  git submodule update --init --recursive vendor/nim-kzg4844; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/eth2-networks; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/holesky; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/gnosis-chain-configs; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init --recursive vendor/nim-kzg4844; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/mainnet; \
   cd ../..
 
 .DEFAULT:
@@ -203,20 +208,15 @@ update-from-ci: | sanity-checks update-test
 	+ "$(MAKE)" --no-print-directory deps-common
 
 # builds the tools, wherever they are
-$(TOOLS): | build deps
+$(TOOLS): | build deps rocksdb
 	for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
-nimbus: | build deps
+nimbus: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
-
-nimbus_rocksdb_static: | build deps rocksdb_static_deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:enable_rocksdb_static_linking -d:chronicles_log_level=TRACE \
-		-o:build/$@ "nimbus/nimbus.nim"
 
 # symlink
 nimbus.nims:
@@ -226,17 +226,31 @@ nimbus.nims:
 libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
-# nim-rocksdb static dependencies
-rocksdb_static_deps:
+# nim-rocksdb
+
+ifneq ($(USE_SYSTEM_ROCKSDB), 0)
+ifeq ($(OS), Windows_NT)
+rocksdb:
+	+ vendor/nim-rocksdb/scripts/build_dlls_windows.bat && \
+	cp -a vendor/nim-rocksdb/build/librocksdb.dll build
+else
+rocksdb:
 	+ vendor/nim-rocksdb/scripts/build_static_deps.sh
+endif
+else
+rocksdb:
+endif
 
 # builds and runs the nimbus test suite
-test: | build deps
+test: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_rocksdb $(NIM_PARAMS) nimbus.nims
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
+test_import: nimbus
+	$(ENV_SCRIPT) nim test_import $(NIM_PARAMS) nimbus.nims
+
 # builds and runs an EVM-related subset of the nimbus test suite
-test-evm: | build deps
+test-evm: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_evm $(NIM_PARAMS) nimbus.nims
 
 # Primitive reproducibility test.
@@ -334,7 +348,7 @@ t8n_test: | build deps t8n
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_default_output_device=stderr "tools/t8n/$@.nim"
 
 # builds evm state test tool
-evmstate: | build deps
+evmstate: | build deps rocksdb
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/evmstate/$@.nim"
 
 # builds and runs evm state tool test suite

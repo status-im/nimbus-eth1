@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   results,
   chronos,
@@ -24,26 +26,27 @@ export results, state_content
 logScope:
   topics = "portal_state"
 
-const stateProtocolId* = [byte 0x50, 0x0A]
-
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
   historyNetwork: Opt[HistoryNetwork]
+  validateStateIsCanonical: bool
 
 func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
 proc new*(
     T: type StateNetwork,
+    portalNetwork: PortalNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
     streamManager: StreamManager,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     historyNetwork = Opt.none(HistoryNetwork),
+    validateStateIsCanonical = true,
 ): T =
   let cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
 
@@ -51,7 +54,7 @@ proc new*(
 
   let portalProtocol = PortalProtocol.new(
     baseProtocol,
-    stateProtocolId,
+    getProtocolId(portalNetwork, PortalSubnetwork.state),
     toContentIdHandler,
     createGetHandler(contentDB),
     s,
@@ -67,13 +70,14 @@ proc new*(
     contentDB: contentDB,
     contentQueue: cq,
     historyNetwork: historyNetwork,
+    validateStateIsCanonical: validateStateIsCanonical,
   )
 
 proc getContent(
     n: StateNetwork,
     key: AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey,
     V: type ContentRetrievalType,
-): Future[Opt[V]] {.async.} =
+): Future[Opt[V]] {.async: (raises: [CancelledError]).} =
   let
     contentKeyBytes = key.toContentKey().encode()
     contentId = contentKeyBytes.toContentId()
@@ -82,25 +86,26 @@ proc getContent(
     let contentFromDB = n.contentDB.get(contentId)
     if contentFromDB.isSome():
       let contentValue = V.decode(contentFromDB.get()).valueOr:
-        error "Unable to decode account trie node content value from database"
+        error "Unable to decode state content value from database"
         return Opt.none(V)
 
-      info "Fetched account trie node from database"
+      info "Fetched state content value from database"
       return Opt.some(contentValue)
 
   let
     contentLookupResult = (
       await n.portalProtocol.contentLookup(contentKeyBytes, contentId)
     ).valueOr:
+      warn "Failed fetching state content from the network"
       return Opt.none(V)
     contentValueBytes = contentLookupResult.content
 
   let contentValue = V.decode(contentValueBytes).valueOr:
-    error "Unable to decode account trie node content value from content lookup"
+    warn "Unable to decode state content value from content lookup"
     return Opt.none(V)
 
   validateRetrieval(key, contentValue).isOkOr:
-    error "Validation of retrieved content failed"
+    warn "Validation of retrieved state content failed"
     return Opt.none(V)
 
   n.portalProtocol.storeContent(contentKeyBytes, contentId, contentValueBytes)
@@ -109,24 +114,28 @@ proc getContent(
 
 proc getAccountTrieNode*(
     n: StateNetwork, key: AccountTrieNodeKey
-): Future[Opt[AccountTrieNodeRetrieval]] {.inline.} =
+): Future[Opt[AccountTrieNodeRetrieval]] {.
+    async: (raw: true, raises: [CancelledError])
+.} =
   n.getContent(key, AccountTrieNodeRetrieval)
 
 proc getContractTrieNode*(
     n: StateNetwork, key: ContractTrieNodeKey
-): Future[Opt[ContractTrieNodeRetrieval]] {.inline.} =
+): Future[Opt[ContractTrieNodeRetrieval]] {.
+    async: (raw: true, raises: [CancelledError])
+.} =
   n.getContent(key, ContractTrieNodeRetrieval)
 
 proc getContractCode*(
     n: StateNetwork, key: ContractCodeKey
-): Future[Opt[ContractCodeRetrieval]] {.inline.} =
+): Future[Opt[ContractCodeRetrieval]] {.async: (raw: true, raises: [CancelledError]).} =
   n.getContent(key, ContractCodeRetrieval)
 
-proc getStateRootByBlockHash(
+proc getStateRootByBlockHash*(
     n: StateNetwork, hash: BlockHash
-): Future[Opt[KeccakHash]] {.async.} =
+): Future[Opt[KeccakHash]] {.async: (raises: [CancelledError]).} =
   if n.historyNetwork.isNone():
-    warn "History network is not available. Unable to get state root by block hash"
+    warn "History network is not available"
     return Opt.none(KeccakHash)
 
   let header = (await n.historyNetwork.get().getVerifiedBlockHeader(hash)).valueOr:
@@ -142,14 +151,19 @@ proc processOffer*(
     contentValueBytes: seq[byte],
     contentKey: AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey,
     V: type ContentOfferType,
-): Future[Result[void, string]] {.async.} =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let contentValue = V.decode(contentValueBytes).valueOr:
     return err("Unable to decode offered content value")
 
-  let stateRoot = (await n.getStateRootByBlockHash(contentValue.blockHash)).valueOr:
-    return err("Failed to get state root by block hash")
+  let res =
+    if n.validateStateIsCanonical:
+      let stateRoot = (await n.getStateRootByBlockHash(contentValue.blockHash)).valueOr:
+        return err("Failed to get state root by block hash")
+      validateOffer(Opt.some(stateRoot), contentKey, contentValue)
+    else:
+      # Skip state root validation
+      validateOffer(Opt.none(KeccakHash), contentKey, contentValue)
 
-  let res = validateOffer(stateRoot, contentKey, contentValue)
   if res.isErr():
     return err("Offered content failed validation: " & res.error())
 
@@ -161,14 +175,14 @@ proc processOffer*(
   )
   info "Offered content validated successfully", contentKeyBytes
 
-  asyncSpawn gossipOffer(
+  await gossipOffer(
     n.portalProtocol, maybeSrcNodeId, contentKeyBytes, contentValueBytes, contentKey,
     contentValue,
   )
 
   ok()
 
-proc processContentLoop(n: StateNetwork) {.async.} =
+proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
@@ -209,7 +223,8 @@ proc processContentLoop(n: StateNetwork) {.async.} =
     trace "processContentLoop canceled"
 
 proc start*(n: StateNetwork) =
-  info "Starting Portal State Network", protocolId = n.portalProtocol.protocolId
+  info "Starting Portal execution state network",
+    protocolId = n.portalProtocol.protocolId
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)

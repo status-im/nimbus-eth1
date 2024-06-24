@@ -16,7 +16,7 @@
 import
   results,
   ./tx_frame,
-  ".."/[aristo_desc, aristo_get, aristo_layers, aristo_hashify]
+  ".."/[aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -24,7 +24,6 @@ import
 
 proc txFork*(
     tx: AristoTxRef;                  # Transaction descriptor
-    dontHashify = false;              # Process/fix MPT hashes
       ): Result[AristoDbRef,AristoError] =
   ## Clone a transaction into a new DB descriptor accessing the same backend
   ## database (if any) as the argument `db`. The new descriptor is linked to
@@ -48,9 +47,6 @@ proc txFork*(
   ## `tx` as top layer of level 1 (i.e. this is he only transaction.) Rolling
   ## back will end up at the backend layer (incl. backend filter.)
   ##
-  ## If the arguent flag `dontHashify` is passed `true`, the clone descriptor
-  ## will *NOT* be hashified right after construction.
-  ##
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   let db = tx.db
@@ -66,12 +62,12 @@ proc txFork*(
 
   # Provide new empty stack layer
   let stackLayer = block:
-    let rc = db.getIdgBE()
+    let rc = db.getTuvBE()
     if rc.isOk:
       LayerRef(
-        delta: LayerDeltaRef(),
-        final: LayerFinalRef(vGen: rc.value))
-    elif rc.error == GetIdgNotFound:
+        delta: LayerDeltaRef(vTop: rc.value),
+        final: LayerFinalRef())
+    elif rc.error == GetTuvNotFound:
       LayerRef.init()
     else:
       return err(rc.error)
@@ -89,17 +85,11 @@ proc txFork*(
     txUid: 1,
     level: 1)
 
-  if not dontHashify:
-    txClone.hashify().isOkOr:
-      discard txClone.forget()
-      return err(error[1])
-
   ok(txClone)
 
 
 proc txForkTop*(
     db: AristoDbRef;
-    dontHashify = false;              # Process/fix MPT hashes
       ): Result[AristoDbRef,AristoError] =
   ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
   ## the top layer is cloned, and an empty transaction is set up. After
@@ -111,21 +101,15 @@ proc txForkTop*(
     let txClone = ? db.fork(noToplayer=true, noFilter=false)
     txClone.top = db.layersCc         # Is a deep copy
 
-    if not dontHashify:
-      txClone.hashify().isOkOr:
-        discard txClone.forget()
-        return err(error[1])
-
     discard txClone.txFrameBegin()
     return ok(txClone)
     # End if()
 
-  db.txRef.txFork dontHashify
+  db.txRef.txFork()
 
 
 proc txForkBase*(
     db: AristoDbRef;
-    dontHashify = false;              # Process/fix MPT hashes
       ): Result[AristoDbRef,AristoError] =
   ## Variant of `forkTx()`, sort of the opposite of `forkTop()`. This is the
   ## equivalent of top layer forking after all tranactions have been rolled
@@ -134,15 +118,10 @@ proc txForkBase*(
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
-    return db.txForkTop dontHashify
+    return db.txForkTop()
 
   let txClone = ? db.fork(noToplayer=true, noFilter=false)
   txClone.top = db.layersCc 0
-
-  if not dontHashify:
-    txClone.hashify().isOkOr:
-      discard txClone.forget()
-      return err(error[1])
 
   discard txClone.txFrameBegin()
   ok(txClone)

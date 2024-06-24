@@ -82,12 +82,22 @@ proc getKvpFn(db: MemBackendRef): GetKvpFn =
         return ok(move(data))
       err(GetNotFound)
 
+proc lenKvpFn(db: MemBackendRef): LenKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[int,KvtError] =
+      if key.len == 0:
+        return err(KeyInvalid)
+      var data = db.mdb.tab.getOrVoid @key
+      if data.isValid:
+        return ok(data.len)
+      err(GetNotFound)
+
 # -------------
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
-      db.newSession()
+    proc(): Result[PutHdlRef,KvtError] =
+      ok db.newSession()
 
 proc putKvpFn(db: MemBackendRef): PutKvpFn =
   result =
@@ -120,6 +130,16 @@ proc closeFn(db: MemBackendRef): CloseFn =
     proc(ignore: bool) =
       discard
 
+proc canModFn(db: MemBackendRef): CanModFn =
+  result =
+    proc(): Result[void,KvtError] =
+      ok()
+
+proc setWrReqFn(db: MemBackendRef): SetWrReqFn =
+  result =
+    proc(kvt: RootRef): Result[void,KvtError] =
+      err(RdbBeHostNotApplicable)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -130,13 +150,15 @@ proc memoryBackend*: BackendRef =
     mdb:    MemDbRef())
 
   db.getKvpFn = getKvpFn db
+  db.lenKvpFn = lenKvpFn db
 
   db.putBegFn = putBegFn db
   db.putKvpFn = putKvpFn db
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
-
+  db.canModFn = canModFn db
+  db.setWrReqFn = setWrReqFn db
   db
 
 proc dup*(db: MemBackendRef): MemBackendRef =

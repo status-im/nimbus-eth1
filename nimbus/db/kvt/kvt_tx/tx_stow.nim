@@ -16,11 +16,26 @@
 import
   std/tables,
   results,
-  ".."/[kvt_desc, kvt_filter]
+  ".."/[kvt_desc, kvt_delta]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc txStowOk*(
+    db: KvtDbRef;                     # Database
+    persistent: bool;                 # Stage only unless `true`
+      ): Result[void,KvtError] =
+  ## Verify that `txStow()` can go ahead
+  if not db.txRef.isNil:
+    return err(TxPendingTx)
+  if 0 < db.stack.len:
+    return err(TxStackGarbled)
+
+  if persistent and not db.deltaUpdateOk():
+    return err(TxBackendNotWritable)
+
+  ok()
 
 proc txStow*(
     db: KvtDbRef;                     # Database
@@ -32,21 +47,15 @@ proc txStow*(
   ## If there is no backend the function returns immediately with an error.
   ## The same happens if there is a pending transaction.
   ##
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
-
-  if persistent and not db.filterUpdateOk():
-    return err(TxBackendNotWritable)
+  ? db.txStowOk persistent
 
   if 0 < db.top.delta.sTab.len:
-    db.filterMerge db.top.delta
+    db.deltaMerge db.top.delta
     db.top.delta = LayerDeltaRef()
 
   if persistent:
-    # Move `roFilter` data into persistent tables
-    ? db.filterUpdate()
+    # Move `balancer` data into persistent tables
+    ? db.deltaUpdate()
 
   ok()
 

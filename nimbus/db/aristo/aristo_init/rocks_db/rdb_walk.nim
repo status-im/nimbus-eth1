@@ -17,7 +17,6 @@ import
   eth/common,
   stew/endians2,
   rocksdb,
-  ../init_common,
   ./rdb_desc
 
 const
@@ -35,63 +34,53 @@ when extraTraceMessages:
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator walk*(
-    rdb: RdbInst;
-      ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
-  ## Walk over all key-value pairs of the database.
+iterator walkAdm*(rdb: RdbInst): tuple[xid: uint64, data: Blob] =
+  ## Walk over key-value pairs of the admin column of the database.
   ##
-  ## Non-decodable entries are stepped over and ignored.
+  ## Non-decodable entries are are ignored.
+  ##
   block walkBody:
-    let rit = rdb.store.openIterator().valueOr:
+    let rit = rdb.admCol.openIterator().valueOr:
       when extraTraceMessages:
-        trace logTxt "walk", pfx="all", error
+        trace logTxt "walkAdm()", error
       break walkBody
     defer: rit.close()
 
     for (key,val) in rit.pairs:
-      if key.len == 9:
-        if StorageType.high.ord < key[0]:
-          break walkBody
-        let
-          pfx = StorageType(key[0])
-          id = uint64.fromBytesBE key.toOpenArray(1, key.len - 1)
-        yield (pfx, id, val)
+      if key.len == 8 and val.len != 0:
+        yield (uint64.fromBytesBE key, val)
 
-
-iterator walk*(
-    rdb: RdbInst;
-    pfx: StorageType;
-      ): tuple[xid: uint64, data: Blob] =
-  ## Walk over key-value pairs of the table referted to by the argument `pfx`
-  ## whic must be different from `Oops` and `AdmPfx`.
+iterator walkKey*(rdb: RdbInst): tuple[vid: uint64, data: Blob] =
+  ## Walk over key-value pairs of the hash key column of the database.
   ##
-  ## Non-decodable entries are stepped over and ignored.
+  ## Non-decodable entries are are ignored.
   ##
   block walkBody:
-    let rit = rdb.store.openIterator().valueOr:
+    let rit = rdb.keyCol.openIterator().valueOr:
       when extraTraceMessages:
-        echo ">>> walk (2) oops",
-          " pfx=", pfx
-        trace logTxt "walk", pfx, error
+        trace logTxt "walkKey()", error
       break walkBody
     defer: rit.close()
 
-    # Start at first entry not less than `<pfx> & 1`
-    rit.seekToKey 1u64.toRdbKey pfx
+    for (key,val) in rit.pairs:
+      if key.len == 8 and val.len != 0:
+        yield (uint64.fromBytesBE key, val)
 
-    # Fetch sub-table data as long as the current key is acceptable
-    while rit.isValid():
-      let key = rit.key()
-      if key.len == 9:
-        if key[0] != pfx.ord.uint:
-          break walkBody # done
+iterator walkVtx*(rdb: RdbInst): tuple[vid: uint64, data: Blob] =
+  ## Walk over key-value pairs of the hash key column of the database.
+  ##
+  ## Non-decodable entries are are ignored.
+  ##
+  block walkBody:
+    let rit = rdb.vtxCol.openIterator().valueOr:
+      when extraTraceMessages:
+        trace logTxt "walkVtx()", error
+      break walkBody
+    defer: rit.close()
 
-        let val = rit.value()
-        if val.len != 0:
-          yield (uint64.fromBytesBE key[1..^1], val)
-
-      # Update Iterator
-      rit.next()
+    for (key,val) in rit.pairs:
+      if key.len == 8 and val.len != 0:
+        yield (uint64.fromBytesBE key, val)
 
 # ------------------------------------------------------------------------------
 # End

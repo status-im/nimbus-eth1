@@ -11,15 +11,14 @@
 {.push raises: [].}
 
 import
-  std/[tables, typetraits],
+  std/tables,
   eth/common,
-  results,
   ../../aristo as use_ari,
   ../../aristo/aristo_walk,
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk],
   ".."/[base, base/base_desc],
-  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt, handlers_trace]
+  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
 
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
@@ -42,11 +41,11 @@ type
     ## Main descriptor
     kdbBase: KvtBaseRef                      ## Kvt subsystem
     adbBase: AristoBaseRef                   ## Aristo subsystem
-    tracer: AristoTracerRef                  ## Currently active recorder
+    #tracer: AristoTracerRef                  ## Currently active recorder
 
-  AristoTracerRef = ref object of TraceRecorderRef
-    ## Sub-handle for tracer
-    parent: AristoCoreDbRef
+  #AristoTracerRef = ref object of TraceRecorderRef
+  #  ## Sub-handle for tracer
+  #  parent: AristoCoreDbRef
 
 proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
 
@@ -71,52 +70,55 @@ proc txMethods(
     levelFn: proc(): int =
       aTx.level,
 
-    commitFn: proc(ignore: bool): CoreDbRc[void] =
+    commitFn: proc() =
       const info = "commitFn()"
-      ? adbApi.commit(aTx).toVoidRc(adbBase, info)
-      ? kdbApi.commit(kTx).toVoidRc(kdbBase, info)
-      ok(),
+      adbApi.commit(aTx).isOkOr:
+        raiseAssert info & ": " & $error
+      kdbApi.commit(kTx).isOkOr:
+        raiseAssert info & ": " & $error
+      discard,
 
-    rollbackFn: proc(): CoreDbRc[void] =
+    rollbackFn: proc() =
       const info = "rollbackFn()"
-      ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
-      ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
-      ok(),
+      adbApi.rollback(aTx).isOkOr:
+        raiseAssert info & ": " & $error
+      kdbApi.rollback(kTx).isOkOr:
+        raiseAssert info & ": " & $error
+      discard,
 
-    disposeFn: proc(): CoreDbRc[void] =
+    disposeFn: proc() =
       const info =  "disposeFn()"
-      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
-      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
-      ok(),
+      if adbApi.isTop(aTx):
+        adbApi.rollback(aTx).isOkOr:
+          raiseAssert info & ": " & $error
+      if kdbApi.isTop(kTx):
+        kdbApi.rollback(kTx).isOkOr:
+          raiseAssert info & ": " & $error
+      discard)
 
-    safeDisposeFn: proc(): CoreDbRc[void] =
-      const info =  "safeDisposeFn()"
-      if adbApi.isTop(aTx): ? adbApi.rollback(aTx).toVoidRc(adbBase, info)
-      if kdbApi.isTop(kTx): ? kdbApi.rollback(kTx).toVoidRc(kdbBase, info)
-      ok())
+when false: # currently disabled
+  proc cptMethods(
+      tracer: AristoTracerRef;
+        ): CoreDbCaptFns =
+    let
+      tr = tracer         # So it can savely be captured
+      db = tr.parent      # Will not change and can be captured
+      log = tr.topInst()  # Ditto
 
-proc cptMethods(
-    tracer: AristoTracerRef;
-      ): CoreDbCaptFns =
-  let
-    tr = tracer         # So it can savely be captured
-    db = tr.parent      # Will not change and can be captured
-    log = tr.topInst()  # Ditto
+    CoreDbCaptFns(
+      recorderFn: proc(): CoreDbRef =
+        db,
 
-  CoreDbCaptFns(
-    recorderFn: proc(): CoreDbRef =
-      db,
+      logDbFn: proc(): TableRef[Blob,Blob] =
+        log.kLog,
 
-    logDbFn: proc(): TableRef[Blob,Blob] =
-      log.kLog,
+      getFlagsFn: proc(): set[CoreDbCaptFlags] =
+        log.flags,
 
-    getFlagsFn: proc(): set[CoreDbCaptFlags] =
-      log.flags,
-
-    forgetFn: proc() =
-      if not tracer.pop():
-        tr.parent.tracer = AristoTracerRef(nil)
-        tr.restore())
+      forgetFn: proc() =
+        if not tracer.pop():
+          tr.parent.tracer = AristoTracerRef(nil)
+          tr.restore())
 
 
 proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
@@ -124,30 +126,34 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     aBase = db.adbBase
     kBase = db.kdbBase
 
-  proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDxCaptRef =
-    if db.tracer.isNil:
-      db.tracer = AristoTracerRef(parent: db)
-      db.tracer.init(kBase, aBase, flags)
-    else:
-      db.tracer.push(flags)
-    CoreDxCaptRef(methods: db.tracer.cptMethods)
+  when false: # currently disabled
+    proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDbCaptRef =
+      if db.tracer.isNil:
+        db.tracer = AristoTracerRef(parent: db)
+        db.tracer.init(kBase, aBase, flags)
+      else:
+        db.tracer.push(flags)
+      CoreDbCaptRef(methods: db.tracer.cptMethods)
 
-  proc persistent(bn: Option[BlockNumber]): CoreDbRc[void] =
+  proc persistent(bn: Opt[BlockNumber]): CoreDbRc[void] =
     const info = "persistentFn()"
-    let fid =
-      if bn.isNone: none(FilterID)
-      else: some(bn.unsafeGet.truncate(uint64).FilterID)
+    let sid =
+      if bn.isNone: 0u64
+      else: bn.unsafeGet
     ? kBase.persistent info
-    ? aBase.persistent(fid, info)
+    ? aBase.persistent(sid, info)
     ok()
 
   CoreDbBaseFns(
-    destroyFn: proc(flush: bool) =
-      aBase.destroy(flush)
-      kBase.destroy(flush),
+    destroyFn: proc(eradicate: bool) =
+      aBase.destroy(eradicate)
+      kBase.destroy(eradicate),
 
     levelFn: proc(): int =
       aBase.getLevel,
+
+    colStateEmptyFn: proc(col: CoreDbColRef): CoreDbRc[bool] =
+      aBase.rootHashEmpty(col, "rootHashFn()"),
 
     colStateFn: proc(col: CoreDbColRef): CoreDbRc[Hash256] =
       aBase.rootHash(col, "rootHashFn()"),
@@ -158,8 +164,8 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
 
-    newKvtFn: proc(offSite: bool): CoreDbRc[CoreDxKvtRef] =
-      kBase.newKvtHandler(offSite, "newKvtFn()"),
+    newKvtFn: proc(): CoreDbRc[CoreDbKvtRef] =
+      kBase.newKvtHandler("newKvtFn()"),
 
     newCtxFn: proc(): CoreDbCtxRef =
       aBase.ctx,
@@ -170,16 +176,19 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
       aBase.swapCtx(ctx),
 
-    beginFn: proc(): CoreDbRc[CoreDxTxRef] =
+    beginFn: proc(): CoreDbTxRef =
       const info = "beginFn()"
-      let dsc = CoreDxTxRef(
-        methods: db.txMethods(? aBase.txBegin info, ? kBase.txBegin info))
-      ok(db.bless dsc),
+      let
+        aTx = aBase.txBegin info
+        kTx = kBase.txBegin info
+        dsc = CoreDbTxRef(methods: db.txMethods(aTx, kTx))
+      db.bless(dsc),
 
-    newCaptureFn: proc(flags: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] =
-      ok(db.bless flags.tracerSetup()),
+    # # currently disabled
+    #  newCaptureFn: proc(flags:set[CoreDbCaptFlags]): CoreDbRc[CoreDbCaptRef] =
+    #    ok(db.bless flags.tracerSetup()),
 
-    persistentFn: proc(bn: Option[BlockNumber]): CoreDbRc[void] =
+    persistentFn: proc(bn: Opt[BlockNumber]): CoreDbRc[void] =
       persistent(bn))
 
 # ------------------------------------------------------------------------------
@@ -198,11 +207,6 @@ proc create*(dbType: CoreDbType; kdb: KvtDbRef; adb: AristoDbRef): CoreDbRef =
   db.dbType = dbType
   db.methods = db.baseMethods()
   db.bless()
-
-proc newAristoMemoryCoreDbRef*(qlr: QidLayoutRef): CoreDbRef =
-  AristoDbMemory.create(
-    KvtDbRef.init(use_kvt.MemBackendRef),
-    AristoDbRef.init(use_ari.MemBackendRef, qlr))
 
 proc newAristoMemoryCoreDbRef*(): CoreDbRef =
   AristoDbMemory.create(
@@ -226,11 +230,11 @@ func toAristoProfData*(
       result.aristo = db.AristoCoreDbRef.adbBase.api.AristoApiProfRef.data
       result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
 
-func toAristoApi*(kvt: CoreDxKvtRef): KvtApiRef =
+func toAristoApi*(kvt: CoreDbKvtRef): KvtApiRef =
   if kvt.parent.isAristo:
     return AristoCoreDbRef(kvt.parent).kdbBase.api
 
-func toAristoApi*(mpt: CoreDxMptRef): AristoApiRef =
+func toAristoApi*(mpt: CoreDbMptRef): AristoApiRef =
   if mpt.parent.isAristo:
     return mpt.to(AristoApiRef)
 
@@ -242,23 +246,14 @@ func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
     return mBe.AristoCoreDbMptBE.adb
 
-proc toAristoLatestState*(
+proc toAristoSavedStateBlockNumber*(
     mBe: CoreDbMptBackendRef;
       ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =
   if not mBe.isNil and mBe.parent.isAristo:
-    let fil = mBe.parent.AristoCoreDbRef.adbBase.getFromJournal 0
-    if not fil.isNil:
-      return (fil.trg, fil.fid.distinctBase.toBlockNumber)
-  (EMPTY_ROOT_HASH, 0.toBlockNumber)
-
-proc toAristoOldestState*(
-    mBe: CoreDbMptBackendRef;
-      ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =
-  if not mBe.isNil and mBe.parent.isAristo:
-    let fil = mBe.parent.AristoCoreDbRef.adbBase.getFromJournal none(FilterID)
-    if not fil.isNil:
-      return (fil.trg, fil.fid.distinctBase.toBlockNumber)
-  (EMPTY_ROOT_HASH, 0.toBlockNumber)
+    let rc = mBe.parent.AristoCoreDbRef.adbBase.getSavedState()
+    if rc.isOk:
+      return (rc.value.src.to(Hash256), rc.value.serial.BlockNumber)
+  (EMPTY_ROOT_HASH, 0.BlockNumber)
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators
@@ -269,7 +264,7 @@ include
 
 # ------------------------
 
-iterator aristoKvtPairsVoid*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoKvtPairsVoid*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
     api = dsc.toAristoApi()
     p = api.forkTx(dsc.to(KvtDbRef),0).valueOrApiError "aristoKvtPairs()"
@@ -277,7 +272,7 @@ iterator aristoKvtPairsVoid*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
   for (k,v) in use_kvt.VoidBackendRef.walkPairs p:
     yield (k,v)
 
-iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoKvtPairsMem*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
     api = dsc.toAristoApi()
     p = api.forkTx(dsc.to(KvtDbRef),0).valueOrApiError "aristoKvtPairs()"
@@ -285,19 +280,19 @@ iterator aristoKvtPairsMem*(dsc: CoreDxKvtRef): (Blob,Blob) {.rlpRaise.} =
   for (k,v) in use_kvt.MemBackendRef.walkPairs p:
     yield (k,v)
 
-iterator aristoMptPairs*(dsc: CoreDxMptRef): (Blob,Blob) {.noRaise.} =
+iterator aristoMptPairs*(dsc: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
   let
     api = dsc.to(AristoApiRef)
     mpt = dsc.to(AristoDbRef)
   for (k,v) in mpt.rightPairs LeafTie(root: dsc.rootID):
     yield (api.pathAsBlob(k.path), api.serialise(mpt, v).valueOr(EmptyBlob))
 
-iterator aristoReplicateMem*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoReplicateMem*(dsc: CoreDbMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `MemBackendRef`
   for k,v in aristoReplicate[use_ari.MemBackendRef](dsc):
     yield (k,v)
 
-iterator aristoReplicateVoid*(dsc: CoreDxMptRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoReplicateVoid*(dsc: CoreDbMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `VoidBackendRef`
   for k,v in aristoReplicate[use_ari.VoidBackendRef](dsc):
     yield (k,v)

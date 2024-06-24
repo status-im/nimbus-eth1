@@ -17,7 +17,7 @@ import
   std/[macros, strformat],
   pkg/[chronicles, chronos, stew/byteutils],
   ".."/[constants, db/ledger],
-  "."/[code_stream, computation],
+  "."/[code_stream, computation, evm_errors],
   "."/[message, precompiles, state, types],
   ./interpreter/[op_dispatcher, gas_costs]
 
@@ -38,10 +38,9 @@ when optimizationCondition:
   # this is a top level pragma since nim 1.6.16
   {.optimization: speed.}
 
-proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
-    {.gcsafe, raises: [CatchableError].} =
+proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool): EvmResultVoid =
   ## Op code execution handler main loop.
-  var desc: Vm2Ctx
+  var desc: VmCtx
   desc.cpt = c
 
   # It's important not to re-prepare the tracer after
@@ -107,6 +106,8 @@ proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool)
 
       genLowMemDispatcher(fork, c.instr, desc)
 
+  ok()
+
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == EVMC_CALL:
@@ -129,12 +130,12 @@ proc afterExecCall(c: Computation) =
   else:
     c.rollback()
 
-proc beforeExecCreate(c: Computation): bool
-    {.gcsafe, raises: [ValueError].} =
+proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateStateDB:
     let nonce = db.getNonce(c.msg.sender)
     if nonce+1 < nonce:
-      c.setError(&"Nonce overflow when sender={c.msg.sender.toHex} wants to create contract", false)
+      let sender = c.msg.sender.toHex
+      c.setError("Nonce overflow when sender=" & sender & " wants to create contract", false)
       return true
     db.setNonce(c.msg.sender, nonce+1)
 
@@ -162,8 +163,7 @@ proc beforeExecCreate(c: Computation): bool
 
   return false
 
-proc afterExecCreate(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
+proc afterExecCreate(c: Computation) =
   if c.isSuccess:
     # This can change `c.isSuccess`.
     c.writeContract()
@@ -194,9 +194,7 @@ func msgToOp(msg: Message): Op =
     return StaticCall
   MsgKindToOp[msg.kind]
 
-proc beforeExec(c: Computation): bool
-    {.gcsafe, raises: [ValueError].} =
-
+proc beforeExec(c: Computation): bool =
   if c.msg.depth > 0:
     c.vmState.captureEnter(c,
         msgToOp(c.msg),
@@ -210,9 +208,7 @@ proc beforeExec(c: Computation): bool
   else:
     c.beforeExecCreate()
 
-proc afterExec(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
-
+proc afterExec(c: Computation) =
   if not c.msg.isCreate:
     c.afterExecCall()
   else:
@@ -226,76 +222,74 @@ proc afterExec(c: Computation)
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true)
-    {.gcsafe, raises: [].} =
+template handleEvmError(x: EvmErrorObj) =
+  let
+    msg = $x.code
+    depth = $(c.msg.depth + 1) # plus one to match tracer depth, and avoid confusion
+  c.setError("Opcode Dispatch Error: " & msg & ", depth=" & depth, true)
+
+proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
   let fork = c.fork
 
-  block:
+  block blockOne:
     if c.continuation.isNil and c.execPrecompiles(fork):
-      break
+      break blockOne
 
-    try:
-      let cont = c.continuation
-      if not cont.isNil:
-        c.continuation = nil
-        cont()
-      let nextCont = c.continuation
-      if nextCont.isNil:
-        # FIXME-Adam: I hate how convoluted this is. See also the comment in
-        # op_dispatcher.nim. The idea here is that we need to call
-        # traceOpCodeEnded at the end of the opcode (and only if there
-        # hasn't been an exception thrown); otherwise we run into problems
-        # if an exception (e.g. out of gas) is thrown during a continuation.
-        # So this code says, "If we've just run a continuation, but there's
-        # no *subsequent* continuation, then the opcode is done."
-        if c.tracingEnabled and not(cont.isNil) and nextCont.isNil:
-          c.traceOpCodeEnded(c.instr, c.opIndex)
-        case c.instr
-        of Return, Revert, SelfDestruct: # FIXME-Adam: HACK, fix this in a clean way; I think the idea is that these are the ones from the "always break" case in op_dispatcher
-          discard
-        else:
-          c.selectVM(fork, shouldPrepareTracer)
-      else:
-        # Return up to the caller, which will run the async operation or child
-        # and then call this proc again.
-        discard
-    except CatchableError as e:
-      let
-        msg = e.msg
-        depth = $(c.msg.depth + 1) # plus one to match tracer depth, and avoid confusion
-      c.setError("Opcode Dispatch Error: " & msg & ", depth=" & depth, true)
+    let cont = c.continuation
+    if not cont.isNil:
+      c.continuation = nil
+      cont().isOkOr:
+        handleEvmError(error)
+        break blockOne
+
+    let nextCont = c.continuation
+    if not nextCont.isNil:
+      # Return up to the caller, which will run the child
+      # and then call this proc again.
+      break blockOne
+
+    # FIXME-Adam: I hate how convoluted this is. See also the comment in
+    # op_dispatcher.nim. The idea here is that we need to call
+    # traceOpCodeEnded at the end of the opcode (and only if there
+    # hasn't been an exception thrown); otherwise we run into problems
+    # if an exception (e.g. out of gas) is thrown during a continuation.
+    # So this code says, "If we've just run a continuation, but there's
+    # no *subsequent* continuation, then the opcode is done."
+    if c.tracingEnabled and not(cont.isNil) and nextCont.isNil:
+      c.traceOpCodeEnded(c.instr, c.opIndex)
+
+    if c.instr == Return or
+       c.instr == Revert or
+       c.instr == SelfDestruct:
+      break blockOne
+
+    c.selectVM(fork, shouldPrepareTracer).isOkOr:
+      handleEvmError(error)
+      break blockOne # this break is not needed but make the flow clear
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
 
 when vm_use_recursion:
   # Recursion with tiny stack frame per level.
-  proc execCallOrCreate*(c: Computation)
-      {.gcsafe, raises: [CatchableError].} =
+  proc execCallOrCreate*(c: Computation) =
     defer: c.dispose()
     if c.beforeExec():
       return
     c.executeOpcodes()
     while not c.continuation.isNil:
       # If there's a continuation, then it's because there's either
-      # a child (i.e. call or create) or a pendingAsyncOperation.
-      if not c.pendingAsyncOperation.isNil:
-        let p = c.pendingAsyncOperation
-        c.pendingAsyncOperation = nil
-        doAssert(p.finished(), "In synchronous mode, every async operation should be an already-resolved Future.")
-        c.executeOpcodes(false)
+      # a child (i.e. call or create)
+      when evmc_enabled:
+        c.res = c.host.call(c.child[])
       else:
-        when evmc_enabled:
-          c.res = c.host.call(c.child[])
-        else:
-          execCallOrCreate(c.child)
-        c.child = nil
-        c.executeOpcodes()
+        execCallOrCreate(c.child)
+      c.child = nil
+      c.executeOpcodes()
     c.afterExec()
 
 else:
-  proc execCallOrCreate*(cParam: Computation)
-      {.gcsafe, raises: [CatchableError].} =
+  proc execCallOrCreate*(cParam: Computation) =
     var (c, before, shouldPrepareTracer) = (cParam, true, true)
     defer:
       while not c.isNil:
@@ -311,18 +305,12 @@ else:
         if c.continuation.isNil:
           c.afterExec()
           break
-        if not c.pendingAsyncOperation.isNil:
-          before = false
-          shouldPrepareTracer = false
-          let p = c.pendingAsyncOperation
-          c.pendingAsyncOperation = nil
-          doAssert(p.finished(), "In synchronous mode, every async operation should be an already-resolved Future.")
-        else:
-          (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
+        (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
       if c.parent.isNil:
         break
       c.dispose()
       (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
+
 
 # ------------------------------------------------------------------------------
 # End

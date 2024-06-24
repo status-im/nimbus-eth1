@@ -18,7 +18,6 @@ import
   ../utils/utils,
   "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
-  ./pow,
   nimcrypto/utils as cryptoutils,
   stew/objects,
   results
@@ -34,75 +33,49 @@ const
     byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
 
 # ------------------------------------------------------------------------------
-# Pivate validator functions
+# Private validator functions
 # ------------------------------------------------------------------------------
-
-proc validateSeal(pow: PowRef; header: BlockHeader): Result[void,string] =
-  try:
-    let (expMixDigest, miningValue) = pow.getPowDigest(header)
-
-    if expMixDigest != header.mixDigest:
-      let
-        miningHash = header.getPowSpecs.miningHash
-        (size, cachedHash) = try: pow.getPowCacheLookup(header.blockNumber)
-                            except KeyError: return err("Unknown block")
-                            except CatchableError as e: return err(e.msg)
-      return err("mixHash mismatch. actual=$1, expected=$2," &
-                " blockNumber=$3, miningHash=$4, nonce=$5, difficulty=$6," &
-                " size=$7, cachedHash=$8" % [
-                $header.mixDigest, $expMixDigest, $header.blockNumber,
-                $miningHash, header.nonce.toHex, $header.difficulty,
-                $size, $cachedHash])
-
-    let value = UInt256.fromBytesBE(miningValue.data)
-    if value > UInt256.high div header.difficulty:
-      return err("mining difficulty error")
-
-  except CatchableError as err:
-    return err(err.msg)
-
-  ok()
 
 proc validateHeader(
     com: CommonRef;
-    header: BlockHeader;
+    blk: EthBlock;
     parentHeader: BlockHeader;
-    body: BlockBody;
     checkSealOK: bool;
-      ): Result[void,string]
-      {.gcsafe, raises: [].} =
-
+      ): Result[void,string] =
+  template header: BlockHeader = blk.header
+  # TODO this code is used for validating uncles also, though these get passed
+  #      an empty body - avoid this by separating header and block validation
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
     # Blocks with block numbers in the range [1_920_000, 1_920_009]
     # MUST have DAOForkBlockExtra
     let daoForkBlock = com.daoForkBlock.get
-    let DAOHigh = daoForkBlock + DAOForkExtraRange.u256
+    let DAOHigh = daoForkBlock + DAOForkExtraRange
     daoForkBlock <= blockNumber and
       blockNumber < DAOHigh
 
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
-  if header.gasUsed == 0 and 0 < body.transactions.len:
+  if header.gasUsed == 0 and 0 < blk.transactions.len:
     return err("zero gasUsed but transactions present");
 
   if header.gasUsed < 0 or header.gasUsed > header.gasLimit:
     return err("gasUsed should be non negative and smaller or equal gasLimit")
 
-  if header.blockNumber != parentHeader.blockNumber + 1:
+  if header.number != parentHeader.number + 1:
     return err("Blocks must be numbered consecutively")
 
   if header.timestamp <= parentHeader.timestamp:
     return err("timestamp must be strictly later than parent")
 
-  if com.daoForkSupport and inDAOExtraRange(header.blockNumber):
+  if com.daoForkSupport and inDAOExtraRange(header.number):
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")
 
   if com.consensus == ConsensusType.POS:
     # EIP-4399 and EIP-3675
-    # no need to check mixDigest because EIP-4399 override this field
+    # no need to check mixHash because EIP-4399 override this field
     # checking rule
 
     if not header.difficulty.isZero:
@@ -118,11 +91,8 @@ proc validateHeader(
     if header.difficulty < calcDiffc:
       return err("provided header difficulty is too low")
 
-    if checkSealOK:
-      return com.pow.validateSeal(header)
-
-  ? com.validateWithdrawals(header, body)
-  ? com.validateEip4844Header(header, parentHeader, body.transactions)
+  ? com.validateWithdrawals(header, blk.withdrawals)
+  ? com.validateEip4844Header(header, parentHeader, blk.transactions)
   ? com.validateGasLimitOrBaseFee(header, parentHeader)
 
   ok()
@@ -144,7 +114,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
     return err("Header suggests block should have uncles but block has none")
 
   # Check for duplicates
-  var uncleSet = initHashSet[Hash256]()
+  var uncleSet = HashSet[Hash256]()
   for uncle in uncles:
     let uncleHash = uncle.blockHash
     if uncleHash in uncleSet:
@@ -185,7 +155,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
        (uncle.parentHash == header.parentHash):
       return err("Uncle's parent is not an ancestor")
 
-    if uncle.blockNumber >= header.blockNumber:
+    if uncle.number >= header.number:
       return err("uncle block number larger than current block number")
 
     # check uncle against own parent
@@ -195,23 +165,15 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
     if uncle.timestamp <= parent.timestamp:
       return err("Uncle's parent must me older")
 
-    # Now perform VM level validation of the uncle
-    if checkSealOK:
-      result = com.pow.validateSeal(uncle)
-      if result.isErr:
-        return
-
     let uncleParent = try:
       chainDB.getBlockHeader(uncle.parentHash)
     except BlockNotFound:
       return err("Uncle parent not found")
 
-    result = com.validateHeader(uncle, uncleParent,
-                                BlockBody(), checkSealOK)
-    if result.isErr:
-      return
+    ? com.validateHeader(
+      EthBlock.init(uncle, BlockBody()), uncleParent, checkSealOK)
 
-  result = ok()
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public function, extracted from executor
@@ -219,9 +181,9 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
 
 func gasCost*(tx: Transaction): UInt256 =
   if tx.txType >= TxEip4844:
-    tx.gasLimit.u256 * tx.maxFee.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas.u256
+    tx.gasLimit.u256 * tx.maxFeePerGas.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas
   elif tx.txType >= TxEip1559:
-    tx.gasLimit.u256 * tx.maxFee.u256
+    tx.gasLimit.u256 * tx.maxFeePerGas.u256
   else:
     tx.gasLimit.u256 * tx.gasPrice.u256
 
@@ -245,9 +207,9 @@ proc validateTxBasic*(
 
   try:
     # The total must be the larger of the two
-    if tx.maxFee < tx.maxPriorityFee:
+    if tx.maxFeePerGas < tx.maxPriorityFeePerGas:
       return err("invalid tx: maxFee is smaller than maPriorityFee. maxFee=$1, maxPriorityFee=$2" % [
-        $tx.maxFee, $tx.maxPriorityFee])
+        $tx.maxFeePerGas, $tx.maxPriorityFeePerGas])
 
     if tx.gasLimit < tx.intrinsicGas(fork):
       return err("invalid tx: not enough gas to perform calculation. avail=$1, require=$2" % [
@@ -326,9 +288,9 @@ proc validateTransaction*(
         $maxLimit, $tx.gasLimit])
 
     # ensure that the user was willing to at least pay the base fee
-    if tx.maxFee < baseFee.truncate(int64):
+    if tx.maxFeePerGas < baseFee.truncate(GasInt):
       return err("invalid tx: maxFee is smaller than baseFee. maxFee=$1, baseFee=$2" % [
-        $tx.maxFee, $baseFee])
+        $tx.maxFeePerGas, $baseFee])
 
     # the signer must be able to fully afford the transaction
     let gasCost = tx.gasCost()
@@ -354,7 +316,7 @@ proc validateTransaction*(
     # `eth_call` and `eth_estimateGas`
     # EOA = Externally Owned Account
     let codeHash = roDB.getCodeHash(sender)
-    if codeHash != EMPTY_SHA3:
+    if codeHash != EMPTY_CODE_HASH:
       return err("invalid tx: sender is not an EOA. sender=$1, codeHash=$2" % [
         sender.toHex, codeHash.data.toHex])
 
@@ -376,32 +338,27 @@ proc validateTransaction*(
 
 proc validateHeaderAndKinship*(
     com: CommonRef;
-    header: BlockHeader;
-    body: BlockBody;
+    blk: EthBlock;
+    parent: BlockHeader;
     checkSealOK: bool;
       ): Result[void, string]
       {.gcsafe, raises: [].} =
+  template header: BlockHeader = blk.header
+
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
     return ok()
 
-  let chainDB = com.db
-  let parent = try:
-    chainDB.getBlockHeader(header.parentHash)
-  except CatchableError as err:
-    return err("Failed to load block header from DB")
+  ? com.validateHeader(blk, parent, checkSealOK)
 
-  result = com.validateHeader(
-    header, parent, body, checkSealOK)
-  if result.isErr:
-    return
-
-  if body.uncles.len > MAX_UNCLES:
+  if blk.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
   if com.consensus != ConsensusType.POS:
-    result = com.validateUncles(header, body.uncles, checkSealOK)
+    ? com.validateUncles(header, blk.uncles, checkSealOK)
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

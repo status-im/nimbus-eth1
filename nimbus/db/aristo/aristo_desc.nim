@@ -58,12 +58,11 @@ type
     centre: AristoDbRef               ## Link to peer with write permission
     peers: HashSet[AristoDbRef]       ## List of all peers
 
-  AristoDbRef* = ref AristoDbObj
-  AristoDbObj* = object
+  AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    roFilter*: FilterRef              ## Apply read filter (locks writing)
+    balancer*: LayerDeltaRef          ## Baland out concurrent backend access
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: AristoTxRef               ## Latest active transaction
@@ -109,8 +108,8 @@ func isValid*(pld: PayloadRef): bool =
 func isValid*(pid: PathID): bool =
   pid != VOID_PATH_ID
 
-func isValid*(filter: FilterRef): bool =
-  filter != FilterRef(nil)
+func isValid*(filter: LayerDeltaRef): bool =
+  filter != LayerDeltaRef(nil)
 
 func isValid*(root: Hash256): bool =
   root != EMPTY_ROOT_HASH
@@ -124,9 +123,6 @@ func isValid*(vid: VertexID): bool =
 
 func isValid*(sqv: HashSet[VertexID]): bool =
   sqv != EmptyVidSet
-
-func isValid*(qid: QueueID): bool =
-  qid != QueueID(0)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
@@ -153,7 +149,7 @@ func getCentre*(db: AristoDbRef): AristoDbRef =
   ##
   if db.dudes.isNil: db else: db.dudes.centre
 
-proc reCentre*(db: AristoDbRef) =
+proc reCentre*(db: AristoDbRef): Result[void,AristoError] =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -169,6 +165,7 @@ proc reCentre*(db: AristoDbRef) =
   ##
   if not db.dudes.isNil:
     db.dudes.centre = db
+  ok()
 
 proc fork*(
     db: AristoDbRef;
@@ -201,17 +198,17 @@ proc fork*(
     backend: db.backend)
 
   if not noFilter:
-    clone.roFilter = db.roFilter # Ref is ok here (filters are immutable)
+    clone.balancer = db.balancer # Ref is ok here (filters are immutable)
 
   if not noTopLayer:
     clone.top = LayerRef.init()
-    if not db.roFilter.isNil:
-      clone.top.final.vGen = db.roFilter.vGen
+    if not db.balancer.isNil:
+      clone.top.delta.vTop = db.balancer.vTop
     else:
-      let rc = clone.backend.getIdgFn()
+      let rc = clone.backend.getTuvFn()
       if rc.isOk:
-        clone.top.final.vGen = rc.value
-      elif rc.error != GetIdgNotFound:
+        clone.top.delta.vTop = rc.value
+      elif rc.error != GetTuvNotFound:
         return err(rc.error)
 
   # Add to peer list of clones
@@ -242,9 +239,9 @@ proc forget*(db: AristoDbRef): Result[void,AristoError] =
   ## comments on `fork()`.)
   ##
   if db.isCentre:
-    err(NotAllowedOnCentre)
+    err(DescNotAllowedOnCentre)
   elif db notin db.dudes.peers:
-    err(StaleDescriptor)
+    err(DescStaleDescriptor)
   else:
     db.dudes.peers.excl db         # Unlink argument `db` from peers list
     ok()
@@ -255,10 +252,14 @@ proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
   ##
   if not db.dudes.isNil:
     if db.dudes.centre != db:
-      return err(MustBeOnCentre)
+      return err(DescMustBeOnCentre)
 
     db.dudes = DudesRef(nil)
   ok()
+
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
 
 iterator rstack*(db: AristoDbRef): LayerRef =
   # Stack in reverse order

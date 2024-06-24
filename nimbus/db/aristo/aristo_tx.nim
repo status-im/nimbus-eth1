@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/options,
   results,
   ./aristo_tx/[tx_fork, tx_frame, tx_stow],
   "."/[aristo_desc, aristo_get]
@@ -52,7 +51,6 @@ func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
 proc forkTx*(
     db: AristoDbRef;
     backLevel: int;                   # Backward location of transaction
-    dontHashify = false;              # Process/fix MPT hashes
       ): Result[AristoDbRef,AristoError] =
   ## Fork a new descriptor obtained from parts of the argument database
   ## as described by arguments `db` and `backLevel`.
@@ -62,28 +60,25 @@ proc forkTx*(
   ## are stripped and the remaing layers are squashed into a single transaction.
   ##
   ## If `backLevel` is `-1`, a database descriptor with empty transaction
-  ## layers will be provided where the `roFilter` between database and
+  ## layers will be provided where the `balancer` between database and
   ## transaction layers are kept in place.
   ##
   ## If `backLevel` is `-2`, a database descriptor with empty transaction
-  ## layers will be provided without an `roFilter`.
+  ## layers will be provided without a `balancer`.
   ##
   ## The returned database descriptor will always have transaction level one.
   ## If there were no transactions that could be squashed, an empty
   ## transaction is added.
   ##
-  ## If the arguent flag `dontHashify` is passed `true`, the forked descriptor
-  ## will *NOT* be hashified right after construction.
-  ##
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   # Fork top layer (with or without pending transaction)?
   if backLevel == 0:
-    return db.txForkTop dontHashify
+    return db.txForkTop()
 
   # Fork bottom layer (=> 0 < db.stack.len)
   if backLevel == db.stack.len:
-    return db.txForkBase dontHashify
+    return db.txForkBase()
 
   # Inspect transaction stack
   if 0 < backLevel:
@@ -96,9 +91,9 @@ proc forkTx*(
       tx = tx.parent
       if tx.isNil:
         return err(TxStackGarbled)
-    return tx.txFork dontHashify
+    return tx.txFork()
 
-  # Plain fork, include `roFilter`
+  # Plain fork, include `balancer`
   if backLevel == -1:
     let xb = ? db.fork(noFilter=false)
     discard xb.txFrameBegin()
@@ -156,9 +151,9 @@ proc findTx*(
     if botKey == key:
       return ok(db.stack.len)
 
-  # Try `(vid,key)` on roFilter
-  if not db.roFilter.isNil:
-    let roKey = db.roFilter.kMap.getOrVoid vid
+  # Try `(vid,key)` on balancer
+  if not db.balancer.isNil:
+    let roKey = db.balancer.kMap.getOrVoid vid
     if roKey == key:
       return ok(-1)
 
@@ -225,7 +220,7 @@ proc collapse*(
 
 proc persist*(
     db: AristoDbRef;                  # Database
-    nxtFid = none(FilterID);          # Next filter ID (zero is OK)
+    nxtSid = 0u64;                    # Next state ID (aka block number)
     chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## Persistently store data onto backend database. If the system is running
@@ -248,7 +243,7 @@ proc persist*(
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
   ## `fwdFilter()`.)
   ##
-  db.txStow(nxtFid, persistent=true, chunkedMpt=chunkedMpt)
+  db.txStow(nxtSid, persistent=true, chunkedMpt=chunkedMpt)
 
 proc stow*(
     db: AristoDbRef;                  # Database
@@ -267,7 +262,7 @@ proc stow*(
   ## In this case, the `chunkedMpt` argument must be set `true` (see alse
   ## `fwdFilter()`.)
   ##
-  db.txStow(nxtFid=none(FilterID), persistent=false, chunkedMpt=chunkedMpt)
+  db.txStow(nxtSid=0u64, persistent=false, chunkedMpt=chunkedMpt)
 
 # ------------------------------------------------------------------------------
 # End

@@ -156,12 +156,9 @@ switch("warning", "LockLevel:off")
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
 
-# RocksDB static linking is disabled by default
-when defined(enable_rocksdb_static_linking):
-
-  when defined(windows):
-    {.fatal: "RocksDB static linking is not supported on Windows".}
-
+# We lock down rocksdb to a particular version
+# TODO self-build rocksdb dll on windows
+when not defined(use_system_rocksdb) and not defined(windows):
   switch("define", "rocksdb_static_linking")
 
   # use the C++ linker profile because it's a C++ library
@@ -173,3 +170,6 @@ when defined(enable_rocksdb_static_linking):
   switch("dynlibOverride", "rocksdb")
   switch("dynlibOverride", "lz4")
   switch("dynlibOverride", "zstd")
+
+when defined(gcc):
+  switch("passc", "-Wno-error=incompatible-pointer-types")

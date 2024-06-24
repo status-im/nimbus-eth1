@@ -12,11 +12,11 @@
 import
   std/[sequtils, times, tables, typetraits],
   json_rpc/rpcserver, stint, stew/byteutils,
-  json_serialization, web3/conversions, json_serialization/std/options,
+  json_serialization, web3/conversions, json_serialization/stew/results,
   eth/common/eth_types_json_serialization,
   eth/[keys, rlp, p2p],
-  ".."/[transaction, vm_state, constants],
-  ../db/state_db,
+  ".."/[transaction, evm/state, constants],
+  ../db/ledger,
   ./rpc_types, ./rpc_utils, ./oracle,
   ../transaction/call_evm,
   ../core/tx_pool,
@@ -24,18 +24,41 @@ import
   ../common/[common, context],
   ../utils/utils,
   ../beacon/web3_eth_conv,
+  ../evm/evm_errors,
   ./filters
+
+const
+  AccountAndStorageProofAvailableAndWorking = false
+    ## Need to include this module despite non-working proof functions. See
+    ## `TODO-P2P.md` for some explanation.
 
 type
   BlockHeader = eth_types.BlockHeader
   Hash256 = eth_types.Hash256
 
+when not AccountAndStorageProofAvailableAndWorking:
+  type
+    MptNodeRlpBytes = seq[byte]
+    AccountProof = seq[MptNodeRlpBytes]
+    SlotProof = seq[MptNodeRlpBytes]
+  func getAccountProof(
+      db: LedgerRef;
+      eAddr: EthAddress;
+        ): AccountProof =
+    discard
+  func getStorageProof(
+      db: LedgerRef;
+      eAddr: EthAddress;
+      slot: seq[UInt256];
+        ): seq[SlotProof] =
+    discard
+
 proc getProof*(
-    accDB: ReadOnlyStateDB,
+    accDB: LedgerRef,
     address: EthAddress,
-    slots: seq[UInt256]): ProofResponse {.raises: [RlpError].} =
+    slots: seq[UInt256]): ProofResponse =
   let
-    acc = accDB.getAccount(address)
+    acc = accDB.getEthAccount(address)
     accExists = accDB.accountExists(address)
     accountProof = accDB.getAccountProof(address)
     slotProofs = accDB.getStorageProof(address, slots)
@@ -43,9 +66,9 @@ proc getProof*(
   var storage = newSeqOfCap[StorageProof](slots.len)
 
   for i, slotKey in slots:
-    let (slotValue, _) = accDB.getStorage(address, u256(slotKey))
+    let slotValue = accDB.getStorage(address, slotKey)
     storage.add(StorageProof(
-        key: u256(slotKey),
+        key: slotKey,
         value: slotValue,
         proof: seq[RlpEncodedBytes](slotProofs[i])))
 
@@ -69,17 +92,16 @@ proc setupEthRpc*(
     txPool: TxPoolRef, oracle: Oracle, server: RpcServer) =
 
   let chainDB = com.db
-  proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
+  proc getStateDB(header: BlockHeader): LedgerRef =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
-    let ac = newAccountStateDB(chainDB, header.stateRoot)
-    result = ReadOnlyStateDB(ac)
+    LedgerRef.init(chainDB, header.stateRoot)
 
-  proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): ReadOnlyStateDB
+  proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): LedgerRef
       {.gcsafe, raises: [CatchableError].} =
     result = getStateDB(chainDB.headerFromTag(quantityTag))
 
-  server.rpc("eth_protocolVersion") do() -> Option[string]:
+  server.rpc("eth_protocolVersion") do() -> Opt[string]:
     # Old Ethereum wiki documents this as returning a decimal string.
     # Infura documents this as returning 0x-prefixed hex string.
     # Geth 1.10.0 has removed this call "as it makes no sense".
@@ -88,8 +110,8 @@ proc setupEthRpc*(
     # - https://blog.ethereum.org/2021/03/03/geth-v1-10-0/#compatibility
     for n in node.capabilities:
       if n.name == "eth":
-        return some($n.version)
-    return none(string)
+        return Opt.some($n.version)
+    return Opt.none(string)
 
   server.rpc("eth_chainId") do() -> Web3Quantity:
     return w3Qty(distinctBase(com.chainId))
@@ -136,7 +158,7 @@ proc setupEthRpc*(
 
   server.rpc("eth_blockNumber") do() -> Web3Quantity:
     ## Returns integer of the current block number the client is on.
-    result = w3Qty(chainDB.getCanonicalHead().blockNumber)
+    result = w3Qty(chainDB.getCanonicalHead().number)
 
   server.rpc("eth_getBalance") do(data: Web3Address, quantityTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
@@ -159,7 +181,8 @@ proc setupEthRpc*(
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
-    result = accDB.getStorage(address, slot)[0].w3FixedBytes
+      data = accDB.getStorage(address, slot)
+    result = data.w3FixedBytes
 
   server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions sent from an address.
@@ -181,7 +204,7 @@ proc setupEthRpc*(
       blockHash = data.ethHash
       header    = chainDB.getBlockHeader(blockHash)
       txCount   = chainDB.getTransactionCount(header.txRoot)
-    result = w3Qty(txCount)
+    result = Web3Quantity(txCount)
 
   server.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions in a block matching the given block number.
@@ -191,7 +214,7 @@ proc setupEthRpc*(
     let
       header  = chainDB.headerFromTag(quantityTag)
       txCount = chainDB.getTransactionCount(header.txRoot)
-    result = w3Qty(txCount)
+    result = Web3Quantity(txCount)
 
   server.rpc("eth_getUncleCountByBlockHash") do(data: Web3Hash) -> Web3Quantity:
     ## Returns the number of uncles in a block from a block matching the given block hash.
@@ -202,7 +225,7 @@ proc setupEthRpc*(
       blockHash   = data.ethHash
       header      = chainDB.getBlockHeader(blockHash)
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
-    result = w3Qty(unclesCount)
+    result = Web3Quantity(unclesCount)
 
   server.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of uncles in a block from a block matching the given block number.
@@ -212,7 +235,7 @@ proc setupEthRpc*(
     let
       header      = chainDB.headerFromTag(quantityTag)
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
-    result = w3Qty(unclesCount.uint)
+    result = Web3Quantity(unclesCount)
 
   server.rpc("eth_getCode") do(data: Web3Address, quantityTag: BlockTag) -> seq[byte]:
     ## Returns code at a given address.
@@ -223,7 +246,7 @@ proc setupEthRpc*(
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
-    result = accDB.getCode(address)
+    result = accDB.getCode(address).bytes()
 
   template sign(privateKey: PrivateKey, message: string): seq[byte] =
     # message length encoded as ASCII representation of decimal
@@ -329,7 +352,8 @@ proc setupEthRpc*(
     ## Returns the return value of executed contract.
     let
       header   = headerFromTag(chainDB, quantityTag)
-      res      = rpcCallEvm(args, header, com)
+      res      = rpcCallEvm(args, header, com).valueOr:
+                   raise newException(ValueError, "rpcCallEvm error: " & $error.code)
     result = res.output
 
   server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Web3Quantity:
@@ -343,7 +367,8 @@ proc setupEthRpc*(
     let
       header   = chainDB.headerFromTag(blockId("latest"))
       # TODO: DEFAULT_RPC_GAS_CAP should configurable
-      gasUsed  = rpcEstimateGas(args, header, com, DEFAULT_RPC_GAS_CAP)
+      gasUsed  = rpcEstimateGas(args, header, com, DEFAULT_RPC_GAS_CAP).valueOr:
+                   raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
     result = w3Qty(gasUsed)
 
   server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
@@ -390,7 +415,7 @@ proc setupEthRpc*(
     let header = chainDB.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, txDetails.index, tx):
-      result = populateTransactionObject(tx, some(header), some(txDetails.index))
+      result = populateTransactionObject(tx, Opt.some(header), Opt.some(txDetails.index))
 
   server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Web3Hash, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
@@ -398,14 +423,14 @@ proc setupEthRpc*(
     ## data: hash of a block.
     ## quantity: integer of the transaction index position.
     ## Returns  requested transaction information.
-    let index  = int(quantity)
+    let index  = uint64(quantity)
     var header: BlockHeader
     if not chainDB.getBlockHeader(data.ethHash(), header):
       return nil
 
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, index, tx):
-      result = populateTransactionObject(tx, some(header), some(index))
+      result = populateTransactionObject(tx, Opt.some(header), Opt.some(index))
     else:
       result = nil
 
@@ -416,11 +441,11 @@ proc setupEthRpc*(
     ## quantity: the transaction index position.
     let
       header = chainDB.headerFromTag(quantityTag)
-      index  = int(quantity)
+      index  = uint64(quantity)
 
     var tx: Transaction
     if chainDB.getTransaction(header.txRoot, index, tx):
-      result = populateTransactionObject(tx, some(header), some(index))
+      result = populateTransactionObject(tx, Opt.some(header), Opt.some(index))
     else:
       result = nil
 
@@ -440,10 +465,10 @@ proc setupEthRpc*(
       return nil
 
     var
-      idx = 0
+      idx = 0'u64
       prevGasUsed = GasInt(0)
 
-    for receipt in chainDB.getReceipts(header.receiptRoot):
+    for receipt in chainDB.getReceipts(header.receiptsRoot):
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
       prevGasUsed = receipt.cumulativeGasUsed
       if idx == txDetails.index:
@@ -456,17 +481,17 @@ proc setupEthRpc*(
     ## data: hash of block.
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
-    let index  = int(quantity)
+    let index  = uint64(quantity)
     var header: BlockHeader
     if not chainDB.getBlockHeader(data.ethHash(), header):
       return nil
 
     let uncles = chainDB.getUncles(header.ommersHash)
-    if index < 0 or index >= uncles.len:
+    if index < 0 or index >= uncles.len.uint64:
       return nil
 
     result = populateBlockObject(uncles[index], chainDB, false, true)
-    result.totalDifficulty = chainDB.getScore(header.hash)
+    result.totalDifficulty = chainDB.getScore(header.blockHash).valueOr(0.u256)
 
   server.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: BlockTag, quantity: Web3Quantity) -> BlockObject:
     # Returns information about a uncle of a block by number and uncle index position.
@@ -475,15 +500,15 @@ proc setupEthRpc*(
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
     let
-      index  = int(quantity)
+      index  = uint64(quantity)
       header = chainDB.headerFromTag(quantityTag)
       uncles = chainDB.getUncles(header.ommersHash)
 
-    if index < 0 or index >= uncles.len:
+    if index < 0 or index >= uncles.len.uint64:
       return nil
 
     result = populateBlockObject(uncles[index], chainDB, false, true)
-    result.totalDifficulty = chainDB.getScore(header.hash)
+    result.totalDifficulty = chainDB.getScore(header.blockHash).valueOr(0.u256)
 
   proc getLogsForBlock(
       chain: CoreDbRef,
@@ -493,7 +518,7 @@ proc setupEthRpc*(
         {.gcsafe, raises: [RlpError,ValueError].} =
     if headerBloomFilter(header, opts.address, opts.topics):
       let blockBody = chain.getBlockBody(hash)
-      let receipts = chain.getReceipts(header.receiptRoot)
+      let receipts = chain.getReceipts(header.receiptsRoot)
       # Note: this will hit assertion error if number of block transactions
       # do not match block receipts.
       # Although this is fine as number of receipts should always match number
@@ -506,8 +531,8 @@ proc setupEthRpc*(
 
   proc getLogsForRange(
       chain: CoreDbRef,
-      start: UInt256,
-      finish: UInt256,
+      start: common.BlockNumber,
+      finish: common.BlockNumber,
       opts: FilterOptions): seq[FilterLog]
         {.gcsafe, raises: [RlpError,ValueError].} =
     var logs = newSeq[FilterLog]()
@@ -546,11 +571,11 @@ proc setupEthRpc*(
       let fromHeader = chainDB.headerFromTag(filterOptions.fromBlock)
       let toHeader = chainDB.headerFromTag(filterOptions.toBlock)
 
-      # Note: if fromHeader.blockNumber > toHeader.blockNumber, no logs will be
+      # Note: if fromHeader.number > toHeader.number, no logs will be
       # returned. This is consistent with, what other ethereum clients return
       let logs = chainDB.getLogsForRange(
-        fromHeader.blockNumber,
-        toHeader.blockNumber,
+        fromHeader.number,
+        toHeader.number,
         filterOptions
       )
       return logs
@@ -580,12 +605,12 @@ proc setupEthRpc*(
         prevGasUsed = GasInt(0)
         recs: seq[ReceiptObject]
         txs: seq[Transaction]
-        index = 0
+        index = 0'u64
 
       for tx in chainDB.getBlockTransactions(header):
         txs.add tx
 
-      for receipt in chainDB.getReceipts(header.receiptRoot):
+      for receipt in chainDB.getReceipts(header.receiptsRoot):
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
         prevGasUsed = receipt.cumulativeGasUsed
         recs.add populateReceipt(receipt, gasUsed, txs[index], index, header)
@@ -603,7 +628,7 @@ proc setupEthRpc*(
       return createAccessList(header, com, args)
     except CatchableError as exc:
       return AccessListResult(
-        error: some("createAccessList error: " & exc.msg),
+        error: Opt.some("createAccessList error: " & exc.msg),
       )
 
   server.rpc("eth_blobBaseFee") do() -> Web3Quantity:
@@ -620,7 +645,7 @@ proc setupEthRpc*(
 
   server.rpc("eth_feeHistory") do(blockCount: Quantity,
                                   newestBlock: BlockTag,
-                                  rewardPercentiles: Option[seq[float64]]) -> FeeHistoryResult:
+                                  rewardPercentiles: Opt[seq[float64]]) -> FeeHistoryResult:
     let
       blocks = blockCount.uint64
       percentiles = rewardPercentiles.get(newSeq[float64]())
@@ -685,12 +710,12 @@ proc setupEthRpc*(
     ## DATA, 32 Bytes - the boundary condition ("target"), 2^256 / difficulty.
     discard
 
-  server.rpc("eth_submitWork") do(nonce: int64, powHash: HexDataStr, mixDigest: HexDataStr) -> bool:
+  server.rpc("eth_submitWork") do(nonce: int64, powHash: HexDataStr, mixHash: HexDataStr) -> bool:
     ## Used for submitting a proof-of-work solution.
     ##
     ## nonce: the nonce found.
     ## headerPow: the header's pow-hash.
-    ## mixDigest: the mix digest.
+    ## mixHash: the mix digest.
     ## Returns true if the provided solution is valid, otherwise false.
     discard
 

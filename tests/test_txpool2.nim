@@ -19,7 +19,6 @@ import
   ../nimbus/core/casper,
   ../nimbus/common/common,
   ../nimbus/utils/utils,
-  ../nimbus/vm_types,
   ./test_txpool/helpers,
   ./macro_assembler
 
@@ -70,7 +69,7 @@ func makeTx(
     nonce   : AccountNonce(t.nonce),
     gasPrice: gasPrice,
     gasLimit: gasLimit,
-    to      : some(recipient),
+    to      : Opt.some(recipient),
     value   : amount,
     payload : @payload
   )
@@ -95,13 +94,13 @@ proc initEnv(envFork: HardFork): TestEnv =
   )
 
   if envFork >= MergeFork:
-    conf.networkParams.config.terminalTotalDifficulty = some(100.u256)
+    conf.networkParams.config.terminalTotalDifficulty = Opt.some(100.u256)
 
   if envFork >= Shanghai:
-    conf.networkParams.config.shanghaiTime = some(0.EthTime)
+    conf.networkParams.config.shanghaiTime = Opt.some(0.EthTime)
 
   if envFork >= Cancun:
-    conf.networkParams.config.cancunTime = some(0.EthTime)
+    conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
 
   let
     com = CommonRef.new(
@@ -172,8 +171,8 @@ proc runTxPoolPosTest() =
       check blk.txs.len == 1
 
     test "PoS persistBlocks":
-      let rr = chain.persistBlocks([blk.header], [body])
-      check rr == ValidationResult.OK
+      let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
+      check rr.isOk()
 
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
@@ -230,13 +229,13 @@ proc runTxPoolBlobhashTest() =
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles,
-        withdrawals: some[seq[Withdrawal]](@[])
+        withdrawals: Opt.some(newSeq[Withdrawal]())
       )
       check blk.txs.len == 2
 
     test "Blobhash persistBlocks":
-      let rr = chain.persistBlocks([blk.header], [body])
-      check rr == ValidationResult.OK
+      let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
+      check rr.isOk()
 
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
@@ -317,7 +316,7 @@ proc runTxHeadDelta(noisy = true) =
             uncles: blk.uncles)
 
           # Commit to block chain
-          check chain.persistBlocks([blk.header], [body]).isOk
+          check chain.persistBlocks([EthBlock.init(blk.header, body)]).isOk
 
           # Synchronise TxPool against new chain head, register txs differences.
           # In this particular case, these differences will simply flush the
@@ -330,7 +329,7 @@ proc runTxHeadDelta(noisy = true) =
 
           setErrorLevel() # in case we set trace level
 
-      check com.syncCurrent == 10.toBlockNumber
+      check com.syncCurrent == 10.BlockNumber
       head = com.db.getBlockHeader(com.syncCurrent)
       let
         sdb = LedgerRef.init(com.db, head.stateRoot)

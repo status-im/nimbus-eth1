@@ -21,12 +21,12 @@ proc accountExists(p: evmc_host_context, address: var evmc_address): c99bool {.c
 
 proc getStorage(p: evmc_host_context, address: var evmc_address,
                 key: var evmc_bytes32): evmc_bytes32
-    {.cdecl, raises: [].} =
+    {.cdecl.} =
   toHost(p).getStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setStorage(p: evmc_host_context, address: var evmc_address,
                 key, value: var evmc_bytes32): evmc_storage_status
-    {.cdecl, raises: [].} =
+    {.cdecl.} =
   toHost(p).setStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 proc getBalance(p: evmc_host_context,
@@ -50,7 +50,7 @@ proc selfDestruct(p: evmc_host_context, address,
   toHost(p).selfDestruct(address.fromEvmc, beneficiary.fromEvmc)
 
 proc call(p: evmc_host_context, msg: var evmc_message): evmc_result
-    {.cdecl, raises: [CatchableError].} =
+    {.cdecl.} =
   # This would contain `flip256`, but `call` is special.  The C stack usage
   # must be kept small for deeply nested EVM calls.  To ensure small stack,
   # `flip256` must be handled at `host_call_nested`, not here.
@@ -62,10 +62,10 @@ proc getTxContext(p: evmc_host_context): evmc_tx_context {.cdecl.} =
   toHost(p).getTxContext()
 
 proc getBlockHash(p: evmc_host_context, number: int64): evmc_bytes32
-    {.cdecl, raises: [CatchableError].} =
+    {.cdecl.} =
   # TODO: `HostBlockNumber` is 256-bit unsigned.  It should be changed to match
   # EVMC which is more sensible.
-  toHost(p).getBlockHash(number.uint64.u256).toEvmc
+  toHost(p).getBlockHash(number.uint64).toEvmc
 
 proc emitLog(p: evmc_host_context, address: var evmc_address,
              data: ptr byte, data_size: csize_t,
@@ -83,11 +83,11 @@ proc accessStorage(p: evmc_host_context, address: var evmc_address,
 
 proc getTransientStorage(p: evmc_host_context, address: var evmc_address,
                 key: var evmc_bytes32): evmc_bytes32
-    {.cdecl, raises: [].} =
+    {.cdecl.} =
   toHost(p).getTransientStorage(address.fromEvmc, key.flip256.fromEvmc).toEvmc.flip256
 
 proc setTransientStorage(p: evmc_host_context, address: var evmc_address,
-                key, value: var evmc_bytes32) {.cdecl, raises: [].} =
+                key, value: var evmc_bytes32) {.cdecl.} =
   toHost(p).setTransientStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
 let hostInterface = evmc_host_interface(
@@ -109,8 +109,7 @@ let hostInterface = evmc_host_interface(
   set_transient_storage: setTransientStorage,
 )
 
-proc evmcExecComputation*(host: TransactionHost): EvmcResult
-    {.raises: [CatchableError].} =
+proc evmcExecComputation*(host: TransactionHost): EvmcResult =
   host.showCallEntry(host.msg)
 
   let vm = evmcLoadVMCached()
@@ -124,28 +123,11 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult
   let hostContext = cast[evmc_host_context](host)
   host.hostInterface = hostInterface.unsafeAddr
 
-  # Without `{.gcsafe.}:` here, the call via `vm.execute` results in a Nim
-  # compile-time error in a far away function.  Starting here, a cascade of
-  # warnings takes place: "Warning: '...' is not GC-safe as it performs an
-  # indirect call here [GCUnsafe2]", then a list of "Warning: '...' is not
-  # GC-safe as it calls '...'" at each function up the call stack, to a high
-  # level function `persistBlocks` where it terminates compilation as an error
-  # instead of a warning.
-  #
-  # It is tempting to annotate all EVMC API functions with `{.cdecl, gcsafe.}`,
-  # overriding the function signatures from the Nim EVMC module.  Perhaps we
-  # will do that, though it's conceptually dubious, as the two sides of the
-  # EVMC ABI live in different GC worlds (when loaded as a shared library with
-  # its own Nim runtime), very similar to calling between threads.
-  #
-  # TODO: But wait: Why does the Nim EVMC test program compile fine without
-  # any `gcsafe`, even with `--threads:on`?
-  {.gcsafe.}:
-    result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
-                          evmc_revision(host.vmState.fork.ord), host.msg,
-                          if host.code.len > 0: host.code[0].unsafeAddr
-                          else: nil,
-                          host.code.len.csize_t)
+  result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
+                        evmc_revision(host.vmState.fork.ord), host.msg,
+                        if host.code.len > 0: host.code.bytes[0].unsafeAddr
+                        else: nil,
+                        host.code.len.csize_t)
 
   host.showCallReturn(result)
 

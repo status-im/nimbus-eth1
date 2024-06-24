@@ -16,26 +16,36 @@
 
 import
   std/[algorithm, sequtils, sets, strutils, hashes],
-  eth/[common, trie/nibbles],
+  eth/common,
   stew/byteutils,
   chronicles,
   results,
-  stint
+  stint,
+  ./desc_nibbles
+
+export
+  desc_nibbles
 
 type
-  QueueID* = distinct uint64
-    ## Identifier used to tag filter logs stored on the backend.
-
-  FilterID* = distinct uint64
-    ## Identifier used to identify a particular filter. It is generatied with
-    ## the filter when stored to database.
-
   VertexID* = distinct uint64
     ## Unique identifier for a vertex of the `Aristo Trie`. The vertex is the
     ## prefix tree (aka `Patricia Trie`) component. When augmented by hash
     ## keys, the vertex component will be called a node. On the persistent
     ## backend of the database, there is no other reference to the node than
     ## the very same `VertexID`.
+    ##
+    ## Vertex IDs are generated on the fly and thrown away when not needed,
+    ## anymore. They are not recycled. A quick estimate
+    ##
+    ##   (2^64) / (100 * 365.25 * 24 * 3600) / 1000 / 1000 / 1000 = 5.86
+    ##
+    ## shows that the `uint64` scalar space is not exhausted in a 100 years
+    ## if the database consumes somewhat less than 6 IDs per nanosecond.
+    ##
+    ## A simple recycling mechanism was tested which slowed down the system
+    ## considerably because large swaths of database vertices were regularly
+    ## freed so recycling had do deal with extensive lists of non-consecutive
+    ## IDs.
 
   HashKey* = object
     ## Ethereum MPTs use Keccak hashes as node links if the size of an RLP
@@ -91,7 +101,6 @@ type
 # ------------------------------------------------------------------------------
 
 chronicles.formatIt(VertexID): $it
-chronicles.formatIt(QueueID): $it
 
 # ------------------------------------------------------------------------------
 # Public helpers: `VertexID` scalar data model
@@ -112,37 +121,6 @@ func `==`*(a: VertexID; b: static[uint]): bool = (a == VertexID(b))
 func `+`*(a: VertexID; b: uint64): VertexID = (a.uint64+b).VertexID
 func `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
 func `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
-
-# ------------------------------------------------------------------------------
-# Public helpers: `QueueID` scalar data model
-# ------------------------------------------------------------------------------
-
-func `<`*(a, b: QueueID): bool {.borrow.}
-func `<=`*(a, b: QueueID): bool {.borrow.}
-func `==`*(a, b: QueueID): bool {.borrow.}
-func cmp*(a, b: QueueID): int {.borrow.}
-func `$`*(a: QueueID): string {.borrow.}
-
-func `==`*(a: QueueID; b: static[uint]): bool = (a == QueueID(b))
-
-func `+`*(a: QueueID; b: uint64): QueueID = (a.uint64+b).QueueID
-func `-`*(a: QueueID; b: uint64): QueueID = (a.uint64-b).QueueID
-func `-`*(a, b: QueueID): uint64 = (a.uint64 - b.uint64)
-
-# ------------------------------------------------------------------------------
-# Public helpers: `FilterID` scalar data model
-# ------------------------------------------------------------------------------
-
-func `<`*(a, b: FilterID): bool {.borrow.}
-func `<=`*(a, b: FilterID): bool {.borrow.}
-func `==`*(a, b: FilterID): bool {.borrow.}
-func `$`*(a: FilterID): string {.borrow.}
-
-func `==`*(a: FilterID; b: static[uint]): bool = (a == FilterID(b))
-
-func `+`*(a: FilterID; b: uint64): FilterID = (a.uint64+b).FilterID
-func `-`*(a: FilterID; b: uint64): FilterID = (a.uint64-b).FilterID
-func `-`*(a, b: FilterID): uint64 = (a.uint64 - b.uint64)
 
 # ------------------------------------------------------------------------------
 # Public helpers: `PathID` ordered scalar data model
@@ -198,6 +176,13 @@ func `==`*(a, b: PathID): bool =
 func cmp*(a, b: PathID): int =
   if a < b: -1 elif b < a: 1 else: 0
 
+# ------------------------------------------------------------------------------
+# Public helpers: `HashKey` ordered scalar data model
+# ------------------------------------------------------------------------------
+
+func len*(lid: HashKey): int =
+  lid.len.int # if lid.isHash: 32 else: lid.blob.len
+
 template data*(lid: HashKey): openArray[byte] =
   lid.buf.toOpenArray(0, lid.len - 1)
 
@@ -212,13 +197,6 @@ func to*(lid: HashKey; T: type PathID): T =
     PathID(pfx: UInt256.fromBytesBE a32, length: 2 * lid.len.uint8)
   else:
     PathID()
-
-# ------------------------------------------------------------------------------
-# Public helpers: `HashKey` ordered scalar data model
-# ------------------------------------------------------------------------------
-
-func len*(lid: HashKey): int =
-  lid.len.int # if lid.isHash: 32 else: lid.blob.len
 
 func fromBytes*(T: type HashKey; data: openArray[byte]): Result[T,void] =
   ## Write argument `data` of length 0 or between 2 and 32 bytes as a `HashKey`.
@@ -293,9 +271,9 @@ func cmp*(a, b: LeafTie): int =
 # Public helpers: Reversible conversions between `PathID`, `HashKey`, etc.
 # ------------------------------------------------------------------------------
 
-func to*(pid: PathID; T: type NibblesSeq): T =
+func to*(pid: PathID; T: type NibblesBuf): T =
   ## Representation of a `PathID` as `NibbleSeq` (preserving full information)
-  let nibbles = pid.pfx.toBytesBE.toSeq.initNibbleRange()
+  let nibbles = NibblesBuf.fromBytes(pid.pfx.toBytesBE)
   if pid.length < 64:
     nibbles.slice(0, pid.length.int)
   else:
@@ -326,9 +304,13 @@ func to*(key: Hash256; T: type HashKey): T =
   else:
     T(len: 32, buf: key.data)
 
-func to*(n: SomeUnsignedInt|UInt256; T: type PathID): T =
+func to*(n: SomeUnsignedInt; T: type PathID): T =
   ## Representation of a scalar as `PathID` (preserving full information)
   T(pfx: n.u256, length: 64)
+
+func to*(n: UInt256; T: type PathID): T =
+  ## Representation of a scalar as `PathID` (preserving full information)
+  T(pfx: n, length: 64)
 
 # ------------------------------------------------------------------------------
 # Public helpers: Miscellaneous mappings

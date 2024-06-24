@@ -14,8 +14,8 @@ import
   ../../constants,
   ../../db/ledger,
   ../../transaction,
-  ../../vm_state,
-  ../../vm_types,
+  ../../evm/state,
+  ../../evm/types,
   ../dao,
   ./calculate_reward,
   ./executor_helpers,
@@ -28,12 +28,12 @@ import
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.
 proc processTransactions*(
-    vmState: BaseVMState;
-    header: BlockHeader;
-    transactions: seq[Transaction];
-      ): Result[void, string]
-      {.gcsafe, raises: [CatchableError].} =
-  vmState.receipts = newSeq[Receipt](transactions.len)
+    vmState: BaseVMState,
+    header: BlockHeader,
+    transactions: seq[Transaction],
+    skipReceipts = false,
+): Result[void, string] =
+  vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
 
   for txIndex, tx in transactions:
@@ -43,148 +43,137 @@ proc processTransactions*(
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
-    vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+    if skipReceipts:
+      # TODO don't generate logs at all if we're not going to put them in
+      #      receipts
+      discard vmState.getAndClearLogEntries()
+    else:
+      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
   ok()
 
-proc procBlkPreamble(vmState: BaseVMState;
-                     header: BlockHeader; body: BlockBody): bool
-    {.gcsafe, raises: [CatchableError].} =
+proc procBlkPreamble(
+    vmState: BaseVMState, blk: EthBlock, skipValidation, skipReceipts, skipUncles: bool
+): Result[void, string] =
+  template header(): BlockHeader =
+    blk.header
 
-  if vmState.com.daoForkSupport and
-     vmState.com.daoForkBlock.get == header.blockNumber:
+  if vmState.com.daoForkSupport and vmState.com.daoForkBlock.get == header.number:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
-  if body.transactions.calcTxRoot != header.txRoot:
-    debug "Mismatched txRoot",
-      blockNumber = header.blockNumber
-    return false
+  if not skipValidation: # Expensive!
+    if blk.transactions.calcTxRoot != header.txRoot:
+      return err("Mismatched txRoot")
 
   if vmState.determineFork >= FkCancun:
     if header.parentBeaconBlockRoot.isNone:
-      raise ValidationError.newException("Post-Cancun block header must have parentBeaconBlockRoot")
+      return err("Post-Cancun block header must have parentBeaconBlockRoot")
+
+    ?vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
   else:
     if header.parentBeaconBlockRoot.isSome:
-      raise ValidationError.newException("Pre-Cancun block header must not have parentBeaconBlockRoot")
-
-  if header.parentBeaconBlockRoot.isSome:
-    let r = vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
-    if r.isErr:
-      error("error in processing beaconRoot", err=r.error)
+      return err("Pre-Cancun block header must not have parentBeaconBlockRoot")
 
   if header.txRoot != EMPTY_ROOT_HASH:
-    if body.transactions.len == 0:
-      debug "No transactions in body",
-        blockNumber = header.blockNumber
-      return false
-    else:
-      let r = processTransactions(vmState, header, body.transactions)
-      if r.isErr:
-        error("error in processing transactions", err=r.error)
+    if blk.transactions.len == 0:
+      return err("Transactions missing from body")
+
+    ?processTransactions(vmState, header, blk.transactions, skipReceipts)
+  elif blk.transactions.len > 0:
+    return err("Transactions in block with empty txRoot")
 
   if vmState.determineFork >= FkShanghai:
     if header.withdrawalsRoot.isNone:
-      raise ValidationError.newException("Post-Shanghai block header must have withdrawalsRoot")
-    if body.withdrawals.isNone:
-      raise ValidationError.newException("Post-Shanghai block body must have withdrawals")
+      return err("Post-Shanghai block header must have withdrawalsRoot")
+    if blk.withdrawals.isNone:
+      return err("Post-Shanghai block body must have withdrawals")
 
-    for withdrawal in body.withdrawals.get:
+    for withdrawal in blk.withdrawals.get:
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
     if header.withdrawalsRoot.isSome:
-      raise ValidationError.newException("Pre-Shanghai block header must not have withdrawalsRoot")
-    if body.withdrawals.isSome:
-      raise ValidationError.newException("Pre-Shanghai block body must not have withdrawals")
+      return err("Pre-Shanghai block header must not have withdrawalsRoot")
+    if blk.withdrawals.isSome:
+      return err("Pre-Shanghai block body must not have withdrawals")
 
   if vmState.cumulativeGasUsed != header.gasUsed:
+    # TODO replace logging with better error
     debug "gasUsed neq cumulativeGasUsed",
-      gasUsed = header.gasUsed,
-      cumulativeGasUsed = vmState.cumulativeGasUsed
-    return false
+      gasUsed = header.gasUsed, cumulativeGasUsed = vmState.cumulativeGasUsed
+    return err("gasUsed mismatch")
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    let h = vmState.com.db.persistUncles(body.uncles)
-    if h != header.ommersHash:
-      debug "Uncle hash mismatch"
-      return false
+    # TODO It's strange that we persist uncles before processing block but the
+    #      rest after...
+    if not skipUncles:
+      let h = vmState.com.db.persistUncles(blk.uncles)
+      if h != header.ommersHash:
+        return err("ommersHash mismatch")
+    elif not skipValidation and rlpHash(blk.uncles) != header.ommersHash:
+      return err("ommersHash mismatch")
+  elif blk.uncles.len > 0:
+    return err("Uncles in block with empty uncle hash")
 
-  true
+  ok()
 
-proc procBlkEpilogue(vmState: BaseVMState;
-                     header: BlockHeader; body: BlockBody): bool
-    {.gcsafe, raises: [].} =
+proc procBlkEpilogue(
+    vmState: BaseVMState, header: BlockHeader, skipValidation: bool
+): Result[void, string] =
   # Reward beneficiary
   vmState.mutateStateDB:
-    if vmState.generateWitness:
+    if vmState.collectWitnessData:
       db.collectWitnessData()
-    let clearEmptyAccount = vmState.determineFork >= FkSpurious
-    db.persist(clearEmptyAccount, ClearCache in vmState.flags)
 
-  let stateDb = vmState.stateDB
-  if header.stateRoot != stateDb.rootHash:
-    debug "wrong state root in block",
-      blockNumber = header.blockNumber,
-      expected = header.stateRoot,
-      actual = stateDb.rootHash,
-      arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
-    return false
+    db.persist(clearEmptyAccount = vmState.determineFork >= FkSpurious)
 
-  let bloom = createBloom(vmState.receipts)
-  if header.bloom != bloom:
-    debug "wrong bloom in block",
-      blockNumber = header.blockNumber
-    return false
+  if not skipValidation:
+    let stateDB = vmState.stateDB
+    if header.stateRoot != stateDB.rootHash:
+      # TODO replace logging with better error
+      debug "wrong state root in block",
+        blockNumber = header.number,
+        expected = header.stateRoot,
+        actual = stateDB.rootHash,
+        arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
+      return err("stateRoot mismatch")
 
-  let receiptRoot = calcReceiptRoot(vmState.receipts)
-  if header.receiptRoot != receiptRoot:
-    debug "wrong receiptRoot in block",
-      blockNumber = header.blockNumber,
-      actual = receiptRoot,
-      expected = header.receiptRoot
-    return false
+    let bloom = createBloom(vmState.receipts)
 
-  true
+    if header.logsBloom != bloom:
+      return err("bloom mismatch")
+
+    let receiptsRoot = calcReceiptsRoot(vmState.receipts)
+    if header.receiptsRoot != receiptsRoot:
+      # TODO replace logging with better error
+      debug "wrong receiptRoot in block",
+        blockNumber = header.number,
+        actual = receiptsRoot,
+        expected = header.receiptsRoot
+      return err("receiptRoot mismatch")
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc processBlock*(
-    vmState: BaseVMState;  ## Parent environment of header/body block
-    header:  BlockHeader;  ## Header/body block to add to the blockchain
-    body:    BlockBody;
-      ): ValidationResult
-      {.gcsafe, raises: [CatchableError].} =
-  ## Generalised function to processes `(header,body)` pair for any network,
-  ## regardless of PoA or not.
-  ##
-  ## Rather than calculating the PoA state change here, it is done with the
-  ## verification in the `chain/persist_blocks.persistBlocks()` method. So
-  ## the `poa` descriptor is currently unused and only provided for later
-  ## implementations (but can be savely removed, as well.)
-  ## variant of `processBlock()` where the `header` argument is explicitely set.
-
-  var dbTx = vmState.com.db.beginTransaction()
-  defer: dbTx.dispose()
-
-  if not vmState.procBlkPreamble(header, body):
-    return ValidationResult.Error
+    vmState: BaseVMState, ## Parent environment of header/body block
+    blk: EthBlock, ## Header/body block to add to the blockchain
+    skipValidation: bool = false,
+    skipReceipts: bool = false,
+    skipUncles: bool = false,
+): Result[void, string] =
+  ## Generalised function to processes `blk` for any network.
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
 
   # EIP-3675: no reward for miner in POA/POS
   if vmState.com.consensus == ConsensusType.POW:
-    vmState.calculateReward(header, body)
+    vmState.calculateReward(blk.header, blk.uncles)
 
-  if not vmState.procBlkEpilogue(header, body):
-    return ValidationResult.Error
+  ?vmState.procBlkEpilogue(blk.header, skipValidation)
 
-  # `applyDeletes = false`
-  # If the trie pruning activated, each of the block will have its own state
-  # trie keep intact, rather than destroyed by trie pruning. But the current
-  # block will still get a pruned trie. If trie pruning deactivated,
-  # `applyDeletes` have no effects.
-  dbTx.commit(applyDeletes = false)
-
-  ValidationResult.OK
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

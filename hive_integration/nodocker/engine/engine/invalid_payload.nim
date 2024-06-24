@@ -74,7 +74,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
       let ok = env.sendNextTx(
         eng,
         BaseTx(
-          recipient:  some(prevRandaoContractAddr),
+          recipient:  Opt.some(prevRandaoContractAddr),
           amount:     1.u256,
           txType:     cs.txType,
           gasLimit:   75000.GasInt,
@@ -173,7 +173,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
       #  (payloadStatus: (status: INVALID, latestValidHash: null, validationError: errorMessage | null), payloadId: null)
       #  obtained from the Payload validation process if the payload is deemed INVALID
       version = env.engine.version(shadow.alteredPayload.timestamp)
-      let s = env.engine.client.forkchoiceUpdated(version, fcState, some(attr))
+      let s = env.engine.client.forkchoiceUpdated(version, fcState, Opt.some(attr))
       if not cs.syncing:
         # Execution specification:
         #  (payloadStatus: (status: INVALID, latestValidHash: null, validationError: errorMessage | null), payloadId: null)
@@ -261,7 +261,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
         return true
 
       let customizer = CustomPayloadData(
-        parentHash: some(ethHash shadow.alteredPayload.blockHash),
+        parentHash: Opt.some(ethHash shadow.alteredPayload.blockHash),
       )
 
       let followUpAlteredPayload = customizer.customizePayload(env.clMock.latestExecutableData)
@@ -332,12 +332,12 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
         # Get a payload from the invalid payload producer and invalidate it
         let
           customizer = BasePayloadAttributesCustomizer(
-            prevRandao: some(common.Hash256()),
-            suggestedFeerecipient: some(ZeroAddr),
+            prevRandao: Opt.some(common.Hash256()),
+            suggestedFeerecipient: Opt.some(ZeroAddr),
           )
           payloadAttributes = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
           version = env.engine.version(env.clMock.latestHeader.timestamp)
-          r = invalidPayloadProducer.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, some(payloadAttributes))
+          r = invalidPayloadProducer.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(payloadAttributes))
 
         r.expectPayloadStatus(PayloadExecutionStatus.valid)
         # Wait for the payload to be produced by the EL
@@ -352,8 +352,8 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
         let basePayload = s.get.executionPayload
         var src = ExecutableData(basePayload: basePayload)
         if versione == Version.V3:
-          src.beaconRoot = some(common.Hash256())
-          src.versionedHashes = some(collectBlobHashes(basePayload.transactions))
+          src.beaconRoot = Opt.some(common.Hash256())
+          src.versionedHashes = Opt.some(collectBlobHashes(basePayload.transactions))
 
         inv_p = env.generateInvalidPayload(src, InvalidStateRoot)
 
@@ -407,7 +407,7 @@ method execute(cs: InvalidTxChainIDTest, env: TestEnv): bool =
     # Run test after a new payload has been broadcast
     onPayloadAttributesGenerated: proc(): bool =
       let txCreator = BaseTx(
-        recipient:  some(prevRandaoContractAddr),
+        recipient:  Opt.some(prevRandaoContractAddr),
         amount:     1.u256,
         txType:     cs.txType,
         gasLimit:   75000,
@@ -427,7 +427,7 @@ method execute(cs: InvalidTxChainIDTest, env: TestEnv): bool =
         chainId = eng.com.chainId
 
       let txCustomizerData = CustomTransactionData(
-        chainID: some((chainId.uint64 + 1'u64).ChainId)
+        chainID: Opt.some((chainId.uint64 + 1'u64).ChainId)
       )
 
       shadow.invalidTx = tx

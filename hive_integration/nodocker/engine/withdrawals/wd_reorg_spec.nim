@@ -41,7 +41,7 @@ type
     sidechain   : Table[uint64, ExecutionPayload]
     payloadId   : PayloadID
     height      : uint64
-    attr        : Option[PayloadAttributes]
+    attr        : Opt[PayloadAttributes]
 
   Canonical = ref object
     startAccount: UInt256
@@ -91,7 +91,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       startAccount: 1.u256 shl 160,
       nextIndex   : 0,
       wdHistory   : WDHistory(),
-      sidechain   : initTable[uint64, ExecutionPayload]()
+      sidechain   : Table[uint64, ExecutionPayload]()
     )
 
   # Sidechain withdraws on the max account value range 0xffffffffffffffffffffffffffffffffffffffff
@@ -100,12 +100,12 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
   let numBlocks = ws.getPreWithdrawalsBlockCount()+ws.wdBlockCount
   let pbRes = env.clMock.produceBlocks(numBlocks, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
-      env.clMock.nextWithdrawals = none(seq[WithdrawalV1])
+      env.clMock.nextWithdrawals = Opt.none(seq[WithdrawalV1])
 
       if env.clMock.currentPayloadNumber >= ws.forkHeight.uint64:
         # Prepare some withdrawals
         let wfb = ws.generateWithdrawalsForBlock(canonical.nextIndex, canonical.startAccount)
-        env.clMock.nextWithdrawals = some(w3Withdrawals wfb.wds)
+        env.clMock.nextWithdrawals = Opt.some(w3Withdrawals wfb.wds)
         canonical.nextIndex = wfb.nextIndex
         ws.wdHistory.put(env.clMock.currentPayloadNumber, wfb.wds)
 
@@ -128,7 +128,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       # Send transactions to be included in the payload
       let txs = env.makeTxs(
         BaseTx(
-          recipient: some(prevRandaoContractAddr),
+          recipient: Opt.some(prevRandaoContractAddr),
           amount:    1.u256,
           txType:    ws.txType,
           gasLimit:  75000.GasInt,
@@ -170,12 +170,12 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
           testCond rr.isOk:
             error "sidechain wd", msg=rr.error
 
-          attr.withdrawals = some(w3Withdrawals rr.get)
+          attr.withdrawals = Opt.some(w3Withdrawals rr.get)
 
         info "Requesting sidechain payload",
           number=env.clMock.currentPayloadNumber
 
-        sidechain.attr = some(attr)
+        sidechain.attr = Opt.some(attr)
         let r = sec.client.forkchoiceUpdated(fcState, attr)
         r.expectNoError()
         r.expectPayloadStatus(PayloadExecutionStatus.valid)
@@ -237,13 +237,13 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
           timestamp:             w3Qty(sidechain.sidechain[sidechain.height].timestamp, ws.getSidechainBlockTimeIncrements()),
           prevRandao:            env.clMock.latestPayloadAttributes.prevRandao,
           suggestedFeeRecipient: env.clMock.latestPayloadAttributes.suggestedFeeRecipient,
-          withdrawals:           some(w3Withdrawals wds),
+          withdrawals:           Opt.some(w3Withdrawals wds),
         )
         fcState = ForkchoiceStateV1(
           headBlockHash: sidechain.sidechain[sidechain.height].blockHash,
         )
 
-      let r = sec.client.forkchoiceUpdatedV2(fcState, some(attr))
+      let r = sec.client.forkchoiceUpdatedV2(fcState, Opt.some(attr))
       r.expectPayloadStatus(PayloadExecutionStatus.valid)
 
       let p = sec.client.getPayloadV2(r.get().payloadID.get)
@@ -262,7 +262,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       sidechain.sidechain[sidechain.height] = executionPayload(z.executionPayload)
 
   # Check the withdrawals on the latest
-  let res = ws.wdHistory.verifyWithdrawals(sidechain.height, none(UInt256), env.client)
+  let res = ws.wdHistory.verifyWithdrawals(sidechain.height, Opt.none(uint64), env.client)
   testCond res.isOk
 
   if ws.reOrgViaSync:
@@ -322,7 +322,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
 
 
   # Verify withdrawals changed
-  let r2 = sidechain.wdHistory.verifyWithdrawals(sidechain.height, none(UInt256), env.client)
+  let r2 = sidechain.wdHistory.verifyWithdrawals(sidechain.height, Opt.none(uint64), env.client)
   testCond r2.isOk
 
   # Verify all balances of accounts in the original chain didn't increase
@@ -330,7 +330,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
   # We are using different accounts credited between the canonical chain
   # and the fork.
   # We check on `latest`.
-  let r3 = ws.wdHistory.verifyWithdrawals(uint64(ws.forkHeight-1), none(UInt256), env.client)
+  let r3 = ws.wdHistory.verifyWithdrawals(uint64(ws.forkHeight-1), Opt.none(uint64), env.client)
   testCond r3.isOk
 
   # Re-Org back to the canonical chain

@@ -13,8 +13,9 @@ import
   chronicles,
   ../common/common,
   ../transaction/call_common,
-  ../vm_types,
+  ../evm/types,
   ../beacon/web3_eth_conv,
+  ../evm/evm_errors,
   ./rpc_types
 
 export
@@ -31,15 +32,13 @@ func destination*(args: TransactionArgs): EthAddress =
   ethAddr args.to.get(ZeroAddr)
 
 proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
-                   globalGasCap: GasInt, baseFee: Option[UInt256],
-                   forkOverride = none(EVMFork)): CallParams
-    {.gcsafe, raises: [ValueError].} =
+                   globalGasCap: GasInt, baseFee: Opt[UInt256],
+                   forkOverride = Opt.none(EVMFork)): EvmResult[CallParams] =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
-    raise newException(ValueError,
-      "both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified")
+    return err(evmErr(EvmInvalidParam))
 
   # Set default gas & gas price if none were set
   var gasLimit = globalGasCap
@@ -73,7 +72,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     else:
       @[]
 
-  CallParams(
+  ok(CallParams(
     vmState:         vmState,
     forkOverride:    forkOverride,
     sender:          args.sender,
@@ -85,6 +84,6 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     input:           args.payload(),
     accessList:      ethAccessList args.accessList,
     versionedHashes: args.versionedHashes,
-  )
+  ))
 
 {.pop.}

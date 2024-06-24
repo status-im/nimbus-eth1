@@ -9,16 +9,15 @@
 # distributed except according to those terms.
 
 import
-  std/[hashes, os, sequtils],
+  std/[os, sequtils],
   eth/common,
-  rocksdb,
+  stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_delete, aristo_journal/journal_scheduler,
-    aristo_hashify, aristo_hike, aristo_merge],
+    aristo_debug, aristo_desc, aristo_hashify, aristo_hike, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,
-  ../test_sync_snap/test_types,
-  ../replay/[pp, undump_accounts, undump_storages]
+  ../replay/[pp, undump_accounts, undump_storages],
+  ./test_samples_xx
 
 from ../../nimbus/sync/snap/range_desc
   import NodeKey, ByteArray32
@@ -29,14 +28,6 @@ type
     id*: int
     proof*: seq[SnapProof]
     kvpLst*: seq[LeafTiePayload]
-
-const
-  samples = [
-    [      (4,0,10),      (3,3,10),      (3,4,10),      (3,5,10)],
-    [(2,0,high int),(1,1,high int),(1,1,high int),(1,1,high int)],
-  ]
-
-  LyoSamples* = samples.mapIt((it, (3 * it.volumeSize.minCovered) div 2))
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -110,7 +101,7 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
 func `==`*[T: AristoError|VertexID](a: T, b: int): bool =
   a == T(b)
 
-func `==`*(a: (VertexID|QueueID,AristoError), b: (int,int)): bool =
+func `==`*(a: (VertexID,AristoError), b: (int,int)): bool =
   (a[0].int,a[1].int) == b
 
 func `==`*(a: (VertexID,AristoError), b: (int,AristoError)): bool =
@@ -122,9 +113,6 @@ func `==`*(a: (int,AristoError), b: (int,int)): bool =
 func `==`*(a: (int,VertexID,AristoError), b: (int,int,int)): bool =
   (a[0], a[1].int, a[2].int) == b
 
-func `==`*(a: (QueueID,Hash), b: (int,Hash)): bool =
-  (a[0].int,a[1]) == b
-
 func to*(a: Hash256; T: type UInt256): T =
   T.fromBytesBE a.data
 
@@ -133,9 +121,6 @@ func to*(a: Hash256; T: type PathID): T =
 
 func to*(a: HashKey; T: type UInt256): T =
   T.fromBytesBE 0u8.repeat(32 - a.len) & @(a.data)
-
-func to*(fid: FilterID; T: type Hash256): T =
-  result.data = fid.uint64.u256.toBytesBE
 
 proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable in-memory format
@@ -225,67 +210,13 @@ proc hashify*(
   else:
     aristo_hashify.hashify(db)
 
-
-proc delete*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-    accPath: PathID;
-    noisy: bool;
-      ): Result[bool,(VertexID,AristoError)] =
-  when declared(aristo_delete.noisy):
-    aristo_delete.exec(noisy, aristo_delete.delete(db, root, path, accPath))
-  else:
-    aristo_delete.delete(db, root, path, accPath)
-
-proc delete*(
-    db: AristoDbRef;
-    lty: LeafTie;
-    accPath: PathID;
-    noisy: bool;
-      ): Result[bool,(VertexID,AristoError)] =
-  when declared(aristo_delete.noisy):
-    aristo_delete.exec(noisy, aristo_delete.delete(db, lty, accPath))
-  else:
-    aristo_delete.delete(db, lty, accPath)
-
-proc delTree*(
-    db: AristoDbRef;
-    root: VertexID;
-    accPath: PathID;
-    noisy: bool;
-      ): Result[void,(VertexID,AristoError)] =
-  when declared(aristo_delete.noisy):
-    aristo_delete.exec(noisy, aristo_delete.delTree(db, root, accPath))
-  else:
-    aristo_delete.delTree(db, root, accPath)
-
-
-proc merge*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-    data: openArray[byte];
-    accPath: PathID;
-    noisy: bool;
-      ): Result[bool, AristoError] =
-  when declared(aristo_merge.noisy):
-    aristo_merge.exec(noisy, aristo_merge.merge(db, root, path, data, accPath))
-  else:
-    aristo_merge.merge(db, root, path, data, accPath)
-
-proc mergePayload*(
-    db: AristoDbRef;
-    lty: LeafTie;
-    pyl: PayloadRef;
-    accPath: PathID;
-    noisy: bool;
-      ): Result[Hike,AristoError] =
-  when declared(aristo_merge.noisy):
-    aristo_merge.exec(noisy, aristo_merge.mergePayload(db, lty, pyl, accPath))
-  else:
-    aristo_merge.mergePayload(db, lty, pyl, accPath)
-
+proc mergeGenericData*(
+    db: AristoDbRef;                   # Database, top layer
+    leaf: LeafTiePayload;              # Leaf item to add to the database
+      ): Result[bool,AristoError] =
+  ## Variant of `mergeGenericData()`.
+  db.mergeGenericData(
+    leaf.leafTie.root, @(leaf.leafTie.path), leaf.payload.rawBlob)
 
 proc mergeList*(
     db: AristoDbRef;                   # Database, top layer
@@ -297,19 +228,35 @@ proc mergeList*(
   for n,w in leafs:
     noisy.say "*** mergeList",
       " n=", n, "/", leafs.len
-    let rc = db.mergePayload(w.leafTie, w.payload, VOID_PATH_ID, noisy=noisy)
+    let rc = db.mergeGenericData w
     noisy.say "*** mergeList",
       " n=", n, "/", leafs.len,
       " rc=", (if rc.isOk: "ok" else: $rc.error),
       "\n    -------------\n"
-    if rc.isOk:
-      merged.inc
-    elif rc.error in {MergeLeafPathCachedAlready,MergeLeafPathOnBackendAlready}:
-      dups.inc
-    else:
+    if rc.isErr:
       return (n,dups,rc.error)
+    elif rc.value:
+      merged.inc
+    else:
+      dups.inc
 
   (merged, dups, AristoError(0))
+
+
+proc mergeDummyAccLeaf*(
+    db: AristoDbRef;
+    pathID: int;
+    nonce: int;
+      ): Result[void,AristoError] =
+  # Add a dummy entry so the balancer logic can be triggered
+  let
+    acc = AristoAccount(nonce: nonce.AccountNonce)
+    rc = db.mergeAccountPayload(pathID.uint64.toBytesBE, acc)
+  if rc.isOk:
+    ok()
+  else:
+    err(rc.error)
+
 
 # ------------------------------------------------------------------------------
 # End

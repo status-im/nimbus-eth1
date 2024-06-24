@@ -162,7 +162,7 @@ proc close*(env: EngineEnv) =
 proc setRealTTD*(env: EngineEnv) =
   let genesis = env.com.genesisHeader
   let realTTD = genesis.difficulty
-  env.com.setTTD some(realTTD)
+  env.com.setTTD Opt.some(realTTD)
   env.ttd = realTTD
 
 func httpPort*(env: EngineEnv): Port =
@@ -218,5 +218,5 @@ func version*(env: EngineEnv, time: Web3Quantity): Version =
 func version*(env: EngineEnv, time: uint64): Version =
   env.version(time.EthTime)
 
-proc setBlock*(env: EngineEnv, header: common.BlockHeader, body: common.BlockBody): bool =
-  env.chain.setBlock(header, body) == ValidationResult.OK
+proc setBlock*(env: EngineEnv, blk: common.EthBlock): bool =
+  env.chain.setBlock(blk).isOk()

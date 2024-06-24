@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -15,7 +15,7 @@ export BlockHeader
 proc hasUncles*(header: BlockHeader): bool = header.ommersHash != EMPTY_UNCLE_HASH
 
 proc `$`*(header: BlockHeader): string =
-  result = &"BlockHeader(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.blockNumber} gasLimit: {header.gasLimit})"
+  result = &"BlockHeader(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.number} gasLimit: {header.gasLimit})"
 
 # CalcGasLimit computes the gas limit of the next block after parent. It aims
 # to keep the baseline gas above the provided floor, and increase it towards the

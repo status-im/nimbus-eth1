@@ -117,7 +117,7 @@ method execute(cs: InOrderPayloadExecutionTest, env: TestEnv): bool =
     # We send the transactions after we got the Payload ID, before the CLMocker gets the prepared Payload
     onPayloadProducerSelected: proc(): bool =
       let tc = BaseTx(
-        recipient:  some(shadow.recipient),
+        recipient:  Opt.some(shadow.recipient),
         amount:     shadow.amountPerTx,
         txType:     cs.txType,
         gasLimit:   75000,
@@ -220,7 +220,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
     onPayloadProducerSelected: proc(): bool =
       let recipient = EthAddress.randomBytes()
       let tc = BaseTx(
-        recipient:  some(recipient),
+        recipient:  Opt.some(recipient),
         txType:     cs.txType,
         gasLimit:   75000,
       )
@@ -245,7 +245,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
     for i in 0..<payloadCount:
       let newPrevRandao = common.Hash256.randomBytes()
       let customizer = CustomPayloadData(
-        prevRandao: some(newPrevRandao),
+        prevRandao: Opt.some(newPrevRandao),
       )
       let newPayload = customizer.customizePayload(basePayload)
       let version = env.engine.version(newPayload.timestamp)
@@ -304,7 +304,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
     onPayloadProducerSelected: proc(): bool =
       # Send at least one transaction per payload
       let tc = BaseTx(
-        recipient:  some(shadow.recipient),
+        recipient:  Opt.some(shadow.recipient),
         txType:     cs.txType,
         gasLimit:   75000,
       )
@@ -331,7 +331,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
     onPayloadProducerSelected: proc(): bool =
       # Send at least one transaction per payload
       let tc = BaseTx(
-        recipient:  some(shadow.recipient),
+        recipient:  Opt.some(shadow.recipient),
         txType:     cs.txType,
         gasLimit:   75000,
       )
@@ -353,8 +353,8 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
         suggestedFeeRecipient = w3Address()
 
       let customizer = BasePayloadAttributesCustomizer(
-        prevRandao: some(ethHash random),
-        suggestedFeerecipient: some(ethAddr suggestedFeeRecipient),
+        prevRandao: Opt.some(ethHash random),
+        suggestedFeerecipient: Opt.some(ethAddr suggestedFeeRecipient),
       )
 
       let newAttr = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
@@ -365,7 +365,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
       )
 
       var version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
-      var s = env.engine.client.forkchoiceUpdated(version, fcu, some(newAttr))
+      var s = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(newAttr))
       s.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
       # Send the previous payload to be able to continue
@@ -420,7 +420,7 @@ method execute(cs: NewPayloadWithMissingFcUTest, env: TestEnv): bool =
     onPayloadProducerSelected: proc(): bool =
       let recipient = common.EthAddress.randomBytes()
       let tc = BaseTx(
-        recipient:  some(recipient),
+        recipient:  Opt.some(recipient),
         txType:     cs.txType,
         gasLimit:   75000,
       )

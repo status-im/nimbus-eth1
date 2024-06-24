@@ -16,6 +16,7 @@ import
   ../nimbus/errors,
   ../nimbus/core/chain,
   ../nimbus/common,
+  ../nimbus/db/opts,
   ../nimbus/db/[core_db/persistent, storage_types],
   configuration  # must be late (compilation annoyance)
 
@@ -39,6 +40,9 @@ else:
 template persistToDb(db: CoreDbRef, body: untyped) =
   block: body
 
+proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
+  kvt.hasKey(key).expect "valid bool"
+
 proc main() {.used.} =
   # 97 block with uncles
   # 46147 block with first transaction
@@ -54,35 +58,34 @@ proc main() {.used.} =
 
   let conf = configuration.getConfiguration()
   let com = CommonRef.new(
-    newCoreDbRef(DefaultDbPersistent, conf.dataDir),
+    newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()),
     conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
-  if conf.head != 0.u256:
+  if conf.head != 0'u64:
     var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
     discard com.db.setHead(parentBlock.header)
 
-  if canonicalHeadHashKey().toOpenArray notin com.db.kvt:
+  let kvt = com.db.newKvt()
+  if canonicalHeadHashKey().toOpenArray notin kvt:
     persistToDb(com.db):
       com.initializeEmptyDb()
-    doAssert(canonicalHeadHashKey().toOpenArray in com.db.kvt)
+    doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
   var head = com.db.getCanonicalHead()
-  var blockNumber = head.blockNumber + 1
+  var blockNumber = head.number + 1
   var chain = newChain(com)
 
   let numBlocksToCommit = conf.numCommits
 
-  var headers = newSeqOfCap[BlockHeader](numBlocksToCommit)
-  var bodies  = newSeqOfCap[BlockBody](numBlocksToCommit)
-  var one     = 1.u256
+  var blocks = newSeqOfCap[EthBlock](numBlocksToCommit)
+  var one    = 1'u64
 
   var numBlocks = 0
   var counter = 0
   var retryCount = 0
 
   while true:
-
     var thisBlock: Block
     try:
       thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
@@ -95,8 +98,7 @@ proc main() {.used.} =
       else:
         raise e
 
-    headers.add thisBlock.header
-    bodies.add thisBlock.body
+    blocks.add EthBlock.init(thisBlock.header, thisBlock.body)
     info "REQUEST HEADER", blockNumber=blockNumber, txs=thisBlock.body.transactions.len
 
     inc numBlocks
@@ -104,11 +106,11 @@ proc main() {.used.} =
 
     if numBlocks == numBlocksToCommit:
       persistToDb(com.db):
-        if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
-          raise newException(ValidationError, "Error when validating blocks")
+        let res = chain.persistBlocks(blocks)
+        res.isOkOr:
+          raise newException(ValidationError, "Error when validating blocks: " & res.error)
       numBlocks = 0
-      headers.setLen(0)
-      bodies.setLen(0)
+      blocks.setLen(0)
 
     inc counter
     if conf.maxBlocks != 0 and counter >= conf.maxBlocks:
@@ -116,8 +118,9 @@ proc main() {.used.} =
 
   if numBlocks > 0:
     persistToDb(com.db):
-      if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
-        raise newException(ValidationError, "Error when validating blocks")
+      let res = chain.persistBlocks(blocks)
+      res.isOkOr:
+        raise newException(ValidationError, "Error when validating blocks: " & res.error)
 
 when isMainModule:
   var message: string

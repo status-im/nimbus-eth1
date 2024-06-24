@@ -22,23 +22,23 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getIdgUbe*(
+proc getTuvUbe*(
     db: AristoDbRef;
-      ): Result[seq[VertexID],AristoError] =
+      ): Result[VertexID,AristoError] =
   ## Get the ID generator state from the unfiltered backened if available.
   let be = db.backend
   if not be.isNil:
-    return be.getIdgFn()
-  err(GetIdgNotFound)
+    return be.getTuvFn()
+  err(GetTuvNotFound)
 
-proc getFqsUbe*(
+proc getLstUbe*(
     db: AristoDbRef;
-      ): Result[seq[(QueueID,QueueID)],AristoError] =
-  ## Get the list of filter IDs unfiltered backened if available.
+      ): Result[SavedState,AristoError] =
+  ## Get the last saved state
   let be = db.backend
   if not be.isNil:
-    return be.getFqsFn()
-  err(GetFqsNotFound)
+    return be.getLstFn()
+  err(GetLstNotFound)
 
 proc getVtxUbe*(
     db: AristoDbRef;
@@ -60,33 +60,23 @@ proc getKeyUbe*(
     return be.getKeyFn vid
   err GetKeyNotFound
 
-proc getFilUbe*(
-    db: AristoDbRef;
-    qid: QueueID;
-      ): Result[FilterRef,AristoError] =
-  ## Get the filter from the unfiltered backened if available.
-  let be = db.backend
-  if not be.isNil:
-    return be.getFilFn qid
-  err GetFilNotFound
-
 # ------------------
 
-proc getIdgBE*(
+proc getTuvBE*(
     db: AristoDbRef;
-      ): Result[seq[VertexID],AristoError] =
+      ): Result[VertexID,AristoError] =
   ## Get the ID generator state the `backened` layer if available.
-  if not db.roFilter.isNil:
-    return ok(db.roFilter.vGen)
-  db.getIdgUbe()
+  if not db.balancer.isNil:
+    return ok(db.balancer.vTop)
+  db.getTuvUbe()
 
 proc getVtxBE*(
     db: AristoDbRef;
     vid: VertexID;
       ): Result[VertexRef,AristoError] =
   ## Get the vertex from the (filtered) backened if available.
-  if not db.roFilter.isNil:
-    db.roFilter.sTab.withValue(vid, w):
+  if not db.balancer.isNil:
+    db.balancer.sTab.withValue(vid, w):
       if w[].isValid:
         return ok(w[])
       return err(GetVtxNotFound)
@@ -97,8 +87,8 @@ proc getKeyBE*(
     vid: VertexID;
       ): Result[HashKey,AristoError] =
   ## Get the merkle hash/key from the (filtered) backend if available.
-  if not db.roFilter.isNil:
-    db.roFilter.kMap.withValue(vid, w):
+  if not db.balancer.isNil:
+    db.balancer.kMap.withValue(vid, w):
       if w[].isValid:
         return ok(w[])
       return err(GetKeyNotFound)

@@ -10,9 +10,10 @@
 
 import
   chronicles,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/core/executor,
   ../nimbus/common/common,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   configuration # must be late (compilation annoyance)
 
@@ -23,39 +24,39 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
   var
     parentNumber = blockNumber - 1
     parent = com.db.getBlockHeader(parentNumber)
-    headers = newSeq[BlockHeader](numBlocks)
-    bodies  = newSeq[BlockBody](numBlocks)
+    blocks = newSeq[EthBlock](numBlocks)
 
   for i in 0 ..< numBlocks:
-    headers[i] = com.db.getBlockHeader(blockNumber + i.u256)
-    bodies[i]  = com.db.getBlockBody(headers[i].blockHash)
+    blocks[i] = com.db.getEthBlock(blockNumber + i.BlockNumber)
 
-  let transaction = com.db.beginTransaction()
+  let transaction = com.db.newTransaction()
   defer: transaction.dispose()
 
   for i in 0 ..< numBlocks:
-    stdout.write blockNumber + i.u256
+    stdout.write blockNumber + i.BlockNumber
     stdout.write "\r"
 
     let
-      vmState = BaseVMState.new(parent, headers[i], com)
-      validationResult = vmState.processBlock(headers[i], bodies[i])
+      vmState = BaseVMState.new(parent, blocks[i].header, com)
+      validationResult = vmState.processBlock(blocks[i])
 
-    if validationResult != ValidationResult.OK:
-      error "block validation error", validationResult, blockNumber = blockNumber + i.u256
+    if validationResult.isErr:
+      error "block validation error",
+        err = validationResult.error(), blockNumber = blockNumber + i.BlockNumber
 
-    parent = headers[i]
+    parent = blocks[i].header
 
   transaction.rollback()
-  result = blockNumber + numBlocks.u256
+  result = blockNumber + numBlocks.BlockNumber
 
 proc main() {.used.} =
   let
     conf = getConfiguration()
-    com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir))
+    com = CommonRef.new(newCoreDbRef(
+      DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
   # move head to block number ...
-  if conf.head == 0.u256:
+  if conf.head == 0'u64:
     raise newException(ValueError, "please set block number with --head: blockNumber")
 
   var counter = 0

@@ -18,7 +18,6 @@
 
 import
   ../constants,
-  ./keyed_queue/kq_rlp,
   ./utils_defs,
   eth/[common, common/transaction, keys, rlp],
   stew/keyed_queue,
@@ -156,8 +155,7 @@ proc len*(er: var EcRecover): int =
 # Public functions: caching ecRecover version
 # ------------------------------------------------------------------------------
 
-proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult
-    =
+proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult =
   ## Extract account address from `extraData` field (last 65 bytes) of the
   ## argument header. The result is kept in a LRU cache to re-purposed for
   ## improved result delivery avoiding calculations.
@@ -172,35 +170,18 @@ proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult
       return ok(er.q.lruAppend(key, rc.value, er.size.int))
     err(rc.error)
 
-proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult
-    =
+proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult =
   ## Variant of `ecRecover()` for call-by-value header
   var hdr = header
   er.ecRecover(hdr)
 
-proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult
-    =
+proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult =
   ## Variant of `ecRecover()` for hash only. Will only succeed it the
   ## argument hash is uk the LRU queue.
   let rc = er.q.lruFetch(hash.data)
   if rc.isOk:
     return ok(rc.value)
   err((errItemNotFound,""))
-
-# ------------------------------------------------------------------------------
-# Public RLP mixin functions for caching version
-# ------------------------------------------------------------------------------
-
-proc append*(rw: var RlpWriter; data: EcRecover)
-    {.raises: [KeyError].} =
-  ## Generic support for `rlp.encode()`
-  rw.append((data.size,data.q))
-
-proc read*(rlp: var Rlp; Q: type EcRecover): Q
-    {.raises: [KeyError].} =
-  ## Generic support for `rlp.decode()` for loading the cache from a
-  ## serialised data stream.
-  (result.size, result.q) = rlp.read((type result.size, type result.q))
 
 # ------------------------------------------------------------------------------
 # Debugging

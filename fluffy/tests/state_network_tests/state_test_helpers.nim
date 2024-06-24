@@ -14,7 +14,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../../nimbus/common/chain_config,
+  ../../../nimbus/common/chain_config,
   ../../network/history/[history_content, history_network],
   ../../network/state/[state_content, state_utils, state_network],
   ../../eth_data/yaml_utils,
@@ -109,7 +109,7 @@ proc toState*(
     alloc: GenesisAlloc
 ): (HexaryTrie, Table[EthAddress, HexaryTrie]) {.raises: [RlpError].} =
   var accountTrie = initHexaryTrie(newMemoryDB())
-  var storageStates = initTable[EthAddress, HexaryTrie]()
+  var storageStates = Table[EthAddress, HexaryTrie]()
 
   for address, genAccount in alloc:
     var storageRoot = EMPTY_ROOT_HASH
@@ -148,8 +148,9 @@ proc newStateNode*(
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new("", uint32.high, inMemory = true)
     sm = StreamManager.new(node)
-    hn = HistoryNetwork.new(node, db, sm, FinishedAccumulator())
-    sn = StateNetwork.new(node, db, sm, historyNetwork = Opt.some(hn))
+    hn = HistoryNetwork.new(PortalNetwork.none, node, db, sm, FinishedAccumulator())
+    sn =
+      StateNetwork.new(PortalNetwork.none, node, db, sm, historyNetwork = Opt.some(hn))
 
   return StateNode(discoveryProtocol: node, stateNetwork: sn)
 
@@ -166,7 +167,7 @@ proc stop*(sn: StateNode) {.async.} =
   sn.stateNetwork.stop()
   await sn.discoveryProtocol.closeWait()
 
-proc containsId*(sn: StateNode, contentId: ContentId): bool =
+proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =
   return sn.stateNetwork.contentDB.get(contentId).isSome()
 
 proc mockBlockHashToStateRoot*(
@@ -186,3 +187,11 @@ proc mockBlockHashToStateRoot*(
   sn.portalProtocol().storeContent(
     contentKeyBytes, contentId, SSZ.encode(blockHeaderWithProof)
   )
+
+proc waitUntilContentAvailable*(sn: StateNode, contentId: ContentId) {.async.} =
+  var waitCount = 0
+  while not sn.containsId(contentId):
+    await sleepAsync(10.milliseconds)
+    inc waitCount
+    if waitCount > 1000:
+      break

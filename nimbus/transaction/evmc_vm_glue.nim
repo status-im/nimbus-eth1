@@ -10,7 +10,7 @@
 
 import
   ./host_types, evmc/evmc,
-  ".."/[vm_types, vm_computation, vm_state_transactions]
+  ".."/[evm/types, evm/computation, evm/state_transactions]
 
 proc evmcReleaseResult(result: var evmc_result) {.cdecl.} =
   dealloc(result.output_data)
@@ -38,13 +38,10 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
   #  host.computation = c
 
   c.host.init(cast[ptr nimbus_host_interface](hostInterface), hostContext)
-  try:
-    if c.sysCall:
-      execSysCall(c)
-    else:
-      execComputation(c)
-  except CatchableError as exc:
-    c.setError(exc.msg)
+  if c.sysCall:
+    execSysCall(c)
+  else:
+    execComputation(c)
 
   # When output size is zero, output data pointer may be null.
   var output_data: ptr byte
@@ -65,8 +62,8 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
     status_code: c.evmcStatus,
     # Gas left is required to be zero when not `EVMC_SUCCESS` or `EVMC_REVERT`.
     gas_left:    if result.status_code notin {EVMC_SUCCESS, EVMC_REVERT}: 0'i64
-                 else: c.gasMeter.gasRemaining.int64,
-    gas_refund:  if result.status_code == EVMC_SUCCESS: c.gasMeter.gasRefunded.int64
+                 else: c.gasMeter.gasRemaining,
+    gas_refund:  if result.status_code == EVMC_SUCCESS: c.gasMeter.gasRefunded
                  else: 0'i64,
     output_data: output_data,
     output_size: output_size.csize_t,

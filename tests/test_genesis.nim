@@ -101,7 +101,7 @@ proc customGenesisTest() =
       check com.ttd.get == ttd
       check com.consensus == ConsensusType.POW
       check cg.config.mergeNetsplitBlock.isSome
-      check cg.config.mergeNetsplitBlock.get == 14660963.toBlockNumber
+      check cg.config.mergeNetsplitBlock.get == 14660963.BlockNumber
       check cg.config.mergeNetsplitBlock == cg.config.mergeForkBlock
 
     test "Holesky":

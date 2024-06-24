@@ -76,11 +76,9 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
-      # check that both the offer and parent were received by the second state instance
+      # check that the offer was received by the second state instance
       let res1 =
         await stateNode2.stateNetwork.getAccountTrieNode(contentKey.accountTrieNodeKey)
       check:
@@ -89,14 +87,13 @@ procSuite "State Gossip - Gossip Offer":
         res1.get() == contentValue.toRetrievalValue()
         res1.get().node == contentValue.toRetrievalValue().node
 
+      # check that the parent offer was not received by the second state instance
       let res2 = await stateNode2.stateNetwork.getAccountTrieNode(
         parentContentKey.accountTrieNodeKey
       )
       check:
-        stateNode2.containsId(parentContentId)
-        res2.isOk()
-        res2.get() == parentContentValue.toRetrievalValue()
-        res2.get().node == parentContentValue.toRetrievalValue().node
+        not stateNode2.containsId(parentContentId)
+        res2.isNone()
 
     await stateNode1.stop()
     await stateNode2.stop()
@@ -152,11 +149,9 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
-      # check that both the offer and parent were received by the second state instance
+      # check that the offer was received by the second state instance
       let res1 = await stateNode2.stateNetwork.getContractTrieNode(
         contentKey.contractTrieNodeKey
       )
@@ -166,14 +161,13 @@ procSuite "State Gossip - Gossip Offer":
         res1.get() == contentValue.toRetrievalValue()
         res1.get().node == contentValue.toRetrievalValue().node
 
+      # check that the offer parent was not received by the second state instance
       let res2 = await stateNode2.stateNetwork.getContractTrieNode(
         parentContentKey.contractTrieNodeKey
       )
       check:
-        stateNode2.containsId(parentContentId)
-        res2.isOk()
-        res2.get() == parentContentValue.toRetrievalValue()
-        res2.get().node == parentContentValue.toRetrievalValue().node
+        not stateNode2.containsId(parentContentId)
+        res2.isNone()
 
     await stateNode1.stop()
     await stateNode2.stop()
@@ -218,11 +212,9 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
-      # check that both the offer and parent were received by the second state instance
+      # check that the offer was received by the second state instance
       let res1 =
         await stateNode2.stateNetwork.getContractCode(contentKey.contractCodeKey)
       check:
@@ -273,7 +265,7 @@ procSuite "State Gossip - Gossip Offer":
       check not stateNode2.containsId(contentId)
 
       # offer the leaf node
-      await stateNode1.portalProtocol.gossipOffer(
+      await stateNode1.portalProtocol.recursiveGossipOffer(
         Opt.none(NodeId),
         contentKeyBytes,
         contentValueBytes,
@@ -282,7 +274,9 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for recursive gossip to complete
-      await sleepAsync(1000.milliseconds)
+      for node in testData.recursive_gossip:
+        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       # check that all nodes were received by both state instances
       for kv in testData.recursive_gossip:
@@ -350,7 +344,7 @@ procSuite "State Gossip - Gossip Offer":
       check not stateNode2.containsId(contentId)
 
       # offer the leaf node
-      await stateNode1.portalProtocol.gossipOffer(
+      await stateNode1.portalProtocol.recursiveGossipOffer(
         Opt.none(NodeId),
         contentKeyBytes,
         contentValueBytes,
@@ -359,7 +353,9 @@ procSuite "State Gossip - Gossip Offer":
       )
 
       # wait for recursive gossip to complete
-      await sleepAsync(1000.milliseconds)
+      for node in testData.recursive_gossip:
+        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       # check that all nodes were received by both state instances
       for kv in testData.recursive_gossip:

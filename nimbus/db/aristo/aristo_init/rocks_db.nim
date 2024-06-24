@@ -25,22 +25,19 @@
 ##       ...
 ##
 {.push raises: [].}
-{.warning: "*** importing rocks DB which needs a linker library".}
 
 import
   eth/common,
   rocksdb,
   results,
-  ../aristo_constants,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
   ../aristo_blobify,
   ./init_common,
-  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
+  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk],
+  ../../opts
 
 const
-  maxOpenFiles = 512          ## Rocks DB setup, open files limit
-
   extraTraceMessages = false
     ## Enabled additional logging noise
 
@@ -81,14 +78,13 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
     proc(vid: VertexID): Result[VertexRef,AristoError] =
 
       # Fetch serialised data record
-      let data = db.rdb.getVtx(vid.uint64).valueOr:
+      let vtx = db.rdb.getVtx(vid).valueOr:
         when extraTraceMessages:
           trace logTxt "getVtxFn() failed", vid, error=error[0], info=error[1]
         return err(error[0])
 
-      # Decode data record
-      if 0 < data.len:
-        return data.deblobify VertexRef
+      if vtx.isValid:
+        return ok(vtx)
 
       err(GetVtxNotFound)
 
@@ -97,114 +93,63 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
     proc(vid: VertexID): Result[HashKey,AristoError] =
 
       # Fetch serialised data record
-      let data = db.rdb.getKey(vid.uint64).valueOr:
+      let key = db.rdb.getKey(vid).valueOr:
         when extraTraceMessages:
           trace logTxt "getKeyFn: failed", vid, error=error[0], info=error[1]
         return err(error[0])
 
-      # Decode data record
-      if 0 < data.len:
-        let lid = HashKey.fromBytes(data).valueOr:
-          return err(RdbHashKeyExpected)
-        return ok lid
+      if key.isValid:
+        return ok(key)
 
       err(GetKeyNotFound)
 
-proc getFilFn(db: RdbBackendRef): GetFilFn =
-  if db.rdb.noFq:
-    result =
-      proc(qid: QueueID): Result[FilterRef,AristoError] =
-        err(FilQuSchedDisabled)
-  else:
-    result =
-      proc(qid: QueueID): Result[FilterRef,AristoError] =
-
-        # Fetch serialised data record.
-        let data = db.rdb.getByPfx(FilPfx, qid.uint64).valueOr:
-          when extraTraceMessages:
-            trace logTxt "getFilFn: failed", qid, error=error[0], info=error[1]
-          return err(error[0])
-
-        # Decode data record
-        if 0 < data.len:
-          return data.deblobify FilterRef
-
-        err(GetFilNotFound)
-
-proc getIdgFn(db: RdbBackendRef): GetIdgFn =
+proc getTuvFn(db: RdbBackendRef): GetTuvFn =
   result =
-    proc(): Result[seq[VertexID],AristoError]=
+    proc(): Result[VertexID,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getByPfx(AdmPfx, AdmTabIdIdg.uint64).valueOr:
+      let data = db.rdb.getAdm(AdmTabIdTuv).valueOr:
         when extraTraceMessages:
-          trace logTxt "getIdgFn: failed", error=error[0], info=error[1]
+          trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
         return err(error[0])
 
       # Decode data record
       if data.len == 0:
-        let w = EmptyVidSeq   # Must be `let`
-        return ok w           # Compiler error with `ok(EmptyVidSeq)`
+        return ok VertexID(0)
 
       # Decode data record
-      data.deblobify seq[VertexID]
+      result = data.deblobify VertexID
 
-proc getFqsFn(db: RdbBackendRef): GetFqsFn =
-  if db.rdb.noFq:
-    result =
-      proc(): Result[seq[(QueueID,QueueID)],AristoError] =
-        err(FilQuSchedDisabled)
-  else:
-    result =
-      proc(): Result[seq[(QueueID,QueueID)],AristoError]=
+proc getLstFn(db: RdbBackendRef): GetLstFn =
+  result =
+    proc(): Result[SavedState,AristoError]=
 
-        # Fetch serialised data record.
-        let data = db.rdb.getByPfx(AdmPfx, AdmTabIdFqs.uint64).valueOr:
-          when extraTraceMessages:
-            trace logTxt "getFqsFn: failed", error=error[0], info=error[1]
-          return err(error[0])
+      # Fetch serialised data record.
+      let data = db.rdb.getAdm(AdmTabIdLst).valueOr:
+        when extraTraceMessages:
+          trace logTxt "getLstFn: failed", error=error[0], info=error[1]
+        return err(error[0])
 
-        if data.len == 0:
-          let w = EmptyQidPairSeq   # Must be `let`
-          return ok w               # Compiler error with `ok(EmptyQidPairSeq)`
-
-        # Decode data record
-        data.deblobify seq[(QueueID,QueueID)]
+      # Decode data record
+      data.deblobify SavedState
 
 # -------------
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
+    proc(): Result[PutHdlRef,AristoError] =
       db.rdb.begin()
-      db.newSession()
+      ok db.newSession()
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
     proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-
-        # Collect batch session arguments
-        var batch: seq[(uint64,Blob)]
-        for (vid,vtx) in vrps:
-          if vtx.isValid:
-            let rc = vtx.blobify()
-            if rc.isErr:
-              hdl.error = TypedPutHdlErrRef(
-                pfx:  VtxPfx,
-                vid:  vid,
-                code: rc.error)
-              return
-            batch.add (vid.uint64, rc.value)
-          else:
-            batch.add (vid.uint64, EmptyBlob)
-
-        # Stash batch session data via LRU cache
-        db.rdb.putVtx(batch).isOkOr:
+        db.rdb.putVtx(vrps).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
-            vid:  VertexID(error[0]),
+            vid:  error[0],
             code: error[1],
             info: error[2])
 
@@ -213,99 +158,45 @@ proc putKeyFn(db: RdbBackendRef): PutKeyFn =
     proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-
-        # Collect batch session arguments
-        var batch: seq[(uint64,Blob)]
-        for (vid,key) in vkps:
-          if key.isValid:
-            batch.add (vid.uint64, @(key.data))
-          else:
-            batch.add (vid.uint64, EmptyBlob)
-
-        # Stash batch session data via LRU cache
-        db.rdb.putKey(batch).isOkOr:
+        db.rdb.putKey(vkps).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  KeyPfx,
-            vid:  VertexID(error[0]),
+            vid:  error[0],
             code: error[1],
             info: error[2])
 
-proc putFilFn(db: RdbBackendRef): PutFilFn =
-  if db.rdb.noFq:
-    result =
-      proc(hdl: PutHdlRef; vf: openArray[(QueueID,FilterRef)]) =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  FilPfx,
-            qid:  (if 0 < vf.len: vf[0][0] else: QueueID(0)),
-            code: FilQuSchedDisabled)
-  else:
-    result =
-      proc(hdl: PutHdlRef; vrps: openArray[(QueueID,FilterRef)]) =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-
-          # Collect batch session arguments
-          var batch: seq[(uint64,Blob)]
-          for (qid,filter) in vrps:
-            if filter.isValid:
-              let rc = filter.blobify()
-              if rc.isErr:
-                hdl.error = TypedPutHdlErrRef(
-                  pfx:  FilPfx,
-                  qid:  qid,
-                  code: rc.error)
-                return
-              batch.add (qid.uint64, rc.value)
-            else:
-              batch.add (qid.uint64, EmptyBlob)
-
-          # Stash batch session data
-          db.rdb.putByPfx(FilPfx, batch).isOkOr:
-            hdl.error = TypedPutHdlErrRef(
-              pfx:  FilPfx,
-              qid:  QueueID(error[0]),
-              code: error[1],
-              info: error[2])
-
-proc putIdgFn(db: RdbBackendRef): PutIdgFn =
+proc putTuvFn(db: RdbBackendRef): PutTuvFn =
   result =
-    proc(hdl: PutHdlRef; vs: openArray[VertexID])  =
+    proc(hdl: PutHdlRef; vs: VertexID)  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        let idg = if 0 < vs.len: vs.blobify else: EmptyBlob
-        db.rdb.putByPfx(AdmPfx, @[(AdmTabIdIdg.uint64, idg)]).isOkOr:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            aid:  AdmTabIdIdg,
-            code: error[1],
-            info: error[2])
-
-proc putFqsFn(db: RdbBackendRef): PutFqsFn =
-  if db.rdb.noFq:
-    result =
-      proc(hdl: PutHdlRef; fs: openArray[(QueueID,QueueID)])  =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            code: FilQuSchedDisabled)
-  else:
-    result =
-      proc(hdl: PutHdlRef; vs: openArray[(QueueID,QueueID)])  =
-        let hdl = hdl.getSession db
-        if hdl.error.isNil:
-
-          # Stash batch session data
-          let fqs = if 0 < vs.len: vs.blobify else: EmptyBlob
-          db.rdb.putByPfx(AdmPfx, @[(AdmTabIdFqs.uint64, fqs)]).isOkOr:
+        if vs.isValid:
+          db.rdb.putAdm(AdmTabIdTuv, vs.blobify).isOkOr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  AdmPfx,
-              aid:  AdmTabIdFqs,
+              aid:  AdmTabIdTuv,
               code: error[1],
               info: error[2])
+            return
 
+
+proc putLstFn(db: RdbBackendRef): PutLstFn =
+  result =
+    proc(hdl: PutHdlRef; lst: SavedState) =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        let data = lst.blobify.valueOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  AdmPfx,
+            aid:  AdmTabIdLst,
+            code: error)
+          return
+        db.rdb.putAdm(AdmTabIdLst, data).isOkOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  AdmPfx,
+            aid:  AdmTabIdLst,
+            code: error[1],
+            info: error[2])
 
 proc putEndFn(db: RdbBackendRef): PutEndFn =
   result =
@@ -321,7 +212,8 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
           of AdmPfx: trace logTxt "putEndFn: admin failed",
             pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
           of Oops: trace logTxt "putEndFn: oops",
-            error=hdl.error.code
+            pfx=hdl.error.pfx, error=hdl.error.code
+        db.rdb.rollback()
         return err(hdl.error.code)
 
       # Commit session
@@ -331,19 +223,26 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
         return err(error[0])
       ok()
 
-proc guestDbFn(db: RdbBackendRef): GuestDbFn =
-  result =
-    proc(instance: int): Result[RootRef,AristoError] =
-      let gdb = db.rdb.initGuestDb(instance).valueOr:
-        when extraTraceMessages:
-          trace logTxt "guestDbFn", error=error[0], info=error[1]
-        return err(error[0])
-      ok gdb
-
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
-    proc(flush: bool) =
-      db.rdb.destroy(flush)
+    proc(eradicate: bool) =
+      db.rdb.destroy(eradicate)
+
+# ------------------------------------------------------------------------------
+# Private functions: hosting interface changes
+# ------------------------------------------------------------------------------
+
+proc putBegHostingFn(db: RdbBackendRef): PutBegFn =
+  result =
+    proc(): Result[PutHdlRef,AristoError] =
+      db.rdb.begin()
+      if db.rdb.trgWriteEvent(db.rdb.session):
+        ok db.newSession()
+      else:
+        when extraTraceMessages:
+          trace logTxt "putBegFn: guest trigger aborted session"
+        db.rdb.rollback()
+        err(RdbGuestInstanceAborted)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -351,51 +250,53 @@ proc closeFn(db: RdbBackendRef): CloseFn =
 
 proc rocksDbBackend*(
     path: string;
-    qidLayout: QidLayoutRef;
-      ): Result[BackendRef,AristoError] =
+    dbOpts: DbOptionsRef;
+    cfOpts: ColFamilyOptionsRef;
+    guestCFs: openArray[ColFamilyDescriptor];
+      ): Result[(BackendRef, seq[ColFamilyReadWrite]),AristoError] =
   let db = RdbBackendRef(
     beKind: BackendRocksDB)
 
   # Initialise RocksDB
-  block:
-    let rc = db.rdb.init(path, maxOpenFiles)
+  let oCfs = block:
+    let rc = db.rdb.init(path, dbOpts, cfOpts, guestCFs)
     if rc.isErr:
       when extraTraceMessages:
         trace logTxt "constructor failed",
            error=rc.error[0], info=rc.error[1]
-        return err(rc.error[0])
-
-  db.rdb.noFq = qidLayout.isNil
+      return err(rc.error[0])
+    rc.value()
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
-  db.getFilFn = getFilFn db
-  db.getIdgFn = getIdgFn db
-  db.getFqsFn = getFqsFn db
+  db.getTuvFn = getTuvFn db
+  db.getLstFn = getLstFn db
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
   db.putKeyFn = putKeyFn db
-  db.putFilFn = putFilFn db
-  db.putIdgFn = putIdgFn db
-  db.putFqsFn = putFqsFn db
+  db.putTuvFn = putTuvFn db
+  db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
 
-  db.guestDbFn = guestDbFn db
-
   db.closeFn = closeFn db
+  ok((db, oCfs))
 
-  # Set up filter management table
-  if not db.rdb.noFq:
-    db.journal = QidSchedRef(ctx: qidLayout)
-    db.journal.state = block:
-      let rc = db.getFqsFn()
-      if rc.isErr:
-        db.closeFn(flush = false)
-        return err(rc.error)
-      rc.value
 
-  ok db
+proc rocksDbSetEventTrigger*(
+    be: BackendRef;
+    hdl: RdbWriteEventCb;
+     ): Result[void,AristoError] =
+  ## Store event trigger. This also changes the backend type.
+  if hdl.isNil:
+    err(RdbBeWrTriggerNilFn)
+  else:
+    let db = RdbBackendRef(be)
+    db.rdb.trgWriteEvent = hdl
+    db.beKind = BackendRdbHosting
+    db.putBegFn = putBegHostingFn db
+    ok()
+
 
 proc dup*(db: RdbBackendRef): RdbBackendRef =
   ## Duplicate descriptor shell as needed for API debugging
@@ -412,50 +313,32 @@ iterator walk*(
       ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
   ## Walk over all key-value pairs of the database.
   ##
-  ## Non-decodable entries are stepped over while the counter `n` of the
-  ## yield record is still incremented.
-  if be.rdb.noFq:
-    for w in be.rdb.walk:
-      case w.pfx:
-      of AdmPfx:
-        if w.xid == AdmTabIdFqs.uint64:
-          continue
-      of FilPfx:
-        break # last sub-table
-      else:
-        discard
-      yield w
-  else:
-    for w in be.rdb.walk:
-      yield w
+  ## Non-decodable entries are ignored
+  ##
+  for (xid, data) in be.rdb.walkAdm:
+    yield (AdmPfx, xid, data)
+  for (vid, data) in be.rdb.walkVtx:
+    yield (VtxPfx, vid, data)
+  for (vid, data) in be.rdb.walkKey:
+    yield (KeyPfx, vid, data)
 
 iterator walkVtx*(
     be: RdbBackendRef;
       ): tuple[vid: VertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (xid, data) in be.rdb.walk VtxPfx:
+  for (vid, data) in be.rdb.walkVtx:
     let rc = data.deblobify VertexRef
     if rc.isOk:
-      yield (VertexID(xid), rc.value)
+      yield (VertexID(vid), rc.value)
 
 iterator walkKey*(
     be: RdbBackendRef;
       ): tuple[vid: VertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
-  for (xid, data) in be.rdb.walk KeyPfx:
+  for (vid, data) in be.rdb.walkKey:
     let lid = HashKey.fromBytes(data).valueOr:
       continue
-    yield (VertexID(xid), lid)
-
-iterator walkFil*(
-    be: RdbBackendRef;
-      ): tuple[qid: QueueID, filter: FilterRef] =
-  ## Variant of `walk()` iteration over the filter sub-table.
-  if not be.rdb.noFq:
-    for (xid, data) in be.rdb.walk FilPfx:
-      let rc = data.deblobify FilterRef
-      if rc.isOk:
-        yield (QueueID(xid), rc.value)
+    yield (VertexID(vid), lid)
 
 # ------------------------------------------------------------------------------
 # End

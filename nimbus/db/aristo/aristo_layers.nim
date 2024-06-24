@@ -35,8 +35,8 @@ func dirty*(db: AristoDbRef): lent HashSet[VertexID] =
 func pPrf*(db: AristoDbRef): lent HashSet[VertexID] =
   db.top.final.pPrf
 
-func vGen*(db: AristoDbRef): lent seq[VertexID] =
-  db.top.final.vGen
+func vTop*(db: AristoDbRef): VertexID =
+  db.top.delta.vTop
 
 # ------------------------------------------------------------------------------
 # Public getters/helpers
@@ -62,42 +62,42 @@ func nLayersKey*(db: AristoDbRef): int =
 # Public functions: getter variants
 # ------------------------------------------------------------------------------
 
-func layersGetVtx*(db: AristoDbRef; vid: VertexID): Result[VertexRef,void] =
+func layersGetVtx*(db: AristoDbRef; vid: VertexID): Opt[VertexRef] =
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
-  if db.top.delta.sTab.hasKey vid:
-    return ok(db.top.delta.sTab.getOrVoid vid)
+  db.top.delta.sTab.withValue(vid, item):
+    return Opt.some(item[])
 
   for w in db.rstack:
-    if w.delta.sTab.hasKey vid:
-      return ok(w.delta.sTab.getOrVoid vid)
+    w.delta.sTab.withValue(vid, item):
+      return Opt.some(item[])
 
-  err()
+  Opt.none(VertexRef)
 
 func layersGetVtxOrVoid*(db: AristoDbRef; vid: VertexID): VertexRef =
   ## Simplified version of `layersGetVtx()`
   db.layersGetVtx(vid).valueOr: VertexRef(nil)
 
 
-func layersGetKey*(db: AristoDbRef; vid: VertexID): Result[HashKey,void] =
+func layersGetKey*(db: AristoDbRef; vid: VertexID): Opt[HashKey] =
   ## Find a hash key on the cache layers. An `ok()` result might contain a void
   ## hash key if it is stored on the cache that way.
   ##
-  if db.top.delta.kMap.hasKey vid:
+  db.top.delta.kMap.withValue(vid, item):
     # This is ok regardless of the `dirty` flag. If this vertex has become
     # dirty, there is an empty `kMap[]` entry on this layer.
-    return ok(db.top.delta.kMap.getOrVoid vid)
+    return Opt.some(item[])
 
   for w in db.rstack:
-    if w.delta.kMap.hasKey vid:
+    w.delta.kMap.withValue(vid, item):
       # Same reasoning as above regarding the `dirty` flag.
-      return ok(w.delta.kMap.getOrVoid vid)
+      return ok(item[])
 
-  err()
+  Opt.none(HashKey)
 
 func layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
-  ## Simplified version of `layersGetkey()`
+  ## Simplified version of `layersGetKey()`
   db.layersGetKey(vid).valueOr: VOID_HASH_KEY
 
 
@@ -190,6 +190,7 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
     trg.delta.sTab[vid] = vtx
   for (vid,key) in src.delta.kMap.pairs:
     trg.delta.kMap[vid] = key
+  trg.delta.vTop = src.delta.vTop
 
 
 func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
@@ -205,7 +206,8 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
     final: layers[^1].final.dup,               # Pre-merged/final values
     delta: LayerDeltaRef(
       sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
-      kMap: layers[0].delta.kMap))
+      kMap: layers[0].delta.kMap,
+      vTop: layers[^1].delta.vTop))
 
   # Consecutively merge other layers on top
   for n in 1 ..< layers.len:

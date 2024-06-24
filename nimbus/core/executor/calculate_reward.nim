@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,8 +11,8 @@
 import
   ../../db/ledger,
   ../../common/common,
-  ../../vm_state,
-  ../../vm_types
+  ../../evm/state,
+  ../../evm/types
 
 {.push raises: [].}
 
@@ -22,8 +22,8 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
   var mainReward = blockReward
 
   for uncle in uncles:
-    var uncleReward = uncle.blockNumber.u256 + 8.u256
-    uncleReward -= number
+    var uncleReward = uncle.number.u256 + 8.u256
+    uncleReward -= number.u256
     uncleReward = uncleReward * blockReward
     uncleReward = uncleReward div 8.u256
     vmState.mutateStateDB:
@@ -35,7 +35,7 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
 
 
 proc calculateReward*(vmState: BaseVMState;
-                      header: BlockHeader; body: BlockBody) =
-  vmState.calculateReward(header.coinbase, header.blockNumber, body.uncles)
+                      header: BlockHeader; uncles: openArray[BlockHeader]) =
+  vmState.calculateReward(header.coinbase, header.number, uncles)
 
 # End

@@ -24,7 +24,7 @@ import
 
 proc setupTxContext*(vmState: BaseVMState,
                      txCtx: sink TxContext,
-                     forkOverride=none(EVMFork)) =
+                     forkOverride=Opt.none(EVMFork)) =
   ## this proc will be called each time a new transaction
   ## is going to be executed
   vmState.txCtx = system.move(txCtx)
@@ -35,25 +35,19 @@ proc setupTxContext*(vmState: BaseVMState,
       vmState.determineFork
   vmState.gasCosts = vmState.fork.forkToSchedule
 
-# FIXME-awkwardFactoring: the factoring out of the pre and
-# post parts feels awkward to me, but for now I'd really like
-# not to have too much duplicated code between sync and async.
-# --Adam
-
 proc preExecComputation(c: Computation) =
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:
       db.incNonce(c.msg.sender)
 
-proc postExecComputation(c: Computation) =
+func postExecComputation(c: Computation) =
   if c.isSuccess:
     if c.fork < FkLondon:
       # EIP-3529: Reduction in refunds
       c.refundSelfDestruct()
   c.vmState.status = c.isSuccess
 
-proc execComputation*(c: Computation)
-    {.gcsafe, raises: [CatchableError].} =
+proc execComputation*(c: Computation) =
   c.preExecComputation()
   c.execCallOrCreate()
   c.postExecComputation()

@@ -113,7 +113,7 @@ template `gas=`(tx: var Transaction, x: GasInt) =
 template `input=`(tx: var Transaction, x: Blob) =
   tx.payload = x
 
-template `v=`(tx: var Transaction, x: int64) =
+template `v=`(tx: var Transaction, x: uint64) =
   tx.V = x
 
 template `r=`(tx: var Transaction, x: UInt256) =
@@ -121,12 +121,6 @@ template `r=`(tx: var Transaction, x: UInt256) =
 
 template `s=`(tx: var Transaction, x: UInt256) =
   tx.S = x
-
-template `maxPriorityFeePerGas=`(tx: var Transaction, x: GasInt) =
-  tx.maxPriorityFee = x
-
-template `maxFeePerGas=`(tx: var Transaction, x: GasInt) =
-  tx.maxFee = x
 
 template `blobVersionedHashes=`(tx: var Transaction, x: VersionedHashes) =
   tx.versionedHashes = x
@@ -145,7 +139,7 @@ template omitZero(o: untyped, T: type, oField: untyped) =
 template optional(o: untyped, T: type, oField: untyped) =
   const fName = astToStr(oField)
   if n.hasKey(fName) and n[fName].kind != JNull:
-    o.oField = some(T.fromJson(n, fName))
+    o.oField = Opt.some(T.fromJson(n, fName))
 
 proc parseAlloc*(ctx: var TransContext, n: JsonNode) =
   for accAddr, acc in n:
@@ -200,14 +194,14 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
     var withdrawals: seq[Withdrawal]
     for v in w:
       withdrawals.add Withdrawal.fromJson(v)
-    ctx.env.withdrawals = some(withdrawals)
+    ctx.env.withdrawals = Opt.some(withdrawals)
 
 proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   var tx: Transaction
   if not n.hasKey("type"):
     tx.txType = TxLegacy
   else:
-    tx.txType = int64.fromJson(n, "type").TxType
+    tx.txType = uint64.fromJson(n, "type").TxType
 
   required(tx, AccountNonce, nonce)
   required(tx, GasInt, gas)
@@ -215,7 +209,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   required(tx, Blob, input)
 
   if n.hasKey("to"):
-    tx.to = some(EthAddress.fromJson(n, "to"))
+    tx.to = Opt.some(EthAddress.fromJson(n, "to"))
 
   case tx.txType
   of TxLegacy:
@@ -246,7 +240,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     let secretKey = PrivateKey.fromRaw(data).tryGet
     signTransaction(tx, secretKey, chainId, eip155)
   else:
-    required(tx, int64, v)
+    required(tx, uint64, v)
     required(tx, UInt256, r)
     required(tx, UInt256, s)
     tx
@@ -420,7 +414,7 @@ proc `@@`[T](x: seq[T]): JsonNode =
   for c in x:
     result.add @@(c)
 
-proc `@@`[T](x: Option[T]): JsonNode =
+proc `@@`[T](x: Opt[T]): JsonNode =
   if x.isNone:
     newJNull()
   else:
@@ -432,7 +426,7 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     "txRoot"      : @@(x.txRoot),
     "receiptsRoot": @@(x.receiptsRoot),
     "logsHash"    : @@(x.logsHash),
-    "logsBloom"   : @@(x.bloom),
+    "logsBloom"   : @@(x.logsBloom),
     "receipts"    : @@(x.receipts),
     "currentDifficulty": @@(x.currentDifficulty),
     "gasUsed"     : @@(x.gasUsed)

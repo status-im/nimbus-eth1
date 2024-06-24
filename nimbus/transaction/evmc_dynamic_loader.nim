@@ -14,7 +14,7 @@ import
   evmc/evmc, ../config
 
 # The built-in Nimbus EVM, via imported C function.
-proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc, raises: [].}
+proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc, raises: [], gcsafe.}
 
 # Import this module to link in the definition of `evmc_create_nimbus_evm`.
 # Nim thinks the module is unused because the function is only called via
@@ -83,7 +83,7 @@ proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
 
   return (cast[evmc_create_vm_name_fn](sym), path)
 
-proc evmcLoadVMShowDetail(): ptr evmc_vm {.raises: [].} =
+proc evmcLoadVMShowDetail(): ptr evmc_vm  =
   let (vmCreate, vmDescription) = evmcLoadVMGetCreateFn()
   if vmCreate.isNil:
     return nil
@@ -109,7 +109,7 @@ proc evmcLoadVMShowDetail(): ptr evmc_vm {.raises: [].} =
   info "Using EVM", name=name, version=version, `from`=vmDescription
   return vm
 
-proc evmcLoadVMCached*(): ptr evmc_vm {.raises: [CatchableError].} =
+proc evmcLoadVMCached*(): ptr evmc_vm =
   # TODO: Make this open the VM library once per process.  Currently it does
   # so once per thread, but at least this is thread-safe.
   var vm {.threadvar.}: ptr evmc_vm

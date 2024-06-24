@@ -20,7 +20,6 @@ type
     canonicalHeadHash
     slotHashToSlot
     contractHash
-    cliqueSnapshot
     transitionStatus
     safeHash
     finalizedHash
@@ -28,10 +27,6 @@ type
     skeletonBlockHashToNumber
     skeletonHeader
     skeletonBody
-    snapSyncAccount
-    snapSyncStorageSlot
-    snapSyncStateRoot
-    blockHashToBlockWitness
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -75,7 +70,7 @@ func contractHashKey*(h: Hash256): DbKey {.inline.} =
   result.dataEndPos = uint8 32
 
 func transitionStatusKey*(): DbKey =
-  # ETH-2 Transition Status
+  # POW->POS Transition Status
   result.data[0] = byte ord(transitionStatus)
   result.dataEndPos = uint8 1
 
@@ -107,32 +102,8 @@ func skeletonBodyKey*(h: Hash256): DbKey {.inline.} =
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-func snapSyncAccountKey*(h: openArray[byte]): DbKey {.inline.} =
-  doAssert(h.len == 32)
-  result.data[0] = byte ord(snapSyncAccount)
-  result.data[1 .. 32] = h
-  result.dataEndPos = uint8 sizeof(h)
-
-func snapSyncStorageSlotKey*(h: openArray[byte]): DbKey {.inline.} =
-  doAssert(h.len == 32)
-  result.data[0] = byte ord(snapSyncStorageSlot)
-  result.data[1 .. 32] = h
-  result.dataEndPos = uint8 sizeof(h)
-
-func snapSyncStateRootKey*(h: openArray[byte]): DbKey {.inline.} =
-  doAssert(h.len == 32)
-  result.data[0] = byte ord(snapSyncStateRoot)
-  result.data[1 .. 32] = h
-  result.dataEndPos = uint8 sizeof(h)
-
-func blockHashToBlockWitnessKey*(h: Hash256): DbKey {.inline.} =
-  result.data[0] = byte ord(blockHashToBlockWitness)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
-
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))
 
 func `==`*(a, b: DbKey): bool {.inline.} =
   a.toOpenArray == b.toOpenArray
-

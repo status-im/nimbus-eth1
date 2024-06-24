@@ -29,7 +29,7 @@ method setEngineAPIVersionResolver*(cust: EngineAPIVersionResolver, v: CommonRef
   cust.com = v
 
 method forkchoiceUpdatedVersion*(cust: EngineAPIVersionResolver,
-  headTimestamp: uint64, payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version {.base, gcsafe.} =
+  headTimestamp: uint64, payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64)): Version {.base, gcsafe.} =
   let ts = if payloadAttributesTimestamp.isNone: headTimestamp.EthTime
            else: payloadAttributesTimestamp.get().EthTime
   if cust.com.isCancunOrLater(ts):
@@ -69,7 +69,7 @@ method getExpectedError*(cust: GetPayloadCustomizer): int {.base, gcsafe.} =
 
 type
   BaseGetPayloadCustomizer* = ref object of GetPayloadCustomizer
-    customPayloadID*: Option[PayloadID]
+    customPayloadID*: Opt[PayloadID]
     expectedError*  : int
 
 method getPayloadID(cust: BaseGetPayloadCustomizer,
@@ -105,12 +105,12 @@ method getPayloadAttributes*(cust: PayloadAttributesCustomizer, basePayloadAttri
 
 type
   BasePayloadAttributesCustomizer* = ref object of PayloadAttributesCustomizer
-    timestamp*             : Option[uint64]
-    prevRandao*            : Option[common.Hash256]
-    suggestedFeeRecipient* : Option[common.EthAddress]
-    withdrawals*           : Option[seq[Withdrawal]]
+    timestamp*             : Opt[uint64]
+    prevRandao*            : Opt[common.Hash256]
+    suggestedFeeRecipient* : Opt[common.EthAddress]
+    withdrawals*           : Opt[seq[Withdrawal]]
     removeWithdrawals*     : bool
-    beaconRoot*            : Option[common.Hash256]
+    beaconRoot*            : Opt[common.Hash256]
     removeBeaconRoot*      : bool
 
 method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes =
@@ -132,12 +132,12 @@ method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAt
     customPayloadAttributes.suggestedFeeRecipient = w3Addr cust.suggestedFeeRecipient.get
 
   if cust.removeWithdrawals:
-    customPayloadAttributes.withdrawals = none(seq[WithdrawalV1])
+    customPayloadAttributes.withdrawals = Opt.none(seq[WithdrawalV1])
   elif cust.withdrawals.isSome:
     customPayloadAttributes.withdrawals = w3Withdrawals cust.withdrawals
 
   if cust.removeBeaconRoot:
-    customPayloadAttributes.parentBeaconBlockRoot = none(Web3Hash)
+    customPayloadAttributes.parentBeaconBlockRoot = Opt.none(Web3Hash)
   elif cust.beaconRoot.isSome:
     customPayloadAttributes.parentBeaconBlockRoot = w3Hash cust.beaconRoot
 
@@ -174,7 +174,7 @@ type
   UpgradeForkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
 
 method forkchoiceUpdatedVersion(cust: UpgradeForkchoiceUpdatedVersion, headTimestamp:
-                                uint64, payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version =
+                                uint64, payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64)): Version =
   let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
   doAssert(version != Version.high, "cannot upgrade version " & $Version.high)
   version.succ
@@ -184,7 +184,7 @@ type
   DowngradeForkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
 
 method forkchoiceUpdatedVersion(cust: DowngradeForkchoiceUpdatedVersion, headTimestamp: uint64,
-                                payloadAttributesTimestamp: Option[uint64] = none(uint64)): Version =
+                                payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64)): Version =
   let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
   doAssert(version != Version.V1, "cannot downgrade version 1")
   version.pred
@@ -200,13 +200,13 @@ method getPayloadAttributes(cust: TimestampDeltaPayloadAttributesCustomizer, bas
 
 type
   VersionedHashesCustomizer* = ref object of RootRef
-    blobs*: Option[seq[BlobID]]
+    blobs*: Opt[seq[BlobID]]
     hashVersions*: seq[byte]
 
 method getVersionedHashes*(cust: VersionedHashesCustomizer,
-                           baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] {.base, gcsafe.} =
+                           baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] {.base, gcsafe.} =
   if cust.blobs.isNone:
-    return none(seq[common.Hash256])
+    return Opt.none(seq[common.Hash256])
 
   let blobs = cust.blobs.get
   var v = newSeq[common.Hash256](blobs.len)
@@ -216,7 +216,7 @@ method getVersionedHashes*(cust: VersionedHashesCustomizer,
     if cust.hashVersions.len > i:
       version = cust.hashVersions[i]
     v[i] = blobID.getVersionedHash(version)
-  some(v)
+  Opt.some(v)
 
 method description*(cust: VersionedHashesCustomizer): string {.base, gcsafe.} =
   result = "VersionedHashes: "
@@ -232,33 +232,33 @@ type
   IncreaseVersionVersionedHashes* = ref object of VersionedHashesCustomizer
 
 method getVersionedHashes(cust: IncreaseVersionVersionedHashes,
-                          baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] =
+                          baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] =
   doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
 
   var v = newSeq[common.Hash256](baseVersionedHashes.len)
   for i, h in baseVersionedHashes:
     v[i] = h
     v[i].data[0] = v[i].data[0] + 1
-  some(v)
+  Opt.some(v)
 
 type
   CorruptVersionedHashes* = ref object of VersionedHashesCustomizer
 
 method getVersionedHashes(cust: CorruptVersionedHashes,
-                          baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] =
+                          baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] =
   doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
 
   var v = newSeq[common.Hash256](baseVersionedHashes.len)
   for i, h in baseVersionedHashes:
     v[i] = h
     v[i].data[h.data.len-1] = v[i].data[h.data.len-1] + 1
-  some(v)
+  Opt.some(v)
 
 type
   RemoveVersionedHash* = ref object of VersionedHashesCustomizer
 
 method getVersionedHashes(cust: RemoveVersionedHash,
-                          baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] =
+                          baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] =
   doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
 
   var v = newSeq[common.Hash256](baseVersionedHashes.len - 1)
@@ -266,13 +266,13 @@ method getVersionedHashes(cust: RemoveVersionedHash,
     if i < baseVersionedHashes.len-1:
       v[i] = h
       v[i].data[h.data.len-1] = v[i].data[h.data.len-1] + 1
-  some(v)
+  Opt.some(v)
 
 type
   ExtraVersionedHash* = ref object of VersionedHashesCustomizer
 
 method getVersionedHashes(cust: ExtraVersionedHash,
-                          baseVersionedHashes: openArray[common.Hash256]): Option[seq[common.Hash256]] =
+                          baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] =
   var v = newSeq[common.Hash256](baseVersionedHashes.len + 1)
   for i, h in baseVersionedHashes:
     v[i] = h
@@ -280,7 +280,7 @@ method getVersionedHashes(cust: ExtraVersionedHash,
   var extraHash = common.Hash256.randomBytes()
   extraHash.data[0] = VERSIONED_HASH_VERSION_KZG
   v[^1] = extraHash
-  some(v)
+  Opt.some(v)
 
 type
   PayloadCustomizer* = ref object of EngineAPIVersionResolver
@@ -304,27 +304,27 @@ method getExpectInvalidStatus*(cust: NewPayloadCustomizer): bool {.base, gcsafe.
 
 type
   CustomPayloadData* = object
-    parentHash*               : Option[common.Hash256]
-    feeRecipient*             : Option[common.EthAddress]
-    stateRoot*                : Option[common.Hash256]
-    receiptsRoot*             : Option[common.Hash256]
-    logsBloom*                : Option[BloomFilter]
-    prevRandao*               : Option[common.Hash256]
-    number*                   : Option[uint64]
-    gasLimit*                 : Option[GasInt]
-    gasUsed*                  : Option[GasInt]
-    timestamp*                : Option[uint64]
-    extraData*                : Option[common.Blob]
-    baseFeePerGas*            : Option[UInt256]
-    blockHash*                : Option[common.Hash256]
-    transactions*             : Option[seq[Transaction]]
-    withdrawals*              : Option[seq[Withdrawal]]
+    parentHash*               : Opt[common.Hash256]
+    feeRecipient*             : Opt[common.EthAddress]
+    stateRoot*                : Opt[common.Hash256]
+    receiptsRoot*             : Opt[common.Hash256]
+    logsBloom*                : Opt[BloomFilter]
+    prevRandao*               : Opt[common.Hash256]
+    number*                   : Opt[uint64]
+    gasLimit*                 : Opt[GasInt]
+    gasUsed*                  : Opt[GasInt]
+    timestamp*                : Opt[uint64]
+    extraData*                : Opt[common.Blob]
+    baseFeePerGas*            : Opt[UInt256]
+    blockHash*                : Opt[common.Hash256]
+    transactions*             : Opt[seq[Transaction]]
+    withdrawals*              : Opt[seq[Withdrawal]]
     removeWithdrawals*        : bool
-    blobGasUsed*              : Option[uint64]
+    blobGasUsed*              : Opt[uint64]
     removeBlobGasUsed*        : bool
-    excessBlobGas*            : Option[uint64]
+    excessBlobGas*            : Opt[uint64]
     removeExcessBlobGas*      : bool
-    parentBeaconRoot*         : Option[common.Hash256]
+    parentBeaconRoot*         : Opt[common.Hash256]
     removeParentBeaconRoot*   : bool
     versionedHashesCustomizer*: VersionedHashesCustomizer
 
@@ -351,16 +351,16 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
     customHeader.stateRoot = cust.stateRoot.get
 
   if cust.receiptsRoot.isSome:
-    customHeader.receiptRoot = cust.receiptsRoot.get
+    customHeader.receiptsRoot = cust.receiptsRoot.get
 
   if cust.logsBloom.isSome:
-    customHeader.bloom = cust.logsBloom.get
+    customHeader.logsBloom = cust.logsBloom.get
 
   if cust.prevRandao.isSome:
-    customHeader.mixDigest = cust.prevRandao.get
+    customHeader.mixHash = cust.prevRandao.get
 
   if cust.number.isSome:
-    customHeader.blockNumber = cust.number.get.u256
+    customHeader.number = cust.number.get
 
   if cust.gasLimit.isSome:
     customHeader.gasLimit = cust.gasLimit.get
@@ -375,40 +375,40 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
     customHeader.extraData = cust.extraData.get
 
   if cust.baseFeePerGas.isSome:
-    customHeader.fee = cust.baseFeePerGas
+    customHeader.baseFeePerGas = cust.baseFeePerGas
 
   if cust.removeWithdrawals:
-    customHeader.withdrawalsRoot = none(common.Hash256)
+    customHeader.withdrawalsRoot = Opt.none(common.Hash256)
   elif cust.withdrawals.isSome:
     let h = calcWithdrawalsRoot(cust.withdrawals.get)
-    customHeader.withdrawalsRoot = some(h)
+    customHeader.withdrawalsRoot = Opt.some(h)
 
   if cust.removeBlobGasUsed:
-    customHeader.blobGasUsed = none(uint64)
+    customHeader.blobGasUsed = Opt.none(uint64)
   elif cust.blobGasUsed.isSome:
     customHeader.blobGasUsed = cust.blobGasUsed
 
   if cust.removeExcessBlobGas:
-    customHeader.excessBlobGas = none(uint64)
+    customHeader.excessBlobGas = Opt.none(uint64)
   elif cust.excessBlobGas.isSome:
     customHeader.excessBlobGas = cust.excessBlobGas
 
   if cust.removeParentBeaconRoot:
-    customHeader.parentBeaconBlockRoot = none(common.Hash256)
+    customHeader.parentBeaconBlockRoot = Opt.none(common.Hash256)
   elif cust.parentBeaconRoot.isSome:
     customHeader.parentBeaconBlockRoot = cust.parentBeaconRoot
 
   var blk = EthBlock(
     header: customHeader,
+    transactions:
+      if cust.transactions.isSome:
+        cust.transactions.get
+      else:
+        ethTxs data.basePayload.transactions
   )
 
-  if cust.transactions.isSome:
-    blk.txs = cust.transactions.get
-  else:
-    blk.txs = ethTxs data.basePayload.transactions
-
   if cust.removeWithdrawals:
-    blk.withdrawals = none(seq[Withdrawal])
+    blk.withdrawals = Opt.none(seq[Withdrawal])
   elif cust.withdrawals.isSome:
     blk.withdrawals = cust.withdrawals
   elif data.basePayload.withdrawals.isSome:
@@ -454,7 +454,7 @@ method newPayloadVersion(cust: DowngradeNewPayloadVersion, timestamp: uint64): V
 
 proc customizePayloadTransactions*(data: ExecutableData, customTransactions: openArray[Transaction]): ExecutableData =
   let cpd = CustomPayloadData(
-    transactions: some(@customTransactions),
+    transactions: Opt.some(@customTransactions),
   )
   customizePayload(cpd, data)
 
@@ -533,15 +533,15 @@ type
     ExtraVersionedHashes
     InvalidWithdrawals
 
-func scramble(data: Web3Hash): Option[common.Hash256] =
+func scramble(data: Web3Hash): Opt[common.Hash256] =
   var h = ethHash data
   h.data[^1] = byte(255 - h.data[^1])
-  some(h)
+  Opt.some(h)
 
-func scramble(data: common.Hash256): Option[common.Hash256] =
+func scramble(data: common.Hash256): Opt[common.Hash256] =
   var h = data
   h.data[0] = byte(255 - h.data[0])
-  some(h)
+  Opt.some(h)
 
 # This function generates an invalid payload by taking a base payload and modifying the specified field such that it ends up being invalid.
 # One small consideration is that the payload needs to contain transactions and specially transactions using the PREVRANDAO opcode for all the fields to be compatible with this function.
@@ -565,29 +565,29 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
   of InvalidNumber:
     let modNumber = basePayload.blockNumber.uint64 - 1
     customPayloadMod = CustomPayloadData(
-      number: some(modNumber),
+      number: Opt.some(modNumber),
     )
   of InvalidGasLimit:
     let modGasLimit = basePayload.gasLimit.GasInt * 2
     customPayloadMod = CustomPayloadData(
-      gasLimit: some(modGasLimit),
+      gasLimit: Opt.some(modGasLimit),
     )
   of InvalidGasUsed:
     let modGasUsed = basePayload.gasUsed.GasInt - 1
     customPayloadMod = CustomPayloadData(
-      gasUsed: some(modGasUsed),
+      gasUsed: Opt.some(modGasUsed),
     )
   of InvalidTimestamp:
     let modTimestamp = basePayload.timestamp.uint64 - 1
     customPayloadMod = CustomPayloadData(
-      timestamp: some(modTimestamp),
+      timestamp: Opt.some(modTimestamp),
     )
   of InvalidPrevRandao:
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.
     let randomHash = common.Hash256.randomBytes()
     customPayloadMod = CustomPayloadData(
-      prevRandao: some(randomHash),
+      prevRandao: Opt.some(randomHash),
     )
   of InvalidParentBeaconBlockRoot:
     doAssert(data.beaconRoot.isSome,
@@ -599,19 +599,19 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
     doAssert(basePayload.blobGasUsed.isSome, "no blob gas used available for modification")
     let modBlobGasUsed = basePayload.blobGasUsed.get.uint64 + 1
     customPayloadMod = CustomPayloadData(
-      blobGasUsed: some(modBlobGasUsed),
+      blobGasUsed: Opt.some(modBlobGasUsed),
     )
   of InvalidBlobCountGasUsed:
     doAssert(basePayload.blobGasUsed.isSome, "no blob gas used available for modification")
     let modBlobGasUsed = basePayload.blobGasUsed.get.uint64 + GAS_PER_BLOB
     customPayloadMod = CustomPayloadData(
-      blobGasUsed: some(modBlobGasUsed),
+      blobGasUsed: Opt.some(modBlobGasUsed),
     )
   of InvalidExcessBlobGas:
     doAssert(basePayload.excessBlobGas.isSome, "no excess blob gas available for modification")
     let modExcessBlobGas = basePayload.excessBlobGas.get.uint64 + 1
     customPayloadMod = CustomPayloadData(
-      excessBlobGas: some(modExcessBlobGas),
+      excessBlobGas: Opt.some(modExcessBlobGas),
     )
   of InvalidVersionedHashesVersion:
     doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
@@ -640,7 +640,7 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
   of RemoveTransaction:
     let emptyTxs = newSeq[Transaction]()
     customPayloadMod = CustomPayloadData(
-      transactions: some(emptyTxs),
+      transactions: Opt.some(emptyTxs),
     )
   of InvalidTransactionSignature,
     InvalidTransactionNonce,
@@ -657,26 +657,26 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
     case payloadField
     of InvalidTransactionSignature:
       var sig = CustSig(R: baseTx.R - 1.u256)
-      custTx.signature = some(sig)
+      custTx.signature = Opt.some(sig)
     of InvalidTransactionNonce:
-      custTx.nonce = some(baseTx.nonce - 1)
+      custTx.nonce = Opt.some(baseTx.nonce - 1)
     of InvalidTransactionGas:
-      custTx.gas = some(0.GasInt)
+      custTx.gas = Opt.some(0.GasInt)
     of InvalidTransactionGasPrice:
-      custTx.gasPriceOrGasFeeCap = some(0.GasInt)
+      custTx.gasPriceOrGasFeeCap = Opt.some(0.GasInt)
     of InvalidTransactionGasTipPrice:
-      custTx.gasTipCap = some(gasTipPrice.GasInt * 2.GasInt)
+      custTx.gasTipCap = Opt.some(gasTipPrice.GasInt * 2.GasInt)
     of InvalidTransactionValue:
       # Vault account initially has 0x123450000000000000000, so this value should overflow
-      custTx.value = some(UInt256.fromHex("0x123450000000000000001"))
+      custTx.value = Opt.some(UInt256.fromHex("0x123450000000000000001"))
     of InvalidTransactionChainID:
-      custTx.chainId = some(ChainId(baseTx.chainId.uint64 + 1))
+      custTx.chainId = Opt.some(ChainId(baseTx.chainId.uint64 + 1))
     else: discard
 
     let acc = sender.getNextAccount()
     let modifiedTx = sender.customizeTransaction(acc, baseTx, custTx)
     customPayloadMod = CustomPayloadData(
-      transactions: some(@[modifiedTx]),
+      transactions: Opt.some(@[modifiedTx]),
     )
 
   customPayloadMod.customizePayload(data)

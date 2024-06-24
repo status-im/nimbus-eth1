@@ -9,27 +9,24 @@
 # according to those terms.
 
 import
-  json,
+  std/[json, strutils],
+  results,
   ../nimbus/common/common, # must be early (compilation annoyance)
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
-  ../nimbus/[config, tracer, vm_types]
+  ../nimbus/[config, tracer, evm/types]
 
-proc dumpTest(com: CommonRef, blockNumber: int) =
-  let
-    blockNumber = blockNumber.u256
-
+proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
   var
-    capture = com.db.capture()
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
   let
-    header = captureCom.db.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    blockBody = captureCom.db.getBlockBody(headerHash)
-    txTrace = traceTransactions(captureCom, header, blockBody)
-    stateDump = dumpBlockState(captureCom, header, blockBody)
-    blockTrace = traceBlock(captureCom, header, blockBody, {DisableState})
-    receipts = dumpReceipts(captureCom.db, header)
+    blk = captureCom.db.getEthBlock(blockNumber)
+    txTrace = traceTransactions(captureCom, blk.header, blk.transactions)
+    stateDump = dumpBlockState(captureCom, blk)
+    blockTrace = traceBlock(captureCom, blk, {DisableState})
+    receipts = dumpReceipts(captureCom.db, blk.header)
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,
@@ -57,7 +54,8 @@ proc main() {.used.} =
   # nimbus --rpc-api: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir)
+  let db = newCoreDbRef(
+    DefaultDbPersistent, string conf.dataDir, DbOptions.init())
   let com = CommonRef.new(db)
 
   com.dumpTest(97)

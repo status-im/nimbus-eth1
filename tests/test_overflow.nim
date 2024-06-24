@@ -12,8 +12,8 @@ import eth/[keys, trie]
 import stew/byteutils
 import unittest2
 import ../nimbus/common
-import ../nimbus/vm_state
-import ../nimbus/vm_types
+import ../nimbus/evm/state
+import ../nimbus/evm/types
 import ../nimbus/transaction
 import ../nimbus/transaction/call_evm
 import ../nimbus/db/core_db
@@ -39,7 +39,7 @@ proc overflowMain*() =
   test "GasCall unhandled overflow":
     let header = BlockHeader(
       stateRoot: emptyRlpHash,
-      blockNumber: u256(1150000),
+      number: 1150000'u64,
       coinBase: coinbase,
       gasLimit: 30000000,
       timeStamp: EthTime(123456),
@@ -59,7 +59,7 @@ proc overflowMain*() =
       chainId: MainNet.ChainId,
       gasPrice: 0.GasInt,
       gasLimit: 30000000,
-      to: codeAddress.some,
+      to: Opt.some codeAddress,
       value: 0.u256,
       payload: @data
     )
@@ -67,10 +67,11 @@ proc overflowMain*() =
     let privateKey = PrivateKey.fromHex("0000000000000000000000000000000000000000000000000000001000000000")[]
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
     let res = testCallEvm(tx, tx.getSender, s, FkHomestead)
+
     when defined(evmc_enabled):
       check res.error == "EVMC_FAILURE"
     else:
-      check res.error == "Opcode Dispatch Error: GasInt overflow, gasCost=2199123918888, gasRefund=9223372036845099570, depth=1"
+      check res.error == "Opcode Dispatch Error: GasIntOverflow, depth=1"
 
 when isMainModule:
   overflowMain()

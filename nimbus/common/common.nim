@@ -10,10 +10,9 @@
 {.push raises: [].}
 
 import
-  std/[options],
   chronicles,
   eth/trie/trie_defs,
-  ../core/[pow, casper],
+  ../core/casper,
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils, ec_recover],
   ".."/[constants, errors],
@@ -24,7 +23,6 @@ export
   core_db,
   constants,
   errors,
-  options,
   evmforks,
   hardforks,
   genesis,
@@ -83,9 +81,6 @@ type
       ## installing a snapshot pivot. The default value for this field is
       ## `GENESIS_PARENT_HASH` to start at the very beginning.
 
-    pow: PowRef
-      ## Wrapper around `hashimotoLight()` and lookup cache
-
     pos: CasperRef
       ## Proof Of Stake descriptor
 
@@ -143,9 +138,6 @@ proc init(com         : CommonRef,
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
   com.pruneHistory= pruneHistory
-
-  # Always initialise the PoW epoch cache even though it migh no be used
-  com.pow = PowRef.new
   com.pos = CasperRef.new
 
   # com.currentFork and com.consensusType
@@ -159,13 +151,13 @@ proc init(com         : CommonRef,
   # by setForkId
   if genesis.isNil.not:
     com.hardForkTransition(ForkDeterminationInfo(
-      blockNumber: 0.toBlockNumber,
-      td: some(0.u256),
-      time: some(genesis.timestamp)
+      number: 0.BlockNumber,
+      td: Opt.some(0.u256),
+      time: Opt.some(genesis.timestamp)
     ))
 
     # Must not overwrite the global state on the single state DB
-    if not db.getBlockHeader(0.toBlockNumber, com.genesisHeader):
+    if not db.getBlockHeader(0.BlockNumber, com.genesisHeader):
       com.genesisHeader = toGenesisHeader(genesis,
         com.currentFork, com.db)
 
@@ -173,31 +165,31 @@ proc init(com         : CommonRef,
     com.pos.timestamp = genesis.timestamp
   else:
     com.hardForkTransition(ForkDeterminationInfo(
-      blockNumber: 0.toBlockNumber,
-      td: some(0.u256),
-      time: some(TimeZero)
+      number: 0.BlockNumber,
+      td: Opt.some(0.u256),
+      time: Opt.some(TimeZero)
     ))
 
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
 
-proc getTd(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
+proc getTd(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
   var td: DifficultyInt
   if not com.db.getTd(blockHash, td):
     # TODO: Is this really ok?
-    none[DifficultyInt]()
+    Opt.none(DifficultyInt)
   else:
-    some(td)
+    Opt.some(td)
 
 func needTdForHardForkDetermination(com: CommonRef): bool =
   let t = com.forkTransitionTable.mergeForkTransitionThreshold
-  t.ttdPassed.isNone and t.blockNumber.isNone and t.ttd.isSome
+  t.ttdPassed.isNone and t.number.isNone and t.ttd.isSome
 
-proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Option[DifficultyInt] =
+proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
   if needTdForHardForkDetermination(com):
     getTd(com, blockHash)
   else:
-    none[DifficultyInt]()
+    Opt.none(DifficultyInt)
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -255,7 +247,6 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     networkId    : com.networkId,
     currentFork  : com.currentFork,
     consensusType: com.consensusType,
-    pow          : com.pow,
     pos          : com.pos,
     pruneHistory : com.pruneHistory)
 
@@ -285,23 +276,23 @@ func hardForkTransition(
 func hardForkTransition*(
     com: CommonRef,
     number: BlockNumber,
-    td: Option[DifficultyInt],
-    time: Option[EthTime]) =
+    td: Opt[DifficultyInt],
+    time: Opt[EthTime]) =
   com.hardForkTransition(ForkDeterminationInfo(
-    blockNumber: number, time: time, td: td))
+    number: number, time: time, td: td))
 
 proc hardForkTransition*(
     com: CommonRef,
     parentHash: Hash256,
     number: BlockNumber,
-    time: Option[EthTime]) =
+    time: Opt[EthTime]) =
   com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
 
 proc hardForkTransition*(
     com: CommonRef, header: BlockHeader)
     {.gcsafe, raises: [].} =
   com.hardForkTransition(
-    header.parentHash, header.blockNumber, some(header.timestamp))
+    header.parentHash, header.number, Opt.some(header.timestamp))
 
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork
@@ -333,19 +324,19 @@ func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
 
 func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
   ## EIP 2364/2124
-  com.forkIdCalculator.newID(head.truncate(uint64), time.uint64)
+  com.forkIdCalculator.newID(head, time.uint64)
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.get
 
-proc isBlockAfterTtd*(com: CommonRef, header: BlockHeader): bool
-                      {.gcsafe, raises: [CatchableError].} =
+proc isBlockAfterTtd*(com: CommonRef, header: BlockHeader): bool =
   if com.config.terminalTotalDifficulty.isNone:
     return false
 
   let
     ttd = com.config.terminalTotalDifficulty.get()
-    ptd = com.db.getScore(header.parentHash)
+    ptd = com.db.getScore(header.parentHash).valueOr:
+      return false
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
 
@@ -358,22 +349,24 @@ func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.pragueTime.isSome and t >= com.config.pragueTime.get
 
-proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType
-                {.gcsafe, raises: [CatchableError].} =
+proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType =
   if com.isBlockAfterTtd(header):
     return ConsensusType.POS
 
   return com.config.consensusType
 
-proc initializeEmptyDb*(com: CommonRef)
-    {.gcsafe, raises: [CatchableError].} =
-  let kvt = com.db.kvt()
+proc initializeEmptyDb*(com: CommonRef) =
+  let kvt = com.db.newKvt()
+  proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
+    kvt.hasKey(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin kvt:
-    trace "Writing genesis to DB"
-    doAssert(com.genesisHeader.blockNumber.isZero,
+    info "Writing genesis to DB"
+    doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
-    discard com.db.persistHeaderToDb(com.genesisHeader,
-      com.consensusType == ConsensusType.POS)
+    doAssert(com.db.persistHeader(com.genesisHeader,
+      com.consensusType == ConsensusType.POS,
+      startOfHistory=com.genesisHeader.parentHash),
+      "can persist genesis header")
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
 proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
@@ -396,10 +389,6 @@ func startOfHistory*(com: CommonRef): Hash256 =
   ## Getter
   com.startOfHistory
 
-func pow*(com: CommonRef): PowRef =
-  ## Getter
-  com.pow
-
 func pos*(com: CommonRef): CasperRef =
   ## Getter
   com.pos
@@ -410,19 +399,19 @@ func db*(com: CommonRef): CoreDbRef =
 func consensus*(com: CommonRef): ConsensusType =
   com.consensusType
 
-func eip150Block*(com: CommonRef): Option[BlockNumber] =
+func eip150Block*(com: CommonRef): Opt[BlockNumber] =
   com.config.eip150Block
 
 func eip150Hash*(com: CommonRef): Hash256 =
   com.config.eip150Hash
 
-func daoForkBlock*(com: CommonRef): Option[BlockNumber] =
+func daoForkBlock*(com: CommonRef): Opt[BlockNumber] =
   com.config.daoForkBlock
 
 func daoForkSupport*(com: CommonRef): bool =
   com.config.daoForkSupport
 
-func ttd*(com: CommonRef): Option[DifficultyInt] =
+func ttd*(com: CommonRef): Opt[DifficultyInt] =
   com.config.terminalTotalDifficulty
 
 func ttdPassed*(com: CommonRef): bool =
@@ -481,7 +470,7 @@ func `startOfHistory=`*(com: CommonRef, val: Hash256) =
   ## Setter
   com.startOfHistory = val
 
-func setTTD*(com: CommonRef, ttd: Option[DifficultyInt]) =
+func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   ## useful for testing
   com.config.terminalTotalDifficulty = ttd
   # rebuild the MergeFork piece of the forkTransitionTable

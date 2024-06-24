@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -22,28 +22,28 @@ import
   ./setup_env
 
 proc noTtdAndNoTtdPassed(cc: NetworkParams) =
-  cc.config.terminalTotalDifficultyPassed = none(bool)
-  cc.config.terminalTotalDifficulty = none(UInt256)
+  cc.config.terminalTotalDifficultyPassed = Opt.none(bool)
+  cc.config.terminalTotalDifficulty = Opt.none(UInt256)
   cc.genesis.difficulty = 1.u256
 
 proc ttdPassedNoTtd(cc: NetworkParams) =
-  cc.config.terminalTotalDifficultyPassed = some(true)
-  cc.config.terminalTotalDifficulty = none(UInt256)
+  cc.config.terminalTotalDifficultyPassed = Opt.some(true)
+  cc.config.terminalTotalDifficulty = Opt.none(UInt256)
   cc.genesis.difficulty = 1.u256
 
 proc ttdNoTtdPassed(cc: NetworkParams) =
-  cc.config.terminalTotalDifficultyPassed = none(bool)
-  cc.config.terminalTotalDifficulty = some(0.u256)
+  cc.config.terminalTotalDifficultyPassed = Opt.none(bool)
+  cc.config.terminalTotalDifficulty = Opt.some(0.u256)
   cc.genesis.difficulty = 1.u256
 
 proc ttdAndTtdPassed(cc: NetworkParams) =
-  cc.config.terminalTotalDifficultyPassed = some(true)
-  cc.config.terminalTotalDifficulty = some(0.u256)
+  cc.config.terminalTotalDifficultyPassed = Opt.some(true)
+  cc.config.terminalTotalDifficulty = Opt.some(0.u256)
   cc.genesis.difficulty = 1.u256
 
 proc ttdPassedFalseNoTtd(cc: NetworkParams) =
-  cc.config.terminalTotalDifficultyPassed = some(false)
-  cc.config.terminalTotalDifficulty = none(UInt256)
+  cc.config.terminalTotalDifficultyPassed = Opt.some(false)
+  cc.config.terminalTotalDifficulty = Opt.none(UInt256)
   cc.genesis.difficulty = 1.u256
 
 proc skeletonMain*() =

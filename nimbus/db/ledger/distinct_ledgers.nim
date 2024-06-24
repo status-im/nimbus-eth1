@@ -32,8 +32,8 @@ import
   ".."/[core_db, storage_types]
 
 type
-  AccountLedger* = distinct CoreDxAccRef
-  StorageLedger* = distinct CoreDxPhkRef
+  AccountLedger* = distinct CoreDbAccRef
+  StorageLedger* = distinct CoreDbMptRef
   SomeLedger* = AccountLedger | StorageLedger
 
 const
@@ -56,7 +56,7 @@ proc toSvp*(sl: StorageLedger): seq[(UInt256,UInt256)] =
   let kvt = db.newKvt
   var kvp: Table[UInt256,UInt256]
   try:
-    for (slotHash,val) in sl.distinctBase.toMpt.pairs:
+    for (slotHash,val) in sl.distinctBase.pairs:
       let rc = kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
       if rc.isErr:
         warn "StorageLedger.dump()", slotHash, error=($$rc.error)
@@ -149,12 +149,15 @@ proc merge*(al: AccountLedger; account: CoreDbAccount) =
   al.distinctBase.merge(account).isOkOr:
     raiseAssert info & $$error
 
+proc freeStorage*(al: AccountLedger, eAddr: EthAddress) =
+  const info = "AccountLedger/freeStorage()"
+  # Flush associated storage trie
+  al.distinctBase.stoDelete(eAddr).isOkOr:
+    raiseAssert info & $$error
+
 proc delete*(al: AccountLedger, eAddr: EthAddress) =
   const info = "AccountLedger/delete()"
-  # Flush associated storage trie
-  al.distinctBase.stoFlush(eAddr).isOkOr:
-    raiseAssert info & $$error
-  # Clear account
+  # Delete account and associated storage tree (if any)
   al.distinctBase.delete(eAddr).isOkOr:
     if error.error == MptNotFound:
       return
@@ -168,7 +171,6 @@ proc init*(
     T: type StorageLedger;
     al: AccountLedger;
     account: CoreDbAccount;
-    reHashOk = true;
       ): T =
   ## Storage trie constructor.
   ##
@@ -177,11 +179,6 @@ proc init*(
   let
     db = al.distinctBase.parent
     stt = account.storage
-  if not stt.isNil and reHashOk:
-    let rc = al.distinctBase.getColumn.state()
-    if rc.isErr:
-      raiseAssert "re-hash oops, error=" & $$rc.error
-  let
     ctx = db.ctx
     trie = if stt.isNil: ctx.newColumn(account.address) else: stt
     mpt = block:
@@ -189,22 +186,22 @@ proc init*(
       if rc.isErr:
         raiseAssert info & $$rc.error
       rc.value
-  mpt.toPhk.T
+  mpt.T
 
 proc fetch*(sl: StorageLedger, slot: UInt256): Result[Blob,void] =
-  var rc = sl.distinctBase.fetch(slot.toBytesBE)
+  var rc = sl.distinctBase.fetch(slot.toBytesBE.keccakHash.data)
   if rc.isErr:
     return err()
   ok move(rc.value)
 
 proc merge*(sl: StorageLedger, slot: UInt256, value: openArray[byte]) =
   const info = "StorageLedger/merge(): "
-  sl.distinctBase.merge(slot.toBytesBE, value).isOkOr:
+  sl.distinctBase.merge(slot.toBytesBE.keccakHash.data, value).isOkOr:
     raiseAssert info & $$error
 
 proc delete*(sl: StorageLedger, slot: UInt256) =
   const info = "StorageLedger/delete(): "
-  sl.distinctBase.delete(slot.toBytesBE).isOkOr:
+  sl.distinctBase.delete(slot.toBytesBE.keccakHash.data).isOkOr:
     if error.error == MptNotFound:
       return
     raiseAssert info & $$error

@@ -9,7 +9,7 @@
 
 import
   std/strutils,
-  eth/[common],
+  eth/common,
   stew/byteutils,
   stint,
   chronos,

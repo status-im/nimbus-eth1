@@ -13,7 +13,6 @@
 import
   std/tables,
   eth/common,
-  results,
   ../../aristo/aristo_profile
 
 from ../../aristo
@@ -34,12 +33,6 @@ const
   CoreDbPersistentTypes* = {AristoDbRocks}
 
 type
-  CoreDbKvtRef*  = distinct CoreDxKvtRef  # Legacy descriptor
-  CoreDbMptRef*  = distinct CoreDxMptRef  # Legacy descriptor
-  CoreDbPhkRef*  = distinct CoreDxPhkRef  # Legacy descriptor
-  CoreDbTxRef*   = distinct CoreDxTxRef   # Legacy descriptor
-  CoreDbCaptRef* = distinct CoreDxCaptRef # Legacy descriptor
-
   CoreDbProfListRef* = AristoDbProfListRef
     ## Borrowed from `aristo_profile`, only used in profiling mode
 
@@ -73,7 +66,6 @@ type
     CtxNotFound
     HashNotAvailable
     KvtNotFound
-    KvtNotOffSite
     MptNotFound
     NotImplemented
     RlpException
@@ -97,27 +89,30 @@ type
   # --------------------------------------------------
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
-  CoreDbBaseDestroyFn* = proc(flush = true) {.noRaise.}
+  CoreDbBaseDestroyFn* = proc(eradicate = true) {.noRaise.}
   CoreDbBaseColStateFn* = proc(
     col: CoreDbColRef): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbBaseColStateEmptyFn* = proc(
+    col: CoreDbColRef): CoreDbRc[bool] {.noRaise.}
   CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseNewKvtFn* = proc(offSite: bool): CoreDbRc[CoreDxKvtRef] {.noRaise.}
+  CoreDbBaseNewKvtFn* = proc(): CoreDbRc[CoreDbKvtRef] {.noRaise.}
   CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
   CoreDbBaseNewCtxFromTxFn* = proc(
     colState: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
   CoreDbBaseSwapCtxFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
-  CoreDbBaseTxBeginFn* = proc(): CoreDbRc[CoreDxTxRef] {.noRaise.}
+  CoreDbBaseTxBeginFn* = proc(): CoreDbTxRef {.noRaise.}
   CoreDbBaseNewCaptFn* =
-    proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDxCaptRef] {.noRaise.}
-  CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDxCaptRef] {.noRaise.}
+    proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDbCaptRef] {.noRaise.}
+  CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDbCaptRef] {.noRaise.}
   CoreDbBasePersistentFn* =
-    proc(bn: Option[BlockNumber]): CoreDbRc[void] {.noRaise.}
+    proc(bn: Opt[BlockNumber]): CoreDbRc[void] {.noRaise.}
 
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
     colStateFn*:     CoreDbBaseColStateFn
+    colStateEmptyFn*: CoreDbBaseColStateEmptyFn
     colPrintFn*:     CoreDbBaseColPrintFn
     errorPrintFn*:   CoreDbBaseErrorPrintFn
     levelFn*:        CoreDbBaseLevelFn
@@ -145,10 +140,10 @@ type
   # --------------------------------------------------
   CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
   CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbKvtLenFn* = proc(k: openArray[byte]): CoreDbRc[int] {.noRaise.}
   CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
     proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtSaveOffSiteFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
   CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
 
@@ -156,25 +151,23 @@ type
     ## Methods for key-value table
     backendFn*:     CoreDbKvtBackendFn
     getFn*:         CoreDbKvtGetFn
+    lenFn*:         CoreDbKvtLenFn
     delFn*:         CoreDbKvtDelFn
     putFn*:         CoreDbKvtPutFn
     hasKeyFn*:      CoreDbKvtHasKeyFn
-    saveOffSiteFn*: CoreDbKvtSaveOffSiteFn
     forgetFn*:      CoreDbKvtForgetFn
 
   # --------------------------------------------------
   # Sub-descriptor: MPT context methods
   # --------------------------------------------------
-  CoreDbCtxFromTxFn* =
-    proc(root: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
   CoreDbCtxNewColFn* = proc(
-    colType: CoreDbColType; colState: Hash256; address: Option[EthAddress];
+    cCtx: CoreDbCtxRef; colType: CoreDbColType; colState: Hash256; address: Opt[EthAddress];
     ): CoreDbRc[CoreDbColRef] {.noRaise.}
   CoreDbCtxGetMptFn* = proc(
-    root: CoreDbColRef; prune: bool): CoreDbRc[CoreDxMptRef] {.noRaise.}
+    cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
   CoreDbCtxGetAccFn* = proc(
-    root: CoreDbColRef; prune: bool): CoreDbRc[CoreDxAccRef] {.noRaise.}
-  CoreDbCtxForgetFn* = proc() {.noRaise.}
+    cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbAccRef] {.noRaise.}
+  CoreDbCtxForgetFn* = proc(cCtx: CoreDbCtxRef) {.noRaise.}
 
   CoreDbCtxFns* = object
     ## Methods for context maniulation
@@ -186,21 +179,20 @@ type
   # --------------------------------------------------
   # Sub-descriptor: generic  Mpt/hexary trie methods
   # --------------------------------------------------
-  CoreDbMptBackendFn* = proc(): CoreDbMptBackendRef {.noRaise.}
+  CoreDbMptBackendFn* = proc(cMpt: CoreDbMptRef): CoreDbMptBackendRef {.noRaise.}
   CoreDbMptFetchFn* =
-    proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbMptFetchAccountFn* =
-    proc(k: openArray[byte]): CoreDbRc[CoreDbAccount] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbMptDeleteFn* =
-    proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbMptMergeFn* =
-    proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbMptMergeAccountFn* =
-    proc(k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
-  CoreDbMptHasPathFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbMptIsPruningFn* = proc(): bool {.noRaise.}
-  CoreDbMptForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
+    proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
+  CoreDbMptHasPathFn* = proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbMptGetColFn* = proc(cMpt: CoreDbMptRef): CoreDbColRef {.noRaise.}
+  CoreDbMptForgetFn* = proc(cMpt: CoreDbMptRef): CoreDbRc[void] {.noRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects
@@ -210,49 +202,43 @@ type
     mergeFn*:     CoreDbMptMergeFn
     hasPathFn*:   CoreDbMptHasPathFn
     getColFn*:    CoreDbMptGetColFn
-    isPruningFn*: CoreDbMptIsPruningFn
 
 
   # ----------------------------------------------------
   # Sub-descriptor: Mpt/hexary trie methods for accounts
   # ------------------------------------------------------
-  CoreDbAccGetMptFn* = proc(): CoreDbRc[CoreDxMptRef] {.noRaise.}
-  CoreDbAccFetchFn* = proc(k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
-  CoreDbAccDeleteFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccStoFlushFn* = proc(k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccMergeFn* = proc(v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
-  CoreDbAccHasPathFn* = proc(k: EthAddress): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccGetColFn* = proc(): CoreDbColRef {.noRaise.}
-  CoreDbAccIsPruningFn* = proc(): bool {.noRaise.}
-  CoreDbAccForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbAccGetMptFn* = proc(cAcc: CoreDbAccRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
+  CoreDbAccFetchFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
+  CoreDbAccDeleteFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccStoDeleteFn* = proc(cAcc: CoreDbAccRef,k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccMergeFn* = proc(cAcc: CoreDbAccRef, v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
+  CoreDbAccHasPathFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[bool] {.noRaise.}
+  CoreDbAccGetColFn* = proc(cAcc: CoreDbAccRef): CoreDbColRef {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects
     getMptFn*:     CoreDbAccGetMptFn
     fetchFn*:      CoreDbAccFetchFn
     deleteFn*:     CoreDbAccDeleteFn
-    stoFlushFn*:   CoreDbAccStoFlushFn
+    stoDeleteFn*:  CoreDbAccStoDeleteFn
     mergeFn*:      CoreDbAccMergeFn
     hasPathFn*:    CoreDbAccHasPathFn
     getColFn*:     CoreDbAccGetColFn
-    isPruningFn*:  CoreDbAccIsPruningFn
 
 
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
   CoreDbTxLevelFn* = proc(): int {.noRaise.}
-  CoreDbTxCommitFn* = proc(applyDeletes: bool): CoreDbRc[void] {.noRaise.}
-  CoreDbTxRollbackFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbTxDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbTxSafeDisposeFn* = proc(): CoreDbRc[void] {.noRaise.}
+  CoreDbTxCommitFn* = proc() {.noRaise.}
+  CoreDbTxRollbackFn* = proc() {.noRaise.}
+  CoreDbTxDisposeFn* = proc() {.noRaise.}
 
   CoreDbTxFns* = object
     levelFn*:       CoreDbTxLevelFn
     commitFn*:      CoreDbTxCommitFn
     rollbackFn*:    CoreDbTxRollbackFn
     disposeFn*:     CoreDbTxDisposeFn
-    safeDisposeFn*: CoreDbTxSafeDisposeFn
 
 
   # --------------------------------------------------
@@ -296,25 +282,24 @@ type
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
-  CoreDxKvtRef* = ref CoreDxKvtObj
-  CoreDxKvtObj* = object of RootObj
+  CoreDbKvtRef* = ref object of RootRef
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbKvtFns
 
   CoreDbCtxRef* = ref object of RootRef
-    ## Context for `CoreDxMptRef` and `CoreDxAccRef`
+    ## Context for `CoreDbMptRef` and `CoreDbAccRef`
     parent*: CoreDbRef
     methods*: CoreDbCtxFns
 
-  CoreDxMptRef* = ref object of RootRef
+  CoreDbMptRef* = ref object of RootRef
     ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
     ## initialised on-the-fly.
     parent*: CoreDbRef
     methods*: CoreDbMptFns
 
-  CoreDxAccRef* = ref object of RootRef
-    ## Similar to `CoreDxKvtRef`, only dealing with `CoreDbAccount` data
+  CoreDbAccRef* = ref object of RootRef
+    ## Similar to `CoreDbKvtRef`, only dealing with `CoreDbAccount` data
     ## rather than `Blob` values.
     parent*: CoreDbRef
     methods*: CoreDbAccFns
@@ -325,19 +310,12 @@ type
     parent*: CoreDbRef
     ready*: bool              ## Must be set `true` to enable
 
-  CoreDxPhkRef* = ref object
-    ## Similar to `CoreDbMptRef` but with pre-hashed keys. That is, any
-    ## argument key for `merge()`, `fetch()` etc. will be hashed first
-    ## before being applied.
-    toMpt*: CoreDxMptRef
-    methods*: CoreDbMptFns
-
-  CoreDxTxRef* = ref object of RootRef
+  CoreDbTxRef* = ref object of RootRef
     ## Transaction descriptor derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbTxFns
 
-  CoreDxCaptRef* = ref object
+  CoreDbCaptRef* = ref object
     ## Db transaction tracer derived from `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbCaptFns

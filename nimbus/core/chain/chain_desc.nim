@@ -13,8 +13,7 @@
 import
   ../../common/common,
   ../../utils/utils,
-  ../../vm_types,
-  ../pow
+  ../../evm/types
 
 export
   common
@@ -25,16 +24,8 @@ type
       ## common block chain configuration
       ## used throughout entire app
 
-    validateBlock: bool ##\
-      ## If turn off, `persistBlocks` will always return
-      ## ValidationResult.OK and disable extraValidation too.
-
     extraValidation: bool ##\
       ## Trigger extra validation, currently within `persistBlocks()`
-      ## function only.
-
-    generateWitness: bool ##\
-      ## Enable generation of block witness, currently within `persistBlocks()`
       ## function only.
 
     verifyFrom: BlockNumber ##\
@@ -49,16 +40,16 @@ type
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc newChain*(com: CommonRef,
-               extraValidation: bool, vmState = BaseVMState(nil)): ChainRef =
+func newChain*(com: CommonRef,
+               extraValidation: bool,
+               vmState = BaseVMState(nil)): ChainRef =
   ## Constructor for the `Chain` descriptor object.
   ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
   ChainRef(
     com: com,
-    validateBlock: true,
     extraValidation: extraValidation,
-    vmState: vmState,
+    vmState: vmState
   )
 
 func newChain*(com: CommonRef): ChainRef =
@@ -67,42 +58,29 @@ func newChain*(com: CommonRef): ChainRef =
   let extraValidation = com.consensus == ConsensusType.POS
   ChainRef(
     com: com,
-    validateBlock: true,
     extraValidation: extraValidation,
   )
 
 # ------------------------------------------------------------------------------
 # Public `Chain` getters
 # ------------------------------------------------------------------------------
-proc vmState*(c: ChainRef): BaseVMState =
+func vmState*(c: ChainRef): BaseVMState =
   ## Getter
   c.vmState
 
-proc pow*(c: ChainRef): PowRef =
-  ## Getter
-  c.com.pow
-
-proc db*(c: ChainRef): CoreDbRef =
+func db*(c: ChainRef): CoreDbRef =
   ## Getter
   c.com.db
 
-proc com*(c: ChainRef): CommonRef =
+func com*(c: ChainRef): CommonRef =
   ## Getter
   c.com
 
-proc validateBlock*(c: ChainRef): bool =
-  ## Getter
-  c.validateBlock
-
-proc extraValidation*(c: ChainRef): bool =
+func extraValidation*(c: ChainRef): bool =
   ## Getter
   c.extraValidation
 
-proc generateWitness*(c: ChainRef): bool =
-  ## Getter
-  c.generateWitness
-
-proc verifyFrom*(c: ChainRef): BlockNumber =
+func verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
 
@@ -116,30 +94,17 @@ proc currentBlock*(c: ChainRef): BlockHeader
 # ------------------------------------------------------------------------------
 # Public `Chain` setters
 # ------------------------------------------------------------------------------
-proc `validateBlock=`*(c: ChainRef; validateBlock: bool) =
-  ## Setter. If set `true`, the assignment value `validateBlock` enables
-  ## block execution, else it will always return ValidationResult.OK
-  c.validateBlock = validateBlock
 
-proc `extraValidation=`*(c: ChainRef; extraValidation: bool) =
+func `extraValidation=`*(c: ChainRef; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables
   ## extra block chain validation.
   c.extraValidation = extraValidation
 
-proc `generateWitness=`*(c: ChainRef; generateWitness: bool) =
-  ## Setter. If set `true`, the assignment value `generateWitness` enables
-  ## block witness generation.
-  c.generateWitness = generateWitness
-
-proc `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
+func `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
   ## Setter. The  assignment value `verifyFrom` defines the first block where
   ## validation should start if the `Clique` field `extraValidation` was set
   ## `true`.
   c.verifyFrom = verifyFrom
-
-proc `verifyFrom=`*(c: ChainRef; verifyFrom: uint64) =
-  ## Variant of `verifyFrom=`
-  c.verifyFrom = verifyFrom.u256
 
 # ------------------------------------------------------------------------------
 # End

@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  results,
   ../aristo_desc,
   ../aristo_desc/desc_backend,
   "."/[init_common, memory_db]
@@ -28,8 +27,7 @@ type
 export
   BackendType,
   GuestDbRef,
-  MemBackendRef,
-  QidLayoutRef
+  MemBackendRef
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -52,7 +50,6 @@ proc kind*(
 proc init*(
     T: type AristoDbRef;                      # Target type
     B: type MemBackendRef;                    # Backend type
-    qidLayout: QidLayoutRef;                  # Optional fifo schedule
       ): T =
   ## Memory backend constructor.
   ##
@@ -62,7 +59,7 @@ proc init*(
   ## layouts might render the filter history data unmanageable.
   ##
   when B is MemBackendRef:
-    AristoDbRef(top: LayerRef.init(), backend: memoryBackend(qidLayout))
+    AristoDbRef(top: LayerRef.init(), backend: memoryBackend())
 
 proc init*(
     T: type AristoDbRef;                      # Target type
@@ -79,8 +76,7 @@ proc init*(
     AristoDbRef(top: LayerRef.init())
 
   elif B is MemBackendRef:
-    let qidLayout = DEFAULT_QID_QUEUES.to(QidLayoutRef)
-    AristoDbRef(top: LayerRef.init(), backend: memoryBackend(qidLayout))
+    AristoDbRef(top: LayerRef.init(), backend: memoryBackend())
 
 proc init*(
     T: type AristoDbRef;                      # Target type
@@ -88,20 +84,12 @@ proc init*(
   ## Shortcut for `AristoDbRef.init(VoidBackendRef)`
   AristoDbRef.init VoidBackendRef
 
-proc guestDb*(db: AristoDbRef; instance = 0): Result[GuestDbRef,AristoError] =
-  ## Database pigiback feature
-  if db.backend.isNil:
-    ok(GuestDbRef(nil))
-  else:
-    let gdb = db.backend.guestDbFn(instance).valueOr:
-      return err(error)
-    ok(gdb.GuestDbRef)
 
-proc finish*(db: AristoDbRef; flush = false) =
-  ## Backend destructor. The argument `flush` indicates that a full database
-  ## deletion is requested. If set `false` the outcome might differ depending
-  ## on the type of backend (e.g. the `BackendMemory` backend will always
-  ## flush on close.)
+proc finish*(db: AristoDbRef; eradicate = false) =
+  ## Backend destructor. The argument `eradicate` indicates that a full
+  ## database deletion is requested. If set `false` the outcome might differ
+  ## depending on the type of backend (e.g. the `BackendMemory` backend will
+  ## always eradicate on close.)
   ##
   ## In case of distributed descriptors accessing the same backend, all
   ## distributed descriptors will be destroyed.
@@ -109,7 +97,7 @@ proc finish*(db: AristoDbRef; flush = false) =
   ## This distructor may be used on already *destructed* descriptors.
   ##
   if not db.backend.isNil:
-    db.backend.closeFn flush
+    db.backend.closeFn eradicate
   discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------

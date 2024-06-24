@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  std/tables,
+  std/[tables, options],
   chronicles,
   chronos,
   chronos/timer,
@@ -52,7 +52,7 @@ func makeGetBlocksJob(number, maxResults: uint64) : BeaconJob =
 
 func makeHeaderRequest(number: uint64, maxResults: uint64): BlocksRequest =
   BlocksRequest(
-    startBlock: HashOrNum(isHash: false, number: number.u256),
+    startBlock: HashOrNum(isHash: false, number: number),
     maxResults: maxResults.uint,
     skip: 0,
     reverse: true
@@ -81,9 +81,15 @@ proc mapBodiesToHeader(buddy: BeaconBuddyRef,
                        job: BeaconJob,
                        bodies: openArray[BlockBody],
                        reqBodies: openArray[bool]) {.raises: [].} =
+  doAssert(job.mode == bjmGetBlocks or
+           job.mode == bjmGetBodies,
+           "mapBodiesToHeader doesn't allow this job: " & $job.mode)
   var
-    headers = system.move(job.getBlocksJob.headers)
-    map = initTable[Hash256, int]()
+    headers = if job.mode == bjmGetBlocks:
+                system.move(job.getBlocksJob.headers)
+              else:
+                system.move(job.getBodiesJob.headers)
+    map = Table[Hash256, int]()
 
   for i, x in bodies:
     let bodyHash = sumHash(x)
@@ -283,7 +289,7 @@ proc executeGetBodyJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.a
   if b.isNone:
     debug "executeGetBodyJob->getBodies none",
       hash=job.getBodyJob.headerHash.short,
-      number=job.getBodyJob.header.blockNumber
+      number=job.getBodyJob.header.number
     # retry with other peer
     buddy.requeue job
     return
@@ -292,7 +298,7 @@ proc executeGetBodyJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.a
   if bodies.blocks.len == 0:
     debug "executeGetBodyJob->getBodies isZero",
       hash=job.getBodyJob.headerHash.short,
-      number=job.getBodyJob.header.blockNumber
+      number=job.getBodyJob.header.number
     # retry with other peer
     buddy.requeue job
     return

@@ -14,9 +14,68 @@
 {.push raises: [].}
 
 import
-  std/[options, tables],
+  std/tables,
   results,
-  ".."/[aristo_desc, aristo_get, aristo_journal, aristo_layers, aristo_hashify]
+  ../aristo_delta/delta_merge,
+  ".."/[aristo_desc, aristo_get, aristo_delta, aristo_layers, aristo_hashify]
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc getBeStateRoot(
+    db: AristoDbRef;
+    chunkedMpt: bool;
+      ): Result[HashKey,AristoError] =
+  ## Get the Merkle hash key for the current backend state root and check
+  ## validity of top layer.
+  let srcRoot = block:
+    let rc = db.getKeyBE VertexID(1)
+    if rc.isOk:
+      rc.value
+    elif rc.error == GetKeyNotFound:
+      VOID_HASH_KEY
+    else:
+      return err(rc.error)
+
+  if db.top.delta.kMap.getOrVoid(VertexID 1).isValid:
+    return ok(srcRoot)
+
+  elif not db.top.delta.kMap.hasKey(VertexID 1) and
+       not db.top.delta.sTab.hasKey(VertexID 1):
+    # This layer is unusable, need both: vertex and key
+    return err(TxPrettyPointlessLayer)
+
+  elif not db.top.delta.sTab.getOrVoid(VertexID 1).isValid:
+    # Root key and vertex have been deleted
+    return ok(srcRoot)
+
+  elif chunkedMpt and srcRoot == db.top.delta.kMap.getOrVoid VertexID(1):
+    # FIXME: this one needs to be double checked with `snap` sunc preload
+    return ok(srcRoot)
+
+  err(TxStateRootMismatch)
+
+
+proc topMerge(db: AristoDbRef; src: HashKey): Result[void,AristoError] =
+  ## Merge the `top` layer into the read-only balacer layer.
+  let ubeRoot = block:
+    let rc = db.getKeyUbe VertexID(1)
+    if rc.isOk:
+      rc.value
+    elif rc.error == GetKeyNotFound:
+      VOID_HASH_KEY
+    else:
+      return err(rc.error)
+
+  # Update layer for merge call
+  db.top.delta.src = src
+
+  # This one will return the `db.top.delta` if `db.balancer.isNil`
+  db.balancer = db.deltaMerge(db.top.delta, db.balancer, ubeRoot).valueOr:
+    return err(error[1])
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -24,7 +83,7 @@ import
 
 proc txStow*(
     db: AristoDbRef;                  # Database
-    nxtFid: Option[FilterID];         # Next filter ID (zero is OK)
+    nxtSid: uint64;                   # Next state ID (aka block number)
     persistent: bool;                 # Stage only unless `true`
     chunkedMpt: bool;                 # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
@@ -34,57 +93,55 @@ proc txStow*(
     return err(TxPendingTx)
   if 0 < db.stack.len:
     return err(TxStackGarbled)
-  if persistent and not db.journalUpdateOk():
+  if persistent and not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
 
   # Update Merkle hashes (unless disabled)
   db.hashify().isOkOr:
     return err(error[1])
 
-  let fwd = db.journalFwdFilter(db.top, chunkedMpt).valueOr:
-    return err(error[1])
+  # Verify database consistency and get `src` field for update
+  let rc = db.getBeStateRoot chunkedMpt
+  if rc.isErr and rc.error != TxPrettyPointlessLayer:
+    return err(rc.error)
 
-  if fwd.isValid:
-    # Move/merge `top` layer onto `roFilter`
-    db.journalMerge(fwd).isOkOr:
-      return err(error[1])
+  # Special treatment for `snap` proofs (aka `chunkedMpt`)
+  let final =
+    if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
+    else: LayerFinalRef()
 
-    # Special treatment for `snap` proofs (aka `chunkedMpt`)
-    let final =
-      if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
-      else: LayerFinalRef()
+  # Move/merge/install `top` layer onto `balancer`
+  if rc.isOk:
+    db.topMerge(rc.value).isOkOr:
+      return err(error)
 
-    # New empty top layer (probably with `snap` proofs and `vGen` carry over)
+    # New empty top layer (probably with `snap` proofs and `vTop` carry over)
     db.top = LayerRef(
       delta: LayerDeltaRef(),
       final: final)
-    if db.roFilter.isValid:
-      db.top.final.vGen = db.roFilter.vGen
+    if db.balancer.isValid:
+      db.top.delta.vTop = db.balancer.vTop
     else:
-      let rc = db.getIdgUbe()
+      let rc = db.getTuvUbe()
       if rc.isOk:
-        db.top.final.vGen = rc.value
+        db.top.delta.vTop = rc.value
       else:
-        # It is OK if there was no `Idg`. Otherwise something serious happened
+        # It is OK if there was no `vTop`. Otherwise something serious happened
         # and there is no way to recover easily.
-        doAssert rc.error == GetIdgNotFound
+        doAssert rc.error == GetTuvNotFound
+
   elif db.top.delta.sTab.len != 0 and
        not db.top.delta.sTab.getOrVoid(VertexID(1)).isValid:
     # Currently, a `VertexID(1)` root node is required
     return err(TxAccRootMissing)
 
   if persistent:
-    # Merge/move `roFilter` into persistent tables
-    ? db.journalUpdate nxtFid
-
-  # Special treatment for `snap` proofs (aka `chunkedMpt`)
-  let final =
-    if chunkedMpt: LayerFinalRef(vGen: db.vGen, fRpp: db.top.final.fRpp)
-    else: LayerFinalRef(vGen: db.vGen)
+    # Merge/move `balancer` into persistent tables
+    ? db.deltaPersistent nxtSid
 
   # New empty top layer (probably with `snap` proofs carry over)
   db.top = LayerRef(
-    delta: LayerDeltaRef(),
+    delta: LayerDeltaRef(vTop: db.vTop),
     final: final,
     txUid: db.top.txUid)
   ok()

@@ -81,9 +81,10 @@ proc txFrameBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   if db.txFrameLevel != db.stack.len:
     return err(TxStackGarbled)
 
+  let vTop = db.top.delta.vTop
   db.stack.add db.top
   db.top = LayerRef(
-    delta: LayerDeltaRef(),
+    delta: LayerDeltaRef(vTop: vTop),
     final: db.top.final.dup,
     txUid: db.getTxUid)
 

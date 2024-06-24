@@ -12,7 +12,7 @@ import
   chronicles,
   confutils,
   confutils/std/net as confNet,
-  stew/[byteutils, endians2],
+  stew/byteutils,
   json_rpc/servers/httpserver,
   eth/p2p/discoveryv5/protocol,
   eth/p2p/discoveryv5/enr,
@@ -54,7 +54,7 @@ proc installUtpHandlers(
     d: protocol.Protocol,
     s: UtpDiscv5Protocol,
     t: ref Table[SKey, UtpSocket[NodeAddress]],
-) {.raises: [CatchableError].} =
+) {.raises: [].} =
   srv.rpc("utp_connect") do(r: enr.Record) -> SKey:
     let nodeRes = newNode(r)
 
@@ -116,8 +116,12 @@ proc buildAcceptConnection(
     t: ref Table[SKey, UtpSocket[NodeAddress]]
 ): AcceptConnectionCallback[NodeAddress] =
   return (
-    proc(server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]): Future[void] =
-      let fut = newFuture[void]()
+    proc(
+        server: UtpRouter[NodeAddress], client: UtpSocket[NodeAddress]
+    ): Future[void] {.async: (raw: true, raises: []).} =
+      let fut = noCancel Future[void].Raising([CancelledError]).init(
+        "utp_test_app.AcceptConnectionCallback"
+      )
       let key = client.socketKey.toSKey()
       t[key] = client
       fut.complete()
@@ -144,9 +148,9 @@ when isMainModule:
 
   let d = newProtocol(
     key,
-    some(discAddress),
-    none(Port),
-    some(conf.udpPort),
+    Opt.some(discAddress),
+    Opt.none(Port),
+    Opt.some(conf.udpPort),
     bootstrapRecords = @[],
     bindIp = discAddress,
     bindPort = conf.udpPort,

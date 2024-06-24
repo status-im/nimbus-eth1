@@ -20,13 +20,8 @@ import
 when CoreDbEnableApiTracking:
   import chronicles
 
-const
-  ProvideLegacyAPI = CoreDbProvideLegacyAPI
-
-when ProvideLegacyAPI and CoreDbEnableApiTracking:
   const
     logTxt = "CoreDb/it "
-    legaApiTxt = logTxt & "legacy API"
     newApiTxt = logTxt & "API"
 
 # Annotation helper(s)
@@ -36,7 +31,7 @@ when ProvideLegacyAPI and CoreDbEnableApiTracking:
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
+iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
   ## Iterator supported on memory DB (otherwise implementation dependent)
   ##
   kvt.setTrackNewApi KvtPairsIt
@@ -51,8 +46,8 @@ iterator pairs*(kvt: CoreDxKvtRef): (Blob, Blob) {.apiRaise.} =
     raiseAssert: "Unsupported database type: " & $kvt.parent.dbType
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) =
-  ## Trie traversal, only supported for `CoreDxMptRef` (not `Phk`)
+iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
+  ## Trie traversal, only supported for `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptPairsIt
   case mpt.parent.dbType:
@@ -65,8 +60,8 @@ iterator pairs*(mpt: CoreDxMptRef): (Blob, Blob) =
     let trie = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, trie
 
-iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
-  ## Low level trie dump, only supported for `CoreDxMptRef` (not `Phk`)
+iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
+  ## Low level trie dump, only supported for `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptReplicateIt
   case mpt.parent.dbType:
@@ -81,25 +76,6 @@ iterator replicate*(mpt: CoreDxMptRef): (Blob, Blob) {.apiRaise.} =
   mpt.ifTrackNewApi:
     let trie = mpt.methods.getColFn()
     debug newApiTxt, api, elapsed, trie
-
-when ProvideLegacyAPI:
-
-  iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
-    kvt.setTrackLegaApi LegaKvtPairsIt
-    for k,v in kvt.distinctBase.pairs(): yield (k,v)
-    kvt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
-    ## Trie traversal, not supported for `CoreDbPhkRef`
-    mpt.setTrackLegaApi LegaMptPairsIt
-    for k,v in mpt.distinctBase.pairs(): yield (k,v)
-    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
-
-  iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
-    ## Low level trie dump, not supported for `CoreDbPhkRef`
-    mpt.setTrackLegaApi LegaMptReplicateIt
-    for k,v in mpt.distinctBase.replicate(): yield (k,v)
-    mpt.ifTrackLegaApi: debug legaApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

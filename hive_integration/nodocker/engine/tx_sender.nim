@@ -20,13 +20,15 @@ import
   ../../../nimbus/common,
   ../../../nimbus/utils/utils
 
+from std/sequtils import mapIt
+
 type
   BaseTx* = object of RootObj
-    recipient* : Option[EthAddress]
+    recipient* : Opt[EthAddress]
     gasLimit*  : GasInt
     amount*    : UInt256
     payload*   : seq[byte]
-    txType*    : Option[TxType]
+    txType*    : Opt[TxType]
     gasTip*    : GasInt
     gasFee*    : GasInt
     blobGasFee*: UInt256
@@ -58,20 +60,20 @@ type
     nonce*  : AccountNonce
 
   CustSig* = object
-    V*: int64
+    V*: uint64
     R*: UInt256
     S*: UInt256
 
   CustomTransactionData* = object
-    nonce*              : Option[uint64]
-    gasPriceOrGasFeeCap*: Option[GasInt]
-    gasTipCap*          : Option[GasInt]
-    gas*                : Option[GasInt]
-    to*                 : Option[common.EthAddress]
-    value*              : Option[UInt256]
-    data*               : Option[seq[byte]]
-    chainId*            : Option[ChainId]
-    signature*          : Option[CustSig]
+    nonce*              : Opt[uint64]
+    gasPriceOrGasFeeCap*: Opt[GasInt]
+    gasTipCap*          : Opt[GasInt]
+    gas*                : Opt[GasInt]
+    to*                 : Opt[common.EthAddress]
+    value*              : Opt[UInt256]
+    data*               : Opt[seq[byte]]
+    chainId*            : Opt[ChainId]
+    signature*          : Opt[CustSig]
 
 const
   TestAccountCount = 1000
@@ -157,8 +159,8 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         txType  : TxEIP1559,
         nonce   : params.nonce,
         gasLimit: tc.gasLimit,
-        maxFee  : gasFeeCap,
-        maxPriorityFee: gasTipCap,
+        maxFeePerGas: gasFeeCap,
+        maxPriorityFeePerGas: gasTipCap,
         to      : tc.recipient,
         value   : tc.amount,
         payload : tc.payload,
@@ -182,8 +184,8 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         txType  : TxEIP4844,
         nonce   : params.nonce,
         chainId : params.chainId,
-        maxFee  : gasFeeCap,
-        maxPriorityFee: gasTipCap,
+        maxFeePerGas: gasFeeCap,
+        maxPriorityFeePerGas: gasTipCap,
         gasLimit: tc.gasLimit,
         to      : tc.recipient,
         value   : tc.amount,
@@ -193,9 +195,9 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         versionedHashes: system.move(blobData.hashes),
       ),
       networkPayload: NetworkPayload(
-        blobs: system.move(blobData.blobs),
-        commitments: system.move(blobData.commitments),
-        proofs: system.move(blobData.proofs),
+        blobs: blobData.blobs.mapIt(it.bytes),
+        commitments: blobData.commitments.mapIt(it.bytes),
+        proofs: blobData.proofs.mapIt(it.bytes),
       )
     )
   else:
@@ -324,8 +326,8 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
     txType    : TxEip4844,
     chainId   : params.chainId,
     nonce     : params.nonce,
-    maxPriorityFee: gasTipCap,
-    maxFee    : gasFeeCap,
+    maxPriorityFeePerGas: gasTipCap,
+    maxFeePerGas: gasFeeCap,
     gasLimit  : tc.gasLimit,
     to        : tc.recipient,
     value     : tc.amount,
@@ -337,9 +339,9 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
   PooledTransaction(
     tx: signTransaction(unsignedTx, params.key, params.chainId, eip155 = true),
     networkPayload: NetworkPayload(
-      blobs      : data.blobs,
-      commitments: data.commitments,
-      proofs     : data.proofs,
+      blobs      : data.blobs.mapIt(it.bytes),
+      commitments: data.commitments.mapIt(it.bytes),
+      proofs     : data.proofs.mapIt(it.bytes),
     ),
   )
 
@@ -436,15 +438,15 @@ proc customizeTransaction*(sender: TxSender,
       modTx.chainId = custTx.chainId.get
 
     if custTx.gasPriceOrGasFeeCap.isSome:
-      modTx.maxFee = custTx.gasPriceOrGasFeeCap.get.GasInt
+      modTx.maxFeePErGas = custTx.gasPriceOrGasFeeCap.get.GasInt
 
     if custTx.gasTipCap.isSome:
-      modTx.maxPriorityFee = custTx.gasTipCap.get.GasInt
+      modTx.maxPriorityFeePerGas = custTx.gasTipCap.get.GasInt
 
   if baseTx.txType == TxEip4844:
     if modTx.to.isNone:
       var address: EthAddress
-      modTx.to = some(address)
+      modTx.to = Opt.some(address)
 
   if custTx.signature.isNone:
     return signTransaction(modTx, acc.key, modTx.chainId, eip155 = true)

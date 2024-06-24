@@ -1,20 +1,17 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[times, macros, strutils, os, osproc, threadpool],
+  std/[times, macros, strutils, os, osproc],
   unittest2,
-  ../nimbus/vm_compile_info,
+  ../nimbus/compile_info,
   ../nimbus/utils/utils
 
-export strutils, os, unittest2, osproc, threadpool
-
-# AppVeyor may go out of memory with the default of 4
-setMinPoolSize(2)
+export strutils, os, unittest2, osproc
 
 proc executeMyself(numModules: int, names: openArray[string]): int =
   let appName = getAppFilename()

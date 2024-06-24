@@ -31,7 +31,7 @@ func pp*(b: Blob): string =
 func pp*(a: EthAddress): string =
   a.toHex[32 .. 39]
 
-func pp*(a: Option[EthAddress]): string =
+func pp*(a: Opt[EthAddress]): string =
   if a.isSome: a.unsafeGet.pp else: "n/a"
 
 func pp*(a: openArray[EthAddress]): string =
@@ -51,7 +51,7 @@ func pp*(a: NetworkPayload): string =
 func pp*(h: BlockHeader; sep = " "): string =
   "" &
     &"hash={h.blockHash.pp}{sep}" &
-    &"blockNumber={h.blockNumber}{sep}" &
+    &"blockNumber={h.number}{sep}" &
     &"parentHash={h.parentHash.pp}{sep}" &
     &"coinbase={h.coinbase.pp}{sep}" &
     &"gasLimit={h.gasLimit}{sep}" &
@@ -59,13 +59,13 @@ func pp*(h: BlockHeader; sep = " "): string =
     &"timestamp={h.timestamp}{sep}" &
     &"extraData={h.extraData.pp}{sep}" &
     &"difficulty={h.difficulty}{sep}" &
-    &"mixDigest={h.mixDigest.pp}{sep}" &
+    &"mixHash={h.mixHash.pp}{sep}" &
     &"nonce={h.nonce.pp}{sep}" &
     &"ommersHash={h.ommersHash.pp}{sep}" &
     &"txRoot={h.txRoot.pp}{sep}" &
-    &"receiptRoot={h.receiptRoot.pp}{sep}" &
+    &"receiptsRoot={h.receiptsRoot.pp}{sep}" &
     &"stateRoot={h.stateRoot.pp}{sep}" &
-    &"baseFee={h.baseFee}{sep}" &
+    &"baseFee={h.baseFeePerGas}{sep}" &
     &"withdrawalsRoot={h.withdrawalsRoot.get(EMPTY_ROOT_HASH)}{sep}" &
     &"blobGasUsed={h.blobGasUsed.get(0'u64)}{sep}" &
     &"excessBlobGas={h.excessBlobGas.get(0'u64)}"
@@ -91,8 +91,8 @@ func pp*(t: Transaction; sep = " "): string =
     &"chainId={t.chainId.distinctBase}{sep}" &
     &"nonce={t.nonce}{sep}" &
     &"gasPrice={t.gasPrice}{sep}" &
-    &"maxPriorityFee={t.maxPriorityFee}{sep}" &
-    &"maxFee={t.maxFee}{sep}" &
+    &"maxPriorityFee={t.maxPriorityFeePerGas}{sep}" &
+    &"maxFee={t.maxFeePerGas}{sep}" &
     &"gasLimit={t.gasLimit}{sep}" &
     &"to={t.to.pp}{sep}" &
     &"value={t.value}{sep}" &

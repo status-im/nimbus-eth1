@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -75,7 +75,7 @@ proc dumpAccount*(db: LedgerRef, acc: EthAddress): DumpAccount =
     nonce   : db.getNonce(acc),
     root    : db.getStorageRoot(acc),
     codeHash: db.getCodeHash(acc),
-    code    : db.getCode(acc),
+    code    : db.getCode(acc).bytes(),
     key     : keccakHash(acc)
   )
   for k, v in db.cachedStorage(acc):

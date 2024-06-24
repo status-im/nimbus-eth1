@@ -28,7 +28,8 @@ proc newHistoryNode(
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new("", uint32.high, inMemory = true)
     streamManager = StreamManager.new(node)
-    historyNetwork = HistoryNetwork.new(node, db, streamManager, accumulator)
+    historyNetwork =
+      HistoryNetwork.new(PortalNetwork.none, node, db, streamManager, accumulator)
 
   return HistoryNode(discoveryProtocol: node, historyNetwork: historyNetwork)
 
@@ -52,7 +53,7 @@ proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
   var headers: seq[BlockHeader]
   for i in fromNum .. toNum:
     var bh = BlockHeader()
-    bh.blockNumber = u256(i)
+    bh.number = BlockNumber(i)
     bh.difficulty = u256(i)
     # empty so that we won't care about creating fake block bodies
     bh.ommersHash = EMPTY_UNCLE_HASH
@@ -187,7 +188,7 @@ procSuite "History Content Network":
     historyNode2.start()
 
     let maxOfferedHistoryContent =
-      getMaxOfferedContentKeys(uint32(len(historyProtocolId)), maxContentKeySize)
+      getMaxOfferedContentKeys(uint32(len(PortalProtocolId)), maxContentKeySize)
 
     let headersWithProof =
       buildHeadersWithProof(headers[0 .. maxOfferedHistoryContent], epochAccumulators)

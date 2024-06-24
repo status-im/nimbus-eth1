@@ -9,9 +9,9 @@
 
 import
   std/typetraits,
-  chronicles, # Added for generic sandwich that hits in core_db :(
   eth/common/eth_types as etypes,
   eth/[trie, rlp],
+  results,
   stint,
   web3,
   web3/engine_api_types,
@@ -89,15 +89,16 @@ proc calculateTransactionData(
   ## - root of transactions trie
   ## - list of transactions hashes
   ## - total size of transactions in block
-  var tr = newCoreDbRef(DefaultDbMemory).mptPrune
+  var tr = newCoreDbRef(DefaultDbMemory).ctx.getMpt(CtGeneric)
   var txHashes: seq[TxOrHash]
   var txSize: uint64
   for i, t in items:
     let tx = distinctBase(t)
     txSize = txSize + uint64(len(tx))
-    tr.put(rlp.encode(i), tx)
+    tr.merge(rlp.encode(i), tx).expect "merge data"
     txHashes.add(txOrHash toFixedBytes(keccakHash(tx)))
-  return (tr.rootHash(), txHashes, txSize)
+  let rootHash = tr.getColumn().state().expect "hash"
+  (rootHash, txHashes, txSize)
 
 func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
   let bh = etypes.BlockHeader(
@@ -106,17 +107,17 @@ func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
     coinbase: etypes.EthAddress payload.feeRecipient,
     stateRoot: payload.stateRoot.asEthHash,
     txRoot: txRoot,
-    receiptRoot: payload.receiptsRoot.asEthHash,
-    bloom: distinctBase(payload.logsBloom),
+    receiptsRoot: payload.receiptsRoot.asEthHash,
+    logsBloom: distinctBase(payload.logsBloom),
     difficulty: default(etypes.DifficultyInt),
-    blockNumber: payload.blockNumber.distinctBase.u256,
+    number: payload.blockNumber.distinctBase,
     gasLimit: payload.gasLimit.unsafeQuantityToInt64,
     gasUsed: payload.gasUsed.unsafeQuantityToInt64,
     timestamp: payload.timestamp.EthTime,
     extraData: bytes payload.extraData,
-    mixDigest: payload.prevRandao.asEthHash,
+    mixHash: payload.prevRandao.asEthHash,
     nonce: default(etypes.BlockNonce),
-    fee: some payload.baseFeePerGas,
+    baseFeePerGas: Opt.some payload.baseFeePerGas,
   )
   return uint64(len(rlp.encode(bh)))
 
@@ -142,7 +143,7 @@ proc asBlockObject*(p: ExecutionData): BlockObject {.raises: [ValueError].} =
     gasLimit: p.gasLimit,
     gasUsed: p.gasUsed,
     timestamp: p.timestamp,
-    nonce: some(default(FixedBytes[8])),
+    nonce: Opt.some(default(FixedBytes[8])),
     size: Quantity(blockSize),
     # TODO: It does not matter what we put here after merge blocks.
     # Other projects like `helios` return `0`, data providers like alchemy return
@@ -150,5 +151,5 @@ proc asBlockObject*(p: ExecutionData): BlockObject {.raises: [ValueError].} =
     totalDifficulty: UInt256.zero,
     transactions: txHashes,
     uncles: @[],
-    baseFeePerGas: some(p.baseFeePerGas),
+    baseFeePerGas: Opt.some(p.baseFeePerGas),
   )

@@ -60,15 +60,15 @@ proc validateBlockHash*(header: common.BlockHeader,
 
     let res = PayloadStatusV1(
       status: status,
-      validationError: some("blockhash mismatch, want $1, got $2" % [
+      validationError: Opt.some("blockhash mismatch, want $1, got $2" % [
        $wantHash, $gotHash])
     )
     return err(res)
 
   return ok()
 
-template toValidHash*(x: common.Hash256): Option[Web3Hash] =
-  some(w3Hash x)
+template toValidHash*(x: common.Hash256): Opt[Web3Hash] =
+  Opt.some(w3Hash x)
 
 proc simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: status)
@@ -81,19 +81,22 @@ proc simpleFCU*(status: PayloadExecutionStatus,
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
       status: status,
-      validationError: some(msg)
+      validationError: Opt.some(msg)
     )
   )
 
-proc invalidFCU*(hash = common.Hash256()): ForkchoiceUpdatedResponse =
+proc invalidFCU*(
+    validationError: string,
+    hash = common.Hash256()): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus:
     PayloadStatusV1(
       status: PayloadExecutionStatus.invalid,
-      latestValidHash: toValidHash(hash)
+      latestValidHash: toValidHash(hash),
+      validationError: Opt.some validationError
     )
   )
 
-proc validFCU*(id: Option[PayloadID],
+proc validFCU*(id: Opt[PayloadID],
                validHash: common.Hash256): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
@@ -107,7 +110,7 @@ proc invalidStatus*(validHash: common.Hash256, msg: string): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash),
-    validationError: some(msg)
+    validationError: Opt.some(msg)
   )
 
 proc invalidStatus*(validHash = common.Hash256()): PayloadStatusV1 =
@@ -171,11 +174,10 @@ proc tooLargeRequest*(msg: string): ref InvalidRequest =
 
 proc latestValidHash*(db: CoreDbRef,
                       parent: common.BlockHeader,
-                      ttd: DifficultyInt): common.Hash256
-                       {.gcsafe, raises: [RlpError].} =
+                      ttd: DifficultyInt): common.Hash256 =
   if parent.isGenesis:
     return common.Hash256()
-  let ptd = db.getScore(parent.parentHash)
+  let ptd = db.getScore(parent.parentHash).valueOr(0.u256)
   if ptd >= ttd:
     parent.blockHash
   else:
@@ -183,13 +185,16 @@ proc latestValidHash*(db: CoreDbRef,
     # latestValidHash MUST be set to ZERO
     common.Hash256()
 
-proc invalidFCU*(com: CommonRef,
-                 header: common.BlockHeader): ForkchoiceUpdatedResponse
-                  {.gcsafe, raises: [RlpError].} =
+proc invalidFCU*(validationError: string,
+                 com: CommonRef,
+                 header: common.BlockHeader): ForkchoiceUpdatedResponse =
   var parent: common.BlockHeader
   if not com.db.getBlockHeader(header.parentHash, parent):
-    return invalidFCU(common.Hash256())
+    return invalidFCU(validationError)
 
-  let blockHash = latestValidHash(com.db, parent,
-    com.ttd.get(high(common.BlockNumber)))
-  invalidFCU(blockHash)
+  let blockHash = try:
+    latestValidHash(com.db, parent, com.ttd.get(high(UInt256)))
+  except RlpError:
+    default(common.Hash256)
+
+  invalidFCU(validationError, blockHash)

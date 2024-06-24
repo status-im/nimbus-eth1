@@ -14,42 +14,42 @@
 #
 
 import
-  stint,
+  results,
   ../nimbus/common/common,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   ../nimbus/core/executor,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/tracer,
   ./configuration # must be late (compilation annoyance)
 
-proc dumpDebug(com: CommonRef, blockNumber: UInt256) =
+proc dumpDebug(com: CommonRef, blockNumber: BlockNumber) =
   var
-    capture = com.db.capture()
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
-  let transaction = capture.recorder.beginTransaction()
+  let transaction = capture.recorder.newTransaction()
   defer: transaction.dispose()
 
 
-  let
+  var
     parentNumber = blockNumber - 1
     parent = captureCom.db.getBlockHeader(parentNumber)
-    header = captureCom.db.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    body = captureCom.db.getBlockBody(headerHash)
-    vmState = BaseVMState.new(parent, header, captureCom)
+    blk = captureCom.db.getEthBlock(blockNumber)
+    vmState = BaseVMState.new(parent, blk.header, captureCom)
 
   discard captureCom.db.setHead(parent, true)
-  discard vmState.processBlock(header, body)
+  discard vmState.processBlock(blk)
 
   transaction.rollback()
-  vmState.dumpDebuggingMetaData(header, body, false)
+  vmState.dumpDebuggingMetaData(blk, false)
 
 proc main() {.used.} =
   let conf = getConfiguration()
-  let com = CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir))
+  let com = CommonRef.new(
+    newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
-  if conf.head != 0.u256:
+  if conf.head != 0'u64:
     dumpDebug(com, conf.head)
 
 when isMainModule:

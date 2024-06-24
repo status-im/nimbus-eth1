@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  ../nimbus/vm_compile_info
+  ../nimbus/compile_info
 
 import
   std/[os, strutils, net],
@@ -22,8 +22,8 @@ import
   ./version,
   ./constants,
   ./nimbus_desc,
+  ./nimbus_import,
   ./core/eip4844,
-  ./core/block_import,
   ./db/core_db/persistent,
   ./sync/protocol,
   ./sync/handlers
@@ -35,14 +35,6 @@ when defined(evmc_enabled):
 ## * No IPv6 support
 ## * No multiple bind addresses support
 ## * No database support
-
-proc importBlocks(conf: NimbusConf, com: CommonRef) =
-  if string(conf.blocksFile).len > 0:
-    # success or not, we quit after importing blocks
-    if not importRlpBlock(string conf.blocksFile, com):
-      quit(QuitFailure)
-    else:
-      quit(QuitSuccess)
 
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
@@ -62,7 +54,6 @@ proc basicServices(nimbus: NimbusNode,
     nimbus.chainRef.extraValidation = 0 < verifyFrom
     nimbus.chainRef.verifyFrom = verifyFrom
 
-  nimbus.chainRef.generateWitness = conf.generateWitness
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
@@ -141,15 +132,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
     let
-      exCtrlFile = if conf.syncCtrlFile.isNone: none(string)
-                   else: some(conf.syncCtrlFile.get)
+      exCtrlFile = if conf.syncCtrlFile.isNone: Opt.none(string)
+                   else: Opt.some(conf.syncCtrlFile.get)
       tickerOK = conf.logLevel in {
         LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
     case conf.syncMode:
-    of SyncMode.Full:
-      nimbus.fullSyncRef = FullSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        tickerOK, exCtrlFile)
     #of SyncMode.Snap:
     #  # Minimal capability needed for sync only
     #  if ProtocolFlag.Snap notin protocols:
@@ -159,14 +146,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     #    nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
     #    tickerOK, exCtrlFile)
     of SyncMode.Default:
-      if com.forkGTE(MergeFork):
-        nimbus.beaconSyncRef = BeaconSyncRef.init(
-          nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        )
-      else:
-        nimbus.fullSyncRef = FullSyncRef.init(
-          nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-          tickerOK, exCtrlFile)
+      nimbus.beaconSyncRef = BeaconSyncRef.init(
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+      )
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -185,15 +167,14 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     case conf.syncMode:
     #of SyncMode.Snap:
     #  waitForPeers = false
-    of SyncMode.Full, SyncMode.Default:
+    of SyncMode.Default:
       discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
       waitForPeers = waitForPeers)
 
 
-proc localServices(nimbus: NimbusNode, conf: NimbusConf,
-                   com: CommonRef, protocols: set[ProtocolFlag]) =
+proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
   # metrics logging
   if conf.logMetricsEnabled:
     # https://github.com/nim-lang/Nim/issues/17369
@@ -204,8 +185,6 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       info "metrics", registry
       discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
     discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
-
-  nimbus.setupRpc(conf, com, protocols)
 
   # metrics server
   if conf.metricsEnabled:
@@ -218,7 +197,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.metricsServer = res.get
     waitFor nimbus.metricsServer.start()
 
-proc start(nimbus: NimbusNode, conf: NimbusConf) =
+proc run(nimbus: NimbusNode, conf: NimbusConf) =
   ## logging
   setLogLevel(conf.logLevel)
   if conf.logFile.isSome:
@@ -226,26 +205,15 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(logFile, fmAppend)
 
+  info "Launching execution client",
+      version = FullVersionStr,
+      conf
+
   when defined(evmc_enabled):
     evmcSetLibraryPath(conf.evm)
 
-  createDir(string conf.dataDir)
-  let coreDB =
-    # Resolve statically for database type
-    case conf.chainDbMode:
-    of Aristo,AriPrune:
-      AristoDbRocks.newCoreDbRef(string conf.dataDir)
-  let com = CommonRef.new(
-    db = coreDB,
-    pruneHistory = (conf.chainDbMode == AriPrune),
-    networkId = conf.networkId,
-    params = conf.networkParams)
-
-  com.initializeEmptyDb()
-
-  let protocols = conf.getProtocolFlags()
-
-  if conf.cmd != NimbusCmd.`import` and conf.trustedSetupFile.isSome:
+  # Trusted setup is needed for processing Cancun+ blocks
+  if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
     let res = Kzg.loadTrustedSetup(fileName)
     if res.isErr:
@@ -257,24 +225,41 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
       fatal "Cannot load baked in Kzg trusted setup", msg=res.error
       quit(QuitFailure)
 
+  createDir(string conf.dataDir)
+  let coreDB =
+    # Resolve statically for database type
+    case conf.chainDbMode:
+    of Aristo,AriPrune:
+      AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
+
+  setupMetrics(nimbus, conf)
+
+  let com = CommonRef.new(
+    db = coreDB,
+    pruneHistory = (conf.chainDbMode == AriPrune),
+    networkId = conf.networkId,
+    params = conf.networkParams)
+
+  defer:
+    com.db.finish()
+
+  com.initializeEmptyDb()
+
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   else:
+    let protocols = conf.getProtocolFlags()
+
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
     setupP2P(nimbus, conf, com, protocols)
-    localServices(nimbus, conf, com, protocols)
+    setupRpc(nimbus, conf, com, protocols)
 
     if conf.maxPeers > 0:
       case conf.syncMode:
       of SyncMode.Default:
-        if com.forkGTE(MergeFork):
-          nimbus.beaconSyncRef.start
-        else:
-          nimbus.fullSyncRef.start
-      of SyncMode.Full:
-        nimbus.fullSyncRef.start
+        nimbus.beaconSyncRef.start
       #of SyncMode.Snap:
       #  nimbus.snapSyncRef.start
 
@@ -282,17 +267,16 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
       # it might have been set to "Stopping" with Ctrl+C
       nimbus.state = NimbusState.Running
 
-proc process*(nimbus: NimbusNode, conf: NimbusConf) =
-  # Main event loop
-  while nimbus.state == NimbusState.Running:
-    try:
-      poll()
-    except CatchableError as e:
-      debug "Exception in poll()", exc = e.name, err = e.msg
-      discard e # silence warning when chronicles not activated
+    # Main event loop
+    while nimbus.state == NimbusState.Running:
+      try:
+        poll()
+      except CatchableError as e:
+        debug "Exception in poll()", exc = e.name, err = e.msg
+        discard e # silence warning when chronicles not activated
 
-  # Stop loop
-  waitFor nimbus.stop(conf)
+    # Stop loop
+    waitFor nimbus.stop(conf)
 
 when isMainModule:
   var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
@@ -312,5 +296,4 @@ when isMainModule:
   ## Processing command line arguments
   let conf = makeConfig()
 
-  nimbus.start(conf)
-  nimbus.process(conf)
+  nimbus.run(conf)

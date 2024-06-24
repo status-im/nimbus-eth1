@@ -27,7 +27,7 @@ proc tx0(i: int): Transaction =
   Transaction(
     txType:   TxLegacy,
     nonce:    i.AccountNonce,
-    to:       recipient.some,
+    to:       Opt.some recipient,
     gasLimit: 1.GasInt,
     gasPrice: 2.GasInt,
     payload:  abcdef)
@@ -47,7 +47,7 @@ proc tx2(i: int): Transaction =
     txType:     TxEip2930,
     chainId:    1.ChainId,
     nonce:      i.AccountNonce,
-    to:         recipient.some,
+    to:         Opt.some recipient,
     gasLimit:   123457.GasInt,
     gasPrice:   10.GasInt,
     accessList: accesses,
@@ -59,7 +59,7 @@ proc tx3(i: int): Transaction =
     txType:   TxEip2930,
     chainId:  1.ChainId,
     nonce:    i.AccountNonce,
-    to:       recipient.some,
+    to:       Opt.some recipient,
     gasLimit: 123457.GasInt,
     gasPrice: 10.GasInt,
     payload:  abcdef)
@@ -80,8 +80,8 @@ proc tx5(i: int): Transaction =
     chainId:    1.ChainId,
     nonce:      i.AccountNonce,
     gasLimit:   123457.GasInt,
-    maxPriorityFee: 42.GasInt,
-    maxFee:     10.GasInt,
+    maxPriorityFeePerGas: 42.GasInt,
+    maxFeePerGas: 10.GasInt,
     accessList: accesses)
 
 proc tx6(i: int): Transaction =
@@ -93,8 +93,8 @@ proc tx6(i: int): Transaction =
     chainId:             1.ChainId,
     nonce:               i.AccountNonce,
     gasLimit:            123457.GasInt,
-    maxPriorityFee:      42.GasInt,
-    maxFee:              10.GasInt,
+    maxPriorityFeePerGas:42.GasInt,
+    maxFeePerGas:        10.GasInt,
     accessList:          accesses,
     versionedHashes:     @[digest]
   )
@@ -108,8 +108,8 @@ proc tx7(i: int): Transaction =
     chainID:             1.ChainId,
     nonce:               i.AccountNonce,
     gasLimit:            123457.GasInt,
-    maxPriorityFee:      42.GasInt,
-    maxFee:              10.GasInt,
+    maxPriorityFeePerGas:42.GasInt,
+    maxFeePerGas:        10.GasInt,
     accessList:          accesses,
     versionedHashes:     @[digest],
     maxFeePerBlobGas:    10000000.u256,
@@ -123,10 +123,10 @@ proc tx8(i: int): Transaction =
     txType:              TxEip4844,
     chainID:             1.ChainId,
     nonce:               i.AccountNonce,
-    to:                  some(recipient),
+    to:                  Opt.some recipient,
     gasLimit:            123457.GasInt,
-    maxPriorityFee:      42.GasInt,
-    maxFee:              10.GasInt,
+    maxPriorityFeePerGas:42.GasInt,
+    maxFeePerGas:        10.GasInt,
     accessList:          accesses,
     versionedHashes:     @[digest],
     maxFeePerBlobGas:    10000000.u256,

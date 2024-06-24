@@ -9,29 +9,33 @@
 # according to those terms.
 
 import
-  json, stint, stew/byteutils,
+  std/strutils,
+  json, stew/byteutils,
+  results,
   ../nimbus/db/[core_db, storage_types], eth/[rlp, common],
   ../nimbus/tracer
 
-proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: UInt256, parent, header: BlockHeader, body: BlockBody) =
+proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: BlockNumber, parent: BlockHeader, blk: EthBlock) =
+  template header: BlockHeader = blk.header
   let
     state = nimbus["state"]
     headerHash = rlpHash(header)
-
-  var
     chainDB = newCoreDbRef(DefaultDbMemory)
+    kvt = chainDB.newKvt()
 
   discard chainDB.setHead(parent, true)
-  discard chainDB.persistTransactions(blockNumber, body.transactions)
-  discard chainDB.persistUncles(body.uncles)
+  chainDB.persistTransactions(blockNumber, blk.transactions)
+  discard chainDB.persistUncles(blk.uncles)
 
-  chainDB.kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
-  chainDB.addBlockNumberToHashLookup(header)
+  kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
+    raiseAssert "generatePrestate(): put() failed " & $$error
+  chainDB.addBlockNumberToHashLookup(header.number, headerHash)
 
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    chainDB.kvt.put(key, value)
+    kvt.put(key, value).isOkOr:
+      raiseAssert "generatePrestate(): put() (loop) failed " & $$error
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,

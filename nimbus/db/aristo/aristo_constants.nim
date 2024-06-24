@@ -12,14 +12,11 @@
 
 import
   std/sets,
-  eth/[common, trie/nibbles],
+  eth/common,
   ./aristo_desc/desc_identifiers
 
 const
   EmptyBlob* = seq[byte].default
-    ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
-
-  EmptyNibbleSeq* = EmptyBlob.initNibbleRange
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
 
   EmptyVidSeq* = seq[VertexID].default
@@ -36,29 +33,6 @@ const
 
   VOID_PATH_ID* = PathID()
     ## Void equivalent for Merkle hash value
-
-  EmptyQidPairSeq* = seq[(QueueID,QueueID)].default
-    ## Useful shortcut
-
-  DEFAULT_QID_QUEUES* = [
-    (128, 0), # Consecutive list of (at least) 128 filter slots
-    ( 16, 3), # Overflow list with (at least) 16 filter slots (with gap size 3)
-              # each slot covering 4 filters from previous list
-    (  1, 1), # ..
-    (  1, 1)]
-    ## The `DEFAULT_QID_QUEUES` schedule has the following properties:
-    ## * most recent consecutive slots: 128
-    ## * maximal slots used: 151
-    ## * covered backlog savings: between 216..231
-    ## This was calculated via the `capacity()` function from the
-    ## `filter_scheduler.nim` source. So, saving each block after executing
-    ## it, the previous 128 block chain states will be directly accessible.
-    ## For older block chain states (of at least back to 216), the system can
-    ## be positioned before the desired state and block by block executed
-    ## forward.
-
-  SUB_TREE_DISPOSAL_MAX* = 200_000
-    ## Some limit for disposing sub-trees in one go using `delete()`.
 
   LEAST_FREE_VID* = 100
     ## Vids smaller are used as known state roots and cannot be recycled. Only

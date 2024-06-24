@@ -52,7 +52,7 @@ proc configurationMain*() =
 
       let bb = makeConfig(@["import", genesisFile])
       check bb.cmd == NimbusCmd.`import`
-      check bb.blocksFile.string == genesisFile
+      check bb.blocksFile[0].string == genesisFile
 
     test "custom-network loading config file with no genesis data":
       # no genesis will fallback to geth compatibility mode
@@ -318,22 +318,6 @@ proc configurationMain*() =
       let conf = makeConfig(@["--key-store:banana"])
       check conf.dataDir.string == defaultDataDir()
       check conf.keyStore.string == "banana"
-
-    test "generate-witness default":
-      let conf = makeTestConfig()
-      check conf.generateWitness == false
-
-    test "generate-witness enabled":
-      let conf = makeConfig(@["--generate-witness"])
-      check conf.generateWitness == true
-
-    test "generate-witness equals true":
-      let conf = makeConfig(@["--generate-witness=true"])
-      check conf.generateWitness == true
-
-    test "generate-witness equals false":
-      let conf = makeConfig(@["--generate-witness=false"])
-      check conf.generateWitness == false
 
 when isMainModule:
   configurationMain()

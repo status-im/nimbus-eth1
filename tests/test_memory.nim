@@ -6,52 +6,32 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, sequtils,
-  ../nimbus/[errors, vm_internals]
+  std/sequtils,
+  unittest2,
+  ../nimbus/evm/evm_errors,
+  ../nimbus/evm/memory
 
-proc memory32: Memory =
-  result = newMemory()
-  result.extend(0, 32)
+proc memory32: EvmMemoryRef =
+  result = EvmMemoryRef.new(32)
 
-proc memory128: Memory =
-  result = newMemory()
-  result.extend(0, 128)
+proc memory128: EvmMemoryRef =
+  result = EvmMemoryRef.new(123)
 
 proc memoryMain*() =
   suite "memory":
     test "write":
       var mem = memory32()
       # Test that write creates 32byte string == value padded with zeros
-      mem.write(startPos = 0, value = @[1.byte, 0.byte, 1.byte, 0.byte])
+      check mem.write(startPos = 0, value = @[1.byte, 0.byte, 1.byte, 0.byte]).isOk
       check(mem.bytes == @[1.byte, 0.byte, 1.byte, 0.byte].concat(repeat(0.byte, 28)))
 
-    # test "write rejects invalid position":
-    #   expect(ValidationError):
-    #     var mem = memory32()
-    #     mem.write(startPosition = -1.i256, size = 2.i256, value = @[1.byte, 0.byte])
-      # expect(ValidationError):
-        # TODO: work on 256
-        # var mem = memory32()
-        # echo "pow ", pow(2.i256, 255) - 1.i256
-        # mem.write(startPosition = pow(2.i256, 256), size = 2.i256, value = @[1.byte, 0.byte])
-
-    # test "write rejects invalid size":
-    #   # expect(ValidationError):
-    #   #   var mem = memory32()
-    #   #   mem.write(startPosition = 0.i256, size = -1.i256, value = @[1.byte, 0.byte])
-
-    #   #TODO deactivated because of no pow support in Stint: https://github.com/status-im/nim-stint/issues/37
-    #   expect(ValidationError):
-    #     var mem = memory32()
-    #     mem.write(startPosition = 0.u256, size = pow(2.u256, 256), value = @[1.byte, 0.byte])
-
     test "write rejects values beyond memory size":
-      expect(ValidationError):
-        var mem = memory128()
-        mem.write(startPos = 128, value = @[1.byte, 0.byte, 1.byte, 0.byte])
+      var mem = memory128()
+      check mem.write(startPos = 128, value = @[1.byte, 0.byte, 1.byte, 0.byte]).error.code == EvmErrorCode.MemoryFull
+      check mem.write(startPos = 128, value = 1.byte).error.code == EvmErrorCode.MemoryFull
 
     test "extends appropriately extends memory":
-      var mem = newMemory()
+      var mem = EvmMemoryRef.new()
       # Test extends to 32 byte array: 0 < (start_position + size) <= 32
       mem.extend(startPos = 0, size = 10)
       check(mem.bytes == repeat(0.byte, 32))
@@ -64,10 +44,10 @@ proc memoryMain*() =
 
     test "read returns correct bytes":
       var mem = memory32()
-      mem.write(startPos = 5, value = @[1.byte, 0.byte, 1.byte, 0.byte])
-      check(mem.read(startPos = 5, size = 4) == @[1.byte, 0.byte, 1.byte, 0.byte])
-      check(mem.read(startPos = 6, size = 4) == @[0.byte, 1.byte, 0.byte, 0.byte])
-      check(mem.read(startPos = 1, size = 3) == @[0.byte, 0.byte, 0.byte])
+      check mem.write(startPos = 5, value = @[1.byte, 0.byte, 1.byte, 0.byte]).isOk
+      check(@(mem.read(startPos = 5, size = 4)) == @[1.byte, 0.byte, 1.byte, 0.byte])
+      check(@(mem.read(startPos = 6, size = 4)) == @[0.byte, 1.byte, 0.byte, 0.byte])
+      check(@(mem.read(startPos = 1, size = 3)) == @[0.byte, 0.byte, 0.byte])
 
 when isMainModule:
   memoryMain()

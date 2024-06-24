@@ -31,7 +31,7 @@ proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
     discard xp.txDB.reassign(item, status)
 
 proc importBlocks(c: ChainRef; h: seq[BlockHeader]; b: seq[BlockBody]): int =
-  if c.persistBlocks(h,b) != ValidationResult.OK:
+  if c.persistBlocks(h,b).isErr():
     raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
   for body in b:
     result += body.transactions.len
@@ -66,7 +66,7 @@ proc toTxPool*(
     nTxs = 0
 
   doAssert not com.isNil
-  result[0] = TxPoolRef.new(com,testAddress)
+  result[0] = TxPoolRef.new(com)
   result[0].baseFee = baseFee
 
   for chain in file.undumpBlocksGz:
@@ -120,7 +120,7 @@ proc toTxPool*(
 
   doAssert not com.isNil
 
-  result = TxPoolRef.new(com,testAddress)
+  result = TxPoolRef.new(com)
   result.baseFee = baseFee
   result.maxRejects = itList.len
 
@@ -155,7 +155,7 @@ proc toTxPool*(
   doAssert not com.isNil
   doAssert 0 < itemsPC and itemsPC < 100
 
-  result = TxPoolRef.new(com,testAddress)
+  result = TxPoolRef.new(com)
   result.baseFee = baseFee
   result.maxRejects = itList.len
 

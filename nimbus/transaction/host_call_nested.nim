@@ -12,9 +12,12 @@ import
   eth/common/eth_types,
   stew/ptrops,
   stint,
-  ".."/[vm_types, vm_computation],
+  ../evm/types,
+  ../evm/interpreter_dispatch,
   ../utils/utils,
   "."/[host_types, host_trace]
+
+import ../evm/computation except fromEvmc, toEvmc
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
   dealloc(res.output_data)
@@ -25,7 +28,7 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
   let childMsg = Message(
     kind: CallKind(m.kind.ord),
     depth: m.depth,
-    gas: m.gas,
+    gas: GasInt m.gas,
     sender: m.sender.fromEvmc,
     value: m.value.fromEvmc,
     data: @(makeOpenArray(m.inputData, m.inputSize.int))
@@ -39,7 +42,7 @@ proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
     res.gas_left = child.gasMeter.gasRemaining
 
   if child.isSuccess:
-    host.computation.merge(child)
+    res.gas_refund = child.gasMeter.gasRefunded
     res.status_code = EVMC_SUCCESS
     res.create_address = child.msg.contractAddress.toEvmc
   else:
@@ -56,7 +59,7 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
   let childMsg = Message(
     kind: CallKind(m.kind.ord),
     depth: m.depth,
-    gas: m.gas,
+    gas: GasInt m.gas,
     sender: m.sender.fromEvmc,
     codeAddress: m.code_address.fromEvmc,
     contractAddress: if m.kind == EVMC_CALL:
@@ -75,7 +78,7 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
     res.gas_left = child.gasMeter.gasRemaining
 
   if child.isSuccess:
-    host.computation.merge(child)
+    res.gas_refund = child.gasMeter.gasRefunded
     res.status_code = EVMC_SUCCESS
   else:
     res.status_code = child.evmcStatus
@@ -112,7 +115,7 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
 proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
-    {.noinline, gcsafe, raises: [ValueError].} =
+    {.noinline.} =
   # `call` is special.  Most host functions do `flip256` in `evmc_host_glue`
   # and `show` in `host_services`, but `call` needs to minimise C stack used
   # by nested EVM calls.  Just `flip256` in glue's `call` adds a lot of
@@ -136,7 +139,7 @@ proc afterExecEvmcNested(host: TransactionHost, child: Computation,
                          kind: EvmcCallKind): EvmcResult
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
-    {.noinline, gcsafe, raises: [ValueError].} =
+    {.noinline.} =
   host.computation = host.saveComputation[^1]
   host.saveComputation[^1] = nil
   host.saveComputation.setLen(host.saveComputation.len - 1)

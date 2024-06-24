@@ -21,14 +21,14 @@ import
     chronicles,
     confutils,
     confutils/defs,
-    stew/byteutils,
     confutils/std/net
   ],
   eth/[common, net/utils, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
-  "."/[constants, vm_compile_info, version],
-  common/chain_config
+  "."/[constants, compile_info, version],
+  common/chain_config,
+  db/opts
 
-export net
+export net, defs
 
 const
   # TODO: fix this agent-string format to match other
@@ -131,7 +131,6 @@ type
 
   SyncMode* {.pure.} = enum
     Default
-    Full                          ## Beware, experimental
     #Snap                          ## Beware, experimental
 
   NimbusConf* = object of RootObj
@@ -144,6 +143,11 @@ type
       defaultValueDesc: $defaultDataDirDesc
       abbr: "d"
       name: "data-dir" }: OutDir
+
+    era1DirOpt* {.
+      desc: "Directory where era1 (pre-merge) archive can be found"
+      defaultValueDesc: "<data-dir>/era1"
+      name: "era1-dir" }: Option[OutDir]
 
     keyStore* {.
       desc: "Load one or more keystore files from this directory"
@@ -166,8 +170,7 @@ type
     syncMode* {.
       desc: "Specify particular blockchain sync mode."
       longDesc:
-        "- default   -- legacy sync mode\n" &
-        "- full      -- full blockchain archive\n" &
+        "- default   -- beacon sync mode\n" &
         # "- snap      -- experimental snap mode (development only)\n" &
         ""
       defaultValue: SyncMode.Default
@@ -194,17 +197,17 @@ type
       defaultValueDesc: ""
       name: "verify-from" }: Option[uint64]
 
-    generateWitness* {.
-      hidden
-      desc: "Enable experimental generation and storage of block witnesses"
-      defaultValue: false
-      name: "generate-witness" }: bool
-
     evm* {.
       desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
       defaultValue: ""
       name: "evm"
       includeIfEvmc }: string
+
+    trustedSetupFile* {.
+      desc: "Load EIP-4844 trusted setup file"
+      defaultValue: none(string)
+      defaultValueDesc: "Baked in trusted setup"
+      name: "trusted-setup-file" .}: Option[string]
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
@@ -254,6 +257,23 @@ type
       desc: "Interval at which to log metrics, in seconds"
       defaultValue: 10
       name: "log-metrics-interval" .}: int
+
+    metricsEnabled* {.
+      desc: "Enable the built-in metrics HTTP server"
+      defaultValue: false
+      name: "metrics" }: bool
+
+    metricsPort* {.
+      desc: "Listening port of the built-in metrics HTTP server"
+      defaultValue: defaultMetricsServerPort
+      defaultValueDesc: $defaultMetricsServerPort
+      name: "metrics-port" }: Port
+
+    metricsAddress* {.
+      desc: "Listening IP address of the built-in metrics HTTP server"
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: $defaultAdminListenAddressDesc
+      name: "metrics-address" }: IpAddress
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
@@ -369,6 +389,30 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
+    rocksdbMaxOpenFiles {.
+      hidden
+      defaultValue: defaultMaxOpenFiles
+      defaultValueDesc: $defaultMaxOpenFiles
+      name: "debug-rocksdb-max-open-files".}: int
+
+    rocksdbWriteBufferSize {.
+      hidden
+      defaultValue: defaultWriteBufferSize
+      defaultValueDesc: $defaultWriteBufferSize
+      name: "debug-rocksdb-write-buffer-size".}: int
+
+    rocksdbRowCacheSize {.
+      hidden
+      defaultValue: defaultRowCacheSize
+      defaultValueDesc: $defaultRowCacheSize
+      name: "debug-rocksdb-row-cache-size".}: int
+
+    rocksdbBlockCacheSize {.
+      hidden
+      defaultValue: defaultBlockCacheSize
+      defaultValueDesc: $defaultBlockCacheSize
+      name: "debug-rocksdb-block-cache-size".}: int
+
     case cmd* {.
       command
       defaultValue: NimbusCmd.noCommand }: NimbusCmd
@@ -451,59 +495,55 @@ type
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
 
-      metricsEnabled* {.
-        desc: "Enable the built-in metrics HTTP server"
-        defaultValue: false
-        name: "metrics" }: bool
-
-      metricsPort* {.
-        desc: "Listening port of the built-in metrics HTTP server"
-        defaultValue: defaultMetricsServerPort
-        defaultValueDesc: $defaultMetricsServerPort
-        name: "metrics-port" }: Port
-
-      metricsAddress* {.
-        desc: "Listening IP address of the built-in metrics HTTP server"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "metrics-address" }: IpAddress
-
-      trustedSetupFile* {.
-        desc: "Load EIP-4844 trusted setup file"
-        defaultValue: none(string)
-        defaultValueDesc: "Baked in trusted setup"
-        name: "trusted-setup-file" .}: Option[string]
-
     of `import`:
-
       blocksFile* {.
         argument
-        desc: "Import RLP encoded block(s) from a file, validate, write to database and quit"
-        defaultValue: ""
-        name: "blocks-file" }: InputFile
+        desc: "One or more RLP encoded block(s) files"
+        name: "blocks-file" }: seq[InputFile]
+
+      maxBlocks* {.
+        desc: "Maximum number of blocks to import"
+        defaultValue: uint64.high()
+        name: "max-blocks" .}: uint64
+
+      chunkSize* {.
+        desc: "Number of blocks per database transaction"
+        defaultValue: 8192
+        name: "chunk-size" .}: uint64
+
+      csvStats* {.
+        hidden
+        desc: "Save performance statistics to CSV"
+        name: "debug-csv-stats".}: Option[string]
+
+      # TODO validation and storage options should be made non-hidden when the
+      #      UX has stabilised and era1 storage is in the app
+      fullValidation* {.
+        hidden
+        desc: "Enable full per-block validation (slow)"
+        defaultValue: false
+        name: "debug-full-validation".}: bool
+
+      storeBodies* {.
+        hidden
+        desc: "Store block blodies in database"
+        defaultValue: false
+        name: "debug-store-bodies".}: bool
+
+      # TODO this option should probably only cover the redundant parts, ie
+      #      those that are in era1 files - era files presently do not store
+      #      receipts
+      storeReceipts* {.
+        hidden
+        desc: "Store receipts in database"
+        defaultValue: false
+        name: "debug-store-receipts".}: bool
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
   parseInt(p).T
 
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
-  return @[]
-
-func parseCmdArg(T: type UInt256, p: string): T
-    {.gcsafe, raises: [ValueError].} =
-  parse(p, T)
-
-func completeCmdArg(T: type UInt256, val: string): seq[string] =
-  return @[]
-
-func parseCmdArg(T: type EthAddress, p: string): T
-    {.gcsafe, raises: [ValueError].}=
-  try:
-    result = hexToByteArray(p, 20)
-  except CatchableError:
-    raise newException(ValueError, "failed to parse EthAddress")
-
-func completeCmdArg(T: type EthAddress, val: string): seq[string] =
   return @[]
 
 func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
@@ -734,6 +774,17 @@ func httpServerEnabled*(conf: NimbusConf): bool =
   conf.graphqlEnabled or
     conf.wsEnabled or
     conf.rpcEnabled
+
+func era1Dir*(conf: NimbusConf): OutDir =
+  conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))
+
+func dbOptions*(conf: NimbusConf): DbOptions =
+  DbOptions.init(
+    maxOpenFiles = conf.rocksdbMaxOpenFiles,
+    writeBufferSize = conf.rocksdbWriteBufferSize,
+    rowCacheSize = conf.rocksdbRowCacheSize,
+    blockCacheSize = conf.rocksdbBlockCacheSize,
+  )
 
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.

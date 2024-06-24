@@ -14,7 +14,7 @@ import
   eth/[common, rlp],
   eth/common/eth_types_rlp,
   chronicles,
-  stew/[results, byteutils],
+  stew/byteutils,
   kzg4844/kzg_ex as kzg,
   ../types,
   ../engine_client,
@@ -112,11 +112,11 @@ proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void
   if returnedTx.chainId.get.uint64 != tx.chainId.uint64:
     return err("chain id mismatch: $1 != $2" % [$returnedTx.chainId.get.uint64, $tx.chainId.uint64])
 
-  if returnedTx.maxFeePerGas != tx.maxFee:
-    return err("max fee per gas mismatch: $1 != $2" % [$returnedTx.maxFeePerGas, $tx.maxFee])
+  if returnedTx.maxFeePerGas != tx.maxFeePerGas:
+    return err("max fee per gas mismatch: $1 != $2" % [$returnedTx.maxFeePerGas, $tx.maxFeePerGas])
 
-  if returnedTx.maxPriorityFeePerGas != tx.maxPriorityFee:
-    return err("max priority fee per gas mismatch: $1 != $2" % [$returnedTx.maxPriorityFeePerGas, $tx.maxPriorityFee])
+  if returnedTx.maxPriorityFeePerGas != tx.maxPriorityFeePerGas:
+    return err("max priority fee per gas mismatch: $1 != $2" % [$returnedTx.maxPriorityFeePerGas, $tx.maxPriorityFeePerGas])
 
   if returnedTx.maxFeePerBlobGas.isNone:
     return err("expect maxFeePerBlobGas is some")
@@ -186,9 +186,9 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
     for i in 0..<blobTx.tx.versionedHashes.len:
       blobData.data.add BlobWrapData(
         versionedHash: blobTx.tx.versionedHashes[i],
-        commitment   : np.commitments[i],
-        blob         : np.blobs[i],
-        proof        : np.proofs[i],
+        commitment   : kzg.KzgCommitment(bytes: np.commitments[i]),
+        blob         : kzg.KzgBlob(bytes: np.blobs[i]),
+        proof        : kzg.KzgProof(bytes: np.proofs[i]),
       )
     blobData.txs.add blobTx.tx
 
@@ -198,7 +198,7 @@ proc verifyBeaconRootStorage*(client: RpcClient, payload: ExecutionPayload): boo
   # Read the storage keys from the stateful precompile that stores the beacon roots and verify
   # that the beacon root is the same as the one in the payload
   let
-    blockNumber = u256 payload.blockNumber
+    blockNumber = payload.blockNumber.uint64
     precompileAddress = BEACON_ROOTS_ADDRESS
     (timestampKey, beaconRootKey) = beaconRootStorageIndexes(payload.timestamp.uint64)
 
@@ -210,7 +210,7 @@ proc verifyBeaconRootStorage*(client: RpcClient, payload: ExecutionPayload): boo
 
   if r.get.u256 != payload.timestamp.uint64.u256:
     error "verifyBeaconRootStorage storage 1",
-      expect=payload.timestamp.uint64.u256,
+      expect=payload.timestamp.uint64,
       get=r.get.u256
     return false
 

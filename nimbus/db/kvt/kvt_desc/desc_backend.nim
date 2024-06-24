@@ -23,6 +23,9 @@ type
   GetKvpFn* =
     proc(key: openArray[byte]): Result[Blob,KvtError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function
+  LenKvpFn* =
+    proc(key: openArray[byte]): Result[int,KvtError] {.gcsafe, raises: [].}
+      ## Generic backend database retrieval function
 
   # -------------
 
@@ -33,7 +36,7 @@ type
     ## by any library function using the backend.
 
   PutBegFn* =
-    proc(): PutHdlRef {.gcsafe, raises: [].}
+    proc(): Result[PutHdlRef,KvtError] {.gcsafe, raises: [].}
       ## Generic transaction initialisation function
 
   PutKvpFn* =
@@ -47,11 +50,27 @@ type
   # -------------
 
   CloseFn* =
-    proc(flush: bool) {.gcsafe, raises: [].}
-      ## Generic destructor for the `Kvt DB` backend. The argument `flush`
+    proc(eradicate: bool) {.gcsafe, raises: [].}
+      ## Generic destructor for the `Kvt DB` backend. The argument `eradicate`
       ## indicates that a full database deletion is requested. If passed
       ## `false` the outcome might differ depending on the type of backend
-      ## (e.g. in-memory backends would flush on close.)
+      ## (e.g. in-memory backends would eradicate on close.)
+
+  CanModFn* =
+    proc(): Result[void,KvtError] {.gcsafe, raises: [].}
+      ## This function returns OK if there is nothing to prevent the main
+      ## `KVT` descriptors being modified (e.g. by `reCentre()`) or by
+      ## adding/removing a new peer (e.g. by `fork()` or `forget()`.)
+
+  SetWrReqFn* =
+    proc(db: RootRef): Result[void,KvtError] {.gcsafe, raises: [].}
+      ## This function stores a request function for the piggiback mode
+      ## writing to the `Aristo` set of column families.
+      ##
+      ## If used at all, this function would run thee function closure
+      ## `rocks_db.setWrReqTriggeredFn()()` with a `KvtDbRef` type argument
+      ## for `db`. This allows to run the `Kvt` without linking to the
+      ## rocksdb interface unless it is really needed.
 
   # -------------
 
@@ -60,19 +79,26 @@ type
     ## Backend interface.
 
     getKvpFn*: GetKvpFn              ## Read key-value pair
+    lenKvpFn*: LenKvpFn              ## Read key-value pair length
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putKvpFn*: PutKvpFn              ## Bulk store key-value pairs
     putEndFn*: PutEndFn              ## Commit bulk store session
 
     closeFn*: CloseFn                ## Generic destructor
+    canModFn*: CanModFn              ## Lock-alike
+
+    setWrReqFn*: SetWrReqFn          ## Register main descr for write request
 
 proc init*(trg: var BackendObj; src: BackendObj) =
   trg.getKvpFn = src.getKvpFn
+  trg.lenKvpFn = src.lenKvpFn
   trg.putBegFn = src.putBegFn
   trg.putKvpFn = src.putKvpFn
   trg.putEndFn = src.putEndFn
   trg.closeFn = src.closeFn
+  trg.canModFn = src.canModFn
+  trg.setWrReqFn = src.setWrReqFn
 
 # ------------------------------------------------------------------------------
 # End

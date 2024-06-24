@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -12,6 +12,7 @@
 import
   chronicles,
   eth/rlp,
+  results,
   ../db/[core_db, storage_types]
 
 type
@@ -37,10 +38,12 @@ type
 # ------------------------------------------------------------------------------
 
 proc writeStatus(db: CoreDbRef, status: TransitionStatus) =
-  db.kvt.put(transitionStatusKey().toOpenArray(), rlp.encode(status))
+  db.newKvt.put(transitionStatusKey().toOpenArray(), rlp.encode(status)).isOkOr:
+    raiseAssert "writeStatus(): put() failed " & $$error
 
 proc readStatus(db: CoreDbRef): TransitionStatus =
-  var bytes = db.kvt.get(transitionStatusKey().toOpenArray())
+  var bytes = db.newKvt.get(transitionStatusKey().toOpenArray()).valueOr:
+    EmptyBlob
   if bytes.len > 0:
     try:
       result = rlp.decode(bytes, typeof result)

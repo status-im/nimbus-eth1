@@ -42,8 +42,10 @@ const
     (number: 15049999'u64, time: 0'u64, id: (crc: 0x20c327fc'u32, next: 15050000'u64)), # Last Arrow Glacier block
     (number: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # First Gray Glacier block
     (number: 20000000'u64, time: 1681338454'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # Last Gray Glacier block
-    (number: 20000000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64)),          # First Shanghai block
-    (number: 30000000'u64, time: 2000000000'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64)),          # Future Shanghai block
+    (number: 20000000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # First Shanghai block
+    (number: 30000000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai block
+    (number: 40000000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64)),          # First Cancun block
+    (number: 50000000'u64, time: 2000000000'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64)),          # Future Cancun block
   ]
 
   SepoliaNetIDs = [
@@ -54,6 +56,7 @@ const
     (number: 1735372'u64, time: 1677557088'u64, id: (crc: 0xf7f9bc08'u32, next: 1706655072'u64)), # First Shanghai block
     (number: 1735372'u64, time: 1706655071'u64, id: (crc: 0xf7f9bc08'u32, next: 1706655072'u64)), # Last Shanghai block
     (number: 1735372'u64, time: 1706655072'u64, id: (crc: 0x88cf81d9'u32, next: 0'u64)),          # First Cancun block
+    (number: 1735372'u64, time: 2706655072'u64, id: (crc: 0x88cf81d9'u32, next: 0'u64)),          # Future Cancun block
   ]
 
   HoleskyNetIDs = [
@@ -62,6 +65,7 @@ const
     (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # First Shanghai block
     (number: 123'u64, time: 1707305663'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # Last Shanghai block
     (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # First Cancun block
+    (number: 123'u64, time: 2707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # Future Cancun block
   ]
 
 template runTest(network: untyped, name: string) =
@@ -78,24 +82,24 @@ template runTest(network: untyped, name: string) =
 func config(shanghai, cancun: uint64): ChainConfig =
   ChainConfig(
     chainID:                       ChainId(1337),
-    homesteadBlock:                some(0.u256),
-    dAOForkBlock:                  none(BlockNumber),
+    homesteadBlock:                Opt.some(0'u64),
+    dAOForkBlock:                  Opt.none(BlockNumber),
     dAOForkSupport:                true,
-    eIP150Block:                   some(0.u256),
-    eIP155Block:                   some(0.u256),
-    eIP158Block:                   some(0.u256),
-    byzantiumBlock:                some(0.u256),
-    constantinopleBlock:           some(0.u256),
-    petersburgBlock:               some(0.u256),
-    istanbulBlock:                 some(0.u256),
-    muirGlacierBlock:              some(0.u256),
-    berlinBlock:                   some(0.u256),
-    londonBlock:                   some(0.u256),
-    terminalTotalDifficulty:       some(0.u256),
-    terminalTotalDifficultyPassed: some(true),
-    mergeForkBlock:                some(0.u256),
-    shanghaiTime:                  some(shanghai.EthTime),
-    cancunTime:                    some(cancun.EthTime),
+    eIP150Block:                   Opt.some(0'u64),
+    eIP155Block:                   Opt.some(0'u64),
+    eIP158Block:                   Opt.some(0'u64),
+    byzantiumBlock:                Opt.some(0'u64),
+    constantinopleBlock:           Opt.some(0'u64),
+    petersburgBlock:               Opt.some(0'u64),
+    istanbulBlock:                 Opt.some(0'u64),
+    muirGlacierBlock:              Opt.some(0'u64),
+    berlinBlock:                   Opt.some(0'u64),
+    londonBlock:                   Opt.some(0'u64),
+    terminalTotalDifficulty:       Opt.some(0.u256),
+    terminalTotalDifficultyPassed: Opt.some(true),
+    mergeForkBlock:                Opt.some(0'u64),
+    shanghaiTime:                  Opt.some(shanghai.EthTime),
+    cancunTime:                    Opt.some(cancun.EthTime),
   )
 
 func calcID(conf: ChainConfig, crc: uint32, time: uint64): ForkID =

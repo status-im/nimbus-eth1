@@ -16,10 +16,16 @@
 
 import
   std/[hashes, sets, tables],
-  eth/[common, trie/nibbles],
+  eth/common,
   "."/[desc_error, desc_identifiers]
 
 type
+  LeafTiePayload* = object
+    ## Generalised key-value pair for a sub-trie. The main trie is the
+    ## sub-trie with `root=VertexID(1)`.
+    leafTie*: LeafTie                ## Full `Patricia Trie` path root-to-leaf
+    payload*: PayloadRef             ## Leaf data payload (see below)
+
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
     Leaf
@@ -35,15 +41,15 @@ type
   PayloadType* = enum
     ## Type of leaf data.
     RawData                          ## Generic data
-    RlpData                          ## Marked RLP encoded
     AccountData                      ## `Aristo account` with vertex IDs links
 
   PayloadRef* = ref object of RootRef
+    ## The payload type depends on the sub-tree used. The `VertesID(1)` rooted
+    ## sub-tree only has `AccountData` type payload, while all other sub-trees
+    ## have `RawData` payload.
     case pType*: PayloadType
     of RawData:
       rawBlob*: Blob                 ## Opaque data, default value
-    of RlpData:
-      rlpBlob*: Blob                 ## Opaque data marked RLP encoded
     of AccountData:
       account*: AristoAccount
 
@@ -51,10 +57,10 @@ type
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     case vType*: VertexType
     of Leaf:
-      lPfx*: NibblesSeq              ## Portion of path segment
+      lPfx*: NibblesBuf              ## Portion of path segment
       lData*: PayloadRef             ## Reference to data payload
     of Extension:
-      ePfx*: NibblesSeq              ## Portion of path segment
+      ePfx*: NibblesBuf              ## Portion of path segment
       eVid*: VertexID                ## Edge to vertex with ID `eVid`
     of Branch:
       bVid*: array[16,VertexID]      ## Edge list with vertex IDs
@@ -72,14 +78,11 @@ type
     vid*: VertexID                    ## Table lookup vertex ID (if any)
     vtx*: VertexRef                   ## Reference to vertex
 
-  FilterRef* = ref object
-    ## Delta layer
-    fid*: FilterID                   ## Filter identifier
-    src*: Hash256                    ## Applicable to this state root
-    trg*: Hash256                    ## Resulting state root (i.e. `kMap[1]`)
-    sTab*: Table[VertexID,VertexRef] ## Filter structural vertex table
-    kMap*: Table[VertexID,HashKey]   ## Filter Merkle hash key mapping
-    vGen*: seq[VertexID]             ## Filter unique vertex ID generator
+  SavedState* = object
+    ## Last saved state
+    src*: HashKey                    ## Previous state hash
+    trg*: HashKey                    ## Last state hash
+    serial*: uint64                  ## Generic identifier froom application
 
   LayerDeltaRef* = ref object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
@@ -104,8 +107,10 @@ type
     ## tables. So a corresponding zero value or missing entry produces an
     ## inconsistent state that must be resolved.
     ##
+    src*: HashKey                    ## Only needed when used as a filter
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
+    vTop*: VertexID                  ## Last used vertex ID
 
   LayerFinalRef* = ref object
     ## Final tables fully supersede tables on lower layers when stacked as a
@@ -117,7 +122,6 @@ type
     ##
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     fRpp*: Table[HashKey,VertexID]   ## Key lookup for `pPrf[]` (proof nodes)
-    vGen*: seq[VertexID]             ## Recycling state for vertex IDs
     dirty*: HashSet[VertexID]        ## Start nodes to re-hashiy from
 
   LayerRef* = ref LayerObj
@@ -127,45 +131,6 @@ type
     delta*: LayerDeltaRef            ## Most structural tables held as deltas
     final*: LayerFinalRef            ## Stored as latest version
     txUid*: uint                     ## Transaction identifier if positive
-
-  # ----------------------
-
-  QidLayoutRef* = ref object
-    ## Layout of cascaded list of filter ID slot queues where a slot queue
-    ## with index `N+1` serves as an overflow queue of slot queue `N`.
-    q*: array[4,QidSpec]
-
-  QidSpec* = tuple
-    ## Layout of a filter ID slot queue
-    size: uint                       ## Queue capacity, length within `1..wrap`
-    width: uint                      ## Instance gaps (relative to prev. item)
-    wrap: QueueID                    ## Range `1..wrap` for round-robin queue
-
-  QidSchedRef* = ref object of RootRef
-    ## Current state of the filter queues
-    ctx*: QidLayoutRef               ## Organisation of the FIFO
-    state*: seq[(QueueID,QueueID)]   ## Current fill state
-
-  JournalInx* = tuple
-    ## Helper structure for fetching fiters from the journal.
-    inx: int                         ## Non negative journal index. latest=`0`
-    fil: FilterRef                   ## Valid filter
-
-const
-  DefaultQidWrap = QueueID(0x3fff_ffff_ffff_ffffu64)
-
-  QidSpecSizeMax* = high(uint32).uint
-    ## Maximum value allowed for a `size` value of a `QidSpec` object
-
-  QidSpecWidthMax* = high(uint32).uint
-    ## Maximum value allowed for a `width` value of a `QidSpec` object
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func max(a, b, c: int): int =
-  max(max(a,b),c)
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
@@ -196,9 +161,6 @@ proc `==`*(a, b: PayloadRef): bool =
     case a.pType:
     of RawData:
       if a.rawBlob != b.rawBlob:
-        return false
-    of RlpData:
-      if a.rlpBlob != b.rlpBlob:
         return false
     of AccountData:
       if a.account != b.account:
@@ -254,10 +216,6 @@ func dup*(pld: PayloadRef): PayloadRef =
     PayloadRef(
       pType:    RawData,
       rawBlob:  pld.rawBlob)
-  of RlpData:
-    PayloadRef(
-      pType:    RlpData,
-      rlpBlob:  pld.rlpBlob)
   of AccountData:
     PayloadRef(
       pType:   AccountData,
@@ -315,7 +273,6 @@ func dup*(final: LayerFinalRef): LayerFinalRef =
   LayerFinalRef(
     pPrf:  final.pPrf,
     fRpp:  final.fRpp,
-    vGen:  final.vGen,
     dirty: final.dirty)
 
 func dup*(wp: VidVtxPair): VidVtxPair =
@@ -329,51 +286,6 @@ func dup*(wp: VidVtxPair): VidVtxPair =
 func to*(node: NodeRef; T: type VertexRef): T =
   ## Extract a copy of the `VertexRef` part from a `NodeRef`.
   node.VertexRef.dup
-
-func to*(a: array[4,tuple[size, width: int]]; T: type QidLayoutRef): T =
-  ## Convert a size-width array to a `QidLayoutRef` layout. Overly large
-  ## array field values are adjusted to its maximal size.
-  var q: array[4,QidSpec]
-  for n in 0..3:
-    q[n] = (min(a[n].size.uint, QidSpecSizeMax),
-            min(a[n].width.uint, QidSpecWidthMax),
-            DefaultQidWrap)
-  q[0].width = 0
-  T(q: q)
-
-func to*(a: array[4,tuple[size, width, wrap: int]]; T: type QidLayoutRef): T =
-  ## Convert a size-width-wrap array to a `QidLayoutRef` layout. Overly large
-  ## array field values are adjusted to its maximal size. Too small `wrap`
-  ## field values are adjusted to its minimal size.
-  var q: array[4,QidSpec]
-  for n in 0..2:
-    q[n] = (min(a[n].size.uint, QidSpecSizeMax),
-            min(a[n].width.uint, QidSpecWidthMax),
-            QueueID(max(a[n].size + a[n+1].width, a[n].width+1,
-                        min(a[n].wrap, DefaultQidWrap.int))))
-  q[0].width = 0
-  q[3] = (min(a[3].size.uint, QidSpecSizeMax),
-          min(a[3].width.uint, QidSpecWidthMax),
-          QueueID(max(a[3].size, a[3].width,
-                      min(a[3].wrap, DefaultQidWrap.int))))
-  T(q: q)
-
-# ------------------------------------------------------------------------------
-# Public constructors for filter slot scheduler state
-# ------------------------------------------------------------------------------
-
-func init*(T: type QidSchedRef; a: array[4,(int,int)]): T =
-  ## Constructor, see comments at the coverter function `to()` for adjustments
-  ## of the layout argument `a`.
-  T(ctx: a.to(QidLayoutRef))
-
-func init*(T: type QidSchedRef; a: array[4,(int,int,int)]): T =
-  ## Constructor, see comments at the coverter function `to()` for adjustments
-  ## of the layout argument `a`.
-  T(ctx: a.to(QidLayoutRef))
-
-func init*(T: type QidSchedRef; ctx: QidLayoutRef): T =
-  T(ctx: ctx)
 
 # ------------------------------------------------------------------------------
 # End

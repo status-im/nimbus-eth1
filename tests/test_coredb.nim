@@ -16,10 +16,12 @@ import
   eth/common,
   results,
   unittest2,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent,
   ../nimbus/core/chain,
   ./replay/pp,
-  ./test_coredb/[coredb_test_xx, test_chainsync, test_helpers]
+  ./test_coredb/[
+    coredb_test_xx, test_chainsync, test_coredb_helpers, test_helpers]
 
 const
   # If `true`, this compile time option set up `unittest2` for manual parsing
@@ -150,14 +152,17 @@ proc setErrorLevel {.used.} =
 proc initRunnerDB(
     path: string;
     specs: CaptureSpecs;
-    dbType: CoreDbType): CommonRef =
+    dbType: CdbTypeEx;
+    pruneHistory: bool;
+     ): CommonRef =
   let coreDB =
     # Resolve for static `dbType`
     case dbType:
-    of AristoDbMemory: AristoDbMemory.newCoreDbRef()
-    of AristoDbRocks: AristoDbRocks.newCoreDbRef path
-    of AristoDbVoid: AristoDbVoid.newCoreDbRef()
-    else: raiseAssert "Oops"
+    of CdbAristoMemory: AristoDbMemory.newCoreDbRef()
+    of CdbAristoRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+    of CdbAristoDualRocks: newCdbAriAristoDualRocks(path, DbOptions.init())
+    of CdbAristoVoid: AristoDbVoid.newCoreDbRef()
+    of CdbOoops: raiseAssert "Ooops"
 
   when false: # or true:
     setDebugLevel()
@@ -177,7 +182,8 @@ proc initRunnerDB(
   result = CommonRef.new(
     db = coreDB,
     networkId = networkId,
-    params = params)
+    params = params,
+    pruneHistory = pruneHistory)
 
   result.initializeEmptyDb
 
@@ -193,7 +199,8 @@ proc initRunnerDB(
 proc chainSyncRunner(
     noisy = true;
     capture = memorySampleDefault;
-    dbType = CoreDbType(0);
+    dbType =  CdbTypeEx(0);
+    pruneHistory = false;
     profilingOk = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
@@ -214,14 +221,14 @@ proc chainSyncRunner(
 
     dbType = block:
       # Decreasing priority: dbType, capture.dbType, dbTypeDefault
-      var effDbType = dbTypeDefault
-      if dbType != CoreDbType(0):
+      var effDbType = dbTypeDefault.to(CdbTypeEx)
+      if dbType != CdbTypeEx(0):
         effDbType = dbType
       elif capture.dbType != CoreDbType(0):
-        effDbType = capture.dbType
+        effDbType = capture.dbType.to(CdbTypeEx)
       effDbType
 
-    persistent = dbType in CoreDbPersistentTypes
+    persistent = dbType in CdbTypeExPersistent
 
   defer:
     if persistent: baseDir.flushDbDir
@@ -230,9 +237,9 @@ proc chainSyncRunner(
 
     test &"Ledger API {numBlocksInfo} blocks":
       let
-        com = initRunnerDB(dbDir, capture, dbType)
+        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
-        com.db.finish(flush = finalDiskCleanUpOk)
+        com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
         if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
 
@@ -249,8 +256,9 @@ proc chainSyncRunner(
 proc persistentSyncPreLoadAndResumeRunner(
     noisy = true;
     capture = persistentSampleDefault;
-    dbType = CoreDbType(0);
+    dbType = CdbTypeEx(0);
     profilingOk = false;
+    pruneHistory = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
     lastOneExtraOk = true;
@@ -264,14 +272,14 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     dbType = block:
       # Decreasing priority: dbType, capture.dbType, dbTypeDefault
-      var effDbType = dbTypeDefault
-      if dbType != CoreDbType(0):
+      var effDbType = dbTypeDefault.to(CdbTypeEx)
+      if dbType != CdbTypeEx(0):
         effDbType = dbType
       elif capture.dbType != CoreDbType(0):
-        effDbType = capture.dbType
+        effDbType = capture.dbType.to(CdbTypeEx)
       effDbType
 
-  doAssert dbType in CoreDbPersistentTypes
+  doAssert dbType in CdbTypeExPersistent
   defer: baseDir.flushDbDir
 
   let
@@ -283,9 +291,9 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test "Populate db by initial sample parts":
       let
-        com = initRunnerDB(dbDir, capture, dbType)
+        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
-        com.db.finish(flush = finalDiskCleanUpOk)
+        com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
 
       if noisy:
@@ -299,9 +307,9 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test &"Continue with rest of sample":
       let
-        com = initRunnerDB(dbDir, capture, dbType)
+        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
-        com.db.finish(flush = finalDiskCleanUpOk)
+        com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
         if finalDiskCleanUpOk: dbDir.flushDbDir
 
@@ -323,10 +331,8 @@ proc coreDbMain*(noisy = defined(debug)) =
   noisy.persistentSyncPreLoadAndResumeRunner()
 
 when isMainModule:
-  import
-    std/times
   const
-    noisy = defined(debug) or true
+    noisy {.used.} = defined(debug) or true
   var
     sampleList: seq[CaptureSpecs]
 
@@ -344,11 +350,14 @@ when isMainModule:
     sampleList = @[memorySampleDefault]
 
   when true: # and false:
+    import std/times
     var state: (Duration, int)
     for n,capture in sampleList:
       noisy.profileSection("@sample #" & $n, state):
         noisy.chainSyncRunner(
+          #dbType = CdbAristoDualRocks,
           capture = capture,
+          pruneHistory = true,
           #profilingOk = true,
           #finalDiskCleanUpOk = false,
           oldLogAlign = true

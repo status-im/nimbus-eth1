@@ -8,35 +8,29 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  results,
-  ../common/common
-
 {.push raises: [].}
+
+import results, ../common/common
 
 # https://eips.ethereum.org/EIPS/eip-4895
 proc validateWithdrawals*(
-    com: CommonRef,
-    header: BlockHeader,
-    body: BlockBody
-      ): Result[void, string]
-      {.gcsafe, raises: [].} =
-
+    com: CommonRef, header: BlockHeader, withdrawals: Opt[seq[Withdrawal]]
+): Result[void, string] =
   if com.forkGTE(Shanghai):
     if header.withdrawalsRoot.isNone:
       return err("Post-Shanghai block header must have withdrawalsRoot")
-    elif body.withdrawals.isNone:
+    elif withdrawals.isNone:
       return err("Post-Shanghai block body must have withdrawals")
     else:
       try:
-        if body.withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
-          return err("Mismatched withdrawalsRoot blockNumber =" & $header.blockNumber)
+        if withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
+          return err("Mismatched withdrawalsRoot blockNumber =" & $header.number)
       except RlpError as ex:
         return err(ex.msg)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
-    elif body.withdrawals.isSome:
+    elif withdrawals.isSome:
       return err("Pre-Shanghai block body must not have withdrawals")
 
   return ok()

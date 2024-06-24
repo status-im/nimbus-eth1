@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -28,10 +28,10 @@ method getForkConfig*(cs: NonZeroPreMergeFork): ChainConfig =
   let forkConfig = procCall getForkConfig(BaseSpec(cs))
   if forkConfig.isNil:
     return nil
-    
+
   # Merge fork & pre-merge happen at block 1
-  forkConfig.londonBlock = some(1.u256)
-  forkConfig.mergeForkBlock = some(1.u256)
+  forkConfig.londonBlock = Opt.some(1'u64)
+  forkConfig.mergeForkBlock = Opt.some(1'u64)
 
   # Post-merge fork happens at block 2
   let mainFork = BaseSpec(cs).getMainFork()

@@ -30,13 +30,7 @@ proc toAccount*(
   ## Converts the argument `payload` to an `Account` type. If the implied
   ## account das a storage slots system associated, the database `db` must
   ## contain the Merkle hash key of the root vertex.
-  case payload.pType:
-  of RlpData:
-    try:
-      return ok(rlp.decode(payload.rlpBlob, Account))
-    except RlpError:
-      return err(AccRlpDecodingError)
-  of AccountData:
+  if payload.pType == AccountData:
     var acc = Account(
       nonce:       payload.account.nonce,
       balance:     payload.account.balance,
@@ -45,10 +39,8 @@ proc toAccount*(
     if payload.account.storageID.isValid:
       acc.storageRoot = (? db.getKeyRc payload.account.storageID).to(Hash256)
     return ok(acc)
-  else:
-    discard
 
-  err PayloadTypeUnsupported
+  err UtilsPayloadTypeUnsupported
 
 proc toAccount*(
     vtx: VertexRef;
@@ -57,7 +49,7 @@ proc toAccount*(
   ## Variant of `toAccount()` for a `Leaf` vertex.
   if vtx.isValid and vtx.vType == Leaf:
     return vtx.lData.toAccount db
-  err AccVtxUnsupported
+  err UtilsAccVtxUnsupported
 
 proc toAccount*(
     node: NodeRef;
@@ -65,13 +57,7 @@ proc toAccount*(
   ## Variant of `toAccount()` for a `Leaf` node which must be complete (i.e.
   ## a potential Merkle hash key must have been initialised.)
   if node.isValid and node.vType == Leaf:
-    case node.lData.pType:
-    of RlpData:
-      try:
-        return ok(rlp.decode(node.lData.rlpBlob, Account))
-      except RlpError:
-        return err(AccRlpDecodingError)
-    of AccountData:
+    if node.lData.pType == AccountData:
       var acc = Account(
         nonce:       node.lData.account.nonce,
         balance:     node.lData.account.balance,
@@ -79,13 +65,13 @@ proc toAccount*(
         storageRoot: EMPTY_ROOT_HASH)
       if node.lData.account.storageID.isValid:
         if not node.key[0].isValid:
-          return err(AccStorageKeyMissing)
+          return err(UtilsAccStorageKeyMissing)
         acc.storageRoot = node.key[0].to(Hash256)
       return ok(acc)
     else:
-      return err(PayloadTypeUnsupported)
+      return err(UtilsPayloadTypeUnsupported)
 
-  err AccNodeUnsupported
+  err UtilsAccNodeUnsupported
 
 # ---------------------
 
@@ -186,61 +172,51 @@ proc subVids*(vtx: VertexRef): seq[VertexID] =
 
 # ---------------------
 
-proc registerAccount*(
-    db: AristoDbRef;                   # Database, top layer
-    stoRoot: VertexID;                 # Storage root ID
-    accPath: PathID;                   # Needed for accounts payload
-       ): Result[VidVtxPair,AristoError] =
-  ## Verify that the `stoRoot` argument is properly referred to by the
-  ## account data (if any) implied to by the `accPath` argument.
+proc retrieveStoAccHike*(
+    db: AristoDbRef;                   # Database
+    accPath: PathID;                   # Implies a storage ID (if any)
+      ): Result[Hike,AristoError] =
+  ## Verify that the `accPath` argument properly referres to a storage root
+  ## vertex ID. The function will reset the keys along the `accPath` for
+  ## being modified.
   ##
-  ## The function will return an account leaf node if there was any, or an empty
-  ## `VidVtxPair()` object.
+  ## On success, the function will return an account leaf pair with the leaf
+  ## vertex and the vertex ID.
   ##
-  # Verify storage root and account path
-  if not stoRoot.isValid:
-    return err(UtilsStoRootMissing)
-  if not accPath.isValid:
-    return err(UtilsAccPathMissing)
+  # Expand vertex path to account leaf
+  let hike = accPath.to(NibblesBuf).hikeUp(VertexID(1), db).valueOr:
+    return err(UtilsAccInaccessible)
 
-  # Get account leaf with account data
-  let hike = LeafTie(root: VertexID(1), path: accPath).hikeUp(db).valueOr:
-    return err(UtilsAccUnaccessible)
-
+  # Extract the account payload fro the leaf
   let wp = hike.legs[^1].wp
   if wp.vtx.vType != Leaf:
     return err(UtilsAccPathWithoutLeaf)
-  if wp.vtx.lData.pType != AccountData:
-    return ok(VidVtxPair()) # nothing to do
+  assert wp.vtx.lData.pType == AccountData            # debugging only
+  let acc = wp.vtx.lData.account
 
-  # Check whether the `stoRoot` exists on the databse
-  let stoVtx = block:
-    let rc = db.getVtxRc stoRoot
-    if rc.isOk:
-      rc.value
-    elif rc.error == GetVtxNotFound:
-      VertexRef(nil)
-    else:
-      return err(rc.error)
+  # Check whether storage ID exists, at all
+  if acc.storageID.isValid:
+    # Verify that the storage root `acc.storageID` exists on the databse
+    discard db.getVtxRc(acc.storageID).valueOr:
+      return err(UtilsStoRootInaccessible)
 
-  # Verify `stoVtx` against storage root
-  let stoID = wp.vtx.lData.account.storageID
-  if stoVtx.isValid:
-    if stoID != stoRoot:
-      return err(UtilsAccWrongStorageRoot)
-  else:
-    if stoID.isValid:
-      return err(UtilsAccWrongStorageRoot)
+  ok(hike)
 
+proc updateAccountForHasher*(
+    db: AristoDbRef;                   # Database
+    hike: Hike;                        # Return value from `retrieveStorageID()`
+      ) =
+  ## For a successful run of `retrieveStoAccHike()`, the argument `hike` is
+  ## used to mark/reset the keys along the `accPath` for being re-calculated
+  ## by `hashify()`.
+  ##
   # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
   for w in hike.legs.mapIt(it.wp.vid):
     db.layersResKey(hike.root, w)
 
   # Signal to `hashify()` where to start rebuilding Merkel hashes
   db.top.final.dirty.incl hike.root
-  db.top.final.dirty.incl wp.vid
-
-  ok(wp)
+  db.top.final.dirty.incl hike.legs[^1].wp.vid
 
 # ------------------------------------------------------------------------------
 # End

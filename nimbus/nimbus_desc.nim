@@ -17,7 +17,6 @@ import
   ./sync/peers,
   ./sync/beacon,
   # ./sync/snap, # -- todo
-  ./sync/full,
   ./beacon/beacon_engine,
   ./common,
   ./config
@@ -52,7 +51,6 @@ type
     networkLoop*: Future[void]
     peerManager*: PeerManagerRef
     # snapSyncRef*: SnapSyncRef # -- todo
-    fullSyncRef*: FullSyncRef
     beaconSyncRef*: BeaconSyncRef
     beaconEngine*: BeaconEngineRef
     metricsServer*: MetricsHttpServerRef
@@ -71,8 +69,6 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.peerManager.stop()
   #if nimbus.snapSyncRef.isNil.not:
   #  nimbus.snapSyncRef.stop()
-  if nimbus.fullSyncRef.isNil.not:
-    nimbus.fullSyncRef.stop()
   if nimbus.beaconSyncRef.isNil.not:
     nimbus.beaconSyncRef.stop()
   if nimbus.metricsServer.isNil.not:

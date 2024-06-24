@@ -114,7 +114,6 @@ proc asPortalBlockData*(
 ): (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyLegacy) =
   let
     txRoot = calculateTransactionData(payload.transactions)
-    withdrawalsRoot = options.none(Hash256)
 
     header = etypes.BlockHeader(
       parentHash: payload.parentHash.asEthHash,
@@ -122,20 +121,20 @@ proc asPortalBlockData*(
       coinbase: EthAddress payload.feeRecipient,
       stateRoot: payload.stateRoot.asEthHash,
       txRoot: txRoot,
-      receiptRoot: payload.receiptsRoot.asEthHash,
-      bloom: distinctBase(payload.logsBloom),
+      receiptsRoot: payload.receiptsRoot.asEthHash,
+      logsBloom: distinctBase(payload.logsBloom),
       difficulty: default(DifficultyInt),
-      blockNumber: payload.blockNumber.distinctBase.u256,
+      number: payload.blockNumber.distinctBase,
       gasLimit: payload.gasLimit.unsafeQuantityToInt64,
       gasUsed: payload.gasUsed.unsafeQuantityToInt64,
       timestamp: payload.timestamp.EthTime,
       extraData: bytes payload.extraData,
-      mixDigest: payload.prevRandao.asEthHash,
+      mixHash: payload.prevRandao.asEthHash,
       nonce: default(BlockNonce),
-      fee: some(payload.baseFeePerGas),
-      withdrawalsRoot: withdrawalsRoot,
-      blobGasUsed: options.none(uint64),
-      excessBlobGas: options.none(uint64),
+      baseFeePerGas: Opt.some(payload.baseFeePerGas),
+      withdrawalsRoot: Opt.none(Hash256),
+      blobGasUsed: Opt.none(uint64),
+      excessBlobGas: Opt.none(uint64),
     )
 
     headerWithProof = BlockHeaderWithProof(
@@ -158,7 +157,7 @@ proc asPortalBlockData*(
 ): (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyShanghai) =
   let
     txRoot = calculateTransactionData(payload.transactions)
-    withdrawalsRoot = some(calculateWithdrawalsRoot(payload.withdrawals))
+    withdrawalsRoot = Opt.some(calculateWithdrawalsRoot(payload.withdrawals))
 
     # TODO: adjust blobGasUsed & excessBlobGas according to deneb fork!
     header = etypes.BlockHeader(
@@ -167,20 +166,20 @@ proc asPortalBlockData*(
       coinbase: EthAddress payload.feeRecipient,
       stateRoot: payload.stateRoot.asEthHash,
       txRoot: txRoot,
-      receiptRoot: payload.receiptsRoot.asEthHash,
-      bloom: distinctBase(payload.logsBloom),
+      receiptsRoot: payload.receiptsRoot.asEthHash,
+      logsBloom: distinctBase(payload.logsBloom),
       difficulty: default(DifficultyInt),
-      blockNumber: payload.blockNumber.distinctBase.u256,
+      number: payload.blockNumber.distinctBase,
       gasLimit: payload.gasLimit.unsafeQuantityToInt64,
       gasUsed: payload.gasUsed.unsafeQuantityToInt64,
       timestamp: payload.timestamp.EthTime,
       extraData: bytes payload.extraData,
-      mixDigest: payload.prevRandao.asEthHash,
+      mixHash: payload.prevRandao.asEthHash,
       nonce: default(BlockNonce),
-      fee: some(payload.baseFeePerGas),
+      baseFeePerGas: Opt.some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
-      blobGasUsed: options.none(uint64),
-      excessBlobGas: options.none(uint64),
+      blobGasUsed: Opt.none(uint64),
+      excessBlobGas: Opt.none(uint64),
     )
 
     headerWithProof = BlockHeaderWithProof(
@@ -265,7 +264,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     portalRpcClient = newRpcHttpClient()
 
     optimisticHandler = proc(
-        signedBlock: ForkedMsgTrustedSignedBeaconBlock
+        signedBlock: ForkedSignedBeaconBlock
     ): Future[void] {.async: (raises: [CancelledError]).} =
       # TODO: Should not be gossiping optimistic blocks, but instead store them
       # in a cache and only gossip them after they are confirmed due to an LC
@@ -513,7 +512,6 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
     withForkyHeader(optimisticHeader):
       when lcDataFork > LightClientDataFork.None:
         info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
-        optimisticProcessor.setOptimisticHeader(forkyHeader.beacon)
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader

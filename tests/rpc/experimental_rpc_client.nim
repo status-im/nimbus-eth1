@@ -17,5 +17,4 @@ export
   conversions
 
 createRpcSigsFromNim(RpcClient):
-  proc exp_getWitnessByBlockNumber(blockId: BlockIdentifier, statePostExecution: bool): seq[byte]
   proc exp_getProofsByBlockNumber(blockId: BlockIdentifier, statePostExecution: bool): seq[ProofResponse]

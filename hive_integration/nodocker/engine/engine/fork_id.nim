@@ -40,7 +40,7 @@ method getForkConfig*(cs: ForkIDSpec): ChainConfig =
   # Merge fork happen at block 0
   let mainFork = cs.getMainFork()
   if mainFork == ForkParis:
-    forkConfig.mergeForkBlock = some(0.u256)
+    forkConfig.mergeForkBlock = Opt.some(0'u64)
   return forkConfig
 
 method execute(cs: ForkIDSpec, env: TestEnv): bool =

@@ -50,6 +50,7 @@ type
     LdgGetStorageFn            = "getStorage"
     LdgGetStorageRootFn        = "getStorageRoot"
     LdgGetTransientStorageFn   = "getTransientStorage"
+    LdgGetAthAccountFn         = "getEthAccount"
     LdgInAccessListFn          = "inAccessList"
     LdgIncNonceFn              = "incNonce"
     LdgIsDeadAccountFn         = "isDeadAccount"
@@ -97,8 +98,9 @@ func toStr*(w: EthAddress): string =
 func toStr*(w: Hash256): string =
   w.data.oaToStr
 
-func toStr*(w: CoreDbMptRef): string =
-  if w.CoreDxMptRef.isNil: "MptRef(nil)" else: "MptRef"
+when declared(CoreDbMptRef):
+  func toStr*(w: CoreDbMptRef): string =
+    if w.CoreDbMptRef.isNil: "MptRef(nil)" else: "MptRef"
 
 func toStr*(w: Blob): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"

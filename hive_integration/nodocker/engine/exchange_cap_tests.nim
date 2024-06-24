@@ -62,11 +62,11 @@ proc ecCancun(env: TestEnv): bool =
 
 proc getCCShanghai(timestamp: int): ChainConfig =
   result = getChainConfig("Shanghai")
-  result.shanghaiTime = some(EthTime(timestamp))
+  result.shanghaiTime = Opt.some(EthTime(timestamp))
 
 proc getCCCancun(timestamp: int): ChainConfig =
   result = getChainConfig("Cancun")
-  result.cancunTime = some(EthTime(timestamp))
+  result.cancunTime = Opt.some(EthTime(timestamp))
 
 proc specExecute(ws: BaseSpec): bool =
   let ws = ECSpec(ws)

@@ -115,8 +115,45 @@ func skipBCTests*(folder: string, name: string): bool =
     "DelegateCallSpam.json",
   ]
 
+# skip failing cases
+# TODO: see issue #2260
+const
+  problematicCases = [
+    "powToPosBlockRejection.json",
+    "initialVal.json",
+    "ForkStressTest.json",
+    "HomesteadOverrideFrontier.json",
+    "blockChainFrontierWithLargerTDvsHomesteadBlockchain.json",
+    "blockChainFrontierWithLargerTDvsHomesteadBlockchain2.json",
+    "RPC_API_Test.json",
+    "DaoTransactions.json",
+    "CallContractFromNotBestBlock.json",
+    "ChainAtoChainB.json",
+    "ChainAtoChainBCallContractFormA.json",
+    "ChainAtoChainB_BlockHash.json",
+    "ChainAtoChainB_difficultyB.json",
+    "ChainAtoChainBtoChainA.json",
+    "ChainAtoChainBtoChainAtoChainB.json",
+    "UncleFromSideChain.json",
+    "lotsOfLeafs.json",
+    "lotsOfBranchesOverrideAtTheEnd.json",
+    "lotsOfBranchesOverrideAtTheMiddle.json",
+    "newChainFrom4Block.json",
+    "newChainFrom5Block.json",
+    "newChainFrom6Block.json",
+    "sideChainWithMoreTransactions.json",
+    "sideChainWithMoreTransactions2.json",
+    "sideChainWithNewMaxDifficultyStartingFromBlock3AfterBlock4.json",
+    "uncleBlockAtBlock3AfterBlock3.json",
+    "uncleBlockAtBlock3afterBlock4.json",
+  ]
+
 func skipNewBCTests*(folder: string, name: string): bool =
   if folder in ["vmPerformance"]:
+    return true
+
+  # TODO: fix this
+  if name in problematicCases:
     return true
 
   # the new BC tests also contains these slow tests

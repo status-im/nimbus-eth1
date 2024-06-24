@@ -20,7 +20,7 @@ import
   ../network/history/accumulator
 
 from nimcrypto/hash import fromHex
-from ../../nimbus/utils/utils import calcTxRoot, calcReceiptRoot
+from ../../nimbus/utils/utils import calcTxRoot, calcReceiptsRoot
 
 export e2store.readRecord
 
@@ -338,6 +338,30 @@ proc getTotalDifficulty(f: Era1File): Result[UInt256, string] =
 
   ok(UInt256.fromBytesLE(bytes))
 
+proc getNextEthBlock*(f: Era1File): Result[EthBlock, string] =
+  doAssert not isNil(f) and f[].handle.isSome
+
+  var
+    header = ?getBlockHeader(f)
+    body = ?getBlockBody(f)
+  ?skipRecord(f) # receipts
+  ?skipRecord(f) # totalDifficulty
+
+  ok(EthBlock.init(move(header), move(body)))
+
+proc getEthBlock*(f: Era1File, blockNumber: uint64): Result[EthBlock, string] =
+  doAssert not isNil(f) and f[].handle.isSome
+  doAssert(
+    blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
+    "Wrong era1 file for selected block number",
+  )
+
+  let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
+
+  ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
+
+  getNextEthBlock(f)
+
 proc getNextBlockTuple*(f: Era1File): Result[BlockTuple, string] =
   doAssert not isNil(f) and f[].handle.isSome
 
@@ -429,7 +453,7 @@ proc buildAccumulator*(f: Era1File): Result[EpochAccumulatorCached, string] =
       HeaderRecord(blockHash: blockHeader.blockHash(), totalDifficulty: totalDifficulty)
     )
 
-  ok(EpochAccumulatorCached.init(@headerRecords))
+  ok(EpochAccumulatorCached.init(headerRecords))
 
 proc verify*(f: Era1File): Result[Digest, string] =
   let
@@ -443,7 +467,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
         ?f.getBlockTuple(blockNumber)
 
       txRoot = calcTxRoot(blockBody.transactions)
-      ommershHash = keccakHash(rlp.encode(blockBody.uncles))
+      ommershHash = rlpHash(blockBody.uncles)
 
     if blockHeader.txRoot != txRoot:
       return err("Invalid transactions root")
@@ -451,7 +475,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
     if blockHeader.ommersHash != ommershHash:
       return err("Invalid ommers hash")
 
-    if blockHeader.receiptRoot != calcReceiptRoot(receipts):
+    if blockHeader.receiptsRoot != calcReceiptsRoot(receipts):
       return err("Invalid receipts root")
 
     headerRecords.add(

@@ -11,7 +11,7 @@
 import
   std/[json, strutils],
   json_rpc/[rpcclient], httputils,
-  eth/[common, rlp], chronicles,
+  eth/common, chronicles,
   ../nimbus/utils/utils,
   ./parser
 
@@ -122,10 +122,10 @@ proc requestBlock*(
     result.receipts   = requestReceipts(header, client)
     if DownloadAndValidate in flags:
       let
-        receiptRoot   = calcReceiptRoot(result.receipts).prefixHex
-        receiptRootOK = result.header.receiptRoot.prefixHex
-      if receiptRoot != receiptRootOK:
-        debug "wrong receipt root", receiptRoot, receiptRootOK, blockNumber
+        receiptsRoot   = calcReceiptsRoot(result.receipts).prefixHex
+        receiptsRootOK = result.header.receiptsRoot.prefixHex
+      if receiptsRoot != receiptsRootOK:
+        debug "wrong receipt root", receiptsRoot, receiptsRootOK, blockNumber
         raise newException(ValueError, "Error when validating receipt root")
 
   if DownloadAndValidate in flags:

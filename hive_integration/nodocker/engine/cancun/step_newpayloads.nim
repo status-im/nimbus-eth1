@@ -52,9 +52,9 @@ proc verifyPayload(step: NewPayloads,
                    com: CommonRef,
                    client: RpcClient,
                    blobTxsInPayload: openArray[Transaction],
-                   shouldOverrideBuilder: Option[bool],
+                   shouldOverrideBuilder: Opt[bool],
                    payload: ExecutionPayload,
-                   previousPayload = none(ExecutionPayload)): bool =
+                   previousPayload = Opt.none(ExecutionPayload)): bool =
 
   var
     parentExcessBlobGas = 0'u64
@@ -70,8 +70,8 @@ proc verifyPayload(step: NewPayloads,
 
   let
     parent = common.BlockHeader(
-      excessBlobGas: some(parentExcessBlobGas),
-      blobGasUsed: some(parentBlobGasUsed)
+      excessBlobGas: Opt.some(parentExcessBlobGas),
+      blobGasUsed: Opt.some(parentBlobGasUsed)
     )
     expectedExcessBlobGas = calcExcessBlobGas(parent)
 
@@ -161,15 +161,15 @@ proc verifyBlobBundle(step: NewPayloads,
     let bundleBlob = blobBundle.blobs[i].bytes
     let bundleProof = blobBundle.proofs[i].bytes
 
-    if bundleCommitment != blobData.commitment:
+    if bundleCommitment != blobData.commitment.bytes:
       error "KZG mismatch at index of the bundle", index=i
       return false
 
-    if bundleBlob != blobData.blob:
+    if bundleBlob != blobData.blob.bytes:
       error "blob mismatch at index of the bundle", index=i
       return false
 
-    if bundleProof != blobData.proof:
+    if bundleProof != blobData.proof.bytes:
       error "proof mismatch at index of the bundle", index=i
       return false
 
@@ -223,12 +223,12 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
             timestamp         = env.clMock.latestHeader.timestamp.uint64
 
           payloadAttributes = step.fcUOnPayloadRequest.getPayloadAttributes(payloadAttributes)
-          let version = step.fcUOnPayloadRequest.forkchoiceUpdatedVersion(timestamp, some(payloadAttributes.timestamp.uint64))
+          let version = step.fcUOnPayloadRequest.forkchoiceUpdatedVersion(timestamp, Opt.some(payloadAttributes.timestamp.uint64))
 
           if step.fcUOnPayloadRequest.getExpectInvalidStatus():
             expectedStatus = PayloadExecutionStatus.invalid
 
-          let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState, some(payloadAttributes))
+          let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState, Opt.some(payloadAttributes))
           if expectedError != 0:
             r.expectErrorCode(expectedError, step.expectationDescription)
           else:
@@ -353,7 +353,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
         let blobData = res.get
         if not step.verifyPayload(env.engine.com, env.engine.client,
                    blobData.txs, env.clMock.latestShouldOverrideBuilder,
-                   payload, some(shadow.prevPayload)):
+                   payload, Opt.some(shadow.prevPayload)):
           fatal "Error verifying payload", payload=shadow.p+1, count=shadow.payloadCount
           return false
 

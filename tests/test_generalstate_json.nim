@@ -6,11 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[strutils, tables, json, os, sets, options],
+  std/[strutils, tables, json, os, sets],
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/core/executor, test_config,
   ../nimbus/transaction,
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/db/ledger,
   ../nimbus/common/common,
   ../nimbus/utils/[utils, debug],
@@ -46,13 +46,13 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256 =
   if blockNumber >= vmState.blockNumber:
-    return
+    return Hash256()
   elif blockNumber < 0:
-    return
+    return Hash256()
   elif blockNumber < vmState.blockNumber - 256:
-    return
+    return Hash256()
   else:
     return keccakHash(toBytes($blockNumber))
 

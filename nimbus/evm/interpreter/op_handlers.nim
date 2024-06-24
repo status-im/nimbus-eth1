@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -28,25 +28,25 @@ import
 
 const
   allHandlersList = @[
-    (vm2OpExecArithmetic, "Arithmetic"),
-    (vm2OpExecHash,       "Hash"),
-    (vm2OpExecEnvInfo,    "EnvInfo"),
-    (vm2OpExecBlockData,  "BlockData"),
-    (vm2OpExecMemory,     "Memory"),
-    (vm2OpExecPush,       "Push"),
-    (vm2OpExecPushZero,   "PushZero"),
-    (vm2OpExecDup,        "Dup"),
-    (vm2OpExecSwap,       "Swap"),
-    (vm2OpExecLog,        "Log"),
-    (vm2OpExecCreate,     "Create"),
-    (vm2OpExecCall,       "Call"),
-    (vm2OpExecSysOp,      "SysOp")]
+    (VmOpExecArithmetic, "Arithmetic"),
+    (VmOpExecHash,       "Hash"),
+    (VmOpExecEnvInfo,    "EnvInfo"),
+    (VmOpExecBlockData,  "BlockData"),
+    (VmOpExecMemory,     "Memory"),
+    (VmOpExecPush,       "Push"),
+    (VmOpExecPushZero,   "PushZero"),
+    (VmOpExecDup,        "Dup"),
+    (VmOpExecSwap,       "Swap"),
+    (VmOpExecLog,        "Log"),
+    (VmOpExecCreate,     "Create"),
+    (VmOpExecCall,       "Call"),
+    (VmOpExecSysOp,      "SysOp")]
 
 # ------------------------------------------------------------------------------
 # Helper
 # ------------------------------------------------------------------------------
 
-proc mkOpTable(selected: EVMFork): array[Op,Vm2OpExec] {.compileTime.} =
+proc mkOpTable(selected: EVMFork): array[Op,VmOpExec] {.compileTime.} =
 
   # Collect selected <fork> entries
   for (subList,subName) in allHandlersList:
@@ -75,8 +75,8 @@ proc mkOpTable(selected: EVMFork): array[Op,Vm2OpExec] {.compileTime.} =
 # ------------------------------------------------------------------------------
 
 #const
-#  vm2OpHandlers* = block:
-#    var rc: array[Fork, array[Op, Vm2OpExec]]
+#  VmOpHandlers* = block:
+#    var rc: array[Fork, array[Op, VmOpExec]]
 #    for w in Fork:
 #      rc[w] = w.mkOpTable
 #    rc
@@ -85,7 +85,7 @@ type
   vmOpHandlersRec* = tuple
     name: string    ## Name (or ID) of op handler
     info: string    ## Some op handler info
-    run:  Vm2OpFn   ## Executable handler
+    run:  VmOpFn    ## Executable handler
 
 const
   # Pack handler record.
@@ -97,12 +97,12 @@ const
   #
   #   to pick right function when <op> is a variable . Using
   #
-  #      vm2OpHandlers[fork][op].exec.run
+  #      VmOpHandlers[fork][op].exec
   #
   #   only works when <op> is a constant. There seems to be some optimisation
   #   that garbles the <exec> sub-structures elements <prep>, <run>, and <post>.
   #   Moreover, <post> is seen NULL under the debugger. It is untested yet
-  #   under what circumstances the vm2OpHandlers[] matrix is set up correctly.
+  #   under what circumstances the VmOpHandlers[] matrix is set up correctly.
   #   Linearising/flattening the index has no effect here.
   #
   vmOpHandlers* = ## Op handler records matrix indexed `fork` x `op`
@@ -113,7 +113,7 @@ const
         for op in Op:
           rc[fork][op].name = tab[op].name
           rc[fork][op].info = tab[op].info
-          rc[fork][op].run  = tab[op].exec.run
+          rc[fork][op].run  = tab[op].exec
       rc
 
 # ------------------------------------------------------------------------------
@@ -122,7 +122,7 @@ const
 
 when isMainModule and isChatty:
 
-  proc opHandlersRun(fork: EVMFork; op: Op; d: var Vm2Ctx) {.used.} =
+  proc opHandlersRun(fork: EVMFork; op: Op; d: var VmCtx) {.used.} =
     ## Given a particular `fork` and an `op`-code, run the associated handler
     vmOpHandlers[fork][op].run(d)
 
@@ -140,10 +140,10 @@ when isMainModule and isChatty:
   echo ">>> berlin[swap16]:         ", FkBerlin.opHandlersInfo(Swap16)
   echo ">>> berlin[log4]:           ", FkBerlin.opHandlersInfo(Log4)
 
-  echo ">>>       frontier[sstore]: ",       FkFrontier.opHandlersInfo(Sstore)
+  echo ">>>       frontier[sstore]: ", FkFrontier.opHandlersInfo(Sstore)
   echo ">>> constantinople[sstore]: ", FkConstantinople.opHandlersInfo(Sstore)
-  echo ">>>         berlin[sstore]: ",         FkBerlin.opHandlersInfo(Sstore)
-  echo ">>>          paris[sstore]: ",          FkParis.opHandlersInfo(Sstore)
+  echo ">>>         berlin[sstore]: ", FkBerlin.opHandlersInfo(Sstore)
+  echo ">>>          paris[sstore]: ", FkParis.opHandlersInfo(Sstore)
 
 # ------------------------------------------------------------------------------
 # End

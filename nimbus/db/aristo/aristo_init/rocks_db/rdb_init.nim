@@ -14,22 +14,74 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, os],
+  std/[sets, sequtils, os],
   rocksdb,
   results,
   ../../aristo_desc,
-  ./rdb_desc
+  ./rdb_desc,
+  ../../../opts
 
-const
-  extraTraceMessages = false
-    ## Enable additional logging noise
+# ------------------------------------------------------------------------------
+# Private constructor
+# ------------------------------------------------------------------------------
 
-when extraTraceMessages:
-  import
-    chronicles
+proc initImpl(
+    rdb: var RdbInst;
+    basePath: string;
+    dbOpts: DbOptionsRef,
+    cfOpts: ColFamilyOptionsRef;
+    guestCFs: openArray[ColFamilyDescriptor] = [];
+      ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
+  ## Database backend constructor
+  const initFailed = "RocksDB/init() failed"
 
-  logScope:
-    topics = "aristo-rocksdb"
+  rdb.basePath = basePath
+
+  let
+    dataDir = rdb.dataDir
+  try:
+    dataDir.createDir
+  except OSError, IOError:
+    return err((RdbBeCantCreateDataDir, ""))
+
+  # Column familiy names to allocate when opening the database. This list
+  # might be extended below.
+  var useCFs = AristoCFs.mapIt($it).toHashSet
+
+  # The `guestCFs` list must not overwrite `AristoCFs` options
+  let guestCFs = guestCFs.filterIt(it.name notin useCFs)
+
+  # If the database exists already, check for missing column families and
+  # allocate them for opening. Otherwise rocksdb might reject the peristent
+  # database.
+  if (dataDir / "CURRENT").fileExists:
+    let hdCFs = dataDir.listColumnFamilies.valueOr:
+      raiseAssert initFailed & " cannot read existing CFs: " & error
+    # Update list of column families for opener.
+    useCFs = useCFs + hdCFs.toHashSet
+
+  # The `guestCFs` list might come with a different set of options. So it is
+  # temporarily removed from `useCFs` and will be re-added with appropriate
+  # options.
+  let guestCFq = @guestCFs
+  useCFs = useCFs - guestCFs.mapIt(it.name).toHashSet
+
+  # Finalise list of column families
+  let cfs = useCFs.toSeq.mapIt(it.initColFamilyDescriptor cfOpts) & guestCFq
+
+  # Open database for the extended family :)
+  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
+    raiseAssert initFailed & " cannot create base descriptor: " & error
+
+  # Initialise column handlers (this stores implicitely `baseDb`)
+  rdb.admCol = baseDb.withColFamily($AdmCF).valueOr:
+    raiseAssert initFailed & " cannot initialise AdmCF descriptor: " & error
+  rdb.vtxCol = baseDb.withColFamily($VtxCF).valueOr:
+    raiseAssert initFailed & " cannot initialise VtxCF descriptor: " & error
+  rdb.keyCol = baseDb.withColFamily($KeyCF).valueOr:
+    raiseAssert initFailed & " cannot initialise KeyCF descriptor: " & error
+
+  ok(guestCFs.mapIt(baseDb.withColFamily(it.name).expect("loaded cf")))
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -38,67 +90,19 @@ when extraTraceMessages:
 proc init*(
     rdb: var RdbInst;
     basePath: string;
-    openMax: int;
-      ): Result[void,(AristoError,string)] =
-  ## Constructor c ode inspired by `RocksStoreRef.init()` from
-  ## kvstore_rocksdb.nim
-  rdb.basePath = basePath
-
-  let
-    dataDir = rdb.dataDir
-
-  try:
-    dataDir.createDir
-  except OSError, IOError:
-    return err((RdbBeCantCreateDataDir, ""))
-
-  let
-    cfs = @[initColFamilyDescriptor AristoFamily] &
-          RdbGuest.mapIt(initColFamilyDescriptor $it)
-    opts = defaultDbOptions()
-  opts.setMaxOpenFiles(openMax)
-
-  # Reserve a family corner for `Aristo` on the database
-  let baseDb = openRocksDb(dataDir, opts, columnFamilies=cfs).valueOr:
-    let errSym = RdbBeDriverInitError
-    when extraTraceMessages:
-      trace logTxt "init failed", dataDir, openMax, error=errSym, info=error
-    return err((errSym, error))
-
-  # Initialise `Aristo` family
-  rdb.store = baseDb.withColFamily(AristoFamily).valueOr:
-    let errSym = RdbBeDriverInitError
-    when extraTraceMessages:
-      trace logTxt "init failed", dataDir, openMax, error=errSym, info=error
-    return err((errSym, error))
-
-  ok()
-
-proc initGuestDb*(
-    rdb: RdbInst;
-    instance: int;
-      ): Result[RootRef,(AristoError,string)] =
-  # Initialise `Guest` family
-  if high(RdbGuest).ord < instance:
-    return err((RdbGuestInstanceUnsupported,""))
-  let
-    guestSym = $RdbGuest(instance)
-    guestDb = rdb.store.db.withColFamily(guestSym).valueOr:
-      let errSym = RdbBeDriverGuestError
-      when extraTraceMessages:
-        trace logTxt "guestDb failed", error=errSym, info=error
-      return err((errSym, error))
-
-  ok RdbGuestDbRef(
-    beKind: BackendRocksDB,
-    guestDb: guestDb)
+    dbOpts: DbOptionsRef;
+    cfOpts: ColFamilyOptionsRef;
+    guestCFs: openArray[ColFamilyDescriptor];
+      ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
+  ## Temporarily define a guest CF list here.
+  rdb.initImpl(basePath, dbOpts, cfOpts, guestCFs)
 
 
-proc destroy*(rdb: var RdbInst; flush: bool) =
+proc destroy*(rdb: var RdbInst; eradicate: bool) =
   ## Destructor
-  rdb.store.db.close()
+  rdb.baseDb.close()
 
-  if flush:
+  if eradicate:
     try:
       rdb.dataDir.removeDir
 

@@ -25,21 +25,21 @@
 ##       ...
 ##
 {.push raises: [].}
-{.warning: "*** importing rocks DB which needs a linker library".}
 
 import
+  chronicles,
   eth/common,
   rocksdb,
   results,
+  ../../aristo/aristo_init/persistent,
+  ../../opts,
   ../kvt_desc,
   ../kvt_desc/desc_backend,
+  ../kvt_tx/tx_stow,
   ./init_common,
   ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
 
-
 const
-  maxOpenFiles = 512          ## Rocks DB setup, open files limit
-
   extraTraceMessages = false or true
     ## Enabled additional logging noise
 
@@ -49,11 +49,8 @@ type
 
   RdbPutHdlRef = ref object of TypedPutHdlRef
 
-when extraTraceMessages:
-  import chronicles
-
-  logScope:
-    topics = "aristo-backend"
+logScope:
+  topics = "kvt-backend"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -76,7 +73,7 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
   hdl.RdbPutHdlRef
 
 # ------------------------------------------------------------------------------
-# Private functions: interface
+# Private functions: standard interface
 # ------------------------------------------------------------------------------
 
 proc getKvpFn(db: RdbBackendRef): GetKvpFn =
@@ -95,13 +92,30 @@ proc getKvpFn(db: RdbBackendRef): GetKvpFn =
 
       err(GetNotFound)
 
+proc lenKvpFn(db: RdbBackendRef): LenKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[int,KvtError] =
+
+      # Get data record
+      var len = db.rdb.len(key).valueOr:
+        when extraTraceMessages:
+          debug logTxt "lenKvpFn() failed", key, error=error[0], info=error[1]
+        return err(error[0])
+
+      # Return if non-empty
+      if 0 < len:
+        return ok(len)
+
+      err(GetNotFound)
+
 # -------------
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
   result =
-    proc(): PutHdlRef =
+    proc(): Result[PutHdlRef,KvtError] =
       db.rdb.begin()
-      db.newSession()
+      ok db.newSession()
+
 
 proc putKvpFn(db: RdbBackendRef): PutKvpFn =
   result =
@@ -115,6 +129,7 @@ proc putKvpFn(db: RdbBackendRef): PutKvpFn =
           hdl.info = error[2]
           return
 
+
 proc putEndFn(db: RdbBackendRef): PutEndFn =
   result =
     proc(hdl: PutHdlRef): Result[void,KvtError] =
@@ -122,6 +137,7 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
       if hdl.error != KvtError(0):
         when extraTraceMessages:
           debug logTxt "putEndFn: failed", error=hdl.error, info=hdl.info
+        db.rdb.rollback()
         return err(hdl.error)
 
       # Commit session
@@ -134,43 +150,181 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
 
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
-    proc(flush: bool) =
-      db.rdb.destroy(flush)
+    proc(eradicate: bool) =
+      db.rdb.destroy(eradicate)
 
-# --------------
+proc canModFn(db: RdbBackendRef): CanModFn =
+  result =
+    proc(): Result[void,KvtError] =
+      ok()
 
-proc setup(db: RdbBackendRef) =
+proc setWrReqFn(db: RdbBackendRef): SetWrReqFn =
+  result =
+    proc(kvt: RootRef): Result[void,KvtError] =
+      err(RdbBeHostNotApplicable)
+
+# ------------------------------------------------------------------------------
+# Private functions: triggered interface changes
+# ------------------------------------------------------------------------------
+
+proc putBegTriggeredFn(db: RdbBackendRef): PutBegFn =
+  ## Variant of `putBegFn()` for piggyback write batch
+  result =
+    proc(): Result[PutHdlRef,KvtError] =
+      # Check whether somebody else initiated the rocksdb write batch/session
+      if db.rdb.session.isNil:
+        const error = RdbBeDelayedNotReady
+        when extraTraceMessages:
+          debug logTxt "putBegTriggeredFn: failed", error
+        return err(error)
+      ok db.newSession()
+
+proc putEndTriggeredFn(db: RdbBackendRef): PutEndFn =
+  ## Variant of `putEndFn()` for piggyback write batch
+  result =
+    proc(hdl: PutHdlRef): Result[void,KvtError] =
+
+      # There is no commit()/rollback() here as we do not own the backend.
+      let hdl = hdl.endSession db
+
+      if hdl.error != KvtError(0):
+        when extraTraceMessages:
+          debug logTxt "putEndTriggeredFn: failed",
+            error=hdl.error, info=hdl.info
+        # The error return code will signal a problem to the `txStow()`
+        # function which was called by `writeEvCb()` below.
+        return err(hdl.error)
+
+      # Commit the session. This will be acknowledged by the `txStow()`
+      # function which was called by `writeEvCb()` below.
+      ok()
+
+proc closeTriggeredFn(db: RdbBackendRef): CloseFn =
+  ## Variant of `closeFn()` for piggyback write batch
+  result =
+    proc(eradicate: bool) =
+      # Nothing to do here as we do not own the backend
+      discard
+
+proc canModTriggeredFn(db: RdbBackendRef): CanModFn =
+  ## Variant of `canModFn()` for piggyback write batch
+  result =
+    proc(): Result[void,KvtError] =
+      # Deny modifications/changes if there is a pending write request
+      if not db.rdb.delayedPersist.isNil:
+        return err(RdbBeDelayedLocked)
+      ok()
+
+proc setWrReqTriggeredFn(db: RdbBackendRef): SetWrReqFn =
+  result =
+    proc(kvt: RootRef): Result[void,KvtError] =
+      if db.rdb.delayedPersist.isNil:
+        db.rdb.delayedPersist = KvtDbRef(kvt)
+        ok()
+      else:
+        err(RdbBeDelayedAlreadyRegistered)
+
+# ------------------------------------------------------------------------------
+# Private function: trigger handler
+# ------------------------------------------------------------------------------
+
+proc writeEvCb(db: RdbBackendRef): RdbWriteEventCb =
+  ## Write session event handler
+  result =
+    proc(ws: WriteBatchRef): bool =
+
+      # Only do something if a write session request was queued
+      if not db.rdb.delayedPersist.isNil:
+        defer:
+          # Clear session environment when leaving. This makes sure that the
+          # same session can only be run once.
+          db.rdb.session = WriteBatchRef(nil)
+          db.rdb.delayedPersist = KvtDbRef(nil)
+
+        # Publish session argument
+        db.rdb.session = ws
+
+        # Execute delayed session. Note the the `txStow()` function is located
+        # in `tx_stow.nim`. This module `tx_stow.nim` is also imported by
+        # `kvt_tx.nim` which contains `persist() `. So the logic goes:
+        # ::
+        #   kvt_tx.persist()     --> registers a delayed write request rather
+        #                            than excuting tx_stow.txStow()
+        #
+        #   // the backend owner (i.e. Aristo) will start a write cycle and
+        #   // invoke the envent handler rocks_db.writeEvCb()
+        #   rocks_db.writeEvCb() --> calls tx_stow.txStow()
+        #
+        #   tx_stow.txStow()     --> calls rocks_db.putBegTriggeredFn()
+        #                            calls rocks_db.putKvpFn()
+        #                            calls rocks_db.putEndTriggeredFn()
+        #
+        let rc = db.rdb.delayedPersist.txStow(persistent=true)
+        if rc.isErr:
+          error "writeEventCb(): persist() failed", error=rc.error
+          return false
+      true
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc rocksDbKvtBackend*(
+    path: string;
+    dbOpts: DbOptionsRef;
+    cfOpts: ColFamilyOptionsRef;
+      ): Result[BackendRef,(KvtError,string)] =
+  let db = RdbBackendRef(
+    beKind: BackendRocksDB)
+
+  # Initialise RocksDB
+  db.rdb.init(path, dbOpts, cfOpts).isOkOr:
+    when extraTraceMessages:
+      trace logTxt "constructor failed", error=error[0], info=error[1]
+    return err(error)
+
   db.getKvpFn = getKvpFn db
+  db.lenKvpFn = lenKvpFn db
 
   db.putBegFn = putBegFn db
   db.putKvpFn = putKvpFn db
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
+  db.canModFn = canModFn db
+  db.setWrReqFn = setWrReqFn db
+  ok db
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
 
-proc rocksDbBackend*(path: string): Result[BackendRef,KvtError] =
+proc rocksDbKvtTriggeredBackend*(
+    adb: AristoDbRef;
+    oCfs: openArray[ColFamilyReadWrite];
+      ): Result[BackendRef,(KvtError,string)] =
   let db = RdbBackendRef(
-    beKind: BackendRocksDB)
+    beKind: BackendRdbTriggered)
 
-  # Initialise RocksDB
-  db.rdb.init(path, maxOpenFiles).isOkOr:
+  # Initialise RocksDB piggy-backed on `Aristo` backend.
+  db.rdb.init(oCfs).isOkOr:
     when extraTraceMessages:
       trace logTxt "constructor failed", error=error[0], info=error[1]
-    return err(error[0])
+    return err(error)
 
-  db.setup()
+  # Register write session event handler
+  adb.activateWrTrigger(db.writeEvCb()).isOkOr:
+    return err((RdbBeHostError,$error))
+
+  db.getKvpFn = getKvpFn db
+  db.lenKvpFn = lenKvpFn db
+
+  db.putBegFn = putBegTriggeredFn db
+  db.putKvpFn = putKvpFn db
+  db.putEndFn = putEndTriggeredFn db
+
+  db.closeFn = closeTriggeredFn db
+  db.canModFn = canModTriggeredFn db
+  db.setWrReqFn = setWrReqTriggeredFn db
   ok db
 
-proc rocksDbBackend*(store: ColFamilyReadWrite): Result[BackendRef,KvtError] =
-  let db = RdbBackendRef(
-    beKind: BackendRocksDB)
-  db.rdb.init(store)
-  db.setup()
-  ok db
 
 proc dup*(db: RdbBackendRef): RdbBackendRef =
   new result

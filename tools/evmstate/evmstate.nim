@@ -16,7 +16,7 @@ import
   results,
   stint,
   eth/trie/[trie_defs],
-  ../../nimbus/[vm_types, vm_state],
+  ../../nimbus/[evm/types, evm/state],
   ../../nimbus/db/ledger,
   ../../nimbus/transaction,
   ../../nimbus/core/executor,
@@ -64,7 +64,7 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
   keccakHash(toBytes($blockNumber))
 
 proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =
@@ -157,7 +157,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
 
   vmState.mutateStateDB:
     setupStateDB(pre, db)
-    db.persist(clearEmptyAccount = false, clearCache = false) # settle accounts storage
+    db.persist(clearEmptyAccount = false) # settle accounts storage
 
   defer:
     ctx.verifyResult(vmState)

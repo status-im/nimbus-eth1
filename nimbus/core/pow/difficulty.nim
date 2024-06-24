@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -56,7 +56,7 @@ func calcDifficultyFrontier*(timeStamp: EthTime, parent: BlockHeader): Difficult
 
   diff = max(diff, MinimumDifficultyU)
 
-  var periodCount = parent.blockNumber + bigOne
+  var periodCount = parent.number.u256 + bigOne
   difficultyBomb(periodCount)
   result = diff
 
@@ -91,7 +91,7 @@ func calcDifficultyHomestead*(timeStamp: EthTime, parent: BlockHeader): Difficul
   var diff = cast[UInt256](max(x, MinimumDifficultyI))
 
   # for the exponential factor
-  var periodCount = parent.blockNumber + bigOne
+  var periodCount = parent.number.u256 + bigOne
   difficultyBomb(periodCount)
 
   result = diff
@@ -138,8 +138,8 @@ func makeDifficultyCalculator(bombDelay: static[int], timeStamp: EthTime, parent
   # calculate a fake block number for the ice-age delay
   # Specification: https:#eips.ethereum.org/EIPS/eip-1234
   var periodCount: UInt256
-  if parent.blockNumber >= bombDelayFromParent:
-    periodCount = parent.blockNumber - bombDelayFromParent
+  if parent.number.u256 >= bombDelayFromParent:
+    periodCount = parent.number.u256 - bombDelayFromParent
 
   difficultyBomb(periodCount)
 

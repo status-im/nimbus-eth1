@@ -9,10 +9,11 @@
 # according to those terms.
 
 import
-  std/[json, os],
+  std/[json, os, strutils],
   stew/byteutils,
   chronicles,
-  ../nimbus/[vm_state, vm_types],
+  results,
+  ../nimbus/[evm/state, evm/types],
   ../nimbus/core/executor,
   ./premixcore, ./prestate,
   ../nimbus/tracer,
@@ -20,34 +21,33 @@ import
 
 proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
   let state = node["state"]
-
+  let kvt = memoryDB.newKvt()
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
-    memoryDB.kvt.put(key, value)
+    kvt.put(key, value).isOkOr:
+      raiseAssert "prepareBlockEnv(): put() (loop) failed " & $$error
 
-proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256) =
-  let
+proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: BlockNumber) =
+  var
     parentNumber = blockNumber - 1
     com = CommonRef.new(memoryDB)
     parent = com.db.getBlockHeader(parentNumber)
-    header = com.db.getBlockHeader(blockNumber)
-    body   = com.db.getBlockBody(header.blockHash)
-
-  let transaction = memoryDB.beginTransaction()
+    blk = com.db.getEthBlock(blockNumber)
+  let transaction = memoryDB.newTransaction()
   defer: transaction.dispose()
 
   let
-    vmState = BaseVMState.new(parent, header, com)
-    validationResult = vmState.processBlock(header, body)
+    vmState = BaseVMState.new(parent, blk.header, com)
+    validationResult = vmState.processBlock(blk)
 
-  if validationResult != ValidationResult.OK:
-    error "block validation error", validationResult
+  if validationResult.isErr:
+    error "block validation error", err = validationResult.error()
   else:
-    info "block validation success", validationResult, blockNumber
+    info "block validation success", blockNumber
 
   transaction.rollback()
-  vmState.dumpDebuggingMetaData(header, body, false)
+  vmState.dumpDebuggingMetaData(blk, false)
   let
     fileName = "debug" & $blockNumber & ".json"
     nimbus   = json.parseFile(fileName)
@@ -60,7 +60,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: UInt256)
 
   # prestate data goes to debug tool and contains data
   # needed to execute single block
-  generatePrestate(nimbus, geth, blockNumber, parent, header, body)
+  generatePrestate(nimbus, geth, blockNumber, parent, blk)
 
 proc main() =
   if paramCount() == 0:
@@ -70,7 +70,8 @@ proc main() =
   let
     blockEnv = json.parseFile(paramStr(1))
     memoryDB = newCoreDbRef(DefaultDbMemory)
-    blockNumber = UInt256.fromHex(blockEnv["blockNumber"].getStr())
+    blockNumberHex = blockEnv["blockNumber"].getStr()
+    blockNumber = parseHexInt(blockNumberHex).uint64
 
   prepareBlockEnv(blockEnv, memoryDB)
   executeBlock(blockEnv, memoryDB, blockNumber)

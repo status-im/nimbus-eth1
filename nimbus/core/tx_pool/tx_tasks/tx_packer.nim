@@ -22,11 +22,11 @@ import
   ../../../common/common,
   ../../../utils/utils,
   ../../../constants,
-  "../.."/[dao, executor, validate, eip4844, casper],
+  "../.."/[dao, executor, validate, casper],
   ../../../transaction/call_evm,
   ../../../transaction,
-  ../../../vm_state,
-  ../../../vm_types,
+  ../../../evm/state,
+  ../../../evm/types,
   ".."/[tx_chain, tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
   "."/[tx_bucket, tx_classify]
 
@@ -39,7 +39,6 @@ type
     tr: CoreDbMptRef
     cleanState: bool
     balance: UInt256
-    blobGasUsed: uint64
     numBlobPerBlock: int
 
 const
@@ -71,17 +70,14 @@ proc persist(pst: TxPackerStateRef)
   ## Smart wrapper
   if not pst.cleanState:
     let fork = pst.xp.chain.nextFork
-    pst.xp.chain.vmState.stateDB.persist(
-      clearEmptyAccount = fork >= FkSpurious,
-      clearCache = false)
+    pst.xp.chain.vmState.stateDB.persist(clearEmptyAccount = fork >= FkSpurious)
     pst.cleanState = true
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
-    {.gcsafe,raises: [CatchableError].} =
+proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
   let
@@ -89,12 +85,10 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt
     baseFee = pst.xp.chain.baseFee
     tx = item.tx.eip1559TxNormalization(baseFee.GasInt)
 
-  #safeExecutor "tx_packer.runTx":
-  #  # Execute transaction, may return a wildcard `Exception`
-  result = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
-
+  let gasUsed = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
   pst.cleanState = false
-  doAssert 0 <= result
+  doAssert 0 <= gasUsed
+  gasUsed
 
 proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
     {.gcsafe,raises: [CatchableError].} =
@@ -113,7 +107,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   vmState.stateDB.addBalance(xp.chain.feeRecipient, reward)
   xp.blockValue += reward
 
-  if vmState.generateWitness:
+  if vmState.collectWitnessData:
     vmState.stateDB.collectWitnessData()
 
   # Save accounts via persist() is not needed unless the fork is smaller
@@ -136,12 +130,9 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
-  # EIP-4844, count blobGasUsed
-  if item.tx.txType >= TxEip4844:
-    pst.blobGasUsed += item.tx.getTotalBlobGas
-
   # Update txRoot
-  pst.tr.put(rlp.encode(inx), rlp.encode(item.tx))
+  pst.tr.merge(rlp.encode(inx), rlp.encode(item.tx)).isOkOr:
+    raiseAssert "runTxCommit(): merge failed, " & $$error
 
   # Add the item to the `packed` bucket. This implicitely increases the
   # receipts index `inx` at the next visit of this function.
@@ -163,7 +154,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
   xp.chain.maxMode = (packItemsMaxGasLimit in xp.pFlags)
 
   if xp.chain.com.daoForkSupport and
-     xp.chain.com.daoForkBlock.get == xp.chain.head.blockNumber + 1:
+     xp.chain.com.daoForkBlock.get == xp.chain.head.number + 1:
     xp.chain.vmState.mutateStateDB:
       db.applyDAOHardFork()
 
@@ -175,7 +166,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
 
   let packer = TxPackerStateRef( # return value
     xp: xp,
-    tr: AristoDbMemory.newCoreDbRef().mptPrune,
+    tr: AristoDbMemory.newCoreDbRef().ctx.getMpt CtGeneric,
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
     numBlobPerBlock: 0,
   )
@@ -227,9 +218,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
   # Commit account state DB
   vmState.stateDB.commit(accTx)
 
-  vmState.stateDB.persist(
-    clearEmptyAccount = xp.chain.nextFork >= FkSpurious,
-    clearCache = false)
+  vmState.stateDB.persist(clearEmptyAccount = xp.chain.nextFork >= FkSpurious)
   # let midRoot = vmState.stateDB.rootHash -- notused
 
   # Finish book-keeping and move item to `packed` bucket
@@ -251,25 +240,24 @@ proc vmExecCommit(pst: TxPackerStateRef)
 
   # Reward beneficiary
   vmState.mutateStateDB:
-    if vmState.generateWitness:
+    if vmState.collectWitnessData:
       db.collectWitnessData()
     # Finish up, then vmState.stateDB.rootHash may be accessed
-    db.persist(
-      clearEmptyAccount = xp.chain.nextFork >= FkSpurious,
-      clearCache = ClearCache in vmState.flags)
+    db.persist(clearEmptyAccount = xp.chain.nextFork >= FkSpurious)
 
   # Update flexi-array, set proper length
   let nItems = xp.txDB.byStatus.eq(txItemPacked).nItems
   vmState.receipts.setLen(nItems)
 
   xp.chain.receipts = vmState.receipts
-  xp.chain.txRoot = pst.tr.rootHash
+  xp.chain.txRoot = pst.tr.getColumn.state.valueOr:
+    raiseAssert "vmExecCommit(): state() failed " & $$error
   xp.chain.stateRoot = vmState.stateDB.rootHash
 
   if vmState.com.forkGTE(Cancun):
     # EIP-4844
-    xp.chain.excessBlobGas = some(vmState.blockCtx.excessBlobGas)
-    xp.chain.blobGasUsed = some(pst.blobGasUsed)
+    xp.chain.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
+    xp.chain.blobGasUsed = Opt.some(vmState.blobGasUsed)
 
   proc balanceDelta: UInt256 =
     let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient)
@@ -287,7 +275,7 @@ proc packerVmExec*(xp: TxPoolRef): Result[void, string] {.gcsafe,raises: [Catcha
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.chain.com.db
-  let dbTx = db.beginTransaction
+  let dbTx = db.newTransaction
   defer: dbTx.dispose()
 
   var pst = xp.vmExecInit.valueOr:

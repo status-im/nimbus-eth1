@@ -15,8 +15,8 @@ import
     constants,
     db/ledger,
     transaction,
-    vm_state,
-    vm_types,
+    evm/state,
+    evm/types,
     core/dao,
     core/validate,
     core/chain/chain_desc,
@@ -25,16 +25,14 @@ import
     core/executor/process_block
   ],
   chronicles,
-  stint,
   results
 
 {.push raises: [].}
 
 proc processBlock(
     vmState: BaseVMState;  ## Parent environment of header/body block
-    header:  BlockHeader;  ## Header/body block to add to the blockchain
-    body:    BlockBody): ValidationResult
-    {.gcsafe, raises: [CatchableError].} =
+    blk:     EthBlock;  ## Header/body block to add to the blockchain
+    ): Result[void, string] =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not.
   ##
@@ -43,67 +41,57 @@ proc processBlock(
   ## the `poa` descriptor is currently unused and only provided for later
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
-
-  var dbTx = vmState.com.db.beginTransaction()
+  template header: BlockHeader = blk.header
+  var dbTx = vmState.com.db.newTransaction()
   defer: dbTx.dispose()
 
   if vmState.com.daoForkSupport and
-     vmState.com.daoForkBlock.get == header.blockNumber:
+     vmState.com.daoForkBlock.get == header.number:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
   if header.parentBeaconBlockRoot.isSome:
-    let r = vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
-    if r.isErr:
-      error("error in processing beaconRoot", err=r.error)
+    ? vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
 
-  let r = processTransactions(vmState, header, body.transactions)
-  if r.isErr:
-    error("error in processing transactions", err=r.error)
+  ? processTransactions(vmState, header, blk.transactions)
 
   if vmState.determineFork >= FkShanghai:
-    for withdrawal in body.withdrawals.get:
+    for withdrawal in blk.withdrawals.get:
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    discard vmState.com.db.persistUncles(body.uncles)
+    discard vmState.com.db.persistUncles(blk.uncles)
 
   # EIP-3675: no reward for miner in POA/POS
   if vmState.com.consensus == ConsensusType.POW:
-    vmState.calculateReward(header, body)
+    vmState.calculateReward(header, blk.uncles)
 
   vmState.mutateStateDB:
     let clearEmptyAccount = vmState.determineFork >= FkSpurious
-    db.persist(clearEmptyAccount, ClearCache in vmState.flags)
+    db.persist(clearEmptyAccount)
 
-  # `applyDeletes = false`
-  # If the trie pruning activated, each of the block will have its own state
-  # trie keep intact, rather than destroyed by trie pruning. But the current
-  # block will still get a pruned trie. If trie pruning deactivated,
-  # `applyDeletes` have no effects.
-  dbTx.commit(applyDeletes = false)
+  dbTx.commit()
 
-  ValidationResult.OK
+  ok()
 
 proc getVmState(c: ChainRef, header: BlockHeader):
-                 Result[BaseVMState, void]
-                  {.gcsafe, raises: [CatchableError].} =
+                 Result[BaseVMState, void] =
   if c.vmState.isNil.not:
     return ok(c.vmState)
 
   let vmState = BaseVMState()
   if not vmState.init(header, c.com):
     debug "Cannot initialise VmState",
-      number = header.blockNumber
+      number = header.number
     return err()
+
   return ok(vmState)
 
 # A stripped down version of persistBlocks without validation
 # intended to accepts invalid block
-proc setBlock*(c: ChainRef; header: BlockHeader;
-                  body: BlockBody): ValidationResult
-                          {.inline, raises: [CatchableError].} =
-  let dbTx = c.db.beginTransaction()
+proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
+  template header: BlockHeader = blk.header
+  let dbTx = c.db.newTransaction()
   defer: dbTx.dispose()
 
   c.com.hardForkTransition(header)
@@ -111,25 +99,27 @@ proc setBlock*(c: ChainRef; header: BlockHeader;
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
     vmState = c.getVmState(header).valueOr:
-      return ValidationResult.Error
+      return err("no vmstate")
     stateRootChpt = vmState.parent.stateRoot # Check point
-    validationResult = vmState.processBlock(header, body)
+  ? vmState.processBlock(blk)
 
-  if validationResult != ValidationResult.OK:
-    return validationResult
+  if not c.db.persistHeader(
+      header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory):
+    return err("Could not persist header")
 
-  discard c.db.persistHeaderToDb(
-    header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory)
-  discard c.db.persistTransactions(header.blockNumber, body.transactions)
-  discard c.db.persistReceipts(vmState.receipts)
+  try:
+    c.db.persistTransactions(header.number, blk.transactions)
+    c.db.persistReceipts(vmState.receipts)
 
-  if body.withdrawals.isSome:
-    discard c.db.persistWithdrawals(body.withdrawals.get)
+    if blk.withdrawals.isSome:
+      c.db.persistWithdrawals(blk.withdrawals.get)
+  except CatchableError as exc:
+    return err(exc.msg)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result
   # between eth_blockNumber and eth_syncing
-  c.com.syncCurrent = header.blockNumber
+  c.com.syncCurrent = header.number
 
   dbTx.commit()
 
@@ -140,9 +130,9 @@ proc setBlock*(c: ChainRef; header: BlockHeader;
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with
   # `persistent()` together with the respective block number.
-  c.db.persistent(header.blockNumber - 1)
+  c.db.persistent(header.number - 1)
 
-  ValidationResult.OK
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

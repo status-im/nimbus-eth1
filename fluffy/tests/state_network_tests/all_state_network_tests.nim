@@ -11,6 +11,8 @@ import
   ./test_state_content_keys_vectors,
   ./test_state_content_nibbles,
   ./test_state_content_values_vectors,
+  ./test_state_endpoints_genesis,
+  ./test_state_endpoints_vectors,
   ./test_state_gossip_getparent_genesis,
   ./test_state_gossip_getparent_vectors,
   ./test_state_gossip_gossipoffer_vectors,

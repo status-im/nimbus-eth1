@@ -41,7 +41,7 @@ proc merkleSignAdd*(
   ## is irrelevant.
   if sdb.error == AristoError(0):
     sdb.count.inc
-    discard sdb.db.merge(sdb.root, key, val, VOID_PATH_ID).valueOr:
+    discard sdb.db.mergeGenericData(sdb.root, key, val).valueOr:
       sdb.`error` = error
       sdb.errKey = @key
       return

@@ -51,10 +51,28 @@ template validateVersion(attr, com, apiVersion) =
         raise invalidParams("if timestamp is earlier than Shanghai," &
           " payloadAttributes must be PayloadAttributesV1")
 
+template validateHeaderTimestamp(header, com, apiVersion) =
+  # See fCUV3 specification No.2 bullet iii
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/cancun.md#specification-1
+  if com.isCancunOrLater(header.timestamp):
+    if apiVersion != Version.V3:
+      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
+          " doesn't support head block with timestamp >= Cancun")
+  # See fCUV2 specification No.2 bullet 1
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
+  elif com.isShanghaiOrLater(header.timestamp):
+    if apiVersion != Version.V2:
+      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
+          " doesn't support head block with Shanghai timestamp")
+  else:
+    if apiVersion != Version.V1:
+      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
+          " doesn't support head block with timestamp earlier than Shanghai")
+
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
                         update: ForkchoiceStateV1,
-                        attrsOpt: Option[PayloadAttributes]):
+                        attrsOpt: Opt[PayloadAttributes]):
                              ForkchoiceUpdatedResponse =
   let
     com   = ben.com
@@ -93,51 +111,59 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       # TODO: cancel downloader
 
     info "Forkchoice requested sync to new head",
-      number = header.blockNumber,
+      number = header.number,
       hash   = blockHash.short
 
     # Update sync header (if any)
     com.syncReqNewHead(header)
     return simpleFCU(PayloadExecutionStatus.syncing)
 
+  validateHeaderTimestamp(header, com, apiVersion)
+
   # Block is known locally, just sanity check that the beacon client does not
   # attempt to push us back to before the merge.
-  let blockNumber = header.blockNumber.truncate(uint64)
-  if header.difficulty > 0.u256 or blockNumber ==  0'u64:
-    var
-      td, ptd: DifficultyInt
-      ttd = com.ttd.get(high(common.BlockNumber))
+  #
+  # Disable terminal PoW block conditions validation for fCUV2 and later.
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
+  if apiVersion == Version.V1:
+    let blockNumber = header.number
+    if header.difficulty > 0.u256 or blockNumber ==  0'u64:
+      var
+        td, ptd: DifficultyInt
+        ttd = com.ttd.get(high(UInt256))
 
-    if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
-      error "TDs unavailable for TTD check",
-        number = blockNumber,
-        hash = blockHash.short,
-        td = td,
-        parent = header.parentHash.short,
-        ptd = ptd
-      return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TDD check")
+      if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
+        error "TDs unavailable for TTD check",
+          number = blockNumber,
+          hash = blockHash.short,
+          td = td,
+          parent = header.parentHash.short,
+          ptd = ptd
+        return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
 
-    if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
-      error "Refusing beacon update to pre-merge",
-        number = blockNumber,
-        hash = blockHash.short,
-        diff = header.difficulty,
-        ptd = ptd,
-        ttd = ttd
+      if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
+        notice "Refusing beacon update to pre-merge",
+          number = blockNumber,
+          hash = blockHash.short,
+          diff = header.difficulty,
+          ptd = ptd,
+          ttd = ttd
 
-      return invalidFCU()
+        return invalidFCU("Refusing beacon update to pre-merge")
 
   # If the head block is already in our canonical chain, the beacon client is
   # probably resyncing. Ignore the update.
+  # See point 2 of fCUV1 specification
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
   var canonHash: common.Hash256
-  if db.getBlockHash(header.blockNumber, canonHash) and canonHash == blockHash:
-    # TODO should this be possible?
-    # If we allow these types of reorgs, we will do lots and lots of reorgs during sync
-    debug "Reorg to previous block"
-    if chain.setCanonical(header) != ValidationResult.OK:
-      return invalidFCU(com, header)
-  elif chain.setCanonical(header) != ValidationResult.OK:
-    return invalidFCU(com, header)
+  if db.getBlockHash(header.number, canonHash) and canonHash == blockHash:
+    notice "Ignoring beacon update to old head",
+      blockHash=blockHash.short,
+      blockNumber=header.number
+    return validFCU(Opt.none(PayloadID), blockHash)
+
+  chain.setCanonical(header).isOkOr:
+    return invalidFCU(error, com, header)
 
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
@@ -153,14 +179,14 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block header not available")
     var finalHash: common.Hash256
-    if not db.getBlockHash(finalBlock.blockNumber, finalHash):
+    if not db.getBlockHash(finalBlock.number, finalHash):
       warn "Final block not in canonical chain",
-        number=finalBlock.blockNumber,
+        number=finalBlock.number,
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block hash not available")
     if finalHash != finalizedBlockHash:
       warn "Final block not in canonical chain",
-        number=finalBlock.blockNumber,
+        number=finalBlock.number,
         expect=finalizedBlockHash.short,
         get=finalHash.short
       raise invalidForkChoiceState("finalized block not canonical")
@@ -174,13 +200,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
         hash = safeBlockHash.short
       raise invalidForkChoiceState("safe head not available")
     var safeHash: common.Hash256
-    if not db.getBlockHash(safeBlock.blockNumber, safeHash):
+    if not db.getBlockHash(safeBlock.number, safeHash):
       warn "Safe block hash not available in database",
         hash = safeHash.short
       raise invalidForkChoiceState("safe block hash not available")
     if safeHash != safeBlockHash:
       warn "Safe block not in canonical chain",
-        blockNumber=safeBlock.blockNumber,
+        blockNumber=safeBlock.number,
         expect=safeBlockHash.short,
         get=safeHash.short
       raise invalidForkChoiceState("safe head not canonical")
@@ -205,6 +231,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       hash = bundle.executionPayload.blockHash.short,
       number = bundle.executionPayload.blockNumber
 
-    return validFCU(some(id), blockHash)
+    return validFCU(Opt.some(id), blockHash)
 
-  return validFCU(none(PayloadID), blockHash)
+  return validFCU(Opt.none(PayloadID), blockHash)

@@ -91,23 +91,22 @@ proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
 proc successorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
-                     skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
-  let offset = 1 + skip.toBlockNumber
-  if h.blockNumber <= (not 0.toBlockNumber) - offset:
-    result = db.getBlockHeader(h.blockNumber + offset, output)
+                     skip = 0'u): bool =
+  let offset = 1 + skip.BlockNumber
+  if h.number <= (not 0.BlockNumber) - offset:
+    result = db.getBlockHeader(h.number + offset, output)
 
 proc ancestorHeader(db: CoreDbRef,
                      h: BlockHeader,
                      output: var BlockHeader,
-                     skip = 0'u): bool {.gcsafe, raises: [RlpError].} =
-  let offset = 1 + skip.toBlockNumber
-  if h.blockNumber >= offset:
-    result = db.getBlockHeader(h.blockNumber - offset, output)
+                     skip = 0'u): bool =
+  let offset = 1 + skip.BlockNumber
+  if h.number >= offset:
+    result = db.getBlockHeader(h.number - offset, output)
 
 proc blockHeader(db: CoreDbRef,
                  b: HashOrNum,
-                 output: var BlockHeader): bool
-                 {.gcsafe, raises: [RlpError].} =
+                 output: var BlockHeader): bool =
   if b.isHash:
     db.getBlockHeader(b.hash, output)
   else:
@@ -165,7 +164,7 @@ proc banPeer(pool: PeerPool, peer: Peer, banTime: chronos.Duration) {.async.} =
 
 proc cleanupKnownByPeer(ctx: EthWireRef) =
   let now = getTime()
-  var tmp = initHashSet[Hash256]()
+  var tmp = HashSet[Hash256]()
   for _, map in ctx.knownByPeer:
     for hash, time in map:
       if time - now >= POOLED_STORAGE_TIME_LIMIT:
@@ -174,7 +173,7 @@ proc cleanupKnownByPeer(ctx: EthWireRef) =
       map.del(hash)
     tmp.clear()
 
-  var tmpPeer = initHashSet[Peer]()
+  var tmpPeer = HashSet[Peer]()
   for peer, map in ctx.knownByPeer:
     if map.len == 0:
       tmpPeer.incl peer
@@ -399,7 +398,7 @@ method getStatus*(ctx: EthWireRef): Result[EthState, string]
       db = ctx.db
       com = ctx.chain.com
       bestBlock = db.getCanonicalHead()
-      forkId = com.forkId(bestBlock.blockNumber, bestBlock.timestamp)
+      forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
     return ok(EthState(
       totalDifficulty: db.headTotalDifficulty,
@@ -426,7 +425,7 @@ method getReceipts*(ctx: EthWireRef,
     var list: seq[seq[Receipt]]
     for blockHash in hashes:
       if db.getBlockHeader(blockHash, header):
-        list.add db.getReceipts(header.receiptRoot)
+        list.add db.getReceipts(header.receiptsRoot)
       else:
         list.add @[]
         trace "handlers.getReceipts: blockHeader not found", blockHash
@@ -574,7 +573,7 @@ method handleNewBlock*(ctx: EthWireRef,
   try:
     if ctx.chain.com.forkGTE(MergeFork):
       debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
-        peer, blockNumber=blk.header.blockNumber,
+        peer, blockNumber=blk.header.number,
         blockHash=blk.header.blockHash, totalDifficulty
       asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
       return ok()

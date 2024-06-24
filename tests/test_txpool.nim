@@ -12,9 +12,8 @@ import
   std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
   ../nimbus/core/chain, # must be early (compilation annoyance)
   ../nimbus/common/common,
-  ../nimbus/core/clique/clique_sealer,
-  ../nimbus/core/[clique, executor, casper, tx_pool, tx_pool/tx_item],
-  ../nimbus/[config, vm_state, vm_types],
+  ../nimbus/core/[executor, casper, tx_pool, tx_pool/tx_item],
+  ../nimbus/[config, evm/state, evm/types],
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[keys, p2p],
@@ -186,7 +185,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
          "Latest item: <", xp.txDB.byItemID.last.value.data.info, ">"
 
       # make sure that the block chain was initialised
-      check capture.numBlocks.u256 <= bcCom.db.getCanonicalHead.blockNumber
+      check capture.numBlocks.u256 <= bcCom.db.getCanonicalHead.number
 
       check xp.nItems.total == foldl(@[0]&statCount.toSeq, a+b)
       #                        ^^^ sum up statCount[] values
@@ -715,7 +714,7 @@ proc runTxPackerTests(noisy = true) =
         # at least `nTrgTxs` txs and `nTrgAccounts` known accounts
         let
           (backHeader,backTxs,accLst) = xq.getBackHeader(nTrgTxs,nTrgAccounts)
-          nBackBlocks = xq.head.blockNumber - backHeader.blockNumber
+          nBackBlocks = xq.head.number - backHeader.number
           stats = xq.nItems
 
         # verify that the test would not degenerate
@@ -864,7 +863,7 @@ proc runTxPackerTests(noisy = true) =
           check bdy == blockBody
         else:
           # The canonical head will be set to hdr if it scores high enough
-          # (see implementation of db_chain.persistHeaderToDb()).
+          # (see implementation of db_chain.persistHeader()).
           let
             canonScore = xq.chain.com.db.getScore(canonicalHead.blockHash)
             headerScore = xq.chain.com.db.getScore(hdr.blockHash)

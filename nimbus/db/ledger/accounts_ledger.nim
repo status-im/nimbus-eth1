@@ -25,18 +25,29 @@
 ##
 
 import
+  stew/keyed_queue,
   std/[tables, hashes, sets],
   chronicles,
   eth/[common, rlp],
   results,
-  ../../../stateless/multi_keys,
+  ../../stateless/multi_keys,
   "../.."/[constants, utils/utils],
   ../access_list as ac_access_list,
   ".."/[core_db, storage_types, transient_storage],
+  ../../evm/code_bytes,
   ./distinct_ledgers
+
+export code_bytes
 
 const
   debugAccountsLedgerRef = false
+  codeLruSize = 16*1024
+    # An LRU cache of 16K items gives roughly 90% hit rate anecdotally on a
+    # small range of test blocks - this number could be studied in more detail
+    # Per EIP-170, a the code of a contract can be up to `MAX_CODE_SIZE` = 24kb,
+    # which would cause a worst case of 386MB memory usage though in reality
+    # code sizes are much smaller - it would make sense to study these numbers
+    # in greater detail.
 
 type
   AccountFlag = enum
@@ -44,7 +55,6 @@ type
     IsNew
     Dirty
     Touched
-    CodeLoaded
     CodeChanged
     StorageChanged
     NewlyCreated # EIP-6780: self destruct only in same transaction
@@ -54,7 +64,7 @@ type
   AccountRef = ref object
     statement: CoreDbAccount
     flags: AccountFlags
-    code: seq[byte]
+    code: CodeBytesRef
     originalStorage: TableRef[UInt256, UInt256]
     overlayStorage: Table[UInt256, UInt256]
 
@@ -64,11 +74,21 @@ type
 
   AccountsLedgerRef* = ref object
     ledger: AccountLedger
-    kvt: CoreDxKvtRef
+    kvt: CoreDbKvtRef
     savePoint: LedgerSavePoint
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
     ripemdSpecial: bool
+    code: KeyedQueue[Hash256, CodeBytesRef]
+      ## The code cache provides two main benefits:
+      ##
+      ## * duplicate code is shared in memory beween accounts
+      ## * the jump destination table does not have to be recomputed for every
+      ##   execution, for commonly called called contracts
+      ##
+      ## The former feature is specially important in the 2.3-2.7M block range
+      ## when underpriced code opcodes are being run en masse - both advantages
+      ## help performance broadly as well.
 
   ReadOnlyStateDB* = distinct AccountsLedgerRef
 
@@ -80,6 +100,7 @@ type
   LedgerSavePoint* = ref object
     parentSavepoint: LedgerSavePoint
     cache: Table[EthAddress, AccountRef]
+    dirty: Table[EthAddress, AccountRef]
     selfDestruct: HashSet[EthAddress]
     logEntries: seq[Log]
     accessList: ac_access_list.AccessList
@@ -129,6 +150,13 @@ func newCoreDbAccount(address: EthAddress): CoreDbAccount =
     codeHash: emptyEthAccount.codeHash,
     storage:  CoreDbColRef(nil))
 
+proc resetCoreDbAccount(ac: AccountsLedgerRef, v: var CoreDbAccount) =
+  ac.ledger.freeStorage v.address
+  v.nonce = emptyEthAccount.nonce
+  v.balance = emptyEthAccount.balance
+  v.codeHash = emptyEthAccount.codeHash
+  v.storage = nil
+
 template noRlpException(info: static[string]; code: untyped) =
   try:
     code
@@ -141,11 +169,11 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
   new result
   result.ledger = AccountLedger.init(db, root)
   result.kvt = db.newKvt() # save manually in `persist()`
-  result.witnessCache = initTable[EthAddress, WitnessData]()
+  result.witnessCache = Table[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
-proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef, pruneTrie = true): AccountsLedgerRef =
-  init(x, db, EMPTY_ROOT_HASH, pruneTrie)
+proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
+  init(x, db, EMPTY_ROOT_HASH)
 
 # Renamed `rootHash()` => `state()`
 proc state*(ac: AccountsLedgerRef): KeccakHash =
@@ -161,7 +189,7 @@ proc isTopLevelClean*(ac: AccountsLedgerRef): bool =
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint =
   new result
-  result.cache = initTable[EthAddress, AccountRef]()
+  result.cache = Table[EthAddress, AccountRef]()
   result.accessList.init()
   result.transientStorage.init()
   result.state = Pending
@@ -195,6 +223,9 @@ proc commit*(ac: AccountsLedgerRef, sp: LedgerSavePoint) =
   ac.savePoint = sp.parentSavepoint
   for k, v in sp.cache:
     sp.parentSavepoint.cache[k] = v
+
+  for k, v in sp.dirty:
+    sp.parentSavepoint.dirty[k] = v
 
   ac.savePoint.transientStorage.merge(sp.transientStorage)
   ac.savePoint.accessList.merge(sp.accessList)
@@ -242,7 +273,7 @@ proc getAccount(
 
   # cache the account
   ac.savePoint.cache[address] = result
-
+  ac.savePoint.dirty[address] = result
 
 proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
   result = AccountRef(
@@ -256,9 +287,9 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
     result.overlayStorage = acc.overlayStorage
 
 proc isEmpty(acc: AccountRef): bool =
-  result = acc.statement.codeHash == EMPTY_SHA3 and
+  acc.statement.nonce == 0 and
     acc.statement.balance.isZero and
-    acc.statement.nonce == 0
+    acc.statement.codeHash == EMPTY_CODE_HASH
 
 template exists(acc: AccountRef): bool =
   Alive in acc.flags
@@ -294,12 +325,12 @@ proc storageValue(
   do:
     result = acc.originalStorageValue(slot, ac)
 
-proc kill(acc: AccountRef, address: EthAddress) =
+proc kill(ac: AccountsLedgerRef, acc: AccountRef) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
   acc.originalStorage = nil
-  acc.statement = address.newCoreDbAccount()
-  acc.code = default(seq[byte])
+  ac.resetCoreDbAccount acc.statement
+  acc.code.reset()
 
 type
   PersistMode = enum
@@ -319,22 +350,22 @@ proc persistMode(acc: AccountRef): PersistMode =
 proc persistCode(acc: AccountRef, ac: AccountsLedgerRef) =
   if acc.code.len != 0:
     let rc = ac.kvt.put(
-      contractHashKey(acc.statement.codeHash).toOpenArray, acc.code)
+      contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
     if rc.isErr:
       warn logTxt "persistCode()",
        codeHash=acc.statement.codeHash, error=($$rc.error)
 
-proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
+proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
     return
 
-  if not clearCache and acc.originalStorage.isNil:
+  if acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
-  # Make sure that there is an account column on the database. This is needed
-  # for saving the account-linked storage column on the Aristo database.
+  # Make sure that there is an account address row on the database. This is
+  # needed for saving the account-linked storage column on the Aristo database.
   if acc.statement.storage.isNil:
     ac.ledger.merge(acc.statement)
   var storageLedger = StorageLedger.init(ac.ledger, acc.statement)
@@ -352,25 +383,24 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef, clearCache: bool) =
     if rc.isErr:
       warn logTxt "persistStorage()", slot, error=($$rc.error)
 
-  if not clearCache:
-    # if we preserve cache, move the overlayStorage
-    # to originalStorage, related to EIP2200, EIP1283
-    for slot, value in acc.overlayStorage:
-      if value > 0:
-        acc.originalStorage[slot] = value
-      else:
-        acc.originalStorage.del(slot)
-    acc.overlayStorage.clear()
+  # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
+  for slot, value in acc.overlayStorage:
+    if value > 0:
+      acc.originalStorage[slot] = value
+    else:
+      acc.originalStorage.del(slot)
+  acc.overlayStorage.clear()
 
   # Changing the storage trie might also change the `storage` descriptor when
   # the trie changes from empty to exixting or v.v.
   acc.statement.storage = storageLedger.getColumn()
 
   # No need to hold descriptors for longer than needed
-  let state = acc.statement.storage.state.valueOr:
+  let stateEmpty = acc.statement.storage.stateEmpty.valueOr:
     raiseAssert "Storage column state error: " & $$error
-  if state == EMPTY_ROOT_HASH:
+  if stateEmpty:
     acc.statement.storage = CoreDbColRef(nil)
+
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
   ac.isDirty = true
@@ -378,12 +408,14 @@ proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true):
   if address in ac.savePoint.cache:
     # it's already in latest savepoint
     result.flags.incl Dirty
+    ac.savePoint.dirty[address] = result
     return
 
   # put a copy into latest savepoint
   result = result.clone(cloneStorage)
   result.flags.incl Dirty
   ac.savePoint.cache[address] = result
+  ac.savePoint.dirty[address] = result
 
 proc getCodeHash*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   let acc = ac.getAccount(address, false)
@@ -400,24 +432,49 @@ proc getNonce*(ac: AccountsLedgerRef, address: EthAddress): AccountNonce =
   if acc.isNil: emptyEthAccount.nonce
   else: acc.statement.nonce
 
-proc getCode*(ac: AccountsLedgerRef, address: EthAddress): seq[byte] =
+proc getCode*(ac: AccountsLedgerRef, address: EthAddress): CodeBytesRef =
+  # Always returns non-nil!
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    return
+    return CodeBytesRef()
 
-  if CodeLoaded in acc.flags or CodeChanged in acc.flags:
-    result = acc.code
-  elif acc.statement.codeHash != EMPTY_CODE_HASH:
-    let rc = ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
-    if rc.isErr:
-      warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
-    else:
-      acc.code = rc.value
-      acc.flags.incl CodeLoaded
-      result = acc.code
+  if acc.code == nil:
+    acc.code =
+      if acc.statement.codeHash != EMPTY_CODE_HASH:
+        ac.code.lruFetch(acc.statement.codeHash).valueOr:
+          var rc = ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
+          if rc.isErr:
+            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+            CodeBytesRef()
+          else:
+            let newCode = CodeBytesRef.init(move(rc.value))
+            ac.code.lruAppend(acc.statement.codeHash, newCode, codeLruSize)
+      else:
+        CodeBytesRef()
+
+  acc.code
 
 proc getCodeSize*(ac: AccountsLedgerRef, address: EthAddress): int =
-  ac.getCode(address).len
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return 0
+
+  if acc.code == nil:
+    if acc.statement.codeHash == EMPTY_CODE_HASH:
+      return 0
+    acc.code = ac.code.lruFetch(acc.statement.codeHash).valueOr:
+      # On a cache miss, we don't fetch the code - instead, we fetch just the
+      # length - should the code itself be needed, it will typically remain
+      # cached and easily accessible in the database layer - this is to prevent
+      # EXTCODESIZE calls from messing up the code cache and thus causing
+      # recomputation of the jump destination table
+      var rc = ac.kvt.len(contractHashKey(acc.statement.codeHash).toOpenArray)
+
+      return rc.valueOr:
+        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        0
+
+  acc.code.len()
 
 proc getCommittedStorage*(ac: AccountsLedgerRef, address: EthAddress, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
@@ -436,8 +493,8 @@ proc contractCollision*(ac: AccountsLedgerRef, address: EthAddress): bool =
   if acc.isNil:
     return
   acc.statement.nonce != 0 or
-    acc.statement.codeHash != EMPTY_SHA3 or
-     acc.statement.storage.stateOrVoid != EMPTY_ROOT_HASH
+    acc.statement.codeHash != EMPTY_CODE_HASH or
+      not acc.statement.storage.stateEmptyOrVoid
 
 proc accountExists*(ac: AccountsLedgerRef, address: EthAddress): bool =
   let acc = ac.getAccount(address, false)
@@ -500,7 +557,9 @@ proc setCode*(ac: AccountsLedgerRef, address: EthAddress, code: seq[byte]) =
   if acc.statement.codeHash != codeHash:
     var acc = ac.makeDirty(address)
     acc.statement.codeHash = codeHash
-    acc.code = code
+    # Try to reuse cache entry if it exists, but don't save the code - it's not
+    # a given that it will be executed within LRU range
+    acc.code = ac.code.lruFetch(codeHash).valueOr(CodeBytesRef.init(code))
     acc.flags.incl CodeChanged
 
 proc setStorage*(ac: AccountsLedgerRef, address: EthAddress, slot, value: UInt256) =
@@ -519,11 +578,13 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
 
-  let accHash = acc.statement.storage.state.valueOr: return
-  if accHash != EMPTY_ROOT_HASH:
-    # there is no point to clone the storage since we want to remove it
+  let empty = acc.statement.storage.stateEmpty.valueOr: return
+  if not empty:
+    # need to clear the storage from the database first
     let acc = ac.makeDirty(address, cloneStorage = false)
+    ac.ledger.freeStorage address
     acc.statement.storage = CoreDbColRef(nil)
+    # update caches
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
       # both getStorage and getCommittedStorage will
@@ -537,7 +598,8 @@ proc deleteAccount*(ac: AccountsLedgerRef, address: EthAddress) =
   if IsNew in acc.flags:
     ac.savePoint.cache.del address
   else:
-    acc.kill(address)
+    ac.savePoint.dirty[address] = acc
+    ac.kill acc
 
 proc selfDestruct*(ac: AccountsLedgerRef, address: EthAddress) =
   ac.setBalance(address, 0.u256)
@@ -578,7 +640,8 @@ proc deleteEmptyAccount(ac: AccountsLedgerRef, address: EthAddress) =
   if IsNew in acc.flags:
     ac.savePoint.cache.del(address)
   else:
-    acc.kill(address)
+    ac.savePoint.dirty[address] = acc
+    ac.kill acc
 
 proc clearEmptyAccounts(ac: AccountsLedgerRef) =
   var toDel: seq[EthAddress]
@@ -588,7 +651,7 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
       if IsNew in acc.flags:
         toDel.add address
       else:
-        acc.kill(address)
+        ac.kill(acc)
   for d in toDel:
     ac.savePoint.cache.del(d)
 
@@ -598,11 +661,9 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
     ac.ripemdSpecial = false
 
 proc persist*(ac: AccountsLedgerRef,
-              clearEmptyAccount: bool = false,
-              clearCache: bool = true) =
+              clearEmptyAccount: bool = false) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
-  var cleanAccounts = initHashSet[EthAddress]()
 
   if clearEmptyAccount:
     ac.clearEmptyAccounts()
@@ -610,8 +671,7 @@ proc persist*(ac: AccountsLedgerRef,
   for address in ac.savePoint.selfDestruct:
     ac.deleteAccount(address)
 
-  for address, acc in ac.savePoint.cache:
-    assert address == acc.statement.address # debugging only
+  for acc in ac.savePoint.dirty.values(): # This is a hotspot in block processing
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
@@ -619,25 +679,19 @@ proc persist*(ac: AccountsLedgerRef,
       if StorageChanged in acc.flags:
         # storageRoot must be updated first
         # before persisting account into merkle trie
-        acc.persistStorage(ac, clearCache)
+        acc.persistStorage(ac)
       ac.ledger.merge(acc.statement)
     of Remove:
-      ac.ledger.delete address
-      if not clearCache:
-        cleanAccounts.incl address
+      ac.ledger.delete acc.statement.address
+      ac.savePoint.cache.del acc.statement.address
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
-      if not clearCache and Alive notin acc.flags:
-        cleanAccounts.incl address
+      if Alive notin acc.flags:
+        ac.savePoint.cache.del acc.statement.address
 
     acc.flags = acc.flags - resetFlags
-
-  if clearCache:
-    ac.savePoint.cache.clear()
-  else:
-    for x in cleanAccounts:
-      ac.savePoint.cache.del x
+  ac.savePoint.dirty.clear()
 
   ac.savePoint.selfDestruct.clear()
 
@@ -695,7 +749,7 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
 proc update(wd: var WitnessData, acc: AccountRef) =
   # once the code is touched make sure it doesn't get reset back to false in another update
   if not wd.codeTouched:
-    wd.codeTouched = CodeChanged in acc.flags or CodeLoaded in acc.flags
+    wd.codeTouched = CodeChanged in acc.flags or acc.code != nil
 
   if not acc.originalStorage.isNil:
     for k, v in acc.originalStorage:
@@ -706,7 +760,7 @@ proc update(wd: var WitnessData, acc: AccountRef) =
     wd.storageKeys.incl k
 
 proc witnessData(acc: AccountRef): WitnessData =
-  result.storageKeys = initHashSet[UInt256]()
+  result.storageKeys = HashSet[UInt256]()
   update(result, acc)
 
 proc collectWitnessData*(ac: AccountsLedgerRef) =
@@ -778,13 +832,24 @@ func getAccessList*(ac: AccountsLedgerRef): common.AccessList =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   ac.savePoint.accessList.getAccessList()
 
+proc getEthAccount*(ac: AccountsLedgerRef, address: EthAddress): Account =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return emptyEthAccount
+
+  ## Convert to legacy object, will throw an assert if that fails
+  let rc = acc.statement.recast()
+  if rc.isErr:
+    raiseAssert "getAccount(): cannot convert account: " & $$rc.error
+  rc.value
+
 proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
-proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
+proc getCode*(db: ReadOnlyStateDB, address: EthAddress): CodeBytesRef {.borrow.}
 proc getCodeSize*(db: ReadOnlyStateDB, address: EthAddress): int {.borrow.}
 proc contractCollision*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}

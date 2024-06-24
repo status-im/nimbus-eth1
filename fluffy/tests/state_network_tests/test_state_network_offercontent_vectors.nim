@@ -271,9 +271,7 @@ procSuite "State Network - Offer Content":
       check offerResult.isOk()
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
       let getRes =
         await stateNode2.stateNetwork.getAccountTrieNode(contentKey.accountTrieNodeKey)
@@ -322,9 +320,7 @@ procSuite "State Network - Offer Content":
       check offerResult.isOk()
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
       let getRes = await stateNode2.stateNetwork.getContractTrieNode(
         contentKey.contractTrieNodeKey
@@ -374,9 +370,7 @@ procSuite "State Network - Offer Content":
       check offerResult.isOk()
 
       # wait for offer to be processed by state node 2
-      while not stateNode2.stateNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
-      await sleepAsync(100.milliseconds)
+      await stateNode2.waitUntilContentAvailable(contentId)
 
       let getRes =
         await stateNode2.stateNetwork.getContractCode(contentKey.contractCodeKey)

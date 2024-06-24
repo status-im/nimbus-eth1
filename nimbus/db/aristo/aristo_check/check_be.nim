@@ -11,31 +11,17 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables, typetraits],
-  eth/[common, trie/nibbles],
+  std/[sets, tables],
+  eth/common,
+  results,
   stew/interval_set,
   ../../aristo,
   ../aristo_walk/persistent,
   ".."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise]
 
-const
-  Vid2 = @[VertexID(LEAST_FREE_VID)].toHashSet
-
 # ------------------------------------------------------------------------------
 # Private helper
 # ------------------------------------------------------------------------------
-
-proc to(s: IntervalSetRef[VertexID,uint64]; T: type HashSet[VertexID]): T =
-  ## Convert the argument list `s` to a set of vertex IDs as it would appear
-  ## with a vertex generator state list.
-  if s.total < high(uint64):
-    for w in s.increasing:
-      if w.maxPt == high(VertexID):
-        result.incl w.minPt # last interval
-      else:
-        for pt in w.minPt .. w.maxPt:
-          if LEAST_FREE_VID <= pt.distinctBase:
-            result.incl pt
 
 proc toNodeBE(
     vtx: VertexRef;                    # Vertex to convert
@@ -76,17 +62,6 @@ proc toNodeBE(
       return ok node
     return err(vid)
 
-proc vidReorgAlways(vGen: seq[VertexID]): seq[VertexID] =
-  ## See `vidReorg()`, this one always sorts and optimises
-  ##
-  if 1 < vGen.len:
-    let lst = vGen.mapIt(uint64(it)).sorted(Descending).mapIt(VertexID(it))
-    for n in 0 .. lst.len-2:
-      if lst[n].uint64 != lst[n+1].uint64 + 1:
-        return lst[n+1 .. lst.len-1] & @[lst[n]]
-    return @[lst[^1]]
-  vGen
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -100,11 +75,11 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       ): Result[void,(VertexID,AristoError)] =
   ## Make sure that each vertex has a Merkle hash and vice versa. Also check
   ## the vertex ID generator state.
-  let vids = IntervalSetRef[VertexID,uint64].init()
-  discard vids.merge Interval[VertexID,uint64].new(
-    VertexID(LEAST_FREE_VID),high(VertexID))
+  var topVidBe = VertexID(0)
 
   for (vid,vtx) in T.walkVtxBe db:
+    if topVidBe < vid:
+      topVidBe = vid
     if not vtx.isValid:
       return err((vid,CheckBeVtxInvalid))
     let rc = db.getKeyBE vid
@@ -127,6 +102,8 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
         return err((vid,CheckBeVtxExtPfxMissing))
 
   for (vid,key) in T.walkKeyBe db:
+    if topVidBe < vid:
+      topVidBe = vid
     if not key.isValid:
       return err((vid,CheckBeKeyInvalid))
     let vtx = db.getVtxBE(vid).valueOr:
@@ -137,29 +114,28 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       let expected = node.digestTo(HashKey)
       if expected != key:
         return err((vid,CheckBeKeyMismatch))
-    discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
 
-  # Compare calculated state against database state
-  block:
-    # Extract vertex ID generator state
-    let vGen = block:
-      let rc = db.getIdgBE()
+  # Compare calculated `vTop` against database state
+  if topVidBe.isValid:
+    let vidTuvBe = block:
+      let rc = db.getTuvBE()
       if rc.isOk:
-        rc.value.vidReorgAlways.toHashSet
-      elif rc.error == GetIdgNotFound:
-        EmptyVidSeq.toHashSet
+        rc.value
+      elif rc.error == GetTuvNotFound:
+        VertexID(0)
       else:
         return err((VertexID(0),rc.error))
-    let
-      vGenExpected = vids.to(HashSet[VertexID])
-      delta = vGenExpected -+- vGen # symmetric difference
-    if 0 < delta.len:
-      # Exclude fringe case when there is a single root vertex only
-      if vGenExpected != Vid2 or 0 < vGen.len:
-        return err((delta.toSeq.sorted[^1],CheckBeGarbledVGen))
+    if vidTuvBe != topVidBe:
+      # All vertices and keys between `topVidBe` and `vidTuvBe` must have
+      # been deleted.
+      for vid in max(topVidBe + 1, VertexID(LEAST_FREE_VID)) .. vidTuvBe:
+        if db.getVtxBE(vid).isOk or db.getKeyBE(vid).isOk:
+          return err((vid,CheckBeGarbledVTop))
 
-  # Check top layer cache against backend
+  # Check layer cache against backend
   if cache:
+    var topVidCache = VertexID(0)
+
     let checkKeysOk = block:
       if db.dirty.len == 0:
         true
@@ -170,6 +146,8 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
 
     # Check structural table
     for (vid,vtx) in db.layersWalkVtx:
+      if vtx.isValid and topVidCache < vid:
+        topVidCache = vid
       let key = block:
         let rc = db.layersGetKey(vid)
         if rc.isOk:
@@ -179,35 +157,19 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
           return err((vid,CheckBeCacheKeyMissing))
         else:
           VOID_HASH_KEY
-      if vtx.isValid:
-        # Register existing vid against backend generator state
-        discard vids.reduce Interval[VertexID,uint64].new(vid,vid)
-      else:
+      if not vtx.isValid:
         # Some vertex is to be deleted, the key must be empty
         if checkKeysOk and key.isValid:
           return err((vid,CheckBeCacheKeyNonEmpty))
         # There must be a representation on the backend DB unless in a TX
         if db.getVtxBE(vid).isErr and db.stack.len == 0:
           return err((vid,CheckBeCacheVidUnsynced))
-        # Register deleted vid against backend generator state
-        discard vids.merge Interval[VertexID,uint64].new(vid,vid)
-
-    # Check cascaded fifos
-    if fifos and
-       not db.backend.isNil and
-       not db.backend.journal.isNil:
-      var lastTrg = db.getKeyUbe(VertexID(1)).get(otherwise = VOID_HASH_KEY)
-                      .to(Hash256)
-      for (qid,filter) in db.backend.T.walkFifoBe: # walk in fifo order
-        if filter.src != lastTrg:
-          return err((VertexID(0),CheckBeFifoSrcTrgMismatch))
-        if filter.trg != filter.kMap.getOrVoid(VertexID 1).to(Hash256):
-          return err((VertexID(1),CheckBeFifoTrgNotStateRoot))
-        lastTrg = filter.trg
 
     # Check key table
     var list: seq[VertexID]
     for (vid,key) in db.layersWalkKey:
+      if key.isValid and topVidCache < vid:
+        topVidCache = vid
       list.add vid
       let vtx = db.getVtx vid
       if db.layersGetVtx(vid).isErr and not vtx.isValid:
@@ -222,22 +184,14 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       if expected != key:
         return err((vid,CheckBeCacheKeyMismatch))
 
-    # Check vGen
-    let
-      vGen = db.vGen.vidReorgAlways.toHashSet
-      vGenExpected = vids.to(HashSet[VertexID])
-      delta = vGenExpected -+- vGen # symmetric difference
-    if 0 < delta.len:
-      if vGen == Vid2 and vGenExpected.len == 0:
-        # Fringe case when the database is empty
-        discard
-      elif vGen.len == 0 and vGenExpected == Vid2:
-        # Fringe case when there is a single root vertex only
-        discard
-      else:
-        let delta = delta.toSeq
-        if delta.len != 1 or delta[0] != VertexID(1) or VertexID(1) in vGen:
-          return err((delta.sorted[^1],CheckBeCacheGarbledVGen))
+    # Check vTop
+    if topVidCache.isValid and topVidCache != db.vTop:
+      # All vertices and keys between `topVidCache` and `db.vTop` must have
+      # been deleted.
+      for vid in max(db.vTop + 1, VertexID(LEAST_FREE_VID)) .. topVidCache:
+        if db.layersGetVtxOrVoid(vid).isValid or
+           db.layersGetKeyOrVoid(vid).isValid:
+          return err((db.vTop,CheckBeCacheGarbledVTop))
 
   ok()
 

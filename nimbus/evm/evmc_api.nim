@@ -56,36 +56,36 @@ type
     output_data*   : ptr byte
     output_size*   : uint
     release*       : proc(result: var nimbus_result)
-                       {.cdecl, gcsafe, raises: [CatchableError].}
+                       {.cdecl, gcsafe, raises: [].}
     create_address*: EthAddress
     padding*       : array[4, byte]
 
   nimbus_host_interface* = object
-    account_exists*: proc(context: evmc_host_context, address: EthAddress): bool {.cdecl, gcsafe, raises: [CatchableError].}
-    get_storage*: proc(context: evmc_host_context, address: EthAddress, key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [CatchableError].}
+    account_exists*: proc(context: evmc_host_context, address: EthAddress): bool {.cdecl, gcsafe, raises: [].}
+    get_storage*: proc(context: evmc_host_context, address: EthAddress, key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [].}
     set_storage*: proc(context: evmc_host_context, address: EthAddress,
-                       key, value: ptr evmc_uint256be): evmc_storage_status {.cdecl, gcsafe, raises: [CatchableError].}
-    get_balance*: proc(context: evmc_host_context, address: EthAddress): evmc_uint256be {.cdecl, gcsafe, raises: [CatchableError].}
-    get_code_size*: proc(context: evmc_host_context, address: EthAddress): uint {.cdecl, gcsafe, raises: [CatchableError].}
-    get_code_hash*: proc(context: evmc_host_context, address: EthAddress): Hash256 {.cdecl, gcsafe, raises: [CatchableError].}
+                       key, value: ptr evmc_uint256be): evmc_storage_status {.cdecl, gcsafe, raises: [].}
+    get_balance*: proc(context: evmc_host_context, address: EthAddress): evmc_uint256be {.cdecl, gcsafe, raises: [].}
+    get_code_size*: proc(context: evmc_host_context, address: EthAddress): uint {.cdecl, gcsafe, raises: [].}
+    get_code_hash*: proc(context: evmc_host_context, address: EthAddress): Hash256 {.cdecl, gcsafe, raises: [].}
     copy_code*: proc(context: evmc_host_context, address: EthAddress,
                      code_offset: int, buffer_data: ptr byte,
-                     buffer_size: int): int {.cdecl, gcsafe, raises: [CatchableError].}
-    selfdestruct*: proc(context: evmc_host_context, address, beneficiary: EthAddress) {.cdecl, gcsafe, raises: [CatchableError].}
-    call*: proc(context: evmc_host_context, msg: ptr nimbus_message): nimbus_result {.cdecl, gcsafe, raises: [CatchableError].}
-    get_tx_context*: proc(context: evmc_host_context): nimbus_tx_context {.cdecl, gcsafe, raises: [CatchableError].}
-    get_block_hash*: proc(context: evmc_host_context, number: int64): Hash256 {.cdecl, gcsafe, raises: [CatchableError].}
+                     buffer_size: int): int {.cdecl, gcsafe, raises: [].}
+    selfdestruct*: proc(context: evmc_host_context, address, beneficiary: EthAddress) {.cdecl, gcsafe, raises: [].}
+    call*: proc(context: evmc_host_context, msg: ptr nimbus_message): nimbus_result {.cdecl, gcsafe, raises: [].}
+    get_tx_context*: proc(context: evmc_host_context): nimbus_tx_context {.cdecl, gcsafe, raises: [].}
+    get_block_hash*: proc(context: evmc_host_context, number: int64): Hash256 {.cdecl, gcsafe, raises: [].}
     emit_log*: proc(context: evmc_host_context, address: EthAddress,
                     data: ptr byte, data_size: uint,
-                    topics: ptr evmc_bytes32, topics_count: uint) {.cdecl, gcsafe, raises: [CatchableError].}
+                    topics: ptr evmc_bytes32, topics_count: uint) {.cdecl, gcsafe, raises: [].}
     access_account*: proc(context: evmc_host_context,
-                          address: EthAddress): evmc_access_status {.cdecl, gcsafe, raises: [CatchableError].}
+                          address: EthAddress): evmc_access_status {.cdecl, gcsafe, raises: [].}
     access_storage*: proc(context: evmc_host_context, address: EthAddress,
-                          key: var evmc_bytes32): evmc_access_status {.cdecl, gcsafe, raises: [CatchableError].}
+                          key: var evmc_bytes32): evmc_access_status {.cdecl, gcsafe, raises: [].}
     get_transient_storage*: proc(context: evmc_host_context, address: EthAddress,
-                       key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [CatchableError].}
+                       key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [].}
     set_transient_storage*: proc(context: evmc_host_context, address: EthAddress,
-                       key, value: ptr evmc_uint256be) {.cdecl, gcsafe, raises: [CatchableError].}
+                       key, value: ptr evmc_uint256be) {.cdecl, gcsafe, raises: [].}
 
 proc nim_host_get_interface*(): ptr nimbus_host_interface {.importc, cdecl.}
 proc nim_host_create_context*(vmstate: pointer, msg: ptr evmc_message): evmc_host_context {.importc, cdecl.}
@@ -104,45 +104,36 @@ proc init*(x: var HostContext, host: ptr nimbus_host_interface, context: evmc_ho
 proc init*(x: typedesc[HostContext], host: ptr nimbus_host_interface, context: evmc_host_context): HostContext =
   result.init(host, context)
 
-proc getTxContext*(ctx: HostContext): nimbus_tx_context
-    {.gcsafe, raises: [CatchableError].} =
+proc getTxContext*(ctx: HostContext): nimbus_tx_context =
   ctx.host.get_tx_context(ctx.context)
 
-proc getBlockHash*(ctx: HostContext, number: UInt256): Hash256
-    {.gcsafe, raises: [CatchableError].} =
-  ctx.host.get_block_hash(ctx.context, number.truncate(int64))
+proc getBlockHash*(ctx: HostContext, number: BlockNumber): Hash256 =
+  ctx.host.get_block_hash(ctx.context, number.int64)
 
-proc accountExists*(ctx: HostContext, address: EthAddress): bool
-    {.gcsafe, raises: [CatchableError].} =
+proc accountExists*(ctx: HostContext, address: EthAddress): bool =
   ctx.host.account_exists(ctx.context, address)
 
-proc getStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256
-    {.gcsafe, raises: [CatchableError].} =
+proc getStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256 =
   var key = toEvmc(key)
   UInt256.fromEvmc ctx.host.get_storage(ctx.context, address, key.addr)
 
 proc setStorage*(ctx: HostContext, address: EthAddress,
-                 key, value: UInt256): evmc_storage_status
-    {.gcsafe, raises: [CatchableError].} =
+                 key, value: UInt256): evmc_storage_status =
   var
     key = toEvmc(key)
     value = toEvmc(value)
   ctx.host.set_storage(ctx.context, address, key.addr, value.addr)
 
-proc getBalance*(ctx: HostContext, address: EthAddress): UInt256
-    {.gcsafe, raises: [CatchableError].} =
+proc getBalance*(ctx: HostContext, address: EthAddress): UInt256 =
   UInt256.fromEvmc ctx.host.get_balance(ctx.context, address)
 
-proc getCodeSize*(ctx: HostContext, address: EthAddress): uint
-    {.gcsafe, raises: [CatchableError].} =
+proc getCodeSize*(ctx: HostContext, address: EthAddress): uint =
   ctx.host.get_code_size(ctx.context, address)
 
-proc getCodeHash*(ctx: HostContext, address: EthAddress): Hash256
-    {.gcsafe, raises: [CatchableError].} =
+proc getCodeHash*(ctx: HostContext, address: EthAddress): Hash256 =
   ctx.host.get_code_hash(ctx.context, address)
 
-proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[byte]
-    {.gcsafe, raises: [CatchableError].} =
+proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[byte] =
   let size = ctx.getCodeSize(address).int
   if size - codeOffset > 0:
     result = newSeq[byte](size - codeOffset)
@@ -150,39 +141,32 @@ proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[
         codeOffset, result[0].addr, result.len)
     doAssert(read == result.len)
 
-proc selfDestruct*(ctx: HostContext, address, beneficiary: EthAddress)
-    {.gcsafe, raises: [CatchableError].} =
+proc selfDestruct*(ctx: HostContext, address, beneficiary: EthAddress) =
   ctx.host.selfdestruct(ctx.context, address, beneficiary)
 
 proc emitLog*(ctx: HostContext, address: EthAddress, data: openArray[byte],
-              topics: ptr evmc_bytes32, topicsCount: int)
-    {.gcsafe, raises: [CatchableError].} =
+              topics: ptr evmc_bytes32, topicsCount: int) =
   ctx.host.emit_log(ctx.context, address, if data.len > 0: data[0].unsafeAddr else: nil,
                     data.len.uint, topics, topicsCount.uint)
 
-proc call*(ctx: HostContext, msg: nimbus_message): nimbus_result
-    {.gcsafe, raises: [CatchableError].} =
+proc call*(ctx: HostContext, msg: nimbus_message): nimbus_result =
   ctx.host.call(ctx.context, msg.unsafeAddr)
 
 proc accessAccount*(ctx: HostContext,
-                    address: EthAddress): evmc_access_status
-    {.gcsafe, raises: [CatchableError].} =
+                    address: EthAddress): evmc_access_status =
   ctx.host.access_account(ctx.context, address)
 
 proc accessStorage*(ctx: HostContext, address: EthAddress,
-                    key: UInt256): evmc_access_status
-    {.gcsafe, raises: [CatchableError].} =
+                    key: UInt256): evmc_access_status =
   var key = toEvmc(key)
   ctx.host.access_storage(ctx.context, address, key)
 
-proc getTransientStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256
-    {.gcsafe, raises: [CatchableError].} =
+proc getTransientStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256 =
   var key = toEvmc(key)
   UInt256.fromEvmc ctx.host.get_transient_storage(ctx.context, address, key.addr)
 
 proc setTransientStorage*(ctx: HostContext, address: EthAddress,
-                 key, value: UInt256)
-    {.gcsafe, raises: [CatchableError].} =
+                 key, value: UInt256) =
   var
     key = toEvmc(key)
     value = toEvmc(value)
@@ -191,8 +175,8 @@ proc setTransientStorage*(ctx: HostContext, address: EthAddress,
 # The following two templates put here because the stupid style checker
 # complaints about block_number vs blockNumber and chain_id vs chainId
 # if they are written directly in computation.nim
-template getBlockNumber*(ctx: HostContext): UInt256 =
-  ctx.getTxContext().block_number.u256
+template getBlockNumber*(ctx: HostContext): uint64 =
+  ctx.getTxContext().block_number.uint64
 
 template getChainId*(ctx: HostContext): uint64 =
   UInt256.fromEvmc(ctx.getTxContext().chain_id).truncate(uint64)

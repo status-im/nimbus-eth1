@@ -12,7 +12,7 @@
 
 import
   std/sequtils,
-  eth/[common, rlp, trie/nibbles],
+  eth/[common, rlp],
   results,
   "."/[aristo_constants, aristo_desc, aristo_get]
 
@@ -41,8 +41,6 @@ proc serialise(
   case pyl.pType:
   of RawData:
     ok pyl.rawBlob
-  of RlpData:
-    ok pyl.rlpBlob
   of AccountData:
     let
       vid = pyl.account.storageID
@@ -100,7 +98,7 @@ proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
   of 2:
     if blobs[0].len == 0:
       return aristoError(RlpNonEmptyBlobExpected)
-    let (isLeaf, pathSegment) = hexPrefixDecode blobs[0]
+    let (isLeaf, pathSegment) = NibblesBuf.fromHexPrefix blobs[0]
     if isLeaf:
       return NodeRef(
         vType:     Leaf,
@@ -149,7 +147,7 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
 
     of Extension:
       writer.startList(2)
-      writer.append node.ePfx.hexPrefixEncode(isleaf = false)
+      writer.append node.ePfx.toHexPrefix(isleaf = false)
       writer.addHashKey node.key[0]
 
     of Leaf:
@@ -157,7 +155,7 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
         ok(node.key[0]) # always succeeds
 
       writer.startList(2)
-      writer.append node.lPfx.hexPrefixEncode(isleaf = true)
+      writer.append node.lPfx.toHexPrefix(isleaf = true)
       writer.append node.lData.serialise(getKey0).value
 
 # ---------------------

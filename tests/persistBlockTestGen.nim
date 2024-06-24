@@ -9,32 +9,29 @@
 # according to those terms.
 
 import
-  json, stint,
+  std/[json, strutils],
+  results,
   ../nimbus/[tracer, config],
   ../nimbus/core/chain,
   ../nimbus/common/common,
+  ../nimbus/db/opts,
   ../nimbus/db/core_db/persistent
 
-proc dumpTest(com: CommonRef, blockNumber: int) =
+proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
   let
-    blockNumber = blockNumber.u256
     parentNumber = blockNumber - 1
 
   var
-    capture = com.db.capture()
+    capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
   let
     parent = captureCom.db.getBlockHeader(parentNumber)
-    header = captureCom.db.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    blockBody = captureCom.db.getBlockBody(headerHash)
+    blk = captureCom.db.getEthBlock(blockNumber)
     chain = newChain(captureCom)
-    headers = @[header]
-    bodies = @[blockBody]
 
   discard captureCom.db.setHead(parent, true)
-  discard chain.persistBlocks(headers, bodies)
+  discard chain.persistBlocks([blk])
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex
@@ -58,7 +55,8 @@ proc main() {.used.} =
   # nimbus --rpcapi: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir)
+  let db = newCoreDbRef(
+    DefaultDbPersistent, string conf.dataDir, DbOptions.init())
   let com = CommonRef.new(db)
 
   com.dumpTest(97)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -49,7 +49,7 @@ type
     chain*: ChainRef            ## Block chain database (no need for `Peer`)
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
-    exCtrlFile*: Option[string] ## Extra instructions file (if any)
+    exCtrlFile*: Opt[string]    ## Extra instructions file (if any)
     pool*: S                    ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------

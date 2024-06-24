@@ -12,9 +12,11 @@ import
   json_rpc/[rpcproxy, rpcserver],
   web3/conversions, # sigh, for FixedBytes marshalling
   web3/eth_api_types,
-  eth/[common/eth_types, rlp],
+  web3/primitives as web3types,
+  eth/common/eth_types,
   beacon_chain/spec/forks,
   ../network/history/[history_network, history_content],
+  ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client
 
 from ../../nimbus/transaction import getSender, ValidationError
@@ -50,23 +52,23 @@ func init*(
     txIndex: int,
 ): T {.raises: [ValidationError].} =
   TransactionObject(
-    blockHash: some(w3Hash header.blockHash),
-    blockNumber: some(eth_api_types.BlockNumber(header.blockNumber.truncate(uint64))),
+    blockHash: Opt.some(w3Hash header.blockHash),
+    blockNumber: Opt.some(eth_api_types.BlockNumber(header.number)),
     `from`: w3Addr tx.getSender(),
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
     hash: w3Hash tx.rlpHash,
     input: tx.payload,
     nonce: Quantity(tx.nonce),
-    to: some(w3Addr tx.destination),
-    transactionIndex: some(Quantity(txIndex)),
+    to: Opt.some(w3Addr tx.destination),
+    transactionIndex: Opt.some(Quantity(txIndex)),
     value: tx.value,
     v: Quantity(tx.V),
     r: tx.R,
     s: tx.S,
-    `type`: some(Quantity(tx.txType)),
-    maxFeePerGas: some(Quantity(tx.maxFee)),
-    maxPriorityFeePerGas: some(Quantity(tx.maxPriorityFee)),
+    `type`: Opt.some(Quantity(tx.txType)),
+    maxFeePerGas: Opt.some(Quantity(tx.maxFeePerGas)),
+    maxPriorityFeePerGas: Opt.some(Quantity(tx.maxPriorityFeePerGas)),
   )
 
 # Note: Similar as `populateBlockObject` from rpc_utils, but lacking the
@@ -81,15 +83,15 @@ func init*(
   let blockHash = header.blockHash
 
   var blockObject = BlockObject(
-    number: eth_api_types.BlockNumber(header.blockNumber.truncate(uint64)),
+    number: eth_api_types.BlockNumber(header.number),
     hash: w3Hash blockHash,
     parentHash: w3Hash header.parentHash,
-    nonce: some(FixedBytes[8](header.nonce)),
+    nonce: Opt.some(FixedBytes[8](header.nonce)),
     sha3Uncles: w3Hash header.ommersHash,
-    logsBloom: FixedBytes[256] header.bloom,
+    logsBloom: FixedBytes[256] header.logsBloom,
     transactionsRoot: w3Hash header.txRoot,
     stateRoot: w3Hash header.stateRoot,
-    receiptsRoot: w3Hash header.receiptRoot,
+    receiptsRoot: w3Hash header.receiptsRoot,
     miner: w3Addr header.coinbase,
     difficulty: header.difficulty,
     extraData: HistoricExtraData header.extraData,
@@ -97,9 +99,9 @@ func init*(
     # https://playground.open-rpc.org/?schemaUrl=https://raw.githubusercontent.com/ethereum/eth1.0-apis/assembled-spec/openrpc.json
     # So we should probably change `BlockObject`.
     totalDifficulty: UInt256.low(),
-    gasLimit: Quantity(header.gasLimit.uint64),
-    gasUsed: Quantity(header.gasUsed.uint64),
-    timestamp: Quantity(header.timestamp.uint64),
+    gasLimit: Quantity(header.gasLimit),
+    gasUsed: Quantity(header.gasUsed),
+    timestamp: Quantity(header.timestamp),
   )
 
   let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
@@ -119,7 +121,7 @@ func init*(
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add txOrHash(w3Hash keccakHash(rlp.encode(tx)))
+        blockObject.transactions.add txOrHash(w3Hash rlpHash(tx))
 
   blockObject
 
@@ -127,6 +129,7 @@ proc installEthApiHandlers*(
     rpcServerWithProxy: var RpcProxy,
     historyNetwork: HistoryNetwork,
     beaconLightClient: Opt[LightClient],
+    stateNetwork: Opt[StateNetwork],
 ) =
   # Supported API
   rpcServerWithProxy.registerProxyMethod("eth_blockNumber")
@@ -212,7 +215,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.rpc("eth_getBlockByHash") do(
     data: eth_api_types.Hash256, fullTransactions: bool
-  ) -> Option[BlockObject]:
+  ) -> Opt[BlockObject]:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
@@ -223,13 +226,13 @@ proc installEthApiHandlers*(
     let
       blockHash = data.toHash()
       (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
-        return none(BlockObject)
+        return Opt.none(BlockObject)
 
-    return some(BlockObject.init(header, body, fullTransactions))
+    return Opt.some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
     quantityTag: RtBlockIdentifier, fullTransactions: bool
-  ) -> Option[BlockObject]:
+  ) -> Opt[BlockObject]:
     if quantityTag.kind == bidAlias:
       let tag = quantityTag.alias.toLowerAscii
       case tag
@@ -250,9 +253,9 @@ proc installEthApiHandlers*(
             let
               blockHash = forkyStore.optimistic_header.execution.block_hash
               (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
-                return none(BlockObject)
+                return Opt.none(BlockObject)
 
-            return some(BlockObject.init(header, body, fullTransactions))
+            return Opt.some(BlockObject.init(header, body, fullTransactions))
           else:
             raise newException(ValueError, "Not available before Capella - not synced?")
       of "finalized":
@@ -264,9 +267,9 @@ proc installEthApiHandlers*(
             let
               blockHash = forkyStore.finalized_header.execution.block_hash
               (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
-                return none(BlockObject)
+                return Opt.none(BlockObject)
 
-            return some(BlockObject.init(header, body, fullTransactions))
+            return Opt.some(BlockObject.init(header, body, fullTransactions))
           else:
             raise newException(ValueError, "Not available before Capella - not synced?")
       of "pending":
@@ -275,15 +278,15 @@ proc installEthApiHandlers*(
         raise newException(ValueError, "Unsupported block tag " & tag)
     else:
       let
-        blockNumber = quantityTag.number.uint64.toBlockNumber
+        blockNumber = quantityTag.number.uint64.u256
         maybeBlock = (await historyNetwork.getBlock(blockNumber)).valueOr:
           raise newException(ValueError, error)
 
       if maybeBlock.isNone():
-        return none(BlockObject)
+        return Opt.none(BlockObject)
       else:
         let (header, body) = maybeBlock.get()
-        return some(BlockObject.init(header, body, fullTransactions))
+        return Opt.some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
     data: eth_api_types.Hash256
@@ -309,7 +312,7 @@ proc installEthApiHandlers*(
   # from from the block with that block hash. The Canonical Indices Network
   # would need to be implemented to get this information.
   # rpcServerWithProxy.rpc("eth_getTransactionReceipt") do(
-  #     data: EthHashStr) -> Option[ReceiptObject]:
+  #     data: EthHashStr) -> Opt[ReceiptObject]:
 
   rpcServerWithProxy.rpc("eth_getLogs") do(
     filterOptions: FilterOptions
@@ -344,3 +347,120 @@ proc installEthApiHandlers*(
     else:
       # bloomfilter returned false, there are no logs matching the criteria
       return @[]
+
+  rpcServerWithProxy.rpc("eth_getBalance") do(
+    data: web3Types.Address, quantityTag: RtBlockIdentifier
+  ) -> UInt256:
+    ## Returns the balance of the account of given address.
+    ##
+    ## data: address to check for balance.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns integer of the current balance in wei.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not enabled")
+
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+    else:
+      let
+        blockNumber = quantityTag.number.uint64.u256
+        blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
+          raise newException(ValueError, error)
+
+        balance = (await stateNetwork.get().getBalance(blockHash, data.EthAddress)).valueOr:
+          raise newException(ValueError, "Unable to get balance")
+
+      return balance
+
+  rpcServerWithProxy.rpc("eth_getTransactionCount") do(
+    data: web3Types.Address, quantityTag: RtBlockIdentifier
+  ) -> Quantity:
+    ## Returns the number of transactions sent from an address.
+    ##
+    ## data: address.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns integer of the number of transactions send from this address.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not enabled")
+
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+    else:
+      let
+        blockNumber = quantityTag.number.uint64.u256
+        blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
+          raise newException(ValueError, error)
+
+        nonce = (
+          await stateNetwork.get().getTransactionCount(blockHash, data.EthAddress)
+        ).valueOr:
+          raise newException(ValueError, "Unable to get transaction count")
+      return nonce.Quantity
+
+  rpcServerWithProxy.rpc("eth_getStorageAt") do(
+    data: web3Types.Address, slot: UInt256, quantityTag: RtBlockIdentifier
+  ) -> FixedBytes[32]:
+    ## Returns the value from a storage position at a given address.
+    ##
+    ## data: address of the storage.
+    ## slot: integer of the position in the storage.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns: the value at this storage position.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not enabled")
+
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+    else:
+      let
+        blockNumber = quantityTag.number.uint64.u256
+        blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
+          raise newException(ValueError, error)
+
+        slotValue = (
+          await stateNetwork.get().getStorageAt(blockHash, data.EthAddress, slot)
+        ).valueOr:
+          raise newException(ValueError, "Unable to get storage slot")
+      return FixedBytes[32](slotValue.toBytesBE())
+
+  rpcServerWithProxy.rpc("eth_getCode") do(
+    data: web3Types.Address, quantityTag: RtBlockIdentifier
+  ) -> seq[byte]:
+    ## Returns code at a given address.
+    ##
+    ## data: address
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns the code from the given address.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not enabled")
+
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+    else:
+      let
+        blockNumber = quantityTag.number.uint64.u256
+        blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
+          raise newException(ValueError, error)
+
+        bytecode = (await stateNetwork.get().getCode(blockHash, data.EthAddress)).valueOr:
+          raise newException(ValueError, "Unable to get code")
+      return bytecode.asSeq()
+
+        # rpcServerWithProxy.rpc("eth_getProof") do(
+        #   address: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
+        # ) -> ProofResponse:
+        #   ## Returns information about an account and storage slots (if the account is a contract
+        #   ## and the slots are requested) along with account and storage proofs which prove the
+        #   ## existence of the values in the state.
+        #   ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
+        #   ##
+        #   ## data: address of the account.
+        #   ## slots: integers of the positions in the storage to return with storage proofs.
+        #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+        #   ## Returns: the proof response containing the account, account proof and storage proof
+        #   # TODO
+        #   raiseAssert("Not implemented")

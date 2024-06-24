@@ -36,9 +36,9 @@ import
 proc getGenesis(cs: EngineSpec, param: NetworkParams) =  
   # Set the terminal total difficulty
   let realTTD = param.genesis.difficulty + cs.ttd.u256
-  param.config.terminalTotalDifficulty = some(realTTD)
+  param.config.terminalTotalDifficulty = Opt.some(realTTD)
   if param.genesis.difficulty <= realTTD:
-    param.config.terminalTotalDifficultyPassed = some(true)
+    param.config.terminalTotalDifficultyPassed = Opt.some(true)
 
   # Set the genesis timestamp if provided
   if cs.genesisTimestamp != 0:
@@ -82,7 +82,7 @@ proc makeEngineTest*(): seq[EngineSpec] =
       InvalidPayloadAttributesTest(
         description: "Zero timestamp",
         customizer: BasePayloadAttributesCustomizer(
-          timestamp: some(0'u64),
+          timestamp: Opt.some(0'u64),
         ),
       ),
       InvalidPayloadAttributesTest(
@@ -101,11 +101,11 @@ proc makeEngineTest*(): seq[EngineSpec] =
 
   # Invalid Transaction ChainID Tests
   result.add InvalidTxChainIDTest(
-    txType: some(TxLegacy),
+    txType: Opt.some(TxLegacy),
   )
 
   result.add InvalidTxChainIDTest(
-    txType: some(TxEip1559),
+    txType: Opt.some(TxEip1559),
   )
 
   # Invalid Ancestor Re-Org Tests (Reveal Via NewPayload)
@@ -178,21 +178,21 @@ proc makeEngineTest*(): seq[EngineSpec] =
 
   # PrevRandao opcode tests
   result.add PrevRandaoTransactionTest(
-    txType: some(TxLegacy)
+    txType: Opt.some(TxLegacy)
   )
 
   result.add PrevRandaoTransactionTest(
-    txType: some(TxEip1559),
+    txType: Opt.some(TxEip1559),
   )
 
   # Suggested Fee Recipient Tests
   result.add SuggestedFeeRecipientTest(
-    txType: some(TxLegacy),
+    txType: Opt.some(TxLegacy),
     transactionCount: 20,
   )
 
   result.add SuggestedFeeRecipientTest(
-    txType: some(TxEip1559),
+    txType: Opt.some(TxEip1559),
     transactionCount: 20,
   )
 
@@ -227,14 +227,14 @@ proc makeEngineTest*(): seq[EngineSpec] =
       if invalidField != InvalidTransactionGasTipPrice:
         for testTxType in [TxLegacy, TxEip1559]:
           result.add InvalidPayloadTestCase(
-            txType:                some(testTxType),
+            txType:                Opt.some(testTxType),
             invalidField:          invalidField,
             syncing:               syncing,
             invalidDetectedOnSync: invalidDetectedOnSync,
           )
       else:
         result.add InvalidPayloadTestCase(
-          txType:                some(TxEip1559),
+          txType:                Opt.some(TxEip1559),
           invalidField:          invalidField,
           syncing:               syncing,
           invalidDetectedOnSync: invalidDetectedOnSync,

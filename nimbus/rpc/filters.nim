@@ -33,7 +33,7 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
   doAssert(len(transactions) == len(receipts))
 
   var resLogs: seq[FilterLog] = @[]
-  var logIndex = 0
+  var logIndex = 0'u64
 
   for i, receipt in receipts:
     for log in receipt.logs:
@@ -43,11 +43,11 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
         # level, to keep track about potential re-orgs
         # - in fluffy there is no concept of re-org
         removed: false,
-        logIndex: some(w3Qty(logIndex)),
-        transactionIndex: some(w3Qty(i)),
-        transactionHash: some(w3Hash transactions[i].rlpHash),
-        blockHash: some(w3Hash header.blockHash),
-        blockNumber: some(w3BlockNumber(header.blockNumber)),
+        logIndex: Opt.some(w3Qty(logIndex)),
+        transactionIndex: Opt.some(Quantity(i)),
+        transactionHash: Opt.some(w3Hash transactions[i].rlpHash),
+        blockHash: Opt.some(w3Hash header.blockHash),
+        blockNumber: Opt.some(w3BlockNumber(header.number)),
         address: w3Addr log.address,
         data: log.data,
         #  TODO topics should probably be kept as Hash256 in receipts
@@ -114,7 +114,7 @@ proc headerBloomFilter*(
     header: BlockHeader,
     addresses: AddressOrList,
     topics: seq[TopicOrList]): bool =
-  return bloomFilter(header.bloom, addresses, topics)
+  return bloomFilter(header.logsBloom, addresses, topics)
 
 proc matchTopics(log: FilterLog, topics: seq[TopicOrList]): bool =
   for i, sub in topics:

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# Copyright (c) 2019-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,7 @@
 import
   unittest2,
   eth/common/eth_types,
-  ../nimbus/vm_internals,
+  ../nimbus/evm/internals,
   ../nimbus/core/pow/header
 
 func toAddress(n: int): EthAddress =

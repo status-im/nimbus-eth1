@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -13,7 +13,7 @@ import
 type
   # cannot use range for unknown reason
   # Nim bug?
-  GasNatural* = int64 # range[0'i64..high(int64)]
+  GasNatural* = Natural
 
 # some methods based on py-evm utils/numeric
 

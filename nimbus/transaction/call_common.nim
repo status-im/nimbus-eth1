@@ -9,25 +9,30 @@
 {.push raises: [].}
 
 import
-  eth/common/eth_types, stint, options, stew/ptrops,
+  eth/common/eth_types, stint, stew/ptrops,
   chronos,
-  ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
-  ".."/[vm_internals, vm_precompiles, vm_gas_costs],
-  ".."/[db/ledger],
+  results,
+  ../evm/[types, state, state_transactions],
+  ../evm/[precompiles, internals],
+  ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
   ./host_types
 
+import ../evm/computation except fromEvmc, toEvmc
+
 when defined(evmc_enabled):
   import ../utils/utils
   import ./host_services
+#else:
+  #import ../evm/state_transactions
 
 type
   # Standard call parameters.
   CallParams* = object
     vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    forkOverride*: Option[EVMFork]      # Default fork is usually correct.
-    origin*:       Option[HostAddress]  # Default origin is `sender`.
+    forkOverride*: Opt[EVMFork]         # Default fork is usually correct.
+    origin*:       Opt[HostAddress]     # Default origin is `sender`.
     gasPrice*:     GasInt               # Gas price for this call.
     gasLimit*:     GasInt               # Maximum gas available for this call.
     sender*:       HostAddress          # Sender account.
@@ -51,8 +56,8 @@ type
     contractAddress*: EthAddress        # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
     logEntries*:      seq[Log]          # Output logs.
-    stack*:           Stack             # EVM stack on return (for test only).
-    memory*:          Memory            # EVM memory on return (for test only).
+    stack*:           EvmStackRef       # EVM stack on return (for test only).
+    memory*:          EvmMemoryRef      # EVM memory on return (for test only).
 
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
@@ -61,7 +66,7 @@ proc hostToComputationMessage*(msg: EvmcMessage): Message =
   Message(
     kind:            CallKind(msg.kind.ord),
     depth:           msg.depth,
-    gas:             msg.gas,
+    gas:             GasInt msg.gas,
     sender:          msg.sender.fromEvmc,
     contractAddress: msg.recipient.fromEvmc,
     codeAddress:     msg.code_address.fromEvmc,
@@ -95,7 +100,7 @@ func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
   if fork >= FkBerlin:
     for account in call.accessList:
       gas += ACCESS_LIST_ADDRESS_COST
-      gas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
+      gas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
 
   return gas
 
@@ -161,7 +166,7 @@ proc setupHost(call: CallParams): TransactionHost =
   # with the contract address.  This differs from the previous Nimbus EVM API.
   # Guarded under `evmc_enabled` for now so it doesn't break vm2.
   when defined(evmc_enabled):
-    var code: seq[byte]
+    var code: CodeBytesRef
     if call.isCreate:
       let sender = call.sender
       let contractAddress =
@@ -169,7 +174,7 @@ proc setupHost(call: CallParams): TransactionHost =
       host.msg.recipient = contractAddress.toEvmc
       host.msg.input_size = 0
       host.msg.input_data = nil
-      code = call.input
+      code = CodeBytesRef.init(call.input)
     else:
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
@@ -184,7 +189,7 @@ proc setupHost(call: CallParams): TransactionHost =
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, call.sysCall, cMsg, code)
 
-    host.code = system.move(code)
+    host.code = code
 
   else:
     if call.input.len > 0:
@@ -204,8 +209,7 @@ proc setupHost(call: CallParams): TransactionHost =
   return host
 
 when defined(evmc_enabled):
-  proc doExecEvmc(host: TransactionHost, call: CallParams)
-      {.gcsafe, raises: [CatchableError].} =
+  proc doExecEvmc(host: TransactionHost, call: CallParams) =
     var callResult = evmcExecComputation(host)
     let c = host.computation
 
@@ -216,7 +220,7 @@ when defined(evmc_enabled):
     else:
       c.setError(callResult.status_code, true)
 
-    c.gasMeter.gasRemaining = callResult.gas_left
+    c.gasMeter.gasRemaining = GasInt callResult.gas_left
     c.msg.contractAddress = callResult.create_address.fromEvmc
     c.output = if callResult.output_size <= 0: @[]
                else: @(makeOpenArray(callResult.output_data,
@@ -264,7 +268,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     result = c.gasMeter.gasRemaining
   elif not c.shouldBurnGas:
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
-    let refund = min(c.getGasRefund(), maxRefund)
+    let refund = min(GasInt c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
     result = c.gasMeter.gasRemaining
 
@@ -278,7 +282,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
 
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
   # evm gas used without intrinsic gas
-  let gasUsed = host.msg.gas - gasRemaining
+  let gasUsed = host.msg.gas.GasInt - gasRemaining
   host.vmState.captureEnd(c, c.output, gasUsed, c.errorOpt)
 
   if c.isError:
@@ -291,8 +295,7 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   result.stack = c.stack
   result.memory = c.memory
 
-proc runComputation*(call: CallParams): CallResult
-    {.gcsafe, raises: [CatchableError].} =
+proc runComputation*(call: CallParams): CallResult =
   let host = setupHost(call)
   prepareToRunComputation(host, call)
 

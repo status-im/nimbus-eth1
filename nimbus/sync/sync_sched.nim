@@ -385,7 +385,7 @@ proc initSync*[S,W](
     node: EthereumNode;
     chain: ChainRef,
     slots: int;
-    exCtrlFile = none(string);
+    exCtrlFile = Opt.none(string);
       ) =
   ## Constructor
   # Leave one extra slot so that it can holds a *zombie* even if all slots

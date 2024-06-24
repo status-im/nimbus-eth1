@@ -36,17 +36,41 @@ proc getUbe*(
     return be.getKvpFn key
   err(GetNotFound)
 
+proc getUbeLen*(
+    db: KvtDbRef;                     # Database
+    key: openArray[byte];             # Key of database record
+      ): Result[int,KvtError] =
+  ## For the argument `key` return the associated value from the backend
+  ## database if available.
+  ##
+  let be = db.backend
+  if not be.isNil:
+    return be.lenKvpFn key
+  err(GetNotFound)
+
 proc getBe*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[Blob,KvtError] =
   ## Get the vertex from the (filtered) backened if available.
-  if not db.roFilter.isNil:
-    db.roFilter.sTab.withValue(@key, w):
+  if not db.balancer.isNil:
+    db.balancer.sTab.withValue(@key, w):
       if w[].len == 0:
         return err(GetNotFound)
       return ok(w[])
   db.getUbe key
+
+proc getBeLen*(
+    db: KvtDbRef;                     # Database
+    key: openArray[byte];             # Key of database record
+      ): Result[int,KvtError] =
+  ## Get the vertex from the (filtered) backened if available.
+  if not db.balancer.isNil:
+    db.balancer.sTab.withValue(@key, w):
+      if w[].len == 0:
+        return err(GetNotFound)
+      return ok(w[].len)
+  db.getUbeLen key
 
 # ------------
 
@@ -95,6 +119,19 @@ proc get*(
 
   return ok(move(data))
 
+proc len*(
+    db: KvtDbRef;                     # Database
+    key: openArray[byte];             # Key of database record
+      ): Result[int,KvtError] =
+  ## For the argument `key` return the associated value preferably from the
+  ## top layer, or the database otherwise.
+  ##
+  if key.len == 0:
+    return err(KeyInvalid)
+
+  let len = db.layersLen(key).valueOr:
+    return db.getBeLen key
+  ok(len)
 
 proc hasKey*(
     db: KvtDbRef;                     # Database
@@ -106,7 +143,7 @@ proc hasKey*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  if db.layersHasKey @key:
+  if db.layersHasKey key:
     return ok(true)
 
   let rc = db.getBe key

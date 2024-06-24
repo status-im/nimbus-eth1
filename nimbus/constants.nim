@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,10 +36,10 @@ const
 
   UNCLE_DEPTH_PENALTY_FACTOR* =             8.u256
 
-  MAX_UNCLE_DEPTH* =                        6.u256
+  MAX_UNCLE_DEPTH* =                        6
   MAX_UNCLES* =                             2
 
-  GENESIS_BLOCK_NUMBER* =                   0.toBlockNumber
+  GENESIS_BLOCK_NUMBER* =                   0.BlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
   GENESIS_GAS_LIMIT* =                      3_141_592
   GENESIS_PARENT_HASH* =                    ZERO_HASH256
@@ -55,7 +55,7 @@ const
 
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* =      20.u256
 
-  MAX_PREV_HEADER_DEPTH* =                  256.toBlockNumber
+  MAX_PREV_HEADER_DEPTH* =                  256'u64
   MaxCallDepth* =                           1024
 
   SECPK1_N* =                               UInt256.fromHex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")

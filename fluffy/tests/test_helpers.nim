@@ -24,16 +24,16 @@ proc initDiscoveryNode*(
     address: Address,
     bootstrapRecords: openArray[Record] = [],
     localEnrFields: openArray[(string, seq[byte])] = [],
-    previousRecord = none[enr.Record](),
+    previousRecord = Opt.none(enr.Record),
 ): discv5_protocol.Protocol {.raises: [CatchableError].} =
   # set bucketIpLimit to allow bucket split
   let config = DiscoveryConfig.init(1000, 24, 5)
 
   result = newProtocol(
     privKey,
-    some(address.ip),
-    some(address.port),
-    some(address.port),
+    Opt.some(address.ip),
+    Opt.some(address.port),
+    Opt.some(address.port),
     bindPort = address.port,
     bootstrapRecords = bootstrapRecords,
     localEnrFields = localEnrFields,
@@ -57,7 +57,7 @@ func buildAccumulator*(headers: seq[BlockHeader]): Result[FinishedAccumulator, s
   for header in headers:
     updateAccumulator(accumulator, header)
 
-    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+    if header.number == mergeBlockNumber - 1:
       return ok(finishAccumulator(accumulator))
 
   err("Not enough headers provided to finish the accumulator")
@@ -73,7 +73,7 @@ func buildAccumulatorData*(
     if accumulator.currentEpoch.len() == epochSize:
       epochAccumulators.add(accumulator.currentEpoch)
 
-    if header.blockNumber.truncate(uint64) == mergeBlockNumber - 1:
+    if header.number == mergeBlockNumber - 1:
       epochAccumulators.add(accumulator.currentEpoch)
 
       return ok((finishAccumulator(accumulator), epochAccumulators))

@@ -26,7 +26,7 @@ proc getPayload*(ben: BeaconEngineRef,
 
   var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
-  var blobsBundle: Option[BlobsBundleV1]
+  var blobsBundle: Opt[BlobsBundleV1]
   if not ben.get(id, blockValue, payloadGeneric, blobsBundle):
     raise unknownPayload("Unknown payload")
 
@@ -50,7 +50,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV3Response =
 
   var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
-  var blobsBundle: Option[BlobsBundleV1]
+  var blobsBundle: Opt[BlobsBundleV1]
   if not ben.get(id, blockValue, payloadGeneric, blobsBundle):
     raise unknownPayload("Unknown payload")
 
@@ -78,7 +78,7 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV4Response =
 
   var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
-  var blobsBundle: Option[BlobsBundleV1]
+  var blobsBundle: Opt[BlobsBundleV1]
   if not ben.get(id, blockValue, payloadGeneric, blobsBundle):
     raise unknownPayload("Unknown payload")
 

@@ -41,13 +41,6 @@ proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void,string] =
     return err("invalid gas limit below 5000")
   ok()
 
-proc validateGasLimit(com: CommonRef; header: BlockHeader): Result[void, string] =
-  let parent = try:
-    com.db.getBlockHeader(header.parentHash)
-  except CatchableError:
-    return err "Parent block not in database"
-  header.validateGasLimit(parent.gasLimit)
-
 # ------------------------------------------------------------------------------
 # Eip 1559 support
 # ------------------------------------------------------------------------------
@@ -58,8 +51,8 @@ proc calcEip1599BaseFee*(com: CommonRef; parent: BlockHeader): UInt256 =
 
   # If the current block is the first EIP-1559 block, return the
   # initial base fee.
-  if com.isLondon(parent.blockNumber):
-    eip1559.calcEip1599BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFee)
+  if com.isLondon(parent.number):
+    eip1559.calcEip1599BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFeePerGas.get(0.u256))
   else:
     EIP1559_INITIAL_BASE_FEE
 
@@ -68,7 +61,7 @@ proc verifyEip1559Header(com: CommonRef;
                          parent, header: BlockHeader): Result[void, string]
                         {.raises: [].} =
   ## Verify that the gas limit remains within allowed bounds
-  let limit = if com.isLondon(parent.blockNumber):
+  let limit = if com.isLondon(parent.number):
                 parent.gasLimit
               else:
                 parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
@@ -76,7 +69,7 @@ proc verifyEip1559Header(com: CommonRef;
   if rc.isErr:
     return rc
 
-  let headerBaseFee = header.baseFee
+  let headerBaseFee = header.baseFeePerGas.get(0.u256)
   # Verify the header is not malformed
   if headerBaseFee.isZero:
     return err("Post EIP-1559 header expected to have base fee")
@@ -86,8 +79,8 @@ proc verifyEip1559Header(com: CommonRef;
   if headerBaseFee != expectedBaseFee:
     try:
       return err(&"invalid baseFee: have {expectedBaseFee}, "&
-                 &"want {header.baseFee}, " &
-                 &"parent.baseFee {parent.baseFee}, "&
+                 &"want {header.baseFeePerGas}, " &
+                 &"parent.baseFee {parent.baseFeePerGas}, "&
                  &"parent.gasUsed {parent.gasUsed}")
     except ValueError:
       # TODO deprecate-strformat
@@ -98,17 +91,13 @@ proc verifyEip1559Header(com: CommonRef;
 proc validateGasLimitOrBaseFee*(com: CommonRef;
                                 header, parent: BlockHeader): Result[void, string] =
 
-  if not com.isLondon(header.blockNumber):
+  if not com.isLondon(header.number):
     # Verify BaseFee not present before EIP-1559 fork.
-    if not header.baseFee.isZero:
-      return err("invalid baseFee before London fork: have " & $header.baseFee & ", want <0>")
-    let rc = com.validateGasLimit(header)
-    if rc.isErr:
-      return rc
+    let baseFeePerGas = header.baseFeePerGas.get(0.u256)
+    if not baseFeePerGas.isZero:
+      return err("invalid baseFee before London fork: have " & $baseFeePerGas & ", want <0>")
+    ?validateGasLimit(header, parent.gasLimit)
   else:
-    let rc = com.verifyEip1559Header(parent = parent,
-                                     header = header)
-    if rc.isErr:
-      return rc
+    ?com.verifyEip1559Header(parent = parent, header = header)
 
   return ok()

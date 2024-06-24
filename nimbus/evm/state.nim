@@ -12,12 +12,13 @@
 
 import
   std/[options, sets, strformat],
+  stew/assign2,
   eth/keys,
-  ../../stateless/[witness_from_tree, witness_types, multi_keys],
   ../db/ledger,
   ../common/[common, evmforks],
   ./interpreter/[op_codes, gas_costs],
-  ./types
+  ./types,
+  ./evm_errors
 
 proc init(
       self:         BaseVMState;
@@ -28,20 +29,21 @@ proc init(
       tracer:       TracerRef,
       flags:        set[VMFlag] = self.flags) =
   ## Initialisation helper
-  self.parent = parent
+  assign(self.parent, parent)
   self.blockCtx = blockCtx
   self.gasPool = blockCtx.gasLimit
   self.com = com
   self.tracer = tracer
   self.stateDB = ac
   self.flags = flags
+  self.blobGasUsed = 0'u64
 
 func blockCtx(com: CommonRef, header: BlockHeader):
                 BlockContext =
   BlockContext(
     timestamp    : header.timestamp,
     gasLimit     : header.gasLimit,
-    fee          : header.fee,
+    baseFeePerGas: header.baseFeePerGas,
     prevRandao   : header.prevRandao,
     difficulty   : header.difficulty,
     coinbase     : com.minerAddress(header),
@@ -51,12 +53,12 @@ func blockCtx(com: CommonRef, header: BlockHeader):
 # --------------
 
 proc `$`*(vmState: BaseVMState): string
-    {.gcsafe, raises: [ValueError].} =
+    {.gcsafe, raises: [].} =
   if vmState.isNil:
     result = "nil"
   else:
     result = &"VMState:"&
-             &"\n  blockNumber: {vmState.parent.blockNumber + 1}"
+             &"\n  blockNumber: {vmState.parent.number + 1}"
 
 proc new*(
       T:        type BaseVMState;
@@ -81,11 +83,13 @@ proc new*(
 
 proc reinit*(self:     BaseVMState;     ## Object descriptor
              parent:   BlockHeader;     ## parent header, account sync pos.
-             blockCtx: BlockContext
+             blockCtx: BlockContext;
+             linear: bool
              ): bool =
   ## Re-initialise state descriptor. The `LedgerRef` database is
   ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
-  ## already. Accumulated state data are reset.
+  ## already. Accumulated state data are reset. When linear, we assume that
+  ## the state recently processed the parent block.
   ##
   ## This function returns `true` unless the `LedgerRef` database could be
   ## queries about its `rootHash`, i.e. `isTopLevelClean` evaluated `true`. If
@@ -96,7 +100,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
       tracer = self.tracer
       com    = self.com
       db     = com.db
-      ac     = if self.stateDB.rootHash == parent.stateRoot: self.stateDB
+      ac     = if linear or self.stateDB.rootHash == parent.stateRoot: self.stateDB
                else: LedgerRef.init(db, parent.stateRoot)
       flags  = self.flags
     self[].reset
@@ -113,6 +117,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
 proc reinit*(self:   BaseVMState; ## Object descriptor
              parent: BlockHeader; ## parent header, account sync pos.
              header: BlockHeader; ## header with tx environment data fields
+             linear: bool
              ): bool =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
   ## cache and the `header` is used as a container to pass the `timestamp`,
@@ -120,9 +125,10 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
-  result = self.reinit(
+  self.reinit(
     parent   = parent,
     blockCtx = self.com.blockCtx(header),
+    linear = linear
     )
 
 proc reinit*(self:      BaseVMState; ## Object descriptor
@@ -132,10 +138,11 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `update()` variant, above.
   var parent: BlockHeader
-  if self.com.db.getBlockHeader(header.parentHash, parent):
-    return self.reinit(
+  self.com.db.getBlockHeader(header.parentHash, parent) and
+    self.reinit(
       parent    = parent,
-      header    = header)
+      header    = header,
+      linear    = false)
 
 proc init*(
       self:   BaseVMState;     ## Object descriptor
@@ -180,16 +187,19 @@ proc new*(
       T:      type BaseVMState;
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil): T
-    {.gcsafe, raises: [CatchableError].} =
+      tracer: TracerRef = nil): EvmResult[T] =
   ## This is a variant of the `new()` constructor above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `new()` variant, above.
-  BaseVMState.new(
-    parent = com.db.getBlockHeader(header.parentHash),
-    header = header,
-    com    = com,
-    tracer = tracer)
+  var parent: BlockHeader
+  if com.db.getBlockHeader(header.parentHash, parent):
+    ok(BaseVMState.new(
+      parent = parent,
+      header = header,
+      com    = com,
+      tracer = tracer))
+  else:
+    err(evmErr(EvmHeaderNotFound))
 
 proc init*(
       vmState: BaseVMState;
@@ -212,8 +222,8 @@ proc coinbase*(vmState: BaseVMState): EthAddress =
 
 proc blockNumber*(vmState: BaseVMState): BlockNumber =
   # it should return current block number
-  # and not head.blockNumber
-  vmState.parent.blockNumber + 1
+  # and not head.number
+  vmState.parent.number + 1
 
 proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   if vmState.com.consensus == ConsensusType.POS:
@@ -222,14 +232,20 @@ proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   else:
     vmState.blockCtx.difficulty
 
-proc baseFee*(vmState: BaseVMState): UInt256 =
-  vmState.blockCtx.fee.get(0.u256)
+proc baseFeePerGas*(vmState: BaseVMState): UInt256 =
+  vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
-    vmState: BaseVMState, blockNumber: BlockNumber):
-    Hash256 {.base, gcsafe, raises: [CatchableError].} =
+    vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.gcsafe, base.} =
   let db = vmState.com.db
-  db.getBlockHash(blockNumber)
+  try:
+    var blockHash: Hash256
+    if db.getBlockHash(blockNumber, blockHash):
+      blockHash
+    else:
+      Hash256()
+  except RlpError:
+    Hash256()
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)
@@ -249,31 +265,12 @@ proc `status=`*(vmState: BaseVMState, status: bool) =
  if status: vmState.flags.incl ExecutionOK
  else: vmState.flags.excl ExecutionOK
 
-proc generateWitness*(vmState: BaseVMState): bool =
-  GenerateWitness in vmState.flags
+proc collectWitnessData*(vmState: BaseVMState): bool =
+  CollectWitnessData in vmState.flags
 
-proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
-  if status: vmState.flags.incl GenerateWitness
-  else: vmState.flags.excl GenerateWitness
-
-proc buildWitness*(
-    vmState: BaseVMState,
-    mkeys: MultiKeysRef): seq[byte] {.raises: [CatchableError].} =
-  let rootHash = vmState.stateDB.rootHash
-  let flags = if vmState.fork >= FkSpurious: {wfEIP170} else: {}
-
-  # A valid block having no transactions should return an empty witness
-  if mkeys.keys.len() == 0:
-    return @[]
-
-  # build witness from tree
-  var wb = initWitnessBuilder(vmState.com.db, rootHash, flags)
-  wb.buildWitness(mkeys)
-
-proc buildWitness*(
-    vmState: BaseVMState): seq[byte] {.raises: [CatchableError].} =
-  let mkeys = vmState.stateDB.makeMultiKeys()
-  buildWitness(vmState, mkeys)
+proc `collectWitnessData=`*(vmState: BaseVMState, status: bool) =
+  if status: vmState.flags.incl CollectWitnessData
+  else: vmState.flags.excl CollectWitnessData
 
 func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =
   # FIXME-Adam: Is this timestamp right? Note that up above in blockNumber we add 1;
@@ -303,7 +300,7 @@ proc captureStart*(vmState: BaseVMState, comp: Computation,
     vmState.tracer.captureStart(comp, sender, to, create, input, gasLimit, value)
 
 proc captureEnd*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
-                 gasUsed: GasInt, error: Option[string]) =
+                 gasUsed: GasInt, error: Opt[string]) =
   if vmState.tracingEnabled:
     vmState.tracer.captureEnd(comp, output, gasUsed, error)
 
@@ -315,7 +312,7 @@ proc captureEnter*(vmState: BaseVMState, comp: Computation, op: Op,
     vmState.tracer.captureEnter(comp, op, sender, to, input, gasLimit, value)
 
 proc captureExit*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
-                  gasUsed: GasInt, error: Option[string]) =
+                  gasUsed: GasInt, error: Opt[string]) =
   if vmState.tracingEnabled:
     vmState.tracer.captureExit(comp, output, gasUsed, error)
 
@@ -345,7 +342,7 @@ proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
 proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: GasInt,
                    rData: openArray[byte],
-                   depth: int, error: Option[string]) =
+                   depth: int, error: Opt[string]) =
   if vmState.tracingEnabled:
     let fixed = vmState.gasCosts[op].kind == GckFixed
     vmState.tracer.captureFault(comp, fixed, pc, op, gas, refund, rData, depth, error)

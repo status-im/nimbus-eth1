@@ -88,7 +88,7 @@ proc makeFundingTx*(
       nonce   : v.nextNonce(),
       gasPrice: v.gasPrice,
       gasLimit: GasInt(75000),
-      to      : some(predeployedVaultAddr),
+      to      : Opt.some(predeployedVaultAddr),
       value   : 0.u256,
       payload : sendSome(recipient, amount)
     )
@@ -111,7 +111,7 @@ proc signTx*(v: Vault,
       nonce   : nonce,
       gasPrice: gasPrice,
       gasLimit: gasLimit,
-      to      : some(recipient),
+      to      : Opt.some(recipient),
       value   : amount,
       payload : payload
     )

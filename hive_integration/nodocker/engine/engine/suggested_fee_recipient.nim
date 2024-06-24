@@ -42,7 +42,7 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
   # Send multiple transactions
   for i in 0..<cs.transactionCount:
     let tc = BaseTx(
-      recipient:  some(txRecipient),
+      recipient:  Opt.some(txRecipient),
       amount:     0.u256,
       txType:     cs.txType,
       gasLimit:   75000,
@@ -72,7 +72,7 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
 
   var feeRecipientFees = 0.u256
   for tx in blockIncluded.txs:
-    let effGasTip = tx.effectiveGasTip(blockIncluded.header.fee)
+    let effGasTip = tx.effectiveGasTip(blockIncluded.header.baseFeePerGas)
 
     let r = env.engine.client.txReceipt(tx.rlpHash)
     testCond r.isOk:

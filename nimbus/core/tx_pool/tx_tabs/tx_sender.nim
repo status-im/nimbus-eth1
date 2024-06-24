@@ -15,10 +15,9 @@
 ##
 
 import
-  std/[math],
   ../tx_info,
   ../tx_item,
-  eth/[common],
+  eth/common,
   stew/[keyed_queue, keyed_queue/kq_debug, sorted_set],
   results,
   ../../eip4844

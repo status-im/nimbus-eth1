@@ -38,8 +38,9 @@ type
   FinalityUpdate = Endpoint[Slot, ForkedLightClientFinalityUpdate]
   OptimisticUpdate = Endpoint[Slot, ForkedLightClientOptimisticUpdate]
 
-  ValueVerifier[V] =
-    proc(v: V): Future[Result[void, VerifierError]] {.gcsafe, raises: [].}
+  ValueVerifier[V] = proc(v: V): Future[Result[void, VerifierError]] {.
+    async: (raises: [CancelledError], raw: true)
+  .}
   BootstrapVerifier* = ValueVerifier[ForkedLightClientBootstrap]
   UpdateVerifier* = ValueVerifier[ForkedLightClientUpdate]
   FinalityUpdateVerifier* = ValueVerifier[ForkedLightClientFinalityUpdate]
@@ -104,7 +105,9 @@ proc getOptimisticPeriod(self: LightClientManager): SyncCommitteePeriod =
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientbootstrap
 proc doRequest(
     e: typedesc[Bootstrap], n: BeaconNetwork, blockRoot: Eth2Digest
-): Future[NetRes[ForkedLightClientBootstrap]] =
+): Future[NetRes[ForkedLightClientBootstrap]] {.
+    async: (raises: [CancelledError], raw: true)
+.} =
   n.getLightClientBootstrap(blockRoot)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/p2p-interface.md#lightclientupdatesbyrange
@@ -113,7 +116,9 @@ proc doRequest(
     e: typedesc[UpdatesByRange],
     n: BeaconNetwork,
     key: tuple[startPeriod: SyncCommitteePeriod, count: uint64],
-): Future[LightClientUpdatesByRangeResponse] {.async.} =
+): Future[LightClientUpdatesByRangeResponse] {.
+    async: (raises: [ResponseError, CancelledError])
+.} =
   let (startPeriod, count) = key
   doAssert count > 0 and count <= MAX_REQUEST_LIGHT_CLIENT_UPDATES
   let response = await n.getLightClientUpdatesByRange(startPeriod, count)
@@ -126,13 +131,17 @@ proc doRequest(
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientfinalityupdate
 proc doRequest(
     e: typedesc[FinalityUpdate], n: BeaconNetwork, finalizedSlot: Slot
-): Future[NetRes[ForkedLightClientFinalityUpdate]] =
+): Future[NetRes[ForkedLightClientFinalityUpdate]] {.
+    async: (raises: [CancelledError], raw: true)
+.} =
   n.getLightClientFinalityUpdate(distinctBase(finalizedSlot))
 
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientoptimisticupdate
 proc doRequest(
     e: typedesc[OptimisticUpdate], n: BeaconNetwork, optimisticSlot: Slot
-): Future[NetRes[ForkedLightClientOptimisticUpdate]] =
+): Future[NetRes[ForkedLightClientOptimisticUpdate]] {.
+    async: (raises: [CancelledError], raw: true)
+.} =
   n.getLightClientOptimisticUpdate(distinctBase(optimisticSlot))
 
 template valueVerifier[E](
@@ -161,7 +170,7 @@ iterator values(v: auto): auto =
 
 proc workerTask[E](
     self: LightClientManager, e: typedesc[E], key: E.K
-): Future[bool] {.async.} =
+): Future[bool] {.async: (raises: [CancelledError]).} =
   var didProgress = false
   try:
     let value =
@@ -230,13 +239,12 @@ proc workerTask[E](
     warn "Received invalid response", error = exc.msg, endpoint = E.name
   except CancelledError as exc:
     raise exc
-  except CatchableError as exc:
-    debug "Unexpected exception while receiving value", exc = exc.msg
-    raise exc
 
   return didProgress
 
-proc query[E](self: LightClientManager, e: typedesc[E], key: E.K): Future[bool] =
+proc query[E](
+    self: LightClientManager, e: typedesc[E], key: E.K
+): Future[bool] {.async: (raises: [CancelledError], raw: true).} =
   # Note:
   # The libp2p version does concurrent requests here. But it seems to be done
   # for the same key and thus as redundant request to avoid waiting on a not
@@ -249,7 +257,7 @@ proc query[E](self: LightClientManager, e: typedesc[E], key: E.K): Future[bool] 
   self.workerTask(e, key)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.1/specs/altair/light-client/light-client.md#light-client-sync-process
-proc loop(self: LightClientManager) {.async.} =
+proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
   var nextSyncTaskTime = self.getBeaconTime()
   while true:
     # Periodically wake and check for changes
@@ -312,8 +320,8 @@ proc start*(self: var LightClientManager) =
   doAssert self.loopFuture == nil
   self.loopFuture = self.loop()
 
-proc stop*(self: var LightClientManager) {.async.} =
+proc stop*(self: var LightClientManager) {.async: (raises: []).} =
   ## Stop light client manager's loop.
   if self.loopFuture != nil:
-    await self.loopFuture.cancelAndWait()
+    await noCancel self.loopFuture.cancelAndWait()
     self.loopFuture = nil

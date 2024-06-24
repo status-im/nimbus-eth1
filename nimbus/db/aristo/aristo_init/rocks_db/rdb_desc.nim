@@ -22,28 +22,35 @@ import
   ../init_common
 
 type
+  RdbWriteEventCb* =
+    proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
+      ## Call back closure function that passes the the write session handle
+      ## to a guest peer right after it was opened. The guest may store any
+      ## data on its own column family and return `true` if that worked
+      ## all right. Then the `Aristo` handler will stor its own columns and
+      ## finalise the write session.
+      ##
+      ## In case of an error when `false` is returned, `Aristo` will abort the
+      ## write session and return a session error.
+
   RdbInst* = object
-    store*: ColFamilyReadWrite         ## Rocks DB database handler
+    admCol*: ColFamilyReadWrite        ## Admin column family handler
+    vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
+    keyCol*: ColFamilyReadWrite        ## Hash key column family handler
     session*: WriteBatchRef            ## For batched `put()`
-    rdKeyLru*: KeyedQueue[RdbKey,Blob] ## Read cache
-    rdVtxLru*: KeyedQueue[RdbKey,Blob] ## Read cache
+    rdKeyLru*: KeyedQueue[VertexID,HashKey] ## Read cache
+    rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
+
     basePath*: string                  ## Database directory
-    noFq*: bool                        ## No filter queues available
+    trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
 
-  RdbKey* = array[1 + sizeof VertexID, byte]
-    ## Sub-table key, <pfx> + VertexID
-
-  # Alien interface
-  RdbGuest* = enum
-    GuestFamily0 = "Guest0"            ## Guest family (e.g. for Kvt)
-    GuestFamily1 = "Guest1"            ## Ditto
-    GuestFamily2 = "Guest2"            ## Ditto
-
-  RdbGuestDbRef* = ref object of GuestDbRef
-    guestDb*: ColFamilyReadWrite       ## Pigiback feature references
+  AristoCFs* = enum
+    ## Column family symbols/handles and names used on the database
+    AdmCF = "AriAdm"                   ## Admin column family name
+    VtxCF = "AriVtx"                   ## Vertex column family name
+    KeyCF = "AriKey"                   ## Hash key column family name
 
 const
-  AristoFamily* = "Aristo"             ## RocksDB column family
   BaseFolder* = "nimbus"               ## Same as for Legacy DB
   DataFolder* = "aristo"               ## Legacy DB has "data"
   RdKeyLruMaxSize* = 4096              ## Max size of read cache for keys
@@ -56,6 +63,9 @@ const
 template logTxt*(info: static[string]): static[string] =
   "RocksDB/" & info
 
+template baseDb*(rdb: RdbInst): RocksDbReadWriteRef =
+  rdb.admCol.db
+
 
 func baseDir*(rdb: RdbInst): string =
   rdb.basePath / BaseFolder
@@ -63,10 +73,12 @@ func baseDir*(rdb: RdbInst): string =
 func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
 
-func toRdbKey*(id: uint64; pfx: StorageType): RdbKey =
-  let idKey = id.toBytesBE
-  result[0] = pfx.ord.byte
-  copyMem(addr result[1], unsafeAddr idKey, sizeof idKey)
+
+template toOpenArray*(xid: AdminTabID): openArray[byte] =
+  xid.uint64.toBytesBE.toOpenArray(0,7)
+
+template toOpenArray*(vid: VertexID): openArray[byte] =
+  vid.uint64.toBytesBE.toOpenArray(0,7)
 
 # ------------------------------------------------------------------------------
 # End

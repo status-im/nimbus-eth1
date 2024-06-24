@@ -12,7 +12,7 @@ import
   json_rpc/rpcserver,
   ./rpc_utils,
   ./rpc_types,
-  ../tracer, ../vm_types,
+  ../tracer, ../evm/types,
   ../common/common,
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
@@ -22,18 +22,18 @@ import
 
 type
   TraceOptions = object
-    disableStorage: Option[bool]
-    disableMemory: Option[bool]
-    disableStack: Option[bool]
-    disableState: Option[bool]
-    disableStateDiff: Option[bool]
+    disableStorage: Opt[bool]
+    disableMemory: Opt[bool]
+    disableStack: Opt[bool]
+    disableState: Opt[bool]
+    disableStateDiff: Opt[bool]
 
 TraceOptions.useDefaultSerializationIn JrpcConv
 
-proc isTrue(x: Option[bool]): bool =
+proc isTrue(x: Opt[bool]): bool =
   result = x.isSome and x.get() == true
 
-proc traceOptionsToFlags(options: Option[TraceOptions]): set[TracerFlags] =
+proc traceOptionsToFlags(options: Opt[TraceOptions]): set[TracerFlags] =
   if options.isSome:
     let opts = options.get
     if opts.disableStorage.isTrue: result.incl TracerFlags.DisableStorage
@@ -45,7 +45,7 @@ proc traceOptionsToFlags(options: Option[TraceOptions]): set[TracerFlags] =
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
   let chainDB = com.db
 
-  rpcsrv.rpc("debug_traceTransaction") do(data: Web3Hash, options: Option[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceTransaction") do(data: Web3Hash, options: Opt[TraceOptions]) -> JsonNode:
     ## The traceTransaction debugging method will attempt to run the transaction in the exact
     ## same manner as it was executed on the network. It will replay any transaction that may
     ## have been executed prior to this one before it will finally attempt to execute the
@@ -61,12 +61,11 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     let
       txHash = ethHash(data)
       txDetails = chainDB.getTransactionKey(txHash)
-      blockHeader = chainDB.getBlockHeader(txDetails.blockNumber)
-      blockHash = chainDB.getBlockHash(txDetails.blockNumber)
-      blockBody = chainDB.getBlockBody(blockHash)
+      header = chainDB.getBlockHeader(txDetails.blockNumber)
+      transactions = chainDB.getTransactions(header.txRoot)
       flags = traceOptionsToFlags(options)
 
-    result = traceTransaction(com, blockHeader, blockBody, txDetails.index, flags)
+    traceTransaction(com, header, transactions, txDetails.index, flags)
 
   rpcsrv.rpc("debug_dumpBlockStateByNumber") do(quantityTag: BlockTag) -> JsonNode:
     ## Retrieves the state that corresponds to the block number and returns
@@ -74,55 +73,53 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     ##
     ## quantityTag: integer of a block number, or the string "earliest",
     ## "latest" or "pending", as in the default block parameter.
-    let
+    var
       header = chainDB.headerFromTag(quantityTag)
-      blockHash = chainDB.getBlockHash(header.blockNumber)
+      blockHash = chainDB.getBlockHash(header.number)
       body = chainDB.getBlockBody(blockHash)
 
-    result = dumpBlockState(com, header, body)
+    dumpBlockState(com, EthBlock.init(move(header), move(body)))
 
   rpcsrv.rpc("debug_dumpBlockStateByHash") do(data: Web3Hash) -> JsonNode:
     ## Retrieves the state that corresponds to the block number and returns
     ## a list of accounts (including storage and code).
     ##
     ## data: Hash of a block.
-    let
+    var
       h = data.ethHash
-      header = chainDB.getBlockHeader(h)
-      blockHash = chainDB.getBlockHash(header.blockNumber)
-      body = chainDB.getBlockBody(blockHash)
+      blk = chainDB.getEthBlock(h)
 
-    result = dumpBlockState(com, header, body)
+    dumpBlockState(com, blk)
 
-  rpcsrv.rpc("debug_traceBlockByNumber") do(quantityTag: BlockTag, options: Option[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceBlockByNumber") do(quantityTag: BlockTag, options: Opt[TraceOptions]) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
     ## that were included included in this block.
     ##
     ## quantityTag: integer of a block number, or the string "earliest",
     ## "latest" or "pending", as in the default block parameter.
     ## options: see debug_traceTransaction
-    let
+    var
       header = chainDB.headerFromTag(quantityTag)
-      blockHash = chainDB.getBlockHash(header.blockNumber)
+      blockHash = chainDB.getBlockHash(header.number)
       body = chainDB.getBlockBody(blockHash)
       flags = traceOptionsToFlags(options)
 
-    result = traceBlock(com, header, body, flags)
+    traceBlock(com, EthBlock.init(move(header), move(body)), flags)
 
-  rpcsrv.rpc("debug_traceBlockByHash") do(data: Web3Hash, options: Option[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceBlockByHash") do(data: Web3Hash, options: Opt[TraceOptions]) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
     ## that were included included in this block.
     ##
     ## data: Hash of a block.
     ## options: see debug_traceTransaction
-    let
+    var
       h = data.ethHash
       header = chainDB.getBlockHeader(h)
-      blockHash = chainDB.getBlockHash(header.blockNumber)
+      blockHash = chainDB.getBlockHash(header.number)
       body = chainDB.getBlockBody(blockHash)
       flags = traceOptionsToFlags(options)
 
-    result = traceBlock(com, header, body, flags)
+    traceBlock(com, EthBlock.init(move(header), move(body)), flags)
 
   rpcsrv.rpc("debug_setHead") do(quantityTag: BlockTag) -> bool:
     ## Sets the current head of the local chain by block number.
@@ -130,34 +127,26 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     ## Use with extreme caution.
     let
       header = chainDB.headerFromTag(quantityTag)
-    result = chainDB.setHead(header)
+    chainDB.setHead(header)
 
   rpcsrv.rpc("debug_getRawBlock") do(quantityTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded block.
-    let
-      header = chainDB.headerFromTag(quantityTag)
-      blockHash = chainDB.getBlockHash(header.blockNumber)
-
     var
+      header = chainDB.headerFromTag(quantityTag)
+      blockHash = chainDB.getBlockHash(header.number)
       body = chainDB.getBlockBody(blockHash)
-      ethBlock = EthBlock(
-        header: header,
-        txs: system.move(body.transactions),
-        uncles: system.move(body.uncles),
-        withdrawals: system.move(body.withdrawals),
-      )
 
-    result = rlp.encode(ethBlock)
+    rlp.encode(EthBlock.init(move(header), move(body)))
 
   rpcsrv.rpc("debug_getRawHeader") do(quantityTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded header.
     let header = chainDB.headerFromTag(quantityTag)
-    result = rlp.encode(header)
+    rlp.encode(header)
 
   rpcsrv.rpc("debug_getRawReceipts") do(quantityTag: BlockTag) -> seq[seq[byte]]:
     ## Returns an array of EIP-2718 binary-encoded receipts.
     let header = chainDB.headerFromTag(quantityTag)
-    for receipt in chainDB.getReceipts(header.receiptRoot):
+    for receipt in chainDB.getReceipts(header.receiptsRoot):
       result.add rlp.encode(receipt)
 
   rpcsrv.rpc("debug_getRawTransaction") do(data: Web3Hash) -> seq[byte]:
