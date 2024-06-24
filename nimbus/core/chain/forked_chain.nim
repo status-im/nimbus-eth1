@@ -191,15 +191,7 @@ func findActiveChain(c: ForkedChain, hash: Hash256): Result[ActiveChain, string]
 
 proc initForkedChain*(com: CommonRef): ForkedChain =
   result.com = com
-<<<<<<< HEAD
   result.db = com.db
-<<<<<<< HEAD
-  result.stagingTx = com.db.newTransaction()
-=======
->>>>>>> 0563e36d (foekr)
-=======
-  result.db = com.db
->>>>>>> 4cf6fd2f (Create new stagingTx in addBlock)
   result.baseHeader = com.db.getCanonicalHead()
   let headHash = result.baseHeader.blockHash
   result.headHash = headHash
@@ -207,18 +199,9 @@ proc initForkedChain*(com: CommonRef): ForkedChain =
   result.headHeader = result.baseHeader
 
 proc addBlock*(c: var ForkedChain, blk: EthBlock) =
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
   if c.stagingTx.isNil:
     c.stagingTx = c.db.newTransaction()
 
->>>>>>> 0563e36d (foekr)
-=======
-  if c.stagingTx.isNil:
-    c.stagingTx = com.db.newTransaction()
-
->>>>>>> 4cf6fd2f (Create new stagingTx in addBlock)
   template header(): BlockHeader =
     blk.header
 
