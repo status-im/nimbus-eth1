@@ -164,58 +164,50 @@ const
      forks: VmOpAllForks,
      name: "returnOp",
      info: "Halt execution returning output data",
-     exec: (prep: VmOpIgnore,
-            run: returnOp,
-            post: VmOpIgnore)),
+     exec: returnOp),
+
 
     (opCode: Revert,       ## 0xfd, Halt and revert state changes
      forks: VmOpByzantiumAndLater,
      name: "revert",
      info: "Halt execution reverting state changes but returning data " &
            "and remaining gas",
-     exec: (prep: VmOpIgnore,
-            run: revertOp,
-            post: VmOpIgnore)),
+     exec: revertOp),
+
 
     (opCode: Invalid,      ## 0xfe, invalid instruction.
      forks: VmOpAllForks,
      name: "invalidInstruction",
      info: "Designated invalid instruction",
-     exec: (prep: VmOpIgnore,
-            run: invalidOp,
-            post: VmOpIgnore)),
+     exec: invalidOp),
+
 
     (opCode: SelfDestruct, ## 0xff, Halt execution, prep for later deletion
      forks: VmOpAllForks - VmOpTangerineAndLater,
      name: "selfDestruct",
      info: "Halt execution and register account for later deletion",
-     exec: (prep: VmOpIgnore,
-            run:  selfDestructOp,
-            post: VmOpIgnore)),
+     exec: selfDestructOp),
+
 
     (opCode: SelfDestruct, ## 0xff, EIP150: self destruct, Tangerine
      forks: VmOpTangerineAndLater - VmOpSpuriousAndLater,
      name: "selfDestructEIP150",
      info: "EIP150: Halt execution and register account for later deletion",
-     exec: (prep: VmOpIgnore,
-            run:  selfDestructEIP150Op,
-            post: VmOpIgnore)),
+     exec: selfDestructEIP150Op),
+
 
     (opCode: SelfDestruct, ## 0xff, EIP161: self destruct, Spurious and later
      forks: VmOpSpuriousAndLater - VmOpBerlinAndLater,
      name: "selfDestructEIP161",
      info: "EIP161: Halt execution and register account for later deletion",
-     exec: (prep: VmOpIgnore,
-            run:  selfDestructEIP161Op,
-            post: VmOpIgnore)),
+     exec: selfDestructEIP161Op),
+
 
     (opCode: SelfDestruct, ## 0xff, EIP2929: self destruct, Berlin and later
      forks: VmOpBerlinAndLater,
      name: "selfDestructEIP2929",
      info: "EIP2929: Halt execution and register account for later deletion",
-     exec: (prep: VmOpIgnore,
-            run:  selfDestructEIP2929Op,
-            post: VmOpIgnore))]
+     exec: selfDestructEIP2929Op)]
 
 # ------------------------------------------------------------------------------
 # End

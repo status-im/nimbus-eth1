@@ -255,17 +255,14 @@ const
      forks: VmOpAllForks,
      name: "create",
      info: "Create a new account with associated code",
-     exec: (prep: VmOpIgnore,
-            run: createOp,
-            post: VmOpIgnore)),
+     exec: createOp),
+
 
     (opCode: Create2,   ## 0xf5, Create using keccak256
      forks: VmOpConstantinopleAndLater,
      name: "create2",
      info: "Behaves identically to CREATE, except using keccak256",
-     exec: (prep: VmOpIgnore,
-            run: create2Op,
-            post: VmOpIgnore))]
+     exec: create2Op)]
 
 # ------------------------------------------------------------------------------
 # End

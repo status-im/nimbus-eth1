@@ -324,164 +324,143 @@ const
      forks: VmOpAllForks,
      name: "pop",
      info: "Remove item from stack",
-     exec: (prep: VmOpIgnore,
-            run:  VmOpFn popOp,
-            post: VmOpIgnore)),
+     exec: VmOpFn popOp),
+
 
     (opCode: Mload,     ## 0x51, Load word from memory
      forks: VmOpAllForks,
      name: "mload",
      info: "Load word from memory",
-     exec: (prep: VmOpIgnore,
-            run:  mloadOp,
-            post: VmOpIgnore)),
+     exec: mloadOp),
+
 
     (opCode: Mstore,    ## 0x52, Save word to memory
      forks: VmOpAllForks,
      name: "mstore",
      info: "Save word to memory",
-     exec: (prep: VmOpIgnore,
-            run:  mstoreOp,
-            post: VmOpIgnore)),
+     exec: mstoreOp),
+
 
     (opCode: Mstore8,   ## 0x53, Save byte to memory
      forks: VmOpAllForks,
      name: "mstore8",
      info: "Save byte to memory",
-     exec: (prep: VmOpIgnore,
-            run:  mstore8Op,
-            post: VmOpIgnore)),
+     exec: mstore8Op),
+
 
     (opCode: Sload,     ## 0x54, Load word from storage
      forks: VmOpAllForks - VmOpBerlinAndLater,
      name: "sload",
      info: "Load word from storage",
-     exec: (prep: VmOpIgnore,
-            run:  sloadOp,
-            post: VmOpIgnore)),
+     exec: sloadOp),
+
 
     (opCode: Sload,     ## 0x54, sload for Berlin and later
      forks: VmOpBerlinAndLater,
      name: "sloadEIP2929",
      info: "EIP2929: sload for Berlin and later",
-     exec: (prep: VmOpIgnore,
-            run:  sloadEIP2929Op,
-            post: VmOpIgnore)),
+     exec: sloadEIP2929Op),
+
 
     (opCode: Sstore,    ## 0x55, Save word
      forks: VmOpAllForks - VmOpConstantinopleAndLater,
      name: "sstore",
      info: "Save word to storage",
-     exec: (prep: VmOpIgnore,
-            run:  sstoreOp,
-            post: VmOpIgnore)),
+     exec: sstoreOp),
+
 
     (opCode: Sstore,    ## 0x55, sstore for Constantinople and later
      forks: VmOpConstantinopleAndLater - VmOpPetersburgAndLater,
      name: "sstoreEIP1283",
      info: "EIP1283: sstore for Constantinople and later",
-     exec: (prep: VmOpIgnore,
-            run:  sstoreEIP1283Op,
-            post: VmOpIgnore)),
+     exec: sstoreEIP1283Op),
+
 
     (opCode: Sstore,    ## 0x55, sstore for Petersburg and later
      forks: VmOpPetersburgAndLater - VmOpIstanbulAndLater,
      name: "sstore",
      info: "sstore for Constantinople and later",
-     exec: (prep: VmOpIgnore,
-            run:  sstoreOp,
-            post: VmOpIgnore)),
+     exec: sstoreOp),
+
 
     (opCode: Sstore,    ##  0x55, sstore for Istanbul and later
      forks: VmOpIstanbulAndLater - VmOpBerlinAndLater,
      name: "sstoreEIP2200",
      info: "EIP2200: sstore for Istanbul and later",
-     exec: (prep: VmOpIgnore,
-            run:  sstoreEIP2200Op,
-            post: VmOpIgnore)),
+     exec: sstoreEIP2200Op),
+
 
     (opCode: Sstore,    ##  0x55, sstore for Berlin and later
      forks: VmOpBerlinAndLater,
      name: "sstoreEIP2929",
      info: "EIP2929: sstore for Istanbul and later",
-     exec: (prep: VmOpIgnore,
-            run:  sstoreEIP2929Op,
-            post: VmOpIgnore)),
+     exec: sstoreEIP2929Op),
+
 
     (opCode: Jump,      ## 0x56, Jump
      forks: VmOpAllForks,
      name: "jump",
      info: "Alter the program counter",
-     exec: (prep: VmOpIgnore,
-            run:  jumpOp,
-            post: VmOpIgnore)),
+     exec: jumpOp),
+
 
     (opCode: JumpI,     ## 0x57, Conditional jump
      forks: VmOpAllForks,
      name: "jumpI",
      info: "Conditionally alter the program counter",
-     exec: (prep: VmOpIgnore,
-            run:  jumpIOp,
-            post: VmOpIgnore)),
+     exec: jumpIOp),
+
 
     (opCode: Pc,        ## 0x58, Program counter prior to instruction
      forks: VmOpAllForks,
      name: "pc",
      info: "Get the value of the program counter prior to the increment "&
            "corresponding to this instruction",
-     exec: (prep: VmOpIgnore,
-            run:  pcOp,
-            post: VmOpIgnore)),
+     exec: pcOp),
+
 
     (opCode: Msize,     ## 0x59, Memory size
      forks: VmOpAllForks,
      name: "msize",
      info: "Get the size of active memory in bytes",
-     exec: (prep: VmOpIgnore,
-            run:  msizeOp,
-            post: VmOpIgnore)),
+     exec: msizeOp),
+
 
     (opCode: Gas,       ##  0x5a, Get available gas
      forks: VmOpAllForks,
      name: "gas",
      info: "Get the amount of available gas, including the corresponding "&
            "reduction for the cost of this instruction",
-     exec: (prep: VmOpIgnore,
-            run:  gasOp,
-            post: VmOpIgnore)),
+     exec: gasOp),
+
 
     (opCode: JumpDest,  ## 0x5b, Mark jump target. This operation has no effect
                         ##       on machine state during execution
      forks: VmOpAllForks,
      name: "jumpDest",
      info: "Mark a valid destination for jumps",
-     exec: (prep: VmOpIgnore,
-            run:  jumpDestOp,
-            post: VmOpIgnore)),
+     exec: jumpDestOp),
+
 
     (opCode: Tload,     ## 0x5c, Load word from transient storage.
      forks: VmOpCancunAndLater,
      name: "tLoad",
      info: "Load word from transient storage",
-     exec: (prep: VmOpIgnore,
-            run:  tloadOp,
-            post: VmOpIgnore)),
+     exec: tloadOp),
+
 
     (opCode: Tstore,     ## 0x5d, Save word to transient storage.
      forks: VmOpCancunAndLater,
      name: "tStore",
      info: "Save word to transient storage",
-     exec: (prep: VmOpIgnore,
-            run:  tstoreOp,
-            post: VmOpIgnore)),
+     exec: tstoreOp),
+
 
     (opCode: Mcopy,     ## 0x5e, Copy memory
      forks: VmOpCancunAndLater,
      name: "MCopy",
      info: "Copy memory",
-     exec: (prep: VmOpIgnore,
-            run:  mCopyOp,
-            post: VmOpIgnore))]
+     exec: mCopyOp)]
 
 # ------------------------------------------------------------------------------
 # End

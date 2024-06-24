@@ -253,163 +253,142 @@ const
      forks: VmOpAllForks,
      name: "address",
      info: "Get address of currently executing account",
-     exec: (prep: VmOpIgnore,
-            run:  VmOpFn addressOp,
-            post: VmOpIgnore)),
+     exec: VmOpFn addressOp),
+
 
     (opCode: Balance,         ## 0x31, Balance
      forks: VmOpAllForks - VmOpBerlinAndLater,
      name: "balance",
      info: "Get balance of the given account",
-     exec: (prep: VmOpIgnore,
-            run:  balanceOp,
-            post: VmOpIgnore)),
+     exec: balanceOp),
+
 
     (opCode: Balance,         ## 0x31, Balance for Berlin and later
      forks: VmOpBerlinAndLater,
      name: "balanceEIP2929",
      info: "EIP2929: Get balance of the given account",
-     exec: (prep: VmOpIgnore,
-            run:  balanceEIP2929Op,
-            post: VmOpIgnore)),
+     exec: balanceEIP2929Op),
+
 
     (opCode: Origin,          ## 0x32, Origination address
      forks: VmOpAllForks,
      name: "origin",
      info: "Get execution origination address",
-     exec: (prep: VmOpIgnore,
-            run:  originOp,
-            post: VmOpIgnore)),
+     exec: originOp),
+
 
     (opCode: Caller,          ## 0x33, Caller address
      forks: VmOpAllForks,
      name: "caller",
      info: "Get caller address",
-     exec: (prep: VmOpIgnore,
-            run:  callerOp,
-            post: VmOpIgnore)),
+     exec: callerOp),
+
 
     (opCode: CallValue,       ## 0x34, Execution deposited value
      forks: VmOpAllForks,
      name: "callValue",
      info: "Get deposited value by the instruction/transaction " &
            "responsible for this execution",
-     exec: (prep: VmOpIgnore,
-            run:  callValueOp,
-            post: VmOpIgnore)),
+     exec: callValueOp),
+
 
     (opCode: CallDataLoad,    ## 0x35, Input data
      forks: VmOpAllForks,
      name: "callDataLoad",
      info: "Get input data of current environment",
-     exec: (prep: VmOpIgnore,
-            run:  callDataLoadOp,
-            post: VmOpIgnore)),
+     exec: callDataLoadOp),
+
 
     (opCode: CallDataSize,    ## 0x36, Size of input data
      forks: VmOpAllForks,
      name: "callDataSize",
      info: "Get size of input data in current environment",
-     exec: (prep: VmOpIgnore,
-            run:  callDataSizeOp,
-            post: VmOpIgnore)),
+     exec: callDataSizeOp),
+
 
     (opCode: CallDataCopy,    ## 0x37, Copy input data to memory.
      forks: VmOpAllForks,
      name: "callDataCopy",
      info: "Copy input data in current environment to memory",
-     exec: (prep: VmOpIgnore,
-            run:  callDataCopyOp,
-            post: VmOpIgnore)),
+     exec: callDataCopyOp),
+
 
     (opCode: CodeSize,       ## 0x38, Size of code
      forks: VmOpAllForks,
      name: "codeSize",
      info: "Get size of code running in current environment",
-     exec: (prep: VmOpIgnore,
-            run:  codeSizeOp,
-            post: VmOpIgnore)),
+     exec: codeSizeOp),
+
 
     (opCode: CodeCopy,       ## 0x39, Copy code to memory.
      forks: VmOpAllForks,
      name: "codeCopy",
      info: "Copy code running in current environment to memory",
-     exec: (prep: VmOpIgnore,
-            run:  codeCopyOp,
-            post: VmOpIgnore)),
+     exec: codeCopyOp),
+
 
     (opCode: GasPrice,       ## 0x3a, Gas price
      forks: VmOpAllForks,
      name: "gasPrice",
      info: "Get price of gas in current environment",
-     exec: (prep: VmOpIgnore,
-            run:  gasPriceOp,
-            post: VmOpIgnore)),
+     exec: gasPriceOp),
+
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size
      forks: VmOpAllForks - VmOpBerlinAndLater,
      name: "extCodeSize",
      info: "Get size of an account's code",
-     exec: (prep: VmOpIgnore,
-            run:  extCodeSizeOp,
-            post: VmOpIgnore)),
+     exec: extCodeSizeOp),
+
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin and later
      forks: VmOpBerlinAndLater,
      name: "extCodeSizeEIP2929",
      info: "EIP2929: Get size of an account's code",
-     exec: (prep: VmOpIgnore,
-            run:  extCodeSizeEIP2929Op,
-            post: VmOpIgnore)),
+     exec: extCodeSizeEIP2929Op),
+
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account code copy to memory.
      forks: VmOpAllForks - VmOpBerlinAndLater,
      name: "extCodeCopy",
      info: "Copy an account's code to memory",
-     exec: (prep: VmOpIgnore,
-            run:  extCodeCopyOp,
-            post: VmOpIgnore)),
+     exec: extCodeCopyOp),
+
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin and later
      forks: VmOpBerlinAndLater,
      name: "extCodeCopyEIP2929",
      info: "EIP2929: Copy an account's code to memory",
-     exec: (prep: VmOpIgnore,
-            run:  extCodeCopyEIP2929Op,
-            post: VmOpIgnore)),
+     exec: extCodeCopyEIP2929Op),
+
 
     (opCode: ReturnDataSize, ## 0x3d, Previous call output data size
      forks: VmOpByzantiumAndLater,
      name: "returnDataSize",
      info: "Get size of output data from the previous call " &
            "from the current environment",
-     exec: (prep: VmOpIgnore,
-            run:  returnDataSizeOp,
-            post: VmOpIgnore)),
+     exec: returnDataSizeOp),
+
 
     (opCode: ReturnDataCopy, ## 0x3e, Previous call output data copy to memory
      forks: VmOpByzantiumAndLater,
      name: "returnDataCopy",
      info: "Copy output data from the previous call to memory",
-     exec: (prep: VmOpIgnore,
-            run:  returnDataCopyOp,
-            post: VmOpIgnore)),
+     exec: returnDataCopyOp),
+
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash
      forks: VmOpConstantinopleAndLater - VmOpBerlinAndLater,
      name: "extCodeHash",
      info: "Returns the keccak256 hash of a contract’s code",
-     exec: (prep: VmOpIgnore,
-            run:  extCodeHashOp,
-            post: VmOpIgnore)),
+     exec: extCodeHashOp),
+
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash for berlin and later
      forks: VmOpBerlinAndLater,
      name: "extCodeHashEIP2929",
      info: "EIP2929: Returns the keccak256 hash of a contract’s code",
-     exec: (prep: VmOpIgnore,
-            run:  extCodeHashEIP2929Op,
-            post: VmOpIgnore))]
+     exec: extCodeHashEIP2929Op)]
 
 # ------------------------------------------------------------------------------
 # End
