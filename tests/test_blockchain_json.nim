@@ -87,7 +87,8 @@ proc executeCase(node: JsonNode): bool =
   var c = initForkedChain(com)
   var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
-    if c.importBlock(blk.blk).isOk:
+    let res = c.importBlock(blk.blk)
+    if res.isOk:
       if env.lastBlockHash == blk.blk.header.blockHash:
         lastStateRoot = blk.blk.header.stateRoot
       if blk.badBlock:
@@ -95,7 +96,7 @@ proc executeCase(node: JsonNode): bool =
         return false
     else:
       if not blk.badBlock:
-        debugEcho "A bug? good block rejected"
+        debugEcho "A bug? good block rejected: ", res.error
         return false
 
   c.forkChoice(env.lastBlockHash, env.lastBlockHash).isOkOr:
