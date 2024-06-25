@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/tables,
   ../../common,
@@ -51,6 +53,11 @@ const
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
+template shouldNotKeyError(body: untyped) =
+  try:
+    body
+  except KeyError as exc:
+    raiseAssert exc.msg
 
 proc processBlock(c: ForkedChain,
                   parent: BlockHeader,
@@ -147,9 +154,10 @@ proc replaySegment(c: var ForkedChain, target: Hash256) =
     prevHash = target
     chain = newSeq[EthBlock]()
 
-  while prevHash != c.baseHash:
-    chain.add c.blocks[prevHash].blk
-    prevHash = chain[^1].header.parentHash
+  shouldNotKeyError:
+    while prevHash != c.baseHash:
+      chain.add c.blocks[prevHash].blk
+      prevHash = chain[^1].header.parentHash
 
   c.stagingTx.rollback()
   c.stagingTx = c.db.newTransaction()
@@ -161,15 +169,16 @@ proc replaySegment(c: var ForkedChain, target: Hash256) =
 
 proc writeBaggage(c: var ForkedChain, target: Hash256) =
   # Write baggage from base+1 to target block
-  var prevHash = target
-  while prevHash != c.baseHash:
-    let blk =  c.blocks[prevHash]
-    c.db.persistTransactions(blk.blk.header.number, blk.blk.transactions)
-    c.db.persistReceipts(blk.receipts)
-    discard c.db.persistUncles(blk.blk.uncles)
-    if blk.blk.withdrawals.isSome:
-      c.db.persistWithdrawals(blk.blk.withdrawals.get)
-    prevHash = blk.blk.header.parentHash
+  shouldNotKeyError:
+    var prevHash = target
+    while prevHash != c.baseHash:
+      let blk =  c.blocks[prevHash]
+      c.db.persistTransactions(blk.blk.header.number, blk.blk.transactions)
+      c.db.persistReceipts(blk.receipts)
+      discard c.db.persistUncles(blk.blk.uncles)
+      if blk.blk.withdrawals.isSome:
+        c.db.persistWithdrawals(blk.blk.withdrawals.get)
+      prevHash = blk.blk.header.parentHash
 
 func updateBase(c: var ForkedChain,
                 newBaseHash: Hash256,
@@ -227,14 +236,15 @@ func findCanonicalHead(c: ForkedChain,
     # because it not point to any active chain
     return ok(CanonicalDesc(cursorHash: c.baseHash, header: c.baseHeader))
 
-  # Find hash belong to which chain
-  for cursor in c.cursorHeads:
-    let header = c.blocks[cursor.hash].blk.header
-    var prevHash = cursor.hash
-    while prevHash != c.baseHash:
-      if prevHash == hash:
-        return ok(CanonicalDesc(cursorHash: cursor.hash, header: header))
-      prevHash = c.blocks[prevHash].blk.header.parentHash
+  shouldNotKeyError:
+   # Find hash belong to which chain
+   for cursor in c.cursorHeads:
+     let header = c.blocks[cursor.hash].blk.header
+     var prevHash = cursor.hash
+     while prevHash != c.baseHash:
+       if prevHash == hash:
+         return ok(CanonicalDesc(cursorHash: cursor.hash, header: header))
+       prevHash = c.blocks[prevHash].blk.header.parentHash
 
   err("Block hash is not part of any active chain")
 
@@ -244,12 +254,13 @@ func canonicalChain(c: ForkedChain,
   if hash == c.baseHash:
     return ok(c.baseHeader)
 
-  var prevHash = headHash
-  while prevHash != c.baseHash:
-    var header = c.blocks[prevHash].blk.header
-    if prevHash == hash:
-      return ok(header)
-    prevHash = header.parentHash
+  shouldNotKeyError:
+    var prevHash = headHash
+    while prevHash != c.baseHash:
+      var header = c.blocks[prevHash].blk.header
+      if prevHash == hash:
+        return ok(header)
+      prevHash = header.parentHash
 
   err("Block hash not in canonical chain")
 
@@ -267,37 +278,38 @@ func calculateNewBase(c: ForkedChain,
   if targetNumber - c.baseHeader.number <= BaseDistance:
     return BaseDesc(hash: c.baseHash, header: c.baseHeader)
 
-  var prevHash = headHash
-  while prevHash != c.baseHash:
-    var header = c.blocks[prevHash].blk.header
-    if header.number == targetNumber:
-      return BaseDesc(hash: prevHash, header: move(header))
-    prevHash = header.parentHash
+  shouldNotKeyError:
+    var prevHash = headHash
+    while prevHash != c.baseHash:
+      var header = c.blocks[prevHash].blk.header
+      if header.number == targetNumber:
+        return BaseDesc(hash: prevHash, header: move(header))
+      prevHash = header.parentHash
 
   doAssert(false, "Unreachable code")
 
 func trimCanonicalChain(c: var ForkedChain, head: CanonicalDesc) =
   # Maybe the current active chain is longer than canonical chain
-  var prevHash = head.cursorHash
-  while prevHash != c.baseHash:
-    let header = c.blocks[prevHash].blk.header
-    if header.number > head.header.number:
-      c.blocks.del(prevHash)
-    else:
-      break
-    prevHash = header.parentHash
+  shouldNotKeyError:
+    var prevHash = head.cursorHash
+    while prevHash != c.baseHash:
+      let header = c.blocks[prevHash].blk.header
+      if header.number > head.header.number:
+        c.blocks.del(prevHash)
+      else:
+        break
+      prevHash = header.parentHash
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc initForkedChain*(com: CommonRef): ForkedChain =
+proc initForkedChain*(com: CommonRef, baseHeader: BlockHeader): ForkedChain =
   result.com = com
-  result.db = com.db
-  result.baseHeader = com.db.getCanonicalHead()
-  let cursorHash = result.baseHeader.blockHash
-  result.cursorHash = cursorHash
-  result.baseHash = cursorHash
+  result.db  = com.db
+  result.baseHeader   = baseHeader
+  result.cursorHash   = baseHeader.blockHash
+  result.baseHash     = result.cursorHash
   result.cursorHeader = result.baseHeader
 
 proc importBlock*(c: var ForkedChain, blk: EthBlock): Result[void, string] =

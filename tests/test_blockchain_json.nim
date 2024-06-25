@@ -87,7 +87,7 @@ proc executeCase(node: JsonNode): bool =
     debugEcho "Genesis block hash is database different with expected genesis block hash"
     return false
 
-  var c = initForkedChain(com)
+  var c = initForkedChain(com, env.genesisHeader)
   var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
     let res = c.importBlock(blk.blk)
