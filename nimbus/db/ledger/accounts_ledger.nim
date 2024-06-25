@@ -79,6 +79,9 @@ type
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
     ripemdSpecial: bool
+    cache: Table[EthAddress, AccountRef]
+      # Second-level cache for the ledger save point, which is cleared on every
+      # persist
     code: KeyedQueue[Hash256, CodeBytesRef]
       ## The code cache provides two main benefits:
       ##
@@ -257,6 +260,11 @@ proc getAccount(
     if not result.isNil:
       return
     sp = sp.parentSavepoint
+
+  if ac.cache.pop(address, result):
+    # Check second-level cache
+    ac.savePoint.cache[address] = result
+    return
 
   # not found in cache, look into state trie
   let rc = ac.ledger.fetch address
@@ -651,7 +659,8 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
     ac.ripemdSpecial = false
 
 proc persist*(ac: AccountsLedgerRef,
-              clearEmptyAccount: bool = false) =
+              clearEmptyAccount: bool = false,
+              clearCache = false) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
 
@@ -682,6 +691,11 @@ proc persist*(ac: AccountsLedgerRef,
 
     acc.flags = acc.flags - resetFlags
   ac.savePoint.dirty.clear()
+
+  if clearCache:
+    # This overwrites the cache from the previous persist, providing a crude LRU
+    # scheme with little overhead
+    ac.cache = move(ac.savePoint.cache)
 
   ac.savePoint.selfDestruct.clear()
 
