@@ -132,29 +132,27 @@ proc putBegFn(db: MemBackendRef): PutBegFn =
 
 proc putVtxFn(db: MemBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
+    proc(hdl: PutHdlRef; vid: VertexID; vtx: VertexRef) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        for (vid,vtx) in vrps:
-          if vtx.isValid:
-            let rc = vtx.blobify()
-            if rc.isErr:
-              hdl.error = TypedPutHdlErrRef(
-                pfx:  VtxPfx,
-                vid:  vid,
-                code: rc.error)
-              return
-            hdl.sTab[vid] = rc.value
-          else:
-            hdl.sTab[vid] = EmptyBlob
+        if vtx.isValid:
+          let rc = vtx.blobify()
+          if rc.isErr:
+            hdl.error = TypedPutHdlErrRef(
+              pfx:  VtxPfx,
+              vid:  vid,
+              code: rc.error)
+            return
+          hdl.sTab[vid] = rc.value
+        else:
+          hdl.sTab[vid] = EmptyBlob
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
   result =
-    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
+    proc(hdl: PutHdlRef; vid: VertexID, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        for (vid,key) in vkps:
-          hdl.kMap[vid] = key
+        hdl.kMap[vid] = key
 
 proc putTuvFn(db: MemBackendRef): PutTuvFn =
   result =

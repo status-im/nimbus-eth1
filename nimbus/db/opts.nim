@@ -18,7 +18,7 @@ const
   # https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning
   defaultMaxOpenFiles* = 512
   defaultWriteBufferSize* = 64 * 1024 * 1024
-  defaultRowCacheSize* = 2048 * 1024 * 1024
+  defaultRowCacheSize* = 4096 * 1024 * 1024
   defaultBlockCacheSize* = 256 * 1024 * 1024
 
 type DbOptions* = object # Options that are transported to the database layer

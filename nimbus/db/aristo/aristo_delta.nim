@@ -75,8 +75,10 @@ proc deltaPersistent*(
 
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
-  be.putVtxFn(writeBatch, db.balancer.sTab.pairs.toSeq)
-  be.putKeyFn(writeBatch, db.balancer.kMap.pairs.toSeq)
+  for vid, vtx in db.balancer.sTab:
+    be.putVtxFn(writeBatch, vid, vtx)
+  for vid, key in db.balancer.kMap:
+    be.putKeyFn(writeBatch, vid,key)
   be.putTuvFn(writeBatch, db.balancer.vTop)
   be.putLstFn(writeBatch, lSst)
   ? be.putEndFn writeBatch                       # Finalise write batch
