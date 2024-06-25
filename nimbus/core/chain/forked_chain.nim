@@ -130,9 +130,10 @@ proc validateBlock(c: var ForkedChain,
 
   ok()
 
-proc replaySegment(c: var ForkedChain, head: Hash256) =
+proc replaySegment(c: var ForkedChain, target: Hash256) =
+  # Replay from base+1 to target block
   var
-    prevHash = head
+    prevHash = target
     chain = newSeq[EthBlock]()
 
   while prevHash != c.baseHash:
@@ -147,8 +148,9 @@ proc replaySegment(c: var ForkedChain, head: Hash256) =
       updateCursor = false).expect("have been validated before")
     c.cursorHeader = chain[i].header
 
-proc writeBaggage(c: var ForkedChain, blockHash: Hash256) =
-  var prevHash = blockHash
+proc writeBaggage(c: var ForkedChain, target: Hash256) =
+  # Write baggage from base+1 to target block
+  var prevHash = target
   while prevHash != c.baseHash:
     let blk =  c.blocks[prevHash]
     c.db.persistTransactions(blk.blk.header.number, blk.blk.transactions)
@@ -257,8 +259,10 @@ proc importBlock*(c: var ForkedChain, blk: EthBlock): Result[void, string] =
     return err("Block is not part of valid chain")
 
   # TODO: If engine API keep importing blocks
-  # but not finalized it, e.g. current chain length > 128 blocks
-  # Should we move the base forward?
+  # but not finalized it, e.g. current chain length > StagedBlocksThreshold
+  # We need to persist some of the in-memory stuff
+  # to a "staging area" or disk-backed memory but it must not afect `base`.
+  # `base` is the point of no return, we only update it on finality.
 
   c.replaySegment(header.parentHash)
   c.validateBlock(c.cursorHeader, blk)
