@@ -52,13 +52,13 @@ type
       ## Generic transaction initialisation function
 
   PutVtxFn* =
-    proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)])
+    proc(hdl: PutHdlRef; vid: VertexID; vtx: VertexRef)
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function, `VertexRef(nil)`
         ## values indicate that records should be deleted.
 
   PutKeyFn* =
-    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)])
+    proc(hdl: PutHdlRef; vid: VertexID, key: HashKey)
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function, `VOID_HASH_KEY`
         ## values indicate that records should be deleted.

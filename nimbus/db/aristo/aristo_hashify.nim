@@ -45,7 +45,7 @@ type
     root: HashSet[VertexID]                ## Top level, root targets
     pool: Table[VertexID,VertexID]         ## Upper links pool
     base: Table[VertexID,VertexID]         ## Width-first leaf level links
-    leaf: HashSet[VertexID]                ## Stans-alone leaf to process
+    leaf: seq[VertexID]                    ## Stand-alone leaf to process
     rev: Table[VertexID,HashSet[VertexID]] ## Reverse look up table
 
 logScope:
@@ -82,15 +82,15 @@ func hasValue(
 
 proc pedigree(
     db: AristoDbRef;                   # Database, top layer
+    wff: var WidthFirstForest;
     ancestors: HashSet[VertexID];      # Vertex IDs to start connecting from
     proofs: HashSet[VertexID];         # Additional proof nodes to start from
-      ): Result[WidthFirstForest,(VertexID,AristoError)] =
+      ): Result[void, (VertexID,AristoError)] =
   ## For each vertex ID from the argument set `ancestors` find all un-labelled
   ## grand child vertices and build a forest (of trees) starting from the
   ## grand child vertices.
   ##
   var
-    wff: WidthFirstForest
     leafs: HashSet[VertexID]
 
   proc register(wff: var WidthFirstForest; fromVid, toVid: VertexID) =
@@ -134,7 +134,7 @@ proc pedigree(
       let children = vtx.subVids
       if children.len == 0:
         # This is an isolated leaf node
-        wff.leaf.incl root
+        wff.leaf.add root
       else:
         wff.root.incl root
         for child in vtx.subVids:
@@ -187,18 +187,19 @@ proc pedigree(
 
     redo.swap leafs
 
-  ok move(wff)
+  ok()
 
 # ------------------------------------------------------------------------------
 # Private functions, tree traversal
 # ------------------------------------------------------------------------------
 
 proc createSched(
+    wff: var WidthFirstForest;         # Search tree to create
     db: AristoDbRef;                   # Database, top layer
-      ): Result[WidthFirstForest,(VertexID,AristoError)] =
+      ): Result[void,(VertexID,AristoError)] =
   ## Create width-first search schedule (aka forest)
   ##
-  var wff = ? db.pedigree(db.dirty, db.pPrf)
+  ? db.pedigree(wff, db.dirty, db.pPrf)
 
   if 0 < wff.leaf.len:
     for vid in wff.leaf:
@@ -210,8 +211,9 @@ proc createSched(
             return err((needed,HashifyVtxUnresolved))
         continue
       db.layersPutKey(VertexID(1), vid, node.digestTo(HashKey))
+    wff.leaf.reset() # No longer needed
 
-  ok move(wff)
+  ok()
 
 
 proc processSched(
@@ -306,7 +308,8 @@ proc hashify*(
   ##
   if 0 < db.dirty.len:
     # Set up widh-first traversal schedule
-    var wff = ? db.createSched()
+    var wff: WidthFirstForest
+    ? wff.createSched db
 
     # Traverse tree spanned by `wff` and label remaining vertices.
     ? wff.processSched db

@@ -143,10 +143,10 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; vrps: openArray[(VertexID,VertexRef)]) =
+    proc(hdl: PutHdlRef; vid: VertexID; vtx: VertexRef) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putVtx(vrps).isOkOr:
+        db.rdb.putVtx(vid, vtx).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
             vid:  error[0],
@@ -155,10 +155,10 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
 
 proc putKeyFn(db: RdbBackendRef): PutKeyFn =
   result =
-    proc(hdl: PutHdlRef; vkps: openArray[(VertexID,HashKey)]) =
+    proc(hdl: PutHdlRef; vid: VertexID, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putKey(vkps).isOkOr:
+        db.rdb.putKey(vid, key).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  KeyPfx,
             vid:  error[0],
