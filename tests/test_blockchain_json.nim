@@ -21,6 +21,9 @@ import
   ../nimbus/common/common,
   ../nimbus/core/eip4844
 
+const
+  debugMode = false
+
 type
   BlockDesc = object
     blk: EthBlock
@@ -118,6 +121,8 @@ proc executeCase(node: JsonNode): bool =
 
 proc executeFile(node: JsonNode, testStatusIMPL: var TestStatus) =
   for name, bctCase in node:
+    when debugMode:
+      debugEcho "TEST NAME: ", name
     check executeCase(bctCase)
 
 proc blockchainJsonMain*() =
@@ -138,12 +143,12 @@ proc blockchainJsonMain*() =
       jsonTest(newFolder, "newBlockchainTests", executeFile, skipNewBCTests)
 
 when isMainModule:
-  when false:
+  when debugMode:
     proc executeFile(name: string) =
       var testStatusIMPL: TestStatus
       let node = json.parseFile(name)
       executeFile(node, testStatusIMPL)
 
-    executeFile("tests/fixtures/eth_tests/BlockchainTests/TransitionTests/bcFrontierToHomestead/HomesteadOverrideFrontier.json")
+    executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcTotalDifficultyTest/sideChainWithMoreTransactions.json")
   else:
     blockchainJsonMain()

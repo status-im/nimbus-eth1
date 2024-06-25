@@ -30,6 +30,10 @@ type
     hash: Hash256
     header: BlockHeader
 
+  CanonicalDesc = object
+    cursorHash: Hash256
+    header: BlockHeader
+
   ForkedChain* = object
     stagingTx: CoreDbTxRef
     db: CoreDbRef
@@ -168,7 +172,9 @@ proc writeBaggage(c: var ForkedChain, target: Hash256) =
     prevHash = blk.blk.header.parentHash
 
 func updateBase(c: var ForkedChain,
-                newBaseHash: Hash256, newBaseHeader: BlockHeader) =
+                newBaseHash: Hash256,
+                newBaseHeader: BlockHeader,
+                canonicalCursorHash: Hash256) =
   var cursorHeadsLen = c.cursorHeads.len
   # Remove obsolete chains, example:
   #     -- A1 - A2 - A3      -- D5 - D6
@@ -180,7 +186,8 @@ func updateBase(c: var ForkedChain,
   # but not D
 
   for i in 0..<cursorHeadsLen:
-    if c.cursorHeads[i].forkJunction <= newBaseHeader.number:
+    if c.cursorHeads[i].forkJunction <= newBaseHeader.number and
+       c.cursorHeads[i].hash != canonicalCursorHash:
       var prevHash = c.cursorHeads[i].hash
       while prevHash != c.baseHash:
         c.blocks.withValue(prevHash, val) do:
@@ -196,21 +203,37 @@ func updateBase(c: var ForkedChain,
       # the sequence length will not updated
       dec cursorHeadsLen
 
+  # Cleanup in-memory blocks starting from newBase backward
+  # while blocks from newBase+1 to canonicalCursor not deleted
+  # e.g. B4 onward
+  var prevHash = newBaseHash
+  while prevHash != c.baseHash:
+    c.blocks.withValue(prevHash, val) do:
+      let rmHash = prevHash
+      prevHash = val.blk.header.parentHash
+      c.blocks.del(rmHash)
+    do:
+      # Older chain segment have been deleted
+      # by previous head
+      break
+
   c.baseHeader = newBaseHeader
   c.baseHash = newBaseHash
 
 func findCanonicalHead(c: ForkedChain,
-                       hash: Hash256): Result[BlockHeader, string] =
+                       hash: Hash256): Result[CanonicalDesc, string] =
   if hash == c.baseHash:
-    return ok(c.baseHeader)
+    # The cursorHash here should not be used for next step
+    # because it not point to any active chain
+    return ok(CanonicalDesc(cursorHash: c.baseHash, header: c.baseHeader))
 
   # Find hash belong to which chain
-  for x in c.cursorHeads:
-    let header = c.blocks[x.hash].blk.header
-    var prevHash = x.hash
+  for cursor in c.cursorHeads:
+    let header = c.blocks[cursor.hash].blk.header
+    var prevHash = cursor.hash
     while prevHash != c.baseHash:
       if prevHash == hash:
-        return ok(header)
+        return ok(CanonicalDesc(cursorHash: cursor.hash, header: header))
       prevHash = c.blocks[prevHash].blk.header.parentHash
 
   err("Block hash is not part of any active chain")
@@ -252,6 +275,17 @@ func calculateNewBase(c: ForkedChain,
     prevHash = header.parentHash
 
   doAssert(false, "Unreachable code")
+
+func trimCanonicalChain(c: var ForkedChain, head: CanonicalDesc) =
+  # Maybe the current active chain is longer than canonical chain
+  var prevHash = head.cursorHash
+  while prevHash != c.baseHash:
+    let header = c.blocks[prevHash].blk.header
+    if header.number > head.header.number:
+      c.blocks.del(prevHash)
+    else:
+      break
+    prevHash = header.parentHash
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -302,30 +336,43 @@ proc forkChoice*(c: var ForkedChain,
                  finalizedHash: Hash256): Result[void, string] =
 
   # If there are multiple heads, find which chain headHash belongs to
-  let headHeader = ?c.findCanonicalHead(headHash)
+  let head = ?c.findCanonicalHead(headHash)
 
   # Finalized block must be part of canonical chain
   let finalizedHeader = ?c.canonicalChain(finalizedHash, headHash)
 
-  if finalizedHash == c.baseHash:
-    # The base is not updated
+  let newBase = c.calculateNewBase(
+    finalizedHeader, headHash, head.header)
+
+  if newBase.hash == c.baseHash:
+    # The base is not updated but the cursor maybe need update
+    if c.cursorHash != head.cursorHash:
+      if not c.stagingTx.isNil:
+        c.stagingTx.rollback()
+      c.stagingTx = c.db.newTransaction()
+      c.replaySegment(headHash)
+
+    c.trimCanonicalChain(head)
+    if c.cursorHash != headHash:
+      c.cursorHeader = head.header
+      c.cursorHash = headHash
     return ok()
 
   # At this point cursorHeader.number > baseHeader.number
-  if finalizedHash == c.cursorHash:
+  if newBase.hash == c.cursorHash:
     # Paranoid check, guaranteed by findCanonicalHead
     doAssert(c.cursorHash == headHash)
 
     # Current segment is canonical chain
-    c.writeBaggage(finalizedHash)
+    c.writeBaggage(newBase.hash)
 
-    # Paranoid check, guaranteed by `finalizedHash == c.cursorHash`
+    # Paranoid check, guaranteed by `newBase.hash == c.cursorHash`
     doAssert(not c.stagingTx.isNil)
     c.stagingTx.commit()
     c.stagingTx = nil
 
-    # Move base to finalized
-    c.updateBase(finalizedHash, c.cursorHeader)
+    # Move base to newBase
+    c.updateBase(newBase.hash, c.cursorHeader, head.cursorHash)
 
     # Save and record the block number before the last saved block state.
     c.db.persistent(c.cursorHeader.number).isOkOr:
@@ -335,10 +382,7 @@ proc forkChoice*(c: var ForkedChain,
 
   # At this point finalizedHeader.number is <= headHeader.number
   # and possibly switched to other chain beside the one with cursor
-  doAssert(finalizedHeader.number <= headHeader.number)
-
-  let newBase = c.calculateNewBase(
-    finalizedHeader, headHash, headHeader)
+  doAssert(finalizedHeader.number <= head.header.number)
 
   # Write segment from base+1 to newBase into database
   c.stagingTx.rollback()
@@ -347,18 +391,22 @@ proc forkChoice*(c: var ForkedChain,
     c.replaySegment(newBase.hash)
     c.writeBaggage(newBase.hash)
     c.stagingTx.commit()
+    c.stagingTx = nil
     # Update base forward to newBase
-    c.updateBase(newBase.hash, newBase.header)
+    c.updateBase(newBase.hash, newBase.header, head.cursorHash)
     c.db.persistent(newBase.header.number).isOkOr:
       return err("Failed to save state: " & $$error)
 
   # Move chain state forward to current head
-  if newBase.header.number < headHeader.number:
-    c.stagingTx = c.db.newTransaction()
+  if newBase.header.number < head.header.number:
+    if c.stagingTx.isNil:
+      c.stagingTx = c.db.newTransaction()
     c.replaySegment(headHash)
 
   # Move cursor forward to current head
-  c.cursorHeader = headHeader
-  c.cursorHash = headHash
+  c.trimCanonicalChain(head)
+  if c.cursorHash != headHash:
+    c.cursorHeader = head.header
+    c.cursorHash = headHash
 
   ok()
