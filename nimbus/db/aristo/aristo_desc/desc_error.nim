@@ -303,7 +303,6 @@ type
     UtilsAccVtxUnsupported
     UtilsAccWrongStorageRoot
     UtilsPayloadTypeUnsupported
-    UtilsStoRootInaccessible
     UtilsStoRootMissing
 
 # End
