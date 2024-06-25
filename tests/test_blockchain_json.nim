@@ -98,7 +98,7 @@ proc executeCase(node: JsonNode): bool =
         debugEcho "A bug? good block rejected"
         return false
 
-  c.forkChoice(env.lastBlockHash).isOkOr:
+  c.forkChoice(env.lastBlockHash, env.lastBlockHash).isOkOr:
     debugEcho error
     return false
 
@@ -143,6 +143,6 @@ when isMainModule:
       let node = json.parseFile(name)
       executeFile(node, testStatusIMPL)
 
-    executeFile("tests/fixtures/eth_tests/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/wrongTimestamp.json")
+    executeFile("tests/fixtures/eth_tests/BlockchainTests/TransitionTests/bcFrontierToHomestead/HomesteadOverrideFrontier.json")
   else:
     blockchainJsonMain()

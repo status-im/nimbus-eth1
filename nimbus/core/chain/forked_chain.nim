@@ -19,16 +19,12 @@ import
 
 type
   CursorDesc = object
-    number: BlockNumber
+    forkJunction: BlockNumber
     hash: Hash256
 
   BlockDesc = object
     blk: EthBlock
     receipts: seq[Receipt]
-
-  ActiveChain = object
-    header: BlockHeader
-    hash: Hash256
 
   ForkedChain* = object
     stagingTx: CoreDbTxRef
@@ -75,25 +71,35 @@ proc processBlock(c: ForkedChain,
 
   ok(move(vmState.receipts))
 
-proc updateCursorHeads(c: var ForkedChain,
-                 hash: Hash256,
-                 header: BlockHeader) =
+func updateCursorHeads(c: var ForkedChain,
+          cursorHash: Hash256,
+          header: BlockHeader) =
+  # Example of cursorHeads and cursor
+  #
+  #     -- A1 - A2 - A3    -- D5 - D6
+  #    /                  /
+  # base - B1 - B2 - B3 - B4
+  #             \
+  #              --- C3 - C4
+  #
+  # A3, B4, C4, and D6, are in cursorHeads
+  # Any one of them with blockHash == cursorHash
+  # is the active chain with cursor pointing to the
+  # latest block of that chain.
+
   for i in 0..<c.cursorHeads.len:
     if c.cursorHeads[i].hash == header.parentHash:
-      c.cursorHeads[i] = CursorDesc(
-        hash: hash,
-        number: header.number,
-      )
+      c.cursorHeads[i].hash = cursorHash
       return
 
   c.cursorHeads.add CursorDesc(
-    hash: hash,
-    number: header.number,
+    hash: cursorHash,
+    forkJunction: header.number,
   )
 
-proc updateCursor(c: var ForkedChain,
-                blk: EthBlock,
-                receipts: sink seq[Receipt]) =
+func updateCursor(c: var ForkedChain,
+                  blk: EthBlock,
+                  receipts: sink seq[Receipt]) =
   template header(): BlockHeader =
     blk.header
 
@@ -124,8 +130,7 @@ proc validateBlock(c: var ForkedChain,
 
   ok()
 
-proc replaySegment(c: var ForkedChain,
-                   head: Hash256) =
+proc replaySegment(c: var ForkedChain, head: Hash256) =
   var
     prevHash = head
     chain = newSeq[EthBlock]()
@@ -153,11 +158,20 @@ proc writeBaggage(c: var ForkedChain, blockHash: Hash256) =
       c.db.persistWithdrawals(blk.blk.withdrawals.get)
     prevHash = blk.blk.header.parentHash
 
-proc updateBase(c: var ForkedChain,
+func updateBase(c: var ForkedChain,
                 newBaseHash: Hash256, newBaseHeader: BlockHeader) =
-  # Remove obsolete chains
-  for i in 0..<c.cursorHeads.len:
-    if c.cursorHeads[i].number <= c.baseHeader.number:
+  var cursorHeadsLen = c.cursorHeads.len
+  # Remove obsolete chains, example:
+  #     -- A1 - A2 - A3      -- D5 - D6
+  #    /                    /
+  # base - B1 - B2 - [B3] - B4
+  #             \
+  #              --- C3 - C4
+  # If base move to B3, both A and C will be removed
+  # but not D
+
+  for i in 0..<cursorHeadsLen:
+    if c.cursorHeads[i].forkJunction <= newBaseHeader.number:
       var prevHash = c.cursorHeads[i].hash
       while prevHash != c.baseHash:
         c.blocks.withValue(prevHash, val) do:
@@ -169,24 +183,43 @@ proc updateBase(c: var ForkedChain,
           # by previous head
           break
       c.cursorHeads.del(i)
+      # If we use `c.cursorHeads.len` in the for loop,
+      # the sequence length will not updated
+      dec cursorHeadsLen
 
   c.baseHeader = newBaseHeader
   c.baseHash = newBaseHash
 
-func findActiveChain(c: ForkedChain, hash: Hash256): Result[ActiveChain, string] =
+func findCanonicalHead(c: ForkedChain,
+                       hash: Hash256): Result[BlockHeader, string] =
+  if hash == c.baseHash:
+    return ok(c.baseHeader)
+
   # Find hash belong to which chain
   for x in c.cursorHeads:
     let header = c.blocks[x.hash].blk.header
-    if x.hash == hash:
-      return ok(ActiveChain(header: header, hash: x.hash))
-
-    var prevHash = header.parentHash
+    var prevHash = x.hash
     while prevHash != c.baseHash:
-      prevHash = c.blocks[prevHash].blk.header.parentHash
       if prevHash == hash:
-        return ok(ActiveChain(header: header, hash: x.hash))
+        return ok(header)
+      prevHash = c.blocks[prevHash].blk.header.parentHash
 
-  err("Finalized hash is not part of any active chain")
+  err("Block hash is not part of any active chain")
+
+func canonicalChain(c: ForkedChain,
+                    hash: Hash256,
+                    headHash: Hash256): Result[BlockHeader, string] =
+  if hash == c.baseHash:
+    return ok(c.baseHeader)
+
+  var prevHash = headHash
+  while prevHash != c.baseHash:
+    var header = c.blocks[prevHash].blk.header
+    if prevHash == hash:
+      return ok(header)
+    prevHash = header.parentHash
+
+  err("Block hash not in canonical chain")
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -223,66 +256,70 @@ proc importBlock*(c: var ForkedChain, blk: EthBlock): Result[void, string] =
     # there is no hope the descendant is valid
     return err("Block is not part of valid chain")
 
+  # TODO: If engine API keep importing blocks
+  # but not finalized it, e.g. current chain length > 128 blocks
+  # Should we move the base forward?
+
   c.replaySegment(header.parentHash)
   c.validateBlock(c.cursorHeader, blk)
 
 proc forkChoice*(c: var ForkedChain,
-        finalizedHash: Hash256): Result[void, string] =
+                 headHash: Hash256,
+                 finalizedHash: Hash256): Result[void, string] =
+
+  # If there are multiple heads, find which chain headHash belongs to
+  let headHeader = ?c.findCanonicalHead(headHash)
+
+  # Finalized block must be part of canonical chain
+  let finalizedHeader = ?c.canonicalChain(finalizedHash, headHash)
+
   if finalizedHash == c.baseHash:
     # The base is not updated
     return ok()
 
   if finalizedHash == c.cursorHash:
+    # Paranoid check, guaranteed by findCanonicalHead
+    doAssert(c.cursorHash == headHash)
+
     # Current segment is canonical chain
     c.writeBaggage(finalizedHash)
 
-    # Paranoid check
+    # Paranoid check, guaranteed by `finalizedHash == c.cursorHash`
     doAssert(not c.stagingTx.isNil)
     c.stagingTx.commit()
     c.stagingTx = nil
+
+    # Move base to finalized
+    c.updateBase(finalizedHash, c.cursorHeader)
 
     # Save and record the block number before the last saved block state.
     c.db.persistent(c.cursorHeader.number).isOkOr:
       return err("Failed to save state: " & $$error)
 
-    c.updateBase(finalizedHash, c.cursorHeader)
     return ok()
 
-  # If there are multiple heads, find which chain finalizedHash belongs to
-  let ac = ?c.findActiveChain(finalizedHash)
+  # At this point finalizedHeader.number is <= headHeader.number
+  # and possibly switched to other chain beside the one with cursor
+  doAssert(finalizedHeader.number <= headHeader.number)
 
-  var
-    newBaseHash: Hash256
-    newBaseHeader: BlockHeader
-
-  c.blocks.withValue(finalizedHash, val) do:
-    if ac.header.number <= 128:
-      if val.blk.header.number < ac.header.number:
-        newBaseHash = finalizedHash
-        newBaseHeader = val.blk.header
-      else:
-        newBaseHash = ac.hash
-        newBaseHeader = ac.header
-    elif val.blk.header.number < ac.header.number - 128:
-      newBaseHash = finalizedHash
-      newBaseHeader = val.blk.header
-    else:
-      newBaseHash = ac.hash
-      newBaseHeader = ac.header
-  do:
-    # Redundant check, already checked in in findActiveChain
-    return err("Finalized head not in segments list")
-
+  # Write segment from base+1 to finalized into database
   c.stagingTx.rollback()
   c.stagingTx = c.db.newTransaction()
-  c.replaySegment(newBaseHash)
-  c.writeBaggage(newBaseHash)
-
+  c.replaySegment(finalizedHash)
+  c.writeBaggage(finalizedHash)
   c.stagingTx.commit()
-  c.stagingTx = nil
-
-  c.db.persistent(newBaseHeader.number).isOkOr:
+  # Update base forward to finalized
+  c.updateBase(finalizedHash, finalizedHeader)
+  c.db.persistent(finalizedHeader.number).isOkOr:
     return err("Failed to save state: " & $$error)
-  c.updateBase(newBaseHash, newBaseHeader)
+
+  # Move chain state forward to current head
+  if finalizedHeader.number < headHeader.number:
+    c.stagingTx = c.db.newTransaction()
+    c.replaySegment(headHash)
+
+  # Move cursor forward to current head
+  c.cursorHeader = headHeader
+  c.cursorHash = headHash
 
   ok()
