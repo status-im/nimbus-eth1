@@ -22,19 +22,26 @@ import
   ../nimbus/core/eip4844
 
 type
+  BlockDesc = object
+    blk: EthBlock
+    badBlock: bool
+
   TestEnv = object
-    blocks: seq[EthBlock]
+    blocks: seq[BlockDesc]
     genesisHeader: BlockHeader
     lastBlockHash: Hash256
     network: string
     pre: JsonNode
 
-proc parseBlocks(node: JsonNode): seq[EthBlock] =
+proc parseBlocks(node: JsonNode): seq[BlockDesc] =
   for x in node:
     try:
       let blockRLP = hexToSeqByte(x["rlp"].getStr)
       let blk = rlp.decode(blockRLP, EthBlock)
-      result.add blk
+      result.add BlockDesc(
+        blk: blk,
+        badBlock: "expectException" in x,
+      )
     except RlpError:
       # invalid rlp will not participate in block validation
       # e.g. invalid rlp received from network
@@ -80,9 +87,16 @@ proc executeCase(node: JsonNode): bool =
   var c = initForkedChain(com)
   var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
-    discard c.importBlock(blk)
-    if env.lastBlockHash == blk.header.blockHash:
-      lastStateRoot = blk.header.stateRoot
+    if c.importBlock(blk.blk).isOk:
+      if env.lastBlockHash == blk.blk.header.blockHash:
+        lastStateRoot = blk.blk.header.stateRoot
+      if blk.badBlock:
+        debugEcho "A bug? bad block imported"
+        return false
+    else:
+      if not blk.badBlock:
+        debugEcho "A bug? good block rejected"
+        return false
 
   c.forkChoice(env.lastBlockHash).isOkOr:
     debugEcho error
