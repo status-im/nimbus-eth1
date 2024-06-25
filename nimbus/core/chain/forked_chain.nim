@@ -18,7 +18,7 @@ import
   ../executor/process_block
 
 type
-  HeadDesc = object
+  CursorDesc = object
     number: BlockNumber
     hash: Hash256
 
@@ -35,11 +35,11 @@ type
     db: CoreDbRef
     com: CommonRef
     blocks: Table[Hash256, BlockDesc]
-    headHash: Hash256
     baseHash: Hash256
     baseHeader: BlockHeader
-    headHeader: BlockHeader
-    heads: seq[HeadDesc]
+    cursorHash: Hash256
+    cursorHeader: BlockHeader
+    cursorHeads: seq[CursorDesc]
 
 # ------------------------------------------------------------------------------
 # Private
@@ -75,40 +75,40 @@ proc processBlock(c: ForkedChain,
 
   ok(move(vmState.receipts))
 
-proc updateHeads(c: var ForkedChain,
+proc updateCursorHeads(c: var ForkedChain,
                  hash: Hash256,
                  header: BlockHeader) =
-  for i in 0..<c.heads.len:
-    if c.heads[i].hash == header.parentHash:
-      c.heads[i] = HeadDesc(
+  for i in 0..<c.cursorHeads.len:
+    if c.cursorHeads[i].hash == header.parentHash:
+      c.cursorHeads[i] = CursorDesc(
         hash: hash,
         number: header.number,
       )
       return
 
-  c.heads.add HeadDesc(
+  c.cursorHeads.add CursorDesc(
     hash: hash,
     number: header.number,
   )
 
-proc updateHead(c: var ForkedChain,
+proc updateCursor(c: var ForkedChain,
                 blk: EthBlock,
                 receipts: sink seq[Receipt]) =
   template header(): BlockHeader =
     blk.header
 
-  c.headHeader = header
-  c.headHash = header.blockHash
-  c.blocks[c.headHash] = BlockDesc(
+  c.cursorHeader = header
+  c.cursorHash = header.blockHash
+  c.blocks[c.cursorHash] = BlockDesc(
     blk: blk,
     receipts: move(receipts)
   )
-  c.updateHeads(c.headHash, header)
+  c.updateCursorHeads(c.cursorHash, header)
 
-proc validatePotentialHead(c: var ForkedChain,
+proc validateBlock(c: var ForkedChain,
           parent: BlockHeader,
           blk: EthBlock,
-          updateHead: bool = true)  =
+          updateCursor: bool = true): Result[void, string] =
   let dbTx = c.db.newTransaction()
   defer:
     dbTx.dispose()
@@ -116,11 +116,13 @@ proc validatePotentialHead(c: var ForkedChain,
   var res = c.processBlock(parent, blk)
   if res.isErr:
     dbTx.rollback()
-    return
+    return err(res.error)
 
   dbTx.commit()
-  if updateHead:
-    c.updateHead(blk, move(res.value))
+  if updateCursor:
+    c.updateCursor(blk, move(res.value))
+
+  ok()
 
 proc replaySegment(c: var ForkedChain,
                    head: Hash256) =
@@ -134,10 +136,11 @@ proc replaySegment(c: var ForkedChain,
 
   c.stagingTx.rollback()
   c.stagingTx = c.db.newTransaction()
-  c.headHeader = c.baseHeader
+  c.cursorHeader = c.baseHeader
   for i in countdown(chain.high, chain.low):
-    c.validatePotentialHead(c.headHeader, chain[i], updateHead = false)
-    c.headHeader = chain[i].header
+    c.validateBlock(c.cursorHeader, chain[i],
+      updateCursor = false).expect("have been validated before")
+    c.cursorHeader = chain[i].header
 
 proc writeBaggage(c: var ForkedChain, blockHash: Hash256) =
   var prevHash = blockHash
@@ -153,9 +156,9 @@ proc writeBaggage(c: var ForkedChain, blockHash: Hash256) =
 proc updateBase(c: var ForkedChain,
                 newBaseHash: Hash256, newBaseHeader: BlockHeader) =
   # Remove obsolete chains
-  for i in 0..<c.heads.len:
-    if c.heads[i].number <= c.baseHeader.number:
-      var prevHash = c.heads[i].hash
+  for i in 0..<c.cursorHeads.len:
+    if c.cursorHeads[i].number <= c.baseHeader.number:
+      var prevHash = c.cursorHeads[i].hash
       while prevHash != c.baseHash:
         c.blocks.withValue(prevHash, val) do:
           let rmHash = prevHash
@@ -165,14 +168,14 @@ proc updateBase(c: var ForkedChain,
           # Older chain segment have been deleted
           # by previous head
           break
-      c.heads.del(i)
+      c.cursorHeads.del(i)
 
   c.baseHeader = newBaseHeader
   c.baseHash = newBaseHash
 
 func findActiveChain(c: ForkedChain, hash: Hash256): Result[ActiveChain, string] =
   # Find hash belong to which chain
-  for x in c.heads:
+  for x in c.cursorHeads:
     let header = c.blocks[x.hash].blk.header
     if x.hash == hash:
       return ok(ActiveChain(header: header, hash: x.hash))
@@ -193,43 +196,43 @@ proc initForkedChain*(com: CommonRef): ForkedChain =
   result.com = com
   result.db = com.db
   result.baseHeader = com.db.getCanonicalHead()
-  let headHash = result.baseHeader.blockHash
-  result.headHash = headHash
-  result.baseHash = headHash
-  result.headHeader = result.baseHeader
+  let cursorHash = result.baseHeader.blockHash
+  result.cursorHash = cursorHash
+  result.baseHash = cursorHash
+  result.cursorHeader = result.baseHeader
 
-proc addBlock*(c: var ForkedChain, blk: EthBlock) =
+proc importBlock*(c: var ForkedChain, blk: EthBlock): Result[void, string] =
+  # Try to import block to canonical or side chain.
+  # return error if the block is invalid
   if c.stagingTx.isNil:
     c.stagingTx = c.db.newTransaction()
 
   template header(): BlockHeader =
     blk.header
 
-  if header.parentHash == c.headHash:
-    c.validatePotentialHead(c.headHeader, blk)
-    return
+  if header.parentHash == c.cursorHash:
+    return c.validateBlock(c.cursorHeader, blk)
 
   if header.parentHash == c.baseHash:
     c.stagingTx.rollback()
     c.stagingTx = c.db.newTransaction()
-    c.validatePotentialHead(c.baseHeader, blk)
-    return
+    return c.validateBlock(c.baseHeader, blk)
 
   if header.parentHash notin c.blocks:
     # If it's parent is an invalid block
     # there is no hope the descendant is valid
-    return
+    return err("Block is not part of valid chain")
 
   c.replaySegment(header.parentHash)
-  c.validatePotentialHead(c.headHeader, blk)
+  c.validateBlock(c.cursorHeader, blk)
 
-proc finalizeSegment*(c: var ForkedChain,
+proc forkChoice*(c: var ForkedChain,
         finalizedHash: Hash256): Result[void, string] =
   if finalizedHash == c.baseHash:
     # The base is not updated
     return ok()
 
-  if finalizedHash == c.headHash:
+  if finalizedHash == c.cursorHash:
     # Current segment is canonical chain
     c.writeBaggage(finalizedHash)
 
@@ -239,10 +242,10 @@ proc finalizeSegment*(c: var ForkedChain,
     c.stagingTx = nil
 
     # Save and record the block number before the last saved block state.
-    c.db.persistent(c.headHeader.number).isOkOr:
+    c.db.persistent(c.cursorHeader.number).isOkOr:
       return err("Failed to save state: " & $$error)
 
-    c.updateBase(finalizedHash, c.headHeader)
+    c.updateBase(finalizedHash, c.cursorHeader)
     return ok()
 
   # If there are multiple heads, find which chain finalizedHash belongs to

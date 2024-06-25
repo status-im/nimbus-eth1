@@ -80,11 +80,11 @@ proc executeCase(node: JsonNode): bool =
   var c = initForkedChain(com)
   var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
-    c.addBlock(blk)
+    discard c.importBlock(blk)
     if env.lastBlockHash == blk.header.blockHash:
       lastStateRoot = blk.header.stateRoot
 
-  c.finalizeSegment(env.lastBlockHash).isOkOr:
+  c.forkChoice(env.lastBlockHash).isOkOr:
     debugEcho error
     return false
 
