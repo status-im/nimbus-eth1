@@ -361,7 +361,7 @@ proc forkChoice*(c: var ForkedChain,
   # At this point cursorHeader.number > baseHeader.number
   if newBase.hash == c.cursorHash:
     # Paranoid check, guaranteed by findCanonicalHead
-    doAssert(c.cursorHash == headHash)
+    doAssert(c.cursorHash == head.cursorHash)
 
     # Current segment is canonical chain
     c.writeBaggage(newBase.hash)
@@ -383,6 +383,7 @@ proc forkChoice*(c: var ForkedChain,
   # At this point finalizedHeader.number is <= headHeader.number
   # and possibly switched to other chain beside the one with cursor
   doAssert(finalizedHeader.number <= head.header.number)
+  doAssert(newBase.header.number <= finalizedHeader.number)
 
   # Write segment from base+1 to newBase into database
   c.stagingTx.rollback()
@@ -403,7 +404,7 @@ proc forkChoice*(c: var ForkedChain,
       c.stagingTx = c.db.newTransaction()
     c.replaySegment(headHash)
 
-  # Move cursor forward to current head
+  # Move cursor to current head
   c.trimCanonicalChain(head)
   if c.cursorHash != headHash:
     c.cursorHeader = head.header
