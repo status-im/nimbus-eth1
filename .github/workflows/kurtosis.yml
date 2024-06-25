@@ -14,9 +14,27 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - 'doc/**'
+      - 'docs/**'
+      - '**/*.md'
+      - 'hive_integration/**'
+      - 'fluffy/**'
+      - '.github/workflows/fluffy*.yml'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
   pull_request:
     branches:
       - master
+    paths-ignore:
+      - 'doc/**'
+      - 'docs/**'
+      - '**/*.md'
+      - 'hive_integration/**'
+      - 'fluffy/**'
+      - '.github/workflows/fluffy*.yml'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
 
 jobs:
   build:
