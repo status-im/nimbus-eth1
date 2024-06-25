@@ -26,6 +26,10 @@ type
     blk: EthBlock
     receipts: seq[Receipt]
 
+  BaseDesc = object
+    hash: Hash256
+    header: BlockHeader
+
   ForkedChain* = object
     stagingTx: CoreDbTxRef
     db: CoreDbRef
@@ -36,6 +40,9 @@ type
     cursorHash: Hash256
     cursorHeader: BlockHeader
     cursorHeads: seq[CursorDesc]
+
+const
+  BaseDistance = 128
 
 # ------------------------------------------------------------------------------
 # Private
@@ -223,6 +230,29 @@ func canonicalChain(c: ForkedChain,
 
   err("Block hash not in canonical chain")
 
+func calculateNewBase(c: ForkedChain,
+               finalizedHeader: BlockHeader,
+               headHash: Hash256,
+               headHeader: BlockHeader): BaseDesc =
+  # It's important to have base at least `BaseDistance` behind head
+  # so we can answer state queries about history that deep.
+
+  let targetNumber = min(finalizedHeader.number,
+    max(headHeader.number, BaseDistance) - BaseDistance)
+
+  # The distance is less than `BaseDistance`, don't move the base
+  if targetNumber - c.baseHeader.number <= BaseDistance:
+    return BaseDesc(hash: c.baseHash, header: c.baseHeader)
+
+  var prevHash = headHash
+  while prevHash != c.baseHash:
+    var header = c.blocks[prevHash].blk.header
+    if header.number == targetNumber:
+      return BaseDesc(hash: prevHash, header: move(header))
+    prevHash = header.parentHash
+
+  doAssert(false, "Unreachable code")
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -281,6 +311,7 @@ proc forkChoice*(c: var ForkedChain,
     # The base is not updated
     return ok()
 
+  # At this point cursorHeader.number > baseHeader.number
   if finalizedHash == c.cursorHash:
     # Paranoid check, guaranteed by findCanonicalHead
     doAssert(c.cursorHash == headHash)
@@ -306,19 +337,23 @@ proc forkChoice*(c: var ForkedChain,
   # and possibly switched to other chain beside the one with cursor
   doAssert(finalizedHeader.number <= headHeader.number)
 
-  # Write segment from base+1 to finalized into database
+  let newBase = c.calculateNewBase(
+    finalizedHeader, headHash, headHeader)
+
+  # Write segment from base+1 to newBase into database
   c.stagingTx.rollback()
   c.stagingTx = c.db.newTransaction()
-  c.replaySegment(finalizedHash)
-  c.writeBaggage(finalizedHash)
-  c.stagingTx.commit()
-  # Update base forward to finalized
-  c.updateBase(finalizedHash, finalizedHeader)
-  c.db.persistent(finalizedHeader.number).isOkOr:
-    return err("Failed to save state: " & $$error)
+  if newBase.header.number > c.baseHeader.number:
+    c.replaySegment(newBase.hash)
+    c.writeBaggage(newBase.hash)
+    c.stagingTx.commit()
+    # Update base forward to newBase
+    c.updateBase(newBase.hash, newBase.header)
+    c.db.persistent(newBase.header.number).isOkOr:
+      return err("Failed to save state: " & $$error)
 
   # Move chain state forward to current head
-  if finalizedHeader.number < headHeader.number:
+  if newBase.header.number < headHeader.number:
     c.stagingTx = c.db.newTransaction()
     c.replaySegment(headHash)
 
