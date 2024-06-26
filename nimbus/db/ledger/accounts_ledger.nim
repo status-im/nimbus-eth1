@@ -425,7 +425,7 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
     acc.statement.address).value.storage
 
   # No need to hold descriptors for longer than needed
-  let stateEmpty = acc.statement.storage.stateEmpty.valueOr:
+  let stateEmpty = ac.ledger.slotStateEmpty(acc.statement.address).valueOr:
     raiseAssert info & "Storage column error: " & $$error
   if stateEmpty:
     acc.statement.storage = CoreDbColRef(nil)
@@ -523,7 +523,7 @@ proc contractCollision*(ac: AccountsLedgerRef, address: EthAddress): bool =
     return
   acc.statement.nonce != 0 or
     acc.statement.codeHash != EMPTY_CODE_HASH or
-      not acc.statement.storage.stateEmptyOrVoid
+      not ac.ledger.slotStateEmptyOrVoid(address)
 
 proc accountExists*(ac: AccountsLedgerRef, address: EthAddress): bool =
   let acc = ac.getAccount(address, false)
@@ -609,7 +609,7 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
 
-  let empty = acc.statement.storage.stateEmpty.valueOr: return
+  let empty = ac.ledger.slotStateEmpty(address).valueOr: return
   if not empty:
     # need to clear the storage from the database first
     let acc = ac.makeDirty(address, cloneStorage = false)
