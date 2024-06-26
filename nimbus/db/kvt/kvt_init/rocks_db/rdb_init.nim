@@ -56,7 +56,7 @@ proc init*(
 
   # Initialise column handlers (this stores implicitely `baseDb`)
   for col in KvtCFs:
-    rdb.store[col] = baseDb.withColFamily($col).valueOr:
+    rdb.store[col] = baseDb.getColFamily($col).valueOr:
       raiseAssert initFailed & " cannot initialise " &
         $col & " descriptor: " & error
   ok()

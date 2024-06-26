@@ -30,7 +30,7 @@ type
     ## Column family symbols/handles and names used on the database
     KvtGeneric = "KvtGen"            ## Generic column family
 
-  KvtCfStore* = array[KvtCFs,ColFamilyReadWrite]
+  KvtCfStore* = array[KvtCFs, ColFamilyReadWrite]
     ## List of column family handlers
 
 const

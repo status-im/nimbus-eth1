@@ -74,14 +74,14 @@ proc initImpl(
     raiseAssert initFailed & " cannot create base descriptor: " & error
 
   # Initialise column handlers (this stores implicitely `baseDb`)
-  rdb.admCol = baseDb.withColFamily($AdmCF).valueOr:
+  rdb.admCol = baseDb.getColFamily($AdmCF).valueOr:
     raiseAssert initFailed & " cannot initialise AdmCF descriptor: " & error
-  rdb.vtxCol = baseDb.withColFamily($VtxCF).valueOr:
+  rdb.vtxCol = baseDb.getColFamily($VtxCF).valueOr:
     raiseAssert initFailed & " cannot initialise VtxCF descriptor: " & error
-  rdb.keyCol = baseDb.withColFamily($KeyCF).valueOr:
+  rdb.keyCol = baseDb.getColFamily($KeyCF).valueOr:
     raiseAssert initFailed & " cannot initialise KeyCF descriptor: " & error
 
-  ok(guestCFs.mapIt(baseDb.withColFamily(it.name).expect("loaded cf")))
+  ok(guestCFs.mapIt(baseDb.getColFamily(it.name).expect("loaded cf")))
 
 # ------------------------------------------------------------------------------
 # Public constructor
