@@ -28,7 +28,7 @@ type
 
   EthWireRef* = ref object of EthWireBase
     db: CoreDbRef
-    chain: ChainRef
+    chain: ForkedChainRef
     txPool: TxPoolRef
     peerPool: PeerPool
     knownByPeer: Table[Peer, HashToTime]
@@ -270,7 +270,7 @@ proc setupPeerObserver(ctx: EthWireRef) =
 # ------------------------------------------------------------------------------
 
 proc new*(_: type EthWireRef,
-          chain: ChainRef,
+          chain: ForkedChainRef,
           txPool: TxPoolRef,
           peerPool: PeerPool): EthWireRef =
   let ctx = EthWireRef(

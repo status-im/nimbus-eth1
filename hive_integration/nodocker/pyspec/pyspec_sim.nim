@@ -116,8 +116,7 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
 
 proc runTest(node: JsonNode, network: string): TestStatus =
   let conf = getChainConfig(network)
-  var t = TestEnv(conf: makeTestConfig())
-  t.setupELClient(conf, node)
+  var env = setupELClient(conf, node)
 
   let blks = node["blocks"]
   var
@@ -143,7 +142,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
     latestVersion = payload.payload.version
 
-    let res = t.rpcClient.newPayload(payload.payload, payload.beaconRoot)
+    let res = env.rpcClient.newPayload(payload.payload, payload.beaconRoot)
     if res.isErr:
       result = TestStatus.Failed
       echo "unable to send block ",
@@ -164,22 +163,22 @@ proc runTest(node: JsonNode, network: string): TestStatus =
         echo pStatus.validationError.get
       break
 
-  block:
+  block blockOne:
     # only update head of beacon chain if valid response occurred
     if latestValidHash != common.Hash256():
       # update with latest valid response
       let fcState = ForkchoiceStateV1(headBlockHash: BlockHash latestValidHash.data)
-      let res = t.rpcClient.forkchoiceUpdated(latestVersion, fcState)
+      let res = env.rpcClient.forkchoiceUpdated(latestVersion, fcState)
       if res.isErr:
         result = TestStatus.Failed
         echo "unable to update head of beacon chain: ", res.error
-        break
+        break blockOne
 
-    if not validatePostState(node, t):
+    if not validatePostState(node, env):
       result = TestStatus.Failed
-      break
+      break blockOne
 
-  t.stopELClient()
+  env.stopELClient()
 
 const
   skipName = [
