@@ -341,7 +341,7 @@ proc deleteAccountRecord*(
       if error[1] in HikeAcceptableStopsNotFound:
         return err(DelPathNotFound)
       return err(error[1])
-    stoID = hike.legs[^1].wp.vtx.lData.account.storageID
+    stoID = hike.legs[^1].wp.vtx.lData.stoID
 
   # Delete storage tree if present
   if stoID.isValid:
@@ -419,7 +419,7 @@ proc deleteStorageData*(
         return err(DelStoAccMissing)
       return err(error)
     wpAcc = accHike.legs[^1].wp
-    stoID = wpAcc.vtx.lData.account.storageID
+    stoID = wpAcc.vtx.lData.stoID
 
   if not stoID.isValid:
     return err(DelStoRootMissing)
@@ -441,7 +441,7 @@ proc deleteStorageData*(
 
   # De-register the deleted storage tree from the account record
   let leaf = wpAcc.vtx.dup           # Dup on modify
-  leaf.lData.account.storageID = VertexID(0)
+  leaf.lData.stoID = VertexID(0)
   db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
   db.layersResKey(VertexID(1), wpAcc.vid)
   ok(true)
@@ -459,7 +459,7 @@ proc deleteStorageTree*(
         return err(DelStoAccMissing)
       return err(error)
     wpAcc = accHike.legs[^1].wp
-    stoID = wpAcc.vtx.lData.account.storageID
+    stoID = wpAcc.vtx.lData.stoID
 
   if not stoID.isValid:
     return err(DelStoRootMissing)
@@ -471,7 +471,7 @@ proc deleteStorageTree*(
 
   # De-register the deleted storage tree from the accounts record
   let leaf = wpAcc.vtx.dup             # Dup on modify
-  leaf.lData.account.storageID = VertexID(0)
+  leaf.lData.stoID = VertexID(0)
   db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
   db.layersResKey(VertexID(1), wpAcc.vid)
   ok()

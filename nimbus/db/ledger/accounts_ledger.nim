@@ -149,8 +149,7 @@ func newCoreDbAccount(address: EthAddress): CoreDbAccount =
     address:  address,
     nonce:    emptyEthAccount.nonce,
     balance:  emptyEthAccount.balance,
-    codeHash: emptyEthAccount.codeHash,
-    storage:  CoreDbColRef(nil))
+    codeHash: emptyEthAccount.codeHash)
 
 proc resetCoreDbAccount(ac: AccountsLedgerRef, v: var CoreDbAccount) =
   const info = "resetCoreDbAccount(): "
@@ -159,7 +158,6 @@ proc resetCoreDbAccount(ac: AccountsLedgerRef, v: var CoreDbAccount) =
   v.nonce = emptyEthAccount.nonce
   v.balance = emptyEthAccount.balance
   v.codeHash = emptyEthAccount.codeHash
-  v.storage = nil
 
 template noRlpException(info: static[string]; code: untyped) =
   try:
@@ -388,9 +386,8 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
 
   # Make sure that there is an account address row on the database. This is
   # needed for saving the account-linked storage column on the Aristo database.
-  if acc.statement.storage.isNil:
-    ac.ledger.merge(acc.statement).isOkOr:
-      raiseAssert info & $$error
+  ac.ledger.merge(acc.statement).isOkOr:
+    raiseAssert info & $$error
 
   # Save `overlayStorage[]` on database
   for slot, value in acc.overlayStorage:
@@ -418,17 +415,6 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
     else:
       acc.originalStorage.del(slot)
   acc.overlayStorage.clear()
-
-  # Changing the storage trie might also change the `storage` descriptor when
-  # the trie changes from empty to exixting or v.v.
-  acc.statement.storage = ac.ledger.fetch(
-    acc.statement.address).value.storage
-
-  # No need to hold descriptors for longer than needed
-  let stateEmpty = ac.ledger.slotStateEmpty(acc.statement.address).valueOr:
-    raiseAssert info & "Storage column error: " & $$error
-  if stateEmpty:
-    acc.statement.storage = CoreDbColRef(nil)
 
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
@@ -615,7 +601,6 @@ proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
     let acc = ac.makeDirty(address, cloneStorage = false)
     ac.ledger.clearStorage(address).isOkOr:
       raiseAssert info & $$error
-    acc.statement.storage = CoreDbColRef(nil)
     # update caches
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
@@ -745,13 +730,13 @@ iterator accounts*(ac: AccountsLedgerRef): Account =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for _, account in ac.savePoint.cache:
-    yield account.statement.recast().value
+    yield ac.ledger.recast(account.statement, updateOk=true).value
 
 iterator pairs*(ac: AccountsLedgerRef): (EthAddress, Account) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, account in ac.savePoint.cache:
-    yield (address, account.statement.recast().value)
+    yield (address, ac.ledger.recast(account.statement, updateOk=true).value)
 
 import stew/byteutils
 iterator storage*(
@@ -781,7 +766,7 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
-  else: acc.statement.storage.state.valueOr: EMPTY_ROOT_HASH
+  else: ac.ledger.slotState(address).valueOr: EMPTY_ROOT_HASH
 
 proc update(wd: var WitnessData, acc: AccountRef) =
   # once the code is touched make sure it doesn't get reset back to false in another update
@@ -875,7 +860,7 @@ proc getEthAccount*(ac: AccountsLedgerRef, address: EthAddress): Account =
     return emptyEthAccount
 
   ## Convert to legacy object, will throw an assert if that fails
-  let rc = acc.statement.recast()
+  let rc = ac.ledger.recast(acc.statement)
   if rc.isErr:
     raiseAssert "getAccount(): cannot convert account: " & $$rc.error
   rc.value

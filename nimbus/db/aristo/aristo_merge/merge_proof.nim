@@ -90,7 +90,7 @@ proc mergeNodeImpl(
           if not sid.isValid:
             sid = db.vidFetch
             db.layersPutProof(sid, acc.storageRoot.to(HashKey))
-          pyl.account.storageID = sid
+          pyl.stoID = sid
         vtx.lData = pyl
       except RlpError:
         return err(MergeNodeAccountPayloadError)

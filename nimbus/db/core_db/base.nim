@@ -603,7 +603,11 @@ proc slotStateEmptyOrVoid*(
 
 # ------------- other ----------------
 
-proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
+proc recast*(
+    acc: CoreDbAccRef;
+    statement: CoreDbAccount;
+    updateOk = false;
+      ): CoreDbRc[Account] =
   ## Convert the argument `statement` to the portable Ethereum representation
   ## of an account statement. This conversion may fail if the storage colState
   ## hash (see `hash()` above) is currently unavailable.
@@ -611,11 +615,8 @@ proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
   ## Note:
   ##   With the legacy backend, this function always succeeds.
   ##
-  let storage = statement.storage
-  storage.setTrackNewApi EthAccRecastFn
-  let rc =
-    if storage.isNil or not storage.ready: CoreDbRc[Hash256].ok(EMPTY_ROOT_HASH)
-    else: storage.parent.methods.colStateFn storage
+  acc.setTrackNewApi EthAccRecastFn
+  let rc = acc.methods.slotStateFn(acc, statement.address, updateOk)
   result =
     if rc.isOk:
       ok Account(
@@ -625,7 +626,7 @@ proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
         storageRoot: rc.value)
     else:
       err(rc.error)
-  storage.ifTrackNewApi: debug newApiTxt, api, elapsed, storage, result
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, storage, result
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods

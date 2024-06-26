@@ -43,7 +43,6 @@ type
     address*:  EthAddress    ## Reverse reference for storage trie path
     nonce*:    AccountNonce  ## Some `uint64` type
     balance*:  UInt256
-    storage*:  CoreDbColRef  ## Implies storage root MPT (aka column)
     codeHash*: Hash256
 
   CoreDbErrorCode* = enum

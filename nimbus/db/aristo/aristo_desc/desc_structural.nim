@@ -33,9 +33,10 @@ type
     Branch
 
   AristoAccount* = object
+    ## Application relevant part of an Ethereum account. Note that the storage
+    ## data/tree reference is not part of the account (see `PayloadRef` below.)
     nonce*:     AccountNonce         ## Some `uint64` type
     balance*:   UInt256
-    storageID*: VertexID             ## Implies storage root Merkle hash key
     codeHash*:  Hash256
 
   PayloadType* = enum
@@ -52,6 +53,7 @@ type
       rawBlob*: Blob                 ## Opaque data, default value
     of AccountData:
       account*: AristoAccount
+      stoID*: VertexID               ## Storage vertex ID (if any)
 
   VertexRef* = ref object of RootRef
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
@@ -163,7 +165,8 @@ proc `==`*(a, b: PayloadRef): bool =
       if a.rawBlob != b.rawBlob:
         return false
     of AccountData:
-      if a.account != b.account:
+      if a.account != b.account or
+         a.stoID != b.stoID:
         return false
   true
 
@@ -219,7 +222,8 @@ func dup*(pld: PayloadRef): PayloadRef =
   of AccountData:
     PayloadRef(
       pType:   AccountData,
-      account: pld.account)
+      account: pld.account,
+      stoID:   pld.stoID)
 
 func dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.

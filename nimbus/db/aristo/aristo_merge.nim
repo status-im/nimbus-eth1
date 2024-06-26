@@ -43,8 +43,8 @@ const
 
 proc mergeAccountRecord*(
     db: AristoDbRef;                   # Database, top layer
-    accKey: openArray[byte];          # Even nibbled byte path
-    accPayload: AristoAccount;         # Payload value
+    accKey: openArray[byte];           # Even nibbled byte path
+    accRec: AristoAccount;             # Account data
       ): Result[bool,AristoError] =
   ## Merge the  key-value-pair argument `(accKey,accPayload)` as an account
   ## ledger value, i.e. the the sub-tree starting at `VertexID(1)`.
@@ -58,7 +58,7 @@ proc mergeAccountRecord*(
   ## already.
   ##
   let
-    pyl =  PayloadRef(pType: AccountData, account: accPayload)
+    pyl =  PayloadRef(pType: AccountData, account: accRec)
     rc = db.mergePayloadImpl(VertexID(1), accKey, pyl, VidVtxPair())
   if rc.isOk:
     ok true
@@ -125,7 +125,7 @@ proc mergeStorageData*(
         return err(MergeStoAccMissing)
       return err(error)
     wpAcc = accHike.legs[^1].wp
-    stoID = wpAcc.vtx.lData.account.storageID
+    stoID = wpAcc.vtx.lData.stoID
 
     # Provide new storage ID when needed
     useID = if stoID.isValid: stoID else: db.vidFetch()
@@ -144,7 +144,7 @@ proc mergeStorageData*(
     else:
       # Make sure that there is an account that refers to that storage trie
       let leaf = wpAcc.vtx.dup # Dup on modify
-      leaf.lData.account.storageID = useID
+      leaf.lData.stoID = useID
       db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
       db.layersResKey(VertexID(1), wpAcc.vid)
       return ok useID

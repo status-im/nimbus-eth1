@@ -116,7 +116,7 @@ proc fetchStorageID*(
       if error == FetchAccInaccessible:
         return err(FetchPathNotFound)
       return err(error)
-    stoID = accHike.legs[^1].wp.vtx.lData.account.storageID
+    stoID = accHike.legs[^1].wp.vtx.lData.stoID
 
   if not stoID.isValid:
     return err(FetchPathNotFound)

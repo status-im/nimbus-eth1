@@ -36,8 +36,8 @@ proc toAccount*(
       balance:     payload.account.balance,
       codeHash:    payload.account.codeHash,
       storageRoot: EMPTY_ROOT_HASH)
-    if payload.account.storageID.isValid:
-      acc.storageRoot = (? db.getKeyRc payload.account.storageID).to(Hash256)
+    if payload.stoID.isValid:
+      acc.storageRoot = (? db.getKeyRc payload.stoID).to(Hash256)
     return ok(acc)
 
   err UtilsPayloadTypeUnsupported
@@ -63,7 +63,7 @@ proc toAccount*(
         balance:     node.lData.account.balance,
         codeHash:    node.lData.account.codeHash,
         storageRoot: EMPTY_ROOT_HASH)
-      if node.lData.account.storageID.isValid:
+      if node.lData.stoID.isValid:
         if not node.key[0].isValid:
           return err(UtilsAccStorageKeyMissing)
         acc.storageRoot = node.key[0].to(Hash256)
@@ -111,7 +111,7 @@ proc toNode*(
     let node = NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
     # Need to resolve storage root for account leaf
     if vtx.lData.pType == AccountData:
-      let vid = vtx.lData.account.storageID
+      let vid = vtx.lData.stoID
       if vid.isValid:
         let key = db.getKey vid
         if not key.isValid:
@@ -120,7 +120,7 @@ proc toNode*(
               # Stale storage trie?
               if LEAST_FREE_VID <= vid.distinctBase and
                  not db.getVtx(vid).isValid:
-                node.lData.account.storageID = VertexID(0)
+                node.lData.stoID = VertexID(0)
                 break looseCoupling
             # Otherwise this is a stale storage trie.
             return err(@[vid])
@@ -160,7 +160,7 @@ proc subVids*(vtx: VertexRef): seq[VertexID] =
   case vtx.vType:
   of Leaf:
     if vtx.lData.pType == AccountData:
-      let vid = vtx.lData.account.storageID
+      let vid = vtx.lData.stoID
       if vid.isValid:
         result.add vid
   of Branch:

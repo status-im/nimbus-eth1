@@ -214,7 +214,7 @@ proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
       result = "("
       result &= ($p.account.nonce).stripZeros(toExp=true) & ","
       result &= ($p.account.balance).stripZeros(toExp=true) & ","
-      result &= p.account.storageID.ppVid & ","
+      result &= p.stoID.ppVid & ","
       result &= p.account.codeHash.ppCodeHash & ")"
 
 proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =

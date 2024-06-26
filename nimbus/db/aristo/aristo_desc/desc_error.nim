@@ -194,7 +194,6 @@ type
     MergeBranchRootExpected
     MergeHashKeyDiffersFromCached
     MergeHashKeyInvalid
-    MergeLeafCantChangeStorageID
     MergeLeafGarbledHike
     MergeLeafPathCachedAlready
     MergeLeafPathOnBackendAlready

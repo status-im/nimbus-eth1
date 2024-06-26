@@ -72,30 +72,6 @@ func to(col: CoreDbColRef; T: type VertexID): T =
 func to(eAddr: EthAddress; T: type PathID): T =
   HashKey.fromBytes(eAddr.keccakHash.data).value.to(T)
 
-func resetCol(colType: CoreDbColType): bool =
-  ## Check whether to reset some non-dynamic column when instantiating. It
-  ## emulates the behaviour of a new empty MPT on the legacy database.
-  colType == CtGeneric or
-    (high(CoreDbColType) < colType and colType.ord < LEAST_FREE_VID)
-
-# -------------------------------
-
-func toCoreDbAccount(
-    cAcc: AristoCoreDbAccRef;
-    acc: AristoAccount;
-    address: EthAddress;
-      ): CoreDbAccount =
-  let db = cAcc.base.parent
-  result = CoreDbAccount(
-    address:  address,
-    nonce:    acc.nonce,
-    balance:  acc.balance,
-    codeHash: acc.codeHash)
-  if acc.storageID.isValid:
-    result.storage = db.bless AristoColRef(
-      base:    cAcc.base,
-      stoRoot: acc.storageID)
-
 # -------------------------------
 
 func toError(
@@ -159,6 +135,7 @@ func toVoidRc[T](
 # ------------------------------------------------------------------------------
 # Private `MPT` call back functions
 # ------------------------------------------------------------------------------
+
 proc mptMethods(): CoreDbMptFns =
   # These templates are a hack to remove a closure environment that was using
   # hundreds of mb of memory to have this syntactic convenience
@@ -256,18 +233,21 @@ proc accMethods(): CoreDbAccFns =
       if error != FetchPathNotFound:
         return err(error.toError(base, info))
       return err(error.toError(base, info, AccNotFound))
-    ok cAcc.toCoreDbAccount(acc, eAddr)
-
-  proc accMerge(cAcc: AristoCoreDbAccRef, acc: CoreDbAccount): CoreDbRc[void] =
+    ok CoreDbAccount(
+      address:  eAddr,
+      nonce:    acc.nonce,
+      balance:  acc.balance,
+      codeHash: acc.codeHash)
+    
+  proc accMerge(cAcc: AristoCoreDbAccRef, account: CoreDbAccount): CoreDbRc[void] =
     const info = "acc/mergeFn()"
 
     let
-      key = acc.address.keccakHash.data
+      key = account.address.keccakHash.data
       val = AristoAccount(
-        nonce:     acc.nonce,
-        balance:   acc.balance,
-        storageID: acc.storage.to(VertexID),
-        codeHash:  acc.codeHash)
+        nonce:    account.nonce,
+        balance:  account.balance,
+        codeHash: account.codeHash)
     api.mergeAccountRecord(mpt, key, val).isOkOr:
       return err(error.toError(base, info))
     ok()
@@ -298,7 +278,7 @@ proc accMethods(): CoreDbAccFns =
     ok(yn)
 
   proc accState(cAcc: AristoCoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] =
-    const info = "accState()"
+    const info = "accStateFn()"
 
     let rc = api.fetchAccountState(mpt)
     if rc.isOk:
@@ -344,7 +324,7 @@ proc accMethods(): CoreDbAccFns =
     ok(yn)
 
   proc slotMerge(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key, val: openArray[byte]): CoreDbRc[void] =
-    const info = "acc/stoMergeFn()"
+    const info = "slotMergeFn()"
 
     api.mergeStorageData(mpt, key, val, eAddr.to(PathID)).isOkOr:
         return err(error.toError(base, info))
