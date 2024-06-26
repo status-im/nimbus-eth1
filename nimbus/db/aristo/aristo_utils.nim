@@ -172,29 +172,6 @@ proc subVids*(vtx: VertexRef): seq[VertexID] =
 
 # ---------------------
 
-proc retrieveStoAccHike*(
-    db: AristoDbRef;                   # Database
-    accPath: PathID;                   # Implies a storage ID (if any)
-      ): Result[Hike,AristoError] =
-  ## Verify that the `accPath` argument properly referres to a storage root
-  ## vertex ID. The function will reset the keys along the `accPath` for
-  ## being modified.
-  ##
-  ## On success, the function will return an account leaf pair with the leaf
-  ## vertex and the vertex ID.
-  ##
-  # Expand vertex path to account leaf
-  var hike = accPath.to(NibblesBuf).hikeUp(VertexID(1), db).valueOr:
-    return err(UtilsAccInaccessible)
-
-  # Extract the account payload fro the leaf
-  let wp = hike.legs[^1].wp
-  if wp.vtx.vType != Leaf:
-    return err(UtilsAccPathWithoutLeaf)
-  assert wp.vtx.lData.pType == AccountData            # debugging only
-
-  ok(move(hike))
-
 proc updateAccountForHasher*(
     db: AristoDbRef;                   # Database
     hike: Hike;                        # Return value from `retrieveStorageID()`

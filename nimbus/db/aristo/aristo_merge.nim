@@ -28,7 +28,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_layers, aristo_utils, aristo_vid],
+  "."/[aristo_desc, aristo_fetch, aristo_layers, aristo_utils, aristo_vid],
   ./aristo_merge/[merge_payload_helper, merge_proof]
 
 export
@@ -41,7 +41,7 @@ const
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc mergeAccountPayload*(
+proc mergeAccountRecord*(
     db: AristoDbRef;                   # Database, top layer
     accKey: openArray[byte];          # Even nibbled byte path
     accPayload: AristoAccount;         # Payload value
@@ -120,7 +120,10 @@ proc mergeStorageData*(
   ## otherwise `VertexID(0)`.
   ##
   let
-    accHike = ? db.retrieveStoAccHike accPath # checks for `AccountData`
+    accHike = db.fetchAccountHike(accPath).valueOr:
+      if error == FetchAccInaccessible:
+        return err(MergeStoAccMissing)
+      return err(error)
     wpAcc = accHike.legs[^1].wp
     stoID = wpAcc.vtx.lData.account.storageID
 

@@ -20,7 +20,7 @@ import
   ./aristo_init/memory_db,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
        aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
-       aristo_serialise, aristo_tx]
+       aristo_tx]
 
 export
   AristoDbProfListRef
@@ -49,7 +49,7 @@ type
       ## previous layer. The previous transaction is returned if there
       ## was any.
 
-  AristoApiDeleteAccountPayloadFn* =
+  AristoApiDeleteAccountRecordFn* =
     proc(db: AristoDbRef;
          path: openArray[byte];
         ): Result[void,AristoError]
@@ -108,7 +108,7 @@ type
       ## Merkle hash tag for vertex with ID 1 and a bespoke `uint64` identifier
       ## (may be interpreted as block number.)
 
-  AristoApiFetchAccountPayloadFn* =
+  AristoApiFetchAccountRecordFn* =
     proc(db: AristoDbRef;
          path: openArray[byte];
         ): Result[AristoAccount,AristoError]
@@ -297,16 +297,16 @@ type
       ## `reCentre()` for details.) This function is a fast version of
       ## `db.forked.toSeq.len`.
 
-  AristoApiMergeAccountPayloadFn* =
+  AristoApiMergeAccountRecordFn* =
     proc(db: AristoDbRef;
          accPath: openArray[byte];
-         accPayload: AristoAccount;
+         accRec: AristoAccount;
         ): Result[bool,AristoError]
         {.noRaise.}
-      ## Merge the  key-value-pair argument `(accKey,accPayload)` as an account
+      ## Merge the  key-value-pair argument `(accKey,accRec)` as an account
       ## ledger value, i.e. the the sub-tree starting at `VertexID(1)`.
       ##
-      ## The payload argument `accPayload` must have the `storageID` field
+      ## The payload argument `accRec` must have the `storageID` field
       ## either unset/invalid or referring to a existing vertex which will be
       ## assumed to be a storage tree.
 
@@ -397,14 +397,6 @@ type
       ## operations performed for this transactio. The previous transaction
       ## is returned if there was any.
 
-  AristoApiSerialiseFn* =
-    proc(db: AristoDbRef;
-         pyl: PayloadRef;
-        ): Result[Blob,(VertexID,AristoError)]
-        {.noRaise.}
-      ## Encode the data payload of the argument `pyl` as RLP `Blob` if
-      ## it is of account type, otherwise pass the data as is.
-
   AristoApiTxBeginFn* =
     proc(db: AristoDbRef
         ): Result[AristoTxRef,AristoError]
@@ -430,7 +422,7 @@ type
     ## Useful set of `Aristo` fuctions that can be filtered, stacked etc.
     commit*: AristoApiCommitFn
 
-    deleteAccountPayload*: AristoApiDeleteAccountPayloadFn
+    deleteAccountRecord*: AristoApiDeleteAccountRecordFn
     deleteGenericData*: AristoApiDeleteGenericDataFn
     deleteGenericTree*: AristoApiDeleteGenericTreeFn
     deleteStorageData*: AristoApiDeleteStorageDataFn
@@ -438,7 +430,7 @@ type
 
     fetchLastSavedState*: AristoApiFetchLastSavedStateFn
 
-    fetchAccountPayload*: AristoApiFetchAccountPayloadFn
+    fetchAccountRecord*: AristoApiFetchAccountRecordFn
     fetchAccountState*: AristoApiFetchAccountStateFn
     fetchGenericData*: AristoApiFetchGenericDataFn
     fetchGenericState*: AristoApiFetchGenericStateFn
@@ -461,7 +453,7 @@ type
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
 
-    mergeAccountPayload*: AristoApiMergeAccountPayloadFn
+    mergeAccountRecord*: AristoApiMergeAccountRecordFn
     mergeGenericData*: AristoApiMergeGenericDataFn
     mergeStorageData*: AristoApiMergeStorageDataFn
 
@@ -469,7 +461,6 @@ type
     persist*: AristoApiPersistFn
     reCentre*: AristoApiReCentreFn
     rollback*: AristoApiRollbackFn
-    serialise*: AristoApiSerialiseFn
     txBegin*: AristoApiTxBeginFn
     txTop*: AristoApiTxTopFn
 
@@ -479,7 +470,7 @@ type
     AristoApiProfTotal                  = "total"
     AristoApiProfCommitFn               = "commit"
 
-    AristoApiProfDeleteAccountPayloadFn = "deleteAccountPayload"
+    AristoApiProfDeleteAccountRecordFn  = "deleteAccountRecord"
     AristoApiProfDeleteGenericDataFn    = "deleteGnericData"
     AristoApiProfDeleteGenericTreeFn    = "deleteGnericTree"
     AristoApiProfDeleteStorageDataFn    = "deleteStorageData"
@@ -487,7 +478,7 @@ type
 
     AristoApiProfFetchLastSavedStateFn  = "fetchLastSavedState"
 
-    AristoApiProfFetchAccountPayloadFn  = "fetchAccountPayload"
+    AristoApiProfFetchAccountRecordFn   = "fetchAccountRecord"
     AristoApiProfFetchAccountStateFn    = "fetchAccountState"
     AristoApiProfFetchGenericDataFn     = "fetchGenericData"
     AristoApiProfFetchGenericStateFn    = "fetchGenericState"
@@ -510,7 +501,7 @@ type
     AristoApiProfLevelFn                = "level"
     AristoApiProfNForkedFn              = "nForked"
 
-    AristoApiProfMergeAccountPayloadFn  = "mergeAccountPayload"
+    AristoApiProfMergeAccountRecordFn   = "mergeAccountRecord"
     AristoApiProfMergeGenericDataFn     = "mergeGenericData"
     AristoApiProfMergeStorageDataFn     = "mergeStorageData"
 
@@ -518,7 +509,6 @@ type
     AristoApiProfPersistFn              = "persist"
     AristoApiProfReCentreFn             = "reCentre"
     AristoApiProfRollbackFn             = "rollback"
-    AristoApiProfSerialiseFn            = "serialise"
     AristoApiProfTxBeginFn              = "txBegin"
     AristoApiProfTxTopFn                = "txTop"
 
@@ -545,7 +535,7 @@ when AutoValidateApiHooks:
   proc validate(api: AristoApiObj|AristoApiRef) =
     doAssert not api.commit.isNil
 
-    doAssert not api.deleteAccountPayload.isNil
+    doAssert not api.deleteAccountRecord.isNil
     doAssert not api.deleteGenericData.isNil
     doAssert not api.deleteGenericTree.isNil
     doAssert not api.deleteStorageData.isNil
@@ -553,7 +543,7 @@ when AutoValidateApiHooks:
 
     doAssert not api.fetchLastSavedState.isNil
 
-    doAssert not api.fetchAccountPayload.isNil
+    doAssert not api.fetchAccountRecord.isNil
     doAssert not api.fetchAccountState.isNil
     doAssert not api.fetchGenericData.isNil
     doAssert not api.fetchGenericState.isNil
@@ -576,7 +566,7 @@ when AutoValidateApiHooks:
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
 
-    doAssert not api.mergeAccountPayload.isNil
+    doAssert not api.mergeAccountRecord.isNil
     doAssert not api.mergeGenericData.isNil
     doAssert not api.mergeStorageData.isNil
 
@@ -584,7 +574,6 @@ when AutoValidateApiHooks:
     doAssert not api.persist.isNil
     doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
-    doAssert not api.serialise.isNil
     doAssert not api.txBegin.isNil
     doAssert not api.txTop.isNil
 
@@ -615,7 +604,7 @@ func init*(api: var AristoApiObj) =
     api.reset
   api.commit = commit
 
-  api.deleteAccountPayload = deleteAccountPayload
+  api.deleteAccountRecord = deleteAccountRecord
   api.deleteGenericData = deleteGenericData
   api.deleteGenericTree = deleteGenericTree
   api.deleteStorageData = deleteStorageData
@@ -623,7 +612,7 @@ func init*(api: var AristoApiObj) =
 
   api.fetchLastSavedState = fetchLastSavedState
 
-  api.fetchAccountPayload = fetchAccountPayload
+  api.fetchAccountRecord = fetchAccountRecord
   api.fetchAccountState = fetchAccountState
   api.fetchGenericData = fetchGenericData
   api.fetchGenericState = fetchGenericState
@@ -646,7 +635,7 @@ func init*(api: var AristoApiObj) =
   api.level = level
   api.nForked = nForked
 
-  api.mergeAccountPayload = mergeAccountPayload
+  api.mergeAccountRecord = mergeAccountRecord
   api.mergeGenericData = mergeGenericData
   api.mergeStorageData = mergeStorageData
 
@@ -654,7 +643,6 @@ func init*(api: var AristoApiObj) =
   api.persist = persist
   api.reCentre = reCentre
   api.rollback = rollback
-  api.serialise = serialise
   api.txBegin = txBegin
   api.txTop = txTop
   when AutoValidateApiHooks:
@@ -668,14 +656,14 @@ func dup*(api: AristoApiRef): AristoApiRef =
   result = AristoApiRef(
     commit:               api.commit,
 
-    deleteAccountPayload: api.deleteAccountPayload,
+    deleteAccountRecord:  api.deleteAccountRecord,
     deleteGenericData:    api.deleteGenericData,
     deleteGenericTree:    api.deleteGenericTree,
     deleteStorageData:    api.deleteStorageData,
     deleteStorageTree:    api.deleteStorageTree,
 
     fetchLastSavedState:  api.fetchLastSavedState,
-    fetchAccountPayload:  api.fetchAccountPayload,
+    fetchAccountRecord:   api.fetchAccountRecord,
     fetchAccountState:    api.fetchAccountState,
     fetchGenericData:     api.fetchGenericData,
     fetchGenericState:    api.fetchGenericState,
@@ -698,7 +686,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     level:                api.level,
     nForked:              api.nForked,
 
-    mergeAccountPayload:  api.mergeAccountPayload,
+    mergeAccountRecord:   api.mergeAccountRecord,
     mergeGenericData:     api.mergeGenericData,
     mergeStorageData:     api.mergeStorageData,
 
@@ -706,7 +694,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     persist:              api.persist,
     reCentre:             api.reCentre,
     rollback:             api.rollback,
-    serialise:            api.serialise,
     txBegin:              api.txBegin,
     txTop:                api.txTop)
   when AutoValidateApiHooks:
@@ -744,10 +731,10 @@ func init*(
       AristoApiProfCommitFn.profileRunner:
         result = api.commit(a)
 
-  profApi.deleteAccountPayload =
+  profApi.deleteAccountRecord =
     proc(a: AristoDbRef; b: openArray[byte]): auto =
-      AristoApiProfDeleteAccountPayloadFn.profileRunner:
-        result = api.deleteAccountPayload(a, b)
+      AristoApiProfDeleteAccountRecordFn.profileRunner:
+        result = api.deleteAccountRecord(a, b)
 
   profApi.deleteGenericData =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
@@ -774,10 +761,10 @@ func init*(
       AristoApiProfFetchLastSavedStateFn.profileRunner:
         result = api.fetchLastSavedState(a)
 
-  profApi.fetchAccountPayload =
+  profApi.fetchAccountRecord =
     proc(a: AristoDbRef; b: openArray[byte]): auto =
-      AristoApiProfFetchAccountPayloadFn.profileRunner:
-        result = api.fetchAccountPayload(a, b)
+      AristoApiProfFetchAccountRecordFn.profileRunner:
+        result = api.fetchAccountRecord(a, b)
 
   profApi.fetchAccountState =
     proc(a: AristoDbRef): auto =
@@ -869,10 +856,10 @@ func init*(
       AristoApiProfNForkedFn.profileRunner:
          result = api.nForked(a)
 
-  profApi.mergeAccountPayload =
+  profApi.mergeAccountRecord =
     proc(a: AristoDbRef; b, c: openArray[byte]): auto =
-      AristoApiProfMergeAccountPayloadFn.profileRunner:
-        result = api.mergeAccountPayload(a, b, c)
+      AristoApiProfMergeAccountRecordFn.profileRunner:
+        result = api.mergeAccountRecord(a, b, c)
 
   profApi.mergeGenericData =
     proc(a: AristoDbRef; b: VertexID, c, d: openArray[byte]): auto =
@@ -903,11 +890,6 @@ func init*(
     proc(a: AristoTxRef): auto =
       AristoApiProfRollbackFn.profileRunner:
         result = api.rollback(a)
-
-  profApi.serialise =
-    proc(a: AristoDbRef; b: PayloadRef): auto =
-      AristoApiProfSerialiseFn.profileRunner:
-        result = api.serialise(a, b)
 
   profApi.txBegin =
     proc(a: AristoDbRef): auto =

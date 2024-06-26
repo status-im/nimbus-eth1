@@ -143,11 +143,13 @@ type
 
 
     # Fetch functions from `aristo_fetch.nim`
-    FetchPathNotFound
+    FetchAccInaccessible
+    FetchAccPathWithoutLeaf
+    FetchAccRootNotAccepted
     FetchLeafKeyInvalid
     FetchPathInvalid
+    FetchPathNotFound
     FetchRootVidMissing
-    FetchAccRootNotAccepted
     FetchStoRootNotAccepted
 
 
@@ -214,6 +216,7 @@ type
     MergeRootKeysMissing
     MergeRootKeysOverflow
     MergeRootVidMissing
+    MergeStoAccMissing
 
 
     # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
@@ -294,11 +297,9 @@ type
 
 
     # Functions from `aristo_utils.nim`
-    UtilsAccInaccessible
     UtilsAccLeafPayloadExpected
     UtilsAccNodeUnsupported
     UtilsAccPathMissing
-    UtilsAccPathWithoutLeaf
     UtilsAccStorageKeyMissing
     UtilsAccVtxUnsupported
     UtilsAccWrongStorageRoot

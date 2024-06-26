@@ -288,24 +288,20 @@ iterator aristoMptPairs*(dsc: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
   let
     api = dsc.to(AristoApiRef)
     mpt = dsc.to(AristoDbRef)
-  for (k,v) in mpt.rightPairs LeafTie(root: dsc.rootID):
-    yield (api.pathAsBlob(k.path), api.serialise(mpt, v).valueOr(EmptyBlob))
+  for (path,data) in mpt.rightPairsGeneric dsc.rootID:
+    yield (api.pathAsBlob(path), data)
 
 iterator aristoSlotPairs*(
     dsc: CoreDbAccRef;
     eAddr: EthAddress;
       ): (Blob,Blob)
       {.noRaise.} =
-  block body:
-    let
-      api = dsc.to(AristoApiRef)
-      mpt = dsc.to(AristoDbRef)
-      acc = api.fetchAccountPayload(mpt, eAddr.keccakHash.data).valueOr:
-        break body
-    if not acc.storageID.isValid:
-      break body
-    for (k,v) in mpt.rightPairs LeafTie(root: acc.storageID):
-      yield (api.pathAsBlob(k.path), api.serialise(mpt, v).valueOr(EmptyBlob))
+  let
+    api = dsc.to(AristoApiRef)
+    mpt = dsc.to(AristoDbRef)
+    accKey = HashKey.fromBytes(eAddr.keccakHash.data).value.to(PathID)
+  for (path,data) in mpt.rightPairsStorage accKey:
+    yield (api.pathAsBlob(path), data)
 
 iterator aristoReplicateMem*(dsc: CoreDbMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `MemBackendRef`

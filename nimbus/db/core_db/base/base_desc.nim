@@ -15,9 +15,6 @@ import
   eth/common,
   ../../aristo/aristo_profile
 
-from ../../aristo
-  import PayloadRef
-
 # Annotation helpers
 {.pragma:  noRaise, gcsafe, raises: [].}
 {.pragma: apiRaise, gcsafe, raises: [CoreDbApiError].}
@@ -48,10 +45,6 @@ type
     balance*:  UInt256
     storage*:  CoreDbColRef  ## Implies storage root MPT (aka column)
     codeHash*: Hash256
-
-  CoreDbPayloadRef* = ref object of PayloadRef
-    ## Extension of `Aristo` payload used in the tracer
-    blob*: Blob              ## Serialised version for accounts data
 
   CoreDbErrorCode* = enum
     Unset = 0

@@ -96,15 +96,6 @@ func toCoreDbAccount(
       base:    cAcc.base,
       stoRoot: acc.storageID)
 
-func toPayloadRef(acc: CoreDbAccount): PayloadRef =
-  PayloadRef(
-    pType:       AccountData,
-    account: AristoAccount(
-      nonce:     acc.nonce,
-      balance:   acc.balance,
-      storageID: acc.storage.to(VertexID),
-      codeHash:  acc.codeHash))
-
 # -------------------------------
 
 func toError(
@@ -261,26 +252,30 @@ proc accMethods(): CoreDbAccFns =
   proc accFetch(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
 
-    let acc = api.fetchAccountPayload(mpt, eAddr.keccakHash.data).valueOr:
+    let acc = api.fetchAccountRecord(mpt, eAddr.keccakHash.data).valueOr:
       if error != FetchPathNotFound:
         return err(error.toError(base, info))
       return err(error.toError(base, info, AccNotFound))
     ok cAcc.toCoreDbAccount(acc, eAddr)
 
-  proc accMerge(cAcc: AristoCoreDbAccRef, account: CoreDbAccount): CoreDbRc[void] =
+  proc accMerge(cAcc: AristoCoreDbAccRef, acc: CoreDbAccount): CoreDbRc[void] =
     const info = "acc/mergeFn()"
 
     let
-      key = account.address.keccakHash.data
-      val = account.toPayloadRef().account
-    api.mergeAccountPayload(mpt, key, val).isOkOr:
+      key = acc.address.keccakHash.data
+      val = AristoAccount(
+        nonce:     acc.nonce,
+        balance:   acc.balance,
+        storageID: acc.storage.to(VertexID),
+        codeHash:  acc.codeHash)
+    api.mergeAccountRecord(mpt, key, val).isOkOr:
       return err(error.toError(base, info))
     ok()
 
   proc accDelete(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
     const info = "acc/deleteFn()"
 
-    api.deleteAccountPayload(mpt, eAddr.keccakHash.data).isOkOr:
+    api.deleteAccountRecord(mpt, eAddr.keccakHash.data).isOkOr:
       if error == DelPathNotFound:
         # TODO: Would it be conseqient to just return `ok()` here?
         return err(error.toError(base, info, AccNotFound))

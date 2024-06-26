@@ -19,7 +19,7 @@ import
   std/[sets, typetraits],
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers,
        aristo_utils, aristo_vid]
 
 # ------------------------------------------------------------------------------
@@ -329,7 +329,7 @@ proc deleteImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc deleteAccountPayload*(
+proc deleteAccountRecord*(
     db: AristoDbRef;
     path: openArray[byte];
       ): Result[void,AristoError] =
@@ -414,7 +414,10 @@ proc deleteStorageData*(
   ## will return `true`.
   ##
   let
-    accHike = ? db.retrieveStoAccHike accPath
+    accHike = db.fetchAccountHike(accPath).valueOr:
+      if error == FetchAccInaccessible:
+        return err(DelStoAccMissing)
+      return err(error)
     wpAcc = accHike.legs[^1].wp
     stoID = wpAcc.vtx.lData.account.storageID
 
@@ -451,8 +454,8 @@ proc deleteStorageTree*(
   ## associated to the account argument `accPath`.
   ##
   let
-    accHike = db.retrieveStoAccHike(accPath).valueOr:
-      if error == UtilsAccInaccessible:
+    accHike = db.fetchAccountHike(accPath).valueOr:
+      if error == FetchAccInaccessible:
         return err(DelStoAccMissing)
       return err(error)
     wpAcc = accHike.legs[^1].wp

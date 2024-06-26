@@ -16,7 +16,7 @@ import
   ./base/[api_tracking, base_desc]
 
 from ../aristo
-  import EmptyBlob, PayloadRef, isValid
+  import EmptyBlob, isValid
 
 const
   EnableApiTracking = false
@@ -43,7 +43,6 @@ export
   CoreDbFnInx,
   CoreDbKvtBackendRef,
   CoreDbMptBackendRef,
-  CoreDbPayloadRef,
   CoreDbPersistentTypes,
   CoreDbProfListRef,
   CoreDbRef,
@@ -52,8 +51,7 @@ export
   CoreDbCaptRef,
   CoreDbKvtRef,
   CoreDbMptRef,
-  CoreDbTxRef,
-  PayloadRef
+  CoreDbTxRef
 
 const
   CoreDbEnableApiTracking* = EnableApiTracking

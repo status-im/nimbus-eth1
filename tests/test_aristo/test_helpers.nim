@@ -251,7 +251,7 @@ proc mergeDummyAccLeaf*(
   # Add a dummy entry so the balancer logic can be triggered
   let
     acc = AristoAccount(nonce: nonce.AccountNonce)
-    rc = db.mergeAccountPayload(pathID.uint64.toBytesBE, acc)
+    rc = db.mergeAccountRecord(pathID.uint64.toBytesBE, acc)
   if rc.isOk:
     ok()
   else:
