@@ -13,7 +13,7 @@
 ##
 
 import
-  std/[sequtils, tables],
+  std/tables,
   eth/common,
   results,
   ./aristo_desc,

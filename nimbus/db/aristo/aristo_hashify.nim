@@ -65,7 +65,7 @@ func getOrVoid(tab: Table[VertexID,VertexID]; vid: VertexID): VertexID =
 func hasValue(
     wffTable: Table[VertexID,VertexID];
     vid: VertexID;
-    wff: WidthFirstForest;
+    wff: var WidthFirstForest;
       ): bool =
   ## Helper for efficient `value` access:
   ## ::
@@ -75,9 +75,10 @@ func hasValue(
   ## ::
   ##   vid in wffTable.values.toSeq
   ##
-  for w in wff.rev.getOrVoid vid:
-    if w in wffTable:
-      return true
+  wff.rev.withValue(vid, v):
+    for w in v[]:
+      if w in wffTable:
+        return true
 
 
 proc pedigree(

@@ -184,7 +184,7 @@ proc retrieveStoAccHike*(
   ## vertex and the vertex ID.
   ##
   # Expand vertex path to account leaf
-  let hike = accPath.to(NibblesBuf).hikeUp(VertexID(1), db).valueOr:
+  var hike = accPath.to(NibblesBuf).hikeUp(VertexID(1), db).valueOr:
     return err(UtilsAccInaccessible)
 
   # Extract the account payload fro the leaf
@@ -192,15 +192,8 @@ proc retrieveStoAccHike*(
   if wp.vtx.vType != Leaf:
     return err(UtilsAccPathWithoutLeaf)
   assert wp.vtx.lData.pType == AccountData            # debugging only
-  let acc = wp.vtx.lData.account
 
-  # Check whether storage ID exists, at all
-  if acc.storageID.isValid:
-    # Verify that the storage root `acc.storageID` exists on the databse
-    discard db.getVtxRc(acc.storageID).valueOr:
-      return err(UtilsStoRootInaccessible)
-
-  ok(hike)
+  ok(move(hike))
 
 proc updateAccountForHasher*(
     db: AristoDbRef;                   # Database

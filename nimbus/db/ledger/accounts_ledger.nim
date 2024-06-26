@@ -695,7 +695,9 @@ proc persist*(ac: AccountsLedgerRef,
   if clearCache:
     # This overwrites the cache from the previous persist, providing a crude LRU
     # scheme with little overhead
-    ac.cache = move(ac.savePoint.cache)
+    # TODO https://github.com/nim-lang/Nim/issues/23759
+    swap(ac.cache, ac.savePoint.cache)
+    ac.savePoint.cache.reset()
 
   ac.savePoint.selfDestruct.clear()
 
