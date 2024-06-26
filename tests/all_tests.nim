@@ -32,8 +32,6 @@ cliBuilder:
           ./test_state_db,
           ./test_difficulty,
           ./test_transaction_json,
-          # TODO: some of test_blockchain_json's test cases failing
-          # see issue #2260
           ./test_blockchain_json,
           ./test_forkid,
           ./test_multi_keys,
