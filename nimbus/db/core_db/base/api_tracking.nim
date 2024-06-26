@@ -20,7 +20,7 @@ import
 
 type
   CoreDbApiTrackRef* =
-    CoreDbRef | CoreDbKvtRef | CoreDbColRef |
+    CoreDbRef | CoreDbKvtRef |
     CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
     CoreDbTxRef | CoreDbCaptRef | CoreDbErrorRef
 
@@ -47,9 +47,6 @@ type
 
     AnyBackendFn        = "any/backend"
 
-    BaseColPrintFn      = "$$"
-    BaseColStateEmptyFn = "stateEmpty"
-    BaseColStateFn      = "state"
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"
@@ -116,12 +113,6 @@ func toStr*(w: Hash256): string =
 proc toStr*(e: CoreDbErrorRef): string =
   $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
 
-proc toStr*(p: CoreDbColRef): string =
-  let
-    w = if p.isNil or not p.ready: "nil" else: p.parent.methods.colPrintFn(p)
-    (a,b) = if 0 < w.len and w[0] == '(': ("","") else: ("(",")")
-  "Col" & a & w & b
-
 func toLenStr*(w: openArray[byte]): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
   else: "openArray[" & $w.len & "]"
@@ -147,9 +138,6 @@ proc toStr*(rc: CoreDbRc[Blob]): string =
   else: "err(" & rc.error.toStr & ")"
 
 proc toStr*(rc: CoreDbRc[Hash256]): string =
-  if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
-
-proc toStr*(rc: CoreDbRc[CoreDbColRef]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
 proc toStr*(rc: CoreDbRc[set[CoreDbCaptFlags]]): string =

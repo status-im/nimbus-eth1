@@ -13,8 +13,8 @@ import
   ./base_desc
 
 type
-  EphemMethodsDesc = CoreDbKvtBackendRef | CoreDbMptBackendRef |
-                     CoreDbAccBackendRef | CoreDbColRef
+  EphemMethodsDesc =
+    CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef
 
   MethodsDesc =
     CoreDbKvtRef |
@@ -30,8 +30,6 @@ type
 
 proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.destroyFn.isNil
-  doAssert not base.colStateFn.isNil
-  doAssert not base.colPrintFn.isNil
   doAssert not base.errorPrintFn.isNil
   doAssert not base.levelFn.isNil
   doAssert not base.newKvtFn.isNil
@@ -81,11 +79,6 @@ proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.slotStateEmptyFn.isNil
 
 # ------------
-
-proc validateMethodsDesc(col: CoreDbColRef) =
-  doAssert not col.isNil
-  doAssert not col.parent.isNil
-  doAssert col.ready == true
 
 proc validateMethodsDesc(e: CoreDbErrorRef) =
   doAssert e.error != CoreDbErrorCode(0)

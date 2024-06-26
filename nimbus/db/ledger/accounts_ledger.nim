@@ -18,7 +18,6 @@
 ##    + renamed from `RefAccount`
 ##    + the `statement` entry is sort of a superset of an `Account` object
 ##      - contains an `EthAddress` field
-##      - the storage root hash is generalised as a `CoreDbTrieRef` object
 ##
 ##  * `AccountsLedgerRef`
 ##    + renamed from `AccountsCache`
@@ -139,10 +138,6 @@ template logTxt(info: static[string]): static[string] =
   "AccountsLedgerRef " & info
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
-
-# FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
-# take this out once those are gone.
-# proc rawTrie*(ac: AccountsLedgerRef): AccountLedger = ac.ledger
 
 func newCoreDbAccount(address: EthAddress): CoreDbAccount =
   CoreDbAccount(

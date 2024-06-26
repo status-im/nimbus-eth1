@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[strutils, typetraits],
+  std/typetraits,
   chronicles,
   eth/common,
   stew/byteutils,
@@ -38,19 +38,11 @@ type
     base: AristoBaseRef          ## Local base descriptor
     mptRoot: VertexID            ## State root, may be zero unless account
 
-  AristoColRef* = ref object of CoreDbColRef
-    ## Vertex ID wrapper, optionally with *MPT* context
-    base: AristoBaseRef
-    stoRoot: VertexID            ## State root, may be zero if unknown
-
   AristoCoreDbMptBE* = ref object of CoreDbMptBackendRef
     adb*: AristoDbRef
 
   AristoCoreDbAccBE* = ref object of CoreDbAccBackendRef
     adb*: AristoDbRef
-
-const
-  VoidVID = VertexID(0)
 
 logScope:
   topics = "aristo-hdl"
@@ -61,13 +53,6 @@ static:
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-func isValid(col: CoreDbColRef): bool =
-  not col.isNil and col.ready
-
-func to(col: CoreDbColRef; T: type VertexID): T =
-  if col.isValid:
-    return AristoColRef(col).stoRoot
 
 func to(eAddr: EthAddress; T: type PathID): T =
   HashKey.fromBytes(eAddr.keccakHash.data).value.to(T)
@@ -85,28 +70,17 @@ func toError(
     isAristo: true,
     aErr:     e))
 
-# Forward declaration, see below in public section
-func toError*(
+func toError(
     e: (VertexID,AristoError);
     base: AristoBaseRef;
     info: string;
     error = Unspecified;
-      ): CoreDbErrorRef
-
-
-func toRc[T](
-    rc: Result[T,(VertexID,AristoError)];
-    base: AristoBaseRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbRc[T] =
-  if rc.isOk:
-    when T is void:
-      return ok()
-    else:
-      return ok(rc.value)
-  err rc.error.toError(base, info, error)
-
+      ): CoreDbErrorRef =
+  base.parent.bless(error, AristoCoreDbError(
+    ctx:      info,
+    isAristo: true,
+    vid:      e[0],
+    aErr:     e[1]))
 
 func toRc[T](
     rc: Result[T,AristoError];
@@ -119,8 +93,7 @@ func toRc[T](
       return ok()
     else:
       return ok(rc.value)
-  err((VoidVID,rc.error).toError(base, info, error))
-
+  err((VertexID(0),rc.error).toError(base, info, error))
 
 func toVoidRc[T](
     rc: Result[T,(VertexID,AristoError)];
@@ -239,15 +212,15 @@ proc accMethods(): CoreDbAccFns =
       balance:  acc.balance,
       codeHash: acc.codeHash)
     
-  proc accMerge(cAcc: AristoCoreDbAccRef, account: CoreDbAccount): CoreDbRc[void] =
+  proc accMerge(cAcc: AristoCoreDbAccRef, acc: CoreDbAccount): CoreDbRc[void] =
     const info = "acc/mergeFn()"
 
     let
-      key = account.address.keccakHash.data
+      key = acc.address.keccakHash.data
       val = AristoAccount(
-        nonce:    account.nonce,
-        balance:  account.balance,
-        codeHash: account.codeHash)
+        nonce:    acc.nonce,
+        balance:  acc.balance,
+        codeHash: acc.codeHash)
     api.mergeAccountRecord(mpt, key, val).isOkOr:
       return err(error.toError(base, info))
     ok()
@@ -438,28 +411,6 @@ proc ctxMethods(): CoreDbCtxFns =
 # Public handlers and helpers
 # ------------------------------------------------------------------------------
 
-func toError*(
-    e: (VertexID,AristoError);
-    base: AristoBaseRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbErrorRef =
-  base.parent.bless(error, AristoCoreDbError(
-    ctx:      info,
-    isAristo: true,
-    vid:      e[0],
-    aErr:     e[1]))
-
-func toVoidRc*[T](
-    rc: Result[T,AristoError];
-    base: AristoBaseRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbRc[void] =
-  if rc.isOk:
-    return ok()
-  err((VoidVID,rc.error).toError(base, info, error))
-
 proc getSavedState*(base: AristoBaseRef): Result[SavedState,void] =
   let be = base.ctx.mpt.backend
   if not be.isNil:
@@ -504,75 +455,6 @@ proc getLevel*(base: AristoBaseRef): int =
   base.api.level(base.ctx.mpt)
 
 # ---------------------
-
-proc colPrint*(
-    base: AristoBaseRef;
-    col: CoreDbColRef;
-      ): string =
-  if col.isValid:
-    let
-      col = AristoColRef(col)
-      root = col.to(VertexID)
-    # Do vertex ID and address/hash
-    result = "(CtGeneric,"
-
-    # Do the Merkle hash key
-    if not root.isValid:
-      result &= ",£ø"
-    else:
-      let rc = base.api.getKeyRc(col.base.ctx.mpt, root)
-      if rc.isErr:
-        result &= "," & $rc.error
-      elif rc.value.isValid:
-        result &= ",£" & rc.value.to(Hash256).data.toHex
-      else:
-        result &= ",£ø"
-
-    result &= ")"
-  elif not col.isNil:
-    result &= "$?"
-
-
-proc rootHashEmpty*(
-    base: AristoBaseRef;
-    col: CoreDbColRef;
-    info: static[string];
-      ): CoreDbRc[bool] =
-  let col = AristoColRef(col)
-  if not col.isValid:
-    return err(TrieInvalid.toError(base, info, HashNotAvailable))
-
-  let root = col.to(VertexID)
-  if not root.isValid:
-    return ok(true)
-  return ok(false)
-
-proc rootHash*(
-    base: AristoBaseRef;
-    col: CoreDbColRef;
-    info: static[string];
-      ): CoreDbRc[Hash256] =
-  let col = AristoColRef(col)
-  if not col.isValid:
-    return err(TrieInvalid.toError(base, info, HashNotAvailable))
-
-  let root = col.to(VertexID)
-  if not root.isValid:
-    return ok(EMPTY_ROOT_HASH)
-
-  let
-    api = base.api
-    mpt = base.ctx.mpt
-  ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
-
-  let key = block:
-    let rc = api.getKeyRc(mpt, root)
-    if rc.isErr:
-      doAssert rc.error in {GetKeyNotFound, GetKeyUpdateNeeded}
-      return err(rc.error.toError(base, info, HashNotAvailable))
-    rc.value
-  ok key.to(Hash256)
-
 
 proc swapCtx*(base: AristoBaseRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   doAssert not ctx.isNil

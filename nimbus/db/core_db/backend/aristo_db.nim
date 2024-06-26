@@ -152,15 +152,6 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     levelFn: proc(): int =
       aBase.getLevel,
 
-    colStateEmptyFn: proc(col: CoreDbColRef): CoreDbRc[bool] =
-      aBase.rootHashEmpty(col, "rootHashFn()"),
-
-    colStateFn: proc(col: CoreDbColRef): CoreDbRc[Hash256] =
-      aBase.rootHash(col, "rootHashFn()"),
-
-    colPrintFn: proc(vid: CoreDbColRef): string =
-      aBase.colPrint(vid),
-
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
 

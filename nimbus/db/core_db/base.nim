@@ -36,7 +36,6 @@ export
   CoreDbApiError,
   CoreDbCaptFlags,
   CoreDbColType,
-  CoreDbColRef,
   CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbErrorRef,
@@ -86,7 +85,6 @@ when EnableApiTracking:
   proc `$`(q: set[CoreDbCaptFlags]): string = q.toStr
   proc `$`(t: Duration): string = t.toStr
   proc `$`(e: EthAddress): string = e.toStr
-  proc `$`(v: CoreDbColRef): string = v.toStr
   proc `$`(h: Hash256): string = h.toStr
 
 template setTrackNewApi(
@@ -125,14 +123,6 @@ proc bless*(db: CoreDbRef): CoreDbRef =
     db.profTab = CoreDbProfListRef.init()
   db
 
-proc bless*(db: CoreDbRef; col: CoreDbColRef): CoreDbColRef =
-  ## Complete sub-module descriptor, fill in `parent` and actvate it.
-  col.parent = db
-  col.ready = true
-  when AutoValidateDescriptors:
-    col.validate
-  col
-
 proc bless*(db: CoreDbRef; kvt: CoreDbKvtRef): CoreDbKvtRef =
   ## Complete sub-module descriptor, fill in `parent`.
   kvt.parent = db
@@ -169,10 +159,6 @@ proc prettyText*(e: CoreDbErrorRef): string =
   ## Pretty print argument object (for tracking use `$$()`)
   if e.isNil: "$ø" else: e.toStr()
 
-proc prettyText*(col: CoreDbColRef): string =
-  ## Pretty print argument object (for tracking use `$$()`)
-  if col.isNil or not col.ready: "$ø" else: col.toStr()
-
 # ------------------------------------------------------------------------------
 # Public main descriptor methods
 # ------------------------------------------------------------------------------
@@ -192,7 +178,6 @@ proc dbType*(db: CoreDbRef): CoreDbType =
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc parent*[T: CoreDbKvtRef |
-                CoreDbColRef |
                 CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
                 CoreDbTxRef |
                 CoreDbCaptRef |
@@ -260,7 +245,7 @@ proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
-  ## This function always returns a non-empty `Blob` or an error code.
+  ## This function returns the size of the value associated with `key`.
   kvt.setTrackNewApi KvtLenFn
   result = kvt.methods.lenFn key
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
@@ -309,19 +294,6 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   result = db.methods.newCtxFn()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-#proc ctxFromTx*(
-#    db: CoreDbRef;
-#    colState: Hash256;
-#    colType = CtAccounts;
-#      ): CoreDbRc[CoreDbCtxRef] =
-#  ## Create new context derived from matching transaction of the currently
-#  ## active column context. For the legacy backend, this function always
-#  ## returns the currently active context (i.e. the same as `db.ctx()`.)
-#  ##
-#  db.setTrackNewApi BaseNewCtxFromTxFn
-#  result = db.methods.newCtxFromTxFn(colState, colType)
-#  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
 proc swapCtx*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   ## Activate argument context `ctx` and return the previously active column
   ## context. This function goes typically together with `forget()`. A valid
@@ -343,56 +315,6 @@ proc forget*(ctx: CoreDbCtxRef) =
   ctx.setTrackNewApi CtxForgetFn
   ctx.methods.forgetFn(ctx)
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
-
-# ------------------------------------------------------------------------------
-# Public Merkle Patricia Tree sub-trie abstaction management
-# ------------------------------------------------------------------------------
-
-proc `$$`*(col: CoreDbColRef): string =
-  ## Pretty print the column descriptor. Note that this directive may have side
-  ## effects as it calls a backend function.
-  ##
-  #col.setTrackNewApi ColPrintFn
-  result = col.prettyText()
-  #col.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-proc stateEmpty*(col: CoreDbColRef): CoreDbRc[bool] =
-  ## Getter (well, sort of). It retrieves the column state hash for the
-  ## argument `col` descriptor. The function might fail unless the current
-  ## state is available (e.g. on `Aristo`.)
-  ##
-  ## The value `EMPTY_ROOT_HASH` is returned on the void `col` descriptor
-  ## argument `CoreDbColRef(nil)`.
-  ##
-  col.setTrackNewApi BaseColStateEmptyFn
-  result = block:
-    if not col.isNil and col.ready:
-      col.parent.methods.colStateEmptyFn col
-    else:
-      ok true
-  # Note: tracker will be silent if `vid` is NIL
-  col.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
-
-proc state*(col: CoreDbColRef): CoreDbRc[Hash256] =
-  ## Getter (well, sort of). It retrieves the column state hash for the
-  ## argument `col` descriptor. The function might fail unless the current
-  ## state is available (e.g. on `Aristo`.)
-  ##
-  ## The value `EMPTY_ROOT_HASH` is returned on the void `col` descriptor
-  ## argument `CoreDbColRef(nil)`.
-  ##
-  col.setTrackNewApi BaseColStateFn
-  result = block:
-    if not col.isNil and col.ready:
-      col.parent.methods.colStateFn col
-    else:
-      ok EMPTY_ROOT_HASH
-  # Note: tracker will be silent if `vid` is NIL
-  col.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
-
-proc stateEmptyOrVoid*(col: CoreDbColRef): bool =
-  ## Convenience wrapper, returns `true` where `stateEmpty()` would fail.
-  col.stateEmpty.valueOr: true
 
 # ------------------------------------------------------------------------------
 # Public functions for generic columns

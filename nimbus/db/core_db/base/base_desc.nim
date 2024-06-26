@@ -81,11 +81,6 @@ type
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
   CoreDbBaseDestroyFn* = proc(eradicate = true) {.noRaise.}
-  CoreDbBaseColStateFn* = proc(
-    col: CoreDbColRef): CoreDbRc[Hash256] {.noRaise.}
-  CoreDbBaseColStateEmptyFn* = proc(
-    col: CoreDbColRef): CoreDbRc[bool] {.noRaise.}
-  CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
   CoreDbBaseNewKvtFn* = proc(): CoreDbRc[CoreDbKvtRef] {.noRaise.}
@@ -102,9 +97,6 @@ type
 
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
-    colStateFn*:     CoreDbBaseColStateFn
-    colStateEmptyFn*: CoreDbBaseColStateEmptyFn
-    colPrintFn*:     CoreDbBaseColPrintFn
     errorPrintFn*:   CoreDbBaseErrorPrintFn
     levelFn*:        CoreDbBaseLevelFn
 
@@ -309,12 +301,6 @@ type
     ## rather than `Blob` values.
     parent*: CoreDbRef
     methods*: CoreDbAccFns
-
-  CoreDbColRef* = ref object of RootRef
-    ## Generic state root: `Hash256` for legacy, `VertexID` for Aristo. This
-    ## object makes only sense in the context of an *MPT*.
-    parent*: CoreDbRef
-    ready*: bool              ## Must be set `true` to enable
 
   CoreDbTxRef* = ref object of RootRef
     ## Transaction descriptor derived from `CoreDbRef`
