@@ -41,6 +41,8 @@ type
     AccSlotHasPathFn    = "slotHasPath"
     AccSlotMergeFn      = "slotMerge"
     AccSlotStateFn      = "slotState"
+    AccSlotStateEmptyFn = "slotStateEmpty"
+    AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
     AccSlotPairsIt      = "slotPairs"
 
     AnyBackendFn        = "any/backend"

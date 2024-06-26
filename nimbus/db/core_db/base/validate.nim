@@ -78,6 +78,7 @@ proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.slotHasPathFn.isNil
   doAssert not fns.slotMergeFn.isNil
   doAssert not fns.slotStateFn.isNil
+  doAssert not fns.slotStateEmptyFn.isNil
 
 # ------------
 

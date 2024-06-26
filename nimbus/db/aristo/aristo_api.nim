@@ -266,6 +266,14 @@ type
       ## For a storage tree related to account `accPath`, query whether the
       ## data record indexed by `path` exists on the database.
 
+  AristoApiHasStorageDataFn* =
+    proc(db: AristoDbRef;
+         accPath: PathID;
+        ): Result[bool,AristoError]
+        {.noRaise.}
+      ## For a storage tree related to account `accPath`, query whether there
+      ## is a non-empty data storage area at all.
+
   AristoApiHikeUpFn* =
     proc(path: NibblesBuf;
          root: VertexID;
@@ -305,10 +313,6 @@ type
         {.noRaise.}
       ## Merge the  key-value-pair argument `(accKey,accRec)` as an account
       ## ledger value, i.e. the the sub-tree starting at `VertexID(1)`.
-      ##
-      ## The payload argument `accRec` must have the `storageID` field
-      ## either unset/invalid or referring to a existing vertex which will be
-      ## assumed to be a storage tree.
 
   AristoApiMergeGenericDataFn* =
     proc( db: AristoDbRef;
@@ -447,6 +451,7 @@ type
     hasPathAccount*: AristoApiHasPathAccountFn
     hasPathGeneric*: AristoApiHasPathGenericFn
     hasPathStorage*: AristoApiHasPathStorageFn
+    hasStorageData*: AristoApiHasStorageDataFn
 
     hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
@@ -495,6 +500,7 @@ type
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
     AristoApiProfHasPathGenericFn       = "hasPathGeneric"
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
+    AristoApiProfHasStorageDataFn       = "hasStorageData"
 
     AristoApiProfHikeUpFn               = "hikeUp"
     AristoApiProfIsTopFn                = "isTop"
@@ -560,6 +566,7 @@ when AutoValidateApiHooks:
     doAssert not api.hasPathAccount.isNil
     doAssert not api.hasPathGeneric.isNil
     doAssert not api.hasPathStorage.isNil
+    doAssert not api.hasStorageData.isNil
 
     doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
@@ -629,6 +636,7 @@ func init*(api: var AristoApiObj) =
   api.hasPathAccount = hasPathAccount
   api.hasPathGeneric = hasPathGeneric
   api.hasPathStorage = hasPathStorage
+  api.hasStorageData = hasStorageData
 
   api.hikeUp = hikeUp
   api.isTop = isTop
@@ -680,6 +688,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     hasPathAccount:       api.hasPathAccount,
     hasPathGeneric:       api.hasPathGeneric,
     hasPathStorage:       api.hasPathStorage,
+    hasStorageData:       api.hasStorageData,
 
     hikeUp:               api.hikeUp,
     isTop:                api.isTop,
@@ -832,9 +841,14 @@ func init*(
         result = api.hasPathGeneric(a, b, c)
 
   profApi.hasPathStorage =
-    proc(a: AristoDbRef; b: openArray[byte]; c: PathID;): auto =
+    proc(a: AristoDbRef; b: openArray[byte]; c: PathID): auto =
       AristoApiProfHasPathStorageFn.profileRunner:
         result = api.hasPathStorage(a, b, c)
+
+  profApi.hasStorageData =
+    proc(a: AristoDbRef; b: PathID): auto =
+      AristoApiProfHasStorageDataFn.profileRunner:
+        result = api.hasStorageData(a, b)
 
   profApi.hikeUp =
     proc(a: NibblesBuf; b: VertexID; c: AristoDbRef): auto =

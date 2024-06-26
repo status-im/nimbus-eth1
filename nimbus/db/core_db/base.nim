@@ -583,6 +583,24 @@ proc slotState*(
   result = acc.methods.slotStateFn(acc, eAddr, updateOk)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
 
+proc slotStateEmpty*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+      ):  CoreDbRc[bool] =
+  ## ...
+  acc.setTrackNewApi AccSlotStateEmptyFn
+  result = acc.methods.slotStateEmptyFn(acc, eAddr)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+
+proc slotStateEmptyOrVoid*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+      ): bool =
+  ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
+  acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
+  result = acc.methods.slotStateEmptyFn(acc, eAddr).valueOr: true
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+
 # ------------- other ----------------
 
 proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =

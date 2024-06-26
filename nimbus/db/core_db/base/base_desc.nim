@@ -200,15 +200,17 @@ type
   CoreDbAccStateFn* = proc(cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
   CoreDbSlotFetchFn* =
-    proc(cAcc: CoreDbAccRef,a: EthAddress; k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+    proc(cAcc: CoreDbAccRef, a: EthAddress; k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
   CoreDbSlotDeleteFn* =
     proc(cAcc: CoreDbAccRef,a: EthAddress; k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbSlotHasPathFn* =
-    proc(cAcc: CoreDbAccRef,a: EthAddress; k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+    proc(cAcc: CoreDbAccRef, a: EthAddress; k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbSlotMergeFn* =
-    proc(cAcc: CoreDbAccRef,a: EthAddress; k, v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+    proc(cAcc: CoreDbAccRef, a: EthAddress; k, v: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbSlotStateFn* =
-    proc(cAcc: CoreDbAccRef,a: EthAddress; updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
+    proc(cAcc: CoreDbAccRef, a: EthAddress; updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbSlotStateEmptyFn* =
+    proc(cAcc: CoreDbAccRef, a: EthAddress): CoreDbRc[bool] {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects
@@ -220,12 +222,12 @@ type
     mergeFn*:        CoreDbAccMergeFn
     stateFn*:        CoreDbAccStateFn
 
-    slotFetchFn*:    CoreDbSlotFetchFn
-    slotDeleteFn*:   CoreDbSlotDeleteFn
-    slotHasPathFn*:  CoreDbSlotHasPathFn
-    slotMergeFn*:    CoreDbSlotMergeFn
-    slotStateFn*:    CoreDbSlotStateFn
-
+    slotFetchFn*:      CoreDbSlotFetchFn
+    slotDeleteFn*:     CoreDbSlotDeleteFn
+    slotHasPathFn*:    CoreDbSlotHasPathFn
+    slotMergeFn*:      CoreDbSlotMergeFn
+    slotStateFn*:      CoreDbSlotStateFn
+    slotStateEmptyFn*: CoreDbSlotStateEmptyFn
 
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management

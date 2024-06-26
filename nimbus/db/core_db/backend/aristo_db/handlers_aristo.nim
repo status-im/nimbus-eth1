@@ -315,7 +315,7 @@ proc accMethods(): CoreDbAccFns =
 
 
   proc slotFetch(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[Blob] =
-    const info = "acc/stoFetchFn()"
+    const info = "slotFetchFn()"
 
     let data = api.fetchStorageData(mpt, key, eAddr.to(PathID)).valueOr:
       if error != FetchPathNotFound:
@@ -324,7 +324,7 @@ proc accMethods(): CoreDbAccFns =
     ok(data)
 
   proc slotDelete(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[void] =
-    const info = "acc/stoDeleteFn()"
+    const info = "slotDeleteFn()"
 
     api.deleteStorageData(mpt, key, eAddr.to(PathID)).isOkOr:
       if error == DelPathNotFound:
@@ -337,7 +337,7 @@ proc accMethods(): CoreDbAccFns =
     ok()
 
   proc slotHasPath(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[bool] =
-    const info = "acc/stoHasPathFn()"
+    const info = "slotHasPathFn()"
 
     let yn = api.hasPathStorage(mpt, key, eAddr.to(PathID)).valueOr:
       return err(error.toError(base, info))
@@ -351,7 +351,7 @@ proc accMethods(): CoreDbAccFns =
     ok()
 
   proc slotState(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; updateOk: bool): CoreDbRc[Hash256] =
-    const info = "acc/stoStateFn()"
+    const info = "slotStateFn()"
 
     let rc = api.fetchStorageState(mpt, eAddr.to(PathID))
     if rc.isOk:
@@ -365,6 +365,13 @@ proc accMethods(): CoreDbAccFns =
     let state = api.fetchStorageState(mpt, eAddr.to(PathID)).valueOr:
       return err(error.toError(base, info))
     ok(state)
+
+  proc slotStateEmpty(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
+    const info = "slotStateEmptyFn()"
+
+    let yn = api.hasStorageData(mpt, eAddr.to(PathID)).valueOr:
+      return err(error.toError(base, info))
+    ok(not yn)
 
 
   CoreDbAccFns(
@@ -402,7 +409,10 @@ proc accMethods(): CoreDbAccFns =
       slotMerge(AristoCoreDbAccRef(cAcc), eAddr, k, v),
 
     slotStateFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; updateOk: bool): CoreDbRc[Hash256] =
-      slotState(AristoCoreDbAccRef(cAcc), eAddr, updateOk))
+      slotState(AristoCoreDbAccRef(cAcc), eAddr, updateOk),
+
+    slotStateEmptyFn: proc(cAcc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
+      slotStateEmpty(AristoCoreDbAccRef(cAcc), eAddr))
 
 # ------------------------------------------------------------------------------
 # Private context call back functions
