@@ -126,10 +126,7 @@ proc update(dh: TxChainRef; parent: BlockHeader)
     timestamp = dh.getTimestamp(parent)
     db  = dh.com.db
     acc = LedgerRef.init(db, parent.stateRoot)
-    fee = if dh.com.isLondon(parent.number + 1, timestamp):
-            Opt.some(dh.com.baseFeeGet(parent).uint64.u256)
-          else:
-            Opt.none UInt256
+    fee = baseFeeGet(dh.com, parent, timestamp)
 
   # Keep a separate accounts descriptor positioned at the sync point
   dh.roAcc = ReadOnlyStateDB(acc)
@@ -293,7 +290,7 @@ func `baseFee=`*(dh: TxChainRef; val: GasPrice) =
   ## Setter, temorarily overwrites parameter until next `head=` update. This
   ## function would be called in exceptional cases only as this parameter is
   ## determined by the `head=` update.
-  if 0 < val or dh.com.isLondon(dh.txEnv.vmState.blockNumber):
+  if 0 < val or dh.com.isLondonOrLater(dh.txEnv.vmState.blockNumber):
     dh.txEnv.vmState.blockCtx.baseFeePerGas = Opt.some(val.uint64.u256)
   else:
     dh.txEnv.vmState.blockCtx.baseFeePerGas = Opt.none UInt256

@@ -15,43 +15,31 @@
 import
   ../../../common/common,
   ../../../constants,
-  ../tx_item,
   eth/eip1559
 
 {.push raises: [].}
-
-const
-  INITIAL_BASE_FEE = EIP1559_INITIAL_BASE_FEE.truncate(uint64)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc baseFeeGet*(com: CommonRef; parent: BlockHeader): GasPrice =
+proc baseFeeGet*(com: CommonRef;
+                 parent: BlockHeader, timestamp: EthTime): Opt[UInt256] =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
-  ## new block header to generate. This function is derived from
-  ## `p2p/gaslimit.calcEip1599BaseFee()` which in turn has its origins on
-  ## `consensus/misc/eip1559.go` of geth.
+  ## new block header to generate.
 
   # Note that the baseFee is calculated for the next header
-  let
-    forkDeterminer = forkDeterminationInfo(parent)
-    parentFork = com.toEVMFork(forkDeterminer)
-    nextFork = com.toEVMFork(forkDeterminer.adjustForNextBlock)
-
-  if nextFork < FkLondon:
-    return 0.GasPrice
+  if not com.isLondonOrLater(parent.number+1, timestamp):
+    return Opt.none(UInt256)
 
   # If the new block is the first EIP-1559 block, return initial base fee.
-  if parentFork < FkLondon:
-    return INITIAL_BASE_FEE.GasPrice
+  if not com.isLondonOrLater(parent.number, timestamp):
+    return Opt.some(EIP1559_INITIAL_BASE_FEE)
 
-  # TODO: which one is better?
-  # truncate parent.baseFee to uint64 first and do the operation in uint64
-  # or truncate the result?
-  calcEip1599BaseFee(parent.gasLimit,
+  Opt.some calcEip1599BaseFee(
+    parent.gasLimit,
     parent.gasUsed,
-    parent.baseFeePerGas.get(0.u256)).truncate(uint64).GasPrice
+    parent.baseFeePerGas.get(0.u256))
 
 # ------------------------------------------------------------------------------
 # End
