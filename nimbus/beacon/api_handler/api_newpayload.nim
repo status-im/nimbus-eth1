@@ -177,7 +177,7 @@ proc newPayload*(ben: BeaconEngineRef,
     if api.eth.SyncMode() != downloader.FullSync:
       return api.delayPayloadImport(header)
 
-  if not db.haveBlockAndState(header.parentHash):
+  if not ben.chain.haveBlockAndState(header.parentHash):
     ben.put(blockHash, header)
     warn "State not available, ignoring new payload",
       hash   = blockHash,
@@ -187,7 +187,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   trace "Inserting block without sethead",
     hash = blockHash, number = header.number
-  let vres = ben.chain.insertBlockWithoutSetHead(blk)
+  let vres = ben.chain.importBlock(blk)
   if vres.isErr:
     ben.setInvalidAncestor(header, blockHash)
     let blockHash = latestValidHash(db, parent, ttd)

@@ -29,7 +29,7 @@ type
     txPool: TxPoolRef
     merge : MergeTracker
     queue : PayloadQueue
-    chain : ChainRef
+    chain : ForkedChainRef
 
     # The forkchoice update and new payload method require us to return the
     # latest valid hash in an invalid chain. To support that return, we need
@@ -98,7 +98,7 @@ proc setInvalidAncestor(ben: BeaconEngineRef,
 
 proc new*(_: type BeaconEngineRef,
           txPool: TxPoolRef,
-          chain: ChainRef): BeaconEngineRef =
+          chain: ForkedChainRef): BeaconEngineRef =
   let ben = BeaconEngineRef(
     txPool: txPool,
     merge : MergeTracker.init(txPool.com.db),
@@ -154,7 +154,7 @@ proc put*(ben: BeaconEngineRef, id: PayloadID,
 func com*(ben: BeaconEngineRef): CommonRef =
   ben.txPool.com
 
-func chain*(ben: BeaconEngineRef): ChainRef =
+func chain*(ben: BeaconEngineRef): ForkedChainRef =
   ben.chain
 
 func ttdReached*(ben: BeaconEngineRef): bool =
@@ -215,9 +215,8 @@ proc generatePayload*(ben: BeaconEngineRef,
   wrapException:
     let
       xp  = ben.txPool
-      db  = xp.com.db
       pos = xp.com.pos
-      headBlock = db.getCanonicalHead()
+      headBlock = ben.chain.latestHeader
 
     pos.prevRandao   = ethHash attrs.prevRandao
     pos.timestamp    = ethTime attrs.timestamp
