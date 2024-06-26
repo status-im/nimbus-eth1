@@ -14,7 +14,7 @@ import
   std/tables,
   eth/common,
   ../../aristo as use_ari,
-  ../../aristo/aristo_walk,
+  ../../aristo/[aristo_walk, aristo_serialise],
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk],
   ".."/[base, base/base_desc],

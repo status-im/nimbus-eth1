@@ -126,7 +126,7 @@ func layersPutVtx*(
       ) =
   ## Store a (potentally empty) vertex on the top layer
   db.top.delta.sTab[vid] = vtx
-  db.top.final.dirty.incl root
+  # db.top.final.dirty.incl root
 
 func layersResVtx*(
     db: AristoDbRef;
@@ -146,7 +146,7 @@ func layersPutKey*(
       ) =
   ## Store a (potentally void) hash key on the top layer
   db.top.delta.kMap[vid] = key
-  db.top.final.dirty.incl root # Modified top cache layers => hashify
+  # db.top.final.dirty.incl root # Modified top cache layers => hashify
 
 
 func layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =

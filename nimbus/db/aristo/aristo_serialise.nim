@@ -31,7 +31,7 @@ proc aristoError(error: AristoError): NodeRef =
   ## Allows returning de
   NodeRef(vType: Leaf, error: error)
 
-proc serialise(
+proc serialise*(
     pyl: PayloadRef;
     getKey: ResolveVidFn;
       ): Result[Blob,(VertexID,AristoError)] =
@@ -125,15 +125,15 @@ proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
 
   aristoError(Rlp2Or17ListEntries)
 
+func append*(w: var RlpWriter; key: HashKey) =
+  if 1 < key.len and key.len < 32:
+    w.appendRawBytes key.data
+  else:
+    w.append key.data
 
 proc append*(writer: var RlpWriter; node: NodeRef) =
   ## Mixin for RLP writer. Note that a `Dummy` node is encoded as an empty
   ## list.
-  func addHashKey(w: var RlpWriter; key: HashKey) =
-    if 1 < key.len and key.len < 32:
-      w.appendRawBytes key.data
-    else:
-      w.append key.data
 
   if node.error != AristoError(0):
     writer.startList(0)
@@ -142,13 +142,13 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
     of Branch:
       writer.startList(17)
       for n in 0..15:
-        writer.addHashKey node.key[n]
+        writer.append node.key[n]
       writer.append EmptyBlob
 
     of Extension:
       writer.startList(2)
       writer.append node.ePfx.toHexPrefix(isleaf = false)
-      writer.addHashKey node.key[0]
+      writer.append node.key[0]
 
     of Leaf:
       proc getKey0(vid: VertexID): Result[HashKey,AristoError] {.noRaise.} =

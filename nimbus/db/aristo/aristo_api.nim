@@ -20,7 +20,7 @@ import
   ./aristo_init/memory_db,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
        aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
-       aristo_serialise, aristo_tx]
+       aristo_serialise, aristo_tx, aristo_utils]
 
 export
   AristoDbProfListRef
@@ -204,6 +204,14 @@ type
     ## transaction is added.
     ##
     ## Use `aristo_desc.forget()` to clean up this descriptor.
+
+  AristoApiComputeKeyFn* =
+    proc(db: AristoDbRef;
+         vid: VertexID;
+        ): Result[HashKey,AristoError]
+        {.noRaise.}
+      ## Cascaded attempt to fetch a Merkle hash from the cache layers or
+      ## the backend (if available.)
 
   AristoApiGetKeyRcFn* =
     proc(db: AristoDbRef;
@@ -422,8 +430,8 @@ type
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
     forkTx*: AristoApiForkTxFn
+    computeKey*: AristoApiComputeKeyFn
     getKeyRc*: AristoApiGetKeyRcFn
-    hashify*: AristoApiHashifyFn
     hasPathAccount*: AristoApiHasPathAccountFn
     hasPathGeneric*: AristoApiHasPathGenericFn
     hasPathStorage*: AristoApiHasPathStorageFn
@@ -462,7 +470,6 @@ type
     AristoApiProfForgetFn               = "forget"
     AristoApiProfForkTxFn               = "forkTx"
     AristoApiProfGetKeyRcFn             = "getKeyRc"
-    AristoApiProfHashifyFn              = "hashify"
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
     AristoApiProfHasPathGenericFn       = "hasPathGeneric"
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
@@ -517,7 +524,6 @@ when AutoValidateApiHooks:
     doAssert not api.forget.isNil
     doAssert not api.forkTx.isNil
     doAssert not api.getKeyRc.isNil
-    doAssert not api.hashify.isNil
     doAssert not api.hasPathAccount.isNil
     doAssert not api.hasPathGeneric.isNil
     doAssert not api.hasPathStorage.isNil
@@ -575,8 +581,8 @@ func init*(api: var AristoApiObj) =
   api.finish = finish
   api.forget = forget
   api.forkTx = forkTx
+  api.computeKey = computeKey
   api.getKeyRc = getKeyRc
-  api.hashify = hashify
   api.hasPathAccount = hasPathAccount
   api.hasPathGeneric = hasPathGeneric
   api.hasPathStorage = hasPathStorage
@@ -618,7 +624,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     forget:               api.forget,
     forkTx:               api.forkTx,
     getKeyRc:             api.getKeyRc,
-    hashify:              api.hashify,
     hasPathAccount:       api.hasPathAccount,
     hasPathGeneric:       api.hasPathGeneric,
     hasPathStorage:       api.hasPathStorage,
@@ -740,11 +745,6 @@ func init*(
     proc(a: AristoDbRef; b: VertexID): auto =
       AristoApiProfGetKeyRcFn.profileRunner:
         result = api.getKeyRc(a, b)
-
-  profApi.hashify =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfHashifyFn.profileRunner:
-        result = api.hashify(a)
 
   profApi.hasPathAccount =
     proc(a: AristoDbRef; b: openArray[byte]): auto =

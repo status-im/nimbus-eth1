@@ -122,8 +122,6 @@ proc txFrameCommit*(
   ## previous transaction is returned if there was any.
   ##
   let db = ? tx.getDbDescFromTopTx()
-  db.hashify().isOkOr:
-    return err(error[1])
 
   # Pop layer from stack and merge database top layer onto it
   let merged = block:
@@ -161,11 +159,6 @@ proc txFrameCollapse*(
   ##     tx = db.txTop.value
   ##
   let db = ? tx.getDbDescFromTopTx()
-
-  if commit:
-    # For commit, hashify the current layer if requested and install it
-    db.hashify().isOkOr:
-      return err(error[1])
 
   db.top.txUid = 0
   db.stack.setLen(0)

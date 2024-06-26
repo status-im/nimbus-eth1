@@ -201,15 +201,6 @@ func mapRootVid*(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hashify*(
-    db: AristoDbRef;
-    noisy: bool;
-      ): Result[void,(VertexID,AristoError)] =
-  when declared(aristo_hashify.noisy):
-    aristo_hashify.exec(noisy, aristo_hashify.hashify(db))
-  else:
-    aristo_hashify.hashify(db)
-
 proc mergeGenericData*(
     db: AristoDbRef;                   # Database, top layer
     leaf: LeafTiePayload;              # Leaf item to add to the database
