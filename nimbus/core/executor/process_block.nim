@@ -117,7 +117,7 @@ proc procBlkPreamble(
   ok()
 
 proc procBlkEpilogue(
-    vmState: BaseVMState, header: BlockHeader, skipValidation: bool
+    vmState: BaseVMState, header: BlockHeader, skipValidation: bool, skipReceipts: bool
 ): Result[void, string] =
   # Reward beneficiary
   vmState.mutateStateDB:
@@ -141,19 +141,20 @@ proc procBlkEpilogue(
         arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
       return err("stateRoot mismatch")
 
-    let bloom = createBloom(vmState.receipts)
-
-    if header.logsBloom != bloom:
-      return err("bloom mismatch")
-
-    let receiptsRoot = calcReceiptsRoot(vmState.receipts)
-    if header.receiptsRoot != receiptsRoot:
-      # TODO replace logging with better error
-      debug "wrong receiptRoot in block",
-        blockNumber = header.number,
-        actual = receiptsRoot,
-        expected = header.receiptsRoot
-      return err("receiptRoot mismatch")
+    if not skipReceipts:
+      let bloom = createBloom(vmState.receipts)
+  
+      if header.logsBloom != bloom:
+        return err("bloom mismatch")
+  
+      let receiptsRoot = calcReceiptsRoot(vmState.receipts)
+      if header.receiptsRoot != receiptsRoot:
+        # TODO replace logging with better error
+        debug "wrong receiptRoot in block",
+          blockNumber = header.number,
+          actual = receiptsRoot,
+          expected = header.receiptsRoot
+        return err("receiptRoot mismatch")
 
   ok()
 
@@ -175,7 +176,7 @@ proc processBlock*(
   if vmState.com.consensus == ConsensusType.POW:
     vmState.calculateReward(blk.header, blk.uncles)
 
-  ?vmState.procBlkEpilogue(blk.header, skipValidation)
+  ?vmState.procBlkEpilogue(blk.header, skipValidation, skipReceipts)
 
   ok()
 
