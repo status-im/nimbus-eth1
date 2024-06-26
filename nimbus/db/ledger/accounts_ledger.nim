@@ -174,7 +174,7 @@ proc state*(ac: AccountsLedgerRef): KeccakHash =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
-  ac.ledger.state.valueOr:
+  ac.ledger.state(updateOk=true).valueOr:
     raiseAssert info & $$error
 
 proc isTopLevelClean*(ac: AccountsLedgerRef): bool =

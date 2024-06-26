@@ -96,10 +96,6 @@ proc txStow*(
   if persistent and not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
 
-  # Update Merkle hashes (unless disabled)
-  db.hashify().isOkOr:
-    return err(error[1])
-
   # Verify database consistency and get `src` field for update
   let rc = db.getBeStateRoot chunkedMpt
   if rc.isErr and rc.error != TxPrettyPointlessLayer:

@@ -183,7 +183,7 @@ proc blobify(
       if rc.isOk:
         rc.value
       else:
-        ? api.hashify(mpt)
+        # TODO ? api.hashify(mpt)
         ? api.serialise(mpt, pyl)
   ok(blob)
 

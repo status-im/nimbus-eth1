@@ -17,7 +17,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike]
+  "."/[aristo_desc, aristo_get, aristo_hashify, aristo_hike]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -55,11 +55,16 @@ proc retrievePayload(
 proc retrieveMerkleHash(
     db: AristoDbRef;
     root: VertexID;
+    updateOk: bool;
       ): Result[Hash256,AristoError] =
-  let key = db.getKeyRc(root).valueOr:
-    if error == GetKeyNotFound:
-      return ok(EMPTY_ROOT_HASH) # empty sub-tree
-    return err(error)
+  let key = block:
+    if updateOk:
+      db.computeKey(root).expect "ok"
+    else:
+      db.getKeyRc(root).valueOr:
+        if error == GetKeyNotFound:
+          return ok(EMPTY_ROOT_HASH) # empty sub-tree
+        return err(error)
   ok key.to(Hash256)
 
 
@@ -148,9 +153,10 @@ proc fetchAccountRecord*(
 
 proc fetchAccountState*(
     db: AristoDbRef;
+    updateOk: bool;
       ): Result[Hash256,AristoError] =
   ## Fetch the Merkle hash of the account root.
-  db.retrieveMerkleHash VertexID(1)
+  db.retrieveMerkleHash(VertexID(1), updateOk)
 
 proc hasPathAccount*(
     db: AristoDbRef;
@@ -178,9 +184,10 @@ proc fetchGenericData*(
 proc fetchGenericState*(
     db: AristoDbRef;
     root: VertexID;
+    updateOk: bool;
       ): Result[Hash256,AristoError] =
   ## Fetch the Merkle hash of the argument `root`.
-  db.retrieveMerkleHash root
+  db.retrieveMerkleHash(root, updateOk)
 
 proc hasPathGeneric*(
     db: AristoDbRef;
@@ -209,13 +216,14 @@ proc fetchStorageData*(
 proc fetchStorageState*(
     db: AristoDbRef;
     accPath: openArray[byte];
+    updateOk: bool;
       ): Result[Hash256,AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
   let stoID = db.fetchStorageID(accPath).valueOr:
     if error == FetchPathNotFound:
       return ok(EMPTY_ROOT_HASH) # no sub-tree
     return err(error)
-  db.retrieveMerkleHash stoID
+  db.retrieveMerkleHash(stoID, updateOk)
 
 proc hasPathStorage*(
     db: AristoDbRef;

@@ -185,8 +185,8 @@ proc updateAccountForHasher*(
     db.layersResKey(hike.root, w)
 
   # Signal to `hashify()` where to start rebuilding Merkel hashes
-  db.top.final.dirty.incl hike.root
-  db.top.final.dirty.incl hike.legs[^1].wp.vid
+  # db.top.final.dirty.incl hike.root
+  # db.top.final.dirty.incl hike.legs[^1].wp.vid
 
 # ------------------------------------------------------------------------------
 # End
