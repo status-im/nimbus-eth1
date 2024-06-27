@@ -111,6 +111,9 @@ template ifTrackNewApi*(w: CoreDbApiTrackRef; code: untyped) =
     w.endNewApiIf:
       code
 
+template toOpenArrayKey(eAddr: EthAddress): openArray[byte] =
+  eAddr.keccakHash.data.toOpenArray(0,31)
+
 # ------------------------------------------------------------------------------
 # Public constructor helper
 # ------------------------------------------------------------------------------
@@ -410,7 +413,7 @@ proc fetch*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
   ## the address `eAddr`.
   ##
   acc.setTrackNewApi AccFetchFn
-  result = acc.methods.fetchFn(acc, eAddr)
+  result = acc.methods.fetchFn(acc, eAddr.toOpenArrayKey, eAddr)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc delete*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
@@ -418,7 +421,7 @@ proc delete*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
   ## will also destroy an associated storage area.
   ##
   acc.setTrackNewApi AccDeleteFn
-  result = acc.methods.deleteFn(acc, eAddr)
+  result = acc.methods.deleteFn(acc, eAddr.toOpenArrayKey)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
 proc clearStorage*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
@@ -426,7 +429,7 @@ proc clearStorage*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
   ## particular account indexed by the address `eAddr`.
   ##
   acc.setTrackNewApi AccClearStorageFn
-  result = acc.methods.clearStorageFn(acc, eAddr)
+  result = acc.methods.clearStorageFn(acc, eAddr.toOpenArrayKey)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc merge*(acc: CoreDbAccRef; account: CoreDbAccount): CoreDbRc[void] =
@@ -443,7 +446,7 @@ proc hasPath*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
   acc.setTrackNewApi AccHasPathFn
-  result = acc.methods.hasPathFn(acc, eAddr)
+  result = acc.methods.hasPathFn(acc, eAddr.toOpenArrayKey)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
@@ -465,7 +468,7 @@ proc slotFetch*(
     slot: openArray[byte];
       ):  CoreDbRc[Blob] =
   acc.setTrackNewApi AccSlotFetchFn
-  result = acc.methods.slotFetchFn(acc, eAddr, slot)
+  result = acc.methods.slotFetchFn(acc, eAddr.toOpenArrayKey, slot)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc slotDelete*(
@@ -474,7 +477,7 @@ proc slotDelete*(
     slot: openArray[byte];
       ):  CoreDbRc[void] =
   acc.setTrackNewApi AccSlotDeleteFn
-  result = acc.methods.slotDeleteFn(acc, eAddr, slot)
+  result = acc.methods.slotDeleteFn(acc, eAddr.toOpenArrayKey, slot)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc slotHasPath*(
@@ -483,7 +486,7 @@ proc slotHasPath*(
     slot: openArray[byte];
       ):  CoreDbRc[bool] =
   acc.setTrackNewApi AccSlotHasPathFn
-  result = acc.methods.slotHasPathFn(acc, eAddr, slot)
+  result = acc.methods.slotHasPathFn(acc, eAddr.toOpenArrayKey, slot)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc slotMerge*(
@@ -493,7 +496,7 @@ proc slotMerge*(
     data: openArray[byte];
       ):  CoreDbRc[void] =
   acc.setTrackNewApi AccSlotMergeFn
-  result = acc.methods.slotMergeFn(acc, eAddr, slot, data)
+  result = acc.methods.slotMergeFn(acc, eAddr.toOpenArrayKey, slot, data)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
 proc slotState*(
@@ -502,7 +505,7 @@ proc slotState*(
     updateOk = false;
       ):  CoreDbRc[Hash256] =
   acc.setTrackNewApi AccSlotStateFn
-  result = acc.methods.slotStateFn(acc, eAddr, updateOk)
+  result = acc.methods.slotStateFn(acc, eAddr.toOpenArrayKey, updateOk)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
 
 proc slotStateEmpty*(
@@ -511,7 +514,7 @@ proc slotStateEmpty*(
       ):  CoreDbRc[bool] =
   ## ...
   acc.setTrackNewApi AccSlotStateEmptyFn
-  result = acc.methods.slotStateEmptyFn(acc, eAddr)
+  result = acc.methods.slotStateEmptyFn(acc, eAddr.toOpenArrayKey)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
 
 proc slotStateEmptyOrVoid*(
@@ -520,7 +523,7 @@ proc slotStateEmptyOrVoid*(
       ): bool =
   ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
   acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
-  result = acc.methods.slotStateEmptyFn(acc, eAddr).valueOr: true
+  result = acc.methods.slotStateEmptyFn(acc, eAddr.toOpenArrayKey).valueOr: true
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
 
 # ------------- other ----------------
@@ -538,7 +541,7 @@ proc recast*(
   ##   With the legacy backend, this function always succeeds.
   ##
   acc.setTrackNewApi EthAccRecastFn
-  let rc = acc.methods.slotStateFn(acc, statement.address, updateOk)
+  let rc = acc.methods.slotStateFn(acc, statement.accPath.data, updateOk)
   result =
     if rc.isOk:
       ok Account(

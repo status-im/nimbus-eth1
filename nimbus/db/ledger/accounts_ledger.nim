@@ -141,14 +141,15 @@ proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
 
 func newCoreDbAccount(address: EthAddress): CoreDbAccount =
   CoreDbAccount(
-    address:  address,
+    eAddr:    address,
+    accPath:  address.keccakHash,
     nonce:    emptyEthAccount.nonce,
     balance:  emptyEthAccount.balance,
     codeHash: emptyEthAccount.codeHash)
 
 proc resetCoreDbAccount(ac: AccountsLedgerRef, v: var CoreDbAccount) =
   const info = "resetCoreDbAccount(): "
-  ac.ledger.clearStorage(v.address).isOkOr:
+  ac.ledger.clearStorage(v.eAddr).isOkOr:
     raiseAssert info & $$error
   v.nonce = emptyEthAccount.nonce
   v.balance = emptyEthAccount.balance
@@ -321,7 +322,7 @@ proc originalStorageValue(
   # Not in the original values cache - go to the DB.
   let
     slotKey = slot.toBytesBE.keccakHash.data
-    rc = ac.ledger.slotFetch(acc.statement.address, slotKey)
+    rc = ac.ledger.slotFetch(acc.statement.eAddr, slotKey)
   if rc.isOk and 0 < rc.value.len:
     noRlpException "originalStorageValue()":
       result = rlp.decode(rc.value, UInt256)
@@ -390,10 +391,10 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
     if value > 0:
       let encodedValue = rlp.encode(value)
       ac.ledger.slotMerge(
-        acc.statement.address, slotKey, encodedValue).isOkOr:
+        acc.statement.eAddr, slotKey, encodedValue).isOkOr:
           raiseAssert info & $$error
     else:
-      ac.ledger.slotDelete(acc.statement.address, slotKey).isOkOr:
+      ac.ledger.slotDelete(acc.statement.eAddr, slotKey).isOkOr:
         if error.error != StoNotFound:
           raiseAssert info & $$error
         discard
@@ -682,21 +683,24 @@ proc persist*(ac: AccountsLedgerRef,
       if CodeChanged in acc.flags:
         acc.persistCode(ac)
       if StorageChanged in acc.flags:
-        # storageRoot must be updated first
-        # before persisting account into merkle trie
+        # FIXME: Comment below might be obsolete
+        # --     # storageRoot must be updated first
+        # --     # before persisting account into merkle trie
         acc.persistStorage(ac)
+      # FIXME: This one might be unnecessary, `persistStorage()` might have
+      #        saved the account record already.
       ac.ledger.merge(acc.statement).isOkOr:
         raiseAssert info & $$error
     of Remove:
-      ac.ledger.delete(acc.statement.address).isOkOr:
+      ac.ledger.delete(acc.statement.eAddr).isOkOr:
         if error.error != AccNotFound:
           raiseAssert info & $$error
-      ac.savePoint.cache.del acc.statement.address
+      ac.savePoint.cache.del acc.statement.eAddr
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
       if Alive notin acc.flags:
-        ac.savePoint.cache.del acc.statement.address
+        ac.savePoint.cache.del acc.statement.eAddr
 
     acc.flags = acc.flags - resetFlags
   ac.savePoint.dirty.clear()

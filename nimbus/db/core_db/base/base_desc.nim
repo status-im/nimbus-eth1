@@ -40,7 +40,8 @@ type
 
   CoreDbAccount* = object
     ## Generic account representation referencing an *MPT* sub-trie
-    address*:  EthAddress    ## Reverse reference for storage trie path
+    accPath*:  Hash256       ## Hashed account address
+    eAddr*:    EthAddress    ## Reverse `accPath` (will go away)
     nonce*:    AccountNonce  ## Some `uint64` type
     balance*:  UInt256
     codeHash*: Hash256
@@ -173,26 +174,40 @@ type
   # ----------------------------------------------------
   # Sub-descriptor: Account column methods
   # ------------------------------------------------------
-  CoreDbAccBackendFn* = proc(cAcc: CoreDbAccRef): CoreDbAccBackendRef {.noRaise.}
-  CoreDbAccFetchFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
-  CoreDbAccDeleteFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccClearStorageFn* = proc(cAcc: CoreDbAccRef,k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccMergeFn* = proc(cAcc: CoreDbAccRef, v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
-  CoreDbAccHasPathFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccStateFn* = proc(cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbAccBackendFn* = proc(
+    cAcc: CoreDbAccRef): CoreDbAccBackendRef {.noRaise.}
+  CoreDbAccFetchFn* = proc(
+    cAcc: CoreDbAccRef, accPath: openArray[byte]; eAddr: EthAddress;
+    ): CoreDbRc[CoreDbAccount] {.noRaise.}
+  CoreDbAccDeleteFn* = proc(
+    cAcc: CoreDbAccRef, accPath: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbAccClearStorageFn* = proc(
+    cAcc: CoreDbAccRef, accPath: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbAccMergeFn* = proc(
+    cAcc: CoreDbAccRef, accPath: CoreDbAccount): CoreDbRc[void] {.noRaise.}
+  CoreDbAccHasPathFn* = proc(
+    cAcc: CoreDbAccRef, accPath: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbAccStateFn* = proc(
+    cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
-  CoreDbSlotFetchFn* =
-    proc(cAcc: CoreDbAccRef, a: EthAddress; k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
-  CoreDbSlotDeleteFn* =
-    proc(cAcc: CoreDbAccRef,a: EthAddress; k: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbSlotHasPathFn* =
-    proc(cAcc: CoreDbAccRef, a: EthAddress; k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbSlotMergeFn* =
-    proc(cAcc: CoreDbAccRef, a: EthAddress; k, v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbSlotStateFn* =
-    proc(cAcc: CoreDbAccRef, a: EthAddress; updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
-  CoreDbSlotStateEmptyFn* =
-    proc(cAcc: CoreDbAccRef, a: EthAddress): CoreDbRc[bool] {.noRaise.}
+  CoreDbSlotFetchFn* = proc(
+    cAcc: CoreDbAccRef; accPath, stoPath: openArray[byte];
+    ): CoreDbRc[Blob] {.noRaise.}
+  CoreDbSlotDeleteFn* = proc(
+    cAcc: CoreDbAccRef; accPath, stoPath: openArray[byte];
+    ): CoreDbRc[void] {.noRaise.}
+  CoreDbSlotHasPathFn* = proc(
+    cAcc: CoreDbAccRef; accPath, stoPath: openArray[byte];
+    ): CoreDbRc[bool] {.noRaise.}
+  CoreDbSlotMergeFn* = proc(
+    cAcc: CoreDbAccRef; accPath, stoPath, stoData: openArray[byte];
+    ): CoreDbRc[void] {.noRaise.}
+  CoreDbSlotStateFn* = proc(
+    cAcc: CoreDbAccRef; accPath: openArray[byte]; updateOk: bool;
+    ): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbSlotStateEmptyFn* = proc(
+    cAcc: CoreDbAccRef; accPath: openArray[byte];
+    ): CoreDbRc[bool] {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects
