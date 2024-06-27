@@ -436,7 +436,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     )
 
     # Sanity check, to not `panic` in state_transition
-    if com.isLondon(ctx.env.currentNumber):
+    if com.isLondonOrLater(ctx.env.currentNumber):
       if ctx.env.currentBaseFee.isSome:
         # Already set, currentBaseFee has precedent over parentBaseFee.
         discard

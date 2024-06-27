@@ -302,13 +302,9 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
 func toEVMFork*(com: CommonRef): EVMFork =
   ToEVMFork[com.currentFork]
 
-func isLondon*(com: CommonRef, number: BlockNumber): bool =
+func isLondonOrLater*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
   com.toHardFork(number.forkDeterminationInfo) >= London
-
-func isLondon*(com: CommonRef, number: BlockNumber, timestamp: EthTime): bool =
-  # TODO: Fixme, use only London comparator
-  com.toHardFork(forkDeterminationInfo(number, timestamp)) >= London
 
 func forkGTE*(com: CommonRef, fork: HardFork): bool =
   com.currentFork >= fork

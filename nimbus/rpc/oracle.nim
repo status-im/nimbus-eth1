@@ -85,7 +85,7 @@ func toBytes(list: openArray[float64]): seq[byte] =
     result.add(cast[uint64](x).toBytesLE)
 
 func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
-  if com.isLondon(bc.blockNumber + 1):
+  if com.isLondonOrLater(bc.blockNumber + 1):
     calcEip1599BaseFee(
       bc.header.gasLimit,
       bc.header.gasUsed,
