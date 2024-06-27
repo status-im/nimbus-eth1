@@ -48,7 +48,6 @@ type
 
   AccountRef = ref object
     statement: CoreDbAccount
-    eAddr: EthAddress
     accPath: Hash256
     flags: AccountFlags
     code: CodeBytesRef
@@ -263,7 +262,6 @@ proc getAccount(
   if rc.isOk:
     result = AccountRef(
       statement: rc.value,
-      eAddr:     address,
       accPath:   address.keccakHash,
       flags:     {Alive})
   elif shouldCreate:
@@ -272,7 +270,6 @@ proc getAccount(
         nonce:    emptyEthAccount.nonce,
         balance:  emptyEthAccount.balance,
         codeHash: emptyEthAccount.codeHash),
-      eAddr:      address,
       accPath:    address.keccakHash,
       flags:      {Alive, IsNew})
   else:
@@ -285,7 +282,6 @@ proc getAccount(
 proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
   result = AccountRef(
     statement: acc.statement,
-    eAddr:     acc.eAddr,
     accPath:   acc.accPath,
     flags:     acc.flags,
     code:      acc.code)
@@ -673,7 +669,7 @@ proc persist*(ac: AccountsLedgerRef,
   for address in ac.savePoint.selfDestruct:
     ac.deleteAccount(address)
 
-  for acc in ac.savePoint.dirty.values(): # This is a hotspot in block processing
+  for (eAddr,acc) in ac.savePoint.dirty.pairs(): # This is a hotspot in block processing
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
@@ -691,12 +687,12 @@ proc persist*(ac: AccountsLedgerRef,
       ac.ledger.delete(acc.toAccountKey).isOkOr:
         if error.error != AccNotFound:
           raiseAssert info & $$error
-      ac.savePoint.cache.del acc.eAddr
+      ac.savePoint.cache.del eAddr
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
       if Alive notin acc.flags:
-        ac.savePoint.cache.del acc.eAddr
+        ac.savePoint.cache.del eAddr
 
     acc.flags = acc.flags - resetFlags
   ac.savePoint.dirty.clear()
