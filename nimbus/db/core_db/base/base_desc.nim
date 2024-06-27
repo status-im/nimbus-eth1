@@ -49,22 +49,13 @@ type
     Unset = 0
     Unspecified
 
-    AccAddrMissing
     AccNotFound
-    AccTxPending
-    AutoFlushFailed
     ColUnacceptable
-    ColLocked
-    CtxNotFound
     HashNotAvailable
     KvtNotFound
     MptNotFound
-    NotImplemented
     RlpException
-    RootNotFound
-    RootUnacceptable
     StoNotFound
-    StorageFailed
     TxPending
 
   CoreDbColType* = enum

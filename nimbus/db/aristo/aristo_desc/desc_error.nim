@@ -15,14 +15,8 @@ type
     # Miscelaneous/unclassified handy helpers
     GenericError
 
-    AccRootUnacceptable
-    MptRootUnacceptable
-    MptRootMissing
-    NotImplemented
-    TrieInvalid
 
-
-    # Data record transcoders, `deblobify()` and `blobify()`
+    # Data record transcoders, `blobify()` from `blobify.nim`
     BlobifyBranchMissingRefs
     BlobifyExtMissingRefs
     BlobifyExtPathOverflow

@@ -18,9 +18,8 @@ import
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
-  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
-       aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
-       aristo_tx]
+  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_hashify,
+       aristo_init, aristo_merge, aristo_path, aristo_profile, aristo_tx]
 
 export
   AristoDbProfListRef
@@ -225,14 +224,6 @@ type
     ##
     ## Use `aristo_desc.forget()` to clean up this descriptor.
 
-  AristoApiGetKeyRcFn* =
-    proc(db: AristoDbRef;
-         vid: VertexID;
-        ): Result[HashKey,AristoError]
-        {.noRaise.}
-      ## Cascaded attempt to fetch a Merkle hash from the cache layers or
-      ## the backend (if available.)
-
   AristoApiHashifyFn* =
     proc(db: AristoDbRef;
         ): Result[void,(VertexID,AristoError)]
@@ -273,15 +264,6 @@ type
         {.noRaise.}
       ## For a storage tree related to account `accPath`, query whether there
       ## is a non-empty data storage area at all.
-
-  AristoApiHikeUpFn* =
-    proc(path: NibblesBuf;
-         root: VertexID;
-         db: AristoDbRef;
-        ): Result[Hike,(VertexID,AristoError,Hike)]
-        {.noRaise.}
-      ## For the argument `path`, find and return the logest possible path
-      ## in the argument database `db`.
 
   AristoApiIsTopFn* =
     proc(tx: AristoTxRef;
@@ -439,7 +421,6 @@ type
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
     forkTx*: AristoApiForkTxFn
-    getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
 
     hasPathAccount*: AristoApiHasPathAccountFn
@@ -447,7 +428,6 @@ type
     hasPathStorage*: AristoApiHasPathStorageFn
     hasStorageData*: AristoApiHasStorageDataFn
 
-    hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
@@ -488,7 +468,6 @@ type
     AristoApiProfFinishFn               = "finish"
     AristoApiProfForgetFn               = "forget"
     AristoApiProfForkTxFn               = "forkTx"
-    AristoApiProfGetKeyRcFn             = "getKeyRc"
     AristoApiProfHashifyFn              = "hashify"
 
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
@@ -496,7 +475,6 @@ type
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
     AristoApiProfHasStorageDataFn       = "hasStorageData"
 
-    AristoApiProfHikeUpFn               = "hikeUp"
     AristoApiProfIsTopFn                = "isTop"
     AristoApiProfLevelFn                = "level"
     AristoApiProfNForkedFn              = "nForked"
@@ -554,7 +532,6 @@ when AutoValidateApiHooks:
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
     doAssert not api.forkTx.isNil
-    doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
 
     doAssert not api.hasPathAccount.isNil
@@ -562,7 +539,6 @@ when AutoValidateApiHooks:
     doAssert not api.hasPathStorage.isNil
     doAssert not api.hasStorageData.isNil
 
-    doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
@@ -624,7 +600,6 @@ func init*(api: var AristoApiObj) =
   api.finish = finish
   api.forget = forget
   api.forkTx = forkTx
-  api.getKeyRc = getKeyRc
   api.hashify = hashify
 
   api.hasPathAccount = hasPathAccount
@@ -632,7 +607,6 @@ func init*(api: var AristoApiObj) =
   api.hasPathStorage = hasPathStorage
   api.hasStorageData = hasStorageData
 
-  api.hikeUp = hikeUp
   api.isTop = isTop
   api.level = level
   api.nForked = nForked
@@ -676,7 +650,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     finish:               api.finish,
     forget:               api.forget,
     forkTx:               api.forkTx,
-    getKeyRc:             api.getKeyRc,
     hashify:              api.hashify,
 
     hasPathAccount:       api.hasPathAccount,
@@ -684,7 +657,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     hasPathStorage:       api.hasPathStorage,
     hasStorageData:       api.hasStorageData,
 
-    hikeUp:               api.hikeUp,
     isTop:                api.isTop,
     level:                api.level,
     nForked:              api.nForked,
@@ -814,11 +786,6 @@ func init*(
       AristoApiProfForkTxFn.profileRunner:
         result = api.forkTx(a, b)
 
-  profApi.getKeyRc =
-    proc(a: AristoDbRef; b: VertexID): auto =
-      AristoApiProfGetKeyRcFn.profileRunner:
-        result = api.getKeyRc(a, b)
-
   profApi.hashify =
     proc(a: AristoDbRef): auto =
       AristoApiProfHashifyFn.profileRunner:
@@ -843,11 +810,6 @@ func init*(
     proc(a: AristoDbRef; b: openArray[byte]): auto =
       AristoApiProfHasStorageDataFn.profileRunner:
         result = api.hasStorageData(a, b)
-
-  profApi.hikeUp =
-    proc(a: NibblesBuf; b: VertexID; c: AristoDbRef): auto =
-      AristoApiProfHikeUpFn.profileRunner:
-        result = api.hikeUp(a, b, c)
 
   profApi.isTop =
     proc(a: AristoTxRef): auto =
