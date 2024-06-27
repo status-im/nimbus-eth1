@@ -128,14 +128,14 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     discard # don't connect to any network bootstrap nodes
   of PortalNetwork.mainnet:
     for enrURI in mainnetBootstrapNodes:
-      var record: Record
-      if fromURI(record, enrURI):
-        bootstrapRecords.add(record)
+      let res = enr.Record.fromURI(enrURI)
+      if res.isOk():
+        bootstrapRecords.add(res.value)
   of PortalNetwork.angelfood:
     for enrURI in angelfoodBootstrapNodes:
-      var record: Record
-      if fromURI(record, enrURI):
-        bootstrapRecords.add(record)
+      let res = enr.Record.fromURI(enrURI)
+      if res.isOk():
+        bootstrapRecords.add(res.value)
 
   let
     discoveryConfig =

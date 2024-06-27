@@ -53,11 +53,7 @@ func getRoutingTableInfo*(r: RoutingTable): RoutingTableInfo =
   info
 
 func toNodeWithAddress*(enr: Record): Node {.raises: [ValueError].} =
-  let nodeRes = newNode(enr)
-  if nodeRes.isErr():
-    raise newException(ValueError, $nodeRes.error)
-
-  let node = nodeRes.get()
+  let node = Node.fromRecord(enr)
   if node.address.isNone():
     raise newException(ValueError, "ENR without address")
   else:
@@ -69,7 +65,7 @@ proc writeValue*(w: var JsonWriter[JrpcConv], v: Record) {.gcsafe, raises: [IOEr
 proc readValue*(
     r: var JsonReader[JrpcConv], val: var Record
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
-  if not fromURI(val, r.parseString()):
+  val = Record.fromURI(r.parseString()).valueOr:
     r.raiseUnexpectedValue("Invalid ENR")
 
 proc writeValue*(w: var JsonWriter[JrpcConv], v: NodeId) {.gcsafe, raises: [IOError].} =

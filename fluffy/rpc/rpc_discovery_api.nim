@@ -49,25 +49,20 @@ proc installDiscoveryApiHandlers*(
     return getRoutingTableInfo(d.routingTable)
 
   rpcServer.rpc("discv5_addEnr") do(enr: Record) -> bool:
-    let nodeRes = newNode(enr)
-    if nodeRes.isOk():
-      let node = nodeRes.get()
-      let res = d.addNode(node)
+    let node = Node.fromRecord(enr)
+    let res = d.addNode(node)
+    if res:
       d.routingTable.setJustSeen(node)
-      return res
-    else:
-      raise newException(ValueError, "Failed creating Node from ENR")
+    return res
 
   rpcServer.rpc("discv5_addEnrs") do(enrs: seq[Record]) -> bool:
     # Note: unspecified RPC, but useful for our local testnet test
-    # TODO: We could also adjust the API of addNode & newNode to accept a seen
+    # TODO: We could also adjust the API of addNode & fromRecord to accept a seen
     # parameter, but perhaps only if that makes sense on other locations in
     # discv5/portal that are not testing/debug related.
     for enr in enrs:
-      let nodeRes = newNode(enr)
-      if nodeRes.isOk():
-        let node = nodeRes.get()
-        discard d.addNode(node)
+      let node = Node.fromRecord(enr)
+      if d.addNode(node):
         d.routingTable.setJustSeen(node)
 
     return true
