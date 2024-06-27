@@ -658,7 +658,7 @@ proc runTxPackerTests(noisy = true) =
 
     # After we wired ForkedChainRef with TxPool, we can
     # try to enable these test
-    
+
     #[block:
       var
         xq = bcCom.toTxPool(txList, ntBaseFee,

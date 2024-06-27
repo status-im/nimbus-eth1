@@ -99,10 +99,10 @@ proc setupTxPool*(getStatus: proc(): TxItemStatus): (CommonRef, TxPoolRef, int) 
   com.initializeEmptyDb()
   let txPool = TxPoolRef.new(com)
 
-  for tx in txEnv.txs:
+  for n, tx in txEnv.txs:
     let s = txEnv.getSigner(tx.getSender())
     let status = statusInfo[getStatus()]
-    let info = $status
+    let info = &"{n}/{txEnv.txs.len} {status}"
     let signedTx = signTransaction(tx, s.signer, txEnv.chainId, eip155 = true)
     txPool.add(PooledTransaction(tx: signedTx), info)
 
@@ -203,8 +203,9 @@ proc setItemStatusFromInfo*(xp: TxPoolRef) =
   ## Re-define status from last character of info field. Note that this might
   ## violate boundary conditions regarding nonces.
   for item in xp.toItems:
-    let w = TxItemStatus.toSeq.filterIt(statusInfo[it][0] == item.info[^1])[0]
-    xp.setStatus(item, w)
+    let w = TxItemStatus.toSeq.filterIt(statusInfo[it][0] == item.info[^1])
+    if w.len > 0:
+      xp.setStatus(item, w[0])
 
 
 proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
