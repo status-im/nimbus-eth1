@@ -29,14 +29,15 @@ import
   aristo/aristo_nearby
 export
   leftPairs, # iterators
-  rightPairs
+  rightPairs,
+  rightPairsAccount,
+  rightPairsGeneric,
+  rightPairsStorage
 
 import
   aristo/aristo_desc/[desc_identifiers, desc_structural]
 export
   AristoAccount,
-  PayloadRef,
-  PayloadType,
   desc_identifiers,
   `==`
 

@@ -32,7 +32,7 @@ proc toNodeBE(
   of Leaf:
     let node = NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
     if vtx.lData.pType == AccountData:
-      let vid = vtx.lData.account.storageID
+      let vid = vtx.lData.stoID
       if vid.isValid:
         let rc = db.getKeyBE vid
         if rc.isErr or not rc.value.isValid:

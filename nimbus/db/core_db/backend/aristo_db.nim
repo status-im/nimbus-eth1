@@ -152,15 +152,6 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
     levelFn: proc(): int =
       aBase.getLevel,
 
-    colStateEmptyFn: proc(col: CoreDbColRef): CoreDbRc[bool] =
-      aBase.rootHashEmpty(col, "rootHashFn()"),
-
-    colStateFn: proc(col: CoreDbColRef): CoreDbRc[Hash256] =
-      aBase.rootHash(col, "rootHashFn()"),
-
-    colPrintFn: proc(vid: CoreDbColRef): string =
-      aBase.colPrint(vid),
-
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       e.errorPrint(),
 
@@ -246,6 +237,10 @@ func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
     return mBe.AristoCoreDbMptBE.adb
 
+func toAristo*(mBe: CoreDbAccBackendRef): AristoDbRef =
+  if not mBe.isNil and mBe.parent.isAristo:
+    return mBe.AristoCoreDbAccBE.adb
+
 proc toAristoSavedStateBlockNumber*(
     mBe: CoreDbMptBackendRef;
       ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =
@@ -284,8 +279,20 @@ iterator aristoMptPairs*(dsc: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
   let
     api = dsc.to(AristoApiRef)
     mpt = dsc.to(AristoDbRef)
-  for (k,v) in mpt.rightPairs LeafTie(root: dsc.rootID):
-    yield (api.pathAsBlob(k.path), api.serialise(mpt, v).valueOr(EmptyBlob))
+  for (path,data) in mpt.rightPairsGeneric dsc.rootID:
+    yield (api.pathAsBlob(path), data)
+
+iterator aristoSlotPairs*(
+    dsc: CoreDbAccRef;
+    eAddr: EthAddress;
+      ): (Blob,Blob)
+      {.noRaise.} =
+  let
+    api = dsc.to(AristoApiRef)
+    mpt = dsc.to(AristoDbRef)
+    accKey = HashKey.fromBytes(eAddr.keccakHash.data).value.to(PathID)
+  for (path,data) in mpt.rightPairsStorage accKey:
+    yield (api.pathAsBlob(path), data)
 
 iterator aristoReplicateMem*(dsc: CoreDbMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `MemBackendRef`

@@ -418,11 +418,9 @@ proc mergePayloadUpdate(
     if vid in db.pPrf:
       return err(MergeLeafProofModeLock)
 
-    # Make certain that the account leaf can be replaced
+    # Update accounts storage root which is handled implicitely
     if hike.root == VertexID(1):
-      # Only `AccountData` payload on `VertexID(1)` tree
-      if payload.account.storageID != leafLeg.wp.vtx.lData.account.storageID:
-        return err(MergeLeafCantChangeStorageID)
+      payload.stoID = leafLeg.wp.vtx.lData.stoID
 
     # Update vertex and hike
     let vtx = VertexRef(

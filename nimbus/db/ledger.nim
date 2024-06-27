@@ -18,7 +18,7 @@
 import
   eth/common,
   ./core_db,
-  ./ledger/[base_iterators, distinct_ledgers, accounts_ledger]
+  ./ledger/[base_iterators, accounts_ledger]
 
 import
   ./ledger/base except LedgerApiTxt, beginTrackApi, bless, ifTrackApi
@@ -27,7 +27,6 @@ export
   AccountsLedgerRef,
   base,
   base_iterators,
-  distinct_ledgers,
   init
 
 # ------------------------------------------------------------------------------

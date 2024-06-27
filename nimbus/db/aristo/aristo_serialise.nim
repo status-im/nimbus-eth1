@@ -43,7 +43,7 @@ proc serialise(
     ok pyl.rawBlob
   of AccountData:
     let
-      vid = pyl.account.storageID
+      vid = pyl.stoID
       key = block:
         if vid.isValid:
           vid.getKey.valueOr:

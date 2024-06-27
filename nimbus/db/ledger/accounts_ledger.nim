@@ -18,24 +18,22 @@
 ##    + renamed from `RefAccount`
 ##    + the `statement` entry is sort of a superset of an `Account` object
 ##      - contains an `EthAddress` field
-##      - the storage root hash is generalised as a `CoreDbTrieRef` object
 ##
 ##  * `AccountsLedgerRef`
 ##    + renamed from `AccountsCache`
 ##
 
 import
-  stew/keyed_queue,
-  std/[tables, hashes, sets],
+  std/[tables, hashes, sets, typetraits],
   chronicles,
   eth/[common, rlp],
   results,
+  stew/keyed_queue,
   ../../stateless/multi_keys,
   "../.."/[constants, utils/utils],
   ../access_list as ac_access_list,
-  ".."/[core_db, storage_types, transient_storage],
   ../../evm/code_bytes,
-  ./distinct_ledgers
+  ".."/[core_db, storage_types, transient_storage]
 
 export code_bytes
 
@@ -73,7 +71,7 @@ type
     codeTouched*: bool
 
   AccountsLedgerRef* = ref object
-    ledger: AccountLedger
+    ledger: CoreDbAccRef # AccountLedger
     kvt: CoreDbKvtRef
     savePoint: LedgerSavePoint
     witnessCache: Table[EthAddress, WitnessData]
@@ -141,24 +139,20 @@ template logTxt(info: static[string]): static[string] =
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
 
-# FIXME-Adam: this is only necessary because of my sanity checks on the latest rootHash;
-# take this out once those are gone.
-proc rawTrie*(ac: AccountsLedgerRef): AccountLedger = ac.ledger
-
 func newCoreDbAccount(address: EthAddress): CoreDbAccount =
   CoreDbAccount(
     address:  address,
     nonce:    emptyEthAccount.nonce,
     balance:  emptyEthAccount.balance,
-    codeHash: emptyEthAccount.codeHash,
-    storage:  CoreDbColRef(nil))
+    codeHash: emptyEthAccount.codeHash)
 
 proc resetCoreDbAccount(ac: AccountsLedgerRef, v: var CoreDbAccount) =
-  ac.ledger.freeStorage v.address
+  const info = "resetCoreDbAccount(): "
+  ac.ledger.clearStorage(v.address).isOkOr:
+    raiseAssert info & $$error
   v.nonce = emptyEthAccount.nonce
   v.balance = emptyEthAccount.balance
   v.codeHash = emptyEthAccount.codeHash
-  v.storage = nil
 
 template noRlpException(info: static[string]; code: untyped) =
   try:
@@ -169,8 +163,15 @@ template noRlpException(info: static[string]; code: untyped) =
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash): AccountsLedgerRef =
+  const info = "AccountsLedgerRef.init(): "
   new result
-  result.ledger = AccountLedger.init(db, root)
+  result.ledger = db.ctx.getAccounts()
+  if root != EMPTY_ROOT_HASH:
+    let rc = result.ledger.state(updateOk=true)
+    if rc.isErr:
+      raiseAssert info & $$rc.error
+    if rc.value != root:
+      raiseAssert info & ": wrong account state"
   result.kvt = db.newKvt() # save manually in `persist()`
   result.witnessCache = Table[EthAddress, WitnessData]()
   discard result.beginSavepoint
@@ -180,11 +181,13 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
 
 # Renamed `rootHash()` => `state()`
 proc state*(ac: AccountsLedgerRef): KeccakHash =
+  const info = "state(): "
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
-  ac.ledger.state
+  ac.ledger.state.valueOr:
+    raiseAssert info & $$error
 
 proc isTopLevelClean*(ac: AccountsLedgerRef): bool =
   ## Getter, returns `true` if all pending data have been commited.
@@ -316,7 +319,9 @@ proc originalStorageValue(
       return val[]
 
   # Not in the original values cache - go to the DB.
-  let rc = StorageLedger.init(ac.ledger, acc.statement).fetch slot
+  let
+    slotKey = slot.toBytesBE.keccakHash.data
+    rc = ac.ledger.slotFetch(acc.statement.address, slotKey)
   if rc.isOk and 0 < rc.value.len:
     noRlpException "originalStorageValue()":
       result = rlp.decode(rc.value, UInt256)
@@ -364,6 +369,8 @@ proc persistCode(acc: AccountRef, ac: AccountsLedgerRef) =
        codeHash=acc.statement.codeHash, error=($$rc.error)
 
 proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
+  const info = "persistStorage(): "
+
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
@@ -374,17 +381,22 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
 
   # Make sure that there is an account address row on the database. This is
   # needed for saving the account-linked storage column on the Aristo database.
-  if acc.statement.storage.isNil:
-    ac.ledger.merge(acc.statement)
-  var storageLedger = StorageLedger.init(ac.ledger, acc.statement)
+  ac.ledger.merge(acc.statement).isOkOr:
+    raiseAssert info & $$error
 
   # Save `overlayStorage[]` on database
   for slot, value in acc.overlayStorage:
+    let slotKey = slot.toBytesBE.keccakHash.data
     if value > 0:
       let encodedValue = rlp.encode(value)
-      storageLedger.merge(slot, encodedValue)
+      ac.ledger.slotMerge(
+        acc.statement.address, slotKey, encodedValue).isOkOr:
+          raiseAssert info & $$error
     else:
-      storageLedger.delete(slot)
+      ac.ledger.slotDelete(acc.statement.address, slotKey).isOkOr:
+        if error.error != StoNotFound:
+          raiseAssert info & $$error
+        discard
     let
       key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
       rc = ac.kvt.put(key.toOpenArray, rlp.encode(slot))
@@ -398,16 +410,6 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
     else:
       acc.originalStorage.del(slot)
   acc.overlayStorage.clear()
-
-  # Changing the storage trie might also change the `storage` descriptor when
-  # the trie changes from empty to exixting or v.v.
-  acc.statement.storage = storageLedger.getColumn()
-
-  # No need to hold descriptors for longer than needed
-  let stateEmpty = acc.statement.storage.stateEmpty.valueOr:
-    raiseAssert "Storage column state error: " & $$error
-  if stateEmpty:
-    acc.statement.storage = CoreDbColRef(nil)
 
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
@@ -502,7 +504,7 @@ proc contractCollision*(ac: AccountsLedgerRef, address: EthAddress): bool =
     return
   acc.statement.nonce != 0 or
     acc.statement.codeHash != EMPTY_CODE_HASH or
-      not acc.statement.storage.stateEmptyOrVoid
+      not ac.ledger.slotStateEmptyOrVoid(address)
 
 proc accountExists*(ac: AccountsLedgerRef, address: EthAddress): bool =
   let acc = ac.getAccount(address, false)
@@ -580,18 +582,20 @@ proc setStorage*(ac: AccountsLedgerRef, address: EthAddress, slot, value: UInt25
     acc.flags.incl StorageChanged
 
 proc clearStorage*(ac: AccountsLedgerRef, address: EthAddress) =
+  const info = "clearStorage(): "
+
   # a.k.a createStateObject. If there is an existing account with
   # the given address, it is overwritten.
 
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
 
-  let empty = acc.statement.storage.stateEmpty.valueOr: return
+  let empty = ac.ledger.slotStateEmpty(address).valueOr: return
   if not empty:
     # need to clear the storage from the database first
     let acc = ac.makeDirty(address, cloneStorage = false)
-    ac.ledger.freeStorage address
-    acc.statement.storage = CoreDbColRef(nil)
+    ac.ledger.clearStorage(address).isOkOr:
+      raiseAssert info & $$error
     # update caches
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
@@ -661,6 +665,8 @@ proc clearEmptyAccounts(ac: AccountsLedgerRef) =
 proc persist*(ac: AccountsLedgerRef,
               clearEmptyAccount: bool = false,
               clearCache = false) =
+  const info = "persist(): "
+
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
 
@@ -679,9 +685,12 @@ proc persist*(ac: AccountsLedgerRef,
         # storageRoot must be updated first
         # before persisting account into merkle trie
         acc.persistStorage(ac)
-      ac.ledger.merge(acc.statement)
+      ac.ledger.merge(acc.statement).isOkOr:
+        raiseAssert info & $$error
     of Remove:
-      ac.ledger.delete acc.statement.address
+      ac.ledger.delete(acc.statement.address).isOkOr:
+        if error.error != AccNotFound:
+          raiseAssert info & $$error
       ac.savePoint.cache.del acc.statement.address
     of DoNothing:
       # dead man tell no tales
@@ -716,27 +725,29 @@ iterator accounts*(ac: AccountsLedgerRef): Account =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for _, account in ac.savePoint.cache:
-    yield account.statement.recast().value
+    yield ac.ledger.recast(account.statement, updateOk=true).value
 
 iterator pairs*(ac: AccountsLedgerRef): (EthAddress, Account) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, account in ac.savePoint.cache:
-    yield (address, account.statement.recast().value)
+    yield (address, ac.ledger.recast(account.statement, updateOk=true).value)
 
-iterator storage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) =
+import stew/byteutils
+iterator storage*(
+    ac: AccountsLedgerRef;
+    eAddr: EthAddress;
+      ): (UInt256, UInt256) =
   # beware that if the account not persisted,
   # the storage root will not be updated
-  let acc = ac.getAccount(address, false)
-  if not acc.isNil:
-    noRlpException "storage()":
-      for slotHash, value in ac.ledger.storage acc.statement:
-        if slotHash.len == 0: continue
-        let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
-        if rc.isErr:
-          warn logTxt "storage()", slotHash, error=($$rc.error)
-        else:
-          yield (rlp.decode(rc.value, UInt256), rlp.decode(value, UInt256))
+  noRlpException "storage()":
+    for (slotHash, value) in ac.ledger.slotPairs eAddr:
+      echo ">>> storage: ", slotHash.toHex, ":", value.toHex
+      let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+      if rc.isErr:
+        warn logTxt "storage()", slotHash, error=($$rc.error)
+      else:
+        yield (rlp.decode(rc.value, UInt256), rlp.decode(value, UInt256))
 
 iterator cachedStorage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) =
   let acc = ac.getAccount(address, false)
@@ -750,7 +761,7 @@ proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
-  else: acc.statement.storage.state.valueOr: EMPTY_ROOT_HASH
+  else: ac.ledger.slotState(address).valueOr: EMPTY_ROOT_HASH
 
 proc update(wd: var WitnessData, acc: AccountRef) =
   # once the code is touched make sure it doesn't get reset back to false in another update
@@ -844,7 +855,7 @@ proc getEthAccount*(ac: AccountsLedgerRef, address: EthAddress): Account =
     return emptyEthAccount
 
   ## Convert to legacy object, will throw an assert if that fails
-  let rc = acc.statement.recast()
+  let rc = ac.ledger.recast(acc.statement)
   if rc.isErr:
     raiseAssert "getAccount(): cannot convert account: " & $$rc.error
   rc.value

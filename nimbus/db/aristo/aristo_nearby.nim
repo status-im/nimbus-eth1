@@ -21,10 +21,10 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, typetraits],
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_path]
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_path]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -450,6 +450,38 @@ iterator rightPairs*(
 
     rc = hike.right db
     # End while
+
+iterator rightPairsAccount*(
+    db: AristoDbRef;                    # Database layer
+    start = low(PathID);                # Before or at first value
+      ): (PathID,AristoAccount) =
+  ## Variant of `rightPairs()` for accounts tree
+  for (lty,pyl) in db.rightPairs LeafTie(root: VertexID(1), path: start):
+    yield (lty.path, pyl.account)
+
+iterator rightPairsGeneric*(
+    db: AristoDbRef;                    # Database layer
+    root: VertexID;                     # Generic root (different from VertexID)
+    start = low(PathID);                # Before or at first value
+      ): (PathID,Blob) =
+  ## Variant of `rightPairs()` for a generic tree
+  # Verify that `root` is neither from an accounts tree nor a strorage tree.
+  if VertexID(1) < root and root.distinctBase < LEAST_FREE_VID:
+    for (lty,pyl) in db.rightPairs LeafTie(root: VertexID(1), path: start):
+        yield (lty.path, pyl.rawBlob)
+
+iterator rightPairsStorage*(
+    db: AristoDbRef;                    # Database layer
+    accPath: PathID;                    # Account the storage data belong to
+    start = low(PathID);                # Before or at first value
+      ): (PathID,Blob) =
+  ## Variant of `rightPairs()` for a storage tree
+  block body:
+    let stoID = db.fetchStorageID(accPath).valueOr:
+      break body
+    if stoID.isValid:
+      for (lty,pyl) in db.rightPairs LeafTie(root: stoID, path: start):
+        yield (lty.path, pyl.rawBlob)
 
 # ----------------
 

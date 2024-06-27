@@ -19,29 +19,12 @@ import
   std/[sets, typetraits],
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers,
        aristo_utils, aristo_vid]
-
-type
-  SaveToVaeVidFn =
-    proc(err: AristoError): (VertexID,AristoError) {.gcsafe, raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private heplers
 # ------------------------------------------------------------------------------
-
-func toVae(err: AristoError): (VertexID,AristoError) =
-  ## Map single error to error pair with dummy vertex
-  (VertexID(0),err)
-
-func toVae(vid: VertexID): SaveToVaeVidFn =
-  ## Map single error to error pair with argument vertex
-  result =
-    proc(err: AristoError): (VertexID,AristoError) =
-      return (vid,err)
-
-func toVae(err: (VertexID,AristoError,Hike)): (VertexID,AristoError) =
-  (err[0], err[1])
 
 proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
   ## Returns the nibble if there is only one reference left.
@@ -346,7 +329,7 @@ proc deleteImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc deleteAccountPayload*(
+proc deleteAccountRecord*(
     db: AristoDbRef;
     path: openArray[byte];
       ): Result[void,AristoError] =
@@ -358,7 +341,7 @@ proc deleteAccountPayload*(
       if error[1] in HikeAcceptableStopsNotFound:
         return err(DelPathNotFound)
       return err(error[1])
-    stoID = hike.legs[^1].wp.vtx.lData.account.storageID
+    stoID = hike.legs[^1].wp.vtx.lData.stoID
 
   # Delete storage tree if present
   if stoID.isValid:
@@ -431,9 +414,12 @@ proc deleteStorageData*(
   ## will return `true`.
   ##
   let
-    accHike = ? db.retrieveStoAccHike accPath
+    accHike = db.fetchAccountHike(accPath).valueOr:
+      if error == FetchAccInaccessible:
+        return err(DelStoAccMissing)
+      return err(error)
     wpAcc = accHike.legs[^1].wp
-    stoID = wpAcc.vtx.lData.account.storageID
+    stoID = wpAcc.vtx.lData.stoID
 
   if not stoID.isValid:
     return err(DelStoRootMissing)
@@ -455,7 +441,7 @@ proc deleteStorageData*(
 
   # De-register the deleted storage tree from the account record
   let leaf = wpAcc.vtx.dup           # Dup on modify
-  leaf.lData.account.storageID = VertexID(0)
+  leaf.lData.stoID = VertexID(0)
   db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
   db.layersResKey(VertexID(1), wpAcc.vid)
   ok(true)
@@ -468,12 +454,12 @@ proc deleteStorageTree*(
   ## associated to the account argument `accPath`.
   ##
   let
-    accHike = db.retrieveStoAccHike(accPath).valueOr:
-      if error == UtilsAccInaccessible:
+    accHike = db.fetchAccountHike(accPath).valueOr:
+      if error == FetchAccInaccessible:
         return err(DelStoAccMissing)
       return err(error)
     wpAcc = accHike.legs[^1].wp
-    stoID = wpAcc.vtx.lData.account.storageID
+    stoID = wpAcc.vtx.lData.stoID
 
   if not stoID.isValid:
     return err(DelStoRootMissing)
@@ -485,7 +471,7 @@ proc deleteStorageTree*(
 
   # De-register the deleted storage tree from the accounts record
   let leaf = wpAcc.vtx.dup             # Dup on modify
-  leaf.lData.account.storageID = VertexID(0)
+  leaf.lData.stoID = VertexID(0)
   db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
   db.layersResKey(VertexID(1), wpAcc.vid)
   ok()

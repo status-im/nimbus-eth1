@@ -116,26 +116,23 @@ iterator getBlockTransactionData*(
     db: CoreDbRef;
     transactionRoot: Hash256;
       ): Blob =
+  const info = "getBlockTransactionData()"
   block body:
     if transactionRoot == EMPTY_ROOT_HASH:
       break body
-
     let
-      ctx = db.ctx
-      col = ctx.newColumn(CtTxs, transactionRoot).valueOr:
-        warn logTxt "getBlockTransactionData()",
-          transactionRoot, action="newColumn()", `error`=($$error)
-        break body
-      transactionDb = ctx.getMpt(col).valueOr:
-        warn logTxt "getBlockTransactionData()", transactionRoot,
-          action="newMpt()", col=($$col), error=($$error)
-        break body
+      transactionDb = db.ctx.getColumn CtTxs
+      state = transactionDb.state(updateOk=true).valueOr:
+        raiseAssert info & ": " & $$error
+    if state != transactionRoot:
+      warn logTxt info, transactionRoot, state, error="state mismatch"
+      break body
     var transactionIdx = 0'u64
     while true:
       let transactionKey = rlp.encode(transactionIdx)
       let data = transactionDb.fetch(transactionKey).valueOr:
         if error.error != MptNotFound:
-          warn logTxt "getBlockTransactionData()", transactionRoot,
+          warn logTxt info, transactionRoot,
             transactionKey, action="fetch()", error=($$error)
         break body
       yield data
@@ -165,20 +162,17 @@ iterator getWithdrawalsData*(
     db: CoreDbRef;
     withdrawalsRoot: Hash256;
       ): Blob =
+  const info = "getWithdrawalsData()"
   block body:
     if withdrawalsRoot == EMPTY_ROOT_HASH:
       break body
-
     let
-      ctx = db.ctx
-      col = ctx.newColumn(CtWithdrawals, withdrawalsRoot).valueOr:
-        warn logTxt "getWithdrawalsData()",
-          withdrawalsRoot, action="newColumn()", error=($$error)
-        break body
-      wddb = ctx.getMpt(col).valueOr:
-        warn logTxt "getWithdrawalsData()",
-          withdrawalsRoot, action="newMpt()", col=($$col), error=($$error)
-        break body
+      wddb = db.ctx.getColumn CtWithdrawals
+      state = wddb.state(updateOk=true).valueOr:
+        raiseAssert info & ": " & $$error
+    if state != withdrawalsRoot:
+      warn logTxt info, withdrawalsRoot, state, error="state mismatch"
+      break body
     var idx = 0
     while true:
       let wdKey = rlp.encode(idx.uint)
@@ -196,20 +190,17 @@ iterator getReceipts*(
     receiptsRoot: Hash256;
       ): Receipt
       {.gcsafe, raises: [RlpError].} =
+  const info = "getReceipts()"
   block body:
     if receiptsRoot == EMPTY_ROOT_HASH:
       break body
-
     let
-      ctx = db.ctx
-      col = ctx.newColumn(CtReceipts, receiptsRoot).valueOr:
-        warn logTxt "getWithdrawalsData()",
-          receiptsRoot, action="newColumn()", error=($$error)
-        break body
-      receiptDb = ctx.getMpt(col).valueOr:
-        warn logTxt "getWithdrawalsData()",
-          receiptsRoot, action="getMpt()", col=($$col), error=($$error)
-        break body
+      receiptDb = db.ctx.getColumn CtReceipts
+      state = receiptDb.state(updateOk=true).valueOr:
+        raiseAssert info & ": " & $$error
+    if state != receiptsRoot:
+      warn logTxt info, receiptsRoot, state, error="state mismatch"
+      break body
     var receiptIdx = 0
     while true:
       let receiptKey = rlp.encode(receiptIdx.uint)
@@ -347,15 +338,16 @@ proc getSavedStateBlockNumber*(
   ## the `relax` argument can be set `true` so this function also returns
   ## zero if the state consistency check fails.
   ##
+  const info = "getSavedStateBlockNumber(): "
   var header: BlockHeader
-  let st = db.ctx.getMpt(CtGeneric).backend.toAristoSavedStateBlockNumber()
+  let st = db.ctx.getColumn(CtGeneric).backend.toAristoSavedStateBlockNumber()
   if db.getBlockHeader(st.blockNumber, header):
-    discard db.ctx.newColumn(CtAccounts,header.stateRoot).valueOr:
-      if relax:
-        return
-      raiseAssert "getSavedStateBlockNumber(): state mismatch at " &
-        "#" & $st.blockNumber
-    return st.blockNumber
+    let state = db.ctx.getAccounts.state.valueOr:
+      raiseAssert info & $$error
+    if state == header.stateRoot:
+      return st.blockNumber
+    if not relax:
+      raiseAssert info & ": state mismatch at " & "#" & $st.blockNumber
 
 proc getBlockHeader*(
     db: CoreDbRef;
@@ -548,7 +540,7 @@ proc persistTransactions*(
     return
 
   let
-    mpt = db.ctx.getMpt(CtTxs)
+    mpt = db.ctx.getColumn(CtTxs, clearData=true)
     kvt = db.newKvt()
 
   for idx, tx in transactions:
@@ -592,23 +584,23 @@ proc getTransaction*(
   const
     info = "getTransaction()"
   let
-    ctx = db.ctx
-    col = ctx.newColumn(CtTxs, txRoot).valueOr:
-      warn logTxt info, txRoot, action="newColumn()", error=($$error)
+    clearOk = txRoot == EMPTY_ROOT_HASH
+    mpt = db.ctx.getColumn(CtTxs, clearData=clearOk)
+  if not clearOk:
+    let state = mpt.state(updateOk=true).valueOr:
+      raiseAssert info & ": " & $$error
+    if state != txRoot:
+      warn logTxt info, txRoot, state, error="state mismatch"
       return false
-    mpt = ctx.getMpt(col).valueOr:
-      warn logTxt info,
-        txRoot, action="newMpt()", col=($$col), error=($$error)
-      return false
+  let
     txData = mpt.fetch(rlp.encode(txIndex)).valueOr:
       if error.error != MptNotFound:
-        warn logTxt info, txIndex, action="fetch()", error=($$error)
+        warn logTxt info, txIndex, error=($$error)
       return false
   try:
     res = rlp.decode(txData, Transaction)
-  except RlpError as exc:
-    warn logTxt info,
-      txRoot, action="rlp.decode()", col=($$col), error=exc.msg
+  except RlpError as e:
+    warn logTxt info, txRoot, action="rlp.decode()", name=($e.name), msg=e.msg
     return false
   true
 
@@ -619,13 +611,13 @@ proc getTransactionCount*(
   const
     info = "getTransactionCount()"
   let
-    ctx = db.ctx
-    col = ctx.newColumn(CtTxs, txRoot).valueOr:
-      warn logTxt info, txRoot, action="newColumn()", error=($$error)
-      return 0
-    mpt = ctx.getMpt(col).valueOr:
-      warn logTxt info, txRoot,
-        action="newMpt()", col=($$col), error=($$error)
+    clearOk = txRoot == EMPTY_ROOT_HASH
+    mpt = db.ctx.getColumn(CtTxs, clearData=clearOk)
+  if not clearOk:
+    let state = mpt.state(updateOk=true).valueOr:
+      raiseAssert info & ": " & $$error
+    if state != txRoot:
+      warn logTxt info, txRoot, state, error="state mismatch"
       return 0
   var txCount = 0
   while true:
@@ -676,11 +668,10 @@ proc persistWithdrawals*(
   const info = "persistWithdrawals()"
   if withdrawals.len == 0:
     return
-
-  let mpt = db.ctx.getMpt(CtWithdrawals)
+  let mpt = db.ctx.getColumn(CtWithdrawals, clearData=true)
   for idx, wd in withdrawals:
     mpt.merge(rlp.encode(idx.uint), rlp.encode(wd)).isOkOr:
-      warn logTxt info, idx, action="merge()", error=($$error)
+      warn logTxt info, idx, error=($$error)
       return
 
 proc getWithdrawals*(
@@ -847,8 +838,7 @@ proc persistReceipts*(
   const info = "persistReceipts()"
   if receipts.len == 0:
     return
-
-  let mpt = db.ctx.getMpt(CtReceipts)
+  let mpt = db.ctx.getColumn(CtReceipts, clearData=true)
   for idx, rec in receipts:
     mpt.merge(rlp.encode(idx.uint), rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)

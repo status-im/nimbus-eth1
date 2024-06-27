@@ -20,7 +20,7 @@ import
 
 type
   CoreDbApiTrackRef* =
-    CoreDbRef | CoreDbKvtRef | CoreDbColRef |
+    CoreDbRef | CoreDbKvtRef |
     CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
     CoreDbTxRef | CoreDbCaptRef | CoreDbErrorRef
 
@@ -31,18 +31,22 @@ type
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
     AccForgetFn         = "acc/forget"
-    AccGetColFn         = "acc/getColumn"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
-    AccGetMptFn         = "acc/getMpt"
-    AccStoDeleteFn      = "acc/stoDelete"
-    AccToMptFn          = "acc/toMpt"
+    AccStateFn          = "acc/state"
+    AccClearStorageFn   = "acc/clearStorage"
+
+    AccSlotFetchFn      = "slotFetch"
+    AccSlotDeleteFn     = "slotDelete"
+    AccSlotHasPathFn    = "slotHasPath"
+    AccSlotMergeFn      = "slotMerge"
+    AccSlotStateFn      = "slotState"
+    AccSlotStateEmptyFn = "slotStateEmpty"
+    AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
+    AccSlotPairsIt      = "slotPairs"
 
     AnyBackendFn        = "any/backend"
 
-    BaseColPrintFn      = "$$"
-    BaseColStateEmptyFn = "stateEmpty"
-    BaseColStateFn      = "state"
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"
@@ -60,31 +64,31 @@ type
     CptForgetFn         = "cpt/forget"
 
     CtxForgetFn         = "ctx/forget"
-    CtxGetAccFn         = "ctx/getAcc"
-    CtxGetMptFn         = "ctx/getMpt"
+    CtxGetAccountsFn    = "getAccounts"
+    CtxGetColumnFn      = "getColumn"
     CtxNewColFn         = "ctx/newColumn"
 
     ErrorPrintFn        = "$$"
     EthAccRecastFn      = "recast"
 
-    KvtDelFn            = "kvt/del"
-    KvtForgetFn         = "kvt/forget"
-    KvtGetFn            = "kvt/get"
-    KvtLenFn            = "kvt/len"
-    KvtGetOrEmptyFn     = "kvt/getOrEmpty"
-    KvtHasKeyFn         = "kvt/hasKey"
-    KvtPairsIt          = "kvt/pairs"
-    KvtPutFn            = "kvt/put"
+    KvtDelFn            = "del"
+    KvtForgetFn         = "forget"
+    KvtGetFn            = "get"
+    KvtGetOrEmptyFn     = "getOrEmpty"
+    KvtHasKeyFn         = "hasKey"
+    KvtLenFn            = "len"
+    KvtPairsIt          = "pairs"
+    KvtPutFn            = "put"
 
     MptDeleteFn         = "mpt/delete"
     MptFetchFn          = "mpt/fetch"
     MptFetchOrEmptyFn   = "mpt/fetchOrEmpty"
     MptForgetFn         = "mpt/forget"
-    MptGetColFn         = "mpt/getColumn"
     MptHasPathFn        = "mpt/hasPath"
     MptMergeFn          = "mpt/merge"
     MptPairsIt          = "mpt/pairs"
     MptReplicateIt      = "mpt/replicate"
+    MptStateFn          = "mpt/state"
 
     TxCommitFn          = "commit"
     TxDisposeFn         = "dispose"
@@ -108,12 +112,6 @@ func toStr*(w: Hash256): string =
 
 proc toStr*(e: CoreDbErrorRef): string =
   $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
-
-proc toStr*(p: CoreDbColRef): string =
-  let
-    w = if p.isNil or not p.ready: "nil" else: p.parent.methods.colPrintFn(p)
-    (a,b) = if 0 < w.len and w[0] == '(': ("","") else: ("(",")")
-  "Col" & a & w & b
 
 func toLenStr*(w: openArray[byte]): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
@@ -140,9 +138,6 @@ proc toStr*(rc: CoreDbRc[Blob]): string =
   else: "err(" & rc.error.toStr & ")"
 
 proc toStr*(rc: CoreDbRc[Hash256]): string =
-  if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
-
-proc toStr*(rc: CoreDbRc[CoreDbColRef]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
 proc toStr*(rc: CoreDbRc[set[CoreDbCaptFlags]]): string =

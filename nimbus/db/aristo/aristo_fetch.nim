@@ -17,7 +17,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_utils]
+  "."/[aristo_desc, aristo_get, aristo_hike]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -52,18 +52,15 @@ proc retrievePayload(
   ok hike.legs[^1].wp.vtx.lData
 
 
-proc retrieveStoID(
+proc retrieveMerkleHash(
     db: AristoDbRef;
-    accPath: PathID;
-      ): Result[VertexID,AristoError] =
-  let
-    accHike = ? db.retrieveStoAccHike accPath # checks for `AccountData`
-    stoID = accHike.legs[^1].wp.vtx.lData.account.storageID
-
-  if not stoID.isValid:
-    return err(FetchPathNotFound)
-
-  ok stoID
+    root: VertexID;
+      ): Result[Hash256,AristoError] =
+  let key = db.getKeyRc(root).valueOr:
+    if error == GetKeyNotFound:
+      return ok(EMPTY_ROOT_HASH) # empty sub-tree
+    return err(error)
+  ok key.to(Hash256)
 
 
 proc hasPayload(
@@ -81,6 +78,52 @@ proc hasPayload(
   ok(true)
 
 # ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
+
+proc fetchAccountHike*(
+    db: AristoDbRef;                   # Database
+    accPath: PathID;                   # Implies a storage ID (if any)
+      ): Result[Hike,AristoError] =
+  ## Verify that the `accPath` argument properly referres to a storage root
+  ## vertex ID. The function will reset the keys along the `accPath` for
+  ## being modified.
+  ##
+  ## On success, the function will return an account leaf pair with the leaf
+  ## vertex and the vertex ID.
+  ##
+  # Expand vertex path to account leaf
+  var hike = accPath.to(NibblesBuf).hikeUp(VertexID(1), db).valueOr:
+    return err(FetchAccInaccessible)
+
+  # Extract the account payload from the leaf
+  let wp = hike.legs[^1].wp
+  if wp.vtx.vType != Leaf:
+    return err(FetchAccPathWithoutLeaf)
+  assert wp.vtx.lData.pType == AccountData            # debugging only
+
+  ok(move(hike))
+
+
+proc fetchStorageID*(
+    db: AristoDbRef;
+    accPath: PathID;
+      ): Result[VertexID,AristoError] =
+  ## Public helper function fro retrieving a storage (vertex) ID for a
+  ## given account.
+  let
+    accHike = db.fetchAccountHike(accPath).valueOr:
+      if error == FetchAccInaccessible:
+        return err(FetchPathNotFound)
+      return err(error)
+    stoID = accHike.legs[^1].wp.vtx.lData.stoID
+
+  if not stoID.isValid:
+    return err(FetchPathNotFound)
+
+  ok stoID
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -93,7 +136,7 @@ proc fetchLastSavedState*(
   db.getLstUbe()
 
 
-proc fetchAccountPayload*(
+proc fetchAccountRecord*(
     db: AristoDbRef;
     path: openArray[byte];
       ): Result[AristoAccount,AristoError] =
@@ -102,6 +145,12 @@ proc fetchAccountPayload*(
   let pyl = ? db.retrievePayload(VertexID(1), path)
   assert pyl.pType == AccountData   # debugging only
   ok pyl.account
+
+proc fetchAccountState*(
+    db: AristoDbRef;
+      ): Result[Hash256,AristoError] =
+  ## Fetch the Merkle hash of the account root.
+  db.retrieveMerkleHash VertexID(1)
 
 proc hasPathAccount*(
     db: AristoDbRef;
@@ -126,6 +175,13 @@ proc fetchGenericData*(
   assert pyl.pType == RawData   # debugging only
   ok pyl.rawBlob
 
+proc fetchGenericState*(
+    db: AristoDbRef;
+    root: VertexID;
+      ): Result[Hash256,AristoError] =
+  ## Fetch the Merkle hash of the argument `root`.
+  db.retrieveMerkleHash root
+
 proc hasPathGeneric*(
     db: AristoDbRef;
     root: VertexID;
@@ -146,9 +202,20 @@ proc fetchStorageData*(
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
   ##
-  let pyl = ? db.retrievePayload(? db.retrieveStoID accPath, path)
+  let pyl = ? db.retrievePayload(? db.fetchStorageID accPath, path)
   assert pyl.pType == RawData   # debugging only
   ok pyl.rawBlob
+
+proc fetchStorageState*(
+    db: AristoDbRef;
+    accPath: PathID;
+      ): Result[Hash256,AristoError] =
+  ## Fetch the Merkle hash of the storage root related to `accPath`.
+  let stoID = db.fetchStorageID(accPath).valueOr:
+    if error == FetchPathNotFound:
+      return ok(EMPTY_ROOT_HASH) # no sub-tree
+    return err(error)
+  db.retrieveMerkleHash stoID
 
 proc hasPathStorage*(
     db: AristoDbRef;
@@ -158,7 +225,20 @@ proc hasPathStorage*(
   ## For a storage tree related to account `accPath`, query whether the data
   ## record indexed by `path` exists on the database.
   ##
-  db.hasPayload(? db.retrieveStoID accPath, path)
+  db.hasPayload(? db.fetchStorageID accPath, path)
+
+proc hasStorageData*(
+    db: AristoDbRef;
+    accPath: PathID;
+      ): Result[bool,AristoError] =
+  ## For a storage tree related to account `accPath`, query whether there
+  ## is a non-empty data storage area at all.
+  ##
+  let stoID = db.fetchStorageID(accPath).valueOr:
+    if error == FetchPathNotFound:
+      return ok(false) # no sub-tree
+    return err(error)
+  ok stoID.isValid
 
 # ------------------------------------------------------------------------------
 # End

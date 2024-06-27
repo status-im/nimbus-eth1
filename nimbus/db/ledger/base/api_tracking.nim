@@ -45,7 +45,6 @@ type
     LdgGetCodeHashFn           = "getCodeHash"
     LdgGetCodeSizeFn           = "getCodeSize"
     LdgGetCommittedStorageFn   = "getCommittedStorage"
-    LdgGetMptFn                = "getMpt"
     LdgGetNonceFn              = "getNonce"
     LdgGetStorageFn            = "getStorage"
     LdgGetStorageRootFn        = "getStorageRoot"

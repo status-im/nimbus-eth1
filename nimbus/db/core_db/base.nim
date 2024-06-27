@@ -16,7 +16,7 @@ import
   ./base/[api_tracking, base_desc]
 
 from ../aristo
-  import EmptyBlob, PayloadRef, isValid
+  import EmptyBlob, isValid
 
 const
   EnableApiTracking = false
@@ -36,14 +36,12 @@ export
   CoreDbApiError,
   CoreDbCaptFlags,
   CoreDbColType,
-  CoreDbColRef,
   CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbErrorRef,
   CoreDbFnInx,
   CoreDbKvtBackendRef,
   CoreDbMptBackendRef,
-  CoreDbPayloadRef,
   CoreDbPersistentTypes,
   CoreDbProfListRef,
   CoreDbRef,
@@ -52,8 +50,7 @@ export
   CoreDbCaptRef,
   CoreDbKvtRef,
   CoreDbMptRef,
-  CoreDbTxRef,
-  PayloadRef
+  CoreDbTxRef
 
 const
   CoreDbEnableApiTracking* = EnableApiTracking
@@ -88,7 +85,6 @@ when EnableApiTracking:
   proc `$`(q: set[CoreDbCaptFlags]): string = q.toStr
   proc `$`(t: Duration): string = t.toStr
   proc `$`(e: EthAddress): string = e.toStr
-  proc `$`(v: CoreDbColRef): string = v.toStr
   proc `$`(h: Hash256): string = h.toStr
 
 template setTrackNewApi(
@@ -127,14 +123,6 @@ proc bless*(db: CoreDbRef): CoreDbRef =
     db.profTab = CoreDbProfListRef.init()
   db
 
-proc bless*(db: CoreDbRef; col: CoreDbColRef): CoreDbColRef =
-  ## Complete sub-module descriptor, fill in `parent` and actvate it.
-  col.parent = db
-  col.ready = true
-  when AutoValidateDescriptors:
-    col.validate
-  col
-
 proc bless*(db: CoreDbRef; kvt: CoreDbKvtRef): CoreDbKvtRef =
   ## Complete sub-module descriptor, fill in `parent`.
   kvt.parent = db
@@ -145,7 +133,7 @@ proc bless*(db: CoreDbRef; kvt: CoreDbKvtRef): CoreDbKvtRef =
 proc bless*[T: CoreDbKvtRef |
                CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
                CoreDbTxRef  | CoreDbCaptRef |
-               CoreDbKvtBackendRef | CoreDbMptBackendRef](
+               CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef] (
     db: CoreDbRef;
     dsc: T;
       ): auto =
@@ -171,10 +159,6 @@ proc prettyText*(e: CoreDbErrorRef): string =
   ## Pretty print argument object (for tracking use `$$()`)
   if e.isNil: "$ø" else: e.toStr()
 
-proc prettyText*(col: CoreDbColRef): string =
-  ## Pretty print argument object (for tracking use `$$()`)
-  if col.isNil or not col.ready: "$ø" else: col.toStr()
-
 # ------------------------------------------------------------------------------
 # Public main descriptor methods
 # ------------------------------------------------------------------------------
@@ -194,7 +178,6 @@ proc dbType*(db: CoreDbRef): CoreDbType =
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc parent*[T: CoreDbKvtRef |
-                CoreDbColRef |
                 CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
                 CoreDbTxRef |
                 CoreDbCaptRef |
@@ -204,7 +187,7 @@ proc parent*[T: CoreDbKvtRef |
   ##
   result = child.parent
 
-proc backend*(dsc: CoreDbKvtRef): auto =
+proc backend*(dsc: CoreDbKvtRef | CoreDbMptRef | CoreDbAccRef): auto =
   ## Getter, retrieves the *raw* backend object for special/localised support.
   ##
   dsc.setTrackNewApi AnyBackendFn
@@ -262,7 +245,7 @@ proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
-  ## This function always returns a non-empty `Blob` or an error code.
+  ## This function returns the size of the value associated with `key`.
   kvt.setTrackNewApi KvtLenFn
   result = kvt.methods.lenFn key
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
@@ -311,19 +294,6 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   result = db.methods.newCtxFn()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-proc ctxFromTx*(
-    db: CoreDbRef;
-    colState: Hash256;
-    colType = CtAccounts;
-      ): CoreDbRc[CoreDbCtxRef] =
-  ## Create new context derived from matching transaction of the currently
-  ## active column context. For the legacy backend, this function always
-  ## returns the currently active context (i.e. the same as `db.ctx()`.)
-  ##
-  db.setTrackNewApi BaseNewCtxFromTxFn
-  result = db.methods.newCtxFromTxFn(colState, colType)
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
 proc swapCtx*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   ## Activate argument context `ctx` and return the previously active column
   ## context. This function goes typically together with `forget()`. A valid
@@ -347,215 +317,19 @@ proc forget*(ctx: CoreDbCtxRef) =
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
-# Public Merkle Patricia Tree sub-trie abstaction management
+# Public functions for generic columns
 # ------------------------------------------------------------------------------
 
-proc newColumn*(
+proc getColumn*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;
-    colState: Hash256;
-    address = Opt.none(EthAddress);
-      ): CoreDbRc[CoreDbColRef] =
-  ## Retrieve a new column descriptor.
-  ##
-  ## The database is can be viewed as a matrix of rows and columns, potenially
-  ## with values at their intersection. A row is identified by a lookup key
-  ## and a column is identified by a state hash.
-  ##
-  ## Additionally, any column has a column type attribute given as `colType`
-  ## argument. Only storage columns also have an address attribute which must
-  ## be passed as argument `address` when the `colType` argument is `CtStorage`.
-  ##
-  ## If the state hash argument `colState` is passed as `EMPTY_ROOT_HASH`, this
-  ## function always succeeds. The result is the equivalent of a potential
-  ## column be incarnated later. If the column type is different from
-  ## `CtStorage` and `CtAccounts`, then the returned column descriptor will be
-  ## flagged to reset all column data when incarnated as MPT (see `newMpt()`.).
-  ##
-  ## Otherwise, the function will fail unless a column with the corresponding
-  ## argument `colState` identifier exists and can be found on the database.
-  ## Note that on a single state database like `Aristo`, the requested column
-  ## might exist but is buried in some history journal (which needs an extra
-  ## effort to unwrap.)
-  ##
-  ## This function is intended to open a column on the database as in:
-  ## ::
-  ##   proc openAccountLedger(db: CoreDbRef, colState: Hash256): CoreDbMptRef =
-  ##     let col = db.ctx.newColumn(CtAccounts, colState).valueOr:
-  ##       # some error handling
-  ##       return
-  ##     db.getAcc col
-  ##
-  ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(ctx, colType, colState, address)
-  ctx.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, colType, colState, address, result
-
-proc newColumn*(
-    ctx: CoreDbCtxRef;
-    colState: Hash256;
-    address: EthAddress;
-      ): CoreDbRc[CoreDbColRef] =
-  ## Shortcut for `ctx.newColumn(CtStorage,colState,some(address))`.
-  ##
-  ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(ctx, CtStorage, colState, Opt.some(address))
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, colState, address, result
-
-proc newColumn*(
-    ctx: CoreDbCtxRef;
-    address: EthAddress;
-      ): CoreDbColRef =
-  ## Shortcut for `ctx.newColumn(EMPTY_ROOT_HASH,address).value`. The function
-  ## will throw an exception on error. So the result will always be a valid
-  ## descriptor.
-  ##
-  ctx.setTrackNewApi CtxNewColFn
-  result = ctx.methods.newColFn(
-      ctx, CtStorage, EMPTY_ROOT_HASH, Opt.some(address)).valueOr:
-    raiseAssert error.prettyText()
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
-
-
-proc `$$`*(col: CoreDbColRef): string =
-  ## Pretty print the column descriptor. Note that this directive may have side
-  ## effects as it calls a backend function.
-  ##
-  #col.setTrackNewApi ColPrintFn
-  result = col.prettyText()
-  #col.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-proc stateEmpty*(col: CoreDbColRef): CoreDbRc[bool] =
-  ## Getter (well, sort of). It retrieves the column state hash for the
-  ## argument `col` descriptor. The function might fail unless the current
-  ## state is available (e.g. on `Aristo`.)
-  ##
-  ## The value `EMPTY_ROOT_HASH` is returned on the void `col` descriptor
-  ## argument `CoreDbColRef(nil)`.
-  ##
-  col.setTrackNewApi BaseColStateEmptyFn
-  result = block:
-    if not col.isNil and col.ready:
-      col.parent.methods.colStateEmptyFn col
-    else:
-      ok true
-  # Note: tracker will be silent if `vid` is NIL
-  col.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
-
-proc state*(col: CoreDbColRef): CoreDbRc[Hash256] =
-  ## Getter (well, sort of). It retrieves the column state hash for the
-  ## argument `col` descriptor. The function might fail unless the current
-  ## state is available (e.g. on `Aristo`.)
-  ##
-  ## The value `EMPTY_ROOT_HASH` is returned on the void `col` descriptor
-  ## argument `CoreDbColRef(nil)`.
-  ##
-  col.setTrackNewApi BaseColStateFn
-  result = block:
-    if not col.isNil and col.ready:
-      col.parent.methods.colStateFn col
-    else:
-      ok EMPTY_ROOT_HASH
-  # Note: tracker will be silent if `vid` is NIL
-  col.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
-
-proc stateEmptyOrVoid*(col: CoreDbColRef): bool =
-  ## Convenience wrapper, returns `true` where `stateEmpty()` would fail.
-  col.stateEmpty.valueOr: true
-
-# ------------------------------------------------------------------------------
-# Public Merkle Patricia Tree, hexary trie constructors
-# ------------------------------------------------------------------------------
-
-proc getMpt*(
-    ctx: CoreDbCtxRef;
-    col: CoreDbColRef;
-      ): CoreDbRc[CoreDbMptRef] =
-  ## Get an MPT sub-trie view.
-  ##
-  ## If the `col` argument descriptor was created for an `EMPTY_ROOT_HASH`
-  ## column state of type different form `CtStorage` or `CtAccounts`, all
-  ## column will be flushed. There is no need to hold the `col` argument for
-  ## later use. It can always be rerieved for this particular MPT using the
-  ## function `getColumn()`.
-  ##
-  ctx.setTrackNewApi CtxGetMptFn
-  result = ctx.methods.getMptFn(ctx, col)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
-
-proc getMpt*(
-    ctx: CoreDbCtxRef;
-    colType: CoreDbColType;
-    address = Opt.none(EthAddress);
+    clearData = false;
       ): CoreDbMptRef =
-  ## Shortcut for `getMpt(col)` where the `col` argument is
-  ## `db.getColumn(colType,EMPTY_ROOT_HASH).value`. This function will always
-  ## return a non-nil descriptor or throw an exception.
+  ## ...
   ##
-  ctx.setTrackNewApi CtxGetMptFn
-  let col = ctx.methods.newColFn(ctx, colType, EMPTY_ROOT_HASH, address).value
-  result = ctx.methods.getMptFn(ctx, col).valueOr:
-    raiseAssert error.prettyText()
-  ctx.ifTrackNewApi: debug newApiTxt, api, colType, elapsed
-
-
-proc getMpt*(acc: CoreDbAccRef): CoreDbMptRef =
-  ## Variant of `getMpt()`, will defect on failure.
-  ##
-  ## The needed sub-trie information is taken/implied from the current `acc`
-  ## argument.
-  ##
-  acc.setTrackNewApi AccToMptFn
-  result = acc.methods.getMptFn(acc).valueOr:
-    raiseAssert error.prettyText()
-  acc.ifTrackNewApi:
-    let colState = result.methods.getColFn()
-    debug newApiTxt, api, elapsed, colState
-
-
-proc getAcc*(
-    ctx: CoreDbCtxRef;
-    col: CoreDbColRef;
-      ): CoreDbRc[CoreDbAccRef] =
-  ## Accounts trie constructor, will defect on failure.
-  ##
-  ## Example:
-  ## ::
-  ##   let col = db.getColumn(CtAccounts,<some-hash>).valueOr:
-  ##     ... # No node available with <some-hash>
-  ##     return
-  ##
-  ##   let acc = db.getAccMpt(col)
-  ##     ... # Was not the state root for the accounts column
-  ##     return
-  ##
-  ## This function works similar to `getMpt()` for handling accounts.
-  ##
-  ctx.setTrackNewApi CtxGetAccFn
-  result = ctx.methods.getAccFn(ctx, col)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
-
-# ------------------------------------------------------------------------------
-# Public common methods for all hexary trie databases (`mpt`, or `acc`)
-# ------------------------------------------------------------------------------
-
-proc getColumn*(acc: CoreDbAccRef): CoreDbColRef =
-  ## Getter, result is not `nil`
-  ##
-  acc.setTrackNewApi AccGetColFn
-  result = acc.methods.getColFn(acc)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-proc getColumn*(mpt: CoreDbMptRef): CoreDbColRef =
-  ## Variant of `getColumn()`
-  ##
-  mpt.setTrackNewApi MptGetColFn
-  result = mpt.methods.getColFn(mpt)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-# ------------------------------------------------------------------------------
-# Public generic hexary trie database methods
-# ------------------------------------------------------------------------------
+  ctx.setTrackNewApi CtxGetColumnFn
+  result = ctx.methods.getColumnFn(ctx, colType, clearData)
+  ctx.ifTrackNewApi: debug newApiTxt, api, colType, clearData, elapsed
 
 proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## Fetch data from the argument `mpt`. The function always returns a
@@ -607,61 +381,155 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
     let col = mpt.methods.getColFn(mpt)
     debug newApiTxt, api, elapsed, col, key=key.toStr, result
 
+proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
+  ## This function retrieves the Merkle state hash of the argument
+  ## database column (if acvailable.)
+  ##
+  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
+  ## database will be updated first (if needed, at all).
+  ##
+  mpt.setTrackNewApi MptStateFn
+  result = mpt.methods.stateFn(mpt, updateOk)
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
+
 # ------------------------------------------------------------------------------
-# Public trie database methods for accounts
+# Public methods for accounts
 # ------------------------------------------------------------------------------
 
-proc fetch*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[CoreDbAccount] =
-  ## Fetch data from the argument `acc`.
+proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
+  ## Accounts column constructor, will defect on failure.
+  ##
+  ctx.setTrackNewApi CtxGetAccountsFn
+  result = ctx.methods.getAccountsFn(ctx)
+  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
+
+# ----------- accounts ---------------
+
+proc fetch*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
+  ## Fetch the account data record for the particular account indexed by
+  ## the address `eAddr`.
   ##
   acc.setTrackNewApi AccFetchFn
-  result = acc.methods.fetchFn(acc, address)
-  acc.ifTrackNewApi:
-    let storage = if result.isErr: "n/a" else: result.value.storage.prettyText()
-    debug newApiTxt, api, elapsed, address, storage, result
+  result = acc.methods.fetchFn(acc, eAddr)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
-
-proc delete*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[void] =
+proc delete*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+  ## Delete the particular account indexed by the address `eAddr`. This
+  ## will also destroy an associated storage area.
+  ##
   acc.setTrackNewApi AccDeleteFn
-  result = acc.methods.deleteFn(acc, address)
+  result = acc.methods.deleteFn(acc, eAddr)
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
 
-proc stoDelete*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[void] =
-  ## Recursively delete all data elements from the storage trie associated to
-  ## the account identified by the argument `address`. After successful run,
-  ## the storage trie will be empty.
+proc clearStorage*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+  ## Delete all data slots from the storage area associated with the
+  ## particular account indexed by the address `eAddr`.
   ##
-  ## Caveat:
-  ##   This function has no effect on the legacy backend so it must not be
-  ##   relied upon in general. On the legacy backend, storage tries might be
-  ##   shared by several accounts whereas they are unique on the `Aristo`
-  ##   backend.
+  acc.setTrackNewApi AccClearStorageFn
+  result = acc.methods.clearStorageFn(acc, eAddr)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc merge*(acc: CoreDbAccRef; account: CoreDbAccount): CoreDbRc[void] =
+  ## Add or update the argument account data record `account`. Note that the
+  ## `account` argument uniquely idendifies the particular account address.
   ##
-  acc.setTrackNewApi AccStoDeleteFn
-  result = acc.methods.stoDeleteFn(acc, address)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
-
-
-proc merge*(
-    acc: CoreDbAccRef;
-    account: CoreDbAccount;
-      ): CoreDbRc[void] =
   acc.setTrackNewApi AccMergeFn
   result = acc.methods.mergeFn(acc, account)
   acc.ifTrackNewApi:
-    let address = account.address
-    debug newApiTxt, api, elapsed, address, result
+    let eAddr = account.address
+    debug newApiTxt, api, elapsed, eAddr, result
 
-
-proc hasPath*(acc: CoreDbAccRef; address: EthAddress): CoreDbRc[bool] =
+proc hasPath*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
   acc.setTrackNewApi AccHasPathFn
-  result = acc.methods.hasPathFn(acc, address)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
+  result = acc.methods.hasPathFn(acc, eAddr)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
 
+proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
+  ## This function retrieves the Merkle state hash of the accounts
+  ## column (if acvailable.)
+  ##
+  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
+  ## database will be updated first (if needed, at all).
+  ##
+  acc.setTrackNewApi AccStateFn
+  result = acc.methods.stateFn(acc, updateOk)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
 
-proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
+# ------------ storage ---------------
+
+proc slotFetch*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    slot: openArray[byte];
+      ):  CoreDbRc[Blob] =
+  acc.setTrackNewApi AccSlotFetchFn
+  result = acc.methods.slotFetchFn(acc, eAddr, slot)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc slotDelete*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    slot: openArray[byte];
+      ):  CoreDbRc[void] =
+  acc.setTrackNewApi AccSlotDeleteFn
+  result = acc.methods.slotDeleteFn(acc, eAddr, slot)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc slotHasPath*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    slot: openArray[byte];
+      ):  CoreDbRc[bool] =
+  acc.setTrackNewApi AccSlotHasPathFn
+  result = acc.methods.slotHasPathFn(acc, eAddr, slot)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc slotMerge*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    slot: openArray[byte];
+    data: openArray[byte];
+      ):  CoreDbRc[void] =
+  acc.setTrackNewApi AccSlotMergeFn
+  result = acc.methods.slotMergeFn(acc, eAddr, slot, data)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+
+proc slotState*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+    updateOk = false;
+      ):  CoreDbRc[Hash256] =
+  acc.setTrackNewApi AccSlotStateFn
+  result = acc.methods.slotStateFn(acc, eAddr, updateOk)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+
+proc slotStateEmpty*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+      ):  CoreDbRc[bool] =
+  ## ...
+  acc.setTrackNewApi AccSlotStateEmptyFn
+  result = acc.methods.slotStateEmptyFn(acc, eAddr)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+
+proc slotStateEmptyOrVoid*(
+    acc: CoreDbAccRef;
+    eAddr: EthAddress;
+      ): bool =
+  ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
+  acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
+  result = acc.methods.slotStateEmptyFn(acc, eAddr).valueOr: true
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+
+# ------------- other ----------------
+
+proc recast*(
+    acc: CoreDbAccRef;
+    statement: CoreDbAccount;
+    updateOk = false;
+      ): CoreDbRc[Account] =
   ## Convert the argument `statement` to the portable Ethereum representation
   ## of an account statement. This conversion may fail if the storage colState
   ## hash (see `hash()` above) is currently unavailable.
@@ -669,11 +537,8 @@ proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
   ## Note:
   ##   With the legacy backend, this function always succeeds.
   ##
-  let storage = statement.storage
-  storage.setTrackNewApi EthAccRecastFn
-  let rc =
-    if storage.isNil or not storage.ready: CoreDbRc[Hash256].ok(EMPTY_ROOT_HASH)
-    else: storage.parent.methods.colStateFn storage
+  acc.setTrackNewApi EthAccRecastFn
+  let rc = acc.methods.slotStateFn(acc, statement.address, updateOk)
   result =
     if rc.isOk:
       ok Account(
@@ -683,7 +548,7 @@ proc recast*(statement: CoreDbAccount): CoreDbRc[Account] =
         storageRoot: rc.value)
     else:
       err(rc.error)
-  storage.ifTrackNewApi: debug newApiTxt, api, elapsed, storage, result
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, storage, result
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods

@@ -13,7 +13,8 @@ import
   ./base_desc
 
 type
-  EphemMethodsDesc = CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbColRef
+  EphemMethodsDesc =
+    CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef
 
   MethodsDesc =
     CoreDbKvtRef |
@@ -29,8 +30,6 @@ type
 
 proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.destroyFn.isNil
-  doAssert not base.colStateFn.isNil
-  doAssert not base.colPrintFn.isNil
   doAssert not base.errorPrintFn.isNil
   doAssert not base.levelFn.isNil
   doAssert not base.newKvtFn.isNil
@@ -51,9 +50,8 @@ proc validateMethodsDesc(kvt: CoreDbKvtFns) =
   doAssert not kvt.forgetFn.isNil
 
 proc validateMethodsDesc(ctx: CoreDbCtxFns) =
-  doAssert not ctx.newColFn.isNil
-  doAssert not ctx.getMptFn.isNil
-  doAssert not ctx.getAccFn.isNil
+  doAssert not ctx.getAccountsFn.isNil
+  doAssert not ctx.getColumnFn.isNil
   doAssert not ctx.forgetFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbMptFns) =
@@ -62,23 +60,25 @@ proc validateMethodsDesc(fns: CoreDbMptFns) =
   doAssert not fns.deleteFn.isNil
   doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
-  doAssert not fns.getColFn.isNil
+  doAssert not fns.stateFn.isNil
 
 proc validateMethodsDesc(fns: CoreDbAccFns) =
-  doAssert not fns.getMptFn.isNil
+  doAssert not fns.backendFn.isNil
   doAssert not fns.fetchFn.isNil
+  doAssert not fns.clearStorageFn.isNil
   doAssert not fns.deleteFn.isNil
-  doAssert not fns.stoDeleteFn.isNil
-  doAssert not fns.mergeFn.isNil
   doAssert not fns.hasPathFn.isNil
-  doAssert not fns.getColFn.isNil
+  doAssert not fns.mergeFn.isNil
+  doAssert not fns.stateFn.isNil
+
+  doAssert not fns.slotFetchFn.isNil
+  doAssert not fns.slotDeleteFn.isNil
+  doAssert not fns.slotHasPathFn.isNil
+  doAssert not fns.slotMergeFn.isNil
+  doAssert not fns.slotStateFn.isNil
+  doAssert not fns.slotStateEmptyFn.isNil
 
 # ------------
-
-proc validateMethodsDesc(col: CoreDbColRef) =
-  doAssert not col.isNil
-  doAssert not col.parent.isNil
-  doAssert col.ready == true
 
 proc validateMethodsDesc(e: CoreDbErrorRef) =
   doAssert e.error != CoreDbErrorCode(0)

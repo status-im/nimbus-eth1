@@ -32,7 +32,7 @@ func nLayersKeys*(db: KvtDbRef): int =
 # ------------------------------------------------------------------------------
 
 func layersLen*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[int] =
-  ## Return `true` id the argument key is cached.
+  ## Returns the size of the value associated with `key`.
   ##
   when key isnot seq[byte]:
     let key = @key
@@ -47,7 +47,7 @@ func layersLen*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[int] =
   Opt.none(int)
 
 func layersHasKey*(db: KvtDbRef; key: openArray[byte]|seq[byte]): bool =
-  ## Return `true` id the argument key is cached.
+  ## Return `true` if the argument key is cached.
   ##
   db.layersLen(key).isSome()
 

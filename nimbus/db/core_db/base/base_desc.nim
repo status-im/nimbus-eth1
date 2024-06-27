@@ -15,9 +15,6 @@ import
   eth/common,
   ../../aristo/aristo_profile
 
-from ../../aristo
-  import PayloadRef
-
 # Annotation helpers
 {.pragma:  noRaise, gcsafe, raises: [].}
 {.pragma: apiRaise, gcsafe, raises: [CoreDbApiError].}
@@ -46,12 +43,7 @@ type
     address*:  EthAddress    ## Reverse reference for storage trie path
     nonce*:    AccountNonce  ## Some `uint64` type
     balance*:  UInt256
-    storage*:  CoreDbColRef  ## Implies storage root MPT (aka column)
     codeHash*: Hash256
-
-  CoreDbPayloadRef* = ref object of PayloadRef
-    ## Extension of `Aristo` payload used in the tracer
-    blob*: Blob              ## Serialised version for accounts data
 
   CoreDbErrorCode* = enum
     Unset = 0
@@ -71,13 +63,12 @@ type
     RlpException
     RootNotFound
     RootUnacceptable
+    StoNotFound
     StorageFailed
     TxPending
 
   CoreDbColType* = enum
-    CtStorage = 0
-    CtAccounts
-    CtGeneric
+    CtGeneric = 2 # columns smaller than 2 are not provided
     CtReceipts
     CtTxs
     CtWithdrawals
@@ -90,11 +81,6 @@ type
   # Sub-descriptor: Misc methods for main descriptor
   # --------------------------------------------------
   CoreDbBaseDestroyFn* = proc(eradicate = true) {.noRaise.}
-  CoreDbBaseColStateFn* = proc(
-    col: CoreDbColRef): CoreDbRc[Hash256] {.noRaise.}
-  CoreDbBaseColStateEmptyFn* = proc(
-    col: CoreDbColRef): CoreDbRc[bool] {.noRaise.}
-  CoreDbBaseColPrintFn* = proc(vid: CoreDbColRef): string {.noRaise.}
   CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
   CoreDbBaseLevelFn* = proc(): int {.noRaise.}
   CoreDbBaseNewKvtFn* = proc(): CoreDbRc[CoreDbKvtRef] {.noRaise.}
@@ -111,9 +97,6 @@ type
 
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
-    colStateFn*:     CoreDbBaseColStateFn
-    colStateEmptyFn*: CoreDbBaseColStateEmptyFn
-    colPrintFn*:     CoreDbBaseColPrintFn
     errorPrintFn*:   CoreDbBaseErrorPrintFn
     levelFn*:        CoreDbBaseLevelFn
 
@@ -160,24 +143,19 @@ type
   # --------------------------------------------------
   # Sub-descriptor: MPT context methods
   # --------------------------------------------------
-  CoreDbCtxNewColFn* = proc(
-    cCtx: CoreDbCtxRef; colType: CoreDbColType; colState: Hash256; address: Opt[EthAddress];
-    ): CoreDbRc[CoreDbColRef] {.noRaise.}
-  CoreDbCtxGetMptFn* = proc(
-    cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
-  CoreDbCtxGetAccFn* = proc(
-    cCtx: CoreDbCtxRef; root: CoreDbColRef): CoreDbRc[CoreDbAccRef] {.noRaise.}
+  CoreDbCtxGetColumnFn* = proc(
+    cCtx: CoreDbCtxRef; colType: CoreDbColType; clearData: bool): CoreDbMptRef {.noRaise.}
+  CoreDbCtxGetAccountsFn* = proc(cCtx: CoreDbCtxRef): CoreDbAccRef {.noRaise.}
   CoreDbCtxForgetFn* = proc(cCtx: CoreDbCtxRef) {.noRaise.}
 
   CoreDbCtxFns* = object
     ## Methods for context maniulation
-    newColFn*: CoreDbCtxNewColFn
-    getMptFn*: CoreDbCtxGetMptFn
-    getAccFn*: CoreDbCtxGetAccFn
-    forgetFn*: CoreDbCtxForgetFn
+    getColumnFn*:   CoreDbCtxGetColumnFn
+    getAccountsFn*: CoreDbCtxGetAccountsFn
+    forgetFn*:      CoreDbCtxForgetFn
 
   # --------------------------------------------------
-  # Sub-descriptor: generic  Mpt/hexary trie methods
+  # Sub-descriptor: generic Mpt methods
   # --------------------------------------------------
   CoreDbMptBackendFn* = proc(cMpt: CoreDbMptRef): CoreDbMptBackendRef {.noRaise.}
   CoreDbMptFetchFn* =
@@ -188,11 +166,8 @@ type
     proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbMptMergeFn* =
     proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbMptMergeAccountFn* =
-    proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbMptHasPathFn* = proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptGetColFn* = proc(cMpt: CoreDbMptRef): CoreDbColRef {.noRaise.}
-  CoreDbMptForgetFn* = proc(cMpt: CoreDbMptRef): CoreDbRc[void] {.noRaise.}
+  CoreDbMptStateFn* = proc(cMpt: CoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
   CoreDbMptFns* = object
     ## Methods for trie objects
@@ -201,30 +176,49 @@ type
     deleteFn*:    CoreDbMptDeleteFn
     mergeFn*:     CoreDbMptMergeFn
     hasPathFn*:   CoreDbMptHasPathFn
-    getColFn*:    CoreDbMptGetColFn
+    stateFn*:     CoreDbMptStateFn
 
 
   # ----------------------------------------------------
-  # Sub-descriptor: Mpt/hexary trie methods for accounts
+  # Sub-descriptor: Account column methods
   # ------------------------------------------------------
-  CoreDbAccGetMptFn* = proc(cAcc: CoreDbAccRef): CoreDbRc[CoreDbMptRef] {.noRaise.}
+  CoreDbAccBackendFn* = proc(cAcc: CoreDbAccRef): CoreDbAccBackendRef {.noRaise.}
   CoreDbAccFetchFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[void] {.noRaise.}
-  CoreDbAccStoDeleteFn* = proc(cAcc: CoreDbAccRef,k: EthAddress): CoreDbRc[void] {.noRaise.}
+  CoreDbAccClearStorageFn* = proc(cAcc: CoreDbAccRef,k: EthAddress): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(cAcc: CoreDbAccRef, v: CoreDbAccount): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(cAcc: CoreDbAccRef, k: EthAddress): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccGetColFn* = proc(cAcc: CoreDbAccRef): CoreDbColRef {.noRaise.}
+  CoreDbAccStateFn* = proc(cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
+
+  CoreDbSlotFetchFn* =
+    proc(cAcc: CoreDbAccRef, a: EthAddress; k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbSlotDeleteFn* =
+    proc(cAcc: CoreDbAccRef,a: EthAddress; k: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbSlotHasPathFn* =
+    proc(cAcc: CoreDbAccRef, a: EthAddress; k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+  CoreDbSlotMergeFn* =
+    proc(cAcc: CoreDbAccRef, a: EthAddress; k, v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbSlotStateFn* =
+    proc(cAcc: CoreDbAccRef, a: EthAddress; updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
+  CoreDbSlotStateEmptyFn* =
+    proc(cAcc: CoreDbAccRef, a: EthAddress): CoreDbRc[bool] {.noRaise.}
 
   CoreDbAccFns* = object
     ## Methods for trie objects
-    getMptFn*:     CoreDbAccGetMptFn
-    fetchFn*:      CoreDbAccFetchFn
-    deleteFn*:     CoreDbAccDeleteFn
-    stoDeleteFn*:  CoreDbAccStoDeleteFn
-    mergeFn*:      CoreDbAccMergeFn
-    hasPathFn*:    CoreDbAccHasPathFn
-    getColFn*:     CoreDbAccGetColFn
+    backendFn*:      CoreDbAccBackendFn
+    fetchFn*:        CoreDbAccFetchFn
+    clearStorageFn*: CoreDbAccClearStorageFn
+    deleteFn*:       CoreDbAccDeleteFn
+    hasPathFn*:      CoreDbAccHasPathFn
+    mergeFn*:        CoreDbAccMergeFn
+    stateFn*:        CoreDbAccStateFn
 
+    slotFetchFn*:      CoreDbSlotFetchFn
+    slotDeleteFn*:     CoreDbSlotDeleteFn
+    slotHasPathFn*:    CoreDbSlotHasPathFn
+    slotMergeFn*:      CoreDbSlotMergeFn
+    slotStateFn*:      CoreDbSlotStateFn
+    slotStateEmptyFn*: CoreDbSlotStateEmptyFn
 
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
@@ -282,6 +276,10 @@ type
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
 
+  CoreDbAccBackendRef* = ref object of RootRef
+    ## Backend wrapper for direct backend access
+    parent*: CoreDbRef
+
   CoreDbKvtRef* = ref object of RootRef
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
@@ -303,12 +301,6 @@ type
     ## rather than `Blob` values.
     parent*: CoreDbRef
     methods*: CoreDbAccFns
-
-  CoreDbColRef* = ref object of RootRef
-    ## Generic state root: `Hash256` for legacy, `VertexID` for Aristo. This
-    ## object makes only sense in the context of an *MPT*.
-    parent*: CoreDbRef
-    ready*: bool              ## Must be set `true` to enable
 
   CoreDbTxRef* = ref object of RootRef
     ## Transaction descriptor derived from `CoreDbRef`

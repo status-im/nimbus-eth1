@@ -60,9 +60,9 @@ proc blobifyTo*(pyl: PayloadRef, data: var Blob) =
       mask = mask or 0x04
       data &= pyl.account.balance.truncate(uint64).uint64.toBytesBE
 
-    if VertexID(0) < pyl.account.storageID:
+    if VertexID(0) < pyl.stoID:
       mask = mask or 0x10
-      data &= pyl.account.storageID.uint64.toBytesBE
+      data &= pyl.stoID.uint64.toBytesBE
 
     if pyl.account.codeHash != VOID_CODE_HASH:
       mask = mask or 0x80
@@ -218,7 +218,7 @@ proc deblobifyTo(
   of 0x00:
     discard
   of 0x10:
-    pAcc.account.storageID = (? data.load64 start).VertexID
+    pAcc.stoID = (? data.load64 start).VertexID
   else:
     return err(DeblobStorageLenUnsupported)
 
