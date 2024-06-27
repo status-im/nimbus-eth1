@@ -472,7 +472,7 @@ iterator rightPairsGeneric*(
 
 iterator rightPairsStorage*(
     db: AristoDbRef;                    # Database layer
-    accPath: PathID;                    # Account the storage data belong to
+    accPath: openArray[byte];           # Account the storage data belong to
     start = low(PathID);                # Before or at first value
       ): (PathID,Blob) =
   ## Variant of `rightPairs()` for a storage tree

@@ -43,7 +43,7 @@ const
 
 proc mergeAccountRecord*(
     db: AristoDbRef;                   # Database, top layer
-    accKey: openArray[byte];           # Even nibbled byte path
+    accPath: openArray[byte];          # Even nibbled byte path
     accRec: AristoAccount;             # Account data
       ): Result[bool,AristoError] =
   ## Merge the  key-value-pair argument `(accKey,accPayload)` as an account
@@ -59,7 +59,7 @@ proc mergeAccountRecord*(
   ##
   let
     pyl =  PayloadRef(pType: AccountData, account: accRec)
-    rc = db.mergePayloadImpl(VertexID(1), accKey, pyl, VidVtxPair())
+    rc = db.mergePayloadImpl(VertexID(1), accPath, pyl)
   if rc.isOk:
     ok true
   elif rc.error in MergeNoAction:
@@ -91,7 +91,7 @@ proc mergeGenericData*(
 
   let
     pyl = PayloadRef(pType: RawData, rawBlob: @data)
-    rc = db.mergePayloadImpl(root, path, pyl, VidVtxPair())
+    rc = db.mergePayloadImpl(root, path, pyl)
   if rc.isOk:
     ok true
   elif rc.error in MergeNoAction:
@@ -102,22 +102,13 @@ proc mergeGenericData*(
 
 proc mergeStorageData*(
     db: AristoDbRef;                   # Database, top layer
-    stoKey: openArray[byte];           # Storage data path (aka key)
+    accPath: openArray[byte];          # Needed for accounts payload
+    stoPath: openArray[byte];          # Storage data path (aka key)
     stoData: openArray[byte];          # Storage data payload value
-    accPath: PathID;                   # Needed for accounts payload
-      ): Result[VertexID,AristoError] =
-  ## Merge the  key-value-pair argument `(stoKey,stoData)` as a storage value.
-  ## This means, the root vertex will be derived from the `accPath` argument,
-  ## the Patricia tree path for the storage tree is given by `stoKey` and the
-  ## leaf value with the payload will be stored as a `PayloadRef` object of
-  ## type `RawData`.
-  ##
-  ## If the storage tree does not exist yet it will be created and the
-  ## payload leaf accessed by `accPath` will be updated with the storage
-  ## tree vertex ID.
-  ##
-  ## The function returns the new vertex ID if a new storage tree was created,
-  ## otherwise `VertexID(0)`.
+      ): Result[void,AristoError] =
+  ## Store the `stoData` data argument on the storage area addressed by
+  ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
+  ## and `stoPath`  is the slot path of the corresponding storage area.
   ##
   let
     accHike = db.fetchAccountHike(accPath).valueOr:
@@ -132,14 +123,14 @@ proc mergeStorageData*(
 
     # Call merge
     pyl = PayloadRef(pType: RawData, rawBlob: @stoData)
-    rc = db.mergePayloadImpl(useID, stoKey, pyl, wpAcc)
+    rc = db.mergePayloadImpl(useID, stoPath, pyl)
 
   if rc.isOk:
     # Mark account path for update for `hashify()`
     db.updateAccountForHasher accHike
 
     if stoID.isValid:
-      return ok VertexID(0)
+      return ok()
 
     else:
       # Make sure that there is an account that refers to that storage trie
@@ -147,11 +138,11 @@ proc mergeStorageData*(
       leaf.lData.stoID = useID
       db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
       db.layersResKey(VertexID(1), wpAcc.vid)
-      return ok useID
+      return ok()
 
   elif rc.error in MergeNoAction:
     assert stoID.isValid         # debugging only
-    return ok VertexID(0)
+    return ok()
 
   # Error: mark account path for update for `hashify()`
   db.updateAccountForHasher accHike

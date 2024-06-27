@@ -290,7 +290,7 @@ iterator aristoSlotPairs*(
   let
     api = dsc.to(AristoApiRef)
     mpt = dsc.to(AristoDbRef)
-    accKey = HashKey.fromBytes(eAddr.keccakHash.data).value.to(PathID)
+    accKey = eAddr.keccakHash.data
   for (path,data) in mpt.rightPairsStorage accKey:
     yield (api.pathAsBlob(path), data)
 

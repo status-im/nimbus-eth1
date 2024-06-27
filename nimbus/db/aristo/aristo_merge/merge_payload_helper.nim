@@ -450,31 +450,11 @@ proc mergePayloadImpl*(
     root: VertexID;                    # MPT state root
     path: openArray[byte];             # Leaf item to add to the database
     payload: PayloadRef;               # Payload value
-    wpAcc: VidVtxPair;                 # Needed for storage tree
       ): Result[void,AristoError] =
   ## Merge the argument `(root,path)` key-value-pair into the top level vertex
   ## table of the database `db`. The `path` argument is used to address the
   ## leaf vertex with the payload. It is stored or updated on the database
   ## accordingly.
-  ##
-  ## If the `root` argument is `VertexID(1)` this function relies upon that the
-  ## payload argument is of type `AccountData`. If the payload exists already
-  ## on the database, the `storageID` field of the `payload` and on the database
-  ## must be the same or an error is returned. The argument `wpAcc` will be
-  ## ignored for accounts.
-  ##
-  ## Otherwise, if the `root` argument belongs to a well known sub trie (i.e.
-  ## it does not exceed `LEAST_FREE_VID`) the entry will just be merged. The
-  ## argument `wpAcc` will be ignored .
-  ##
-  ## Otherwise, a valid `wpAcc` must be given referring to an `AccountData`
-  ## payload type leaf vertex.  If the `storageID` field of that payload
-  ## does not have a valid entry, a new sub-trie will be created. Otherwise
-  ## this function expects that the `root` argument is the same as the
-  ## `storageID` field.
-  ##
-  ## The function returns `true` iff a new sub-tree was linked to an account
-  ## leaf record.
   ##
   let
     nibblesPath = NibblesBuf.fromBytes(path)

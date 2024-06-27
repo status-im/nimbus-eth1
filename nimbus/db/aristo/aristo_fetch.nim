@@ -71,7 +71,7 @@ proc hasPayload(
   if path.len == 0:
     return err(FetchPathInvalid)
 
-  let hike = NibblesBuf.fromBytes(path).hikeUp(VertexID(1), db).valueOr:
+  let hike = path.hikeUp(VertexID(1), db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return ok(false)
     return err(error[1])
@@ -83,7 +83,7 @@ proc hasPayload(
 
 proc fetchAccountHike*(
     db: AristoDbRef;                   # Database
-    accPath: PathID;                   # Implies a storage ID (if any)
+    accPath: openArray[byte];          # Implies a storage ID (if any)
       ): Result[Hike,AristoError] =
   ## Verify that the `accPath` argument properly referres to a storage root
   ## vertex ID. The function will reset the keys along the `accPath` for
@@ -93,7 +93,7 @@ proc fetchAccountHike*(
   ## vertex and the vertex ID.
   ##
   # Expand vertex path to account leaf
-  var hike = accPath.to(NibblesBuf).hikeUp(VertexID(1), db).valueOr:
+  var hike = accPath.hikeUp(VertexID(1), db).valueOr:
     return err(FetchAccInaccessible)
 
   # Extract the account payload from the leaf
@@ -107,7 +107,7 @@ proc fetchAccountHike*(
 
 proc fetchStorageID*(
     db: AristoDbRef;
-    accPath: PathID;
+    accPath: openArray[byte];
       ): Result[VertexID,AristoError] =
   ## Public helper function fro retrieving a storage (vertex) ID for a
   ## given account.
@@ -138,11 +138,11 @@ proc fetchLastSavedState*(
 
 proc fetchAccountRecord*(
     db: AristoDbRef;
-    path: openArray[byte];
+    accPath: openArray[byte];
       ): Result[AristoAccount,AristoError] =
-  ## Fetch an account record from the database indexed by `path`.
+  ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let pyl = ? db.retrievePayload(VertexID(1), path)
+  let pyl = ? db.retrievePayload(VertexID(1), accPath)
   assert pyl.pType == AccountData   # debugging only
   ok pyl.account
 
@@ -154,12 +154,12 @@ proc fetchAccountState*(
 
 proc hasPathAccount*(
     db: AristoDbRef;
-    path: openArray[byte];
+    accPath: openArray[byte];
       ): Result[bool,AristoError] =
-  ## For an account record indexed by `path` query whether this record exists
+  ## For an account record indexed by `accPath` query whether this record exists
   ## on the database.
   ##
-  db.hasPayload(VertexID(1), path)
+  db.hasPayload(VertexID(1), accPath)
 
 
 proc fetchGenericData*(
@@ -196,19 +196,19 @@ proc hasPathGeneric*(
 
 proc fetchStorageData*(
     db: AristoDbRef;
-    path: openArray[byte];
-    accPath: PathID;
+    accPath: openArray[byte];
+    stoPath: openArray[byte];
       ): Result[Blob,AristoError] =
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
   ##
-  let pyl = ? db.retrievePayload(? db.fetchStorageID accPath, path)
+  let pyl = ? db.retrievePayload(? db.fetchStorageID accPath, stoPath)
   assert pyl.pType == RawData   # debugging only
   ok pyl.rawBlob
 
 proc fetchStorageState*(
     db: AristoDbRef;
-    accPath: PathID;
+    accPath: openArray[byte];
       ): Result[Hash256,AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
   let stoID = db.fetchStorageID(accPath).valueOr:
@@ -219,17 +219,17 @@ proc fetchStorageState*(
 
 proc hasPathStorage*(
     db: AristoDbRef;
-    path: openArray[byte];
-    accPath: PathID;
+    accPath: openArray[byte];
+    stoPath: openArray[byte];
       ): Result[bool,AristoError] =
   ## For a storage tree related to account `accPath`, query whether the data
   ## record indexed by `path` exists on the database.
   ##
-  db.hasPayload(? db.fetchStorageID accPath, path)
+  db.hasPayload(? db.fetchStorageID accPath, stoPath)
 
 proc hasStorageData*(
     db: AristoDbRef;
-    accPath: PathID;
+    accPath: openArray[byte];
       ): Result[bool,AristoError] =
   ## For a storage tree related to account `accPath`, query whether there
   ## is a non-empty data storage area at all.

@@ -57,6 +57,9 @@ static:
 func to(eAddr: EthAddress; T: type PathID): T =
   HashKey.fromBytes(eAddr.keccakHash.data).value.to(T)
 
+template toOpenArrayKey(eAddr: EthAddress): openArray[byte] =
+  eAddr.keccakHash.data.toOpenArray(0,31)
+
 # -------------------------------
 
 func toError(
@@ -199,10 +202,14 @@ proc accMethods(): CoreDbAccFns =
   proc accBackend(cAcc: AristoCoreDbAccRef): CoreDbAccBackendRef =
     db.bless AristoCoreDbAccBE(adb: mpt)
 
-  proc accFetch(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
+  proc accFetch(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+      eAddr: EthAddress;
+        ): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
 
-    let acc = api.fetchAccountRecord(mpt, eAddr.keccakHash.data).valueOr:
+    let acc = api.fetchAccountRecord(mpt, accPath).valueOr:
       if error != FetchPathNotFound:
         return err(error.toError(base, info))
       return err(error.toError(base, info, AccNotFound))
@@ -212,7 +219,10 @@ proc accMethods(): CoreDbAccFns =
       balance:  acc.balance,
       codeHash: acc.codeHash)
     
-  proc accMerge(cAcc: AristoCoreDbAccRef, acc: CoreDbAccount): CoreDbRc[void] =
+  proc accMerge(
+      cAcc: AristoCoreDbAccRef;
+      acc: CoreDbAccount;
+        ): CoreDbRc[void] =
     const info = "acc/mergeFn()"
 
     let
@@ -225,32 +235,44 @@ proc accMethods(): CoreDbAccFns =
       return err(error.toError(base, info))
     ok()
 
-  proc accDelete(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+  proc accDelete(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+        ): CoreDbRc[void] =
     const info = "acc/deleteFn()"
 
-    api.deleteAccountRecord(mpt, eAddr.keccakHash.data).isOkOr:
+    api.deleteAccountRecord(mpt, accPath).isOkOr:
       if error == DelPathNotFound:
         # TODO: Would it be conseqient to just return `ok()` here?
         return err(error.toError(base, info, AccNotFound))
       return err(error.toError(base, info))
     ok()
 
-  proc accClearStorage(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+  proc accClearStorage(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+        ): CoreDbRc[void] =
     const info = "acc/clearStoFn()"
 
-    api.deleteStorageTree(mpt, eAddr.to(PathID)).isOkOr:
+    api.deleteStorageTree(mpt, accPath).isOkOr:
       if error notin {DelStoRootMissing,DelStoAccMissing}:
         return err(error.toError(base, info))
     ok()
 
-  proc accHasPath(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
+  proc accHasPath(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+        ): CoreDbRc[bool] =
     const info = "hasPathFn()"
 
-    let yn = api.hasPathAccount(mpt, eAddr.keccakHash.data).valueOr:
+    let yn = api.hasPathAccount(mpt, accPath).valueOr:
       return err(error.toError(base, info))
     ok(yn)
 
-  proc accState(cAcc: AristoCoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] =
+  proc accState(
+      cAcc: AristoCoreDbAccRef,
+      updateOk: bool;
+        ): CoreDbRc[Hash256] =
     const info = "accStateFn()"
 
     let rc = api.fetchAccountState(mpt)
@@ -267,19 +289,27 @@ proc accMethods(): CoreDbAccFns =
     ok(state)
 
 
-  proc slotFetch(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[Blob] =
+  proc slotFetch(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+      stoPath: openArray[byte];
+        ): CoreDbRc[Blob] =
     const info = "slotFetchFn()"
 
-    let data = api.fetchStorageData(mpt, key, eAddr.to(PathID)).valueOr:
+    let data = api.fetchStorageData(mpt, accPath, stoPath).valueOr:
       if error != FetchPathNotFound:
         return err(error.toError(base, info))
       return err(error.toError(base, info, StoNotFound))
     ok(data)
 
-  proc slotDelete(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[void] =
+  proc slotDelete(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+      stoPath: openArray[byte];
+        ): CoreDbRc[void] =
     const info = "slotDeleteFn()"
 
-    api.deleteStorageData(mpt, key, eAddr.to(PathID)).isOkOr:
+    api.deleteStorageData(mpt, accPath, stoPath).isOkOr:
       if error == DelPathNotFound:
         return err(error.toError(base, info, StoNotFound))
       if error == DelStoRootMissing:
@@ -289,24 +319,37 @@ proc accMethods(): CoreDbAccFns =
       return err(error.toError(base, info))
     ok()
 
-  proc slotHasPath(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key: openArray[byte]): CoreDbRc[bool] =
+  proc slotHasPath(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+      stoPath: openArray[byte];
+        ): CoreDbRc[bool] =
     const info = "slotHasPathFn()"
 
-    let yn = api.hasPathStorage(mpt, key, eAddr.to(PathID)).valueOr:
+    let yn = api.hasPathStorage(mpt, accPath, stoPath).valueOr:
       return err(error.toError(base, info))
     ok(yn)
 
-  proc slotMerge(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; key, val: openArray[byte]): CoreDbRc[void] =
+  proc slotMerge(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+      stoPath: openArray[byte]; 
+      stoData: openArray[byte];
+        ): CoreDbRc[void] =
     const info = "slotMergeFn()"
 
-    api.mergeStorageData(mpt, key, val, eAddr.to(PathID)).isOkOr:
+    api.mergeStorageData(mpt, accPath, stoPath, stoData).isOkOr:
         return err(error.toError(base, info))
     ok()
 
-  proc slotState(cAcc: AristoCoreDbAccRef; eAddr: EthAddress; updateOk: bool): CoreDbRc[Hash256] =
+  proc slotState(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+      updateOk: bool;
+        ): CoreDbRc[Hash256] =
     const info = "slotStateFn()"
 
-    let rc = api.fetchStorageState(mpt, eAddr.to(PathID))
+    let rc = api.fetchStorageState(mpt, accPath)
     if rc.isOk:
       return ok(rc.value)
     elif not updateOk and rc.error != GetKeyUpdateNeeded:
@@ -315,14 +358,17 @@ proc accMethods(): CoreDbAccFns =
     # FIXME: `hashify()` should probably throw an assert on failure
     ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
 
-    let state = api.fetchStorageState(mpt, eAddr.to(PathID)).valueOr:
+    let state = api.fetchStorageState(mpt, accPath).valueOr:
       return err(error.toError(base, info))
     ok(state)
 
-  proc slotStateEmpty(cAcc: AristoCoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
+  proc slotStateEmpty(
+      cAcc: AristoCoreDbAccRef;
+      accPath: openArray[byte];
+        ): CoreDbRc[bool] =
     const info = "slotStateEmptyFn()"
 
-    let yn = api.hasStorageData(mpt, eAddr.to(PathID)).valueOr:
+    let yn = api.hasStorageData(mpt, accPath).valueOr:
       return err(error.toError(base, info))
     ok(not yn)
 
@@ -331,41 +377,84 @@ proc accMethods(): CoreDbAccFns =
     backendFn: proc(cAcc: CoreDbAccRef): CoreDbAccBackendRef =
       accBackend(AristoCoreDbAccRef(cAcc)),
 
-    fetchFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
-      accFetch(AristoCoreDbAccRef(cAcc), eAddr),
+    fetchFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+          ): CoreDbRc[CoreDbAccount] =
+      accFetch(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey, eAddr),
 
-    deleteFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress): CoreDbRc[void] =
-      accDelete(AristoCoreDbAccRef(cAcc), eAddr),
+    deleteFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+          ): CoreDbRc[void] =
+      accDelete(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey),
 
-    clearStorageFn: proc(cAcc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
-      accClearStorage(AristoCoreDbAccRef(cAcc), eAddr),
+    clearStorageFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+          ): CoreDbRc[void] =
+      accClearStorage(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey),
 
-    mergeFn: proc(cAcc: CoreDbAccRef, acc: CoreDbAccount): CoreDbRc[void] =
+    mergeFn: proc(
+        cAcc: CoreDbAccRef;
+        acc: CoreDbAccount;
+          ): CoreDbRc[void] =
       accMerge(AristoCoreDbAccRef(cAcc), acc),
 
-    hasPathFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress): CoreDbRc[bool] =
-      accHasPath(AristoCoreDbAccRef(cAcc), eAddr),
+    hasPathFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+          ): CoreDbRc[bool] =
+      accHasPath(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey),
 
-    stateFn: proc(cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] =
+    stateFn: proc(
+        cAcc: CoreDbAccRef;
+        updateOk: bool;
+          ): CoreDbRc[Hash256] =
       accState(AristoCoreDbAccRef(cAcc), updateOk),
 
-    slotFetchFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; k: openArray[byte]): CoreDbRc[Blob] =
-      slotFetch(AristoCoreDbAccRef(cAcc), eAddr, k),
+    slotFetchFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+        stoPath: openArray[byte];
+          ): CoreDbRc[Blob] =
+      slotFetch(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey, stoPath),
 
-    slotDeleteFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; k: openArray[byte]): CoreDbRc[void] =
-      slotDelete(AristoCoreDbAccRef(cAcc), eAddr, k),
+    slotDeleteFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+        stoPath: openArray[byte];
+          ): CoreDbRc[void] =
+      slotDelete(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey, stoPath),
 
-    slotHasPathFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; k: openArray[byte]): CoreDbRc[bool] =
-      slotHasPath(AristoCoreDbAccRef(cAcc), eAddr, k),
+    slotHasPathFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+        stoPath: openArray[byte];
+          ): CoreDbRc[bool] =
+      slotHasPath(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey, stoPath),
 
-    slotMergeFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; k,v: openArray[byte]): CoreDbRc[void] =
-      slotMerge(AristoCoreDbAccRef(cAcc), eAddr, k, v),
+    slotMergeFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+        stoPath: openArray[byte];
+        stoData: openArray[byte];
+          ): CoreDbRc[void] =
+      slotMerge(AristoCoreDbAccRef(cAcc),
+                eAddr.toOpenArrayKey, stoPath, stoData),
 
-    slotStateFn: proc(cAcc: CoreDbAccRef, eAddr: EthAddress; updateOk: bool): CoreDbRc[Hash256] =
-      slotState(AristoCoreDbAccRef(cAcc), eAddr, updateOk),
+    slotStateFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+        updateOk: bool;
+           ): CoreDbRc[Hash256] =
+      slotState(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey, updateOk),
 
-    slotStateEmptyFn: proc(cAcc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
-      slotStateEmpty(AristoCoreDbAccRef(cAcc), eAddr))
+    slotStateEmptyFn: proc(
+        cAcc: CoreDbAccRef;
+        eAddr: EthAddress;
+           ): CoreDbRc[bool] =
+      slotStateEmpty(AristoCoreDbAccRef(cAcc), eAddr.toOpenArrayKey))
 
 # ------------------------------------------------------------------------------
 # Private context call back functions
