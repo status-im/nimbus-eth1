@@ -449,15 +449,16 @@ proc clearStorage*(
 
 proc merge*(
     acc: CoreDbAccRef;
-    cDbAcc: CoreDbAccount;
+    accPath: openArray[byte];
+    accRec: CoreDbAccount;
       ): CoreDbRc[void] =
   ## Add or update the argument account data record `account`. Note that the
   ## `account` argument uniquely idendifies the particular account address.
   ##
   acc.setTrackNewApi AccMergeFn
-  result = acc.methods.mergeFn(acc, cDbAcc)
+  result = acc.methods.mergeFn(acc, accPath, accRec)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=cDbAcc.accPath.toStr, result
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
 proc hasPath*(
     acc: CoreDbAccRef;
@@ -590,30 +591,30 @@ proc slotStateEmptyOrVoid*(
 
 proc recast*(
     acc: CoreDbAccRef;
-    statement: CoreDbAccount;
+    accPath: openArray[byte];
+    accRec: CoreDbAccount;
     updateOk = false;
       ): CoreDbRc[Account] =
   ## Convert the argument `statement` to the portable Ethereum representation
   ## of an account statement. This conversion may fail if the storage colState
   ## hash (see `hash()` above) is currently unavailable.
   ##
-  ## Note:
-  ##   With the legacy backend, this function always succeeds.
-  ##
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi EthAccRecastFn
-  let rc = acc.methods.slotStateFn(acc, statement.accPath.data, updateOk)
+  let rc = acc.methods.slotStateFn(acc, accPath, updateOk)
   result =
     if rc.isOk:
       ok Account(
-        nonce:       statement.nonce,
-        balance:     statement.balance,
-        codeHash:    statement.codeHash,
+        nonce:       accRec.nonce,
+        balance:     accRec.balance,
+        codeHash:    accRec.codeHash,
         storageRoot: rc.value)
     else:
       err(rc.error)
   acc.ifTrackNewApi:
-    let storage = if rc.isOk: rc.value.toStr else: "n/a"
-    debug newApiTxt, api, elapsed, storage, result
+    let slotState = if rc.isOk: rc.value.toStr else: "n/a"
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, slotState, result
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods

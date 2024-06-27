@@ -49,6 +49,7 @@ type
   AccountRef = ref object
     statement: CoreDbAccount
     eAddr: EthAddress
+    accPath: Hash256
     flags: AccountFlags
     code: CodeBytesRef
     originalStorage: TableRef[UInt256, UInt256]
@@ -125,32 +126,22 @@ when debugAccountsLedgerRef:
 template logTxt(info: static[string]): static[string] =
   "AccountsLedgerRef " & info
 
-template toAccountKey(accPath: Hash256): openArray[byte] =
-  accPath.data.toOpenArray(0,31)
-
 template toAccountKey(acc: AccountRef): openArray[byte] =
-  acc.statement.accPath.toAccountKey
+  acc.accPath.data.toOpenArray(0,31)
 
 template toAccountKey(eAddr: EthAddress): openArray[byte] =
-  eAddr.keccakHash.toAccountKey
+  eAddr.keccakHash.data.toOpenArray(0,31)
 
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
 
-func newCoreDbAccount(address: EthAddress): CoreDbAccount =
-  CoreDbAccount(
-    accPath:  address.keccakHash,
-    nonce:    emptyEthAccount.nonce,
-    balance:  emptyEthAccount.balance,
-    codeHash: emptyEthAccount.codeHash)
-
-proc resetCoreDbAccount(ac: AccountsLedgerRef, v: var CoreDbAccount) =
+proc resetCoreDbAccount(ac: AccountsLedgerRef, acc: AccountRef) =
   const info = "resetCoreDbAccount(): "
-  ac.ledger.clearStorage(v.accPath.toAccountKey).isOkOr:
+  ac.ledger.clearStorage(acc.toAccountKey).isOkOr:
     raiseAssert info & $$error
-  v.nonce = emptyEthAccount.nonce
-  v.balance = emptyEthAccount.balance
-  v.codeHash = emptyEthAccount.codeHash
+  acc.statement.nonce = emptyEthAccount.nonce
+  acc.statement.balance = emptyEthAccount.balance
+  acc.statement.codeHash = emptyEthAccount.codeHash
 
 template noRlpException(info: static[string]; code: untyped) =
   try:
@@ -273,12 +264,17 @@ proc getAccount(
     result = AccountRef(
       statement: rc.value,
       eAddr:     address,
+      accPath:   address.keccakHash,
       flags:     {Alive})
   elif shouldCreate:
     result = AccountRef(
-      statement: address.newCoreDbAccount(),
-      eAddr:     address,
-      flags:     {Alive, IsNew})
+      statement: CoreDbAccount(
+        nonce:    emptyEthAccount.nonce,
+        balance:  emptyEthAccount.balance,
+        codeHash: emptyEthAccount.codeHash),
+      eAddr:      address,
+      accPath:    address.keccakHash,
+      flags:      {Alive, IsNew})
   else:
     return # ignore, don't cache
 
@@ -290,6 +286,7 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
   result = AccountRef(
     statement: acc.statement,
     eAddr:     acc.eAddr,
+    accPath:   acc.accPath,
     flags:     acc.flags,
     code:      acc.code)
 
@@ -343,7 +340,7 @@ proc kill(ac: AccountsLedgerRef, acc: AccountRef) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
   acc.originalStorage = nil
-  ac.resetCoreDbAccount acc.statement
+  ac.resetCoreDbAccount acc
   acc.code.reset()
 
 type
@@ -382,7 +379,7 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
 
   # Make sure that there is an account address row on the database. This is
   # needed for saving the account-linked storage column on the Aristo database.
-  ac.ledger.merge(acc.statement).isOkOr:
+  ac.ledger.merge(acc.toAccountKey, acc.statement).isOkOr:
     raiseAssert info & $$error
 
   # Save `overlayStorage[]` on database
@@ -688,7 +685,7 @@ proc persist*(ac: AccountsLedgerRef,
         acc.persistStorage(ac)
       # FIXME: This one might be unnecessary, `persistStorage()` might have
       #        saved the account record already.
-      ac.ledger.merge(acc.statement).isOkOr:
+      ac.ledger.merge(acc.toAccountKey, acc.statement).isOkOr:
         raiseAssert info & $$error
     of Remove:
       ac.ledger.delete(acc.toAccountKey).isOkOr:
@@ -727,14 +724,16 @@ iterator addresses*(ac: AccountsLedgerRef): EthAddress =
 iterator accounts*(ac: AccountsLedgerRef): Account =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
-  for _, account in ac.savePoint.cache:
-    yield ac.ledger.recast(account.statement, updateOk=true).value
+  for _, acc in ac.savePoint.cache:
+    yield ac.ledger.recast(
+      acc.toAccountKey, acc.statement, updateOk=true).value
 
 iterator pairs*(ac: AccountsLedgerRef): (EthAddress, Account) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
-  for address, account in ac.savePoint.cache:
-    yield (address, ac.ledger.recast(account.statement, updateOk=true).value)
+  for address, acc in ac.savePoint.cache:
+    yield (address, ac.ledger.recast(
+      acc.toAccountKey, acc.statement, updateOk=true).value)
 
 iterator storage*(
     ac: AccountsLedgerRef;
@@ -856,7 +855,7 @@ proc getEthAccount*(ac: AccountsLedgerRef, address: EthAddress): Account =
     return emptyEthAccount
 
   ## Convert to legacy object, will throw an assert if that fails
-  let rc = ac.ledger.recast(acc.statement)
+  let rc = ac.ledger.recast(acc.toAccountKey, acc.statement)
   if rc.isErr:
     raiseAssert "getAccount(): cannot convert account: " & $$rc.error
   rc.value

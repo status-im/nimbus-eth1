@@ -200,24 +200,20 @@ proc accMethods(): CoreDbAccFns =
       if error != FetchPathNotFound:
         return err(error.toError(base, info))
       return err(error.toError(base, info, AccNotFound))
-    var cDbAcc = CoreDbAccount(
-      nonce:    acc.nonce,
-      balance:  acc.balance,
-      codeHash: acc.codeHash)
-    (addr cDbAcc.accPath.data[0]).copyMem(unsafeAddr accPath[0], 32)
-    ok cDbAcc
+    ok acc
     
   proc accMerge(
       cAcc: AristoCoreDbAccRef;
-      acc: CoreDbAccount;
+      accPath: openArray[byte];
+      accRec: CoreDbAccount;
         ): CoreDbRc[void] =
     const info = "acc/mergeFn()"
 
     let val = AristoAccount(
-      nonce:    acc.nonce,
-      balance:  acc.balance,
-      codeHash: acc.codeHash)
-    api.mergeAccountRecord(mpt, acc.accPath.data, val).isOkOr:
+      nonce:    accRec.nonce,
+      balance:  accRec.balance,
+      codeHash: accRec.codeHash)
+    api.mergeAccountRecord(mpt, accPath, val).isOkOr:
       return err(error.toError(base, info))
     ok()
 
@@ -383,9 +379,10 @@ proc accMethods(): CoreDbAccFns =
 
     mergeFn: proc(
         cAcc: CoreDbAccRef;
-        acc: CoreDbAccount;
+        accPath: openArray[byte];
+        accRec: CoreDbAccount;
           ): CoreDbRc[void] =
-      accMerge(AristoCoreDbAccRef(cAcc), acc),
+      accMerge(AristoCoreDbAccRef(cAcc), accPath, accRec),
 
     hasPathFn: proc(
         cAcc: CoreDbAccRef;

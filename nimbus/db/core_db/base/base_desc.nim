@@ -13,6 +13,7 @@
 import
   std/tables,
   eth/common,
+  ../../aristo,
   ../../aristo/aristo_profile
 
 # Annotation helpers
@@ -38,12 +39,12 @@ type
 
   CoreDbRc*[T] = Result[T,CoreDbErrorRef]
 
-  CoreDbAccount* = object
-    ## Generic account representation referencing an *MPT* sub-trie
-    accPath*:  Hash256       ## Hashed account address
-    nonce*:    AccountNonce  ## Some `uint64` type
-    balance*:  UInt256
-    codeHash*: Hash256
+  CoreDbAccount* = AristoAccount
+    ## Generic account record representation. The data fields
+    ## look like:
+    ##   * nonce*:    AccountNonce  -- Some `uint64` type
+    ##   * balance*:  UInt256       -- Account balance
+    ##   * codeHash*: Hash256       -- Lookup value
 
   CoreDbErrorCode* = enum
     Unset = 0
@@ -176,18 +177,19 @@ type
   CoreDbAccBackendFn* = proc(
     cAcc: CoreDbAccRef): CoreDbAccBackendRef {.noRaise.}
   CoreDbAccFetchFn* = proc(
-    cAcc: CoreDbAccRef, accPath: openArray[byte];
+    cAcc: CoreDbAccRef; accPath: openArray[byte];
     ): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(
     cAcc: CoreDbAccRef, accPath: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbAccClearStorageFn* = proc(
-    cAcc: CoreDbAccRef, accPath: openArray[byte]): CoreDbRc[void] {.noRaise.}
+    cAcc: CoreDbAccRef; accPath: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(
-    cAcc: CoreDbAccRef, accPath: CoreDbAccount): CoreDbRc[void] {.noRaise.}
+    cAcc: CoreDbAccRef; accPath: openArray[byte]; accRec: CoreDbAccount;
+    ): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(
-    cAcc: CoreDbAccRef, accPath: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+    cAcc: CoreDbAccRef; accPath: openArray[byte]): CoreDbRc[bool] {.noRaise.}
   CoreDbAccStateFn* = proc(
-    cAcc: CoreDbAccRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
+    cAcc: CoreDbAccRef; updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
   CoreDbSlotFetchFn* = proc(
     cAcc: CoreDbAccRef; accPath, stoPath: openArray[byte];
