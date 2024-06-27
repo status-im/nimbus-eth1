@@ -296,11 +296,7 @@ proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
 
 proc addNode*(p: PortalProtocol, r: Record): bool =
-  let node = newNode(r)
-  if node.isOk():
-    p.addNode(node[]) == Added
-  else:
-    false
+  p.addNode(Node.fromRecord(r)) == Added
 
 func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
   p.routingTable.getNode(id)
@@ -682,13 +678,12 @@ proc offerImpl*(
 proc recordsFromBytes*(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
   for r in rawRecords.asSeq():
-    var record: Record
-    if record.fromBytes(r.asSeq()):
-      records.add(record)
-    else:
+    let record = enr.Record.fromBytes(r.asSeq()).valueOr:
       # If any of the ENRs is invalid, fail immediatly. This is similar as what
       # is done on the discovery v5 layer.
       return err("Deserialization of an ENR failed")
+
+    records.add(record)
 
   ok(records)
 

@@ -56,20 +56,17 @@ proc installPortalApiHandlers*(
     return getRoutingTableInfo(p.routingTable)
 
   rpcServer.rpc("portal_" & network & "AddEnr") do(enr: Record) -> bool:
-    let node = newNode(enr).valueOr:
-      raise newException(ValueError, "Failed creating Node from ENR")
-
+    let node = Node.fromRecord(enr)
     let addResult = p.addNode(node)
-    p.routingTable.setJustSeen(node)
+    if addResult == Added:
+      p.routingTable.setJustSeen(node)
     return addResult == Added
 
   rpcServer.rpc("portal_" & network & "AddEnrs") do(enrs: seq[Record]) -> bool:
     # Note: unspecified RPC, but useful for our local testnet test
     for enr in enrs:
-      let nodeRes = newNode(enr)
-      if nodeRes.isOk():
-        let node = nodeRes.get()
-        discard p.addNode(node)
+      let node = Node.fromRecord(enr)
+      if p.addNode(node) == Added:
         p.routingTable.setJustSeen(node)
 
     return true

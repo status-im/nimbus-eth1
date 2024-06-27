@@ -56,22 +56,17 @@ proc installUtpHandlers(
     t: ref Table[SKey, UtpSocket[NodeAddress]],
 ) {.raises: [].} =
   srv.rpc("utp_connect") do(r: enr.Record) -> SKey:
-    let nodeRes = newNode(r)
-
-    if nodeRes.isOk():
-      let node = nodeRes.get()
-      let nodeAddress = NodeAddress.init(node).unsafeGet()
-      discard d.addNode(node)
-      let connResult = await s.connectTo(nodeAddress)
-      if (connResult.isOk()):
-        let socket = connResult.get()
-        let sKey = socket.socketKey.toSKey()
-        t[sKey] = socket
-        return sKey
-      else:
-        raise newException(ValueError, "Connection to node Failed.")
+    let node = Node.fromRecord(r)
+    let nodeAddress = NodeAddress.init(node).unsafeGet()
+    discard d.addNode(node)
+    let connResult = await s.connectTo(nodeAddress)
+    if (connResult.isOk()):
+      let socket = connResult.get()
+      let sKey = socket.socketKey.toSKey()
+      t[sKey] = socket
+      return sKey
     else:
-      raise newException(ValueError, "Bad enr")
+      raise newException(ValueError, "Connection to node Failed.")
 
   srv.rpc("utp_write") do(k: SKey, b: string) -> bool:
     let sock = t.getOrDefault(k)

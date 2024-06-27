@@ -28,11 +28,11 @@ iterator strippedLines(filename: string): string {.raises: [ref IOError].} =
       yield stripped
 
 proc addBootstrapNode(bootstrapAddr: string, bootstrapEnrs: var seq[Record]) =
-  var enrRec: enr.Record
-  if enrRec.fromURI(bootstrapAddr):
-    bootstrapEnrs.add enrRec
+  let res = enr.Record.fromURI(bootstrapAddr)
+  if res.isOk():
+    bootstrapEnrs.add res.value
   else:
-    warn "Ignoring invalid bootstrap ENR", bootstrapAddr
+    warn "Ignoring invalid bootstrap ENR", bootstrapAddr, error = $res.error
 
 proc loadBootstrapFile*(bootstrapFile: string, bootstrapEnrs: var seq[Record]) =
   if bootstrapFile.len == 0:
@@ -109,11 +109,12 @@ proc getPersistentEnr*(enrFilePath: string): Opt[enr.Record] =
     var record: enr.Record
     # TODO: This old API of var passing is very error prone and should be
     # changed in nim-eth.
-    if not record.fromURI(enrUri):
+    let res = enr.Record.fromURI(enrUri)
+    if res.isErr():
       warn "Could not decode ENR from ENR file"
-      return Opt.none(enr.Record)
+      Opt.none(enr.Record)
     else:
-      return Opt.some(record)
+      Opt.some(res.value)
   else:
     warn "Could not find ENR file. Was it manually deleted?"
-    return Opt.none(enr.Record)
+    Opt.none(enr.Record)

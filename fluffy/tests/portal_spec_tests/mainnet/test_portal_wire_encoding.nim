@@ -93,16 +93,20 @@ suite "Portal Wire Protocol Message Encodings":
       message.nodes.enrs.len() == 0
 
   test "Nodes Response - enrs":
-    var e1, e2: Record
-    check:
-      e1.fromURI(
+    let
+      res1 = Record.fromURI(
         "enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg"
       )
-      e2.fromURI(
+      res2 = Record.fromURI(
         "enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU"
       )
+    check:
+      res1.isOk()
+      res2.isOk()
 
     let
+      e1 = res1.value
+      e2 = res2.value
       total = 0x1'u8
       n = NodesMessage(
         total: total, enrs: List[ByteList, 32](@[ByteList(e1.raw), ByteList(e2.raw)])
@@ -177,16 +181,20 @@ suite "Portal Wire Protocol Message Encodings":
       message.content.content == content
 
   test "Content Response - enrs":
-    var e1, e2: Record
-    check:
-      e1.fromURI(
+    let
+      res1 = Record.fromURI(
         "enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg"
       )
-      e2.fromURI(
+      res2 = Record.fromURI(
         "enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU"
       )
+    check:
+      res1.isOk()
+      res2.isOk()
 
     let
+      e1 = res1.value
+      e2 = res2.value
       enrs = List[ByteList, 32](@[ByteList(e1.raw), ByteList(e2.raw)])
       c = ContentMessage(contentMessageType: enrsType, enrs: enrs)
 

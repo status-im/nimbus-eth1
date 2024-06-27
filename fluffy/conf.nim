@@ -316,25 +316,24 @@ func completeCmdArg*(T: type TrustedDigest, input: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
-  if not fromURI(result, p):
-    raise newException(ValueError, "Invalid ENR")
+  let res = enr.Record.fromURI(p)
+  if res.isErr():
+    raise newException(ValueError, "Invalid ENR: " & $res.error)
+  res.value
 
 proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
-  var record: enr.Record
-  if not fromURI(record, p):
-    raise newException(ValueError, "Invalid ENR")
+  let res = enr.Record.fromURI(p)
+  if res.isErr():
+    raise newException(ValueError, "Invalid ENR: " & $res.error)
 
-  let n = newNode(record)
-  if n.isErr:
-    raise newException(ValueError, $n.error)
-
-  if n[].address.isNone():
+  let n = Node.fromRecord(res.value)
+  if n.address.isNone():
     raise newException(ValueError, "ENR without address")
 
-  n[]
+  n
 
 proc completeCmdArg*(T: type Node, val: string): seq[string] =
   return @[]
