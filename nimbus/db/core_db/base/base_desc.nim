@@ -61,9 +61,6 @@ type
 
   CoreDbColType* = enum
     CtGeneric = 2 # columns smaller than 2 are not provided
-    CtReceipts
-    CtTxs
-    CtWithdrawals
 
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
