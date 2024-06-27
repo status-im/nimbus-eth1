@@ -373,8 +373,9 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
   if acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
 
-  # Make sure that there is an account address row on the database. This is
-  # needed for saving the account-linked storage column on the Aristo database.
+  # Make sure that there is an account entry on the database. This is needed by
+  # `Aristo` for updating the account's storage area reference. As a side effect,
+  # this action also updates the latest statement data.
   ac.ledger.merge(acc.toAccountKey, acc.statement).isOkOr:
     raiseAssert info & $$error
 
@@ -675,14 +676,12 @@ proc persist*(ac: AccountsLedgerRef,
       if CodeChanged in acc.flags:
         acc.persistCode(ac)
       if StorageChanged in acc.flags:
-        # FIXME: Comment below might be obsolete
-        # --     # storageRoot must be updated first
-        # --     # before persisting account into merkle trie
         acc.persistStorage(ac)
-      # FIXME: This one might be unnecessary, `persistStorage()` might have
-      #        saved the account record already.
-      ac.ledger.merge(acc.toAccountKey, acc.statement).isOkOr:
-        raiseAssert info & $$error
+      else:
+        # This one is only necessary unless `persistStorage()` is run which needs
+        # to `merge()` the latest statement as well.
+        ac.ledger.merge(acc.toAccountKey, acc.statement).isOkOr:
+          raiseAssert info & $$error
     of Remove:
       ac.ledger.delete(acc.toAccountKey).isOkOr:
         if error.error != AccNotFound:
