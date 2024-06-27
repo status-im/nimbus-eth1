@@ -284,14 +284,13 @@ iterator aristoMptPairs*(dsc: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
 
 iterator aristoSlotPairs*(
     dsc: CoreDbAccRef;
-    eAddr: EthAddress;
+    accPath: openArray[byte];
       ): (Blob,Blob)
       {.noRaise.} =
   let
     api = dsc.to(AristoApiRef)
     mpt = dsc.to(AristoDbRef)
-    accKey = eAddr.keccakHash.data
-  for (path,data) in mpt.rightPairsStorage accKey:
+  for (path,data) in mpt.rightPairsStorage accPath:
     yield (api.pathAsBlob(path), data)
 
 iterator aristoReplicateMem*(dsc: CoreDbMptRef): (Blob,Blob) {.rlpRaise.} =

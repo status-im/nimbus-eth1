@@ -50,9 +50,6 @@ static:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func to(eAddr: EthAddress; T: type PathID): T =
-  HashKey.fromBytes(eAddr.keccakHash.data).value.to(T)
-
 func toError(
     e: AristoError;
     base: AristoBaseRef;
@@ -196,7 +193,6 @@ proc accMethods(): CoreDbAccFns =
   proc accFetch(
       cAcc: AristoCoreDbAccRef;
       accPath: openArray[byte];
-      eAddr: EthAddress;                  # <--- will go away
         ): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
 
@@ -205,7 +201,6 @@ proc accMethods(): CoreDbAccFns =
         return err(error.toError(base, info))
       return err(error.toError(base, info, AccNotFound))
     var cDbAcc = CoreDbAccount(
-      eAddr:    eAddr,
       nonce:    acc.nonce,
       balance:  acc.balance,
       codeHash: acc.codeHash)
@@ -371,9 +366,8 @@ proc accMethods(): CoreDbAccFns =
     fetchFn: proc(
         cAcc: CoreDbAccRef;
         accPath: openArray[byte];
-        eAddr: EthAddress;                # <--- will go away
           ): CoreDbRc[CoreDbAccount] =
-      accFetch(AristoCoreDbAccRef(cAcc), accPath, eAddr),
+      accFetch(AristoCoreDbAccRef(cAcc), accPath),
 
     deleteFn: proc(
         cAcc: CoreDbAccRef;

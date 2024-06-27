@@ -329,13 +329,13 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
 
   let
     al = com.db.ctx.getAccounts()
-    acc = al.fetch(codeAddress).expect "Valid Account Handle"
+    accPath = codeAddress.keccakHash.data
 
   for kv in boa.storage:
     let key = kv[0].toHex()
     let val = kv[1].toHex()
     let slotKey = UInt256.fromBytesBE(kv[0]).toBytesBE.keccakHash.data
-    let data = al.slotFetch(codeAddress, slotKey).valueOr: EmptyBlob
+    let data = al.slotFetch(accPath, slotKey).valueOr: EmptyBlob
     let actual = data.toHex
     let zerosLen = 64 - (actual.len)
     let value = repeat('0', zerosLen) & actual

@@ -41,7 +41,6 @@ type
   CoreDbAccount* = object
     ## Generic account representation referencing an *MPT* sub-trie
     accPath*:  Hash256       ## Hashed account address
-    eAddr*:    EthAddress    ## Reverse `accPath` (will go away)
     nonce*:    AccountNonce  ## Some `uint64` type
     balance*:  UInt256
     codeHash*: Hash256
@@ -177,7 +176,7 @@ type
   CoreDbAccBackendFn* = proc(
     cAcc: CoreDbAccRef): CoreDbAccBackendRef {.noRaise.}
   CoreDbAccFetchFn* = proc(
-    cAcc: CoreDbAccRef, accPath: openArray[byte]; eAddr: EthAddress;
+    cAcc: CoreDbAccRef, accPath: openArray[byte];
     ): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(
     cAcc: CoreDbAccRef, accPath: openArray[byte]): CoreDbRc[void] {.noRaise.}
