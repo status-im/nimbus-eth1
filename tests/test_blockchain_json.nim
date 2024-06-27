@@ -84,10 +84,10 @@ proc executeCase(node: JsonNode): bool =
     return false
 
   if com.db.getCanonicalHead().blockHash != env.genesisHeader.blockHash:
-    debugEcho "Genesis block hash is database different with expected genesis block hash"
+    debugEcho "Genesis block hash in database is different with expected genesis block hash"
     return false
 
-  var c = initForkedChain(com, env.genesisHeader)
+  var c = newForkedChain(com, env.genesisHeader)
   var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
     let res = c.importBlock(blk.blk)
@@ -130,9 +130,8 @@ proc blockchainJsonMain*() =
     legacyFolder = "eth_tests/LegacyTests/Constantinople/BlockchainTests"
     newFolder = "eth_tests/BlockchainTests"
 
-  let res = loadKzgTrustedSetup()
-  if res.isErr:
-    echo "FATAL: ", res.error
+  loadKzgTrustedSetup().isOkOr:
+    echo "FATAL: ", error
     quit(QuitFailure)
 
   if false:
@@ -145,6 +144,10 @@ proc blockchainJsonMain*() =
 when isMainModule:
   when debugMode:
     proc executeFile(name: string) =
+      loadKzgTrustedSetup().isOkOr:
+        echo "FATAL: ", error
+        quit(QuitFailure)
+
       var testStatusIMPL: TestStatus
       let node = json.parseFile(name)
       executeFile(node, testStatusIMPL)

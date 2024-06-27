@@ -36,7 +36,7 @@ type
     cursorHash: Hash256
     header: BlockHeader
 
-  ForkedChain* = object
+  ForkedChainRef* = ref object
     stagingTx: CoreDbTxRef
     db: CoreDbRef
     com: CommonRef
@@ -59,7 +59,7 @@ template shouldNotKeyError(body: untyped) =
   except KeyError as exc:
     raiseAssert exc.msg
 
-proc processBlock(c: ForkedChain,
+proc processBlock(c: ForkedChainRef,
                   parent: BlockHeader,
                   blk: EthBlock): Result[seq[Receipt], string] =
   template header(): BlockHeader =
@@ -89,7 +89,7 @@ proc processBlock(c: ForkedChain,
 
   ok(move(vmState.receipts))
 
-func updateCursorHeads(c: var ForkedChain,
+func updateCursorHeads(c: ForkedChainRef,
           cursorHash: Hash256,
           header: BlockHeader) =
   # Example of cursorHeads and cursor
@@ -115,7 +115,7 @@ func updateCursorHeads(c: var ForkedChain,
     forkJunction: header.number,
   )
 
-func updateCursor(c: var ForkedChain,
+func updateCursor(c: ForkedChainRef,
                   blk: EthBlock,
                   receipts: sink seq[Receipt]) =
   template header(): BlockHeader =
@@ -129,7 +129,7 @@ func updateCursor(c: var ForkedChain,
   )
   c.updateCursorHeads(c.cursorHash, header)
 
-proc validateBlock(c: var ForkedChain,
+proc validateBlock(c: ForkedChainRef,
           parent: BlockHeader,
           blk: EthBlock,
           updateCursor: bool = true): Result[void, string] =
@@ -148,7 +148,7 @@ proc validateBlock(c: var ForkedChain,
 
   ok()
 
-proc replaySegment(c: var ForkedChain, target: Hash256) =
+proc replaySegment(c: ForkedChainRef, target: Hash256) =
   # Replay from base+1 to target block
   var
     prevHash = target
@@ -167,7 +167,7 @@ proc replaySegment(c: var ForkedChain, target: Hash256) =
       updateCursor = false).expect("have been validated before")
     c.cursorHeader = chain[i].header
 
-proc writeBaggage(c: var ForkedChain, target: Hash256) =
+proc writeBaggage(c: ForkedChainRef, target: Hash256) =
   # Write baggage from base+1 to target block
   shouldNotKeyError:
     var prevHash = target
@@ -180,7 +180,7 @@ proc writeBaggage(c: var ForkedChain, target: Hash256) =
         c.db.persistWithdrawals(blk.blk.withdrawals.get)
       prevHash = blk.blk.header.parentHash
 
-func updateBase(c: var ForkedChain,
+func updateBase(c: ForkedChainRef,
                 newBaseHash: Hash256,
                 newBaseHeader: BlockHeader,
                 canonicalCursorHash: Hash256) =
@@ -229,7 +229,7 @@ func updateBase(c: var ForkedChain,
   c.baseHeader = newBaseHeader
   c.baseHash = newBaseHash
 
-func findCanonicalHead(c: ForkedChain,
+func findCanonicalHead(c: ForkedChainRef,
                        hash: Hash256): Result[CanonicalDesc, string] =
   if hash == c.baseHash:
     # The cursorHash here should not be used for next step
@@ -248,7 +248,7 @@ func findCanonicalHead(c: ForkedChain,
 
   err("Block hash is not part of any active chain")
 
-func canonicalChain(c: ForkedChain,
+func canonicalChain(c: ForkedChainRef,
                     hash: Hash256,
                     headHash: Hash256): Result[BlockHeader, string] =
   if hash == c.baseHash:
@@ -264,7 +264,7 @@ func canonicalChain(c: ForkedChain,
 
   err("Block hash not in canonical chain")
 
-func calculateNewBase(c: ForkedChain,
+func calculateNewBase(c: ForkedChainRef,
                finalizedHeader: BlockHeader,
                headHash: Hash256,
                headHeader: BlockHeader): BaseDesc =
@@ -288,7 +288,7 @@ func calculateNewBase(c: ForkedChain,
 
   doAssert(false, "Unreachable code")
 
-func trimCanonicalChain(c: var ForkedChain, head: CanonicalDesc) =
+func trimCanonicalChain(c: ForkedChainRef, head: CanonicalDesc) =
   # Maybe the current active chain is longer than canonical chain
   shouldNotKeyError:
     var prevHash = head.cursorHash
@@ -304,7 +304,8 @@ func trimCanonicalChain(c: var ForkedChain, head: CanonicalDesc) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc initForkedChain*(com: CommonRef, baseHeader: BlockHeader): ForkedChain =
+proc newForkedChain*(com: CommonRef, baseHeader: BlockHeader): ForkedChainRef =
+  new(result)
   result.com = com
   result.db  = com.db
   result.baseHeader   = baseHeader
@@ -312,7 +313,7 @@ proc initForkedChain*(com: CommonRef, baseHeader: BlockHeader): ForkedChain =
   result.baseHash     = result.cursorHash
   result.cursorHeader = result.baseHeader
 
-proc importBlock*(c: var ForkedChain, blk: EthBlock): Result[void, string] =
+proc importBlock*(c: ForkedChainRef, blk: EthBlock): Result[void, string] =
   # Try to import block to canonical or side chain.
   # return error if the block is invalid
   if c.stagingTx.isNil:
@@ -343,7 +344,7 @@ proc importBlock*(c: var ForkedChain, blk: EthBlock): Result[void, string] =
   c.replaySegment(header.parentHash)
   c.validateBlock(c.cursorHeader, blk)
 
-proc forkChoice*(c: var ForkedChain,
+proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash256,
                  finalizedHash: Hash256): Result[void, string] =
 
