@@ -123,10 +123,9 @@ proc update(dh: TxChainRef; parent: BlockHeader)
     {.gcsafe,raises: [].} =
 
   let
-    timestamp = dh.getTimestamp(parent)
     db  = dh.com.db
     acc = LedgerRef.init(db, parent.stateRoot)
-    fee = baseFeeGet(dh.com, parent, timestamp)
+    fee = baseFeeGet(dh.com, parent)
 
   # Keep a separate accounts descriptor positioned at the sync point
   dh.roAcc = ReadOnlyStateDB(acc)

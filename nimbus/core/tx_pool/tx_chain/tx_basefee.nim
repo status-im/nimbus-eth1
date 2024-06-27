@@ -24,16 +24,16 @@ import
 # ------------------------------------------------------------------------------
 
 proc baseFeeGet*(com: CommonRef;
-                 parent: BlockHeader, timestamp: EthTime): Opt[UInt256] =
+                 parent: BlockHeader): Opt[UInt256] =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
 
   # Note that the baseFee is calculated for the next header
-  if not com.isLondonOrLater(parent.number+1, timestamp):
+  if not com.isLondonOrLater(parent.number+1):
     return Opt.none(UInt256)
 
   # If the new block is the first EIP-1559 block, return initial base fee.
-  if not com.isLondonOrLater(parent.number, timestamp):
+  if not com.isLondonOrLater(parent.number):
     return Opt.some(EIP1559_INITIAL_BASE_FEE)
 
   Opt.some calcEip1599BaseFee(
