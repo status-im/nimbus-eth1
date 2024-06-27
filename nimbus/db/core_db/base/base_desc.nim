@@ -262,7 +262,6 @@ type
   CoreDbRef* = ref object of RootRef
     ## Database descriptor
     dbType*: CoreDbType         ## Type of database backend
-    trackLegaApi*: bool         ## Debugging, support
     trackNewApi*: bool          ## Debugging, support
     trackLedgerApi*: bool       ## Debugging, suggestion for subsequent ledger
     profTab*: CoreDbProfListRef ## Profiling data (if any)

@@ -188,7 +188,6 @@ proc initRunnerDB(
   result.initializeEmptyDb
 
   setErrorLevel()
-  coreDB.trackLegaApi = false
   coreDB.trackNewApi = false
   coreDB.trackLedgerApi =false
 

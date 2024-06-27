@@ -97,9 +97,12 @@ func toStr*(w: EthAddress): string =
 func toStr*(w: Hash256): string =
   w.data.oaToStr
 
-when declared(CoreDbMptRef):
-  func toStr*(w: CoreDbMptRef): string =
-    if w.CoreDbMptRef.isNil: "MptRef(nil)" else: "MptRef"
+func toStr*(w: CoreDbMptRef): string =
+  if w.CoreDbMptRef.isNil: "nil" else: "MptRef"
+
+func toStr*(w: CodeBytesRef): string =
+  if w.CodeBytesRef.isNil: "nil"
+  else: "[" & $w.bytes.len & "]"
 
 func toStr*(w: Blob): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"

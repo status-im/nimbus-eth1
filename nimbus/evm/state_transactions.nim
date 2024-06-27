@@ -35,12 +35,13 @@ proc setupTxContext*(vmState: BaseVMState,
       vmState.determineFork
   vmState.gasCosts = vmState.fork.forkToSchedule
 
+# Using `proc` as `incNonce()` might be `proc` in logging mode
 proc preExecComputation(c: Computation) =
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:
       db.incNonce(c.msg.sender)
 
-func postExecComputation(c: Computation) =
+proc postExecComputation(c: Computation) =
   if c.isSuccess:
     if c.fork < FkLondon:
       # EIP-3529: Reduction in refunds
