@@ -72,13 +72,13 @@ proc putAdm*(
       ): Result[void,(AdminTabID,AristoError,string)] =
   let dsc = rdb.session
   if data.len == 0:
-    dsc.delete(xid.toOpenArray, $AdmCF).isOkOr:
+    dsc.delete(xid.toOpenArray, rdb.admCol.handle()).isOkOr:
       const errSym = RdbBeDriverDelAdmError
       when extraTraceMessages:
         trace logTxt "putAdm()", xid, error=errSym, info=error
       return err((xid,errSym,error))
   else:
-    dsc.put(xid.toOpenArray, data, $AdmCF).isOkOr:
+    dsc.put(xid.toOpenArray, data, rdb.admCol.handle()).isOkOr:
       const errSym = RdbBeDriverPutAdmError
       when extraTraceMessages:
         trace logTxt "putAdm()", xid, error=errSym, info=error
@@ -92,7 +92,7 @@ proc putKey*(
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = rdb.session
   if key.isValid:
-    dsc.put(vid.toOpenArray, key.data, $KeyCF).isOkOr:
+    dsc.put(vid.toOpenArray, key.data, rdb.keyCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdKeyLru` cache
       const errSym = RdbBeDriverPutKeyError
       when extraTraceMessages:
@@ -104,7 +104,7 @@ proc putKey*(
       discard rdb.rdKeyLru.lruAppend(vid, key, RdKeyLruMaxSize)
 
   else:
-    dsc.delete(vid.toOpenArray, $KeyCF).isOkOr:
+    dsc.delete(vid.toOpenArray, rdb.keyCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdKeyLru` cache
       const errSym = RdbBeDriverDelKeyError
       when extraTraceMessages:
@@ -128,7 +128,7 @@ proc putVtx*(
       # Caller must `rollback()` which will flush the `rdVtxLru` cache
       return err((vid,rc.error,""))
 
-    dsc.put(vid.toOpenArray, rc.value, $VtxCF).isOkOr:
+    dsc.put(vid.toOpenArray, rc.value, rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdVtxLru` cache
       const errSym = RdbBeDriverPutVtxError
       when extraTraceMessages:
@@ -140,7 +140,7 @@ proc putVtx*(
       discard rdb.rdVtxLru.lruAppend(vid, vtx, RdVtxLruMaxSize)
 
   else:
-    dsc.delete(vid.toOpenArray, $VtxCF).isOkOr:
+    dsc.delete(vid.toOpenArray, rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdVtxLru` cache
       const errSym = RdbBeDriverDelVtxError
       when extraTraceMessages:

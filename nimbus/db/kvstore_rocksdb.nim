@@ -137,5 +137,4 @@ proc openNamespace*(
     name: string): KvResult[RocksNamespaceRef] =
   doAssert not store.db.isClosed()
 
-  let cf = ? store.db.withColFamily(name)
-  ok(RocksNamespaceRef(colFamily: cf))
+  ok(RocksNamespaceRef(colFamily: ?store.db.getColFamily(name)))
