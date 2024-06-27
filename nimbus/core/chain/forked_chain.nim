@@ -305,6 +305,7 @@ func trimCanonicalChain(c: ForkedChainRef, head: CanonicalDesc) =
 # ------------------------------------------------------------------------------
 
 proc newForkedChain*(com: CommonRef, baseHeader: BlockHeader): ForkedChainRef =
+  new(result)
   result.com = com
   result.db  = com.db
   result.baseHeader   = baseHeader
