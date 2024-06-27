@@ -89,7 +89,7 @@ proc calculateTransactionData(
   ## - root of transactions trie
   ## - list of transactions hashes
   ## - total size of transactions in block
-  var tr = newCoreDbRef(DefaultDbMemory).ctx.getMpt(CtGeneric)
+  var tr = newCoreDbRef(DefaultDbMemory).ctx.getColumn(CtGeneric)
   var txHashes: seq[TxOrHash]
   var txSize: uint64
   for i, t in items:
@@ -97,7 +97,7 @@ proc calculateTransactionData(
     txSize = txSize + uint64(len(tx))
     tr.merge(rlp.encode(i), tx).expect "merge data"
     txHashes.add(txOrHash toFixedBytes(keccakHash(tx)))
-  let rootHash = tr.getColumn().state().expect "hash"
+  let rootHash = tr.state(updateOk=true).expect "hash"
   (rootHash, txHashes, txSize)
 
 func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =

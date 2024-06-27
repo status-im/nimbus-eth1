@@ -85,7 +85,7 @@ proc verifySlotProof(trustedStorageRoot: Web3Hash, slot: StorageProof): MptProof
 proc persistFixtureBlock(chainDB: CoreDbRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
-  chainDB.kvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
+  discard chainDB.newKvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
   chainDB.persistTransactions(header.number, getBlockBody4514995().transactions)
   chainDB.persistReceipts(getReceipts4514995())
@@ -155,7 +155,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     txs = [signedTx1, signedTx2]
   com.db.persistTransactions(blockNumber, txs)
 
-  let txRoot = com.db.ctx.getMpt(CtTxs).getColumn().state().valueOr(EMPTY_ROOT_HASH)
+  let txRoot = com.db.ctx.getColumn(CtTxs).state(updateOk=true).valueOr(EMPTY_ROOT_HASH)
 
   vmState.receipts = newSeq[Receipt](txs.len)
   vmState.cumulativeGasUsed = 0
@@ -167,7 +167,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
 
   com.db.persistReceipts(vmState.receipts)
   let
-    receiptRoot = com.db.ctx.getMpt(CtReceipts).getColumn().state().valueOr(EMPTY_ROOT_HASH)
+    receiptRoot = com.db.ctx.getColumn(CtReceipts).state(updateOk=true).valueOr(EMPTY_ROOT_HASH)
     date        = dateTime(2017, mMar, 30)
     timeStamp   = date.toTime.toUnix.EthTime
     difficulty  = com.calcDifficulty(timeStamp, parent)

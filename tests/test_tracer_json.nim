@@ -34,7 +34,7 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
     txRoot: Hash256       # header with block number `num`
     rcptRoot: Hash256     # ditto
   let
-    adb = cdb.ctx.getMpt(CtGeneric).backend.toAristo
+    adb = cdb.ctx.getColumn(CtGeneric).backend.toAristo
     kdb = cdb.newKvt.backend.toAristo
 
   # Fill KVT and collect `proof` data
