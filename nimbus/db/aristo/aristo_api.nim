@@ -18,9 +18,8 @@ import
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
-  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_get, aristo_hashify,
-       aristo_hike, aristo_init, aristo_merge, aristo_path, aristo_profile,
-       aristo_tx]
+  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_hashify,
+       aristo_init, aristo_merge, aristo_path, aristo_profile, aristo_tx]
 
 export
   AristoDbProfListRef
@@ -51,7 +50,7 @@ type
 
   AristoApiDeleteAccountRecordFn* =
     proc(db: AristoDbRef;
-         path: openArray[byte];
+         accPath: openArray[byte];
         ): Result[void,AristoError]
         {.noRaise.}
       ## Delete the account leaf entry addressed by the argument `path`. If
@@ -81,20 +80,20 @@ type
 
   AristoApiDeleteStorageDataFn* =
     proc(db: AristoDbRef;
-         path: openArray[byte];
-         accPath: PathID;
+         accPath: openArray[byte];
+         stoPath: openArray[byte];
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a given account argument `accPath`, this function deletes the
-      ## argument `path` from the associated storage tree (if any, at all.) If
-      ## the if the argument `path` deleted was the last one on the storage
-      ## tree, account leaf referred to by `accPath` will be updated so that
-      ## it will not refer to a storage tree anymore. In the latter case only
-      ## the function will return `true`.
+      ## argument `stoPath` from the associated storage tree (if any, at all.)
+      ## If the if the argument `stoPath` deleted was the last one on the
+      ## storage tree, account leaf referred to by `accPath` will be updated
+      ## so that it will not refer to a storage tree anymore. In the latter
+      ## case only the function will return `true`.
 
   AristoApiDeleteStorageTreeFn* =
     proc(db: AristoDbRef;
-         accPath: PathID;
+         accPath: openArray[byte];
         ): Result[void,AristoError]
         {.noRaise.}
       ## Variant of `deleteStorageData()` for purging the whole storage tree
@@ -110,10 +109,10 @@ type
 
   AristoApiFetchAccountRecordFn* =
     proc(db: AristoDbRef;
-         path: openArray[byte];
+         accPath: openArray[byte];
         ): Result[AristoAccount,AristoError]
         {.noRaise.}
-      ## Fetch an account record from the database indexed by `path`.
+      ## Fetch an account record from the database indexed by `accPath`.
 
   AristoApiFetchAccountStateFn* =
     proc(db: AristoDbRef;
@@ -139,16 +138,16 @@ type
 
   AristoApiFetchStorageDataFn* =
     proc(db: AristoDbRef;
-         path: openArray[byte];
-         accPath: PathID;
+         accPath: openArray[byte];
+         stoPath: openArray[byte];
         ): Result[Blob,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, fetch the data
-      ## record from the database indexed by `path`.
+      ## record from the database indexed by `stoPath`.
 
   AristoApiFetchStorageStateFn* =
     proc(db: AristoDbRef;
-         accPath: PathID;
+         accPath: openArray[byte];
         ): Result[Hash256,AristoError]
         {.noRaise.}
       ## Fetch the Merkle hash of the storage root related to `accPath`.
@@ -225,14 +224,6 @@ type
     ##
     ## Use `aristo_desc.forget()` to clean up this descriptor.
 
-  AristoApiGetKeyRcFn* =
-    proc(db: AristoDbRef;
-         vid: VertexID;
-        ): Result[HashKey,AristoError]
-        {.noRaise.}
-      ## Cascaded attempt to fetch a Merkle hash from the cache layers or
-      ## the backend (if available.)
-
   AristoApiHashifyFn* =
     proc(db: AristoDbRef;
         ): Result[void,(VertexID,AristoError)]
@@ -242,10 +233,10 @@ type
 
   AristoApiHasPathAccountFn* =
     proc(db: AristoDbRef;
-         path: openArray[byte];
+         accPath: openArray[byte];
         ): Result[bool,AristoError]
         {.noRaise.}
-      ## For an account record indexed by `path` query whether this record
+      ## For an account record indexed by `accPath` query whether this record
       ## exists on the database.
 
   AristoApiHasPathGenericFn* =
@@ -259,29 +250,20 @@ type
 
   AristoApiHasPathStorageFn* =
     proc(db: AristoDbRef;
-         path: openArray[byte];
-         accPath: PathID;
+         accPath: openArray[byte];
+         stoPath: openArray[byte];
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, query whether the
-      ## data record indexed by `path` exists on the database.
+      ## data record indexed by `stoPath` exists on the database.
 
   AristoApiHasStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: PathID;
+         accPath: openArray[byte];
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, query whether there
       ## is a non-empty data storage area at all.
-
-  AristoApiHikeUpFn* =
-    proc(path: NibblesBuf;
-         root: VertexID;
-         db: AristoDbRef;
-        ): Result[Hike,(VertexID,AristoError,Hike)]
-        {.noRaise.}
-      ## For the argument `path`, find and return the logest possible path
-      ## in the argument database `db`.
 
   AristoApiIsTopFn* =
     proc(tx: AristoTxRef;
@@ -326,20 +308,14 @@ type
 
   AristoApiMergeStorageDataFn* =
     proc(db: AristoDbRef;
-         stoKey: openArray[byte];
+         accPath: openArray[byte];
+         stoPath: openArray[byte];
          stoData: openArray[byte];
-         accPath: PathID;
-        ): Result[VertexID,AristoError]
+        ): Result[void,AristoError]
         {.noRaise.}
-      ## Merge the  key-value-pair argument `(stoKey,stoData)` as a storage
-      ## value. This means, the root vertex will be derived from the `accPath`
-      ## argument, the Patricia tree path for the storage tree is given by
-      ## `stoKey` and the leaf value with the payload will be stored as a
-      ## `PayloadRef` object of type `RawData`.
-      ##
-      ## If the storage tree does not exist yet it will be created and the
-      ## payload leaf accessed by `accPath` will be updated with the storage
-      ## tree vertex ID.
+      ## Store the `stoData` data argument on the storage area addressed by
+      ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
+      ## and `stoPath`  is the slot path of the corresponding storage area.
 
   AristoApiPathAsBlobFn* =
     proc(tag: PathID;
@@ -445,7 +421,6 @@ type
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
     forkTx*: AristoApiForkTxFn
-    getKeyRc*: AristoApiGetKeyRcFn
     hashify*: AristoApiHashifyFn
 
     hasPathAccount*: AristoApiHasPathAccountFn
@@ -453,7 +428,6 @@ type
     hasPathStorage*: AristoApiHasPathStorageFn
     hasStorageData*: AristoApiHasStorageDataFn
 
-    hikeUp*: AristoApiHikeUpFn
     isTop*: AristoApiIsTopFn
     level*: AristoApiLevelFn
     nForked*: AristoApiNForkedFn
@@ -494,7 +468,6 @@ type
     AristoApiProfFinishFn               = "finish"
     AristoApiProfForgetFn               = "forget"
     AristoApiProfForkTxFn               = "forkTx"
-    AristoApiProfGetKeyRcFn             = "getKeyRc"
     AristoApiProfHashifyFn              = "hashify"
 
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
@@ -502,7 +475,6 @@ type
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
     AristoApiProfHasStorageDataFn       = "hasStorageData"
 
-    AristoApiProfHikeUpFn               = "hikeUp"
     AristoApiProfIsTopFn                = "isTop"
     AristoApiProfLevelFn                = "level"
     AristoApiProfNForkedFn              = "nForked"
@@ -560,7 +532,6 @@ when AutoValidateApiHooks:
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
     doAssert not api.forkTx.isNil
-    doAssert not api.getKeyRc.isNil
     doAssert not api.hashify.isNil
 
     doAssert not api.hasPathAccount.isNil
@@ -568,7 +539,6 @@ when AutoValidateApiHooks:
     doAssert not api.hasPathStorage.isNil
     doAssert not api.hasStorageData.isNil
 
-    doAssert not api.hikeUp.isNil
     doAssert not api.isTop.isNil
     doAssert not api.level.isNil
     doAssert not api.nForked.isNil
@@ -630,7 +600,6 @@ func init*(api: var AristoApiObj) =
   api.finish = finish
   api.forget = forget
   api.forkTx = forkTx
-  api.getKeyRc = getKeyRc
   api.hashify = hashify
 
   api.hasPathAccount = hasPathAccount
@@ -638,7 +607,6 @@ func init*(api: var AristoApiObj) =
   api.hasPathStorage = hasPathStorage
   api.hasStorageData = hasStorageData
 
-  api.hikeUp = hikeUp
   api.isTop = isTop
   api.level = level
   api.nForked = nForked
@@ -682,7 +650,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     finish:               api.finish,
     forget:               api.forget,
     forkTx:               api.forkTx,
-    getKeyRc:             api.getKeyRc,
     hashify:              api.hashify,
 
     hasPathAccount:       api.hasPathAccount,
@@ -690,7 +657,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     hasPathStorage:       api.hasPathStorage,
     hasStorageData:       api.hasStorageData,
 
-    hikeUp:               api.hikeUp,
     isTop:                api.isTop,
     level:                api.level,
     nForked:              api.nForked,
@@ -756,12 +722,12 @@ func init*(
         result = api.deleteGenericTree(a, b)
 
   profApi.deleteStorageData =
-    proc(a: AristoDbRef; b: openArray[byte]; c: PathID): auto =
+    proc(a: AristoDbRef; b, c: openArray[byte]): auto =
       AristoApiProfDeleteStorageDataFn.profileRunner:
         result = api.deleteStorageData(a, b, c)
 
   profApi.deleteStorageTree =
-    proc(a: AristoDbRef; b: PathID): auto =
+    proc(a: AristoDbRef; b: openArray[byte]): auto =
       AristoApiProfDeleteStorageTreeFn.profileRunner:
         result = api.deleteStorageTree(a, b)
 
@@ -791,12 +757,12 @@ func init*(
         result = api.fetchGenericState(a, b)
 
   profApi.fetchStorageData =
-    proc(a: AristoDbRef; b: openArray[byte]; c: PathID;): auto =
+    proc(a: AristoDbRef; b, c: openArray[byte]): auto =
       AristoApiProfFetchStorageDataFn.profileRunner:
         result = api.fetchStorageData(a, b, c)
 
   profApi.fetchStorageState =
-    proc(a: AristoDbRef; b: PathID;): auto =
+    proc(a: AristoDbRef; b: openArray[byte]): auto =
       AristoApiProfFetchStorageStateFn.profileRunner:
         result = api.fetchStorageState(a, b)
 
@@ -816,14 +782,9 @@ func init*(
         result = api.forget(a)
 
   profApi.forkTx =
-    proc(a: AristoDbRef; b: int; c = false): auto =
+    proc(a: AristoDbRef; b: int): auto =
       AristoApiProfForkTxFn.profileRunner:
-        result = api.forkTx(a, b, c)
-
-  profApi.getKeyRc =
-    proc(a: AristoDbRef; b: VertexID): auto =
-      AristoApiProfGetKeyRcFn.profileRunner:
-        result = api.getKeyRc(a, b)
+        result = api.forkTx(a, b)
 
   profApi.hashify =
     proc(a: AristoDbRef): auto =
@@ -841,19 +802,14 @@ func init*(
         result = api.hasPathGeneric(a, b, c)
 
   profApi.hasPathStorage =
-    proc(a: AristoDbRef; b: openArray[byte]; c: PathID): auto =
+    proc(a: AristoDbRef; b, c: openArray[byte]): auto =
       AristoApiProfHasPathStorageFn.profileRunner:
         result = api.hasPathStorage(a, b, c)
 
   profApi.hasStorageData =
-    proc(a: AristoDbRef; b: PathID): auto =
+    proc(a: AristoDbRef; b: openArray[byte]): auto =
       AristoApiProfHasStorageDataFn.profileRunner:
         result = api.hasStorageData(a, b)
-
-  profApi.hikeUp =
-    proc(a: NibblesBuf; b: VertexID; c: AristoDbRef): auto =
-      AristoApiProfHikeUpFn.profileRunner:
-        result = api.hikeUp(a, b, c)
 
   profApi.isTop =
     proc(a: AristoTxRef): auto =
@@ -871,7 +827,7 @@ func init*(
          result = api.nForked(a)
 
   profApi.mergeAccountRecord =
-    proc(a: AristoDbRef; b, c: openArray[byte]): auto =
+    proc(a: AristoDbRef; b: openArray[byte]; c: AristoAccount): auto =
       AristoApiProfMergeAccountRecordFn.profileRunner:
         result = api.mergeAccountRecord(a, b, c)
 
@@ -881,7 +837,7 @@ func init*(
         result = api.mergeGenericData(a, b, c, d)
 
   profApi.mergeStorageData =
-    proc(a: AristoDbRef; b, c: openArray[byte]; d: PathID): auto =
+    proc(a: AristoDbRef; b, c, d: openArray[byte]): auto =
       AristoApiProfMergeStorageDataFn.profileRunner:
         result = api.mergeStorageData(a, b, c, d)
 
@@ -945,15 +901,15 @@ func init*(
     data.list[AristoApiProfBeGetLstFn.ord].masked = true
 
     beDup.putVtxFn =
-      proc(a: PutHdlRef; b: openArray[(VertexID,VertexRef)]) =
+      proc(a: PutHdlRef; b: VertexID, c: VertexRef) =
         AristoApiProfBePutVtxFn.profileRunner:
-          be.putVtxFn(a,b)
+          be.putVtxFn(a, b, c)
     data.list[AristoApiProfBePutVtxFn.ord].masked = true
 
     beDup.putKeyFn =
-      proc(a: PutHdlRef; b: openArray[(VertexID,HashKey)]) =
+      proc(a: PutHdlRef; b: VertexID, c: HashKey) =
         AristoApiProfBePutKeyFn.profileRunner:
-          be.putKeyFn(a,b)
+          be.putKeyFn(a, b, c)
     data.list[AristoApiProfBePutKeyFn.ord].masked = true
 
     beDup.putTuvFn =

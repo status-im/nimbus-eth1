@@ -397,7 +397,8 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
 
-func addLogEntry*(c: Computation, log: Log) =
+# Using `proc` as `addLogEntry()` might be `proc` in logging mode
+proc addLogEntry*(c: Computation, log: Log) =
   c.vmState.stateDB.addLogEntry(log)
 
 # some gasRefunded operations still relying
@@ -406,7 +407,8 @@ func getGasRefund*(c: Computation): GasInt =
   if c.isSuccess:
     result = c.gasMeter.gasRefunded
 
-func refundSelfDestruct*(c: Computation) =
+# Using `proc` as `selfDestructLen()` might be `proc` in logging mode
+proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
   let num  = c.vmState.stateDB.selfDestructLen
   c.gasMeter.refundGas(cost * num)

@@ -127,6 +127,9 @@ func toStr*(w: openArray[byte]): string =
 func toStr*(w: set[CoreDbCaptFlags]): string =
   "Flags[" & $w.len & "]"
 
+proc toStr*(rc: CoreDbRc[int]): string =
+  if rc.isOk: "ok(" & $rc.value & ")" else: "err(" & rc.error.toStr & ")"
+
 proc toStr*(rc: CoreDbRc[bool]): string =
   if rc.isOk: "ok(" & $rc.value & ")" else: "err(" & rc.error.toStr & ")"
 
@@ -171,11 +174,11 @@ template beginNewApi*(w: CoreDbApiTrackRef; s: static[CoreDbFnInx]) =
   let bnaStart {.inject.} = getTime() # Local use only
 
 template endNewApiIf*(w: CoreDbApiTrackRef; code: untyped) =
-  block:
+  block body:
     when typeof(w) is CoreDbRef:
       let db = w
     else:
-      if w.isNil: break
+      if w.isNil: break body
       let db = w.parent
     when CoreDbEnableApiProfiling:
       let elapsed {.inject,used.} = getTime() - bnaStart

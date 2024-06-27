@@ -47,9 +47,7 @@ iterator replicatePersistent*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
       yield (k,v)
   else:
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
-  mpt.ifTrackNewApi:
-    let trie = mpt.methods.getColFn()
-    debug newApiTxt, api, elapsed, trie
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

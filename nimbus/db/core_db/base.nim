@@ -19,10 +19,18 @@ from ../aristo
   import EmptyBlob, isValid
 
 const
+  EnableAccountKeyValidation = defined(release).not
+    ## If this flag is enabled, the length of an account key is verified
+    ## to habe exactly 32 bytes. An assert is thrown if seen otherwise (a
+    ## notoriously week spot of the `openArray[byte]` argument type.)
+
   EnableApiTracking = false
     ## When enabled, functions using this tracking facility need to import
-    ## `chronicles`, as well. Tracking is enabled by setting `true` the flags
-    ## `trackLegaApi` and/or `trackNewApi` in the `CoreDbTxRef` descriptor.
+    ## `chronicles`, as well. Also, some `func` designators might need to
+    ## be changed to `proc` for possible side effects.
+    ##
+    ## Tracking noise is then enabled by setting the flag `trackNewApi` to
+    ## `true` in the `CoreDbRef` descriptor.
 
   EnableApiProfiling = true
     ## Enables functions profiling if `EnableApiTracking` is also set `true`.
@@ -79,7 +87,8 @@ when EnableApiTracking:
     {.warning: "*** Provided API logging for CoreDB (disabled by default)".}
 
   import
-    std/times
+    std/times,
+    chronicles
 
   proc `$`[T](rc: CoreDbRc[T]): string = rc.toStr
   proc `$`(q: set[CoreDbCaptFlags]): string = q.toStr
@@ -337,9 +346,7 @@ proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ##
   mpt.setTrackNewApi MptFetchFn
   result = mpt.methods.fetchFn(mpt, key)
-  mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn(mpt)
-    debug newApiTxt, api, elapsed, col, key=key.toStr, result
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function returns an empty `Blob` if the argument `key` is not found
@@ -349,16 +356,12 @@ proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   result = mpt.methods.fetchFn(mpt, key)
   if result.isErr and result.error.error == MptNotFound:
     result = CoreDbRc[Blob].ok(EmptyBlob)
-  mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn(mpt)
-    debug newApiTxt, api, elapsed, col, key=key.toStr, result
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc delete*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[void] =
   mpt.setTrackNewApi MptDeleteFn
   result = mpt.methods.deleteFn(mpt, key)
-  mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn()
-    debug newApiTxt, api, elapsed, col, key=key.toStr, result
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc merge*(
     mpt: CoreDbMptRef;
@@ -368,8 +371,7 @@ proc merge*(
   mpt.setTrackNewApi MptMergeFn
   result = mpt.methods.mergeFn(mpt, key, val)
   mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn(mpt)
-    debug newApiTxt, api, elapsed, col, key=key.toStr, val=val.toLenStr, result
+    debug newApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
 
 proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
   ## This function would be named `contains()` if it returned `bool` rather
@@ -377,9 +379,7 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
   ##
   mpt.setTrackNewApi MptHasPathFn
   result = mpt.methods.hasPathFn(mpt, key)
-  mpt.ifTrackNewApi:
-    let col = mpt.methods.getColFn(mpt)
-    debug newApiTxt, api, elapsed, col, key=key.toStr, result
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
   ## This function retrieves the Merkle state hash of the argument
@@ -401,54 +401,81 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
   ##
   ctx.setTrackNewApi CtxGetAccountsFn
   result = ctx.methods.getAccountsFn(ctx)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed, col, result
+  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ----------- accounts ---------------
 
-proc fetch*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[CoreDbAccount] =
+proc fetch*(
+    acc: CoreDbAccRef;
+    accPath: openArray[byte];
+      ): CoreDbRc[CoreDbAccount] =
   ## Fetch the account data record for the particular account indexed by
-  ## the address `eAddr`.
+  ## the key `accPath`.
   ##
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccFetchFn
-  result = acc.methods.fetchFn(acc, eAddr)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+  result = acc.methods.fetchFn(acc, accPath)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
-proc delete*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
-  ## Delete the particular account indexed by the address `eAddr`. This
+proc delete*(
+    acc: CoreDbAccRef;
+    accPath: openArray[byte];
+      ): CoreDbRc[void] =
+  ## Delete the particular account indexed by the key `accPath`. This
   ## will also destroy an associated storage area.
   ##
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccDeleteFn
-  result = acc.methods.deleteFn(acc, eAddr)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, address, result
+  result = acc.methods.deleteFn(acc, accPath)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
-proc clearStorage*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[void] =
+proc clearStorage*(
+    acc: CoreDbAccRef;
+    accPath: openArray[byte];
+      ): CoreDbRc[void] =
   ## Delete all data slots from the storage area associated with the
-  ## particular account indexed by the address `eAddr`.
+  ## particular account indexed by the key `accPath`.
   ##
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccClearStorageFn
-  result = acc.methods.clearStorageFn(acc, eAddr)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+  result = acc.methods.clearStorageFn(acc, accPath)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
-proc merge*(acc: CoreDbAccRef; account: CoreDbAccount): CoreDbRc[void] =
+proc merge*(
+    acc: CoreDbAccRef;
+    accPath: openArray[byte];
+    accRec: CoreDbAccount;
+      ): CoreDbRc[void] =
   ## Add or update the argument account data record `account`. Note that the
   ## `account` argument uniquely idendifies the particular account address.
   ##
   acc.setTrackNewApi AccMergeFn
-  result = acc.methods.mergeFn(acc, account)
+  result = acc.methods.mergeFn(acc, accPath, accRec)
   acc.ifTrackNewApi:
-    let eAddr = account.address
-    debug newApiTxt, api, elapsed, eAddr, result
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
-proc hasPath*(acc: CoreDbAccRef; eAddr: EthAddress): CoreDbRc[bool] =
+proc hasPath*(
+    acc: CoreDbAccRef;
+    accPath: openArray[byte];
+      ): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccHasPathFn
-  result = acc.methods.hasPathFn(acc, eAddr)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+  result = acc.methods.hasPathFn(acc, accPath)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
 proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
   ## This function retrieves the Merkle state hash of the accounts
-  ## column (if acvailable.)
+  ## column (if available.)
   ##
   ## If the argument `updateOk` is set `true`, the Merkle hashes of the
   ## database will be updated first (if needed, at all).
@@ -461,94 +488,133 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
 
 proc slotFetch*(
     acc: CoreDbAccRef;
-    eAddr: EthAddress;
+    accPath: openArray[byte];
     slot: openArray[byte];
       ):  CoreDbRc[Blob] =
+  ## Like `fetch()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotFetchFn
-  result = acc.methods.slotFetchFn(acc, eAddr, slot)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+  result = acc.methods.slotFetchFn(acc, accPath, slot)
+  acc.ifTrackNewApi:
+    doAssert accPath.len == 32
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr,
+            slot=slot.toStr, result
 
 proc slotDelete*(
     acc: CoreDbAccRef;
-    eAddr: EthAddress;
+    accPath: openArray[byte];
     slot: openArray[byte];
       ):  CoreDbRc[void] =
+  ## Like `delete()` but with cascaded index `(accPath,slot)`.
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotDeleteFn
-  result = acc.methods.slotDeleteFn(acc, eAddr, slot)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+  result = acc.methods.slotDeleteFn(acc, accPath, slot)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr,
+            slot=slot.toStr, result
 
 proc slotHasPath*(
     acc: CoreDbAccRef;
-    eAddr: EthAddress;
+    accPath: openArray[byte];
     slot: openArray[byte];
       ):  CoreDbRc[bool] =
+  ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotHasPathFn
-  result = acc.methods.slotHasPathFn(acc, eAddr, slot)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+  result = acc.methods.slotHasPathFn(acc, accPath, slot)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr,
+            slot=slot.toStr, result
 
 proc slotMerge*(
     acc: CoreDbAccRef;
-    eAddr: EthAddress;
+    accPath: openArray[byte];
     slot: openArray[byte];
     data: openArray[byte];
       ):  CoreDbRc[void] =
+  ## Like `merge()` but with cascaded index `(accPath,slot)`.
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotMergeFn
-  result = acc.methods.slotMergeFn(acc, eAddr, slot, data)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, result
+  result = acc.methods.slotMergeFn(acc, accPath, slot, data)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr,
+            slot=slot.toStr, result
 
 proc slotState*(
     acc: CoreDbAccRef;
-    eAddr: EthAddress;
+    accPath: openArray[byte];
     updateOk = false;
       ):  CoreDbRc[Hash256] =
+  ## This function retrieves the Merkle state hash of the storage data
+  ## column (if available) related to the account  indexed by the key
+  ## `accPath`.`.
+  ##
+  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
+  ## database will be updated first (if needed, at all).
+  ##
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotStateFn
-  result = acc.methods.slotStateFn(acc, eAddr, updateOk)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+  result = acc.methods.slotStateFn(acc, accPath, updateOk)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, updateOk, result
 
 proc slotStateEmpty*(
     acc: CoreDbAccRef;
-    eAddr: EthAddress;
+    accPath: openArray[byte];
       ):  CoreDbRc[bool] =
-  ## ...
+  ## This function returns `true` if the storage data column is empty or
+  ## missing.
+  ##
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotStateEmptyFn
-  result = acc.methods.slotStateEmptyFn(acc, eAddr)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+  result = acc.methods.slotStateEmptyFn(acc, accPath)
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
 proc slotStateEmptyOrVoid*(
     acc: CoreDbAccRef;
-    eAddr: EthAddress;
+    accPath: openArray[byte];
       ): bool =
   ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
-  result = acc.methods.slotStateEmptyFn(acc, eAddr).valueOr: true
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, eAddr, updateOk, result
+  result = acc.methods.slotStateEmptyFn(acc, accPath).valueOr: true
+  acc.ifTrackNewApi:
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
 # ------------- other ----------------
 
 proc recast*(
     acc: CoreDbAccRef;
-    statement: CoreDbAccount;
+    accPath: openArray[byte];
+    accRec: CoreDbAccount;
     updateOk = false;
       ): CoreDbRc[Account] =
   ## Convert the argument `statement` to the portable Ethereum representation
   ## of an account statement. This conversion may fail if the storage colState
   ## hash (see `hash()` above) is currently unavailable.
   ##
-  ## Note:
-  ##   With the legacy backend, this function always succeeds.
-  ##
+  when EnableAccountKeyValidation:
+    doAssert accPath.len == 32
   acc.setTrackNewApi EthAccRecastFn
-  let rc = acc.methods.slotStateFn(acc, statement.address, updateOk)
+  let rc = acc.methods.slotStateFn(acc, accPath, updateOk)
   result =
     if rc.isOk:
       ok Account(
-        nonce:       statement.nonce,
-        balance:     statement.balance,
-        codeHash:    statement.codeHash,
+        nonce:       accRec.nonce,
+        balance:     accRec.balance,
+        codeHash:    accRec.codeHash,
         storageRoot: rc.value)
     else:
       err(rc.error)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, storage, result
+  acc.ifTrackNewApi:
+    let slotState = if rc.isOk: rc.value.toStr else: "n/a"
+    debug newApiTxt, api, elapsed, accPath=accPath.toStr, slotState, result
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods

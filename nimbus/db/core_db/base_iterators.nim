@@ -58,17 +58,19 @@ iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
     raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-iterator slotPairs*(acc: CoreDbAccRef; eAddr: EthAddress): (Blob, Blob) =
+iterator slotPairs*(acc: CoreDbAccRef; accPath: openArray[byte]): (Blob, Blob) =
   ## Trie traversal, only supported for `CoreDbMptRef`
   ##
   acc.setTrackNewApi AccSlotPairsIt
   case acc.parent.dbType:
   of AristoDbMemory, AristoDbRocks, AristoDbVoid:
-    for k,v in acc.aristoSlotPairs(eAddr):
+    for k,v in acc.aristoSlotPairs accPath:
       yield (k,v)
   of Ooops:
     raiseAssert: "Unsupported database type: " & $acc.parent.dbType
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed
+  acc.ifTrackNewApi:
+    doAssert accPath.len == 32
+    debug newApiTxt, api, elapsed
 
 iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
   ## Low level trie dump, only supported for non persistent `CoreDbMptRef`

@@ -331,13 +331,13 @@ proc deleteImpl(
 
 proc deleteAccountRecord*(
     db: AristoDbRef;
-    path: openArray[byte];
+    accPath: openArray[byte];
       ): Result[void,AristoError] =
   ## Delete the account leaf entry addressed by the argument `path`. If this
   ## leaf entry referres to a storage tree, this one will be deleted as well.
   ##
   let
-    hike = NibblesBuf.fromBytes(path).hikeUp(VertexID(1), db).valueOr:
+    hike = accPath.hikeUp(VertexID(1), db).valueOr:
       if error[1] in HikeAcceptableStopsNotFound:
         return err(DelPathNotFound)
       return err(error[1])
@@ -374,7 +374,7 @@ proc deleteGenericData*(
   elif LEAST_FREE_VID <= root.distinctBase:
     return err(DelStoRootNotAccepted)
 
-  let hike = NibblesBuf.fromBytes(path).hikeUp(root, db).valueOr:
+  let hike = path.hikeUp(root, db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return err(DelPathNotFound)
     return err(error[1])
@@ -403,12 +403,12 @@ proc deleteGenericTree*(
 
 proc deleteStorageData*(
     db: AristoDbRef;
-    path: openArray[byte];
-    accPath: PathID;                   # Needed for accounts payload
+    accPath: openArray[byte];          # Implies storage data tree
+    stoPath: openArray[byte];
       ): Result[bool,AristoError] =
   ## For a given account argument `accPath`, this function deletes the
-  ## argument `path` from the associated storage tree (if any, at all.) If
-  ## the if the argument `path` deleted was the last one on the storage tree,
+  ## argument `stoPath` from the associated storage tree (if any, at all.) If
+  ## the if the argument `stoPath` deleted was the last one on the storage tree,
   ## account leaf referred to by `accPath` will be updated so that it will
   ## not refer to a storage tree anymore. In the latter case only the function
   ## will return `true`.
@@ -424,7 +424,7 @@ proc deleteStorageData*(
   if not stoID.isValid:
     return err(DelStoRootMissing)
 
-  let stoHike = NibblesBuf.fromBytes(path).hikeUp(stoID, db).valueOr:
+  let stoHike = stoPath.hikeUp(stoID, db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return err(DelPathNotFound)
     return err(error[1])
@@ -448,7 +448,7 @@ proc deleteStorageData*(
 
 proc deleteStorageTree*(
     db: AristoDbRef;                   # Database, top layer
-    accPath: PathID;                   # Needed for accounts payload
+    accPath: openArray[byte];          # Implies storage data tree
       ): Result[void,AristoError] =
   ## Variant of `deleteStorageData()` for purging the whole storage tree
   ## associated to the account argument `accPath`.

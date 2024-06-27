@@ -40,7 +40,7 @@ const
   EnableExtraLoggingControl = true
 var
   logStartTime {.used.} = Time()
-  logSavedEnv {.used.}: (bool,bool,bool)
+  logSavedEnv {.used.}: (bool,bool)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -66,18 +66,15 @@ template initLogging(noisy: bool, com: CommonRef) =
       setDebugLevel()
       debug "start undumping into persistent blocks"
     logStartTime = Time()
-    logSavedEnv = (com.db.trackLegaApi, com.db.trackNewApi,
-                   com.db.trackLedgerApi)
+    logSavedEnv = (com.db.trackNewApi, com.db.trackLedgerApi)
     setErrorLevel()
-    com.db.trackLegaApi = true
     com.db.trackNewApi = true
     com.db.trackLedgerApi = true
 
 proc finishLogging(com: CommonRef) =
   when EnableExtraLoggingControl:
     setErrorLevel()
-    (com.db.trackLegaApi, com.db.trackNewApi,
-     com.db.trackLedgerApi) = logSavedEnv
+    (com.db.trackNewApi, com.db.trackLedgerApi) = logSavedEnv
 
 
 template startLogging(noisy: bool; num: BlockNumber) =
@@ -238,7 +235,6 @@ proc test_chainSync*(
           if noisy:
             noisy.whisper "***", "Re-run with logging enabled...\n"
             setTraceLevel()
-            com.db.trackLegaApi = false
             com.db.trackNewApi = false
             com.db.trackLedgerApi = false
             discard chain.persistBlocks(w)

@@ -22,7 +22,8 @@ import
 const
   EnableApiTracking = false
     ## When enabled, API functions are logged. Tracking is enabled by setting
-    ## the `trackApi` flag to `true`.
+    ## the `trackApi` flag to `true`. This setting is typically inherited from
+    ## the `CoreDb` descriptor flag `trackLedgerApi`.
 
   EnableApiProfiling = true
     ## Enable functions profiling (only if `EnableApiTracking` is set `true`.)
@@ -61,6 +62,7 @@ when EnableApiTracking:
     std/times,
     chronicles
 
+  func `$`(w: CodeBytesRef): string {.used.} = w.toStr
   func `$`(e: Duration): string {.used.} = e.toStr
   func `$`(c: CoreDbMptRef): string {.used.} = c.toStr
   func `$`(l: seq[Log]): string {.used.} = l.toStr
@@ -87,7 +89,7 @@ proc bless*(ldg: LedgerRef; db: CoreDbRef): LedgerRef =
     ldg.trackApi = db.trackLedgerApi
   when LedgerEnableApiProfiling:
     ldg.profTab = db.ldgProfData()
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, ldgType=ldg.ldgType
+  ldg.ifTrackApi: debug apiTxt, api, elapsed
   ldg
 
 # ------------------------------------------------------------------------------
@@ -180,7 +182,7 @@ proc getBalance*(ldg: LedgerRef, eAddr: EthAddress): UInt256 =
 proc getCode*(ldg: LedgerRef, eAddr: EthAddress): CodeBytesRef =
   ldg.beginTrackApi LdgGetCodeFn
   result = ldg.ac.getCode(eAddr)
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, result=result.toStr
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr, result
 
 proc getCodeHash*(ldg: LedgerRef, eAddr: EthAddress): Hash256  =
   ldg.beginTrackApi LdgGetCodeHashFn

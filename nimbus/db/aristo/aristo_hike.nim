@@ -165,6 +165,14 @@ proc hikeUp*(
   ## Variant of `hike()`
   lty.path.to(NibblesBuf).hikeUp(lty.root, db)
 
+proc hikeUp*(
+    path: openArray[byte];
+    root: VertexID;
+    db: AristoDbRef;
+      ): Result[Hike,(VertexID,AristoError,Hike)] =
+  ## Variant of `hike()`
+  NibblesBuf.fromBytes(path).hikeUp(root, db)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
