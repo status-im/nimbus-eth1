@@ -20,11 +20,11 @@ const
   # example from clique, signer: 658bdf435d810c91414ec09147daa6db62406379
   prvKey = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
 
-proc signature(tx: Transaction; key: PrivateKey): (int64,UInt256,UInt256) =
+proc signature(tx: Transaction; key: PrivateKey): (uint64,UInt256,UInt256) =
   let
     hashData = tx.txHashNoSignature.data
     signature = key.sign(SkMessage(hashData)).toRaw
-    v = signature[64].int64
+    v = signature[64].uint64
 
   result[1] = UInt256.fromBytesBE(signature[0..31])
   result[2] = UInt256.fromBytesBE(signature[32..63])
@@ -33,12 +33,12 @@ proc signature(tx: Transaction; key: PrivateKey): (int64,UInt256,UInt256) =
     if tx.V >= EIP155_CHAIN_ID_OFFSET:
       # just a guess which does not always work .. see `txModPair()`
       # see https://eips.ethereum.org/EIPS/eip-155
-      result[0] = (tx.V and not 1'i64) or (not v and 1)
+      result[0] = (tx.V and not 1'u64) or (not v and 1'u64)
     else:
       result[0] = 27 + v
   else:
     # currently unsupported, will skip this one .. see `txModPair()`
-    result[0] = -1
+    result[0] = 0'u64
 
 
 proc sign(tx: Transaction; key: PrivateKey): Transaction =

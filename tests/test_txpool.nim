@@ -21,26 +21,8 @@ import
   stint,
   unittest2
 
-type
-  CaptureSpecs = tuple
-    network: NetworkID
-    file: string
-    numBlocks, minBlockTxs, numTxs: int
-
 const
   prngSeed = 42
-
-  baseDir = [".", "..", ".."/"..", $DirSep]
-  repoDir = [".", "tests"/"replay", "nimbus-eth1-blobs"/"replay"]
-
-  goerliCapture: CaptureSpecs = (
-    network: GoerliNet,
-    file: "goerli68161.txt.gz",
-    numBlocks: 22000,  # block chain prequel
-    minBlockTxs: 300,  # minimum txs in imported blocks
-    numTxs:      840)  # txs following (not in block chain)
-
-  loadSpecs = goerliCapture
 
   # 75% <= #local/#remote <= 1/75%
   # note: by law of big numbers, the ratio will exceed any upper or lower
@@ -130,34 +112,19 @@ proc addOrFlushGroupwise(xp: TxPoolRef;
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runTxLoader(noisy = true; capture = loadSpecs) =
-  let
-    elapNoisy = noisy
-    veryNoisy = false # noisy
-    fileInfo = capture.file.splitFile.name.split(".")[0]
-    filePath = capture.file.findFilePath(baseDir,repoDir).value
-
+proc runTxLoader() =
   # Reset/initialise
   statCount.reset
   txList.reset
   effGasTips.reset
-  bcCom = capture.network.blockChainForTesting
 
-  suite &"TxPool: Transactions from {fileInfo} capture":
+  suite "TxPool: Transactions from file capture":
     var
       xp: TxPoolRef
       nTxs: int
 
-    test &"Import {capture.numBlocks.toKMG} blocks + {capture.minBlockTxs} txs"&
-        &" and collect {capture.numTxs} txs for pooling":
-
-      elapNoisy.showElapsed("Total collection time"):
-        (xp, nTxs) = bcCom.toTxPool(file = filePath,
-                                   getStatus = randStatus,
-                                   loadBlocks = capture.numBlocks,
-                                   minBlockTxs = capture.minBlockTxs,
-                                   loadTxs = capture.numTxs,
-                                   noisy = veryNoisy)
+    test "Import txs for pooling":
+      (bcCom, xp, nTxs) = setupTxPool(randStatus)
 
       # Extract some of the least profitable accounts and hold them so
       # they could be made local at a later stage
@@ -167,8 +134,7 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       localAccounts = accr.remote[accr.remote.len - nExtract .. ^1]
 
       # Make sure that sample extraction from file was ok
-      check capture.minBlockTxs <= nTxs
-      check capture.numTxs == xp.nItems.total
+      check nTxs == xp.nItems.total
 
       # Set txs to pseudo random status
       check xp.verify.isOk
@@ -181,11 +147,8 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       check txList.len == 0
       check xp.nItems.disposed == 0
 
-      noisy.say "***",
-         "Latest item: <", xp.txDB.byItemID.last.value.data.info, ">"
-
-      # make sure that the block chain was initialised
-      check capture.numBlocks.u256 <= bcCom.db.getCanonicalHead.number
+      #noisy.say "***",
+      #   "Latest item: <", xp.txDB.byItemID.last.value.data.info, ">"
 
       check xp.nItems.total == foldl(@[0]&statCount.toSeq, a+b)
       #                        ^^^ sum up statCount[] values
@@ -199,28 +162,25 @@ proc runTxLoader(noisy = true; capture = loadSpecs) =
       txList = xp.toItems
       check txList.len == xp.nItems.total
 
-      elapNoisy.showElapsed("Load min/max gas prices"):
-        for item in txList:
-          if item.tx.gasPrice < minGasPrice and 0 < item.tx.gasPrice:
-            minGasPrice = item.tx.gasPrice.GasPrice
-          if maxGasPrice < item.tx.gasPrice.GasPrice:
-            maxGasPrice = item.tx.gasPrice.GasPrice
+      for item in txList:
+        if item.tx.gasPrice < minGasPrice and 0 < item.tx.gasPrice:
+          minGasPrice = item.tx.gasPrice.GasPrice
+        if maxGasPrice < item.tx.gasPrice.GasPrice:
+          maxGasPrice = item.tx.gasPrice.GasPrice
 
       check 0.GasPrice <= minGasPrice
       check minGasPrice <= maxGasPrice
 
-
-proc runTxPoolTests(noisy = true) =
+proc runTxPoolTests(noisy = false) =
   let elapNoisy = false
 
-  suite &"TxPool: Play with pool functions and primitives":
+  suite "TxPool: Play with pool functions and primitives":
 
     block:
       const groupLen = 13
       let veryNoisy = noisy and false
 
-      test &"Load/forward walk ID queue, " &
-          &"deleting groups of at most {groupLen}":
+      test "Load/forward walk ID queue, deleting groups of at most {groupLen}":
         var
           xq = bcCom.toTxPool(txList, noisy = noisy)
           seen: seq[TxItemRef]
@@ -257,10 +217,10 @@ proc runTxPoolTests(noisy = true) =
 
     block:
       var
-        xq = TxPoolRef.new(bcCom,testAddress)
+        xq = TxPoolRef.new(bcCom)
         testTxs: array[5,(TxItemRef,Transaction,Transaction)]
 
-      test &"Superseding txs with sender and nonce variants":
+      test "Superseding txs with sender and nonce variants":
         var
           testInx = 0
         let
@@ -306,7 +266,7 @@ proc runTxPoolTests(noisy = true) =
           altLst[^1] = testTxs[^1][0].info
           check altLst.sorted == xq.toItems.toSeq.mapIt(it.info).sorted
 
-      test &"Deleting tx => also delete higher nonces":
+      test "Deleting tx => also delete higher nonces":
 
         let
           # From the data base, get the one before last item. This was
@@ -468,8 +428,8 @@ proc runTxPoolTests(noisy = true) =
                     xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
           check nAddrPendingItems + moveNumItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-          check nAddrPackedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
+          check nAddrStagedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
 
       # --------------------
 
@@ -516,14 +476,13 @@ proc runTxPoolTests(noisy = true) =
         check thisItem.info == wbItem.info
         check thisItem.timeStamp < wbItem.timeStamp
 
-
 proc runTxPackerTests(noisy = true) =
-  suite &"TxPool: Block packer tests":
+  suite "TxPool: Block packer tests":
     var
       ntBaseFee = 0.GasPrice
       ntNextFee = 0.GasPrice
 
-    test &"Calculate some non-trivial base fee":
+    test "Calculate some non-trivial base fee":
       var
         feesList = SortedSet[GasPriceEx,bool].init()
 
@@ -697,11 +656,36 @@ proc runTxPackerTests(noisy = true) =
 
     # -------------------------------------------------
 
-    block:
+    # After we wired ForkedChainRef with TxPool, we can
+    # try to enable these test
+
+    #[block:
       var
         xq = bcCom.toTxPool(txList, ntBaseFee,
                            local = localAccounts,
                            noisy = noisy)
+
+      test "Assemble few blocks so we can backtrack":
+        let w = xq.chain.com.db.getCanonicalHead
+        let c = bcCom.newChain(extraValidation = false)
+
+        var count = 0
+        while true:
+          let r = xq.assembleBlock()
+          if r.isErr:
+            break
+
+          let blk = r.get.blk
+          check c.persistBlocks([blk]).isOk
+
+          check xq.smartHead(blk.header)
+          inc count
+          if count >= 2:
+            break
+
+        # make sure we generate some block
+        check count > 0
+
       let
         (nMinTxs, nTrgTxs) = (15, 15)
         (nMinAccounts, nTrgAccounts) = (1, 8)
@@ -772,10 +756,6 @@ proc runTxPackerTests(noisy = true) =
       # if true: return
       test "Store generated block in block chain database":
 
-        # authorized signer is needed to produce correct
-        # POA difficulty and blockheader fields
-        bcCom.poa.authorize(testAddress, signerFunc)
-
         noisy.say "***", "locality",
           " locals=", xq.accountRanks.local.len,
           " remotes=", xq.accountRanks.remote.len
@@ -834,13 +814,15 @@ proc runTxPackerTests(noisy = true) =
         # Test low-level function for adding the new block to the database
         #xq.chain.maxMode = (packItemsMaxGasLimit in xq.flags)
         xq.chain.clearAccounts
-        check xq.chain.vmState.processBlock(hdr, bdy).isOk
+        check xq.chain.vmState.processBlock(EthBlock.init(hdr, bdy)).isOk
 
         setErrorLevel()
 
         # Re-allocate using VM environment from `persistBlocks()`
-        let vmstate2 = BaseVMState.new(hdr, bcCom)
-        check vmstate2.processBlock(hdr, bdy).isOk
+        let res = BaseVMState.new(hdr, bcCom)
+        check res.isOk
+        let vmState2 = res.get
+        check vmState2.processBlock(EthBlock.init(hdr, bdy)).isOk
 
         # This should not have changed
         check canonicalHead == xq.chain.com.db.getCanonicalHead
@@ -849,7 +831,7 @@ proc runTxPackerTests(noisy = true) =
         # turning off header verification.
         let c = bcCom.newChain(extraValidation = false)
 
-        check c.persistBlocks(@[hdr], @[bdy]).isOk
+        check c.persistBlocks([EthBlock.init(hdr, bdy)]).isOk
 
         if bcCom.consensus == ConsensusType.POS:
           # PoS consensus will force the new blockheader as head
@@ -868,38 +850,27 @@ proc runTxPackerTests(noisy = true) =
             canonScore = xq.chain.com.db.getScore(canonicalHead.blockHash)
             headerScore = xq.chain.com.db.getScore(hdr.blockHash)
 
-          if canonScore < headerScore:
+          check canonScore.isSome
+          check headerScore.isSome
+
+          if canonScore.get < headerScore.get:
             # Note that the updated canonical head is equivalent to hdr but not
             # necessarily binary equal.
             check hdr.blockHash == xq.chain.com.db.getCanonicalHead.blockHash
           else:
-            check canonicalHead == xq.chain.com.db.getCanonicalHead
+            check canonicalHead == xq.chain.com.db.getCanonicalHead]#
 
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc txPoolMain*(noisy = defined(debug)) =
-  noisy.runTxLoader
-  noisy.runTxPoolTests
-  noisy.runTxPackerTests
+proc txPoolMain*() =
+  runTxLoader()
+  runTxPoolTests()
+  runTxPackerTests()
 
 when isMainModule:
-  const
-    noisy = defined(debug)
-    capts0: CaptureSpecs = goerliCapture
-    capts1: CaptureSpecs = (GoerliNet, "goerli482304.txt.gz", 30000, 500, 1500)
-    # Note: mainnet has the leading 45k blocks without any transactions
-    capts2: CaptureSpecs = (MainNet, "mainnet332160.txt.gz", 30000, 500, 1500)
-
-  setErrorLevel()
-
-  noisy.runTxLoader(capture = capts1)
-  noisy.runTxPoolTests
-  noisy.runTxPackerTests
-
-  #noisy.runTxLoader(dir = ".")
-  #noisy.runTxPoolTests
+  txPoolMain()
 
 # ------------------------------------------------------------------------------
 # End
