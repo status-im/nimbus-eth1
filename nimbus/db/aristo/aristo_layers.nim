@@ -29,9 +29,6 @@ func dup(sTab: Table[VertexID,VertexRef]): Table[VertexID,VertexRef] =
 # Public getters: lazy value lookup for read only versions
 # ------------------------------------------------------------------------------
 
-func dirty*(db: AristoDbRef): lent HashSet[VertexID] =
-  db.top.final.dirty
-
 func pPrf*(db: AristoDbRef): lent HashSet[VertexID] =
   db.top.final.pPrf
 
@@ -85,13 +82,10 @@ func layersGetKey*(db: AristoDbRef; vid: VertexID): Opt[HashKey] =
   ## hash key if it is stored on the cache that way.
   ##
   db.top.delta.kMap.withValue(vid, item):
-    # This is ok regardless of the `dirty` flag. If this vertex has become
-    # dirty, there is an empty `kMap[]` entry on this layer.
     return Opt.some(item[])
 
   for w in db.rstack:
     w.delta.kMap.withValue(vid, item):
-      # Same reasoning as above regarding the `dirty` flag.
       return ok(item[])
 
   Opt.none(HashKey)
@@ -126,7 +120,6 @@ func layersPutVtx*(
       ) =
   ## Store a (potentally empty) vertex on the top layer
   db.top.delta.sTab[vid] = vtx
-  # db.top.final.dirty.incl root
 
 func layersResVtx*(
     db: AristoDbRef;
@@ -146,7 +139,6 @@ func layersPutKey*(
       ) =
   ## Store a (potentally void) hash key on the top layer
   db.top.delta.kMap[vid] = key
-  # db.top.final.dirty.incl root # Modified top cache layers => hashify
 
 
 func layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =

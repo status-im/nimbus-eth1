@@ -358,12 +358,10 @@ assumed, i.e. the list with the single vertex ID *1*.
 ### 4.7 Serialisation of a last saved state record
 
          0 +--+--+--+--+--+ .. --+--+ .. --+
-           |                               | -- 32 bytes source state hash
+           |                               | -- 32 bytes state hash
         32 +--+--+--+--+--+ .. --+--+ .. --+
-           |                               | -- 32 bytes target state hash
-        64 +--+--+--+--+--+ .. --+--+ .. --+
            |                       |         -- state number/block number
-        72 +--+--+--+--+--+--+--+--+
+        40 +--+--+--+--+--+--+--+--+
            |  |                              -- marker(8), 0x7f
            +--+
 

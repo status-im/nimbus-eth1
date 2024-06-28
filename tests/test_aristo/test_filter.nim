@@ -12,7 +12,6 @@
 ##
 
 import
-  std/sets,
   eth/common,
   results,
   unittest2,
@@ -23,7 +22,6 @@ import
     aristo_debug,
     aristo_desc,
     aristo_get,
-    aristo_layers,
     aristo_persistent,
     aristo_tx],
   ../replay/xcheck,
@@ -170,8 +168,7 @@ proc isDbEq(a, b: LayerDeltaRef; db: AristoDbRef; noisy = true): bool =
   if b.isNil:
     return false
   if unsafeAddr(a[]) != unsafeAddr(b[]):
-    if a.src != b.src or
-       a.kMap.getOrVoid(testRootVid) != b.kMap.getOrVoid(testRootVid) or
+    if a.kMap.getOrVoid(testRootVid) != b.kMap.getOrVoid(testRootVid) or
        a.vTop != b.vTop:
       return false
 

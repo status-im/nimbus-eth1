@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[algorithm, sequtils, tables],
   eth/common,
   stew/interval_set,
   results,
@@ -31,9 +31,9 @@ proc checkTop*(
     proofMode = false;                 # Has proof nodes
       ): Result[void,(VertexID,AristoError)] =
   ## Verify that the cache structure is correct as it would be after `merge()`
-  ## and `hashify()` operations. Unless `proofMode` is set `true` it would not
-  ## fully check against the backend, which is typically not applicable after
-  ## `delete()` operations.
+  ## operations. Unless `proofMode` is set `true` it would not fully check
+  ## against the backend, which is typically not applicable after `delete()`
+  ## operations.
   ##
   ## The following is verified:
   ##

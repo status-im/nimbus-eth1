@@ -87,7 +87,7 @@ let
   mainTest0m* = mainSample
     .cloneWith(
       name      = "-am-some",
-      numBlocks = 5) # 1_000)
+      numBlocks = 1_000)
 
   mainTest1m* = mainSample
     .cloneWith(

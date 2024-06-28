@@ -69,8 +69,7 @@ proc deltaPersistent*(
   defer: updateSiblings.rollback()
 
   let lSst = SavedState(
-    src: db.balancer.src,
-    trg: db.balancer.kMap.getOrVoid(VertexID 1),
+    key:  EMPTY_ROOT_HASH,                       # placeholder for more
     serial: nxtFid)
 
   # Store structural single trie entries

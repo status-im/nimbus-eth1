@@ -11,13 +11,10 @@
 {.push raises: [].}
 
 import
-  chronicles,
   eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise]
 
-logScope:
-  topics = "aristo-hashify"
 
 proc computeKey*(
     db: AristoDbRef;                   # Database, top layer

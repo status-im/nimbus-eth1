@@ -17,7 +17,7 @@ import
   std/tables,
   results,
   ../aristo_delta/delta_merge,
-  ".."/[aristo_desc, aristo_get, aristo_delta, aristo_layers, aristo_hashify]
+  ".."/[aristo_desc, aristo_get, aristo_delta, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -69,9 +69,6 @@ proc topMerge(db: AristoDbRef; src: HashKey): Result[void,AristoError] =
       VOID_HASH_KEY
     else:
       return err(rc.error)
-
-  # Update layer for merge call
-  db.top.delta.src = src
 
   # This one will return the `db.top.delta` if `db.balancer.isNil`
   db.balancer = db.deltaMerge(db.top.delta, db.balancer, ubeRoot).valueOr:

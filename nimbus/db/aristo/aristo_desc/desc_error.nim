@@ -23,8 +23,6 @@ type
     BlobifyLeafPathOverflow
     BlobifyNilFilter
     BlobifyNilVertex
-    BlobifyStateSrcLenGarbled
-    BlobifyStateTrgLenGarbled
 
 
     # Cache checker `checkCache()`
@@ -155,12 +153,6 @@ type
     GetLstNotFound
     GetTuvNotFound
     GetVtxNotFound
-
-
-    # Update `Merkle` hashes `hashify()`
-    HashifyVtxUnresolved
-    HashifyRootVtxUnresolved
-    HashifyProofHashMismatch
 
 
     # Path function `hikeUp()`

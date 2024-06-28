@@ -17,7 +17,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_hashify, aristo_hike]
+  "."/[aristo_compute, aristo_desc, aristo_get, aristo_hike]
 
 # ------------------------------------------------------------------------------
 # Private functions

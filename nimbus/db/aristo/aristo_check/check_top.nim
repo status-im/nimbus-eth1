@@ -42,7 +42,7 @@ proc checkTopStrict*(
       if key != node.digestTo(HashKey):
         return err((vid,CheckStkVtxKeyMismatch))
 
-    elif db.dirty.len == 0 or db.layersGetKey(vid).isErr:
+    elif db.layersGetKey(vid).isErr:
       # So `vtx` exists but not `key`, so cache is supposed dirty and the
       # vertex has a zero entry.
       return err((vid,CheckStkVtxKeyMissing))

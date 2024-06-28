@@ -16,8 +16,7 @@
 import
   eth/common,
   results,
-  "."/[aristo_constants, aristo_desc, aristo_hashify, aristo_init,
-       aristo_merge]
+  "."/[aristo_compute, aristo_constants, aristo_desc, aristo_init, aristo_merge]
 
 # ------------------------------------------------------------------------------
 # Public functions, signature generator

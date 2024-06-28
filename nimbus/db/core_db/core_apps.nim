@@ -334,20 +334,24 @@ proc getSavedStateBlockNumber*(
   ##
   ## This function verifies the state consistency of the database and throws
   ## an assert exception if that fails. So the function will only apply to a
-  ## finalised (aka hashified) database state. For an an opportunistic use,
-  ## the `relax` argument can be set `true` so this function also returns
-  ## zero if the state consistency check fails.
+  ## saved database state. For an an opportunistic use, the `relax` argument
+  ## can be set `true` so this function also returns the block number if the
+  ## state consistency check fails.
   ##
   const info = "getSavedStateBlockNumber(): "
-  var header: BlockHeader
-  let st = db.ctx.getColumn(CtGeneric).backend.toAristoSavedStateBlockNumber()
-  if db.getBlockHeader(st.blockNumber, header):
-    let state = db.ctx.getAccounts.state.valueOr:
-      raiseAssert info & $$error
-    if state == header.stateRoot:
-      return st.blockNumber
-    if not relax:
-      raiseAssert info & ": state mismatch at " & "#" & $st.blockNumber
+  # FIXME: This construct following will be replaced by a proper
+  #        `CoreDb` method.
+  let bn = db.ctx.getColumn(CtGeneric).backend.toAristoSavedStateBlockNumber()
+  if relax:
+    return bn
+  else:
+    var header: BlockHeader
+    if db.getBlockHeader(bn, header):
+      let state = db.ctx.getAccounts.state(updateOk=true).valueOr:
+        raiseAssert info & $$error
+      if state != header.stateRoot:
+        raiseAssert info & ": state mismatch at " & "#" & $result
+      return bn
 
 proc getBlockHeader*(
     db: CoreDbRef;

@@ -16,7 +16,7 @@
 import
   std/tables,
   results,
-  ".."/[aristo_desc, aristo_layers, aristo_hashify]
+  ".."/[aristo_desc, aristo_layers]
 
 func txFrameIsTop*(tx: AristoTxRef): bool
 

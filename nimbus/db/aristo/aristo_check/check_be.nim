@@ -135,14 +135,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   # Check layer cache against backend
   if cache:
     var topVidCache = VertexID(0)
-
-    let checkKeysOk = block:
-      if db.dirty.len == 0:
-        true
-      elif relax:
-        false
-      else:
-        return err((VertexID(0),CheckBeCacheIsDirty))
+    let checkKeysOk = true
 
     # Check structural table
     for (vid,vtx) in db.layersWalkVtx:

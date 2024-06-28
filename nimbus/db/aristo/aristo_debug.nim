@@ -401,7 +401,6 @@ proc ppFilter(
   if fl.isNil:
     result &= " n/a"
     return
-  result &= pfx & "src=" & fl.src.ppKey(db)
   result &= pfx & "vTop=" & fl.vTop.ppVid
   result &= pfx & "sTab" & pfx1 & "{"
   for n,vid in fl.sTab.sortedKeys:
@@ -521,11 +520,6 @@ proc ppLayer(
         tLen = layer.final.fRpp.len
         info = "fRpp(" & $tLen & ")"
       result &= info.doPrefix(0 < tLen) & layer.final.fRpp.ppFRpp(db,indent+2)
-    if 0 < nOKs:
-      let
-        info = if layer.final.dirty.len == 0: "clean"
-               else: "dirty" & layer.final.dirty.ppVids
-      result &= info.doPrefix(false)
 
 # ------------------------------------------------------------------------------
 # Public functions

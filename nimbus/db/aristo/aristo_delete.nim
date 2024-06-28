@@ -429,7 +429,7 @@ proc deleteStorageData*(
       return err(DelPathNotFound)
     return err(error[1])
 
-  # Mark account path for update for `hashify()`
+  # Mark account path Merkle keys for update
   db.updateAccountForHasher accHike
 
   db.deleteImpl(stoHike).isOkOr:
@@ -464,7 +464,7 @@ proc deleteStorageTree*(
   if not stoID.isValid:
     return err(DelStoRootMissing)
 
-  # Mark account path for update for `hashify()`
+  # Mark account path Merkle keys for update
   db.updateAccountForHasher accHike
 
   ? db.delSubTreeImpl stoID

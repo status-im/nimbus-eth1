@@ -82,9 +82,8 @@ type
 
   SavedState* = object
     ## Last saved state
-    src*: HashKey                    ## Previous state hash
-    trg*: HashKey                    ## Last state hash
-    serial*: uint64                  ## Generic identifier froom application
+    key*: Hash256                    ## Some state hash (if any)
+    serial*: uint64                  ## Generic identifier from application
 
   LayerDeltaRef* = ref object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
@@ -109,7 +108,6 @@ type
     ## tables. So a corresponding zero value or missing entry produces an
     ## inconsistent state that must be resolved.
     ##
-    src*: HashKey                    ## Only needed when used as a filter
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                  ## Last used vertex ID
@@ -124,7 +122,6 @@ type
     ##
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     fRpp*: Table[HashKey,VertexID]   ## Key lookup for `pPrf[]` (proof nodes)
-    dirty*: HashSet[VertexID]        ## Start nodes to re-hashiy from
 
   LayerRef* = ref LayerObj
   LayerObj* = object
@@ -276,8 +273,7 @@ func dup*(final: LayerFinalRef): LayerFinalRef =
   ## Duplicate final layer.
   LayerFinalRef(
     pPrf:  final.pPrf,
-    fRpp:  final.fRpp,
-    dirty: final.dirty)
+    fRpp:  final.fRpp)
 
 func dup*(wp: VidVtxPair): VidVtxPair =
   ## Safe copy of `wp` argument

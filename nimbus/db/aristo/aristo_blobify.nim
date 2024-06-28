@@ -152,21 +152,7 @@ proc blobify*(tuv: VertexID): Blob =
 
 proc blobifyTo*(lSst: SavedState; data: var Blob): Result[void,AristoError] =
   ## Serialise a last saved state record
-  case lSst.src.len:
-  of 0:
-    data.setLen(32)
-  of 32:
-    data.setLen(0)
-    data.add lSst.src.data
-  else:
-    return err(BlobifyStateSrcLenGarbled)
-  case lSst.trg.len:
-  of 0:
-    data.setLen(64)
-  of 32:
-    data.add lSst.trg.data
-  else:
-    return err(BlobifyStateTrgLenGarbled)
+  data.add lSst.key.data
   data.add lSst.serial.toBytesBE
   data.add @[0x7fu8]
   ok()
@@ -352,17 +338,20 @@ proc deblobifyTo*(
       ): Result[void,AristoError] =
   ## De-serialise the last saved state data record previously encoded with
   ## `blobify()`.
-  if data.len != 73:
+  # Keep that legacy setting for a while
+  if data.len == 73:
+    if data[^1] != 0x7f:
+      return err(DeblobWrongType)
+    lSst.key = EMPTY_ROOT_HASH
+    lSst.serial = uint64.fromBytesBE data.toOpenArray(64, 71)
+    return ok()
+  # -----
+  if data.len != 41:
     return err(DeblobWrongSize)
   if data[^1] != 0x7f:
     return err(DeblobWrongType)
-  func loadHashKey(data: openArray[byte]): Result[HashKey,AristoError] =
-    var w = HashKey.fromBytes(data).valueOr:
-      return err(DeblobHashKeyExpected)
-    ok move(w)
-  lSst.src = ? data.toOpenArray(0, 31).loadHashKey()
-  lSst.trg = ? data.toOpenArray(32, 63).loadHashKey()
-  lSst.serial = uint64.fromBytesBE data.toOpenArray(64, 71)
+  (addr lSst.key.data[0]).copyMem(unsafeAddr data[0], 32)
+  lSst.serial = uint64.fromBytesBE data.toOpenArray(32, 39)
   ok()
 
 proc deblobify*(
