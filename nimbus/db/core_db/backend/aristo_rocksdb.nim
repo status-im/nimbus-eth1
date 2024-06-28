@@ -45,7 +45,7 @@ proc toRocksDb*(
   #      data model itself has settled down as their optimal values will depend
   #      on the shape of the data - it'll also be different per column family..
 
-  let tableOpts = defaultTableOptions()
+  let tableOpts = defaultTableOptions(autoClose = true)
   # This bloom filter helps avoid having to read multiple SST files when looking
   # for a value.
   # A 9.9-bits-per-key ribbon filter takes ~7 bits per key and has a 1% false
@@ -53,11 +53,11 @@ proc toRocksDb*(
   # should be better investigated.
   # https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter#ribbon-filter
   # https://github.com/facebook/rocksdb/blob/d64eac28d32a025770cba641ea04e697f475cdd6/include/rocksdb/filter_policy.h#L208
-  tableOpts.filterPolicy = createRibbonHybrid(9.9)
+  tableOpts.filterPolicy = createRibbonHybrid(9.9, autoClose = false)
 
   if opts.blockCacheSize > 0:
     # Share a single block cache instance between all column families
-    tableOpts.blockCache = cacheCreateLRU(opts.blockCacheSize)
+    tableOpts.blockCache = cacheCreateLRU(opts.blockCacheSize, autoClose = true)
 
   # Single-level indices might cause long stalls due to their large size -
   # two-level indexing allows the first level to be kept in memory at all times
@@ -75,7 +75,7 @@ proc toRocksDb*(
   tableOpts.dataBlockIndexType = DataBlockIndexType.binarySearchAndHash
   tableOpts.dataBlockHashRatio = 0.75
 
-  let cfOpts = defaultColFamilyOptions()
+  let cfOpts = defaultColFamilyOptions(autoClose = true)
 
   cfOpts.blockBasedTableFactory = tableOpts
 
@@ -111,7 +111,7 @@ proc toRocksDb*(
 
   cfOpts.maxBytesForLevelBase = opts.writeBufferSize
 
-  let dbOpts = defaultDbOptions()
+  let dbOpts = defaultDbOptions(autoClose = true)
   dbOpts.maxOpenFiles = opts.maxOpenFiles
 
   if opts.rowCacheSize > 0:
@@ -119,7 +119,7 @@ proc toRocksDb*(
     # using range queries, we should probably give more attention to the block
     # cache
     # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L1276
-    dbOpts.rowCache = cacheCreateLRU(opts.rowCacheSize)
+    dbOpts.rowCache = cacheCreateLRU(opts.rowCacheSize, autoClose = true)
 
   # Without this option, WAL files might never get removed since a small column
   # family (like the admin CF) with only tiny writes might keep it open - this
