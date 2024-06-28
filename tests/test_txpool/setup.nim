@@ -9,16 +9,16 @@
 # according to those terms.
 
 import
-  std/[algorithm, os, sequtils, strformat, tables, times],
+  std/[algorithm, os, sequtils, strformat, tables, times, json],
   ../../nimbus/core/[chain, tx_pool], # must be early (compilation annoyance)
   ../../nimbus/common/common,
   ../../nimbus/[config, constants],
   ../../nimbus/utils/ec_recover,
   ../../nimbus/core/tx_pool/[tx_chain, tx_item],
+  ../../nimbus/transaction,
   ./helpers,
-  ./sign_helper,
   eth/[keys, p2p],
-  stew/[keyed_queue]
+  stew/[keyed_queue, byteutils]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -30,86 +30,83 @@ proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
   if status != item.status:
     discard xp.txDB.reassign(item, status)
 
-proc importBlocks(c: ChainRef; h: seq[BlockHeader]; b: seq[BlockBody]): int =
-  if c.persistBlocks(h,b).isErr():
-    raiseAssert "persistBlocks() failed at block #" & $h[0].blockNumber
-  for body in b:
-    result += body.transactions.len
+type
+  TxEnv = object
+    chainId: ChainID
+    rng: ref HmacDrbgContext
+    signers: Table[EthAddress, PrivateKey]
+    map: Table[EthAddress, EthAddress]
+    txs: seq[Transaction]
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
+  Signer = object
+    address: EthAddress
+    signer: PrivateKey
 
-proc blockChainForTesting*(network: NetworkID): CommonRef =
+const
+  genesisFile = "tests/customgenesis/cancun123.json"
 
-  result = CommonRef.new(
+proc initTxEnv(chainId: ChainID): TxEnv =
+  result.rng = newRng()
+  result.chainId = chainId
+
+proc getSigner(env: var TxEnv, address: EthAddress): Signer =
+  env.map.withValue(address, val) do:
+    let newAddress = val[]
+    return Signer(address: newAddress, signer: env.signers[newAddress])
+  do:
+    let key = PrivateKey.random(env.rng[])
+    let newAddress = toCanonicalAddress(key.toPublicKey)
+    env.map[address] = newAddress
+    env.signers[newAddress] = key
+    return Signer(address: newAddress, signer: key)
+
+proc fillGenesis(env: var TxEnv, param: NetworkParams) =
+  const txFile = "tests/test_txpool/transactions.json"
+  let n = json.parseFile(txFile)
+
+  var map: Table[EthAddress, UInt256]
+
+  for z in n:
+    let bytes = hexToSeqByte(z.getStr)
+    let tx = rlp.decode(bytes, Transaction)
+    let sender = tx.getSender()
+    let bal = map.getOrDefault(sender, 0.u256)
+    if bal + tx.value > 0:
+      map[sender] = bal + tx.value
+    env.txs.add(tx)
+
+  for k, v in map:
+    let s = env.getSigner(k)
+    param.genesis.alloc[s.address] = GenesisAccount(
+      balance: v + v,
+    )
+
+proc setupTxPool*(getStatus: proc(): TxItemStatus): (CommonRef, TxPoolRef, int) =
+  let
+    conf = makeConfig(@[
+      "--custom-network:" & genesisFile
+    ])
+
+  var txEnv = initTxEnv(conf.networkParams.config.chainId)
+  txEnv.fillGenesis(conf.networkParams)
+
+  let com = CommonRef.new(
     newCoreDbRef DefaultDbMemory,
-    networkId = network,
-    params = network.networkParams)
+    conf.networkId,
+    conf.networkParams
+  )
 
-  result.initializeEmptyDb
+  com.initializeEmptyDb()
+  let txPool = TxPoolRef.new(com)
 
-proc toTxPool*(
-    com: CommonRef;                   ## to be modified
-    file: string;                     ## input, file and transactions
-    getStatus: proc(): TxItemStatus;  ## input, random function
-    loadBlocks: int;                  ## load at most this many blocks
-    minBlockTxs: int;                 ## load at least this many txs in blocks
-    loadTxs: int;                     ## load at most this many transactions
-    baseFee = 0.GasPrice;             ## initalise with `baseFee` (unless 0)
-    noisy: bool): (TxPoolRef, int) =
+  for n, tx in txEnv.txs:
+    let s = txEnv.getSigner(tx.getSender())
+    let status = statusInfo[getStatus()]
+    let info = &"{n}/{txEnv.txs.len} {status}"
+    let signedTx = signTransaction(tx, s.signer, txEnv.chainId, eip155 = true)
+    txPool.add(PooledTransaction(tx: signedTx), info)
 
-  var
-    txCount  = 0
-    chainNo  = 0
-    chainRef = com.newChain
-    nTxs = 0
-
-  doAssert not com.isNil
-  result[0] = TxPoolRef.new(com)
-  result[0].baseFee = baseFee
-
-  for chain in file.undumpBlocksGz:
-    let leadBlkNum = chain[0][0].blockNumber
-    chainNo.inc
-
-    if loadTxs <= txCount:
-      break
-
-    # Verify Genesis
-    if leadBlkNum == 0.u256:
-      doAssert chain[0][0] == com.db.getBlockHeader(0.u256)
-      continue
-
-    if leadBlkNum < loadBlocks.u256 or nTxs < minBlockTxs:
-      nTxs += chainRef.importBlocks(chain[0],chain[1])
-      continue
-
-    # Import transactions
-    for inx in 0 ..< chain[0].len:
-      let
-        num = chain[0][inx].blockNumber
-        txs = chain[1][inx].transactions
-
-      # Continue importing up until first non-trivial block
-      if txCount == 0 and txs.len == 0:
-        nTxs += chainRef.importBlocks(@[chain[0][inx]],@[chain[1][inx]])
-        continue
-
-      # Load transactions, one-by-one
-      for n in 0 ..< min(txs.len, loadTxs - txCount):
-        txCount.inc
-        let
-          status = statusInfo[getStatus()]
-          info = &"{txCount} #{num}({chainNo}) {n}/{txs.len} {status}"
-        noisy.showElapsed(&"insert: {info}"):
-          result[0].add(PooledTransaction(tx: txs[n]), info)
-
-      if loadTxs <= txCount:
-        break
-
-  result[1] = nTxs
-
+  (com, txPool, txEnv.txs.len)
 
 proc toTxPool*(
     com: CommonRef;               ## to be modified, initialisier for `TxPool`
@@ -206,8 +203,9 @@ proc setItemStatusFromInfo*(xp: TxPoolRef) =
   ## Re-define status from last character of info field. Note that this might
   ## violate boundary conditions regarding nonces.
   for item in xp.toItems:
-    let w = TxItemStatus.toSeq.filterIt(statusInfo[it][0] == item.info[^1])[0]
-    xp.setStatus(item, w)
+    let w = TxItemStatus.toSeq.filterIt(statusInfo[it][0] == item.info[^1])
+    if w.len > 0:
+      xp.setStatus(item, w[0])
 
 
 proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
