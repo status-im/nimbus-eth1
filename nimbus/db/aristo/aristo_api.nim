@@ -18,7 +18,7 @@ import
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
-  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_hashify,
+  "."/[aristo_delete, aristo_desc, aristo_fetch,
        aristo_init, aristo_merge, aristo_path, aristo_profile, aristo_tx]
 
 export
@@ -116,9 +116,11 @@ type
 
   AristoApiFetchAccountStateFn* =
     proc(db: AristoDbRef;
+         updateOk: bool;
         ): Result[Hash256,AristoError]
         {.noRaise.}
-      ## Fetch the Merkle hash of the account root.
+      ## Fetch the Merkle hash of the account root. Force update if the
+      ## argument `updateOK` is set `true`.
 
   AristoApiFetchGenericDataFn* =
     proc(db: AristoDbRef;
@@ -132,9 +134,11 @@ type
   AristoApiFetchGenericStateFn* =
     proc(db: AristoDbRef;
          root: VertexID;
+         updateOk: bool;
         ): Result[Hash256,AristoError]
         {.noRaise.}
-      ## Fetch the Merkle hash of the argument `root`.
+      ## Fetch the Merkle hash of the argument `root`. Force update if the
+      ## argument `updateOK` is set `true`.
 
   AristoApiFetchStorageDataFn* =
     proc(db: AristoDbRef;
@@ -148,9 +152,11 @@ type
   AristoApiFetchStorageStateFn* =
     proc(db: AristoDbRef;
          accPath: openArray[byte];
+         updateOk: bool;
         ): Result[Hash256,AristoError]
         {.noRaise.}
-      ## Fetch the Merkle hash of the storage root related to `accPath`.
+      ## Fetch the Merkle hash of the storage root related to `accPath`. Force
+      ## update if the argument `updateOK` is set `true`.
 
   AristoApiFindTxFn* =
     proc(db: AristoDbRef;
@@ -421,8 +427,6 @@ type
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
     forkTx*: AristoApiForkTxFn
-    hashify*: AristoApiHashifyFn
-
     hasPathAccount*: AristoApiHasPathAccountFn
     hasPathGeneric*: AristoApiHasPathGenericFn
     hasPathStorage*: AristoApiHasPathStorageFn
@@ -468,7 +472,6 @@ type
     AristoApiProfFinishFn               = "finish"
     AristoApiProfForgetFn               = "forget"
     AristoApiProfForkTxFn               = "forkTx"
-    AristoApiProfHashifyFn              = "hashify"
 
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
     AristoApiProfHasPathGenericFn       = "hasPathGeneric"
@@ -532,7 +535,6 @@ when AutoValidateApiHooks:
     doAssert not api.finish.isNil
     doAssert not api.forget.isNil
     doAssert not api.forkTx.isNil
-    doAssert not api.hashify.isNil
 
     doAssert not api.hasPathAccount.isNil
     doAssert not api.hasPathGeneric.isNil
@@ -600,7 +602,6 @@ func init*(api: var AristoApiObj) =
   api.finish = finish
   api.forget = forget
   api.forkTx = forkTx
-  api.hashify = hashify
 
   api.hasPathAccount = hasPathAccount
   api.hasPathGeneric = hasPathGeneric
@@ -650,7 +651,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     finish:               api.finish,
     forget:               api.forget,
     forkTx:               api.forkTx,
-    hashify:              api.hashify,
 
     hasPathAccount:       api.hasPathAccount,
     hasPathGeneric:       api.hasPathGeneric,
@@ -742,9 +742,9 @@ func init*(
         result = api.fetchAccountRecord(a, b)
 
   profApi.fetchAccountState =
-    proc(a: AristoDbRef): auto =
+    proc(a: AristoDbRef; b: bool): auto =
       AristoApiProfFetchAccountStateFn.profileRunner:
-        result = api.fetchAccountState(a)
+        result = api.fetchAccountState(a, b)
 
   profApi.fetchGenericData =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
@@ -752,9 +752,9 @@ func init*(
         result = api.fetchGenericData(a, b, c)
 
   profApi.fetchGenericState =
-    proc(a: AristoDbRef; b: VertexID;): auto =
+    proc(a: AristoDbRef; b: VertexID; c: bool): auto =
       AristoApiProfFetchGenericStateFn.profileRunner:
-        result = api.fetchGenericState(a, b)
+        result = api.fetchGenericState(a, b, c)
 
   profApi.fetchStorageData =
     proc(a: AristoDbRef; b, c: openArray[byte]): auto =
@@ -762,9 +762,9 @@ func init*(
         result = api.fetchStorageData(a, b, c)
 
   profApi.fetchStorageState =
-    proc(a: AristoDbRef; b: openArray[byte]): auto =
+    proc(a: AristoDbRef; b: openArray[byte]; c: bool): auto =
       AristoApiProfFetchStorageStateFn.profileRunner:
-        result = api.fetchStorageState(a, b)
+        result = api.fetchStorageState(a, b, c)
 
   profApi.findTx =
     proc(a: AristoDbRef; b: VertexID; c: HashKey): auto =
@@ -785,11 +785,6 @@ func init*(
     proc(a: AristoDbRef; b: int): auto =
       AristoApiProfForkTxFn.profileRunner:
         result = api.forkTx(a, b)
-
-  profApi.hashify =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfHashifyFn.profileRunner:
-        result = api.hashify(a)
 
   profApi.hasPathAccount =
     proc(a: AristoDbRef; b: openArray[byte]): auto =

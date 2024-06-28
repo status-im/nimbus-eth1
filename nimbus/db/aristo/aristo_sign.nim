@@ -16,7 +16,7 @@
 import
   eth/common,
   results,
-  "."/[aristo_constants, aristo_desc, aristo_get, aristo_hashify, aristo_init,
+  "."/[aristo_constants, aristo_desc, aristo_hashify, aristo_init,
        aristo_merge]
 
 # ------------------------------------------------------------------------------
@@ -54,13 +54,8 @@ proc merkleSignCommit*(
     return ok VOID_HASH_KEY
   if sdb.error != AristoError(0):
     return err((sdb.errKey, sdb.error))
-  sdb.db.hashify().isOkOr:
-    let w = (EmptyBlob, error[1])
-    return err(w)
-  let hash = sdb.db.getKeyRc(sdb.root).valueOr:
-    let w = (EmptyBlob, error)
-    return err(w)
-  ok hash
+
+  ok sdb.db.computeKey(sdb.root).expect("ok")
 
 # ------------------------------------------------------------------------------
 # End

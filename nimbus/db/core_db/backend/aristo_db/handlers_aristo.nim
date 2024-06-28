@@ -142,18 +142,8 @@ proc mptMethods(): CoreDbMptFns =
 
   proc mptState(cMpt: AristoCoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] =
     const info = "mptState()"
-
-    let rc = api.fetchGenericState(mpt, cMpt.mptRoot)
-    if rc.isOk:
-      return ok(rc.value)
-    elif not updateOk and rc.error != GetKeyUpdateNeeded:
-      return err(rc.error.toError(base, info))
-
-    # FIXME: `hashify()` should probably throw an assert on failure
-    ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
-
-    let state = api.fetchGenericState(mpt, cMpt.mptRoot).valueOr:
-      raiseAssert info & ": " & $error
+    let state = api.fetchGenericState(mpt, cMpt.mptRoot, updateOk).valueOr:
+      return err(error.toError(base, info))
     ok(state)
 
   ## Generic columns database handlers
@@ -256,18 +246,8 @@ proc accMethods(): CoreDbAccFns =
       updateOk: bool;
         ): CoreDbRc[Hash256] =
     const info = "accStateFn()"
-
-    let rc = api.fetchAccountState(mpt)
-    if rc.isOk:
-      return ok(rc.value)
-    elif not updateOk and rc.error != GetKeyUpdateNeeded:
-      return err(rc.error.toError(base, info))
-
-    # FIXME: `hashify()` should probably throw an assert on failure
-    ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
-
-    let state = api.fetchAccountState(mpt).valueOr:
-      raiseAssert info & ": " & $error
+    let state = api.fetchAccountState(mpt, updateOk).valueOr:
+      return err(error.toError(base, info))
     ok(state)
 
 
@@ -330,17 +310,7 @@ proc accMethods(): CoreDbAccFns =
       updateOk: bool;
         ): CoreDbRc[Hash256] =
     const info = "slotStateFn()"
-
-    let rc = api.fetchStorageState(mpt, accPath)
-    if rc.isOk:
-      return ok(rc.value)
-    elif not updateOk and rc.error != GetKeyUpdateNeeded:
-      return err(rc.error.toError(base, info))
-
-    # FIXME: `hashify()` should probably throw an assert on failure
-    ? api.hashify(mpt).toVoidRc(base, info, HashNotAvailable)
-
-    let state = api.fetchStorageState(mpt, accPath).valueOr:
+    let state = api.fetchStorageState(mpt, accPath, updateOk).valueOr:
       return err(error.toError(base, info))
     ok(state)
 

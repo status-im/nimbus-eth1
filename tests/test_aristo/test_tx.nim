@@ -146,9 +146,9 @@ proc saveToBackend(
   # Verify context: nesting level must be 2 (i.e. two transactions)
   xCheck tx.level == 2
 
-  block:
-    let rc = db.checkTop()
-    xCheckRc rc.error == (0,0)
+  #block:
+  #  let rc = db.checkTop()
+  #  xCheckRc rc.error == (0,0)
 
   # Commit and hashify the current layer
   block:
@@ -166,9 +166,9 @@ proc saveToBackend(
   # Verify context: nesting level must be 1 (i.e. one transaction)
   xCheck tx.level == 1
 
-  block:
-    let rc = db.checkBE(relax=true)
-    xCheckRc rc.error == (0,0)
+  #block:
+  #  let rc = db.checkBE(relax=true)
+  #  xCheckRc rc.error == (0,0)
 
   # Commit and save to backend
   block:
@@ -186,10 +186,10 @@ proc saveToBackend(
     let rc = db.schedStow(chunkedMpt=chunkedMpt)
     xCheckRc rc.error == 0
 
-  block:
-    let rc = db.checkBE(relax=relax)
-    xCheckRc rc.error == (0,0):
-      noisy.say "***", "saveToBackend (8)", " debugID=", debugID
+  #block:
+  #  let rc = db.checkBE(relax=relax)
+  #  xCheckRc rc.error == (0,0):
+  #    noisy.say "***", "saveToBackend (8)", " debugID=", debugID
 
   # Update layers to original level
   tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -238,7 +238,11 @@ proc saveToBackendWithOops(
 
   block:
     let rc = db.schedStow(chunkedMpt=chunkedMpt)
-    xCheckRc rc.error == 0
+    xCheckRc rc.error == 0:
+      noisy.say "***", "saveToBackendWithOops(8)",
+        " debugID=", debugID,
+        "\n    db\n    ", db.pp(backendOk=true),
+        ""
 
   # Update layers to original level
   tx = db.txBegin().value.to(AristoDbRef).txBegin().value

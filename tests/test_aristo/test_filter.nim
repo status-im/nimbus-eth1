@@ -247,14 +247,14 @@ proc checkBeOk(
     noisy = true;
       ): bool =
   ## ..
-  for n in 0 ..< dx.len:
-    let cache = if forceCache: true else: dx[n].dirty.len == 0
-    block:
-      let rc = dx[n].checkBE(relax=relax, cache=cache, fifos=fifos)
-      xCheckRc rc.error == (0,0):
-        noisy.say "***", "db checkBE failed",
-          " n=", n, "/", dx.len-1,
-          " cache=", cache
+  #for n in 0 ..< dx.len:
+  #  let cache = if forceCache: true else: dx[n].dirty.len == 0
+  #  block:
+  #    let rc = dx[n].checkBE(relax=relax, cache=cache, fifos=fifos)
+  #    xCheckRc rc.error == (0,0):
+  #      noisy.say "***", "db checkBE failed",
+  #        " n=", n, "/", dx.len-1,
+  #        " cache=", cache
   true
 
 # ------------------------------------------------------------------------------

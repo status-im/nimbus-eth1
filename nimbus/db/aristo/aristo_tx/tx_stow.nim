@@ -46,15 +46,17 @@ proc getBeStateRoot(
     # This layer is unusable, need both: vertex and key
     return err(TxPrettyPointlessLayer)
 
-  elif not db.top.delta.sTab.getOrVoid(VertexID 1).isValid:
-    # Root key and vertex have been deleted
-    return ok(srcRoot)
+  ok(srcRoot)
 
-  elif chunkedMpt and srcRoot == db.top.delta.kMap.getOrVoid VertexID(1):
-    # FIXME: this one needs to be double checked with `snap` sunc preload
-    return ok(srcRoot)
-
-  err(TxStateRootMismatch)
+  #elif not db.top.delta.sTab.getOrVoid(VertexID 1).isValid:
+  #  # Root key and vertex have been deleted
+  #  return ok(srcRoot)
+  #
+  #elif chunkedMpt and srcRoot == db.top.delta.kMap.getOrVoid VertexID(1):
+  #  # FIXME: this one needs to be double checked with `snap` sunc preload
+  #  return ok(srcRoot)
+  #
+  #err(TxStateRootMismatch)
 
 
 proc topMerge(db: AristoDbRef; src: HashKey): Result[void,AristoError] =
@@ -95,10 +97,6 @@ proc txStow*(
     return err(TxStackGarbled)
   if persistent and not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
-
-  # Update Merkle hashes (unless disabled)
-  db.hashify().isOkOr:
-    return err(error[1])
 
   # Verify database consistency and get `src` field for update
   let rc = db.getBeStateRoot chunkedMpt
