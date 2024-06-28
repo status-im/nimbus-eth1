@@ -17,7 +17,7 @@ import
   std/tables,
   results,
   ../aristo_delta/delta_merge,
-  ".."/[aristo_desc, aristo_get, aristo_delta, aristo_layers, aristo_hashify]
+  ".."/[aristo_desc, aristo_get, aristo_delta, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private functions

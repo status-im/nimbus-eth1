@@ -126,7 +126,7 @@ proc mergeStorageData*(
     rc = db.mergePayloadImpl(useID, stoPath, pyl)
 
   if rc.isOk:
-    # Mark account path for update for `hashify()`
+    # Mark account path Merkle keys for update
     db.updateAccountForHasher accHike
 
     if stoID.isValid:
@@ -144,7 +144,7 @@ proc mergeStorageData*(
     assert stoID.isValid         # debugging only
     return ok()
 
-  # Error: mark account path for update for `hashify()`
+  # Error: mark account path Merkle keys for update
   db.updateAccountForHasher accHike
   err(rc.error)
 

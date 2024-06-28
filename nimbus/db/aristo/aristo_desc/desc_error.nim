@@ -157,12 +157,6 @@ type
     GetVtxNotFound
 
 
-    # Update `Merkle` hashes `hashify()`
-    HashifyVtxUnresolved
-    HashifyRootVtxUnresolved
-    HashifyProofHashMismatch
-
-
     # Path function `hikeUp()`
     HikeBranchMissingEdge
     HikeBranchTailEmpty
