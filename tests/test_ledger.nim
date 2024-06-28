@@ -9,18 +9,20 @@
 # according to those terms.
 
 import
-  std/[strformat, strutils],
+  std/[strformat, strutils, importutils],
   eth/keys,
   stew/byteutils,
   stew/endians2,
   ../nimbus/config,
   ../nimbus/db/ledger,
+  ../nimbus/db/storage_types,
   ../nimbus/common/common,
   ../nimbus/core/chain,
   ../nimbus/core/tx_pool,
   ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
+  ../nimbus/db/ledger/accounts_ledger {.all.}, # import all private symbols
   unittest2
 
 const
@@ -64,7 +66,7 @@ proc pp*(tx: Transaction; ledger: LedgerRef): string =
 
 when isMainModule:
   import chronicles
-  
+
   proc setTraceLevel =
     discard
     when defined(chronicles_runtime_filtering) and loggingEnabled:
@@ -138,10 +140,9 @@ func initAddr(z: int): EthAddress =
   result[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
 
 proc importBlocks(env: TestEnv; blk: EthBlock) =
-  let res = env.chain.persistBlocks([blk])
-  if res.isErr:
-    debugEcho res.error
-    raiseAssert "persistBlocks() failed at block #" & $blk.header.number
+  env.chain.persistBlocks([blk]).isOkOr:
+    raiseAssert "persistBlocks() failed at block #" &
+      $blk.header.number & " msg: " & error
 
 proc getLedger(com: CommonRef; header: BlockHeader): LedgerRef =
   LedgerRef.init(com.db, header.stateRoot)
@@ -295,8 +296,8 @@ const
   feeRecipient = initAddr(401)
   prevRandao = EMPTY_UNCLE_HASH # it can be any valid hash
 
-proc runner(noisy = true) =
-  suite "StateDB nesting scenarios":
+proc runLedgerTransactionTests(noisy = true) =
+  suite "Ledger nesting scenarios":
     var env = initEnv()
 
     test "Create transactions and blocks":
@@ -390,18 +391,306 @@ proc runner(noisy = true) =
         let ledger = env.com.getLedger(head)
         env.runTrial4(ledger, n, rollback = true)
 
+proc runLedgerBesicOperationsTests() =
+  suite "Ledger basic operations tests":
+    setup:
+      const emptyAcc {.used.} = newAccount()
+
+      var
+        memDB = newCoreDbRef DefaultDbMemory
+        stateDB {.used.} = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+        address {.used.} = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+        code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+        rootHash {.used.} : KeccakHash
+
+    test "accountExists and isDeadAccount":
+      check stateDB.accountExists(address) == false
+      check stateDB.isDeadAccount(address) == true
+
+      stateDB.setBalance(address, 1000.u256)
+
+      check stateDB.accountExists(address) == true
+      check stateDB.isDeadAccount(address) == false
+
+      stateDB.setBalance(address, 0.u256)
+      stateDB.setNonce(address, 1)
+      check stateDB.isDeadAccount(address) == false
+
+      stateDB.setCode(address, code)
+      stateDB.setNonce(address, 0)
+      check stateDB.isDeadAccount(address) == false
+
+      stateDB.setCode(address, newSeq[byte]())
+      check stateDB.isDeadAccount(address) == true
+      check stateDB.accountExists(address) == true
+
+    test "clone storage":
+      # give access to private fields of AccountRef
+      privateAccess(AccountRef)
+      var x = AccountRef(
+        overlayStorage: Table[UInt256, UInt256](),
+        originalStorage: newTable[UInt256, UInt256]()
+      )
+
+      x.overlayStorage[10.u256] = 11.u256
+      x.overlayStorage[11.u256] = 12.u256
+
+      x.originalStorage[10.u256] = 11.u256
+      x.originalStorage[11.u256] = 12.u256
+
+      var y = x.clone(cloneStorage = true)
+      y.overlayStorage[12.u256] = 13.u256
+      y.originalStorage[12.u256] = 13.u256
+
+      check 12.u256 notin x.overlayStorage
+      check 12.u256 in y.overlayStorage
+
+      check x.overlayStorage.len == 2
+      check y.overlayStorage.len == 3
+
+      check 12.u256 in x.originalStorage
+      check 12.u256 in y.originalStorage
+
+      check x.originalStorage.len == 3
+      check y.originalStorage.len == 3
+
+    test "accounts cache":
+      var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+      var addr1 = initAddr(1)
+
+      check ac.isDeadAccount(addr1) == true
+      check ac.accountExists(addr1) == false
+      check ac.contractCollision(addr1) == false
+
+      ac.setBalance(addr1, 1000.u256)
+      check ac.getBalance(addr1) == 1000.u256
+      ac.subBalance(addr1, 100.u256)
+      check ac.getBalance(addr1) == 900.u256
+      ac.addBalance(addr1, 200.u256)
+      check ac.getBalance(addr1) == 1100.u256
+
+      ac.setNonce(addr1, 1)
+      check ac.getNonce(addr1) == 1
+      ac.incNonce(addr1)
+      check ac.getNonce(addr1) == 2
+
+      ac.setCode(addr1, code)
+      check ac.getCode(addr1) == code
+
+      ac.setStorage(addr1, 1.u256, 10.u256)
+      check ac.getStorage(addr1, 1.u256) == 10.u256
+      check ac.getCommittedStorage(addr1, 1.u256) == 0.u256
+
+      check ac.contractCollision(addr1) == true
+      check ac.getCodeSize(addr1) == code.len
+
+      ac.persist()
+      rootHash = ac.rootHash
+
+      var db = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+      db.setBalance(addr1, 1100.u256)
+      db.setNonce(addr1, 2)
+      db.setCode(addr1, code)
+      db.setStorage(addr1, 1.u256, 10.u256)
+      check rootHash == db.rootHash
+
+      # accounts cache readonly operations
+      # use previous hash
+      var ac2 = LedgerRef.init(memDB, rootHash)
+      var addr2 = initAddr(2)
+
+      check ac2.getCodeHash(addr2) == emptyAcc.codeHash
+      check ac2.getBalance(addr2) == emptyAcc.balance
+      check ac2.getNonce(addr2) == emptyAcc.nonce
+      check ac2.getCode(addr2) == []
+      check ac2.getCodeSize(addr2) == 0
+      check ac2.getCommittedStorage(addr2, 1.u256) == 0.u256
+      check ac2.getStorage(addr2, 1.u256) == 0.u256
+      check ac2.contractCollision(addr2) == false
+      check ac2.accountExists(addr2) == false
+      check ac2.isDeadAccount(addr2) == true
+
+      ac2.persist()
+      # readonly operations should not modify
+      # state trie at all
+      check ac2.rootHash == rootHash
+
+    test "accounts cache code retrieval after persist called":
+      var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+      var addr2 = initAddr(2)
+      ac.setCode(addr2, code)
+      ac.persist()
+      check ac.getCode(addr2) == code
+      let
+        key = contractHashKey(keccakHash(code))
+        val = memDB.newKvt().get(key.toOpenArray).valueOr: EmptyBlob
+      check val == code
+
+    test "accessList operations":
+      proc verifyAddrs(ac: LedgerRef, addrs: varargs[int]): bool =
+        for c in addrs:
+          if not ac.inAccessList(c.initAddr):
+            return false
+        true
+
+      proc verifySlots(ac: LedgerRef, address: int, slots: varargs[int]): bool =
+        let a = address.initAddr
+        if not ac.inAccessList(a):
+            return false
+
+        for c in slots:
+          if not ac.inAccessList(a, c.u256):
+            return false
+        true
+
+      proc accessList(ac: LedgerRef, address: int) {.inline.} =
+        ac.accessList(address.initAddr)
+
+      proc accessList(ac: LedgerRef, address, slot: int) {.inline.} =
+        ac.accessList(address.initAddr, slot.u256)
+
+      var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+
+      ac.accessList(0xaa)
+      ac.accessList(0xbb, 0x01)
+      ac.accessList(0xbb, 0x02)
+      check ac.verifyAddrs(0xaa, 0xbb)
+      check ac.verifySlots(0xbb, 0x01, 0x02)
+      check ac.verifySlots(0xaa, 0x01) == false
+      check ac.verifySlots(0xaa, 0x02) == false
+
+      var sp = ac.beginSavepoint
+      # some new ones
+      ac.accessList(0xbb, 0x03)
+      ac.accessList(0xaa, 0x01)
+      ac.accessList(0xcc, 0x01)
+      ac.accessList(0xcc)
+
+      check ac.verifyAddrs(0xaa, 0xbb, 0xcc)
+      check ac.verifySlots(0xaa, 0x01)
+      check ac.verifySlots(0xbb, 0x01, 0x02, 0x03)
+      check ac.verifySlots(0xcc, 0x01)
+
+      ac.rollback(sp)
+      check ac.verifyAddrs(0xaa, 0xbb)
+      check ac.verifyAddrs(0xcc) == false
+      check ac.verifySlots(0xcc, 0x01) == false
+
+      sp = ac.beginSavepoint
+      ac.accessList(0xbb, 0x03)
+      ac.accessList(0xaa, 0x01)
+      ac.accessList(0xcc, 0x01)
+      ac.accessList(0xcc)
+      ac.accessList(0xdd, 0x04)
+      ac.commit(sp)
+
+      check ac.verifyAddrs(0xaa, 0xbb, 0xcc)
+      check ac.verifySlots(0xaa, 0x01)
+      check ac.verifySlots(0xbb, 0x01, 0x02, 0x03)
+      check ac.verifySlots(0xcc, 0x01)
+      check ac.verifySlots(0xdd, 0x04)
+
+    test "transient storage operations":
+      var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+
+      proc tStore(ac: LedgerRef, address, slot, val: int) =
+        ac.setTransientStorage(address.initAddr, slot.u256, val.u256)
+
+      proc tLoad(ac: LedgerRef, address, slot: int): UInt256 =
+        ac.getTransientStorage(address.initAddr, slot.u256)
+
+      proc vts(ac: LedgerRef, address, slot, val: int): bool =
+        ac.tLoad(address, slot) == val.u256
+
+      ac.tStore(0xaa, 3, 66)
+      ac.tStore(0xbb, 1, 33)
+      ac.tStore(0xbb, 2, 99)
+
+      check ac.vts(0xaa, 3, 66)
+      check ac.vts(0xbb, 1, 33)
+      check ac.vts(0xbb, 2, 99)
+      check ac.vts(0xaa, 1, 33) == false
+      check ac.vts(0xbb, 1, 66) == false
+
+      var sp = ac.beginSavepoint
+      # some new ones
+      ac.tStore(0xaa, 3, 77)
+      ac.tStore(0xbb, 1, 55)
+      ac.tStore(0xcc, 7, 88)
+
+      check ac.vts(0xaa, 3, 77)
+      check ac.vts(0xbb, 1, 55)
+      check ac.vts(0xcc, 7, 88)
+
+      check ac.vts(0xaa, 3, 66) == false
+      check ac.vts(0xbb, 1, 33) == false
+      check ac.vts(0xbb, 2, 99)
+
+      ac.rollback(sp)
+      check ac.vts(0xaa, 3, 66)
+      check ac.vts(0xbb, 1, 33)
+      check ac.vts(0xbb, 2, 99)
+      check ac.vts(0xcc, 7, 88) == false
+
+      sp = ac.beginSavepoint
+      ac.tStore(0xaa, 3, 44)
+      ac.tStore(0xaa, 4, 55)
+      ac.tStore(0xbb, 1, 22)
+      ac.tStore(0xdd, 2, 66)
+
+      ac.commit(sp)
+      check ac.vts(0xaa, 3, 44)
+      check ac.vts(0xaa, 4, 55)
+      check ac.vts(0xbb, 1, 22)
+      check ac.vts(0xbb, 1, 55) == false
+      check ac.vts(0xbb, 2, 99)
+      check ac.vts(0xcc, 7, 88) == false
+      check ac.vts(0xdd, 2, 66)
+
+      ac.clearTransientStorage()
+      check ac.vts(0xaa, 3, 44) == false
+      check ac.vts(0xaa, 4, 55) == false
+      check ac.vts(0xbb, 1, 22) == false
+      check ac.vts(0xbb, 1, 55) == false
+      check ac.vts(0xbb, 2, 99) == false
+      check ac.vts(0xcc, 7, 88) == false
+      check ac.vts(0xdd, 2, 66) == false
+
+    test "accounts cache contractCollision":
+      # use previous hash
+      var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+      let addr2 = initAddr(2)
+      check ac.contractCollision(addr2) == false
+
+      ac.setStorage(addr2, 1.u256, 1.u256)
+      check ac.contractCollision(addr2) == false
+
+      ac.persist()
+      check ac.contractCollision(addr2) == true
+
+      let addr3 = initAddr(3)
+      check ac.contractCollision(addr3) == false
+      ac.setCode(addr3, @[0xaa.byte, 0xbb])
+      check ac.contractCollision(addr3) == true
+
+      let addr4 = initAddr(4)
+      check ac.contractCollision(addr4) == false
+      ac.setNonce(addr4, 1)
+      check ac.contractCollision(addr4) == true
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc ledgerMain*(noisy = defined(debug)) =
-  noisy.runner
+  noisy.runLedgerTransactionTests
+  runLedgerBesicOperationsTests()
 
 when isMainModule:
   var noisy = defined(debug)
 
   setErrorLevel()
-  noisy.runner
+  noisy.ledgerMain
 
 # ------------------------------------------------------------------------------
 # End
