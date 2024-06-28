@@ -23,58 +23,6 @@ import
 # Public functions, converters
 # ------------------------------------------------------------------------------
 
-proc toAccount*(
-    payload: PayloadRef;
-    db: AristoDbRef;
-      ): Result[Account,AristoError] =
-  ## Converts the argument `payload` to an `Account` type. If the implied
-  ## account das a storage slots system associated, the database `db` must
-  ## contain the Merkle hash key of the root vertex.
-  if payload.pType == AccountData:
-    var acc = Account(
-      nonce:       payload.account.nonce,
-      balance:     payload.account.balance,
-      codeHash:    payload.account.codeHash,
-      storageRoot: EMPTY_ROOT_HASH)
-    if payload.stoID.isValid:
-      acc.storageRoot = (? db.getKeyRc payload.stoID).to(Hash256)
-    return ok(acc)
-
-  err UtilsPayloadTypeUnsupported
-
-proc toAccount*(
-    vtx: VertexRef;
-    db: AristoDbRef;
-      ): Result[Account,AristoError] =
-  ## Variant of `toAccount()` for a `Leaf` vertex.
-  if vtx.isValid and vtx.vType == Leaf:
-    return vtx.lData.toAccount db
-  err UtilsAccVtxUnsupported
-
-proc toAccount*(
-    node: NodeRef;
-      ): Result[Account,AristoError] =
-  ## Variant of `toAccount()` for a `Leaf` node which must be complete (i.e.
-  ## a potential Merkle hash key must have been initialised.)
-  if node.isValid and node.vType == Leaf:
-    if node.lData.pType == AccountData:
-      var acc = Account(
-        nonce:       node.lData.account.nonce,
-        balance:     node.lData.account.balance,
-        codeHash:    node.lData.account.codeHash,
-        storageRoot: EMPTY_ROOT_HASH)
-      if node.lData.stoID.isValid:
-        if not node.key[0].isValid:
-          return err(UtilsAccStorageKeyMissing)
-        acc.storageRoot = node.key[0].to(Hash256)
-      return ok(acc)
-    else:
-      return err(UtilsPayloadTypeUnsupported)
-
-  err UtilsAccNodeUnsupported
-
-# ---------------------
-
 proc toNode*(
     vtx: VertexRef;                    # Vertex to convert
     db: AristoDbRef;                   # Database, top layer

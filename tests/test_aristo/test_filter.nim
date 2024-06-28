@@ -12,7 +12,6 @@
 ##
 
 import
-  std/sets,
   eth/common,
   results,
   unittest2,
