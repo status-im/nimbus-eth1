@@ -23,8 +23,6 @@ type
     BlobifyLeafPathOverflow
     BlobifyNilFilter
     BlobifyNilVertex
-    BlobifyStateSrcLenGarbled
-    BlobifyStateTrgLenGarbled
 
 
     # Cache checker `checkCache()`

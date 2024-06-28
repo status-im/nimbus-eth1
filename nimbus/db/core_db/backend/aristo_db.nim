@@ -243,12 +243,11 @@ func toAristo*(mBe: CoreDbAccBackendRef): AristoDbRef =
 
 proc toAristoSavedStateBlockNumber*(
     mBe: CoreDbMptBackendRef;
-      ): tuple[stateRoot: Hash256, blockNumber: BlockNumber] =
+      ): BlockNumber =
   if not mBe.isNil and mBe.parent.isAristo:
     let rc = mBe.parent.AristoCoreDbRef.adbBase.getSavedState()
     if rc.isOk:
-      return (rc.value.src.to(Hash256), rc.value.serial.BlockNumber)
-  (EMPTY_ROOT_HASH, 0.BlockNumber)
+      return rc.value.serial.BlockNumber
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators

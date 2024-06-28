@@ -82,9 +82,8 @@ type
 
   SavedState* = object
     ## Last saved state
-    src*: HashKey                    ## Previous state hash
-    trg*: HashKey                    ## Last state hash
-    serial*: uint64                  ## Generic identifier froom application
+    key*: Hash256                    ## Some state hash (if any)
+    serial*: uint64                  ## Generic identifier from application
 
   LayerDeltaRef* = ref object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
@@ -109,7 +108,6 @@ type
     ## tables. So a corresponding zero value or missing entry produces an
     ## inconsistent state that must be resolved.
     ##
-    src*: HashKey                    ## Only needed when used as a filter
     sTab*: Table[VertexID,VertexRef] ## Structural vertex table
     kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                  ## Last used vertex ID

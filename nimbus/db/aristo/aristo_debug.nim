@@ -401,7 +401,6 @@ proc ppFilter(
   if fl.isNil:
     result &= " n/a"
     return
-  result &= pfx & "src=" & fl.src.ppKey(db)
   result &= pfx & "vTop=" & fl.vTop.ppVid
   result &= pfx & "sTab" & pfx1 & "{"
   for n,vid in fl.sTab.sortedKeys:

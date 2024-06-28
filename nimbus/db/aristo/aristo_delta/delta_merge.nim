@@ -30,43 +30,22 @@ proc deltaMerge*(
   ## stacked and the database access is `upper -> lower -> backend` whereas
   ## the `src/trg` matching logic goes the other way round.
   ##
-  ## The resuting filter has no `FilterID` set.
-  ##
-  ## Comparing before and after merge
-  ## ::
-  ##   arguments                       | merged result
-  ##   --------------------------------+------------------------------------
-  ##   (src2==trg1) --> upper --> trg2 |
-  ##                                   | (src1==trg0) --> newFilter --> trg2
-  ##   (src1==trg0) --> lower --> trg1 |
-  ##                                   |
-  ##              beStateRoot --> trg0 |
-  ##
   # Degenerate case: `upper` is void
   if lower.isNil:
     if upper.isNil:
       # Even more degenerate case when both filters are void
       return ok LayerDeltaRef(nil)
-    if upper.src != beStateRoot:
-      return err((VertexID(1),FilStateRootMismatch))
     return ok(upper)
 
   # Degenerate case: `upper` is non-trivial and `lower` is void
   if upper.isNil:
-    if lower.src != beStateRoot:
-      return err((VertexID(0), FilStateRootMismatch))
     return ok(lower)
 
   # Verify stackability
   let lowerTrg = lower.kMap.getOrVoid VertexID(1)
-  if upper.src != lowerTrg:
-    return err((VertexID(0), FilTrgSrcMismatch))
-  if lower.src != beStateRoot:
-    return err((VertexID(0), FilStateRootMismatch))
 
   # There is no need to deep copy table vertices as they will not be modified.
   let newFilter = LayerDeltaRef(
-    src:  lower.src,
     sTab: lower.sTab,
     kMap: lower.kMap,
     vTop: upper.vTop)
@@ -94,11 +73,6 @@ proc deltaMerge*(
         newFilter.kMap.del vid
       else:
         return err((vid,rc.error))
-
-  # # Check consistency
-  # if (newFilter.src == newFilter.kMap.getOrVoid(VertexID 1)) !=
-  #      (newFilter.sTab.len == 0 and newFilter.kMap.len == 0):
-  #   return err((VertexID(0),FilSrcTrgInconsistent))
 
   ok newFilter
 
