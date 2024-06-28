@@ -59,7 +59,10 @@ proc retrieveMerkleHash(
       ): Result[Hash256,AristoError] =
   let key = block:
     if updateOk:
-      db.computeKey(root).expect "ok"
+      db.computeKey(root).valueOr:
+        if error == GetVtxNotFound:
+          return ok(EMPTY_ROOT_HASH)
+        return err(error)
     else:
       db.getKeyRc(root).valueOr:
         if error == GetKeyNotFound:

@@ -45,8 +45,9 @@ proc computeKey*(
     # debugEcho "ok ", vid, " ", key
     return ok key
 
-  let vtx = db.getVtx(vid)
-  doAssert vtx.isValid()
+  #let vtx = db.getVtx(vid)
+  #doAssert vtx.isValid()
+  let vtx = ? db.getVtxRc vid
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   var rlp = initRlpWriter()
