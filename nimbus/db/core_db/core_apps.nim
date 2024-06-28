@@ -556,7 +556,7 @@ proc forgetHistory*(
       # delete blockHash->header, stateRoot->blockNum
       discard kvt.del(genericHashKey(blockHash).toOpenArray)
 
-proc getTransaction*(
+proc getTransactionByIndex*(
     db: CoreDbRef;
     txRoot: Hash256;
     txIndex: uint16;
