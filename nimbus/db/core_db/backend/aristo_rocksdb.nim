@@ -17,7 +17,7 @@ import
   results,
   ../../aristo,
   ../../aristo/aristo_init/rocks_db as use_ari,
-  ../../aristo/[aristo_desc, aristo_serialise, aristo_walk/persistent, aristo_tx],
+  ../../aristo/[aristo_desc, aristo_walk/persistent, aristo_tx],
   ../../kvt,
   ../../kvt/kvt_persistent as use_kvt,
   ../../kvt/kvt_init/rocks_db/rdb_init,

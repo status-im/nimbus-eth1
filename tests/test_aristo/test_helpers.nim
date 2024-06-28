@@ -13,7 +13,7 @@ import
   eth/common,
   stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_hashify, aristo_hike, aristo_merge],
+    aristo_debug, aristo_desc, aristo_hike, aristo_merge],
   ../../nimbus/db/kvstore_rocksdb,
   ../../nimbus/sync/protocol/snap/snap_types,
   ../replay/[pp, undump_accounts, undump_storages],

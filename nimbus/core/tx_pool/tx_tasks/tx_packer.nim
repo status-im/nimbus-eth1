@@ -250,7 +250,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
   vmState.receipts.setLen(nItems)
 
   xp.chain.receipts = vmState.receipts
-  xp.chain.txRoot = pst.tr.state.valueOr:
+  xp.chain.txRoot = pst.tr.state(updateOk=true).valueOr:
     raiseAssert "vmExecCommit(): state() failed " & $$error
   xp.chain.stateRoot = vmState.stateDB.rootHash
 

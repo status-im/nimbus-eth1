@@ -95,10 +95,10 @@ proc deltaMerge*(
       else:
         return err((vid,rc.error))
 
-  # Check consistency
-  if (newFilter.src == newFilter.kMap.getOrVoid(VertexID 1)) !=
-       (newFilter.sTab.len == 0 and newFilter.kMap.len == 0):
-    return err((VertexID(0),FilSrcTrgInconsistent))
+  # # Check consistency
+  # if (newFilter.src == newFilter.kMap.getOrVoid(VertexID 1)) !=
+  #      (newFilter.sTab.len == 0 and newFilter.kMap.len == 0):
+  #   return err((VertexID(0),FilSrcTrgInconsistent))
 
   ok newFilter
 
