@@ -155,9 +155,6 @@ proc saveToBackend(
     let rc = tx.commit()
     xCheckRc rc.error == 0
 
-  # Make sure MPT hashes are OK
-  xCheck db.dirty.len == 0
-
   block:
     let rc = db.txTop()
     xCheckRc rc.error == 0
@@ -174,9 +171,6 @@ proc saveToBackend(
   block:
     let rc = tx.commit()
     xCheckRc rc.error == 0
-
-  # Make sure MPT hashes are OK
-  xCheck db.dirty.len == 0
 
   block:
     let rc = db.txTop()
@@ -213,9 +207,6 @@ proc saveToBackendWithOops(
     let rc = tx.commit()
     xCheckRc rc.error == 0
 
-  # Make sure MPT hashes are OK
-  xCheck db.dirty.len == 0
-
   block:
     let rc = db.txTop()
     xCheckRc rc.error == 0
@@ -228,9 +219,6 @@ proc saveToBackendWithOops(
   block:
     let rc = tx.commit()
     xCheckRc rc.error == 0
-
-  # Make sure MPT hashes are OK
-  xCheck db.dirty.len == 0
 
   block:
     let rc = db.txTop()

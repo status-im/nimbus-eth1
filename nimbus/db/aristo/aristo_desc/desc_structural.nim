@@ -124,7 +124,6 @@ type
     ##
     pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
     fRpp*: Table[HashKey,VertexID]   ## Key lookup for `pPrf[]` (proof nodes)
-    dirty*: HashSet[VertexID]        ## Start nodes to re-hashiy from
 
   LayerRef* = ref LayerObj
   LayerObj* = object
@@ -276,8 +275,7 @@ func dup*(final: LayerFinalRef): LayerFinalRef =
   ## Duplicate final layer.
   LayerFinalRef(
     pPrf:  final.pPrf,
-    fRpp:  final.fRpp,
-    dirty: final.dirty)
+    fRpp:  final.fRpp)
 
 func dup*(wp: VidVtxPair): VidVtxPair =
   ## Safe copy of `wp` argument

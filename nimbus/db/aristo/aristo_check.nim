@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, tables],
+  std/[algorithm, sequtils, tables],
   eth/common,
   stew/interval_set,
   results,

@@ -176,17 +176,12 @@ proc updateAccountForHasher*(
     db: AristoDbRef;                   # Database
     hike: Hike;                        # Return value from `retrieveStorageID()`
       ) =
-  ## For a successful run of `retrieveStoAccHike()`, the argument `hike` is
-  ## used to mark/reset the keys along the `accPath` for being re-calculated
-  ## by `hashify()`.
+  ## The argument `hike` is used to mark/reset the keys along the implied
+  ## vertex path for being re-calculated.
   ##
   # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
   for w in hike.legs.mapIt(it.wp.vid):
     db.layersResKey(hike.root, w)
-
-  # Signal to `hashify()` where to start rebuilding Merkel hashes
-  # db.top.final.dirty.incl hike.root
-  # db.top.final.dirty.incl hike.legs[^1].wp.vid
 
 # ------------------------------------------------------------------------------
 # End

@@ -521,11 +521,6 @@ proc ppLayer(
         tLen = layer.final.fRpp.len
         info = "fRpp(" & $tLen & ")"
       result &= info.doPrefix(0 < tLen) & layer.final.fRpp.ppFRpp(db,indent+2)
-    if 0 < nOKs:
-      let
-        info = if layer.final.dirty.len == 0: "clean"
-               else: "dirty" & layer.final.dirty.ppVids
-      result &= info.doPrefix(false)
 
 # ------------------------------------------------------------------------------
 # Public functions
