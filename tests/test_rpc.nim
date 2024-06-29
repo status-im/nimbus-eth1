@@ -87,8 +87,8 @@ proc persistFixtureBlock(chainDB: CoreDbRef) =
   # Manually inserting header to avoid any parent checks
   discard chainDB.newKvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
-  chainDB.persistTransactions(header.number, getBlockBody4514995().transactions)
-  chainDB.persistReceipts(getReceipts4514995())
+  chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
+  chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
 
 proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
   var
@@ -153,9 +153,9 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     signedTx1 = signTransaction(unsignedTx1, acc.privateKey, com.chainId, eip155)
     signedTx2 = signTransaction(unsignedTx2, acc.privateKey, com.chainId, eip155)
     txs = [signedTx1, signedTx2]
-  com.db.persistTransactions(blockNumber, txs)
 
-  let txRoot = com.db.ctx.getColumn(CtTxs).state(updateOk=true).valueOr(EMPTY_ROOT_HASH)
+  let txRoot = calcTxRoot(txs)
+  com.db.persistTransactions(blockNumber, txRoot, txs)
 
   vmState.receipts = newSeq[Receipt](txs.len)
   vmState.cumulativeGasUsed = 0

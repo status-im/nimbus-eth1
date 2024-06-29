@@ -170,13 +170,15 @@ proc persistBlocksImpl(
         return err("Could not persist header")
 
     if NoPersistTransactions notin flags:
-      c.db.persistTransactions(header.number, blk.transactions)
+      c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
 
     if NoPersistReceipts notin flags:
-      c.db.persistReceipts(vmState.receipts)
+      c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
 
     if NoPersistWithdrawals notin flags and blk.withdrawals.isSome:
-      c.db.persistWithdrawals(blk.withdrawals.get)
+      c.db.persistWithdrawals(
+        header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
+        blk.withdrawals.get)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result

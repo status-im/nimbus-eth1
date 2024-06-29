@@ -337,6 +337,77 @@ proc runTxHeadDelta(noisy = true) =
         balance = sdb.getBalance(recipient)
       check balance == expected
 
+proc runGetBlockBodyTest() =
+  var
+    env = initEnv(Cancun)
+    blockTime = EthTime.now()
+    parentHeader: BlockHeader
+    currentHeader: BlockHeader
+
+  suite "Test get parent transactions after persistBlock":
+    test "TxPool create first block":
+      let
+        tx1 = env.makeTx(recipient, 1.u256)
+        tx2 = env.makeTx(recipient, 2.u256)
+
+      check env.xp.addLocal(PooledTransaction(tx: tx1), true).isOk
+      check env.xp.addLocal(PooledTransaction(tx: tx2), true).isOk
+
+      env.com.pos.prevRandao = prevRandao
+      env.com.pos.feeRecipient = feeRecipient
+      env.com.pos.timestamp = blockTime
+
+      let r = env.xp.assembleBlock()
+      if r.isErr:
+        check false
+        return
+
+      let blk = r.get.blk
+      check env.chain.persistBlocks([blk]).isOk
+      parentHeader = blk.header
+      check env.xp.smartHead(parentHeader)
+      check blk.transactions.len == 2
+
+    test "TxPool create second block":
+      let
+        tx1 = env.makeTx(recipient, 3.u256)
+        tx2 = env.makeTx(recipient, 4.u256)
+        tx3 = env.makeTx(recipient, 5.u256)
+
+      check env.xp.addLocal(PooledTransaction(tx: tx1), true).isOk
+      check env.xp.addLocal(PooledTransaction(tx: tx2), true).isOk
+      check env.xp.addLocal(PooledTransaction(tx: tx3), true).isOk
+
+      env.com.pos.prevRandao = prevRandao
+      env.com.pos.feeRecipient = feeRecipient
+      env.com.pos.timestamp = blockTime + 1
+
+      let r = env.xp.assembleBlock()
+      if r.isErr:
+        check false
+        return
+
+      let blk = r.get.blk
+      check env.chain.persistBlocks([blk]).isOk
+      currentHeader = blk.header
+      check env.xp.smartHead(currentHeader)
+      check blk.transactions.len == 3
+
+    test "Get current block body":
+      var body: BlockBody
+      check env.com.db.getBlockBody(currentHeader, body)
+      check body.transactions.len == 3
+      check env.com.db.getReceipts(currentHeader.receiptsRoot).len == 3
+      check env.com.db.getTransactionCount(currentHeader.txRoot) == 3
+
+    test "Get parent block body":
+      # Make sure parent baggage doesn't swept away by aristo
+      var body: BlockBody
+      check env.com.db.getBlockBody(parentHeader, body)
+      check body.transactions.len == 2
+      check env.com.db.getReceipts(parentHeader.receiptsRoot).len == 2
+      check env.com.db.getTransactionCount(parentHeader.txRoot) == 2
+
 proc txPool2Main*() =
   const
     noisy = defined(debug)
@@ -346,6 +417,7 @@ proc txPool2Main*() =
   runTxPoolPosTest()
   runTxPoolBlobhashTest()
   noisy.runTxHeadDelta
+  runGetBlockBodyTest()
 
 when isMainModule:
   txPool2Main()

@@ -315,7 +315,7 @@ proc getWithdrawals(ctx: GraphqlContextRef, header: common.BlockHeader): RespRes
 proc getTxAt(ctx: GraphqlContextRef, header: common.BlockHeader, index: uint64): RespResult =
   try:
     var tx: Transaction
-    if getTransaction(ctx.chainDB, header.txRoot, index, tx):
+    if getTransactionByIndex(ctx.chainDB, header.txRoot, index.uint16, tx):
       let txn = txNode(ctx, tx, index, header.number, header.baseFeePerGas)
 
       var i = 0'u64

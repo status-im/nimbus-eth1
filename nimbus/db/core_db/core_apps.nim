@@ -114,30 +114,23 @@ iterator findNewAncestors(
 
 iterator getBlockTransactionData*(
     db: CoreDbRef;
-    transactionRoot: Hash256;
+    txRoot: Hash256;
       ): Blob =
   const info = "getBlockTransactionData()"
   block body:
-    if transactionRoot == EMPTY_ROOT_HASH:
+    if txRoot == EMPTY_ROOT_HASH:
       break body
-    let
-      transactionDb = db.ctx.getColumn CtTxs
-      state = transactionDb.state(updateOk=true).valueOr:
-        raiseAssert info & ": " & $$error
-    if state != transactionRoot:
-      warn logTxt info, transactionRoot, state, error="state mismatch"
-      break body
-    var transactionIdx = 0'u64
-    while true:
-      let transactionKey = rlp.encode(transactionIdx)
-      let data = transactionDb.fetch(transactionKey).valueOr:
-        if error.error != MptNotFound:
-          warn logTxt info, transactionRoot,
-            transactionKey, action="fetch()", error=($$error)
-        break body
-      yield data
-      inc transactionIdx
 
+    let kvt = db.newKvt()
+    for idx in 0'u16..<uint16.high:
+      let key = hashIndexKey(txRoot, idx)
+      let txData = kvt.getOrEmpty(key).valueOr:
+        warn logTxt "getBlockTransactionData()",
+          txRoot, key, action="getOrEmpty()", error=($$error)
+        break body
+      if txData.len == 0:
+        break body
+      yield txData
 
 iterator getBlockTransactions*(
     db: CoreDbRef;
@@ -158,32 +151,24 @@ iterator getBlockTransactionHashes*(
   for encodedTx in db.getBlockTransactionData(blockHeader.txRoot):
     yield keccakHash(encodedTx)
 
-iterator getWithdrawalsData*(
+iterator getWithdrawals*(
     db: CoreDbRef;
     withdrawalsRoot: Hash256;
-      ): Blob =
-  const info = "getWithdrawalsData()"
+      ): Withdrawal {.raises: [RlpError].} =
   block body:
     if withdrawalsRoot == EMPTY_ROOT_HASH:
       break body
-    let
-      wddb = db.ctx.getColumn CtWithdrawals
-      state = wddb.state(updateOk=true).valueOr:
-        raiseAssert info & ": " & $$error
-    if state != withdrawalsRoot:
-      warn logTxt info, withdrawalsRoot, state, error="state mismatch"
-      break body
-    var idx = 0
-    while true:
-      let wdKey = rlp.encode(idx.uint)
-      let data = wddb.fetch(wdKey).valueOr:
-        if error.error != MptNotFound:
-          warn logTxt "getWithdrawalsData()",
-            withdrawalsRoot, wdKey, action="fetch()", error=($$error)
-        break body
-      yield data
-      inc idx
 
+    let kvt = db.newKvt()
+    for idx in 0'u16..<uint16.high:
+      let key = hashIndexKey(withdrawalsRoot, idx)
+      let data = kvt.getOrEmpty(key).valueOr:
+        warn logTxt "getWithdrawals()",
+          withdrawalsRoot, key, action="getOrEmpty()", error=($$error)
+        break body
+      if data.len == 0:
+        break body
+      yield rlp.decode(data, Withdrawal)
 
 iterator getReceipts*(
     db: CoreDbRef;
@@ -194,23 +179,17 @@ iterator getReceipts*(
   block body:
     if receiptsRoot == EMPTY_ROOT_HASH:
       break body
-    let
-      receiptDb = db.ctx.getColumn CtReceipts
-      state = receiptDb.state(updateOk=true).valueOr:
-        raiseAssert info & ": " & $$error
-    if state != receiptsRoot:
-      warn logTxt info, receiptsRoot, state, error="state mismatch"
-      break body
-    var receiptIdx = 0
-    while true:
-      let receiptKey = rlp.encode(receiptIdx.uint)
-      let receiptData = receiptDb.fetch(receiptKey).valueOr:
-        if error.error != MptNotFound:
-          warn logTxt "getWithdrawalsData()",
-            receiptsRoot, receiptKey, action="hasKey()", error=($$error)
+
+    let kvt = db.newKvt()
+    for idx in 0'u16..<uint16.high:
+      let key = hashIndexKey(receiptsRoot, idx)
+      let data = kvt.getOrEmpty(key).valueOr:
+        warn logTxt "getReceipts()",
+          receiptsRoot, key, action="getOrEmpty()", error=($$error)
         break body
-      yield rlp.decode(receiptData, Receipt)
-      inc receiptIdx
+      if data.len == 0:
+        break body
+      yield rlp.decode(data, Receipt)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -535,6 +514,7 @@ proc addBlockNumberToHashLookup*(
 proc persistTransactions*(
     db: CoreDbRef;
     blockNumber: BlockNumber;
+    txRoot: Hash256;
     transactions: openArray[Transaction];
       ) =
   const
@@ -543,19 +523,16 @@ proc persistTransactions*(
   if transactions.len == 0:
     return
 
-  let
-    mpt = db.ctx.getColumn(CtTxs, clearData=true)
-    kvt = db.newKvt()
-
+  let kvt = db.newKvt()
   for idx, tx in transactions:
     let
-      encodedKey = rlp.encode(idx.uint)
       encodedTx = rlp.encode(tx)
       txHash = keccakHash(encodedTx)
       blockKey = transactionHashToBlockKey(txHash)
       txKey: TransactionKey = (blockNumber, idx.uint)
-    mpt.merge(encodedKey, encodedTx).isOkOr:
-      warn logTxt info, idx, action="merge()", error=($$error)
+      key = hashIndexKey(txRoot, idx.uint16)
+    kvt.put(key, encodedTx).isOkOr:
+      warn logTxt info, idx, action="put()", error=($$error)
       return
     kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       trace logTxt info, blockKey, action="put()", error=($$error)
@@ -579,32 +556,29 @@ proc forgetHistory*(
       # delete blockHash->header, stateRoot->blockNum
       discard kvt.del(genericHashKey(blockHash).toOpenArray)
 
-proc getTransaction*(
+proc getTransactionByIndex*(
     db: CoreDbRef;
     txRoot: Hash256;
-    txIndex: uint64;
+    txIndex: uint16;
     res: var Transaction;
       ): bool =
   const
     info = "getTransaction()"
-  let
-    clearOk = txRoot == EMPTY_ROOT_HASH
-    mpt = db.ctx.getColumn(CtTxs, clearData=clearOk)
-  if not clearOk:
-    let state = mpt.state(updateOk=true).valueOr:
-      raiseAssert info & ": " & $$error
-    if state != txRoot:
-      warn logTxt info, txRoot, state, error="state mismatch"
-      return false
-  let
-    txData = mpt.fetch(rlp.encode(txIndex)).valueOr:
-      if error.error != MptNotFound:
-        warn logTxt info, txIndex, error=($$error)
-      return false
+
+  let kvt = db.newKvt()
+  let key = hashIndexKey(txRoot, txIndex)
+  let txData = kvt.getOrEmpty(key).valueOr:
+    warn logTxt "getTransaction()",
+      txRoot, key, action="getOrEmpty()", error=($$error)
+    return false
+  if txData.len == 0:
+    return false
+
   try:
     res = rlp.decode(txData, Transaction)
-  except RlpError as e:
-    warn logTxt info, txRoot, action="rlp.decode()", name=($e.name), msg=e.msg
+  except RlpError as exc:
+    warn logTxt info,
+      txRoot, action="rlp.decode()", error=exc.msg
     return false
   true
 
@@ -614,24 +588,19 @@ proc getTransactionCount*(
       ): int =
   const
     info = "getTransactionCount()"
-  let
-    clearOk = txRoot == EMPTY_ROOT_HASH
-    mpt = db.ctx.getColumn(CtTxs, clearData=clearOk)
-  if not clearOk:
-    let state = mpt.state(updateOk=true).valueOr:
-      raiseAssert info & ": " & $$error
-    if state != txRoot:
-      warn logTxt info, txRoot, state, error="state mismatch"
-      return 0
-  var txCount = 0
+
+  let kvt = db.newKvt()
+  var txCount = 0'u16
   while true:
-    let hasPath = mpt.hasPath(rlp.encode(txCount.uint)).valueOr:
-      warn logTxt info, txCount, action="hasPath()", error=($$error)
+    let key = hashIndexKey(txRoot, txCount)
+    let yes = kvt.hasKey(key).valueOr:
+      warn logTxt info,
+        txRoot, key, action="hasKey()", error=($$error)
       return 0
-    if hasPath:
+    if yes:
       inc txCount
     else:
-      return txCount
+      return txCount.int
 
   doAssert(false, "unreachable")
 
@@ -667,15 +636,17 @@ proc getUncles*(
 
 proc persistWithdrawals*(
     db: CoreDbRef;
+    withdrawalsRoot: Hash256;
     withdrawals: openArray[Withdrawal];
       ) =
   const info = "persistWithdrawals()"
   if withdrawals.len == 0:
     return
-  let mpt = db.ctx.getColumn(CtWithdrawals, clearData=true)
+  let kvt = db.newKvt()
   for idx, wd in withdrawals:
-    mpt.merge(rlp.encode(idx.uint), rlp.encode(wd)).isOkOr:
-      warn logTxt info, idx, error=($$error)
+    let key = hashIndexKey(withdrawalsRoot, idx.uint16)
+    kvt.put(key, rlp.encode(wd)).isOkOr:
+      warn logTxt info, idx, action="put()", error=($$error)
       return
 
 proc getWithdrawals*(
@@ -683,8 +654,8 @@ proc getWithdrawals*(
     withdrawalsRoot: Hash256;
       ): seq[Withdrawal]
       {.gcsafe, raises: [RlpError].} =
-  for encodedWd in db.getWithdrawalsData(withdrawalsRoot):
-    result.add(rlp.decode(encodedWd, Withdrawal))
+  for wd in db.getWithdrawals(withdrawalsRoot):
+    result.add(wd)
 
 proc getTransactions*(
     db: CoreDbRef;
@@ -837,14 +808,17 @@ proc setHead*(
 
 proc persistReceipts*(
     db: CoreDbRef;
+    receiptsRoot: Hash256;
     receipts: openArray[Receipt];
       ) =
   const info = "persistReceipts()"
   if receipts.len == 0:
     return
-  let mpt = db.ctx.getColumn(CtReceipts, clearData=true)
+
+  let kvt = db.newKvt()
   for idx, rec in receipts:
-    mpt.merge(rlp.encode(idx.uint), rlp.encode(rec)).isOkOr:
+    let key = hashIndexKey(receiptsRoot, idx.uint16)
+    kvt.put(key, rlp.encode(rec)).isOkOr:
       warn logTxt info, idx, action="merge()", error=($$error)
 
 proc getReceipts*(

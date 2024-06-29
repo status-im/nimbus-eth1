@@ -33,6 +33,8 @@ type
     data*: array[33, byte]
     dataEndPos*: uint8 # the last populated position in the data
 
+  HashIndexKey* = array[34, byte]
+
 func genericHashKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(genericHash)
   result.data[1 .. 32] = h.data
@@ -101,6 +103,11 @@ func skeletonBodyKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(skeletonBody)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
+
+func hashIndexKey*(hash: Hash256, index: uint16): HashIndexKey =
+  result[0..31] = hash.data
+  result[32] = byte(index and 0xFF)
+  result[33] = byte((index shl 8) and 0xFF)
 
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

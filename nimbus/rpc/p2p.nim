@@ -11,8 +11,12 @@
 
 import
   std/[sequtils, times, tables, typetraits],
-  json_rpc/rpcserver, stint, stew/byteutils,
-  json_serialization, web3/conversions, json_serialization/stew/results,
+  json_rpc/rpcserver,
+  stint,
+  stew/byteutils,
+  json_serialization,
+  web3/conversions,
+  json_serialization/stew/results,
   eth/common/eth_types_json_serialization,
   eth/[keys, rlp, p2p],
   ".."/[transaction, evm/state, constants],
@@ -414,7 +418,7 @@ proc setupEthRpc*(
 
     let header = chainDB.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
-    if chainDB.getTransaction(header.txRoot, txDetails.index, tx):
+    if chainDB.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
       result = populateTransactionObject(tx, Opt.some(header), Opt.some(txDetails.index))
 
   server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Web3Hash, quantity: Web3Quantity) -> TransactionObject:
@@ -429,7 +433,7 @@ proc setupEthRpc*(
       return nil
 
     var tx: Transaction
-    if chainDB.getTransaction(header.txRoot, index, tx):
+    if chainDB.getTransactionByIndex(header.txRoot, uint16(index), tx):
       result = populateTransactionObject(tx, Opt.some(header), Opt.some(index))
     else:
       result = nil
@@ -444,7 +448,7 @@ proc setupEthRpc*(
       index  = uint64(quantity)
 
     var tx: Transaction
-    if chainDB.getTransaction(header.txRoot, index, tx):
+    if chainDB.getTransactionByIndex(header.txRoot, uint16(index), tx):
       result = populateTransactionObject(tx, Opt.some(header), Opt.some(index))
     else:
       result = nil
@@ -461,7 +465,7 @@ proc setupEthRpc*(
 
     let header = chainDB.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
-    if not chainDB.getTransaction(header.txRoot, txDetails.index, tx):
+    if not chainDB.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
       return nil
 
     var

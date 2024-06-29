@@ -169,16 +169,21 @@ proc replaySegment(c: ForkedChainRef, target: Hash256) =
 
 proc writeBaggage(c: ForkedChainRef, target: Hash256) =
   # Write baggage from base+1 to target block
+  template header(): BlockHeader =
+    blk.blk.header
+
   shouldNotKeyError:
     var prevHash = target
     while prevHash != c.baseHash:
       let blk =  c.blocks[prevHash]
-      c.db.persistTransactions(blk.blk.header.number, blk.blk.transactions)
-      c.db.persistReceipts(blk.receipts)
+      c.db.persistTransactions(header.number, header.txRoot, blk.blk.transactions)
+      c.db.persistReceipts(header.receiptsRoot, blk.receipts)
       discard c.db.persistUncles(blk.blk.uncles)
       if blk.blk.withdrawals.isSome:
-        c.db.persistWithdrawals(blk.blk.withdrawals.get)
-      prevHash = blk.blk.header.parentHash
+        c.db.persistWithdrawals(
+          header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
+          blk.blk.withdrawals.get)
+      prevHash = header.parentHash
 
 func updateBase(c: ForkedChainRef,
                 newBaseHash: Hash256,
