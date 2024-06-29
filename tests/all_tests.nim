@@ -10,12 +10,9 @@ import ./all_tests_macro
 {. warning[UnusedImport]:off .}
 
 cliBuilder:
-  import  ./test_code_stream,
-          ./test_ledger,
+  import  ./test_ledger,
           ./test_jwt_auth,
-          ./test_gas_meter,
-          ./test_memory,
-          ./test_stack,
+          ./test_evm_support,
           ./test_genesis,
           ./test_precompiles,
           ./test_generalstate_json,
@@ -29,13 +26,11 @@ cliBuilder:
           ./test_op_memory,
           ./test_op_misc,
           ./test_op_custom,
-          ./test_state_db,
           ./test_difficulty,
           ./test_transaction_json,
           ./test_blockchain_json,
           ./test_forkid,
           ./test_multi_keys,
-          ./test_misc,
           #./test_graphql,                         -- fails
           ./test_configuration,
           ./test_txpool,
@@ -43,7 +38,6 @@ cliBuilder:
           #./test_merge,                           -- fails
           ./test_eip4844,
           ./test_beacon/test_skeleton,
-          ./test_overflow,
           #./test_getproof_json,                   -- fails
           #./test_rpc_experimental_json,           -- fails
           ./test_aristo,
