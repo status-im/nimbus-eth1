@@ -42,7 +42,10 @@ def prettySecs(s: float):
 def formatBins(df: pd.DataFrame, bins: int):
     if bins > 0:
         bins = np.linspace(
-            df.block_number.iloc[0] - df.blocks.iloc[0], df.block_number.iloc[-1], bins, dtype=int
+            df.block_number.iloc[0] - df.blocks.iloc[0],
+            df.block_number.iloc[-1],
+            bins,
+            dtype=int,
         )
         return df.groupby(pd.cut(df["block_number"], bins), observed=True)
     else:
@@ -71,9 +74,16 @@ min_block_number = args.min_block_number
 baseline = readStats(args.baseline)
 contender = readStats(args.contender)
 
-# Pick out the rows to match - a more sophisticated version of this would
-# interpolate, perhaps - also, maybe should check for non-matching block/tx counts
-df = baseline.merge(contender, on=("block_number", "blocks", "txs"))
+start = max(min(baseline.index), min(contender.index))
+end = min(max(baseline.index), max(contender.index))
+
+baseline = baseline.loc[baseline.index >= start and baseline.index <= end]
+contender = contender.loc[contender.index >= start and contender.index <= end]
+
+# Join the two frames then interpolate - this helps dealing with runs that
+# haven't been using the same chunking and/or max-blocks
+df = baseline.merge(contender, on=("block_number", "blocks"), how="outer")
+df = df.interpolate(method="index").reindex(contender.index)
 df.reset_index(inplace=True)
 
 if df.block_number.iloc[-1] > min_block_number + df.block_number.iloc[0]:
@@ -83,10 +93,9 @@ if df.block_number.iloc[-1] > min_block_number + df.block_number.iloc[0]:
     )
     df = df[df.block_number >= cutoff]
 
-df["bpsd"] = ((df.bps_y - df.bps_x) / df.bps_x)
-df["tpsd"] = ((df.tps_y - df.tps_x) / df.tps_x.replace(0, 1))
+df["bpsd"] = (df.bps_y - df.bps_x) / df.bps_x
+df["tpsd"] = (df.tps_y - df.tps_x) / df.tps_x.replace(0, 1)
 df["timed"] = (df.time_y - df.time_x) / df.time_x
-
 
 if args.plot:
     plt.rcParams["axes.grid"] = True
@@ -118,23 +127,20 @@ print(f"{os.path.basename(args.baseline)} vs {os.path.basename(args.contender)}"
 print(
     formatBins(df, args.bins)
     .agg(
-        dict.fromkeys(
-            ["bps_x", "bps_y", "tps_x", "tps_y", "bpsd", "tpsd", "timed"], "mean"
-        ),
+        dict.fromkeys(["bps_x", "bps_y", "tps_x", "tps_y"], "mean")
+        | dict.fromkeys(["time_x", "time_y"], "sum")
+        | dict.fromkeys(["bpsd", "tpsd", "timed"], "mean")
     )
     .to_string(
-        formatters=dict(
-            dict.fromkeys(["bpsd", "tpsd", "timed"], "{:,.2%}".format),
-            **dict.fromkeys(["bps_x", "bps_y", "tps_x", "tps_y"], "{:,.2f}".format),
-        )
+        formatters=dict.fromkeys(["bpsd", "tpsd", "timed"], "{:,.2%}".format)
+        | dict.fromkeys(["bps_x", "bps_y", "tps_x", "tps_y"], "{:,.2f}".format)
+        | dict.fromkeys(["time_x", "time_y"], prettySecs),
     )
 )
 
 print(
-    f"\nblocks: {df.blocks.sum()}, baseline: {prettySecs(df.time_x.sum())}, contender: {prettySecs(df.time_y.sum())}"
+    f"\nblocks: {df.block_number.max() - df.block_number.min()}, baseline: {prettySecs(df.time_x.sum())}, contender: {prettySecs(df.time_y.sum())}"
 )
-print(f"bpsd (mean): {df.bpsd.mean():.2%}")
-print(f"tpsd (mean): {df.tpsd.mean():.2%}")
 time_xt = df.time_x.sum()
 time_yt = df.time_y.sum()
 
