@@ -482,6 +482,13 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       ctx.env.currentDifficulty = Opt.some(calcDifficulty(com,
         ctx.env.currentTimestamp, parent))
 
+    # Calculate the BlobBaseFee
+    if ctx.env.currentExcessBlobGas.isNone:
+      # If it is not explicitly defined, but we have the parent values, we try
+      # to calculate it ourselves.
+      if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
+        ctx.env.currentExcessBlobGas = Opt.some calcExcessBlobGas(parent)
+
     let header  = envToHeader(ctx.env)
 
     let vmState = TestVMState(

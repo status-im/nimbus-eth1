@@ -17,10 +17,10 @@ import
   ../../nimbus/beacon/web3_eth_conv
 
 const
-  #testFile = "tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4844_blobs/fork_transition_excess_blob_gas.json"
+  testFile = "tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4844_blobs/fork_transition_excess_blob_gas.json"
   #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcRandomBlockhashTest/randomStatetest224BC.json"
   #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcRandomBlockhashTest/randomStatetest631BC.json"
-  testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcStateTests/blockhashTests.json"
+  #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcStateTests/blockhashTests.json"
 
 type
   BCTConv* = JrpcConv
@@ -122,10 +122,12 @@ proc toBctEnv(parentBlock, currentBlock: EthBlock, hashes: BCTHashes): BCTEnv =
   result.currentTimestamp  = Opt.some w3Qty(current.timestamp)
   result.currentDifficulty = current.difficulty
   result.currentRandom     = Opt.some w3Hash(current.mixHash)
-  result.currentBaseFee    = current.baseFeePerGas
 
-  result.currentBlobGasUsed    = w3Qty(current.blobGasUsed)
-  result.currentExcessBlobGas  = w3Qty(current.excessBlobGas)
+  # t8n should able to calculate these values itself if not supplied
+  #result.currentBaseFee        = current.baseFeePerGas
+  #result.currentBlobGasUsed    = w3Qty(current.blobGasUsed)
+  #result.currentExcessBlobGas  = w3Qty(current.excessBlobGas)
+
   result.parentBeaconBlockRoot = w3Hash(current.parentBeaconBlockRoot)
   result.parentDifficulty      = Opt.some parent.difficulty
   result.parentTimestamp       = Opt.some w3Qty(parent.timestamp)
