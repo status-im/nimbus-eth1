@@ -29,6 +29,7 @@ cliBuilder:
           ./test_difficulty,
           ./test_transaction_json,
           ./test_blockchain_json,
+          ./test_forked_chain,
           ./test_forkid,
           ./test_multi_keys,
           #./test_graphql,                         -- fails
