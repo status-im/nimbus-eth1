@@ -113,9 +113,23 @@ proc cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
     of JObject:
       # we cannot use OrderedTable's equality here as
       # the order does not matter for equality here.
-      if a.fields.len != b.fields.len:
-        jsc.exit("OBJ LEN A($1) != B($2)" % [$a.fields.len, $b.fields.len])
+      var
+        aFields = newSeqOfCap[string](a.fields.len)
+        bFields = newSeqOfCap[string](b.fields.len)
+
       for key, val in a.fields:
+        if val.kind != JNull:
+          aFields.add key
+
+      for key, val in b.fields:
+        if val.kind != JNull:
+          bFields.add key
+
+      if aFields.len != bFields.len:
+        jsc.exit("OBJ LEN A($1) != B($2)" % [$aFields.len, $bFields.len])
+
+      for key in aFields:
+        let val = a.fields[key]
         if not b.fields.hasKey(key):
           jsc.exit("OBJ FIELD A($1) != B(none)" % [key])
         if not jsc.cmp(val, b.fields[key], path & "/" & key):
@@ -572,6 +586,15 @@ const
     TestSpec(
       name  : "Blob gas used exceeds max allowance",
       base  : "testdata/00-523",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Cancun", "0",
+      ),
+      output: T8nOutput(result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "Calculate excessBlobGas if not supplied",
+      base  : "testdata/00-524",
       input : t8nInput(
         "alloc.json", "txs.rlp", "env.json", "Cancun", "0",
       ),
