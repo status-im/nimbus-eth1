@@ -17,18 +17,18 @@
 ## would always require extra linking.
 
 template valueOrApiError[U,V](rc: Result[U,V]; info: static[string]): U =
-  rc.valueOr: raise (ref AristoApiRlpError)(msg: info)
+  rc.valueOr: raise (ref CoreDbApiError)(msg: info)
 
 iterator aristoReplicate[T](
     dsc: CoreDbMptRef;
       ): (Blob,Blob)
-      {.gcsafe, raises: [AristoApiRlpError].} =
+      {.gcsafe, raises: [CoreDbApiError].} =
   ## Generic iterator used for building dedicated backend iterators.
   ##
   let
     root = dsc.rootID
-    mpt = dsc.to(AristoDbRef)
-    api = dsc.to(AristoApiRef)
+    mpt = dsc.parent.ctx.mpt
+    api = dsc.parent.adbBase.api
     p = api.forkTx(mpt,0).valueOrApiError "aristoReplicate()"
   defer: discard api.forget(p)
   for (vid,key,vtx,node) in T.replicate(p):

@@ -13,22 +13,8 @@
 import
   std/strutils,
   ../../../../errors,
-  "../../.."/[aristo, kvt],
+  "../../.."/aristo,
   ../../base/base_desc
-
-type
-  AristoApiRlpError* = object of CoreDbApiError
-    ## For re-routing exceptions in iterator closure
-
-  AristoCoreDbError* = ref object of CoreDbErrorRef
-    ## Error return code
-    ctx*: string     ## Context where the exception or error occured
-    case isAristo*: bool
-    of true:
-      vid*: VertexID
-      aErr*: AristoError
-    else:
-      kErr*: KvtError
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -47,7 +33,6 @@ func toStr*(n: VertexID): string =
 
 func errorPrint*(e: CoreDbErrorRef): string =
   if not e.isNil:
-    let e = e.AristoCoreDbError
     result = if e.isAristo: "Aristo" else: "Kvt"
     result &= ", ctx=" & $e.ctx & ", "
     if e.isAristo:

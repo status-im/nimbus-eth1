@@ -19,11 +19,6 @@ from ../aristo
   import EmptyBlob, isValid
 
 const
-  EnableAccountKeyValidation = defined(release).not
-    ## If this flag is enabled, the length of an account key is verified
-    ## to habe exactly 32 bytes. An assert is thrown if seen otherwise (a
-    ## notoriously week spot of the `openArray[byte]` argument type.)
-
   EnableApiTracking = false
     ## When enabled, functions using this tracking facility need to import
     ## `chronicles`, as well. Also, some `func` designators might need to
@@ -142,6 +137,7 @@ proc bless*(db: CoreDbRef; kvt: CoreDbKvtRef): CoreDbKvtRef =
 proc bless*[T: CoreDbKvtRef |
                CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
                CoreDbTxRef  | CoreDbCaptRef |
+               CoreDbKvtBaseRef | CoreDbAriBaseRef |
                CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef] (
     db: CoreDbRef;
     dsc: T;
@@ -188,9 +184,9 @@ proc dbType*(db: CoreDbRef): CoreDbType =
 
 proc parent*[T: CoreDbKvtRef |
                 CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
-                CoreDbTxRef |
-                CoreDbCaptRef |
-                CoreDbErrorRef](
+                CoreDbTxRef | CoreDbCaptRef |
+                CoreDbKvtBaseRef | CoreDbAriBaseRef |
+                CoreDbErrorRef] (
     child: T): CoreDbRef =
   ## Getter, common method for all sub-modules
   ##
@@ -412,8 +408,6 @@ proc fetch*(
   ## Fetch the account data record for the particular account indexed by
   ## the key `accPath`.
   ##
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccFetchFn
   result = acc.methods.fetchFn(acc, accPath)
   acc.ifTrackNewApi:
@@ -426,8 +420,6 @@ proc delete*(
   ## Delete the particular account indexed by the key `accPath`. This
   ## will also destroy an associated storage area.
   ##
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccDeleteFn
   result = acc.methods.deleteFn(acc, accPath)
   acc.ifTrackNewApi:
@@ -440,8 +432,6 @@ proc clearStorage*(
   ## Delete all data slots from the storage area associated with the
   ## particular account indexed by the key `accPath`.
   ##
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccClearStorageFn
   result = acc.methods.clearStorageFn(acc, accPath)
   acc.ifTrackNewApi:
@@ -466,8 +456,6 @@ proc hasPath*(
       ): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccHasPathFn
   result = acc.methods.hasPathFn(acc, accPath)
   acc.ifTrackNewApi:
@@ -505,8 +493,6 @@ proc slotDelete*(
     slot: openArray[byte];
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotDeleteFn
   result = acc.methods.slotDeleteFn(acc, accPath, slot)
   acc.ifTrackNewApi:
@@ -519,8 +505,6 @@ proc slotHasPath*(
     slot: openArray[byte];
       ):  CoreDbRc[bool] =
   ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotHasPathFn
   result = acc.methods.slotHasPathFn(acc, accPath, slot)
   acc.ifTrackNewApi:
@@ -534,8 +518,6 @@ proc slotMerge*(
     data: openArray[byte];
       ):  CoreDbRc[void] =
   ## Like `merge()` but with cascaded index `(accPath,slot)`.
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotMergeFn
   result = acc.methods.slotMergeFn(acc, accPath, slot, data)
   acc.ifTrackNewApi:
@@ -554,8 +536,6 @@ proc slotState*(
   ## If the argument `updateOk` is set `true`, the Merkle hashes of the
   ## database will be updated first (if needed, at all).
   ##
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotStateFn
   result = acc.methods.slotStateFn(acc, accPath, updateOk)
   acc.ifTrackNewApi:
@@ -568,8 +548,6 @@ proc slotStateEmpty*(
   ## This function returns `true` if the storage data column is empty or
   ## missing.
   ##
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotStateEmptyFn
   result = acc.methods.slotStateEmptyFn(acc, accPath)
   acc.ifTrackNewApi:
@@ -580,8 +558,6 @@ proc slotStateEmptyOrVoid*(
     accPath: Hash256;
       ): bool =
   ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
   result = acc.methods.slotStateEmptyFn(acc, accPath).valueOr: true
   acc.ifTrackNewApi:
@@ -599,8 +575,6 @@ proc recast*(
   ## of an account statement. This conversion may fail if the storage colState
   ## hash (see `hash()` above) is currently unavailable.
   ##
-  when EnableAccountKeyValidation:
-    doAssert accPath.len == 32
   acc.setTrackNewApi EthAccRecastFn
   let rc = acc.methods.slotStateFn(acc, accPath, updateOk)
   result =

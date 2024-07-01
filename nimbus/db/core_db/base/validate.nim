@@ -22,7 +22,9 @@ type
     CoreDbTxRef  |
     CoreDbCaptRef
 
-  ValidateDesc* = MethodsDesc | EphemMethodsDesc | CoreDbErrorRef
+  BaseDesc* = CoreDbAriBaseRef | CoreDbAriBaseRef
+  
+  ValidateDesc* = MethodsDesc | EphemMethodsDesc | CoreDbErrorRef | BaseDesc
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -80,44 +82,52 @@ proc validateMethodsDesc(fns: CoreDbAccFns) =
 
 # ------------
 
-proc validateMethodsDesc(e: CoreDbErrorRef) =
+proc validateSubDescRef(e: CoreDbErrorRef) =
   doAssert e.error != CoreDbErrorCode(0)
   doAssert not e.isNil
   doAssert not e.parent.isNil
 
-proc validateMethodsDesc(eph: EphemMethodsDesc) =
-  doAssert not eph.isNil
-  doAssert not eph.parent.isNil
+proc validateSubDescRef(kb: CoreDbKvtBackendRef) =
+  doAssert not kb.isNil
+  doAssert not kb.parent.isNil
+  doAssert not kb.kdb.isNil
 
-proc validateMethodsDesc(kvt: CoreDbKvtRef) =
+proc validateSubDescRef(ab: CoreDbMptBackendRef | CoreDbAccBackendRef) =
+  doAssert not ab.isNil
+  doAssert not ab.parent.isNil
+  doAssert not ab.adb.isNil
+
+proc validateSubDescRef(kvt: CoreDbKvtRef) =
   doAssert not kvt.isNil
   doAssert not kvt.parent.isNil
+  doAssert not kvt.kvt.isNil
   kvt.methods.validateMethodsDesc
 
-proc validateMethodsDesc(ctx: CoreDbCtxRef) =
+proc validateSubDescRef(ctx: CoreDbCtxRef) =
   doAssert not ctx.isNil
   doAssert not ctx.parent.isNil
+  doAssert not ctx.mpt.isNil
   ctx.methods.validateMethodsDesc
 
-proc validateMethodsDesc(mpt: CoreDbMptRef) =
+proc validateSubDescRef(mpt: CoreDbMptRef) =
   doAssert not mpt.isNil
   doAssert not mpt.parent.isNil
   mpt.methods.validateMethodsDesc
 
-proc validateMethodsDesc(acc: CoreDbAccRef) =
+proc validateSubDescRef(acc: CoreDbAccRef) =
   doAssert not acc.isNil
   doAssert not acc.parent.isNil
   acc.methods.validateMethodsDesc
 
 when false: # currently disabled
-  proc validateMethodsDesc(cpt: CoreDbCaptRef) =
+  proc validateSubDescRef(cpt: CoreDbCaptRef) =
     doAssert not cpt.isNil
     doAssert not cpt.parent.isNil
     doAssert not cpt.methods.recorderFn.isNil
     doAssert not cpt.methods.getFlagsFn.isNil
     doAssert not cpt.methods.forgetFn.isNil
 
-proc validateMethodsDesc(tx: CoreDbTxRef) =
+proc validateSubDescRef(tx: CoreDbTxRef) =
   doAssert not tx.isNil
   doAssert not tx.parent.isNil
   doAssert not tx.methods.levelFn.isNil
@@ -125,20 +135,34 @@ proc validateMethodsDesc(tx: CoreDbTxRef) =
   doAssert not tx.methods.rollbackFn.isNil
   doAssert not tx.methods.disposeFn.isNil
 
-proc validateMethodsDesc(db: CoreDbRef) =
+proc validateSubDescRef(db: CoreDbRef) =
   doAssert not db.isNil
   doAssert db.dbType != CoreDbType(0)
   db.methods.validateMethodsDesc
+
+proc validateSubDescRef(bd: CoreDbAriBaseRef) =
+  doAssert not bd.parent.isNil
+  doAssert not bd.api.isNil
+
+proc validateSubDescRef(bd: CoreDbKvtBaseRef) =
+  doAssert not bd.parent.isNil
+  doAssert not bd.api.isNil
+  doAssert not bd.kdb.isNil
+  doAssert not bd.cache.isNil
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
 proc validate*(dsc: ValidateDesc) =
-  dsc.validateMethodsDesc
+  dsc.validateSubDescRef
 
 proc validate*(db: CoreDbRef) =
-  db.validateMethodsDesc
+  db.validateSubDescRef
+  doAssert not db.kdbBase.isNil
+  doAssert not db.adbBase.isNil
+  doAssert not db.ctx.isNil
+
 
 # ------------------------------------------------------------------------------
 # End

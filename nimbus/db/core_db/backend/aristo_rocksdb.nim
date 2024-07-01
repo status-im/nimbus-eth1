@@ -23,7 +23,7 @@ import
   ../../kvt/kvt_init/rocks_db/rdb_init,
   ../base,
   ./aristo_db,
-  ./aristo_db/[common_desc, handlers_aristo],
+  ./aristo_db/handlers_aristo,
   ../../opts
 
 include ./aristo_db/aristo_replicate
@@ -34,7 +34,7 @@ const
   kvtFail = "Kvt/RocksDB init() failed"
 
 # Annotation helper(s)
-{.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
+{.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
 
 proc toRocksDb*(
     opts: DbOptions

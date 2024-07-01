@@ -25,7 +25,7 @@ when CoreDbEnableApiTracking:
     newApiTxt = logTxt & "API"
 
 # Annotation helper(s)
-{.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
+{.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
 
 # ------------------------------------------------------------------------------
 # Public iterators

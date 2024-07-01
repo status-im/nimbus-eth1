@@ -29,23 +29,10 @@ import
 
 # Annotation helper(s)
 {.pragma:  noRaise, gcsafe, raises: [].}
-{.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
+{.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
 
 export
-  AristoApiRlpError,
-  AristoCoreDbKvtBE,
   isAristo
-
-type
-  AristoCoreDbRef* = ref object of CoreDbRef
-    ## Main descriptor
-    kdbBase: KvtBaseRef                      ## Kvt subsystem
-    adbBase: AristoBaseRef                   ## Aristo subsystem
-    #tracer: AristoTracerRef                  ## Currently active recorder
-
-  #AristoTracerRef = ref object of TraceRecorderRef
-  #  ## Sub-handle for tracer
-  #  parent: AristoCoreDbRef
 
 proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
 
@@ -54,7 +41,7 @@ proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
 # ------------------------------------------------------------------------------
 
 proc txMethods(
-    db: AristoCoreDbRef;
+    db: CoreDbRef;
     aTx: AristoTxRef;
     kTx: KvtTxRef;
      ): CoreDbTxFns =
@@ -121,7 +108,7 @@ when false: # currently disabled
           tr.restore())
 
 
-proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
+proc baseMethods(db: CoreDbRef): CoreDbBaseFns =
   let
     aBase = db.adbBase
     kBase = db.kdbBase
@@ -159,7 +146,7 @@ proc baseMethods(db: AristoCoreDbRef): CoreDbBaseFns =
       kBase.newKvtHandler("newKvtFn()"),
 
     newCtxFn: proc(): CoreDbCtxRef =
-      aBase.ctx,
+      db.ctx,
 
     newCtxFromTxFn: proc(r: Hash256; k: CoreDbColType): CoreDbRc[CoreDbCtxRef] =
       CoreDbCtxRef.init(db.adbBase, r, k),
@@ -190,9 +177,10 @@ proc create*(dbType: CoreDbType; kdb: KvtDbRef; adb: AristoDbRef): CoreDbRef =
   ## Constructor helper
 
   # Local extensions
-  var db = AristoCoreDbRef()
-  db.adbBase = AristoBaseRef.init(db, adb)
-  db.kdbBase = KvtBaseRef.init(db, kdb)
+  var db = CoreDbRef()
+  db.adbBase = db.bless CoreDbAriBaseRef(api: AristoApiRef.init())
+  db.kdbBase = CoreDbKvtBaseRef.init(db, kdb)
+  db.ctx = CoreDbCtxRef.init(db, adb)
 
   # Base descriptor
   db.dbType = dbType
@@ -218,34 +206,32 @@ func toAristoProfData*(
       ): tuple[aristo: AristoDbProfListRef, kvt: KvtDbProfListRef]  =
   when CoreDbEnableApiProfiling:
     if db.isAristo:
-      result.aristo = db.AristoCoreDbRef.adbBase.api.AristoApiProfRef.data
-      result.kvt = db.AristoCoreDbRef.kdbBase.api.KvtApiProfRef.data
+      result.aristo = db.CoreDbRef.adbBase.api.AristoApiProfRef.data
+      result.kvt = db.CoreDbRef.kdbBase.api.KvtApiProfRef.data
 
 func toAristoApi*(kvt: CoreDbKvtRef): KvtApiRef =
   if kvt.parent.isAristo:
-    return AristoCoreDbRef(kvt.parent).kdbBase.api
+    return CoreDbRef(kvt.parent).kdbBase.api
 
 func toAristoApi*(mpt: CoreDbMptRef): AristoApiRef =
   if mpt.parent.isAristo:
-    return mpt.to(AristoApiRef)
+    return mpt.parent.adbBase.api
 
 func toAristo*(kBe: CoreDbKvtBackendRef): KvtDbRef =
   if not kBe.isNil and kBe.parent.isAristo:
-    return kBe.AristoCoreDbKvtBE.kdb
+    return kBe.kdb
 
 func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
-    return mBe.AristoCoreDbMptBE.adb
+    return mBe.adb
 
 func toAristo*(mBe: CoreDbAccBackendRef): AristoDbRef =
   if not mBe.isNil and mBe.parent.isAristo:
-    return mBe.AristoCoreDbAccBE.adb
+    return mBe.adb
 
-proc toAristoSavedStateBlockNumber*(
-    mBe: CoreDbMptBackendRef;
-      ): BlockNumber =
+proc toAristoSavedStateBlockNumber*(mBe: CoreDbMptBackendRef): BlockNumber =
   if not mBe.isNil and mBe.parent.isAristo:
-    let rc = mBe.parent.AristoCoreDbRef.adbBase.getSavedState()
+    let rc = mBe.parent.adbBase.getSavedState()
     if rc.isOk:
       return rc.value.serial.BlockNumber
 
@@ -261,7 +247,7 @@ include
 iterator aristoKvtPairsVoid*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
     api = dsc.toAristoApi()
-    p = api.forkTx(dsc.to(KvtDbRef),0).valueOrApiError "aristoKvtPairs()"
+    p = api.forkTx(dsc.kvt,0).valueOrApiError "aristoKvtPairs()"
   defer: discard api.forget(p)
   for (k,v) in use_kvt.VoidBackendRef.walkPairs p:
     yield (k,v)
@@ -269,15 +255,15 @@ iterator aristoKvtPairsVoid*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
 iterator aristoKvtPairsMem*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
     api = dsc.toAristoApi()
-    p = api.forkTx(dsc.to(KvtDbRef),0).valueOrApiError "aristoKvtPairs()"
+    p = api.forkTx(dsc.kvt,0).valueOrApiError "aristoKvtPairs()"
   defer: discard api.forget(p)
   for (k,v) in use_kvt.MemBackendRef.walkPairs p:
     yield (k,v)
 
 iterator aristoMptPairs*(dsc: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
   let
-    api = dsc.to(AristoApiRef)
-    mpt = dsc.to(AristoDbRef)
+    api = dsc.parent.adbBase.api
+    mpt = dsc.parent.ctx.mpt
   for (path,data) in mpt.rightPairsGeneric dsc.rootID:
     yield (api.pathAsBlob(path), data)
 
@@ -287,8 +273,8 @@ iterator aristoSlotPairs*(
       ): (Blob,Blob)
       {.noRaise.} =
   let
-    api = dsc.to(AristoApiRef)
-    mpt = dsc.to(AristoDbRef)
+    api = dsc.parent.adbBase.api
+    mpt = dsc.parent.ctx.mpt
   for (path,data) in mpt.rightPairsStorage accPath:
     yield (api.pathAsBlob(path), data)
 

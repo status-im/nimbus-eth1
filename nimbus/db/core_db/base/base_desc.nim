@@ -14,6 +14,7 @@ import
   std/tables,
   eth/common,
   ../../aristo,
+  ../../kvt,
   ../../aristo/aristo_profile
 
 # Annotation helpers
@@ -264,40 +265,66 @@ type
     trackLedgerApi*: bool       ## Debugging, suggestion for subsequent ledger
     profTab*: CoreDbProfListRef ## Profiling data (if any)
     ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
+    kdbBase*: CoreDbKvtBaseRef  ## Kvt subsystem
+    adbBase*: CoreDbAriBaseRef  ## Aristo subsystem
+    ctx*: CoreDbCtxRef          ## Currently active context
     methods*: CoreDbBaseFns
+
+  CoreDbKvtBaseRef* = ref object of RootRef
+    parent*: CoreDbRef
+    api*: KvtApiRef             ## Api functions can be re-directed
+    kdb*: KvtDbRef              ## Shared key-value table
+    cache*: CoreDbKvtRef        ## Shared transaction table wrapper
+
+  CoreDbAriBaseRef* = ref object of RootRef
+    parent*: CoreDbRef
+    api*: AristoApiRef          ## Api functions can be re-directed
 
   CoreDbErrorRef* = ref object of RootRef
     ## Generic error object
     error*: CoreDbErrorCode
     parent*: CoreDbRef
+    ctx*: string     ## Context where the exception or error occured
+    case isAristo*: bool
+    of true:
+      vid*: VertexID
+      aErr*: AristoError
+    else:
+      kErr*: KvtError
 
   CoreDbKvtBackendRef* = ref object of RootRef
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
+    kdb*: KvtDbRef
 
   CoreDbMptBackendRef* = ref object of RootRef
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
+    adb*: AristoDbRef
 
   CoreDbAccBackendRef* = ref object of RootRef
     ## Backend wrapper for direct backend access
     parent*: CoreDbRef
+    adb*: AristoDbRef
 
   CoreDbKvtRef* = ref object of RootRef
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
     methods*: CoreDbKvtFns
+    kvt*: KvtDbRef              ## In most cases different from `base.kdb`
 
   CoreDbCtxRef* = ref object of RootRef
     ## Context for `CoreDbMptRef` and `CoreDbAccRef`
     parent*: CoreDbRef
     methods*: CoreDbCtxFns
+    mpt*: AristoDbRef           ## Aristo MPT database
 
   CoreDbMptRef* = ref object of RootRef
     ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
     ## initialised on-the-fly.
     parent*: CoreDbRef
     methods*: CoreDbMptFns
+    rootID*: VertexID           ## State root, may be zero unless account
 
   CoreDbAccRef* = ref object of RootRef
     ## Similar to `CoreDbKvtRef`, only dealing with `CoreDbAccount` data
