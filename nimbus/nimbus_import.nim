@@ -316,6 +316,10 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       avgMGps = f(gas.float / 1000000 / diff0),
       elapsed = shortLog(time2 - time0, 3)
 
+    nec_imported_blocks.inc(blocks.len)
+    nec_imported_transactions.inc(statsRes[].txs)
+    nec_imported_gas.inc(statsRes[].gas)
+
     if csv != nil:
       # In the CSV, we store a line for every chunk of blocks processed so
       # that the file can meaningfully be appended to when restarting the
