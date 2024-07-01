@@ -306,7 +306,6 @@ proc exists*(db: CoreDbRef, hash: Hash256): bool =
 
 proc getSavedStateBlockNumber*(
     db: CoreDbRef;
-    relax = false;
       ): BlockNumber =
   ## Returns the block number registered when the database was last time
   ## updated, or `BlockNumber(0)` if there was no updata found.
@@ -317,20 +316,9 @@ proc getSavedStateBlockNumber*(
   ## can be set `true` so this function also returns the block number if the
   ## state consistency check fails.
   ##
-  const info = "getSavedStateBlockNumber(): "
   # FIXME: This construct following will be replaced by a proper
   #        `CoreDb` method.
-  let bn = db.ctx.getColumn(CtGeneric).backend.toAristoSavedStateBlockNumber()
-  if relax:
-    return bn
-  else:
-    var header: BlockHeader
-    if db.getBlockHeader(bn, header):
-      let state = db.ctx.getAccounts.state(updateOk=true).valueOr:
-        raiseAssert info & $$error
-      if state != header.stateRoot:
-        raiseAssert info & ": state mismatch at " & "#" & $result
-      return bn
+  db.ctx.getColumn(CtGeneric).backend.toAristoSavedStateBlockNumber()
 
 proc getBlockHeader*(
     db: CoreDbRef;

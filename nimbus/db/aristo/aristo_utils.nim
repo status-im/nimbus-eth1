@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, typetraits],
+  std/[sequtils, typetraits],
   eth/common,
   results,
   "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
@@ -103,20 +103,20 @@ proc toNode*(
     return ok node
 
 
-proc subVids*(vtx: VertexRef): seq[VertexID] =
+iterator subVids*(vtx: VertexRef): VertexID =
   ## Returns the list of all sub-vertex IDs for the argument `vtx`.
   case vtx.vType:
   of Leaf:
     if vtx.lData.pType == AccountData:
       let vid = vtx.lData.stoID
       if vid.isValid:
-        result.add vid
+        yield vid
   of Branch:
     for vid in vtx.bVid:
       if vid.isValid:
-        result.add vid
+        yield vid
   of Extension:
-    result.add vtx.eVid
+    yield vtx.eVid
 
 # ---------------------
 

@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, typetraits],
+  std/[sets, typetraits],
   eth/common,
   results,
   ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_vid]
@@ -38,8 +38,9 @@ proc clearMerkleKeys(
     hike: Hike;                        # Implied vertex IDs to clear hashes for
     vid: VertexID;                     # Additionall vertex IDs to clear
       ) =
-  for w in hike.legs.mapIt(it.wp.vid) & @[vid]:
-    db.layersResKey(hike.root, w)
+  for w in hike.legs:
+    db.layersResKey(hike.root, w.wp.vid)
+  db.layersResKey(hike.root, vid)
 
 proc setVtxAndKey*(
     db: AristoDbRef;                   # Database, top layer

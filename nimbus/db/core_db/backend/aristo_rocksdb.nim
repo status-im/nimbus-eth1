@@ -102,14 +102,20 @@ proc toRocksDb*(
   # https://github.com/facebook/rocksdb/wiki/Compression
   cfOpts.bottommostCompression = Compression.lz4Compression
 
-  # We mostly look up data we know is there, so we don't need filters at the
-  # last level of the database - this option saves 90% bloom filter memory usage
-  # TODO verify this point
+  # TODO In the AriVtx table, we don't do lookups that are expected to result
+  #      in misses thus we could avoid the filter cost - this does not apply to
+  #      other tables since their API admit queries that might result in
+  #      not-found - specially the KVT which is exposed to external queries and
+  #      the `HashKey` cache (AriKey)
   # https://github.com/EighteenZi/rocksdb_wiki/blob/master/Memory-usage-in-RocksDB.md#indexes-and-filter-blocks
   # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/advanced_options.h#L696
-  cfOpts.optimizeFiltersForHits = true
+  # cfOpts.optimizeFiltersForHits = true
 
-  cfOpts.maxBytesForLevelBase = opts.writeBufferSize
+  cfOpts.maxBytesForLevelBase = cfOpts.writeBufferSize
+
+  # Reduce number of files when the database grows
+  cfOpts.targetFileSizeBase = cfOpts.writeBufferSize div 4
+  cfOpts.targetFileSizeMultiplier = 4
 
   let dbOpts = defaultDbOptions()
   dbOpts.maxOpenFiles = opts.maxOpenFiles
