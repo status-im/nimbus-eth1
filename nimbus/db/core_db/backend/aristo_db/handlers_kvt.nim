@@ -49,7 +49,7 @@ func toRc[T](
 # Private `kvt` call back functions
 # ------------------------------------------------------------------------------
 
-proc kvtMethods(cKvt: CoreDbKvtRef): CoreDbKvtFns =
+proc kvtMethods(): CoreDbKvtFns =
   ## Key-value database table handlers
 
   proc kvtBackend(
@@ -146,25 +146,25 @@ proc kvtMethods(cKvt: CoreDbKvtRef): CoreDbKvtFns =
       err(rc.error.toError(base, info))
 
   CoreDbKvtFns(
-    backendFn: proc(): CoreDbKvtBackendRef =
+    backendFn: proc(cKvt: CoreDbKvtRef): CoreDbKvtBackendRef =
       cKvt.kvtBackend(),
 
-    getFn: proc(k: openArray[byte]): CoreDbRc[Blob] =
+    getFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[Blob] =
       cKvt.kvtGet(k, "getFn()"),
 
-    lenFn: proc(k: openArray[byte]): CoreDbRc[int] =
+    lenFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[int] =
       cKvt.kvtLen(k, "lenFn()"),
 
-    delFn: proc(k: openArray[byte]): CoreDbRc[void] =
+    delFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[void] =
       cKvt.kvtDel(k, "delFn()"),
 
-    putFn: proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+    putFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
       cKvt.kvtPut(k, v, "putFn()"),
 
-    hasKeyFn: proc(k: openArray[byte]): CoreDbRc[bool] =
+    hasKeyFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[bool] =
       cKvt.kvtHasKey(k, "hasKeyFn()"),
 
-    forgetFn: proc(): CoreDbRc[void] =
+    forgetFn: proc(cKvt: CoreDbKvtRef): CoreDbRc[void] =
       cKvt.kvtForget("forgetFn()"))
 
 # ------------------------------------------------------------------------------
@@ -226,16 +226,14 @@ proc destroy*(base: CoreDbKvtBaseRef; eradicate: bool) =
 
 
 func init*(T: type CoreDbKvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =
-  result = CoreDbKvtBaseRef(
-    parent: db,
-    api:    KvtApiRef.init(),
-    kdb:    kdb)
+  result = db.bless CoreDbKvtBaseRef(
+    api:       KvtApiRef.init(),
+    kdb:       kdb,
 
-  # Preallocated shared descriptor
-  let dsc = CoreDbKvtRef(
-    kvt:  kdb)
-  dsc.methods = dsc.kvtMethods()
-  result.cache = db.bless dsc
+    # Preallocated shared descriptor
+    cache: db.bless CoreDbKvtRef(
+      kvt:     kdb,
+      methods: kvtMethods()))
 
   when CoreDbEnableApiProfiling:
     let profApi = KvtApiProfRef.init(result.api, kdb.backend)

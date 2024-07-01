@@ -77,34 +77,44 @@ func toVoidRc[T](
 # ------------------------------------------------------------------------------
 
 proc mptMethods(): CoreDbMptFns =
-  # These templates are a hack to remove a closure environment that was using
-  # hundreds of mb of memory to have this syntactic convenience
-  # TODO remove methods / abstraction entirely - it is no longer needed
-  template db: untyped = cMpt.parent
-  template base: untyped = db.adbBase
-  template api: untyped = base.api
-  template mpt: untyped = db.ctx.mpt
 
   proc mptBackend(cMpt: CoreDbMptRef): CoreDbMptBackendRef =
-    db.bless CoreDbMptBackendRef(adb: mpt)
+    let db = cMpt.parent
+    db.bless CoreDbMptBackendRef(adb: db.ctx.mpt)
 
   proc mptFetch(cMpt: CoreDbMptRef, key: openArray[byte]): CoreDbRc[Blob] =
     const info = "fetchFn()"
-    let data = api.fetchGenericData(mpt, cMpt.rootID, key).valueOr:
-      if error == FetchPathNotFound:
-        return err(error.toError(base, info, MptNotFound))
-      return err(error.toError(base, info))
+
+    let
+      db = cMpt.parent
+      base = db.adbBase
+      data = base.api.fetchGenericData(db.ctx.mpt, cMpt.rootID, key).valueOr:
+        if error == FetchPathNotFound:
+          return err(error.toError(base, info, MptNotFound))
+        return err(error.toError(base, info))
     ok(data)
 
-  proc mptMerge(cMpt: CoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
+  proc mptMerge(
+      cMpt: CoreDbMptRef,
+      key: openArray[byte];
+      val: openArray[byte];
+        ): CoreDbRc[void] =
     const info = "mergeFn()"
-    api.mergeGenericData(mpt, cMpt.rootID, k, v).isOkOr:
+
+    let
+      db = cMpt.parent
+      base = db.adbBase
+    base.api.mergeGenericData(db.ctx.mpt, cMpt.rootID, key, val).isOkOr:
       return err(error.toError(base, info))
     ok()
 
   proc mptDelete(cMpt: CoreDbMptRef, key: openArray[byte]): CoreDbRc[void] =
     const info = "deleteFn()"
-    api.deleteGenericData(mpt, cMpt.rootID, key).isOkOr:
+
+    let
+      db = cMpt.parent
+      base = db.adbBase
+    base.api.deleteGenericData(db.ctx.mpt, cMpt.rootID, key).isOkOr:
       if error == DelPathNotFound:
         return err(error.toError(base, info, MptNotFound))
       return err(error.toError(base, info))
@@ -112,14 +122,23 @@ proc mptMethods(): CoreDbMptFns =
 
   proc mptHasPath(cMpt: CoreDbMptRef, key: openArray[byte]): CoreDbRc[bool] =
     const info = "hasPathFn()"
-    let yn = api.hasPathGeneric(mpt, cMpt.rootID, key).valueOr:
-      return err(error.toError(base, info))
+
+    let
+      db = cMpt.parent
+      base = db.adbBase
+      yn = base.api.hasPathGeneric(db.ctx.mpt, cMpt.rootID, key).valueOr:
+        return err(error.toError(base, info))
     ok(yn)
 
   proc mptState(cMpt: CoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] =
     const info = "mptState()"
-    let state = api.fetchGenericState(mpt, cMpt.rootID, updateOk).valueOr:
-      return err(error.toError(base, info))
+
+    let
+      db = cMpt.parent
+      base = db.adbBase
+      state = base.api.fetchGenericState(
+          db.ctx.mpt, cMpt.rootID, updateOk).valueOr:
+        return err(error.toError(base, info))
     ok(state)
 
   ## Generic columns database handlers
@@ -148,13 +167,10 @@ proc mptMethods(): CoreDbMptFns =
 
 proc accMethods(): CoreDbAccFns =
   ## Account columns database handlers
-  template db: untyped = cAcc.parent
-  template base: untyped = db.adbBase
-  template api: untyped = base.api
-  template mpt: untyped = db.ctx.mpt
 
   proc accBackend(cAcc: CoreDbAccRef): CoreDbAccBackendRef =
-    db.bless CoreDbAccBackendRef(adb: mpt)
+    let db = cAcc.parent
+    db.bless CoreDbAccBackendRef(adb: db.ctx.mpt)
 
   proc accFetch(
       cAcc: CoreDbAccRef;
@@ -162,10 +178,13 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
 
-    let acc = api.fetchAccountRecord(mpt, accPath).valueOr:
-      if error != FetchPathNotFound:
-        return err(error.toError(base, info))
-      return err(error.toError(base, info, AccNotFound))
+    let
+      db = cAcc.parent
+      base = db.adbBase
+      acc = base.api.fetchAccountRecord(db.ctx.mpt, accPath).valueOr:
+        if error != FetchPathNotFound:
+          return err(error.toError(base, info))
+        return err(error.toError(base, info, AccNotFound))
     ok acc
 
   proc accMerge(
@@ -175,11 +194,10 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[void] =
     const info = "acc/mergeFn()"
 
-    let val = AristoAccount(
-      nonce:    accRec.nonce,
-      balance:  accRec.balance,
-      codeHash: accRec.codeHash)
-    api.mergeAccountRecord(mpt, accPath, val).isOkOr:
+    let
+      db = cAcc.parent
+      base = db.adbBase
+    base.api.mergeAccountRecord(db.ctx.mpt, accPath, accRec).isOkOr:
       return err(error.toError(base, info))
     ok()
 
@@ -189,7 +207,10 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[void] =
     const info = "acc/deleteFn()"
 
-    api.deleteAccountRecord(mpt, accPath).isOkOr:
+    let
+      db = cAcc.parent
+      base = db.adbBase
+    base.api.deleteAccountRecord(db.ctx.mpt, accPath).isOkOr:
       if error == DelPathNotFound:
         # TODO: Would it be conseqient to just return `ok()` here?
         return err(error.toError(base, info, AccNotFound))
@@ -202,7 +223,10 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[void] =
     const info = "acc/clearStoFn()"
 
-    api.deleteStorageTree(mpt, accPath).isOkOr:
+    let
+      db = cAcc.parent
+      base = db.adbBase
+    base.api.deleteStorageTree(db.ctx.mpt, accPath).isOkOr:
       if error notin {DelStoRootMissing,DelStoAccMissing}:
         return err(error.toError(base, info))
     ok()
@@ -213,8 +237,11 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[bool] =
     const info = "hasPathFn()"
 
-    let yn = api.hasPathAccount(mpt, accPath).valueOr:
-      return err(error.toError(base, info))
+    let
+      db = cAcc.parent
+      base = db.adbBase
+      yn = base.api.hasPathAccount(db.ctx.mpt, accPath).valueOr:
+        return err(error.toError(base, info))
     ok(yn)
 
   proc accState(
@@ -222,8 +249,11 @@ proc accMethods(): CoreDbAccFns =
       updateOk: bool;
         ): CoreDbRc[Hash256] =
     const info = "accStateFn()"
-    let state = api.fetchAccountState(mpt, updateOk).valueOr:
-      return err(error.toError(base, info))
+    let
+      db = cAcc.parent
+      base = db.adbBase
+      state = base.api.fetchAccountState(db.ctx.mpt, updateOk).valueOr:
+        return err(error.toError(base, info))
     ok(state)
 
 
@@ -234,10 +264,13 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[Blob] =
     const info = "slotFetchFn()"
 
-    let data = api.fetchStorageData(mpt, accPath, stoPath).valueOr:
-      if error != FetchPathNotFound:
-        return err(error.toError(base, info))
-      return err(error.toError(base, info, StoNotFound))
+    let
+      db = cAcc.parent
+      base = db.adbBase
+      data = base.api.fetchStorageData(db.ctx.mpt, accPath, stoPath).valueOr:
+        if error != FetchPathNotFound:
+          return err(error.toError(base, info))
+        return err(error.toError(base, info, StoNotFound))
     ok(data)
 
   proc slotDelete(
@@ -247,7 +280,10 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[void] =
     const info = "slotDeleteFn()"
 
-    api.deleteStorageData(mpt, accPath, stoPath).isOkOr:
+    let
+      db = cAcc.parent
+      base = db.adbBase
+    base.api.deleteStorageData(db.ctx.mpt, accPath, stoPath).isOkOr:
       if error == DelPathNotFound:
         return err(error.toError(base, info, StoNotFound))
       if error == DelStoRootMissing:
@@ -264,8 +300,11 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[bool] =
     const info = "slotHasPathFn()"
 
-    let yn = api.hasPathStorage(mpt, accPath, stoPath).valueOr:
-      return err(error.toError(base, info))
+    let
+      db = cAcc.parent
+      base = db.adbBase
+      yn = base.api.hasPathStorage(db.ctx.mpt, accPath, stoPath).valueOr:
+        return err(error.toError(base, info))
     ok(yn)
 
   proc slotMerge(
@@ -276,7 +315,10 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[void] =
     const info = "slotMergeFn()"
 
-    api.mergeStorageData(mpt, accPath, stoPath, stoData).isOkOr:
+    let
+      db = cAcc.parent
+      base = db.adbBase
+    base.api.mergeStorageData(db.ctx.mpt, accPath, stoPath, stoData).isOkOr:
         return err(error.toError(base, info))
     ok()
 
@@ -286,8 +328,11 @@ proc accMethods(): CoreDbAccFns =
       updateOk: bool;
         ): CoreDbRc[Hash256] =
     const info = "slotStateFn()"
-    let state = api.fetchStorageState(mpt, accPath, updateOk).valueOr:
-      return err(error.toError(base, info))
+    let
+      db = cAcc.parent
+      base = db.adbBase
+      state = base.api.fetchStorageState(db.ctx.mpt, accPath, updateOk).valueOr:
+        return err(error.toError(base, info))
     ok(state)
 
   proc slotStateEmpty(
@@ -296,8 +341,11 @@ proc accMethods(): CoreDbAccFns =
         ): CoreDbRc[bool] =
     const info = "slotStateEmptyFn()"
 
-    let yn = api.hasStorageData(mpt, accPath).valueOr:
-      return err(error.toError(base, info))
+    let
+      db = cAcc.parent
+      base = db.adbBase
+      yn = base.api.hasStorageData(db.ctx.mpt, accPath).valueOr:
+        return err(error.toError(base, info))
     ok(not yn)
 
 
@@ -389,31 +437,36 @@ proc accMethods(): CoreDbAccFns =
 # ------------------------------------------------------------------------------
 
 proc ctxMethods(): CoreDbCtxFns =
-  template db: untyped = cCtx.parent
-  template base: untyped = db.adbBase
-  template api: untyped = base.api
-  template mpt: untyped = cCtx.mpt
-
-  proc ctxGetColumn(cCtx: CoreDbCtxRef; colType: CoreDbColType; clearData: bool): CoreDbMptRef =
+  proc ctxGetColumn(
+      cCtx: CoreDbCtxRef;
+      colType: CoreDbColType;
+      clearData: bool;
+        ): CoreDbMptRef =
     const info = "getColumnFn()"
+    let db = cCtx.parent
     if clearData:
-      api.deleteGenericTree(mpt, VertexID(colType)).isOkOr:
+      db.adbBase.api.deleteGenericTree(cCtx.mpt, VertexID(colType)).isOkOr:
         raiseAssert info & " clearing up failed: " & $error
     db.bless CoreDbMptRef(
       methods: mptMethods(),
       rootID: VertexID(colType))
 
   proc ctxGetAccounts(cCtx: CoreDbCtxRef): CoreDbAccRef =
-    db.bless CoreDbAccRef(
+    cCtx.parent.bless CoreDbAccRef(
       methods: accMethods())
 
   proc ctxForget(cCtx: CoreDbCtxRef) =
-    api.forget(mpt).isOkOr:
+    let db = cCtx.parent
+    db.adbBase.api.forget(cCtx.mpt).isOkOr:
       raiseAssert "forgetFn(): " & $error
 
 
   CoreDbCtxFns(
-    getColumnFn: proc(cCtx: CoreDbCtxRef; colType: CoreDbColType; clearData: bool): CoreDbMptRef =
+    getColumnFn: proc(
+        cCtx: CoreDbCtxRef;
+        colType: CoreDbColType;
+        clearData: bool;
+          ): CoreDbMptRef =
       ctxGetColumn(CoreDbCtxRef(cCtx), colType, clearData),
 
     getAccountsFn: proc(cCtx: CoreDbCtxRef): CoreDbAccRef =

@@ -138,7 +138,7 @@ proc bless*[T: CoreDbKvtRef |
                CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
                CoreDbTxRef  | CoreDbCaptRef |
                CoreDbKvtBaseRef | CoreDbAriBaseRef |
-               CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef] (
+               CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef](
     db: CoreDbRef;
     dsc: T;
       ): auto =
@@ -246,13 +246,13 @@ proc newKvt*(db: CoreDbRef): CoreDbKvtRef =
 proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function always returns a non-empty `Blob` or an error code.
   kvt.setTrackNewApi KvtGetFn
-  result = kvt.methods.getFn key
+  result = kvt.methods.getFn(kvt, key)
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
   ## This function returns the size of the value associated with `key`.
   kvt.setTrackNewApi KvtLenFn
-  result = kvt.methods.lenFn key
+  result = kvt.methods.lenFn(kvt, key)
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
@@ -261,14 +261,14 @@ proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## database.
   ##
   kvt.setTrackNewApi KvtGetOrEmptyFn
-  result = kvt.methods.getFn key
+  result = kvt.methods.getFn(kvt, key)
   if result.isErr and result.error.error == KvtNotFound:
     result = CoreDbRc[Blob].ok(EmptyBlob)
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[void] =
   kvt.setTrackNewApi KvtDelFn
-  result = kvt.methods.delFn key
+  result = kvt.methods.delFn(kvt, key)
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc put*(
@@ -277,7 +277,7 @@ proc put*(
     val: openArray[byte];
       ): CoreDbRc[void] =
   kvt.setTrackNewApi KvtPutFn
-  result = kvt.methods.putFn(key, val)
+  result = kvt.methods.putFn(kvt, key, val)
   kvt.ifTrackNewApi:
     debug newApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
 
@@ -285,7 +285,7 @@ proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
   kvt.setTrackNewApi KvtHasKeyFn
-  result = kvt.methods.hasKeyFn key
+  result = kvt.methods.hasKeyFn(kvt, key)
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 # ------------------------------------------------------------------------------

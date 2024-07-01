@@ -22,9 +22,9 @@ type
     CoreDbTxRef  |
     CoreDbCaptRef
 
-  BaseDesc* = CoreDbAriBaseRef | CoreDbAriBaseRef
-  
-  ValidateDesc* = MethodsDesc | EphemMethodsDesc | CoreDbErrorRef | BaseDesc
+  ValidateDesc* =
+    MethodsDesc | EphemMethodsDesc | CoreDbErrorRef |
+    CoreDbKvtBaseRef | CoreDbAriBaseRef
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -162,7 +162,6 @@ proc validate*(db: CoreDbRef) =
   doAssert not db.kdbBase.isNil
   doAssert not db.adbBase.isNil
   doAssert not db.ctx.isNil
-
 
 # ------------------------------------------------------------------------------
 # End

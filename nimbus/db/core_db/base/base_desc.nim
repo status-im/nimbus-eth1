@@ -111,14 +111,14 @@ type
   # --------------------------------------------------
   # Sub-descriptor: KVT methods
   # --------------------------------------------------
-  CoreDbKvtBackendFn* = proc(): CoreDbKvtBackendRef {.noRaise.}
-  CoreDbKvtGetFn* = proc(k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
-  CoreDbKvtLenFn* = proc(k: openArray[byte]): CoreDbRc[int] {.noRaise.}
-  CoreDbKvtDelFn* = proc(k: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtBackendFn* = proc(cKvt: CoreDbKvtRef): CoreDbKvtBackendRef {.noRaise.}
+  CoreDbKvtGetFn* = proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
+  CoreDbKvtLenFn* = proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[int] {.noRaise.}
+  CoreDbKvtDelFn* = proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[void] {.noRaise.}
   CoreDbKvtPutFn* =
-    proc(k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtForgetFn* = proc(): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtHasKeyFn* = proc(k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+    proc(cKvt: CoreDbKvtRef; k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtForgetFn* = proc(cKvt: CoreDbKvtRef): CoreDbRc[void] {.noRaise.}
+  CoreDbKvtHasKeyFn* = proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
 
   CoreDbKvtFns* = object
     ## Methods for key-value table
