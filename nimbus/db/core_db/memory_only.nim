@@ -27,7 +27,6 @@ export
   core_apps,
 
   # see `aristo_db`
-  isAristo,
   toAristo,
   toAristoProfData,
   toAristoSavedStateBlockNumber,

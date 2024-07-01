@@ -11,14 +11,14 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[strutils, tables],
   eth/common,
   ../../aristo as use_ari,
   ../../aristo/[aristo_walk, aristo_serialise],
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk],
   ".."/[base, base/base_desc],
-  ./aristo_db/[common_desc, handlers_aristo, handlers_kvt]
+  ./aristo_db/[handlers_aristo, handlers_kvt]
 
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
@@ -31,10 +31,30 @@ import
 {.pragma:  noRaise, gcsafe, raises: [].}
 {.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
 
-export
-  isAristo
-
 proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+func toStr(n: VertexID): string =
+  result = "$"
+  if n.isValid:
+    result &= n.uint64.toHex.strip(
+      leading=true, trailing=false, chars={'0'}).toLowerAscii
+  else:
+    result &= "ø"
+
+func errorPrint(e: CoreDbErrorRef): string =
+  if not e.isNil:
+    result = if e.isAristo: "Aristo" else: "Kvt"
+    result &= ", ctx=" & $e.ctx & ", "
+    if e.isAristo:
+      if e.vid.isValid:
+        result &= "vid=" & e.vid.toStr & ", "
+      result &= "error=" & $e.aErr
+    else:
+      result &= "error=" & $e.kErr
 
 # ------------------------------------------------------------------------------
 # Private tx and base methods
@@ -205,32 +225,29 @@ func toAristoProfData*(
     db: CoreDbRef;
       ): tuple[aristo: AristoDbProfListRef, kvt: KvtDbProfListRef]  =
   when CoreDbEnableApiProfiling:
-    if db.isAristo:
-      result.aristo = db.CoreDbRef.adbBase.api.AristoApiProfRef.data
-      result.kvt = db.CoreDbRef.kdbBase.api.KvtApiProfRef.data
+    result.aristo = db.CoreDbRef.adbBase.api.AristoApiProfRef.data
+    result.kvt = db.CoreDbRef.kdbBase.api.KvtApiProfRef.data
 
 func toAristoApi*(kvt: CoreDbKvtRef): KvtApiRef =
-  if kvt.parent.isAristo:
-    return CoreDbRef(kvt.parent).kdbBase.api
+  return CoreDbRef(kvt.parent).kdbBase.api
 
 func toAristoApi*(mpt: CoreDbMptRef): AristoApiRef =
-  if mpt.parent.isAristo:
-    return mpt.parent.adbBase.api
+  return mpt.parent.adbBase.api
 
 func toAristo*(kBe: CoreDbKvtBackendRef): KvtDbRef =
-  if not kBe.isNil and kBe.parent.isAristo:
+  if not kBe.isNil:
     return kBe.kdb
 
 func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
-  if not mBe.isNil and mBe.parent.isAristo:
+  if not mBe.isNil:
     return mBe.adb
 
 func toAristo*(mBe: CoreDbAccBackendRef): AristoDbRef =
-  if not mBe.isNil and mBe.parent.isAristo:
+  if not mBe.isNil:
     return mBe.adb
 
 proc toAristoSavedStateBlockNumber*(mBe: CoreDbMptBackendRef): BlockNumber =
-  if not mBe.isNil and mBe.parent.isAristo:
+  if not mBe.isNil:
     let rc = mBe.parent.adbBase.getSavedState()
     if rc.isOk:
       return rc.value.serial.BlockNumber
