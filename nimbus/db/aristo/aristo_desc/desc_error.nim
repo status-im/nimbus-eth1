@@ -37,21 +37,9 @@ type
     CheckAnyVTopUnset
 
     CheckBeCacheGarbledVTop
-    CheckBeCacheIsDirty
-    CheckBeCacheKeyCantCompile
     CheckBeCacheKeyDangling
-    CheckBeCacheKeyMismatch
-    CheckBeCacheKeyMissing
     CheckBeCacheKeyNonEmpty
-    CheckBeCacheVidUnsynced
-    CheckBeCacheVtxDangling
-    CheckBeFifoSrcTrgMismatch
-    CheckBeFifoTrgNotStateRoot
     CheckBeGarbledVTop
-    CheckBeKeyCantCompile
-    CheckBeKeyInvalid
-    CheckBeKeyMismatch
-    CheckBeKeyMissing
     CheckBeVtxBranchLinksMissing
     CheckBeVtxExtPfxMissing
     CheckBeVtxInvalid
@@ -62,7 +50,6 @@ type
     CheckStkVtxKeyMismatch
     CheckStkVtxKeyMissing
 
-    CheckRlxVidVtxMismatch
     CheckRlxVtxIncomplete
     CheckRlxVtxKeyMissing
     CheckRlxVtxKeyMismatch

@@ -19,7 +19,7 @@ import
   stew/interval_set,
   results,
   ./aristo_walk/persistent,
-  "."/[aristo_desc, aristo_get, aristo_init, aristo_utils],
+  "."/[aristo_desc, aristo_get, aristo_init],
   ./aristo_check/[check_be, check_top]
 
 # ------------------------------------------------------------------------------
@@ -51,9 +51,6 @@ proc checkTop*(
 
 proc checkBE*(
     db: AristoDbRef;                   # Database, top layer
-    relax = true;                      # Not re-compiling hashes if `true`
-    cache = true;                      # Also verify against top layer cache
-    fifos = false;                     # Also verify cascaded filter fifos
       ): Result[void,(VertexID,AristoError)] =
   ## Verify database backend structure. If the argument `relax` is set `false`,
   ## all necessary Merkle hashes are compiled and verified. If the argument
@@ -73,11 +70,11 @@ proc checkBE*(
   ##
   case db.backend.kind:
   of BackendMemory:
-    return MemBackendRef.checkBE(db, cache=cache, relax=relax)
+    return MemBackendRef.checkBE db
   of BackendRocksDB, BackendRdbHosting:
-    return RdbBackendRef.checkBE(db, cache=cache, relax=relax)
+    return RdbBackendRef.checkBE db
   of BackendVoid:
-    return VoidBackendRef.checkBE(db, cache=cache, relax=relax)
+    return VoidBackendRef.checkBE db
 
 
 proc check*(
@@ -88,7 +85,7 @@ proc check*(
       ): Result[void,(VertexID,AristoError)] =
   ## Shortcut for running `checkTop()` followed by `checkBE()`
   ? db.checkTop(proofMode = proofMode)
-  ? db.checkBE(relax = relax, cache = cache)
+  ? db.checkBE()
   ok()
 
 # ------------------------------------------------------------------------------
