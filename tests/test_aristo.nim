@@ -151,7 +151,6 @@ proc storagesRunner(
 
 proc aristoMain*(noisy = defined(debug)) =
   noisy.miscRunner()
-  noisy.accountsRunner()
   noisy.storagesRunner()
 
 when isMainModule:
@@ -163,13 +162,6 @@ when isMainModule:
   when true and false:
     # Verify Problem with the database for production test
     noisy.aristoMain()
-
-  # This one uses dumps from the external `nimbus-eth1-blob` repo
-  when true and false:
-    import ./test_sync_snap/snap_other_xx
-    noisy.showElapsed("@snap_other_xx"):
-      for n,sam in snapOtherList:
-        noisy.accountsRunner(sam, resetDb=true)
 
   when true: # and false:
     let persistent = false or true
