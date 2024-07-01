@@ -271,6 +271,29 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       boolFlag({PersistBlockFlag.NoFullValidation}, not conf.fullValidation) +
       boolFlag(NoPersistBodies, not conf.storeBodies) +
       boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts)
+    clConfig = 
+      if conf.networkId == HoleskyNet:
+        getMetadataForNetwork("holesky")
+      elif conf.networkId == SepoliaNet:
+        getMetadataForNetwork("sepolia")
+      elif conf.networkId == MainNet:
+        getMetadataForNetwork("mainnet")
+      else:
+        error "Unsupported network", network = conf.networkId
+        quit(QuitFailure)
+    genesis_validators_root = 
+      if conf.networkId == MainNet:
+        Eth2Digest.fromHex(
+          "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95") # Mainnet Validators Root
+      elif conf.networkId == HoleskyNet:
+        Eth2Digest.fromHex(
+          "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1") # Holesky Validators Root
+      elif conf.networkId == SepoliaNet:
+        Eth2Digest.fromHex(
+          "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078") # Sepolia Validators Root
+      else:
+        error "Unsupported network", network = conf.networkId
+        quit(QuitFailure)
     blocks: seq[EthBlock]
 
   defer:
@@ -341,21 +364,37 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         warn "Could not write csv", err = exc.msg
     blocks.setLen(0)
 
+  ## ##################################################### 
+  ##                                                
+  ##   Networks with pre-merge and post-merge history      
+  ##
+  ## #####################################################
   if isDir(conf.era1Dir.string):
-    doAssert conf.networkId == MainNet, "Only mainnet era1 current supported"
+    doAssert conf.networkId == MainNet or conf.networkId == SepoliaNet, "Only mainnet/sepolia era1 current supported"
 
-    const
+    let
       # TODO the merge block number could be fetched from the era1 file instead,
       #      specially if the accumulator is added to the chain metadata
-      lastEra1Block = 15537393
-      firstSlotAfterMerge = 4700013
+      lastEra1Block = 
+        if conf.networkId == MainNet:
+          15537393'u64                          # Mainnet
+        else:
+          1450409'u64                           # Sepolia
+      firstSlotAfterMerge = 
+        if conf.networkId == MainNet:
+          4700013'u64                          # Mainnet
+        else:
+          115193'u64                           # Sepolia
 
     if start <= lastEra1Block:
       notice "Importing era1 archive",
         start, dataDir = conf.dataDir.string, era1Dir = conf.era1Dir.string
 
-      let db =
-        Era1DbRef.init(conf.era1Dir.string, "mainnet").expect("Era files present")
+      let db = 
+        if conf.networkId == MainNet:
+          Era1DbRef.init(conf.era1Dir.string, "mainnet").expect("Era files present") # Mainnet
+        else:
+          Era1DbRef.init(conf.era1Dir.string, "sepolia").expect("Era files present") # Sepolia
       defer:
         db.dispose()
 
@@ -375,14 +414,11 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     
     if start > lastEra1Block:
       doAssert isDir(conf.eraDir.string), "Era directory not found"
-           
+
       notice "Importing era archive",
         start, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
 
       let
-        clConfig = getMetadataForNetwork("mainnet")
-        genesis_validators_root = Eth2Digest.fromHex(
-          "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95") # Mainnet Validators Root
         eraDB = EraDB.new(
           clConfig.cfg, conf.eraDir.string, genesis_validators_root
         )
@@ -392,7 +428,8 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           error "Error loading historical summaries", error
           quit QuitFailure
       
-      importedSlot = firstSlotAfterMerge
+      if importedSlot < firstSlotAfterMerge: # if resuming import we do not update the slot
+        importedSlot = firstSlotAfterMerge
 
       while running and imported < conf.maxBlocks and importedSlot < endSlot:
         var clblock = getBlockFromEra(
@@ -409,12 +446,14 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       if blocks.len > 0:
         process()
 
+  ## ################################################
+  ##                                                
+  ##      Networks with not pre-merge history       
+  ##
+  ## ################################################
   if isDir(conf.eraDir.string) and conf.networkId == HoleskyNet:
     
     let
-      clConfig = getMetadataForNetwork("holesky")
-      genesis_validators_root = Eth2Digest.fromHex(
-        "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1") # Holesky Validators Root
       eraDB = EraDB.new(
         clConfig.cfg, conf.eraDir.string, genesis_validators_root
       )
