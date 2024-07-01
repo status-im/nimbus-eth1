@@ -7,28 +7,12 @@
 
 {.push raises: [].}
 
-import chronos, chronicles, ../../rpc/portal_rpc_client, ./portal_bridge_conf
+import chronicles, ./[portal_bridge_conf, portal_bridge_common]
 
 proc runState*(config: PortalBridgeConf) =
   let
-    portalClient = newRpcHttpClient()
-    # TODO: Use Web3 object?
-    web3Client: RpcClient =
-      case config.web3UrlState.kind
-      of HttpUrl:
-        newRpcHttpClient()
-      of WsUrl:
-        newRpcWebSocketClient()
-  try:
-    waitFor portalClient.connect(config.rpcAddress, Port(config.rpcPort), false)
-  except CatchableError as e:
-    error "Failed to connect to portal RPC", error = $e.msg
-
-  if config.web3UrlState.kind == HttpUrl:
-    try:
-      waitFor (RpcHttpClient(web3Client)).connect(config.web3UrlState.url)
-    except CatchableError as e:
-      error "Failed to connect to web3 RPC", error = $e.msg
+    portalClient = newRpcClientConnect(config.portalRpcUrl)
+    web3Client = newRpcClientConnect(config.web3Url)
 
   # TODO:
   # Here we'd want to implement initially a loop that backfills the state
