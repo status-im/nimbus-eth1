@@ -154,12 +154,6 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
   const info = "AccountsLedgerRef.init(): "
   new result
   result.ledger = db.ctx.getAccounts()
-  if root != EMPTY_ROOT_HASH:
-    let rc = result.ledger.state(updateOk=true)
-    if rc.isErr:
-      raiseAssert info & $$rc.error
-    if rc.value != root:
-      raiseAssert info & ": wrong account state"
   result.kvt = db.newKvt() # save manually in `persist()`
   result.witnessCache = Table[EthAddress, WitnessData]()
   discard result.beginSavepoint

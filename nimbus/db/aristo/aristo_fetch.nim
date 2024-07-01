@@ -44,13 +44,16 @@ proc retrievePayload(
   if path.len == 0:
     return err(FetchPathInvalid)
 
-  let hike = NibblesBuf.fromBytes(path).hikeUp(root, db).valueOr:
-    if error[1] in HikeAcceptableStopsNotFound:
-      return err(FetchPathNotFound)
-    return err(error[1])
+  for step in stepUp(NibblesBuf.fromBytes(path), root, db):
+    let vtx = step.valueOr:
+      if error in HikeAcceptableStopsNotFound:
+        return err(FetchPathNotFound)
+      return err(error)
 
-  ok hike.legs[^1].wp.vtx.lData
+    if vtx.vType == Leaf:
+      return ok vtx.lData
 
+  return err(FetchPathNotFound)
 
 proc retrieveMerkleHash(
     db: AristoDbRef;
@@ -79,11 +82,12 @@ proc hasPayload(
   if path.len == 0:
     return err(FetchPathInvalid)
 
-  let hike = path.hikeUp(VertexID(1), db).valueOr:
-    if error[1] in HikeAcceptableStopsNotFound:
-      return ok(false)
-    return err(error[1])
-  ok(true)
+  let error = db.retrievePayload(root, path).errorOr:
+    return ok(true)
+
+  if error == FetchPathNotFound:
+    return ok(false)
+  err(error)
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -120,11 +124,12 @@ proc fetchStorageID*(
   ## Public helper function fro retrieving a storage (vertex) ID for a
   ## given account.
   let
-    accHike = db.fetchAccountHike(accPath).valueOr:
+    payload = db.retrievePayload(VertexID(1), accPath).valueOr:
       if error == FetchAccInaccessible:
         return err(FetchPathNotFound)
       return err(error)
-    stoID = accHike.legs[^1].wp.vtx.lData.stoID
+
+    stoID = payload.stoID
 
   if not stoID.isValid:
     return err(FetchPathNotFound)

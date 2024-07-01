@@ -134,10 +134,6 @@ proc persistBlocksImpl(
       if not updated:
         debug "Cannot update VmState", blockNumber = header.number
         return err("Cannot update VmState to block " & $header.number)
-    else:
-      # TODO weirdly, some tests depend on this reinit being called, even though
-      #      in theory it's a fresh instance that should not need it (?)
-      doAssert vmState.reinit(header = header)
 
     # TODO even if we're skipping validation, we should perform basic sanity
     #      checks on the block and header - that fields are sanely set for the
@@ -178,7 +174,8 @@ proc persistBlocksImpl(
     if NoPersistWithdrawals notin flags and blk.withdrawals.isSome:
       c.db.persistWithdrawals(
         header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
-        blk.withdrawals.get)
+        blk.withdrawals.get
+      )
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
@@ -189,6 +186,7 @@ proc persistBlocksImpl(
     txs += blk.transactions.len
     gas += blk.header.gasUsed
     parentHash = blockHash
+
   dbTx.commit()
 
   # Save and record the block number before the last saved block state.

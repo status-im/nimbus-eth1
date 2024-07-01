@@ -77,6 +77,77 @@ func legsTo*(hike: Hike; numLegs: int; T: type NibblesBuf): T =
 
 # --------
 
+proc step*(
+    path: NibblesBuf, vid: VertexID, db: AristoDbRef
+      ): Result[(VertexRef, NibblesBuf, VertexID), AristoError] =
+  # Fetch next vertex
+  let vtx = db.getVtxRc(vid).valueOr:
+    if error != GetVtxNotFound:
+      return err(error)
+
+    # The vertex ID `vid` was a follow up from a parent vertex, but there is
+    # no child vertex on the database. So `vid` is a dangling link which is
+    # allowed only if there is a partial trie (e.g. with `snap` sync.)
+    return err(HikeDanglingEdge)
+
+  case vtx.vType:
+  of Leaf:
+    # This must be the last vertex, so there cannot be any `tail` left.
+    if path.len != path.sharedPrefixLen(vtx.lPfx):
+      return err(HikeLeafUnexpected)
+
+    ok (vtx, NibblesBuf(), VertexID(0))
+
+  of Branch:
+    # There must be some more data (aka `tail`) after a `Branch` vertex.
+    if path.len == 0:
+      return err(HikeBranchTailEmpty)
+
+    let
+      nibble = path[0].int8
+      nextVid = vtx.bVid[nibble]
+
+    if not nextVid.isValid:
+      return err(HikeBranchMissingEdge)
+
+    ok (vtx, path.slice(1), nextVid)
+
+  of Extension:
+    # There must be some more data (aka `tail`) after an `Extension` vertex.
+    if path.len == 0:
+      return err(HikeBranchTailEmpty)
+
+    if vtx.ePfx.len != path.sharedPrefixLen(vtx.ePfx):
+      return err(HikeExtTailMismatch) # Need to branch from here
+
+    let nextVid = vtx.eVid
+    if not nextVid.isValid:
+      return err(HikeExtMissingEdge)
+
+    ok (vtx, path.slice(vtx.ePfx.len), nextVid)
+
+iterator stepUp*(
+    path: NibblesBuf;                            # Partial path
+    root: VertexID;                              # Start vertex
+    db: AristoDbRef;                             # Database
+): Result[VertexRef, AristoError] =
+  ## For the argument `path`, iterate over the logest possible path in the
+  ## argument database `db`.
+  var
+    path = path
+    next = root
+    vtx: VertexRef
+  block iter:
+    while true:
+      (vtx, path, next) = step(path, next, db).valueOr:
+        yield Result[VertexRef, AristoError].err(error)
+        break iter
+
+      yield Result[VertexRef, AristoError].ok(vtx)
+
+      if path.len == 0:
+        break
+
 proc hikeUp*(
     path: NibblesBuf;                            # Partial path
     root: VertexID;                              # Start vertex
@@ -95,66 +166,26 @@ proc hikeUp*(
 
   var vid = root
   while true:
-    var leg = Leg(wp: VidVtxPair(vid: vid), nibble: -1)
+    let (vtx, path, next) = step(hike.tail, vid, db).valueOr:
+      return err((vid,error,hike))
 
-    # Fetch next vertex
-    leg.wp.vtx = db.getVtxRc(vid).valueOr:
-      if error != GetVtxNotFound:
-        return err((vid,error,hike))
-      if hike.legs.len == 0:
-        return err((vid,HikeNoLegs,hike))
-      # The vertex ID `vid` was a follow up from a parent vertex, but there is
-      # no child vertex on the database. So `vid` is a dangling link which is
-      # allowed only if there is a partial trie (e.g. with `snap` sync.)
-      return err((vid,HikeDanglingEdge,hike))
+    let wp = VidVtxPair(vid:vid, vtx:vtx)
 
-    case leg.wp.vtx.vType:
+    case vtx.vType
     of Leaf:
-      # This must be the last vertex, so there cannot be any `tail` left.
-      if hike.tail.len == hike.tail.sharedPrefixLen(leg.wp.vtx.lPfx):
-        # Bingo, got full path
-        hike.legs.add leg
-        hike.tail = NibblesBuf()
-        # This is the only loop exit
-        break
+      hike.legs.add Leg(wp: wp, nibble: -1)
+      hike.tail = path
 
-      return err((vid,HikeLeafUnexpected,hike))
-
-    of Branch:
-      # There must be some more data (aka `tail`) after a `Branch` vertex.
-      if hike.tail.len == 0:
-        hike.legs.add leg
-        return err((vid,HikeBranchTailEmpty,hike))
-
-      let
-        nibble = hike.tail[0].int8
-        nextVid = leg.wp.vtx.bVid[nibble]
-
-      if not nextVid.isValid:
-        return err((vid,HikeBranchMissingEdge,hike))
-
-      leg.nibble = nibble
-      hike.legs.add leg
-      hike.tail = hike.tail.slice(1)
-      vid = nextVid
+      break
 
     of Extension:
-      # There must be some more data (aka `tail`) after an `Extension` vertex.
-      if hike.tail.len == 0:
-        hike.legs.add leg
-        hike.tail = NibblesBuf()
-        return err((vid,HikeExtTailEmpty,hike))    # Well, somehow odd
+      hike.legs.add Leg(wp: wp, nibble: -1)
 
-      if leg.wp.vtx.ePfx.len != hike.tail.sharedPrefixLen(leg.wp.vtx.ePfx):
-        return err((vid,HikeExtTailMismatch,hike)) # Need to branch from here
+    of Branch:
+      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[0])
 
-      let nextVid = leg.wp.vtx.eVid
-      if not nextVid.isValid:
-        return err((vid,HikeExtMissingEdge,hike))
-
-      hike.legs.add leg
-      hike.tail = hike.tail.slice(leg.wp.vtx.ePfx.len)
-      vid = nextVid
+    hike.tail = path
+    vid = next
 
   ok hike
 

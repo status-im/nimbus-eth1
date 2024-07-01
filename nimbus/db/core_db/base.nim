@@ -629,21 +629,6 @@ proc level*(db: CoreDbRef): int =
 
 proc persistent*(
     db: CoreDbRef;
-      ): CoreDbRc[void] =
-  ## For the legacy database, this function has no effect and succeeds always.
-  ## It will nevertheless return a discardable error if there is a pending
-  ## transaction (i.e. `db.level() == 0`.)
-  ##
-  ## Otherwise, cached data from the `Kvt`, `Mpt`, and `Acc` descriptors are
-  ## stored on the persistent database (if any). This requires that that there
-  ## is no transaction pending.
-  ##
-  db.setTrackNewApi BasePersistentFn
-  result = db.methods.persistentFn Opt.none(BlockNumber)
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
-
-proc persistent*(
-    db: CoreDbRef;
     blockNumber: BlockNumber;
       ): CoreDbRc[void] {.discardable.} =
   ## Variant of `persistent()` which stores a block number within the recovery
