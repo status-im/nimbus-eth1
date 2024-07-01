@@ -316,6 +316,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       avgMGps = f(gas.float / 1000000 / diff0),
       elapsed = shortLog(time2 - time0, 3)
 
+    metrics.set(nec_import_block_number, int64(blockNumber))
     nec_imported_blocks.inc(blocks.len)
     nec_imported_transactions.inc(statsRes[].txs)
     nec_imported_gas.inc(statsRes[].gas)
@@ -372,7 +373,9 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       if blocks.len > 0:
         process() # last chunk, if any
     
-    if start > lastEra1Block:     
+    if start > lastEra1Block:
+      doAssert isDir(conf.eraDir.string), "Era directory not found"
+           
       notice "Importing era archive",
         start, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
 
