@@ -19,8 +19,6 @@ import
   ../beacon/web3_eth_conv,
   ./rpc_types
 
-{.push raises: [].}
-
 type
   ServerAPIRef = ref object
     com: CommonRef
@@ -30,9 +28,10 @@ const
   defaultTag = blockId("latest")
 
 func newServerAPI*(c: ForkedChainRef): ServerAPIRef =
-  new(result)
-  result.com = c.com
-  result.chain = c
+  ServerAPIRef(
+    com: c.com,
+    chain: c,
+  )
 
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[common.BlockHeader, string] =
   if blockTag.kind == bidAlias:
