@@ -41,18 +41,8 @@ const
     ## functions with fixed assignments of the type of a state root (e.g. for
     ## a receipt or a transaction root.)
 
-  LOOSE_STORAGE_TRIE_COUPLING* = true
-    ## Enabling the `LOOSE_STORAGE_TRIE_COUPLING` flag a sub-trie is considered
-    ## empty if the root vertex ID is zero or at least `LEAST_FREE_VID` and
-    ## there is no vertex available. If the vertex ID is not zero and should
-    ## be considered as such will affect calculating the Merkel hash node key
-    ## for an accou.t leaf of payload type `AccountData`.
-    ##
-    ## Setting this flag `true` might be helpful for running an API supporting
-    ## both, a legacy and# the `Aristo` database backend.
-    ##
-
 static:
-  doAssert 1 < LEAST_FREE_VID # must stay away from `VertexID(1)`
+  # must stay away from `VertexID(1)` and `VertexID(2)`
+  doAssert 2 < LEAST_FREE_VID
 
 # End

@@ -63,15 +63,7 @@ proc toNode*(
       if vid.isValid:
         let key = db.getKey vid
         if not key.isValid:
-          block looseCoupling:
-            when LOOSE_STORAGE_TRIE_COUPLING:
-              # Stale storage trie?
-              if LEAST_FREE_VID <= vid.distinctBase and
-                 not db.getVtx(vid).isValid:
-                node.lData.stoID = VertexID(0)
-                break looseCoupling
-            # Otherwise this is a stale storage trie.
-            return err(@[vid])
+          return err(@[vid])
         node.key[0] = key
     return ok node
 

@@ -238,20 +238,15 @@ proc isDbEq(a, b: LayerDeltaRef; db: AristoDbRef; noisy = true): bool =
 
 proc checkBeOk(
     dx: DbTriplet;
-    relax = false;
     forceCache = false;
-    fifos = true;
     noisy = true;
       ): bool =
   ## ..
-  #for n in 0 ..< dx.len:
-  #  let cache = if forceCache: true else: dx[n].dirty.len == 0
-  #  block:
-  #    let rc = dx[n].checkBE(relax=relax, cache=cache, fifos=fifos)
-  #    xCheckRc rc.error == (0,0):
-  #      noisy.say "***", "db checkBE failed",
-  #        " n=", n, "/", dx.len-1,
-  #        " cache=", cache
+  for n in 0 ..< dx.len:
+    let rc = dx[n].checkBE()
+    xCheckRc rc.error == (0,0):
+      noisy.say "***", "db checkBE failed",
+        " n=", n, "/", dx.len-1
   true
 
 # ------------------------------------------------------------------------------
@@ -317,7 +312,7 @@ proc testDistributedAccess*(
 
       # Check/verify backends
       block:
-        let ok = dx.checkBeOk(noisy=noisy,fifos=true)
+        let ok = dx.checkBeOk(noisy=noisy)
         xCheck ok:
           noisy.say "*** testDistributedAccess (4)", "n=", n, "db3".dump db3
 
@@ -375,7 +370,7 @@ proc testDistributedAccess*(
           ""
       # Check/verify backends
       block:
-        let ok = dy.checkBeOk(noisy=noisy,fifos=true)
+        let ok = dy.checkBeOk(noisy=noisy)
         xCheck ok
 
       when false: # or true:

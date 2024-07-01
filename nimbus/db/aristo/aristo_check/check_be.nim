@@ -17,7 +17,7 @@ import
   stew/interval_set,
   ../../aristo,
   ../aristo_walk/persistent,
-  ".."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise]
+  ".."/[aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private helper
@@ -69,9 +69,6 @@ proc toNodeBE(
 proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     _: type T;
     db: AristoDbRef;                   # Database, top layer
-    relax: bool;                       # Not compiling hashes if `true`
-    cache: bool;                       # Also verify against top layer cache
-    fifos = true;                      # Also verify cascaded filter fifos
       ): Result[void,(VertexID,AristoError)] =
   ## Make sure that each vertex has a Merkle hash and vice versa. Also check
   ## the vertex ID generator state.
@@ -82,9 +79,6 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       topVidBe = vid
     if not vtx.isValid:
       return err((vid,CheckBeVtxInvalid))
-    let rc = db.getKeyBE vid
-    if rc.isErr or not rc.value.isValid:
-      return err((vid,CheckBeKeyMissing))
     case vtx.vType:
     of Leaf:
       discard
@@ -104,16 +98,8 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   for (vid,key) in T.walkKeyBe db:
     if topVidBe < vid:
       topVidBe = vid
-    if not key.isValid:
-      return err((vid,CheckBeKeyInvalid))
     let vtx = db.getVtxBE(vid).valueOr:
       return err((vid,CheckBeVtxMissing))
-    let node = vtx.toNodeBE(db).valueOr: # backend links only
-      return err((vid,CheckBeKeyCantCompile))
-    if not relax:
-      let expected = node.digestTo(HashKey)
-      if expected != key:
-        return err((vid,CheckBeKeyMismatch))
 
   # Compare calculated `vTop` against database state
   if topVidBe.isValid:
@@ -133,30 +119,18 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
           return err((vid,CheckBeGarbledVTop))
 
   # Check layer cache against backend
-  if cache:
+  block:
     var topVidCache = VertexID(0)
-    let checkKeysOk = true
 
     # Check structural table
     for (vid,vtx) in db.layersWalkVtx:
       if vtx.isValid and topVidCache < vid:
         topVidCache = vid
-      let key = block:
-        let rc = db.layersGetKey(vid)
-        if rc.isOk:
-          rc.value
-        elif checkKeysOk:
-          # A `kMap[]` entry must exist.
-          return err((vid,CheckBeCacheKeyMissing))
-        else:
-          VOID_HASH_KEY
+      let key = db.layersGetKey(vid).valueOr: VOID_HASH_KEY
       if not vtx.isValid:
         # Some vertex is to be deleted, the key must be empty
-        if checkKeysOk and key.isValid:
+        if key.isValid:
           return err((vid,CheckBeCacheKeyNonEmpty))
-        # There must be a representation on the backend DB unless in a TX
-        if db.getVtxBE(vid).isErr and db.stack.len == 0:
-          return err((vid,CheckBeCacheVidUnsynced))
 
     # Check key table
     var list: seq[VertexID]
@@ -167,15 +141,6 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
       let vtx = db.getVtx vid
       if db.layersGetVtx(vid).isErr and not vtx.isValid:
         return err((vid,CheckBeCacheKeyDangling))
-      if not key.isValid or relax:
-        continue
-      if not vtx.isValid:
-        return err((vid,CheckBeCacheVtxDangling))
-      let node = vtx.toNode(db).valueOr: # compile cache first
-        return err((vid,CheckBeCacheKeyCantCompile))
-      let expected = node.digestTo(HashKey)
-      if expected != key:
-        return err((vid,CheckBeCacheKeyMismatch))
 
     # Check vTop
     if topVidCache.isValid and topVidCache != db.vTop:
@@ -185,7 +150,6 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
         if db.layersGetVtxOrVoid(vid).isValid or
            db.layersGetKeyOrVoid(vid).isValid:
           return err((db.vTop,CheckBeCacheGarbledVTop))
-
   ok()
 
 # ------------------------------------------------------------------------------

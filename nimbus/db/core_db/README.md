@@ -3,6 +3,9 @@ Core database replacement wrapper object
 This wrapper replaces the *TrieDatabaseRef* and its derivatives by the new
 object *CoreDbRef*.
 
+# **out of date**
+
+
 Relations to current *TrieDatabaseRef* implementation
 -----------------------------------------------------
 Here are some incomplete translations for objects and constructors.
