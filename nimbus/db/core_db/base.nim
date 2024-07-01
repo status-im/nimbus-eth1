@@ -13,6 +13,7 @@
 import
   eth/common,
   "../.."/[constants, errors],
+  ../kvt,
   ./base/[api_tracking, base_desc]
 
 from ../aristo
@@ -29,6 +30,9 @@ const
 
   EnableApiProfiling = true
     ## Enables functions profiling if `EnableApiTracking` is also set `true`.
+
+  EnableDebugApi* = defined(release).not
+    ## ...
 
   AutoValidateDescriptors = defined(release).not
     ## No validatinon needed for production suite.
@@ -62,6 +66,14 @@ const
 when AutoValidateDescriptors:
   import ./base/validate
 
+when EnableDebugApi:
+  discard
+else:
+  import
+    ../aristo/[
+      aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_tx],
+    ../kvt/[kvt_desc, kvt_utils, kvt_tx]
+
 # More settings
 const
   logTxt = "CoreDb "
@@ -70,6 +82,13 @@ const
 # Annotation helpers
 {.pragma:   apiRaise, gcsafe, raises: [CoreDbApiError].}
 {.pragma: catchRaise, gcsafe, raises: [CatchableError].}
+
+proc bless*(
+    db: CoreDbRef;
+    error: CoreDbErrorCode;
+    dsc: CoreDbErrorRef;
+      ): CoreDbErrorRef
+      {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -114,6 +133,44 @@ template ifTrackNewApi*(w: CoreDbApiTrackRef; code: untyped) =
   when EnableApiTracking:
     w.endNewApiIf:
       code
+# ------------------------------------------------------------------------------
+# Private KVT helpers
+# ------------------------------------------------------------------------------
+
+proc toError(
+    e: KvtError;
+    base: CoreDbKvtBaseRef;
+    info: string;
+    error = Unspecified;
+      ): CoreDbErrorRef =
+  base.parent.bless(error, CoreDbErrorRef(
+    ctx:      info,
+    isAristo: false,
+    kErr:     e))
+
+template call(
+    base: CoreDbKvtBaseRef;
+    fn: untyped;
+    args: varArgs[untyped];
+      ): untyped =
+  when EnableDebugApi:
+    base.api.fn(args)
+  else:
+    fn(args)
+
+# ------------------------------------------------------------------------------
+# Private Aristo helpers
+# ------------------------------------------------------------------------------
+
+template call(
+    base: CoreDbAriBaseRef;
+    fn: untyped;
+    args: varArgs[untyped];
+      ): untyped =
+  when EnableDebugApi:
+    base.api.fn(args)
+  else:
+    fn(args)
 
 # ------------------------------------------------------------------------------
 # Public constructor helper
@@ -230,6 +287,13 @@ proc `$$`*(e: CoreDbErrorRef): string =
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
+proc backend*(kvt: CoreDbKvtRef): auto =
+  ## Getter, retrieves the *raw* backend object for special/localised support.
+  ##
+  kvt.setTrackNewApi AnyBackendFn
+  result = kvt.parent.bless CoreDbKvtBackendRef(kdb: kvt.kvt)
+  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
+
 proc newKvt*(db: CoreDbRef): CoreDbKvtRef =
   ## Constructor, will defect on failure.
   ##
@@ -243,32 +307,65 @@ proc newKvt*(db: CoreDbRef): CoreDbKvtRef =
     raiseAssert error.prettyText()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
+# ----------- KVT ---------------
+
 proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function always returns a non-empty `Blob` or an error code.
   kvt.setTrackNewApi KvtGetFn
-  result = kvt.methods.getFn(kvt, key)
+  let
+    base = kvt.parent.kdbBase
+    rc = base.call(get, kvt.kvt, key)
+  result = block:
+    if rc.isOk:
+      ok(rc.value)
+    elif rc.error == GetNotFound:
+      err(rc.error.toError(base, $api, KvtNotFound))
+    else:
+      err(rc.error.toError(base, $api))
+  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+
+proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
+  ## Variant of `get()` returning an empty `Blob` if the key is not found
+  ## on the database.
+  ##
+  kvt.setTrackNewApi KvtGetOrEmptyFn
+  let
+    base = kvt.parent.kdbBase
+    rc = base.call(get, kvt.kvt, key)
+  result = block:
+    if rc.isOk:
+      ok(rc.value)
+    elif rc.error == GetNotFound:
+      CoreDbRc[Blob].ok(EmptyBlob)
+    else:
+      err(rc.error.toError(base, $api))
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
   ## This function returns the size of the value associated with `key`.
   kvt.setTrackNewApi KvtLenFn
-  result = kvt.methods.lenFn(kvt, key)
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
-
-proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
-  ## This function sort of mimics the behaviour of the legacy database
-  ## returning an empty `Blob` if the argument `key` is not found on the
-  ## database.
-  ##
-  kvt.setTrackNewApi KvtGetOrEmptyFn
-  result = kvt.methods.getFn(kvt, key)
-  if result.isErr and result.error.error == KvtNotFound:
-    result = CoreDbRc[Blob].ok(EmptyBlob)
+  let
+    base = kvt.parent.kdbBase
+    rc = base.call(len, kvt.kvt, key)
+  result = block:
+    if rc.isOk:
+      ok(rc.value)
+    elif rc.error == GetNotFound:
+      err(rc.error.toError(base, $api, KvtNotFound))
+    else:
+      err(rc.error.toError(base, $api))
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[void] =
   kvt.setTrackNewApi KvtDelFn
-  result = kvt.methods.delFn(kvt, key)
+  let
+    base = kvt.parent.kdbBase
+    rc = base.call(del, kvt.kvt, key)
+  result = block:
+    if rc.isOk:
+      ok()
+    else:
+      err(rc.error.toError(base, $api))
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc put*(
@@ -277,7 +374,14 @@ proc put*(
     val: openArray[byte];
       ): CoreDbRc[void] =
   kvt.setTrackNewApi KvtPutFn
-  result = kvt.methods.putFn(kvt, key, val)
+  let
+    base = kvt.parent.kdbBase
+    rc = base.call(put, kvt.kvt, key, val)
+  result = block:
+    if rc.isOk:
+      ok()
+    else:
+      err(rc.error.toError(base, $api))
   kvt.ifTrackNewApi:
     debug newApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
 
@@ -285,7 +389,14 @@ proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
   kvt.setTrackNewApi KvtHasKeyFn
-  result = kvt.methods.hasKeyFn(kvt, key)
+  let
+    base = kvt.parent.kdbBase
+    rc = base.call(hasKey, kvt.kvt, key)
+  result = block:
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError(base, $api))
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 # ------------------------------------------------------------------------------
@@ -335,6 +446,8 @@ proc getColumn*(
   ctx.setTrackNewApi CtxGetColumnFn
   result = ctx.methods.getColumnFn(ctx, colType, clearData)
   ctx.ifTrackNewApi: debug newApiTxt, api, colType, clearData, elapsed
+
+# ----------- generic MPT ---------------
 
 proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## Fetch data from the argument `mpt`. The function always returns a
@@ -483,7 +596,6 @@ proc slotFetch*(
   acc.setTrackNewApi AccSlotFetchFn
   result = acc.methods.slotFetchFn(acc, accPath, slot)
   acc.ifTrackNewApi:
-    doAssert accPath.len == 32
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
             slot=slot.toStr, result
 

@@ -42,15 +42,6 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   # doAssert not base.newCaptureFn.isNil # currently disabled
   doAssert not base.persistentFn.isNil
 
-proc validateMethodsDesc(kvt: CoreDbKvtFns) =
-  doAssert not kvt.backendFn.isNil
-  doAssert not kvt.getFn.isNil
-  doAssert not kvt.lenFn.isNil
-  doAssert not kvt.delFn.isNil
-  doAssert not kvt.putFn.isNil
-  doAssert not kvt.hasKeyFn.isNil
-  doAssert not kvt.forgetFn.isNil
-
 proc validateMethodsDesc(ctx: CoreDbCtxFns) =
   doAssert not ctx.getAccountsFn.isNil
   doAssert not ctx.getColumnFn.isNil
@@ -101,7 +92,6 @@ proc validateSubDescRef(kvt: CoreDbKvtRef) =
   doAssert not kvt.isNil
   doAssert not kvt.parent.isNil
   doAssert not kvt.kvt.isNil
-  kvt.methods.validateMethodsDesc
 
 proc validateSubDescRef(ctx: CoreDbCtxRef) =
   doAssert not ctx.isNil

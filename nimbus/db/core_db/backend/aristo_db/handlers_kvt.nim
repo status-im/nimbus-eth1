@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   results,
   ../../../kvt as use_kvt,
   ../../base,
@@ -32,156 +31,9 @@ func toError(
     isAristo: false,
     kErr:     e))
 
-func toRc[T](
-    rc: Result[T,KvtError];
-    base: CoreDbKvtBaseRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbRc[T] =
-  if rc.isOk:
-    when T is void:
-      return ok()
-    else:
-      return ok(rc.value)
-  err rc.error.toError(base, info, error)
-
-# ------------------------------------------------------------------------------
-# Private `kvt` call back functions
-# ------------------------------------------------------------------------------
-
-proc kvtMethods(): CoreDbKvtFns =
-  ## Key-value database table handlers
-
-  proc kvtBackend(
-      cKvt:CoreDbKvtRef;
-        ): CoreDbKvtBackendRef =
-    cKvt.parent.bless CoreDbKvtBackendRef(kdb: cKvt.kvt)
-
-  proc kvtForget(
-      cKvt: CoreDbKvtRef;
-      info: static[string];
-        ): CoreDbRc[void] =
-    let
-      base = cKvt.parent.kdbBase
-      kvt = cKvt.kvt
-    if kvt != base.kdb:
-      let rc = base.api.forget(kvt)
-
-      # There is not much that can be done in case of a `forget()` error.
-      # So unmark it anyway.
-      cKvt.kvt = KvtDbRef(nil)
-
-      if rc.isErr:
-        return err(rc.error.toError(base, info))
-    ok()
-
-  proc kvtGet(
-      cKvt: CoreDbKvtRef;
-      k: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[Blob] =
-    let
-      base = cKvt.parent.kdbBase
-      rc = base.api.get(cKvt.kvt, k)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == GetNotFound:
-      err(rc.error.toError(base, info, KvtNotFound))
-    else:
-      rc.toRc(base, info)
-
-  proc kvtLen(
-      cKvt: CoreDbKvtRef;
-      k: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[int] =
-    let
-      base = cKvt.parent.kdbBase
-      rc = base.api.len(cKvt.kvt, k)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == GetNotFound:
-      err(rc.error.toError(base, info, KvtNotFound))
-    else:
-      rc.toRc(base, info)
-
-  proc kvtPut(
-      cKvt: CoreDbKvtRef;
-      k: openArray[byte];
-      v: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[void] =
-    let
-      base = cKvt.parent.kdbBase
-      rc = base.api.put(cKvt.kvt, k, v)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError(base, info))
-
-  proc kvtDel(
-      cKvt: CoreDbKvtRef;
-      k: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[void] =
-    let
-      base = cKvt.parent.kdbBase
-      rc = base.api.del(cKvt.kvt, k)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError(base, info))
-
-  proc kvtHasKey(
-      cKvt: CoreDbKvtRef;
-      k: openArray[byte];
-      info: static[string];
-        ): CoreDbRc[bool] =
-    let
-      base = cKvt.parent.kdbBase
-      rc = base.api.hasKey(cKvt.kvt, k)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError(base, info))
-
-  CoreDbKvtFns(
-    backendFn: proc(cKvt: CoreDbKvtRef): CoreDbKvtBackendRef =
-      cKvt.kvtBackend(),
-
-    getFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[Blob] =
-      cKvt.kvtGet(k, "getFn()"),
-
-    lenFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[int] =
-      cKvt.kvtLen(k, "lenFn()"),
-
-    delFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[void] =
-      cKvt.kvtDel(k, "delFn()"),
-
-    putFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
-      cKvt.kvtPut(k, v, "putFn()"),
-
-    hasKeyFn: proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[bool] =
-      cKvt.kvtHasKey(k, "hasKeyFn()"),
-
-    forgetFn: proc(cKvt: CoreDbKvtRef): CoreDbRc[void] =
-      cKvt.kvtForget("forgetFn()"))
-
 # ------------------------------------------------------------------------------
 # Public handlers and helpers
 # ------------------------------------------------------------------------------
-
-func toVoidRc*[T](
-    rc: Result[T,KvtError];
-    base: CoreDbKvtBaseRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbRc[void] =
-  if rc.isErr:
-    return err(rc.error.toError(base, info, error))
-  ok()
-
-# ---------------------
 
 proc txBegin*(
     base: CoreDbKvtBaseRef;
@@ -210,6 +62,24 @@ proc persistent*(
   else:
     err(rc.error.toError(base, info))
 
+proc kvtForget(
+    cKvt: CoreDbKvtRef;
+    info: static[string];
+      ): CoreDbRc[void] =
+  let
+    base = cKvt.parent.kdbBase
+    kvt = cKvt.kvt
+  if kvt != base.kdb:
+    let rc = base.api.forget(kvt)
+
+    # There is not much that can be done in case of a `forget()` error.
+    # So unmark it anyway.
+    cKvt.kvt = KvtDbRef(nil)
+
+    if rc.isErr:
+      return err(rc.error.toError(base, info))
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public constructors and related
 # ------------------------------------------------------------------------------
@@ -232,8 +102,7 @@ func init*(T: type CoreDbKvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =
 
     # Preallocated shared descriptor
     cache: db.bless CoreDbKvtRef(
-      kvt:     kdb,
-      methods: kvtMethods()))
+      kvt:     kdb))
 
   when CoreDbEnableApiProfiling:
     let profApi = KvtApiProfRef.init(result.api, kdb.backend)

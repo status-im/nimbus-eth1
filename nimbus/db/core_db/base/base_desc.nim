@@ -109,28 +109,6 @@ type
 
 
   # --------------------------------------------------
-  # Sub-descriptor: KVT methods
-  # --------------------------------------------------
-  CoreDbKvtBackendFn* = proc(cKvt: CoreDbKvtRef): CoreDbKvtBackendRef {.noRaise.}
-  CoreDbKvtGetFn* = proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
-  CoreDbKvtLenFn* = proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[int] {.noRaise.}
-  CoreDbKvtDelFn* = proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtPutFn* =
-    proc(cKvt: CoreDbKvtRef; k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtForgetFn* = proc(cKvt: CoreDbKvtRef): CoreDbRc[void] {.noRaise.}
-  CoreDbKvtHasKeyFn* = proc(cKvt: CoreDbKvtRef; k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-
-  CoreDbKvtFns* = object
-    ## Methods for key-value table
-    backendFn*:     CoreDbKvtBackendFn
-    getFn*:         CoreDbKvtGetFn
-    lenFn*:         CoreDbKvtLenFn
-    delFn*:         CoreDbKvtDelFn
-    putFn*:         CoreDbKvtPutFn
-    hasKeyFn*:      CoreDbKvtHasKeyFn
-    forgetFn*:      CoreDbKvtForgetFn
-
-  # --------------------------------------------------
   # Sub-descriptor: MPT context methods
   # --------------------------------------------------
   CoreDbCtxGetColumnFn* = proc(
@@ -310,7 +288,6 @@ type
   CoreDbKvtRef* = ref object of RootRef
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef
-    methods*: CoreDbKvtFns
     kvt*: KvtDbRef              ## In most cases different from `base.kdb`
 
   CoreDbCtxRef* = ref object of RootRef

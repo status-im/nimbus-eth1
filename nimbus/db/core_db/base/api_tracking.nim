@@ -72,7 +72,6 @@ type
     EthAccRecastFn      = "recast"
 
     KvtDelFn            = "del"
-    KvtForgetFn         = "forget"
     KvtGetFn            = "get"
     KvtGetOrEmptyFn     = "getOrEmpty"
     KvtHasKeyFn         = "hasKey"
