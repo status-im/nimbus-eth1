@@ -284,7 +284,7 @@ iterator walk*(
   ## Non-decodable entries are stepped over while the counter `n` of the
   ## yield record is still incremented.
   if be.mdb.tUvi.isSome:
-    yield(AdmPfx, AdmTabIdTuv.uint64, be.mdb.tUvi.unsafeGet.blobify)
+    yield(AdmPfx, AdmTabIdTuv.uint64, @(be.mdb.tUvi.unsafeGet.blobify.data()))
   if be.mdb.lSst.isSome:
     yield(AdmPfx, AdmTabIdLst.uint64, be.mdb.lSst.unsafeGet.blobify.value)
 

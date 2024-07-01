@@ -171,7 +171,7 @@ proc putTuvFn(db: RdbBackendRef): PutTuvFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vs.isValid:
-          db.rdb.putAdm(AdmTabIdTuv, vs.blobify).isOkOr:
+          db.rdb.putAdm(AdmTabIdTuv, vs.blobify.data()).isOkOr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  AdmPfx,
               aid:  AdmTabIdTuv,
