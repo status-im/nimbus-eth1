@@ -30,12 +30,6 @@ export
   toAristo,
   toAristoProfData,
   toAristoSavedStateBlockNumber,
-
-  # Standard interface for calculating merkle hash signatures (see `aristo`)
-  MerkleSignRef,
-  merkleSignBegin,
-  merkleSignAdd,
-  merkleSignCommit,
   to
 
 # ------------------------------------------------------------------------------
