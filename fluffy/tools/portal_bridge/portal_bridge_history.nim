@@ -23,7 +23,7 @@ import
   ../../network_metadata,
   ../../eth_data/[era1, history_data_ssz_e2s, history_data_seeding],
   ../../database/era1_db,
-  ./portal_bridge_conf
+  ./[portal_bridge_conf, portal_bridge_common]
 
 from stew/objects import checkedEnumAssign
 
@@ -127,11 +127,11 @@ proc getBlockByNumber(
     try:
       let res = await client.eth_getBlockByNumber(blockTag, fullTransactions)
       if res.isNil:
-        return err("failed to get latest blockHeader")
+        return err("EL failed to provide requested block")
 
       res
     except CatchableError as e:
-      return err("JSON-RPC eth_getBlockByNumber failed: " & e.msg)
+      return err("EL JSON-RPC eth_getBlockByNumber failed: " & e.msg)
 
   return ok(blck)
 
@@ -142,9 +142,9 @@ proc getBlockReceipts(
     try:
       await client.eth_getBlockReceipts(blockId(blockNumber))
     except CatchableError as e:
-      return err("JSON-RPC eth_getBlockReceipts failed: " & e.msg)
+      return err("EL JSON-RPC eth_getBlockReceipts failed: " & e.msg)
   if res.isNone():
-    err("Failed getting receipts")
+    err("EL failed to provided requested receipts")
   else:
     ok(res.get())
 
@@ -165,7 +165,7 @@ proc gossipBlockHeader(
           encodedContentKeyHex, SSZ.encode(headerWithProof).toHex()
         )
       except CatchableError as e:
-        return err("JSON-RPC error: " & $e.msg)
+        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
 
   info "Block header gossiped", peers, contentKey = encodedContentKeyHex
   return ok()
@@ -185,7 +185,7 @@ proc gossipBlockBody(
           encodedContentKeyHex, SSZ.encode(body).toHex()
         )
       except CatchableError as e:
-        return err("JSON-RPC error: " & $e.msg)
+        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
 
   info "Block body gossiped", peers, contentKey = encodedContentKeyHex
   return ok()
@@ -204,7 +204,7 @@ proc gossipReceipts(
           encodedContentKeyHex, SSZ.encode(receipts).toHex()
         )
       except CatchableError as e:
-        return err("JSON-RPC error: " & $e.msg)
+        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
 
   info "Receipts gossiped", peers, contentKey = encodedContentKeyHex
   return ok()
@@ -266,7 +266,7 @@ proc runLatestLoop(
 
       # gossip block header
       (await portalClient.gossipBlockHeader(hash, headerWithProof)).isOkOr:
-        error "Failed to gossip block header", error
+        error "Failed to gossip block header", error, hash
 
       # For bodies & receipts to get verified, the header needs to be available
       # on the network. Wait a little to get the headers propagated through
@@ -275,11 +275,11 @@ proc runLatestLoop(
 
       # gossip block body
       (await portalClient.gossipBlockBody(hash, body)).isOkOr:
-        error "Failed to gossip block body", error
+        error "Failed to gossip block body", error, hash
 
       # gossip receipts
       (await portalClient.gossipReceipts(hash, portalReceipts)).isOkOr:
-        error "Failed to gossip receipts", error
+        error "Failed to gossip receipts", error, hash
 
     # Making sure here that we poll enough times not to miss a block.
     # We could also do some work without awaiting it, e.g. the gossiping or
@@ -319,7 +319,7 @@ proc gossipHeadersWithProof(
           contentKey.asSeq.toHex(), contentValue.toHex()
         )
       except CatchableError as e:
-        return err("JSON-RPC error: " & $e.msg)
+        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
     info "Block header gossiped", peers, contentKey
 
   ok()
@@ -339,7 +339,7 @@ proc gossipBlockContent(
           contentKey.asSeq.toHex(), contentValue.toHex()
         )
       except CatchableError as e:
-        return err("JSON-RPC error: " & $e.msg)
+        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
     info "Block content gossiped", peers, contentKey
 
   ok()
@@ -377,7 +377,7 @@ proc runBackfillLoop(
         try:
           await portalClient.portal_historyGossipHeaders(eraFile)
         except CatchableError as e:
-          error "JSON-RPC method failed", error = e.msg
+          error "JSON-RPC portal_historyGossipHeaders failed", error = e.msg
           false
 
       if headerRes:
@@ -386,7 +386,7 @@ proc runBackfillLoop(
           try:
             await portalClient.portal_historyGossipBlockContent(eraFile)
           except CatchableError as e:
-            error "JSON-RPC method failed", error = e.msg
+            error "JSON-RPC portal_historyGossipBlockContent failed", error = e.msg
             false
         if res:
           error "Failed to gossip block content from era1 file", eraFile
@@ -455,7 +455,7 @@ proc runBackfillLoopAuditMode(
         error "Block hash mismatch", blockNumber
         break headerBlock
 
-      info "Retrieved block header from Portal network"
+      info "Retrieved block header from Portal network", blockHash
       headerSuccess = true
 
     # body
@@ -523,44 +523,28 @@ proc runBackfillLoopAuditMode(
           raiseAssert "Failed to build header with proof: " & error
 
       (await portalClient.gossipBlockHeader(blockHash, headerWithProof)).isOkOr:
-        error "Failed to gossip block header", error
+        error "Failed to gossip block header", error, blockHash
     if not bodySuccess:
       (
         await portalClient.gossipBlockBody(
           blockHash, PortalBlockBodyLegacy.fromBlockBody(body)
         )
       ).isOkOr:
-        error "Failed to gossip block body", error
+        error "Failed to gossip block body", error, blockHash
     if not receiptsSuccess:
       (
         await portalClient.gossipReceipts(
           blockHash, PortalReceipts.fromReceipts(receipts)
         )
       ).isOkOr:
-        error "Failed to gossip receipts", error
+        error "Failed to gossip receipts", error, blockHash
 
     await sleepAsync(2.seconds)
 
 proc runHistory*(config: PortalBridgeConf) =
   let
-    portalClient = newRpcHttpClient()
-    # TODO: Use Web3 object?
-    web3Client: RpcClient =
-      case config.web3Url.kind
-      of HttpUrl:
-        newRpcHttpClient()
-      of WsUrl:
-        newRpcWebSocketClient()
-  try:
-    waitFor portalClient.connect(config.rpcAddress, Port(config.rpcPort), false)
-  except CatchableError as e:
-    error "Failed to connect to portal RPC", error = $e.msg
-
-  if config.web3Url.kind == HttpUrl:
-    try:
-      waitFor (RpcHttpClient(web3Client)).connect(config.web3Url.url)
-    except CatchableError as e:
-      error "Failed to connect to web3 RPC", error = $e.msg
+    portalClient = newRpcClientConnect(config.portalRpcUrl)
+    web3Client = newRpcClientConnect(config.web3Url)
 
   if config.latest:
     asyncSpawn runLatestLoop(portalClient, web3Client, config.blockVerify)

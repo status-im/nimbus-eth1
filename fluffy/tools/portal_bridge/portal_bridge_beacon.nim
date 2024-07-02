@@ -19,7 +19,7 @@ import
   ../../network/beacon/beacon_content,
   ../../rpc/portal_rpc_client,
   ../eth_data_exporter/cl_data_exporter,
-  ./portal_bridge_conf
+  ./[portal_bridge_conf, portal_bridge_common]
 
 const restRequestsTimeout = 30.seconds
 
@@ -29,7 +29,7 @@ proc sleepAsync(t: TimeDiff): Future[void] =
 
 proc gossipLCBootstrapUpdate(
     restClient: RestClientRef,
-    portalRpcClient: RpcHttpClient,
+    portalRpcClient: RpcClient,
     trustedBlockRoot: Eth2Digest,
     cfg: RuntimeConfig,
     forkDigests: ref ForkDigests,
@@ -75,7 +75,7 @@ proc gossipLCBootstrapUpdate(
 
 proc gossipLCUpdates(
     restClient: RestClientRef,
-    portalRpcClient: RpcHttpClient,
+    portalRpcClient: RpcClient,
     startPeriod: uint64,
     count: uint64,
     cfg: RuntimeConfig,
@@ -135,7 +135,7 @@ proc gossipLCUpdates(
 
 proc gossipLCFinalityUpdate(
     restClient: RestClientRef,
-    portalRpcClient: RpcHttpClient,
+    portalRpcClient: RpcClient,
     cfg: RuntimeConfig,
     forkDigests: ref ForkDigests,
 ): Future[Result[Slot, string]] {.async.} =
@@ -182,7 +182,7 @@ proc gossipLCFinalityUpdate(
 
 proc gossipLCOptimisticUpdate(
     restClient: RestClientRef,
-    portalRpcClient: RpcHttpClient,
+    portalRpcClient: RpcClient,
     cfg: RuntimeConfig,
     forkDigests: ref ForkDigests,
 ): Future[Result[Slot, string]] {.async.} =
@@ -234,23 +234,20 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
   let
     (cfg, forkDigests, beaconClock) = getBeaconData()
     getBeaconTime = beaconClock.getBeaconTimeFn()
-    portalRpcClient = newRpcHttpClient()
+    portalRpcClient = newRpcClientConnect(config.portalRpcUrl)
     restClient = RestClientRef.new(config.restUrl).valueOr:
       fatal "Cannot connect to server", error = $error
       quit QuitFailure
 
   proc backfill(
       beaconRestClient: RestClientRef,
-      rpcAddress: string,
-      rpcPort: Port,
+      portalRpcClient: RpcClient,
       backfillAmount: uint64,
       trustedBlockRoot: Option[TrustedDigest],
   ) {.async.} =
     # Bootstrap backfill, currently just one bootstrap selected by
     # trusted-block-root, could become a selected list, or some other way.
     if trustedBlockRoot.isSome():
-      await portalRpcClient.connect(rpcAddress, rpcPort, false)
-
       let res = await gossipLCBootstrapUpdate(
         beaconRestClient, portalRpcClient, trustedBlockRoot.get(), cfg, forkDigests
       )
@@ -274,8 +271,6 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
       leftOver = backfillAmount mod updatesPerRequest
 
     for i in 0 ..< requestAmount:
-      await portalRpcClient.connect(rpcAddress, rpcPort, false)
-
       let res = await gossipLCUpdates(
         beaconRestClient,
         portalRpcClient,
@@ -291,8 +286,6 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
       await portalRpcClient.close()
 
     if leftOver > 0:
-      await portalRpcClient.connect(rpcAddress, rpcPort, false)
-
       let res = await gossipLCUpdates(
         beaconRestClient,
         portalRpcClient,
@@ -339,8 +332,6 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
 
       # Or basically `lightClientOptimisticUpdateSlotOffset`
       await sleepAsync((SECONDS_PER_SLOT div INTERVALS_PER_SLOT).int.seconds)
-
-      await portalRpcClient.connect(config.rpcAddress, Port(config.rpcPort), false)
 
       let res =
         await gossipLCOptimisticUpdate(restClient, portalRpcClient, cfg, forkDigests)
@@ -394,8 +385,7 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
       timeToNextSlot = nextSlot.start_beacon_time() - getBeaconTime()
 
   waitFor backfill(
-    restClient, config.rpcAddress, config.rpcPort, config.backfillAmount,
-    config.trustedBlockRoot,
+    restClient, portalRpcClient, config.backfillAmount, config.trustedBlockRoot
   )
 
   asyncSpawn runOnSlotLoop()
