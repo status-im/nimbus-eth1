@@ -331,7 +331,7 @@ proc deleteImpl(
 
 proc deleteAccountRecord*(
     db: AristoDbRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): Result[void,AristoError] =
   ## Delete the account leaf entry addressed by the argument `path`. If this
   ## leaf entry referres to a storage tree, this one will be deleted as well.
@@ -403,7 +403,7 @@ proc deleteGenericTree*(
 
 proc deleteStorageData*(
     db: AristoDbRef;
-    accPath: openArray[byte];          # Implies storage data tree
+    accPath: Hash256;          # Implies storage data tree
     stoPath: openArray[byte];
       ): Result[bool,AristoError] =
   ## For a given account argument `accPath`, this function deletes the
@@ -448,7 +448,7 @@ proc deleteStorageData*(
 
 proc deleteStorageTree*(
     db: AristoDbRef;                   # Database, top layer
-    accPath: openArray[byte];          # Implies storage data tree
+    accPath: Hash256;          # Implies storage data tree
       ): Result[void,AristoError] =
   ## Variant of `deleteStorageData()` for purging the whole storage tree
   ## associated to the account argument `accPath`.

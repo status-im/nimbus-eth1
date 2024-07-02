@@ -172,7 +172,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc accFetch(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
         ): CoreDbRc[CoreDbAccount] =
     const info = "acc/fetchFn()"
 
@@ -184,7 +184,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc accMerge(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
       accRec: CoreDbAccount;
         ): CoreDbRc[void] =
     const info = "acc/mergeFn()"
@@ -199,7 +199,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc accDelete(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
         ): CoreDbRc[void] =
     const info = "acc/deleteFn()"
 
@@ -212,7 +212,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc accClearStorage(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
         ): CoreDbRc[void] =
     const info = "acc/clearStoFn()"
 
@@ -223,7 +223,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc accHasPath(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
         ): CoreDbRc[bool] =
     const info = "hasPathFn()"
 
@@ -243,7 +243,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc slotFetch(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
       stoPath: openArray[byte];
         ): CoreDbRc[Blob] =
     const info = "slotFetchFn()"
@@ -256,7 +256,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc slotDelete(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
       stoPath: openArray[byte];
         ): CoreDbRc[void] =
     const info = "slotDeleteFn()"
@@ -273,7 +273,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc slotHasPath(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
       stoPath: openArray[byte];
         ): CoreDbRc[bool] =
     const info = "slotHasPathFn()"
@@ -284,7 +284,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc slotMerge(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
       stoPath: openArray[byte];
       stoData: openArray[byte];
         ): CoreDbRc[void] =
@@ -296,7 +296,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc slotState(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
       updateOk: bool;
         ): CoreDbRc[Hash256] =
     const info = "slotStateFn()"
@@ -306,7 +306,7 @@ proc accMethods(): CoreDbAccFns =
 
   proc slotStateEmpty(
       cAcc: AristoCoreDbAccRef;
-      accPath: openArray[byte];
+      accPath: Hash256;
         ): CoreDbRc[bool] =
     const info = "slotStateEmptyFn()"
 
@@ -321,32 +321,32 @@ proc accMethods(): CoreDbAccFns =
 
     fetchFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
           ): CoreDbRc[CoreDbAccount] =
       accFetch(AristoCoreDbAccRef(cAcc), accPath),
 
     deleteFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
           ): CoreDbRc[void] =
       accDelete(AristoCoreDbAccRef(cAcc), accPath),
 
     clearStorageFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
           ): CoreDbRc[void] =
       accClearStorage(AristoCoreDbAccRef(cAcc), accPath),
 
     mergeFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
         accRec: CoreDbAccount;
           ): CoreDbRc[void] =
       accMerge(AristoCoreDbAccRef(cAcc), accPath, accRec),
 
     hasPathFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
           ): CoreDbRc[bool] =
       accHasPath(AristoCoreDbAccRef(cAcc), accPath),
 
@@ -358,28 +358,28 @@ proc accMethods(): CoreDbAccFns =
 
     slotFetchFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
         stoPath: openArray[byte];
           ): CoreDbRc[Blob] =
       slotFetch(AristoCoreDbAccRef(cAcc), accPath, stoPath),
 
     slotDeleteFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
         stoPath: openArray[byte];
           ): CoreDbRc[void] =
       slotDelete(AristoCoreDbAccRef(cAcc), accPath, stoPath),
 
     slotHasPathFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
         stoPath: openArray[byte];
           ): CoreDbRc[bool] =
       slotHasPath(AristoCoreDbAccRef(cAcc), accPath, stoPath),
 
     slotMergeFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
         stoPath: openArray[byte];
         stoData: openArray[byte];
           ): CoreDbRc[void] =
@@ -387,14 +387,14 @@ proc accMethods(): CoreDbAccFns =
 
     slotStateFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
         updateOk: bool;
            ): CoreDbRc[Hash256] =
       slotState(AristoCoreDbAccRef(cAcc), accPath, updateOk),
 
     slotStateEmptyFn: proc(
         cAcc: CoreDbAccRef;
-        accPath: openArray[byte];
+        accPath: Hash256;
            ): CoreDbRc[bool] =
       slotStateEmpty(AristoCoreDbAccRef(cAcc), accPath))
 

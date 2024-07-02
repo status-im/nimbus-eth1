@@ -50,7 +50,7 @@ type
 
   AristoApiDeleteAccountRecordFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
         ): Result[void,AristoError]
         {.noRaise.}
       ## Delete the account leaf entry addressed by the argument `path`. If
@@ -80,7 +80,7 @@ type
 
   AristoApiDeleteStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
          stoPath: openArray[byte];
         ): Result[bool,AristoError]
         {.noRaise.}
@@ -93,7 +93,7 @@ type
 
   AristoApiDeleteStorageTreeFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
         ): Result[void,AristoError]
         {.noRaise.}
       ## Variant of `deleteStorageData()` for purging the whole storage tree
@@ -109,7 +109,7 @@ type
 
   AristoApiFetchAccountRecordFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
         ): Result[AristoAccount,AristoError]
         {.noRaise.}
       ## Fetch an account record from the database indexed by `accPath`.
@@ -142,7 +142,7 @@ type
 
   AristoApiFetchStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
          stoPath: openArray[byte];
         ): Result[Blob,AristoError]
         {.noRaise.}
@@ -151,7 +151,7 @@ type
 
   AristoApiFetchStorageStateFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
          updateOk: bool;
         ): Result[Hash256,AristoError]
         {.noRaise.}
@@ -239,7 +239,7 @@ type
 
   AristoApiHasPathAccountFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For an account record indexed by `accPath` query whether this record
@@ -256,7 +256,7 @@ type
 
   AristoApiHasPathStorageFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
          stoPath: openArray[byte];
         ): Result[bool,AristoError]
         {.noRaise.}
@@ -265,7 +265,7 @@ type
 
   AristoApiHasStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, query whether there
@@ -295,7 +295,7 @@ type
 
   AristoApiMergeAccountRecordFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
          accRec: AristoAccount;
         ): Result[bool,AristoError]
         {.noRaise.}
@@ -314,7 +314,7 @@ type
 
   AristoApiMergeStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: openArray[byte];
+         accPath: Hash256;
          stoPath: openArray[byte];
          stoData: openArray[byte];
         ): Result[void,AristoError]

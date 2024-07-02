@@ -407,7 +407,7 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
 
 proc fetch*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): CoreDbRc[CoreDbAccount] =
   ## Fetch the account data record for the particular account indexed by
   ## the key `accPath`.
@@ -421,7 +421,7 @@ proc fetch*(
 
 proc delete*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): CoreDbRc[void] =
   ## Delete the particular account indexed by the key `accPath`. This
   ## will also destroy an associated storage area.
@@ -435,7 +435,7 @@ proc delete*(
 
 proc clearStorage*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): CoreDbRc[void] =
   ## Delete all data slots from the storage area associated with the
   ## particular account indexed by the key `accPath`.
@@ -449,7 +449,7 @@ proc clearStorage*(
 
 proc merge*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     accRec: CoreDbAccount;
       ): CoreDbRc[void] =
   ## Add or update the argument account data record `account`. Note that the
@@ -462,7 +462,7 @@ proc merge*(
 
 proc hasPath*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
@@ -488,7 +488,7 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
 
 proc slotFetch*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     slot: openArray[byte];
       ):  CoreDbRc[Blob] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
@@ -501,7 +501,7 @@ proc slotFetch*(
 
 proc slotDelete*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     slot: openArray[byte];
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
@@ -515,7 +515,7 @@ proc slotDelete*(
 
 proc slotHasPath*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     slot: openArray[byte];
       ):  CoreDbRc[bool] =
   ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
@@ -529,7 +529,7 @@ proc slotHasPath*(
 
 proc slotMerge*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     slot: openArray[byte];
     data: openArray[byte];
       ):  CoreDbRc[void] =
@@ -544,7 +544,7 @@ proc slotMerge*(
 
 proc slotState*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     updateOk = false;
       ):  CoreDbRc[Hash256] =
   ## This function retrieves the Merkle state hash of the storage data
@@ -563,7 +563,7 @@ proc slotState*(
 
 proc slotStateEmpty*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ):  CoreDbRc[bool] =
   ## This function returns `true` if the storage data column is empty or
   ## missing.
@@ -577,7 +577,7 @@ proc slotStateEmpty*(
 
 proc slotStateEmptyOrVoid*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): bool =
   ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
   when EnableAccountKeyValidation:
@@ -591,7 +591,7 @@ proc slotStateEmptyOrVoid*(
 
 proc recast*(
     acc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     accRec: CoreDbAccount;
     updateOk = false;
       ): CoreDbRc[Account] =

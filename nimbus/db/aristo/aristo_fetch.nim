@@ -95,7 +95,7 @@ proc hasPayload(
 
 proc fetchAccountHike*(
     db: AristoDbRef;                   # Database
-    accPath: openArray[byte];          # Implies a storage ID (if any)
+    accPath: Hash256;          # Implies a storage ID (if any)
       ): Result[Hike,AristoError] =
   ## Verify that the `accPath` argument properly referres to a storage root
   ## vertex ID. The function will reset the keys along the `accPath` for
@@ -119,12 +119,12 @@ proc fetchAccountHike*(
 
 proc fetchStorageID*(
     db: AristoDbRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): Result[VertexID,AristoError] =
   ## Public helper function fro retrieving a storage (vertex) ID for a
   ## given account.
   let
-    payload = db.retrievePayload(VertexID(1), accPath).valueOr:
+    payload = db.retrievePayload(VertexID(1), accPath.data).valueOr:
       if error == FetchAccInaccessible:
         return err(FetchPathNotFound)
       return err(error)
@@ -151,11 +151,11 @@ proc fetchLastSavedState*(
 
 proc fetchAccountRecord*(
     db: AristoDbRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): Result[AristoAccount,AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let pyl = ? db.retrievePayload(VertexID(1), accPath)
+  let pyl = ? db.retrievePayload(VertexID(1), accPath.data)
   assert pyl.pType == AccountData   # debugging only
   ok pyl.account
 
@@ -168,12 +168,12 @@ proc fetchAccountState*(
 
 proc hasPathAccount*(
     db: AristoDbRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): Result[bool,AristoError] =
   ## For an account record indexed by `accPath` query whether this record exists
   ## on the database.
   ##
-  db.hasPayload(VertexID(1), accPath)
+  db.hasPayload(VertexID(1), accPath.data)
 
 
 proc fetchGenericData*(
@@ -211,7 +211,7 @@ proc hasPathGeneric*(
 
 proc fetchStorageData*(
     db: AristoDbRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     stoPath: openArray[byte];
       ): Result[Blob,AristoError] =
   ## For a storage tree related to account `accPath`, fetch the data record
@@ -223,7 +223,7 @@ proc fetchStorageData*(
 
 proc fetchStorageState*(
     db: AristoDbRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     updateOk: bool;
       ): Result[Hash256,AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
@@ -235,7 +235,7 @@ proc fetchStorageState*(
 
 proc hasPathStorage*(
     db: AristoDbRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
     stoPath: openArray[byte];
       ): Result[bool,AristoError] =
   ## For a storage tree related to account `accPath`, query whether the data
@@ -245,7 +245,7 @@ proc hasPathStorage*(
 
 proc hasStorageData*(
     db: AristoDbRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): Result[bool,AristoError] =
   ## For a storage tree related to account `accPath`, query whether there
   ## is a non-empty data storage area at all.
