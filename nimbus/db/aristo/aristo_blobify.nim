@@ -232,6 +232,8 @@ proc deblobify(
     pAcc.stoID = VertexID(? load64(data, start, int(len + 1)))
 
   if (mask and 0x08) > 0:
+    if data.len() < start + 32:
+      return err(DeblobCodeLenUnsupported)
     discard pAcc.account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
   else:
     pAcc.account.codeHash = EMPTY_CODE_HASH
