@@ -33,7 +33,6 @@ type
 proc validateMethodsDesc(base: CoreDbBaseFns) =
   doAssert not base.destroyFn.isNil
   doAssert not base.errorPrintFn.isNil
-  doAssert not base.levelFn.isNil
   doAssert not base.newKvtFn.isNil
   doAssert not base.newCtxFn.isNil
   doAssert not base.newCtxFromTxFn.isNil
@@ -88,10 +87,8 @@ when false: # currently disabled
 proc validateSubDescRef(tx: CoreDbTxRef) =
   doAssert not tx.isNil
   doAssert not tx.parent.isNil
-  doAssert not tx.methods.levelFn.isNil
-  doAssert not tx.methods.commitFn.isNil
-  doAssert not tx.methods.rollbackFn.isNil
-  doAssert not tx.methods.disposeFn.isNil
+  doAssert not tx.aTx.isNil
+  doAssert not tx.kTx.isNil
 
 proc validateSubDescRef(db: CoreDbRef) =
   doAssert not db.isNil

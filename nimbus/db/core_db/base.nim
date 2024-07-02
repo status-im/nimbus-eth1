@@ -896,7 +896,7 @@ proc level*(db: CoreDbRef): int =
   ## Retrieve transaction level (zero if there is no pending transaction).
   ##
   db.setTrackNewApi BaseLevelFn
-  result = db.methods.levelFn()
+  result = db.adbBase.call(level, db.ctx.mpt)
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc persistent*(
@@ -941,25 +941,36 @@ proc level*(tx: CoreDbTxRef): int =
   ## Print positive transaction level for argument `tx`
   ##
   tx.setTrackNewApi TxLevelFn
-  result = tx.methods.levelFn()
+  result = tx.parent.adbBase.call(txLevel, tx.aTx)
   tx.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
 proc commit*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxCommitFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  tx.methods.commitFn()
+  tx.parent.adbBase.call(commit, tx.aTx).isOkOr:
+    raiseAssert $api & ": " & $error
+  tx.parent.kdbBase.call(commit, tx.kTx).isOkOr:
+    raiseAssert $api & ": " & $error
   tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
 proc rollback*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxRollbackFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  tx.methods.rollbackFn()
+  tx.parent.adbBase.call(rollback, tx.aTx).isOkOr:
+    raiseAssert $api & ": " & $error
+  tx.parent.kdbBase.call(rollback, tx.kTx).isOkOr:
+    raiseAssert $api & ": " & $error
   tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
 proc dispose*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxDisposeFn:
     let prvLevel {.used.} = tx.methods.levelFn()
-  tx.methods.disposeFn()
+  if tx.parent.adbBase.call(isTop, tx.aTx):
+    tx.parent.adbBase.call(rollback, tx.aTx).isOkOr:
+      raiseAssert $api & ": " & $error
+  if tx.parent.kdbBase.call(isTop, tx.kTx):
+    tx.parent.kdbBase.call(rollback, tx.kTx).isOkOr:
+      raiseAssert $api & ": " & $error
   tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
 
 # ------------------------------------------------------------------------------

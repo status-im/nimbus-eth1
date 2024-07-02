@@ -57,7 +57,7 @@ func toError(
     kErr:     e))
 
 # ------------------------------------------------------------------------------
-# Private `Kvt` functions
+# Private functions, free parking
 # ------------------------------------------------------------------------------
 
 when false:
@@ -80,6 +80,33 @@ when false:
         return err(rc.error.toError(base, info))
     ok()
 
+  proc cptMethods(
+      tracer: AristoTracerRef;
+        ): CoreDbCaptFns =
+    ## Free parking here --  currently disabled
+    let
+      tr = tracer         # So it can savely be captured
+      db = tr.parent      # Will not change and can be captured
+      log = tr.topInst()  # Ditto
+
+    CoreDbCaptFns(
+      recorderFn: proc(): CoreDbRef =
+        db,
+
+      logDbFn: proc(): TableRef[Blob,Blob] =
+        log.kLog,
+
+      getFlagsFn: proc(): set[CoreDbCaptFlags] =
+        log.flags,
+
+      forgetFn: proc() =
+        if not tracer.pop():
+          tr.parent.tracer = AristoTracerRef(nil)
+          tr.restore())
+
+# ------------------------------------------------------------------------------
+# Private `Kvt` functions
+# ------------------------------------------------------------------------------
 
 func init(T: type CoreDbKvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =
   result = db.bless CoreDbKvtBaseRef(
@@ -146,74 +173,6 @@ proc init(
 # Private tx and base methods
 # ------------------------------------------------------------------------------
 
-proc txMethods(
-    db: CoreDbRef;
-    aTx: AristoTxRef;
-    kTx: KvtTxRef;
-     ): CoreDbTxFns =
-  ## To be constructed by some `CoreDbBaseFns` function
-  let
-    adbBase = db.adbBase
-    kdbBase = db.kdbBase
-
-    adbApi = adbBase.api
-    kdbApi = kdbBase.api
-
-  CoreDbTxFns(
-    levelFn: proc(): int =
-      aTx.level,
-
-    commitFn: proc() =
-      const info = "commitFn()"
-      adbApi.commit(aTx).isOkOr:
-        raiseAssert info & ": " & $error
-      kdbApi.commit(kTx).isOkOr:
-        raiseAssert info & ": " & $error
-      discard,
-
-    rollbackFn: proc() =
-      const info = "rollbackFn()"
-      adbApi.rollback(aTx).isOkOr:
-        raiseAssert info & ": " & $error
-      kdbApi.rollback(kTx).isOkOr:
-        raiseAssert info & ": " & $error
-      discard,
-
-    disposeFn: proc() =
-      const info =  "disposeFn()"
-      if adbApi.isTop(aTx):
-        adbApi.rollback(aTx).isOkOr:
-          raiseAssert info & ": " & $error
-      if kdbApi.isTop(kTx):
-        kdbApi.rollback(kTx).isOkOr:
-          raiseAssert info & ": " & $error
-      discard)
-
-when false: # currently disabled
-  proc cptMethods(
-      tracer: AristoTracerRef;
-        ): CoreDbCaptFns =
-    let
-      tr = tracer         # So it can savely be captured
-      db = tr.parent      # Will not change and can be captured
-      log = tr.topInst()  # Ditto
-
-    CoreDbCaptFns(
-      recorderFn: proc(): CoreDbRef =
-        db,
-
-      logDbFn: proc(): TableRef[Blob,Blob] =
-        log.kLog,
-
-      getFlagsFn: proc(): set[CoreDbCaptFlags] =
-        log.flags,
-
-      forgetFn: proc() =
-        if not tracer.pop():
-          tr.parent.tracer = AristoTracerRef(nil)
-          tr.restore())
-
-
 proc baseMethods(db: CoreDbRef): CoreDbBaseFns =
   let
     aBase = db.adbBase
@@ -279,10 +238,7 @@ proc baseMethods(db: CoreDbRef): CoreDbBaseFns =
         raiseAssert info & ": " & $rc.error
       rc.value
                 
-    db.bless CoreDbTxRef(methods: db.txMethods(aTx, kTx))
-
-  proc getLevel(): int =
-    aBase.api.level(aBase.parent.ctx.CoreDbCtxRef.mpt)
+    db.bless CoreDbTxRef(aTx: aTx, kTx: kTx)
 
   proc swapCtx(ctx: CoreDbCtxRef): CoreDbCtxRef =
     const info = "swapCtx()"
@@ -296,14 +252,10 @@ proc baseMethods(db: CoreDbRef): CoreDbBaseFns =
       raiseAssert info & " failed: " & $error
 
 
-
   CoreDbBaseFns(
     destroyFn: proc(eradicate: bool) =
       aBase.api.finish(aBase.parent.ctx.CoreDbCtxRef.mpt, eradicate)
       kBase.api.finish(kBase.kdb, eradicate),
-
-    levelFn: proc(): int =
-      getLevel(),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
       errorPrintFn(e),          

@@ -88,7 +88,6 @@ type
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
     errorPrintFn*:   CoreDbBaseErrorPrintFn
-    levelFn*:        CoreDbBaseLevelFn
 
     # Kvt constructor
     newKvtFn*:       CoreDbBaseNewKvtFn
@@ -106,21 +105,6 @@ type
 
     # Save to disk
     persistentFn*: CoreDbBasePersistentFn
-
-
-  # --------------------------------------------------
-  # Sub-descriptor: Transaction frame management
-  # --------------------------------------------------
-  CoreDbTxLevelFn* = proc(): int {.noRaise.}
-  CoreDbTxCommitFn* = proc() {.noRaise.}
-  CoreDbTxRollbackFn* = proc() {.noRaise.}
-  CoreDbTxDisposeFn* = proc() {.noRaise.}
-
-  CoreDbTxFns* = object
-    levelFn*:       CoreDbTxLevelFn
-    commitFn*:      CoreDbTxCommitFn
-    rollbackFn*:    CoreDbTxRollbackFn
-    disposeFn*:     CoreDbTxDisposeFn
 
 
   # --------------------------------------------------
@@ -213,7 +197,8 @@ type
   CoreDbTxRef* = ref object of RootRef
     ## Transaction descriptor derived from `CoreDbRef`
     parent*: CoreDbRef
-    methods*: CoreDbTxFns
+    aTx*: AristoTxRef
+    kTx*: KvtTxRef
 
   CoreDbCaptRef* = ref object
     ## Db transaction tracer derived from `CoreDbRef`

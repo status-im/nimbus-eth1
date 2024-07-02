@@ -384,7 +384,7 @@ type
       ## is returned if there was any.
 
   AristoApiTxBeginFn* =
-    proc(db: AristoDbRef
+    proc(db: AristoDbRef;
         ): Result[AristoTxRef,AristoError]
         {.noRaise.}
       ## Starts a new transaction.
@@ -396,6 +396,12 @@ type
       ##     defer: tx.rollback()
       ##     ... continue using db ...
       ##     tx.commit()
+
+  AristoApiTxLevelFn* =
+    proc(tx: AristoTxRef;
+        ): int
+        {.noRaise.}
+      ## Getter, positive nesting level of transaction argument `tx`
 
   AristoApiTxTopFn* =
     proc(db: AristoDbRef;
@@ -445,6 +451,7 @@ type
     reCentre*: AristoApiReCentreFn
     rollback*: AristoApiRollbackFn
     txBegin*: AristoApiTxBeginFn
+    txLevel*: AristoApiTxLevelFn
     txTop*: AristoApiTxTopFn
 
 
@@ -491,6 +498,7 @@ type
     AristoApiProfReCentreFn             = "reCentre"
     AristoApiProfRollbackFn             = "rollback"
     AristoApiProfTxBeginFn              = "txBegin"
+    AristoApiProfTxLevelFn              = "txLevel"
     AristoApiProfTxTopFn                = "txTop"
 
     AristoApiProfBeGetVtxFn             = "be/getVtx"
@@ -554,6 +562,7 @@ when AutoValidateApiHooks:
     doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
     doAssert not api.txBegin.isNil
+    doAssert not api.txLevel.isNil
     doAssert not api.txTop.isNil
 
   proc validate(prf: AristoApiProfRef) =
@@ -621,6 +630,7 @@ func init*(api: var AristoApiObj) =
   api.reCentre = reCentre
   api.rollback = rollback
   api.txBegin = txBegin
+  api.txLevel = txLevel
   api.txTop = txTop
   when AutoValidateApiHooks:
     api.validate
@@ -670,6 +680,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     reCentre:             api.reCentre,
     rollback:             api.rollback,
     txBegin:              api.txBegin,
+    txLevel:              api.txLevel,
     txTop:                api.txTop)
   when AutoValidateApiHooks:
     api.validate
@@ -860,6 +871,11 @@ func init*(
     proc(a: AristoDbRef): auto =
        AristoApiProfTxBeginFn.profileRunner:
         result = api.txBegin(a)
+
+  profApi.txLevel =
+    proc(a: AristoTxRef): auto =
+       AristoApiProfTxLevelFn.profileRunner:
+        result = api.txLevel(a)
 
   profApi.txTop =
     proc(a: AristoDbRef): auto =
