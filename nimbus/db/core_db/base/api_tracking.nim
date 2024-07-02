@@ -20,9 +20,9 @@ import
 
 type
   CoreDbApiTrackRef* =
-    CoreDbRef | CoreDbKvtRef |
-    CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
-    CoreDbTxRef | CoreDbCaptRef | CoreDbErrorRef
+    # CoreDbCaptRef |
+    CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
+    CoreDbTxRef | CoreDbErrorRef
 
   CoreDbFnInx* = enum
     ## Profiling table index
@@ -110,7 +110,11 @@ func toStr*(w: Hash256): string =
   if w == EMPTY_ROOT_HASH: "EMPTY_ROOT_HASH" else: w.data.oaToStr
 
 proc toStr*(e: CoreDbErrorRef): string =
-  $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
+  result = $e.error & "("
+  result &= (if e.isAristo: "Aristo" else: "Kvt")
+  result &= ", ctx=" & $e.ctx & ", error="
+  result &= (if e.isAristo: $e.aErr else: $e.kErr)
+  result &= ")"
 
 func toLenStr*(w: openArray[byte]): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
@@ -155,7 +159,7 @@ proc toStr*(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
 proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "acc"
 proc toStr*(rc: CoreDbRc[CoreDbKvtRef]): string = rc.toStr "kvt"
 proc toStr*(rc: CoreDbRc[CoreDbTxRef]): string = rc.toStr "tx"
-proc toStr*(rc: CoreDbRc[CoreDbCaptRef]): string = rc.toStr "capt"
+#proc toStr*(rc: CoreDbRc[CoreDbCaptRef]): string = rc.toStr "capt"
 proc toStr*(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
 proc toStr*(rc: CoreDbRc[CoreDbMptRef]): string = rc.toStr "mpt"
 proc toStr*(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"

@@ -51,7 +51,7 @@ export
   CoreDbRef,
   CoreDbType,
   CoreDbAccRef,
-  CoreDbCaptRef,
+  #CoreDbCaptRef,
   CoreDbKvtRef,
   CoreDbMptRef,
   CoreDbTxRef
@@ -199,9 +199,9 @@ proc bless*(db: CoreDbRef; kvt: CoreDbKvtRef): CoreDbKvtRef =
     kvt.validate
   kvt
 
-proc bless*[T: CoreDbKvtRef |
-               CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
-               CoreDbTxRef  | CoreDbCaptRef |
+proc bless*[T: # CoreDbCaptRef |
+               CoreDbKvtRef |
+               CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef | CoreDbTxRef  |
                CoreDbKvtBaseRef | CoreDbAriBaseRef |
                CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef](
     db: CoreDbRef;
@@ -247,10 +247,9 @@ proc dbType*(db: CoreDbRef): CoreDbType =
   result = db.dbType
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
-proc parent*[T: CoreDbKvtRef |
-                CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
-                CoreDbTxRef | CoreDbCaptRef |
-                CoreDbKvtBaseRef | CoreDbAriBaseRef |
+proc parent*[T: # CoreDbCaptRef |
+                CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
+                CoreDbTxRef | CoreDbKvtBaseRef | CoreDbAriBaseRef |
                 CoreDbErrorRef] (
     child: T): CoreDbRef =
   ## Getter, common method for all sub-modules
@@ -266,7 +265,8 @@ proc finish*(db: CoreDbRef; eradicate = false) =
   ## backend removes the database on `true`.
   ##
   db.setTrackNewApi BaseFinishFn
-  db.methods.destroyFn eradicate
+  db.kdbBase.call(finish, db.kdbBase.kdb, eradicate)
+  db.adbBase.call(finish, db.ctx.mpt, eradicate)
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc `$$`*(e: CoreDbErrorRef): string =
@@ -297,8 +297,7 @@ proc newKvt*(db: CoreDbRef): CoreDbKvtRef =
   ## are not saved to the backend database but are still cached and available.
   ##
   db.setTrackNewApi BaseNewKvtFn
-  result = db.methods.newKvtFn().valueOr:
-    raiseAssert error.prettyText()
+  result = db.kdbBase.cache
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ----------- KVT ---------------
@@ -401,7 +400,7 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   ## Get currently active column context.
   ##
   db.setTrackNewApi BaseNewCtxFn
-  result = db.methods.newCtxFn()
+  result = db.ctx
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc swapCtx*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
@@ -414,8 +413,14 @@ proc swapCtx*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   ##     defer: db.swapCtx(saved).forget()
   ##     ...
   ##
+  doAssert not ctx.isNil
   db.setTrackNewApi BaseSwapCtxFn
-  result = db.methods.swapCtxFn ctx
+  result = db.ctx
+
+  # Set read-write access and install
+  db.ctx = CoreDbCtxRef(ctx)
+  db.adbBase.call(reCentre, db.ctx.mpt).isOkOr:
+    raiseAssert $api & " failed: " & $error
   db.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc forget*(ctx: CoreDbCtxRef) =
@@ -925,16 +930,52 @@ proc persistent*(
   ##   db.persistent(stateBlockNumber)
   ##
   db.setTrackNewApi BasePersistentFn
-  result = db.methods.persistentFn blockNumber
+  block body:
+    block:
+      let rc =  db.kdbBase.call(persist, db.kdbBase.cache.kvt)
+      if rc.isOk or rc.error == TxPersistDelayed:
+        # The latter clause is OK: Piggybacking on `Aristo` backend
+        discard
+      elif db.kdbBase.call(level, db.kdbBase.cache.kvt) != 0:
+        result = err(rc.error.toError(db.kdbBase, $api, TxPending))
+        break body
+      else:
+        result = err(rc.error.toError(db.kdbBase, $api))
+        break body
+    block:
+      let
+        mpt = db.adbBase.parent.ctx.CoreDbCtxRef.mpt
+        rc = db.adbBase.call(persist, mpt, blockNumber)
+      if rc.isOk:
+        discard
+      elif db.adbBase.call(level, mpt) != 0:
+        result = err(rc.error.toError(db.adbBase, $api, TxPending))
+        break body
+      else:
+        result = err(rc.error.toError(db.adbBase, $api))
+        break body
+    result = ok()
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, blockNumber, result
 
 proc newTransaction*(db: CoreDbRef): CoreDbTxRef =
   ## Constructor
   ##
   db.setTrackNewApi BaseNewTxFn
-  result = db.methods.beginFn()
+  result = block:
+    let kTx = block:
+      let rc = db.kdbBase.call(txBegin, db.kdbBase.kdb)
+      if rc.isErr:
+        raiseAssert $api & ": " & $rc.error
+      rc.value
+    let aTx = block:
+      let rc = db.adbBase.call(txBegin, db.ctx.mpt)
+      if rc.isErr:
+        raiseAssert $api & ": " & $rc.error
+      rc.value
+    db.bless CoreDbTxRef(aTx: aTx, kTx: kTx)
   db.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, newLevel=db.methods.levelFn()
+    let newLevel = db.adbBase.call(level, db.ctx.mpt)
+    debug newApiTxt, api, elapsed, newLevel
 
 
 proc level*(tx: CoreDbTxRef): int =

@@ -17,10 +17,8 @@ type
     CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef
 
   MethodsDesc =
-    CoreDbKvtRef |
-    CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef  |
-    CoreDbTxRef  |
-    CoreDbCaptRef
+    # CoreDbCaptRef |
+    CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef  | CoreDbTxRef
 
   ValidateDesc* =
     MethodsDesc | EphemMethodsDesc | CoreDbErrorRef |
@@ -29,19 +27,6 @@ type
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc validateMethodsDesc(base: CoreDbBaseFns) =
-  doAssert not base.destroyFn.isNil
-  doAssert not base.errorPrintFn.isNil
-  doAssert not base.newKvtFn.isNil
-  doAssert not base.newCtxFn.isNil
-  doAssert not base.newCtxFromTxFn.isNil
-  doAssert not base.swapCtxFn.isNil
-  doAssert not base.beginFn.isNil
-  # doAssert not base.newCaptureFn.isNil # currently disabled
-  doAssert not base.persistentFn.isNil
-
-# ------------
 
 proc validateSubDescRef(e: CoreDbErrorRef) =
   doAssert e.error != CoreDbErrorCode(0)
@@ -93,7 +78,6 @@ proc validateSubDescRef(tx: CoreDbTxRef) =
 proc validateSubDescRef(db: CoreDbRef) =
   doAssert not db.isNil
   doAssert db.dbType != CoreDbType(0)
-  db.methods.validateMethodsDesc
 
 proc validateSubDescRef(bd: CoreDbAriBaseRef) =
   doAssert not bd.parent.isNil

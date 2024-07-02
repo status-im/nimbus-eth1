@@ -104,6 +104,15 @@ when false:
           tr.parent.tracer = AristoTracerRef(nil)
           tr.restore())
 
+  proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDbCaptRef =
+    ## Free parking here --  currently disabled
+    if db.tracer.isNil:
+      db.tracer = AristoTracerRef(parent: db)
+      db.tracer.init(kBase, aBase, flags)
+    else:
+      db.tracer.push(flags)
+    CoreDbCaptRef(methods: db.tracer.cptMethods)
+
 # ------------------------------------------------------------------------------
 # Private `Kvt` functions
 # ------------------------------------------------------------------------------
@@ -170,119 +179,6 @@ proc init(
   ok(base.parent.bless CoreDbCtxRef(mpt: newMpt))
 
 # ------------------------------------------------------------------------------
-# Private tx and base methods
-# ------------------------------------------------------------------------------
-
-proc baseMethods(db: CoreDbRef): CoreDbBaseFns =
-  let
-    aBase = db.adbBase
-    kBase = db.kdbBase
-
-  when false: # currently disabled
-    proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDbCaptRef =
-      if db.tracer.isNil:
-        db.tracer = AristoTracerRef(parent: db)
-        db.tracer.init(kBase, aBase, flags)
-      else:
-        db.tracer.push(flags)
-      CoreDbCaptRef(methods: db.tracer.cptMethods)
-
-  proc persistent(bn: BlockNumber): CoreDbRc[void] =
-    const info = "persistentFn()"
-
-    block kvtBody:
-      let
-        kvt = kBase.kdb
-        rc = kBase.api.persist(kvt)
-      if rc.isOk or rc.error == TxPersistDelayed:
-        # The latter clause is OK: Piggybacking on `Aristo` backend
-        break kvtBody
-      elif kBase.api.level(kvt) != 0:
-        return err(rc.error.toError(kBase, info, TxPending))
-      else:
-        return err(rc.error.toError(kBase, info))
-
-    block adbBody:
-      let
-        mpt = aBase.parent.ctx.CoreDbCtxRef.mpt
-        rc = aBase.api.persist(mpt, bn)
-      if rc.isOk:
-        break adbBody
-      elif aBase.api.level(mpt) != 0:
-        return err(rc.error.toError(aBase, info, TxPending))
-      else:
-        return err(rc.error.toError(aBase, info))
-    ok()
-
-  proc errorPrintFn(e: CoreDbErrorRef): string =
-    if not e.isNil:
-      result = if e.isAristo: "Aristo" else: "Kvt"
-      result &= ", ctx=" & $e.ctx & ", error="
-      if e.isAristo:
-        result &= $e.aErr
-      else:
-        result &= $e.kErr
-
-  proc txBegin(): CoreDbTxRef =
-    const info = "beginFn()"
-
-    let aTx = block:
-      let rc = aBase.api.txBegin(aBase.parent.ctx.CoreDbCtxRef.mpt)
-      if rc.isErr:
-        raiseAssert info & ": " & $rc.error
-      rc.value
-
-    let kTx = block:
-      let rc = kBase.api.txBegin(kBase.kdb)
-      if rc.isErr:
-        raiseAssert info & ": " & $rc.error
-      rc.value
-                
-    db.bless CoreDbTxRef(aTx: aTx, kTx: kTx)
-
-  proc swapCtx(ctx: CoreDbCtxRef): CoreDbCtxRef =
-    const info = "swapCtx()"
-    
-    doAssert not ctx.isNil
-    result = aBase.parent.ctx
-
-    # Set read-write access and install
-    aBase.parent.ctx = CoreDbCtxRef(ctx)
-    aBase.api.reCentre(aBase.parent.ctx.CoreDbCtxRef.mpt).isOkOr:
-      raiseAssert info & " failed: " & $error
-
-
-  CoreDbBaseFns(
-    destroyFn: proc(eradicate: bool) =
-      aBase.api.finish(aBase.parent.ctx.CoreDbCtxRef.mpt, eradicate)
-      kBase.api.finish(kBase.kdb, eradicate),
-
-    errorPrintFn: proc(e: CoreDbErrorRef): string =
-      errorPrintFn(e),          
-
-    newKvtFn: proc(): CoreDbRc[CoreDbKvtRef] =
-      ok(kBase.cache),
- 
-    newCtxFn: proc(): CoreDbCtxRef =
-      db.ctx,
-
-    newCtxFromTxFn: proc(r: Hash256; k: CoreDbColType): CoreDbRc[CoreDbCtxRef] =
-      CoreDbCtxRef.init(db.adbBase, r, k),
-
-    swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
-      swapCtx(ctx),
-
-    beginFn: proc(): CoreDbTxRef =
-      txBegin(),
-
-    # # currently disabled
-    #  newCaptureFn: proc(flags:set[CoreDbCaptFlags]): CoreDbRc[CoreDbCaptRef] =
-    #    ok(db.bless flags.tracerSetup()),
-
-    persistentFn: proc(bn: BlockNumber): CoreDbRc[void] =
-      persistent(bn))
-
-# ------------------------------------------------------------------------------
 # Public constructor and helper
 # ------------------------------------------------------------------------------
 
@@ -297,7 +193,6 @@ proc create*(dbType: CoreDbType; kdb: KvtDbRef; adb: AristoDbRef): CoreDbRef =
 
   # Base descriptor
   db.dbType = dbType
-  db.methods = db.baseMethods()
   db.bless()
 
 proc newAristoMemoryCoreDbRef*(): CoreDbRef =

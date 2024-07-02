@@ -68,61 +68,6 @@ type
     PersistDel
 
   # --------------------------------------------------
-  # Sub-descriptor: Misc methods for main descriptor
-  # --------------------------------------------------
-  CoreDbBaseDestroyFn* = proc(eradicate = true) {.noRaise.}
-  CoreDbBaseErrorPrintFn* = proc(e: CoreDbErrorRef): string {.noRaise.}
-  CoreDbBaseLevelFn* = proc(): int {.noRaise.}
-  CoreDbBaseNewKvtFn* = proc(): CoreDbRc[CoreDbKvtRef] {.noRaise.}
-  CoreDbBaseNewCtxFn* = proc(): CoreDbCtxRef {.noRaise.}
-  CoreDbBaseNewCtxFromTxFn* = proc(
-    colState: Hash256; kind: CoreDbColType): CoreDbRc[CoreDbCtxRef] {.noRaise.}
-  CoreDbBaseSwapCtxFn* = proc(ctx: CoreDbCtxRef): CoreDbCtxRef {.noRaise.}
-  CoreDbBaseTxBeginFn* = proc(): CoreDbTxRef {.noRaise.}
-  CoreDbBaseNewCaptFn* =
-    proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDbCaptRef] {.noRaise.}
-  CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDbCaptRef] {.noRaise.}
-  CoreDbBasePersistentFn* =
-    proc(bn: BlockNumber): CoreDbRc[void] {.noRaise.}
-
-  CoreDbBaseFns* = object
-    destroyFn*:      CoreDbBaseDestroyFn
-    errorPrintFn*:   CoreDbBaseErrorPrintFn
-
-    # Kvt constructor
-    newKvtFn*:       CoreDbBaseNewKvtFn
-
-    # MPT context constructor
-    newCtxFn*:       CoreDbBaseNewCtxFn
-    newCtxFromTxFn*: CoreDbBaseNewCtxFromTxFn
-    swapCtxFn*:      CoreDbBaseSwapCtxFn
-
-    # Transactions constructors
-    beginFn*:        CoreDbBaseTxBeginFn
-
-    # Capture/tracer constructors
-    newCaptureFn*:   CoreDbBaseNewCaptFn
-
-    # Save to disk
-    persistentFn*: CoreDbBasePersistentFn
-
-
-  # --------------------------------------------------
-  # Sub-descriptor: capture recorder methods
-  # --------------------------------------------------
-  CoreDbCaptRecorderFn* = proc(): CoreDbRef {.noRaise.}
-  CoreDbCaptLogDbFn* = proc(): TableRef[Blob,Blob] {.noRaise.}
-  CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
-  CoreDbCaptForgetFn* = proc() {.noRaise.}
-
-  CoreDbCaptFns* = object
-    recorderFn*: CoreDbCaptRecorderFn
-    logDbFn*: CoreDbCaptLogDbFn
-    getFlagsFn*: CoreDbCaptFlagsFn
-    forgetFn*: CoreDbCaptForgetFn
-
-
-  # --------------------------------------------------
   # Production descriptors
   # --------------------------------------------------
   CoreDbRef* = ref object of RootRef
@@ -135,7 +80,6 @@ type
     kdbBase*: CoreDbKvtBaseRef  ## Kvt subsystem
     adbBase*: CoreDbAriBaseRef  ## Aristo subsystem
     ctx*: CoreDbCtxRef          ## Currently active context
-    methods*: CoreDbBaseFns
 
   CoreDbKvtBaseRef* = ref object of RootRef
     parent*: CoreDbRef
@@ -200,10 +144,26 @@ type
     aTx*: AristoTxRef
     kTx*: KvtTxRef
 
-  CoreDbCaptRef* = ref object
-    ## Db transaction tracer derived from `CoreDbRef`
-    parent*: CoreDbRef
-    methods*: CoreDbCaptFns
+when false: # TODO
+  type
+    # --------------------------------------------------
+    # Sub-descriptor: capture recorder methods
+    # --------------------------------------------------
+    CoreDbCaptRecorderFn* = proc(): CoreDbRef {.noRaise.}
+    CoreDbCaptLogDbFn* = proc(): TableRef[Blob,Blob] {.noRaise.}
+    CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
+    CoreDbCaptForgetFn* = proc() {.noRaise.}
+
+    CoreDbCaptFns* = object
+      recorderFn*: CoreDbCaptRecorderFn
+      logDbFn*: CoreDbCaptLogDbFn
+      getFlagsFn*: CoreDbCaptFlagsFn
+      forgetFn*: CoreDbCaptForgetFn
+
+    CoreDbCaptRef* = ref object
+      ## Db transaction tracer derived from `CoreDbRef`
+      parent*: CoreDbRef
+      methods*: CoreDbCaptFns
 
 # ------------------------------------------------------------------------------
 # End
