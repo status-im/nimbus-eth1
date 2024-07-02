@@ -257,13 +257,6 @@ proc parent*[T: CoreDbKvtRef |
   ##
   result = child.parent
 
-proc backend*(dsc: CoreDbAccRef): auto =
-  ## Getter, retrieves the *raw* backend object for special/localised support.
-  ##
-  dsc.setTrackNewApi AnyBackendFn
-  result = dsc.methods.backendFn(dsc)
-  dsc.ifTrackNewApi: debug newApiTxt, api, elapsed
-
 proc finish*(db: CoreDbRef; eradicate = false) =
   ## Database destructor. If the argument `eradicate` is set `false`, the
   ## database is left as-is and only the in-memory handlers are cleaned up.
@@ -566,6 +559,13 @@ proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
 # Public methods for accounts
 # ------------------------------------------------------------------------------
 
+proc backend*(acc: CoreDbAccRef): auto =
+  ## Getter, retrieves the *raw* backend object for special/localised support.
+  ##
+  acc.setTrackNewApi AnyBackendFn
+  result = acc.parent.bless CoreDbAccBackendRef(adb: acc.parent.ctx.mpt)
+  acc.ifTrackNewApi: debug newApiTxt, api, elapsed
+
 proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
   ## Accounts column constructor, will defect on failure.
   ##
@@ -583,7 +583,18 @@ proc fetch*(
   ## the key `accPath`.
   ##
   acc.setTrackNewApi AccFetchFn
-  result = acc.methods.fetchFn(acc, accPath)
+  #result = acc.methods.fetchFn(acc, accPath)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(fetchAccountRecord, db.ctx.mpt, accPath)
+    if rc.isOk:
+      ok(rc.value)
+    elif rc.error == FetchPathNotFound:
+      err(rc.error.toError(base, $api, AccNotFound))
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
@@ -595,7 +606,18 @@ proc delete*(
   ## will also destroy an associated storage area.
   ##
   acc.setTrackNewApi AccDeleteFn
-  result = acc.methods.deleteFn(acc, accPath)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(deleteAccountRecord, db.ctx.mpt, accPath)
+    if rc.isOk:
+      ok()
+    elif rc.error == DelPathNotFound:
+      # TODO: Would it be conseqient to just return `ok()` here?
+      err(rc.error.toError(base, $api, AccNotFound))
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
@@ -607,7 +629,15 @@ proc clearStorage*(
   ## particular account indexed by the key `accPath`.
   ##
   acc.setTrackNewApi AccClearStorageFn
-  result = acc.methods.clearStorageFn(acc, accPath)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(deleteStorageTree, db.ctx.mpt, accPath)
+    if rc.isOk or rc.error in {DelStoRootMissing,DelStoAccMissing}:
+      ok()
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
@@ -620,7 +650,15 @@ proc merge*(
   ## `account` argument uniquely idendifies the particular account address.
   ##
   acc.setTrackNewApi AccMergeFn
-  result = acc.methods.mergeFn(acc, accPath, accRec)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(mergeAccountRecord, db.ctx.mpt, accPath, accRec)
+    if rc.isOk:
+      ok()
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
@@ -631,7 +669,15 @@ proc hasPath*(
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
   acc.setTrackNewApi AccHasPathFn
-  result = acc.methods.hasPathFn(acc, accPath)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(hasPathAccount, db.ctx.mpt, accPath)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
@@ -643,7 +689,15 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
   ## database will be updated first (if needed, at all).
   ##
   acc.setTrackNewApi AccStateFn
-  result = acc.methods.stateFn(acc, updateOk)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(fetchAccountState, db.ctx.mpt, updateOk)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
 
 # ------------ storage ---------------
@@ -655,7 +709,17 @@ proc slotFetch*(
       ):  CoreDbRc[Blob] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotFetchFn
-  result = acc.methods.slotFetchFn(acc, accPath, slot)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(fetchStorageData, db.ctx.mpt, accPath, slot)
+    if rc.isOk:
+      ok(rc.value)
+    elif rc.error == FetchPathNotFound:
+      err(rc.error.toError(base, $api, StoNotFound))
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
             slot=slot.toStr, result
@@ -667,7 +731,19 @@ proc slotDelete*(
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotDeleteFn
-  result = acc.methods.slotDeleteFn(acc, accPath, slot)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(deleteStorageData, db.ctx.mpt, accPath, slot)
+    if rc.isOk or rc.error == DelStoRootMissing:
+      # The second `if` clause is insane but legit: A storage column was
+      # announced for an account but no data have been added, yet.
+      ok()
+    elif rc.error == DelPathNotFound:
+      err(rc.error.toError(base, $api, StoNotFound))
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
             slot=slot.toStr, result
@@ -679,7 +755,15 @@ proc slotHasPath*(
       ):  CoreDbRc[bool] =
   ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotHasPathFn
-  result = acc.methods.slotHasPathFn(acc, accPath, slot)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(hasPathStorage, db.ctx.mpt, accPath, slot)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
             slot=slot.toStr, result
@@ -692,7 +776,15 @@ proc slotMerge*(
       ):  CoreDbRc[void] =
   ## Like `merge()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotMergeFn
-  result = acc.methods.slotMergeFn(acc, accPath, slot, data)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(mergeStorageData, db.ctx.mpt, accPath, slot, data)
+    if rc.isOk:
+      ok()
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
             slot=slot.toStr, result
@@ -710,7 +802,15 @@ proc slotState*(
   ## database will be updated first (if needed, at all).
   ##
   acc.setTrackNewApi AccSlotStateFn
-  result = acc.methods.slotStateFn(acc, accPath, updateOk)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(fetchStorageState, db.ctx.mpt, accPath, updateOk)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, updateOk, result
 
@@ -722,7 +822,15 @@ proc slotStateEmpty*(
   ## missing.
   ##
   acc.setTrackNewApi AccSlotStateEmptyFn
-  result = acc.methods.slotStateEmptyFn(acc, accPath)
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(hasStorageData, db.ctx.mpt, accPath)
+    if rc.isOk:
+      ok(not rc.value)
+    else:
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
@@ -732,7 +840,15 @@ proc slotStateEmptyOrVoid*(
       ): bool =
   ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
   acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
-  result = acc.methods.slotStateEmptyFn(acc, accPath).valueOr: true
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(hasStorageData, db.ctx.mpt, accPath)
+    if rc.isOk:
+      not rc.value
+    else:
+      true
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
 
@@ -744,13 +860,16 @@ proc recast*(
     accRec: CoreDbAccount;
     updateOk = false;
       ): CoreDbRc[Account] =
-  ## Convert the argument `statement` to the portable Ethereum representation
+  ## Complete the argument `accRec` to the portable Ethereum representation
   ## of an account statement. This conversion may fail if the storage colState
-  ## hash (see `hash()` above) is currently unavailable.
+  ## hash (see `slotState()` above) is currently unavailable.
   ##
   acc.setTrackNewApi EthAccRecastFn
-  let rc = acc.methods.slotStateFn(acc, accPath, updateOk)
-  result =
+  let
+    db = acc.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(fetchStorageState, db.ctx.mpt, accPath, updateOk)
     if rc.isOk:
       ok Account(
         nonce:       accRec.nonce,
@@ -758,7 +877,7 @@ proc recast*(
         codeHash:    accRec.codeHash,
         storageRoot: rc.value)
     else:
-      err(rc.error)
+      err(rc.error.toError(base, $api))
   acc.ifTrackNewApi:
     let slotState = if rc.isOk: rc.value.toStr else: "n/a"
     debug newApiTxt, api, elapsed, accPath=accPath.toStr, slotState, result

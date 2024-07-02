@@ -123,62 +123,6 @@ type
     forgetFn*:      CoreDbCtxForgetFn
 
 
-  # ----------------------------------------------------
-  # Sub-descriptor: Account column methods
-  # ------------------------------------------------------
-  CoreDbAccBackendFn* = proc(
-    cAcc: CoreDbAccRef): CoreDbAccBackendRef {.noRaise.}
-  CoreDbAccFetchFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256;
-    ): CoreDbRc[CoreDbAccount] {.noRaise.}
-  CoreDbAccDeleteFn* = proc(
-    cAcc: CoreDbAccRef, accPath: Hash256): CoreDbRc[void] {.noRaise.}
-  CoreDbAccClearStorageFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256): CoreDbRc[void] {.noRaise.}
-  CoreDbAccMergeFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256; accRec: CoreDbAccount;
-    ): CoreDbRc[void] {.noRaise.}
-  CoreDbAccHasPathFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256): CoreDbRc[bool] {.noRaise.}
-  CoreDbAccStateFn* = proc(
-    cAcc: CoreDbAccRef; updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
-
-  CoreDbSlotFetchFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256, stoPath: openArray[byte];
-    ): CoreDbRc[Blob] {.noRaise.}
-  CoreDbSlotDeleteFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256, stoPath: openArray[byte];
-    ): CoreDbRc[void] {.noRaise.}
-  CoreDbSlotHasPathFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256, stoPath: openArray[byte];
-    ): CoreDbRc[bool] {.noRaise.}
-  CoreDbSlotMergeFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256, stoPath, stoData: openArray[byte];
-    ): CoreDbRc[void] {.noRaise.}
-  CoreDbSlotStateFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256; updateOk: bool;
-    ): CoreDbRc[Hash256] {.noRaise.}
-  CoreDbSlotStateEmptyFn* = proc(
-    cAcc: CoreDbAccRef; accPath: Hash256;
-    ): CoreDbRc[bool] {.noRaise.}
-
-  CoreDbAccFns* = object
-    ## Methods for trie objects
-    backendFn*:      CoreDbAccBackendFn
-    fetchFn*:        CoreDbAccFetchFn
-    clearStorageFn*: CoreDbAccClearStorageFn
-    deleteFn*:       CoreDbAccDeleteFn
-    hasPathFn*:      CoreDbAccHasPathFn
-    mergeFn*:        CoreDbAccMergeFn
-    stateFn*:        CoreDbAccStateFn
-
-    slotFetchFn*:      CoreDbSlotFetchFn
-    slotDeleteFn*:     CoreDbSlotDeleteFn
-    slotHasPathFn*:    CoreDbSlotHasPathFn
-    slotMergeFn*:      CoreDbSlotMergeFn
-    slotStateFn*:      CoreDbSlotStateFn
-    slotStateEmptyFn*: CoreDbSlotStateEmptyFn
-
   # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
@@ -282,7 +226,6 @@ type
     ## Similar to `CoreDbKvtRef`, only dealing with `CoreDbAccount` data
     ## rather than `Blob` values.
     parent*: CoreDbRef
-    methods*: CoreDbAccFns
 
   CoreDbTxRef* = ref object of RootRef
     ## Transaction descriptor derived from `CoreDbRef`
