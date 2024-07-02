@@ -45,8 +45,6 @@ type
     AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
     AccSlotPairsIt      = "slotPairs"
 
-    AnyBackendFn        = "any/backend"
-
     BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"

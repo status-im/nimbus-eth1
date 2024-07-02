@@ -29,7 +29,7 @@ const
   EnableApiProfiling = true
     ## Enables functions profiling if `EnableApiTracking` is also set `true`.
 
-  EnableDebugApi* = defined(release).not # and false
+  EnableDebugApi* = defined(release).not
     ## ...
 
   AutoValidateDescriptors = defined(release).not
@@ -44,8 +44,6 @@ export
   CoreDbErrorCode,
   CoreDbErrorRef,
   CoreDbFnInx,
-  CoreDbKvtBackendRef,
-  CoreDbMptBackendRef,
   CoreDbPersistentTypes,
   CoreDbProfListRef,
   CoreDbRef,
@@ -202,8 +200,7 @@ proc bless*(db: CoreDbRef; kvt: CoreDbKvtRef): CoreDbKvtRef =
 proc bless*[T: # CoreDbCaptRef |
                CoreDbKvtRef |
                CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef | CoreDbTxRef  |
-               CoreDbKvtBaseRef | CoreDbAriBaseRef |
-               CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef](
+               CoreDbKvtBaseRef | CoreDbAriBaseRef] (
     db: CoreDbRef;
     dsc: T;
       ): auto =
@@ -293,13 +290,6 @@ proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
-
-proc backend*(kvt: CoreDbKvtRef): CoreDbKvtBackendRef =
-  ## Getter, retrieves the *raw* backend object for special/localised support.
-  ##
-  kvt.setTrackNewApi AnyBackendFn
-  result = kvt.parent.bless CoreDbKvtBackendRef(kdb: kvt.kvt)
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc newKvt*(db: CoreDbRef): CoreDbKvtRef =
   ## Constructor, will defect on failure.
@@ -449,13 +439,6 @@ proc forget*(ctx: CoreDbCtxRef) =
 # Public functions for generic columns
 # ------------------------------------------------------------------------------
 
-proc backend*(mpt: CoreDbMptRef): CoreDbMptBackendRef =
-  ## Getter, retrieves the *raw* backend object for special/localised support.
-  ##
-  mpt.setTrackNewApi AnyBackendFn
-  result = mpt.parent.bless CoreDbMptBackendRef(adb: mpt.parent.ctx.mpt)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
-
 proc getColumn*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;
@@ -582,13 +565,6 @@ proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
 # ------------------------------------------------------------------------------
 # Public methods for accounts
 # ------------------------------------------------------------------------------
-
-proc backend*(acc: CoreDbAccRef): auto =
-  ## Getter, retrieves the *raw* backend object for special/localised support.
-  ##
-  acc.setTrackNewApi AnyBackendFn
-  result = acc.parent.bless CoreDbAccBackendRef(adb: acc.parent.ctx.mpt)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
   ## Accounts column constructor, will defect on failure.
@@ -892,8 +868,8 @@ proc recast*(
   let
     db = acc.parent
     base = db.adbBase
+    rc = base.call(fetchStorageState, db.ctx.mpt, accPath, updateOk)
   result = block:
-    let rc = base.call(fetchStorageState, db.ctx.mpt, accPath, updateOk)
     if rc.isOk:
       ok Account(
         nonce:       accRec.nonce,
@@ -1000,7 +976,7 @@ proc level*(tx: CoreDbTxRef): int =
 
 proc commit*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxCommitFn:
-    let prvLevel {.used.} = tx.methods.levelFn()
+    let prvLevel {.used.} = tx.parent.adbBase.call(txLevel, tx.aTx)
   tx.parent.adbBase.call(commit, tx.aTx).isOkOr:
     raiseAssert $api & ": " & $error
   tx.parent.kdbBase.call(commit, tx.kTx).isOkOr:
@@ -1009,7 +985,7 @@ proc commit*(tx: CoreDbTxRef) =
 
 proc rollback*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxRollbackFn:
-    let prvLevel {.used.} = tx.methods.levelFn()
+    let prvLevel {.used.} = tx.parent.adbBase.call(txLevel, tx.aTx)
   tx.parent.adbBase.call(rollback, tx.aTx).isOkOr:
     raiseAssert $api & ": " & $error
   tx.parent.kdbBase.call(rollback, tx.kTx).isOkOr:
@@ -1018,7 +994,7 @@ proc rollback*(tx: CoreDbTxRef) =
 
 proc dispose*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxDisposeFn:
-    let prvLevel {.used.} = tx.methods.levelFn()
+    let prvLevel {.used.} = tx.parent.adbBase.call(txLevel, tx.aTx)
   if tx.parent.adbBase.call(isTop, tx.aTx):
     tx.parent.adbBase.call(rollback, tx.aTx).isOkOr:
       raiseAssert $api & ": " & $error

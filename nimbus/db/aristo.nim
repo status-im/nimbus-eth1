@@ -23,6 +23,7 @@ import
 export
   MemBackendRef,
   VoidBackendRef,
+  finish,
   init
 
 import

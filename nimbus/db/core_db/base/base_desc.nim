@@ -101,21 +101,6 @@ type
     else:
       kErr*: KvtError
 
-  CoreDbKvtBackendRef* = ref object of RootRef
-    ## Backend wrapper for direct backend access
-    parent*: CoreDbRef
-    kdb*: KvtDbRef
-
-  CoreDbMptBackendRef* = ref object of RootRef
-    ## Backend wrapper for direct backend access
-    parent*: CoreDbRef
-    adb*: AristoDbRef
-
-  CoreDbAccBackendRef* = ref object of RootRef
-    ## Backend wrapper for direct backend access
-    parent*: CoreDbRef
-    adb*: AristoDbRef
-
   CoreDbKvtRef* = ref object of RootRef
     ## Statically initialised Key-Value pair table living in `CoreDbRef`
     parent*: CoreDbRef

@@ -24,12 +24,7 @@ export
   base,
   base_iterators,
   common,
-  core_apps,
-
-  # see `aristo_db`
-  toAristo,
-  toAristoProfData,
-  to
+  core_apps
 
 # ------------------------------------------------------------------------------
 # Public constructors

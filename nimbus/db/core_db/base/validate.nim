@@ -13,16 +13,12 @@ import
   ./base_desc
 
 type
-  EphemMethodsDesc =
-    CoreDbKvtBackendRef | CoreDbMptBackendRef | CoreDbAccBackendRef
-
   MethodsDesc =
     # CoreDbCaptRef |
     CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef  | CoreDbTxRef
 
   ValidateDesc* =
-    MethodsDesc | EphemMethodsDesc | CoreDbErrorRef |
-    CoreDbKvtBaseRef | CoreDbAriBaseRef
+    MethodsDesc | CoreDbErrorRef | CoreDbKvtBaseRef | CoreDbAriBaseRef
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -32,16 +28,6 @@ proc validateSubDescRef(e: CoreDbErrorRef) =
   doAssert e.error != CoreDbErrorCode(0)
   doAssert not e.isNil
   doAssert not e.parent.isNil
-
-proc validateSubDescRef(kb: CoreDbKvtBackendRef) =
-  doAssert not kb.isNil
-  doAssert not kb.parent.isNil
-  doAssert not kb.kdb.isNil
-
-proc validateSubDescRef(ab: CoreDbMptBackendRef | CoreDbAccBackendRef) =
-  doAssert not ab.isNil
-  doAssert not ab.parent.isNil
-  doAssert not ab.adb.isNil
 
 proc validateSubDescRef(kvt: CoreDbKvtRef) =
   doAssert not kvt.isNil

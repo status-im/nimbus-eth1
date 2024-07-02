@@ -141,8 +141,8 @@ func init(T: type CoreDbCtxRef; db: CoreDbRef, adb: AristoDbRef): T =
 
   when CoreDbEnableApiProfiling:
     let profApi = AristoApiProfRef.init(db.adbBase.api, adb.backend)
-    result.api = profApi
-    result.ctx.mpt.backend = profApi.be
+    db.adbBase.api = profApi
+    adb.backend = profApi.be
 
   db.bless ctx
 
@@ -209,31 +209,6 @@ proc newAristoVoidCoreDbRef*(): CoreDbRef =
 # Public helpers, e.g. for direct backend access
 # ------------------------------------------------------------------------------
 
-func toAristoProfData*(
-    db: CoreDbRef;
-      ): tuple[aristo: AristoDbProfListRef, kvt: KvtDbProfListRef]  =
-  when CoreDbEnableApiProfiling:
-    result.aristo = db.CoreDbRef.adbBase.api.AristoApiProfRef.data
-    result.kvt = db.CoreDbRef.kdbBase.api.KvtApiProfRef.data
-
-func toAristoApi*(kvt: CoreDbKvtRef): KvtApiRef =
-  return CoreDbRef(kvt.parent).kdbBase.api
-
-func toAristoApi*(mpt: CoreDbMptRef): AristoApiRef =
-  return mpt.parent.adbBase.api
-
-func toAristo*(kBe: CoreDbKvtBackendRef): KvtDbRef =
-  if not kBe.isNil:
-    return kBe.kdb
-
-func toAristo*(mBe: CoreDbMptBackendRef): AristoDbRef =
-  if not mBe.isNil:
-    return mBe.adb
-
-func toAristo*(mBe: CoreDbAccBackendRef): AristoDbRef =
-  if not mBe.isNil:
-    return mBe.adb
-
 # ------------------------------------------------------------------------------
 # Public aristo iterators
 # ------------------------------------------------------------------------------
@@ -243,18 +218,18 @@ include
 
 # ------------------------
 
-iterator aristoKvtPairsVoid*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoKvtPairsVoid*(kvt: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
-    api = dsc.toAristoApi()
-    p = api.forkTx(dsc.kvt,0).valueOrApiError "aristoKvtPairs()"
+    api = kvt.parent.kdbBase.api
+    p = api.forkTx(kvt.kvt,0).valueOrApiError "aristoKvtPairs()"
   defer: discard api.forget(p)
   for (k,v) in use_kvt.VoidBackendRef.walkPairs p:
     yield (k,v)
 
-iterator aristoKvtPairsMem*(dsc: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
+iterator aristoKvtPairsMem*(kvt: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
   let
-    api = dsc.toAristoApi()
-    p = api.forkTx(dsc.kvt,0).valueOrApiError "aristoKvtPairs()"
+    api = kvt.parent.kdbBase.api
+    p = api.forkTx(kvt.kvt,0).valueOrApiError "aristoKvtPairs()"
   defer: discard api.forget(p)
   for (k,v) in use_kvt.MemBackendRef.walkPairs p:
     yield (k,v)
