@@ -25,9 +25,6 @@ const
   EmptyVidSet* = EmptyVidSeq.toHashSet
     ## Useful shortcut
 
-  VOID_CODE_HASH* = EMPTY_CODE_HASH
-    ## Equivalent of `nil` for `Account` object code hash field
-
   VOID_HASH_KEY* = HashKey()
     ## Void equivalent for Merkle hash value
 

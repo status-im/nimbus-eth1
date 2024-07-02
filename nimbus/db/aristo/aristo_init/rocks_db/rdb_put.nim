@@ -68,7 +68,7 @@ proc commit*(rdb: var RdbInst): Result[void,(AristoError,string)] =
 proc putAdm*(
     rdb: var RdbInst;
     xid: AdminTabID;
-    data: Blob;
+    data: openArray[byte];
       ): Result[void,(AdminTabID,AristoError,string)] =
   let dsc = rdb.session
   if data.len == 0:
@@ -85,14 +85,13 @@ proc putAdm*(
       return err((xid,errSym,error))
   ok()
 
-
 proc putKey*(
     rdb: var RdbInst;
     vid: VertexID, key: HashKey;
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = rdb.session
   if key.isValid:
-    dsc.put(vid.toOpenArray, key.data, rdb.keyCol.handle()).isOkOr:
+    dsc.put(vid.blobify().data(), key.data, rdb.keyCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdKeyLru` cache
       const errSym = RdbBeDriverPutKeyError
       when extraTraceMessages:
@@ -104,7 +103,7 @@ proc putKey*(
       discard rdb.rdKeyLru.lruAppend(vid, key, RdKeyLruMaxSize)
 
   else:
-    dsc.delete(vid.toOpenArray, rdb.keyCol.handle()).isOkOr:
+    dsc.delete(vid.blobify().data(), rdb.keyCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdKeyLru` cache
       const errSym = RdbBeDriverDelKeyError
       when extraTraceMessages:
@@ -128,7 +127,7 @@ proc putVtx*(
       # Caller must `rollback()` which will flush the `rdVtxLru` cache
       return err((vid,rc.error,""))
 
-    dsc.put(vid.toOpenArray, rc.value, rdb.vtxCol.handle()).isOkOr:
+    dsc.put(vid.blobify().data(), rc.value, rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdVtxLru` cache
       const errSym = RdbBeDriverPutVtxError
       when extraTraceMessages:
@@ -140,7 +139,7 @@ proc putVtx*(
       discard rdb.rdVtxLru.lruAppend(vid, vtx, RdVtxLruMaxSize)
 
   else:
-    dsc.delete(vid.toOpenArray, rdb.vtxCol.handle()).isOkOr:
+    dsc.delete(vid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdVtxLru` cache
       const errSym = RdbBeDriverDelVtxError
       when extraTraceMessages:

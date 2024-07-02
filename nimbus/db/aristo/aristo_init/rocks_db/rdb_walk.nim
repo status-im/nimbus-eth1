@@ -17,7 +17,9 @@ import
   eth/common,
   stew/endians2,
   rocksdb,
-  ./rdb_desc
+  ./rdb_desc,
+  ../../aristo_blobify,
+  ../../aristo_desc/desc_identifiers
 
 const
   extraTraceMessages = false
@@ -50,7 +52,7 @@ iterator walkAdm*(rdb: RdbInst): tuple[xid: uint64, data: Blob] =
       if key.len == 8 and val.len != 0:
         yield (uint64.fromBytesBE key, val)
 
-iterator walkKey*(rdb: RdbInst): tuple[vid: uint64, data: Blob] =
+iterator walkKey*(rdb: RdbInst): tuple[vid: VertexID, data: Blob] =
   ## Walk over key-value pairs of the hash key column of the database.
   ##
   ## Non-decodable entries are are ignored.
@@ -63,10 +65,10 @@ iterator walkKey*(rdb: RdbInst): tuple[vid: uint64, data: Blob] =
     defer: rit.close()
 
     for (key,val) in rit.pairs:
-      if key.len == 8 and val.len != 0:
-        yield (uint64.fromBytesBE key, val)
+      if key.len <= 8 and val.len != 0:
+        yield (key.deblobify(VertexID).value(), val)
 
-iterator walkVtx*(rdb: RdbInst): tuple[vid: uint64, data: Blob] =
+iterator walkVtx*(rdb: RdbInst): tuple[vid: VertexID, data: Blob] =
   ## Walk over key-value pairs of the hash key column of the database.
   ##
   ## Non-decodable entries are are ignored.
@@ -79,8 +81,8 @@ iterator walkVtx*(rdb: RdbInst): tuple[vid: uint64, data: Blob] =
     defer: rit.close()
 
     for (key,val) in rit.pairs:
-      if key.len == 8 and val.len != 0:
-        yield (uint64.fromBytesBE key, val)
+      if key.len <= 8 and val.len != 0:
+        yield (key.deblobify(VertexID).value(), val)
 
 # ------------------------------------------------------------------------------
 # End
