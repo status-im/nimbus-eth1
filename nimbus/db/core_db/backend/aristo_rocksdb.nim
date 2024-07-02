@@ -53,7 +53,7 @@ proc toRocksDb*(
   # should be better investigated.
   # https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter#ribbon-filter
   # https://github.com/facebook/rocksdb/blob/d64eac28d32a025770cba641ea04e697f475cdd6/include/rocksdb/filter_policy.h#L208
-  tableOpts.filterPolicy = createRibbonHybrid(9.9, autoClose = false)
+  tableOpts.filterPolicy = createRibbonHybrid(9.9)
 
   if opts.blockCacheSize > 0:
     # Share a single block cache instance between all column families
