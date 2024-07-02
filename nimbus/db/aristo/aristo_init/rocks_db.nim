@@ -308,20 +308,6 @@ proc dup*(db: RdbBackendRef): RdbBackendRef =
 # Public iterators (needs direct backend access)
 # ------------------------------------------------------------------------------
 
-iterator walk*(
-    be: RdbBackendRef;
-      ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
-  ## Walk over all key-value pairs of the database.
-  ##
-  ## Non-decodable entries are ignored
-  ##
-  for (xid, data) in be.rdb.walkAdm:
-    yield (AdmPfx, xid, data)
-  for (vid, data) in be.rdb.walkVtx:
-    yield (VtxPfx, vid, data)
-  for (vid, data) in be.rdb.walkKey:
-    yield (KeyPfx, vid, data)
-
 iterator walkVtx*(
     be: RdbBackendRef;
       ): tuple[vid: VertexID, vtx: VertexRef] =
@@ -329,7 +315,7 @@ iterator walkVtx*(
   for (vid, data) in be.rdb.walkVtx:
     let rc = data.deblobify VertexRef
     if rc.isOk:
-      yield (VertexID(vid), rc.value)
+      yield (vid, rc.value)
 
 iterator walkKey*(
     be: RdbBackendRef;
@@ -338,7 +324,7 @@ iterator walkKey*(
   for (vid, data) in be.rdb.walkKey:
     let lid = HashKey.fromBytes(data).valueOr:
       continue
-    yield (VertexID(vid), lid)
+    yield (vid, lid)
 
 # ------------------------------------------------------------------------------
 # End
