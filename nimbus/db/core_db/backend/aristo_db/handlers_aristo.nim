@@ -86,16 +86,6 @@ func toRc[T](
       return ok(rc.value)
   err((VertexID(0),rc.error).toError(base, info, error))
 
-func toVoidRc[T](
-    rc: Result[T,(VertexID,AristoError)];
-    base: AristoBaseRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbRc[void] =
-  if rc.isOk:
-    return ok()
-  err rc.error.toError(base, info, error)
-
 # ------------------------------------------------------------------------------
 # Private `MPT` call back functions
 # ------------------------------------------------------------------------------
@@ -191,7 +181,7 @@ proc accMethods(): CoreDbAccFns =
         return err(error.toError(base, info))
       return err(error.toError(base, info, AccNotFound))
     ok acc
-    
+
   proc accMerge(
       cAcc: AristoCoreDbAccRef;
       accPath: openArray[byte];
@@ -295,7 +285,7 @@ proc accMethods(): CoreDbAccFns =
   proc slotMerge(
       cAcc: AristoCoreDbAccRef;
       accPath: openArray[byte];
-      stoPath: openArray[byte]; 
+      stoPath: openArray[byte];
       stoData: openArray[byte];
         ): CoreDbRc[void] =
     const info = "slotMergeFn()"

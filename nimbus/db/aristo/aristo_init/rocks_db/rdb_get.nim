@@ -53,7 +53,6 @@ proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[Blob,(AristoError,string)] =
     res = EmptyBlob
   ok move(res)
 
-
 proc getKey*(
     rdb: var RdbInst;
     vid: VertexID;
@@ -69,7 +68,7 @@ proc getKey*(
     res = HashKey.fromBytes(data).mapErr(proc(): auto =
       (RdbHashKeyExpected,""))
 
-  let gotData = rdb.keyCol.get(vid.toOpenArray, onData).valueOr:
+  let gotData = rdb.keyCol.get(vid.blobify().data(), onData).valueOr:
      const errSym = RdbBeDriverGetKeyError
      when extraTraceMessages:
        trace logTxt "getKey", vid, error=errSym, info=error
@@ -99,7 +98,7 @@ proc getVtx*(
     res = data.deblobify(VertexRef).mapErr(proc(error: AristoError): auto =
       (error,""))
 
-  let gotData = rdb.vtxCol.get(vid.toOpenArray, onData).valueOr:
+  let gotData = rdb.vtxCol.get(vid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
     when extraTraceMessages:
       trace logTxt "getVtx", vid, error=errSym, info=error

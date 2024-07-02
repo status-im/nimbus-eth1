@@ -77,9 +77,6 @@ func dataDir*(rdb: RdbInst): string =
 template toOpenArray*(xid: AdminTabID): openArray[byte] =
   xid.uint64.toBytesBE.toOpenArray(0,7)
 
-template toOpenArray*(vid: VertexID): openArray[byte] =
-  vid.uint64.toBytesBE.toOpenArray(0,7)
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

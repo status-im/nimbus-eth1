@@ -276,26 +276,6 @@ iterator walkKey*(
       yield (vid, key)
 
 
-iterator walk*(
-    be: MemBackendRef;
-      ): tuple[pfx: StorageType, xid: uint64, data: Blob] =
-  ## Walk over all key-value pairs of the database.
-  ##
-  ## Non-decodable entries are stepped over while the counter `n` of the
-  ## yield record is still incremented.
-  if be.mdb.tUvi.isSome:
-    yield(AdmPfx, AdmTabIdTuv.uint64, be.mdb.tUvi.unsafeGet.blobify)
-  if be.mdb.lSst.isSome:
-    yield(AdmPfx, AdmTabIdLst.uint64, be.mdb.lSst.unsafeGet.blobify.value)
-
-  for vid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
-    let data = be.mdb.sTab.getOrDefault(vid, EmptyBlob)
-    if 0 < data.len:
-      yield (VtxPfx, vid.uint64, data)
-
-  for (vid,key) in be.walkKey:
-    yield (KeyPfx, vid.uint64, @(key.data))
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
