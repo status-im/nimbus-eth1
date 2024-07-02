@@ -42,11 +42,6 @@ proc validateMethodsDesc(base: CoreDbBaseFns) =
   # doAssert not base.newCaptureFn.isNil # currently disabled
   doAssert not base.persistentFn.isNil
 
-proc validateMethodsDesc(ctx: CoreDbCtxFns) =
-  doAssert not ctx.getAccountsFn.isNil
-  doAssert not ctx.getColumnFn.isNil
-  doAssert not ctx.forgetFn.isNil
-
 # ------------
 
 proc validateSubDescRef(e: CoreDbErrorRef) =
@@ -73,7 +68,6 @@ proc validateSubDescRef(ctx: CoreDbCtxRef) =
   doAssert not ctx.isNil
   doAssert not ctx.parent.isNil
   doAssert not ctx.mpt.isNil
-  ctx.methods.validateMethodsDesc
 
 proc validateSubDescRef(mpt: CoreDbMptRef) =
   doAssert not mpt.isNil

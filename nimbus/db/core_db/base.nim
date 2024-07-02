@@ -423,7 +423,8 @@ proc forget*(ctx: CoreDbCtxRef) =
   ## context. This function fails if `ctx` is the default context.
   ##
   ctx.setTrackNewApi CtxForgetFn
-  ctx.methods.forgetFn(ctx)
+  ctx.parent.adbBase.call(forget, ctx.mpt).isOkOr:
+    raiseAssert $api & ": " & $error
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
@@ -445,7 +446,12 @@ proc getColumn*(
   ## ...
   ##
   ctx.setTrackNewApi CtxGetColumnFn
-  result = ctx.methods.getColumnFn(ctx, colType, clearData)
+  # result = ctx.methods.getColumnFn(ctx, colType, clearData)
+  let db = ctx.parent
+  if clearData:
+    db.adbBase.call(deleteGenericTree, ctx.mpt, VertexID(colType)).isOkOr:
+      raiseAssert $api & ": " & $error
+  result = db.bless CoreDbMptRef(rootID: VertexID(colType)) 
   ctx.ifTrackNewApi: debug newApiTxt, api, colType, clearData, elapsed
 
 # ----------- generic MPT ---------------
@@ -570,7 +576,7 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
   ## Accounts column constructor, will defect on failure.
   ##
   ctx.setTrackNewApi CtxGetAccountsFn
-  result = ctx.methods.getAccountsFn(ctx)
+  result =  ctx.parent.bless CoreDbAccRef()
   ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ----------- accounts ---------------

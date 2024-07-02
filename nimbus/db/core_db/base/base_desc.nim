@@ -109,21 +109,6 @@ type
 
 
   # --------------------------------------------------
-  # Sub-descriptor: MPT context methods
-  # --------------------------------------------------
-  CoreDbCtxGetColumnFn* = proc(
-    cCtx: CoreDbCtxRef; colType: CoreDbColType; clearData: bool): CoreDbMptRef {.noRaise.}
-  CoreDbCtxGetAccountsFn* = proc(cCtx: CoreDbCtxRef): CoreDbAccRef {.noRaise.}
-  CoreDbCtxForgetFn* = proc(cCtx: CoreDbCtxRef) {.noRaise.}
-
-  CoreDbCtxFns* = object
-    ## Methods for context maniulation
-    getColumnFn*:   CoreDbCtxGetColumnFn
-    getAccountsFn*: CoreDbCtxGetAccountsFn
-    forgetFn*:      CoreDbCtxForgetFn
-
-
-  # --------------------------------------------------
   # Sub-descriptor: Transaction frame management
   # --------------------------------------------------
   CoreDbTxLevelFn* = proc(): int {.noRaise.}
@@ -213,7 +198,6 @@ type
   CoreDbCtxRef* = ref object of RootRef
     ## Context for `CoreDbMptRef` and `CoreDbAccRef`
     parent*: CoreDbRef
-    methods*: CoreDbCtxFns
     mpt*: AristoDbRef           ## Aristo MPT database
 
   CoreDbMptRef* = ref object of RootRef

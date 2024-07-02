@@ -38,47 +38,6 @@ func toError(
     aErr:     e))
 
 # ------------------------------------------------------------------------------
-# Private context call back functions
-# ------------------------------------------------------------------------------
-
-proc ctxMethods(): CoreDbCtxFns =
-  proc ctxGetColumn(
-      cCtx: CoreDbCtxRef;
-      colType: CoreDbColType;
-      clearData: bool;
-        ): CoreDbMptRef =
-    const info = "getColumnFn()"
-    let db = cCtx.parent
-    if clearData:
-      db.adbBase.api.deleteGenericTree(cCtx.mpt, VertexID(colType)).isOkOr:
-        raiseAssert info & " clearing up failed: " & $error
-    db.bless CoreDbMptRef(
-      rootID: VertexID(colType))
-
-  proc ctxGetAccounts(cCtx: CoreDbCtxRef): CoreDbAccRef =
-    cCtx.parent.bless CoreDbAccRef()
-
-  proc ctxForget(cCtx: CoreDbCtxRef) =
-    let db = cCtx.parent
-    db.adbBase.api.forget(cCtx.mpt).isOkOr:
-      raiseAssert "forgetFn(): " & $error
-
-
-  CoreDbCtxFns(
-    getColumnFn: proc(
-        cCtx: CoreDbCtxRef;
-        colType: CoreDbColType;
-        clearData: bool;
-          ): CoreDbMptRef =
-      ctxGetColumn(CoreDbCtxRef(cCtx), colType, clearData),
-
-    getAccountsFn: proc(cCtx: CoreDbCtxRef): CoreDbAccRef =
-      ctxGetAccounts(CoreDbCtxRef(cCtx)),
-
-    forgetFn: proc(cCtx: CoreDbCtxRef) =
-      ctxForget(CoreDbCtxRef(cCtx)))
-
-# ------------------------------------------------------------------------------
 # Public handlers and helpers
 # ------------------------------------------------------------------------------
 
@@ -143,9 +102,7 @@ proc destroy*(base: CoreDbAriBaseRef; eradicate: bool) =
 
 func init*(T: type CoreDbCtxRef; db: CoreDbRef, adb: AristoDbRef): T =
   ## Create initial context
-  let ctx = CoreDbCtxRef(
-    methods: ctxMethods(),
-    mpt:     adb)
+  let ctx = CoreDbCtxRef(mpt: adb)
 
   when CoreDbEnableApiProfiling:
     let profApi = AristoApiProfRef.init(db.adbBase.api, adb.backend)
@@ -185,10 +142,7 @@ proc init*(
       rc.value
 
   # Create new context
-  let ctx = CoreDbCtxRef(
-    methods: ctxMethods(),
-    mpt:     newMpt)
-  ok(base.parent.bless ctx)
+  ok(base.parent.bless CoreDbCtxRef(mpt: newMpt))
 
 # ------------------------------------------------------------------------------
 # End
