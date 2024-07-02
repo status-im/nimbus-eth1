@@ -83,10 +83,8 @@ proc init*(
   except OSError, IOError:
     return err("RocksStoreRef: cannot create database directory")
 
-  let dbOpts = defaultDbOptions()
-
-  let db = ? openRocksDb(dataDir, dbOpts,
-      columnFamilies = namespaces.mapIt(initColFamilyDescriptor(it)))
+  let db = ? openRocksDb(dataDir, columnFamilies = namespaces.mapIt(
+      initColFamilyDescriptor(it, defaultColFamilyOptions(autoClose = true))))
   ok(T(db: db))
 
 # ------------------------------------------------------------------------------
