@@ -19,22 +19,55 @@
 template valueOrApiError[U,V](rc: Result[U,V]; info: static[string]): U =
   rc.valueOr: raise (ref CoreDbApiError)(msg: info)
 
+# ---------------
+
+template kvt(dsc: CoreDbKvtRef): KvtDbRef =
+  dsc.distinctBase.kvt
+
+template call(api: KvtApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+  when CoreDbEnableApiJumpTable:
+    api.fn(args)
+  else:
+    fn(args)
+
+template call(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
+  kvt.distinctBase.parent.kvtApi.call(fn, args)
+
+# ---------------
+  
+template mpt(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
+  dsc.distinctBase.mpt
+
+template rootID(mpt: CoreDbMptRef): VertexID =
+  VertexID(CtGeneric)
+
+template call(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+  when CoreDbEnableApiJumpTable:
+    api.fn(args)
+  else:
+    fn(args)
+
+template call(
+    acc: CoreDbAccRef | CoreDbMptRef;
+    fn: untyped;
+    args: varArgs[untyped];
+      ): untyped =
+  acc.distinctBase.parent.ariApi.call(fn, args)
+
+# ---------------
+
 iterator aristoReplicate[T](
-    dsc: CoreDbMptRef;
+    mpt: CoreDbMptRef;
       ): (Blob,Blob)
       {.gcsafe, raises: [CoreDbApiError].} =
   ## Generic iterator used for building dedicated backend iterators.
   ##
-  let
-    root = dsc.rootID
-    mpt = dsc.parent.ctx.mpt
-    api = dsc.parent.adbBase.api
-    p = api.forkTx(mpt,0).valueOrApiError "aristoReplicate()"
-  defer: discard api.forget(p)
+  let p = mpt.call(forkTx, mpt.mpt, 0).valueOrApiError "aristoReplicate()"
+  defer: discard mpt.call(forget, p)
   for (vid,key,vtx,node) in T.replicate(p):
     if key.len == 32:
       yield (@(key.data), node.encode)
-    elif vid == root:
+    elif vid == mpt.rootID:
       yield (@(key.to(Hash256).data), node.encode)
 
 # End

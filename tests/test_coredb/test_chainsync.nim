@@ -184,9 +184,9 @@ proc test_chainSync*(
   # API data need to be captured so it will be available after the services
   # have terminated.
   when CoreDbEnableApiProfiling:
-    aristoProfData = com.db.adbBase.api.AristoApiProfRef.data
-    kvtProfData = com.db.kdbBase.api.KvtApiProfRef.data
-    cdbProfData = com.db.dbProfData()
+    aristoProfData = com.db.ariApi.AristoApiProfRef.data
+    kvtProfData = com.db.kvtApi.KvtApiProfRef.data
+    cdbProfData = com.db.profTab
   when LedgerEnableApiProfiling:
     ldgProfData = com.db.ldgProfData()
 

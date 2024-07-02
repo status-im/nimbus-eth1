@@ -35,7 +35,7 @@ iterator replicatePersistent*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
   ## Extended version of `replicate()` for `Aristo` persistent backend.
   ##
   mpt.setTrackNewApi MptReplicateIt
-  case mpt.parent.dbType:
+  case mpt.distinctBase.parent.dbType:
   of AristoDbMemory:
     for k,v in aristoReplicateMem(mpt):
       yield (k,v)
@@ -46,7 +46,7 @@ iterator replicatePersistent*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
     for k,v in aristoReplicateRdb(mpt):
       yield (k,v)
   else:
-    raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
+    raiseAssert: "Unsupported database type: " & $mpt.distinctBase.parent.dbType
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------

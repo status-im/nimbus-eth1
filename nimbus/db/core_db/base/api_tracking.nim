@@ -22,19 +22,20 @@ type
   CoreDbApiTrackRef* =
     # CoreDbCaptRef |
     CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
-    CoreDbTxRef | CoreDbErrorRef
+    CoreDbTxRef
 
   CoreDbFnInx* = enum
     ## Profiling table index
     SummaryItem         = "total"
 
+    AccClearStorageFn   = "clearStorage"
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
     AccForgetFn         = "acc/forget"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
+    AccRecastFn         = "recast"
     AccStateFn          = "acc/state"
-    AccClearStorageFn   = "acc/clearStorage"
 
     AccSlotFetchFn      = "slotFetch"
     AccSlotDeleteFn     = "slotDelete"
@@ -45,13 +46,10 @@ type
     AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
     AccSlotPairsIt      = "slotPairs"
 
-    BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"
     BaseNewCaptureFn    = "newCapture"
-    BaseNewCtxFn        = "ctx"
     BaseNewCtxFromTxFn  = "ctxFromTx"
-    BaseNewKvtFn        = "newKvt"
     BaseNewTxFn         = "newTransaction"
     BasePersistentFn    = "persistent"
     BaseStateBlockNumberFn = "stateBlockNumber"
@@ -64,11 +62,7 @@ type
 
     CtxForgetFn         = "ctx/forget"
     CtxGetAccountsFn    = "getAccounts"
-    CtxGetColumnFn      = "getColumn"
-    CtxNewColFn         = "ctx/newColumn"
-
-    ErrorPrintFn        = "$$"
-    EthAccRecastFn      = "recast"
+    CtxGetGenericFn     = "getGeneric"
 
     KvtDelFn            = "del"
     KvtGetFn            = "get"
@@ -179,9 +173,12 @@ template endNewApiIf*(w: CoreDbApiTrackRef; code: untyped) =
   block body:
     when typeof(w) is CoreDbRef:
       let db = w
-    else:
+    elif typeof(w) is CoreDbTxRef:
+      let db = w.ctx.parent
       if w.isNil: break body
-      let db = w.parent
+    else:
+      let db = w.distinctBase.parent
+      if w.distinctBase.isNil: break body
     when CoreDbEnableApiProfiling:
       let elapsed {.inject,used.} = getTime() - bnaStart
       aristo_profile.update(db.profTab, bnaCtx.ord, elapsed)

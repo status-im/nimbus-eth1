@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, typetraits],
   eth/common,
   rocksdb,
   results,
@@ -25,7 +25,7 @@ import
   ./aristo_db,
   ../../opts
 
-include ./aristo_db/aristo_replicate
+include ./aristo_replicate
 
 const
   # Expectation messages

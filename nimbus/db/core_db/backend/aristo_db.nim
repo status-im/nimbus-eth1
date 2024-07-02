@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, typetraits],
   eth/common,
   ../../aristo as use_ari,
   ../../aristo/[aristo_walk, aristo_serialise],
@@ -22,6 +22,13 @@ import
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
 
+when CoreDbEnableApiJumpTable:
+  discard
+else:
+  import
+    ../../aristo/[aristo_desc, aristo_path, aristo_tx],
+    ../../kvt/[kvt_desc, kvt_tx]
+
 # Caveat:
 #  additional direct include(s) -- not import(s) -- is placed near
 #  the end of this source file
@@ -31,36 +38,24 @@ import
 {.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func toError(
-    e: AristoError;
-    base: CoreDbAriBaseRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbErrorRef =
-  base.parent.bless(error, CoreDbErrorRef(
-    ctx:      info,
-    isAristo: true,
-    aErr:     e))
-
-func toError(
-    e: KvtError;
-    base: CoreDbKvtBaseRef;
-    info: string;
-    error = Unspecified;
-      ): CoreDbErrorRef =
-  base.parent.bless(error, CoreDbErrorRef(
-    ctx:      info,
-    isAristo: false,
-    kErr:     e))
-
-# ------------------------------------------------------------------------------
 # Private functions, free parking
 # ------------------------------------------------------------------------------
 
 when false:
+  func toError(e: AristoError; s: string; error = Unspecified): CoreDbErrorRef =
+    CoreDbErrorRef(
+      error:    error,
+      ctx:      s,
+      isAristo: true,
+      aErr:     e)
+
+  func toError(e: KvtError; s: string; error = Unspecified): CoreDbErrorRef =
+    CoreDbErrorRef(
+      error:    error,
+      ctx:      s,
+      isAristo: false,
+      kErr:     e)
+
   proc kvtForget(
       cKvt: CoreDbKvtRef;
       info: static[string];
@@ -113,90 +108,64 @@ when false:
       db.tracer.push(flags)
     CoreDbCaptRef(methods: db.tracer.cptMethods)
 
-# ------------------------------------------------------------------------------
-# Private `Kvt` functions
-# ------------------------------------------------------------------------------
+  proc init(
+      T: type CoreDbCtxRef;
+      base: CoreDbAriBaseRef;
+      colState: Hash256;
+      colType: CoreDbColType;
+        ): CoreDbRc[CoreDbCtxRef] =
+    const info = "fromTxFn()"
 
-func init(T: type CoreDbKvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =
-  result = db.bless CoreDbKvtBaseRef(
-    api:       KvtApiRef.init(),
-    kdb:       kdb,
+    if colType.ord == 0:
+      return err(use_ari.GenericError.toError(base, info, ColUnacceptable))
+    let
+      api = base.api
+      vid = VertexID(colType)
+      key = colState.to(HashKey)
 
-    # Preallocated shared descriptor
-    cache: db.bless CoreDbKvtRef(
-      kvt:     kdb))
+      # Find `(vid,key)` on transaction stack
+      inx = block:
+        let rc = api.findTx(base.parent.ctx.CoreDbCtxRef.mpt, vid, key)
+        if rc.isErr:
+          return err(rc.error.toError(base, info))
+        rc.value
 
-  when CoreDbEnableApiProfiling:
-    let profApi = KvtApiProfRef.init(result.api, kdb.backend)
-    result.api = profApi
-    result.kdb.backend = profApi.be
+      # Fork MPT descriptor that provides `(vid,key)`
+      newMpt = block:
+        let rc = api.forkTx(base.parent.ctx.CoreDbCtxRef.mpt, inx)
+        if rc.isErr:
+          return err(rc.error.toError(base, info))
+        rc.value
 
-# ------------------------------------------------------------------------------
-# Private `Aristo` functions
-# ------------------------------------------------------------------------------
-   
-func init(T: type CoreDbCtxRef; db: CoreDbRef, adb: AristoDbRef): T =
-  ## Create initial context
-  let ctx = CoreDbCtxRef(mpt: adb)
-
-  when CoreDbEnableApiProfiling:
-    let profApi = AristoApiProfRef.init(db.adbBase.api, adb.backend)
-    db.adbBase.api = profApi
-    adb.backend = profApi.be
-
-  db.bless ctx
-
-proc init(
-    T: type CoreDbCtxRef;
-    base: CoreDbAriBaseRef;
-    colState: Hash256;
-    colType: CoreDbColType;
-      ): CoreDbRc[CoreDbCtxRef] =
-  const info = "fromTxFn()"
-
-  if colType.ord == 0:
-    return err(use_ari.GenericError.toError(base, info, ColUnacceptable))
-  let
-    api = base.api
-    vid = VertexID(colType)
-    key = colState.to(HashKey)
-
-    # Find `(vid,key)` on transaction stack
-    inx = block:
-      let rc = api.findTx(base.parent.ctx.CoreDbCtxRef.mpt, vid, key)
-      if rc.isErr:
-        return err(rc.error.toError(base, info))
-      rc.value
-
-    # Fork MPT descriptor that provides `(vid,key)`
-    newMpt = block:
-      let rc = api.forkTx(base.parent.ctx.CoreDbCtxRef.mpt, inx)
-      if rc.isErr:
-        return err(rc.error.toError(base, info))
-      rc.value
-
-  # Create new context
-  ok(base.parent.bless CoreDbCtxRef(mpt: newMpt))
+    # Create new context
+    ok(base.parent.bless CoreDbCtxRef(mpt: newMpt))
 
 # ------------------------------------------------------------------------------
 # Public constructor and helper
 # ------------------------------------------------------------------------------
 
-proc create*(dbType: CoreDbType; kdb: KvtDbRef; adb: AristoDbRef): CoreDbRef =
+proc create*(dbType: CoreDbType; kvt: KvtDbRef; mpt: AristoDbRef): CoreDbRef =
   ## Constructor helper
+  var db = CoreDbRef(dbType: dbType)
+  db.defCtx = db.bless CoreDbCtxRef(mpt: mpt, kvt: kvt)
 
-  # Local extensions
-  var db = CoreDbRef()
-  db.adbBase = db.bless CoreDbAriBaseRef(api: AristoApiRef.init())
-  db.kdbBase = CoreDbKvtBaseRef.init(db, kdb)
-  db.ctx = CoreDbCtxRef.init(db, adb)
+  when CoreDbEnableApiTracking:
+    db.kvtApi = KvtApiRef.init()
+    db.ariApi = AristoApiRef.init()
 
-  # Base descriptor
-  db.dbType = dbType
-  db.bless()
-
+    when CoreDbEnableApiProfiling:
+      block:
+        let profApi = KvtApiProfRef.init(db.kvtApi, kvt.backend)
+        db.kvtApi = profApi
+        kvt.backend = profApi.be
+      block:
+        let profApi = AristoApiProfRef.init(db.ariApi, mpt.backend)
+        db.ariApi = profApi
+        mpt.backend = profApi.be
+  bless db
+  
 proc newAristoMemoryCoreDbRef*(): CoreDbRef =
-  AristoDbMemory.create(
+  result = AristoDbMemory.create(
     KvtDbRef.init(use_kvt.MemBackendRef),
     AristoDbRef.init(use_ari.MemBackendRef))
 
@@ -206,51 +175,37 @@ proc newAristoVoidCoreDbRef*(): CoreDbRef =
     AristoDbRef.init(use_ari.VoidBackendRef))
 
 # ------------------------------------------------------------------------------
-# Public helpers, e.g. for direct backend access
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
 # Public aristo iterators
 # ------------------------------------------------------------------------------
 
 include
-  ./aristo_db/aristo_replicate
+  ./aristo_replicate
 
 # ------------------------
 
 iterator aristoKvtPairsVoid*(kvt: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
-  let
-    api = kvt.parent.kdbBase.api
-    p = api.forkTx(kvt.kvt,0).valueOrApiError "aristoKvtPairs()"
-  defer: discard api.forget(p)
+  let p = kvt.call(forkTx, kvt.kvt, 0).valueOrApiError "aristoKvtPairsVoid()"
+  defer: discard kvt.call(forget, p)
   for (k,v) in use_kvt.VoidBackendRef.walkPairs p:
     yield (k,v)
 
 iterator aristoKvtPairsMem*(kvt: CoreDbKvtRef): (Blob,Blob) {.rlpRaise.} =
-  let
-    api = kvt.parent.kdbBase.api
-    p = api.forkTx(kvt.kvt,0).valueOrApiError "aristoKvtPairs()"
-  defer: discard api.forget(p)
+  let p = kvt.call(forkTx, kvt.kvt, 0).valueOrApiError "aristoKvtPairsMem()"
+  defer: discard kvt.call(forget, p)
   for (k,v) in use_kvt.MemBackendRef.walkPairs p:
     yield (k,v)
 
-iterator aristoMptPairs*(dsc: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
-  let
-    api = dsc.parent.adbBase.api
-    mpt = dsc.parent.ctx.mpt
-  for (path,data) in mpt.rightPairsGeneric dsc.rootID:
-    yield (api.pathAsBlob(path), data)
+iterator aristoMptPairs*(mpt: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
+  for (path,data) in mpt.mpt.rightPairsGeneric mpt.rootID:
+    yield (mpt.call(pathAsBlob, path), data)
 
 iterator aristoSlotPairs*(
-    dsc: CoreDbAccRef;
+    acc: CoreDbAccRef;
     accPath: Hash256;
       ): (Blob,Blob)
       {.noRaise.} =
-  let
-    api = dsc.parent.adbBase.api
-    mpt = dsc.parent.ctx.mpt
-  for (path,data) in mpt.rightPairsStorage accPath:
-    yield (api.pathAsBlob(path), data)
+  for (path,data) in acc.mpt.rightPairsStorage accPath:
+    yield (acc.call(pathAsBlob, path), data)
 
 iterator aristoReplicateMem*(dsc: CoreDbMptRef): (Blob,Blob) {.rlpRaise.} =
   ## Instantiation for `MemBackendRef`

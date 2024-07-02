@@ -59,8 +59,8 @@ type
     StoNotFound
     TxPending
 
-  CoreDbColType* = enum
-    CtGeneric = 2 # columns smaller than 2 are not provided
+  CoreDbColType* = enum     # Keep that legacy type for a while ..
+    CtGeneric = 2           # Actually only this constant is needed
 
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut
@@ -69,64 +69,51 @@ type
   # --------------------------------------------------
   # Production descriptors
   # --------------------------------------------------
-  CoreDbRef* = ref object of RootRef
+  CoreDbRef* = ref object
     ## Database descriptor
     dbType*: CoreDbType         ## Type of database backend
+    defCtx*: CoreDbCtxRef       ## Default context
+
+    # Optional api interface (can be re-directed/intercepted)
+    ariApi*: AristoApiRef       ## `Aristo` api
+    kvtApi*: KvtApiRef          ## `KVT` api
+
+    # Optional profiling and debugging stuff
     trackNewApi*: bool          ## Debugging, support
     trackLedgerApi*: bool       ## Debugging, suggestion for subsequent ledger
     profTab*: CoreDbProfListRef ## Profiling data (if any)
     ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
-    kdbBase*: CoreDbKvtBaseRef  ## Kvt subsystem
-    adbBase*: CoreDbAriBaseRef  ## Aristo subsystem
-    ctx*: CoreDbCtxRef          ## Currently active context
 
-  CoreDbKvtBaseRef* = ref object of RootRef
+  CoreDbCtxRef* = ref object
+    ## Shared context for `CoreDbMptRef`, `CoreDbAccRef`, `CoreDbKvtRef`
     parent*: CoreDbRef
-    api*: KvtApiRef             ## Api functions can be re-directed
-    kdb*: KvtDbRef              ## Shared key-value table
-    cache*: CoreDbKvtRef        ## Shared transaction table wrapper
+    mpt*: AristoDbRef           ## `Aristo` database
+    kvt*: KvtDbRef              ## `KVT` key-value table
 
-  CoreDbAriBaseRef* = ref object of RootRef
-    parent*: CoreDbRef
-    api*: AristoApiRef          ## Api functions can be re-directed
+  CoreDbKvtRef* = distinct CoreDbCtxRef
+    ## Statically initialised Key-Value pair table
 
-  CoreDbErrorRef* = ref object of RootRef
+  CoreDbAccRef* = distinct CoreDbCtxRef
+    ## Similar to `CoreDbKvtRef`, only dealing with `Aristo` accounts
+
+  CoreDbMptRef* = distinct CoreDbCtxRef
+    ## Generic MPT
+ 
+  CoreDbTxRef* = ref object
+    ## Transaction descriptor
+    ctx*: CoreDbCtxRef          ## Context (also contains `Aristo` descriptor)
+    aTx*: AristoTxRef           ## `Aristo` transaction (if any)
+    kTx*: KvtTxRef              ## `KVT` transaction (if any)
+
+  CoreDbErrorRef* = ref object
     ## Generic error object
     error*: CoreDbErrorCode
-    parent*: CoreDbRef
     ctx*: string     ## Context where the exception or error occured
     case isAristo*: bool
     of true:
       aErr*: AristoError
     else:
       kErr*: KvtError
-
-  CoreDbKvtRef* = ref object of RootRef
-    ## Statically initialised Key-Value pair table living in `CoreDbRef`
-    parent*: CoreDbRef
-    kvt*: KvtDbRef              ## In most cases different from `base.kdb`
-
-  CoreDbCtxRef* = ref object of RootRef
-    ## Context for `CoreDbMptRef` and `CoreDbAccRef`
-    parent*: CoreDbRef
-    mpt*: AristoDbRef           ## Aristo MPT database
-
-  CoreDbMptRef* = ref object of RootRef
-    ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
-    ## initialised on-the-fly.
-    parent*: CoreDbRef
-    rootID*: VertexID           ## State root, may be zero unless account
-
-  CoreDbAccRef* = ref object of RootRef
-    ## Similar to `CoreDbKvtRef`, only dealing with `CoreDbAccount` data
-    ## rather than `Blob` values.
-    parent*: CoreDbRef
-
-  CoreDbTxRef* = ref object of RootRef
-    ## Transaction descriptor derived from `CoreDbRef`
-    parent*: CoreDbRef
-    aTx*: AristoTxRef
-    kTx*: KvtTxRef
 
 when false: # TODO
   type

@@ -35,7 +35,7 @@ iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
   ## Iterator supported on memory DB (otherwise implementation dependent)
   ##
   kvt.setTrackNewApi KvtPairsIt
-  case kvt.parent.dbType:
+  case kvt.distinctBase.parent.dbType:
   of AristoDbMemory:
     for k,v in kvt.aristoKvtPairsMem():
       yield (k,v)
@@ -43,31 +43,31 @@ iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
     for k,v in kvt.aristoKvtPairsVoid():
       yield (k,v)
   of Ooops, AristoDbRocks:
-    raiseAssert: "Unsupported database type: " & $kvt.parent.dbType
+    raiseAssert: "Unsupported database type: " & $kvt.distinctBase.parent.dbType
   kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
   ## Trie traversal, only supported for `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptPairsIt
-  case mpt.parent.dbType:
+  case mpt.distinctBase.parent.dbType:
   of AristoDbMemory, AristoDbRocks, AristoDbVoid:
     for k,v in mpt.aristoMptPairs():
       yield (k,v)
   of Ooops:
-    raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
+    raiseAssert: "Unsupported database type: " & $mpt.distinctBase.parent.dbType
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash256): (Blob, Blob) =
   ## Trie traversal, only supported for `CoreDbMptRef`
   ##
   acc.setTrackNewApi AccSlotPairsIt
-  case acc.parent.dbType:
+  case acc.distinctBase.parent.dbType:
   of AristoDbMemory, AristoDbRocks, AristoDbVoid:
     for k,v in acc.aristoSlotPairs accPath:
       yield (k,v)
   of Ooops:
-    raiseAssert: "Unsupported database type: " & $acc.parent.dbType
+    raiseAssert: "Unsupported database type: " & $acc.distinctBase.parent.dbType
   acc.ifTrackNewApi:
     doAssert accPath.len == 32
     debug newApiTxt, api, elapsed
@@ -76,7 +76,7 @@ iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
   ## Low level trie dump, only supported for non persistent `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptReplicateIt
-  case mpt.parent.dbType:
+  case mpt.distinctBase.parent.dbType:
   of AristoDbMemory:
     for k,v in aristoReplicateMem(mpt):
       yield (k,v)
@@ -84,7 +84,7 @@ iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
     for k,v in aristoReplicateVoid(mpt):
       yield (k,v)
   of Ooops, AristoDbRocks:
-    raiseAssert: "Unsupported database type: " & $mpt.parent.dbType
+    raiseAssert: "Unsupported database type: " & $mpt.distinctBase.parent.dbType
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
