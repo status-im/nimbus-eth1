@@ -29,7 +29,6 @@ export
   # see `aristo_db`
   toAristo,
   toAristoProfData,
-  toAristoSavedStateBlockNumber,
   to
 
 # ------------------------------------------------------------------------------

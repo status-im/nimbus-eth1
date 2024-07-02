@@ -234,17 +234,6 @@ func toAristo*(mBe: CoreDbAccBackendRef): AristoDbRef =
   if not mBe.isNil:
     return mBe.adb
 
-proc toAristoSavedStateBlockNumber*(mBe: CoreDbMptBackendRef): BlockNumber =
-  if not mBe.isNil:
-    let
-      base = mBe.parent.adbBase
-      mpt = base.parent.ctx.CoreDbCtxRef.mpt
-      be = mpt.backend
-    if not be.isNil:
-      let rc = base.api.fetchLastSavedState(mpt)
-      if rc.isOk:
-        return rc.value.serial.BlockNumber
-
 # ------------------------------------------------------------------------------
 # Public aristo iterators
 # ------------------------------------------------------------------------------

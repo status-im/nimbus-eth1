@@ -56,6 +56,7 @@ type
     BaseNewKvtFn        = "newKvt"
     BaseNewTxFn         = "newTransaction"
     BasePersistentFn    = "persistent"
+    BaseStateBlockNumberFn = "stateBlockNumber"
     BaseSwapCtxFn       = "swapCtx"
 
     CptFlagsFn          = "cpt/flags"

@@ -277,6 +277,19 @@ proc `$$`*(e: CoreDbErrorRef): string =
   result = e.prettyText()
   e.ifTrackNewApi: debug newApiTxt, api, elapsed, result
 
+proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
+  ## Rhis function returns the block number stored with the latest `persist()`
+  ## directive.
+  ##
+  db.setTrackNewApi BaseStateBlockNumberFn
+  result = block:
+    let rc = db.adbBase.call(fetchLastSavedState, db.ctx.mpt)
+    if rc.isOk:
+      rc.value.serial.BlockNumber
+    else:
+      0u64
+  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
