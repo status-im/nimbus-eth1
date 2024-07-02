@@ -4,3 +4,6 @@
   functionality is directly provided by the `Aristo` backend.
 
 * Rename `newKvt()` to `getKvt()` as it is a shared KVT
+
+* Fix `ctx` logic (mpt must be associated to a dedicated `ctx`, not via the
+  default one freom the `CoreDbRef` as it is currently the case)

@@ -14,10 +14,8 @@ import
   eth/common,
   "../.."/[constants, errors],
   ../kvt,
+  ../aristo,
   ./base/[api_tracking, base_desc]
-
-from ../aristo
-  import EmptyBlob, isValid
 
 const
   EnableApiTracking = false
@@ -31,12 +29,11 @@ const
   EnableApiProfiling = true
     ## Enables functions profiling if `EnableApiTracking` is also set `true`.
 
-  EnableDebugApi* = defined(release).not
+  EnableDebugApi* = defined(release).not # and false
     ## ...
 
   AutoValidateDescriptors = defined(release).not
     ## No validatinon needed for production suite.
-
 
 export
   CoreDbAccount,
@@ -162,6 +159,17 @@ template call(
 # Private Aristo helpers
 # ------------------------------------------------------------------------------
 
+proc toError(
+    e: AristoError;
+    base: CoreDbAriBaseRef;
+    info: string;
+    error = Unspecified;
+      ): CoreDbErrorRef =
+  base.parent.bless(error, CoreDbErrorRef(
+    ctx:      info,
+    isAristo: true,
+    aErr:     e))
+
 template call(
     base: CoreDbAriBaseRef;
     fn: untyped;
@@ -249,19 +257,12 @@ proc parent*[T: CoreDbKvtRef |
   ##
   result = child.parent
 
-proc backend*(dsc: CoreDbKvtRef | CoreDbMptRef | CoreDbAccRef): auto =
+proc backend*(dsc: CoreDbAccRef): auto =
   ## Getter, retrieves the *raw* backend object for special/localised support.
   ##
   dsc.setTrackNewApi AnyBackendFn
-  result = dsc.methods.backendFn()
+  result = dsc.methods.backendFn(dsc)
   dsc.ifTrackNewApi: debug newApiTxt, api, elapsed
-
-proc backend*(mpt: CoreDbMptRef): auto =
-  ## Getter, retrieves the *raw* backend object for special/localised support.
-  ##
-  mpt.setTrackNewApi AnyBackendFn
-  result = mpt.methods.backendFn(mpt)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 proc finish*(db: CoreDbRef; eradicate = false) =
   ## Database destructor. If the argument `eradicate` is set `false`, the
@@ -287,7 +288,7 @@ proc `$$`*(e: CoreDbErrorRef): string =
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-proc backend*(kvt: CoreDbKvtRef): auto =
+proc backend*(kvt: CoreDbKvtRef): CoreDbKvtBackendRef =
   ## Getter, retrieves the *raw* backend object for special/localised support.
   ##
   kvt.setTrackNewApi AnyBackendFn
@@ -436,6 +437,13 @@ proc forget*(ctx: CoreDbCtxRef) =
 # Public functions for generic columns
 # ------------------------------------------------------------------------------
 
+proc backend*(mpt: CoreDbMptRef): CoreDbMptBackendRef =
+  ## Getter, retrieves the *raw* backend object for special/localised support.
+  ##
+  mpt.setTrackNewApi AnyBackendFn
+  result = mpt.parent.bless CoreDbMptBackendRef(adb: mpt.parent.ctx.mpt)
+  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
+
 proc getColumn*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;
@@ -454,7 +462,17 @@ proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## non-empty `Blob` or an error code.
   ##
   mpt.setTrackNewApi MptFetchFn
-  result = mpt.methods.fetchFn(mpt, key)
+  let
+    db = mpt.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(fetchGenericData, db.ctx.mpt, mpt.rootID, key)
+    if rc.isOk:
+      ok(rc.value)
+    elif rc.error == FetchPathNotFound:
+      err(rc.error.toError(base, $api, MptNotFound))
+    else:
+      err(rc.error.toError(base, $api))
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
@@ -462,14 +480,32 @@ proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## on the database.
   ##
   mpt.setTrackNewApi MptFetchOrEmptyFn
-  result = mpt.methods.fetchFn(mpt, key)
-  if result.isErr and result.error.error == MptNotFound:
-    result = CoreDbRc[Blob].ok(EmptyBlob)
+  let
+    db = mpt.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(fetchGenericData, db.ctx.mpt, mpt.rootID, key)
+    if rc.isOk:
+      ok(rc.value)
+    elif rc.error == FetchPathNotFound:
+      CoreDbRc[Blob].ok(EmptyBlob)
+    else:
+      err(rc.error.toError(base, $api))
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc delete*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[void] =
   mpt.setTrackNewApi MptDeleteFn
-  result = mpt.methods.deleteFn(mpt, key)
+  let
+    db = mpt.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(deleteGenericData, db.ctx.mpt, mpt.rootID, key)
+    if rc.isOk:
+      ok()
+    elif rc.error == DelPathNotFound:
+      err(rc.error.toError(base, $api, MptNotFound))
+    else:
+      err(rc.error.toError(base, $api))
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc merge*(
@@ -478,7 +514,15 @@ proc merge*(
     val: openArray[byte];
       ): CoreDbRc[void] =
   mpt.setTrackNewApi MptMergeFn
-  result = mpt.methods.mergeFn(mpt, key, val)
+  let
+    db = mpt.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(mergeGenericData, db.ctx.mpt, mpt.rootID, key, val)
+    if rc.isOk:
+      ok()
+    else:
+      err(rc.error.toError(base, $api))
   mpt.ifTrackNewApi:
     debug newApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
 
@@ -487,7 +531,15 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
   ## than a `Result[]`.
   ##
   mpt.setTrackNewApi MptHasPathFn
-  result = mpt.methods.hasPathFn(mpt, key)
+  let
+    db = mpt.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(hasPathGeneric, db.ctx.mpt, mpt.rootID, key)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError(base, $api))
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
 
 proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
@@ -498,7 +550,16 @@ proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
   ## database will be updated first (if needed, at all).
   ##
   mpt.setTrackNewApi MptStateFn
-  result = mpt.methods.stateFn(mpt, updateOk)
+  #result = mpt.methods.stateFn(mpt, updateOk)
+  let
+    db = mpt.parent
+    base = db.adbBase
+  result = block:
+    let rc = base.call(fetchGenericState, db.ctx.mpt, mpt.rootID, updateOk)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError(base, $api))
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
 
 # ------------------------------------------------------------------------------

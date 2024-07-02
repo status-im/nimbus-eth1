@@ -47,14 +47,6 @@ proc validateMethodsDesc(ctx: CoreDbCtxFns) =
   doAssert not ctx.getColumnFn.isNil
   doAssert not ctx.forgetFn.isNil
 
-proc validateMethodsDesc(fns: CoreDbMptFns) =
-  doAssert not fns.backendFn.isNil
-  doAssert not fns.fetchFn.isNil
-  doAssert not fns.deleteFn.isNil
-  doAssert not fns.mergeFn.isNil
-  doAssert not fns.hasPathFn.isNil
-  doAssert not fns.stateFn.isNil
-
 proc validateMethodsDesc(fns: CoreDbAccFns) =
   doAssert not fns.backendFn.isNil
   doAssert not fns.fetchFn.isNil
@@ -102,7 +94,6 @@ proc validateSubDescRef(ctx: CoreDbCtxRef) =
 proc validateSubDescRef(mpt: CoreDbMptRef) =
   doAssert not mpt.isNil
   doAssert not mpt.parent.isNil
-  mpt.methods.validateMethodsDesc
 
 proc validateSubDescRef(acc: CoreDbAccRef) =
   doAssert not acc.isNil

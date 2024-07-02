@@ -72,94 +72,6 @@ func toVoidRc[T](
     return ok()
   err rc.error.toError(base, info, error)
 
-# ------------------------------------------------------------------------------
-# Private `MPT` call back functions
-# ------------------------------------------------------------------------------
-
-proc mptMethods(): CoreDbMptFns =
-
-  proc mptBackend(cMpt: CoreDbMptRef): CoreDbMptBackendRef =
-    let db = cMpt.parent
-    db.bless CoreDbMptBackendRef(adb: db.ctx.mpt)
-
-  proc mptFetch(cMpt: CoreDbMptRef, key: openArray[byte]): CoreDbRc[Blob] =
-    const info = "fetchFn()"
-
-    let
-      db = cMpt.parent
-      base = db.adbBase
-      data = base.api.fetchGenericData(db.ctx.mpt, cMpt.rootID, key).valueOr:
-        if error == FetchPathNotFound:
-          return err(error.toError(base, info, MptNotFound))
-        return err(error.toError(base, info))
-    ok(data)
-
-  proc mptMerge(
-      cMpt: CoreDbMptRef,
-      key: openArray[byte];
-      val: openArray[byte];
-        ): CoreDbRc[void] =
-    const info = "mergeFn()"
-
-    let
-      db = cMpt.parent
-      base = db.adbBase
-    base.api.mergeGenericData(db.ctx.mpt, cMpt.rootID, key, val).isOkOr:
-      return err(error.toError(base, info))
-    ok()
-
-  proc mptDelete(cMpt: CoreDbMptRef, key: openArray[byte]): CoreDbRc[void] =
-    const info = "deleteFn()"
-
-    let
-      db = cMpt.parent
-      base = db.adbBase
-    base.api.deleteGenericData(db.ctx.mpt, cMpt.rootID, key).isOkOr:
-      if error == DelPathNotFound:
-        return err(error.toError(base, info, MptNotFound))
-      return err(error.toError(base, info))
-    ok()
-
-  proc mptHasPath(cMpt: CoreDbMptRef, key: openArray[byte]): CoreDbRc[bool] =
-    const info = "hasPathFn()"
-
-    let
-      db = cMpt.parent
-      base = db.adbBase
-      yn = base.api.hasPathGeneric(db.ctx.mpt, cMpt.rootID, key).valueOr:
-        return err(error.toError(base, info))
-    ok(yn)
-
-  proc mptState(cMpt: CoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] =
-    const info = "mptState()"
-
-    let
-      db = cMpt.parent
-      base = db.adbBase
-      state = base.api.fetchGenericState(
-          db.ctx.mpt, cMpt.rootID, updateOk).valueOr:
-        return err(error.toError(base, info))
-    ok(state)
-
-  ## Generic columns database handlers
-  CoreDbMptFns(
-    backendFn: proc(cMpt: CoreDbMptRef): CoreDbMptBackendRef =
-      mptBackend(CoreDbMptRef(cMpt)),
-
-    fetchFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[Blob] =
-      mptFetch(CoreDbMptRef(cMpt), k),
-
-    deleteFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[void] =
-      mptDelete(CoreDbMptRef(cMpt), k),
-
-    mergeFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] =
-      mptMerge(CoreDbMptRef(cMpt), k, v),
-
-    hasPathFn: proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[bool] =
-      mptHasPath(CoreDbMptRef(cMpt), k),
-
-    stateFn: proc(cMpt: CoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] =
-      mptState(CoreDbMptRef(cMpt), updateOk))
 
 # ------------------------------------------------------------------------------
 # Private account call back functions
@@ -448,7 +360,6 @@ proc ctxMethods(): CoreDbCtxFns =
       db.adbBase.api.deleteGenericTree(cCtx.mpt, VertexID(colType)).isOkOr:
         raiseAssert info & " clearing up failed: " & $error
     db.bless CoreDbMptRef(
-      methods: mptMethods(),
       rootID: VertexID(colType))
 
   proc ctxGetAccounts(cCtx: CoreDbCtxRef): CoreDbAccRef =

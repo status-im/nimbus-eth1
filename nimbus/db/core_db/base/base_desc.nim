@@ -122,30 +122,6 @@ type
     getAccountsFn*: CoreDbCtxGetAccountsFn
     forgetFn*:      CoreDbCtxForgetFn
 
-  # --------------------------------------------------
-  # Sub-descriptor: generic Mpt methods
-  # --------------------------------------------------
-  CoreDbMptBackendFn* = proc(cMpt: CoreDbMptRef): CoreDbMptBackendRef {.noRaise.}
-  CoreDbMptFetchFn* =
-    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[Blob] {.noRaise.}
-  CoreDbMptFetchAccountFn* =
-    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[CoreDbAccount] {.noRaise.}
-  CoreDbMptDeleteFn* =
-    proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbMptMergeFn* =
-    proc(cMpt: CoreDbMptRef, k: openArray[byte]; v: openArray[byte]): CoreDbRc[void] {.noRaise.}
-  CoreDbMptHasPathFn* = proc(cMpt: CoreDbMptRef, k: openArray[byte]): CoreDbRc[bool] {.noRaise.}
-  CoreDbMptStateFn* = proc(cMpt: CoreDbMptRef, updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
-
-  CoreDbMptFns* = object
-    ## Methods for trie objects
-    backendFn*:   CoreDbMptBackendFn
-    fetchFn*:     CoreDbMptFetchFn
-    deleteFn*:    CoreDbMptDeleteFn
-    mergeFn*:     CoreDbMptMergeFn
-    hasPathFn*:   CoreDbMptHasPathFn
-    stateFn*:     CoreDbMptStateFn
-
 
   # ----------------------------------------------------
   # Sub-descriptor: Account column methods
@@ -300,7 +276,6 @@ type
     ## Hexary/Merkle-Patricia tree derived from `CoreDbRef`, will be
     ## initialised on-the-fly.
     parent*: CoreDbRef
-    methods*: CoreDbMptFns
     rootID*: VertexID           ## State root, may be zero unless account
 
   CoreDbAccRef* = ref object of RootRef
