@@ -10,7 +10,7 @@
 
 import
   stew/byteutils,
-  ../../nimbus/core/chain,
+  ../../nimbus/core/chain/forked_chain,
   ../../nimbus/core/pow/difficulty,
   ../../nimbus/config,
   ../../nimbus/common,
@@ -26,7 +26,7 @@ type
 
   TestEnv* = object
     conf* : NimbusConf
-    chain*: ChainRef
+    chain*: ForkedChainRef
 
   CCModify = proc(cc: NetworkParams)
 
@@ -67,7 +67,7 @@ proc setupEnv*(extraValidation: bool = false, ccm: CCModify = nil): TestEnv =
       conf.networkId,
       conf.networkParams
     )
-    chain = newChain(com, extraValidation)
+    chain = newForkedChain(com, com.genesisHeader, extraValidation)
 
   com.initializeEmptyDb()
   TestEnv(

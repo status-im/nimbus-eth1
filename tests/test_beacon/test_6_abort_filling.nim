@@ -75,8 +75,7 @@ proc test6*() =
       check skel.blockHeight == 4
 
     test "canonical height should now be at head with correct chain":
-      let latestHash = env.chain.currentBlock().blockHash
-      check latestHash == block4PoS.blockHash
+      check env.chain.latestHash == block4PoS.blockHash
 
     test "should update to new height":
       skel.setHeadT(block5, true, false)

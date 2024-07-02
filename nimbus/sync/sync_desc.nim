@@ -46,7 +46,7 @@ type
     ## Shared state among all syncing peer workers (aka buddies.)
     buddiesMax*: int            ## Max number of buddies
     ethWireCtx*: EthWireRef     ## Eth protocol wire context (if available)
-    chain*: ChainRef            ## Block chain database (no need for `Peer`)
+    chain*: ForkedChainRef      ## Block chain database (no need for `Peer`)
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
     exCtrlFile*: Opt[string]    ## Extra instructions file (if any)

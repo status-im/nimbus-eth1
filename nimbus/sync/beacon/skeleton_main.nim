@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -29,7 +29,7 @@ logScope:
 # Constructors
 # ------------------------------------------------------------------------------
 
-proc new*(_: type SkeletonRef, chain: ChainRef): SkeletonRef =
+proc new*(_: type SkeletonRef, chain: ForkedChainRef): SkeletonRef =
   SkeletonRef(
     progress: Progress(),
     pulled  : 0,

@@ -10,8 +10,6 @@
 
 import
   std/[json],
-  eth/p2p as eth_p2p,
-  eth/trie/trie_defs,
   stew/[byteutils],
   json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/[
@@ -22,62 +20,57 @@ import
     core/chain,
     core/tx_pool,
     rpc,
-    sync/protocol,
     beacon/beacon_engine,
     common
   ],
-  ../../../tests/test_helpers,
   ../../../tools/evmstate/helpers
 
 type
   TestEnv* = ref object
-    conf*: NimbusConf
-    ctx: EthContext
-    ethNode: EthereumNode
-    com: CommonRef
-    chainRef: ChainRef
-    rpcServer: RpcHttpServer
+    chain     : ForkedChainRef
+    rpcServer : RpcHttpServer
     rpcClient*: RpcHttpClient
 
 proc genesisHeader(node: JsonNode): BlockHeader =
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
   rlp.decode(genesisRLP, EthBlock).header
 
-proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
-  let memDB = newCoreDbRef DefaultDbMemory
-  t.ctx  = newEthContext()
-  t.ethNode = setupEthNode(t.conf, t.ctx, eth)
-  t.com = CommonRef.new(
-      memDB,
-      conf
-    )
-  t.chainRef = newChain(t.com, extraValidation = true)
+proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
   let
-    stateDB = LedgerRef.init(memDB, emptyRlpHash)
+    memDB = newCoreDbRef DefaultDbMemory
     genesisHeader = node.genesisHeader
+    com = CommonRef.new(memDB, conf)
+    stateDB = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+    chain = newForkedChain(com, genesisHeader)
 
   setupStateDB(node["pre"], stateDB)
   stateDB.persist()
-
   doAssert stateDB.rootHash == genesisHeader.stateRoot
 
-  doAssert t.com.db.persistHeader(genesisHeader,
-    t.com.consensus == ConsensusType.POS)
-  doAssert(t.com.db.getCanonicalHead().blockHash == genesisHeader.blockHash)
+  doAssert com.db.persistHeader(genesisHeader,
+              com.consensus == ConsensusType.POS)
+  doAssert(com.db.getCanonicalHead().blockHash ==
+              genesisHeader.blockHash)
 
-  let txPool  = TxPoolRef.new(t.com)
-  t.rpcServer = newRpcHttpServer(["127.0.0.1:8545"])
+  let
+    txPool  = TxPoolRef.new(com)
+    beaconEngine = BeaconEngineRef.new(txPool, chain)
+    serverApi = newServerAPI(chain)
+    rpcServer = newRpcHttpServer(["127.0.0.1:0"])
+    rpcClient = newRpcHttpClient()
 
-  let beaconEngine = BeaconEngineRef.new(txPool, t.chainRef)
-  let oracle = Oracle.new(t.com)
-  setupEthRpc(t.ethNode, t.ctx, t.com, txPool, oracle, t.rpcServer)
-  setupEngineAPI(beaconEngine, t.rpcServer)
+  setupServerAPI(serverApi, rpcServer)
+  setupEngineAPI(beaconEngine, rpcServer)
 
-  t.rpcServer.start()
+  rpcServer.start()
+  waitFor rpcClient.connect("127.0.0.1", rpcServer.localAddress[0].port, false)
 
-  t.rpcClient = newRpcHttpClient()
-  waitFor t.rpcClient.connect("127.0.0.1", 8545.Port, false)
+  TestEnv(
+    chain: chain,
+    rpcServer: rpcServer,
+    rpcClient: rpcClient,
+  )
 
-proc stopELClient*(t: TestEnv) =
-  waitFor t.rpcClient.close()
-  waitFor t.rpcServer.closeWait()
+proc stopELClient*(env: TestEnv) =
+  waitFor env.rpcClient.close()
+  waitFor env.rpcServer.closeWait()

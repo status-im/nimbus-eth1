@@ -62,7 +62,7 @@ type
     started* : Time         # Timestamp when the skeleton syncer was created
     logged*  : Time         # Timestamp when progress was last logged to user
     db*      : CoreDbRef
-    chain*   : ChainRef
+    chain*   : ForkedChainRef
     conf*    : SkeletonConfig
     fillLogIndex*: uint64
 

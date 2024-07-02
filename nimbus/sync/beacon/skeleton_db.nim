@@ -184,12 +184,8 @@ proc deleteHeaderAndBody*(sk: SkeletonRef, header: BlockHeader) =
   sk.del(skeletonBlockHashToNumberKey(header.blockHash))
   sk.del(skeletonBodyKey(header.sumHash))
 
-proc canonicalHead*(sk: SkeletonRef): Result[BlockHeader, string] =
-  ## Returns Opt.some or error, never returns Opt.none
-  try:
-    ok(sk.db.getCanonicalHead())
-  except CatchableError as ex:
-    err(ex.msg)
+proc canonicalHead*(sk: SkeletonRef): BlockHeader =
+  sk.chain.latestHeader
 
 proc resetCanonicalHead*(sk: SkeletonRef, newHead, oldHead: uint64) =
   debug "RESET CANONICAL", newHead, oldHead
@@ -198,7 +194,8 @@ proc resetCanonicalHead*(sk: SkeletonRef, newHead, oldHead: uint64) =
 proc insertBlocks*(sk: SkeletonRef,
                    blocks: openArray[EthBlock],
                    fromEngine: bool): Result[uint64, string] =
-  discard ? sk.chain.persistBlocks(blocks)
+  for blk in blocks:
+    ? sk.chain.importBlock(blk)
   ok(blocks.len.uint64)
 
 proc insertBlock*(sk: SkeletonRef,

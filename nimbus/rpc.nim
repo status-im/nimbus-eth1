@@ -21,6 +21,7 @@ import
   ./rpc/rpc_server,
   ./rpc/experimental,
   ./rpc/oracle,
+  ./rpc/server_api,
   ./nimbus_desc,
   ./graphql/ethapi
 
@@ -33,7 +34,8 @@ export
   cors,
   rpc_server,
   experimental,
-  oracle
+  oracle,
+  server_api
 
 {.push gcsafe, raises: [].}
 

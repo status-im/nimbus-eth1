@@ -48,11 +48,11 @@ proc basicServices(nimbus: NimbusNode,
   doAssert nimbus.txPool.smartHead(head)
 
   # chainRef: some name to avoid module-name/filed/function misunderstandings
-  nimbus.chainRef = newChain(com)
-  if conf.verifyFrom.isSome:
-    let verifyFrom = conf.verifyFrom.get()
-    nimbus.chainRef.extraValidation = 0 < verifyFrom
-    nimbus.chainRef.verifyFrom = verifyFrom
+  nimbus.chainRef = newForkedChain(com, head)
+  #if conf.verifyFrom.isSome:
+  #  let verifyFrom = conf.verifyFrom.get()
+  #  nimbus.chainRef.extraValidation = 0 < verifyFrom
+  #  nimbus.chainRef.verifyFrom = verifyFrom
 
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
 

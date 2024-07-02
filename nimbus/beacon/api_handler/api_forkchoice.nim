@@ -161,10 +161,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       blockHash=blockHash.short,
       blockNumber=header.number
     return validFCU(Opt.none(PayloadID), blockHash)
-
-  chain.setCanonical(header).isOkOr:
-    return invalidFCU(error, com, header)
-
+  
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
   let finalizedBlockHash = ethHash update.finalizedBlockHash
@@ -211,6 +208,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
         get=safeHash.short
       raise invalidForkChoiceState("safe head not canonical")
     db.safeHeaderHash(safeBlockHash)
+
+  chain.forkChoice(finalizedBlockHash, blockHash).isOkOr:
+    return invalidFCU(error, com, header)
 
   # If payload generation was requested, create a new block to be potentially
   # sealed by the beacon client. The payload will be requested later, and we
