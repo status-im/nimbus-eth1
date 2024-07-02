@@ -203,18 +203,16 @@ proc blobify*(lSst: SavedState): Result[Blob,AristoError] =
   ok(move(data))
 
 # -------------
-proc deblobifyTo(
+proc deblobify(
     data: openArray[byte];
-    pyl: var PayloadRef;
-      ): Result[void,AristoError] =
+    T: type PayloadRef;
+      ): Result[PayloadRef,AristoError] =
   if data.len == 0:
-    pyl = PayloadRef(pType: RawData)
-    return ok()
+    return ok PayloadRef(pType: RawData)
 
   let mask = data[^1]
   if (mask and 0x10) > 0: # unstructured payload
-    pyl = PayloadRef(pType: RawData, rawBlob: data[0 .. ^2])
-    return ok()
+    return ok PayloadRef(pType: RawData, rawBlob: data[0 .. ^2])
 
   var
     pAcc = PayloadRef(pType: AccountData)
@@ -238,24 +236,22 @@ proc deblobifyTo(
   else:
     pAcc.account.codeHash = EMPTY_CODE_HASH
 
+  ok(pAcc)
 
-  pyl = pAcc
-  ok()
-
-proc deblobifyTo*(
+proc deblobify*(
     record: openArray[byte];
-    vtx: var VertexRef;
-      ): Result[void,AristoError] =
+    T: type VertexRef;
+      ): Result[T,AristoError] =
   ## De-serialise a data record encoded with `blobify()`. The second
   ## argument `vtx` can be `nil`.
   if record.len < 3:                                  # minimum `Leaf` record
     return err(DeblobVtxTooShort)
 
-  case record[^1] shr 6:
+  ok case record[^1] shr 6:
   of 0: # `Branch` vertex
     if record[^1] != 0x08u8:
       return err(DeblobUnknown)
-    if record.len < 12:                               # at least two edges
+    if record.len < 11:                               # at least two edges
       return err(DeblobBranchTooShort)
     let
       aInx = record.len - 9
@@ -273,7 +269,7 @@ proc deblobifyTo*(
       lens = lens shr 4
 
       # End `while`
-    vtx = VertexRef(
+    VertexRef(
       vType: Branch,
       bVid:  vtxList)
 
@@ -290,7 +286,7 @@ proc deblobifyTo*(
       return err(DeblobExtGotLeafPrefix)
 
     var offs = 0
-    vtx = VertexRef(
+    VertexRef(
       vType: Extension,
       eVid:  VertexID(?load64(record, offs, pLen)),
       ePfx:  pathSegment)
@@ -306,56 +302,29 @@ proc deblobifyTo*(
       NibblesBuf.fromHexPrefix record.toOpenArray(pLen, rLen-1)
     if not isLeaf:
       return err(DeblobLeafGotExtPrefix)
-    var pyl: PayloadRef
-    ? record.toOpenArray(0, pLen - 1).deblobifyTo(pyl)
-    vtx = VertexRef(
+    let pyl = ? record.toOpenArray(0, pLen - 1).deblobify(PayloadRef)
+    VertexRef(
       vType: Leaf,
       lPfx:  pathSegment,
       lData: pyl)
 
   else:
     return err(DeblobUnknown)
-  ok()
-
-proc deblobify*(
-    data: openArray[byte];
-    T: type VertexRef;
-      ): Result[T,AristoError] =
-  ## Variant of `deblobify()` for vertex deserialisation.
-  var vtx = T(nil) # will be auto-initialised
-  ? data.deblobifyTo vtx
-  ok vtx
-
-proc deblobifyTo*(
-    data: openArray[byte];
-    lSst: var SavedState;
-      ): Result[void,AristoError] =
-  ## De-serialise the last saved state data record previously encoded with
-  ## `blobify()`.
-  # Keep that legacy setting for a while
-  if data.len == 73:
-    if data[^1] != 0x7f:
-      return err(DeblobWrongType)
-    lSst.key = EMPTY_ROOT_HASH
-    lSst.serial = uint64.fromBytesBE data.toOpenArray(64, 71)
-    return ok()
-  # -----
-  if data.len != 41:
-    return err(DeblobWrongSize)
-  if data[^1] != 0x7f:
-    return err(DeblobWrongType)
-  (addr lSst.key.data[0]).copyMem(unsafeAddr data[0], 32)
-  lSst.serial = uint64.fromBytesBE data.toOpenArray(32, 39)
-  ok()
 
 proc deblobify*(
     data: openArray[byte];
     T: type SavedState;
-      ): Result[T,AristoError] =
-  ## Variant of `deblobify()` for deserialising a last saved state data record
-  var lSst: T
-  ? data.deblobifyTo lSst
-  ok move(lSst)
+      ): Result[SavedState,AristoError] =
+  ## De-serialise the last saved state data record previously encoded with
+  ## `blobify()`.
+  if data.len != 41:
+    return err(DeblobWrongSize)
+  if data[^1] != 0x7f:
+    return err(DeblobWrongType)
+
+  ok(SavedState(
+    key: Hash256(data: array[32, byte].initCopyFrom(data.toOpenArray(0, 31))),
+    serial: uint64.fromBytesBE data.toOpenArray(32, 39)))
 
 # ------------------------------------------------------------------------------
 # End
