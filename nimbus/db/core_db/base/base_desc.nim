@@ -83,7 +83,7 @@ type
     proc(flgs: set[CoreDbCaptFlags]): CoreDbRc[CoreDbCaptRef] {.noRaise.}
   CoreDbBaseGetCaptFn* = proc(): CoreDbRc[CoreDbCaptRef] {.noRaise.}
   CoreDbBasePersistentFn* =
-    proc(bn: Opt[BlockNumber]): CoreDbRc[void] {.noRaise.}
+    proc(bn: BlockNumber): CoreDbRc[void] {.noRaise.}
 
   CoreDbBaseFns* = object
     destroyFn*:      CoreDbBaseDestroyFn
@@ -170,7 +170,6 @@ type
     ctx*: string     ## Context where the exception or error occured
     case isAristo*: bool
     of true:
-      vid*: VertexID
       aErr*: AristoError
     else:
       kErr*: KvtError

@@ -23,7 +23,6 @@ import
   ../../kvt/kvt_init/rocks_db/rdb_init,
   ../base,
   ./aristo_db,
-  ./aristo_db/handlers_aristo,
   ../../opts
 
 include ./aristo_db/aristo_replicate

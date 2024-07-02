@@ -11,14 +11,13 @@
 {.push raises: [].}
 
 import
-  std/[strutils, tables],
+  std/tables,
   eth/common,
   ../../aristo as use_ari,
   ../../aristo/[aristo_walk, aristo_serialise],
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk],
-  ".."/[base, base/base_desc],
-  ./aristo_db/[handlers_aristo, handlers_kvt]
+  ".."/[base, base/base_desc]
 
 import
   ../../aristo/aristo_init/memory_only as aristo_memory_only
@@ -31,30 +30,117 @@ import
 {.pragma:  noRaise, gcsafe, raises: [].}
 {.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
 
-proc newAristoVoidCoreDbRef*(): CoreDbRef {.noRaise.}
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func toStr(n: VertexID): string =
-  result = "$"
-  if n.isValid:
-    result &= n.uint64.toHex.strip(
-      leading=true, trailing=false, chars={'0'}).toLowerAscii
-  else:
-    result &= "ø"
+func toError(
+    e: AristoError;
+    base: CoreDbAriBaseRef;
+    info: string;
+    error = Unspecified;
+      ): CoreDbErrorRef =
+  base.parent.bless(error, CoreDbErrorRef(
+    ctx:      info,
+    isAristo: true,
+    aErr:     e))
 
-func errorPrint(e: CoreDbErrorRef): string =
-  if not e.isNil:
-    result = if e.isAristo: "Aristo" else: "Kvt"
-    result &= ", ctx=" & $e.ctx & ", "
-    if e.isAristo:
-      if e.vid.isValid:
-        result &= "vid=" & e.vid.toStr & ", "
-      result &= "error=" & $e.aErr
-    else:
-      result &= "error=" & $e.kErr
+func toError(
+    e: KvtError;
+    base: CoreDbKvtBaseRef;
+    info: string;
+    error = Unspecified;
+      ): CoreDbErrorRef =
+  base.parent.bless(error, CoreDbErrorRef(
+    ctx:      info,
+    isAristo: false,
+    kErr:     e))
+
+# ------------------------------------------------------------------------------
+# Private `Kvt` functions
+# ------------------------------------------------------------------------------
+
+when false:
+  proc kvtForget(
+      cKvt: CoreDbKvtRef;
+      info: static[string];
+        ): CoreDbRc[void] =
+    ## Free parking here
+    let
+      base = cKvt.parent.kdbBase
+      kvt = cKvt.kvt
+    if kvt != base.kdb:
+      let rc = base.api.forget(kvt)
+
+      # There is not much that can be done in case of a `forget()` error.
+      # So unmark it anyway.
+      cKvt.kvt = KvtDbRef(nil)
+
+      if rc.isErr:
+        return err(rc.error.toError(base, info))
+    ok()
+
+
+func init(T: type CoreDbKvtBaseRef; db: CoreDbRef; kdb: KvtDbRef): T =
+  result = db.bless CoreDbKvtBaseRef(
+    api:       KvtApiRef.init(),
+    kdb:       kdb,
+
+    # Preallocated shared descriptor
+    cache: db.bless CoreDbKvtRef(
+      kvt:     kdb))
+
+  when CoreDbEnableApiProfiling:
+    let profApi = KvtApiProfRef.init(result.api, kdb.backend)
+    result.api = profApi
+    result.kdb.backend = profApi.be
+
+# ------------------------------------------------------------------------------
+# Private `Aristo` functions
+# ------------------------------------------------------------------------------
+   
+func init(T: type CoreDbCtxRef; db: CoreDbRef, adb: AristoDbRef): T =
+  ## Create initial context
+  let ctx = CoreDbCtxRef(mpt: adb)
+
+  when CoreDbEnableApiProfiling:
+    let profApi = AristoApiProfRef.init(db.adbBase.api, adb.backend)
+    result.api = profApi
+    result.ctx.mpt.backend = profApi.be
+
+  db.bless ctx
+
+proc init(
+    T: type CoreDbCtxRef;
+    base: CoreDbAriBaseRef;
+    colState: Hash256;
+    colType: CoreDbColType;
+      ): CoreDbRc[CoreDbCtxRef] =
+  const info = "fromTxFn()"
+
+  if colType.ord == 0:
+    return err(use_ari.GenericError.toError(base, info, ColUnacceptable))
+  let
+    api = base.api
+    vid = VertexID(colType)
+    key = colState.to(HashKey)
+
+    # Find `(vid,key)` on transaction stack
+    inx = block:
+      let rc = api.findTx(base.parent.ctx.CoreDbCtxRef.mpt, vid, key)
+      if rc.isErr:
+        return err(rc.error.toError(base, info))
+      rc.value
+
+    # Fork MPT descriptor that provides `(vid,key)`
+    newMpt = block:
+      let rc = api.forkTx(base.parent.ctx.CoreDbCtxRef.mpt, inx)
+      if rc.isErr:
+        return err(rc.error.toError(base, info))
+      rc.value
+
+  # Create new context
+  ok(base.parent.bless CoreDbCtxRef(mpt: newMpt))
 
 # ------------------------------------------------------------------------------
 # Private tx and base methods
@@ -142,29 +228,89 @@ proc baseMethods(db: CoreDbRef): CoreDbBaseFns =
         db.tracer.push(flags)
       CoreDbCaptRef(methods: db.tracer.cptMethods)
 
-  proc persistent(bn: Opt[BlockNumber]): CoreDbRc[void] =
+  proc persistent(bn: BlockNumber): CoreDbRc[void] =
     const info = "persistentFn()"
-    let sid =
-      if bn.isNone: 0u64
-      else: bn.unsafeGet
-    ? kBase.persistent info
-    ? aBase.persistent(sid, info)
+
+    block kvtBody:
+      let
+        kvt = kBase.kdb
+        rc = kBase.api.persist(kvt)
+      if rc.isOk or rc.error == TxPersistDelayed:
+        # The latter clause is OK: Piggybacking on `Aristo` backend
+        break kvtBody
+      elif kBase.api.level(kvt) != 0:
+        return err(rc.error.toError(kBase, info, TxPending))
+      else:
+        return err(rc.error.toError(kBase, info))
+
+    block adbBody:
+      let
+        mpt = aBase.parent.ctx.CoreDbCtxRef.mpt
+        rc = aBase.api.persist(mpt, bn)
+      if rc.isOk:
+        break adbBody
+      elif aBase.api.level(mpt) != 0:
+        return err(rc.error.toError(aBase, info, TxPending))
+      else:
+        return err(rc.error.toError(aBase, info))
     ok()
+
+  proc errorPrintFn(e: CoreDbErrorRef): string =
+    if not e.isNil:
+      result = if e.isAristo: "Aristo" else: "Kvt"
+      result &= ", ctx=" & $e.ctx & ", error="
+      if e.isAristo:
+        result &= $e.aErr
+      else:
+        result &= $e.kErr
+
+  proc txBegin(): CoreDbTxRef =
+    const info = "beginFn()"
+
+    let aTx = block:
+      let rc = aBase.api.txBegin(aBase.parent.ctx.CoreDbCtxRef.mpt)
+      if rc.isErr:
+        raiseAssert info & ": " & $rc.error
+      rc.value
+
+    let kTx = block:
+      let rc = kBase.api.txBegin(kBase.kdb)
+      if rc.isErr:
+        raiseAssert info & ": " & $rc.error
+      rc.value
+                
+    db.bless CoreDbTxRef(methods: db.txMethods(aTx, kTx))
+
+  proc getLevel(): int =
+    aBase.api.level(aBase.parent.ctx.CoreDbCtxRef.mpt)
+
+  proc swapCtx(ctx: CoreDbCtxRef): CoreDbCtxRef =
+    const info = "swapCtx()"
+    
+    doAssert not ctx.isNil
+    result = aBase.parent.ctx
+
+    # Set read-write access and install
+    aBase.parent.ctx = CoreDbCtxRef(ctx)
+    aBase.api.reCentre(aBase.parent.ctx.CoreDbCtxRef.mpt).isOkOr:
+      raiseAssert info & " failed: " & $error
+
+
 
   CoreDbBaseFns(
     destroyFn: proc(eradicate: bool) =
-      aBase.destroy(eradicate)
-      kBase.destroy(eradicate),
+      aBase.api.finish(aBase.parent.ctx.CoreDbCtxRef.mpt, eradicate)
+      kBase.api.finish(kBase.kdb, eradicate),
 
     levelFn: proc(): int =
-      aBase.getLevel,
+      getLevel(),
 
     errorPrintFn: proc(e: CoreDbErrorRef): string =
-      e.errorPrint(),
+      errorPrintFn(e),          
 
     newKvtFn: proc(): CoreDbRc[CoreDbKvtRef] =
-      kBase.newKvtHandler("newKvtFn()"),
-
+      ok(kBase.cache),
+ 
     newCtxFn: proc(): CoreDbCtxRef =
       db.ctx,
 
@@ -172,21 +318,16 @@ proc baseMethods(db: CoreDbRef): CoreDbBaseFns =
       CoreDbCtxRef.init(db.adbBase, r, k),
 
     swapCtxFn: proc(ctx: CoreDbCtxRef): CoreDbCtxRef =
-      aBase.swapCtx(ctx),
+      swapCtx(ctx),
 
     beginFn: proc(): CoreDbTxRef =
-      const info = "beginFn()"
-      let
-        aTx = aBase.txBegin info
-        kTx = kBase.txBegin info
-        dsc = CoreDbTxRef(methods: db.txMethods(aTx, kTx))
-      db.bless(dsc),
+      txBegin(),
 
     # # currently disabled
     #  newCaptureFn: proc(flags:set[CoreDbCaptFlags]): CoreDbRc[CoreDbCaptRef] =
     #    ok(db.bless flags.tracerSetup()),
 
-    persistentFn: proc(bn: Opt[BlockNumber]): CoreDbRc[void] =
+    persistentFn: proc(bn: BlockNumber): CoreDbRc[void] =
       persistent(bn))
 
 # ------------------------------------------------------------------------------
@@ -248,9 +389,14 @@ func toAristo*(mBe: CoreDbAccBackendRef): AristoDbRef =
 
 proc toAristoSavedStateBlockNumber*(mBe: CoreDbMptBackendRef): BlockNumber =
   if not mBe.isNil:
-    let rc = mBe.parent.adbBase.getSavedState()
-    if rc.isOk:
-      return rc.value.serial.BlockNumber
+    let
+      base = mBe.parent.adbBase
+      mpt = base.parent.ctx.CoreDbCtxRef.mpt
+      be = mpt.backend
+    if not be.isNil:
+      let rc = base.api.fetchLastSavedState(mpt)
+      if rc.isOk:
+        return rc.value.serial.BlockNumber
 
 # ------------------------------------------------------------------------------
 # Public aristo iterators

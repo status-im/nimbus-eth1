@@ -925,7 +925,7 @@ proc persistent*(
   ##   db.persistent(stateBlockNumber)
   ##
   db.setTrackNewApi BasePersistentFn
-  result = db.methods.persistentFn Opt.some(blockNumber)
+  result = db.methods.persistentFn blockNumber
   db.ifTrackNewApi: debug newApiTxt, api, elapsed, blockNumber, result
 
 proc newTransaction*(db: CoreDbRef): CoreDbTxRef =
