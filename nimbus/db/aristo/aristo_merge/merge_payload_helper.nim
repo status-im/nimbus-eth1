@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, typetraits],
+  std/typetraits,
   eth/common,
   results,
   ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_vid]
@@ -100,10 +100,7 @@ proc insertBranch(
   # Install `forkVtx`
   block:
     # Clear Merkle hashes (aka hash keys) unless proof mode.
-    if db.pPrf.len == 0:
-      db.clearMerkleKeys(hike, linkID)
-    elif linkID in db.pPrf:
-      return err(MergeNonBranchProofModeLock)
+    db.clearMerkleKeys(hike, linkID)
 
     if linkVtx.vType == Leaf:
       # Double check path prefix
@@ -196,10 +193,7 @@ proc concatBranchAndLeaf(
     return err(MergeRootBranchLinkBusy)
 
   # Clear Merkle hashes (aka hash keys) unless proof mode.
-  if db.pPrf.len == 0:
-    db.clearMerkleKeys(hike, brVid)
-  elif brVid in db.pPrf:
-    return err(MergeBranchProofModeLock) # Ooops
+  db.clearMerkleKeys(hike, brVid)
 
   # Append branch vertex
   var okHike = Hike(root: hike.root, legs: hike.legs)
@@ -264,26 +258,13 @@ proc mergePayloadTopIsBranchAddLeaf(
     #
     #  <-------- immutable ------------> <---- mutable ----> ..
     #
-    if db.pPrf.len == 0:
-      # Not much else that can be done here
-      raiseAssert "Dangling edge:" &
-        " pfx=" & $hike.legsTo(hike.legs.len-1,NibblesBuf) &
-        " branch=" & $parent &
-        " nibble=" & $nibble &
-        " edge=" & $linkID &
-        " tail=" & $hike.tail
-
-    # Reuse placeholder entry in table
-    let vtx = VertexRef(
-      vType: Leaf,
-      lPfx:  hike.tail,
-      lData: payload)
-    db.setVtxAndKey(hike.root, linkID, vtx)
-    var okHike = Hike(root: hike.root, legs: hike.legs)
-    okHike.legs.add Leg(wp: VidVtxPair(vid: linkID, vtx: vtx), nibble: -1)
-    if parent notin db.pPrf:
-      db.layersResKey(hike.root, parent)
-    return ok(okHike)
+    # Not much else that can be done here
+    raiseAssert "Dangling edge:" &
+      " pfx=" & $hike.legsTo(hike.legs.len-1,NibblesBuf) &
+      " branch=" & $parent &
+      " nibble=" & $nibble &
+      " edge=" & $linkID &
+      " tail=" & $hike.tail
 
   if linkVtx.vType == Branch:
     # Slot link to a branch vertex should be handled by `hikeUp()`
@@ -347,10 +328,7 @@ proc mergePayloadTopIsExtAddLeaf(
       return err(MergeRootBranchLinkBusy)
 
     # Clear Merkle hashes (aka hash keys) unless proof mode
-    if db.pPrf.len == 0:
-      db.clearMerkleKeys(hike, brVid)
-    elif brVid in db.pPrf:
-      return err(MergeBranchProofModeLock)
+    db.clearMerkleKeys(hike, brVid)
 
     let
       brDup = brVtx.dup
@@ -382,10 +360,7 @@ proc mergePayloadTopIsEmptyAddLeaf(
       return err(MergeRootBranchLinkBusy)
 
     # Clear Merkle hashes (aka hash keys) unless proof mode
-    if db.pPrf.len == 0:
-      db.clearMerkleKeys(hike, hike.root)
-    elif hike.root in db.pPrf:
-      return err(MergeBranchProofModeLock)
+    db.clearMerkleKeys(hike, hike.root)
 
     let
       rootDup = rootVtx.dup
@@ -416,8 +391,6 @@ proc mergePayloadUpdate(
   # Update payloads if they differ
   if leafLeg.wp.vtx.lData != payload:
     let vid = leafLeg.wp.vid
-    if vid in db.pPrf:
-      return err(MergeLeafProofModeLock)
 
     # Update accounts storage root which is handled implicitly
     if hike.root == VertexID(1):

@@ -61,27 +61,14 @@ proc checkTopStrict*(
 proc checkTopProofMode*(
     db: AristoDbRef;                               # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
-  if 0 < db.pPrf.len:
-    for vid in db.pPrf:
-      let vtx = db.layersGetVtxOrVoid vid
+  for (vid,key) in db.layersWalkKey:
+    if key.isValid:                              # Otherwise to be deleted
+      let vtx = db.getVtx vid
       if vtx.isValid:
         let node = vtx.toNode(db).valueOr:
-          return err((vid,CheckRlxVtxIncomplete))
-
-        let key = db.layersGetKeyOrVoid vid
-        if not key.isValid:
-          return err((vid,CheckRlxVtxKeyMissing))
+          continue
         if key != node.digestTo(HashKey):
           return err((vid,CheckRlxVtxKeyMismatch))
-  else:
-    for (vid,key) in db.layersWalkKey:
-      if key.isValid:                              # Otherwise to be deleted
-        let vtx = db.getVtx vid
-        if vtx.isValid:
-          let node = vtx.toNode(db).valueOr:
-            continue
-          if key != node.digestTo(HashKey):
-            return err((vid,CheckRlxVtxKeyMismatch))
   ok()
 
 
@@ -145,9 +132,6 @@ proc checkTopCommon*(
   if kMapNilCount != 0 and kMapNilCount < nNilVtx:
     return err((VertexID(0),CheckAnyVtxEmptyKeyMismatch))
 
-  for vid in db.pPrf:
-    if db.layersGetKey(vid).isErr:
-      return err((vid,CheckAnyVtxLockWithoutKey))
   ok()
 
 # ------------------------------------------------------------------------------

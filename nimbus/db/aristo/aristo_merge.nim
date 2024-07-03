@@ -29,10 +29,7 @@ import
   eth/common,
   results,
   "."/[aristo_desc, aristo_fetch, aristo_layers, aristo_utils, aristo_vid],
-  ./aristo_merge/[merge_payload_helper, merge_proof]
-
-export
-  merge_proof
+  ./aristo_merge/merge_payload_helper
 
 const
   MergeNoAction = {MergeLeafPathCachedAlready, MergeLeafPathOnBackendAlready}

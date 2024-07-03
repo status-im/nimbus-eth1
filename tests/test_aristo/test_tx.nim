@@ -27,7 +27,6 @@ import
     aristo_hike,
     aristo_init/persistent,
     aristo_layers,
-    aristo_merge,
     aristo_nearby,
     aristo_tx],
   ../replay/xcheck,
@@ -569,19 +568,6 @@ proc testTxMergeProofAndKvpList*(
 
     # var lst = w.kvpLst.mapRootVid testRootVid
 
-    if 0 < w.proof.len:
-      let root = block:
-        let rc = db.mergeProof(rootKey, testRootVid)
-        xCheckRc rc.error == 0
-        rc.value
-
-      let nMerged = block:
-        let rc = db.mergeProof(w.proof, root)
-        xCheckRc rc.error == 0
-        rc.value
-
-      xCheck w.proof.len == nMerged
-      xCheck db.nLayersVtx() <= nMerged + sTabLen
 
     let merged = db.mergeList leafs
     xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}

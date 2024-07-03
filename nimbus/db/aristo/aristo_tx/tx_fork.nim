@@ -65,8 +65,7 @@ proc txFork*(
     let rc = db.getTuvBE()
     if rc.isOk:
       LayerRef(
-        delta: LayerDeltaRef(vTop: rc.value),
-        final: LayerFinalRef())
+        delta: LayerDeltaRef(vTop: rc.value))
     elif rc.error == GetTuvNotFound:
       LayerRef.init()
     else:

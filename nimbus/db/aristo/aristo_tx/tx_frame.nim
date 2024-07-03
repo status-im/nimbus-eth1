@@ -85,7 +85,6 @@ proc txFrameBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   db.stack.add db.top
   db.top = LayerRef(
     delta: LayerDeltaRef(vTop: vTop),
-    final: db.top.final.dup,
     txUid: db.getTxUid)
 
   db.txRef = AristoTxRef(

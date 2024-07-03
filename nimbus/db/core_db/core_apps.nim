@@ -20,7 +20,6 @@ import
   stew/byteutils,
   "../.."/[errors, constants],
   ".."/[aristo, storage_types],
-  ./backend/aristo_db,
   "."/base
 
 logScope:
