@@ -67,7 +67,7 @@ proc setupEnv*(extraValidation: bool = false, ccm: CCModify = nil): TestEnv =
       conf.networkId,
       conf.networkParams
     )
-    chain = newForkedChain(com, com.genesisHeader, extraValidation)
+    chain = newForkedChain(com, com.genesisHeader, extraValidation = extraValidation)
 
   com.initializeEmptyDb()
   TestEnv(
