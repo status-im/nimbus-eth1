@@ -329,7 +329,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
 
   let
     al = com.db.ctx.getAccounts()
-    accPath = codeAddress.keccakHash.data
+    accPath = codeAddress.keccakHash
 
   for kv in boa.storage:
     let key = kv[0].toHex()

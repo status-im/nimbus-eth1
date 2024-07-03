@@ -174,37 +174,37 @@ type
   CoreDbAccBackendFn* = proc(
     cAcc: CoreDbAccRef): CoreDbAccBackendRef {.noRaise.}
   CoreDbAccFetchFn* = proc(
-    cAcc: CoreDbAccRef; accPath: openArray[byte];
+    cAcc: CoreDbAccRef; accPath: Hash256;
     ): CoreDbRc[CoreDbAccount] {.noRaise.}
   CoreDbAccDeleteFn* = proc(
-    cAcc: CoreDbAccRef, accPath: openArray[byte]): CoreDbRc[void] {.noRaise.}
+    cAcc: CoreDbAccRef, accPath: Hash256): CoreDbRc[void] {.noRaise.}
   CoreDbAccClearStorageFn* = proc(
-    cAcc: CoreDbAccRef; accPath: openArray[byte]): CoreDbRc[void] {.noRaise.}
+    cAcc: CoreDbAccRef; accPath: Hash256): CoreDbRc[void] {.noRaise.}
   CoreDbAccMergeFn* = proc(
-    cAcc: CoreDbAccRef; accPath: openArray[byte]; accRec: CoreDbAccount;
+    cAcc: CoreDbAccRef; accPath: Hash256; accRec: CoreDbAccount;
     ): CoreDbRc[void] {.noRaise.}
   CoreDbAccHasPathFn* = proc(
-    cAcc: CoreDbAccRef; accPath: openArray[byte]): CoreDbRc[bool] {.noRaise.}
+    cAcc: CoreDbAccRef; accPath: Hash256): CoreDbRc[bool] {.noRaise.}
   CoreDbAccStateFn* = proc(
     cAcc: CoreDbAccRef; updateOk: bool): CoreDbRc[Hash256] {.noRaise.}
 
   CoreDbSlotFetchFn* = proc(
-    cAcc: CoreDbAccRef; accPath, stoPath: openArray[byte];
+    cAcc: CoreDbAccRef; accPath: Hash256, stoPath: openArray[byte];
     ): CoreDbRc[Blob] {.noRaise.}
   CoreDbSlotDeleteFn* = proc(
-    cAcc: CoreDbAccRef; accPath, stoPath: openArray[byte];
+    cAcc: CoreDbAccRef; accPath: Hash256, stoPath: openArray[byte];
     ): CoreDbRc[void] {.noRaise.}
   CoreDbSlotHasPathFn* = proc(
-    cAcc: CoreDbAccRef; accPath, stoPath: openArray[byte];
+    cAcc: CoreDbAccRef; accPath: Hash256, stoPath: openArray[byte];
     ): CoreDbRc[bool] {.noRaise.}
   CoreDbSlotMergeFn* = proc(
-    cAcc: CoreDbAccRef; accPath, stoPath, stoData: openArray[byte];
+    cAcc: CoreDbAccRef; accPath: Hash256, stoPath, stoData: openArray[byte];
     ): CoreDbRc[void] {.noRaise.}
   CoreDbSlotStateFn* = proc(
-    cAcc: CoreDbAccRef; accPath: openArray[byte]; updateOk: bool;
+    cAcc: CoreDbAccRef; accPath: Hash256; updateOk: bool;
     ): CoreDbRc[Hash256] {.noRaise.}
   CoreDbSlotStateEmptyFn* = proc(
-    cAcc: CoreDbAccRef; accPath: openArray[byte];
+    cAcc: CoreDbAccRef; accPath: Hash256;
     ): CoreDbRc[bool] {.noRaise.}
 
   CoreDbAccFns* = object

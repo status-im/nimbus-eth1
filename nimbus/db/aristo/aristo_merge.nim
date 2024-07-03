@@ -43,7 +43,7 @@ const
 
 proc mergeAccountRecord*(
     db: AristoDbRef;                   # Database, top layer
-    accPath: openArray[byte];          # Even nibbled byte path
+    accPath: Hash256;          # Even nibbled byte path
     accRec: AristoAccount;             # Account data
       ): Result[bool,AristoError] =
   ## Merge the  key-value-pair argument `(accKey,accPayload)` as an account
@@ -59,7 +59,7 @@ proc mergeAccountRecord*(
   ##
   let
     pyl =  PayloadRef(pType: AccountData, account: accRec)
-    rc = db.mergePayloadImpl(VertexID(1), accPath, pyl)
+    rc = db.mergePayloadImpl(VertexID(1), accPath.data, pyl)
   if rc.isOk:
     ok true
   elif rc.error in MergeNoAction:
@@ -102,7 +102,7 @@ proc mergeGenericData*(
 
 proc mergeStorageData*(
     db: AristoDbRef;                   # Database, top layer
-    accPath: openArray[byte];          # Needed for accounts payload
+    accPath: Hash256;          # Needed for accounts payload
     stoPath: openArray[byte];          # Storage data path (aka key)
     stoData: openArray[byte];          # Storage data payload value
       ): Result[void,AristoError] =

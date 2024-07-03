@@ -125,11 +125,11 @@ when debugAccountsLedgerRef:
 template logTxt(info: static[string]): static[string] =
   "AccountsLedgerRef " & info
 
-template toAccountKey(acc: AccountRef): openArray[byte] =
-  acc.accPath.data.toOpenArray(0,31)
+template toAccountKey(acc: AccountRef): Hash256 =
+  acc.accPath
 
-template toAccountKey(eAddr: EthAddress): openArray[byte] =
-  eAddr.keccakHash.data.toOpenArray(0,31)
+template toAccountKey(eAddr: EthAddress): Hash256 =
+  eAddr.keccakHash
 
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}

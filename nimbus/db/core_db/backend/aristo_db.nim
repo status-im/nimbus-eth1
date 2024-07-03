@@ -283,7 +283,7 @@ iterator aristoMptPairs*(dsc: CoreDbMptRef): (Blob,Blob) {.noRaise.} =
 
 iterator aristoSlotPairs*(
     dsc: CoreDbAccRef;
-    accPath: openArray[byte];
+    accPath: Hash256;
       ): (Blob,Blob)
       {.noRaise.} =
   let
