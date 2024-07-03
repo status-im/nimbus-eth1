@@ -203,10 +203,4 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       if blocks.len > 0:
         process() # last chunk, if any
 
-  for blocksFile in conf.blocksFile:
-    if isFile(string blocksFile):
-      # success or not, we quit after importing blocks
-      if not importRlpBlock(string blocksFile, com):
-        quit(QuitFailure)
-      else:
-        quit(QuitSuccess)
+  importRlpBlocks(conf, com)
