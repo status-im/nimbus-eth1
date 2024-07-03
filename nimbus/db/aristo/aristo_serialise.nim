@@ -166,13 +166,14 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
 
 proc serialise*(
     db: AristoDbRef;
+    root: VertexID;
     pyl: PayloadRef;
       ): Result[Blob,(VertexID,AristoError)] =
   ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
   ## account type, otherwise pass the data as is.
   ##
   proc getKey(vid: VertexID): Result[HashKey,AristoError] =
-    db.getKeyRc(vid)
+    db.getKeyRc((root, vid))
 
   pyl.serialise getKey
 

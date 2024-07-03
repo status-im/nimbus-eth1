@@ -78,10 +78,10 @@ func legsTo*(hike: Hike; numLegs: int; T: type NibblesBuf): T =
 # --------
 
 proc step*(
-    path: NibblesBuf, vid: VertexID, db: AristoDbRef
+    path: NibblesBuf, rvid: RootedVertexID, db: AristoDbRef
       ): Result[(VertexRef, NibblesBuf, VertexID), AristoError] =
   # Fetch next vertex
-  let vtx = db.getVtxRc(vid).valueOr:
+  let vtx = db.getVtxRc(rvid).valueOr:
     if error != GetVtxNotFound:
       return err(error)
 
@@ -139,7 +139,7 @@ iterator stepUp*(
     vtx: VertexRef
   block iter:
     while true:
-      (vtx, path, next) = step(path, next, db).valueOr:
+      (vtx, path, next) = step(path, (root, next), db).valueOr:
         yield Result[VertexRef, AristoError].err(error)
         break iter
 
@@ -166,7 +166,7 @@ proc hikeUp*(
 
   var vid = root
   while true:
-    let (vtx, path, next) = step(hike.tail, vid, db).valueOr:
+    let (vtx, path, next) = step(hike.tail, (root, vid), db).valueOr:
       return err((vid,error,hike))
 
     let wp = VidVtxPair(vid:vid, vtx:vtx)

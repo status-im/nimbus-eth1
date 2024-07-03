@@ -93,15 +93,15 @@ proc randomisedLeafs(
     db: AristoDbRef;
     ltys: HashSet[LeafTie];
     td: var PrngDesc;
-       ): Result[seq[(LeafTie,VertexID)],(VertexID,AristoError)] =
-  var lvp: seq[(LeafTie,VertexID)]
+       ): Result[seq[(LeafTie,RootedVertexID)],(VertexID,AristoError)] =
+  var lvp: seq[(LeafTie,RootedVertexID)]
   for lty in ltys:
     let hike = lty.hikeUp(db).valueOr:
       return err((error[0],error[1]))
-    lvp.add (lty,hike.legs[^1].wp.vid)
+    lvp.add (lty,(hike.root, hike.legs[^1].wp.vid))
 
   var lvp2 = lvp.sorted(
-    cmp = proc(a,b: (LeafTie,VertexID)): int = cmp(a[0],b[0]))
+    cmp = proc(a,b: (LeafTie,RootedVertexID)): int = cmp(a[0],b[0]))
   if 2 < lvp2.len:
     for n in 0 ..< lvp2.len-1:
       let r = n + td.rand(lvp2.len - n)

@@ -95,7 +95,7 @@ proc update*(ctx: UpdateSiblingsRef): Result[UpdateSiblingsRef,AristoError] =
       # Update distributed filters. Note that the physical backend database
       # must not have been updated, yet. So the new root key for the backend
       # will be `db.balancer.kMap[$1]`.
-      let trg = db.balancer.kMap.getOrVoid(VertexID 1)
+      let trg = db.balancer.kMap.getOrVoid((VertexID(1), VertexID(1)))
       for w in db.forked:
         let rc = db.deltaMerge(w.balancer, ctx.rev, trg)
         if rc.isErr:

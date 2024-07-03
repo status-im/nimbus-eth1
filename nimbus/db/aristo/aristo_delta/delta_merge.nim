@@ -42,7 +42,7 @@ proc deltaMerge*(
     return ok(lower)
 
   # Verify stackability
-  let lowerTrg = lower.kMap.getOrVoid VertexID(1)
+  let lowerTrg = lower.kMap.getOrVoid (VertexID(1), VertexID(1))
 
   # There is no need to deep copy table vertices as they will not be modified.
   let newFilter = LayerDeltaRef(
@@ -50,29 +50,29 @@ proc deltaMerge*(
     kMap: lower.kMap,
     vTop: upper.vTop)
 
-  for (vid,vtx) in upper.sTab.pairs:
-    if vtx.isValid or not newFilter.sTab.hasKey vid:
-      newFilter.sTab[vid] = vtx
-    elif newFilter.sTab.getOrVoid(vid).isValid:
-      let rc = db.getVtxUbe vid
+  for (rvid,vtx) in upper.sTab.pairs:
+    if vtx.isValid or not newFilter.sTab.hasKey rvid:
+      newFilter.sTab[rvid] = vtx
+    elif newFilter.sTab.getOrVoid(rvid).isValid:
+      let rc = db.getVtxUbe rvid
       if rc.isOk:
-        newFilter.sTab[vid] = vtx # VertexRef(nil)
+        newFilter.sTab[rvid] = vtx # VertexRef(nil)
       elif rc.error == GetVtxNotFound:
-        newFilter.sTab.del vid
+        newFilter.sTab.del rvid
       else:
-        return err((vid,rc.error))
+        return err((rvid.vid,rc.error))
 
-  for (vid,key) in upper.kMap.pairs:
-    if key.isValid or not newFilter.kMap.hasKey vid:
-      newFilter.kMap[vid] = key
-    elif newFilter.kMap.getOrVoid(vid).isValid:
-      let rc = db.getKeyUbe vid
+  for (rvid,key) in upper.kMap.pairs:
+    if key.isValid or not newFilter.kMap.hasKey rvid:
+      newFilter.kMap[rvid] = key
+    elif newFilter.kMap.getOrVoid(rvid).isValid:
+      let rc = db.getKeyUbe rvid
       if rc.isOk:
-        newFilter.kMap[vid] = key
+        newFilter.kMap[rvid] = key
       elif rc.error == GetKeyNotFound:
-        newFilter.kMap.del vid
+        newFilter.kMap.del rvid
       else:
-        return err((vid,rc.error))
+        return err((rvid.vid,rc.error))
 
   ok newFilter
 

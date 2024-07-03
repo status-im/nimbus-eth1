@@ -86,7 +86,6 @@ iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash256): (Blob, Blob) =
   of Ooops:
     raiseAssert: "Unsupported database type: " & $acc.dbType
   acc.ifTrackNewApi:
-    doAssert accPath.len == 32
     debug newApiTxt, api, elapsed
 
 iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =

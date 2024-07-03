@@ -134,8 +134,7 @@ proc mergeStorageData*(
       let leaf = wpAcc.vtx.dup # Dup on modify
       leaf.lData.stoID = useID
       db.layersPutStoID(accPath, useID)
-      db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
-      db.layersResKey(VertexID(1), wpAcc.vid)
+      db.layersUpdateVtx((accHike.root, wpAcc.vid), leaf)
       return ok()
 
   elif rc.error in MergeNoAction:

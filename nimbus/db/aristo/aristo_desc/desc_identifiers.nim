@@ -47,6 +47,15 @@ type
     ## freed so recycling had do deal with extensive lists of non-consecutive
     ## IDs.
 
+  RootedVertexID* = tuple[root, vid: VertexID]
+    ## Vertex and the root it belongs to in the MPT. Used to group a set of
+    ## verticies, for example to store them together in the database or perform
+    ## range operations.
+    ##
+    ## `vid` may be a branch, extension or leaf.
+    ##
+    ## To reference the root itself, use (root, root).
+
   HashKey* = object
     ## Ethereum MPTs use Keccak hashes as node links if the size of an RLP
     ## encoded node is of size at least 32 bytes. Otherwise, the RLP encoded

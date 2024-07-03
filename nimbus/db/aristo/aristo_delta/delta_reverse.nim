@@ -40,24 +40,24 @@ proc revFilter*(
       return err((VertexID(0), rc.error))
 
   # Calculate reverse changes for the `sTab[]` structural table
-  for vid in filter.sTab.keys:
-    let rc = db.getVtxUbe vid
+  for rvid in filter.sTab.keys:
+    let rc = db.getVtxUbe rvid
     if rc.isOk:
-      rev.sTab[vid] = rc.value
+      rev.sTab[rvid] = rc.value
     elif rc.error == GetVtxNotFound:
-      rev.sTab[vid] = VertexRef(nil)
+      rev.sTab[rvid] = VertexRef(nil)
     else:
-      return err((vid,rc.error))
+      return err((rvid.vid,rc.error))
 
   # Calculate reverse changes for the `kMap` sequence.
-  for vid in filter.kMap.keys:
-    let rc = db.getKeyUbe vid
+  for rvid in filter.kMap.keys:
+    let rc = db.getKeyUbe rvid
     if rc.isOk:
-      rev.kMap[vid] = rc.value
+      rev.kMap[rvid] = rc.value
     elif rc.error == GetKeyNotFound:
-      rev.kMap[vid] = VOID_HASH_KEY
+      rev.kMap[rvid] = VOID_HASH_KEY
     else:
-      return err((vid,rc.error))
+      return err((rvid.vid,rc.error))
 
   ok(rev)
 

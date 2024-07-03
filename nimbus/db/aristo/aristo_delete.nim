@@ -43,13 +43,12 @@ proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
 
 proc disposeOfVtx(
     db: AristoDbRef;                   # Database, top layer
-    root: VertexID;
-    vid: VertexID;                     # Vertex IDs to clear
+    rvid: RootedVertexID;              # Vertex ID to clear
       ) =
   # Remove entry
-  db.layersResVtx(root, vid)
-  db.layersResKey(root, vid)
-  db.vidDispose vid                    # Recycle ID
+  db.layersResVtx(rvid)
+  db.layersResKey(rvid)
+  db.vidDispose rvid.vid               # Recycle ID
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -91,7 +90,7 @@ proc collapseBranch(
 
     of Extension:                                        # (2)
       # Merge `br` into ^3 (update `xt`)
-      db.disposeOfVtx(hike.root, xt.vid)
+      db.disposeOfVtx((hike.root, xt.vid))
       xt.vid = par.vid
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
@@ -102,7 +101,7 @@ proc collapseBranch(
     # Replace `br` (use `xt` as-is)
     discard
 
-  db.layersPutVtx(hike.root, xt.vid, xt.vtx)
+  db.layersPutVtx((hike.root, xt.vid), xt.vtx)
   ok()
 
 
@@ -130,7 +129,7 @@ proc collapseExt(
       vType: Extension,
       ePfx:  NibblesBuf.nibble(nibble) & vtx.ePfx,
       eVid:  vtx.eVid))
-  db.disposeOfVtx(hike.root, br.vtx.bVid[nibble])        # `vtx` is obsolete now
+  db.disposeOfVtx((hike.root, br.vtx.bVid[nibble]))      # `vtx` is obsolete now
 
   if 2 < hike.legs.len:                                  # (1) or (2)
     let par = hike.legs[^3].wp
@@ -141,7 +140,7 @@ proc collapseExt(
 
     of Extension:                                        # (2)
       # Replace ^3 by `^3 & ^2 & vtx` (update `xt`)
-      db.disposeOfVtx(hike.root, xt.vid)
+      db.disposeOfVtx((hike.root, xt.vid))
       xt.vid = par.vid
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
@@ -152,7 +151,7 @@ proc collapseExt(
     # Replace ^2 by `^2 & vtx` (use `xt` as-is)
     discard
 
-  db.layersPutVtx(hike.root, xt.vid, xt.vtx)
+  db.layersPutVtx((hike.root, xt.vid), xt.vtx)
   ok()
 
 
@@ -183,18 +182,18 @@ proc collapseLeaf(
       vType: Leaf,
       lPfx:  NibblesBuf.nibble(nibble) & vtx.lPfx,
       lData: vtx.lData))
-  db.layersResKey(hike.root, lf.vid)                     # `vtx` was modified
+  db.layersResKey((hike.root, lf.vid))                     # `vtx` was modified
 
   if 2 < hike.legs.len:                                  # (1), (2), or (3)
-    db.disposeOfVtx(hike.root, br.vid)                   # `br` is obsolete now
+    db.disposeOfVtx((hike.root, br.vid))                 # `br` is obsolete now
     # Merge `br` into the leaf `vtx` and unlink `br`.
     let par = hike.legs[^3].wp.dup                       # Writable vertex
     case par.vtx.vType:
     of Branch:                                           # (1)
       # Replace `vtx` by `^2 & vtx` (use `lf` as-is)
       par.vtx.bVid[hike.legs[^3].nibble] = lf.vid
-      db.layersPutVtx(hike.root, par.vid, par.vtx)
-      db.layersPutVtx(hike.root, lf.vid, lf.vtx)
+      db.layersPutVtx((hike.root, par.vid), par.vtx)
+      db.layersPutVtx((hike.root, lf.vid), lf.vtx)
       return ok()
 
     of Extension:                                        # (2) or (3)
@@ -207,14 +206,14 @@ proc collapseLeaf(
         let gpr = hike.legs[^4].wp.dup                   # Writable vertex
         if gpr.vtx.vType != Branch:
           return err((gpr.vid,DelBranchExpexted))
-        db.disposeOfVtx(hike.root, par.vid)              # `par` is obsolete now
+        db.disposeOfVtx((hike.root, par.vid))            # `par` is obsolete now
         gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
-        db.layersPutVtx(hike.root, gpr.vid, gpr.vtx)
-        db.layersPutVtx(hike.root, lf.vid, lf.vtx)
+        db.layersPutVtx((hike.root, gpr.vid), gpr.vtx)
+        db.layersPutVtx((hike.root, lf.vid), lf.vtx)
         return ok()
 
       # No grandparent, so ^3 is root vertex             # (3)
-      db.layersPutVtx(hike.root, par.vid, lf.vtx)
+      db.layersPutVtx((hike.root, par.vid), lf.vtx)
       # Continue below
 
     of Leaf:
@@ -222,12 +221,11 @@ proc collapseLeaf(
 
   else:                                                  # (4)
     # Replace ^2 by `^2 & vtx` (use `lf` as-is)          # `br` is root vertex
-    db.layersResKey(hike.root, br.vid)                   # root was changed
-    db.layersPutVtx(hike.root, br.vid, lf.vtx)
+    db.layersUpdateVtx((hike.root, br.vid), lf.vtx)
     # Continue below
 
   # Clean up stale leaf vertex which has moved to root position
-  db.disposeOfVtx(hike.root, lf.vid)
+  db.disposeOfVtx((hike.root, lf.vid))
 
   ok()
 
@@ -240,7 +238,7 @@ proc delSubTreeImpl(
   ## Implementation of *delete* sub-trie.
   var
     dispose = @[root]
-    rootVtx = db.getVtxRc(root).valueOr:
+    rootVtx = db.getVtxRc((root, root)).valueOr:
       if error == GetVtxNotFound:
         return ok()
       return err(error)
@@ -252,14 +250,14 @@ proc delSubTreeImpl(
     for vtx in follow:
       for vid in vtx.subVids:
         # Exiting here leaves the tree as-is
-        let vtx = ? db.getVtxRc(vid)
+        let vtx = ? db.getVtxRc((root, vid))
         redo.add vtx
         dispose.add vid
     redo.swap follow
 
   # Mark collected vertices to be deleted
   for vid in dispose:
-    db.disposeOfVtx(root, vid)
+    db.disposeOfVtx((root, vid))
 
   ok()
 
@@ -275,7 +273,7 @@ proc deleteImpl(
   if lf.vtx.vType != Leaf:
     return err((lf.vid,DelLeafExpexted))
 
-  db.disposeOfVtx(hike.root, lf.vid)
+  db.disposeOfVtx((hike.root, lf.vid))
 
   if 1 < hike.legs.len:
     # Get current `Branch` vertex `br`
@@ -288,12 +286,12 @@ proc deleteImpl(
 
     # Unlink child vertex from structural table
     br.vtx.bVid[hike.legs[^2].nibble] = VertexID(0)
-    db.layersPutVtx(hike.root, br.vid, br.vtx)
+    db.layersPutVtx((hike.root, br.vid), br.vtx)
 
     # Clear all Merkle hash keys up to the root key
     for n in 0 .. hike.legs.len - 2:
       let vid = hike.legs[n].wp.vid
-      db.layersResKey(hike.root, vid)
+      db.layersResKey((hike.root, vid))
 
     let nibble = block:
       let rc = br.vtx.branchStillNeeded()
@@ -306,7 +304,7 @@ proc deleteImpl(
       # Get child vertex (there must be one after a `Branch` node)
       let nxt = block:
         let vid = br.vtx.bVid[nibble]
-        VidVtxPair(vid: vid, vtx: db.getVtx vid)
+        VidVtxPair(vid: vid, vtx: db.getVtx (hike.root, vid))
       if not nxt.vtx.isValid:
         return err((nxt.vid, DelVidStaleVtx))
 
@@ -379,7 +377,7 @@ proc deleteGenericData*(
   db.deleteImpl(hike).isOkOr:
     return err(error[1])
 
-  ok(not db.getVtx(root).isValid)
+  ok(not db.getVtx((root, root)).isValid)
 
 proc deleteGenericTree*(
     db: AristoDbRef;                   # Database, top layer
@@ -433,15 +431,15 @@ proc deleteStorageData*(
     return err(error[1])
 
   # Make sure that an account leaf has no dangling sub-trie
-  if db.getVtx(stoID).isValid:
+  if db.getVtx((stoID, stoID)).isValid:
     return ok(false)
 
   # De-register the deleted storage tree from the account record
   let leaf = wpAcc.vtx.dup           # Dup on modify
   leaf.lData.stoID = VertexID(0)
   db.layersPutStoID(accPath, VertexID(0))
-  db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
-  db.layersResKey(VertexID(1), wpAcc.vid)
+  db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
+  db.layersResKey((accHike.root, wpAcc.vid))
   ok(true)
 
 proc deleteStorageTree*(
@@ -471,8 +469,8 @@ proc deleteStorageTree*(
   let leaf = wpAcc.vtx.dup             # Dup on modify
   leaf.lData.stoID = VertexID(0)
   db.layersPutStoID(accPath, VertexID(0))
-  db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
-  db.layersResKey(VertexID(1), wpAcc.vid)
+  db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
+  db.layersResKey((accHike.root, wpAcc.vid))
   ok()
 
 # ------------------------------------------------------------------------------

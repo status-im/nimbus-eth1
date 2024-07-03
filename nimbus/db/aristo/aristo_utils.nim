@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
   eth/common,
   results,
   "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
@@ -25,6 +24,7 @@ import
 
 proc toNode*(
     vtx: VertexRef;                    # Vertex to convert
+    root: VertexID;
     db: AristoDbRef;                   # Database, top layer
     stopEarly = true;                  # Full list of missing links if `false`
     beKeyOk = true;                    # Allow fetching DB backend keys
@@ -40,16 +40,16 @@ proc toNode*(
   ## only from the cache layer. This does not affect a link key for a payload
   ## storage root.
   ##
-  proc getKey(db: AristoDbRef; vid: VertexID; beOk: bool): HashKey =
+  proc getKey(db: AristoDbRef; rvid: RootedVertexID; beOk: bool): HashKey =
     block body:
-      let key = db.layersGetKey(vid).valueOr:
+      let key = db.layersGetKey(rvid).valueOr:
         break body
       if key.isValid:
         return key
       else:
         return VOID_HASH_KEY
     if beOk:
-      let rc = db.getKeyBE vid
+      let rc = db.getKeyBE rvid
       if rc.isOk:
         return rc.value
     VOID_HASH_KEY
@@ -61,7 +61,7 @@ proc toNode*(
     if vtx.lData.pType == AccountData:
       let vid = vtx.lData.stoID
       if vid.isValid:
-        let key = db.getKey vid
+        let key = db.getKey (root, vid)
         if not key.isValid:
           return err(@[vid])
         node.key[0] = key
@@ -73,7 +73,7 @@ proc toNode*(
     for n in 0 .. 15:
       let vid = vtx.bVid[n]
       if vid.isValid:
-        let key = db.getKey(vid, beOk=beKeyOk)
+        let key = db.getKey((root, vid), beOk=beKeyOk)
         if key.isValid:
           node.key[n] = key
         elif stopEarly:
@@ -87,7 +87,7 @@ proc toNode*(
   of Extension:
     let
       vid = vtx.eVid
-      key = db.getKey(vid, beOk=beKeyOk)
+      key = db.getKey((root, vid), beOk=beKeyOk)
     if not key.isValid:
       return err(@[vid])
     let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vid)
@@ -119,9 +119,8 @@ proc updateAccountForHasher*(
   ## The argument `hike` is used to mark/reset the keys along the implied
   ## vertex path for being re-calculated.
   ##
-  # Clear Merkle keys so that `hasify()` can calculate the re-hash forest/tree
-  for w in hike.legs.mapIt(it.wp.vid):
-    db.layersResKey(hike.root, w)
+  for w in hike.legs:
+    db.layersResKey((hike.root, w.wp.vid))
 
 # ------------------------------------------------------------------------------
 # End

@@ -71,8 +71,9 @@ type
     DeblobSizeGarbled
     DeblobWrongType
     DeblobWrongSize
-    DeblobPayloadTooShortInt64
-    DeblobPayloadTooShortInt256
+    Deblob64LenUnsupported
+    Deblob256LenUnsupported
+    DeblobRVidLenUnsupported
     DeblobNonceLenUnsupported
     DeblobBalanceLenUnsupported
     DeblobStorageLenUnsupported

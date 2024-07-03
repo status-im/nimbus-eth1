@@ -17,34 +17,31 @@ import
 
 
 proc computeKey*(
-    db: AristoDbRef;                   # Database, top layer
-    vid: VertexID;                    # Vertex to convert
+    db: AristoDbRef;                  # Database, top layer
+    rvid: RootedVertexID;             # Vertex to convert
       ): Result[HashKey, AristoError] =
   # This is a variation on getKeyRc which computes the key instead of returning
   # an error
   # TODO it should not always write the key to the persistent storage
 
-  proc getKey(db: AristoDbRef; vid: VertexID): HashKey =
+  proc getKey(db: AristoDbRef; rvid: RootedVertexID): HashKey =
     block body:
-      let key = db.layersGetKey(vid).valueOr:
+      let key = db.layersGetKey(rvid).valueOr:
         break body
       if key.isValid:
         return key
       else:
         return VOID_HASH_KEY
-    let rc = db.getKeyBE vid
+    let rc = db.getKeyBE rvid
     if rc.isOk:
       return rc.value
     VOID_HASH_KEY
 
-  let key = getKey(db, vid)
+  let key = getKey(db, rvid)
   if key.isValid():
-    # debugEcho "ok ", vid, " ", key
     return ok key
 
-  #let vtx = db.getVtx(vid)
-  #doAssert vtx.isValid()
-  let vtx = ? db.getVtxRc vid
+  let vtx = ? db.getVtxRc rvid
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   var rlp = initRlpWriter()
@@ -56,21 +53,12 @@ proc computeKey*(
     # Need to resolve storage root for account leaf
     case vtx.lData.pType
     of AccountData:
-      let vid = vtx.lData.stoID
-      let key = if vid.isValid:
-        ?db.computeKey(vid)
-        # if not key.isValid:
-        #   block looseCoupling:
-        #     when LOOSE_STORAGE_TRIE_COUPLING:
-        #       # Stale storage trie?
-        #       if LEAST_FREE_VID <= vid.distinctBase and
-        #          not db.getVtx(vid).isValid:
-        #         node.lData.account.storageID = VertexID(0)
-        #         break looseCoupling
-        #     # Otherwise this is a stale storage trie.
-        #     return err(@[vid])
-      else:
-        VOID_HASH_KEY
+      let
+        stoID = vtx.lData.stoID
+        key = if stoID.isValid:
+          ?db.computeKey((stoID, stoID))
+        else:
+          VOID_HASH_KEY
 
       rlp.append(encode Account(
         nonce:       vtx.lData.account.nonce,
@@ -86,7 +74,7 @@ proc computeKey*(
     for n in 0..15:
       let vid = vtx.bVid[n]
       if vid.isValid:
-        rlp.append(?db.computeKey(vid))
+        rlp.append(?db.computeKey((rvid.root, vid)))
       else:
         rlp.append(VOID_HASH_KEY)
     rlp.append EmptyBlob
@@ -94,14 +82,13 @@ proc computeKey*(
   of Extension:
     rlp.startList(2)
     rlp.append(vtx.ePfx.toHexPrefix(isleaf = false))
-    rlp.append(?db.computeKey(vtx.eVid))
+    rlp.append(?db.computeKey((rvid.root, vtx.eVid)))
 
   let h = rlp.finish().digestTo(HashKey)
   # TODO This shouldn't necessarily go into the database if we're just computing
   #      a key ephemerally - it should however be cached for some tiem since
   #      deep hash computations are expensive
-  # debugEcho "putkey ", vtx.vType, " ", vid, " ", h, " ", toHex(rlp.finish)
-  db.layersPutKey(VertexID(1), vid, h)
+  db.layersPutKey(rvid, h)
   ok h
 
 

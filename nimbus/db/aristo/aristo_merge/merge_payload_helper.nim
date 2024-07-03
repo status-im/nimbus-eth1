@@ -36,18 +36,11 @@ proc xPfx(vtx: VertexRef): NibblesBuf =
 proc clearMerkleKeys(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Implied vertex IDs to clear hashes for
-    vid: VertexID;                     # Additionall vertex IDs to clear
+    vid: VertexID;                     # Additional vertex IDs to clear
       ) =
   for w in hike.legs:
-    db.layersResKey(hike.root, w.wp.vid)
-  db.layersResKey(hike.root, vid)
-
-proc setVtxAndKey*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;
-    vid: VertexID;                     # Vertex IDs to add/clear
-    vtx: VertexRef;                    # Vertex to add
-      ) {.gcsafe.}
+    db.layersResKey((hike.root, w.wp.vid))
+  db.layersResKey((hike.root, vid))
 
 # -----------
 
@@ -111,7 +104,7 @@ proc insertBranch(
         local = db.vidFetch(pristine = true)
         linkDup = linkVtx.dup
 
-      db.setVtxAndKey(hike.root, local, linkDup)
+      db.layersUpdateVtx((hike.root, local), linkDup)
       linkDup.lPfx = linkDup.lPfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
@@ -124,7 +117,7 @@ proc insertBranch(
         local = db.vidFetch
         linkDup = linkVtx.dup
 
-      db.setVtxAndKey(hike.root, local, linkDup)
+      db.layersUpdateVtx((hike.root, local), linkDup)
       linkDup.ePfx = linkDup.ePfx.slice(1+n)
       forkVtx.bVid[linkInx] = local
 
@@ -136,7 +129,7 @@ proc insertBranch(
       vType: Leaf,
       lPfx:  hike.tail.slice(1+n),
       lData: payload)
-    db.setVtxAndKey(hike.root, local, leafLeg.wp.vtx)
+    db.layersUpdateVtx((hike.root, local), leafLeg.wp.vtx)
 
   # Update branch leg, ready to append more legs
   var okHike = Hike(root: hike.root, legs: hike.legs)
@@ -148,7 +141,7 @@ proc insertBranch(
       ePfx:  hike.tail.slice(0,n),
       eVid:  db.vidFetch)
 
-    db.setVtxAndKey(hike.root, linkID, extVtx)
+    db.layersUpdateVtx((hike.root, linkID), extVtx)
 
     okHike.legs.add Leg(
       nibble: -1,
@@ -156,7 +149,7 @@ proc insertBranch(
         vid: linkID,
         vtx: extVtx))
 
-    db.setVtxAndKey(hike.root, extVtx.eVid, forkVtx)
+    db.layersUpdateVtx((hike.root, extVtx.eVid), forkVtx)
     okHike.legs.add Leg(
       nibble: leafInx.int8,
       wp:     VidVtxPair(
@@ -164,7 +157,7 @@ proc insertBranch(
         vtx: forkVtx))
 
   else:
-    db.setVtxAndKey(hike.root, linkID, forkVtx)
+    db.layersUpdateVtx((hike.root, linkID), forkVtx)
     okHike.legs.add Leg(
       nibble: leafInx.int8,
       wp:     VidVtxPair(
@@ -208,24 +201,11 @@ proc concatBranchAndLeaf(
       lPfx:  hike.tail.slice(1),
       lData: payload)
   brDup.bVid[nibble] = vid
-  db.setVtxAndKey(hike.root, brVid, brDup)
-  db.setVtxAndKey(hike.root, vid, vtx)
+  db.layersUpdateVtx((hike.root, brVid), brDup)
+  db.layersUpdateVtx((hike.root, vid), vtx)
   okHike.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
   ok okHike
-
-# ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
-
-proc setVtxAndKey*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;
-    vid: VertexID;                     # Vertex IDs to add/clear
-    vtx: VertexRef;                    # Vertex to add
-      ) =
-  db.layersPutVtx(root, vid, vtx)
-  db.layersResKey(root, vid)
 
 # ------------------------------------------------------------------------------
 # Private functions: add Particia Trie leaf vertex
@@ -250,7 +230,7 @@ proc mergePayloadTopIsBranchAddLeaf(
     parent = hike.legs[^1].wp.vid
     branch = hike.legs[^1].wp.vtx
     linkID = branch.bVid[nibble]
-    linkVtx = db.getVtx linkID
+    linkVtx = db.getVtx (hike.root, linkID)
 
   if not linkVtx.isValid:
     #
@@ -291,7 +271,7 @@ proc mergePayloadTopIsExtAddLeaf(
     extVtx = hike.legs[^1].wp.vtx
     extVid = hike.legs[^1].wp.vid
     brVid = extVtx.eVid
-    brVtx = db.getVtx brVid
+    brVtx = db.getVtx (hike.root, brVid)
 
   var okHike = Hike(root: hike.root, legs: hike.legs)
 
@@ -307,7 +287,7 @@ proc mergePayloadTopIsExtAddLeaf(
       vType: Leaf,
       lPfx:  extVtx.ePfx & hike.tail,
       lData: payload)
-    db.setVtxAndKey(hike.root, extVid, vtx)
+    db.layersUpdateVtx((hike.root, extVid), vtx)
     okHike.legs[^1].wp.vtx = vtx
 
   elif brVtx.vType != Branch:
@@ -338,8 +318,8 @@ proc mergePayloadTopIsExtAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     brDup.bVid[nibble] = vid
-    db.setVtxAndKey(hike.root, brVid, brDup)
-    db.setVtxAndKey(hike.root, vid, vtx)
+    db.layersUpdateVtx((hike.root, brVid), brDup)
+    db.layersUpdateVtx((hike.root, vid), vtx)
     okHike.legs.add Leg(wp: VidVtxPair(vtx: brDup, vid: brVid), nibble: nibble)
     okHike.legs.add Leg(wp: VidVtxPair(vtx: vtx, vid: vid), nibble: -1)
 
@@ -370,8 +350,8 @@ proc mergePayloadTopIsEmptyAddLeaf(
         lPfx:  hike.tail.slice(1),
         lData: payload)
     rootDup.bVid[nibble] = leafVid
-    db.setVtxAndKey(hike.root, hike.root, rootDup)
-    db.setVtxAndKey(hike.root, leafVid, leafVtx)
+    db.layersUpdateVtx((hike.root, hike.root), rootDup)
+    db.layersUpdateVtx((hike.root, leafVid), leafVtx)
     return ok Hike(
       root: hike.root,
       legs: @[Leg(wp: VidVtxPair(vtx: rootDup, vid: hike.root), nibble: nibble),
@@ -405,11 +385,11 @@ proc mergePayloadUpdate(
     hike.legs[^1].wp.vtx = vtx
 
     # Modify top level cache
-    db.setVtxAndKey(hike.root, vid, vtx)
+    db.layersUpdateVtx((hike.root, vid), vtx)
     db.clearMerkleKeys(hike, vid)
     ok hike
 
-  elif db.layersGetVtx(leafLeg.wp.vid).isErr:
+  elif db.layersGetVtx((hike.root, leafLeg.wp.vid)).isErr:
     err(MergeLeafPathOnBackendAlready)
 
   else:
@@ -448,7 +428,7 @@ proc mergePayloadImpl*(
 
   else:
     # Empty hike
-    let rootVtx = db.getVtx hike.root
+    let rootVtx = db.getVtx (hike.root, hike.root)
     if rootVtx.isValid:
       okHike = ? db.mergePayloadTopIsEmptyAddLeaf(hike,rootVtx, payload)
 
@@ -460,7 +440,7 @@ proc mergePayloadImpl*(
           vType: Leaf,
           lPfx:  nibblesPath,
           lData: payload))
-      db.setVtxAndKey(hike.root, wp.vid, wp.vtx)
+      db.layersUpdateVtx((hike.root, wp.vid), wp.vtx)
       okHike = Hike(root: wp.vid, legs: @[Leg(wp: wp, nibble: -1)])
 
     # Double check the result (may be removed in future)

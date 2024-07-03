@@ -55,10 +55,10 @@ proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[Blob,(AristoError,string)] =
 
 proc getKey*(
     rdb: var RdbInst;
-    vid: VertexID;
+    rvid: RootedVertexID;
       ): Result[HashKey,(AristoError,string)] =
   # Try LRU cache first
-  var rc = rdb.rdKeyLru.lruFetch(vid)
+  var rc = rdb.rdKeyLru.lruFetch(rvid.vid)
   if rc.isOK:
     return ok(move(rc.value))
 
@@ -68,10 +68,10 @@ proc getKey*(
     res = HashKey.fromBytes(data).mapErr(proc(): auto =
       (RdbHashKeyExpected,""))
 
-  let gotData = rdb.keyCol.get(vid.blobify().data(), onData).valueOr:
+  let gotData = rdb.keyCol.get(rvid.blobify().data(), onData).valueOr:
      const errSym = RdbBeDriverGetKeyError
      when extraTraceMessages:
-       trace logTxt "getKey", vid, error=errSym, info=error
+       trace logTxt "getKey", rvid, error=errSym, info=error
      return err((errSym,error))
 
   # Correct result if needed
@@ -81,14 +81,14 @@ proc getKey*(
     return res # Parsing failed
 
   # Update cache and return
-  ok rdb.rdKeyLru.lruAppend(vid, res.value(), RdKeyLruMaxSize)
+  ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), RdKeyLruMaxSize)
 
 proc getVtx*(
     rdb: var RdbInst;
-    vid: VertexID;
+    rvid: RootedVertexID;
       ): Result[VertexRef,(AristoError,string)] =
   # Try LRU cache first
-  var rc = rdb.rdVtxLru.lruFetch(vid)
+  var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
   if rc.isOK:
     return ok(move(rc.value))
 
@@ -98,7 +98,7 @@ proc getVtx*(
     res = data.deblobify(VertexRef).mapErr(proc(error: AristoError): auto =
       (error,""))
 
-  let gotData = rdb.vtxCol.get(vid.blobify().data(), onData).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
     when extraTraceMessages:
       trace logTxt "getVtx", vid, error=errSym, info=error
@@ -110,7 +110,7 @@ proc getVtx*(
     return res # Parsing failed
 
   # Update cache and return
-  ok rdb.rdVtxLru.lruAppend(vid, res.value(), RdVtxLruMaxSize)
+  ok rdb.rdVtxLru.lruAppend(rvid.vid, res.value(), RdVtxLruMaxSize)
 
 # ------------------------------------------------------------------------------
 # End

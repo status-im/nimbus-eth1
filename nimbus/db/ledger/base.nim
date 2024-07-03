@@ -64,7 +64,7 @@ when EnableApiTracking:
 
   func `$`(w: CodeBytesRef): string {.used.} = w.toStr
   func `$`(e: Duration): string {.used.} = e.toStr
-  func `$`(c: CoreDbMptRef): string {.used.} = c.toStr
+  # func `$`(c: CoreDbMptRef): string {.used.} = c.toStr
   func `$`(l: seq[Log]): string {.used.} = l.toStr
   func `$`(h: Hash256): string {.used.} = h.toStr
   func `$`(a: EthAddress): string {.used.} = a.toStr

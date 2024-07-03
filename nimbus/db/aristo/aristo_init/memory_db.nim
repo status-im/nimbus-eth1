@@ -43,8 +43,8 @@ const
 type
   MemDbRef = ref object
     ## Database
-    sTab: Table[VertexID,Blob]       ## Structural vertex table making up a trie
-    kMap: Table[VertexID,HashKey]    ## Merkle hash key mapping
+    sTab: Table[RootedVertexID,Blob]       ## Structural vertex table making up a trie
+    kMap: Table[RootedVertexID,HashKey]    ## Merkle hash key mapping
     tUvi: Option[VertexID]           ## Top used vertex ID
     lSst: Opt[SavedState]            ## Last saved state
 
@@ -53,8 +53,8 @@ type
     mdb: MemDbRef                    ## Database
 
   MemPutHdlRef = ref object of TypedPutHdlRef
-    sTab: Table[VertexID,Blob]
-    kMap: Table[VertexID,HashKey]
+    sTab: Table[RootedVertexID,Blob]
+    kMap: Table[RootedVertexID,HashKey]
     tUvi: Option[VertexID]
     lSst: Opt[SavedState]
 
@@ -89,21 +89,21 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 
 proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
-    proc(vid: VertexID): Result[VertexRef,AristoError] =
+    proc(rvid: RootedVertexID): Result[VertexRef,AristoError] =
       # Fetch serialised data record
-      let data = db.mdb.sTab.getOrDefault(vid, EmptyBlob)
+      let data = db.mdb.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:
         let rc = data.deblobify(VertexRef)
         when extraTraceMessages:
           if rc.isErr:
-            trace logTxt "getVtxFn() failed", vid, error=rc.error
+            trace logTxt "getVtxFn() failed", rvid, error=rc.error
         return rc
       err(GetVtxNotFound)
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
-    proc(vid: VertexID): Result[HashKey,AristoError] =
-      let key = db.mdb.kMap.getOrVoid vid
+    proc(rvid: RootedVertexID): Result[HashKey,AristoError] =
+      let key = db.mdb.kMap.getOrVoid rvid
       if key.isValid:
         return ok key
       err(GetKeyNotFound)
@@ -132,7 +132,7 @@ proc putBegFn(db: MemBackendRef): PutBegFn =
 
 proc putVtxFn(db: MemBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; vid: VertexID; vtx: VertexRef) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vtx.isValid:
@@ -140,19 +140,19 @@ proc putVtxFn(db: MemBackendRef): PutVtxFn =
           if rc.isErr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  VtxPfx,
-              vid:  vid,
+              vid:  rvid.vid,
               code: rc.error)
             return
-          hdl.sTab[vid] = rc.value
+          hdl.sTab[rvid] = rc.value
         else:
-          hdl.sTab[vid] = EmptyBlob
+          hdl.sTab[rvid] = EmptyBlob
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
   result =
-    proc(hdl: PutHdlRef; vid: VertexID, key: HashKey) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        hdl.kMap[vid] = key
+        hdl.kMap[rvid] = key
 
 proc putTuvFn(db: MemBackendRef): PutTuvFn =
   result =
@@ -254,26 +254,26 @@ proc dup*(db: MemBackendRef): MemBackendRef =
 
 iterator walkVtx*(
     be: MemBackendRef;
-      ): tuple[vid: VertexID, vtx: VertexRef] =
+      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
-  for n,vid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
-    let data = be.mdb.sTab.getOrDefault(vid, EmptyBlob)
+  for n,rvid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
+    let data = be.mdb.sTab.getOrDefault(rvid, EmptyBlob)
     if 0 < data.len:
       let rc = data.deblobify VertexRef
       if rc.isErr:
         when extraTraceMessages:
-          debug logTxt "walkVtxFn() skip", n, vid, error=rc.error
+          debug logTxt "walkVtxFn() skip", n, rvid, error=rc.error
       else:
-        yield (vid, rc.value)
+        yield (rvid, rc.value)
 
 iterator walkKey*(
     be: MemBackendRef;
-      ): tuple[vid: VertexID, key: HashKey] =
+      ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Iteration over the Markle hash sub-table.
-  for vid in be.mdb.kMap.keys.toSeq.mapIt(it).sorted:
-    let key = be.mdb.kMap.getOrVoid vid
+  for rvid in be.mdb.kMap.keys.toSeq.mapIt(it).sorted:
+    let key = be.mdb.kMap.getOrVoid(rvid)
     if key.isValid:
-      yield (vid, key)
+      yield (rvid, key)
 
 
 # ------------------------------------------------------------------------------

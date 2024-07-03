@@ -29,8 +29,9 @@ proc getBeStateRoot(
       ): Result[HashKey,AristoError] =
   ## Get the Merkle hash key for the current backend state root and check
   ## validity of top layer.
+  const rvid = (VertexID(1), VertexID(1))
   let srcRoot = block:
-    let rc = db.getKeyBE VertexID(1)
+    let rc = db.getKeyBE rvid
     if rc.isOk:
       rc.value
     elif rc.error == GetKeyNotFound:
@@ -38,11 +39,11 @@ proc getBeStateRoot(
     else:
       return err(rc.error)
 
-  if db.top.delta.kMap.getOrVoid(VertexID 1).isValid:
+  if db.top.delta.kMap.getOrVoid(rvid).isValid:
     return ok(srcRoot)
 
-  elif not db.top.delta.kMap.hasKey(VertexID 1) and
-       not db.top.delta.sTab.hasKey(VertexID 1):
+  elif not db.top.delta.kMap.hasKey(rvid) and
+       not db.top.delta.sTab.hasKey(rvid):
     # This layer is unusable, need both: vertex and key
     return err(TxPrettyPointlessLayer)
 
@@ -62,7 +63,8 @@ proc getBeStateRoot(
 proc topMerge(db: AristoDbRef; src: HashKey): Result[void,AristoError] =
   ## Merge the `top` layer into the read-only balacer layer.
   let ubeRoot = block:
-    let rc = db.getKeyUbe VertexID(1)
+    const rvid = (VertexID(1), VertexID(1))
+    let rc = db.getKeyUbe rvid
     if rc.isOk:
       rc.value
     elif rc.error == GetKeyNotFound:
@@ -120,7 +122,7 @@ proc txStow*(
         doAssert rc.error == GetTuvNotFound
 
   elif db.top.delta.sTab.len != 0 and
-       not db.top.delta.sTab.getOrVoid(VertexID(1)).isValid:
+       not db.top.delta.sTab.getOrVoid((VertexID(1), VertexID(1))).isValid:
     # Currently, a `VertexID(1)` root node is required
     return err(TxAccRootMissing)
 

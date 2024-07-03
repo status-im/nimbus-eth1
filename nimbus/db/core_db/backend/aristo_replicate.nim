@@ -37,7 +37,7 @@ template call(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
   kvt.distinctBase.parent.kvtApi.call(fn, args)
 
 # ---------------
-  
+
 template mpt(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
   dsc.distinctBase.mpt
 
@@ -67,10 +67,10 @@ iterator aristoReplicate[T](
   ##
   let p = mpt.call(forkTx, mpt.mpt, 0).valueOrApiError "aristoReplicate()"
   defer: discard mpt.call(forget, p)
-  for (vid,key,vtx,node) in T.replicate(p):
+  for (rvid,key,vtx,node) in T.replicate(p):
     if key.len == 32:
       yield (@(key.data), node.encode)
-    elif vid == mpt.rootID:
+    elif rvid.vid == mpt.rootID:
       yield (@(key.to(Hash256).data), node.encode)
 
 # End

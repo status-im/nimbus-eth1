@@ -24,6 +24,10 @@ type
     buf*: array[sizeof(I), byte]
     len*: byte
 
+  RVidBuf* = object
+    buf*: array[sizeof(RlpBuf[VertexID]) * 2, byte]
+    len*: byte
+
 func significantBytesBE(val: openArray[byte]): byte =
   for i in 0 ..< val.len:
     if val[i] != 0:
@@ -43,9 +47,26 @@ template data*(v: RlpBuf): openArray[byte] =
   vv.buf.toOpenArray(vv.buf.len - int(vv.len), vv.buf.high)
 
 
+func blobify*(rvid: RootedVertexID): RVidBuf =
+  # Length-prefixed root encoding creates a unique and common prefix for all
+  # verticies sharing the same root
+  # TODO evaluate an encoding that colocates short roots (like VertexID(1)) with
+  #      the length
+  let root = rvid.root.blobify()
+  result.buf[0] = root.len
+  assign(result.buf.toOpenArray(1, root.len), root.data())
+
+  if rvid.root == rvid.vid:
+    result.len = root.len + 1
+  else:
+    # We can derive the length of the `vid` from the total length
+    let vid = rvid.vid.blobify()
+    assign(result.buf.toOpenArray(root.len + 1, root.len + vid.len), vid.data())
+    result.len = root.len + 1 + vid.len
+
 proc deblobify*[T: uint64|VertexID](data: openArray[byte], _: type T): Result[T,AristoError] =
   if data.len < 1 or data.len > 8:
-    return err(DeblobPayloadTooShortInt64)
+    return err(Deblob64LenUnsupported)
 
   var tmp: array[8, byte]
   discard tmp.toOpenArray(8 - data.len, 7).copyFrom(data)
@@ -54,9 +75,29 @@ proc deblobify*[T: uint64|VertexID](data: openArray[byte], _: type T): Result[T,
 
 proc deblobify*(data: openArray[byte], _: type UInt256): Result[UInt256,AristoError] =
   if data.len < 1 or data.len > 32:
-    return err(DeblobPayloadTooShortInt256)
+    return err(Deblob256LenUnsupported)
 
   ok UInt256.fromBytesBE(data)
+
+func deblobify*(data: openArray[byte], T: type RootedVertexID): Result[T, AristoError] =
+  let rlen = int(data[0])
+  if data.len < 2:
+    return err(DeblobRVidLenUnsupported)
+
+  if data.len < rlen + 1:
+    return err(DeblobRVidLenUnsupported)
+
+  let
+    root = ?deblobify(data.toOpenArray(1, rlen), VertexID)
+    vid = if data.len > rlen + 1:
+      ?deblobify(data.toOpenArray(rlen + 1, data.high()), VertexID)
+    else:
+      root
+  ok (root, vid)
+
+template data*(v: RVidBuf): openArray[byte] =
+  let vv = v
+  vv.buf.toOpenArray(0, vv.len - 1)
 
 # ------------------------------------------------------------------------------
 # Private helper
@@ -64,7 +105,7 @@ proc deblobify*(data: openArray[byte], _: type UInt256): Result[UInt256,AristoEr
 
 proc load64(data: openArray[byte]; start: var int, len: int): Result[uint64,AristoError] =
   if data.len < start + len:
-    return err(DeblobPayloadTooShortInt64)
+    return err(Deblob256LenUnsupported)
 
   let val = ?deblobify(data.toOpenArray(start, start + len - 1), uint64)
   start += len
@@ -72,7 +113,7 @@ proc load64(data: openArray[byte]; start: var int, len: int): Result[uint64,Aris
 
 proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,AristoError] =
   if data.len < start + len:
-    return err(DeblobPayloadTooShortInt256)
+    return err(Deblob256LenUnsupported)
   let val = ?deblobify(data.toOpenArray(start, start + len - 1), UInt256)
   start += len
   ok val
@@ -331,3 +372,7 @@ proc deblobify*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
+
+var a: RootedVertexID = (VertexID(2), VertexID(2))
+
+doAssert a == deblobify(a.blobify().data(), RootedVertexID).value()

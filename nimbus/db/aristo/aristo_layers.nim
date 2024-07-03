@@ -20,7 +20,7 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-func dup(sTab: Table[VertexID,VertexRef]): Table[VertexID,VertexRef] =
+func dup(sTab: Table[RootedVertexID,VertexRef]): Table[RootedVertexID,VertexRef] =
   ## Explicit dup for `VertexRef` values
   for (k,v) in sTab.pairs:
     result[k] = v.dup
@@ -56,40 +56,40 @@ func nLayersKey*(db: AristoDbRef): int =
 # Public functions: getter variants
 # ------------------------------------------------------------------------------
 
-func layersGetVtx*(db: AristoDbRef; vid: VertexID): Opt[VertexRef] =
+func layersGetVtx*(db: AristoDbRef; rvid: RootedVertexID): Opt[VertexRef] =
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
-  db.top.delta.sTab.withValue(vid, item):
+  db.top.delta.sTab.withValue(rvid, item):
     return Opt.some(item[])
 
   for w in db.rstack:
-    w.delta.sTab.withValue(vid, item):
+    w.delta.sTab.withValue(rvid, item):
       return Opt.some(item[])
 
   Opt.none(VertexRef)
 
-func layersGetVtxOrVoid*(db: AristoDbRef; vid: VertexID): VertexRef =
+func layersGetVtxOrVoid*(db: AristoDbRef; rvid: RootedVertexID): VertexRef =
   ## Simplified version of `layersGetVtx()`
-  db.layersGetVtx(vid).valueOr: VertexRef(nil)
+  db.layersGetVtx(rvid).valueOr: VertexRef(nil)
 
 
-func layersGetKey*(db: AristoDbRef; vid: VertexID): Opt[HashKey] =
+func layersGetKey*(db: AristoDbRef; rvid: RootedVertexID): Opt[HashKey] =
   ## Find a hash key on the cache layers. An `ok()` result might contain a void
   ## hash key if it is stored on the cache that way.
   ##
-  db.top.delta.kMap.withValue(vid, item):
+  db.top.delta.kMap.withValue(rvid, item):
     return Opt.some(item[])
 
   for w in db.rstack:
-    w.delta.kMap.withValue(vid, item):
+    w.delta.kMap.withValue(rvid, item):
       return ok(item[])
 
   Opt.none(HashKey)
 
-func layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
+func layersGetKeyOrVoid*(db: AristoDbRef; rvid: RootedVertexID): HashKey =
   ## Simplified version of `layersGetKey()`
-  db.layersGetKey(vid).valueOr: VOID_HASH_KEY
+  db.layersGetKey(rvid).valueOr: VOID_HASH_KEY
 
 func layersGetStoID*(db: AristoDbRef; accPath: Hash256): Opt[VertexID] =
   db.top.delta.accSids.withValue(accPath, item):
@@ -107,37 +107,44 @@ func layersGetStoID*(db: AristoDbRef; accPath: Hash256): Opt[VertexID] =
 
 func layersPutVtx*(
     db: AristoDbRef;
-    root: VertexID;
-    vid: VertexID;
+    rvid: RootedVertexID;
     vtx: VertexRef;
       ) =
   ## Store a (potentally empty) vertex on the top layer
-  db.top.delta.sTab[vid] = vtx
+  db.top.delta.sTab[rvid] = vtx
 
 func layersResVtx*(
     db: AristoDbRef;
-    root: VertexID;
-    vid: VertexID;
+    rvid: RootedVertexID;
       ) =
   ## Shortcut for `db.layersPutVtx(vid, VertexRef(nil))`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutVtx(root, vid, VertexRef(nil))
+  db.layersPutVtx(rvid, VertexRef(nil))
 
 
 func layersPutKey*(
     db: AristoDbRef;
-    root: VertexID;
-    vid: VertexID;
+    rvid: RootedVertexID;
     key: HashKey;
       ) =
   ## Store a (potentally void) hash key on the top layer
-  db.top.delta.kMap[vid] = key
+  db.top.delta.kMap[rvid] = key
 
 
-func layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =
+func layersResKey*(db: AristoDbRef; rvid: RootedVertexID) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutKey(root, vid, VOID_HASH_KEY)
+  db.layersPutKey(rvid, VOID_HASH_KEY)
+
+proc layersUpdateVtx*(
+    db: AristoDbRef;                   # Database, top layer
+    rvid: RootedVertexID;
+    vtx: VertexRef;                    # Vertex to add
+      ) =
+  ## Update a vertex at `rvid` and reset its associated key entry
+  db.layersPutVtx(rvid, vtx)
+  db.layersResKey(rvid)
+
 
 func layersPutStoID*(db: AristoDbRef; accPath: Hash256; stoID: VertexID) =
   db.top.delta.accSids[accPath] = stoID
@@ -193,7 +200,7 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
 iterator layersWalkVtx*(
     db: AristoDbRef;
     seen: var HashSet[VertexID];
-      ): tuple[vid: VertexID, vtx: VertexRef] =
+      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Walk over all `(VertexID,VertexRef)` pairs on the cache layers. Note that
   ## entries are unsorted.
   ##
@@ -201,40 +208,40 @@ iterator layersWalkVtx*(
   ## the one with a zero vertex which are othewise skipped by the iterator.
   ## The `seen` argument must not be modified while the iterator is active.
   ##
-  for (vid,vtx) in db.top.delta.sTab.pairs:
-    yield (vid,vtx)
-    seen.incl vid
+  for (rvid,vtx) in db.top.delta.sTab.pairs:
+    yield (rvid,vtx)
+    seen.incl rvid.vid
 
   for w in db.rstack:
-    for (vid,vtx) in w.delta.sTab.pairs:
-      if vid notin seen:
-        yield (vid,vtx)
-        seen.incl vid
+    for (rvid,vtx) in w.delta.sTab.pairs:
+      if rvid.vid notin seen:
+        yield (rvid,vtx)
+        seen.incl rvid.vid
 
 iterator layersWalkVtx*(
     db: AristoDbRef;
-      ): tuple[vid: VertexID, vtx: VertexRef] =
+      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Variant of `layersWalkVtx()`.
   var seen: HashSet[VertexID]
-  for (vid,vtx) in db.layersWalkVtx seen:
-    yield (vid,vtx)
+  for (rvid,vtx) in db.layersWalkVtx seen:
+    yield (rvid,vtx)
 
 
 iterator layersWalkKey*(
     db: AristoDbRef;
-      ): tuple[vid: VertexID, key: HashKey] =
+      ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Walk over all `(VertexID,HashKey)` pairs on the cache layers. Note that
   ## entries are unsorted.
   var seen: HashSet[VertexID]
-  for (vid,key) in db.top.delta.kMap.pairs:
-    yield (vid,key)
-    seen.incl vid
+  for (rvid,key) in db.top.delta.kMap.pairs:
+    yield (rvid,key)
+    seen.incl rvid.vid
 
   for w in db.rstack:
-    for (vid,key) in w.delta.kMap.pairs:
-      if vid notin seen:
-        yield (vid,key)
-        seen.incl vid
+    for (rvid,key) in w.delta.kMap.pairs:
+      if rvid.vid notin seen:
+        yield (rvid,key)
+        seen.incl rvid.vid
 
 # ------------------------------------------------------------------------------
 # End
