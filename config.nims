@@ -173,3 +173,11 @@ when not defined(use_system_rocksdb) and not defined(windows):
 
 when defined(gcc):
   switch("passc", "-Wno-error=incompatible-pointer-types")
+
+# This applies per-file compiler flags to C files
+# which do not support {.localPassC: "...".}
+# Unfortunately this is filename based instead of path-based
+# Assumes GCC
+
+# -fomit-frame-pointer for https://github.com/status-im/nimbus-eth1/issues/2127
+put("secp256k1.always", "-fomit-frame-pointer")
