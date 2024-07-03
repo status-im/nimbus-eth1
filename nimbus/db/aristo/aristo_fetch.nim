@@ -17,7 +17,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_compute, aristo_desc, aristo_get, aristo_hike]
+  "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -116,13 +116,22 @@ proc fetchAccountHike*(
 
   ok(move(hike))
 
-
 proc fetchStorageID*(
     db: AristoDbRef;
     accPath: Hash256;
       ): Result[VertexID,AristoError] =
   ## Public helper function fro retrieving a storage (vertex) ID for a
   ## given account.
+
+  if (let stoID = db.layersGetStoID(accPath); stoID.isSome()):
+    if not stoID[].isValid():
+      return err(FetchPathNotFound)
+    return ok stoID[]
+
+  let accKey = accPath.to(AccountKey)
+  if (let stoID = db.accSids.lruFetch(accKey); stoID.isSome()):
+    return ok stoID[]
+
   let
     payload = db.retrievePayload(VertexID(1), accPath.data).valueOr:
       if error == FetchAccInaccessible:
@@ -134,7 +143,9 @@ proc fetchStorageID*(
   if not stoID.isValid:
     return err(FetchPathNotFound)
 
-  ok stoID
+  # If we didn't find a cached storage ID in the layers, we must be using the
+  # database version which we cache here, even across database commits
+  ok db.accSids.lruAppend(accKey, stoID, accLruSize)
 
 # ------------------------------------------------------------------------------
 # Public functions

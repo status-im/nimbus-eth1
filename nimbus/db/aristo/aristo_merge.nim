@@ -136,6 +136,7 @@ proc mergeStorageData*(
       # Make sure that there is an account that refers to that storage trie
       let leaf = wpAcc.vtx.dup # Dup on modify
       leaf.lData.stoID = useID
+      db.layersPutStoID(accPath, useID)
       db.layersPutVtx(VertexID(1), wpAcc.vid, leaf)
       db.layersResKey(VertexID(1), wpAcc.vid)
       return ok()

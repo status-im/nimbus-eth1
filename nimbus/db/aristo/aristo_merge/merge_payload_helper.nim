@@ -419,7 +419,7 @@ proc mergePayloadUpdate(
     if vid in db.pPrf:
       return err(MergeLeafProofModeLock)
 
-    # Update accounts storage root which is handled implicitely
+    # Update accounts storage root which is handled implicitly
     if hike.root == VertexID(1):
       payload.stoID = leafLeg.wp.vtx.lData.stoID
 

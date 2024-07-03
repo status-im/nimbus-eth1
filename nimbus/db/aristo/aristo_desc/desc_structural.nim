@@ -112,6 +112,8 @@ type
     kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                  ## Last used vertex ID
 
+    accSids*: Table[Hash256, VertexID] ## Account path -> stoID
+
   LayerFinalRef* = ref object
     ## Final tables fully supersede tables on lower layers when stacked as a
     ## whole. Missing entries on a higher layers are the final state (for the
