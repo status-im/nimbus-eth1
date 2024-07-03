@@ -31,7 +31,7 @@ func isTop*(tx: AristoTxRef): bool =
   ## level transaction.
   tx.txFrameIsTop()
 
-func level*(tx: AristoTxRef): int =
+func txLevel*(tx: AristoTxRef): int =
   ## Getter, positive nesting level of transaction argument `tx`
   tx.txFrameLevel()
 

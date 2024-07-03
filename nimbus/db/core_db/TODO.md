@@ -1,4 +1,3 @@
-* Re-implement *getOldestJournalBlockNumber()* and
-  *getLatestJournalBlockNumber()* (from the `core_apps` module) via the CoreDb
-  base api. Currently this api is bypassed (via the *backend()* directive). The
-  functionality is directly provided by the `Aristo` backend.
+* Refactor `handlers_tracer`. This module can reliably work only as a genuine
+  logger. The restore features were ill concieved, an attempt to be as close
+  as possible to the legacy tracer.

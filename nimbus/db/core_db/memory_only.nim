@@ -24,20 +24,7 @@ export
   base,
   base_iterators,
   common,
-  core_apps,
-
-  # see `aristo_db`
-  isAristo,
-  toAristo,
-  toAristoProfData,
-  toAristoSavedStateBlockNumber,
-
-  # Standard interface for calculating merkle hash signatures (see `aristo`)
-  MerkleSignRef,
-  merkleSignBegin,
-  merkleSignAdd,
-  merkleSignCommit,
-  to
+  core_apps
 
 # ------------------------------------------------------------------------------
 # Public constructors

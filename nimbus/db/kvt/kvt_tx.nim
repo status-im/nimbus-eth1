@@ -32,7 +32,7 @@ func isTop*(tx: KvtTxRef): bool =
   ## level transaction.
   tx.txFrameIsTop()
 
-func level*(tx: KvtTxRef): int =
+func txLevel*(tx: KvtTxRef): int =
   ## Getter, positive nesting level of transaction argument `tx`
   tx.txFrameLevel()
 

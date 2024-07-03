@@ -20,21 +20,22 @@ import
 
 type
   CoreDbApiTrackRef* =
-    CoreDbRef | CoreDbKvtRef |
-    CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
-    CoreDbTxRef | CoreDbCaptRef | CoreDbErrorRef
+    # CoreDbCaptRef |
+    CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
+    CoreDbTxRef
 
   CoreDbFnInx* = enum
     ## Profiling table index
     SummaryItem         = "total"
 
+    AccClearStorageFn   = "clearStorage"
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
     AccForgetFn         = "acc/forget"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
+    AccRecastFn         = "recast"
     AccStateFn          = "acc/state"
-    AccClearStorageFn   = "acc/clearStorage"
 
     AccSlotFetchFn      = "slotFetch"
     AccSlotDeleteFn     = "slotDelete"
@@ -45,17 +46,13 @@ type
     AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
     AccSlotPairsIt      = "slotPairs"
 
-    AnyBackendFn        = "any/backend"
-
-    BaseDbTypeFn        = "dbType"
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"
     BaseNewCaptureFn    = "newCapture"
-    BaseNewCtxFn        = "ctx"
     BaseNewCtxFromTxFn  = "ctxFromTx"
-    BaseNewKvtFn        = "newKvt"
     BaseNewTxFn         = "newTransaction"
     BasePersistentFn    = "persistent"
+    BaseStateBlockNumberFn = "stateBlockNumber"
     BaseSwapCtxFn       = "swapCtx"
 
     CptFlagsFn          = "cpt/flags"
@@ -65,14 +62,9 @@ type
 
     CtxForgetFn         = "ctx/forget"
     CtxGetAccountsFn    = "getAccounts"
-    CtxGetColumnFn      = "getColumn"
-    CtxNewColFn         = "ctx/newColumn"
-
-    ErrorPrintFn        = "$$"
-    EthAccRecastFn      = "recast"
+    CtxGetGenericFn     = "getGeneric"
 
     KvtDelFn            = "del"
-    KvtForgetFn         = "forget"
     KvtGetFn            = "get"
     KvtGetOrEmptyFn     = "getOrEmpty"
     KvtHasKeyFn         = "hasKey"
@@ -111,7 +103,11 @@ func toStr*(w: Hash256): string =
   if w == EMPTY_ROOT_HASH: "EMPTY_ROOT_HASH" else: w.data.oaToStr
 
 proc toStr*(e: CoreDbErrorRef): string =
-  $e.error & "(" & e.parent.methods.errorPrintFn(e) & ")"
+  result = $e.error & "("
+  result &= (if e.isAristo: "Aristo" else: "Kvt")
+  result &= ", ctx=" & $e.ctx & ", error="
+  result &= (if e.isAristo: $e.aErr else: $e.kErr)
+  result &= ")"
 
 func toLenStr*(w: openArray[byte]): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
@@ -156,7 +152,7 @@ proc toStr*(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
 proc toStr*(rc: CoreDbRc[CoreDbAccount]): string = rc.toStr "acc"
 proc toStr*(rc: CoreDbRc[CoreDbKvtRef]): string = rc.toStr "kvt"
 proc toStr*(rc: CoreDbRc[CoreDbTxRef]): string = rc.toStr "tx"
-proc toStr*(rc: CoreDbRc[CoreDbCaptRef]): string = rc.toStr "capt"
+#proc toStr*(rc: CoreDbRc[CoreDbCaptRef]): string = rc.toStr "capt"
 proc toStr*(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
 proc toStr*(rc: CoreDbRc[CoreDbMptRef]): string = rc.toStr "mpt"
 proc toStr*(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"
@@ -177,9 +173,12 @@ template endNewApiIf*(w: CoreDbApiTrackRef; code: untyped) =
   block body:
     when typeof(w) is CoreDbRef:
       let db = w
-    else:
+    elif typeof(w) is CoreDbTxRef:
+      let db = w.ctx.parent
       if w.isNil: break body
-      let db = w.parent
+    else:
+      let db = w.distinctBase.parent
+      if w.distinctBase.isNil: break body
     when CoreDbEnableApiProfiling:
       let elapsed {.inject,used.} = getTime() - bnaStart
       aristo_profile.update(db.profTab, bnaCtx.ord, elapsed)

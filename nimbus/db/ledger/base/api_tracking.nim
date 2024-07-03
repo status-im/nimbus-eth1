@@ -97,9 +97,6 @@ func toStr*(w: EthAddress): string =
 func toStr*(w: Hash256): string =
   w.data.oaToStr
 
-func toStr*(w: CoreDbMptRef): string =
-  if w.CoreDbMptRef.isNil: "nil" else: "MptRef"
-
 func toStr*(w: CodeBytesRef): string =
   if w.CodeBytesRef.isNil: "nil"
   else: "[" & $w.bytes.len & "]"

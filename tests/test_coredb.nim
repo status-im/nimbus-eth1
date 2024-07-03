@@ -357,7 +357,7 @@ when isMainModule:
           #dbType = CdbAristoDualRocks,
           capture = capture,
           pruneHistory = true,
-          #profilingOk = true,
+          profilingOk = true,
           #finalDiskCleanUpOk = false,
           oldLogAlign = true
         )

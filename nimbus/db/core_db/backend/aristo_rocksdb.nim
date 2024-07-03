@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
   eth/common,
   rocksdb,
   results,
@@ -23,10 +22,9 @@ import
   ../../kvt/kvt_init/rocks_db/rdb_init,
   ../base,
   ./aristo_db,
-  ./aristo_db/[common_desc, handlers_aristo],
   ../../opts
 
-include ./aristo_db/aristo_replicate
+include ./aristo_replicate
 
 const
   # Expectation messages
@@ -34,7 +32,7 @@ const
   kvtFail = "Kvt/RocksDB init() failed"
 
 # Annotation helper(s)
-{.pragma: rlpRaise, gcsafe, raises: [AristoApiRlpError].}
+{.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
 
 proc toRocksDb*(
     opts: DbOptions
@@ -171,15 +169,6 @@ proc newAristoDualRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, dbOpts, cfOpts).valueOr:
       raiseAssert kvtFail & ": " & $error
   AristoDbRocks.create(kdb, adb)
-
-# ------------------------------------------------------------------------------
-# Public aristo iterators
-# ------------------------------------------------------------------------------
-
-iterator aristoReplicateRdb*(dsc: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
-  ## Instantiation for `VoidBackendRef`
-  for k, v in aristoReplicate[use_ari.RdbBackendRef](dsc):
-    yield (k, v)
 
 # ------------------------------------------------------------------------------
 # End

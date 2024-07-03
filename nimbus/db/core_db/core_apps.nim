@@ -310,15 +310,7 @@ proc getSavedStateBlockNumber*(
   ## Returns the block number registered when the database was last time
   ## updated, or `BlockNumber(0)` if there was no updata found.
   ##
-  ## This function verifies the state consistency of the database and throws
-  ## an assert exception if that fails. So the function will only apply to a
-  ## saved database state. For an an opportunistic use, the `relax` argument
-  ## can be set `true` so this function also returns the block number if the
-  ## state consistency check fails.
-  ##
-  # FIXME: This construct following will be replaced by a proper
-  #        `CoreDb` method.
-  db.ctx.getColumn(CtGeneric).backend.toAristoSavedStateBlockNumber()
+  db.stateBlockNumber()
 
 proc getBlockHeader*(
     db: CoreDbRef;
