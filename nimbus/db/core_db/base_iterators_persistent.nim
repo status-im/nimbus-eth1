@@ -13,9 +13,15 @@
 import
   std/typetraits,
   eth/common,
-  ./backend/[aristo_db, aristo_rocksdb],
+  ../aristo as use_ari,
+  ../aristo/aristo_init/rocks_db,
+  ../aristo/[aristo_desc, aristo_walk/persistent, aristo_tx],
+  ../kvt, # needed for `aristo_replicate`
   ./base/[api_tracking, base_desc],
   ./base
+
+include
+  ./backend/aristo_replicate
 
 when CoreDbEnableApiTracking:
   import chronicles
@@ -35,18 +41,18 @@ iterator replicatePersistent*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
   ## Extended version of `replicate()` for `Aristo` persistent backend.
   ##
   mpt.setTrackNewApi MptReplicateIt
-  case mpt.distinctBase.parent.dbType:
+  case mpt.dbType:
   of AristoDbMemory:
-    for k,v in aristoReplicateMem(mpt):
+    for k,v in aristoReplicate[use_ari.MemBackendRef](mpt):
       yield (k,v)
   of AristoDbVoid:
-    for k,v in aristoReplicateVoid(mpt):
+    for k,v in aristoReplicate[use_ari.VoidBackendRef](mpt):
       yield (k,v)
   of AristoDbRocks:
-    for k,v in aristoReplicateRdb(mpt):
-      yield (k,v)
+    for k, v in aristoReplicate[rocks_db.RdbBackendRef](mpt):
+      yield (k, v)
   else:
-    raiseAssert: "Unsupported database type: " & $mpt.distinctBase.parent.dbType
+    raiseAssert: "Unsupported database type: " & $mpt.dbType
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
 # ------------------------------------------------------------------------------

@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, typetraits],
   eth/common,
   rocksdb,
   results,
@@ -170,15 +169,6 @@ proc newAristoDualRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, dbOpts, cfOpts).valueOr:
       raiseAssert kvtFail & ": " & $error
   AristoDbRocks.create(kdb, adb)
-
-# ------------------------------------------------------------------------------
-# Public aristo iterators
-# ------------------------------------------------------------------------------
-
-iterator aristoReplicateRdb*(dsc: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
-  ## Instantiation for `VoidBackendRef`
-  for k, v in aristoReplicate[use_ari.RdbBackendRef](dsc):
-    yield (k, v)
 
 # ------------------------------------------------------------------------------
 # End

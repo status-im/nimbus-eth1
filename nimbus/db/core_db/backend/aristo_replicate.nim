@@ -19,6 +19,9 @@
 template valueOrApiError[U,V](rc: Result[U,V]; info: static[string]): U =
   rc.valueOr: raise (ref CoreDbApiError)(msg: info)
 
+template dbType(dsc: CoreDbKvtRef | CoreDbMptRef | CoreDbAccRef): CoreDbType =
+  dsc.distinctBase.parent.dbType
+
 # ---------------
 
 template kvt(dsc: CoreDbKvtRef): KvtDbRef =
