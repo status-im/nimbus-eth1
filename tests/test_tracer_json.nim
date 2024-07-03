@@ -70,11 +70,6 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   # Set up production MPT
   doAssert adb.mergeProof(proof).isOk
 
-  # Remove locks so that hashify can re-assign changed nodes
-  adb.top.final.pPrf.clear
-  adb.top.final.fRpp.clear
-
-
 # use tracerTestGen.nim to generate additional test data
 proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: CoreDbRef) =
   setErrorLevel()

@@ -86,18 +86,6 @@ proc stripZeros(a: string; toExp = false): string =
       elif 2 < n:
         result &= "↑" & $n
 
-proc vidCode(key: HashKey, db: AristoDbRef): uint64 =
-  if key.isValid:
-    block:
-      let vid = db.layerGetProofVidOrVoid key
-      if vid.isValid:
-        db.xMap.add(key, vid)
-        return vid.uint64
-    block:
-      let vids = db.xMap.getOrVoid key
-      if vids.isValid:
-        return vids.sortedKeys[0].uint64
-
 # ---------------------
 
 proc ppKeyOk(
@@ -106,11 +94,6 @@ proc ppKeyOk(
     vid: VertexID;
       ): string =
   if key.isValid and vid.isValid:
-    block:
-      let vid = db.layerGetProofVidOrVoid key
-      if vid.isValid:
-        db.xMap.add(key, vid)
-        return
     block:
       let vids = db.xMap.getOrVoid key
       if vids.isValid:
@@ -162,11 +145,6 @@ proc ppVidList(vLst: openArray[VertexID]): string =
 
 proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
   proc getVids(): tuple[vids: HashSet[VertexID], xMapTag: string] =
-    block:
-      let vid = db.layerGetProofVidOrVoid key
-      if vid.isValid:
-        db.xMap.add(key, vid)
-        return (@[vid].toHashSet, "")
     block:
       let vids = db.xMap.getOrVoid key
       if vids.isValid:
@@ -221,7 +199,7 @@ proc ppVtx(nd: VertexRef, db: AristoDbRef, vid: VertexID): string =
   if not nd.isValid:
     result = "ø"
   else:
-    if not vid.isValid or vid in db.pPrf:
+    if not vid.isValid:
       result = ["L(", "X(", "B("][nd.vType.ord]
     elif db.layersGetKey(vid).isOk:
       result = ["l(", "x(", "b("][nd.vType.ord]
@@ -249,21 +227,6 @@ proc ppSTab(
             .mapIt((it, sTab.getOrVoid it))
             .mapIt("(" & it[0].ppVid & "," & it[1].ppVtx(db,it[0]) & ")")
             .join(indent.toPfx(1)) & "}"
-
-proc ppPPrf(pPrf: HashSet[VertexID]): string =
-  result = "{"
-  if 0 < pPrf.len:
-    let isr = IntervalSetRef[VertexID,uint64].init()
-    for w in pPrf:
-      doAssert isr.merge(w,w) == 1
-    for iv in isr.increasing():
-      result &= iv.minPt.ppVid
-      if 1 < iv.len:
-        result &= ".. " & iv.maxPt.ppVid
-      result &= ", "
-    result.setlen(result.len - 2)
-    #result &= pPrf.sortedKeys.mapIt(it.ppVid).join(",")
-  result &= "}"
 
 proc ppXMap*(
     db: AristoDbRef;
@@ -341,10 +304,7 @@ proc ppXMap*(
   for vid in kMap.sortedKeys:
     let key = kMap.getOrVoid vid
     if key.isValid:
-      cache.add (vid.uint64, key.vidCode(db), vid in multi)
-      let vids = db.xMap.getOrVoid key
-      if (0 < vids.len and vid notin vids) or key.len < 32:
-        cache[^1][2] = true
+      discard # TODO obsolete - clean up?
     else:
       cache.add (vid.uint64, 0u64, true)
 
@@ -376,16 +336,6 @@ proc ppXMap*(
     result[^1] = '}'
   else:
     result &= "}"
-
-proc ppFRpp(
-    fRpp: Table[HashKey,VertexID];
-    db: AristoDbRef;
-    indent = 4;
-      ): string =
-  let
-    xMap = fRpp.pairs.toSeq.mapIt((it[1],it[0])).toTable
-    xStr = db.ppXMap(xMap, indent)
-  "<" & xStr[1..^2] & ">"
 
 proc ppFilter(
     fl: LayerDeltaRef;
@@ -468,14 +418,12 @@ proc ppLayer(
     vTopOk: bool;
     sTabOk: bool;
     kMapOk: bool;
-    pPrfOk: bool;
-    fRppOk: bool;
     indent = 4;
       ): string =
   let
     pfx1 = indent.toPfx(1)
     pfx2 = indent.toPfx(2)
-    nOKs = vTopOk.ord + sTabOk.ord + kMapOk.ord + pPrfOk.ord + fRppOk.ord
+    nOKs = vTopOk.ord + sTabOk.ord + kMapOk.ord
     tagOk = 1 < nOKs
   var
     pfy = ""
@@ -510,16 +458,6 @@ proc ppLayer(
         info = "kMap(" & lInf & ")"
       result &= info.doPrefix(0 < tLen + uLen)
       result &= db.ppXMap(layer.delta.kMap, indent+2)
-    if pPrfOk:
-      let
-        tLen = layer.final.pPrf.len
-        info = "pPrf(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.final.pPrf.ppPPrf
-    if fRppOk:
-      let
-        tLen = layer.final.fRpp.len
-        info = "fRpp(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.final.fRpp.ppFRpp(db,indent+2)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -610,9 +548,6 @@ proc pp*(
       ): string =
   sTab.ppSTab(db.orDefault)
 
-proc pp*(pPrf: HashSet[VertexID]): string =
-  pPrf.ppPPrf
-
 proc pp*(leg: Leg; db = AristoDbRef(nil)): string =
   let db = db.orDefault()
   result = "(" & leg.wp.vid.ppVid & ","
@@ -669,7 +604,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vTopOk=true, sTabOk=true, kMapOk=true, pPrfOk=true, fRppOk=true)
+    db, vTopOk=true, sTabOk=true, kMapOk=true)
 
 proc pp*(
     layer: LayerRef;
@@ -678,7 +613,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vTopOk=true, sTabOk=xTabOk, kMapOk=true, pPrfOk=true, fRppOk=true)
+    db, vTopOk=true, sTabOk=xTabOk, kMapOk=true)
 
 proc pp*(
     layer: LayerRef;
@@ -689,7 +624,7 @@ proc pp*(
     indent = 4;
       ): string =
   layer.ppLayer(
-    db, vTopOk=other, sTabOk=xTabOk, kMapOk=kMapOk, pPrfOk=other, fRppOk=other)
+    db, vTopOk=other, sTabOk=xTabOk, kMapOk=kMapOk)
 
 
 proc pp*(

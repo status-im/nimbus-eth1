@@ -100,11 +100,6 @@ proc txStow*(
   if rc.isErr and rc.error != TxPrettyPointlessLayer:
     return err(rc.error)
 
-  # Special treatment for `snap` proofs (aka `chunkedMpt`)
-  let final =
-    if chunkedMpt: LayerFinalRef(fRpp: db.top.final.fRpp)
-    else: LayerFinalRef()
-
   # Move/merge/install `top` layer onto `balancer`
   if rc.isOk:
     db.topMerge(rc.value).isOkOr:
@@ -112,8 +107,7 @@ proc txStow*(
 
     # New empty top layer (probably with `snap` proofs and `vTop` carry over)
     db.top = LayerRef(
-      delta: LayerDeltaRef(),
-      final: final)
+      delta: LayerDeltaRef())
     if db.balancer.isValid:
       db.top.delta.vTop = db.balancer.vTop
     else:
@@ -137,7 +131,6 @@ proc txStow*(
   # New empty top layer (probably with `snap` proofs carry over)
   db.top = LayerRef(
     delta: LayerDeltaRef(vTop: db.vTop),
-    final: final,
     txUid: db.top.txUid)
   ok()
 

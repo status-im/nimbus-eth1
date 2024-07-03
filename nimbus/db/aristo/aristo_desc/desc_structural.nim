@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sets, tables],
+  std/[hashes, tables],
   eth/common,
   "."/[desc_error, desc_identifiers]
 
@@ -114,23 +114,11 @@ type
 
     accSids*: Table[Hash256, VertexID] ## Account path -> stoID
 
-  LayerFinalRef* = ref object
-    ## Final tables fully supersede tables on lower layers when stacked as a
-    ## whole. Missing entries on a higher layers are the final state (for the
-    ## the top layer version of the table.)
-    ##
-    ## These structures are used for tables which are typically smaller then
-    ## the ones on the `LayerDelta` object.
-    ##
-    pPrf*: HashSet[VertexID]         ## Locked vertices (proof nodes)
-    fRpp*: Table[HashKey,VertexID]   ## Key lookup for `pPrf[]` (proof nodes)
-
   LayerRef* = ref LayerObj
   LayerObj* = object
     ## Hexary trie database layer structures. Any layer holds the full
     ## change relative to the backend.
     delta*: LayerDeltaRef            ## Most structural tables held as deltas
-    final*: LayerFinalRef            ## Stored as latest version
     txUid*: uint                     ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
@@ -139,8 +127,7 @@ type
 
 func init*(T: type LayerRef): T =
   ## Constructor, returns empty layer
-  T(delta: LayerDeltaRef(),
-    final: LayerFinalRef())
+  T(delta: LayerDeltaRef())
 
 func hash*(node: NodeRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
@@ -270,12 +257,6 @@ func dup*(node: NodeRef): NodeRef =
         vType: Branch,
         bVid:  node.bVid,
         key:   node.key)
-
-func dup*(final: LayerFinalRef): LayerFinalRef =
-  ## Duplicate final layer.
-  LayerFinalRef(
-    pPrf:  final.pPrf,
-    fRpp:  final.fRpp)
 
 func dup*(wp: VidVtxPair): VidVtxPair =
   ## Safe copy of `wp` argument

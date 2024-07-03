@@ -29,9 +29,6 @@ func dup(sTab: Table[VertexID,VertexRef]): Table[VertexID,VertexRef] =
 # Public getters: lazy value lookup for read only versions
 # ------------------------------------------------------------------------------
 
-func pPrf*(db: AristoDbRef): lent HashSet[VertexID] =
-  db.top.final.pPrf
-
 func vTop*(db: AristoDbRef): VertexID =
   db.top.delta.vTop
 
@@ -94,20 +91,6 @@ func layersGetKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
   ## Simplified version of `layersGetKey()`
   db.layersGetKey(vid).valueOr: VOID_HASH_KEY
 
-
-func layerGetProofKeyOrVoid*(db: AristoDbRef; vid: VertexID): HashKey =
-  ## Get the hash key of a proof node if it was registered as such.
-  if vid in db.top.final.pPrf:
-    db.top.delta.kMap.getOrVoid vid
-  else:
-    VOID_HASH_KEY
-
-func layerGetProofVidOrVoid*(db: AristoDbRef; key: HashKey): VertexID =
-  ## Reverse look up for a registered proof node or a link key for such a
-  ## node. The vertex for a returned vertex ID might not exist if the
-  ## argument `key` refers to a link key of a registered proof node.
-  db.top.final.fRpp.getOrVoid key
-
 func layersGetStoID*(db: AristoDbRef; accPath: Hash256): Opt[VertexID] =
   db.top.delta.accSids.withValue(accPath, item):
     return Opt.some(item[])
@@ -156,27 +139,6 @@ func layersResKey*(db: AristoDbRef; root: VertexID; vid: VertexID) =
   ## equivalent of a delete function.
   db.layersPutKey(root, vid, VOID_HASH_KEY)
 
-
-func layersPutProof*(db: AristoDbRef; vid: VertexID; key: HashKey) =
-  ## Register a link key of a proof node.
-  let lKey = db.layersGetKeyOrVoid vid
-  if not lKey.isValid or lKey != key:
-    db.top.delta.kMap[vid] = key
-  db.top.final.fRpp[key] = vid
-
-func layersPutProof*(
-    db: AristoDbRef;
-    vid: VertexID;
-    key: HashKey;
-    vtx: VertexRef;
-      ) =
-  ## Register a full proof node (not only a link key.)
-  let lVtx = db.layersGetVtxOrVoid vid
-  if not lVtx.isValid or lVtx != vtx:
-    db.top.delta.sTab[vid] = vtx
-  db.top.final.pPrf.incl vid
-  db.layersPutProof(vid, key)
-
 func layersPutStoID*(db: AristoDbRef; accPath: Hash256; stoID: VertexID) =
   db.top.delta.accSids[accPath] = stoID
 
@@ -188,7 +150,6 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   ## Merges the argument `src` into the argument `trg` and returns `trg`. For
   ## the result layer, the `txUid` value set to `0`.
   ##
-  trg.final = src.final
   trg.txUid = 0
 
   for (vid,vtx) in src.delta.sTab.pairs:
@@ -209,7 +170,6 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
 
   # Set up initial layer (bottom layer)
   result = LayerRef(
-    final: layers[^1].final.dup,               # Pre-merged/final values
     delta: LayerDeltaRef(
       sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
       kMap: layers[0].delta.kMap,

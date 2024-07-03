@@ -16,7 +16,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, typetraits],
+  std/typetraits,
   eth/common,
   results,
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers,
@@ -274,8 +274,6 @@ proc deleteImpl(
   let lf =  hike.legs[^1].wp
   if lf.vtx.vType != Leaf:
     return err((lf.vid,DelLeafExpexted))
-  if lf.vid in db.pPrf:
-    return err((lf.vid, DelLeafLocked))
 
   db.disposeOfVtx(hike.root, lf.vid)
 
@@ -295,8 +293,6 @@ proc deleteImpl(
     # Clear all Merkle hash keys up to the root key
     for n in 0 .. hike.legs.len - 2:
       let vid = hike.legs[n].wp.vid
-      if vid in db.top.final.pPrf:
-        return err((vid, DelBranchLocked))
       db.layersResKey(hike.root, vid)
 
     let nibble = block:
