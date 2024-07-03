@@ -37,7 +37,7 @@ export
   aristo_constants, desc_error, desc_identifiers, desc_structural, keyed_queue
 
 const
-  accLruSize* = 128 * 1024
+  accLruSize* = 1024 * 1024
     # LRU cache size for accounts that have storage
 
 type
