@@ -23,6 +23,7 @@
 
 import
   std/[hashes, sets, tables],
+  stew/keyed_queue,
   eth/common,
   results,
   ./aristo_constants,
@@ -33,7 +34,11 @@ from ./aristo_desc/desc_backend
 
 # Not auto-exporting backend
 export
-  aristo_constants, desc_error, desc_identifiers, desc_structural
+  aristo_constants, desc_error, desc_identifiers, desc_structural, keyed_queue
+
+const
+  accLruSize* = 128 * 1024
+    # LRU cache size for accounts that have storage
 
 type
   AristoTxRef* = ref object
@@ -58,6 +63,12 @@ type
     centre: AristoDbRef               ## Link to peer with write permission
     peers: HashSet[AristoDbRef]       ## List of all peers
 
+  AccountKey* = distinct ref Hash256
+    # `ref` version of the account path / key
+    # `KeyedQueue` is inefficient for large keys, so we have to use this ref
+    # workaround to not experience a memory explosion in the account cache
+    # TODO rework KeyedQueue to deal with large keys and/or heterogenous lookup
+
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
@@ -72,12 +83,30 @@ type
     # Debugging data below, might go away in future
     xMap*: Table[HashKey,HashSet[VertexID]] ## For pretty printing/debugging
 
+    accSids*: KeyedQueue[AccountKey, VertexID]
+      ## Account path to storage id cache, for contract accounts - storage is
+      ## frequently accessed by account path when contracts interact with it -
+      ## this cache ensures that we don't have to re-travers the storage trie
+      ## path for every such interaction - a better solution would probably be
+      ## to cache this in a type exposed to the high-level API
+
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
 
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
+
+template hash*(a: AccountKey): Hash =
+  mixin hash
+  hash((ref Hash256)(a)[])
+
+template `==`*(a, b: AccountKey): bool =
+  mixin `==`
+  (ref Hash256)(a)[] == (ref Hash256)(b)[]
+
+template to*(a: Hash256, T: type AccountKey): T =
+  AccountKey((ref Hash256)(data: a.data))
 
 func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
   tab.getOrDefault(w, VertexRef(nil))

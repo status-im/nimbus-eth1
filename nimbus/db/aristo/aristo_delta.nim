@@ -82,6 +82,16 @@ proc deltaPersistent*(
   be.putLstFn(writeBatch, lSst)
   ? be.putEndFn writeBatch                       # Finalise write batch
 
+  # Copy back updated payloads - these only change when storage is written to
+  # the first time or when storage is removed completely
+  for accPath, stoID in db.balancer.accSids:
+    let accKey = accPath.to(AccountKey)
+    if stoID.isValid:
+      if not db.accSids.lruUpdate(accKey, stoID):
+        discard db.accSids.lruAppend(accKey, stoID, accLruSize)
+    else:
+      db.accSids.del(accKey)
+
   # Update dudes and this descriptor
   ? updateSiblings.update().commit()
   ok()

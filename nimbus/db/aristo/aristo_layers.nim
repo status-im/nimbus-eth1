@@ -108,6 +108,16 @@ func layerGetProofVidOrVoid*(db: AristoDbRef; key: HashKey): VertexID =
   ## argument `key` refers to a link key of a registered proof node.
   db.top.final.fRpp.getOrVoid key
 
+func layersGetStoID*(db: AristoDbRef; accPath: Hash256): Opt[VertexID] =
+  db.top.delta.accSids.withValue(accPath, item):
+    return Opt.some(item[])
+
+  for w in db.rstack:
+    w.delta.accSids.withValue(accPath, item):
+      return Opt.some(item[])
+
+  Opt.none(VertexID)
+
 # ------------------------------------------------------------------------------
 # Public functions: setter variants
 # ------------------------------------------------------------------------------
@@ -167,6 +177,9 @@ func layersPutProof*(
   db.top.final.pPrf.incl vid
   db.layersPutProof(vid, key)
 
+func layersPutStoID*(db: AristoDbRef; accPath: Hash256; stoID: VertexID) =
+  db.top.delta.accSids[accPath] = stoID
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -183,7 +196,8 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   for (vid,key) in src.delta.kMap.pairs:
     trg.delta.kMap[vid] = key
   trg.delta.vTop = src.delta.vTop
-
+  for (accPath,stoID) in src.delta.accSids.pairs:
+    trg.delta.accSids[accPath] = stoID
 
 func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
@@ -199,7 +213,9 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
     delta: LayerDeltaRef(
       sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
       kMap: layers[0].delta.kMap,
-      vTop: layers[^1].delta.vTop))
+      vTop: layers[^1].delta.vTop,
+      accSids: layers[0].delta.accSids,
+      ))
 
   # Consecutively merge other layers on top
   for n in 1 ..< layers.len:
@@ -207,6 +223,8 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
       result.delta.sTab[vid] = vtx
     for (vid,key) in layers[n].delta.kMap.pairs:
       result.delta.kMap[vid] = key
+    for (accPath,stoID) in layers[n].delta.accSids.pairs:
+      result.delta.accSids[accPath] = stoID
 
 # ------------------------------------------------------------------------------
 # Public iterators
