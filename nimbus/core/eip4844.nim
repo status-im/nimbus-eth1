@@ -18,6 +18,8 @@ import
   ../constants,
   ../common/common
 
+from std/sequtils import mapIt
+
 {.push raises: [].}
 
 type
@@ -39,7 +41,7 @@ const
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
 proc kzgToVersionedHash*(kzg: kzg.KzgCommitment): VersionedHash =
-  result = sha256.digest(kzg)
+  result = sha256.digest(kzg.bytes)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
@@ -53,14 +55,18 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   if input.len != PrecompileInputLength:
     return err("invalid input length")
 
-  let
-    versionedHash = KzgBytes32.initCopyFrom(input.toOpenArray(0, 31))
-    z =  KzgBytes32.initCopyFrom(input.toOpenArray(32, 63))
-    y =  KzgBytes32.initCopyFrom(input.toOpenArray(64, 95))
-    commitment =  KzgBytes48.initCopyFrom(input.toOpenArray(96, 143))
-    kzgProof =  KzgBytes48.initCopyFrom(input.toOpenArray(144, 191))
+  template copyFrom(T: type, input, a, b): auto =
+    type X = (type T().bytes)
+    T(bytes: X.initCopyFrom(input.toOpenArray(a, b)))
 
-  if kzgToVersionedHash(commitment).data != versionedHash:
+  let
+    versionedHash = KzgBytes32.copyFrom(input, 0, 31)
+    z =  KzgBytes32.copyFrom(input, 32, 63)
+    y =  KzgBytes32.copyFrom(input, 64, 95)
+    commitment =  KzgBytes48.copyFrom(input, 96, 143)
+    kzgProof =  KzgBytes48.copyFrom(input, 144, 191)
+
+  if kzgToVersionedHash(commitment).data != versionedHash.bytes:
     return err("versionedHash should equal to kzgToVersionedHash(commitment)")
 
   # Verify KZG proof
@@ -176,13 +182,14 @@ proc validateBlobTransactionWrapper*(tx: PooledTransaction):
   if not goodFormatted:
     return err("tx wrapper is ill formatted")
 
-  let commitments = tx.networkPayload.commitments
+  let commitments = tx.networkPayload.commitments.mapIt(
+                      kzg.KzgCommitment(bytes: it))
 
   # Verify that commitments match the blobs by checking the KZG proof
   let res = kzg.verifyBlobKzgProofBatch(
-              tx.networkPayload.blobs,
+              tx.networkPayload.blobs.mapIt(kzg.KzgBlob(bytes: it)),
               commitments,
-              tx.networkPayload.proofs)
+              tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it)))
 
   if res.isErr:
     return err(res.error)

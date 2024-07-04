@@ -14,7 +14,7 @@ import
   stew/base10,
   results,
   eth/p2p/discoveryv5/random2,
-  beacon_chain/spec/datatypes/[phase0, altair, bellatrix, capella, deneb],
+  beacon_chain/spec/datatypes/[phase0, altair, bellatrix, capella, deneb, electra],
   beacon_chain/spec/[forks_light_client, digest],
   beacon_chain/beacon_clock,
   beacon_chain/sync/light_client_sync_helpers,
