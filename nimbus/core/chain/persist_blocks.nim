@@ -30,6 +30,7 @@ export results
 
 type
   PersistBlockFlag* = enum
+    NoValidation # Validate the batch instead of validating each block in it
     NoFullValidation # Validate the batch instead of validating each block in it
     NoPersistHeader
     NoPersistTransactions
@@ -115,7 +116,8 @@ proc persistBlocksImpl(
     #      can the state root of the last block still be correct? Dubious, but
     #      what would be the consequences? We would roll back the full set of
     #      blocks which is fairly low-cost.
-    let skipValidation = NoFullValidation in flags and header.number != toBlock
+    let skipValidation =
+      NoFullValidation in flags and header.number != toBlock or NoValidation in flags
 
     c.com.hardForkTransition(header)
 
@@ -174,7 +176,7 @@ proc persistBlocksImpl(
     if NoPersistWithdrawals notin flags and blk.withdrawals.isSome:
       c.db.persistWithdrawals(
         header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
-        blk.withdrawals.get
+        blk.withdrawals.get,
       )
 
     # update currentBlock *after* we persist it

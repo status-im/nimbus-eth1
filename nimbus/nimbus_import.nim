@@ -100,6 +100,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       else:
         File(nil)
     flags =
+      boolFlag({PersistBlockFlag.NoValidation}, conf.noValidation) +
       boolFlag({PersistBlockFlag.NoFullValidation}, not conf.fullValidation) +
       boolFlag(NoPersistBodies, not conf.storeBodies) +
       boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts)
