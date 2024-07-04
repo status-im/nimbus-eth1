@@ -45,8 +45,9 @@ proc processBlock(
   var dbTx = vmState.com.db.newTransaction()
   defer: dbTx.dispose()
 
-  if vmState.com.daoForkSupport and
-     vmState.com.daoForkBlock.get == header.number:
+  let com = vmState.com
+  if com.daoForkSupport and
+     com.daoForkBlock.get == header.number:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
@@ -55,19 +56,19 @@ proc processBlock(
 
   ? processTransactions(vmState, header, blk.transactions)
 
-  if vmState.determineFork >= FkShanghai:
+  if com.isShanghaiOrLater(header.timestamp):
     for withdrawal in blk.withdrawals.get:
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    discard vmState.com.db.persistUncles(blk.uncles)
+    discard com.db.persistUncles(blk.uncles)
 
   # EIP-3675: no reward for miner in POA/POS
-  if vmState.com.consensus == ConsensusType.POW:
+  if com.consensus == ConsensusType.POW:
     vmState.calculateReward(header, blk.uncles)
 
   vmState.mutateStateDB:
-    let clearEmptyAccount = vmState.determineFork >= FkSpurious
+    let clearEmptyAccount = com.isSpuriousOrLater(header.number)
     db.persist(clearEmptyAccount)
 
   dbTx.commit()

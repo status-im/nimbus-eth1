@@ -19,7 +19,6 @@ import
   ../nimbus/evm/memory,
   ../nimbus/evm/code_stream,
   ../nimbus/evm/internals,
-  ../nimbus/evm/types,
   ../nimbus/constants,
   ../nimbus/core/pow/header,
   ../nimbus/db/ledger,
@@ -377,7 +376,7 @@ proc runTestOverflow() =
 
     let privateKey = PrivateKey.fromHex("0000000000000000000000000000000000000000000000000000001000000000")[]
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let res = testCallEvm(tx, tx.getSender, s, FkHomestead)
+    let res = testCallEvm(tx, tx.getSender, s)
 
     when defined(evmc_enabled):
       check res.error == "EVMC_FAILURE"

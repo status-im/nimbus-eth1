@@ -31,7 +31,6 @@ type
   # Standard call parameters.
   CallParams* = object
     vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    forkOverride*: Opt[EVMFork]         # Default fork is usually correct.
     origin*:       Opt[HostAddress]     # Default origin is `sender`.
     gasPrice*:     GasInt               # Gas price for this call.
     gasLimit*:     GasInt               # Maximum gas available for this call.
@@ -133,14 +132,11 @@ proc initialAccessListEIP2929(call: CallParams) =
 
 proc setupHost(call: CallParams): TransactionHost =
   let vmState = call.vmState
-  vmState.setupTxContext(
-    TxContext(
-      origin         : call.origin.get(call.sender),
-      gasPrice       : call.gasPrice,
-      versionedHashes: call.versionedHashes,
-      blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas),
-    ),
-    forkOverride = call.forkOverride
+  vmState.txCtx = TxContext(
+    origin         : call.origin.get(call.sender),
+    gasPrice       : call.gasPrice,
+    versionedHashes: call.versionedHashes,
+    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas),
   )
 
   var intrinsicGas: GasInt = 0

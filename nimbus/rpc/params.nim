@@ -32,8 +32,7 @@ func destination*(args: TransactionArgs): EthAddress =
   ethAddr args.to.get(ZeroAddr)
 
 proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
-                   globalGasCap: GasInt, baseFee: Opt[UInt256],
-                   forkOverride = Opt.none(EVMFork)): EvmResult[CallParams] =
+                   globalGasCap: GasInt, baseFee: Opt[UInt256]): EvmResult[CallParams] =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
@@ -74,7 +73,6 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
 
   ok(CallParams(
     vmState:         vmState,
-    forkOverride:    forkOverride,
     sender:          args.sender,
     to:              args.destination,
     isCreate:        args.to.isNone,

@@ -63,7 +63,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     baseFeePerGas: Opt.none UInt256,   ## ???
   )
   let vmState = ? BaseVMState.new(topHeader, com)
-  let fork    = vmState.determineFork
+  let fork    = vmState.fork
   let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = ? toCallParams(vmState, args, gasCap, header.baseFeePerGas)
 
@@ -147,12 +147,11 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   ok(hi)
 
-proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallParams =
+proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
     vmState:      vmState,
-    forkOverride: Opt.some(fork),
     gasPrice:     tx.gasPrice,
     gasLimit:     tx.gasLimit,
     sender:       sender,
@@ -167,10 +166,9 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
   if tx.txType >= TxEip4844:
     result.versionedHashes = tx.versionedHashes
 
-proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: EVMFork): CallParams =
+proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState): CallParams =
   result = CallParams(
     vmState:      vmState,
-    forkOverride: Opt.some(fork),
     gasPrice:     tx.gasPrice,
     gasLimit:     tx.gasLimit,
     sender:       sender,
@@ -190,16 +188,14 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
 
 proc txCallEvm*(tx: Transaction,
                 sender: EthAddress,
-                vmState: BaseVMState,
-                fork: EVMFork): GasInt =
+                vmState: BaseVMState): GasInt =
   let
-    call = callParamsForTx(tx, sender, vmState, fork)
+    call = callParamsForTx(tx, sender, vmState)
     res = runComputation(call)
   res.gasUsed
 
 proc testCallEvm*(tx: Transaction,
                   sender: EthAddress,
-                  vmState: BaseVMState,
-                  fork: EVMFork): CallResult =
-  let call = callParamsForTest(tx, sender, vmState, fork)
+                  vmState: BaseVMState): CallResult =
+  let call = callParamsForTest(tx, sender, vmState)
   runComputation(call)

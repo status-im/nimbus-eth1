@@ -20,6 +20,12 @@ import
   ./types,
   ./evm_errors
 
+func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
+  forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
+
+func determineFork(vmState: BaseVMState): EVMFork =
+  vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
+
 proc init(
       self:         BaseVMState;
       ac:           LedgerRef,
@@ -37,6 +43,8 @@ proc init(
   self.stateDB = ac
   self.flags = flags
   self.blobGasUsed = 0'u64
+  self.fork = self.determineFork
+  self.gasCosts = self.fork.forkToSchedule
 
 func blockCtx(com: CommonRef, header: BlockHeader):
                 BlockContext =
@@ -271,15 +279,6 @@ proc collectWitnessData*(vmState: BaseVMState): bool =
 proc `collectWitnessData=`*(vmState: BaseVMState, status: bool) =
   if status: vmState.flags.incl CollectWitnessData
   else: vmState.flags.excl CollectWitnessData
-
-func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =
-  # FIXME-Adam: Is this timestamp right? Note that up above in blockNumber we add 1;
-  # should timestamp be adding 12 or something?
-  # Also, can I get the TD? Do I need to?
-  forkDeterminationInfo(vmState.blockNumber, vmState.blockCtx.timestamp)
-
-func determineFork*(vmState: BaseVMState): EVMFork =
-  vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
 
 func tracingEnabled*(vmState: BaseVMState): bool =
   vmState.tracer.isNil.not
