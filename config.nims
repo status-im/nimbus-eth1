@@ -20,10 +20,41 @@ if getEnv("NIMBUS_BUILD_SYSTEM") == "yes" and
    system.fileExists(currentDir & "nimbus-build-system.paths"):
   include "nimbus-build-system.paths"
 
-if defined(release):
-  switch("nimcache", "nimcache/release/$projectName")
+const nimCachePathOverride {.strdefine.} = ""
+when nimCachePathOverride == "":
+  when defined(release):
+    let nimCachePath = "nimcache/release/" & projectName()
+  else:
+    let nimCachePath = "nimcache/debug/" & projectName()
 else:
-  switch("nimcache", "nimcache/debug/$projectName")
+  let nimCachePath = nimCachePathOverride
+switch("nimcache", nimCachePath)
+
+# `-flto` gives a significant improvement in processing speed, specially hash tree and state transition (basically any CPU-bound code implemented in nim)
+# With LTO enabled, optimization flags should be passed to both compiler and linker!
+if defined(release) and not defined(disableLTO):
+  # "-w" is not passed to the compiler during linking, so we need to disable
+  # some warnings by hand.
+  switch("passL", "-Wno-stringop-overflow -Wno-stringop-overread")
+
+  if defined(macosx): # Clang
+    switch("passC", "-flto=thin")
+    switch("passL", "-flto=thin -Wl,-object_path_lto," & nimCachePath & "/lto")
+  elif defined(linux):
+    switch("passC", "-flto=auto")
+    switch("passL", "-flto=auto")
+    switch("passC", "-finline-limit=100000")
+    switch("passL", "-finline-limit=100000")
+  else:
+    # On windows, LTO needs more love and attention so "gcc-ar" and "gcc-ranlib" are
+    # used for static libraries.
+    discard
+
+# Hidden visibility allows for better position-independent codegen - it also
+# resolves a build issue in BLST where otherwise private symbols would require
+# an unsupported relocation on PIE-enabled distros such as ubuntu - BLST itself
+# solves this via a linker script which is messy
+switch("passC", "-fvisibility=hidden")
 
 if defined(windows):
   # disable timestamps in Windows PE headers - https://wiki.debian.org/ReproducibleBuilds/TimestampsInPEBinaries
@@ -180,4 +211,35 @@ when defined(gcc):
 # Assumes GCC
 
 # -fomit-frame-pointer for https://github.com/status-im/nimbus-eth1/issues/2127
-put("secp256k1.always", "-fomit-frame-pointer")
+put("secp256k1.always", "-fno-lto -fomit-frame-pointer")
+
+# ############################################################
+#
+#                    No LTO for crypto
+#
+# ############################################################
+
+# This applies per-file compiler flags to C files
+# which do not support {.localPassC: "-fno-lto".}
+# Unfortunately this is filename based instead of path-based
+# Assumes GCC
+
+# BLST
+put("server.always", "-fno-lto")
+put("assembly.always", "-fno-lto")
+
+
+# BearSSL - only RNGs
+put("aesctr_drbg.always", "-fno-lto")
+put("hmac_drbg.always", "-fno-lto")
+put("sysrng.always", "-fno-lto")
+
+# ############################################################
+#
+#                    Spurious warnings
+#
+# ############################################################
+
+# sqlite3.c: In function ‘sqlite3SelectNew’:
+# vendor/nim-sqlite3-abi/sqlite3.c:124500: warning: function may return address of local variable [-Wreturn-local-addr]
+put("sqlite3.always", "-fno-lto") # -Wno-return-local-addr
