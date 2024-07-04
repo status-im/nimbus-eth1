@@ -151,7 +151,6 @@ template noRlpException(info: static[string]; code: untyped) =
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash): AccountsLedgerRef =
-  const info = "AccountsLedgerRef.init(): "
   new result
   result.ledger = db.ctx.getAccounts()
   result.kvt = db.newKvt() # save manually in `persist()`
@@ -308,11 +307,10 @@ proc originalStorageValue(
 
   # Not in the original values cache - go to the DB.
   let
-    slotKey = slot.toBytesBE.keccakHash.data
+    slotKey = slot.toBytesBE.keccakHash
     rc = ac.ledger.slotFetch(acc.toAccountKey, slotKey)
-  if rc.isOk and 0 < rc.value.len:
-    noRlpException "originalStorageValue()":
-      result = rlp.decode(rc.value, UInt256)
+  if rc.isOk:
+    result = rc.value
 
   acc.originalStorage[slot] = result
 
@@ -375,10 +373,9 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
 
   # Save `overlayStorage[]` on database
   for slot, value in acc.overlayStorage:
-    let slotKey = slot.toBytesBE.keccakHash.data
+    let slotKey = slot.toBytesBE.keccakHash
     if value > 0:
-      let encodedValue = rlp.encode(value)
-      ac.ledger.slotMerge(acc.toAccountKey, slotKey, encodedValue).isOkOr:
+      ac.ledger.slotMerge(acc.toAccountKey, slotKey, value).isOkOr:
         raiseAssert info & $$error
     else:
       ac.ledger.slotDelete(acc.toAccountKey, slotKey).isOkOr:

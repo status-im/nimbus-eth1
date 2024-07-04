@@ -16,16 +16,15 @@ import
   stew/[arrayops, endians2],
   ./aristo_desc
 
-# Allocation-free version of the RLP integer encoding, returning the shortest
-# big-endian representation - to decode, the length must be known / stored
-# elsewhere
+# Allocation-free version short big-endian encoding that skips the leading
+# zeroes
 type
-  RlpBuf*[I] = object
+  SbeBuf*[I] = object
     buf*: array[sizeof(I), byte]
     len*: byte
 
   RVidBuf* = object
-    buf*: array[sizeof(RlpBuf[VertexID]) * 2, byte]
+    buf*: array[sizeof(SbeBuf[VertexID]) * 2, byte]
     len*: byte
 
 func significantBytesBE(val: openArray[byte]): byte =
@@ -34,15 +33,15 @@ func significantBytesBE(val: openArray[byte]): byte =
       return byte(val.len - i)
   return 1
 
-func blobify*(v: VertexID|uint64): RlpBuf[typeof(v)] =
+func blobify*(v: VertexID|uint64): SbeBuf[typeof(v)] =
   let b = v.uint64.toBytesBE()
-  RlpBuf[typeof(v)](buf: b, len: significantBytesBE(b))
+  SbeBuf[typeof(v)](buf: b, len: significantBytesBE(b))
 
-func blobify*(v: StUint): RlpBuf[typeof(v)] =
+func blobify*(v: StUint): SbeBuf[typeof(v)] =
   let b = v.toBytesBE()
-  RlpBuf[typeof(v)](buf: b, len: significantBytesBE(b))
+  SbeBuf[typeof(v)](buf: b, len: significantBytesBE(b))
 
-template data*(v: RlpBuf): openArray[byte] =
+template data*(v: SbeBuf): openArray[byte] =
   let vv = v
   vv.buf.toOpenArray(vv.buf.len - int(vv.len), vv.buf.high)
 
@@ -159,6 +158,9 @@ proc blobifyTo*(pyl: PayloadRef, data: var Blob) =
 
     data &= lens.toBytesBE()
     data &= [mask]
+  of StoData:
+    data &= pyl.stoData.blobify().data
+    data &= [0x20.byte]
 
 proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
   ## This function serialises the vertex argument to a database record.
@@ -254,6 +256,11 @@ proc deblobify(
   let mask = data[^1]
   if (mask and 0x10) > 0: # unstructured payload
     return ok PayloadRef(pType: RawData, rawBlob: data[0 .. ^2])
+
+  if (mask and 0x20) > 0: # Slot storage data
+    return ok PayloadRef(
+      pType: StoData,
+      stoData: ?deblobify(data.toOpenArray(0, data.len - 2), UInt256))
 
   var
     pAcc = PayloadRef(pType: AccountData)

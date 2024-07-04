@@ -15,7 +15,6 @@ import
   results,
   "."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise]
 
-
 proc computeKey*(
     db: AristoDbRef;                  # Database, top layer
     rvid: RootedVertexID;             # Vertex to convert
@@ -44,12 +43,12 @@ proc computeKey*(
   let vtx = ? db.getVtxRc rvid
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
-  var rlp = initRlpWriter()
+  var writer = initRlpWriter()
 
   case vtx.vType:
   of Leaf:
-    rlp.startList(2)
-    rlp.append(vtx.lPfx.toHexPrefix(isLeaf = true))
+    writer.startList(2)
+    writer.append(vtx.lPfx.toHexPrefix(isLeaf = true))
     # Need to resolve storage root for account leaf
     case vtx.lData.pType
     of AccountData:
@@ -60,31 +59,34 @@ proc computeKey*(
         else:
           VOID_HASH_KEY
 
-      rlp.append(encode Account(
+      writer.append(encode Account(
         nonce:       vtx.lData.account.nonce,
         balance:     vtx.lData.account.balance,
         storageRoot: key.to(Hash256),
         codeHash:    vtx.lData.account.codeHash)
       )
     of RawData:
-      rlp.append(vtx.lData.rawBlob)
+      writer.append(vtx.lData.rawBlob)
+    of StoData:
+      # TODO avoid memory allocation when encoding storage data
+      writer.append(rlp.encode(vtx.lData.stoData))
 
   of Branch:
-    rlp.startList(17)
+    writer.startList(17)
     for n in 0..15:
       let vid = vtx.bVid[n]
       if vid.isValid:
-        rlp.append(?db.computeKey((rvid.root, vid)))
+        writer.append(?db.computeKey((rvid.root, vid)))
       else:
-        rlp.append(VOID_HASH_KEY)
-    rlp.append EmptyBlob
+        writer.append(VOID_HASH_KEY)
+    writer.append EmptyBlob
 
   of Extension:
-    rlp.startList(2)
-    rlp.append(vtx.ePfx.toHexPrefix(isleaf = false))
-    rlp.append(?db.computeKey((rvid.root, vtx.eVid)))
+    writer.startList(2)
+    writer.append(vtx.ePfx.toHexPrefix(isleaf = false))
+    writer.append(?db.computeKey((rvid.root, vtx.eVid)))
 
-  let h = rlp.finish().digestTo(HashKey)
+  let h = writer.finish().digestTo(HashKey)
   # TODO This shouldn't necessarily go into the database if we're just computing
   #      a key ephemerally - it should however be cached for some tiem since
   #      deep hash computations are expensive

@@ -100,8 +100,8 @@ proc mergeGenericData*(
 proc mergeStorageData*(
     db: AristoDbRef;                   # Database, top layer
     accPath: Hash256;          # Needed for accounts payload
-    stoPath: openArray[byte];          # Storage data path (aka key)
-    stoData: openArray[byte];          # Storage data payload value
+    stoPath: Hash256;          # Storage data path (aka key)
+    stoData: UInt256;          # Storage data payload value
       ): Result[void,AristoError] =
   ## Store the `stoData` data argument on the storage area addressed by
   ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
@@ -119,8 +119,8 @@ proc mergeStorageData*(
     useID = if stoID.isValid: stoID else: db.vidFetch()
 
     # Call merge
-    pyl = PayloadRef(pType: RawData, rawBlob: @stoData)
-    rc = db.mergePayloadImpl(useID, stoPath, pyl)
+    pyl = PayloadRef(pType: StoData, stoData: stoData)
+    rc = db.mergePayloadImpl(useID, stoPath.data, pyl)
 
   if rc.isOk:
     # Mark account path Merkle keys for update

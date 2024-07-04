@@ -334,13 +334,11 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
   for kv in boa.storage:
     let key = kv[0].toHex()
     let val = kv[1].toHex()
-    let slotKey = UInt256.fromBytesBE(kv[0]).toBytesBE.keccakHash.data
-    let data = al.slotFetch(accPath, slotKey).valueOr: EmptyBlob
-    let actual = data.toHex
-    let zerosLen = 64 - (actual.len)
-    let value = repeat('0', zerosLen) & actual
-    if val != value:
-      error "storage has different value", key=key, expected=val, actual=value
+    let slotKey = UInt256.fromBytesBE(kv[0]).toBytesBE.keccakHash
+    let data = al.slotFetch(accPath, slotKey).valueOr: default(UInt256)
+    let actual = data.toBytesBE().toHex
+    if val != actual:
+      error "storage has different value", key=key, expected=val, actual
       return false
 
   let logs = vmState.getAndClearLogEntries()

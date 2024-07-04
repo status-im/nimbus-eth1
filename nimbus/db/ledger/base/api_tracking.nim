@@ -98,7 +98,7 @@ func toStr*(w: Hash256): string =
   w.data.oaToStr
 
 func toStr*(w: CodeBytesRef): string =
-  if w.CodeBytesRef.isNil: "nil"
+  if w.isNil: "nil"
   else: "[" & $w.bytes.len & "]"
 
 func toStr*(w: Blob): string =

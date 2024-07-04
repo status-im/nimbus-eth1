@@ -43,6 +43,7 @@ type
     ## Type of leaf data.
     RawData                          ## Generic data
     AccountData                      ## `Aristo account` with vertex IDs links
+    StoData                         ## Slot storage data
 
   PayloadRef* = ref object of RootRef
     ## The payload type depends on the sub-tree used. The `VertesID(1)` rooted
@@ -54,6 +55,8 @@ type
     of AccountData:
       account*: AristoAccount
       stoID*: VertexID               ## Storage vertex ID (if any)
+    of StoData:
+      stoData*: UInt256
 
   VertexRef* = ref object of RootRef
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
@@ -154,6 +157,9 @@ proc `==`*(a, b: PayloadRef): bool =
       if a.account != b.account or
          a.stoID != b.stoID:
         return false
+    of StoData:
+      if a.stoData != b.stoData:
+        return false
   true
 
 proc `==`*(a, b: VertexRef): bool =
@@ -210,6 +216,11 @@ func dup*(pld: PayloadRef): PayloadRef =
       pType:   AccountData,
       account: pld.account,
       stoID:   pld.stoID)
+  of StoData:
+    PayloadRef(
+      pType:   StoData,
+      stoData: pld.stoData
+    )
 
 func dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.

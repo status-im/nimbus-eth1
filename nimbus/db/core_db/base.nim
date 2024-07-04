@@ -660,12 +660,12 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
 proc slotFetch*(
     acc: CoreDbAccRef;
     accPath: Hash256;
-    slot: openArray[byte];
-      ):  CoreDbRc[Blob] =
+    stoPath: Hash256;
+      ):  CoreDbRc[UInt256] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotFetchFn
   result = block:
-    let rc = acc.call(fetchStorageData, acc.mpt, accPath, slot)
+    let rc = acc.call(fetchStorageData, acc.mpt, accPath, stoPath)
     if rc.isOk:
       ok(rc.value)
     elif rc.error == FetchPathNotFound:
@@ -679,12 +679,12 @@ proc slotFetch*(
 proc slotDelete*(
     acc: CoreDbAccRef;
     accPath: Hash256;
-    slot: openArray[byte];
+    stoPath: Hash256;
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotDeleteFn
   result = block:
-    let rc = acc.call(deleteStorageData, acc.mpt, accPath, slot)
+    let rc = acc.call(deleteStorageData, acc.mpt, accPath, stoPath)
     if rc.isOk or rc.error == DelStoRootMissing:
       # The second `if` clause is insane but legit: A storage column was
       # announced for an account but no data have been added, yet.
@@ -700,12 +700,12 @@ proc slotDelete*(
 proc slotHasPath*(
     acc: CoreDbAccRef;
     accPath: Hash256;
-    slot: openArray[byte];
+    stoPath: Hash256;
       ):  CoreDbRc[bool] =
   ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotHasPathFn
   result = block:
-    let rc = acc.call(hasPathStorage, acc.mpt, accPath, slot)
+    let rc = acc.call(hasPathStorage, acc.mpt, accPath, stoPath)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -717,13 +717,13 @@ proc slotHasPath*(
 proc slotMerge*(
     acc: CoreDbAccRef;
     accPath: Hash256;
-    slot: openArray[byte];
-    data: openArray[byte];
+    stoPath: Hash256;
+    stoData: UInt256;
       ):  CoreDbRc[void] =
   ## Like `merge()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotMergeFn
   result = block:
-    let rc = acc.call(mergeStorageData, acc.mpt, accPath, slot, data)
+    let rc = acc.call(mergeStorageData, acc.mpt, accPath, stoPath, stoData)
     if rc.isOk:
       ok()
     else:
