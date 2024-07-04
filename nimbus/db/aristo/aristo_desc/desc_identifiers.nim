@@ -124,6 +124,9 @@ func `$`*(vid: VertexID): string =
   "$" & (if vid == VertexID(0): "ø"
          else: vid.uint64.toHex.strip(trailing=false,chars={'0'}).toLowerAscii)
 
+func `$`*(rvid: RootedVertexID): string =
+  $rvid.root & "/" & $rvid.vid
+
 func `==`*(a: VertexID; b: static[uint]): bool = (a == VertexID(b))
 
 # Scalar model extension as in `IntervalSetRef[VertexID,uint64]`
