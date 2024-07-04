@@ -75,10 +75,10 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 
 proc getVtxFn(db: RdbBackendRef): GetVtxFn =
   result =
-    proc(vid: VertexID): Result[VertexRef,AristoError] =
+    proc(rvid: RootedVertexID): Result[VertexRef,AristoError] =
 
       # Fetch serialised data record
-      let vtx = db.rdb.getVtx(vid).valueOr:
+      let vtx = db.rdb.getVtx(rvid).valueOr:
         when extraTraceMessages:
           trace logTxt "getVtxFn() failed", vid, error=error[0], info=error[1]
         return err(error[0])
@@ -90,10 +90,10 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
 
 proc getKeyFn(db: RdbBackendRef): GetKeyFn =
   result =
-    proc(vid: VertexID): Result[HashKey,AristoError] =
+    proc(rvid: RootedVertexID): Result[HashKey,AristoError] =
 
       # Fetch serialised data record
-      let key = db.rdb.getKey(vid).valueOr:
+      let key = db.rdb.getKey(rvid).valueOr:
         when extraTraceMessages:
           trace logTxt "getKeyFn: failed", vid, error=error[0], info=error[1]
         return err(error[0])
@@ -143,10 +143,10 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; vid: VertexID; vtx: VertexRef) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putVtx(vid, vtx).isOkOr:
+        db.rdb.putVtx(rvid, vtx).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
             vid:  error[0],
@@ -155,10 +155,10 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
 
 proc putKeyFn(db: RdbBackendRef): PutKeyFn =
   result =
-    proc(hdl: PutHdlRef; vid: VertexID, key: HashKey) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putKey(vid, key).isOkOr:
+        db.rdb.putKey(rvid, key).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  KeyPfx,
             vid:  error[0],
@@ -310,21 +310,21 @@ proc dup*(db: RdbBackendRef): RdbBackendRef =
 
 iterator walkVtx*(
     be: RdbBackendRef;
-      ): tuple[vid: VertexID, vtx: VertexRef] =
+      ): tuple[evid: RootedVertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (vid, data) in be.rdb.walkVtx:
+  for (rvid, data) in be.rdb.walkVtx:
     let rc = data.deblobify VertexRef
     if rc.isOk:
-      yield (vid, rc.value)
+      yield (rvid, rc.value)
 
 iterator walkKey*(
     be: RdbBackendRef;
-      ): tuple[vid: VertexID, key: HashKey] =
+      ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
-  for (vid, data) in be.rdb.walkKey:
+  for (rvid, data) in be.rdb.walkKey:
     let lid = HashKey.fromBytes(data).valueOr:
       continue
-    yield (vid, lid)
+    yield (rvid, lid)
 
 # ------------------------------------------------------------------------------
 # End

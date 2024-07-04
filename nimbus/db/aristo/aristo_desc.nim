@@ -81,7 +81,7 @@ type
     dudes: DudesRef                   ## Related DB descriptors
 
     # Debugging data below, might go away in future
-    xMap*: Table[HashKey,HashSet[VertexID]] ## For pretty printing/debugging
+    xMap*: Table[HashKey,HashSet[RootedVertexID]] ## For pretty printing/debugging
 
     accSids*: KeyedQueue[AccountKey, VertexID]
       ## Account path to storage id cache, for contract accounts - storage is
@@ -117,11 +117,11 @@ func getOrVoid*[W](tab: Table[W,NodeRef]; w: W): NodeRef =
 func getOrVoid*[W](tab: Table[W,HashKey]; w: W): HashKey =
   tab.getOrDefault(w, VOID_HASH_KEY)
 
-func getOrVoid*[W](tab: Table[W,VertexID]; w: W): VertexID =
-  tab.getOrDefault(w, VertexID(0))
+func getOrVoid*[W](tab: Table[W,RootedVertexID]; w: W): RootedVertexID =
+  tab.getOrDefault(w, default(RootedVertexID))
 
-func getOrVoid*[W](tab: Table[W,HashSet[VertexID]]; w: W): HashSet[VertexID] =
-  tab.getOrDefault(w, EmptyVidSet)
+func getOrVoid*[W](tab: Table[W,HashSet[RootedVertexID]]; w: W): HashSet[RootedVertexID] =
+  tab.getOrDefault(w, default(HashSet[RootedVertexID]))
 
 # --------
 
@@ -150,8 +150,11 @@ func isValid*(key: HashKey): bool =
 func isValid*(vid: VertexID): bool =
   vid != VertexID(0)
 
-func isValid*(sqv: HashSet[VertexID]): bool =
-  sqv != EmptyVidSet
+func isValid*(rvid: RootedVertexID): bool =
+  rvid.vid.isValid and rvid.root.isValid
+
+func isValid*(sqv: HashSet[RootedVertexID]): bool =
+  sqv.len > 0
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous

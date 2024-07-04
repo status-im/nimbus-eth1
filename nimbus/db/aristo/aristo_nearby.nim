@@ -94,7 +94,7 @@ proc complete(
     return err((VertexID(0),NearbyVidInvalid))
   var
     vid = vid
-    vtx = db.getVtx vid
+    vtx = db.getVtx (hike.root, vid)
     uHike = Hike(root: hike.root, legs: hike.legs)
   if not vtx.isValid:
     return err((vid,GetVtxNotFound))
@@ -109,7 +109,7 @@ proc complete(
     of Extension:
       vid = vtx.eVid
       if vid.isValid:
-        vtx = db.getVtx vid
+        vtx = db.getVtx (hike.root, vid)
         if vtx.isValid:
           uHike.legs.add leg
           continue
@@ -122,7 +122,7 @@ proc complete(
         leg.nibble = vtx.branchNibbleMax 15
       if 0 <= leg.nibble:
         vid = vtx.bVid[leg.nibble]
-        vtx = db.getVtx vid
+        vtx = db.getVtx (hike.root, vid)
         if vtx.isValid:
           uHike.legs.add leg
           continue
@@ -160,7 +160,7 @@ proc zeroAdjust(
   if 0 < hike.legs.len:
     return ok(hike)
 
-  let root = db.getVtx hike.root
+  let root = db.getVtx (hike.root, hike.root)
   if root.isValid:
     block fail:
       var pfx: NibblesBuf
@@ -186,7 +186,7 @@ proc zeroAdjust(
         # Must be followed by a branch vertex
         if not hike.accept ePfx:
           break fail
-        let vtx = db.getVtx root.eVid
+        let vtx = db.getVtx (hike.root, root.eVid)
         if not vtx.isValid:
           break fail
         pfx =  ePfx
@@ -235,7 +235,7 @@ proc finalise(
       # Check the following up vertex
       let
         vid = top.wp.vtx.bVid[top.nibble]
-        vtx = db.getVtx vid
+        vtx = db.getVtx (hike.root, vid)
       if not vtx.isValid:
         return err((vid,NearbyDanglingLink))
 
@@ -321,7 +321,7 @@ proc nearbyNext(
       if not vid.isValid:
         return err((top.wp.vid,NearbyDanglingLink)) # error
 
-      let vtx = db.getVtx vid
+      let vtx = db.getVtx (hike.root, vid)
       if not vtx.isValid:
         return err((vid,GetVtxNotFound)) # error
 
@@ -583,7 +583,7 @@ proc rightMissing*(
   if not vid.isValid:
     return err(NearbyDanglingLink) # error
 
-  let vtx = db.getVtx vid
+  let vtx = db.getVtx (hike.root, vid)
   if not vtx.isValid:
     return err(GetVtxNotFound) # error
 

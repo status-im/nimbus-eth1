@@ -214,7 +214,7 @@ proc bless*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   when AutoValidateDescriptors:
     ctx.validate
   ctx
-  
+
 proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbMptRef | CoreDbTxRef): auto =
   dsc.ctx = ctx
   when AutoValidateDescriptors:
@@ -442,7 +442,7 @@ proc getGeneric*(
   ## Get a generic MPT, viewed as column
   ##
   ctx.setTrackNewApi CtxGetGenericFn
-  result = CoreDbMptRef(ctx) 
+  result = CoreDbMptRef(ctx)
   if clearData:
     result.call(deleteGenericTree, ctx.mpt, result.rootID).isOkOr:
       raiseAssert $api & ": " & $error

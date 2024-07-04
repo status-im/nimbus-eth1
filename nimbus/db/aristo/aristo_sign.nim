@@ -54,7 +54,7 @@ proc merkleSignCommit*(
   if sdb.error != AristoError(0):
     return err((sdb.errKey, sdb.error))
 
-  ok sdb.db.computeKey(sdb.root).expect("ok")
+  ok sdb.db.computeKey((sdb.root, sdb.root)).expect("ok")
 
 # ------------------------------------------------------------------------------
 # End

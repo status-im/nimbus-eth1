@@ -108,9 +108,9 @@ type
     ## tables. So a corresponding zero value or missing entry produces an
     ## inconsistent state that must be resolved.
     ##
-    sTab*: Table[VertexID,VertexRef] ## Structural vertex table
-    kMap*: Table[VertexID,HashKey]   ## Merkle hash key mapping
-    vTop*: VertexID                  ## Last used vertex ID
+    sTab*: Table[RootedVertexID,VertexRef] ## Structural vertex table
+    kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
+    vTop*: VertexID                        ## Last used vertex ID
 
     accSids*: Table[Hash256, VertexID] ## Account path -> stoID
 

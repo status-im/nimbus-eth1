@@ -110,7 +110,7 @@ proc forkTx*(
 
 proc findTx*(
     db: AristoDbRef;
-    vid: VertexID;                    # Pivot vertex (typically `VertexID(1)`)
+    rvid: RootedVertexID;             # Pivot vertex (typically `VertexID(1)`)
     key: HashKey;                     # Hash key of pivot vertex
       ): Result[int,AristoError] =
   ## Find the transaction where the vertex with ID `vid` exists and has the
@@ -128,13 +128,13 @@ proc findTx*(
   ## A successful return code might be used for the `forkTx()` call for
   ## creating a forked descriptor that provides the pair `(vid,key)`.
   ##
-  if not vid.isValid or
+  if not rvid.isValid or
      not key.isValid:
     return err(TxArgsUseless)
 
   if db.txRef.isNil:
     # Try `(vid,key)` on top layer
-    let topKey = db.top.delta.kMap.getOrVoid vid
+    let topKey = db.top.delta.kMap.getOrVoid rvid
     if topKey == key:
       return ok(0)
 
@@ -143,23 +143,23 @@ proc findTx*(
     for (n,tx,layer,error) in db.txRef.txFrameWalk:
       if error != AristoError(0):
         return err(error)
-      if layer.delta.kMap.getOrVoid(vid) == key:
+      if layer.delta.kMap.getOrVoid(rvid) == key:
         return ok(n)
 
     # Try bottom layer
-    let botKey = db.stack[0].delta.kMap.getOrVoid vid
+    let botKey = db.stack[0].delta.kMap.getOrVoid rvid
     if botKey == key:
       return ok(db.stack.len)
 
   # Try `(vid,key)` on balancer
   if not db.balancer.isNil:
-    let roKey = db.balancer.kMap.getOrVoid vid
+    let roKey = db.balancer.kMap.getOrVoid rvid
     if roKey == key:
       return ok(-1)
 
   # Try `(vid,key)` on unfiltered backend
   block:
-    let beKey = db.getKeyUbe(vid).valueOr: VOID_HASH_KEY
+    let beKey = db.getKeyUbe(rvid).valueOr: VOID_HASH_KEY
     if beKey == key:
       return ok(-2)
 

@@ -28,39 +28,39 @@ export
 iterator walkVtxBe*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
-     ): tuple[vid: VertexID, vtx: VertexRef] =
+     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Iterate over filtered memory backend or backend-less vertices. This
   ## function depends on the particular backend type name which must match
   ## the backend descriptor.
-  for (vid,vtx) in walkVtxBeImpl[T](db):
-    yield (vid,vtx)
+  for (rvid,vtx) in walkVtxBeImpl[T](db):
+    yield (rvid,vtx)
 
 iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
-     ): tuple[vid: VertexID, key: HashKey] =
+     ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Similar to `walkVtxBe()` but for keys.
-  for (vid,key) in walkKeyBeImpl[T](db):
-    yield (vid,key)
+  for (rvid,key) in walkKeyBeImpl[T](db):
+    yield (rvid,key)
 
 # -----------
 
 iterator walkPairs*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
-     ): tuple[vid: VertexID, vtx: VertexRef] =
+     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
   ## are unsorted.
-  for (vid,vtx) in walkPairsImpl[T](db):
-    yield (vid,vtx)
+  for (rvid,vtx) in walkPairsImpl[T](db):
+    yield (rvid,vtx)
 
 iterator replicate*[T: MemBackendRef|VoidBackendRef](
    _: type T;
    db: AristoDbRef;
-    ): tuple[vid: VertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
+    ): tuple[rvid: RootedVertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
   ## Variant of `walkPairsImpl()` for legacy applications.
-  for (vid,key,vtx,node) in replicateImpl[T](db):
-   yield (vid,key,vtx,node)
+  for (rvid,key,vtx,node) in replicateImpl[T](db):
+   yield (rvid,key,vtx,node)
 
 # ------------------------------------------------------------------------------
 # End

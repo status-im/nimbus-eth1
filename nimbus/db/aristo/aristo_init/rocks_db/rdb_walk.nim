@@ -52,7 +52,7 @@ iterator walkAdm*(rdb: RdbInst): tuple[xid: uint64, data: Blob] =
       if key.len == 8 and val.len != 0:
         yield (uint64.fromBytesBE key, val)
 
-iterator walkKey*(rdb: RdbInst): tuple[vid: VertexID, data: Blob] =
+iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
   ## Walk over key-value pairs of the hash key column of the database.
   ##
   ## Non-decodable entries are are ignored.
@@ -65,10 +65,14 @@ iterator walkKey*(rdb: RdbInst): tuple[vid: VertexID, data: Blob] =
     defer: rit.close()
 
     for (key,val) in rit.pairs:
-      if key.len <= 8 and val.len != 0:
-        yield (key.deblobify(VertexID).value(), val)
+      if val.len != 0:
+        let rvid = key.deblobify(RootedVertexID).valueOr:
+          continue
 
-iterator walkVtx*(rdb: RdbInst): tuple[vid: VertexID, data: Blob] =
+        yield (rvid, val)
+
+
+iterator walkVtx*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
   ## Walk over key-value pairs of the hash key column of the database.
   ##
   ## Non-decodable entries are are ignored.
@@ -81,8 +85,11 @@ iterator walkVtx*(rdb: RdbInst): tuple[vid: VertexID, data: Blob] =
     defer: rit.close()
 
     for (key,val) in rit.pairs:
-      if key.len <= 8 and val.len != 0:
-        yield (key.deblobify(VertexID).value(), val)
+      if val.len != 0:
+        let rvid = key.deblobify(RootedVertexID).valueOr:
+          continue
+
+        yield (rvid, val)
 
 # ------------------------------------------------------------------------------
 # End

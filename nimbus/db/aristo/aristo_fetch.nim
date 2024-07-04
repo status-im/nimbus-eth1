@@ -62,12 +62,12 @@ proc retrieveMerkleHash(
       ): Result[Hash256,AristoError] =
   let key = block:
     if updateOk:
-      db.computeKey(root).valueOr:
+      db.computeKey((root, root)).valueOr:
         if error == GetVtxNotFound:
           return ok(EMPTY_ROOT_HASH)
         return err(error)
     else:
-      db.getKeyRc(root).valueOr:
+      db.getKeyRc((root, root)).valueOr:
         if error == GetKeyNotFound:
           return ok(EMPTY_ROOT_HASH) # empty sub-tree
         return err(error)

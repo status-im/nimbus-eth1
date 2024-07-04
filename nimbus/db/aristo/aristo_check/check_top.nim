@@ -26,34 +26,34 @@ proc checkTopStrict*(
   # No need to specify zero keys if implied by a leaf path with valid target
   # vertex ID (i.e. not deleted).
   var zeroKeys: HashSet[VertexID]
-  for (vid,vtx) in db.layersWalkVtx:
-    let key = db.layersGetKeyOrVoid vid
+  for (rvid,vtx) in db.layersWalkVtx:
+    let key = db.layersGetKeyOrVoid rvid
 
     if not vtx.isValid:
       if key.isValid:
-        return err((vid,CheckStkVtxKeyMismatch))
+        return err((rvid.vid,CheckStkVtxKeyMismatch))
       else: # Empty key flags key is for update
-        zeroKeys.incl vid
+        zeroKeys.incl rvid.vid
 
     elif key.isValid:
       # So `vtx` and `key` exist
-      let node = vtx.toNode(db).valueOr:
-        return err((vid,CheckStkVtxIncomplete))
+      let node = vtx.toNode(rvid.root, db).valueOr:
+        return err((rvid.vid,CheckStkVtxIncomplete))
       if key != node.digestTo(HashKey):
-        return err((vid,CheckStkVtxKeyMismatch))
+        return err((rvid.vid,CheckStkVtxKeyMismatch))
 
-    elif db.layersGetKey(vid).isErr:
+    elif db.layersGetKey(rvid).isErr:
       # So `vtx` exists but not `key`, so cache is supposed dirty and the
       # vertex has a zero entry.
-      return err((vid,CheckStkVtxKeyMissing))
+      return err((rvid.vid,CheckStkVtxKeyMissing))
 
     else: # Empty key flags key is for update
-      zeroKeys.incl vid
+      zeroKeys.incl rvid.vid
 
-  for (vid,key) in db.layersWalkKey:
-    if not key.isValid and vid notin zeroKeys:
-      if not db.getVtx(vid).isValid:
-        return err((vid,CheckStkKeyStrayZeroEntry))
+  for (rvid,key) in db.layersWalkKey:
+    if not key.isValid and rvid.vid notin zeroKeys:
+      if not db.getVtx(rvid).isValid:
+        return err((rvid.vid,CheckStkKeyStrayZeroEntry))
 
   ok()
 
@@ -61,14 +61,14 @@ proc checkTopStrict*(
 proc checkTopProofMode*(
     db: AristoDbRef;                               # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
-  for (vid,key) in db.layersWalkKey:
+  for (rvid,key) in db.layersWalkKey:
     if key.isValid:                              # Otherwise to be deleted
-      let vtx = db.getVtx vid
+      let vtx = db.getVtx rvid
       if vtx.isValid:
-        let node = vtx.toNode(db).valueOr:
+        let node = vtx.toNode(rvid.root, db).valueOr:
           continue
         if key != node.digestTo(HashKey):
-          return err((vid,CheckRlxVtxKeyMismatch))
+          return err((rvid.vid,CheckRlxVtxKeyMismatch))
   ok()
 
 
@@ -86,10 +86,10 @@ proc checkTopCommon*(
 
   # Collect leafs and check deleted entries
   var nNilVtx = 0
-  for (vid,vtx) in db.layersWalkVtx:
+  for (rvid,vtx) in db.layersWalkVtx:
     if vtx.isValid:
-      if topVid < vid:
-        topVid = vid
+      if topVid < rvid.vid:
+        topVid = rvid.vid
       case vtx.vType:
       of Leaf:
         if vtx.lData.pType == AccountData:
@@ -108,23 +108,23 @@ proc checkTopCommon*(
               if seen:
                 break check42Links
               seen = true
-          return err((vid,CheckAnyVtxBranchLinksMissing))
+          return err((rvid.vid,CheckAnyVtxBranchLinksMissing))
       of Extension:
         if vtx.ePfx.len == 0:
-          return err((vid,CheckAnyVtxExtPfxMissing))
+          return err((rvid.vid,CheckAnyVtxExtPfxMissing))
     else:
       nNilVtx.inc
-      let rc = db.layersGetKey vid
+      let rc = db.layersGetKey rvid
       if rc.isErr:
-        return err((vid,CheckAnyVtxEmptyKeyMissing))
+        return err((rvid.vid,CheckAnyVtxEmptyKeyMissing))
       if rc.value.isValid:
-        return err((vid,CheckAnyVtxEmptyKeyExpected))
+        return err((rvid.vid,CheckAnyVtxEmptyKeyExpected))
 
   if vTop.distinctBase < LEAST_FREE_VID:
     # Verify that all vids are below `LEAST_FREE_VID`
     if topVid.distinctBase < LEAST_FREE_VID:
-      for (vid,key) in db.layersWalkKey:
-        if key.isValid and LEAST_FREE_VID <= vid.distinctBase:
+      for (rvid,key) in db.layersWalkKey:
+        if key.isValid and LEAST_FREE_VID <= rvid.vid.distinctBase:
           return err((topVid,CheckAnyVTopUnset))
 
   # If present, there are at least as many deleted hashes as there are deleted

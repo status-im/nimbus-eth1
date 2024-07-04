@@ -20,7 +20,7 @@ import
 
 iterator walkVtxBeImpl*[T](
     db: AristoDbRef;                   # Database with optional backend filter
-      ): tuple[vid: VertexID, vtx: VertexRef] =
+      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Generic iterator
   when T is VoidBackendRef:
     let filter = if db.balancer.isNil: LayerDeltaRef() else: db.balancer
@@ -32,24 +32,24 @@ iterator walkVtxBeImpl*[T](
     if not db.balancer.isNil:
       filter.sTab = db.balancer.sTab # copy table
 
-    for (vid,vtx) in db.backend.T.walkVtx:
-      if filter.sTab.hasKey vid:
-        let fVtx = filter.sTab.getOrVoid vid
+    for (rvid,vtx) in db.backend.T.walkVtx:
+      if filter.sTab.hasKey rvid:
+        let fVtx = filter.sTab.getOrVoid rvid
         if fVtx.isValid:
-          yield (vid,fVtx)
-        filter.sTab.del vid
+          yield (rvid,fVtx)
+        filter.sTab.del rvid
       else:
-        yield (vid,vtx)
+        yield (rvid,vtx)
 
-  for vid in filter.sTab.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let vtx = filter.sTab.getOrVoid vid
+  for rvid in filter.sTab.keys.toSeq.sorted:
+    let vtx = filter.sTab.getOrVoid rvid
     if vtx.isValid:
-      yield (vid,vtx)
+      yield (rvid,vtx)
 
 
 iterator walkKeyBeImpl*[T](
     db: AristoDbRef;                   # Database with optional backend filter
-      ): tuple[vid: VertexID, key: HashKey] =
+      ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Generic iterator
   when T is VoidBackendRef:
     let filter = if db.balancer.isNil: LayerDeltaRef() else: db.balancer
@@ -61,47 +61,47 @@ iterator walkKeyBeImpl*[T](
     if not db.balancer.isNil:
       filter.kMap = db.balancer.kMap # copy table
 
-    for (vid,key) in db.backend.T.walkKey:
-      if filter.kMap.hasKey vid:
-        let fKey = filter.kMap.getOrVoid vid
+    for (rvid,key) in db.backend.T.walkKey:
+      if filter.kMap.hasKey rvid:
+        let fKey = filter.kMap.getOrVoid rvid
         if fKey.isValid:
-          yield (vid,fKey)
-        filter.kMap.del vid
+          yield (rvid,fKey)
+        filter.kMap.del rvid
       else:
-        yield (vid,key)
+        yield (rvid,key)
 
-  for vid in filter.kMap.keys.toSeq.mapIt(it.uint64).sorted.mapIt(it.VertexID):
-    let key = filter.kMap.getOrVoid vid
+  for rvid in filter.kMap.keys.toSeq.sorted:
+    let key = filter.kMap.getOrVoid rvid
     if key.isValid:
-      yield (vid,key)
+      yield (rvid,key)
 
 
 iterator walkPairsImpl*[T](
    db: AristoDbRef;                   # Database with top layer & backend filter
-     ): tuple[vid: VertexID, vtx: VertexRef] =
+     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
   ## are unsorted.
   var seen: HashSet[VertexID]
-  for (vid,vtx) in db.layersWalkVtx seen:
+  for (rvid,vtx) in db.layersWalkVtx seen:
     if vtx.isValid:
-      yield (vid,vtx)
+      yield (rvid,vtx)
 
-  for (vid,vtx) in walkVtxBeImpl[T](db):
-    if vid notin seen:
-      yield (vid,vtx)
+  for (rvid,vtx) in walkVtxBeImpl[T](db):
+    if rvid.vid notin seen:
+      yield (rvid,vtx)
 
 iterator replicateImpl*[T](
    db: AristoDbRef;                   # Database with top layer & backend filter
-     ): tuple[vid: VertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
+     ): tuple[rvid: RootedVertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
   ## Variant of `walkPairsImpl()` for legacy applications.
-  for (vid,vtx) in walkPairsImpl[T](db):
+  for (rvid,vtx) in walkPairsImpl[T](db):
     let node = block:
-      let rc = vtx.toNode(db)
+      let rc = vtx.toNode(rvid.root, db)
       if rc.isOk:
         rc.value
       else:
         NodeRef(nil)
-    yield (vid, db.getKey vid, vtx, node)
+    yield (rvid, db.getKey rvid, vtx, node)
 
 # ------------------------------------------------------------------------------
 # End
