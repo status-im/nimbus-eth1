@@ -60,9 +60,8 @@ proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
 
   # success or not, we quit after importing blocks
   for i, blocksFile in conf.blocksFile:
-    if isFile(string blocksFile):
-      importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1).isOkOr:
-        warn "Error when importing blocks", msg=error
-        quit(QuitFailure)
+    importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1).isOkOr:
+      warn "Error when importing blocks", msg=error
+      quit(QuitFailure)
 
   quit(QuitSuccess)
