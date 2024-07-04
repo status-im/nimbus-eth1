@@ -50,13 +50,10 @@ proc fromJson(T: type uint64, n: JsonNode, field: string): uint64 =
   if n[field].kind == JInt:
     n[field].getInt().uint64
   else:
-    parseHexOrInt[AccountNonce](n[field].getStr())
+    parseHexOrInt[uint64](n[field].getStr())
 
 template fromJson(T: type UInt256, n: JsonNode, field: string): UInt256 =
   parseHexOrInt[UInt256](n[field].getStr())
-
-template fromJson(T: type GasInt, n: JsonNode, field: string): GasInt =
-  parseHexOrInt[GasInt](n[field].getStr())
 
 template fromJson(T: type ChainId, n: JsonNode, field: string): ChainId =
   parseHexOrInt[uint64](n[field].getStr()).ChainId

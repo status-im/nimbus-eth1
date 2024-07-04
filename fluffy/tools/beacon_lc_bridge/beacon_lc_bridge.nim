@@ -62,7 +62,6 @@ import
   ./beacon_lc_bridge_conf
 
 from stew/objects import checkedEnumAssign
-from stew/byteutils import readHexChar
 from web3/primitives as web3types import BlockHash
 
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
@@ -72,10 +71,6 @@ type Hash256 = etypes.Hash256
 
 template asEthHash(hash: web3types.BlockHash): Hash256 =
   Hash256(data: distinctBase(hash))
-
-# TODO: Ugh why isn't gasLimit and gasUsed a uint64 in nim-eth / nimbus-eth1 :(
-template unsafeQuantityToInt64(q: Quantity): int64 =
-  int64 q
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]
@@ -125,8 +120,8 @@ proc asPortalBlockData*(
       logsBloom: distinctBase(payload.logsBloom),
       difficulty: default(DifficultyInt),
       number: payload.blockNumber.distinctBase,
-      gasLimit: payload.gasLimit.unsafeQuantityToInt64,
-      gasUsed: payload.gasUsed.unsafeQuantityToInt64,
+      gasLimit: distinctBase(payload.gasLimit),
+      gasUsed: distinctBase(payload.gasUsed),
       timestamp: payload.timestamp.EthTime,
       extraData: bytes payload.extraData,
       mixHash: payload.prevRandao.asEthHash,
@@ -170,8 +165,8 @@ proc asPortalBlockData*(
       logsBloom: distinctBase(payload.logsBloom),
       difficulty: default(DifficultyInt),
       number: payload.blockNumber.distinctBase,
-      gasLimit: payload.gasLimit.unsafeQuantityToInt64,
-      gasUsed: payload.gasUsed.unsafeQuantityToInt64,
+      gasLimit: distinctBase(payload.gasLimit),
+      gasUsed: distinctBase(payload.gasUsed),
       timestamp: payload.timestamp.EthTime,
       extraData: bytes payload.extraData,
       mixHash: payload.prevRandao.asEthHash,

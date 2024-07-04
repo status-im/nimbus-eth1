@@ -69,7 +69,7 @@ iterator storage(ctx: JsonTracer, compDepth: int): UInt256 =
     yield key
 
 proc captureOpImpl(ctx: JsonTracer, c: Computation, pc: int,
-                   op: Op, gas: GasInt, refund: GasInt,
+                   op: Op, gas: GasInt, refund: int64,
                    rData: openArray[byte], depth: int, error: Opt[string]) {.gcsafe.} =
   let
     gasCost = ctx.gas - gas
@@ -195,7 +195,7 @@ method captureGasCost*(ctx: JsonTracer, comp: Computation,
   # opcode with fixed gasCost will be handled by captureOpEnd
 
 method captureOpEnd*(ctx: JsonTracer, comp: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.gcsafe.} =
   if fixed:
@@ -211,7 +211,7 @@ method captureOpEnd*(ctx: JsonTracer, comp: Computation,
     return
 
 method captureFault*(ctx: JsonTracer, comp: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
                      rData: openArray[byte],
                      depth: int, error: Opt[string]) {.gcsafe.} =
 

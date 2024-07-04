@@ -102,10 +102,10 @@ proc gasLimitsGet*(com: CommonRef; parent: BlockHeader; parentLimit: GasInt;
 
   # VM/exec low/high water marks, optionally provided for packer
   result.lwmLimit = max(
-    result.minLimit, (result.trgLimit * pc.lwmTrg + 50) div 100)
+    result.minLimit, (result.trgLimit * pc.lwmTrg.GasInt + 50) div 100)
 
   result.hwmLimit = max(
-    result.trgLimit, (result.maxLimit * pc.hwmMax + 50) div 100)
+    result.trgLimit, (result.maxLimit * pc.hwmMax.GasInt + 50) div 100)
 
   # override trgLimit, see https://github.com/status-im/nimbus-eth1/issues/1032
   if com.isLondonOrLater(parent.number+1):

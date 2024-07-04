@@ -37,6 +37,9 @@ when not defined(evmc_enabled):
   import
     ../../state,
     ../../../db/ledger
+else:
+  import
+    stew/saturation_arith
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -45,7 +48,7 @@ when not defined(evmc_enabled):
 when evmc_enabled:
   template execSubCreate(c: Computation; msg: ref nimbus_message) =
     c.chainTo(msg):
-      c.gasMeter.returnGas(c.res.gas_left)
+      c.gasMeter.returnGas(GasInt c.res.gas_left)
       c.gasMeter.refundGas(c.res.gas_refund)
       if c.res.status_code == EVMC_SUCCESS:
         ? c.stack.top(c.res.create_address)
@@ -140,7 +143,7 @@ proc createOp(k: var VmCtx): EvmResultVoid =
     msg[] = nimbus_message(
       kind: EVMC_CREATE,
       depth: (cpt.msg.depth + 1).int32,
-      gas: createMsgGas,
+      gas: int64.saturate(createMsgGas),
       sender: cpt.msg.contractAddress,
       input_data: cpt.memory.readPtr(memPos),
       input_size: memLen.uint,
@@ -222,7 +225,7 @@ proc create2Op(k: var VmCtx): EvmResultVoid =
     msg[] = nimbus_message(
       kind: EVMC_CREATE2,
       depth: (cpt.msg.depth + 1).int32,
-      gas: createMsgGas,
+      gas: int64.saturate(createMsgGas),
       sender: cpt.msg.contractAddress,
       input_data: cpt.memory.readPtr(memPos),
       input_size: memLen.uint,

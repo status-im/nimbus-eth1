@@ -21,12 +21,12 @@ proc toWordSize(size: GasInt): GasInt =
   (size + 31) shr 5
 
 func intrinsicGas*(data: openArray[byte], fork: EVMFork): GasInt =
-  result = gasFees[fork][GasTransaction]
+  result = GasInt(gasFees[fork][GasTransaction])
   for i in data:
     if i == 0:
-      result += gasFees[fork][GasTXDataZero]
+      result += GasInt(gasFees[fork][GasTXDataZero])
     else:
-      result += gasFees[fork][GasTXDataNonZero]
+      result += GasInt(gasFees[fork][GasTXDataNonZero])
 
 proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
@@ -35,18 +35,18 @@ proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
   result = tx.payload.intrinsicGas(fork)
 
   if tx.contractCreation:
-    result = result + gasFees[fork][GasTXCreate]
+    result += GasInt(gasFees[fork][GasTXCreate])
     if fork >= FkShanghai:
       # cannot use wordCount here, it will raise unlisted exception
       let numWords = toWordSize(GasInt tx.payload.len)
-      result = result + (gasFees[fork][GasInitcodeWord] * numWords)
+      result += GasInt(gasFees[fork][GasInitcodeWord]) * numWords
 
   if tx.txType > TxLegacy:
-    result = result + GasInt(tx.accessList.len) * ACCESS_LIST_ADDRESS_COST
+    result += GasInt(tx.accessList.len) * ACCESS_LIST_ADDRESS_COST
     var numKeys = 0
     for n in tx.accessList:
       inc(numKeys, n.storageKeys.len)
-    result = result + GasInt(numKeys) * ACCESS_LIST_STORAGE_KEY_COST
+    result += GasInt(numKeys) * ACCESS_LIST_STORAGE_KEY_COST
 
 proc getSignature*(tx: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]

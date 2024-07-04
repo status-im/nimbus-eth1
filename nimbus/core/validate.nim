@@ -69,6 +69,9 @@ proc validateHeader(
   if header.timestamp <= parentHeader.timestamp:
     return err("timestamp must be strictly later than parent")
 
+  if header.gasLimit > GAS_LIMIT_MAXIMUM:
+    return err("gasLimit exceeds GAS_LIMIT_MAXIMUM")
+    
   if com.daoForkSupport and inDAOExtraRange(header.number):
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")

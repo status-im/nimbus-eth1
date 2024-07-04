@@ -64,7 +64,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
   )
   let vmState = ? BaseVMState.new(topHeader, com)
   let fork    = vmState.fork
-  let txGas   = gasFees[fork][GasTransaction] # txGas always 21000, use constants?
+  let txGas   = GasInt gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = ? toCallParams(vmState, args, gasCap, header.baseFeePerGas)
 
   var

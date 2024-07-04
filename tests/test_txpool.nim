@@ -163,7 +163,7 @@ proc runTxLoader() =
       check txList.len == xp.nItems.total
 
       for item in txList:
-        if item.tx.gasPrice < minGasPrice and 0 < item.tx.gasPrice:
+        if item.tx.gasPrice.GasPrice < minGasPrice and 0 < item.tx.gasPrice:
           minGasPrice = item.tx.gasPrice.GasPrice
         if maxGasPrice < item.tx.gasPrice.GasPrice:
           maxGasPrice = item.tx.gasPrice.GasPrice

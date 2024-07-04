@@ -11,6 +11,7 @@
 import
   eth/common/eth_types,
   stew/ptrops,
+  stew/saturation_arith,
   stint,
   ../evm/types,
   ../evm/interpreter_dispatch,
@@ -39,7 +40,7 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
 proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
                                res: var EvmcResult) {.inline.} =
   if not child.shouldBurnGas:
-    res.gas_left = child.gasMeter.gasRemaining
+    res.gas_left = int64.saturate(child.gasMeter.gasRemaining)
 
   if child.isSuccess:
     res.gas_refund = child.gasMeter.gasRefunded
@@ -75,7 +76,7 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
 proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
                              res: var EvmcResult) {.inline.} =
   if not child.shouldBurnGas:
-    res.gas_left = child.gasMeter.gasRemaining
+    res.gas_left = int64.saturate(child.gasMeter.gasRemaining)
 
   if child.isSuccess:
     res.gas_refund = child.gasMeter.gasRefunded

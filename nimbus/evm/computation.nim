@@ -403,8 +403,11 @@ proc addLogEntry*(c: Computation, log: Log) =
 # some gasRefunded operations still relying
 # on negative number
 func getGasRefund*(c: Computation): GasInt =
+  # EIP-2183 guarantee that sum of all child gasRefund
+  # should never go below zero
+  doAssert(c.msg.depth == 0 and c.gasMeter.gasRefunded >= 0)
   if c.isSuccess:
-    result = c.gasMeter.gasRefunded
+    result = GasInt c.gasMeter.gasRefunded
 
 # Using `proc` as `selfDestructLen()` might be `proc` in logging mode
 proc refundSelfDestruct*(c: Computation) =
