@@ -124,22 +124,7 @@ type
     DisableStateDiff
     EnableAccount
     DisableReturnData
-
-  StructLog* = object
-    pc*         : int
-    op*         : Op
-    gas*        : GasInt
-    gasCost*    : GasInt
-    memory*     : seq[byte]
-    memSize*    : int
-    stack*      : seq[UInt256]
-    returnData* : seq[byte]
-    storage*    : Table[UInt256, UInt256]
-    depth*      : int
-    refund*     : GasInt
-    opName*     : string
-    error*      : string
-
+    
   TracerRef* = ref object of RootObj
     flags*: set[TracerFlags]
 
