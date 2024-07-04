@@ -524,6 +524,12 @@ type
         defaultValue: false
         name: "debug-full-validation".}: bool
 
+      noValidation* {.
+        hidden
+        desc: "Disble per-chunk validation"
+        defaultValue: true
+        name: "debug-no-validation".}: bool
+
       storeBodies* {.
         hidden
         desc: "Store block blodies in database"
