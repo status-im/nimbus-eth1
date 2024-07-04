@@ -180,9 +180,6 @@ switch("warning", "CaseTransition:off")
 # do its (N)RVO pass: https://github.com/nim-lang/RFCs/issues/230
 switch("warning", "ObservableStores:off")
 
-# Too many false positives for "Warning: method has lock level <unknown>, but another method has 0 [LockLevel]"
-switch("warning", "LockLevel:off")
-
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
@@ -201,9 +198,6 @@ when not defined(use_system_rocksdb) and not defined(windows):
   switch("dynlibOverride", "rocksdb")
   switch("dynlibOverride", "lz4")
   switch("dynlibOverride", "zstd")
-
-when defined(gcc):
-  switch("passc", "-Wno-error=incompatible-pointer-types")
 
 # This applies per-file compiler flags to C files
 # which do not support {.localPassC: "...".}
