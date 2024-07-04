@@ -273,28 +273,23 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
 when vm_use_recursion:
   # Recursion with tiny stack frame per level.
   proc execCallOrCreate*(c: Computation) =
-    defer: c.dispose()
-    if c.beforeExec():
-      return
-    c.executeOpcodes()
-    while not c.continuation.isNil:
-      # If there's a continuation, then it's because there's either
-      # a child (i.e. call or create)
-      when evmc_enabled:
-        c.res = c.host.call(c.child[])
-      else:
-        execCallOrCreate(c.child)
-      c.child = nil
+    if not c.beforeExec():
       c.executeOpcodes()
-    c.afterExec()
+      while not c.continuation.isNil:
+        # If there's a continuation, then it's because there's either
+        # a child (i.e. call or create)
+        when evmc_enabled:
+          c.res = c.host.call(c.child[])
+        else:
+          execCallOrCreate(c.child)
+        c.child = nil
+        c.executeOpcodes()
+      c.afterExec()
+    c.dispose()
 
 else:
   proc execCallOrCreate*(cParam: Computation) =
     var (c, before, shouldPrepareTracer) = (cParam, true, true)
-    defer:
-      while not c.isNil:
-        c.dispose()
-        c = c.parent
 
     # No actual recursion, but simulate recursion including before/after/dispose.
     while true:
@@ -310,6 +305,10 @@ else:
         break
       c.dispose()
       (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
+
+    while not c.isNil:
+      c.dispose()
+      c = c.parent
 
 
 # ------------------------------------------------------------------------------
