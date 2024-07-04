@@ -15,7 +15,6 @@ import
 
 proc coinbaseStateClearing*(vmState: BaseVMState,
                             miner: EthAddress,
-                            fork: EVMFork,
                             touched = true) =
   # This is necessary due to the manner in which the state tests are
   # generated. State tests are generated from the BlockChainTest tests
@@ -38,4 +37,4 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
 
     # do not clear cache, we need the cache when constructing
     # post state
-    db.persist(clearEmptyAccount = fork >= FkSpurious)
+    db.persist(clearEmptyAccount = vmState.fork >= FkSpurious)

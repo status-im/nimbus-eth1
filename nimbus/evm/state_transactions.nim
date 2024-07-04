@@ -9,10 +9,8 @@
 # according to those terms.
 
 import
-  eth/common/eth_types,
   ../constants,
   ../db/ledger,
-  ../transaction,
   ./computation,
   ./interpreter_dispatch,
   ./interpreter/gas_costs,
@@ -21,19 +19,6 @@ import
   ./types
 
 {.push raises: [].}
-
-proc setupTxContext*(vmState: BaseVMState,
-                     txCtx: sink TxContext,
-                     forkOverride=Opt.none(EVMFork)) =
-  ## this proc will be called each time a new transaction
-  ## is going to be executed
-  vmState.txCtx = system.move(txCtx)
-  vmState.fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.determineFork
-  vmState.gasCosts = vmState.fork.forkToSchedule
 
 # Using `proc` as `incNonce()` might be `proc` in logging mode
 proc preExecComputation(c: Computation) =

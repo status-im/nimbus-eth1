@@ -70,12 +70,12 @@ proc processTransactionImpl(
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
-    fork:    EVMFork;
       ): Result[GasInt, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
   let
+    fork = vmState.fork
     roDB = vmState.readOnlyStateDB
     baseFee256 = header.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
@@ -115,7 +115,7 @@ proc processTransactionImpl(
     vmState.captureTxStart(tx.gasLimit)
     let
       accTx = vmState.stateDB.beginSavepoint
-      gasBurned = tx.txCallEvm(sender, vmState, fork)
+      gasBurned = tx.txCallEvm(sender, vmState)
     vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
     res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
@@ -169,18 +169,8 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  EthAddress;  ## tx.getSender or tx.ecRecover
     header:  BlockHeader; ## Header for the block containing the current tx
-    fork:    EVMFork;
       ): Result[GasInt,string] =
-  vmState.processTransactionImpl(tx, sender, header, fork)
-
-proc processTransaction*(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
-    header:  BlockHeader;
-      ): Result[GasInt,string] =
-  let fork = vmState.com.toEVMFork(header.forkDeterminationInfo)
-  vmState.processTransaction(tx, sender, header, fork)
+  vmState.processTransactionImpl(tx, sender, header)
 
 # ------------------------------------------------------------------------------
 # End

@@ -81,11 +81,10 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
   let
-    fork = pst.xp.chain.nextFork
     baseFee = pst.xp.chain.baseFee
     tx = item.tx.eip1559TxNormalization(baseFee.GasInt)
 
-  let gasUsed = tx.txCallEvm(item.sender, pst.xp.chain.vmState, fork)
+  let gasUsed = tx.txCallEvm(item.sender, pst.xp.chain.vmState)
   pst.cleanState = false
   doAssert 0 <= gasUsed
   gasUsed

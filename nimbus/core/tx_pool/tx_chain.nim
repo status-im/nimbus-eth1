@@ -250,7 +250,7 @@ func excessBlobGas*(dh: TxChainRef): uint64 =
 
 func nextFork*(dh: TxChainRef): EVMFork =
   ## Getter, fork of next block
-  dh.com.toEVMFork(dh.txEnv.vmState.forkDeterminationInfoForVMState)
+  dh.txEnv.vmState.fork
 
 func gasUsed*(dh: TxChainRef): GasInt =
   ## Getter, accumulated gas burned for collected blocks

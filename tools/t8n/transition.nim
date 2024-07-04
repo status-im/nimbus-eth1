@@ -300,7 +300,7 @@ proc exec(ctx: var TransContext,
 
   let miner = ctx.env.currentCoinbase
   let fork = vmState.com.toEVMFork
-  coinbaseStateClearing(vmState, miner, fork, stateReward.isSome())
+  coinbaseStateClearing(vmState, miner, stateReward.isSome())
 
   let stateDB = vmState.stateDB
   stateDB.postState(result.alloc)

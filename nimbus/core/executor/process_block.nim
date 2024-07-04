@@ -57,7 +57,8 @@ proc procBlkPreamble(
   template header(): BlockHeader =
     blk.header
 
-  if vmState.com.daoForkSupport and vmState.com.daoForkBlock.get == header.number:
+  let com = vmState.com
+  if com.daoForkSupport and com.daoForkBlock.get == header.number:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
@@ -65,7 +66,7 @@ proc procBlkPreamble(
     if blk.transactions.calcTxRoot != header.txRoot:
       return err("Mismatched txRoot")
 
-  if vmState.determineFork >= FkCancun:
+  if com.isCancunOrLater(header.timestamp):
     if header.parentBeaconBlockRoot.isNone:
       return err("Post-Cancun block header must have parentBeaconBlockRoot")
 
@@ -82,7 +83,7 @@ proc procBlkPreamble(
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
 
-  if vmState.determineFork >= FkShanghai:
+  if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:
       return err("Post-Shanghai block header must have withdrawalsRoot")
     if blk.withdrawals.isNone:
@@ -127,7 +128,7 @@ proc procBlkEpilogue(
     # Clearing the account cache here helps manage its size when replaying
     # large ranges of blocks, implicitly limiting its size using the gas limit
     db.persist(
-      clearEmptyAccount = vmState.determineFork >= FkSpurious,
+      clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
       clearCache = true)
 
   if not skipValidation:

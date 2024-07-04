@@ -395,12 +395,11 @@ proc createSignedTx(payload: Blob, chainId: ChainId): Transaction =
 proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
   let
     com  = vmState.com
-    fork = com.toEVMFork()
   vmState.mutateStateDB:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, com.chainId)
-  let asmResult = testCallEvm(tx, tx.getSender, vmState, fork)
+  let asmResult = testCallEvm(tx, tx.getSender, vmState)
   verifyAsmResult(vmState, boa, asmResult)
 
 macro assembler*(list: untyped): untyped =

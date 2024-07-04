@@ -130,7 +130,6 @@ proc writeRootHashToStderr(vmState: BaseVMState) =
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
-    fork    = com.toEVMFork(ctx.header.forkDeterminationInfo)
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:
                 newJsonTracer(stream, ctx.tracerFlags, conf.pretty)
@@ -175,12 +174,12 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
 
   try:
     let rc = vmState.processTransaction(
-                  ctx.tx, sender, ctx.header, fork)
+                  ctx.tx, sender, ctx.header)
     if rc.isOk:
       gasUsed = rc.value
 
     let miner = ctx.header.coinbase
-    coinbaseStateClearing(vmState, miner, fork)
+    coinbaseStateClearing(vmState, miner)
   except CatchableError as ex:
     echo "FATAL: ", ex.msg
     quit(QuitFailure)

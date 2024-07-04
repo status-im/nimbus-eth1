@@ -10,6 +10,7 @@ import
   unittest2, stew/byteutils,
   eth/[keys, trie],
   ../nimbus/common/common,
+  ../tools/common/helpers as chp,
   ../nimbus/[evm/computation,
     evm/state,
     evm/types,
@@ -23,7 +24,7 @@ import
 
 proc initAddress(i: byte): EthAddress = result[19] = i
 
-template doTest(fixture: JsonNode; vmState: BaseVMState; fork: EVMFork, address: PrecompileAddresses): untyped =
+template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddresses): untyped =
   for test in fixture:
     let
       expectedErr = test.hasKey("ExpectedError")
@@ -44,7 +45,7 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: EVMFork, address:
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork)
+    let fixtureResult = testCallEvm(tx, tx.getSender, vmState)
 
     if expectedErr:
       check fixtureResult.isError
@@ -59,20 +60,16 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; fork: EVMFork, address:
           debugEcho "GAS: ", fixtureResult.gasUsed, " ", gasExpected.get
         check fixtureResult.gasUsed == gasExpected.get
 
-proc parseFork(x: string): EVMFork =
-  let x = x.toLowerAscii
-  for name, fork in nameToFork:
-    if name.toLowerAscii == x:
-      return fork
-  doAssert(false, "unsupported fork name " & x)
-
+proc parseFork(x: string): string =
+  result = x.capitalizeAscii  
+  
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let
     label = fixtures["func"].getStr
-    fork  = parseFork(fixtures["fork"].getStr)
+    conf  = getChainConfig(parseFork(fixtures["fork"].getStr))
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
-    com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = ChainConfig())
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = conf)
     vmState = BaseVMState.new(
       BlockHeader(number: 1'u64, stateRoot: emptyRlpHash),
       BlockHeader(),
@@ -80,25 +77,25 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     )
 
   case toLowerAscii(label)
-  of "ecrecover": data.doTest(vmState, fork, paEcRecover)
-  of "sha256"   : data.doTest(vmState, fork, paSha256)
-  of "ripemd"   : data.doTest(vmState, fork, paRipeMd160)
-  of "identity" : data.doTest(vmState, fork, paIdentity)
-  of "modexp"   : data.doTest(vmState, fork, paModExp)
-  of "bn256add" : data.doTest(vmState, fork, paEcAdd)
-  of "bn256mul" : data.doTest(vmState, fork, paEcMul)
-  of "ecpairing": data.doTest(vmState, fork, paPairing)
-  of "blake2f"  : data.doTest(vmState, fork, paBlake2bf)
-  of "blsg1add" : data.doTest(vmState, fork, paBlsG1Add)
-  of "blsg1mul" : data.doTest(vmState, fork, paBlsG1Mul)
-  of "blsg1multiexp" : data.doTest(vmState, fork, paBlsG1MultiExp)
-  of "blsg2add" : data.doTest(vmState, fork, paBlsG2Add)
-  of "blsg2mul" : data.doTest(vmState, fork, paBlsG2Mul)
+  of "ecrecover": data.doTest(vmState, paEcRecover)
+  of "sha256"   : data.doTest(vmState, paSha256)
+  of "ripemd"   : data.doTest(vmState, paRipeMd160)
+  of "identity" : data.doTest(vmState, paIdentity)
+  of "modexp"   : data.doTest(vmState, paModExp)
+  of "bn256add" : data.doTest(vmState, paEcAdd)
+  of "bn256mul" : data.doTest(vmState, paEcMul)
+  of "ecpairing": data.doTest(vmState, paPairing)
+  of "blake2f"  : data.doTest(vmState, paBlake2bf)
+  of "blsg1add" : data.doTest(vmState, paBlsG1Add)
+  of "blsg1mul" : data.doTest(vmState, paBlsG1Mul)
+  of "blsg1multiexp" : data.doTest(vmState, paBlsG1MultiExp)
+  of "blsg2add" : data.doTest(vmState, paBlsG2Add)
+  of "blsg2mul" : data.doTest(vmState, paBlsG2Mul)
   # EIP 2537: disabled due to gas price changes/discprepancies
-  #of "blsg2multiexp": data.doTest(vmState, fork, paBlsG2MultiExp)
-  #of "blspairing": data.doTest(vmState, fork, paBlsPairing)
-  #of "blsmapg1": data.doTest(vmState, fork, paBlsMapG1)
-  #of "blsmapg2": data.doTest(vmState, fork, paBlsMapG2)
+  #of "blsg2multiexp": data.doTest(vmState, paBlsG2MultiExp)
+  #of "blspairing": data.doTest(vmState, paBlsPairing)
+  #of "blsmapg1": data.doTest(vmState, paBlsMapG1)
+  #of "blsmapg2": data.doTest(vmState, paBlsMapG2)
   else:
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED

@@ -101,7 +101,6 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
 
   var gasUsed: GasInt
   let sender = ctx.tx.getSender()
-  let fork = com.toEVMFork(ctx.header.forkDeterminationInfo)
 
   vmState.mutateStateDB:
     setupStateDB(ctx.pre, db)
@@ -112,12 +111,12 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     db.persist()
 
   let rc = vmState.processTransaction(
-                ctx.tx, sender, ctx.header, fork)
+                ctx.tx, sender, ctx.header)
   if rc.isOk:
     gasUsed = rc.value
 
   let miner = ctx.header.coinbase
-  coinbaseStateClearing(vmState, miner, fork)
+  coinbaseStateClearing(vmState, miner)
 
   block post:
     let obtainedHash = vmState.readOnlyStateDB.rootHash
