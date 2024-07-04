@@ -86,9 +86,12 @@ template validatePayload(apiVersion, version, payload) =
     if payload.depositRequests.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "depositRequests is expected from execution payload")
-    if payload.exits.isNone:
+    if payload.withdrawalRequests.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "exits is expected from execution payload")
+        "withdrawalRequests is expected from execution payload")
+    if payload.consolidationRequests.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "consolidationRequests is expected from execution payload")
 
 
 proc newPayload*(ben: BeaconEngineRef,
