@@ -96,7 +96,7 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
         let rc = data.deblobify(VertexRef)
         when extraTraceMessages:
           if rc.isErr:
-            trace logTxt "getVtxFn() failed", rvid, error=rc.error
+            trace logTxt "getVtxFn() failed", error=rc.error
         return rc
       err(GetVtxNotFound)
 

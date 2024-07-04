@@ -372,7 +372,3 @@ proc deblobify*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-
-var a: RootedVertexID = (VertexID(2), VertexID(2))
-
-doAssert a == deblobify(a.blobify().data(), RootedVertexID).value()
