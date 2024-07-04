@@ -11,9 +11,6 @@ import
   ./op_codes, ../../common/evmforks,
   ../evm_errors
 
-when defined(evmc_enabled):
-  import evmc/evmc
-
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf
 type
@@ -70,8 +67,6 @@ type
 
     case kind*: Op
     of Sstore:
-      when defined(evmc_enabled):
-        s_status*: evmc_storage_status
       s_currentValue*: UInt256
       s_originalValue*: UInt256
     of Call, CallCode, DelegateCall, StaticCall:
@@ -135,87 +130,6 @@ const
   # From EIP-2930 (Berlin).
   ACCESS_LIST_STORAGE_KEY_COST* = 1900.GasInt
   ACCESS_LIST_ADDRESS_COST*     = 2400.GasInt
-
-
-when defined(evmc_enabled):
-  type
-    # The gas cost specification for storage instructions.
-    StorageCostSpec = object
-      netCost   : bool   # Is this net gas cost metering schedule?
-      warmAccess: int16  # Storage warm access cost, YP: G_{warmaccess}
-      sset      : int16  # Storage addition cost, YP: G_{sset}
-      reset     : int16  # Storage modification cost, YP: G_{sreset}
-      clear     : int16  # Storage deletion refund, YP: R_{sclear}
-
-    StorageStoreCost* = object
-      gasCost*  : int16
-      gasRefund*: int16
-
-  # Table of gas cost specification for storage instructions per EVM revision.
-  func storageCostSpec(): array[EVMFork, StorageCostSpec] {.compileTime.} =
-    # Legacy cost schedule.
-    const revs = [
-      FkFrontier, FkHomestead, FkTangerine,
-      FkSpurious, FkByzantium, FkPetersburg]
-
-    for rev in revs:
-      result[rev] = StorageCostSpec(
-        netCost: false, warmAccess: 200, sset: 20000, reset: 5000, clear: 15000)
-
-    # Net cost schedule.
-    result[FkConstantinople] = StorageCostSpec(
-      netCost: true, warmAccess: 200, sset: 20000, reset: 5000, clear: 15000)
-    result[FkIstanbul]       = StorageCostSpec(
-      netCost: true, warmAccess: 800, sset: 20000, reset: 5000, clear: 15000)
-    result[FkBerlin]         = StorageCostSpec(
-      netCost: true, warmAccess: WarmStorageReadCost, sset: 20000,
-        reset: 5000 - ColdSloadCost, clear: 15000)
-    result[FkLondon]         = StorageCostSpec(
-      netCost: true, warmAccess: WarmStorageReadCost, sset: 20000,
-        reset: 5000 - ColdSloadCost, clear: 4800)
-
-    result[FkParis]    = result[FkLondon]
-    result[FkShanghai] = result[FkLondon]
-    result[FkCancun]   = result[FkLondon]
-
-  proc legacySStoreCost(e: var array[evmc_storage_status, StorageStoreCost],
-                        c: StorageCostSpec) {.compileTime.} =
-    e[EVMC_STORAGE_ADDED]             = StorageStoreCost(gasCost: c.sset , gasRefund: 0)
-    e[EVMC_STORAGE_DELETED]           = StorageStoreCost(gasCost: c.reset, gasRefund: c.clear)
-    e[EVMC_STORAGE_MODIFIED]          = StorageStoreCost(gasCost: c.reset, gasRefund: 0)
-    e[EVMC_STORAGE_ASSIGNED]          = e[EVMC_STORAGE_MODIFIED]
-    e[EVMC_STORAGE_DELETED_ADDED]     = e[EVMC_STORAGE_ADDED]
-    e[EVMC_STORAGE_MODIFIED_DELETED]  = e[EVMC_STORAGE_DELETED]
-    e[EVMC_STORAGE_DELETED_RESTORED]  = e[EVMC_STORAGE_ADDED]
-    e[EVMC_STORAGE_ADDED_DELETED]     = e[EVMC_STORAGE_DELETED]
-    e[EVMC_STORAGE_MODIFIED_RESTORED] = e[EVMC_STORAGE_MODIFIED]
-
-  proc netSStoreCost(e: var array[evmc_storage_status, StorageStoreCost],
-                      c: StorageCostSpec) {.compileTime.} =
-    e[EVMC_STORAGE_ASSIGNED]          = StorageStoreCost(gasCost: c.warmAccess, gasRefund: 0)
-    e[EVMC_STORAGE_ADDED]             = StorageStoreCost(gasCost: c.sset      , gasRefund: 0)
-    e[EVMC_STORAGE_DELETED]           = StorageStoreCost(gasCost: c.reset     , gasRefund: c.clear)
-    e[EVMC_STORAGE_MODIFIED]          = StorageStoreCost(gasCost: c.reset     , gasRefund: 0)
-    e[EVMC_STORAGE_DELETED_ADDED]     = StorageStoreCost(gasCost: c.warmAccess, gasRefund: -c.clear)
-    e[EVMC_STORAGE_MODIFIED_DELETED]  = StorageStoreCost(gasCost: c.warmAccess, gasRefund: c.clear)
-    e[EVMC_STORAGE_DELETED_RESTORED]  = StorageStoreCost(gasCost: c.warmAccess,
-      gasRefund: c.reset - c.warmAccess - c.clear)
-    e[EVMC_STORAGE_ADDED_DELETED]     = StorageStoreCost(gasCost: c.warmAccess,
-      gasRefund: c.sset - c.warmAccess)
-    e[EVMC_STORAGE_MODIFIED_RESTORED] = StorageStoreCost(gasCost: c.warmAccess,
-      gasRefund: c.reset - c.warmAccess)
-
-  proc storageStoreCost(): array[EVMFork, array[evmc_storage_status, StorageStoreCost]] {.compileTime.} =
-    const tbl = storageCostSpec()
-    for rev in EVMFork:
-      let c = tbl[rev]
-      if not c.netCost: # legacy
-        legacySStoreCost(result[rev], c)
-      else: # net cost
-        netSStoreCost(result[rev], c)
-
-  const
-    SstoreCost* = storageStoreCost()
 
 template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
@@ -318,90 +232,82 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
   func `prefix gasSstore`(value: UInt256, gasParams: GasParams): EvmResult[GasResult] {.nimcall.} =
     ## Value is word to save
     var res: GasResult
-    when defined(evmc_enabled):
-      const c = SstoreCost[fork]
-      let sc  = c[gasParams.s_status]
-      res.gasCost = GasInt sc.gasCost
-      # refund is used in host_services.setStorage
-      # res.gasRefund = sc.gasRefund
-      ok(res)
-    else:
-      when fork >= FkBerlin:
-        # EIP2929
-        const
-          SLOAD_GAS = WarmStorageReadCost
-          SSTORE_RESET_GAS = 5000 - ColdSloadCost
-      else:
-        const
-          SLOAD_GAS = FeeSchedule[GasSload]
-          SSTORE_RESET_GAS = FeeSchedule[GasSreset]
-
+    when fork >= FkBerlin:
+      # EIP2929
       const
-        NoopGas     {.used.} = SLOAD_GAS # if the value doesn't change.
-        DirtyGas    {.used.} = SLOAD_GAS # if a dirty value is changed.
-        InitGas     {.used.} = FeeSchedule[GasSset]  # from clean zero to non-zero
-        InitRefund  {.used.} = FeeSchedule[GasSset] - SLOAD_GAS # resetting to the original zero value
-        CleanGas    {.used.} = SSTORE_RESET_GAS # from clean non-zero to something else
-        CleanRefund {.used.} = SSTORE_RESET_GAS - SLOAD_GAS # resetting to the original non-zero value
-        ClearRefund {.used.} = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
+        SLOAD_GAS = WarmStorageReadCost
+        SSTORE_RESET_GAS = 5000 - ColdSloadCost
+    else:
+      const
+        SLOAD_GAS = FeeSchedule[GasSload]
+        SSTORE_RESET_GAS = FeeSchedule[GasSreset]
 
-      when fork < FkConstantinople or fork == FkPetersburg:
-        let isStorageEmpty = gasParams.s_currentValue.isZero
+    const
+      NoopGas     {.used.} = SLOAD_GAS # if the value doesn't change.
+      DirtyGas    {.used.} = SLOAD_GAS # if a dirty value is changed.
+      InitGas     {.used.} = FeeSchedule[GasSset]  # from clean zero to non-zero
+      InitRefund  {.used.} = FeeSchedule[GasSset] - SLOAD_GAS # resetting to the original zero value
+      CleanGas    {.used.} = SSTORE_RESET_GAS # from clean non-zero to something else
+      CleanRefund {.used.} = SSTORE_RESET_GAS - SLOAD_GAS # resetting to the original non-zero value
+      ClearRefund {.used.} = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
 
-        # Gas cost - literal translation of Yellow Paper
-        res.gasCost = if value.isZero.not and isStorageEmpty:
-                          InitGas
-                        else:
-                          CleanGas
+    when fork < FkConstantinople or fork == FkPetersburg:
+      let isStorageEmpty = gasParams.s_currentValue.isZero
 
-        # Refund
-        if value.isZero and not isStorageEmpty:
+      # Gas cost - literal translation of Yellow Paper
+      res.gasCost = if value.isZero.not and isStorageEmpty:
+                        InitGas
+                      else:
+                        CleanGas
+
+      # Refund
+      if value.isZero and not isStorageEmpty:
+        res.gasRefund = ClearRefund
+    else:
+      # 0. If *gasleft* is less than or equal to 2300, fail the current call.
+      # 1. If current value equals new value (this is a no-op), SSTORE_NOOP_GAS gas is deducted.
+      # 2. If current value does not equal new value:
+      #   2.1. If original value equals current value (this storage slot has not been changed by the current execution context):
+      #     2.1.1. If original value is 0, SSTORE_INIT_GAS gas is deducted.
+      #     2.1.2. Otherwise, SSTORE_CLEAN_GAS gas is deducted. If new value is 0, add SSTORE_CLEAR_REFUND to refund counter.
+      #   2.2. If original value does not equal current value (this storage slot is dirty), SSTORE_DIRTY_GAS gas is deducted. Apply both of the following clauses:
+      #     2.2.1. If original value is not 0:
+      #       2.2.1.1. If current value is 0 (also means that new value is not 0), subtract SSTORE_CLEAR_REFUND gas from refund counter. We can prove that refund counter will never go below 0.
+      #       2.2.1.2. If new value is 0 (also means that current value is not 0), add SSTORE_CLEAR_REFUND gas to refund counter.
+      #     2.2.2. If original value equals new value (this storage slot is reset):
+      #       2.2.2.1. If original value is 0, add SSTORE_INIT_REFUND to refund counter.
+      #       2.2.2.2. Otherwise, add SSTORE_CLEAN_REFUND gas to refund counter.
+
+      # Gas sentry honoured, do the actual gas calculation based on the stored value
+      if gasParams.s_currentValue == value: # noop (1)
+        res.gasCost = NoopGas
+        return ok(res)
+
+      if gasParams.s_originalValue == gasParams.s_currentValue:
+        if gasParams.s_originalValue.isZero: # create slot (2.1.1)
+          res.gasCost = InitGas
+          return ok(res)
+
+        if value.isZero: # delete slot (2.1.2b)
           res.gasRefund = ClearRefund
-      else:
-        # 0. If *gasleft* is less than or equal to 2300, fail the current call.
-        # 1. If current value equals new value (this is a no-op), SSTORE_NOOP_GAS gas is deducted.
-        # 2. If current value does not equal new value:
-        #   2.1. If original value equals current value (this storage slot has not been changed by the current execution context):
-        #     2.1.1. If original value is 0, SSTORE_INIT_GAS gas is deducted.
-        #     2.1.2. Otherwise, SSTORE_CLEAN_GAS gas is deducted. If new value is 0, add SSTORE_CLEAR_REFUND to refund counter.
-        #   2.2. If original value does not equal current value (this storage slot is dirty), SSTORE_DIRTY_GAS gas is deducted. Apply both of the following clauses:
-        #     2.2.1. If original value is not 0:
-        #       2.2.1.1. If current value is 0 (also means that new value is not 0), subtract SSTORE_CLEAR_REFUND gas from refund counter. We can prove that refund counter will never go below 0.
-        #       2.2.1.2. If new value is 0 (also means that current value is not 0), add SSTORE_CLEAR_REFUND gas to refund counter.
-        #     2.2.2. If original value equals new value (this storage slot is reset):
-        #       2.2.2.1. If original value is 0, add SSTORE_INIT_REFUND to refund counter.
-        #       2.2.2.2. Otherwise, add SSTORE_CLEAN_REFUND gas to refund counter.
 
-        # Gas sentry honoured, do the actual gas calculation based on the stored value
-        if gasParams.s_currentValue == value: # noop (1)
-          res.gasCost = NoopGas
-          return ok(res)
+        res.gasCost = CleanGas # write existing slot (2.1.2)
+        return ok(res)
 
-        if gasParams.s_originalValue == gasParams.s_currentValue:
-          if gasParams.s_originalValue.isZero: # create slot (2.1.1)
-            res.gasCost = InitGas
-            return ok(res)
+      if not gasParams.s_originalValue.isZero:
+        if gasParams.s_currentValue.isZero: # recreate slot (2.2.1.1)
+          res.gasRefund -= ClearRefund
+        if value.isZero: # delete slot (2.2.1.2)
+          res.gasRefund += ClearRefund
 
-          if value.isZero: # delete slot (2.1.2b)
-            res.gasRefund = ClearRefund
+      if gasParams.s_originalValue == value:
+        if gasParams.s_originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
+          res.gasRefund += InitRefund
+        else: # reset to original existing slot (2.2.2.2)
+          res.gasRefund += CleanRefund
 
-          res.gasCost = CleanGas # write existing slot (2.1.2)
-          return ok(res)
-
-        if not gasParams.s_originalValue.isZero:
-          if gasParams.s_currentValue.isZero: # recreate slot (2.2.1.1)
-            res.gasRefund -= ClearRefund
-          if value.isZero: # delete slot (2.2.1.2)
-            res.gasRefund += ClearRefund
-
-        if gasParams.s_originalValue == value:
-          if gasParams.s_originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
-            res.gasRefund += InitRefund
-          else: # reset to original existing slot (2.2.2.2)
-            res.gasRefund += CleanRefund
-
-        res.gasCost = DirtyGas # dirty update (2.2)
-      ok(res)
+      res.gasCost = DirtyGas # dirty update (2.2)
+    ok(res)
 
   func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)

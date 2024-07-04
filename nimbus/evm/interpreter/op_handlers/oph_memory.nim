@@ -21,6 +21,7 @@ import
   ../../memory,
   ../../stack,
   ../../types,
+  ../gas_meter,
   ../gas_costs,
   ../op_codes,
   ../utils/utils_numeric,
@@ -31,9 +32,11 @@ import
 
 when not defined(evmc_enabled):
   import
-    ../gas_meter,
     ../../state,
     ../../../db/ledger
+else:
+  import
+    ../evmc_gas_costs
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -42,10 +45,12 @@ when not defined(evmc_enabled):
 when evmc_enabled:
   proc sstoreEvmc(c: Computation, slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
     let
-      status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
-      gasParam = GasParams(kind: Op.Sstore, s_status: status)
-      res      = ? c.gasCosts[Sstore].c_handler(newValue, gasParam)
-      gasCost  = res.gasCost + coldAccess
+      status  = c.host.setStorage(c.msg.contractAddress, slot, newValue)
+      res     = ForkToSstoreCost[c.fork][status]
+      gasCost = res.gasCost + coldAccess
+
+    if res.gasRefund != 0:
+      c.gasMeter.refundGas(res.gasRefund)
 
     c.opcodeGastCost(Sstore, gasCost, "SSTORE")
 

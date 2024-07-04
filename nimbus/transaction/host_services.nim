@@ -125,8 +125,8 @@ proc accountExists(host: TransactionHost, address: HostAddress): bool {.show.} =
 proc getStorage(host: TransactionHost, address: HostAddress, key: HostKey): HostValue {.show.} =
   host.vmState.readOnlyStateDB.getStorage(address, key)
 
-proc setStorageStatus(host: TransactionHost, address: HostAddress,
-                      key: HostKey, newVal: HostValue): EvmcStorageStatus {.show.} =
+proc setStorage(host: TransactionHost, address: HostAddress,
+                key: HostKey, newVal: HostValue): EvmcStorageStatus {.show.} =
   let
     db = host.vmState.readOnlyStateDB
     currentVal = db.getStorage(address, key)
@@ -172,19 +172,6 @@ proc setStorageStatus(host: TransactionHost, address: HostAddress,
     return EVMC_STORAGE_ADDED_DELETED
   else:
     return EVMC_STORAGE_ASSIGNED
-
-proc setStorage(host: TransactionHost, address: HostAddress,
-                key: HostKey, newVal: HostValue): EvmcStorageStatus {.show.} =
-  let
-    status = setStorageStatus(host, address, key, newVal)
-    fork   = host.vmState.fork
-    refund = SstoreCost[fork][status].gasRefund
-
-  if refund != 0:
-    # TODO: Refund depends on `Computation` at the moment.
-    host.computation.gasMeter.refundGas(refund)
-
-  status
 
 proc getBalance(host: TransactionHost, address: HostAddress): HostBalance {.show.} =
   host.vmState.readOnlyStateDB.getBalance(address)
