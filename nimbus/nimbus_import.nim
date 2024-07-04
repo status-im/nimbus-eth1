@@ -24,17 +24,13 @@ import
   beacon_chain/spec/[forks, helpers],
   ./beacon/payload_conv
 
-declareGauge nec_import_block_number,
-  "Latest imported block number"
+declareGauge nec_import_block_number, "Latest imported block number"
 
-declareCounter nec_imported_blocks,
-  "Blocks processed during import"
+declareCounter nec_imported_blocks, "Blocks processed during import"
 
-declareCounter nec_imported_transactions,
-  "Transactions processed during import"
+declareCounter nec_imported_transactions, "Transactions processed during import"
 
-declareCounter nec_imported_gas,
-  "Gas processed during import"
+declareCounter nec_imported_gas, "Gas processed during import"
 
 var running {.volatile.} = true
 
@@ -67,7 +63,14 @@ proc latestEraFile*(eraDir: string, cfg: RuntimeConfig): Result[(string, Era), s
 
 proc loadHistoricalRootsFromEra*(
     eraDir: string, cfg: RuntimeConfig
-): Result[(HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT], HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT], Slot), string] =
+): Result[
+    (
+      HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT],
+      HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT],
+      Slot,
+    ),
+    string,
+] =
   ## Load the historical_summaries from the latest era file.
   let
     (latestEraFile, latestEra) = ?latestEraFile(eraDir, cfg)
@@ -88,23 +91,35 @@ proc loadHistoricalRootsFromEra*(
 
   withState(state[]):
     when consensusFork >= ConsensusFork.Capella:
-      return ok((forkyState.data.historical_roots, forkyState.data.historical_summaries, slot+8192))
+      return ok(
+        (
+          forkyState.data.historical_roots,
+          forkyState.data.historical_summaries,
+          slot + 8192,
+        )
+      )
     else:
-      return ok((forkyState.data.historical_roots, HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT](), slot+8192))
+      return ok(
+        (
+          forkyState.data.historical_roots,
+          HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT](),
+          slot + 8192,
+        )
+      )
 
 proc getBlockFromEra*(
-    db: EraDB, historical_roots: openArray[Eth2Digest], historical_summaries: openArray[HistoricalSummary], slot: Slot, cfg: RuntimeConfig): Opt[ForkedTrustedSignedBeaconBlock] =
-  
+    db: EraDB,
+    historical_roots: openArray[Eth2Digest],
+    historical_summaries: openArray[HistoricalSummary],
+    slot: Slot,
+    cfg: RuntimeConfig,
+): Opt[ForkedTrustedSignedBeaconBlock] =
   let fork = cfg.consensusForkAtEpoch(slot.epoch)
   result.ok(ForkedTrustedSignedBeaconBlock(kind: fork))
   withBlck(result.get()):
     type T = type(forkyBlck)
     forkyBlck = db.getBlock(
-      historical_roots,
-      historical_summaries,
-      slot,
-      Opt[Eth2Digest].err(),
-      T
+      historical_roots, historical_summaries, slot, Opt[Eth2Digest].err(), T
     ).valueOr:
       result.err()
       return
@@ -120,27 +135,28 @@ proc getTxs*(txs: seq[bellatrix.Transaction]): seq[common.Transaction] =
 proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[common.Withdrawal] =
   result = newSeqOfCap[common.Withdrawal](x.len)
   for w in x:
-    result.add(common.Withdrawal(
-      index: w.index,
-      validatorIndex: w.validator_index,
-      address: EthAddress(w.address.data),
-      amount: uint64(w.amount)
-    ))
+    result.add(
+      common.Withdrawal(
+        index: w.index,
+        validatorIndex: w.validator_index,
+        address: EthAddress(w.address.data),
+        amount: uint64(w.amount),
+      )
+    )
 
 proc getEth1Block*(blck: ForkedTrustedSignedBeaconBlock): EthBlock =
   ## Convert a beacon block to an eth1 block.
   withBlck(blck):
     when consensusFork >= ConsensusFork.Bellatrix:
-
       let
         payload = forkyBlck.message.body.execution_payload
         txs = getTxs(payload.transactions.asSeq())
-        ethWithdrawals = 
+        ethWithdrawals =
           when consensusFork >= ConsensusFork.Capella:
             Opt.some(getWithdrawals(payload.withdrawals.asSeq()))
           else:
             Opt.none(seq[common.Withdrawal])
-        withdrawalRoot = 
+        withdrawalRoot =
           when consensusFork >= ConsensusFork.Capella:
             Opt.some(calcWithdrawalsRoot(ethWithdrawals.get()))
           else:
@@ -161,34 +177,30 @@ proc getEth1Block*(blck: ForkedTrustedSignedBeaconBlock): EthBlock =
           else:
             Opt.none(common.Hash256)
 
-      let
-        header = BlockHeader(
-          parentHash: payload.parent_hash,
-          ommersHash: EMPTY_UNCLE_HASH,
-          coinbase: EthAddress(payload.fee_recipient.data),
-          stateRoot: payload.state_root,
-          txRoot: calcTxRoot(txs),
-          receiptsRoot: payload.receipts_root,
-          logsBloom: BloomFilter(payload.logs_bloom.data),
-          difficulty: 0.u256,
-          number: payload.block_number,
-          gasLimit: GasInt(payload.gas_limit),
-          gasUsed: GasInt(payload.gas_used),
-          timestamp: EthTime(payload.timestamp),
-          extraData: payload.extra_data.asSeq(),
-          mixHash: payload.prev_randao,
-          nonce: default(BlockNonce),
-          baseFeePerGas: Opt.some(payload.base_fee_per_gas),
-          withdrawalsRoot: withdrawalRoot,
-          blobGasUsed: blobGasUsed,
-          excessBlobGas: excessBlobGas,
-          parentBeaconBlockRoot: parentBeaconBlockRoot
-        )
+      let header = BlockHeader(
+        parentHash: payload.parent_hash,
+        ommersHash: EMPTY_UNCLE_HASH,
+        coinbase: EthAddress(payload.fee_recipient.data),
+        stateRoot: payload.state_root,
+        txRoot: calcTxRoot(txs),
+        receiptsRoot: payload.receipts_root,
+        logsBloom: BloomFilter(payload.logs_bloom.data),
+        difficulty: 0.u256,
+        number: payload.block_number,
+        gasLimit: GasInt(payload.gas_limit),
+        gasUsed: GasInt(payload.gas_used),
+        timestamp: EthTime(payload.timestamp),
+        extraData: payload.extra_data.asSeq(),
+        mixHash: payload.prev_randao,
+        nonce: default(BlockNonce),
+        baseFeePerGas: Opt.some(payload.base_fee_per_gas),
+        withdrawalsRoot: withdrawalRoot,
+        blobGasUsed: blobGasUsed,
+        excessBlobGas: excessBlobGas,
+        parentBeaconBlockRoot: parentBeaconBlockRoot,
+      )
       return EthBlock(
-        header: header,
-        transactions: txs,
-        uncles: @[],
-        withdrawals: ethWithdrawals
+        header: header, transactions: txs, uncles: @[], withdrawals: ethWithdrawals
       )
 
 func shortLog(a: timer.Duration, parts = int.high): string {.inline.} =
@@ -239,16 +251,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
   var
     imported = 0'u64
-    importedSlot = 
-      if conf.csvStats.isSome:
-        try:
-          let file = readFile(conf.csvStats.get())
-          let lines = file.splitLines()
-          lines[lines.len-2].split(",")[2].parseInt().uint64
-        except:
-          1'u64
-      else:
-        1'u64
+    importedSlot = 1'u64
     gas = GasInt(0)
     txs = 0
     time0 = Moment.now()
@@ -271,7 +274,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       boolFlag({PersistBlockFlag.NoFullValidation}, not conf.fullValidation) +
       boolFlag(NoPersistBodies, not conf.storeBodies) +
       boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts)
-    clConfig = 
+    clConfig =
       if conf.networkId == HoleskyNet:
         getMetadataForNetwork("holesky")
       elif conf.networkId == SepoliaNet:
@@ -281,16 +284,19 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       else:
         error "Unsupported network", network = conf.networkId
         quit(QuitFailure)
-    genesis_validators_root = 
+    genesis_validators_root =
       if conf.networkId == MainNet:
         Eth2Digest.fromHex(
-          "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95") # Mainnet Validators Root
+          "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95"
+        ) # Mainnet Validators Root
       elif conf.networkId == HoleskyNet:
         Eth2Digest.fromHex(
-          "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1") # Holesky Validators Root
+          "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1"
+        ) # Holesky Validators Root
       elif conf.networkId == SepoliaNet:
         Eth2Digest.fromHex(
-          "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078") # Sepolia Validators Root
+          "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078"
+        ) # Sepolia Validators Root
       else:
         error "Unsupported network", network = conf.networkId
         quit(QuitFailure)
@@ -306,10 +312,10 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     start + imported
 
   func f(value: float): string =
-      try:
-        &"{value:4.3f}"
-      except ValueError:
-        raiseAssert "valid fmt string"
+    try:
+      &"{value:4.3f}"
+    except ValueError:
+      raiseAssert "valid fmt string"
 
   template process() =
     let
@@ -329,6 +335,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     info "Imported blocks",
       blockNumber,
       blocks = imported,
+      importedSlot,
       txs,
       mgas = f(gas.float / 1000000),
       bps = f(blocks.len.float / diff1),
@@ -364,37 +371,57 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         warn "Could not write csv", err = exc.msg
     blocks.setLen(0)
 
-  ## ##################################################### 
-  ##                                                
-  ##   Networks with pre-merge and post-merge history      
-  ##
-  ## #####################################################
+  template updateLastImportedSlot(
+      era: EraDB,
+      historical_roots: openArray[Eth2Digest],
+      historical_summaries: openArray[HistoricalSummary],
+  ) =
+    if blockNumber > 1:
+      importedSlot = blockNumber
+      notice "Finding slot number after resuming import", importedSlot
+      var parentHash: common.Hash256
+      let currentHash = com.db.getHeadBlockHash()
+      while currentHash != parentHash:
+        let clBlock = getBlockFromEra(
+          era, historical_roots, historical_summaries, Slot(importedSlot), clConfig.cfg
+        )
+        if clBlock.isSome:
+          let ethBlock = getEth1Block(clBlock.get())
+          parentHash = ethBlock.header.parentHash
+
+        importedSlot += 1
+      importedSlot -= 1
+      notice "Found the slot to start with", importedSlot
+
   if isDir(conf.era1Dir.string):
-    doAssert conf.networkId == MainNet or conf.networkId == SepoliaNet, "Only mainnet/sepolia era1 current supported"
+    doAssert conf.networkId == MainNet or conf.networkId == SepoliaNet,
+      "Only mainnet/sepolia era1 current supported"
 
     let
       # TODO the merge block number could be fetched from the era1 file instead,
       #      specially if the accumulator is added to the chain metadata
-      lastEra1Block = 
+      lastEra1Block =
         if conf.networkId == MainNet:
-          15537393'u64                          # Mainnet
+          15537393'u64 # Mainnet
         else:
-          1450409'u64                           # Sepolia
-      firstSlotAfterMerge = 
+          1450409'u64 # Sepolia
+      firstSlotAfterMerge =
         if conf.networkId == MainNet:
-          4700013'u64                          # Mainnet
+          4700013'u64 # Mainnet
         else:
-          115193'u64                           # Sepolia
+          115193'u64 # Sepolia
 
     if start <= lastEra1Block:
       notice "Importing era1 archive",
         start, dataDir = conf.dataDir.string, era1Dir = conf.era1Dir.string
 
-      let db = 
+      let db =
         if conf.networkId == MainNet:
-          Era1DbRef.init(conf.era1Dir.string, "mainnet").expect("Era files present") # Mainnet
+          Era1DbRef.init(conf.era1Dir.string, "mainnet").expect("Era files present")
+            # Mainnet
         else:
-          Era1DbRef.init(conf.era1Dir.string, "sepolia").expect("Era files present") # Sepolia
+          Era1DbRef.init(conf.era1Dir.string, "sepolia").expect("Era files present")
+            # Sepolia
       defer:
         db.dispose()
 
@@ -411,7 +438,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
       if blocks.len > 0:
         process() # last chunk, if any
-    
+
     if start > lastEra1Block:
       doAssert isDir(conf.eraDir.string), "Era directory not found"
 
@@ -419,49 +446,54 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         start, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
 
       let
-        eraDB = EraDB.new(
-          clConfig.cfg, conf.eraDir.string, genesis_validators_root
-        )
+        eraDB = EraDB.new(clConfig.cfg, conf.eraDir.string, genesis_validators_root)
         (historical_roots, historical_summaries, endSlot) = loadHistoricalRootsFromEra(
           conf.eraDir.string, clConfig.cfg
         ).valueOr:
           error "Error loading historical summaries", error
           quit QuitFailure
-      
-      if importedSlot < firstSlotAfterMerge: # if resuming import we do not update the slot
+
+      # Load the last slot number
+      updateLastImportedSlot(
+        eraDB, historical_roots.asSeq(), historical_summaries.asSeq()
+      )
+
+      if importedSlot < firstSlotAfterMerge:
+        # if resuming import we do not update the slot
         importedSlot = firstSlotAfterMerge
 
       while running and imported < conf.maxBlocks and importedSlot < endSlot:
         var clblock = getBlockFromEra(
-          eraDB, historical_roots.asSeq(), historical_summaries.asSeq(), Slot(importedSlot), clConfig.cfg
+          eraDB,
+          historical_roots.asSeq(),
+          historical_summaries.asSeq(),
+          Slot(importedSlot),
+          clConfig.cfg,
         )
         if clblock.isSome:
           blocks.add getEth1Block(clblock.get())
           imported += 1
-        
+
         importedSlot += 1
         if blocks.lenu64 mod conf.chunkSize == 0:
           process()
-      
+
       if blocks.len > 0:
         process()
 
-  ## ################################################
-  ##                                                
-  ##      Networks with not pre-merge history       
-  ##
-  ## ################################################
   if isDir(conf.eraDir.string) and conf.networkId == HoleskyNet:
-    
     let
-      eraDB = EraDB.new(
-        clConfig.cfg, conf.eraDir.string, genesis_validators_root
-      )
+      eraDB = EraDB.new(clConfig.cfg, conf.eraDir.string, genesis_validators_root)
       (historical_roots, historical_summaries, endSlot) = loadHistoricalRootsFromEra(
         conf.eraDir.string, clConfig.cfg
       ).valueOr:
         error "Error loading historical summaries", error
         quit QuitFailure
+
+    # Load the last slot number
+    updateLastImportedSlot(
+      eraDB, historical_roots.asSeq(), historical_summaries.asSeq()
+    )
 
     if importedSlot <= endSlot:
       notice "Importing era archive HoleskyNet",
@@ -469,7 +501,11 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
       while running and imported < conf.maxBlocks and importedSlot <= endSlot:
         var clblock = getBlockFromEra(
-          eraDB, historical_roots.asSeq(), historical_summaries.asSeq(), Slot(importedSlot), clConfig.cfg
+          eraDB,
+          historical_roots.asSeq(),
+          historical_summaries.asSeq(),
+          Slot(importedSlot),
+          clConfig.cfg,
         )
         if clblock.isSome:
           blocks.add getEth1Block(clblock.get())
