@@ -57,6 +57,8 @@ proc serialise*(
       balance:     pyl.account.balance,
       storageRoot: key.to(Hash256),
       codeHash:    pyl.account.codeHash)
+  of StoData:
+    ok rlp.encode pyl.stoData
 
 # ------------------------------------------------------------------------------
 # Public RLP transcoder mixins

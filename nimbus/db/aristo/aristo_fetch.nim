@@ -223,14 +223,14 @@ proc hasPathGeneric*(
 proc fetchStorageData*(
     db: AristoDbRef;
     accPath: Hash256;
-    stoPath: openArray[byte];
-      ): Result[Blob,AristoError] =
+    stoPath: Hash256;
+      ): Result[UInt256,AristoError] =
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
   ##
-  let pyl = ? db.retrievePayload(? db.fetchStorageID accPath, stoPath)
-  assert pyl.pType == RawData   # debugging only
-  ok pyl.rawBlob
+  let pyl = ? db.retrievePayload(? db.fetchStorageID accPath, stoPath.data)
+  assert pyl.pType == StoData   # debugging only
+  ok pyl.stoData
 
 proc fetchStorageState*(
     db: AristoDbRef;
@@ -247,12 +247,12 @@ proc fetchStorageState*(
 proc hasPathStorage*(
     db: AristoDbRef;
     accPath: Hash256;
-    stoPath: openArray[byte];
+    stoPath: Hash256;
       ): Result[bool,AristoError] =
   ## For a storage tree related to account `accPath`, query whether the data
   ## record indexed by `path` exists on the database.
   ##
-  db.hasPayload(? db.fetchStorageID accPath, stoPath)
+  db.hasPayload(? db.fetchStorageID accPath, stoPath.data)
 
 proc hasStorageData*(
     db: AristoDbRef;

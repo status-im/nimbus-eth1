@@ -41,9 +41,6 @@ proc deltaMerge*(
   if upper.isNil:
     return ok(lower)
 
-  # Verify stackability
-  let lowerTrg = lower.kMap.getOrVoid (VertexID(1), VertexID(1))
-
   # There is no need to deep copy table vertices as they will not be modified.
   let newFilter = LayerDeltaRef(
     sTab: lower.sTab,

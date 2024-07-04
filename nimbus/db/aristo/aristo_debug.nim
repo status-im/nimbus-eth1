@@ -193,6 +193,8 @@ proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
       result &= ($p.account.balance).stripZeros(toExp=true) & ","
       result &= p.stoID.ppVid & ","
       result &= p.account.codeHash.ppCodeHash & ")"
+    of StoData:
+      result = $p.stoData
 
 proc ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
   if not nd.isValid:
@@ -497,38 +499,6 @@ proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
 proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
   nd.ppVtx(db.orDefault, default(RootedVertexID))
 
-# proc pp*(nd: NodeRef; db: AristoDbRef): string =
-#   if not nd.isValid:
-#     result = "n/a"
-#   elif nd.error != AristoError(0):
-#     result = "(!" & $nd.error
-#   else:
-#     result = ["L(", "X(", "B("][nd.vType.ord]
-#     case nd.vType:
-#     of Leaf:
-#       result &= $nd.lPfx.ppPathPfx & "," & nd.lData.pp(db)
-
-#     of Extension:
-#       result &= $nd.ePfx.ppPathPfx & "," & nd.eVid.ppVid & ","
-#       result &= nd.key[0].ppKey(db)
-#       result &= db.ppKeyOk(nd.key[0], nd.eVid)
-
-#     of Branch:
-#       result &= "["
-#       for n in 0..15:
-#         if nd.bVid[n].isValid or nd.key[n].isValid:
-#           result &= nd.bVid[n].ppVid
-#         result &= db.ppKeyOk(nd.key[n], nd.bVid[n]) & ","
-#       result[^1] = ']'
-
-#       result &= ",["
-#       for n in 0..15:
-#         if nd.bVid[n].isValid or nd.key[n].isValid:
-#           result &= nd.key[n].ppKey(db)
-#         result &= ","
-#       result[^1] = ']'
-#   result &= ")"
-
 proc pp*[T](rc: Result[T,(VertexID,AristoError)]): string =
   if rc.isOk:
     result = "ok("
@@ -537,9 +507,6 @@ proc pp*[T](rc: Result[T,(VertexID,AristoError)]): string =
     result &= ")"
   else:
     result = "err((" & rc.error[0].pp & "," & $rc.error[1] & "))"
-
-proc pp*(nd: NodeRef): string =
-  nd.pp(AristoDbRef(nil).orDefault)
 
 proc pp*(
     sTab: Table[RootedVertexID,VertexRef];

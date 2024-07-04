@@ -115,7 +115,6 @@ iterator getBlockTransactionData*(
     db: CoreDbRef;
     txRoot: Hash256;
       ): Blob =
-  const info = "getBlockTransactionData()"
   block body:
     if txRoot == EMPTY_ROOT_HASH:
       break body
@@ -174,7 +173,6 @@ iterator getReceipts*(
     receiptsRoot: Hash256;
       ): Receipt
       {.gcsafe, raises: [RlpError].} =
-  const info = "getReceipts()"
   block body:
     if receiptsRoot == EMPTY_ROOT_HASH:
       break body

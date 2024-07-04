@@ -13,7 +13,6 @@ import
   ../db/ledger,
   ./computation,
   ./interpreter_dispatch,
-  ./interpreter/gas_costs,
   ./message,
   ./state,
   ./types

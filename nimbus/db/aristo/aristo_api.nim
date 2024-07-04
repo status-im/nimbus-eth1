@@ -81,7 +81,7 @@ type
   AristoApiDeleteStorageDataFn* =
     proc(db: AristoDbRef;
          accPath: Hash256;
-         stoPath: openArray[byte];
+         stoPath: Hash256;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a given account argument `accPath`, this function deletes the
@@ -143,8 +143,8 @@ type
   AristoApiFetchStorageDataFn* =
     proc(db: AristoDbRef;
          accPath: Hash256;
-         stoPath: openArray[byte];
-        ): Result[Blob,AristoError]
+         stoPath: Hash256;
+        ): Result[Uint256,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, fetch the data
       ## record from the database indexed by `stoPath`.
@@ -257,7 +257,7 @@ type
   AristoApiHasPathStorageFn* =
     proc(db: AristoDbRef;
          accPath: Hash256;
-         stoPath: openArray[byte];
+         stoPath: Hash256;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, query whether the
@@ -315,8 +315,8 @@ type
   AristoApiMergeStorageDataFn* =
     proc(db: AristoDbRef;
          accPath: Hash256;
-         stoPath: openArray[byte];
-         stoData: openArray[byte];
+         stoPath: Hash256;
+         stoData: UInt256;
         ): Result[void,AristoError]
         {.noRaise.}
       ## Store the `stoData` data argument on the storage area addressed by
@@ -768,9 +768,9 @@ func init*(
         result = api.fetchGenericState(a, b, c)
 
   profApi.fetchStorageData =
-    proc(a: AristoDbRef; accPath: Hash256, c: openArray[byte]): auto =
+    proc(a: AristoDbRef; accPath, stoPath: Hash256): auto =
       AristoApiProfFetchStorageDataFn.profileRunner:
-        result = api.fetchStorageData(a, accPath, c)
+        result = api.fetchStorageData(a, accPath, stoPath)
 
   profApi.fetchStorageState =
     proc(a: AristoDbRef; accPath: Hash256; c: bool): auto =

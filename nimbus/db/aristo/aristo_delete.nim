@@ -399,7 +399,7 @@ proc deleteGenericTree*(
 proc deleteStorageData*(
     db: AristoDbRef;
     accPath: Hash256;          # Implies storage data tree
-    stoPath: openArray[byte];
+    stoPath: Hash256;
       ): Result[bool,AristoError] =
   ## For a given account argument `accPath`, this function deletes the
   ## argument `stoPath` from the associated storage tree (if any, at all.) If
