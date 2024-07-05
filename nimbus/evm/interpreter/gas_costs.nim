@@ -419,16 +419,15 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         return err(gasErr(GasIntOverflow))
       childGasLimit = params.contractGas.truncate(GasInt)
 
-    if gasCost.u256 + childGasLimit.u256 > high(GasInt).u256:
+    if gasCost.u256 + childGasLimit.u256 + params.gasCallEIP2929.u256 > high(GasInt).u256:
       return err(gasErr(GasIntOverflow))
 
     gasCost += childGasLimit
+    gasCost += params.gasCallEIP2929
 
     # Ccallgas - Gas sent to the child message
     if not value.isZero and params.kind in {Call, CallCode}:
       childGasLimit += static(FeeSchedule[GasCallStipend])
-
-    gasCost += params.gasCallEIP2929
 
     # at this point gasCost and childGasLimit is always > 0
     ok( (gasCost, childGasLimit) )
