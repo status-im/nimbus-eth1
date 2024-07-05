@@ -125,17 +125,18 @@ proc getBlockFromEra*(
       return
 
 proc getTxs*(txs: seq[bellatrix.Transaction]): seq[common.Transaction] =
-  result = newSeqOfCap[common.Transaction](txs.len)
+  var transactions = newSeqOfCap[common.Transaction](txs.len)
   for tx in txs:
     try:
-      result.add(rlp.decode(tx.asSeq(), common.Transaction))
+      transactions.add(rlp.decode(tx.asSeq(), common.Transaction))
     except RlpError:
       return @[]
+  return transactions
 
 proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[common.Withdrawal] =
-  result = newSeqOfCap[common.Withdrawal](x.len)
+  var withdrawals = newSeqOfCap[common.Withdrawal](x.len)
   for w in x:
-    result.add(
+    withdrawals.add(
       common.Withdrawal(
         index: w.index,
         validatorIndex: w.validator_index,
@@ -143,6 +144,7 @@ proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[common.Withdrawal] =
         amount: uint64(w.amount),
       )
     )
+  return withdrawals
 
 proc getEth1Block*(blck: ForkedTrustedSignedBeaconBlock): EthBlock =
   ## Convert a beacon block to an eth1 block.
