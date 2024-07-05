@@ -395,7 +395,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
   if isDir(conf.era1Dir.string):
     doAssert conf.networkId == MainNet or conf.networkId == SepoliaNet,
-      "Only mainnet/sepolia era1 current supported"
+      "Only mainnet/sepolia era1 currently supported"
 
     let
       # TODO the merge block number could be fetched from the era1 file instead,
