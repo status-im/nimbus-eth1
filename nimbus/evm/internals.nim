@@ -25,3 +25,10 @@ export
   op_codes,
   memory,
   stack
+
+when defined(evmc_enabled):
+  import
+    ./interpreter/evmc_gas_costs
+
+  export
+    evmc_gas_costs
