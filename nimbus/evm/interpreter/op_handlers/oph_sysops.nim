@@ -86,17 +86,15 @@ proc selfDestructOp(k: var VmCtx): EvmResultVoid =
 
 proc selfDestructEIP150Op(k: var VmCtx): EvmResultVoid =
   ## selfDestructEip150 (auto generated comment)
-  let cpt = k.cpt
-  let beneficiary = ? cpt.stack.popAddress()
-  block:
-    let gasParams = GasParams(
-      kind: SelfDestruct,
-      sd_condition: not cpt.accountExists(beneficiary))
+  let
+    cpt = k.cpt
+    beneficiary = ? cpt.stack.popAddress()
+    condition = not cpt.accountExists(beneficiary)
+    gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
-    let res = ? cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams)
-    ? cpt.opcodeGastCost(SelfDestruct,
-        res.gasCost, reason = "SELFDESTRUCT EIP150")
-    cpt.selfDestruct(beneficiary)
+  ? cpt.opcodeGastCost(SelfDestruct,
+    gasCost, reason = "SELFDESTRUCT EIP150")
+  cpt.selfDestruct(beneficiary)
   ok()
 
 proc selfDestructEIP161Op(k: var VmCtx): EvmResultVoid =
@@ -104,20 +102,16 @@ proc selfDestructEIP161Op(k: var VmCtx): EvmResultVoid =
   let cpt = k.cpt
   ? checkInStaticContext(cpt)
 
-  let beneficiary = ? cpt.stack.popAddress()
-  block:
-    let
-      isDead = not cpt.accountExists(beneficiary)
-      balance = cpt.getBalance(cpt.msg.contractAddress)
+  let
+    beneficiary = ? cpt.stack.popAddress()
+    isDead = not cpt.accountExists(beneficiary)
+    balance = cpt.getBalance(cpt.msg.contractAddress)
+    condition = isDead and not balance.isZero
+    gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
-    let gasParams = GasParams(
-      kind: SelfDestruct,
-      sd_condition: isDead and not balance.isZero)
-
-    let res = ? cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams)
-    ? cpt.opcodeGastCost(SelfDestruct,
-      res.gasCost, reason = "SELFDESTRUCT EIP161")
-    cpt.selfDestruct(beneficiary)
+  ? cpt.opcodeGastCost(SelfDestruct,
+    gasCost, reason = "SELFDESTRUCT EIP161")
+  cpt.selfDestruct(beneficiary)
   ok()
 
 proc selfDestructEIP2929Op(k: var VmCtx): EvmResultVoid =
@@ -125,32 +119,27 @@ proc selfDestructEIP2929Op(k: var VmCtx): EvmResultVoid =
   let cpt = k.cpt
   ? checkInStaticContext(cpt)
 
-  let beneficiary = ? cpt.stack.popAddress()
-  block:
-    let
-      isDead = not cpt.accountExists(beneficiary)
-      balance = cpt.getBalance(cpt.msg.contractAddress)
+  let
+    beneficiary = ? cpt.stack.popAddress()
+    isDead = not cpt.accountExists(beneficiary)
+    balance = cpt.getBalance(cpt.msg.contractAddress)
+    condition = isDead and not balance.isZero
 
-    let
-      gasParams = GasParams(
-        kind: SelfDestruct,
-        sd_condition: isDead and not balance.isZero)
-      res = ? cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams)
+  var
+    gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
-    var gasCost = res.gasCost
-
-    when evmc_enabled:
-      if cpt.host.accessAccount(beneficiary) == EVMC_ACCESS_COLD:
+  when evmc_enabled:
+    if cpt.host.accessAccount(beneficiary) == EVMC_ACCESS_COLD:
+      gasCost = gasCost + ColdAccountAccessCost
+  else:
+    cpt.vmState.mutateStateDB:
+      if not db.inAccessList(beneficiary):
+        db.accessList(beneficiary)
         gasCost = gasCost + ColdAccountAccessCost
-    else:
-      cpt.vmState.mutateStateDB:
-        if not db.inAccessList(beneficiary):
-          db.accessList(beneficiary)
-          gasCost = gasCost + ColdAccountAccessCost
 
-    ? cpt.opcodeGastCost(SelfDestruct,
-      gasCost, reason = "SELFDESTRUCT EIP2929")
-    cpt.selfDestruct(beneficiary)
+  ? cpt.opcodeGastCost(SelfDestruct,
+    gasCost, reason = "SELFDESTRUCT EIP2929")
+  cpt.selfDestruct(beneficiary)
   ok()
 
 # ------------------------------------------------------------------------------

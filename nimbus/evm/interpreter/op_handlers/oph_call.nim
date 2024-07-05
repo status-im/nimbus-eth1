@@ -210,22 +210,22 @@ proc callOp(k: var VmCtx): EvmResultVoid =
 
   let
     p = ? cpt.callParams
-    res = ? cpt.gasCosts[Call].c_handler(
+
+  var
+    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler(
       p.value,
       GasParams(
-        kind:             Call,
-        c_isNewAccount:   not cpt.accountExists(p.contractAddress),
-        c_gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
-        c_contractGas:    p.gas,
-        c_currentMemSize: cpt.memory.len,
-        c_memOffset:      p.memOffset,
-        c_memLength:      p.memLength))
+        kind:           Call,
+        isNewAccount:   not cpt.accountExists(p.contractAddress),
+        gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
+        contractGas:    p.gas,
+        currentMemSize: cpt.memory.len,
+        memOffset:      p.memOffset,
+        memLength:      p.memLength))
 
-  var (gasCost, childGasLimit) = res
-
+  # at this point gasCost is always > 0
   gasCost += p.gasCallEIP2929
-  if gasCost >= 0:
-    ? cpt.opcodeGastCost(Call, gasCost, reason = $Call)
+  ? cpt.opcodeGastCost(Call, gasCost, reason = $Call)
 
   cpt.returnData.setLen(0)
 
@@ -236,9 +236,6 @@ proc callOp(k: var VmCtx): EvmResultVoid =
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
-
-  if gasCost < 0 and childGasLimit <= 0:
-    return err(opErr(OutOfGas))
 
   cpt.memory.extend(p.memInPos, p.memInLen)
   cpt.memory.extend(p.memOutPos, p.memOutLen)
@@ -288,21 +285,22 @@ proc callCodeOp(k: var VmCtx): EvmResultVoid =
   let
     cpt = k.cpt
     p = ? cpt.callCodeParams
-    res = ? cpt.gasCosts[CallCode].c_handler(
+
+  var
+    (gasCost, childGasLimit) = ? cpt.gasCosts[CallCode].c_handler(
       p.value,
       GasParams(
-        kind:             CallCode,
-        c_isNewAccount:   not cpt.accountExists(p.contractAddress),
-        c_gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
-        c_contractGas:    p.gas,
-        c_currentMemSize: cpt.memory.len,
-        c_memOffset:      p.memOffset,
-        c_memLength:      p.memLength))
+        kind:           CallCode,
+        isNewAccount:   not cpt.accountExists(p.contractAddress),
+        gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
+        contractGas:    p.gas,
+        currentMemSize: cpt.memory.len,
+        memOffset:      p.memOffset,
+        memLength:      p.memLength))
 
-  var (gasCost, childGasLimit) = res
+  # at this point gasCost is always > 0
   gasCost += p.gasCallEIP2929
-  if gasCost >= 0:
-    ? cpt.opcodeGastCost(CallCode, gasCost, reason = $CallCode)
+  ? cpt.opcodeGastCost(CallCode, gasCost, reason = $CallCode)
 
   cpt.returnData.setLen(0)
 
@@ -313,9 +311,6 @@ proc callCodeOp(k: var VmCtx): EvmResultVoid =
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
-
-  if gasCost < 0 and childGasLimit <= 0:
-    return err(opErr(OutOfGas))
 
   cpt.memory.extend(p.memInPos, p.memInLen)
   cpt.memory.extend(p.memOutPos, p.memOutLen)
@@ -366,21 +361,22 @@ proc delegateCallOp(k: var VmCtx): EvmResultVoid =
   let
     cpt = k.cpt
     p = ? cpt.delegateCallParams
-    res = ? cpt.gasCosts[DelegateCall].c_handler(
+
+  var
+    (gasCost, childGasLimit) = ? cpt.gasCosts[DelegateCall].c_handler(
       p.value,
       GasParams(
-        kind: DelegateCall,
-        c_isNewAccount:   not cpt.accountExists(p.contractAddress),
-        c_gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
-        c_contractGas:    p.gas,
-        c_currentMemSize: cpt.memory.len,
-        c_memOffset:      p.memOffset,
-        c_memLength:      p.memLength))
+        kind:           DelegateCall,
+        isNewAccount:   not cpt.accountExists(p.contractAddress),
+        gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
+        contractGas:    p.gas,
+        currentMemSize: cpt.memory.len,
+        memOffset:      p.memOffset,
+        memLength:      p.memLength))
 
-  var (gasCost, childGasLimit) = res
+  # at this point gasCost is always > 0
   gasCost += p.gasCallEIP2929
-  if gasCost >= 0:
-    ? cpt.opcodeGastCost(DelegateCall, gasCost, reason = $DelegateCall)
+  ? cpt.opcodeGastCost(DelegateCall, gasCost, reason = $DelegateCall)
 
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
@@ -390,9 +386,6 @@ proc delegateCallOp(k: var VmCtx): EvmResultVoid =
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
-
-  if gasCost < 0 and childGasLimit <= 0:
-    return err(opErr(OutOfGas))
 
   cpt.memory.extend(p.memInPos, p.memInLen)
   cpt.memory.extend(p.memOutPos, p.memOutLen)
@@ -438,21 +431,22 @@ proc staticCallOp(k: var VmCtx): EvmResultVoid =
   let
     cpt = k.cpt
     p = ? cpt.staticCallParams
-    res = ? cpt.gasCosts[StaticCall].c_handler(
+
+  var
+    (gasCost, childGasLimit) = ? cpt.gasCosts[StaticCall].c_handler(
       p.value,
       GasParams(
-        kind: StaticCall,
-        c_isNewAccount:   not cpt.accountExists(p.contractAddress),
-        c_gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
-        c_contractGas:    p.gas,
-        c_currentMemSize: cpt.memory.len,
-        c_memOffset:      p.memOffset,
-        c_memLength:      p.memLength))
+        kind:           StaticCall,
+        isNewAccount:   not cpt.accountExists(p.contractAddress),
+        gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
+        contractGas:    p.gas,
+        currentMemSize: cpt.memory.len,
+        memOffset:      p.memOffset,
+        memLength:      p.memLength))
 
-  var (gasCost, childGasLimit) = res
+  # at this point gasCost is always > 0
   gasCost += p.gasCallEIP2929
-  if gasCost >= 0:
-    ? cpt.opcodeGastCost(StaticCall, gasCost, reason = $StaticCall)
+  ? cpt.opcodeGastCost(StaticCall, gasCost, reason = $StaticCall)
 
   cpt.returnData.setLen(0)
 
@@ -463,9 +457,6 @@ proc staticCallOp(k: var VmCtx): EvmResultVoid =
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
-
-  if gasCost < 0 and childGasLimit <= 0:
-    return err(opErr(OutOfGas))
 
   cpt.memory.extend(p.memInPos, p.memInLen)
   cpt.memory.extend(p.memOutPos, p.memOutLen)

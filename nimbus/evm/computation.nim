@@ -340,9 +340,8 @@ proc writeContract*(c: Computation) =
   # transaction too, before self-destruction wipes the account at the end.
 
   let
-    gasParams = GasParams(kind: Create, cr_memLength: len)
-    res = c.gasCosts[Create].cr_handler(0.u256, gasParams)
-    codeCost = res.gasCost
+    gasParams = GasParamsCr(memLength: len)
+    codeCost = c.gasCosts[Create].cr_handler(0.u256, gasParams)
 
   if codeCost <= c.gasMeter.gasRemaining:
     c.gasMeter.consumeGas(codeCost,

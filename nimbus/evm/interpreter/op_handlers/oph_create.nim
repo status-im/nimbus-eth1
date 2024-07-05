@@ -101,15 +101,14 @@ proc createOp(k: var VmCtx): EvmResultVoid =
     return err(opErr(InvalidInitCode))
 
   let
-    gasParams = GasParams(
-      kind:              Create,
-      cr_currentMemSize: cpt.memory.len,
-      cr_memOffset:      memPos,
-      cr_memLength:      memLen)
-    res = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+    gasParams = GasParamsCr(
+      currentMemSize: cpt.memory.len,
+      memOffset:      memPos,
+      memLength:      memLen)
+    gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
 
   ? cpt.opcodeGastCost(Create,
-    res.gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
+    gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
@@ -182,14 +181,13 @@ proc create2Op(k: var VmCtx): EvmResultVoid =
     return err(opErr(InvalidInitCode))
 
   let
-    gasParams = GasParams(
-      kind:              Create,
-      cr_currentMemSize: cpt.memory.len,
-      cr_memOffset:      memPos,
-      cr_memLength:      memLen)
-    res = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+    gasParams = GasParamsCr(
+      currentMemSize: cpt.memory.len,
+      memOffset:      memPos,
+      memLength:      memLen)
 
-  let gasCost = res.gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
+  var gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+  gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
   ? cpt.opcodeGastCost(Create2,
     gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")

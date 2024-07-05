@@ -58,11 +58,10 @@ else:
   proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
     let
       currentValue = c.getStorage(slot)
-      gasParam = GasParams(
-        kind: Op.Sstore,
-        s_currentValue: currentValue)
+      gasParam = GasParamsSs(
+        currentValue: currentValue)
 
-      res = ? c.gasCosts[Sstore].c_handler(newValue, gasParam)
+      res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
     ? c.opcodeGastCost(Sstore, res.gasCost, "SSTORE")
     if res.gasRefund > 0:
@@ -78,12 +77,11 @@ else:
       stateDB = c.vmState.readOnlyStateDB
       currentValue = c.getStorage(slot)
 
-      gasParam = GasParams(
-        kind: Op.Sstore,
-        s_currentValue: currentValue,
-        s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
+      gasParam = GasParamsSs(
+        currentValue: currentValue,
+        originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
 
-      res = ? c.gasCosts[Sstore].c_handler(newValue, gasParam)
+      res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
     ? c.opcodeGastCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
