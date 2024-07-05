@@ -210,21 +210,18 @@ proc callOp(k: var VmCtx): EvmResultVoid =
 
   let
     p = ? cpt.callParams
-
-  var
     (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler(
       p.value,
       GasParams(
         kind:           Call,
         isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
+        gasLeft:        cpt.gasMeter.gasRemaining,
+        gasCallEIP2929: p.gasCallEIP2929,
         contractGas:    p.gas,
         currentMemSize: cpt.memory.len,
         memOffset:      p.memOffset,
         memLength:      p.memLength))
 
-  # at this point gasCost is always > 0
-  gasCost += p.gasCallEIP2929
   ? cpt.opcodeGastCost(Call, gasCost, reason = $Call)
 
   cpt.returnData.setLen(0)
@@ -285,21 +282,18 @@ proc callCodeOp(k: var VmCtx): EvmResultVoid =
   let
     cpt = k.cpt
     p = ? cpt.callCodeParams
-
-  var
     (gasCost, childGasLimit) = ? cpt.gasCosts[CallCode].c_handler(
       p.value,
       GasParams(
         kind:           CallCode,
         isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
+        gasLeft:        cpt.gasMeter.gasRemaining,
+        gasCallEIP2929: p.gasCallEIP2929,
         contractGas:    p.gas,
         currentMemSize: cpt.memory.len,
         memOffset:      p.memOffset,
         memLength:      p.memLength))
 
-  # at this point gasCost is always > 0
-  gasCost += p.gasCallEIP2929
   ? cpt.opcodeGastCost(CallCode, gasCost, reason = $CallCode)
 
   cpt.returnData.setLen(0)
@@ -361,21 +355,18 @@ proc delegateCallOp(k: var VmCtx): EvmResultVoid =
   let
     cpt = k.cpt
     p = ? cpt.delegateCallParams
-
-  var
     (gasCost, childGasLimit) = ? cpt.gasCosts[DelegateCall].c_handler(
       p.value,
       GasParams(
         kind:           DelegateCall,
         isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
+        gasLeft:        cpt.gasMeter.gasRemaining,
+        gasCallEIP2929: p.gasCallEIP2929,
         contractGas:    p.gas,
         currentMemSize: cpt.memory.len,
         memOffset:      p.memOffset,
         memLength:      p.memLength))
 
-  # at this point gasCost is always > 0
-  gasCost += p.gasCallEIP2929
   ? cpt.opcodeGastCost(DelegateCall, gasCost, reason = $DelegateCall)
 
   cpt.returnData.setLen(0)
@@ -431,21 +422,18 @@ proc staticCallOp(k: var VmCtx): EvmResultVoid =
   let
     cpt = k.cpt
     p = ? cpt.staticCallParams
-
-  var
     (gasCost, childGasLimit) = ? cpt.gasCosts[StaticCall].c_handler(
       p.value,
       GasParams(
         kind:           StaticCall,
         isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasBalance:     cpt.gasMeter.gasRemaining - p.gasCallEIP2929,
+        gasLeft:        cpt.gasMeter.gasRemaining,
+        gasCallEIP2929: p.gasCallEIP2929,
         contractGas:    p.gas,
         currentMemSize: cpt.memory.len,
         memOffset:      p.memOffset,
         memLength:      p.memLength))
 
-  # at this point gasCost is always > 0
-  gasCost += p.gasCallEIP2929
   ? cpt.opcodeGastCost(StaticCall, gasCost, reason = $StaticCall)
 
   cpt.returnData.setLen(0)
