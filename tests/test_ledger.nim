@@ -28,7 +28,9 @@ import
 const
   genesisFile = "tests/customgenesis/cancun123.json"
   hexPrivKey  = "af1a9be9f1a54421cac82943820a0fe0f601bb5f4f6d0bccc81c613f0ce6ae22"
-  senderAddr  = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
+
+# The above privKey will generate this address
+# senderAddr  = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
 
 type
   TestEnv = object
@@ -391,7 +393,7 @@ proc runLedgerTransactionTests(noisy = true) =
         let ledger = env.com.getLedger(head)
         env.runTrial4(ledger, n, rollback = true)
 
-proc runLedgerBesicOperationsTests() =
+proc runLedgerBasicOperationsTests() =
   suite "Ledger basic operations tests":
     setup:
       const emptyAcc {.used.} = newAccount()
@@ -454,7 +456,7 @@ proc runLedgerBesicOperationsTests() =
       check x.originalStorage.len == 3
       check y.originalStorage.len == 3
 
-    test "accounts cache":
+    test "Ledger various operations":
       var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
       var addr1 = initAddr(1)
 
@@ -494,8 +496,7 @@ proc runLedgerBesicOperationsTests() =
       db.setStorage(addr1, 1.u256, 10.u256)
       check rootHash == db.rootHash
 
-      # accounts cache readonly operations
-      # use previous hash
+      # Ledger readonly operations using previous hash
       var ac2 = LedgerRef.init(memDB, rootHash)
       var addr2 = initAddr(2)
 
@@ -515,7 +516,7 @@ proc runLedgerBesicOperationsTests() =
       # state trie at all
       check ac2.rootHash == rootHash
 
-    test "accounts cache code retrieval after persist called":
+    test "Ledger code retrieval after persist called":
       var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
       var addr2 = initAddr(2)
       ac.setCode(addr2, code)
@@ -656,7 +657,7 @@ proc runLedgerBesicOperationsTests() =
       check ac.vts(0xcc, 7, 88) == false
       check ac.vts(0xdd, 2, 66) == false
 
-    test "accounts cache contractCollision":
+    test "ledger contractCollision":
       # use previous hash
       var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
       let addr2 = initAddr(2)
@@ -678,13 +679,79 @@ proc runLedgerBesicOperationsTests() =
       ac.setNonce(addr4, 1)
       check ac.contractCollision(addr4) == true
 
+    test "Ledger storage iterator":
+      var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+      let addr2 = initAddr(2)
+      ac.setStorage(addr2, 1.u256, 2.u256)
+      ac.setStorage(addr2, 2.u256, 3.u256)
+
+      var keys: seq[UInt256]
+      var vals: seq[UInt256]
+      for k, v in ac.cachedStorage(addr2):
+        keys.add k
+        vals.add v
+
+      # before persist, there are storages in cache
+      check keys.len == 2
+      check vals.len == 2
+
+      check 1.u256 in keys
+      check 2.u256 in keys
+
+      # before persist, the values are all original values
+      check vals == @[0.u256, 0.u256]
+
+      keys.reset
+      vals.reset
+
+      for k, v in ac.storage(addr2):
+        keys.add k
+        vals.add k
+
+      # before persist, there are no storages in db
+      check keys.len == 0
+      check vals.len == 0
+
+      ac.persist()
+      for k, v in ac.cachedStorage(addr2):
+        keys.add k
+        vals.add v
+
+      # after persist, there are storages in cache
+      check keys.len == 2
+      check vals.len == 2
+
+      check 1.u256 in keys
+      check 2.u256 in keys
+
+      # after persist, the values are what we put into
+      check 2.u256 in vals
+      check 3.u256 in vals
+
+      keys.reset
+      vals.reset
+
+      for k, v in ac.storage(addr2):
+        keys.add k
+        vals.add v
+
+      # after persist, there are storages in db
+      check keys.len == 2
+      check vals.len == 2
+
+      check 1.u256 in keys
+      check 2.u256 in keys
+
+      check 2.u256 in vals
+      check 3.u256 in vals
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc ledgerMain*(noisy = defined(debug)) =
   noisy.runLedgerTransactionTests
-  runLedgerBesicOperationsTests()
+  runLedgerBasicOperationsTests()
 
 when isMainModule:
   var noisy = defined(debug)

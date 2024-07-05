@@ -13,14 +13,15 @@
 import
   std/[tables, hashes, sets, typetraits],
   chronicles,
-  eth/[common, rlp],
+  eth/common,
   results,
   stew/keyed_queue,
   ../../stateless/multi_keys,
   "../.."/[constants, utils/utils],
   ../access_list as ac_access_list,
   ../../evm/code_bytes,
-  ".."/[core_db, storage_types, transient_storage]
+  ".."/[core_db, storage_types, transient_storage],
+  ../aristo/aristo_blobify
 
 export code_bytes
 
@@ -141,12 +142,6 @@ proc resetCoreDbAccount(ac: AccountsLedgerRef, acc: AccountRef) =
   acc.statement.nonce = emptyEthAccount.nonce
   acc.statement.balance = emptyEthAccount.balance
   acc.statement.codeHash = emptyEthAccount.codeHash
-
-template noRlpException(info: static[string]; code: untyped) =
-  try:
-    code
-  except RlpError as e:
-    raiseAssert info & ", name=\"" & $e.name & "\", msg=\"" & e.msg & "\""
 
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
@@ -384,7 +379,7 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
         discard
     let
       key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
-      rc = ac.kvt.put(key.toOpenArray, rlp.encode(slot))
+      rc = ac.kvt.put(key.toOpenArray, blobify(slot).data)
     if rc.isErr:
       warn logTxt "persistStorage()", slot, error=($$rc.error)
 
@@ -727,13 +722,16 @@ iterator storage*(
       ): (UInt256, UInt256) =
   # beware that if the account not persisted,
   # the storage root will not be updated
-  noRlpException "storage()":
-    for (slotHash, value) in ac.ledger.slotPairs eAddr.toAccountKey:
-      let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
-      if rc.isErr:
-        warn logTxt "storage()", slotHash, error=($$rc.error)
-      else:
-        yield (rlp.decode(rc.value, UInt256), rlp.decode(value, UInt256))
+  for (slotHash, value) in ac.ledger.slotPairs eAddr.toAccountKey:
+    let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+    if rc.isErr:
+      warn logTxt "storage()", slotHash, error=($$rc.error)
+      continue
+    let r = deblobify(rc.value, UInt256)
+    if r.isErr:
+      warn logTxt "storage.deblobify", slotHash, msg=r.error
+      continue
+    yield (r.value, value)
 
 iterator cachedStorage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) =
   let acc = ac.getAccount(address, false)

@@ -474,14 +474,14 @@ iterator rightPairsStorage*(
     db: AristoDbRef;                    # Database layer
     accPath: Hash256;           # Account the storage data belong to
     start = low(PathID);                # Before or at first value
-      ): (PathID,Blob) =
+      ): (PathID,UInt256) =
   ## Variant of `rightPairs()` for a storage tree
   block body:
     let stoID = db.fetchStorageID(accPath).valueOr:
       break body
     if stoID.isValid:
       for (lty,pyl) in db.rightPairs LeafTie(root: stoID, path: start):
-        yield (lty.path, pyl.rawBlob)
+        yield (lty.path, pyl.stoData)
 
 # ----------------
 
