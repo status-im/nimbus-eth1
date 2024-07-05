@@ -75,7 +75,7 @@ iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
     raiseAssert: "Unsupported database type: " & $mpt.dbType
   mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
 
-iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash256): (Blob, Blob) =
+iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash256): (Blob, UInt256) =
   ## Trie traversal, only supported for `CoreDbMptRef`
   ##
   acc.setTrackNewApi AccSlotPairsIt
