@@ -465,16 +465,18 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         importedSlot = firstSlotAfterMerge
 
       while running and imported < conf.maxBlocks and importedSlot < endSlot:
-        var clblock = getBlockFromEra(
+        let clblock = getBlockFromEra(
           eraDB,
           historical_roots.asSeq(),
           historical_summaries.asSeq(),
           Slot(importedSlot),
           clConfig.cfg,
-        )
-        if clblock.isSome:
-          blocks.add getEth1Block(clblock.get())
-          imported += 1
+        ).valueOr:
+          importedSlot += 1
+          continue
+
+        blocks.add getEth1Block(clblock)
+        imported += 1
 
         importedSlot += 1
         if blocks.lenu64 mod conf.chunkSize == 0:
@@ -502,16 +504,18 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         importedSlot, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
 
       while running and imported < conf.maxBlocks and importedSlot <= endSlot:
-        var clblock = getBlockFromEra(
+        let clblock = getBlockFromEra(
           eraDB,
           historical_roots.asSeq(),
           historical_summaries.asSeq(),
           Slot(importedSlot),
           clConfig.cfg,
-        )
-        if clblock.isSome:
-          blocks.add getEth1Block(clblock.get())
-          imported += 1
+        ).valueOr:
+          importedSlot += 1
+          continue
+
+        blocks.add getEth1Block(clblock)
+        imported += 1
 
         importedSlot += 1
         if blocks.lenu64 mod conf.chunkSize == 0 and blocks.len > 0:
