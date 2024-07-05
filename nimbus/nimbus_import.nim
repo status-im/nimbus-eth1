@@ -47,7 +47,7 @@ proc latestEraFile*(eraDir: string, cfg: RuntimeConfig): Result[(string, Era), s
       if parts.len() == 3 and parts[0] == cfg.CONFIG_NAME:
         let era =
           try:
-            parseInt(parts[1])
+            parseBiggestInt(parts[1])
           except ValueError:
             return err("Invalid era number")
         if era > latestEra:
