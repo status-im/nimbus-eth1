@@ -65,25 +65,22 @@ type
     #   - σ: an account address
     #   - μ: a value popped from the stack or its size.
 
-    case kind*: Op
-    of Sstore:
-      s_currentValue*: UInt256
-      s_originalValue*: UInt256
-    of Call, CallCode, DelegateCall, StaticCall:
-      c_isNewAccount*: bool
-      c_gasBalance*: GasInt
-      c_contractGas*: UInt256
-      c_currentMemSize*: GasNatural
-      c_memOffset*: GasNatural
-      c_memLength*: GasNatural
-    of Create:
-      cr_currentMemSize*: GasNatural
-      cr_memOffset*: GasNatural
-      cr_memLength*: GasNatural
-    of SelfDestruct:
-      sd_condition*: bool
-    else:
-      discard
+    kind*: Op
+    isNewAccount*: bool
+    gasBalance*: GasInt
+    contractGas*: UInt256
+    currentMemSize*: GasNatural
+    memOffset*: GasNatural
+    memLength*: GasNatural
+
+  GasParamsSs* = object
+    currentValue*: UInt256
+    originalValue*: UInt256
+
+  GasParamsCr* = object
+    currentMemSize*: GasNatural
+    memOffset*: GasNatural
+    memLength*: GasNatural
 
   GasCostKind* = enum
     GckInvalidOp,
@@ -91,10 +88,14 @@ type
     GckDynamic,
     GckMemExpansion,
     GckCreate,
-    GckComplex,
-    GckLater
+    GckCall,
+    GckLater,
+    GckSuicide,
+    GckSstore
 
-  GasResult = tuple[gasCost, gasRefund: GasInt]
+  # gasRefund of sstore can be a negative number
+  SStoreGasResult = tuple[gasCost: GasInt, gasRefund: int64]
+  CallGasResult = tuple[gasCost, childGasLimit: GasInt]
 
   GasCost = object
     case kind*: GasCostKind
@@ -109,15 +110,21 @@ type
       m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt
                     {.nimcall, gcsafe, raises: [].}
     of GckCreate:
-      cr_handler*: proc(value: UInt256, gasParams: GasParams): GasResult
+      cr_handler*: proc(value: UInt256, params: GasParamsCr): GasInt
                     {.nimcall, gcsafe, raises: [].}
-    of GckComplex:
-      c_handler*: proc(value: UInt256, gasParams: GasParams): EvmResult[GasResult]
+    of GckCall:
+      c_handler*: proc(value: UInt256, params: GasParams): EvmResult[CallGasResult]
                     {.nimcall, gcsafe, raises: [].}
       # We use gasCost/gasRefund for:
       #   - Properly log and order cost and refund (for Sstore especially)
       #   - Allow to use unsigned integer in the future
       #   - CALL instruction requires passing the child message gas (Ccallgas in yellow paper)
+    of GckSuicide:
+      sc_handler*: proc(condition: bool): GasInt
+                    {.nimcall, gcsafe, raises: [].}
+    of GckSstore:
+      ss_handler*: proc(value: UInt256, params: GasParamsSs): SStoreGasResult
+                    {.nimcall, gcsafe, raises: [].}
 
   GasCosts* = array[Op, GasCost]
 
@@ -198,16 +205,13 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     if not value.isZero:
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
-  func `prefix gasCreate`(value: UInt256, gasParams: GasParams): GasResult {.nimcall.} =
+  func `prefix gasCreate`(value: UInt256, params: GasParamsCr): GasInt {.nimcall.} =
     if value.isZero:
-      result.gasCost = static(FeeSchedule[GasCodeDeposit]) * gasParams.cr_memLength
+      result = static(FeeSchedule[GasCodeDeposit]) * params.memLength
     else:
-      result.gasCost = static(FeeSchedule[GasCreate]) +
-                       (static(FeeSchedule[GasInitcodeWord]) * gasParams.cr_memLength.wordCount) +
-                       `prefix gasMemoryExpansion`(
-                          gasParams.cr_currentMemSize,
-                          gasParams.cr_memOffset,
-                          gasParams.cr_memLength)
+      result = static(FeeSchedule[GasCreate]) +
+        (static(FeeSchedule[GasInitcodeWord]) * params.memLength.wordCount) +
+        `prefix gasMemoryExpansion`(params.currentMemSize, params.memOffset, params.memLength)
 
   func `prefix gasSha3`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
 
@@ -229,9 +233,9 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     result = static(FeeSchedule[GasVeryLow])
     result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-  func `prefix gasSstore`(value: UInt256, gasParams: GasParams): EvmResult[GasResult] {.nimcall.} =
+  func `prefix gasSstore`(value: UInt256, params: GasParamsSs): SStoreGasResult {.nimcall.} =
     ## Value is word to save
-    var res: GasResult
+    var res: SStoreGasResult
     when fork >= FkBerlin:
       # EIP2929
       const
@@ -252,13 +256,13 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       ClearRefund {.used.} = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
 
     when fork < FkConstantinople or fork == FkPetersburg:
-      let isStorageEmpty = gasParams.s_currentValue.isZero
+      let isStorageEmpty = params.currentValue.isZero
 
       # Gas cost - literal translation of Yellow Paper
       res.gasCost = if value.isZero.not and isStorageEmpty:
-                        InitGas
-                      else:
-                        CleanGas
+                      InitGas
+                    else:
+                      CleanGas
 
       # Refund
       if value.isZero and not isStorageEmpty:
@@ -279,35 +283,35 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       #       2.2.2.2. Otherwise, add SSTORE_CLEAN_REFUND gas to refund counter.
 
       # Gas sentry honoured, do the actual gas calculation based on the stored value
-      if gasParams.s_currentValue == value: # noop (1)
+      if params.currentValue == value: # noop (1)
         res.gasCost = NoopGas
-        return ok(res)
+        return res
 
-      if gasParams.s_originalValue == gasParams.s_currentValue:
-        if gasParams.s_originalValue.isZero: # create slot (2.1.1)
+      if params.originalValue == params.currentValue:
+        if params.originalValue.isZero: # create slot (2.1.1)
           res.gasCost = InitGas
-          return ok(res)
+          return res
 
         if value.isZero: # delete slot (2.1.2b)
           res.gasRefund = ClearRefund
 
         res.gasCost = CleanGas # write existing slot (2.1.2)
-        return ok(res)
+        return res
 
-      if not gasParams.s_originalValue.isZero:
-        if gasParams.s_currentValue.isZero: # recreate slot (2.2.1.1)
+      if not params.originalValue.isZero:
+        if params.currentValue.isZero: # recreate slot (2.2.1.1)
           res.gasRefund -= ClearRefund
         if value.isZero: # delete slot (2.2.1.2)
           res.gasRefund += ClearRefund
 
-      if gasParams.s_originalValue == value:
-        if gasParams.s_originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
+      if params.originalValue == value:
+        if params.originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
           res.gasRefund += InitRefund
         else: # reset to original existing slot (2.2.2.2)
           res.gasRefund += CleanRefund
 
       res.gasCost = DirtyGas # dirty update (2.2)
-    ok(res)
+    res
 
   func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
@@ -343,7 +347,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       static(FeeSchedule[GasLogData]) * memLength +
       static(4 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasCall`(value: UInt256, gasParams: GasParams): EvmResult[GasResult] {.nimcall.} =
+  func `prefix gasCall`(value: UInt256, params: GasParams): EvmResult[CallGasResult] {.nimcall.} =
 
     # From the Yellow Paper, going through the equation from bottom to top
     # https://ethereum.github.io/yellowpaper/paper.pdf#appendix.H
@@ -365,87 +369,73 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     # The discussion for the draft EIP-5, which proposes to change the CALL opcode also goes over
     # the current implementation - https://github.com/ethereum/EIPs/issues/8
 
+    # Both gasCost and childGasLimit can go below zero
+    # but that is an OOG condition. Leaving this function
+    # both of them are positive integers.
 
-    # First we have to take into account the costs of memory expansion:
-    # Note there is a "bug" in the Ethereum Yellow Paper
-    #   - https://github.com/ethereum/yellowpaper/issues/325
-    #     μg already includes memory expansion costs but it is not
-    #     plainly explained n the CALL opcode details
-
-    # i.e. Cmem(μ′i) − Cmem(μi)
-    #   Yellow Paper: μ′i ≡ M(M(μi,μs[3],μs[4]),μs[5],μs[6])
-    #   M is the memory expansion function
-    #   μ′i  is passed through gasParams.memRequested
-    # TODO:
-    #   - Py-EVM has costs for both input and output memory expansion
-    #     https://github.com/ethereum/py-evm/blob/eed0bfe4499b394ee58113408e487e7d35ab88d6/evm/vm/logic/call.py#L56-L57
-    #   - Parity only for the largest expansion
-    #     https://github.com/paritytech/parity/blob/af1088ef61323f171915555023d8e993aaaed755/ethcore/evm/src/interpreter/gasometer.rs#L192-L195
-    #   - Go-Ethereum only has one cost
-    #     https://github.com/ethereum/go-ethereum/blob/13af27641829f61d1e6b383e37aab6caae22f2c1/core/vm/gas_table.go#L334
-    # ⚠⚠ Py-EVM seems wrong if memory is needed for both in and out.
-    var res: GasResult
-    res.gasCost =  `prefix gasMemoryExpansion`(
-                        gasParams.c_currentMemSize,
-                        gasParams.c_memOffset,
-                        gasParams.c_memLength
-                      )
+    var gasCost: int64 =  `prefix gasMemoryExpansion`(
+                             params.currentMemSize,
+                             params.memOffset,
+                             params.memLength)
+    var childGasLimit: int64
 
     # Cnew_account
-    if gasParams.c_isNewAccount and gasParams.kind == Call:
+    if params.isNewAccount and params.kind == Call:
       when fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
-        res.gasCost += static(FeeSchedule[GasNewAccount])
+        gasCost += static(FeeSchedule[GasNewAccount])
       else:
         # Afterwards, only those transfering value:
         # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-158.md
         # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
         if not value.isZero:
-          res.gasCost += static(FeeSchedule[GasNewAccount])
+          gasCost += static(FeeSchedule[GasNewAccount])
 
     # Cxfer
-    if not value.isZero and gasParams.kind in {Call, CallCode}:
-      res.gasCost += static(FeeSchedule[GasCallValue])
+    if not value.isZero and params.kind in {Call, CallCode}:
+      gasCost += static(FeeSchedule[GasCallValue])
 
     # Cextra
-    res.gasCost += static(FeeSchedule[GasCall])
+    gasCost += static(FeeSchedule[GasCall])
 
     # Cgascap
     when fork >= FkTangerine:
       # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
-      let gas = `prefix all_but_one_64th`(gasParams.c_gasBalance - res.gasCost)
-      if gasParams.c_contractGas > high(GasInt).u256 or
-        gas < gasParams.c_contractGas.truncate(GasInt):
-        res.gasRefund = gas
+      let gas = `prefix all_but_one_64th`(params.gasBalance - gasCost)
+      if params.contractGas > high(int64).u256 or
+        gas < params.contractGas.truncate(int64):
+        childGasLimit = gas
       else:
-        res.gasRefund = gasParams.c_contractGas.truncate(GasInt)
+        childGasLimit = params.contractGas.truncate(int64)
     else:
-      if gasParams.c_contractGas > high(GasInt).u256:
+      if params.contractGas > high(int64).u256:
         return err(gasErr(GasIntOverflow))
-      res.gasRefund = gasParams.c_contractGas.truncate(GasInt)
+      childGasLimit = params.contractGas.truncate(int64)
 
-    if res.gasRefund > 0: # skip check if gasRefund is negative
-      if res.gasCost.u256 + res.gasRefund.u256 > high(GasInt).u256:
+    if childGasLimit > 0: # skip check if childGasLimit is negative
+      if gasCost.u256 + childGasLimit.u256 > high(int64).u256:
         return err(gasErr(GasIntOverflow))
 
-    res.gasCost += res.gasRefund
+    gasCost += childGasLimit
 
     # Ccallgas - Gas sent to the child message
-    if not value.isZero and gasParams.kind in {Call, CallCode}:
-      res.gasRefund += static(FeeSchedule[GasCallStipend])
+    if not value.isZero and params.kind in {Call, CallCode}:
+      childGasLimit += static(FeeSchedule[GasCallStipend])
 
-    ok(res)
+    if gasCost <= 0 and childGasLimit <= 0:
+      return err(opErr(OutOfGas))
+
+    # at this point gasCost and childGasLimit is always > 0
+    ok( (gasCost, childGasLimit) )
 
   func `prefix gasHalt`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-  func `prefix gasSelfDestruct`(value: UInt256, gasParams: GasParams): EvmResult[GasResult] {.nimcall.} =
-    var res: GasResult
-    res.gasCost += static(FeeSchedule[GasSelfDestruct])
+  func `prefix gasSelfDestruct`(condition: bool): GasInt {.nimcall.} =
+    result += static(FeeSchedule[GasSelfDestruct])
     when fork >= FkTangerine:
-      if gasParams.sd_condition:
-        res.gasCost += static(FeeSchedule[GasNewAccount])
-    ok(res)
+      if condition:
+        result += static(FeeSchedule[GasNewAccount])
 
   func `prefix gasCreate2`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = static(FeeSchedule[GasSha3Word]) * (memLength).wordCount
@@ -475,13 +465,21 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
                   {.nimcall, gcsafe, raises: [].}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
-    func complex(handler: proc(value: UInt256, gasParams: GasParams): EvmResult[GasResult]
+    func handleCall(handler: proc(value: UInt256, gasParams: GasParams): EvmResult[CallGasResult]
                   {.nimcall, gcsafe, raises: [].}): GasCost =
-      GasCost(kind: GckComplex, c_handler: handler)
+      GasCost(kind: GckCall, c_handler: handler)
 
-    func handleCreate(handler: proc(value: UInt256, gasParams: GasParams): GasResult
+    func handleCreate(handler: proc(value: UInt256, gasParams: GasParamsCr): GasInt
                   {.nimcall, gcsafe, raises: [].}): GasCost =
       GasCost(kind: GckCreate, cr_handler: handler)
+
+    func handleSuicide(handler: proc(condition: bool): GasInt
+                  {.nimcall, gcsafe, raises: [].}): GasCost =
+      GasCost(kind: GckSuicide, sc_handler: handler)
+
+    func handleSstore(handler: proc(value: UInt256, gasParams: GasParamsSs): SStoreGasResult
+                  {.nimcall, gcsafe, raises: [].}): GasCost =
+      GasCost(kind: GckSstore, ss_handler: handler)
 
     # Returned value
     fill_enum_table_holes(Op, GasCost(kind: GckInvalidOp)):
@@ -556,7 +554,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Mstore:         memExpansion `prefix gasLoadStore`,
           Mstore8:        memExpansion `prefix gasLoadStore`,
           Sload:          fixedOrLater GasSload,
-          Sstore:         complex `prefix gasSstore`,
+          Sstore:         handleSstore `prefix gasSstore`,
           Jump:           fixed GasMid,
           JumpI:          fixed GasHigh,
           Pc:             fixed GasBase,
@@ -651,15 +649,15 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
           # f0s: System operations
           Create:         handleCreate `prefix gasCreate`,
-          Call:           complex `prefix gasCall`,
-          CallCode:       complex `prefix gasCall`,
+          Call:           handleCall `prefix gasCall`,
+          CallCode:       handleCall `prefix gasCall`,
           Return:         memExpansion `prefix gasHalt`,
-          DelegateCall:   complex `prefix gasCall`,
+          DelegateCall:   handleCall `prefix gasCall`,
           Create2:        memExpansion `prefix gasCreate2`,
-          StaticCall:     complex `prefix gasCall`,
+          StaticCall:     handleCall `prefix gasCall`,
           Revert:         memExpansion `prefix gasHalt`,
           Invalid:        fixed GasZero,
-          SelfDestruct:   complex `prefix gasSelfDestruct`
+          SelfDestruct:   handleSuicide `prefix gasSelfDestruct`
         ]
 
 # Generate the fork-specific gas costs tables
