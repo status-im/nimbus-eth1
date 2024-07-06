@@ -95,7 +95,11 @@ type
     GckSstore
 
   # gasRefund of sstore can be a negative number
-  SStoreGasResult = tuple[gasCost: GasInt, gasRefund: int64]
+  SStoreGasResult* = object
+    gasCost*: GasInt
+    gasRefund*: GasInt
+    reduceRefund*: GasInt
+
   CallGasResult = tuple[gasCost, childGasLimit: GasInt]
 
   GasCost = object
@@ -301,7 +305,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
       if not params.originalValue.isZero:
         if params.currentValue.isZero: # recreate slot (2.2.1.1)
-          res.gasRefund -= ClearRefund
+          res.reduceRefund = ClearRefund
         if value.isZero: # delete slot (2.2.1.2)
           res.gasRefund += ClearRefund
 

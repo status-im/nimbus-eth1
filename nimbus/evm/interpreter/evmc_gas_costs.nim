@@ -18,14 +18,15 @@ type
   # The gas cost specification for storage instructions.
   StorageCostSpec = object
     netCost   : bool   # Is this net gas cost metering schedule?
-    warmAccess: int16  # Storage warm access cost, YP: G_{warmaccess}
-    sset      : int16  # Storage addition cost, YP: G_{sset}
-    reset     : int16  # Storage modification cost, YP: G_{sreset}
-    clear     : int16  # Storage deletion refund, YP: R_{sclear}
+    warmAccess: uint16  # Storage warm access cost, YP: G_{warmaccess}
+    sset      : uint16  # Storage addition cost, YP: G_{sset}
+    reset     : uint16  # Storage modification cost, YP: G_{sreset}
+    clear     : uint16  # Storage deletion refund, YP: R_{sclear}
 
   StorageStoreCost* = object
-    gasCost*  : int16
-    gasRefund*: int16
+    gasCost*  : uint16
+    gasRefund*: uint16
+    reduceRefund*: uint16
 
   SstoreCosts* = array[evmc_storage_status, StorageStoreCost]
 
@@ -79,14 +80,14 @@ proc netSStoreCost(e: var SstoreCosts,
   e[EVMC_STORAGE_ADDED]             = StorageStoreCost(gasCost: c.sset      , gasRefund: 0)
   e[EVMC_STORAGE_DELETED]           = StorageStoreCost(gasCost: c.reset     , gasRefund: c.clear)
   e[EVMC_STORAGE_MODIFIED]          = StorageStoreCost(gasCost: c.reset     , gasRefund: 0)
-  e[EVMC_STORAGE_DELETED_ADDED]     = StorageStoreCost(gasCost: c.warmAccess, gasRefund: -c.clear)
+  e[EVMC_STORAGE_DELETED_ADDED]     = StorageStoreCost(gasCost: c.warmAccess, reduceRefund: c.clear)
   e[EVMC_STORAGE_MODIFIED_DELETED]  = StorageStoreCost(gasCost: c.warmAccess, gasRefund: c.clear)
   e[EVMC_STORAGE_DELETED_RESTORED]  = StorageStoreCost(gasCost: c.warmAccess,
-    gasRefund: c.reset - c.warmAccess - c.clear)
+    gasRefund: c.reset, reduceRefund: c.warmAccess + c.clear)
   e[EVMC_STORAGE_ADDED_DELETED]     = StorageStoreCost(gasCost: c.warmAccess,
-    gasRefund: c.sset - c.warmAccess)
+    gasRefund: c.sset, reduceRefund: c.warmAccess)
   e[EVMC_STORAGE_MODIFIED_RESTORED] = StorageStoreCost(gasCost: c.warmAccess,
-    gasRefund: c.reset - c.warmAccess)
+    gasRefund: c.reset, reduceRefund: c.warmAccess)
 
 proc storageStoreCost(): array[EVMFork, SstoreCosts] {.compileTime.} =
   const tbl = storageCostSpec()

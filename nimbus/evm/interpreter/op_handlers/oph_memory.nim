@@ -47,11 +47,10 @@ when evmc_enabled:
     let
       status  = c.host.setStorage(c.msg.contractAddress, slot, newValue)
       res     = ForkToSstoreCost[c.fork][status]
-      gasCost = res.gasCost + coldAccess
+      gasCost = res.gasCost.GasInt + coldAccess
 
-    if res.gasRefund != 0:
-      c.gasMeter.refundGas(res.gasRefund)
-
+    c.gasMeter.refundGas(res.gasRefund.GasInt)
+    c.gasMeter.reduceRefund(res.reduceRefund.GasInt)
     c.opcodeGastCost(Sstore, gasCost, "SSTORE")
 
 else:
@@ -60,12 +59,12 @@ else:
       currentValue = c.getStorage(slot)
       gasParam = GasParamsSs(
         currentValue: currentValue)
-
       res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
     ? c.opcodeGastCost(Sstore, res.gasCost, "SSTORE")
-    if res.gasRefund > 0:
-      c.gasMeter.refundGas(res.gasRefund)
+
+    c.gasMeter.refundGas(res.gasRefund)
+    c.gasMeter.reduceRefund(res.reduceRefund)
 
     c.vmState.mutateStateDB:
       db.setStorage(c.msg.contractAddress, slot, newValue)
@@ -85,8 +84,8 @@ else:
 
     ? c.opcodeGastCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
-    if res.gasRefund != 0:
-      c.gasMeter.refundGas(res.gasRefund)
+    c.gasMeter.refundGas(res.gasRefund)
+    c.gasMeter.reduceRefund(res.reduceRefund)
 
     c.vmState.mutateStateDB:
       db.setStorage(c.msg.contractAddress, slot, newValue)
