@@ -16,7 +16,6 @@ import
   ../sim_utils,
   ../../../tools/common/helpers as chp,
   ../../../tools/evmstate/helpers as ehp,
-  ../../../tests/test_helpers,
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../nimbus/beacon/payload_conv,
   ../../../nimbus/core/eip4844,

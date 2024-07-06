@@ -14,47 +14,54 @@ import
   eth/rlp, stew/io2,
   ./chain,
   ../common/common,
-  ../utils/utils
+  ../utils/utils,
+  ../config
 
-proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: string = ""): bool =
+proc importRlpBlocks*(blocksRlp: openArray[byte],
+                      chain: ForkedChainRef,
+                      finalize: bool):
+                        Result[void, string] =
   var
     # the encoded rlp can contains one or more blocks
     rlp = rlpFromBytes(blocksRlp)
-    chain = newChain(com, extraValidation = true)
-    errorCount = 0
-    blk: array[1, EthBlock]
+    blk: EthBlock
 
   # even though the new imported blocks have block number
   # smaller than head, we keep importing it.
   # it maybe a side chain.
-  # TODO the above is no longer true with a single-state database - to deal with
-  #      that scenario the code needs to be rewritten to not persist the blocks
-  #      to the state database until all have been processed
   while rlp.hasData:
-    blk[0] = try:
+    blk = try:
       rlp.read(EthBlock)
     except RlpError as e:
       # terminate if there was a decoding error
-      error "rlp error",
-        fileName = importFile,
-        msg = e.msg,
-        exception = e.name
-      return false
+      return err($e.name & ": " & e.msg)
 
-    chain.persistBlocks(blk).isOkOr():
-      # register one more error and continue
-      error "import error",
-        fileName = importFile,
-        error
-      errorCount.inc
+    ? chain.importBlock(blk)
 
-  return errorCount == 0
+  if finalize:
+    ? chain.forkChoice(chain.latestHash, chain.latestHash)
 
-proc importRlpBlock*(importFile: string; com: CommonRef): bool =
-  let res = io2.readAllBytes(importFile)
-  if res.isErr:
-    error "failed to import",
-      fileName = importFile
-    return false
+  ok()
 
-  importRlpBlock(res.get, com, importFile)
+proc importRlpBlocks(importFile: string,
+                     chain: ForkedChainRef,
+                     finalize: bool): Result[void, string] =
+  let bytes = io2.readAllBytes(importFile).valueOr:
+    return err($error)
+  importRlpBlocks(bytes, chain, finalize)
+
+proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
+  var head: BlockHeader
+  if not com.db.getCanonicalHead(head):
+    error "cannot get canonical head from db"
+    quit(QuitFailure)
+
+  let chain = newForkedChain(com, head, baseDistance = 0)
+
+  # success or not, we quit after importing blocks
+  for i, blocksFile in conf.blocksFile:
+    importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1).isOkOr:
+      warn "Error when importing blocks", msg=error
+      quit(QuitFailure)
+
+  quit(QuitSuccess)
