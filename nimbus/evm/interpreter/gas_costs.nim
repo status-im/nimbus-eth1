@@ -67,7 +67,8 @@ type
 
     kind*: Op
     isNewAccount*: bool
-    gasBalance*: GasInt
+    gasLeft*: GasInt
+    gasCallEIP2929*: GasInt
     contractGas*: UInt256
     currentMemSize*: GasNatural
     memOffset*: GasNatural
@@ -348,7 +349,6 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       static(4 * FeeSchedule[GasLogTopic])
 
   func `prefix gasCall`(value: UInt256, params: GasParams): EvmResult[CallGasResult] {.nimcall.} =
-
     # From the Yellow Paper, going through the equation from bottom to top
     # https://ethereum.github.io/yellowpaper/paper.pdf#appendix.H
     #
@@ -369,15 +369,18 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     # The discussion for the draft EIP-5, which proposes to change the CALL opcode also goes over
     # the current implementation - https://github.com/ethereum/EIPs/issues/8
 
-    # Both gasCost and childGasLimit can go below zero
-    # but that is an OOG condition. Leaving this function
-    # both of them are positive integers.
+    # Both gasCost and childGasLimit are always on positive side
 
-    var gasCost: int64 =  `prefix gasMemoryExpansion`(
+    var gasLeft = params.gasLeft
+    if gasLeft < params.gasCallEIP2929:
+      return err(opErr(OutOfGas))
+    gasLeft -= params.gasCallEIP2929
+
+    var gasCost: GasInt = `prefix gasMemoryExpansion`(
                              params.currentMemSize,
                              params.memOffset,
                              params.memLength)
-    var childGasLimit: int64
+    var childGasLimit: GasInt
 
     # Cnew_account
     if params.isNewAccount and params.kind == Call:
@@ -398,32 +401,33 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     # Cextra
     gasCost += static(FeeSchedule[GasCall])
 
+    if gasLeft < gasCost:
+      return err(opErr(OutOfGas))
+    gasLeft -= gasCost
+
     # Cgascap
     when fork >= FkTangerine:
       # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
-      let gas = `prefix all_but_one_64th`(params.gasBalance - gasCost)
-      if params.contractGas > high(int64).u256 or
-        gas < params.contractGas.truncate(int64):
+      let gas = `prefix all_but_one_64th`(gasLeft)
+      if params.contractGas > high(GasInt).u256 or
+        gas < params.contractGas.truncate(GasInt):
         childGasLimit = gas
       else:
-        childGasLimit = params.contractGas.truncate(int64)
+        childGasLimit = params.contractGas.truncate(GasInt)
     else:
-      if params.contractGas > high(int64).u256:
+      if params.contractGas > high(GasInt).u256:
         return err(gasErr(GasIntOverflow))
-      childGasLimit = params.contractGas.truncate(int64)
+      childGasLimit = params.contractGas.truncate(GasInt)
 
-    if childGasLimit > 0: # skip check if childGasLimit is negative
-      if gasCost.u256 + childGasLimit.u256 > high(int64).u256:
-        return err(gasErr(GasIntOverflow))
+    if gasCost.u256 + childGasLimit.u256 + params.gasCallEIP2929.u256 > high(GasInt).u256:
+      return err(gasErr(GasIntOverflow))
 
     gasCost += childGasLimit
+    gasCost += params.gasCallEIP2929
 
     # Ccallgas - Gas sent to the child message
     if not value.isZero and params.kind in {Call, CallCode}:
       childGasLimit += static(FeeSchedule[GasCallStipend])
-
-    if gasCost <= 0 and childGasLimit <= 0:
-      return err(opErr(OutOfGas))
 
     # at this point gasCost and childGasLimit is always > 0
     ok( (gasCost, childGasLimit) )

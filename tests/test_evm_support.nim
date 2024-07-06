@@ -381,7 +381,8 @@ proc runTestOverflow() =
     when defined(evmc_enabled):
       check res.error == "EVMC_FAILURE"
     else:
-      check res.error == "Opcode Dispatch Error: GasIntOverflow, depth=1"
+      # After gasCall values always on positive, this test become OOG
+      check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
 
 proc evmSupportMain*() =
   runStackTests()
