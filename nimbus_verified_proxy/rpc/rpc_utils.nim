@@ -73,9 +73,6 @@ proc asExecutionData*(payload: SomeExecutionPayload): ExecutionData =
       withdrawals: payload.withdrawals,
     )
 
-template unsafeQuantityToInt64(q: Quantity): int64 =
-  int64 q
-
 func toFixedBytes(d: MDigest[256]): FixedBytes[32] =
   FixedBytes[32](d.data)
 
@@ -111,8 +108,8 @@ func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
     logsBloom: distinctBase(payload.logsBloom),
     difficulty: default(etypes.DifficultyInt),
     number: payload.blockNumber.distinctBase,
-    gasLimit: payload.gasLimit.unsafeQuantityToInt64,
-    gasUsed: payload.gasUsed.unsafeQuantityToInt64,
+    gasLimit: distinctBase(payload.gasLimit),
+    gasUsed: distinctBase(payload.gasUsed),
     timestamp: payload.timestamp.EthTime,
     extraData: bytes payload.extraData,
     mixHash: payload.prevRandao.asEthHash,

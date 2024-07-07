@@ -48,7 +48,7 @@ const
   GENESIS_MIX_HASH* =                       ZERO_HASH256
   GENESIS_EXTRA_DATA* =                     ""
   GAS_LIMIT_MINIMUM* =                      5000
-  GAS_LIMIT_MAXIMUM* =                      high(GasInt)
+  GAS_LIMIT_MAXIMUM* =                      int64.high.GasInt # Maximum the gas limit (2^63-1).
   DEFAULT_GAS_LIMIT* =                      8_000_000
 
   EMPTY_SHA3* =                             "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest

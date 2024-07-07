@@ -36,6 +36,9 @@ when not defined(evmc_enabled):
   import
     ../../state,
     ../../../db/ledger
+else:
+  import
+    stew/saturation_arith
 
 # ------------------------------------------------------------------------------
 # Private
@@ -162,7 +165,7 @@ when evmc_enabled:
         ? c.memory.write(p.memOutPos,
           c.returnData.toOpenArray(0, actualOutputSize - 1))
 
-      c.gasMeter.returnGas(c.res.gas_left)
+      c.gasMeter.returnGas(GasInt c.res.gas_left)
       c.gasMeter.refundGas(c.res.gas_refund)
 
       if c.res.status_code == EVMC_SUCCESS:
@@ -249,7 +252,7 @@ proc callOp(k: var VmCtx): EvmResultVoid =
     msg[] = nimbus_message(
       kind        : EVMC_CALL,
       depth       : (cpt.msg.depth + 1).int32,
-      gas         : childGasLimit,
+      gas         : int64.saturate(childGasLimit),
       sender      : p.sender,
       recipient   : p.contractAddress,
       code_address: p.codeAddress,
@@ -321,7 +324,7 @@ proc callCodeOp(k: var VmCtx): EvmResultVoid =
     msg[] = nimbus_message(
       kind        : EVMC_CALLCODE,
       depth       : (cpt.msg.depth + 1).int32,
-      gas         : childGasLimit,
+      gas         : int64.saturate(childGasLimit),
       sender      : p.sender,
       recipient   : p.contractAddress,
       code_address: p.codeAddress,
@@ -388,7 +391,7 @@ proc delegateCallOp(k: var VmCtx): EvmResultVoid =
     msg[] = nimbus_message(
       kind        : EVMC_DELEGATECALL,
       depth       : (cpt.msg.depth + 1).int32,
-      gas         : childGasLimit,
+      gas         : int64.saturate(childGasLimit),
       sender      : p.sender,
       recipient   : p.contractAddress,
       code_address: p.codeAddress,
@@ -456,7 +459,7 @@ proc staticCallOp(k: var VmCtx): EvmResultVoid =
     msg[] = nimbus_message(
       kind        : EVMC_CALL,
       depth       : (cpt.msg.depth + 1).int32,
-      gas         : childGasLimit,
+      gas         : int64.saturate(childGasLimit),
       sender      : p.sender,
       recipient   : p.contractAddress,
       code_address: p.codeAddress,

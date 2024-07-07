@@ -40,10 +40,7 @@ proc fromJson(T: type Blob, n: JsonNode): Blob =
   else:
     hexToSeqByte(hex)
 
-template fromJson(T: type GasInt, n: JsonNode): GasInt =
-  fromHex[GasInt](n.getStr)
-
-template fromJson(T: type AccountNonce, n: JsonNode): AccountNonce =
+template fromJson(T: type uint64, n: JsonNode): uint64 =
   fromHex[AccountNonce](n.getStr)
 
 template fromJson(T: type EthTime, n: JsonNode): EthTime =

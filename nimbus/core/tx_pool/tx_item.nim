@@ -165,10 +165,10 @@ proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
   ## The effective miner gas tip for the globally argument `baseFee`. The
   ## result (which is a price per gas) might well be negative.
   if tx.txType < TxEip1559:
-    (tx.gasPrice - baseFee.int64).GasPriceEx
+    (tx.gasPrice - baseFee.GasInt).GasPriceEx
   else:
     # London, EIP1559
-    min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee.int64).GasPriceEx
+    min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee.GasInt).GasPriceEx
 
 proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
   ## Variant of `effectiveGasTip()`

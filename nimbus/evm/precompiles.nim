@@ -166,7 +166,7 @@ func ecRecover(c: Computation): EvmResultVoid =
 func sha256(c: Computation): EvmResultVoid =
   let
     wordCount = wordCount(c.msg.data.len)
-    gasFee = GasSHA256 + wordCount * GasSHA256Word
+    gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
   c.output = @(sha2.sha256.digest(c.msg.data).data)
@@ -175,7 +175,7 @@ func sha256(c: Computation): EvmResultVoid =
 func ripemd160(c: Computation): EvmResultVoid =
   let
     wordCount = wordCount(c.msg.data.len)
-    gasFee = GasRIPEMD160 + wordCount * GasRIPEMD160Word
+    gasFee = GasRIPEMD160 + wordCount.GasInt * GasRIPEMD160Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   c.output.setLen(32)
@@ -185,7 +185,7 @@ func ripemd160(c: Computation): EvmResultVoid =
 func identity(c: Computation): EvmResultVoid =
   let
     wordCount = wordCount(c.msg.data.len)
-    gasFee = GasIdentity + wordCount * GasIdentityWord
+    gasFee = GasIdentity + wordCount.GasInt * GasIdentityWord
 
   ? c.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
   c.output = c.msg.data

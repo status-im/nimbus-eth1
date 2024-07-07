@@ -245,11 +245,6 @@ proc readValue(reader: var JsonReader[JGenesis], value: var seq[byte])
   wrapError:
     value = hexToSeqByte(reader.readValue(string))
 
-proc readValue(reader: var JsonReader[JGenesis], value: var GasInt)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    value = fromHex[GasInt](reader.readValue(string))
-
 proc readValue(reader: var JsonReader[JGenesis], value: var EthAddress)
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:

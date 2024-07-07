@@ -98,7 +98,7 @@ type
     burnsGas*  : bool
   
   GasMeter* = object
-    gasRefunded*: GasInt
+    gasRefunded*: int64
     gasRemaining*: GasInt
 
   CallKind* = evmc_call_kind
@@ -170,13 +170,13 @@ method captureGasCost*(ctx: TracerRef, comp: Computation,
   discard
 
 method captureOpEnd*(ctx: TracerRef, comp: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.base, gcsafe.} =
   discard
 
 method captureFault*(ctx: TracerRef, comp: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
                      rData: openArray[byte],
                      depth: int, error: Opt[string]) {.base, gcsafe.} =
   discard

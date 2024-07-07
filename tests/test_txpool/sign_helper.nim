@@ -70,7 +70,7 @@ proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
   tx0.nonce = nonce.AccountNonce
 
   var tx1 = tx0
-  tx1.gasPrice = (tx0.gasPrice * (100 + priceBump) + 99) div 100
+  tx1.gasPrice = (tx0.gasPrice * (100 + priceBump).GasInt + 99.GasInt) div 100
 
   let
     tx0Signed = tx0.sign(prvTestKey)

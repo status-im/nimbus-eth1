@@ -331,7 +331,7 @@ proc captureGasCost*(vmState: BaseVMState,
     vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
 
 proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
-                   op: Op, gas: GasInt, refund: GasInt,
+                   op: Op, gas: GasInt, refund: int64,
                    rData: openArray[byte],
                    depth: int, opIndex: int) =
   if vmState.tracingEnabled:
@@ -339,7 +339,7 @@ proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
     vmState.tracer.captureOpEnd(comp, fixed, pc, op, gas, refund, rData, depth, opIndex)
 
 proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
-                   op: Op, gas: GasInt, refund: GasInt,
+                   op: Op, gas: GasInt, refund: int64,
                    rData: openArray[byte],
                    depth: int, error: Opt[string]) =
   if vmState.tracingEnabled:

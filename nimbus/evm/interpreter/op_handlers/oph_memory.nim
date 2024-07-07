@@ -49,9 +49,9 @@ when evmc_enabled:
       res     = ForkToSstoreCost[c.fork][status]
       gasCost = res.gasCost.GasInt + coldAccess
 
-    c.gasMeter.refundGas(res.gasRefund.GasInt)
-    c.gasMeter.reduceRefund(res.reduceRefund.GasInt)
-    c.opcodeGastCost(Sstore, gasCost, "SSTORE")
+    ? c.opcodeGastCost(Sstore, gasCost, "SSTORE")
+    c.gasMeter.refundGas(res.gasRefund)
+    ok()
 
 else:
   proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
@@ -62,9 +62,7 @@ else:
       res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
     ? c.opcodeGastCost(Sstore, res.gasCost, "SSTORE")
-
     c.gasMeter.refundGas(res.gasRefund)
-    c.gasMeter.reduceRefund(res.reduceRefund)
 
     c.vmState.mutateStateDB:
       db.setStorage(c.msg.contractAddress, slot, newValue)
@@ -85,7 +83,6 @@ else:
     ? c.opcodeGastCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
     c.gasMeter.refundGas(res.gasRefund)
-    c.gasMeter.reduceRefund(res.reduceRefund)
 
     c.vmState.mutateStateDB:
       db.setStorage(c.msg.contractAddress, slot, newValue)

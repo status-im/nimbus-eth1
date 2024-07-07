@@ -123,7 +123,7 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation,
     error "LegacyTracer captureOpStart", msg=ex.msg
 
 method captureOpEnd*(ctx: LegacyTracer, c: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
                      rData: openArray[byte],
                      depth: int, opIndex: int) {.gcsafe.} =
   try:
@@ -153,7 +153,7 @@ method captureOpEnd*(ctx: LegacyTracer, c: Computation,
     error "LegacyTracer captureOpEnd", msg=ex.msg
 
 method captureFault*(ctx: LegacyTracer, comp: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: GasInt,
+                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
                      rData: openArray[byte],
                      depth: int, error: Opt[string]) {.gcsafe.} =
   try:

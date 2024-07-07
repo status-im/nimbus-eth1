@@ -12,7 +12,8 @@ import
   eth/common/eth_types, stint, stew/ptrops,
   chronos,
   results,
-  ../evm/[types, state, state_transactions],
+  stew/saturation_arith,
+  ../evm/[types, state],
   ../evm/[precompiles, internals],
   ../db/ledger,
   ../common/evmforks,
@@ -22,10 +23,12 @@ import
 import ../evm/computation except fromEvmc, toEvmc
 
 when defined(evmc_enabled):
-  import ../utils/utils
-  import ./host_services
-#else:
-  #import ../evm/state_transactions
+  import
+    ../utils/utils,
+    ./host_services
+else:
+  import
+    ../evm/state_transactions
 
 type
   # Standard call parameters.
@@ -101,7 +104,7 @@ func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
       gas += ACCESS_LIST_ADDRESS_COST
       gas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
 
-  return gas
+  return gas.GasInt
 
 proc initialAccessListEIP2929(call: CallParams) =
   # EIP2929 initial access list.
@@ -149,7 +152,7 @@ proc setupHost(call: CallParams): TransactionHost =
       kind:         if call.isCreate: EVMC_CREATE else: EVMC_CALL,
       # Default: flags:       {},
       # Default: depth:       0,
-      gas:          call.gasLimit - intrinsicGas,
+      gas:          int64.saturate(call.gasLimit - intrinsicGas),
       recipient:    call.to.toEvmc,
       code_address: call.to.toEvmc,
       sender:       call.sender.toEvmc,
@@ -264,7 +267,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     result = c.gasMeter.gasRemaining
   elif not c.shouldBurnGas:
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
-    let refund = min(GasInt c.getGasRefund(), maxRefund)
+    let refund = min(c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
     result = c.gasMeter.gasRemaining
 

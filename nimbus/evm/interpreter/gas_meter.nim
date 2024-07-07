@@ -28,8 +28,14 @@ func consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string): EvmRes
 func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRemaining += amount
 
-func refundGas*(gasMeter: var GasMeter; amount: GasInt) =
+func refundGas*(gasMeter: var GasMeter; amount: int64) =
+  # EIP-2183 Net gas metering for sstore is built upon idea
+  # that the refund counter is only one in an EVM like geth does.
+  # EIP-2183 gurantee that the counter can never go below zero.
+  # But nimbus, EVMC, and emvone taken different route, the refund counter
+  # is present at each level of recursion. That's why EVMC/evmone is using
+  # int64 while geth using uint64 for their gas calculation.
+  # After nimbus converting GasInt to uint64, the gas refund
+  # cannot be converted to uint64 too, because the sum of all children gas refund,
+  # no matter positive or negative will be >= 0 when EVM finish execution.
   gasMeter.gasRefunded += amount
-
-func reduceRefund*(gasMeter: var GasMeter; amount: GasInt) =
-  gasMeter.gasRefunded -= amount
