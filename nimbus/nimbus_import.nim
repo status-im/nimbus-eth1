@@ -370,7 +370,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     metrics.set(nec_import_block_number, int64(blockNumber))
     nec_imported_blocks.inc(blocks.len)
     nec_imported_transactions.inc(statsRes[].txs)
-    nec_imported_gas.inc(statsRes[].gas)
+    nec_imported_gas.inc(int64 statsRes[].gas)
 
     if csv != nil:
       # In the CSV, we store a line for every chunk of blocks processed so
