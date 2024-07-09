@@ -308,7 +308,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     genesis_validators_root = Eth2Digest.fromHex(
       "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078"
     ) # Sepolia Validators Root
-    lastEra1Block = 1450409'u64 # Sepolia
+    lastEra1Block = 1450408'u64 # Sepolia
     firstSlotAfterMerge =
       if isDir(conf.eraDir.string):
         115193'u64 # Sepolia
@@ -443,7 +443,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       if blocks.len > 0:
         process() # last chunk, if any
 
-    if start > lastEra1Block:
+    if blockNumber > lastEra1Block:
       notice "Importing era archive",
         start, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
 
@@ -456,14 +456,16 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           quit QuitFailure
 
       # Load the last slot number
-      updateLastImportedSlot(
-        eraDB, historical_roots.asSeq(), historical_summaries.asSeq()
-      )
+      if blockNumber != lastEra1Block + 1:
+        updateLastImportedSlot(
+          eraDB, historical_roots.asSeq(), historical_summaries.asSeq()
+        )
 
       if importedSlot < firstSlotAfterMerge and firstSlotAfterMerge != 0:
         # if resuming import we do not update the slot
         importedSlot = firstSlotAfterMerge
 
+      notice "Starting import from slot", importedSlot
       while running and imported < conf.maxBlocks and importedSlot < endSlot:
         let clblock = getBlockFromEra(
           eraDB,
@@ -472,6 +474,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           Slot(importedSlot),
           clConfig.cfg,
         ).valueOr:
+          notice "Slot not found", importedSlot
           importedSlot += 1
           continue
 
