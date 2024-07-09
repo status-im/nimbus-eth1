@@ -148,6 +148,11 @@ type
       desc: "Directory where era1 (pre-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era1"
       name: "era1-dir" }: Option[OutDir]
+    
+    eraDirOpt* {.
+      desc: "Directory where era (post-merge) archive can be found"
+      defaultValueDesc: "<data-dir>/era"
+      name: "era-dir" }: Option[OutDir]
 
     keyStore* {.
       desc: "Load one or more keystore files from this directory"
@@ -783,6 +788,9 @@ func httpServerEnabled*(conf: NimbusConf): bool =
 
 func era1Dir*(conf: NimbusConf): OutDir =
   conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))
+
+func eraDir*(conf: NimbusConf): OutDir =
+  conf.eraDirOpt.get(OutDir(conf.dataDir.string & "/era"))
 
 func dbOptions*(conf: NimbusConf): DbOptions =
   DbOptions.init(
