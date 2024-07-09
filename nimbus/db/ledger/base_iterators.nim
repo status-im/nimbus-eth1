@@ -58,15 +58,6 @@ iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
-iterator storage*(
-    ldg: LedgerRef;
-    eAddr: EthAddress;
-      ): (UInt256,UInt256) =
-  ldg.beginTrackApi LdgStorageIt
-  for w in ldg.ac.storage(eAddr):
-    yield w
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

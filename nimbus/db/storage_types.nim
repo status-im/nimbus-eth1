@@ -13,20 +13,20 @@ import
 
 type
   DBKeyKind* = enum
-    genericHash
-    blockNumberToHash
-    blockHashToScore
-    transactionHashToBlock
-    canonicalHeadHash
-    slotHashToSlot
-    contractHash
-    transitionStatus
-    safeHash
-    finalizedHash
-    skeletonProgress
-    skeletonBlockHashToNumber
-    skeletonHeader
-    skeletonBody
+    # Careful - changing the assigned ordinals will break existing databases
+    genericHash = 0
+    blockNumberToHash = 1
+    blockHashToScore = 2
+    transactionHashToBlock = 3
+    canonicalHeadHash = 4
+    contractHash = 6
+    transitionStatus = 7
+    safeHash = 8
+    finalizedHash = 9
+    skeletonProgress = 10
+    skeletonBlockHashToNumber = 11
+    skeletonHeader = 12
+    skeletonBody = 13
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -59,12 +59,6 @@ func blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} =
 func canonicalHeadHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(canonicalHeadHash)
   result.dataEndPos = 1
-
-func slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
-  doAssert(h.len == 32)
-  result.data[0] = byte ord(slotHashToSlot)
-  result.data[1 .. 32] = h
-  result.dataEndPos = uint8 32
 
 func contractHashKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(contractHash)

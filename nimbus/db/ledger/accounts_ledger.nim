@@ -368,29 +368,27 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
 
   # Save `overlayStorage[]` on database
   for slot, value in acc.overlayStorage:
+    acc.originalStorage[].withValue(slot, v):
+      if v[] == value:
+        continue # Avoid writing A-B-A updates
+
     let slotKey = slot.toBytesBE.keccakHash
     if value > 0:
       ac.ledger.slotMerge(acc.toAccountKey, slotKey, value).isOkOr:
         raiseAssert info & $$error
+
+      # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
+      acc.originalStorage[slot] = value
+
     else:
       ac.ledger.slotDelete(acc.toAccountKey, slotKey).isOkOr:
         if error.error != StoNotFound:
           raiseAssert info & $$error
         discard
-    let
-      key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
-      rc = ac.kvt.put(key.toOpenArray, blobify(slot).data)
-    if rc.isErr:
-      warn logTxt "persistStorage()", slot, error=($$rc.error)
 
-  # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
-  for slot, value in acc.overlayStorage:
-    if value > 0:
-      acc.originalStorage[slot] = value
-    else:
       acc.originalStorage.del(slot)
-  acc.overlayStorage.clear()
 
+  acc.overlayStorage.clear()
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
   ac.isDirty = true
@@ -715,23 +713,6 @@ iterator pairs*(ac: AccountsLedgerRef): (EthAddress, Account) =
   for address, acc in ac.savePoint.cache:
     yield (address, ac.ledger.recast(
       acc.toAccountKey, acc.statement, updateOk=true).value)
-
-iterator storage*(
-    ac: AccountsLedgerRef;
-    eAddr: EthAddress;
-      ): (UInt256, UInt256) =
-  # beware that if the account not persisted,
-  # the storage root will not be updated
-  for (slotHash, value) in ac.ledger.slotPairs eAddr.toAccountKey:
-    let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
-    if rc.isErr:
-      warn logTxt "storage()", slotHash, error=($$rc.error)
-      continue
-    let r = deblobify(rc.value, UInt256)
-    if r.isErr:
-      warn logTxt "storage.deblobify", slotHash, msg=r.error
-      continue
-    yield (r.value, value)
 
 iterator cachedStorage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, UInt256) =
   let acc = ac.getAccount(address, false)
