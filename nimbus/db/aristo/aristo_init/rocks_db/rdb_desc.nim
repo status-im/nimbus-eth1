@@ -53,8 +53,10 @@ type
 const
   BaseFolder* = "nimbus"               ## Same as for Legacy DB
   DataFolder* = "aristo"               ## Legacy DB has "data"
-  RdKeyLruMaxSize* = 4096              ## Max size of read cache for keys
-  RdVtxLruMaxSize* = 2048              ## Max size of read cache for vertex IDs
+  RdKeyLruMaxSize* = 80000
+    ## Max size of read cache for keys - ~4 levels of MPT
+  RdVtxLruMaxSize* = 80000
+    ## Max size of read cache for vertex IDs - ~4 levels of MPT
 
 # ------------------------------------------------------------------------------
 # Public functions
