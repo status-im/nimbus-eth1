@@ -34,6 +34,7 @@ const
     # which would cause a worst case of 386MB memory usage though in reality
     # code sizes are much smaller - it would make sense to study these numbers
     # in greater detail.
+  slotsLruSize = 16 * 1024
 
 type
   AccountFlag = enum
@@ -79,6 +80,11 @@ type
       ## The former feature is specially important in the 2.3-2.7M block range
       ## when underpriced code opcodes are being run en masse - both advantages
       ## help performance broadly as well.
+
+    slots: KeyedQueue[UInt256, Hash256]
+      ## Because the same slots often reappear, we want to avoid writing them
+      ## over and over again to the database to avoid the WAL and compation
+      ## write amplification that ensues
 
   ReadOnlyStateDB* = distinct AccountsLedgerRef
 
@@ -302,7 +308,8 @@ proc originalStorageValue(
 
   # Not in the original values cache - go to the DB.
   let
-    slotKey = slot.toBytesBE.keccakHash
+    slotKey = ac.slots.lruFetch(slot).valueOr:
+      slot.toBytesBE.keccakHash
     rc = ac.ledger.slotFetch(acc.toAccountKey, slotKey)
   if rc.isOk:
     result = rc.value
@@ -368,29 +375,39 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
 
   # Save `overlayStorage[]` on database
   for slot, value in acc.overlayStorage:
-    let slotKey = slot.toBytesBE.keccakHash
+    acc.originalStorage[].withValue(slot, v):
+      if v[] == value:
+        continue # Avoid writing A-B-A updates
+
+    var cached = true
+    let slotKey = ac.slots.lruFetch(slot).valueOr:
+      cached = false
+      ac.slots.lruAppend(slot, slot.toBytesBE.keccakHash, slotsLruSize)
+
     if value > 0:
       ac.ledger.slotMerge(acc.toAccountKey, slotKey, value).isOkOr:
         raiseAssert info & $$error
+
+      # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
+      acc.originalStorage[slot] = value
+
     else:
       ac.ledger.slotDelete(acc.toAccountKey, slotKey).isOkOr:
         if error.error != StoNotFound:
           raiseAssert info & $$error
         discard
-    let
-      key = slot.toBytesBE.keccakHash.data.slotHashToSlotKey
-      rc = ac.kvt.put(key.toOpenArray, blobify(slot).data)
-    if rc.isErr:
-      warn logTxt "persistStorage()", slot, error=($$rc.error)
-
-  # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
-  for slot, value in acc.overlayStorage:
-    if value > 0:
-      acc.originalStorage[slot] = value
-    else:
       acc.originalStorage.del(slot)
-  acc.overlayStorage.clear()
 
+    if not cached:
+      # Write only if it was not cached to avoid writing the same data over and
+      # over..
+      let
+        key = slotKey.data.slotHashToSlotKey
+        rc = ac.kvt.put(key.toOpenArray, blobify(slot).data)
+      if rc.isErr:
+        warn logTxt "persistStorage()", slot, error=($$rc.error)
+
+  acc.overlayStorage.clear()
 
 proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true): AccountRef =
   ac.isDirty = true

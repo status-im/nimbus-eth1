@@ -13,20 +13,21 @@ import
 
 type
   DBKeyKind* = enum
-    genericHash
-    blockNumberToHash
-    blockHashToScore
-    transactionHashToBlock
-    canonicalHeadHash
-    slotHashToSlot
-    contractHash
-    transitionStatus
-    safeHash
-    finalizedHash
-    skeletonProgress
-    skeletonBlockHashToNumber
-    skeletonHeader
-    skeletonBody
+    # Careful - changing the assigned ordinals will break existing databases
+    genericHash = 0
+    blockNumberToHash = 1
+    blockHashToScore = 2
+    transactionHashToBlock = 3
+    canonicalHeadHash = 4
+    slotHashToSlot = 5
+    contractHash = 6
+    transitionStatus = 7
+    safeHash = 8
+    finalizedHash = 9
+    skeletonProgress = 10
+    skeletonBlockHashToNumber = 11
+    skeletonHeader = 12
+    skeletonBody = 13
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
