@@ -23,53 +23,31 @@ import
   eth/keys,
   eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  beacon_chain/beacon_clock,
-  beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/altair,
-  beacon_chain/gossip_processing/light_client_processor,
   ./conf,
   ./network_metadata,
   ./common/common_utils,
   ./rpc/
     [rpc_web3_api, rpc_eth_api, rpc_discovery_api, rpc_portal_api, rpc_portal_debug_api],
-  ./network/state/[state_network, state_content],
-  ./network/history/[history_network, history_content],
-  ./network/beacon/[beacon_init_loader, beacon_light_client],
-  ./network/wire/[portal_stream, portal_protocol_config, portal_protocol],
-  ./eth_data/history_data_ssz_e2s,
   ./database/content_db,
+  ./portal_node,
   ./version,
   ./logging
 
 chronicles.formatIt(IoErrorCode):
   $it
 
-# Application callbacks used when new finalized header or optimistic header is
-# available.
-proc onFinalizedHeader(
-    lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
-) =
-  withForkyHeader(finalizedHeader):
-    when lcDataFork > LightClientDataFork.None:
-      info "New LC finalized header", finalized_header = shortLog(forkyHeader)
-
-proc onOptimisticHeader(
-    lightClient: LightClient, optimisticHeader: ForkedLightClientHeader
-) =
-  withForkyHeader(optimisticHeader):
-    when lcDataFork > LightClientDataFork.None:
-      info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
-
-proc getDbDirectory(network: PortalNetwork): string =
-  if network == PortalNetwork.mainnet:
-    "db"
+func optionToOpt[T](o: Option[T]): Opt[T] =
+  if o.isSome():
+    Opt.some(o.unsafeGet())
   else:
-    "db_" & network.symbolName()
+    Opt.none(T)
 
 proc run(config: PortalConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout)
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
+
+  let rng = newRng()
 
   # Make sure dataDir exists
   let pathExists = createPath(config.dataDir.string)
@@ -78,8 +56,8 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       dataDir = config.dataDir, error = pathExists.error
     quit 1
 
+  ## Network configuration
   let
-    rng = newRng()
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
     # TODO: allow for no TCP port mapping!
@@ -137,6 +115,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       if res.isOk():
         bootstrapRecords.add(res.value)
 
+  ## Discovery v5 protocol setup
   let
     discoveryConfig =
       DiscoveryConfig.init(config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
@@ -150,13 +129,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       # Might make this into a, default off, cli option.
       localEnrFields = {"c": enrClientInfoShort},
       bootstrapRecords = bootstrapRecords,
-      previousRecord =
-        # TODO: discv5/enr code still uses Option, to be changed.
-        if previousEnr.isSome():
-          Opt.some(previousEnr.get())
-        else:
-          Opt.none(enr.Record)
-      ,
+      previousRecord = previousEnr,
       bindIp = bindIp,
       bindPort = udpPort,
       enrAutoUpdate = config.enrAutoUpdate,
@@ -166,7 +139,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
 
   d.open()
 
-  # Force pruning
+  ## Force pruning - optional
   if config.forcePrune:
     let db = ContentDB.new(
       config.dataDir / portalNetwork.getDbDirectory() / "contentdb_" &
@@ -196,104 +169,33 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     db.forcePrune(d.localNode.id, radius)
     db.close()
 
-  # Store the database at contentdb prefixed with the first 8 chars of node id.
-  # This is done because the content in the db is dependant on the `NodeId` and
-  # the selected `Radius`.
+  ## Portal node setup
   let
-    db = ContentDB.new(
-      config.dataDir / portalNetwork.getDbDirectory() / "contentdb_" &
-        d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
-      storageCapacity = config.storageCapacityMB * 1_000_000,
-    )
-
-    portalConfig = PortalProtocolConfig.init(
+    portalProtocolConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
       config.disablePoke,
     )
-    streamManager = StreamManager.new(d)
 
-    accumulator =
-      # Building an accumulator from header epoch files takes > 2m30s and is
-      # thus not really a viable option at start-up.
-      # Options are:
-      # - Start with baked-in accumulator
-      # - Start with file containing SSZ encoded accumulator
-      if config.accumulatorFile.isSome():
-        readAccumulator(string config.accumulatorFile.get()).expect(
-          "Need a file with a valid SSZ encoded accumulator"
-        )
-      else:
-        # Get it from binary file containing SSZ encoded accumulator
-        loadAccumulator()
+    portalNodeConfig = PortalNodeConfig(
+      accumulatorFile: config.accumulatorFile.optionToOpt().map(
+          proc(v: InputFile): string =
+            $v
+        ),
+      disableStateRootValidation: config.disableStateRootValidation,
+      trustedBlockRoot: config.trustedBlockRoot.optionToOpt(),
+      portalConfig: portalProtocolConfig,
+      dataDir: string config.dataDir,
+      storageCapacity: config.storageCapacityMB * 1_000_000,
+    )
 
-    historyNetwork =
-      if PortalSubnetwork.history in portalSubnetworks:
-        Opt.some(
-          HistoryNetwork.new(
-            portalNetwork,
-            d,
-            db,
-            streamManager,
-            accumulator,
-            bootstrapRecords = bootstrapRecords,
-            portalConfig = portalConfig,
-          )
-        )
-      else:
-        Opt.none(HistoryNetwork)
-
-    stateNetwork =
-      if PortalSubnetwork.state in portalSubnetworks:
-        Opt.some(
-          StateNetwork.new(
-            portalNetwork,
-            d,
-            db,
-            streamManager,
-            bootstrapRecords = bootstrapRecords,
-            portalConfig = portalConfig,
-            historyNetwork = historyNetwork,
-            not config.disableStateRootValidation,
-          )
-        )
-      else:
-        Opt.none(StateNetwork)
-
-    beaconLightClient =
-      # TODO: Currently disabled by default as it is not sufficiently polished.
-      # Eventually this should be always-on functionality.
-      if PortalSubnetwork.beacon in portalSubnetworks and
-          config.trustedBlockRoot.isSome():
-        let
-          # Portal works only over mainnet data currently
-          networkData = loadNetworkData("mainnet")
-          beaconDb = BeaconDb.new(networkData, config.dataDir / "db" / "beacon_db")
-          beaconNetwork = BeaconNetwork.new(
-            portalNetwork,
-            d,
-            beaconDb,
-            streamManager,
-            networkData.forks,
-            bootstrapRecords = bootstrapRecords,
-            portalConfig = portalConfig,
-          )
-
-        let beaconLightClient = LightClient.new(
-          beaconNetwork, rng, networkData, LightClientFinalizationMode.Optimistic
-        )
-
-        beaconLightClient.onFinalizedHeader = onFinalizedHeader
-        beaconLightClient.onOptimisticHeader = onOptimisticHeader
-        beaconLightClient.trustedBlockRoot = config.trustedBlockRoot
-
-        # TODO:
-        # Quite dirty. Use register validate callbacks instead. Or, revisit
-        # the object relationships regarding the beacon light client.
-        beaconNetwork.processor = beaconLightClient.processor
-
-        Opt.some(beaconLightClient)
-      else:
-        Opt.none(LightClient)
+    node = PortalNode.new(
+      portalNetwork,
+      portalNodeConfig,
+      d,
+      portalSubnetworks,
+      bootstrapRecords = bootstrapRecords,
+      rng = rng,
+    )
 
   # TODO: If no new network key is generated then we should first check if an
   # enr file exists, and in the case it does read out the seqNum from it and
@@ -322,41 +224,11 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
         url, error_msg = exc.msg, error_name = exc.name
       quit QuitFailure
 
-  ## Starting the different networks.
+  ## Start discovery v5 protocol and the Portal node.
   d.start()
-  if stateNetwork.isSome():
-    stateNetwork.get().start()
-  if historyNetwork.isSome():
-    historyNetwork.get().start()
-  if beaconLightClient.isSome():
-    let lc = beaconLightClient.get()
-    lc.network.start()
-    lc.start()
+  node.start()
 
-    proc onSecond(time: Moment) =
-      discard
-      # TODO:
-      # Figure out what to do with this one.
-      # let wallSlot = lc.getBeaconTime().slotOrZero()
-      # lc.updateGossipStatus(wallSlot + 1)
-
-    proc runOnSecondLoop() {.async.} =
-      let sleepTime = chronos.seconds(1)
-      while true:
-        let start = chronos.now(chronos.Moment)
-        await chronos.sleepAsync(sleepTime)
-        let afterSleep = chronos.now(chronos.Moment)
-        let sleepTime = afterSleep - start
-        onSecond(start)
-        let finished = chronos.now(chronos.Moment)
-        let processingTime = finished - afterSleep
-        trace "onSecond task completed", sleepTime, processingTime
-
-    onSecond(Moment.now())
-
-    asyncSpawn runOnSecondLoop()
-
-  ## Starting the JSON-RPC APIs
+  ## Start the JSON-RPC APIs
   if config.rpcEnabled:
     let ta = initTAddress(config.rpcAddress, config.rpcPort)
 
@@ -368,23 +240,23 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
 
     rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
     rpcHttpServerWithProxy.installWeb3ApiHandlers()
-    if stateNetwork.isSome():
+    if node.stateNetwork.isSome():
       rpcHttpServerWithProxy.installPortalApiHandlers(
-        stateNetwork.get().portalProtocol, "state"
+        node.stateNetwork.value.portalProtocol, "state"
       )
-    if historyNetwork.isSome():
+    if node.historyNetwork.isSome():
       rpcHttpServerWithProxy.installEthApiHandlers(
-        historyNetwork.get(), beaconLightClient, stateNetwork
+        node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
       )
       rpcHttpServerWithProxy.installPortalApiHandlers(
-        historyNetwork.get().portalProtocol, "history"
+        node.historyNetwork.value.portalProtocol, "history"
       )
       rpcHttpServerWithProxy.installPortalDebugApiHandlers(
-        historyNetwork.get().portalProtocol, "history"
+        node.historyNetwork.value.portalProtocol, "history"
       )
-    if beaconLightClient.isSome():
+    if node.beaconNetwork.isSome():
       rpcHttpServerWithProxy.installPortalApiHandlers(
-        beaconLightClient.get().network.portalProtocol, "beacon"
+        node.beaconNetwork.value.portalProtocol, "beacon"
       )
     # TODO: Test proxy with remote node over HTTPS
     waitFor rpcHttpServerWithProxy.start()

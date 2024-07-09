@@ -34,7 +34,7 @@ type
     processor*: ref LightClientProcessor
     manager: LightClientManager
     onFinalizedHeader*, onOptimisticHeader*: LightClientHeaderCallback
-    trustedBlockRoot*: Option[Eth2Digest]
+    trustedBlockRoot*: Opt[Eth2Digest]
 
 func getFinalizedHeader*(lightClient: LightClient): ForkedLightClientHeader =
   withForkyStore(lightClient.store[]):
@@ -75,7 +75,11 @@ proc new*(
   )
 
   func getTrustedBlockRoot(): Option[Eth2Digest] =
-    lightClient.trustedBlockRoot
+    # TODO: use Opt in LC processor
+    if lightClient.trustedBlockRoot.isSome():
+      some(lightClient.trustedBlockRoot.value)
+    else:
+      none(Eth2Digest)
 
   proc onStoreInitialized() =
     discard

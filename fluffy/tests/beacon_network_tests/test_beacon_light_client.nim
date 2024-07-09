@@ -76,7 +76,7 @@ procSuite "Portal Beacon Light Client":
 
     lc.onFinalizedHeader = headerCallback(finalizedHeaders)
     lc.onOptimisticHeader = headerCallback(optimisticHeaders)
-    lc.trustedBlockRoot = some bootstrapHeaderHash
+    lc.trustedBlockRoot = Opt.some bootstrapHeaderHash
 
     # When running start the beacon light client will first try to retrieve the
     # bootstrap for given trustedBlockRoot

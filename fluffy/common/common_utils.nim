@@ -106,9 +106,6 @@ proc getPersistentEnr*(enrFilePath: string): Opt[enr.Record] =
 
     let enrUri = readResult.get()
 
-    var record: enr.Record
-    # TODO: This old API of var passing is very error prone and should be
-    # changed in nim-eth.
     let res = enr.Record.fromURI(enrUri)
     if res.isErr():
       warn "Could not decode ENR from ENR file"
