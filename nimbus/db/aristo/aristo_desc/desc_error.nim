@@ -157,7 +157,7 @@ type
 
 
     # Merge leaf `merge()`
-    MergeAssemblyFailed # Ooops, internal error
+    MergeHikeFailed # Ooops, internal error
     MergeAccRootNotAccepted
     MergeStoRootNotAccepted
     MergeBranchGarbledNibble

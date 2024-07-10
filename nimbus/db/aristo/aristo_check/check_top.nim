@@ -45,7 +45,9 @@ proc checkTopStrict*(
     elif db.layersGetKey(rvid).isErr:
       # So `vtx` exists but not `key`, so cache is supposed dirty and the
       # vertex has a zero entry.
-      return err((rvid.vid,CheckStkVtxKeyMissing))
+      # TODO when we're writing a brand new entry, we don't write a zero key
+      #      to the database to avoid the unnecessary delete traffic..
+      discard # return err((rvid.vid,CheckStkVtxKeyMissing))
 
     else: # Empty key flags key is for update
       zeroKeys.incl rvid.vid

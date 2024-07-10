@@ -28,7 +28,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_fetch, aristo_layers, aristo_utils, aristo_vid],
+  "."/[aristo_desc, aristo_hike, aristo_layers, aristo_utils, aristo_vid],
   ./aristo_merge/merge_payload_helper
 
 const
@@ -107,43 +107,57 @@ proc mergeStorageData*(
   ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
   ## and `stoPath`  is the slot path of the corresponding storage area.
   ##
-  let
-    accHike = db.fetchAccountHike(accPath).valueOr:
-      if error == FetchAccInaccessible:
-        return err(MergeStoAccMissing)
-      return err(error)
-    wpAcc = accHike.legs[^1].wp
-    stoID = wpAcc.vtx.lData.stoID
+  var
+    path = NibblesBuf.fromBytes(accPath.data)
+    next = VertexID(1)
+    vtx: VertexRef
+    touched: array[NibblesBuf.high(), VertexID]
+    pos: int
 
-    # Provide new storage ID when needed
-    useID = if stoID.isValid: stoID else: db.vidFetch()
+  template resetKeys() =
+    # Reset cached hashes of touched verticies
+    for i in 0 ..< pos:
+      db.layersResKey((VertexID(1), touched[pos - i - 1]))
 
-    # Call merge
-    pyl = PayloadRef(pType: StoData, stoData: stoData)
-    rc = db.mergePayloadImpl(useID, stoPath.data, pyl)
+  while path.len > 0:
+    touched[pos] = next
+    pos += 1
 
-  if rc.isOk:
-    # Mark account path Merkle keys for update
-    db.updateAccountForHasher accHike
+    (vtx, path, next) = ?step(path, (VertexID(1), next), db)
 
-    if stoID.isValid:
-      return ok()
+    if vtx.vType == Leaf:
+      let
+        stoID = vtx.lData.stoID
 
-    else:
-      # Make sure that there is an account that refers to that storage trie
-      let leaf = wpAcc.vtx.dup # Dup on modify
-      leaf.lData.stoID = useID
-      db.layersPutStoID(accPath, useID)
-      db.layersUpdateVtx((accHike.root, wpAcc.vid), leaf)
-      return ok()
+        # Provide new storage ID when needed
+        useID = if stoID.isValid: stoID else: db.vidFetch()
 
-  elif rc.error in MergeNoAction:
-    assert stoID.isValid         # debugging only
-    return ok()
+        # Call merge
+        pyl = PayloadRef(pType: StoData, stoData: stoData)
+        rc = db.mergePayloadImpl(useID, stoPath.data, pyl)
 
-  # Error: mark account path Merkle keys for update
-  db.updateAccountForHasher accHike
-  err(rc.error)
+      if rc.isOk:
+        # Mark account path Merkle keys for update
+        resetKeys()
+
+        if stoID.isValid:
+          return ok()
+
+        else:
+          # Make sure that there is an account that refers to that storage trie
+          let leaf = vtx.dup # Dup on modify
+          leaf.lData.stoID = useID
+          db.layersPutStoID(accPath, useID)
+          db.layersPutVtx((VertexID(1), touched[pos - 1]), leaf)
+          return ok()
+
+      elif rc.error in MergeNoAction:
+        assert stoID.isValid         # debugging only
+        return ok()
+
+      return err(rc.error)
+
+  err(MergeHikeFailed)
 
 # ------------------------------------------------------------------------------
 # End

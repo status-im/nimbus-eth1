@@ -27,14 +27,15 @@ import
   eth/common,
   results,
   ./aristo_constants,
-  ./aristo_desc/[desc_error, desc_identifiers, desc_structural]
+  ./aristo_desc/[desc_error, desc_identifiers, desc_nibbles, desc_structural]
 
 from ./aristo_desc/desc_backend
   import BackendRef
 
 # Not auto-exporting backend
 export
-  aristo_constants, desc_error, desc_identifiers, desc_structural, keyed_queue
+  aristo_constants, desc_error, desc_identifiers, desc_nibbles, desc_structural,
+  keyed_queue
 
 const
   accLruSize* = 1024 * 1024
