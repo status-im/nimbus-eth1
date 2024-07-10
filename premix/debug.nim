@@ -34,7 +34,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: BlockNum
     com = CommonRef.new(memoryDB)
     parent = com.db.getBlockHeader(parentNumber)
     blk = com.db.getEthBlock(blockNumber)
-  let transaction = memoryDB.newTransaction()
+  let transaction = memoryDB.ctx.newTransaction()
   defer: transaction.dispose()
 
   let

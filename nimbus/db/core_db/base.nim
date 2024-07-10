@@ -878,11 +878,6 @@ proc dispose*(tx: CoreDbTxRef) =
 # Legacy and convenience methods
 # ------------------------------------------------------------------------------
 
-proc newTransaction*(db: CoreDbRef): CoreDbTxRef =
-  ## Variant of `newTransaction()` starting the transaction on the default
-  ## context
-  db.ctx.newTransaction
-
 proc getColumn*(
     ctx: CoreDbCtxRef;
     colType: CoreDbColType;

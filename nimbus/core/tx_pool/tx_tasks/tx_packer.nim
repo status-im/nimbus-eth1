@@ -274,7 +274,7 @@ proc packerVmExec*(xp: TxPoolRef): Result[void, string] {.gcsafe,raises: [Catcha
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.chain.com.db
-  let dbTx = db.newTransaction
+  let dbTx = db.ctx.newTransaction()
   defer: dbTx.dispose()
 
   var pst = xp.vmExecInit.valueOr:

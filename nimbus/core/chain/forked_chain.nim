@@ -145,7 +145,7 @@ proc validateBlock(c: ForkedChainRef,
           parent: BlockHeader,
           blk: EthBlock,
           updateCursor: bool = true): Result[void, string] =
-  let dbTx = c.db.newTransaction()
+  let dbTx = c.db.ctx.newTransaction()
   defer:
     dbTx.dispose()
 
@@ -172,7 +172,7 @@ proc replaySegment(c: ForkedChainRef, target: Hash256) =
       prevHash = chain[^1].header.parentHash
 
   c.stagingTx.rollback()
-  c.stagingTx = c.db.newTransaction()
+  c.stagingTx = c.db.ctx.newTransaction()
   c.cursorHeader = c.baseHeader
   for i in countdown(chain.high, chain.low):
     c.validateBlock(c.cursorHeader, chain[i],
@@ -397,7 +397,7 @@ proc importBlock*(c: ForkedChainRef, blk: EthBlock): Result[void, string] =
   # Try to import block to canonical or side chain.
   # return error if the block is invalid
   if c.stagingTx.isNil:
-    c.stagingTx = c.db.newTransaction()
+    c.stagingTx = c.db.ctx.newTransaction()
 
   template header(): BlockHeader =
     blk.header
@@ -407,7 +407,7 @@ proc importBlock*(c: ForkedChainRef, blk: EthBlock): Result[void, string] =
 
   if header.parentHash == c.baseHash:
     c.stagingTx.rollback()
-    c.stagingTx = c.db.newTransaction()
+    c.stagingTx = c.db.ctx.newTransaction()
     return c.validateBlock(c.baseHeader, blk)
 
   if header.parentHash notin c.blocks:
@@ -442,7 +442,7 @@ proc forkChoice*(c: ForkedChainRef,
     if c.cursorHash != head.cursorHash:
       if not c.stagingTx.isNil:
         c.stagingTx.rollback()
-      c.stagingTx = c.db.newTransaction()
+      c.stagingTx = c.db.ctx.newTransaction()
       c.replaySegment(headHash)
 
     c.trimCanonicalChain(head, headHash)
@@ -452,7 +452,7 @@ proc forkChoice*(c: ForkedChainRef,
 
     if c.stagingTx.isNil:
       # setHead below don't go straight to db
-      c.stagingTx = c.db.newTransaction()
+      c.stagingTx = c.db.ctx.newTransaction()
 
     c.setHead(headHash, head.header.number)
     return ok()
@@ -489,7 +489,7 @@ proc forkChoice*(c: ForkedChainRef,
 
   # Write segment from base+1 to newBase into database
   c.stagingTx.rollback()
-  c.stagingTx = c.db.newTransaction()
+  c.stagingTx = c.db.ctx.newTransaction()
 
   if newBase.header.number > c.baseHeader.number:
     c.replaySegment(newBase.hash)
@@ -504,7 +504,7 @@ proc forkChoice*(c: ForkedChainRef,
   if c.stagingTx.isNil:
     # replaySegment or setHead below don't
     # go straight to db
-    c.stagingTx = c.db.newTransaction()
+    c.stagingTx = c.db.ctx.newTransaction()
 
   # Move chain state forward to current head
   if newBase.header.number < head.header.number:
