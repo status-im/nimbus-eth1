@@ -165,7 +165,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
 
   let packer = TxPackerStateRef( # return value
     xp: xp,
-    tr: AristoDbMemory.newCoreDbRef().ctx.getColumn(CtGeneric, clearData=true),
+    tr: AristoDbMemory.newCoreDbRef().ctx.getGeneric(clearData=true),
     balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
     numBlobPerBlock: 0,
   )

@@ -41,9 +41,6 @@ template call(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
 template mpt(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
   dsc.distinctBase.mpt
 
-template rootID(mpt: CoreDbMptRef): VertexID =
-  VertexID(CtGeneric)
-
 template call(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
@@ -67,10 +64,11 @@ iterator aristoReplicate[T](
   ##
   let p = mpt.call(forkTx, mpt.mpt, 0).valueOrApiError "aristoReplicate()"
   defer: discard mpt.call(forget, p)
-  for (rvid,key,vtx,node) in T.replicate(p):
+  for (rVid,key,vtx,node) in T.replicate(p):
     if key.len == 32:
       yield (@(key.data), node.encode)
-    elif rvid.vid == mpt.rootID:
+    elif rVid.vid == CoreDbVidGeneric:
+      # FIXME: Would an assert rather be appropriate here?
       yield (@(key.to(Hash256).data), node.encode)
 
 # End

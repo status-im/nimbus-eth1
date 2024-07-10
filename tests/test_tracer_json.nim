@@ -60,6 +60,10 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
           discard
       check kdb.put(key, val).isOk
 
+  # TODO: `getColumn(CtXyy)` does not exists anymore. There is only the generic
+  #       `MPT` left that can be retrieved with `getGeneric()`, optionally with
+  #       argument `clearData=true`
+
   # Install sub-trie roots onto production db
   if txRoot.isValid:
     doAssert adb.mergeProof(txRoot, VertexID(CtTxs)).isOk

@@ -167,6 +167,10 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
 
   com.db.persistReceipts(vmState.receipts)
   let
+    # TODO: `getColumn(CtReceipts)` does not exists anymore. There s only the
+    #       generic `MPT` left that can be retrieved with `getGeneric()`,
+    #       optionally with argument `clearData=true`
+    #
     receiptRoot = com.db.ctx.getColumn(CtReceipts).state(updateOk=true).valueOr(EMPTY_ROOT_HASH)
     date        = dateTime(2017, mMar, 30)
     timeStamp   = date.toTime.toUnix.EthTime
