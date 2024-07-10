@@ -49,7 +49,6 @@ import
   json_rpc/rpcclient,
   snappy,
   ncli/e2store,
-  ../database/seed_db,
   ../../premix/[downloader, parser],
   ../network/history/[history_content, accumulator],
   ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
@@ -123,49 +122,11 @@ proc writeBlocksToJson(config: ExporterConf, client: RpcClient) =
       fatal "Error occured while closing file", error = e.msg
       quit 1
 
-proc writeBlocksToDb(config: ExporterConf, client: RpcClient) =
-  let db = SeedDb.new(distinctBase(config.dataDir), config.fileName)
-
-  defer:
-    db.close()
-
-  for i in config.startBlock .. config.endBlock:
-    let
-      blck = downloadBlock(i, client)
-      blockHash = blck.header.blockHash()
-      contentKeyType = BlockKey(blockHash: blockHash)
-      headerKey =
-        encode(ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType))
-      bodyKey = encode(ContentKey(contentType: blockBody, blockBodyKey: contentKeyType))
-      receiptsKey =
-        encode(ContentKey(contentType: receipts, receiptsKey: contentKeyType))
-
-    db.put(headerKey.toContentId(), headerKey.asSeq(), rlp.encode(blck.header))
-
-    # No need to seed empty lists into database
-    if len(blck.body.transactions) > 0 or len(blck.body.uncles) > 0:
-      let body = encode(blck.body)
-      db.put(bodyKey.toContentId(), bodyKey.asSeq(), body)
-
-    if len(blck.receipts) > 0:
-      let receipts = encode(blck.receipts)
-      db.put(receiptsKey.toContentId(), receiptsKey.asSeq(), receipts)
-
-  info "Data successfuly written to db"
-
 proc exportBlocks(config: ExporterConf, client: RpcClient) =
-  case config.storageMode
-  of JsonStorage:
-    if config.headersOnly:
-      writeHeadersToJson(config, client)
-    else:
-      writeBlocksToJson(config, client)
-  of DbStorage:
-    if config.headersOnly:
-      fatal "Db mode not available for headers only"
-      quit 1
-    else:
-      writeBlocksToDb(config, client)
+  if config.headersOnly:
+    writeHeadersToJson(config, client)
+  else:
+    writeBlocksToJson(config, client)
 
 proc newRpcClient(web3Url: Web3Url): RpcClient =
   # TODO: I don't like this API. I think the creation of the RPC clients should
