@@ -120,21 +120,6 @@ func asReceipts(receiptObjects: seq[ReceiptObject]): Result[seq[Receipt], string
 
 ## EL JSON-RPC API helper calls for requesting block and receipts
 
-proc getBlockByNumber(
-    client: RpcClient, blockTag: RtBlockIdentifier, fullTransactions: bool = true
-): Future[Result[BlockObject, string]] {.async: (raises: []).} =
-  let blck =
-    try:
-      let res = await client.eth_getBlockByNumber(blockTag, fullTransactions)
-      if res.isNil:
-        return err("EL failed to provide requested block")
-
-      res
-    except CatchableError as e:
-      return err("EL JSON-RPC eth_getBlockByNumber failed: " & e.msg)
-
-  return ok(blck)
-
 proc getBlockReceipts(
     client: RpcClient, blockNumber: uint64
 ): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =

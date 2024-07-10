@@ -7,12 +7,17 @@
 
 {.push raises: [].}
 
-import chronicles, ./[portal_bridge_conf, portal_bridge_common]
+import
+  chronicles,
+  web3/[eth_api, eth_api_types],
+  results,
+  eth/common/[eth_types, eth_types_rlp],
+  ./[portal_bridge_conf, portal_bridge_common]
 
-proc runState*(config: PortalBridgeConf) =
-  let
-    portalClient = newRpcClientConnect(config.portalRpcUrl)
-    web3Client = newRpcClientConnect(config.web3Url)
+proc runBackfillLoop(
+    #portalClient: RpcClient,
+    web3Client: RpcClient
+) {.async: (raises: [CancelledError]).} =
 
   # TODO:
   # Here we'd want to implement initially a loop that backfills the state
@@ -25,5 +30,28 @@ proc runState*(config: PortalBridgeConf) =
   # method from nimbus-eth1.
   # It could also be implemented by having the whole state execution happening
   # inside the bridge, and getting the blocks from era1 files.
-  notice "State bridge functionality not yet implemented"
-  quit QuitSuccess
+
+  var currentBlockNumber: uint64 = 0
+
+  while true:
+    let blockObject = (await web3Client.getBlockByNumber(blockId(currentBlockNumber))).valueOr:
+      error "Failed to get block", error
+      await sleepAsync(1.seconds)
+      continue
+
+    if currentBlockNumber mod 1000 == 0:
+      echo "block number: ", blockObject.number
+      echo "block stateRoot: ", blockObject.stateRoot
+      echo "block uncles: ", blockObject.uncles
+
+    inc currentBlockNumber
+
+proc runState*(config: PortalBridgeConf) =
+  let
+    #portalClient = newRpcClientConnect(config.portalRpcUrl)
+    web3Client = newRpcClientConnect(config.web3UrlState)
+
+  asyncSpawn runBackfillLoop(web3Client)
+
+  while true:
+    poll()
