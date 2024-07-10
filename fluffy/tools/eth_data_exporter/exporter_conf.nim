@@ -29,10 +29,6 @@ type
     kind*: Web3UrlKind
     url*: string
 
-  StorageMode* = enum
-    JsonStorage
-    DbStorage
-
 const
   defaultDataDirDesc* = defaultDataDir()
   defaultBlockFileName* = "eth-block-data"
@@ -111,11 +107,6 @@ type
           defaultValueDesc: $defaultBlockFileName,
           name: "file-name"
         .}: string
-        storageMode* {.
-          desc: "Storage mode of block data export",
-          defaultValue: JsonStorage,
-          name: "storage-mode"
-        .}: StorageMode
         headersOnly* {.
           desc: "Only export the headers instead of full blocks and receipts",
           defaultValue: false,
@@ -234,18 +225,6 @@ proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
     )
 
 proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
-  return @[]
-
-proc parseCmdArg*(T: type StorageMode, p: string): T {.raises: [ValueError].} =
-  if p == "db":
-    return DbStorage
-  elif p == "json":
-    return JsonStorage
-  else:
-    let msg = "Provided mode: " & p & " is not a valid. Should be `json` or `db`"
-    raise newException(ValueError, msg)
-
-proc completeCmdArg*(T: type StorageMode, val: string): seq[string] =
   return @[]
 
 func parseCmdArg*(
