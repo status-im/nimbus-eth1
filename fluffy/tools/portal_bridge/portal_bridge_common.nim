@@ -8,7 +8,11 @@
 {.push raises: [].}
 
 import
-  chronicles, json_rpc/rpcclient, web3/[eth_api, eth_api_types], ./portal_bridge_conf
+  chronicles,
+  json_rpc/rpcclient,
+  web3/[eth_api, eth_api_types],
+  ../../rpc/rpc_calls/rpc_trace_calls,
+  ./portal_bridge_conf
 
 export rpcclient
 
@@ -33,11 +37,11 @@ proc newRpcClientConnect*(url: JsonRpcUrl): RpcClient =
     client
 
 proc getBlockByNumber*(
-    client: RpcClient, blockTag: RtBlockIdentifier, fullTransactions: bool = true
+    client: RpcClient, blockId: RtBlockIdentifier, fullTransactions: bool = true
 ): Future[Result[BlockObject, string]] {.async: (raises: []).} =
   let blck =
     try:
-      let res = await client.eth_getBlockByNumber(blockTag, fullTransactions)
+      let res = await client.eth_getBlockByNumber(blockId, fullTransactions)
       if res.isNil:
         return err("EL failed to provide requested block")
 

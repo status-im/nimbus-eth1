@@ -121,6 +121,22 @@ type
       web3UrlState* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
         JsonRpcUrl
 
+      startBlockNumber* {.
+        desc: "The block number to start from", defaultValue: 1, name: "start-block"
+      .}: uint64
+
+      verifyState* {.
+        desc: "Verify the fetched state before gossiping it into the network",
+        defaultValue: true,
+        name: "verify-state"
+      .}: bool
+
+      backfillState* {.
+        desc: "Backfill pre-merge state data into the network",
+        defaultValue: true,
+        name: "backfill"
+      .}: bool
+
 func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)
 
