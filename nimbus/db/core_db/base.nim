@@ -63,7 +63,7 @@ const
     CoreDbEnableApiTracking or CoreDbEnableApiProfiling or EnableApiJumpTable
 
 when AutoValidateDescriptors:
-  import ./base/validate
+  import ./base/base_validate
 
 when CoreDbEnableApiJumpTable:
   discard

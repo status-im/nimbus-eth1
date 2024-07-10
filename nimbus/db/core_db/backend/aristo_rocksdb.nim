@@ -29,9 +29,6 @@ const
   aristoFail = "Aristo/RocksDB init() failed"
   kvtFail = "Kvt/RocksDB init() failed"
 
-# Annotation helper(s)
-{.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
-
 proc toRocksDb*(
     opts: DbOptions
 ): tuple[dbOpts: DbOptionsRef, cfOpts: ColFamilyOptionsRef] =

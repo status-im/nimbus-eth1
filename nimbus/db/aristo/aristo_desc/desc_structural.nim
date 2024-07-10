@@ -43,7 +43,7 @@ type
     ## Type of leaf data.
     RawData                          ## Generic data
     AccountData                      ## `Aristo account` with vertex IDs links
-    StoData                         ## Slot storage data
+    StoData                          ## Slot storage data
 
   PayloadRef* = ref object of RootRef
     ## The payload type depends on the sub-tree used. The `VertesID(1)` rooted

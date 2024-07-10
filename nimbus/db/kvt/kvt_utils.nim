@@ -123,8 +123,8 @@ proc len*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[int,KvtError] =
-  ## For the argument `key` return the associated value preferably from the
-  ## top layer, or the database otherwise.
+  ## For the argument `key` return the length of the associated value,
+  ## preferably from the top layer, or the database otherwise.
   ##
   if key.len == 0:
     return err(KeyInvalid)

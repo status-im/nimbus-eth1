@@ -28,7 +28,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_hike, aristo_layers, aristo_utils, aristo_vid],
+  "."/[aristo_desc, aristo_hike, aristo_layers, aristo_vid],
   ./aristo_merge/merge_payload_helper
 
 const
@@ -43,16 +43,12 @@ proc mergeAccountRecord*(
     accPath: Hash256;          # Even nibbled byte path
     accRec: AristoAccount;             # Account data
       ): Result[bool,AristoError] =
-  ## Merge the  key-value-pair argument `(accKey,accPayload)` as an account
+  ## Merge the  key-value-pair argument `(accKey,accRec)` as an account
   ## ledger value, i.e. the the sub-tree starting at `VertexID(1)`.
   ##
-  ## The payload argument `accPayload` must have the `storageID` field either
-  ## unset/invalid or referring to a existing vertex which will be assumed
-  ## to be a storage tree.
-  ##
-  ## On success, the function returns `true` if the `accPayload` argument was
-  ## merged into the database ot updated, and `false` if it was on the database
-  ## already.
+  ## On success, the function returns `true` if the `accRec` argument was
+  ## not on the database already or different from `accRec`, and `false`
+  ## otherwise.
   ##
   let
     pyl =  PayloadRef(pType: AccountData, account: accRec)
