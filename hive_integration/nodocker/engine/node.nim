@@ -42,7 +42,7 @@ proc processBlock(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
   template header: BlockHeader = blk.header
-  var dbTx = vmState.com.db.newTransaction()
+  var dbTx = vmState.com.db.ctx.newTransaction()
   defer: dbTx.dispose()
 
   let com = vmState.com
@@ -92,7 +92,7 @@ proc getVmState(c: ChainRef, header: BlockHeader):
 # intended to accepts invalid block
 proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
   template header: BlockHeader = blk.header
-  let dbTx = c.db.newTransaction()
+  let dbTx = c.db.ctx.newTransaction()
   defer: dbTx.dispose()
 
   c.com.hardForkTransition(header)

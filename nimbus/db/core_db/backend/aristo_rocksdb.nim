@@ -24,8 +24,6 @@ import
   ./aristo_db,
   ../../opts
 
-include ./aristo_replicate
-
 const
   # Expectation messages
   aristoFail = "Aristo/RocksDB init() failed"

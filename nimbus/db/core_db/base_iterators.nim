@@ -69,7 +69,7 @@ iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
   mpt.setTrackNewApi MptPairsIt
   case mpt.dbType:
   of AristoDbMemory, AristoDbRocks, AristoDbVoid:
-    for (path,data) in mpt.mpt.rightPairsGeneric mpt.rootID:
+    for (path,data) in mpt.mpt.rightPairsGeneric CoreDbVidGeneric:
       yield (mpt.call(pathAsBlob, path), data)
   of Ooops:
     raiseAssert: "Unsupported database type: " & $mpt.dbType

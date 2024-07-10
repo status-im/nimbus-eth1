@@ -38,11 +38,11 @@ type
 # ------------------------------------------------------------------------------
 
 proc writeStatus(db: CoreDbRef, status: TransitionStatus) =
-  db.newKvt.put(transitionStatusKey().toOpenArray(), rlp.encode(status)).isOkOr:
+  db.ctx.getKvt.put(transitionStatusKey().toOpenArray(), rlp.encode(status)).isOkOr:
     raiseAssert "writeStatus(): put() failed " & $$error
 
 proc readStatus(db: CoreDbRef): TransitionStatus =
-  var bytes = db.newKvt.get(transitionStatusKey().toOpenArray()).valueOr:
+  var bytes = db.ctx.getKvt.get(transitionStatusKey().toOpenArray()).valueOr:
     EmptyBlob
   if bytes.len > 0:
     try:

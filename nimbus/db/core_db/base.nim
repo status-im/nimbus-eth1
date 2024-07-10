@@ -44,7 +44,6 @@ export
   CoreDbApiError,
   #CoreDbCaptFlags,
   #CoreDbCaptRef,
-  CoreDbColType,
   CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbErrorRef,
@@ -169,9 +168,6 @@ template mpt(tx: CoreDbTxRef): AristoDbRef =
 
 template ctx(acc: CoreDbAccRef): CoreDbCtxRef =
   acc.distinctBase
-
-template rootID(mpt: CoreDbMptRef): VertexID =
-  VertexID(CtGeneric)
 
 # ---------------
 
@@ -344,8 +340,8 @@ proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
 # ------------------------------------------------------------------------------
 
 proc getKvt*(ctx: CoreDbCtxRef): CoreDbKvtRef =
-  ## This function subscribes to the common base object shared with other
-  ## KVT descriptors. Any changes are immediately visible to subscribers.
+  ## This function retrieves the common base object shared with other KVT
+  ## descriptors. Any changes are immediately visible to subscribers.
   ## On destruction (when the constructed object gets out of scope), changes
   ## are not saved to the backend database but are still cached and available.
   ##
@@ -444,7 +440,7 @@ proc getGeneric*(
   ctx.setTrackNewApi CtxGetGenericFn
   result = CoreDbMptRef(ctx)
   if clearData:
-    result.call(deleteGenericTree, ctx.mpt, result.rootID).isOkOr:
+    result.call(deleteGenericTree, ctx.mpt, CoreDbVidGeneric).isOkOr:
       raiseAssert $api & ": " & $error
   ctx.ifTrackNewApi: debug newApiTxt, api, clearData, elapsed
 
@@ -456,7 +452,7 @@ proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ##
   mpt.setTrackNewApi MptFetchFn
   result = block:
-    let rc = mpt.call(fetchGenericData, mpt.mpt, mpt.rootID, key)
+    let rc = mpt.call(fetchGenericData, mpt.mpt, CoreDbVidGeneric, key)
     if rc.isOk:
       ok(rc.value)
     elif rc.error == FetchPathNotFound:
@@ -471,7 +467,7 @@ proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ##
   mpt.setTrackNewApi MptFetchOrEmptyFn
   result = block:
-    let rc = mpt.call(fetchGenericData, mpt.mpt, mpt.rootID, key)
+    let rc = mpt.call(fetchGenericData, mpt.mpt, CoreDbVidGeneric, key)
     if rc.isOk:
       ok(rc.value)
     elif rc.error == FetchPathNotFound:
@@ -483,7 +479,7 @@ proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
 proc delete*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[void] =
   mpt.setTrackNewApi MptDeleteFn
   result = block:
-    let rc = mpt.call(deleteGenericData, mpt.mpt, mpt.rootID, key)
+    let rc = mpt.call(deleteGenericData, mpt.mpt,CoreDbVidGeneric, key)
     if rc.isOk:
       ok()
     elif rc.error == DelPathNotFound:
@@ -499,7 +495,7 @@ proc merge*(
       ): CoreDbRc[void] =
   mpt.setTrackNewApi MptMergeFn
   result = block:
-    let rc = mpt.call(mergeGenericData, mpt.mpt, mpt.rootID, key, val)
+    let rc = mpt.call(mergeGenericData, mpt.mpt,CoreDbVidGeneric, key, val)
     if rc.isOk:
       ok()
     else:
@@ -513,7 +509,7 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
   ##
   mpt.setTrackNewApi MptHasPathFn
   result = block:
-    let rc = mpt.call(hasPathGeneric, mpt.mpt, mpt.rootID, key)
+    let rc = mpt.call(hasPathGeneric, mpt.mpt, CoreDbVidGeneric, key)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -529,7 +525,7 @@ proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
   ##
   mpt.setTrackNewApi MptStateFn
   result = block:
-    let rc = mpt.call(fetchGenericState, mpt.mpt, mpt.rootID, updateOk)
+    let rc = mpt.call(fetchGenericState, mpt.mpt, CoreDbVidGeneric, updateOk)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -873,28 +869,6 @@ proc dispose*(tx: CoreDbTxRef) =
     CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
       raiseAssert $api & ": " & $error
   tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
-
-# ------------------------------------------------------------------------------
-# Legacy and convenience methods
-# ------------------------------------------------------------------------------
-
-proc newKvt*(db: CoreDbRef): CoreDbKvtRef =
-  ## Variant of `getKvt()` retrieving the KVT from the default context
-  db.ctx.getKvt
-
-proc newTransaction*(db: CoreDbRef): CoreDbTxRef =
-  ## Variant of `newTransaction()` starting the transaction on the default
-  ## context
-  db.ctx.newTransaction
-
-proc getColumn*(
-    ctx: CoreDbCtxRef;
-    colType: CoreDbColType;
-    clearData = false;
-      ): CoreDbMptRef =
-  ## Variant of `getGenteric()` forcing `colType` to be `CtGeneric`
-  doAssert colType == CtGeneric
-  ctx.getGeneric clearData
 
 # ------------------------------------------------------------------------------
 # Public tracer methods

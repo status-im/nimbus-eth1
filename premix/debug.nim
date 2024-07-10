@@ -21,7 +21,7 @@ import
 
 proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
   let state = node["state"]
-  let kvt = memoryDB.newKvt()
+  let kvt = memoryDB.ctx.getKvt()
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
@@ -34,7 +34,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: BlockNum
     com = CommonRef.new(memoryDB)
     parent = com.db.getBlockHeader(parentNumber)
     blk = com.db.getEthBlock(blockNumber)
-  let transaction = memoryDB.newTransaction()
+  let transaction = memoryDB.ctx.newTransaction()
   defer: transaction.dispose()
 
   let

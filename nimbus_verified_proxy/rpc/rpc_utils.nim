@@ -86,7 +86,7 @@ proc calculateTransactionData(
   ## - root of transactions trie
   ## - list of transactions hashes
   ## - total size of transactions in block
-  var tr = newCoreDbRef(DefaultDbMemory).ctx.getColumn(CtGeneric)
+  var tr = newCoreDbRef(DefaultDbMemory).ctx.getGeneric()
   var txHashes: seq[TxOrHash]
   var txSize: uint64
   for i, t in items:

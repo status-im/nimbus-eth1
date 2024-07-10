@@ -28,7 +28,7 @@ proc dumpDebug(com: CommonRef, blockNumber: BlockNumber) =
     capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
 
-  let transaction = capture.recorder.newTransaction()
+  let transaction = capture.recorder.ctx.newTransaction()
   defer: transaction.dispose()
 
 

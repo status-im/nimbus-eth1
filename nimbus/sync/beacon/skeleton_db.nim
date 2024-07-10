@@ -30,15 +30,15 @@ logScope:
 # ------------------------------------------------------------------------------
 
 template get(sk: SkeletonRef, key: untyped): untyped =
-  sk.db.newKvt().get(key.toOpenArray).valueOr: EmptyBlob
+  sk.db.ctx.getKvt().get(key.toOpenArray).valueOr: EmptyBlob
 
 template put(sk: SkeletonRef, key, val: untyped): untyped =
-  let rc = sk.db.newKvt().put(key.toOpenArray, val)
+  let rc = sk.db.ctx.getKvt().put(key.toOpenArray, val)
   if rc.isErr:
     raiseAssert "put() failed: " & $$rc.error
 
 template del(sk: SkeletonRef, key: untyped): untyped =
-  discard sk.db.newKvt().del(key.toOpenArray)
+  discard sk.db.ctx.getKvt().del(key.toOpenArray)
 
 proc append(w: var RlpWriter, s: Segment) =
   w.startList(3)

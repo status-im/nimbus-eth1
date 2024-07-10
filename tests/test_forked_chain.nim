@@ -117,7 +117,7 @@ proc forkedChainMain*() =
       blk2 = cc.makeBlk(2, blk1)
       blk3 = cc.makeBlk(3, blk2)
 
-      dbTx = cc.db.newTransaction()
+      dbTx = cc.db.ctx.newTransaction()
       blk4 = cc.makeBlk(4, blk3)
       blk5 = cc.makeBlk(5, blk4)
       blk6 = cc.makeBlk(6, blk5)

@@ -49,7 +49,7 @@ proc getMultiKeys*(
   vmState.collectWitnessData = true # Enable saving witness data
   vmState.com.hardForkTransition(blockHeader)
 
-  let dbTx = vmState.com.db.newTransaction()
+  let dbTx = vmState.com.db.ctx.newTransaction()
   defer: dbTx.dispose()
 
   # Execute the block of transactions and collect the keys of the touched account state
