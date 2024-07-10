@@ -21,7 +21,7 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: BlockNumber, parent:
     state = nimbus["state"]
     headerHash = rlpHash(header)
     chainDB = newCoreDbRef(DefaultDbMemory)
-    kvt = chainDB.newKvt()
+    kvt = chainDB.ctx.getKvt()
 
   discard chainDB.setHead(parent, true)
   chainDB.persistTransactions(blockNumber, header.txRoot, blk.transactions)

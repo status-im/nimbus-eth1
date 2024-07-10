@@ -154,7 +154,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
            root: KeccakHash): AccountsLedgerRef =
   new result
   result.ledger = db.ctx.getAccounts()
-  result.kvt = db.newKvt() # save manually in `persist()`
+  result.kvt = db.ctx.getKvt()
   result.witnessCache = Table[EthAddress, WitnessData]()
   discard result.beginSavepoint
 

@@ -66,7 +66,7 @@ proc main() {.used.} =
     var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
     discard com.db.setHead(parentBlock.header)
 
-  let kvt = com.db.newKvt()
+  let kvt = com.db.ctx.getKvt()
   if canonicalHeadHashKey().toOpenArray notin kvt:
     persistToDb(com.db):
       com.initializeEmptyDb()

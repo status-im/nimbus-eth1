@@ -21,7 +21,7 @@ import
 
 proc prepareBlockEnv(node: JsonNode, memoryDB: CoreDbRef) =
   let state = node["state"]
-  let kvt = memoryDB.newKvt()
+  let kvt = memoryDB.ctx.getKvt()
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())

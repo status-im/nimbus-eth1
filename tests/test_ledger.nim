@@ -524,7 +524,7 @@ proc runLedgerBasicOperationsTests() =
       check ac.getCode(addr2) == code
       let
         key = contractHashKey(keccakHash(code))
-        val = memDB.newKvt().get(key.toOpenArray).valueOr: EmptyBlob
+        val = memDB.ctx.getKvt().get(key.toOpenArray).valueOr: EmptyBlob
       check val == code
 
     test "accessList operations":

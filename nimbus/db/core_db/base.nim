@@ -344,8 +344,8 @@ proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
 # ------------------------------------------------------------------------------
 
 proc getKvt*(ctx: CoreDbCtxRef): CoreDbKvtRef =
-  ## This function subscribes to the common base object shared with other
-  ## KVT descriptors. Any changes are immediately visible to subscribers.
+  ## This function retrieves the common base object shared with other KVT
+  ## descriptors. Any changes are immediately visible to subscribers.
   ## On destruction (when the constructed object gets out of scope), changes
   ## are not saved to the backend database but are still cached and available.
   ##
@@ -877,10 +877,6 @@ proc dispose*(tx: CoreDbTxRef) =
 # ------------------------------------------------------------------------------
 # Legacy and convenience methods
 # ------------------------------------------------------------------------------
-
-proc newKvt*(db: CoreDbRef): CoreDbKvtRef =
-  ## Variant of `getKvt()` retrieving the KVT from the default context
-  db.ctx.getKvt
 
 proc newTransaction*(db: CoreDbRef): CoreDbTxRef =
   ## Variant of `newTransaction()` starting the transaction on the default
