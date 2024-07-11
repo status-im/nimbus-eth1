@@ -11,10 +11,12 @@ import
   chronicles,
   stew/byteutils,
   stint,
+  eth/[common, trie, trie/db],
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[eth_types, eth_types_rlp],
   ../../rpc/rpc_calls/rpc_trace_calls,
+  ../../../nimbus/common/chain_config,
   ./[portal_bridge_conf, portal_bridge_common]
 
 type
@@ -109,41 +111,166 @@ proc getStateDiffByBlockNumber(
   except CatchableError as e:
     return err("EL JSON-RPC trace_replayBlockTransactions failed: " & e.msg)
 
+proc getAccountOrDefault(
+    accountsTrie: HexaryTrie, addressHash: openArray[byte]
+): Account {.raises: [RlpError].} =
+  let accountBytes = accountsTrie.get(addressHash)
+  if accountBytes.len() == 0:
+    newAccount()
+  else:
+    rlp.decode(accountBytes, Account)
+
+# For now just using in-memory state tries
+# To-Do: Use RocksDb as the db backend
+# To-Do: Use location based trie implementation where path is used
+# instead of node hash is used as key for each value in the trie.
+proc toState*(
+    alloc: GenesisAlloc
+): (HexaryTrie, Table[EthAddress, HexaryTrie]) {.raises: [RlpError].} =
+  var accountsTrie = initHexaryTrie(newMemoryDB())
+  var storageTries = Table[EthAddress, HexaryTrie]()
+
+  for address, genAccount in alloc:
+    var storageRoot = EMPTY_ROOT_HASH
+    var codeHash = EMPTY_CODE_HASH
+
+    if genAccount.code.len() > 0:
+      var storageTrie = initHexaryTrie(newMemoryDB())
+      for slotKey, slotValue in genAccount.storage:
+        let key = keccakHash(toBytesBE(slotKey)).data
+        let value = rlp.encode(slotValue)
+        storageTrie.put(key, value)
+      storageTries[address] = storageTrie
+      storageRoot = storageTrie.rootHash()
+      codeHash = keccakHash(genAccount.code)
+
+    let account = Account(
+      nonce: genAccount.nonce,
+      balance: genAccount.balance,
+      storageRoot: storageRoot,
+      codeHash: codeHash,
+    )
+    let key = keccakHash(address).data
+    let value = rlp.encode(account)
+    accountsTrie.put(key, value)
+
+  (accountsTrie, storageTries)
+
+proc applyStateUpdates(
+    accountsTrie: var HexaryTrie,
+    storageTries: var Table[EthAddress, HexaryTrie],
+    stateDiff: StateDiffRef,
+) {.raises: [RlpError].} =
+  if stateDiff == nil:
+    return
+
+  # apply state changes
+  for address, balanceDiff in stateDiff.balances:
+    let
+      addressHash = keccakHash(address).data
+      nonceDiff = stateDiff.nonces.getOrDefault(address)
+        # what happens when the mapping is missing? Do we get unchanged as the default
+      codeDiff = stateDiff.code.getOrDefault(address)
+      storageDiff = stateDiff.storage.getOrDefault(address)
+
+    var
+      deleteAccount = false
+      account = accountsTrie.getAccountOrDefault(addressHash)
+
+    if balanceDiff.kind == create or balanceDiff.kind == update:
+      account.balance = balanceDiff.updated
+    elif balanceDiff.kind == delete:
+      deleteAccount = true
+
+    if nonceDiff.kind == create or nonceDiff.kind == update:
+      account.nonce = nonceDiff.updated
+    elif nonceDiff.kind == delete:
+      doAssert deleteAccount == true # should already be set to true from balanceDiff
+
+    if codeDiff.kind == create or codeDiff.kind == update:
+      account.codeHash = keccakHash(codeDiff.updated) # TODO: store code in db
+    elif codeDiff.kind == delete:
+      doAssert deleteAccount == true # should already be set to true from balanceDiff
+
+    var storageTrie = storageTries.getOrDefault(address, initHexaryTrie(newMemoryDB()))
+
+    for slotKey, slotDiff in storageDiff:
+      let slotHash = keccakHash(toBytesBE(slotKey)).data
+
+      if slotDiff.kind == create or slotDiff.kind == update:
+        storageTrie.put(slotHash, rlp.encode(slotDiff.updated))
+      elif slotDiff.kind == delete:
+        storageTrie.del(slotHash)
+
+    storageTries[address] = storageTrie
+
+    if deleteAccount:
+      accountsTrie.del(addressHash)
+      # TODO: delete the code
+      # TODO: how to delete storage for the account
+    else:
+      accountsTrie.put(addressHash, rlp.encode(account))
+
+proc applyBlockRewards(
+    accountsTrie: var HexaryTrie, blockObject: BlockObject
+) {.raises: [RlpError].} =
+  let
+    address = blockObject.miner.EthAddress
+    addressHash = keccakHash(address).data
+    baseReward = 5.u256 * pow(10.u256, 18)
+  # TODO: calculate fee reward
+  # TODO: calculate uncles rewards
+
+  var account = accountsTrie.getAccountOrDefault(addressHash)
+  account.balance += baseReward
+  accountsTrie.put(addressHash, rlp.encode(account))
+
 proc runBackfillLoop(
     #portalClient: RpcClient,
     web3Client: RpcClient,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
-  var currentBlockNumber = startBlockNumber
+  var currentBlockNumber = 1.uint64
+    # for now we can only start from block 1 because the state is only in memory
   echo "Starting from block number: ", currentBlockNumber
 
-  while true:
-    let blockObject = (
-      await web3Client.getBlockByNumber(blockId(currentBlockNumber), false)
-    ).valueOr:
-      error "Failed to get block", error
-      await sleepAsync(1.seconds)
-      continue
+  try:
+    let
+      genesisAccounts = genesisBlockForNetwork(MainNet).alloc
+      blockZero = (await web3Client.getBlockByNumber(blockId(0), false)).get()
+    var (accountsTrie, storageTries) = toState(genesisAccounts)
+    # verify the genesis state root
+    # TODO: remove this later
+    doAssert blockZero.stateRoot.bytes() == accountsTrie.rootHash.data
+    discard blockZero
 
-    let stateDiff = (
-      await web3Client.getStateDiffByBlockNumber(blockId(currentBlockNumber))
-    ).valueOr:
-      error "Failed to get state diff", error
-      await sleepAsync(1.seconds)
-      continue
+    while true:
+      let
+        blockNumRequest =
+          web3Client.getBlockByNumber(blockId(currentBlockNumber), false)
+        stateDiffRequest =
+          web3Client.getStateDiffByBlockNumber(blockId(currentBlockNumber))
 
-    if not stateDiff.isNil():
-      echo stateDiff.balances
-      echo stateDiff.nonces
-      echo stateDiff.storage
-      echo stateDiff.code
+        blockObject = (await blockNumRequest).valueOr:
+          error "Failed to get block", error
+          await sleepAsync(1.seconds)
+          continue
+        stateDiff = (await stateDiffRequest).valueOr:
+          error "Failed to get state diff", error
+          await sleepAsync(1.seconds)
+          continue
 
-    if currentBlockNumber mod 1000 == 0:
       echo "block number: ", blockObject.number.uint64
       echo "block stateRoot: ", blockObject.stateRoot
       echo "block uncles: ", blockObject.uncles
 
-    inc currentBlockNumber
+      applyStateUpdates(accountsTrie, storageTries, stateDiff)
+      applyBlockRewards(accountsTrie, blockObject)
+      doAssert(blockObject.stateRoot.bytes() == accountsTrie.rootHash.data)
+
+      inc currentBlockNumber
+  except CatchableError as e:
+    error "runBackfillLoop failed: ", error = e.msg
 
 proc runState*(config: PortalBridgeConf) =
   let
