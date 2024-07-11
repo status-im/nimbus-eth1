@@ -9,6 +9,8 @@
 
 import
   chronicles,
+  stew/byteutils,
+  stint,
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[eth_types, eth_types_rlp],
@@ -16,77 +18,94 @@ import
   ./[portal_bridge_conf, portal_bridge_common]
 
 type
-  StateValues = ref object
-    accounts*: Table[Address, Account]
-    storage*: Table[Address, Table[UInt256, UInt256]]
-    code*: Table[Address, seq[byte]]
-
-  StateDiff = ref object
-    preState*: StateValues
-    postState*: StateValues
-
   DiffType = enum
     unchanged
     create
     update
     delete
 
-  Diff = object
-    kind*: DiffType
-    fromHex*: string
-    toHex*: string
+  Code = seq[byte]
+  StateValue = UInt256 | AccountNonce | Code
 
-proc toDiff(diffJson: JsonNode): Diff =
+  StateValueDiff[StateValue] = object
+    kind: DiffType
+    prior: StateValue
+    updated: StateValue
+
+  StateDiffRef = ref object
+    balances*: Table[EthAddress, StateValueDiff[UInt256]]
+    nonces*: Table[EthAddress, StateValueDiff[AccountNonce]]
+    storage*: Table[EthAddress, Table[UInt256, StateValueDiff[UInt256]]]
+    code*: Table[EthAddress, StateValueDiff[Code]]
+
+proc toStateValue(T: type UInt256, hex: string): T {.raises: [CatchableError].} =
+  UInt256.fromHex(hex)
+
+proc toStateValue(T: type AccountNonce, hex: string): T {.raises: [CatchableError].} =
+  UInt256.fromHex(hex).truncate(uint64)
+
+proc toStateValue(T: type Code, hex: string): T {.raises: [CatchableError].} =
+  hexToSeqByte(hex)
+
+proc toStateValueDiff(
+    diffJson: JsonNode, T: type StateValue
+): StateValueDiff[T] {.raises: [CatchableError].} =
   if diffJson.kind == JString and diffJson.getStr() == "=":
-    return Diff(kind: unchanged)
+    return StateValueDiff[T](kind: unchanged)
   elif diffJson.kind == JObject:
     if diffJson{"+"} != nil:
-      return Diff(kind: create, toHex: diffJson{"+"}.getStr())
+      return
+        StateValueDiff[T](kind: create, updated: T.toStateValue(diffJson{"+"}.getStr()))
     elif diffJson{"-"} != nil:
-      return Diff(kind: delete, toHex: diffJson{"-"}.getStr())
+      return
+        StateValueDiff[T](kind: delete, prior: T.toStateValue(diffJson{"-"}.getStr()))
     elif diffJson{"*"} != nil:
-      let
-        fromHex = diffJson{"*"}{"from"}.getStr()
-        toHex = diffJson{"*"}{"to"}.getStr()
-      return Diff(kind: update, fromHex: fromHex, toHex: toHex)
+      return StateValueDiff[T](
+        kind: update,
+        prior: T.toStateValue(diffJson{"*"}{"from"}.getStr()),
+        updated: T.toStateValue(diffJson{"*"}{"to"}.getStr()),
+      )
     else:
       doAssert false # unreachable
   else:
     doAssert false # unreachable
 
+proc toStateDiff(blockTraceJson: JsonNode): StateDiffRef {.raises: [CatchableError].} =
+  if blockTraceJson.len() == 0:
+    return nil # no state diff
+
+  let
+    stateDiffJson = blockTraceJson[0]["stateDiff"]
+    stateDiff = StateDiffRef()
+
+  for addrJson, accJson in stateDiffJson.pairs:
+    let address = EthAddress.fromHex(addrJson)
+
+    stateDiff.balances[address] = toStateValueDiff(accJson["balance"], UInt256)
+    stateDiff.nonces[address] = toStateValueDiff(accJson["nonce"], AccountNonce)
+    stateDiff.code[address] = toStateValueDiff(accJson["code"], Code)
+
+    let storageDiff = accJson["storage"]
+    var accountStorage: Table[UInt256, StateValueDiff[UInt256]]
+
+    for slotKeyJson, slotValueJson in storageDiff.pairs:
+      let slotKey = UInt256.fromHex(addrJson)
+      accountStorage[slotKey] = toStateValueDiff(slotValueJson, UInt256)
+
+    stateDiff.storage[address] = accountStorage
+
+  stateDiff
+
 proc getStateDiffByBlockNumber(
     client: RpcClient, blockId: RtBlockIdentifier
-): Future[Result[JsonNode, string]] {.async: (raises: []).} =
+): Future[Result[StateDiffRef, string]] {.async: (raises: []).} =
   const traceOpts = @["stateDiff"]
 
   try:
     let blockTraceJson = await client.trace_replayBlockTransactions(blockId, traceOpts)
     if blockTraceJson.isNil:
       return err("EL failed to provide requested state diff")
-
-    if blockTraceJson.len() > 0:
-      let stateDiffJson = blockTraceJson[0]["stateDiff"]
-
-      for addrJson, accJson in stateDiffJson.pairs:
-        echo "address: ", addrJson
-
-        let balanceDiff = accJson["balance"]
-        echo "balanceDiff: ", balanceDiff.toDiff()
-
-        let nonceDiff = accJson["nonce"]
-        echo "nonceDiff: ", nonceDiff.toDiff()
-
-        let codeDiff = accJson["code"]
-        echo "codeDiff: ", codeDiff.toDiff()
-
-        let storageDiff = accJson["storage"]
-        echo "storageDiff: ", storageDiff
-
-        for slotKeyJson, slotValueJson in storageDiff.pairs:
-          echo "slotKey: ", slotKeyJson
-          echo "slotValue: ", slotValueJson.toDiff()
-
-    ok(blockTraceJson)
+    ok(blockTraceJson.toStateDiff())
   except CatchableError as e:
     return err("EL JSON-RPC trace_replayBlockTransactions failed: " & e.msg)
 
@@ -95,20 +114,9 @@ proc runBackfillLoop(
     web3Client: RpcClient,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
-  # TODO:
-  # Here we'd want to implement initially a loop that backfills the state
-  # content. Secondly, a loop that follows the head and injects the latest
-  # state changes too.
-  #
-  # The first step would probably be the easier one to start with, as one
-  # can start from genesis state.
-  # It could be implemented by using the `exp_getProofsByBlockNumber` JSON-RPC
-  # method from nimbus-eth1.
-  # It could also be implemented by having the whole state execution happening
-  # inside the bridge, and getting the blocks from era1 files.
-
   var currentBlockNumber = startBlockNumber
   echo "Starting from block number: ", currentBlockNumber
+
   while true:
     let blockObject = (
       await web3Client.getBlockByNumber(blockId(currentBlockNumber), false)
@@ -124,7 +132,13 @@ proc runBackfillLoop(
       await sleepAsync(1.seconds)
       continue
 
-    if currentBlockNumber mod 100000 == 0:
+    if not stateDiff.isNil():
+      echo stateDiff.balances
+      echo stateDiff.nonces
+      echo stateDiff.storage
+      echo stateDiff.code
+
+    if currentBlockNumber mod 1000 == 0:
       echo "block number: ", blockObject.number.uint64
       echo "block stateRoot: ", blockObject.stateRoot
       echo "block uncles: ", blockObject.uncles
@@ -136,7 +150,20 @@ proc runState*(config: PortalBridgeConf) =
     #portalClient = newRpcClientConnect(config.portalRpcUrl)
     web3Client = newRpcClientConnect(config.web3UrlState)
 
-  asyncSpawn runBackfillLoop(web3Client, config.startBlockNumber)
+  # TODO:
+  # Here we'd want to implement initially a loop that backfills the state
+  # content. Secondly, a loop that follows the head and injects the latest
+  # state changes too.
+  #
+  # The first step would probably be the easier one to start with, as one
+  # can start from genesis state.
+  # It could be implemented by using the `exp_getProofsByBlockNumber` JSON-RPC
+  # method from nimbus-eth1.
+  # It could also be implemented by having the whole state execution happening
+  # inside the bridge, and getting the blocks from era1 files.
+
+  if config.backfillState:
+    asyncSpawn runBackfillLoop(web3Client, config.startBlockNumber)
 
   while true:
     poll()
