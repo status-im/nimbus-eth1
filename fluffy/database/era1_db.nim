@@ -62,9 +62,9 @@ proc getBlockTuple*(db: Era1DB, blockNumber: uint64): Result[BlockTuple, string]
 
 proc getAccumulator*(
     db: Era1DB, blockNumber: uint64
-): Result[EpochAccumulatorCached, string] =
-  ## Get the Epoch Accumulator that the block with `blockNumber` is part of.
-  # TODO: Probably want this `EpochAccumulatorCached` also actually cached in
+): Result[EpochRecordCached, string] =
+  ## Get the Epoch Record that the block with `blockNumber` is part of.
+  # TODO: Probably want this `EpochRecordCached` also actually cached in
   # the Era1File or EraDB object.
   let f = ?db.getEra1File(blockNumber.era)
 

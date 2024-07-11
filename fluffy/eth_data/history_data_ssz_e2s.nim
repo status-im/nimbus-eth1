@@ -27,19 +27,19 @@ proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
   except SerializationError as e:
     err("Failed decoding accumulator: " & e.msg)
 
-proc readEpochAccumulator*(file: string): Result[EpochAccumulator, string] =
+proc readEpochRecord*(file: string): Result[EpochRecord, string] =
   let encodedAccumulator = ?readAllFile(file).mapErr(toString)
 
   try:
-    ok(SSZ.decode(encodedAccumulator, EpochAccumulator))
+    ok(SSZ.decode(encodedAccumulator, EpochRecord))
   except SerializationError as e:
     err("Decoding epoch accumulator failed: " & e.msg)
 
-proc readEpochAccumulatorCached*(file: string): Result[EpochAccumulatorCached, string] =
+proc readEpochRecordCached*(file: string): Result[EpochRecordCached, string] =
   let encodedAccumulator = ?readAllFile(file).mapErr(toString)
 
   try:
-    ok(SSZ.decode(encodedAccumulator, EpochAccumulatorCached))
+    ok(SSZ.decode(encodedAccumulator, EpochRecordCached))
   except SerializationError as e:
     err("Decoding epoch accumulator failed: " & e.msg)
 

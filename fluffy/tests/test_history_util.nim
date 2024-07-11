@@ -13,13 +13,13 @@ import
 export results, accumulator, history_content
 
 proc buildHeadersWithProof*(
-    blockHeaders: seq[BlockHeader], epochAccumulator: EpochAccumulatorCached
+    blockHeaders: seq[BlockHeader], epochRecord: EpochRecordCached
 ): Result[seq[(seq[byte], seq[byte])], string] =
   var blockHeadersWithProof: seq[(seq[byte], seq[byte])]
   for header in blockHeaders:
     if header.isPreMerge():
       let
-        content = ?buildHeaderWithProof(header, epochAccumulator)
+        content = ?buildHeaderWithProof(header, epochRecord)
         contentKey = ContentKey(
           contentType: blockHeader,
           blockHeaderKey: BlockKey(blockHash: header.blockHash()),

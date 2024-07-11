@@ -32,7 +32,7 @@ type
 const
   defaultDataDirDesc* = defaultDataDir()
   defaultBlockFileName* = "eth-block-data"
-  defaultAccumulatorFileName* = "mainnet-master-accumulator.ssz"
+  defaultAccumulatorFileName* = "mainnet-historical-hashes-accumulator.ssz"
   defaultWeb3Url* = Web3Url(kind: HttpUrl, url: "http://127.0.0.1:8545")
 
 type
@@ -144,10 +144,10 @@ type
           defaultValueDesc: $defaultAccumulatorFileName,
           name: "accumulator-file-name"
         .}: string
-        writeEpochAccumulators* {.
-          desc: "Write also the SSZ encoded epoch accumulators to specific files",
+        writeEpochRecords* {.
+          desc: "Write also the SSZ encoded epoch records to specific files",
           defaultValue: false,
-          name: "write-epoch-accumulators"
+          name: "write-epoch-records"
         .}: bool
       of printAccumulatorData:
         accumulatorFileNamePrint* {.

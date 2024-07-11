@@ -47,13 +47,14 @@ const
   angelfoodBootstrapNodes* =
     loadCompileTimeBootstrapNodes(portalConfigDir / "bootstrap_nodes_angelfood.txt")
 
-  finishedAccumulatorSSZ* = slurp(portalConfigDir / "finished_accumulator.ssz")
+  historicalHashesAccumulatorSSZ* =
+    slurp(portalConfigDir / "historical_hashes_accumulator.ssz")
 
   historicalRootsSSZ* = slurp(portalConfigDir / "historical_roots.ssz")
 
 func loadAccumulator*(): FinishedAccumulator =
   try:
-    SSZ.decode(finishedAccumulatorSSZ, FinishedAccumulator)
+    SSZ.decode(historicalHashesAccumulatorSSZ, FinishedAccumulator)
   except SerializationError as err:
     raiseAssert "Invalid baked-in accumulator: " & err.msg
 

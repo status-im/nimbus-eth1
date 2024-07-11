@@ -95,18 +95,18 @@ the assigned `--data-dir`.
 3. Build the master accumulator and the epoch accumulators:
 
 ```bash
-./build/eth_data_exporter history exportAccumulatorData --writeEpochAccumulators --data-dir:"./user_data_dir/"
+./build/eth_data_exporter history exportAccumulatorData --write-epoch-records --data-dir:"./user_data_dir/"
 ```
 
 #### Step 2: Seed the epoch accumulators into the Portal network
 Run Fluffy and trigger the propagation of data with the
-`portal_history_propagateEpochAccumulators` JSON-RPC API call:
+`portal_history_propagateEpochRecords` JSON-RPC API call:
 
 ```bash
 ./build/fluffy --rpc
 
 # From another terminal
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_history_propagateEpochAccumulators","params":["./user_data_dir/"]}' http://localhost:8545 | jq
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_history_propagateEpochRecords","params":["./user_data_dir/"]}' http://localhost:8545 | jq
 ```
 
 

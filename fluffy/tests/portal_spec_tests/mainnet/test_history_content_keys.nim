@@ -136,8 +136,7 @@ suite "History ContentKey Encodings":
         "9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e"
 
     let contentKey = ContentKey(
-      contentType: epochAccumulator,
-      epochAccumulatorKey: EpochAccumulatorKey(epochHash: epochHash),
+      contentType: epochRecord, epochRecordKey: EpochRecordKey(epochHash: epochHash)
     )
 
     let encoded = encode(contentKey)
@@ -148,7 +147,7 @@ suite "History ContentKey Encodings":
     let contentKeyDecoded = decoded.get()
     check:
       contentKeyDecoded.contentType == contentKey.contentType
-      contentKeyDecoded.epochAccumulatorKey == contentKey.epochAccumulatorKey
+      contentKeyDecoded.epochRecordKey == contentKey.epochRecordKey
 
       toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string
