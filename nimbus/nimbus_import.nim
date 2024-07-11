@@ -136,7 +136,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     genesis_validators_root = Eth2Digest.fromHex(
       "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078"
     ) # Sepolia Validators Root
-    lastEra1Block = 1450409'u64 # Sepolia
+    lastEra1Block = 1450408'u64 # Sepolia
     firstSlotAfterMerge =
       if isDir(conf.eraDir.string):
         115193'u64 # Sepolia
