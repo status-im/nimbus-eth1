@@ -41,30 +41,25 @@ proc loadFromYaml*(T: type, file: string): Result[T, string] =
   ok(res)
 
 proc dumpToYaml*[T](value: T, file: string): Result[void, string] =
-  # These are the default options aside from outputVersion which is set to none.
-  const options = PresentationOptions(
-    containers: cMixed,
-    indentationStep: 2,
-    newlines: nlOSDefault,
-    outputVersion: ovNone,
-    maxLineLength: some(80),
-    directivesEnd: deIfNecessary,
-    suppressAttrs: false,
-    quoting: sqUnset,
-    condenseFlow: true,
-    explicitKeys: false,
-  )
-
   let s = newFileStream(file, fmWrite)
   defer:
     try:
       close(s)
     except Exception as e:
       raiseAssert(e.msg)
+
+  # To dump to yaml, avoiding TAGS and YAML version directives, no max line
+  # length.
+  var dumper = minimalDumper()
+  dumper.setDefaultStyle()
+  dumper.serialization.handles = @[]
+  dumper.serialization.tagStyle = tsNone
+  dumper.presentation.outputVersion = ovNone
+  dumper.presentation.maxLineLength = none(int)
+
   try:
     {.gcsafe.}:
-      # Dump to yaml, avoiding TAGS and YAML version directives.
-      dump(value, s, tagStyle = tsNone, options = options, handles = @[])
+      dumper.dump(value, s)
   except YamlPresenterJsonError as e:
     return err(e.msg)
   except YamlSerializationError as e:
