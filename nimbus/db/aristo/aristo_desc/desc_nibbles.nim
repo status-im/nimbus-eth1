@@ -18,6 +18,9 @@ type NibblesBuf* = object
     # Where valid nibbles can be found - we use indices here to avoid copies
     # wen slicing - iend not inclusive
 
+func high*(T: type NibblesBuf): int =
+  63
+
 func fromBytes*(T: type NibblesBuf, bytes: openArray[byte]): T =
   result.iend = 2 * (int8 result.bytes.copyFrom(bytes))
 

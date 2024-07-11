@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, hashes, sets, typetraits],
+  std/[tables, hashes, sets],
   chronicles,
   eth/common,
   results,
