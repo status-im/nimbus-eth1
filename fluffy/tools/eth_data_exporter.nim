@@ -227,7 +227,7 @@ proc cmdExportEra1(config: ExporterConf) =
 
         group.update(e2, blockNumber, blck.header, blck.body, blck.receipts, ttd).get()
 
-      accumulatorRoot = getEpochAccumulatorRoot(headerRecords)
+      accumulatorRoot = getEpochRecordRoot(headerRecords)
 
       group.finish(e2, accumulatorRoot, endNumber).get()
       completed = true
@@ -313,9 +313,9 @@ when isMainModule:
         # Downloading headers from JSON RPC endpoint
         info "Requesting epoch headers", epoch
         var headers: seq[BlockHeader]
-        for j in 0 ..< epochSize.uint64:
+        for j in 0 ..< EPOCH_SIZE.uint64:
           debug "Requesting block", number = j
-          let header = client.downloadHeader(epoch * epochSize + j)
+          let header = client.downloadHeader(epoch * EPOCH_SIZE + j)
           headers.add(header)
 
         let fh = ?openFile(file, {OpenFlags.Write, OpenFlags.Create}).mapErr(toString)
@@ -393,7 +393,7 @@ when isMainModule:
           quit 1
 
       proc buildAccumulator(
-          dataDir: string, writeEpochAccumulators = false
+          dataDir: string, writeEpochRecords = false
       ): Result[FinishedAccumulator, string] =
         var accumulator: Accumulator
         for i in 0 ..< preMergeEpochs:
@@ -421,11 +421,11 @@ when isMainModule:
                   return err("Invalid block header in " & file & ": " & e.msg)
 
               # Quick sanity check
-              if blockHeader.number != i * epochSize + count:
+              if blockHeader.number != i * EPOCH_SIZE + count:
                 fatal "Incorrect block headers in file",
                   file = file,
                   blockNumber = blockHeader.number,
-                  expectedBlockNumber = i * epochSize + count
+                  expectedBlockNumber = i * EPOCH_SIZE + count
                 quit 1
 
               updateAccumulator(accumulator, blockHeader)
@@ -433,22 +433,21 @@ when isMainModule:
               # Note: writing away of epoch accumulators occurs 1 iteration before
               # updating the epoch accumulator, as the latter happens when passed
               # a header for the next epoch (or on finishing the epoch).
-              if writeEpochAccumulators:
-                if accumulator.currentEpoch.len() == epochSize or
+              if writeEpochRecords:
+                if accumulator.currentEpoch.len() == EPOCH_SIZE or
                     blockHeader.number == mergeBlockNumber - 1:
                   let file =
                     try:
-                      dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+                      dataDir / &"mainnet-epoch-record-{i.uint64:05}.ssz"
                     except ValueError as e:
                       raiseAssert e.msg
                   let res = io2.writeFile(file, SSZ.encode(accumulator.currentEpoch))
                   if res.isErr():
-                    error "Failed writing epoch accumulator to file",
-                      file, error = res.error
+                    error "Failed writing epoch record to file", file, error = res.error
                   else:
-                    notice "Succesfully wrote epoch accumulator to file", file
+                    notice "Succesfully wrote epoch record to file", file
 
-              if count == epochSize - 1:
+              if count == EPOCH_SIZE - 1:
                 info "Updated an epoch", epoch = i
               count.inc()
 
@@ -462,7 +461,7 @@ when isMainModule:
 
         err("Not enough headers provided to finish the accumulator")
 
-      let accumulatorRes = buildAccumulator(dataDir, config.writeEpochAccumulators)
+      let accumulatorRes = buildAccumulator(dataDir, config.writeEpochRecords)
       if accumulatorRes.isErr():
         fatal "Could not build accumulator", error = accumulatorRes.error
         quit 1
@@ -474,7 +473,8 @@ when isMainModule:
           file = accumulatorFile, error = res.error
         quit 1
       else:
-        notice "Succesfully wrote master accumulator to file", file = accumulatorFile
+        notice "Succesfully wrote Historical Hashes Accumulator to file",
+          file = accumulatorFile
     of HistoryCmd.printAccumulatorData:
       let file = dataDir / config.accumulatorFileNamePrint
 
@@ -564,8 +564,7 @@ when isMainModule:
         let
           epochIndex = getEpochIndex(blockNumber)
           epochHeadersFile = dataDir / &"mainnet-headers-epoch-{epochIndex:05}.e2s"
-          epochAccumulatorFile =
-            dataDir / &"mainnet-epoch-accumulator-{epochIndex:05}.ssz"
+          epochRecordFile = dataDir / &"mainnet-epoch-record-{epochIndex:05}.ssz"
 
         let res = readBlockHeaders(epochHeadersFile)
         if res.isErr():
@@ -574,17 +573,17 @@ when isMainModule:
 
         let blockHeaders = res.get()
 
-        let epochAccumulatorRes = readEpochAccumulatorCached(epochAccumulatorFile)
-        if epochAccumulatorRes.isErr():
-          error "Could not read epoch accumulator file", error = res.error
+        let epochRecordRes = readEpochRecordCached(epochRecordFile)
+        if epochRecordRes.isErr():
+          error "Could not read epoch record file", error = res.error
           quit 1
 
-        let epochAccumulator = epochAccumulatorRes.get()
+        let epochRecord = epochRecordRes.get()
 
         let headerIndex = getHeaderRecordIndex(blockNumber, epochIndex)
         let header = blockHeaders[headerIndex]
         if header.isPreMerge():
-          let headerWithProof = buildHeaderWithProof(header, epochAccumulator)
+          let headerWithProof = buildHeaderWithProof(header, epochRecord)
           if headerWithProof.isErr:
             error "Error building proof", error = headerWithProof.error
             quit 1

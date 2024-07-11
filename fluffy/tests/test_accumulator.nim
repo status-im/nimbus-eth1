@@ -26,13 +26,13 @@ suite "Header Accumulator":
       # Note: This test assumes at least 5 epochs
       headersToTest = [
         0,
-        epochSize - 1,
-        epochSize,
-        epochSize * 2 - 1,
-        epochSize * 2,
-        epochSize * 3 - 1,
-        epochSize * 3,
-        epochSize * 3 + 1,
+        EPOCH_SIZE - 1,
+        EPOCH_SIZE,
+        EPOCH_SIZE * 2 - 1,
+        EPOCH_SIZE * 2,
+        EPOCH_SIZE * 3 - 1,
+        EPOCH_SIZE * 3,
+        EPOCH_SIZE * 3 + 1,
         int(amount) - 1,
       ]
 
@@ -45,12 +45,12 @@ suite "Header Accumulator":
 
     let accumulatorRes = buildAccumulatorData(headers)
     check accumulatorRes.isOk()
-    let (accumulator, epochAccumulators) = accumulatorRes.get()
+    let (accumulator, epochRecords) = accumulatorRes.get()
 
     block: # Test valid headers
       for i in headersToTest:
         let header = headers[i]
-        let proof = buildProof(header, epochAccumulators)
+        let proof = buildProof(header, epochRecords)
         check:
           proof.isOk()
           verifyAccumulatorProof(accumulator, header, proof.get()).isOk()
@@ -63,7 +63,7 @@ suite "Header Accumulator":
 
       # Test altered block headers by altering the difficulty
       for i in headersToTest:
-        let proof = buildProof(headers[i], epochAccumulators)
+        let proof = buildProof(headers[i], epochRecords)
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches
@@ -89,7 +89,7 @@ suite "Header Accumulator":
 
     check accumulatorRes.isErr()
 
-  test "Header BlockNumber to EpochAccumulator Root":
+  test "Header BlockNumber to EpochRecord Root":
     # Note: This test assumes at least 3 epochs
     const amount = mergeBlockNumber
 
@@ -108,7 +108,7 @@ suite "Header Accumulator":
 
     # Valid response for block numbers in epoch 0
     block:
-      for i in 0 ..< epochSize:
+      for i in 0 ..< EPOCH_SIZE:
         let res = accumulator.getBlockEpochDataForBlockNumber(u256(i))
         check:
           res.isOk()
@@ -116,7 +116,7 @@ suite "Header Accumulator":
 
     # Valid response for block numbers in epoch 1
     block:
-      for i in epochSize ..< (2 * epochSize):
+      for i in EPOCH_SIZE ..< (2 * EPOCH_SIZE):
         let res = accumulator.getBlockEpochDataForBlockNumber(u256(i))
         check:
           res.isOk()
@@ -124,7 +124,7 @@ suite "Header Accumulator":
 
     # Valid response for block numbers in the incomplete (= last) epoch
     block:
-      const startIndex = mergeBlockNumber - (mergeBlockNumber mod epochSize)
+      const startIndex = mergeBlockNumber - (mergeBlockNumber mod EPOCH_SIZE)
       for i in startIndex ..< mergeBlockNumber:
         let res = accumulator.getBlockEpochDataForBlockNumber(u256(i))
         check:

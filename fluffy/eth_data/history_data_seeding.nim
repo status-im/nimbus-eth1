@@ -35,36 +35,35 @@ proc historyStore*(
 
   ok()
 
-proc propagateEpochAccumulator*(
+proc propagateEpochRecord*(
     p: PortalProtocol, file: string
 ): Future[Result[void, string]] {.async.} =
   ## Propagate a specific epoch accumulator into the network.
   ## file holds the SSZ serialized epoch accumulator.
-  let epochAccumulatorRes = readEpochAccumulator(file)
-  if epochAccumulatorRes.isErr():
-    return err(epochAccumulatorRes.error)
+  let epochRecordRes = readEpochRecord(file)
+  if epochRecordRes.isErr():
+    return err(epochRecordRes.error)
   else:
     let
-      accumulator = epochAccumulatorRes.get()
-      rootHash = accumulator.hash_tree_root()
+      epochRecord = epochRecordRes.get()
+      rootHash = epochRecord.hash_tree_root()
       key = ContentKey(
-        contentType: epochAccumulator,
-        epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash),
+        contentType: epochRecord, epochRecordKey: EpochRecordKey(epochHash: rootHash)
       )
       encKey = history_content.encode(key)
       # Note: The file actually holds the SSZ encoded accumulator, but we need
       # to decode as we need the root for the content key.
-      encodedAccumulator = SSZ.encode(accumulator)
-    info "Gossiping epoch accumulator", rootHash, contentKey = encKey
+      encodedEpochRecord = SSZ.encode(epochRecord)
+    info "Gossiping epoch record", rootHash, contentKey = encKey
 
-    p.storeContent(encKey, history_content.toContentId(encKey), encodedAccumulator)
+    p.storeContent(encKey, history_content.toContentId(encKey), encodedEpochRecord)
     discard await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[encKey]), @[encodedAccumulator]
+      Opt.none(NodeId), ContentKeysList(@[encKey]), @[encodedEpochRecord]
     )
 
     return ok()
 
-proc propagateEpochAccumulators*(
+proc propagateEpochRecords*(
     p: PortalProtocol, path: string
 ): Future[Result[void, string]] {.async.} =
   ## Propagate all epoch accumulators created when building the accumulator
@@ -73,11 +72,11 @@ proc propagateEpochAccumulators*(
   for i in 0 ..< preMergeEpochs:
     let file =
       try:
-        path / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+        path / &"mainnet-epoch-record-{i.uint64:05}.ssz"
       except ValueError as e:
         raiseAssert e.msg
 
-    let res = await p.propagateEpochAccumulator(file)
+    let res = await p.propagateEpochRecord(file)
     if res.isErr():
       return err(res.error)
 
@@ -164,7 +163,7 @@ proc historyPropagateBlock*(
     return err(blockDataTable.error)
 
 proc historyPropagateHeadersWithProof*(
-    p: PortalProtocol, epochHeadersFile: string, epochAccumulatorFile: string
+    p: PortalProtocol, epochHeadersFile: string, epochRecordFile: string
 ): Future[Result[void, string]] {.async.} =
   let res = readBlockHeaders(epochHeadersFile)
   if res.isErr():
@@ -172,14 +171,14 @@ proc historyPropagateHeadersWithProof*(
 
   let blockHeaders = res.get()
 
-  let epochAccumulatorRes = readEpochAccumulatorCached(epochAccumulatorFile)
-  if epochAccumulatorRes.isErr():
+  let epochRecordRes = readEpochRecordCached(epochRecordFile)
+  if epochRecordRes.isErr():
     return err(res.error)
 
-  let epochAccumulator = epochAccumulatorRes.get()
+  let epochRecord = epochRecordRes.get()
   for header in blockHeaders:
     if header.isPreMerge():
-      let headerWithProof = buildHeaderWithProof(header, epochAccumulator)
+      let headerWithProof = buildHeaderWithProof(header, epochRecord)
       if headerWithProof.isErr:
         return err(headerWithProof.error)
 
@@ -210,14 +209,14 @@ proc historyPropagateHeadersWithProof*(
           dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
         except ValueError as e:
           raiseAssert e.msg
-      epochAccumulatorFile =
+      epochRecordFile =
         try:
-          dataDir / &"mainnet-epoch-accumulator-{i.uint64:05}.ssz"
+          dataDir / &"mainnet-epoch-record-{i.uint64:05}.ssz"
         except ValueError as e:
           raiseAssert e.msg
 
     let res =
-      await p.historyPropagateHeadersWithProof(epochHeadersfile, epochAccumulatorFile)
+      await p.historyPropagateHeadersWithProof(epochHeadersfile, epochRecordFile)
     if res.isOk():
       info "Finished gossiping 1 epoch of headers with proof", i
     else:
@@ -268,7 +267,7 @@ proc historyPropagateHeaders*(
 # have great support for usage in iterators.
 
 iterator headersWithProof*(
-    f: Era1File, epochAccumulator: EpochAccumulatorCached
+    f: Era1File, epochRecord: EpochRecordCached
 ): (ByteList, seq[byte]) =
   for blockHeader in f.era1BlockHeaders:
     doAssert blockHeader.isPreMerge()
@@ -279,7 +278,7 @@ iterator headersWithProof*(
         blockHeaderKey: BlockKey(blockHash: blockHeader.blockHash()),
       ).encode()
 
-      headerWithProof = buildHeaderWithProof(blockHeader, epochAccumulator).valueOr:
+      headerWithProof = buildHeaderWithProof(blockHeader, epochRecord).valueOr:
         raiseAssert "Failed to build header with proof: " & $blockHeader.number
 
       contentValue = SSZ.encode(headerWithProof)
@@ -315,10 +314,7 @@ iterator blockContent*(f: Era1File): (ByteList, seq[byte]) =
 ##
 
 proc historyGossipHeadersWithProof*(
-    p: PortalProtocol,
-    era1File: string,
-    epochAccumulatorFile: Opt[string],
-    verifyEra = false,
+    p: PortalProtocol, era1File: string, epochRecordFile: Opt[string], verifyEra = false
 ): Future[Result[void, string]] {.async.} =
   let f = ?Era1File.open(era1File)
 
@@ -328,13 +324,13 @@ proc historyGossipHeadersWithProof*(
   # Note: building the accumulator takes about 150ms vs 10ms for reading it,
   # so it is probably not really worth using the read version considering the
   # UX hassle it adds to provide the accumulator ssz files.
-  let epochAccumulator =
-    if epochAccumulatorFile.isNone:
+  let epochRecord =
+    if epochRecordFile.isNone:
       ?f.buildAccumulator()
     else:
-      ?readEpochAccumulatorCached(epochAccumulatorFile.get())
+      ?readEpochRecordCached(epochRecordFile.get())
 
-  for (contentKey, contentValue) in f.headersWithProof(epochAccumulator):
+  for (contentKey, contentValue) in f.headersWithProof(epochRecord):
     let peers = await p.neighborhoodGossip(
       Opt.none(NodeId), ContentKeysList(@[contentKey]), @[contentValue]
     )

@@ -23,9 +23,9 @@ proc installPortalDebugApiHandlers*(
 ) =
   ## Portal debug API calls related to storage and seeding from Era1 files.
   rpcServer.rpc("portal_" & network & "GossipHeaders") do(
-    era1File: string, epochAccumulatorFile: Opt[string]
+    era1File: string, epochRecordFile: Opt[string]
   ) -> bool:
-    let res = await p.historyGossipHeadersWithProof(era1File, epochAccumulatorFile)
+    let res = await p.historyGossipHeadersWithProof(era1File, epochRecordFile)
     if res.isOk():
       return true
     else:
@@ -62,10 +62,10 @@ proc installPortalDebugApiHandlers*(
       raise newException(ValueError, $res.error)
 
   rpcServer.rpc("portal_" & network & "_propagateHeaders") do(
-    epochHeadersFile: string, epochAccumulatorFile: string
+    epochHeadersFile: string, epochRecordFile: string
   ) -> bool:
     let res =
-      await p.historyPropagateHeadersWithProof(epochHeadersFile, epochAccumulatorFile)
+      await p.historyPropagateHeadersWithProof(epochHeadersFile, epochRecordFile)
     if res.isOk():
       return true
     else:
@@ -80,19 +80,17 @@ proc installPortalDebugApiHandlers*(
     else:
       raise newException(ValueError, $res.error)
 
-  rpcServer.rpc("portal_" & network & "_propagateEpochAccumulator") do(
+  rpcServer.rpc("portal_" & network & "_propagateEpochRecord") do(
     dataFile: string
   ) -> bool:
-    let res = await p.propagateEpochAccumulator(dataFile)
+    let res = await p.propagateEpochRecord(dataFile)
     if res.isOk():
       return true
     else:
       raise newException(ValueError, $res.error)
 
-  rpcServer.rpc("portal_" & network & "_propagateEpochAccumulators") do(
-    path: string
-  ) -> bool:
-    let res = await p.propagateEpochAccumulators(path)
+  rpcServer.rpc("portal_" & network & "_propagateEpochRecords") do(path: string) -> bool:
+    let res = await p.propagateEpochRecords(path)
     if res.isOk():
       return true
     else:

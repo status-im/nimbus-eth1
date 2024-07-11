@@ -31,12 +31,12 @@ type
     blockHeader = 0x00
     blockBody = 0x01
     receipts = 0x02
-    epochAccumulator = 0x03
+    epochRecord = 0x03
 
   BlockKey* = object
     blockHash*: BlockHash
 
-  EpochAccumulatorKey* = object
+  EpochRecordKey* = object
     epochHash*: Digest
 
   ContentKey* = object
@@ -47,8 +47,8 @@ type
       blockBodyKey*: BlockKey
     of receipts:
       receiptsKey*: BlockKey
-    of epochAccumulator:
-      epochAccumulatorKey*: EpochAccumulatorKey
+    of epochRecord:
+      epochRecordKey*: EpochRecordKey
 
 func init*(T: type ContentKey, contentType: ContentType, hash: BlockHash | Digest): T =
   case contentType
@@ -58,10 +58,9 @@ func init*(T: type ContentKey, contentType: ContentType, hash: BlockHash | Diges
     ContentKey(contentType: contentType, blockBodyKey: BlockKey(blockHash: hash))
   of receipts:
     ContentKey(contentType: contentType, receiptsKey: BlockKey(blockHash: hash))
-  of epochAccumulator:
+  of epochRecord:
     ContentKey(
-      contentType: contentType,
-      epochAccumulatorKey: EpochAccumulatorKey(epochHash: hash),
+      contentType: contentType, epochRecordKey: EpochRecordKey(epochHash: hash)
     )
 
 func encode*(contentKey: ContentKey): ByteList =
@@ -97,8 +96,8 @@ func `$`*(x: ContentKey): string =
     res.add($x.blockBodyKey)
   of receipts:
     res.add($x.receiptsKey)
-  of epochAccumulator:
-    let key = x.epochAccumulatorKey
+  of epochRecord:
+    let key = x.epochRecordKey
     res.add("epochHash: " & $key.epochHash)
 
   res.add(")")

@@ -28,15 +28,16 @@ suite "History Content Encodings":
         "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
       accumulatorFile =
         "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
+        # TODO: rename
       headersWithProofFile =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/1000001-1000010.json"
 
     let
       blockHeaders = readBlockHeaders(headerFile).valueOr:
         raiseAssert "Invalid header file: " & headerFile
-      epochAccumulator = readEpochAccumulatorCached(accumulatorFile).valueOr:
+      epochRecord = readEpochRecordCached(accumulatorFile).valueOr:
         raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
-      blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
+      blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochRecord).valueOr:
         raiseAssert "Could not build headers with proof"
       accumulator = loadAccumulator()
 

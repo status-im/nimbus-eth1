@@ -85,13 +85,13 @@ procSuite "History Content Network":
 
       headersToTest = [
         0,
-        epochSize - 1,
-        epochSize,
-        epochSize * 2 - 1,
-        epochSize * 2,
-        epochSize * 3 - 1,
-        epochSize * 3,
-        epochSize * 3 + 1,
+        EPOCH_SIZE - 1,
+        EPOCH_SIZE,
+        EPOCH_SIZE * 2 - 1,
+        EPOCH_SIZE * 2,
+        EPOCH_SIZE * 3 - 1,
+        EPOCH_SIZE * 3,
+        EPOCH_SIZE * 3 + 1,
         int(lastBlockNumber),
       ]
 
@@ -100,7 +100,7 @@ procSuite "History Content Network":
     check accumulatorRes.isOk()
 
     let
-      (masterAccumulator, epochAccumulators) = accumulatorRes.get()
+      (masterAccumulator, epochRecords) = accumulatorRes.get()
       historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
       historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
@@ -108,7 +108,7 @@ procSuite "History Content Network":
     for i in headersToTest:
       selectedHeaders.add(headers[i])
 
-    let headersWithProof = buildHeadersWithProof(selectedHeaders, epochAccumulators)
+    let headersWithProof = buildHeadersWithProof(selectedHeaders, epochRecords)
 
     check headersWithProof.isOk()
 
@@ -127,17 +127,17 @@ procSuite "History Content Network":
 
     # Need to store the epoch accumulators to be able to do the block to hash
     # mapping
-    for epochAccumulator in epochAccumulators:
+    for epochRecord in epochRecords:
       let
-        rootHash = epochAccumulator.hash_tree_root()
+        rootHash = epochRecord.hash_tree_root()
         contentKey = ContentKey(
-          contentType: ContentType.epochAccumulator,
-          epochAccumulatorKey: EpochAccumulatorKey(epochHash: rootHash),
+          contentType: ContentType.epochRecord,
+          epochRecordKey: EpochRecordKey(epochHash: rootHash),
         )
         encKey = encode(contentKey)
         contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
-        encKey, contentId, SSZ.encode(epochAccumulator)
+        encKey, contentId, SSZ.encode(epochRecord)
       )
 
     check:
@@ -172,7 +172,7 @@ procSuite "History Content Network":
     check accumulatorRes.isOk()
 
     let
-      (masterAccumulator, epochAccumulators) = accumulatorRes.get()
+      (masterAccumulator, epochRecords) = accumulatorRes.get()
       historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
       historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
@@ -191,7 +191,7 @@ procSuite "History Content Network":
       getMaxOfferedContentKeys(uint32(len(PortalProtocolId)), maxContentKeySize)
 
     let headersWithProof =
-      buildHeadersWithProof(headers[0 .. maxOfferedHistoryContent], epochAccumulators)
+      buildHeadersWithProof(headers[0 .. maxOfferedHistoryContent], epochRecords)
     check headersWithProof.isOk()
 
     # This is one header more than maxOfferedHistoryContent
@@ -251,14 +251,14 @@ procSuite "History Content Network":
     const
       lastBlockNumber = int(mergeBlockNumber - 1)
       headersToTest =
-        [0, 1, epochSize div 2, epochSize - 1, lastBlockNumber - 1, lastBlockNumber]
+        [0, 1, EPOCH_SIZE div 2, EPOCH_SIZE - 1, lastBlockNumber - 1, lastBlockNumber]
 
     let headers = createEmptyHeaders(0, lastBlockNumber)
     let accumulatorRes = buildAccumulatorData(headers)
     check accumulatorRes.isOk()
 
     let
-      (masterAccumulator, epochAccumulators) = accumulatorRes.get()
+      (masterAccumulator, epochRecords) = accumulatorRes.get()
       historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
       historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
@@ -277,7 +277,7 @@ procSuite "History Content Network":
     for i in headersToTest:
       selectedHeaders.add(headers[i])
 
-    let headersWithProof = buildHeadersWithProof(selectedHeaders, epochAccumulators)
+    let headersWithProof = buildHeadersWithProof(selectedHeaders, epochRecords)
     check headersWithProof.isOk()
 
     let contentKVs = headersToContentKV(headersWithProof.get())
