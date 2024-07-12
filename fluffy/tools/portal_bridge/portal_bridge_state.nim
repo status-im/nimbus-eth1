@@ -31,8 +31,8 @@ type
 
   StateValueDiff[StateValue] = object
     kind: DiffType
-    prior: StateValue
-    updated: StateValue
+    before: StateValue
+    after: StateValue
 
   StateDiffRef = ref object
     balances*: Table[EthAddress, StateValueDiff[UInt256]]
@@ -57,28 +57,23 @@ proc toStateValueDiff(
   elif diffJson.kind == JObject:
     if diffJson{"+"} != nil:
       return
-        StateValueDiff[T](kind: create, updated: T.toStateValue(diffJson{"+"}.getStr()))
+        StateValueDiff[T](kind: create, after: T.toStateValue(diffJson{"+"}.getStr()))
     elif diffJson{"-"} != nil:
       return
-        StateValueDiff[T](kind: delete, prior: T.toStateValue(diffJson{"-"}.getStr()))
+        StateValueDiff[T](kind: delete, before: T.toStateValue(diffJson{"-"}.getStr()))
     elif diffJson{"*"} != nil:
       return StateValueDiff[T](
         kind: update,
-        prior: T.toStateValue(diffJson{"*"}{"from"}.getStr()),
-        updated: T.toStateValue(diffJson{"*"}{"to"}.getStr()),
+        before: T.toStateValue(diffJson{"*"}{"from"}.getStr()),
+        after: T.toStateValue(diffJson{"*"}{"to"}.getStr()),
       )
     else:
       doAssert false # unreachable
   else:
     doAssert false # unreachable
 
-proc toStateDiff(blockTraceJson: JsonNode): StateDiffRef {.raises: [CatchableError].} =
-  if blockTraceJson.len() == 0:
-    return nil # no state diff
-
-  let
-    stateDiffJson = blockTraceJson[0]["stateDiff"]
-    stateDiff = StateDiffRef()
+proc toStateDiff(stateDiffJson: JsonNode): StateDiffRef {.raises: [CatchableError].} =
+  let stateDiff = StateDiffRef()
 
   for addrJson, accJson in stateDiffJson.pairs:
     let address = EthAddress.fromHex(addrJson)
@@ -91,23 +86,47 @@ proc toStateDiff(blockTraceJson: JsonNode): StateDiffRef {.raises: [CatchableErr
     var accountStorage: Table[UInt256, StateValueDiff[UInt256]]
 
     for slotKeyJson, slotValueJson in storageDiff.pairs:
-      let slotKey = UInt256.fromHex(addrJson)
+      let slotKey = UInt256.fromHex(slotKeyJson)
       accountStorage[slotKey] = toStateValueDiff(slotValueJson, UInt256)
 
     stateDiff.storage[address] = accountStorage
 
   stateDiff
 
-proc getStateDiffByBlockNumber(
+proc toStateDiffs(
+    blockTraceJson: JsonNode
+): seq[StateDiffRef] {.raises: [CatchableError].} =
+  var stateDiffs = newSeqOfCap[StateDiffRef](blockTraceJson.len())
+  for blockTrace in blockTraceJson:
+    stateDiffs.add(blockTrace["stateDiff"].toStateDiff())
+
+  stateDiffs
+
+proc getUncleBlockByNumberAndIndex*(
+    client: RpcClient, blockId: RtBlockIdentifier, index: Quantity
+): Future[Result[BlockObject, string]] {.async: (raises: []).} =
+  let blck =
+    try:
+      let res = await client.eth_getUncleByBlockNumberAndIndex(blockId, index)
+      if res.isNil:
+        return err("EL failed to provide requested uncle block")
+
+      res
+    except CatchableError as e:
+      return err("EL JSON-RPC eth_getUncleByBlockNumberAndIndex failed: " & e.msg)
+
+  return ok(blck)
+
+proc getStateDiffsByBlockNumber(
     client: RpcClient, blockId: RtBlockIdentifier
-): Future[Result[StateDiffRef, string]] {.async: (raises: []).} =
+): Future[Result[seq[StateDiffRef], string]] {.async: (raises: []).} =
   const traceOpts = @["stateDiff"]
 
   try:
     let blockTraceJson = await client.trace_replayBlockTransactions(blockId, traceOpts)
     if blockTraceJson.isNil:
       return err("EL failed to provide requested state diff")
-    ok(blockTraceJson.toStateDiff())
+    ok(blockTraceJson.toStateDiffs())
   except CatchableError as e:
     return err("EL JSON-RPC trace_replayBlockTransactions failed: " & e.msg)
 
@@ -178,17 +197,17 @@ proc applyStateUpdates(
       account = accountsTrie.getAccountOrDefault(addressHash)
 
     if balanceDiff.kind == create or balanceDiff.kind == update:
-      account.balance = balanceDiff.updated
+      account.balance = balanceDiff.after
     elif balanceDiff.kind == delete:
       deleteAccount = true
 
     if nonceDiff.kind == create or nonceDiff.kind == update:
-      account.nonce = nonceDiff.updated
+      account.nonce = nonceDiff.after
     elif nonceDiff.kind == delete:
       doAssert deleteAccount == true # should already be set to true from balanceDiff
 
     if codeDiff.kind == create or codeDiff.kind == update:
-      account.codeHash = keccakHash(codeDiff.updated) # TODO: store code in db
+      account.codeHash = keccakHash(codeDiff.after) # TODO: store code in db
     elif codeDiff.kind == delete:
       doAssert deleteAccount == true # should already be set to true from balanceDiff
 
@@ -198,32 +217,45 @@ proc applyStateUpdates(
       let slotHash = keccakHash(toBytesBE(slotKey)).data
 
       if slotDiff.kind == create or slotDiff.kind == update:
-        storageTrie.put(slotHash, rlp.encode(slotDiff.updated))
+        if slotDiff.after == 0:
+          storageTrie.del(slotHash)
+        else:
+          storageTrie.put(slotHash, rlp.encode(slotDiff.after))
       elif slotDiff.kind == delete:
         storageTrie.del(slotHash)
 
+    account.storageRoot = storageTrie.rootHash()
     storageTries[address] = storageTrie
 
     if deleteAccount:
       accountsTrie.del(addressHash)
+      storageTries.del(address)
       # TODO: delete the code
-      # TODO: how to delete storage for the account
     else:
       accountsTrie.put(addressHash, rlp.encode(account))
 
 proc applyBlockRewards(
-    accountsTrie: var HexaryTrie, blockObject: BlockObject
+    accountsTrie: var HexaryTrie,
+    blockObject: BlockObject,
+    uncleBlocks: openArray[BlockObject],
 ) {.raises: [RlpError].} =
-  let
-    address = blockObject.miner.EthAddress
-    addressHash = keccakHash(address).data
-    baseReward = 5.u256 * pow(10.u256, 18)
-  # TODO: calculate fee reward
-  # TODO: calculate uncles rewards
+  const baseReward = 5.u256 * pow(10.u256, 18)
 
-  var account = accountsTrie.getAccountOrDefault(addressHash)
-  account.balance += baseReward
-  accountsTrie.put(addressHash, rlp.encode(account))
+  block:
+    # calculate block miner reward
+    let blockMinerAddrHash = keccakHash(blockObject.miner.EthAddress).data
+    var account = accountsTrie.getAccountOrDefault(blockMinerAddrHash)
+    account.balance += baseReward + (baseReward shr 5) * uncleBlocks.len().u256
+    accountsTrie.put(blockMinerAddrHash, rlp.encode(account))
+
+  # calculate uncle miners rewards
+  for i, uncleBlock in uncleBlocks:
+    let uncleMinerAddrHash = keccakHash(uncleBlock.miner.EthAddress).data
+    var account = accountsTrie.getAccountOrDefault(uncleMinerAddrHash)
+    account.balance +=
+      ((8 + uncleBlock.number.uint64 - blockObject.number.uint64).u256 * baseReward) shr
+      3
+    accountsTrie.put(uncleMinerAddrHash, rlp.encode(account))
 
 proc runBackfillLoop(
     #portalClient: RpcClient,
@@ -245,27 +277,53 @@ proc runBackfillLoop(
     discard blockZero
 
     while true:
+      # TODO: can probably batch requests in parellel in order to improve performance
+      # so that processing the state can be done while waiting for network io
       let
         blockNumRequest =
           web3Client.getBlockByNumber(blockId(currentBlockNumber), false)
-        stateDiffRequest =
-          web3Client.getStateDiffByBlockNumber(blockId(currentBlockNumber))
+        stateDiffsRequest =
+          web3Client.getStateDiffsByBlockNumber(blockId(currentBlockNumber))
 
         blockObject = (await blockNumRequest).valueOr:
           error "Failed to get block", error
           await sleepAsync(1.seconds)
           continue
-        stateDiff = (await stateDiffRequest).valueOr:
-          error "Failed to get state diff", error
+
+      var uncleBlocks: seq[BlockObject]
+      for i in 0 .. blockObject.uncles.high:
+        let uncleBlock = (
+          await web3Client.getUncleBlockByNumberAndIndex(
+            blockId(currentBlockNumber), i.Quantity
+          )
+        ).valueOr:
+          error "Failed to get uncle block", error
           await sleepAsync(1.seconds)
           continue
+        uncleBlocks.add(uncleBlock)
 
-      echo "block number: ", blockObject.number.uint64
-      echo "block stateRoot: ", blockObject.stateRoot
-      echo "block uncles: ", blockObject.uncles
+      let stateDiffs = (await stateDiffsRequest).valueOr:
+        error "Failed to get state diff", error
+        await sleepAsync(1.seconds)
+        continue
+      # if currentBlockNumber == 54319:
+      #   for stateDiff in stateDiffs:
+      #     echo "stateDiff.balances:", stateDiff.balances
+      #     echo "stateDiff.nonces:", stateDiff.nonces
+      #     echo "stateDiff.storage:", stateDiff.storage
+      #     echo "stateDiff.code:", stateDiff.code
 
-      applyStateUpdates(accountsTrie, storageTries, stateDiff)
-      applyBlockRewards(accountsTrie, blockObject)
+      if currentBlockNumber mod 1000 == 0:
+        echo "Current block number: ", currentBlockNumber
+      # echo "block number: ", blockObject.number.uint64
+      # echo "block stateRoot: ", blockObject.stateRoot
+      # echo "block uncles: ", blockObject.uncles
+
+      for stateDiff in stateDiffs:
+        applyStateUpdates(accountsTrie, storageTries, stateDiff)
+      applyBlockRewards(accountsTrie, blockObject, uncleBlocks)
+
+      # echo "calculated stateRoot: ", accountsTrie.rootHash
       doAssert(blockObject.stateRoot.bytes() == accountsTrie.rootHash.data)
 
       inc currentBlockNumber

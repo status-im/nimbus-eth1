@@ -24,6 +24,10 @@ createRpcSigsFromNim(RpcClient):
     blockId: BlockIdentifier, fullTransactions: bool
   ): Opt[BlockObject]
 
+  proc eth_getUncleByBlockNumberAndIndex(
+    blockId: BlockIdentifier, quantity: Quantity
+  ): BlockObject
+
   proc eth_getBlockTransactionCountByHash(data: BlockHash): Quantity
   proc eth_getTransactionReceipt(data: TxHash): Opt[ReceiptObject]
   proc eth_getLogs(filterOptions: FilterOptions): seq[LogObject]
