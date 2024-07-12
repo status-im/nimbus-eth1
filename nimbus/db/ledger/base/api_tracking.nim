@@ -27,8 +27,6 @@ type
     ## Profiling table index
     SummaryItem                = "total"
 
-    LdgBlessFn                 = "LedgerRef.init"
-
     LdgAccessListFn            = "accessList"
     LdgAccountExistsFn         = "accountExists"
     LdgAddBalanceFn            = "addBalance"

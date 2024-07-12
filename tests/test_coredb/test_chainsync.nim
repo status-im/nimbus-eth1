@@ -19,9 +19,13 @@ import
   ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
 
+when CoreDbEnableProfiling or
+     LedgerEnableApiProfiling:
+  import
+    std/sequtils
+
 when CoreDbEnableProfiling:
   import
-    std/sequtils,
     ../../nimbus/db/aristo/[aristo_api, aristo_profile],
     ../../nimbus/db/kvt/kvt_api
   var
@@ -30,9 +34,8 @@ when CoreDbEnableProfiling:
     cdbProfData: CoreDbProfListRef
 
 when LedgerEnableApiProfiling:
-  when not CoreDbEnableProfiling:
-    import
-      std/sequtils
+  import
+    ../../nimbus/db/ledger/base/base_helpers
   var
     ldgProfData: LedgerProfListRef
 

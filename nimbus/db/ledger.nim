@@ -19,7 +19,7 @@ import
   eth/common,
   ./core_db,
   ./ledger/backend/accounts_ledger,
-  ./ledger/base/[base_config, base_desc],
+  ./ledger/base/[base_config, base_desc, base_helpers],
   ./ledger/[base, base_iterators]
 
 export

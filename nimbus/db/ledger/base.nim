@@ -28,8 +28,6 @@ export
   LedgerRef,
   LedgerSpRef
 
-proc ldgProfData*(db: CoreDbRef): LedgerProfListRef {.gcsafe.}
-
 # ------------------------------------------------------------------------------
 # Logging/tracking helpers (some public)
 # ------------------------------------------------------------------------------
@@ -51,34 +49,8 @@ when LedgerEnableApiProfiling:
     LedgerProfListRef
 
 # ------------------------------------------------------------------------------
-# Public constructor helper
-# ------------------------------------------------------------------------------
-
-proc bless*(ldg: LedgerRef; db: CoreDbRef): LedgerRef =
-  ldg.beginTrackApi LdgBlessFn
-  when LedgerEnableApiTracking:
-    ldg.trackApi = db.trackLedgerApi
-  when LedgerEnableApiProfiling:
-    ldg.profTab = db.ldgProfData()
-  ldg.ifTrackApi: debug apiTxt, api, elapsed
-  ldg
-
-# ------------------------------------------------------------------------------
 # Public methods
 # ------------------------------------------------------------------------------
-
-proc ldgProfData*(db: CoreDbRef): LedgerProfListRef =
-  ## Return profiling data table (only available in profiling mode). If
-  ## available (i.e. non-nil), result data can be organised by the functions
-  ## available with `aristo_profile`.
-  ##
-  ## Note that profiling these data have accumulated over several ledger
-  ## sessions running on the same `CoreDb` instance.
-  ##
-  when LedgerEnableApiProfiling:
-    if db.ledgerHook.isNil:
-      db.ledgerHook = LedgerProfListRef.init()
-    cast[LedgerProfListRef](db.ledgerHook)
 
 proc accessList*(ldg: LedgerRef, eAddr: EthAddress) =
   ldg.beginTrackApi LdgAccessListFn
