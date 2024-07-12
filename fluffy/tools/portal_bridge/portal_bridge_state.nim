@@ -178,6 +178,7 @@ proc toState*(
 proc applyStateUpdates(
     accountsTrie: var HexaryTrie,
     storageTries: var Table[EthAddress, HexaryTrie],
+    bytecode: var Table[EthAddress, Code],
     stateDiff: StateDiffRef,
 ) {.raises: [RlpError].} =
   if stateDiff == nil:
@@ -207,7 +208,8 @@ proc applyStateUpdates(
       doAssert deleteAccount == true # should already be set to true from balanceDiff
 
     if codeDiff.kind == create or codeDiff.kind == update:
-      account.codeHash = keccakHash(codeDiff.after) # TODO: store code in db
+      bytecode[address] = codeDiff.after
+      account.codeHash = keccakHash(codeDiff.after)
     elif codeDiff.kind == delete:
       doAssert deleteAccount == true # should already be set to true from balanceDiff
 
@@ -230,7 +232,7 @@ proc applyStateUpdates(
     if deleteAccount:
       accountsTrie.del(addressHash)
       storageTries.del(address)
-      # TODO: delete the code
+      bytecode.del(address)
     else:
       accountsTrie.put(addressHash, rlp.encode(account))
 
@@ -262,23 +264,17 @@ proc runBackfillLoop(
     web3Client: RpcClient,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
-  var currentBlockNumber = 1.uint64
-    # for now we can only start from block 1 because the state is only in memory
-  echo "Starting from block number: ", currentBlockNumber
-
   try:
-    let
-      genesisAccounts = genesisBlockForNetwork(MainNet).alloc
-      blockZero = (await web3Client.getBlockByNumber(blockId(0), false)).get()
-    var (accountsTrie, storageTries) = toState(genesisAccounts)
-    # verify the genesis state root
-    # TODO: remove this later
-    doAssert blockZero.stateRoot.bytes() == accountsTrie.rootHash.data
-    discard blockZero
+    let genesisAccounts = genesisBlockForNetwork(MainNet).alloc
+    var
+      (accountsTrie, storageTries) = toState(genesisAccounts)
+      bytecode: Table[EthAddress, Code]
+
+    # for now we can only start from block 1 because the state is only in memory
+    var currentBlockNumber = 1.uint64
+    echo "Starting from block number: ", currentBlockNumber
 
     while true:
-      # TODO: can probably batch requests in parellel in order to improve performance
-      # so that processing the state can be done while waiting for network io
       let
         blockNumRequest =
           web3Client.getBlockByNumber(blockId(currentBlockNumber), false)
@@ -306,24 +302,13 @@ proc runBackfillLoop(
         error "Failed to get state diff", error
         await sleepAsync(1.seconds)
         continue
-      # if currentBlockNumber == 54319:
-      #   for stateDiff in stateDiffs:
-      #     echo "stateDiff.balances:", stateDiff.balances
-      #     echo "stateDiff.nonces:", stateDiff.nonces
-      #     echo "stateDiff.storage:", stateDiff.storage
-      #     echo "stateDiff.code:", stateDiff.code
 
       if currentBlockNumber mod 1000 == 0:
         echo "Current block number: ", currentBlockNumber
-      # echo "block number: ", blockObject.number.uint64
-      # echo "block stateRoot: ", blockObject.stateRoot
-      # echo "block uncles: ", blockObject.uncles
 
       for stateDiff in stateDiffs:
-        applyStateUpdates(accountsTrie, storageTries, stateDiff)
+        applyStateUpdates(accountsTrie, storageTries, bytecode, stateDiff)
       applyBlockRewards(accountsTrie, blockObject, uncleBlocks)
-
-      # echo "calculated stateRoot: ", accountsTrie.rootHash
       doAssert(blockObject.stateRoot.bytes() == accountsTrie.rootHash.data)
 
       inc currentBlockNumber
