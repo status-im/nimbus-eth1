@@ -23,7 +23,7 @@ import
   "."/base
 
 logScope:
-  topics = "core_db-apps"
+  topics = "core_db"
 
 type
   TransactionKey = tuple
@@ -74,7 +74,7 @@ proc getCanonicalHeaderHash*(db: CoreDbRef): Opt[Hash256] {.gcsafe.}
 # ------------------------------------------------------------------------------
 
 template logTxt(info: static[string]): static[string] =
-  "Core apps " & info
+  "Core app " & info
 
 template discardRlpException(info: static[string]; code: untyped) =
   try:
@@ -104,7 +104,7 @@ iterator findNewAncestors(
       break
     else:
       if not db.getBlockHeader(h.parentHash, h):
-        warn "Could not find parent while iterating", hash = h.parentHash
+        warn logTxt "Could not find parent while iterating", hash = h.parentHash
         break
 
 # ------------------------------------------------------------------------------
@@ -138,7 +138,7 @@ iterator getBlockTransactions*(
     try:
       yield rlp.decode(encodedTx, Transaction)
     except RlpError as exc:
-      warn "Cannot decode database transaction", data = toHex(encodedTx), error = exc.msg
+      warn logTxt "Cannot decode database transaction", data = toHex(encodedTx), error = exc.msg
 
 iterator getBlockTransactionHashes*(
     db: CoreDbRef;
@@ -226,7 +226,7 @@ proc setAsCanonicalChainHead(
           db.removeTransactionFromCanonicalChain(txHash)
           # TODO re-add txn to internal pending pool (only if local sender)
       except BlockNotFound:
-        warn "Could not load old header", oldHash
+        warn logTxt "Could not load old header", oldHash
 
     for h in newCanonicalHeaders:
       # TODO don't recompute block hash

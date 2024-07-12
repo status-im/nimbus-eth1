@@ -31,7 +31,7 @@ proc aristoError(error: AristoError): NodeRef =
   ## Allows returning de
   NodeRef(vType: Leaf, error: error)
 
-proc serialise*(
+proc serialise(
     pyl: PayloadRef;
     getKey: ResolveVidFn;
       ): Result[Blob,(VertexID,AristoError)] =

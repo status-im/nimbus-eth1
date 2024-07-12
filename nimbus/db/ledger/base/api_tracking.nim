@@ -14,11 +14,15 @@ import
   std/[strutils, times],
   eth/common,
   stew/byteutils,
+  ../../../evm/code_bytes,
   ../../aristo/aristo_profile,
   ../../core_db,
-  "."/base_desc
+  "."/[base_config, base_desc]
 
 type
+  Elapsed* = distinct Duration
+    ## Needed for local `$` as it would be ambiguous for `Duration`
+
   LedgerFnInx* = enum
     ## Profiling table index
     SummaryItem                = "total"
@@ -58,7 +62,6 @@ type
     LdgLogEntriesFn            = "logEntries"
     LdgMakeMultiKeysFn         = "makeMultiKeys"
     LdgPersistFn               = "persist"
-    LdgRawRootHashFn           = "rawRootHash"
     LdgRipemdSpecialFn         = "ripemdSpecial"
     LdgRollbackFn              = "rollback"
     LdgRootHashFn              = "rootHash"
@@ -87,46 +90,55 @@ type
 func oaToStr(w: openArray[byte]): string =
   w.toHex.toLowerAscii
 
+func toStr(w: EthAddress): string =
+  w.oaToStr
+
+func toStr(w: Hash256): string =
+  w.data.oaToStr
+
+func toStr(w: CodeBytesRef): string =
+  if w.isNil: "nil"
+  else: "[" & $w.bytes.len & "]"
+
+func toStr(w: Blob): string =
+  if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
+  else: "Blob[" & $w.len & "]"
+
+func toStr(w: seq[Log]): string =
+  "Logs[" & $w.len & "]"
+
+func toStr(ela: Duration): string =
+  aristo_profile.toStr(ela)
+
 # ------------------------------------------------------------------------------
 # Public API logging helpers
 # ------------------------------------------------------------------------------
 
-func toStr*(w: EthAddress): string =
-  w.oaToStr
-
-func toStr*(w: Hash256): string =
-  w.data.oaToStr
-
-func toStr*(w: CodeBytesRef): string =
-  if w.isNil: "nil"
-  else: "[" & $w.bytes.len & "]"
-
-func toStr*(w: Blob): string =
-  if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
-  else: "Blob[" & $w.len & "]"
-
-func toStr*(w: seq[Log]): string =
-  "Logs[" & $w.len & "]"
-
-func toStr*(ela: Duration): string =
-  aristo_profile.toStr(ela)
+func `$`*(w: CodeBytesRef): string {.used.} = w.toStr
+func `$`*(e: Elapsed): string = e.Duration.toStr
+func `$`*(l: seq[Log]): string = l.toStr
+func `$`*(b: Blob): string = b.toStr
+func `$$`*(a: EthAddress): string = a.toStr # otherwise collision w/existing `$`
+func `$$`*(h: Hash256): string = h.toStr    # otherwise collision w/existing `$`
 
 # ------------------------------------------------------------------------------
 # Public API logging framework
 # ------------------------------------------------------------------------------
 
-template beginApi*(ldg: LedgerRef; s: static[LedgerFnInx]) =
-  const api {.inject,used.} = s      # Generally available
-  let baStart {.inject.} = getTime() # Local use only
+template beginTrackApi*(ldg: LedgerRef; s: LedgerFnInx) =
+  when LedgerEnableApiTracking:
+    const api {.inject,used.} = s      # Generally available
+    let baStart {.inject.} = getTime() # Local use only
 
-template endApiIf*(ldg: LedgerRef; code: untyped) =
-  when CoreDbEnableApiProfiling:
-    let elapsed {.inject,used.} = getTime() - baStart
-    aristo_profile.update(ldg.profTab, api.ord, elapsed)
-  if ldg.trackApi:
-    when not CoreDbEnableApiProfiling: # otherwise use variable above
-      let elapsed {.inject,used.} = getTime() - baStart
-    code
+template ifTrackApi*(ldg: LedgerRef; code: untyped) =
+  when LedgerEnableApiTracking:
+    when LedgerEnableApiProfiling:
+      let elapsed {.inject,used.} = (getTime() - baStart).Elapsed
+      aristo_profile.update(ldg.profTab, api.ord, elapsed.Duration)
+    if ldg.trackApi:
+      when not LedgerEnableApiProfiling: # otherwise use variable above
+        let elapsed {.inject,used.} = (getTime() - baStart).Elapsed
+      code
 
 # ------------------------------------------------------------------------------
 # Public helpers

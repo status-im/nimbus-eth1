@@ -22,7 +22,7 @@ import
   ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
-  ../nimbus/db/ledger/accounts_ledger {.all.}, # import all private symbols
+  ../nimbus/db/ledger/backend/accounts_ledger {.all.}, # import all private symbols
   unittest2
 
 const

@@ -14,29 +14,8 @@ import
   std/typetraits,
   eth/common,
   "../.."/[constants, errors],
-  ../kvt,
-  ../aristo,
-  ./base/[api_tracking, base_desc]
-
-const
-  EnableApiTracking = false
-    ## When enabled, functions using this tracking facility need to import
-    ## `chronicles`, as well. Also, some `func` designators might need to
-    ## be changed to `proc` for possible side effects.
-    ##
-    ## Tracking noise is then enabled by setting the flag `trackNewApi` to
-    ## `true` in the `CoreDbRef` descriptor.
-
-  EnableApiProfiling = true
-    ## Enables functions profiling if `EnableApiTracking` is also set `true`.
-
-  EnableApiJumpTable* = false
-    ## This flag enables the functions jump table even if `EnableApiTracking`
-    ## and `EnableApiProfiling` is set `false`. This should be used for
-    ## debugging, only.
-
-  AutoValidateDescriptors = defined(release).not
-    ## No validatinon needed for production suite.
+  ".."/[kvt, aristo],
+  ./base/[api_tracking, base_config, base_desc]
 
 export
   CoreDbAccRef,
@@ -47,23 +26,16 @@ export
   CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbErrorRef,
-  CoreDbFnInx,
   CoreDbKvtRef,
   CoreDbMptRef,
   CoreDbPersistentTypes,
-  CoreDbProfListRef,
   CoreDbRef,
   CoreDbTxRef,
   CoreDbType
 
-const
-  CoreDbEnableApiTracking* = EnableApiTracking
-  CoreDbEnableApiProfiling* = EnableApiTracking and EnableApiProfiling
-  CoreDbEnableApiJumpTable* =
-    CoreDbEnableApiTracking or CoreDbEnableApiProfiling or EnableApiJumpTable
-
-when AutoValidateDescriptors:
-  import ./base/validate
+when CoreDbAutoValidateDescriptors:
+  import
+    ./base/base_validate
 
 when CoreDbEnableApiJumpTable:
   discard
@@ -73,58 +45,20 @@ else:
       aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_tx],
     ../kvt/[kvt_desc, kvt_utils, kvt_tx]
 
-# More settings
-const
-  logTxt = "CoreDb "
-  newApiTxt = logTxt & "API"
-
-# Annotation helpers
-{.pragma:   apiRaise, gcsafe, raises: [CoreDbApiError].}
-{.pragma: catchRaise, gcsafe, raises: [CatchableError].}
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
 when CoreDbEnableApiTracking:
-  when CoreDbEnableApiProfiling:
-    {.warning: "*** Provided API profiling for CoreDB (disabled by default)".}
-  else:
-    {.warning: "*** Provided API logging for CoreDB (disabled by default)".}
-
+  {.warning: "*** Provided API logging for CoreDB (disabled by default)".}
   import
-    std/times,
     chronicles
+  logScope:
+    topics = "core_db"
+  const
+    logTxt = "API"
 
-  proc `$`[T](rc: CoreDbRc[T]): string = rc.toStr
-  proc `$`(q: set[CoreDbCaptFlags]): string = q.toStr
-  proc `$`(t: Duration): string = t.toStr
-  proc `$`(e: EthAddress): string = e.toStr
-  proc `$`(h: Hash256): string = h.toStr
-
-template setTrackNewApi(
-    w: CoreDbApiTrackRef;
-    s: static[CoreDbFnInx];
-    code: untyped;
-      ) =
-  ## Template with code section that will be discarded if logging is
-  ## disabled at compile time when `EnableApiTracking` is `false`.
-  when CoreDbEnableApiTracking:
-    w.beginNewApi(s)
-    code
-  const api {.inject,used.} = s
-
-template setTrackNewApi*(
-    w: CoreDbApiTrackRef;
-    s: static[CoreDbFnInx];
-      ) =
-  w.setTrackNewApi(s):
-    discard
-
-template ifTrackNewApi*(w: CoreDbApiTrackRef; code: untyped) =
-  when EnableApiTracking:
-    w.endNewApiIf:
-      code
+when CoreDbEnableProfiling:
+  {.warning: "*** Enabled API profiling for CoreDB".}
+  export
+    CoreDbFnInx,
+    CoreDbProfListRef
 
 # ------------------------------------------------------------------------------
 # Private KVT helpers
@@ -199,21 +133,21 @@ func toError(e: AristoError; s: string; error = Unspecified): CoreDbErrorRef =
 
 proc bless*(db: CoreDbRef): CoreDbRef =
   ## Verify descriptor
-  when AutoValidateDescriptors:
+  when CoreDbAutoValidateDescriptors:
     db.validate
-  when CoreDbEnableApiProfiling:
+  when CoreDbEnableProfiling:
     db.profTab = CoreDbProfListRef.init()
   db
 
 proc bless*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   ctx.parent = db
-  when AutoValidateDescriptors:
+  when CoreDbAutoValidateDescriptors:
     ctx.validate
   ctx
 
 proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbMptRef | CoreDbTxRef): auto =
   dsc.ctx = ctx
-  when AutoValidateDescriptors:
+  when CoreDbAutoValidateDescriptors:
     dsc.validate
   dsc
 
@@ -249,7 +183,7 @@ proc swapCtx*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
   CoreDbKvtRef(ctx).call(reCentre, db.ctx.kvt).isOkOr:
     raiseAssert $api & " failed: " & $error
   db.defCtx = ctx
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed
+  db.ifTrackNewApi: debug logTxt, api, elapsed
 
 proc forget*(ctx: CoreDbCtxRef) =
   ## Dispose `ctx` argument context and related columns created with this
@@ -260,7 +194,7 @@ proc forget*(ctx: CoreDbCtxRef) =
     raiseAssert $api & ": " & $error
   CoreDbKvtRef(ctx).call(forget, ctx.kvt).isOkOr:
     raiseAssert $api & ": " & $error
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
+  ctx.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # Public main descriptor methods
@@ -277,7 +211,7 @@ proc finish*(db: CoreDbRef; eradicate = false) =
   db.setTrackNewApi BaseFinishFn
   CoreDbKvtRef(db.ctx).call(finish, db.ctx.kvt, eradicate)
   CoreDbAccRef(db.ctx).call(finish, db.ctx.mpt, eradicate)
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed
+  db.ifTrackNewApi: debug logTxt, api, elapsed
 
 proc `$$`*(e: CoreDbErrorRef): string =
   ## Pretty print error symbol, note that this directive may have side effects
@@ -320,7 +254,7 @@ proc persistent*(
         result = err(rc.error.toError $api)
         break body
     result = ok()
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, blockNumber, result
+  db.ifTrackNewApi: debug logTxt, api, elapsed, blockNumber, result
 
 proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
   ## Rhis function returns the block number stored with the latest `persist()`
@@ -333,7 +267,7 @@ proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
       rc.value.serial.BlockNumber
     else:
       0u64
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+  db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------
 # Public key-value table methods
@@ -360,7 +294,7 @@ proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
       err(rc.error.toError($api, KvtNotFound))
     else:
       err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## Variant of `get()` returning an empty `Blob` if the key is not found
@@ -375,7 +309,7 @@ proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
       CoreDbRc[Blob].ok(EmptyBlob)
     else:
       err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
   ## This function returns the size of the value associated with `key`.
@@ -388,7 +322,7 @@ proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
       err(rc.error.toError($api, KvtNotFound))
     else:
       err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[void] =
   kvt.setTrackNewApi KvtDelFn
@@ -398,7 +332,7 @@ proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[void] =
       ok()
     else:
       err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc put*(
     kvt: CoreDbKvtRef;
@@ -413,7 +347,7 @@ proc put*(
     else:
       err(rc.error.toError $api)
   kvt.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
+    debug logTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
 
 proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
@@ -425,7 +359,7 @@ proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[bool] =
       ok(rc.value)
     else:
       err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 # ------------------------------------------------------------------------------
 # Public functions for generic columns
@@ -442,7 +376,7 @@ proc getGeneric*(
   if clearData:
     result.call(deleteGenericTree, ctx.mpt, CoreDbVidGeneric).isOkOr:
       raiseAssert $api & ": " & $error
-  ctx.ifTrackNewApi: debug newApiTxt, api, clearData, elapsed
+  ctx.ifTrackNewApi: debug logTxt, api, clearData, elapsed
 
 # ----------- generic MPT ---------------
 
@@ -459,7 +393,7 @@ proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
       err(rc.error.toError($api, MptNotFound))
     else:
       err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## This function returns an empty `Blob` if the argument `key` is not found
@@ -474,7 +408,7 @@ proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
       CoreDbRc[Blob].ok(EmptyBlob)
     else:
       err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc delete*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[void] =
   mpt.setTrackNewApi MptDeleteFn
@@ -486,7 +420,7 @@ proc delete*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[void] =
       err(rc.error.toError($api, MptNotFound))
     else:
       err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc merge*(
     mpt: CoreDbMptRef;
@@ -501,7 +435,7 @@ proc merge*(
     else:
       err(rc.error.toError $api)
   mpt.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
+    debug logTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
 
 proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
   ## This function would be named `contains()` if it returned `bool` rather
@@ -514,7 +448,7 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
       ok(rc.value)
     else:
       err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, key=key.toStr, result
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
   ## This function retrieves the Merkle state hash of the argument
@@ -530,7 +464,7 @@ proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
       ok(rc.value)
     else:
       err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, updateOK, result
 
 # ------------------------------------------------------------------------------
 # Public methods for accounts
@@ -541,7 +475,7 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
   ##
   ctx.setTrackNewApi CtxGetAccountsFn
   result =  CoreDbAccRef(ctx)
-  ctx.ifTrackNewApi: debug newApiTxt, api, elapsed
+  ctx.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ----------- accounts ---------------
 
@@ -561,8 +495,7 @@ proc fetch*(
       err(rc.error.toError($api, AccNotFound))
     else:
       err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
+  acc.ifTrackNewApi: debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc delete*(
     acc: CoreDbAccRef;
@@ -582,7 +515,7 @@ proc delete*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc clearStorage*(
     acc: CoreDbAccRef;
@@ -599,7 +532,7 @@ proc clearStorage*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc merge*(
     acc: CoreDbAccRef;
@@ -617,7 +550,7 @@ proc merge*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc hasPath*(
     acc: CoreDbAccRef;
@@ -633,7 +566,7 @@ proc hasPath*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
   ## This function retrieves the Merkle state hash of the accounts
@@ -649,7 +582,7 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
       ok(rc.value)
     else:
       err(rc.error.toError $api)
-  acc.ifTrackNewApi: debug newApiTxt, api, elapsed, updateOK, result
+  acc.ifTrackNewApi: debug logTxt, api, elapsed, updateOK, result
 
 # ------------ storage ---------------
 
@@ -669,8 +602,8 @@ proc slotFetch*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr,
-            stoPath=stoPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath),
+            stoPath=($$stoPath), result
 
 proc slotDelete*(
     acc: CoreDbAccRef;
@@ -690,8 +623,8 @@ proc slotDelete*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr,
-            stoPath=stoPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath),
+            stoPath=($$stoPath), result
 
 proc slotHasPath*(
     acc: CoreDbAccRef;
@@ -707,8 +640,8 @@ proc slotHasPath*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr,
-            stoPath=stoPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath),
+            stoPath=($$stoPath), result
 
 proc slotMerge*(
     acc: CoreDbAccRef;
@@ -725,8 +658,8 @@ proc slotMerge*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr,
-            stoPath=stoPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath),
+            stoPath=($$stoPath), stoData, result
 
 proc slotState*(
     acc: CoreDbAccRef;
@@ -748,7 +681,7 @@ proc slotState*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, updateOk, result
+    debug logTxt, api, elapsed, accPath=($$accPath), updateOk, result
 
 proc slotStateEmpty*(
     acc: CoreDbAccRef;
@@ -765,7 +698,7 @@ proc slotStateEmpty*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc slotStateEmptyOrVoid*(
     acc: CoreDbAccRef;
@@ -780,7 +713,7 @@ proc slotStateEmptyOrVoid*(
     else:
       true
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, result
+    debug logTxt, api, elapsed, accPath=($$accPath), result
 
 # ------------- other ----------------
 
@@ -806,8 +739,8 @@ proc recast*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    let slotState = if rc.isOk: rc.value.toStr else: "n/a"
-    debug newApiTxt, api, elapsed, accPath=accPath.toStr, slotState, result
+    let slotState = if rc.isOk: $$(rc.value) else: "n/a"
+    debug logTxt, api, elapsed, accPath=($$accPath), slotState, result
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
@@ -818,7 +751,7 @@ proc level*(db: CoreDbRef): int =
   ##
   db.setTrackNewApi BaseLevelFn
   result = CoreDbAccRef(db.ctx).call(level, db.ctx.mpt)
-  db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+  db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 proc newTransaction*(ctx: CoreDbCtxRef): CoreDbTxRef =
   ## Constructor
@@ -832,14 +765,14 @@ proc newTransaction*(ctx: CoreDbCtxRef): CoreDbTxRef =
   result = ctx.bless CoreDbTxRef(kTx: kTx, aTx: aTx)
   ctx.ifTrackNewApi:
     let newLevel = CoreDbAccRef(ctx).call(level, ctx.mpt)
-    debug newApiTxt, api, elapsed, newLevel
+    debug logTxt, api, elapsed, newLevel
 
 proc level*(tx: CoreDbTxRef): int =
   ## Print positive transaction level for argument `tx`
   ##
   tx.setTrackNewApi TxLevelFn
   result = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+  tx.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 proc commit*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxCommitFn:
@@ -848,7 +781,7 @@ proc commit*(tx: CoreDbTxRef) =
     raiseAssert $api & ": " & $error
   CoreDbKvtRef(tx.ctx).call(commit, tx.kTx).isOkOr:
     raiseAssert $api & ": " & $error
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
+  tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
 
 proc rollback*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxRollbackFn:
@@ -857,7 +790,7 @@ proc rollback*(tx: CoreDbTxRef) =
     raiseAssert $api & ": " & $error
   CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
     raiseAssert $api & ": " & $error
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
+  tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
 
 proc dispose*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxDisposeFn:
@@ -868,7 +801,7 @@ proc dispose*(tx: CoreDbTxRef) =
   if CoreDbKvtRef(tx.ctx).call(isTop, tx.kTx):
     CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
       raiseAssert $api & ": " & $error
-  tx.ifTrackNewApi: debug newApiTxt, api, elapsed, prvLevel
+  tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
 
 # ------------------------------------------------------------------------------
 # Public tracer methods
@@ -877,7 +810,6 @@ proc dispose*(tx: CoreDbTxRef) =
 when false: # currently disabled
   proc newCapture*(
       db: CoreDbRef;
-      flags: set[CoreDbCaptFlags] = {};
         ): CoreDbRc[CoreDbCaptRef] =
     ## Trace constructor providing an overlay on top of the argument database
     ## `db`. This overlay provides a replacement database handle that can be
@@ -892,7 +824,7 @@ when false: # currently disabled
     ##
     db.setTrackNewApi BaseNewCaptureFn
     result = db.methods.newCaptureFn flags
-    db.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+    db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
   proc recorder*(cpt: CoreDbCaptRef): CoreDbRef =
     ## Getter, returns a tracer replacement handle to be used as new database.
@@ -907,7 +839,7 @@ when false: # currently disabled
     ##
     cpt.setTrackNewApi CptRecorderFn
     result = cpt.methods.recorderFn()
-    cpt.ifTrackNewApi: debug newApiTxt, api, elapsed
+    cpt.ifTrackNewApi: debug logTxt, api, elapsed
 
   proc logDb*(cp: CoreDbCaptRef): TableRef[Blob,Blob] =
     ## Getter, returns the logger table for the overlay tracer database.
@@ -919,14 +851,14 @@ when false: # currently disabled
     ##
     cp.setTrackNewApi CptLogDbFn
     result = cp.methods.logDbFn()
-    cp.ifTrackNewApi: debug newApiTxt, api, elapsed
+    cp.ifTrackNewApi: debug logTxt, api, elapsed
 
   proc flags*(cp: CoreDbCaptRef):set[CoreDbCaptFlags] =
     ## Getter
     ##
     cp.setTrackNewApi CptFlagsFn
     result = cp.methods.getFlagsFn()
-    cp.ifTrackNewApi: debug newApiTxt, api, elapsed, result
+    cp.ifTrackNewApi: debug logTxt, api, elapsed, result
 
   proc forget*(cp: CoreDbCaptRef) =
     ## Explicitely stop recording the current tracer instance and reset to
@@ -934,7 +866,7 @@ when false: # currently disabled
     ##
     cp.setTrackNewApi CptForgetFn
     cp.methods.forgetFn()
-    cp.ifTrackNewApi: debug newApiTxt, api, elapsed
+    cp.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

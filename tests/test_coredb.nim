@@ -188,8 +188,9 @@ proc initRunnerDB(
   result.initializeEmptyDb
 
   setErrorLevel()
-  coreDB.trackNewApi = false
-  coreDB.trackLedgerApi =false
+  when CoreDbEnableApiTracking:
+    coreDB.trackCoreDbApi = false
+    coreDB.trackLedgerApi = false
 
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
@@ -242,10 +243,10 @@ proc chainSyncRunner(
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
         if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
 
-      if noisy:
-        com.db.trackNewApi = true
-        com.db.trackNewApi = true
-        com.db.trackLedgerApi = true
+      when CoreDbEnableApiTracking:
+        if noisy:
+          com.db.trackCoreDbApi = true
+          com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, numBlocks,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
@@ -295,10 +296,10 @@ proc persistentSyncPreLoadAndResumeRunner(
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
 
-      if noisy:
-        com.db.trackNewApi = true
-        com.db.trackNewApi = true
-        com.db.trackLedgerApi = true
+      when CoreDbEnableApiTracking:
+        if noisy:
+          com.db.trackCoreDbApi = true
+          com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, firstPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
@@ -312,10 +313,10 @@ proc persistentSyncPreLoadAndResumeRunner(
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
         if finalDiskCleanUpOk: dbDir.flushDbDir
 
-      if noisy:
-        com.db.trackNewApi = true
-        com.db.trackNewApi = true
-        com.db.trackLedgerApi = true
+      when CoreDbEnableApiTracking:
+        if noisy:
+          com.db.trackCoreDbApi = true
+          com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, secndPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
@@ -356,8 +357,8 @@ when isMainModule:
         noisy.chainSyncRunner(
           #dbType = CdbAristoDualRocks,
           capture = capture,
-          pruneHistory = true,
-          profilingOk = true,
+          #pruneHistory = true,
+          #profilingOk = true,
           #finalDiskCleanUpOk = false,
           oldLogAlign = true
         )

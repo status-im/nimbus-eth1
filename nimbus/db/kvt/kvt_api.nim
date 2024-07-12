@@ -223,7 +223,7 @@ func dup*(api: KvtApiRef): KvtApiRef =
     txBegin:    api.txBegin,
     txTop:      api.txTop)
   when AutoValidateApiHooks:
-    api.validate
+    result.validate
 
 # ------------------------------------------------------------------------------
 # Public profile API constuctor

@@ -301,12 +301,16 @@ type
         {.noRaise.}
       ## Merge the  key-value-pair argument `(accKey,accRec)` as an account
       ## ledger value, i.e. the the sub-tree starting at `VertexID(1)`.
+      ##
+      ## On success, the function returns `true` if the `accPath` argument was
+      ## not on the database already or the value differend from `accRec`, and
+      ## `false` otherwise.
 
   AristoApiMergeGenericDataFn* =
-    proc( db: AristoDbRef;
-          root: VertexID;
-          path: openArray[byte];
-          data: openArray[byte];
+    proc(db: AristoDbRef;
+         root: VertexID;
+         path: openArray[byte];
+         data: openArray[byte];
         ): Result[bool,AristoError]
         {.noRaise.}
       ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
@@ -683,7 +687,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     txLevel:              api.txLevel,
     txTop:                api.txTop)
   when AutoValidateApiHooks:
-    api.validate
+    result.validate
 
 # ------------------------------------------------------------------------------
 # Public profile API constuctor
@@ -718,9 +722,9 @@ func init*(
         result = api.commit(a)
 
   profApi.deleteAccountRecord =
-    proc(a: AristoDbRef; accPath: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash256): auto =
       AristoApiProfDeleteAccountRecordFn.profileRunner:
-        result = api.deleteAccountRecord(a, accPath)
+        result = api.deleteAccountRecord(a, b)
 
   profApi.deleteGenericData =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
@@ -733,14 +737,14 @@ func init*(
         result = api.deleteGenericTree(a, b)
 
   profApi.deleteStorageData =
-    proc(a: AristoDbRef; accPath: Hash256, c: openArray[byte]): auto =
+    proc(a: AristoDbRef; b: Hash256, c: Hash256): auto =
       AristoApiProfDeleteStorageDataFn.profileRunner:
-        result = api.deleteStorageData(a, accPath, c)
+        result = api.deleteStorageData(a, b, c)
 
   profApi.deleteStorageTree =
-    proc(a: AristoDbRef; accPath: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash256): auto =
       AristoApiProfDeleteStorageTreeFn.profileRunner:
-        result = api.deleteStorageTree(a, accPath)
+        result = api.deleteStorageTree(a, b)
 
   profApi.fetchLastSavedState =
     proc(a: AristoDbRef): auto =
@@ -748,9 +752,9 @@ func init*(
         result = api.fetchLastSavedState(a)
 
   profApi.fetchAccountRecord =
-    proc(a: AristoDbRef; accPath: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash256): auto =
       AristoApiProfFetchAccountRecordFn.profileRunner:
-        result = api.fetchAccountRecord(a, accPath)
+        result = api.fetchAccountRecord(a, b)
 
   profApi.fetchAccountState =
     proc(a: AristoDbRef; b: bool): auto =
@@ -768,14 +772,14 @@ func init*(
         result = api.fetchGenericState(a, b, c)
 
   profApi.fetchStorageData =
-    proc(a: AristoDbRef; accPath, stoPath: Hash256): auto =
+    proc(a: AristoDbRef; b, stoPath: Hash256): auto =
       AristoApiProfFetchStorageDataFn.profileRunner:
-        result = api.fetchStorageData(a, accPath, stoPath)
+        result = api.fetchStorageData(a, b, stoPath)
 
   profApi.fetchStorageState =
-    proc(a: AristoDbRef; accPath: Hash256; c: bool): auto =
+    proc(a: AristoDbRef; b: Hash256; c: bool): auto =
       AristoApiProfFetchStorageStateFn.profileRunner:
-        result = api.fetchStorageState(a, accPath, c)
+        result = api.fetchStorageState(a, b, c)
 
   profApi.findTx =
     proc(a: AristoDbRef; b: RootedVertexID; c: HashKey): auto =
@@ -798,9 +802,9 @@ func init*(
         result = api.forkTx(a, b)
 
   profApi.hasPathAccount =
-    proc(a: AristoDbRef; accPath: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash256): auto =
       AristoApiProfHasPathAccountFn.profileRunner:
-        result = api.hasPathAccount(a, accPath)
+        result = api.hasPathAccount(a, b)
 
   profApi.hasPathGeneric =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
@@ -808,14 +812,14 @@ func init*(
         result = api.hasPathGeneric(a, b, c)
 
   profApi.hasPathStorage =
-    proc(a: AristoDbRef; accPath: Hash256, c: openArray[byte]): auto =
+    proc(a: AristoDbRef; b, c: Hash256): auto =
       AristoApiProfHasPathStorageFn.profileRunner:
-        result = api.hasPathStorage(a, accPath, c)
+        result = api.hasPathStorage(a, b, c)
 
   profApi.hasStorageData =
-    proc(a: AristoDbRef; accPath: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash256): auto =
       AristoApiProfHasStorageDataFn.profileRunner:
-        result = api.hasStorageData(a, accPath)
+        result = api.hasStorageData(a, b)
 
   profApi.isTop =
     proc(a: AristoTxRef): auto =
@@ -833,9 +837,9 @@ func init*(
          result = api.nForked(a)
 
   profApi.mergeAccountRecord =
-    proc(a: AristoDbRef; accPath: Hash256; c: AristoAccount): auto =
+    proc(a: AristoDbRef; b: Hash256; c: AristoAccount): auto =
       AristoApiProfMergeAccountRecordFn.profileRunner:
-        result = api.mergeAccountRecord(a, accPath, c)
+        result = api.mergeAccountRecord(a, b, c)
 
   profApi.mergeGenericData =
     proc(a: AristoDbRef; b: VertexID, c, d: openArray[byte]): auto =
@@ -843,9 +847,9 @@ func init*(
         result = api.mergeGenericData(a, b, c, d)
 
   profApi.mergeStorageData =
-    proc(a: AristoDbRef; accPath: Hash256, c, d: openArray[byte]): auto =
+    proc(a: AristoDbRef; b, c: Hash256, d: Uint256): auto =
       AristoApiProfMergeStorageDataFn.profileRunner:
-        result = api.mergeStorageData(a, accPath, c, d)
+        result = api.mergeStorageData(a, b, c, d)
 
   profApi.pathAsBlob =
     proc(a: PathID): auto =

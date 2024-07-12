@@ -13,18 +13,17 @@
 import
   eth/common,
   ../core_db,
-  ./accounts_ledger,
-  ./base/api_tracking,
-  ./base
+  ./backend/accounts_ledger,
+  ./base/[api_tracking, base_config, base_desc]
 
 when LedgerEnableApiTracking:
   import
     std/times,
     chronicles
+  logScope:
+    topics = "ledger"
   const
-    apiTxt = LedgerApiTxt
-
-  func `$`(a: EthAddress): string {.used.} = a.toStr
+    apiTxt = "API"
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -48,7 +47,7 @@ iterator cachedStorage*(ldg: LedgerRef, eAddr: EthAddress): (UInt256,UInt256) =
   ldg.beginTrackApi LdgCachedStorageIt
   for w in ldg.ac.cachedStorage(eAddr):
     yield w
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr)
 
 
 iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
@@ -65,7 +64,7 @@ iterator storage*(
   ldg.beginTrackApi LdgStorageIt
   for w in ldg.ac.storage(eAddr):
     yield w
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr
+  ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr)
 
 # ------------------------------------------------------------------------------
 # End
