@@ -45,7 +45,6 @@ export
 import
   aristo/aristo_desc
 export
-  AristoDbAction,
   AristoDbRef,
   AristoError,
   AristoTxRef,

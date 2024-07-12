@@ -51,16 +51,16 @@ type
 
   MerkleSignRef* = ref object
     ## Simple Merkle signature calculatior for key-value lists
-    root*: VertexID
+    root*: VertexID                   ## Not accounts tree, e.g. `VertexID(2)`
     db*: AristoDbRef
     count*: uint
     error*: AristoError
     errKey*: Blob
 
   DudesRef = ref object
-    ## List of peers accessing the same database. This list is layzily
-    ## allocated and might be kept with a single entry, i.e. so that
-    ## `{centre} == peers`.
+    ## List of peers accessing the same database. This list is layzily allocated
+    ## and might be kept with a single entry, i.e. so that `{centre} == peers`.
+    ##
     centre: AristoDbRef               ## Link to peer with write permission
     peers: HashSet[AristoDbRef]       ## List of all peers
 
@@ -95,9 +95,6 @@ type
 
     # Debugging data below, might go away in future
     xMap*: Table[HashKey,RootedVertexID] ## For pretty printing/debugging
-
-  AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
-    ## Generic call back function/closure.
 
 # ------------------------------------------------------------------------------
 # Public helpers
