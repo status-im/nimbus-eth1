@@ -13,22 +13,23 @@
 import
   std/typetraits,
   eth/common,
+  ../../errors,
   ../aristo as use_ari,
   ../aristo/aristo_init/rocks_db,
-  ../aristo/[aristo_desc, aristo_walk/persistent, aristo_tx],
+  ../aristo/[aristo_desc, aristo_walk/persistent, aristo_serialise, aristo_tx],
   ../kvt, # needed for `aristo_replicate`
-  ./base/[api_tracking, base_desc],
-  ./base
+  ./base/[api_tracking, base_config, base_desc], ./base
 
 include
   ./backend/aristo_replicate
 
 when CoreDbEnableApiTracking:
-  import chronicles
-
+  import
+    chronicles
+  logScope:
+    topics = "core_db"
   const
-    logTxt = "CoreDb/itp "
-    newApiTxt = logTxt & "API"
+    logTxt = "API"
 
 # Annotation helper(s)
 {.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
@@ -53,7 +54,7 @@ iterator replicatePersistent*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
       yield (k, v)
   else:
     raiseAssert: "Unsupported database type: " & $mpt.dbType
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

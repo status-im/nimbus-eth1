@@ -12,9 +12,8 @@
 
 import
   results,
-  ../../aristo,
-  ../../kvt,
-  ../../aristo/aristo_profile
+  "../.."/[aristo, aristo/aristo_profile, kvt],
+  ./base_config
 
 # Annotation helpers
 {.pragma:  noRaise, gcsafe, raises: [].}
@@ -72,18 +71,21 @@ type
   # --------------------------------------------------
   CoreDbRef* = ref object
     ## Database descriptor
-    dbType*: CoreDbType         ## Type of database backend
-    defCtx*: CoreDbCtxRef       ## Default context
+    dbType*: CoreDbType           ## Type of database backend
+    defCtx*: CoreDbCtxRef         ## Default context
 
     # Optional api interface (can be re-directed/intercepted)
-    ariApi*: AristoApiRef       ## `Aristo` api
-    kvtApi*: KvtApiRef          ## `KVT` api
+    ariApi*: AristoApiRef         ## `Aristo` api
+    kvtApi*: KvtApiRef            ## `KVT` api
 
     # Optional profiling and debugging stuff
-    trackNewApi*: bool          ## Debugging, support
-    trackLedgerApi*: bool       ## Debugging, suggestion for subsequent ledger
-    profTab*: CoreDbProfListRef ## Profiling data (if any)
-    ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
+    when CoreDbEnableApiTracking:
+      trackLedgerApi*: bool       ## Debugging, suggestion for ledger
+      trackCoreDbApi*: bool       ## Debugging, support
+    when CoreDbEnableApiJumpTable:
+      profTab*: CoreDbProfListRef ## Profiling data (if any)
+      ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
+      tracerHook*: RootRef        ## Debugging/tracing
 
   CoreDbCtxRef* = ref object
     ## Shared context for `CoreDbMptRef`, `CoreDbAccRef`, `CoreDbKvtRef`

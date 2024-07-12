@@ -19,7 +19,7 @@ import
   ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
 
-when CoreDbEnableApiProfiling:
+when CoreDbEnableProfiling:
   import
     std/sequtils,
     ../../nimbus/db/aristo/[aristo_api, aristo_profile],
@@ -30,7 +30,7 @@ when CoreDbEnableApiProfiling:
     cdbProfData: CoreDbProfListRef
 
 when LedgerEnableApiProfiling:
-  when not CoreDbEnableApiProfiling:
+  when not CoreDbEnableProfiling:
     import
       std/sequtils
   var
@@ -66,15 +66,17 @@ template initLogging(noisy: bool, com: CommonRef) =
       setDebugLevel()
       debug "start undumping into persistent blocks"
     logStartTime = Time()
-    logSavedEnv = (com.db.trackNewApi, com.db.trackLedgerApi)
     setErrorLevel()
-    com.db.trackNewApi = true
-    com.db.trackLedgerApi = true
+    when CoreDbEnableApiTracking:
+      logSavedEnv = (com.db.trackCoreDbApi, com.db.trackLedgerApi)
+      com.db.trackCoreDbApi = true
+      com.db.trackLedgerApi = true
 
 proc finishLogging(com: CommonRef) =
   when EnableExtraLoggingControl:
     setErrorLevel()
-    (com.db.trackNewApi, com.db.trackLedgerApi) = logSavedEnv
+    when CoreDbEnableApiTracking:
+      (com.db.trackCoreDbApi, com.db.trackLedgerApi) = logSavedEnv
 
 
 template startLogging(noisy: bool; num: BlockNumber) =
@@ -125,7 +127,7 @@ proc test_chainSyncProfilingPrint*(
         names = LedgerFnInx.toSeq.mapIt($it),
         header = "Ledger profiling results" & info,
         indent)
-    when CoreDbEnableApiProfiling:
+    when CoreDbEnableProfiling:
       blurb.add cdbProfData.profilingPrinter(
         names = CoreDbFnInx.toSeq.mapIt($it),
         header = "CoreDb profiling results" & info,
@@ -183,7 +185,7 @@ proc test_chainSync*(
   # Profile variables will be non-nil if profiling is available. The profiling
   # API data need to be captured so it will be available after the services
   # have terminated.
-  when CoreDbEnableApiProfiling:
+  when CoreDbEnableProfiling:
     aristoProfData = com.db.ariApi.AristoApiProfRef.data
     kvtProfData = com.db.kvtApi.KvtApiProfRef.data
     cdbProfData = com.db.profTab
@@ -235,8 +237,9 @@ proc test_chainSync*(
           if noisy:
             noisy.whisper "***", "Re-run with logging enabled...\n"
             setTraceLevel()
-            com.db.trackNewApi = false
-            com.db.trackLedgerApi = false
+            when CoreDbEnableApiTracking:
+              com.db.trackCoreDbApi = false
+              com.db.trackLedgerApi = false
             discard chain.persistBlocks(w)
       blocks += w.len
       continue

@@ -15,7 +15,8 @@ import
   ../../aristo/[aristo_init/memory_only, aristo_walk],
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk],
-  ".."/[base, base/base_desc]
+  ../base,
+  ../base/[base_config, base_desc]
 
 # ------------------------------------------------------------------------------
 # Public constructor and helper
@@ -26,19 +27,19 @@ proc create*(dbType: CoreDbType; kvt: KvtDbRef; mpt: AristoDbRef): CoreDbRef =
   var db = CoreDbRef(dbType: dbType)
   db.defCtx = db.bless CoreDbCtxRef(mpt: mpt, kvt: kvt)
 
-  when CoreDbEnableApiTracking:
+  when CoreDbEnableApiJumpTable:
     db.kvtApi = KvtApiRef.init()
     db.ariApi = AristoApiRef.init()
 
-    when CoreDbEnableApiProfiling:
-      block:
-        let profApi = KvtApiProfRef.init(db.kvtApi, kvt.backend)
-        db.kvtApi = profApi
-        kvt.backend = profApi.be
-      block:
-        let profApi = AristoApiProfRef.init(db.ariApi, mpt.backend)
-        db.ariApi = profApi
-        mpt.backend = profApi.be
+  when CoreDbEnableProfiling:
+    block:
+      let profApi = KvtApiProfRef.init(db.kvtApi, kvt.backend)
+      db.kvtApi = profApi
+      kvt.backend = profApi.be
+    block:
+      let profApi = AristoApiProfRef.init(db.ariApi, mpt.backend)
+      db.ariApi = profApi
+      mpt.backend = profApi.be
   bless db
 
 proc newAristoMemoryCoreDbRef*(): CoreDbRef =

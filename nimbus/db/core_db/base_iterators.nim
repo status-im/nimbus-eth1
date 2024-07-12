@@ -13,12 +13,12 @@
 import
   std/typetraits,
   eth/common,
+  ../../errors,
   ../aristo as use_ari,
   ../aristo/[aristo_walk, aristo_serialise],
   ../kvt as use_kvt,
   ../kvt/[kvt_init/memory_only, kvt_walk],
-  ./base/[api_tracking, base_desc],
-  ./base
+  ./base/[api_tracking, base_config, base_desc]
 
 when CoreDbEnableApiJumpTable:
   discard
@@ -31,11 +31,12 @@ include
   ./backend/aristo_replicate
 
 when CoreDbEnableApiTracking:
-  import chronicles
-
+  import
+    chronicles
+  logScope:
+    topics = "core_db"
   const
-    logTxt = "CoreDb/it "
-    newApiTxt = logTxt & "API"
+    logTxt = "API"
 
 # Annotation helper(s)
 {.pragma: apiRaise, gcsafe, raises: [CoreDbApiError].}
@@ -61,7 +62,7 @@ iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
       yield (k,v)
   of Ooops, AristoDbRocks:
     raiseAssert: "Unsupported database type: " & $kvt.dbType
-  kvt.ifTrackNewApi: debug newApiTxt, api, elapsed
+  kvt.ifTrackNewApi: debug logTxt, api, elapsed
 
 iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
   ## Trie traversal, only supported for `CoreDbMptRef`
@@ -73,7 +74,7 @@ iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
       yield (mpt.call(pathAsBlob, path), data)
   of Ooops:
     raiseAssert: "Unsupported database type: " & $mpt.dbType
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed
 
 iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash256): (Blob, UInt256) =
   ## Trie traversal, only supported for `CoreDbMptRef`
@@ -86,7 +87,7 @@ iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash256): (Blob, UInt256) =
   of Ooops:
     raiseAssert: "Unsupported database type: " & $acc.dbType
   acc.ifTrackNewApi:
-    debug newApiTxt, api, elapsed
+    debug logTxt, api, elapsed
 
 iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
   ## Low level trie dump, only supported for non persistent `CoreDbMptRef`
@@ -101,7 +102,7 @@ iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
       yield (k,v)
   of Ooops, AristoDbRocks:
     raiseAssert: "Unsupported database type: " & $mpt.dbType
-  mpt.ifTrackNewApi: debug newApiTxt, api, elapsed
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End
