@@ -37,7 +37,7 @@ proc newRpcClientConnect*(url: JsonRpcUrl): RpcClient =
     client
 
 proc getBlockByNumber*(
-    client: RpcClient, blockId: RtBlockIdentifier, fullTransactions: bool = true
+    client: RpcClient, blockId: BlockIdentifier, fullTransactions: bool = true
 ): Future[Result[BlockObject, string]] {.async: (raises: []).} =
   let blck =
     try:
@@ -48,5 +48,20 @@ proc getBlockByNumber*(
       res
     except CatchableError as e:
       return err("EL JSON-RPC eth_getBlockByNumber failed: " & e.msg)
+
+  return ok(blck)
+
+proc getUncleByBlockNumberAndIndex*(
+    client: RpcClient, blockId: BlockIdentifier, index: Quantity
+): Future[Result[BlockObject, string]] {.async: (raises: []).} =
+  let blck =
+    try:
+      let res = await client.eth_getUncleByBlockNumberAndIndex(blockId, index)
+      if res.isNil:
+        return err("EL failed to provide requested uncle block")
+
+      res
+    except CatchableError as e:
+      return err("EL JSON-RPC eth_getUncleByBlockNumberAndIndex failed: " & e.msg)
 
   return ok(blck)

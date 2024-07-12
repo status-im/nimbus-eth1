@@ -9,7 +9,6 @@
 
 import
   chronicles,
-  stew/byteutils,
   stint,
   eth/[common, trie, trie/db],
   web3/[eth_api, eth_api_types],
@@ -17,118 +16,8 @@ import
   eth/common/[eth_types, eth_types_rlp],
   ../../rpc/rpc_calls/rpc_trace_calls,
   ../../../nimbus/common/chain_config,
+  ./state_bridge/state_diff,
   ./[portal_bridge_conf, portal_bridge_common]
-
-type
-  DiffType = enum
-    unchanged
-    create
-    update
-    delete
-
-  Code = seq[byte]
-  StateValue = UInt256 | AccountNonce | Code
-
-  StateValueDiff[StateValue] = object
-    kind: DiffType
-    before: StateValue
-    after: StateValue
-
-  StateDiffRef = ref object
-    balances*: Table[EthAddress, StateValueDiff[UInt256]]
-    nonces*: Table[EthAddress, StateValueDiff[AccountNonce]]
-    storage*: Table[EthAddress, Table[UInt256, StateValueDiff[UInt256]]]
-    code*: Table[EthAddress, StateValueDiff[Code]]
-
-proc toStateValue(T: type UInt256, hex: string): T {.raises: [CatchableError].} =
-  UInt256.fromHex(hex)
-
-proc toStateValue(T: type AccountNonce, hex: string): T {.raises: [CatchableError].} =
-  UInt256.fromHex(hex).truncate(uint64)
-
-proc toStateValue(T: type Code, hex: string): T {.raises: [CatchableError].} =
-  hexToSeqByte(hex)
-
-proc toStateValueDiff(
-    diffJson: JsonNode, T: type StateValue
-): StateValueDiff[T] {.raises: [CatchableError].} =
-  if diffJson.kind == JString and diffJson.getStr() == "=":
-    return StateValueDiff[T](kind: unchanged)
-  elif diffJson.kind == JObject:
-    if diffJson{"+"} != nil:
-      return
-        StateValueDiff[T](kind: create, after: T.toStateValue(diffJson{"+"}.getStr()))
-    elif diffJson{"-"} != nil:
-      return
-        StateValueDiff[T](kind: delete, before: T.toStateValue(diffJson{"-"}.getStr()))
-    elif diffJson{"*"} != nil:
-      return StateValueDiff[T](
-        kind: update,
-        before: T.toStateValue(diffJson{"*"}{"from"}.getStr()),
-        after: T.toStateValue(diffJson{"*"}{"to"}.getStr()),
-      )
-    else:
-      doAssert false # unreachable
-  else:
-    doAssert false # unreachable
-
-proc toStateDiff(stateDiffJson: JsonNode): StateDiffRef {.raises: [CatchableError].} =
-  let stateDiff = StateDiffRef()
-
-  for addrJson, accJson in stateDiffJson.pairs:
-    let address = EthAddress.fromHex(addrJson)
-
-    stateDiff.balances[address] = toStateValueDiff(accJson["balance"], UInt256)
-    stateDiff.nonces[address] = toStateValueDiff(accJson["nonce"], AccountNonce)
-    stateDiff.code[address] = toStateValueDiff(accJson["code"], Code)
-
-    let storageDiff = accJson["storage"]
-    var accountStorage: Table[UInt256, StateValueDiff[UInt256]]
-
-    for slotKeyJson, slotValueJson in storageDiff.pairs:
-      let slotKey = UInt256.fromHex(slotKeyJson)
-      accountStorage[slotKey] = toStateValueDiff(slotValueJson, UInt256)
-
-    stateDiff.storage[address] = accountStorage
-
-  stateDiff
-
-proc toStateDiffs(
-    blockTraceJson: JsonNode
-): seq[StateDiffRef] {.raises: [CatchableError].} =
-  var stateDiffs = newSeqOfCap[StateDiffRef](blockTraceJson.len())
-  for blockTrace in blockTraceJson:
-    stateDiffs.add(blockTrace["stateDiff"].toStateDiff())
-
-  stateDiffs
-
-proc getUncleBlockByNumberAndIndex*(
-    client: RpcClient, blockId: RtBlockIdentifier, index: Quantity
-): Future[Result[BlockObject, string]] {.async: (raises: []).} =
-  let blck =
-    try:
-      let res = await client.eth_getUncleByBlockNumberAndIndex(blockId, index)
-      if res.isNil:
-        return err("EL failed to provide requested uncle block")
-
-      res
-    except CatchableError as e:
-      return err("EL JSON-RPC eth_getUncleByBlockNumberAndIndex failed: " & e.msg)
-
-  return ok(blck)
-
-proc getStateDiffsByBlockNumber(
-    client: RpcClient, blockId: RtBlockIdentifier
-): Future[Result[seq[StateDiffRef], string]] {.async: (raises: []).} =
-  const traceOpts = @["stateDiff"]
-
-  try:
-    let blockTraceJson = await client.trace_replayBlockTransactions(blockId, traceOpts)
-    if blockTraceJson.isNil:
-      return err("EL failed to provide requested state diff")
-    ok(blockTraceJson.toStateDiffs())
-  except CatchableError as e:
-    return err("EL JSON-RPC trace_replayBlockTransactions failed: " & e.msg)
 
 proc getAccountOrDefault(
     accountsTrie: HexaryTrie, addressHash: openArray[byte]
@@ -178,7 +67,7 @@ proc toState*(
 proc applyStateUpdates(
     accountsTrie: var HexaryTrie,
     storageTries: var Table[EthAddress, HexaryTrie],
-    bytecode: var Table[EthAddress, Code],
+    bytecode: var Table[EthAddress, seq[byte]],
     stateDiff: StateDiffRef,
 ) {.raises: [RlpError].} =
   if stateDiff == nil:
@@ -189,7 +78,6 @@ proc applyStateUpdates(
     let
       addressHash = keccakHash(address).data
       nonceDiff = stateDiff.nonces.getOrDefault(address)
-        # what happens when the mapping is missing? Do we get unchanged as the default
       codeDiff = stateDiff.code.getOrDefault(address)
       storageDiff = stateDiff.storage.getOrDefault(address)
 
@@ -268,10 +156,10 @@ proc runBackfillLoop(
     let genesisAccounts = genesisBlockForNetwork(MainNet).alloc
     var
       (accountsTrie, storageTries) = toState(genesisAccounts)
-      bytecode: Table[EthAddress, Code]
+      bytecode: Table[EthAddress, seq[byte]]
 
     # for now we can only start from block 1 because the state is only in memory
-    var currentBlockNumber = 1.uint64
+    var currentBlockNumber: uint64 = 1
     echo "Starting from block number: ", currentBlockNumber
 
     while true:
@@ -289,7 +177,7 @@ proc runBackfillLoop(
       var uncleBlocks: seq[BlockObject]
       for i in 0 .. blockObject.uncles.high:
         let uncleBlock = (
-          await web3Client.getUncleBlockByNumberAndIndex(
+          await web3Client.getUncleByBlockNumberAndIndex(
             blockId(currentBlockNumber), i.Quantity
           )
         ).valueOr:
