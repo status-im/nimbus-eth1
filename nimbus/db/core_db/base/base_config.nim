@@ -20,38 +20,78 @@ const
     ## Tracking noise is then enabled by setting the flag `trackCoreDbApi` to
     ## `true` in the `CoreDbRef` descriptor.
 
-  EnableProfiling = false
-    ## Enables profiling of the backend. If the flag `EnableApiTracking` is
-    ## also set the API will also be subject to profiling.
+  AutoValidateDescriptors = defined(release).not or
+                            defined(unittest2DisableParamFiltering)
+    ## No validatinon needed for production suite.
+    ##
+    ## The `unittest2DisableParamFiltering` flag is coincidentally used by
+    ## unit/integration tests which makes it convenient to piggyback on that
+    ## for enabling debugging checks.
 
-  EnableCaptJournal = defined(release).not
-    ## Enables the tracer facility. If set `true` capture journal directives
-    ## like `newCapture()` will be available.
-  
-  NoisyCaptJournal = true
-    ## Provide extra logging with the tracer facility if available.
-  
-  EnableApiJumpTable = false
+  EnableApiJumpTable = defined(dbjapi_enabled) or
+                       defined(unittest2DisableParamFiltering)
     ## This flag enables the functions jump table even if `EnableApiProfiling`
     ## and `EnableCaptJournal` is set `false` in realease mode. This setting
     ## should be used for debugging, only.
+    ##
+    ## The `unittest2DisableParamFiltering` flag is coincidentally used by
+    ## unit/integration tests which makes it convenient to piggyback on that
+    ## for providing API jump tables.
 
-  AutoValidateDescriptors = defined(release).not
-    ## No validatinon needed for production suite.
+  EnableProfiling = false
+    ## Enables profiling of the backend if the flags ` EnableApiJumpTable`
+    ## and `EnableApiTracking` are also set. Profiling will then be enabled
+    ## with the flag `trackCoreDbApi` (which also enables extra logging.)
+
+  EnableCaptJournal = true
+    ## Enables the tracer facility if the flag ` EnableApiJumpTable` is
+    ## also set. In that case the capture journal directives like
+    ## `newCapture()` will be available.
+
+  NoisyCaptJournal = true
+    ## Provide extra logging with the tracer facility if available.
+
 
 # Exportable constants (leave alone this section)
 const
   CoreDbEnableApiTracking* = EnableApiTracking
 
-  CoreDbEnableProfiling* = EnableProfiling
-
-  CoreDbEnableCaptJournal* = EnableCaptJournal
-
-  CoreDbNoisyCaptJournal* = CoreDbEnableCaptJournal and NoisyCaptJournal
-
-  CoreDbEnableApiJumpTable* =
-    CoreDbEnableProfiling or CoreDbEnableCaptJournal or EnableApiJumpTable
-
   CoreDbAutoValidateDescriptors* = AutoValidateDescriptors
+
+  # Api jump table dependent settings:
+
+  CoreDbEnableApiJumpTable* = EnableApiJumpTable
+
+  CoreDbEnableProfiling* = EnableProfiling and CoreDbEnableApiJumpTable
+
+  CoreDbEnableCaptJournal* = EnableCaptJournal and CoreDbEnableApiJumpTable
+
+  CoreDbNoisyCaptJournal* = NoisyCaptJournal and CoreDbEnableCaptJournal
+
+
+# Support warning about extra compile time options. For production, non of
+# the above features should be enabled.
+import strutils
+const coreDbBaseConfigExtras* = block:
+  var s: seq[string]
+  when CoreDbEnableApiTracking:
+    s.add "logging"
+  when CoreDbAutoValidateDescriptors:
+    s.add "validate"
+  when CoreDbEnableProfiling:
+    s.add "profiling"
+  when CoreDbEnableCaptJournal:
+    when CoreDbNoisyCaptJournal:
+      s.add "noisy tracer"
+    else:
+      s.add "tracer"
+  when CoreDbEnableApiJumpTable and
+       not CoreDbEnableProfiling and
+       not CoreDbEnableCaptJournal:
+    s.add "Api jump table"
+  if s.len == 0:
+    ""
+  else:
+    "CoreDb(" & s.join(", ") & ")"
 
 # End

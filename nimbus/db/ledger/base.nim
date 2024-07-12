@@ -33,7 +33,6 @@ export
 # ------------------------------------------------------------------------------
 
 when LedgerEnableApiTracking:
-  {.warning: "*** Provided API logging for Ledger (disabled by default)".}
   import
     std/times,
     chronicles
@@ -43,7 +42,6 @@ when LedgerEnableApiTracking:
     apiTxt = "API"
 
 when LedgerEnableApiProfiling:
-  {.warning: "*** Provided API profiling for Ledger (disabled by default)".}
   export
     LedgerFnInx,
     LedgerProfListRef

@@ -851,9 +851,9 @@ func init*(
         result = api.pathAsBlob(a)
 
   profApi.persist =
-    proc(a: AristoDbRef; b = 0u64; c = false): auto =
+    proc(a: AristoDbRef; b = 0u64): auto =
        AristoApiProfPersistFn.profileRunner:
-        result = api.persist(a, b, c)
+        result = api.persist(a, b)
 
   profApi.reCentre =
     proc(a: AristoDbRef): auto =

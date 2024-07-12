@@ -30,4 +30,19 @@ const
   LedgerEnableApiTracking* = EnableApiTracking and CoreDbEnableApiTracking
   LedgerEnableApiProfiling* = EnableApiProfiling and CoreDbEnableApiJumpTable
 
+
+# Support warning about extra compile time options. For production, non of
+# the above features should be enabled.
+import strutils
+const ledgerBaseConfigExtras* = block:
+  var s: seq[string]
+  when LedgerEnableApiTracking:
+    s.add "logging"
+  when LedgerEnableApiProfiling:
+    s.add "profiling"
+  if s.len == 0:
+    ""
+  else:
+    "Ledger(" & s.join(", ") & ")"
+
 # End
