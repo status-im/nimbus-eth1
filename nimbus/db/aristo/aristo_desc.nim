@@ -84,12 +84,13 @@ type
     # Debugging data below, might go away in future
     xMap*: Table[HashKey,HashSet[RootedVertexID]] ## For pretty printing/debugging
 
-    accSids*: KeyedQueue[AccountKey, VertexID]
-      ## Account path to storage id cache, for contract accounts - storage is
-      ## frequently accessed by account path when contracts interact with it -
-      ## this cache ensures that we don't have to re-travers the storage trie
-      ## path for every such interaction - a better solution would probably be
-      ## to cache this in a type exposed to the high-level API
+    accPyls*: KeyedQueue[AccountKey, PayloadRef]
+      ## Account path to payload cache - accounts are frequently accessed by
+      ## account path when contracts interact with them - this cache ensures
+      ## that we don't have to re-traverse the storage trie for every such
+      ## interaction
+      ## TODO a better solution would probably be to cache this in a type
+      ## exposed to the high-level API
 
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.

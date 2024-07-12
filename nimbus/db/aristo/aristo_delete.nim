@@ -340,10 +340,11 @@ proc deleteAccountRecord*(
   # Delete storage tree if present
   if stoID.isValid:
     ? db.delSubTreeImpl stoID
-    db.layersPutStoID(accPath, VertexID(0))
 
   db.deleteImpl(hike).isOkOr:
     return err(error[1])
+
+  db.layersPutAccPayload(accPath, nil)
 
   ok()
 
@@ -437,7 +438,7 @@ proc deleteStorageData*(
   # De-register the deleted storage tree from the account record
   let leaf = wpAcc.vtx.dup           # Dup on modify
   leaf.lData.stoID = VertexID(0)
-  db.layersPutStoID(accPath, VertexID(0))
+  db.layersPutAccPayload(accPath, leaf.lData)
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   db.layersResKey((accHike.root, wpAcc.vid))
   ok(true)
@@ -468,7 +469,7 @@ proc deleteStorageTree*(
   # De-register the deleted storage tree from the accounts record
   let leaf = wpAcc.vtx.dup             # Dup on modify
   leaf.lData.stoID = VertexID(0)
-  db.layersPutStoID(accPath, VertexID(0))
+  db.layersPutAccPayload(accPath, leaf.lData)
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   db.layersResKey((accHike.root, wpAcc.vid))
   ok()

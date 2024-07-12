@@ -115,7 +115,7 @@ type
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                        ## Last used vertex ID
 
-    accSids*: Table[Hash256, VertexID] ## Account path -> stoID
+    accPyls*: Table[Hash256, PayloadRef] ## Account path -> VertexRef
 
   LayerRef* = ref LayerObj
   LayerObj* = object
