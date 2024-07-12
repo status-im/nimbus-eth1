@@ -26,7 +26,7 @@ type
   ProofTrieData* = object
     root*: Hash256
     id*: int
-    proof*: seq[SnapProof]
+    proof*: seq[Blob]
     kvpLst*: seq[LeafTiePayload]
 
 # ------------------------------------------------------------------------------
@@ -163,7 +163,7 @@ func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
     if 0 < w.data.accounts.len:
       result.add ProofTrieData(
         root:   rootKey,
-        proof:  w.data.proof,
+        proof:  cast[seq[Blob]](w.data.proof),
         kvpLst: w.data.accounts.mapIt(LeafTiePayload(
           leafTie: LeafTie(
             root:  rootVid,
@@ -187,7 +187,7 @@ func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
               path:  it.slotHash.to(PathID)),
             payload: LeafPayload(pType: RawData, rawBlob: it.slotData))))
     if 0 < result.len:
-      result[^1].proof = s.data.proof
+      result[^1].proof = cast[seq[Blob]](s.data.proof)
 
 func mapRootVid*(
     a: openArray[LeafTiePayload];

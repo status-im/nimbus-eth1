@@ -81,9 +81,6 @@ type
     txUidGen*: uint                   ## Tx-relative unique number generator
     dudes: DudesRef                   ## Related DB descriptors
 
-    # Debugging data below, might go away in future
-    xMap*: Table[HashKey,HashSet[RootedVertexID]] ## For pretty printing/debugging
-
     accLeaves*: KeyedQueue[AccountKey, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
@@ -95,6 +92,9 @@ type
     stoLeaves*: KeyedQueue[AccountKey, VertexRef]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
+
+    # Debugging data below, might go away in future
+    xMap*: Table[HashKey,RootedVertexID] ## For pretty printing/debugging
 
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.

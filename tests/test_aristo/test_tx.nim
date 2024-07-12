@@ -28,6 +28,8 @@ import
     aristo_init/persistent,
     aristo_layers,
     aristo_nearby,
+    aristo_part,
+    aristo_part/part_debug,
     aristo_tx],
   ../replay/xcheck,
   ./test_helpers
@@ -117,6 +119,14 @@ proc innerCleanUp(db: var AristoDbRef): bool {.discardable.}  =
       xCheckRc rc.error == 0
     db.finish(eradicate=true)
     db = AristoDbRef(nil)
+  true
+
+proc innerCleanUp(ps: var PartStateRef): bool {.discardable.}  =
+  if not ps.isNil:
+    if not ps.db.innerCleanUp():
+      return false
+    ps = PartStateRef(nil)
+  true
 
 proc schedStow(
     db: AristoDbRef;                  # Database
@@ -502,20 +512,20 @@ proc testTxMergeProofAndKvpList*(
   let
     oopsTab = oops.toTable
   var
-    db = AristoDbRef(nil)
+    ps = PartStateRef(nil)
     tx = AristoTxRef(nil)
     rootKey: Hash256
     count = 0
   defer:
-    if not db.isNil:
-      db.finish(eradicate=true)
+    if not ps.isNil:
+      ps.db.finish(eradicate=true)
 
   for n,w in list:
 
     # Start new database upon request
     if resetDb or w.root != rootKey or w.proof.len == 0:
-      db.innerCleanUp
-      db = block:
+      ps.innerCleanUp()
+      let db = block:
         # New DB with disabled filter slots management
         if 0 < rdbPath.len:
           let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
@@ -524,9 +534,10 @@ proc testTxMergeProofAndKvpList*(
           rc.value()[0]
         else:
           AristoDbRef.init(MemBackendRef)
+      ps = PartStateRef.init(db)
 
       # Start transaction (double frame for testing)
-      tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+      tx = ps.db.txBegin().value.to(AristoDbRef).txBegin().value
       xCheck tx.isTop()
 
       # Update root
@@ -535,17 +546,53 @@ proc testTxMergeProofAndKvpList*(
     count.inc
 
     let
+      db = ps.db
       testId = idPfx & "#" & $w.id & "." & $n
       runID = n
       sTabLen = db.nLayersVtx()
       leafs = w.kvpLst.mapRootVid testRootVid # merge into main trie
 
-    # var lst = w.kvpLst.mapRootVid testRootVid
+    if 0 < w.proof.len:
+      let rc = ps.partPut(w.proof, ForceGenericPayload)
+      xCheckRc rc.error == 0:
+        noisy.say "***", "testTxMergeProofAndKvpList (5)",
+          " <", n, "/", list.len-1, ">",
+          " runID=", runID,
+          " nGroup=", count,
+          " error=", rc.error,
+          " nProof=", w.proof.len,
+          "\n    ps\n    \n", ps.pp(),
+          ""
+    block:
+      let rc = ps.check()
+      xCheckRc rc.error == (0,0)
 
+    when true and false:
+      noisy.say "***", "testTxMergeProofAndKvpList (6)",
+        " <", n, "/", list.len-1, ">",
+        " runID=", runID,
+        " nGroup=", count,
+        " nProof=", w.proof.len,
+        #"\n    ps\n    \n", ps.pp(),
+        ""
 
-    let merged = db.mergeList leafs
-    xCheck merged.error in {AristoError(0), MergeLeafPathCachedAlready}
-    xCheck merged.merged + merged.dups == leafs.len
+    for ltp in leafs:
+      block:
+        let rc = ps.partMergeGenericData(
+          ltp.leafTie.root, @(ltp.leafTie.path), ltp.payload.rawBlob)
+        xCheckRc rc.error == 0
+      block:
+        let rc = ps.check()
+        xCheckRc rc.error == (0,0)
+
+    when true and false:
+      noisy.say "***", "testTxMergeProofAndKvpList (7)",
+        " <", n, "/", list.len-1, ">",
+        " runID=", runID,
+        " nGroup=", count,
+        " nProof=", w.proof.len,
+        #"\n    ps\n    \n", ps.pp(),
+        ""
 
     block:
       let
@@ -557,7 +604,7 @@ proc testTxMergeProofAndKvpList*(
       noisy.say "***", "testTxMergeProofAndKvpList (9)",
         " <", n, "/", list.len-1, ">",
         " runID=", runID,
-        " groups=", count, " merged=", merged
+        " nGroup=", count, " merged=", merged
 
   true
 
