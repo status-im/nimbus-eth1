@@ -670,7 +670,7 @@ proc slotFetch*(
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
-            slot=slot.toStr, result
+            stoPath=stoPath.toStr, result
 
 proc slotDelete*(
     acc: CoreDbAccRef;
@@ -691,7 +691,7 @@ proc slotDelete*(
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
-            slot=slot.toStr, result
+            stoPath=stoPath.toStr, result
 
 proc slotHasPath*(
     acc: CoreDbAccRef;
@@ -708,7 +708,7 @@ proc slotHasPath*(
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
-            slot=slot.toStr, result
+            stoPath=stoPath.toStr, result
 
 proc slotMerge*(
     acc: CoreDbAccRef;
@@ -726,7 +726,7 @@ proc slotMerge*(
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
     debug newApiTxt, api, elapsed, accPath=accPath.toStr,
-            slot=slot.toStr, result
+            stoPath=stoPath.toStr, result
 
 proc slotState*(
     acc: CoreDbAccRef;
