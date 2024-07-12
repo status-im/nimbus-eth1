@@ -18,16 +18,15 @@
 import
   eth/common,
   ./core_db,
-  ./ledger/[base_iterators, accounts_ledger]
-
-import
-  ./ledger/base except LedgerApiTxt, beginTrackApi, bless, ifTrackApi
+  ./ledger/backend/accounts_ledger,
+  ./ledger/base/[base_config, base_desc],
+  ./ledger/[base, base_iterators]
 
 export
   AccountsLedgerRef,
   base,
-  base_iterators,
-  init
+  base_config,
+  base_iterators
 
 # ------------------------------------------------------------------------------
 # Public constructor

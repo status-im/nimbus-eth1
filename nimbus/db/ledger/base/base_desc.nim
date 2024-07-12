@@ -12,10 +12,7 @@
 
 import
   ../../aristo/aristo_profile,
-  ../accounts_ledger
-
-export
-  accounts_ledger
+  ../backend/accounts_ledger
 
 type
   LedgerProfListRef* = AristoDbProfListRef

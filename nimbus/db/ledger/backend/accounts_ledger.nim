@@ -16,14 +16,12 @@ import
   eth/common,
   results,
   stew/keyed_queue,
-  ../../stateless/multi_keys,
-  "../.."/[constants, utils/utils],
-  ../access_list as ac_access_list,
-  ../../evm/code_bytes,
-  ".."/[core_db, storage_types, transient_storage],
-  ../aristo/aristo_blobify
-
-export code_bytes
+  ../../../evm/code_bytes,
+  ../../../stateless/multi_keys,
+  "../../.."/[constants, utils/utils],
+  ../../access_list as ac_access_list,
+  "../.."/[core_db, storage_types, transient_storage],
+  ../../aristo/aristo_blobify
 
 const
   debugAccountsLedgerRef = false
