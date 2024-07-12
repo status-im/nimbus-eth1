@@ -280,7 +280,7 @@ proc runLatestLoop(
 proc gossipHeadersWithProof(
     portalClient: RpcClient,
     era1File: string,
-    epochAccumulatorFile: Opt[string] = Opt.none(string),
+    epochRecordFile: Opt[string] = Opt.none(string),
     verifyEra = false,
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let f = ?Era1File.open(era1File)
@@ -291,13 +291,13 @@ proc gossipHeadersWithProof(
   # Note: building the accumulator takes about 150ms vs 10ms for reading it,
   # so it is probably not really worth using the read version considering the
   # UX hassle it adds to provide the accumulator ssz files.
-  let epochAccumulator =
-    if epochAccumulatorFile.isNone:
+  let epochRecord =
+    if epochRecordFile.isNone:
       ?f.buildAccumulator()
     else:
-      ?readEpochAccumulatorCached(epochAccumulatorFile.get())
+      ?readEpochRecordCached(epochRecordFile.get())
 
-  for (contentKey, contentValue) in f.headersWithProof(epochAccumulator):
+  for (contentKey, contentValue) in f.headersWithProof(epochRecord):
     let peers =
       try:
         await portalClient.portal_historyGossip(
@@ -502,9 +502,9 @@ proc runBackfillLoopAuditMode(
     # Gossip missing content
     if not headerSuccess:
       let
-        epochAccumulator = db.getAccumulator(blockNumber).valueOr:
+        epochRecord = db.getAccumulator(blockNumber).valueOr:
           raiseAssert "Failed to get accumulator from EraDB: " & error
-        headerWithProof = buildHeaderWithProof(header, epochAccumulator).valueOr:
+        headerWithProof = buildHeaderWithProof(header, epochRecord).valueOr:
           raiseAssert "Failed to build header with proof: " & error
 
       (await portalClient.gossipBlockHeader(blockHash, headerWithProof)).isOkOr:

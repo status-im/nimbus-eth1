@@ -29,6 +29,10 @@ type
 
 const
   CoreDbPersistentTypes* = {AristoDbRocks}
+    ## List of persistent DB types (currently only a single one)
+
+  CoreDbVidGeneric* = VertexID(2)
+    ## Generic `MPT` root vertex ID for calculating Merkle hashes
 
 type
   CoreDbProfListRef* = AristoDbProfListRef
@@ -58,9 +62,6 @@ type
     RlpException
     StoNotFound
     TxPending
-
-  CoreDbColType* = enum     # Keep that legacy type for a while ..
-    CtGeneric = 2           # Actually only this constant is needed
 
   CoreDbCaptFlags* {.pure.} = enum
     PersistPut

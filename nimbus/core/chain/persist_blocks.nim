@@ -78,7 +78,7 @@ proc purgeOlderBlocksFromHistory(db: CoreDbRef, bn: BlockNumber) =
 proc persistBlocksImpl(
     c: ChainRef, blocks: openArray[EthBlock], flags: PersistBlockFlags = {}
 ): Result[PersistStats, string] =
-  let dbTx = c.db.newTransaction()
+  let dbTx = c.db.ctx.newTransaction()
   defer:
     dbTx.dispose()
 

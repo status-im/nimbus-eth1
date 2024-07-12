@@ -224,7 +224,7 @@ type
       desc:
         "Maximum amount of nodes with the same IP in the routing table. " &
         "This option is currently required as many nodes are running from " &
-        "the same machines. The option will be removed/adjusted in the future",
+        "the same machines. The option might be removed/adjusted in the future",
       defaultValue: defaultPortalProtocolConfig.tableIpLimits.tableIpLimit,
       defaultValueDesc: $defaultTableIpLimitDesc,
       name: "table-ip-limit"
@@ -235,7 +235,7 @@ type
       desc:
         "Maximum amount of nodes with the same IP in the routing table's buckets. " &
         "This option is currently required as many nodes are running from " &
-        "the same machines. The option will be removed/adjusted in the future",
+        "the same machines. The option might be removed/adjusted in the future",
       defaultValue: defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit,
       defaultValueDesc: $defaultBucketIpLimitDesc,
       name: "bucket-ip-limit"

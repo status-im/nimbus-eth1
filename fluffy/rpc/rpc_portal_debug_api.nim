@@ -11,9 +11,8 @@ import
   json_rpc/[rpcproxy, rpcserver],
   stew/byteutils,
   ../network/wire/portal_protocol,
-  ../network/network_seed,
   ../eth_data/history_data_seeding,
-  ../database/[content_db, seed_db]
+  ../database/content_db
 
 export rpcserver
 
@@ -24,9 +23,9 @@ proc installPortalDebugApiHandlers*(
 ) =
   ## Portal debug API calls related to storage and seeding from Era1 files.
   rpcServer.rpc("portal_" & network & "GossipHeaders") do(
-    era1File: string, epochAccumulatorFile: Opt[string]
+    era1File: string, epochRecordFile: Opt[string]
   ) -> bool:
-    let res = await p.historyGossipHeadersWithProof(era1File, epochAccumulatorFile)
+    let res = await p.historyGossipHeadersWithProof(era1File, epochRecordFile)
     if res.isOk():
       return true
     else:
@@ -63,10 +62,10 @@ proc installPortalDebugApiHandlers*(
       raise newException(ValueError, $res.error)
 
   rpcServer.rpc("portal_" & network & "_propagateHeaders") do(
-    epochHeadersFile: string, epochAccumulatorFile: string
+    epochHeadersFile: string, epochRecordFile: string
   ) -> bool:
     let res =
-      await p.historyPropagateHeadersWithProof(epochHeadersFile, epochAccumulatorFile)
+      await p.historyPropagateHeadersWithProof(epochHeadersFile, epochRecordFile)
     if res.isOk():
       return true
     else:
@@ -81,66 +80,18 @@ proc installPortalDebugApiHandlers*(
     else:
       raise newException(ValueError, $res.error)
 
-  rpcServer.rpc("portal_" & network & "_propagateEpochAccumulator") do(
+  rpcServer.rpc("portal_" & network & "_propagateEpochRecord") do(
     dataFile: string
   ) -> bool:
-    let res = await p.propagateEpochAccumulator(dataFile)
+    let res = await p.propagateEpochRecord(dataFile)
     if res.isOk():
       return true
     else:
       raise newException(ValueError, $res.error)
 
-  rpcServer.rpc("portal_" & network & "_propagateEpochAccumulators") do(
-    path: string
-  ) -> bool:
-    let res = await p.propagateEpochAccumulators(path)
+  rpcServer.rpc("portal_" & network & "_propagateEpochRecords") do(path: string) -> bool:
+    let res = await p.propagateEpochRecords(path)
     if res.isOk():
       return true
     else:
       raise newException(ValueError, $res.error)
-
-  rpcServer.rpc("portal_" & network & "_storeContentInNodeRange") do(
-    dbPath: string, max: uint32, starting: uint32
-  ) -> bool:
-    let storeResult = p.storeContentInNodeRange(dbPath, max, starting)
-
-    if storeResult.isOk():
-      return true
-    else:
-      raise newException(ValueError, $storeResult.error)
-
-  rpcServer.rpc("portal_" & network & "_offerContentInNodeRange") do(
-    dbPath: string, nodeId: NodeId, max: uint32, starting: uint32
-  ) -> int:
-    # waiting for offer result, by the end of this call remote node should
-    # have received offered content
-    let offerResult = await p.offerContentInNodeRange(dbPath, nodeId, max, starting)
-
-    if offerResult.isOk():
-      return offerResult.get()
-    else:
-      raise newException(ValueError, $offerResult.error)
-
-  rpcServer.rpc("portal_" & network & "_depthContentPropagate") do(
-    dbPath: string, max: uint32
-  ) -> bool:
-    # TODO Consider making this call asynchronously without waiting for result
-    # as for big seed db size it could take a loot of time.
-    let propagateResult = await p.depthContentPropagate(dbPath, max)
-
-    if propagateResult.isOk():
-      return true
-    else:
-      raise newException(ValueError, $propagateResult.error)
-
-  rpcServer.rpc("portal_" & network & "_breadthContentPropagate") do(
-    dbPath: string
-  ) -> bool:
-    # TODO Consider making this call asynchronously without waiting for result
-    # as for big seed db size it could take a loot of time.
-    let propagateResult = await p.breadthContentPropagate(dbPath)
-
-    if propagateResult.isOk():
-      return true
-    else:
-      raise newException(ValueError, $propagateResult.error)

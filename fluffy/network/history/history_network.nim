@@ -394,7 +394,7 @@ proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentId): Opt[T] =
   else:
     Opt.none(T)
 
-proc get(db: ContentDB, T: type EpochAccumulator, contentId: ContentId): Opt[T] =
+proc get(db: ContentDB, T: type EpochRecord, contentId: ContentId): Opt[T] =
   db.getSszDecoded(contentId, T)
 
 proc getContentFromDb(n: HistoryNetwork, T: type, contentId: ContentId): Opt[T] =
@@ -567,18 +567,18 @@ proc getReceipts*(
 
     return Opt.some(receipts)
 
-proc getEpochAccumulator(
+proc getEpochRecord(
     n: HistoryNetwork, epochHash: Digest
-): Future[Opt[EpochAccumulator]] {.async: (raises: [CancelledError]).} =
+): Future[Opt[EpochRecord]] {.async: (raises: [CancelledError]).} =
   let
-    contentKey = ContentKey.init(epochAccumulator, epochHash).encode()
+    contentKey = ContentKey.init(epochRecord, epochHash).encode()
     contentId = contentKey.toContentId()
 
   logScope:
     epochHash
     contentKey
 
-  let accumulatorFromDb = n.getContentFromDb(EpochAccumulator, contentId)
+  let accumulatorFromDb = n.getContentFromDb(EpochRecord, contentId)
   if accumulatorFromDb.isSome():
     info "Fetched epoch accumulator from database"
     return accumulatorFromDb
@@ -587,15 +587,15 @@ proc getEpochAccumulator(
     let
       accumulatorContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching epoch accumulator from the network"
-        return Opt.none(EpochAccumulator)
+        return Opt.none(EpochRecord)
 
-      epochAccumulator =
+      epochRecord =
         try:
-          SSZ.decode(accumulatorContent.content, EpochAccumulator)
+          SSZ.decode(accumulatorContent.content, EpochRecord)
         except SerializationError:
           continue
 
-    let hash = hash_tree_root(epochAccumulator)
+    let hash = hash_tree_root(epochRecord)
     if hash == epochHash:
       info "Fetched epoch accumulator from the network"
       n.portalProtocol.storeContent(contentKey, contentId, accumulatorContent.content)
@@ -604,11 +604,11 @@ proc getEpochAccumulator(
         accumulatorContent.content,
       )
 
-      return Opt.some(epochAccumulator)
+      return Opt.some(epochRecord)
     else:
       warn "Validation of epoch accumulator failed", resultedEpochHash = hash
 
-  return Opt.none(EpochAccumulator)
+  return Opt.none(EpochRecord)
 
 proc getBlockHashByNumber*(
     n: HistoryNetwork, bn: UInt256
@@ -617,7 +617,7 @@ proc getBlockHashByNumber*(
     epochData = n.accumulator.getBlockEpochDataForBlockNumber(bn).valueOr:
       return err(error)
     digest = Digest(data: epochData.epochHash)
-    epoch = (await n.getEpochAccumulator(digest)).valueOr:
+    epoch = (await n.getEpochRecord(digest)).valueOr:
       return err("Cannot retrieve epoch accumulator for given block number")
 
   ok(epoch[epochData.blockRelativeIndex].blockHash)
@@ -677,22 +677,22 @@ proc validateContent(
       return false
     else:
       return true
-  of epochAccumulator:
+  of epochRecord:
     # Check first if epochHash is part of master accumulator
-    let epochHash = key.epochAccumulatorKey.epochHash
+    let epochHash = key.epochRecordKey.epochHash
     if not n.accumulator.historicalEpochs.contains(epochHash.data):
       warn "Offered epoch accumulator is not part of master accumulator", epochHash
       return false
 
-    let epochAccumulator =
+    let epochRecord =
       try:
-        SSZ.decode(content, EpochAccumulator)
+        SSZ.decode(content, EpochRecord)
       except SerializationError:
         warn "Failed decoding epoch accumulator"
         return false
 
     # Next check the hash tree root, as this is probably more expensive
-    let hash = hash_tree_root(epochAccumulator)
+    let hash = hash_tree_root(epochRecord)
     if hash != epochHash:
       warn "Epoch accumulator has invalid root hash"
       return false

@@ -85,7 +85,7 @@ proc verifySlotProof(trustedStorageRoot: Web3Hash, slot: StorageProof): MptProof
 proc persistFixtureBlock(chainDB: CoreDbRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
-  discard chainDB.newKvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
+  discard chainDB.ctx.getKvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header)
   chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
   chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
@@ -167,6 +167,10 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
 
   com.db.persistReceipts(vmState.receipts)
   let
+    # TODO: `getColumn(CtReceipts)` does not exists anymore. There s only the
+    #       generic `MPT` left that can be retrieved with `getGeneric()`,
+    #       optionally with argument `clearData=true`
+    #
     receiptRoot = com.db.ctx.getColumn(CtReceipts).state(updateOk=true).valueOr(EMPTY_ROOT_HASH)
     date        = dateTime(2017, mMar, 30)
     timeStamp   = date.toTime.toUnix.EthTime

@@ -94,7 +94,7 @@ proc captureAccount(n: JsonNode, db: LedgerRef, address: EthAddress, name: strin
 
 proc dumpMemoryDB*(node: JsonNode, db: CoreDbRef) =
   var n = newJObject()
-  for k, v in db.newKvt():
+  for k, v in db.ctx.getKvt():
     n[k.toHex(false)] = %v
   node["state"] = n
 

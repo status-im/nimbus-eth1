@@ -22,14 +22,17 @@ export ssz_serialization, merkleization, proofs, eth_types_rlp
 # But with the adjustment to finish the accumulator at merge point.
 
 const
-  epochSize* = 8192 # blocks
+  EPOCH_SIZE* = 8192 # block roots per epoch record
+  MAX_HISTORICAL_EPOCHS = 2048'u64 # Should be sufficient for all networks as for
+  # mainnet this is not even reached: ceil(mergeBlockNumber / EPOCH_SIZE) = 1897
+
   # Allow this to be adjusted at compile time for testing. If more constants
   # need to be adjusted we can add some presets file.
   mergeBlockNumber* {.intdefine.}: uint64 = 15537394
 
-  # Note: This is like a ceil(mergeBlockNumber / epochSize)
-  # Could use ceilDiv(mergeBlockNumber, epochSize) in future versions
-  preMergeEpochs* = (mergeBlockNumber + epochSize - 1) div epochSize
+  # Note: This is like a ceil(mergeBlockNumber / EPOCH_SIZE)
+  # Could use ceilDiv(mergeBlockNumber, EPOCH_SIZE) in future versions
+  preMergeEpochs* = (mergeBlockNumber + EPOCH_SIZE - 1) div EPOCH_SIZE
 
   # TODO:
   # Currently disabled, because issue when testing with other
@@ -39,7 +42,6 @@ const
   # of `mergeBlockNumber`, but:
   # - Still need to store the actual `mergeBlockNumber` and run-time somewhere
   # as it allows for each pre vs post merge block header checking.
-  # - Can't limit `historicalEpochs` SSZ list at `preMergeEpochs` value.
   # - Should probably be stated in the portal network specs.
   # TERMINAL_TOTAL_DIFFICULTY = u256"58750000000000000000000"
 
@@ -48,22 +50,25 @@ type
     blockHash*: BlockHash
     totalDifficulty*: UInt256
 
-  EpochAccumulator* = List[HeaderRecord, epochSize]
+  EpochRecord* = List[HeaderRecord, EPOCH_SIZE]
 
-  # In the core code of Fluffy the `EpochAccumulator` type is solely used, as
+  # In the core code of Fluffy the `EpochRecord` type is solely used, as
   # `hash_tree_root` is done either once or never on this object after
   # serialization.
   # However for the generation of the proofs for all the headers in an epoch, it
   # needs to be run many times and the cached version of the SSZ list is
   # obviously much faster, so this second type is added for this usage.
-  EpochAccumulatorCached* = HashList[HeaderRecord, epochSize]
+  EpochRecordCached* = HashList[HeaderRecord, EPOCH_SIZE]
 
+  # HistoricalHashesAccumulator
   Accumulator* = object
-    historicalEpochs*: List[Bytes32, int(preMergeEpochs)]
-    currentEpoch*: EpochAccumulator
+    historicalEpochs*: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)]
+    currentEpoch*: EpochRecord
 
+  # HistoricalHashesAccumulator in its final state
   FinishedAccumulator* = object
-    historicalEpochs*: List[Bytes32, int(preMergeEpochs)]
+    historicalEpochs*: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)]
+    currentEpoch*: EpochRecord
 
   BlockEpochData* = object
     epochHash*: Bytes32
@@ -71,14 +76,14 @@ type
 
 func init*(T: type Accumulator): T =
   Accumulator(
-    historicalEpochs: List[Bytes32, int(preMergeEpochs)].init(@[]),
-    currentEpoch: EpochAccumulator.init(@[]),
+    historicalEpochs: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)].init(@[]),
+    currentEpoch: EpochRecord.init(@[]),
   )
 
-func getEpochAccumulatorRoot*(headerRecords: openArray[HeaderRecord]): Digest =
-  let epochAccumulator = EpochAccumulator.init(@headerRecords)
+func getEpochRecordRoot*(headerRecords: openArray[HeaderRecord]): Digest =
+  let epochRecord = EpochRecord.init(@headerRecords)
 
-  hash_tree_root(epochAccumulator)
+  hash_tree_root(epochRecord)
 
 func updateAccumulator*(a: var Accumulator, header: BlockHeader) =
   doAssert(
@@ -95,11 +100,11 @@ func updateAccumulator*(a: var Accumulator, header: BlockHeader) =
   # finish an epoch. However, if we were to move this after adding the
   # `HeaderRecord`, there would be no way to get the current total difficulty,
   # unless another field is introduced in the `Accumulator` object.
-  if a.currentEpoch.len() == epochSize:
+  if a.currentEpoch.len() == EPOCH_SIZE:
     let epochHash = hash_tree_root(a.currentEpoch)
 
     doAssert(a.historicalEpochs.add(epochHash.data))
-    a.currentEpoch = EpochAccumulator.init(@[])
+    a.currentEpoch = EpochRecord.init(@[])
 
   let headerRecord = HeaderRecord(
     blockHash: header.blockHash(),
@@ -122,7 +127,7 @@ func finishAccumulator*(a: var Accumulator): FinishedAccumulator =
 ## against the Accumulator and the header proofs.
 
 func getEpochIndex*(blockNumber: uint64): uint64 =
-  blockNumber div epochSize
+  blockNumber div EPOCH_SIZE
 
 func getEpochIndex*(header: BlockHeader): uint64 =
   ## Get the index for the historical epochs
@@ -130,7 +135,7 @@ func getEpochIndex*(header: BlockHeader): uint64 =
 
 func getHeaderRecordIndex*(blockNumber: uint64, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
-  uint64(blockNumber - epochIndex * epochSize)
+  uint64(blockNumber - epochIndex * EPOCH_SIZE)
 
 func getHeaderRecordIndex*(header: BlockHeader, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
@@ -147,15 +152,15 @@ func verifyProof(
 ): bool =
   let
     epochIndex = getEpochIndex(header)
-    epochAccumulatorHash = Digest(data: a.historicalEpochs[epochIndex])
+    epochRecordHash = Digest(data: a.historicalEpochs[epochIndex])
 
     leave = hash_tree_root(header.blockHash())
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
 
     # TODO: Implement more generalized `get_generalized_index`
-    gIndex = GeneralizedIndex(epochSize * 2 * 2 + (headerRecordIndex * 2))
+    gIndex = GeneralizedIndex(EPOCH_SIZE * 2 * 2 + (headerRecordIndex * 2))
 
-  verify_merkle_multiproof(@[leave], proof, @[gIndex], epochAccumulatorHash)
+  verify_merkle_multiproof(@[leave], proof, @[gIndex], epochRecordHash)
 
 func verifyAccumulatorProof*(
     a: FinishedAccumulator, header: BlockHeader, proof: AccumulatorProof
@@ -189,7 +194,7 @@ func verifyHeader*(
       ok()
 
 func buildProof*(
-    header: BlockHeader, epochAccumulator: EpochAccumulator | EpochAccumulatorCached
+    header: BlockHeader, epochRecord: EpochRecord | EpochRecordCached
 ): Result[AccumulatorProof, string] =
   doAssert(header.isPreMerge(), "Must be pre merge header")
 
@@ -198,17 +203,17 @@ func buildProof*(
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
 
     # TODO: Implement more generalized `get_generalized_index`
-    gIndex = GeneralizedIndex(epochSize * 2 * 2 + (headerRecordIndex * 2))
+    gIndex = GeneralizedIndex(EPOCH_SIZE * 2 * 2 + (headerRecordIndex * 2))
 
   var proof: AccumulatorProof
-  ?epochAccumulator.build_proof(gIndex, proof)
+  ?epochRecord.build_proof(gIndex, proof)
 
   ok(proof)
 
 func buildHeaderWithProof*(
-    header: BlockHeader, epochAccumulator: EpochAccumulator | EpochAccumulatorCached
+    header: BlockHeader, epochRecord: EpochRecord | EpochRecordCached
 ): Result[BlockHeaderWithProof, string] =
-  let proof = ?buildProof(header, epochAccumulator)
+  let proof = ?buildProof(header, epochRecord)
 
   ok(
     BlockHeaderWithProof(

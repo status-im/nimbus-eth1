@@ -29,7 +29,7 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
   for i in 0 ..< numBlocks:
     blocks[i] = com.db.getEthBlock(blockNumber + i.BlockNumber)
 
-  let transaction = com.db.newTransaction()
+  let transaction = com.db.ctx.newTransaction()
   defer: transaction.dispose()
 
   for i in 0 ..< numBlocks:

@@ -64,50 +64,50 @@ func buildAccumulator*(headers: seq[BlockHeader]): Result[FinishedAccumulator, s
 
 func buildAccumulatorData*(
     headers: seq[BlockHeader]
-): Result[(FinishedAccumulator, seq[EpochAccumulator]), string] =
+): Result[(FinishedAccumulator, seq[EpochRecord]), string] =
   var accumulator: Accumulator
-  var epochAccumulators: seq[EpochAccumulator]
+  var epochRecords: seq[EpochRecord]
   for header in headers:
     updateAccumulator(accumulator, header)
 
-    if accumulator.currentEpoch.len() == epochSize:
-      epochAccumulators.add(accumulator.currentEpoch)
+    if accumulator.currentEpoch.len() == EPOCH_SIZE:
+      epochRecords.add(accumulator.currentEpoch)
 
     if header.number == mergeBlockNumber - 1:
-      epochAccumulators.add(accumulator.currentEpoch)
+      epochRecords.add(accumulator.currentEpoch)
 
-      return ok((finishAccumulator(accumulator), epochAccumulators))
+      return ok((finishAccumulator(accumulator), epochRecords))
 
   err("Not enough headers provided to finish the accumulator")
 
 func buildProof*(
-    header: BlockHeader, epochAccumulators: seq[EpochAccumulator]
+    header: BlockHeader, epochRecords: seq[EpochRecord]
 ): Result[AccumulatorProof, string] =
   let epochIndex = getEpochIndex(header)
-  doAssert(epochIndex < uint64(epochAccumulators.len()))
-  let epochAccumulator = epochAccumulators[epochIndex]
+  doAssert(epochIndex < uint64(epochRecords.len()))
+  let epochRecord = epochRecords[epochIndex]
 
-  buildProof(header, epochAccumulator)
+  buildProof(header, epochRecord)
 
 func buildHeaderWithProof*(
-    header: BlockHeader, epochAccumulators: seq[EpochAccumulator]
+    header: BlockHeader, epochRecords: seq[EpochRecord]
 ): Result[BlockHeaderWithProof, string] =
   ## Construct the accumulator proof for a specific header.
   ## Returns the block header with the proof
   if header.isPreMerge():
     let epochIndex = getEpochIndex(header)
-    doAssert(epochIndex < uint64(epochAccumulators.len()))
-    let epochAccumulator = epochAccumulators[epochIndex]
+    doAssert(epochIndex < uint64(epochRecords.len()))
+    let epochRecord = epochRecords[epochIndex]
 
-    buildHeaderWithProof(header, epochAccumulator)
+    buildHeaderWithProof(header, epochRecord)
   else:
     err("Cannot build accumulator proof for post merge header")
 
 func buildHeadersWithProof*(
-    headers: seq[BlockHeader], epochAccumulators: seq[EpochAccumulator]
+    headers: seq[BlockHeader], epochRecords: seq[EpochRecord]
 ): Result[seq[BlockHeaderWithProof], string] =
   var headersWithProof: seq[BlockHeaderWithProof]
   for header in headers:
-    headersWithProof.add(?buildHeaderWithProof(header, epochAccumulators))
+    headersWithProof.add(?buildHeaderWithProof(header, epochRecords))
 
   ok(headersWithProof)

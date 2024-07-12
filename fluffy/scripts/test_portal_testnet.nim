@@ -20,7 +20,6 @@ import
   ../rpc/eth_rpc_client,
   ../eth_data/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
   ../network/history/[history_content, accumulator],
-  ../database/seed_db,
   ../tests/test_history_util
 
 type
@@ -249,14 +248,15 @@ procSuite "Portal testnet tests":
         "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
       accumulatorFile =
         "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
+        # TODO: rename
       blockDataFile = "./fluffy/tests/blocks/mainnet_blocks_1000001_1000010.json"
 
     let
       blockHeaders = readBlockHeaders(headerFile).valueOr:
         raiseAssert "Invalid header file: " & headerFile
-      epochAccumulator = readEpochAccumulatorCached(accumulatorFile).valueOr:
+      epochRecord = readEpochRecordCached(accumulatorFile).valueOr:
         raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
-      blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
+      blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochRecord).valueOr:
         raiseAssert "Could not build headers with proof"
       blockData = readJsonType(blockDataFile, BlockDataTable).valueOr:
         raiseAssert "Invalid block data file" & blockDataFile
@@ -333,200 +333,3 @@ procSuite "Portal testnet tests":
         #   discard
 
       await client.close()
-
-  asyncTest "Portal History - Propagate content from seed db":
-    # Skipping this as it seems to fail now at offerContentInNodeRange, likely
-    # due to not being possibly to validate block bodies. This would mean the
-    # test is flawed and block headers should be offered before bodies and
-    # receipts.
-    # TODO: Split this up and activate test
-    skip()
-
-    # const
-    #   headerFile = "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000011-1000030.e2s"
-    #   accumulatorFile = "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
-    #   blockDataFile = "./fluffy/tests/blocks/mainnet_blocks_1000011_1000030.json"
-
-    #   # Path for the temporary db. A separate dir is used as sqlite usually also
-    #   # creates wal files.
-    #   tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000011_1000030.sqlite3"
-
-    # let
-    #   blockHeaders = readBlockHeaders(headerFile).valueOr:
-    #     raiseAssert "Invalid header file: " & headerFile
-    #   epochAccumulator = readEpochAccumulatorCached(accumulatorFile).valueOr:
-    #     raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
-    #   blockHeadersWithProof =
-    #     buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
-    #       raiseAssert "Could not build headers with proof"
-    #   blockData =
-    #     readJsonType(blockDataFile, BlockDataTable).valueOr:
-    #       raiseAssert "Invalid block data file" & blockDataFile
-
-    #   clients = await connectToRpcServers(config)
-
-    # var nodeInfos: seq[NodeInfo]
-    # for client in clients:
-    #   let nodeInfo = await client.portal_history_nodeInfo()
-    #   await client.close()
-    #   nodeInfos.add(nodeInfo)
-
-    # let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
-    # createDir(dbFile)
-    # let db = SeedDb.new(path = dbFile, name = dbName)
-    # defer:
-    #   db.close()
-    #   removeDir(dbFile)
-
-    # # Fill seed db with block headers with proof
-    # for (content, contentKey) in blockHeadersWithProof:
-    #   let contentId = history_content.toContentId(ByteList(contentKey))
-    #   db.put(contentId, contentKey, content)
-
-    # # Fill seed db with block bodies and receipts
-    # for t in blocksContent(blockData, false):
-    #   db.put(t[0], t[1], t[2])
-
-    # let lastNodeIdx = len(nodeInfos) - 1
-
-    # # Store content in node 0 database
-    # check (await clients[0].portal_history_storeContentInNodeRange(
-    #   tempDbPath, 100, 0))
-    # await clients[0].close()
-
-    # # Offer content to node 1..63
-    # for i in 1..lastNodeIdx:
-    #   let recipientId = nodeInfos[i].nodeId
-    #   let offerResponse = await retryUntil(
-    #     proc (): Future[int] {.async.} =
-    #       try:
-    #         let res = await clients[0].portal_history_offerContentInNodeRange(
-    #           tempDbPath, recipientId, 64, 0)
-    #         await clients[0].close()
-    #         return res
-    #       except CatchableError as exc:
-    #         await clients[0].close()
-    #         raise exc
-    #     ,
-    #     proc (os: int): bool = return true,
-    #     "Offer failed",
-    #     i
-    #   )
-    #   check:
-    #     offerResponse > 0
-
-    # for i, client in clients:
-    #   # Note: Once there is the Canonical Indices Network, we don't need to
-    #   # access this file anymore here for the block hashes.
-    #   for hash in blockData.blockHashes():
-    #     let content = await retryUntil(
-    #       proc (): Future[Option[BlockObject]] {.async.} =
-    #         try:
-    #           let res = await client.eth_getBlockByHash(hash.ethHashStr(), true)
-    #           await client.close()
-    #           return res
-    #         except CatchableError as exc:
-    #           await client.close()
-    #           raise exc
-    #       ,
-    #       proc (mc: Option[BlockObject]): bool = return mc.isSome(),
-    #       "Did not receive expected Block with hash " & hash.data.toHex(),
-    #       i
-    #     )
-    #     check content.isSome()
-
-    #     let blockObj = content.get()
-    #     check blockObj.hash.get() == hash
-
-    #     for tx in blockObj.transactions:
-    #       var txObj: TransactionObject
-    #       tx.fromJson("tx", txObj)
-    #       check txObj.blockHash.get() == hash
-
-    #   await client.close()
-
-  asyncTest "Portal History - Propagate content from seed db in depth first fashion":
-    # Skipping this test as it is flawed considering block headers should be
-    # offered before bodies and receipts.
-    # TODO: Split this up and activate test
-    skip()
-
-    # const
-    #   headerFile = "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000011-1000030.e2s"
-    #   accumulatorFile = "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
-    #   # Different set of data for each test as tests are statefull so previously
-    #   # propagated content is still in the network
-    #   blockDataFile = "./fluffy/tests/blocks/mainnet_blocks_1000040_1000050.json"
-
-    #   # Path for the temporary db. A separate dir is used as sqlite usually also
-    #   # creates wal files.
-    #   tempDbPath = "./fluffy/tests/blocks/tempDir/mainnet_blocks_1000040_100050.sqlite3"
-
-    # let
-    #   blockHeaders = readBlockHeaders(headerFile).valueOr:
-    #     raiseAssert "Invalid header file: " & headerFile
-    #   epochAccumulator = readEpochAccumulatorCached(accumulatorFile).valueOr:
-    #     raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
-    #   blockHeadersWithProof =
-    #     buildHeadersWithProof(blockHeaders, epochAccumulator).valueOr:
-    #       raiseAssert "Could not build headers with proof"
-    #   blockData =
-    #     readJsonType(blockDataFile, BlockDataTable).valueOr:
-    #       raiseAssert "Invalid block data file" & blockDataFile
-
-    #   clients = await connectToRpcServers(config)
-
-    # var nodeInfos: seq[NodeInfo]
-    # for client in clients:
-    #   let nodeInfo = await client.portal_history_nodeInfo()
-    #   await client.close()
-    #   nodeInfos.add(nodeInfo)
-
-    # let (dbFile, dbName) = getDbBasePathAndName(tempDbPath).unsafeGet()
-    # createDir(dbFile)
-    # let db = SeedDb.new(path = dbFile, name = dbName)
-    # defer:
-    #   db.close()
-    #   removeDir(dbFile)
-
-    # # Fill seed db with block headers with proof
-    # for (content, contentKey) in blockHeadersWithProof:
-    #   let contentId = history_content.toContentId(ByteList(contentKey))
-    #   db.put(contentId, contentKey, content)
-
-    # # Fill seed db with block bodies and receipts
-    # for t in blocksContent(blockData, false):
-    #   db.put(t[0], t[1], t[2])
-
-    # check (await clients[0].portal_history_depthContentPropagate(tempDbPath, 64))
-    # await clients[0].close()
-
-    # for i, client in clients:
-    #   # Note: Once there is the Canonical Indices Network, we don't need to
-    #   # access this file anymore here for the block hashes.
-    #   for hash in blockData.blockHashes():
-    #     let content = await retryUntil(
-    #       proc (): Future[Option[BlockObject]] {.async.} =
-    #         try:
-    #           let res = await client.eth_getBlockByHash(hash.ethHashStr(), true)
-    #           await client.close()
-    #           return res
-    #         except CatchableError as exc:
-    #           await client.close()
-    #           raise exc
-    #       ,
-    #       proc (mc: Option[BlockObject]): bool = return mc.isSome(),
-    #       "Did not receive expected Block with hash " & hash.data.toHex(),
-    #       i
-    #     )
-    #     check content.isSome()
-
-    #     let blockObj = content.get()
-    #     check blockObj.hash.get() == hash
-
-    #     for tx in blockObj.transactions:
-    #       var txObj: TransactionObject
-    #       tx.fromJson("tx", txObj)
-    #       check txObj.blockHash.get() == hash
-
-    #   await client.close()

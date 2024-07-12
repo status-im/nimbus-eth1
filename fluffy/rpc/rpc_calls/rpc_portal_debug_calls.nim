@@ -25,8 +25,8 @@ createRpcSigsFromNim(RpcClient):
   proc portal_history_propagate(dataFile: string): bool
   proc portal_history_propagateHeaders(dataFile: string): bool
   proc portal_history_propagateBlock(dataFile: string, blockHash: string): bool
-  proc portal_history_propagateEpochAccumulator(dataFile: string): bool
-  proc portal_history_propagateEpochAccumulators(path: string): bool
+  proc portal_history_propagateEpochRecord(dataFile: string): bool
+  proc portal_history_propagateEpochRecords(path: string): bool
   proc portal_history_storeContentInNodeRange(
     dbPath: string, max: uint32, starting: uint32
   ): bool

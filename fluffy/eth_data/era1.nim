@@ -438,7 +438,7 @@ proc getAccumulatorRoot*(f: Era1File): Result[Digest, string] =
 
   ok(Digest(data: array[32, byte].initCopyFrom(bytes)))
 
-proc buildAccumulator*(f: Era1File): Result[EpochAccumulatorCached, string] =
+proc buildAccumulator*(f: Era1File): Result[EpochRecordCached, string] =
   let
     startNumber = f.blockIdx.startNumber
     endNumber = f.blockIdx.endNumber()
@@ -453,7 +453,7 @@ proc buildAccumulator*(f: Era1File): Result[EpochAccumulatorCached, string] =
       HeaderRecord(blockHash: blockHeader.blockHash(), totalDifficulty: totalDifficulty)
     )
 
-  ok(EpochAccumulatorCached.init(headerRecords))
+  ok(EpochRecordCached.init(headerRecords))
 
 proc verify*(f: Era1File): Result[Digest, string] =
   let
@@ -483,7 +483,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
     )
 
   let expectedRoot = ?f.getAccumulatorRoot()
-  let accumulatorRoot = getEpochAccumulatorRoot(headerRecords)
+  let accumulatorRoot = getEpochRecordRoot(headerRecords)
 
   if accumulatorRoot != expectedRoot:
     err("Invalid accumulator root")

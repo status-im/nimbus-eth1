@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 # Tool to verify that certain Portal content is available on the network.
-# Currently only supports checking `EpochAccumulator`s of the history network.
+# Currently only supports checking `EpochRecord`s of the history network.
 
 {.push raises: [].}
 
@@ -42,24 +42,23 @@ proc checkAccumulators(client: RpcClient) {.async.} =
 
   for i, hash in accumulator.historicalEpochs:
     let root = Digest(data: hash)
-    let contentKey = ContentKey.init(epochAccumulator, root)
+    let contentKey = ContentKey.init(epochRecord, root)
 
     try:
       let contentInfo = await client.portal_historyRecursiveFindContent(
         contentKey.encode.asSeq().toHex()
       )
 
-      let res = decodeSsz(hexToSeqByte(contentInfo.content), EpochAccumulator)
+      let res = decodeSsz(hexToSeqByte(contentInfo.content), EpochRecord)
       if res.isErr():
-        echo "[Invalid] EpochAccumulator number " & $i & ": " & $root & " error: " &
-          res.error
+        echo "[Invalid] EpochRecord number " & $i & ": " & $root & " error: " & res.error
       else:
-        let epochAccumulator = res.get()
-        let resultingRoot = hash_tree_root(epochAccumulator)
+        let epochRecord = res.get()
+        let resultingRoot = hash_tree_root(epochRecord)
         if resultingRoot == root:
-          echo "[Available] EpochAccumulator number " & $i & ": " & $root
+          echo "[Available] EpochRecord number " & $i & ": " & $root
         else:
-          echo "[Invalid] EpochAccumulator number " & $i & ": " & $root &
+          echo "[Invalid] EpochRecord number " & $i & ": " & $root &
             " error: Invalid root"
     except RpcPostError as e:
       # RpcPostError when for example timing out on the request. Could retry
@@ -69,8 +68,7 @@ proc checkAccumulators(client: RpcClient) {.async.} =
     except ValueError as e:
       # Either an error with the provided content key or the content was
       # simply not available in the network
-      echo "[Not Available] EpochAccumulator number " & $i & ": " & $root & " error: " &
-        e.msg
+      echo "[Not Available] EpochRecord number " & $i & ": " & $root & " error: " & e.msg
 
     # Using the http connection re-use seems to slow down these sequentual
     # requests considerably. Force a new connection setup by doing a close after

@@ -355,7 +355,7 @@ proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType =
   return com.config.consensusType
 
 proc initializeEmptyDb*(com: CommonRef) =
-  let kvt = com.db.newKvt()
+  let kvt = com.db.ctx.getKvt()
   proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
     kvt.hasKey(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin kvt:
