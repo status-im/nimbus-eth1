@@ -123,7 +123,7 @@ func toStr*(w: openArray[byte]): string =
 func toStr*(w: set[CoreDbCaptFlags]): string =
   "Flags[" & $w.len & "]"
 
-proc toStr*(rc: CoreDbRc[int]): string =
+proc toStr*(rc: CoreDbRc[int]|CoreDbRc[UInt256]): string =
   if rc.isOk: "ok(" & $rc.value & ")" else: "err(" & rc.error.toStr & ")"
 
 proc toStr*(rc: CoreDbRc[bool]): string =
@@ -136,10 +136,7 @@ proc toStr*(rc: CoreDbRc[Blob]): string =
   if rc.isOk: "ok(Blob[" & $rc.value.len & "])"
   else: "err(" & rc.error.toStr & ")"
 
-proc toStr*(rc: CoreDbRc[Hash256]): string =
-  if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
-
-proc toStr*(rc: CoreDbRc[set[CoreDbCaptFlags]]): string =
+proc toStr*[T](rc: CoreDbRc[T]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
 proc toStr*(rc: CoreDbRc[Account]): string =
