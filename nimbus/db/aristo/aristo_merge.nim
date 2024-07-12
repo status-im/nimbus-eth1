@@ -28,7 +28,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_hike, aristo_layers, aristo_utils, aristo_vid],
+  "."/[aristo_desc, aristo_hike, aristo_layers, aristo_vid],
   ./aristo_merge/merge_payload_helper
 
 const
@@ -58,6 +58,7 @@ proc mergeAccountRecord*(
     pyl =  PayloadRef(pType: AccountData, account: accRec)
     rc = db.mergePayloadImpl(VertexID(1), accPath.data, pyl)
   if rc.isOk:
+    db.layersPutAccPayload(accPath, pyl)
     ok true
   elif rc.error in MergeNoAction:
     ok false
@@ -140,16 +141,15 @@ proc mergeStorageData*(
         # Mark account path Merkle keys for update
         resetKeys()
 
-        if stoID.isValid:
-          return ok()
 
-        else:
+        if not stoID.isValid:
           # Make sure that there is an account that refers to that storage trie
           let leaf = vtx.dup # Dup on modify
           leaf.lData.stoID = useID
-          db.layersPutStoID(accPath, useID)
+          db.layersPutAccPayload(accPath, leaf.lData)
           db.layersPutVtx((VertexID(1), touched[pos - 1]), leaf)
-          return ok()
+
+        return ok()
 
       elif rc.error in MergeNoAction:
         assert stoID.isValid         # debugging only

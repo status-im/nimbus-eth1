@@ -91,15 +91,16 @@ func layersGetKeyOrVoid*(db: AristoDbRef; rvid: RootedVertexID): HashKey =
   ## Simplified version of `layersGetKey()`
   db.layersGetKey(rvid).valueOr: VOID_HASH_KEY
 
-func layersGetStoID*(db: AristoDbRef; accPath: Hash256): Opt[VertexID] =
-  db.top.delta.accSids.withValue(accPath, item):
+func layersGetAccPayload*(db: AristoDbRef; accPath: Hash256): Opt[PayloadRef] =
+  db.top.delta.accPyls.withValue(accPath, item):
     return Opt.some(item[])
 
   for w in db.rstack:
-    w.delta.accSids.withValue(accPath, item):
+    w.delta.accPyls.withValue(accPath, item):
       return Opt.some(item[])
 
-  Opt.none(VertexID)
+  Opt.none(PayloadRef)
+
 
 # ------------------------------------------------------------------------------
 # Public functions: setter variants
@@ -146,8 +147,8 @@ proc layersUpdateVtx*(
   db.layersResKey(rvid)
 
 
-func layersPutStoID*(db: AristoDbRef; accPath: Hash256; stoID: VertexID) =
-  db.top.delta.accSids[accPath] = stoID
+func layersPutAccPayload*(db: AristoDbRef; accPath: Hash256; pyl: PayloadRef) =
+  db.top.delta.accPyls[accPath] = pyl
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -164,8 +165,8 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   for (vid,key) in src.delta.kMap.pairs:
     trg.delta.kMap[vid] = key
   trg.delta.vTop = src.delta.vTop
-  for (accPath,stoID) in src.delta.accSids.pairs:
-    trg.delta.accSids[accPath] = stoID
+  for (accPath,pyl) in src.delta.accPyls.pairs:
+    trg.delta.accPyls[accPath] = pyl
 
 func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
@@ -181,7 +182,7 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
       sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
       kMap: layers[0].delta.kMap,
       vTop: layers[^1].delta.vTop,
-      accSids: layers[0].delta.accSids,
+      accPyls: layers[0].delta.accPyls,
       ))
 
   # Consecutively merge other layers on top
@@ -190,8 +191,8 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
       result.delta.sTab[vid] = vtx
     for (vid,key) in layers[n].delta.kMap.pairs:
       result.delta.kMap[vid] = key
-    for (accPath,stoID) in layers[n].delta.accSids.pairs:
-      result.delta.accSids[accPath] = stoID
+    for (accPath,pyl) in layers[n].delta.accPyls.pairs:
+      result.delta.accPyls[accPath] = pyl
 
 # ------------------------------------------------------------------------------
 # Public iterators

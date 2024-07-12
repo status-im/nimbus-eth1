@@ -55,6 +55,32 @@ proc retrievePayload(
 
   return err(FetchPathNotFound)
 
+proc retrieveAccountPayload(
+    db: AristoDbRef;
+    accPath: Hash256;
+      ): Result[PayloadRef,AristoError] =
+  if (let pyl = db.layersGetAccPayload(accPath); pyl.isSome()):
+    if not pyl[].isValid():
+      return err(FetchPathNotFound)
+    return ok pyl[]
+
+  let accKey = accPath.to(AccountKey)
+  if (let pyl = db.accPyls.lruFetch(accKey); pyl.isSome()):
+    if not pyl[].isValid():
+      return err(FetchPathNotFound)
+    return ok pyl[]
+
+  # Updated payloads are stored in the layers so if we didn't find them there,
+  # it must have been in the database
+  let
+    payload = db.retrievePayload(VertexID(1), accPath.data).valueOr:
+      if error == FetchAccInaccessible:
+        discard db.accPyls.lruAppend(accKey, nil, accLruSize)
+        return err(FetchPathNotFound)
+      return err(error)
+
+  ok db.accPyls.lruAppend(accKey, payload, accLruSize)
+
 proc retrieveMerkleHash(
     db: AristoDbRef;
     root: VertexID;
@@ -79,10 +105,18 @@ proc hasPayload(
     root: VertexID;
     path: openArray[byte];
       ): Result[bool,AristoError] =
-  if path.len == 0:
-    return err(FetchPathInvalid)
-
   let error = db.retrievePayload(root, path).errorOr:
+    return ok(true)
+
+  if error == FetchPathNotFound:
+    return ok(false)
+  err(error)
+
+proc hasAccountPayload(
+    db: AristoDbRef;
+    accPath: Hash256;
+      ): Result[bool,AristoError] =
+  let error = db.retrieveAccountPayload(accPath).errorOr:
     return ok(true)
 
   if error == FetchPathNotFound:
@@ -120,20 +154,10 @@ proc fetchStorageID*(
     db: AristoDbRef;
     accPath: Hash256;
       ): Result[VertexID,AristoError] =
-  ## Public helper function fro retrieving a storage (vertex) ID for a
+  ## Public helper function for retrieving a storage (vertex) ID for a
   ## given account.
-
-  if (let stoID = db.layersGetStoID(accPath); stoID.isSome()):
-    if not stoID[].isValid():
-      return err(FetchPathNotFound)
-    return ok stoID[]
-
-  let accKey = accPath.to(AccountKey)
-  if (let stoID = db.accSids.lruFetch(accKey); stoID.isSome()):
-    return ok stoID[]
-
   let
-    payload = db.retrievePayload(VertexID(1), accPath.data).valueOr:
+    payload = db.retrieveAccountPayload(accPath).valueOr:
       if error == FetchAccInaccessible:
         return err(FetchPathNotFound)
       return err(error)
@@ -143,9 +167,8 @@ proc fetchStorageID*(
   if not stoID.isValid:
     return err(FetchPathNotFound)
 
-  # If we didn't find a cached storage ID in the layers, we must be using the
-  # database version which we cache here, even across database commits
-  ok db.accSids.lruAppend(accKey, stoID, accLruSize)
+  ok stoID
+
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -159,15 +182,15 @@ proc fetchLastSavedState*(
   ## `uint64` identifier (may be interpreted as block number.)
   db.getLstUbe()
 
-
 proc fetchAccountRecord*(
     db: AristoDbRef;
     accPath: Hash256;
       ): Result[AristoAccount,AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let pyl = ? db.retrievePayload(VertexID(1), accPath.data)
+  let pyl = ? db.retrieveAccountPayload(accPath)
   assert pyl.pType == AccountData   # debugging only
+
   ok pyl.account
 
 proc fetchAccountState*(
@@ -184,8 +207,7 @@ proc hasPathAccount*(
   ## For an account record indexed by `accPath` query whether this record exists
   ## on the database.
   ##
-  db.hasPayload(VertexID(1), accPath.data)
-
+  db.hasAccountPayload(accPath)
 
 proc fetchGenericData*(
     db: AristoDbRef;
@@ -218,7 +240,6 @@ proc hasPathGeneric*(
   ##
   ? root.mustBeGeneric()
   db.hasPayload(root, path)
-
 
 proc fetchStorageData*(
     db: AristoDbRef;
