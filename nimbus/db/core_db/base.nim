@@ -15,7 +15,7 @@ import
   eth/common,
   "../.."/[constants, errors],
   ".."/[kvt, aristo],
-  ./base/[api_tracking, base_config, base_desc]
+  ./base/[api_tracking, base_config, base_desc, base_helpers]
 
 export
   CoreDbAccRef,
@@ -33,18 +33,6 @@ export
   CoreDbTxRef,
   CoreDbType
 
-when CoreDbAutoValidateDescriptors:
-  import
-    ./base/base_validate
-
-when CoreDbEnableApiJumpTable:
-  discard
-else:
-  import
-    ../aristo/[
-      aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_tx],
-    ../kvt/[kvt_desc, kvt_utils, kvt_tx]
-
 when CoreDbEnableApiTracking:
   {.warning: "*** Provided API logging for CoreDB (disabled by default)".}
   import
@@ -54,102 +42,21 @@ when CoreDbEnableApiTracking:
   const
     logTxt = "API"
 
+
 when CoreDbEnableProfiling:
-  {.warning: "*** Enabled API profiling for CoreDB".}
+  {.warning: "*** Enabled profiling for CoreDB (also tracer API available)".}
   export
     CoreDbFnInx,
     CoreDbProfListRef
 
-# ------------------------------------------------------------------------------
-# Private KVT helpers
-# ------------------------------------------------------------------------------
 
-template kvt(dsc: CoreDbKvtRef): KvtDbRef =
-  dsc.distinctBase.kvt
-
-template ctx(kvt: CoreDbKvtRef): CoreDbCtxRef =
-  kvt.distinctBase
-
-# ---------------
-
-template call(api: KvtApiRef; fn: untyped; args: varArgs[untyped]): untyped =
-  when CoreDbEnableApiJumpTable:
-    api.fn(args)
-  else:
-    fn(args)
-
-template call(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
-  kvt.distinctBase.parent.kvtApi.call(fn, args)
-
-# ---------------
-
-func toError(e: KvtError; s: string; error = Unspecified): CoreDbErrorRef =
-  CoreDbErrorRef(
-    error:    error,
-    ctx:      s,
-    isAristo: false,
-    kErr:     e)
-
-# ------------------------------------------------------------------------------
-# Private Aristo helpers
-# ------------------------------------------------------------------------------
-
-template mpt(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
-  dsc.distinctBase.mpt
-
-template mpt(tx: CoreDbTxRef): AristoDbRef =
-  tx.ctx.mpt
-
-template ctx(acc: CoreDbAccRef): CoreDbCtxRef =
-  acc.distinctBase
-
-# ---------------
-
-template call(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
-  when CoreDbEnableApiJumpTable:
-    api.fn(args)
-  else:
-    fn(args)
-
-template call(
-    acc: CoreDbAccRef | CoreDbMptRef;
-    fn: untyped;
-    args: varArgs[untyped];
-      ): untyped =
-  acc.distinctBase.parent.ariApi.call(fn, args)
-
-# ---------------
-
-func toError(e: AristoError; s: string; error = Unspecified): CoreDbErrorRef =
-  CoreDbErrorRef(
-    error:    error,
-    ctx:      s,
-    isAristo: true,
-    aErr:     e)
-
-# ------------------------------------------------------------------------------
-# Public constructor helper
-# ------------------------------------------------------------------------------
-
-proc bless*(db: CoreDbRef): CoreDbRef =
-  ## Verify descriptor
-  when CoreDbAutoValidateDescriptors:
-    db.validate
-  when CoreDbEnableProfiling:
-    db.profTab = CoreDbProfListRef.init()
-  db
-
-proc bless*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
-  ctx.parent = db
-  when CoreDbAutoValidateDescriptors:
-    ctx.validate
-  ctx
-
-proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbMptRef | CoreDbTxRef): auto =
-  dsc.ctx = ctx
-  when CoreDbAutoValidateDescriptors:
-    dsc.validate
-  dsc
+when CoreDbEnableApiJumpTable:
+  discard
+else:
+  import
+    ../aristo/[
+      aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_tx],
+    ../kvt/[kvt_desc, kvt_utils, kvt_tx]
 
 # ------------------------------------------------------------------------------
 # Public context constructors and administration

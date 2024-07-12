@@ -15,8 +15,7 @@ import
   ../../aristo/[aristo_init/memory_only, aristo_walk],
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk],
-  ../base,
-  ../base/[base_config, base_desc]
+  ../base/[base_config, base_desc, base_helpers]
 
 # ------------------------------------------------------------------------------
 # Public constructor and helper

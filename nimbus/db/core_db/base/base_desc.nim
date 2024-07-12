@@ -15,10 +15,6 @@ import
   "../.."/[aristo, aristo/aristo_profile, kvt],
   ./base_config
 
-# Annotation helpers
-{.pragma:  noRaise, gcsafe, raises: [].}
-{.pragma: apiRaise, gcsafe, raises: [CoreDbApiError].}
-
 type
   CoreDbType* = enum
     Ooops
@@ -61,10 +57,6 @@ type
     RlpException
     StoNotFound
     TxPending
-
-  CoreDbCaptFlags* {.pure.} = enum
-    PersistPut
-    PersistDel
 
   # --------------------------------------------------
   # Production descriptors
@@ -117,27 +109,6 @@ type
       aErr*: AristoError
     else:
       kErr*: KvtError
-
-when false: # TODO
-  type
-    # --------------------------------------------------
-    # Sub-descriptor: capture recorder methods
-    # --------------------------------------------------
-    CoreDbCaptRecorderFn* = proc(): CoreDbRef {.noRaise.}
-    CoreDbCaptLogDbFn* = proc(): TableRef[Blob,Blob] {.noRaise.}
-    CoreDbCaptFlagsFn* = proc(): set[CoreDbCaptFlags] {.noRaise.}
-    CoreDbCaptForgetFn* = proc() {.noRaise.}
-
-    CoreDbCaptFns* = object
-      recorderFn*: CoreDbCaptRecorderFn
-      logDbFn*: CoreDbCaptLogDbFn
-      getFlagsFn*: CoreDbCaptFlagsFn
-      forgetFn*: CoreDbCaptForgetFn
-
-    CoreDbCaptRef* = ref object
-      ## Db transaction tracer derived from `CoreDbRef`
-      parent*: CoreDbRef
-      methods*: CoreDbCaptFns
 
 # ------------------------------------------------------------------------------
 # End

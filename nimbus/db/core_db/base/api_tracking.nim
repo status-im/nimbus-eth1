@@ -23,7 +23,6 @@ type
     ## Needed for local `$` as it would be ambiguous for `Duration`
 
   CoreDbApiTrackRef* =
-    # CoreDbCaptRef |
     CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
     CoreDbTxRef
 
@@ -90,7 +89,7 @@ type
     TxRollbackFn        = "rollback"
     TxSaveDisposeFn     = "safeDispose"
 
-proc toStr*(e: CoreDbErrorRef): string {.gcsafe.}
+func toStr*(e: CoreDbErrorRef): string {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -113,44 +112,43 @@ func toLenStr(w: Blob): string =
 func toStr(ela: Duration): string =
   aristo_profile.toStr(ela)
 
-proc toStr*(rc: CoreDbRc[int]|CoreDbRc[UInt256]): string =
+func toStr*(rc: CoreDbRc[int]|CoreDbRc[UInt256]): string =
   if rc.isOk: "ok(" & $rc.value & ")" else: "err(" & rc.error.toStr & ")"
 
-proc toStr(rc: CoreDbRc[bool]): string =
+func toStr(rc: CoreDbRc[bool]): string =
   if rc.isOk: "ok(" & $rc.value & ")" else: "err(" & rc.error.toStr & ")"
 
-proc toStr(rc: CoreDbRc[void]): string =
+func toStr(rc: CoreDbRc[void]): string =
   if rc.isOk: "ok()" else: "err(" & rc.error.toStr & ")"
 
-proc toStr(rc: CoreDbRc[Blob]): string =
+func toStr(rc: CoreDbRc[Blob]): string =
   if rc.isOk: "ok(Blob[" & $rc.value.len & "])"
   else: "err(" & rc.error.toStr & ")"
 
-proc toStr(rc: CoreDbRc[Hash256]): string =
+func toStr(rc: CoreDbRc[Hash256]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
-proc toStr(rc: CoreDbRc[Account]): string =
+func toStr(rc: CoreDbRc[Account]): string =
   if rc.isOk: "ok(Account)" else: "err(" & rc.error.toStr & ")"
 
-proc toStr(rc: CoreDbRc[CoreDbAccount]): string =
+func toStr(rc: CoreDbRc[CoreDbAccount]): string =
   if rc.isOk: "ok(AristoAccount)" else: "err(" & rc.error.toStr & ")"
 
-proc toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
+func toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
   if rc.isOk: "ok(" & ifOk & ")" else: "err(" & rc.error.toStr & ")"
 
-proc toStr(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
-proc toStr(rc: CoreDbRc[CoreDbKvtRef]): string = rc.toStr "kvt"
-proc toStr(rc: CoreDbRc[CoreDbTxRef]): string = rc.toStr "tx"
-#proc toStr(rc: CoreDbRc[CoreDbCaptRef]): string = rc.toStr "capt"
-proc toStr(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
-proc toStr(rc: CoreDbRc[CoreDbMptRef]): string = rc.toStr "mpt"
-proc toStr(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"
+func toStr(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
+func toStr(rc: CoreDbRc[CoreDbKvtRef]): string = rc.toStr "kvt"
+func toStr(rc: CoreDbRc[CoreDbTxRef]): string = rc.toStr "tx"
+func toStr(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
+func toStr(rc: CoreDbRc[CoreDbMptRef]): string = rc.toStr "mpt"
+func toStr(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"
 
 # ------------------------------------------------------------------------------
 # Public API logging helpers
 # ------------------------------------------------------------------------------
 
-proc toStr*(e: CoreDbErrorRef): string =
+func toStr*(e: CoreDbErrorRef): string =
   result = $e.error & "("
   result &= (if e.isAristo: "Aristo" else: "Kvt")
   result &= ", ctx=" & $e.ctx & ", error="
@@ -164,7 +162,7 @@ func toLenStr*(w: openArray[byte]): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
   else: "openArray[" & $w.len & "]"
 
-proc `$`*[T](rc: CoreDbRc[T]): string = rc.toStr
+func `$`*[T](rc: CoreDbRc[T]): string = rc.toStr
 func `$`*(t: Elapsed): string = t.Duration.toStr
 func `$`*(e: EthAddress): string = e.toStr
 func `$$`*(h: Hash256): string = h.toStr # otherwise collision w/existing `$`
