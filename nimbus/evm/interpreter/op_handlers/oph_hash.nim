@@ -39,7 +39,7 @@ proc sha3Op(k: var VmCtx): EvmResultVoid =
   if pos < 0 or len < 0 or pos > 2147483648'i64:
     return err(opErr(OutOfBounds))
 
-  ? k.cpt.opcodeGastCost(Op.Sha3,
+  ? k.cpt.opcodeGasCost(Op.Sha3,
     k.cpt.gasCosts[Op.Sha3].m_handler(k.cpt.memory.len, pos, len),
     reason = "SHA3: word gas cost")
 

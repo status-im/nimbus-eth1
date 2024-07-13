@@ -89,7 +89,7 @@ type
     TxRollbackFn        = "rollback"
     TxSaveDisposeFn     = "safeDispose"
 
-func toStr*(e: CoreDbErrorRef): string {.gcsafe.}
+func toStr*(e: CoreDbError): string {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -148,7 +148,7 @@ func toStr(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"
 # Public API logging helpers
 # ------------------------------------------------------------------------------
 
-func toStr*(e: CoreDbErrorRef): string =
+func toStr*(e: CoreDbError): string =
   result = $e.error & "("
   result &= (if e.isAristo: "Aristo" else: "Kvt")
   result &= ", ctx=" & $e.ctx & ", error="

@@ -225,7 +225,7 @@ proc callOp(k: var VmCtx): EvmResultVoid =
         memOffset:      p.memOffset,
         memLength:      p.memLength))
 
-  ? cpt.opcodeGastCost(Call, gasCost, reason = $Call)
+  ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
 
   cpt.returnData.setLen(0)
 
@@ -297,7 +297,7 @@ proc callCodeOp(k: var VmCtx): EvmResultVoid =
         memOffset:      p.memOffset,
         memLength:      p.memLength))
 
-  ? cpt.opcodeGastCost(CallCode, gasCost, reason = $CallCode)
+  ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
 
   cpt.returnData.setLen(0)
 
@@ -370,7 +370,7 @@ proc delegateCallOp(k: var VmCtx): EvmResultVoid =
         memOffset:      p.memOffset,
         memLength:      p.memLength))
 
-  ? cpt.opcodeGastCost(DelegateCall, gasCost, reason = $DelegateCall)
+  ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
 
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
@@ -437,7 +437,7 @@ proc staticCallOp(k: var VmCtx): EvmResultVoid =
         memOffset:      p.memOffset,
         memLength:      p.memLength))
 
-  ? cpt.opcodeGastCost(StaticCall, gasCost, reason = $StaticCall)
+  ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
 
   cpt.returnData.setLen(0)
 

@@ -57,9 +57,8 @@ type
     gasUsed*:         GasInt            # Gas used by the call.
     contractAddress*: EthAddress        # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
-    logEntries*:      seq[Log]          # Output logs.
-    stack*:           EvmStackRef       # EVM stack on return (for test only).
-    memory*:          EvmMemoryRef      # EVM memory on return (for test only).
+    stack*:           EvmStack       # EVM stack on return (for test only).
+    memory*:          EvmMemory      # EVM memory on return (for test only).
 
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
@@ -276,7 +275,8 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     host.vmState.mutateStateDB:
       db.addBalance(call.sender, result.u256 * call.gasPrice.u256)
 
-proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResult =
+proc finishRunningComputation(
+    host: TransactionHost, call: CallParams, T: type): T =
   let c = host.computation
 
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
@@ -284,17 +284,26 @@ proc finishRunningComputation(host: TransactionHost, call: CallParams): CallResu
   let gasUsed = host.msg.gas.GasInt - gasRemaining
   host.vmState.captureEnd(c, c.output, gasUsed, c.errorOpt)
 
-  if c.isError:
-    result.error = c.error.info
-  result.gasUsed = call.gasLimit - gasRemaining
-  result.output = system.move(c.output)
-  result.contractAddress = if call.isCreate: c.msg.contractAddress
-                           else: default(HostAddress)
-  result.logEntries = host.vmState.stateDB.logEntries()
-  result.stack = c.stack
-  result.memory = c.memory
+  when T is CallResult:
+    # Collecting the result can be unnecessarily expensive when (re)-processing
+    # transactions
+    if c.isError:
+      result.error = c.error.info
+    result.gasUsed = call.gasLimit - gasRemaining
+    result.output = system.move(c.output)
+    result.contractAddress = if call.isCreate: c.msg.contractAddress
+                            else: default(HostAddress)
+    result.stack = move(c.stack)
+    result.memory = move(c.memory)
+  elif T is GasInt:
+    result = call.gasLimit - gasRemaining
+  elif T is string:
+    if c.isError:
+      result = c.error.info
+  else:
+    {.error: "Unknown computation output".}
 
-proc runComputation*(call: CallParams): CallResult =
+proc runComputation*(call: CallParams, T: type): T =
   let host = setupHost(call)
   prepareToRunComputation(host, call)
 
@@ -306,4 +315,4 @@ proc runComputation*(call: CallParams): CallResult =
     else:
       execComputation(host.computation)
 
-  finishRunningComputation(host, call)
+  finishRunningComputation(host, call, T)

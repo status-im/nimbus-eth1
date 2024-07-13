@@ -49,7 +49,7 @@ when evmc_enabled:
       res     = ForkToSstoreCost[c.fork][status]
       gasCost = res.gasCost.GasInt + coldAccess
 
-    ? c.opcodeGastCost(Sstore, gasCost, "SSTORE")
+    ? c.opcodeGasCost(Sstore, gasCost, "SSTORE")
     c.gasMeter.refundGas(res.gasRefund)
     ok()
 
@@ -61,7 +61,7 @@ else:
         currentValue: currentValue)
       res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
-    ? c.opcodeGastCost(Sstore, res.gasCost, "SSTORE")
+    ? c.opcodeGasCost(Sstore, res.gasCost, "SSTORE")
     c.gasMeter.refundGas(res.gasRefund)
 
     c.vmState.mutateStateDB:
@@ -80,7 +80,7 @@ else:
 
       res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
-    ? c.opcodeGastCost(Sstore, res.gasCost + coldAccess, "SSTORE")
+    ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
     c.gasMeter.refundGas(res.gasRefund)
 
@@ -132,7 +132,7 @@ proc mloadOp (k: var VmCtx): EvmResultVoid =
   let memStartPos = ? k.cpt.stack.popInt()
 
   let memPos = memStartPos.cleanMemRef
-  ? k.cpt.opcodeGastCost(Mload,
+  ? k.cpt.opcodeGasCost(Mload,
     k.cpt.gasCosts[Mload].m_handler(k.cpt.memory.len, memPos, 32),
     reason = "MLOAD: GasVeryLow + memory expansion")
 
@@ -145,7 +145,7 @@ proc mstoreOp (k: var VmCtx): EvmResultVoid =
   let (memStartPos, value) = ? k.cpt.stack.popInt(2)
 
   let memPos = memStartPos.cleanMemRef
-  ? k.cpt.opcodeGastCost(Mstore,
+  ? k.cpt.opcodeGasCost(Mstore,
     k.cpt.gasCosts[Mstore].m_handler(k.cpt.memory.len, memPos, 32),
     reason = "MSTORE: GasVeryLow + memory expansion")
 
@@ -158,7 +158,7 @@ proc mstore8Op (k: var VmCtx): EvmResultVoid =
   let (memStartPos, value) = ? k.cpt.stack.popInt(2)
 
   let memPos = memStartPos.cleanMemRef
-  ? k.cpt.opcodeGastCost(Mstore8,
+  ? k.cpt.opcodeGasCost(Mstore8,
     k.cpt.gasCosts[Mstore8].m_handler(k.cpt.memory.len, memPos, 1),
     reason = "MSTORE8: GasVeryLow + memory expansion")
 
@@ -181,7 +181,7 @@ proc sloadEIP2929Op (k: var VmCtx): EvmResultVoid =
     cpt = k.cpt
     slot = ? cpt.stack.popInt()
     gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
-  ? cpt.opcodeGastCost(Sload, gasCost, reason = "sloadEIP2929")
+  ? cpt.opcodeGasCost(Sload, gasCost, reason = "sloadEIP2929")
   cpt.stack.push cpt.getStorage(slot)
 
 # -------
@@ -305,7 +305,7 @@ proc mCopyOp (k: var VmCtx): EvmResultVoid =
   let (dstPos, srcPos, len) =
     (dst.cleanMemRef, src.cleanMemRef, size.cleanMemRef)
 
-  ? k.cpt.opcodeGastCost(Mcopy,
+  ? k.cpt.opcodeGasCost(Mcopy,
     k.cpt.gasCosts[Mcopy].m_handler(k.cpt.memory.len, max(dstPos, srcPos), len),
     reason = "Mcopy fee")
 

@@ -25,8 +25,8 @@ import
   ../nimbus/transaction/call_evm
 
 template testPush(value: untyped, expected: untyped): untyped =
-  privateAccess(EvmStackRef)
-  var stack = EvmStackRef.new()
+  privateAccess(EvmStack)
+  var stack = EvmStack.init()
   check stack.push(value).isOk
   check(stack.values == @[expected])
 
@@ -44,14 +44,14 @@ proc runStackTests() =
       testPush("ves".toBytes, "ves".toBytes.bigEndianToInt)
 
     test "push does not allow stack to exceed 1024":
-      var stack = EvmStackRef.new()
+      var stack = EvmStack.init()
       for z in 0 ..< 1024:
         check stack.push(z.uint).isOk
       check(stack.len == 1024)
       check stack.push(1025).error.code == EvmErrorCode.StackFull
 
     test "dup does not allow stack to exceed 1024":
-      var stack = EvmStackRef.new()
+      var stack = EvmStack.init()
       check stack.push(1.u256).isOk
       for z in 0 ..< 1023:
         check stack.dup(1).isOk
@@ -59,14 +59,14 @@ proc runStackTests() =
       check stack.dup(1).error.code == EvmErrorCode.StackFull
 
     test "pop returns latest stack item":
-      var stack = EvmStackRef.new()
+      var stack = EvmStack.init()
       for element in @[1'u, 2'u, 3'u]:
         check stack.push(element).isOk
       check(stack.popInt.get == 3.u256)
 
     test "swap correct":
-      privateAccess(EvmStackRef)
-      var stack = EvmStackRef.new()
+      privateAccess(EvmStack)
+      var stack = EvmStack.init()
       for z in 0 ..< 5:
         check stack.push(z.uint).isOk
       check(stack.values == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256])
@@ -76,8 +76,8 @@ proc runStackTests() =
       check(stack.values == @[0.u256, 4.u256, 2.u256, 1.u256, 3.u256])
 
     test "dup correct":
-      privateAccess(EvmStackRef)
-      var stack = EvmStackRef.new()
+      privateAccess(EvmStack)
+      var stack = EvmStack.init()
       for z in 0 ..< 5:
         check stack.push(z.uint).isOk
       check(stack.values == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256])
@@ -87,30 +87,30 @@ proc runStackTests() =
       check(stack.values == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256, 4.u256, 1.u256])
 
     test "pop raises InsufficientStack appropriately":
-      var stack = EvmStackRef.new()
+      var stack = EvmStack.init()
       check stack.popInt().error.code == EvmErrorCode.StackInsufficient
 
     test "swap raises InsufficientStack appropriately":
-      var stack = EvmStackRef.new()
+      var stack = EvmStack.init()
       check stack.swap(0).error.code == EvmErrorCode.StackInsufficient
 
     test "dup raises InsufficientStack appropriately":
-      var stack = EvmStackRef.new()
+      var stack = EvmStack.init()
       check stack.dup(0).error.code == EvmErrorCode.StackInsufficient
 
     test "binary operations raises InsufficientStack appropriately":
       # https://github.com/status-im/nimbus/issues/31
       # ./tests/fixtures/VMTests/vmArithmeticTest/mulUnderFlow.json
 
-      var stack = EvmStackRef.new()
+      var stack = EvmStack.init()
       check stack.push(123).isOk
       check stack.popInt(2).error.code == EvmErrorCode.StackInsufficient
 
-proc memory32: EvmMemoryRef =
-  result = EvmMemoryRef.new(32)
+proc memory32: EvmMemory =
+  result = EvmMemory.init(32)
 
-proc memory128: EvmMemoryRef =
-  result = EvmMemoryRef.new(123)
+proc memory128: EvmMemory =
+  result = EvmMemory.init(123)
 
 proc runMemoryTests() =
   suite "Memory tests":
@@ -126,7 +126,7 @@ proc runMemoryTests() =
       check mem.write(startPos = 128, value = 1.byte).error.code == EvmErrorCode.MemoryFull
 
     test "extends appropriately extends memory":
-      var mem = EvmMemoryRef.new()
+      var mem = EvmMemory.init()
       # Test extends to 32 byte array: 0 < (start_position + size) <= 32
       mem.extend(startPos = 0, size = 10)
       check(mem.bytes == repeat(0.byte, 32))

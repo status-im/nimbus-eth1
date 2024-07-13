@@ -46,9 +46,9 @@ type
     StoData                          ## Slot storage data
 
   PayloadRef* = ref object of RootRef
-    ## The payload type depends on the sub-tree used. The `VertesID(1)` rooted
-    ## sub-tree only has `AccountData` type payload, while all other sub-trees
-    ## have `RawData` payload.
+    ## The payload type depends on the sub-tree used. The `VertexID(1)` rooted
+    ## sub-tree only has `AccountData` type payload, stoID-based have StoData
+    ## while generic have RawData
     case pType*: PayloadType
     of RawData:
       rawBlob*: Blob                 ## Opaque data, default value

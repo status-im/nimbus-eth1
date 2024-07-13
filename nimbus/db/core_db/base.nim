@@ -25,7 +25,7 @@ export
   #CoreDbCaptRef,
   CoreDbCtxRef,
   CoreDbErrorCode,
-  CoreDbErrorRef,
+  CoreDbError,
   CoreDbKvtRef,
   CoreDbMptRef,
   CoreDbPersistentTypes,
@@ -120,11 +120,11 @@ proc finish*(db: CoreDbRef; eradicate = false) =
   CoreDbAccRef(db.ctx).call(finish, db.ctx.mpt, eradicate)
   db.ifTrackNewApi: debug logTxt, api, elapsed
 
-proc `$$`*(e: CoreDbErrorRef): string =
+proc `$$`*(e: CoreDbError): string =
   ## Pretty print error symbol, note that this directive may have side effects
   ## as it calls a backend function.
   ##
-  if e.isNil: "$ø" else: e.toStr()
+  e.toStr()
 
 proc persistent*(
     db: CoreDbRef;

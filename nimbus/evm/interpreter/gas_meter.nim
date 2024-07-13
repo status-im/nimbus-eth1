@@ -19,9 +19,12 @@ func init*(m: var GasMeter, startGas: GasInt) =
   m.gasRemaining = startGas
   m.gasRefunded = 0
 
-func consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string): EvmResultVoid =
+func consumeGas*(
+    gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid =
+  # TODO report reason - consumeGas is a hotspot in EVM execution so it has to
+  #      be done carefully
   if amount > gasMeter.gasRemaining:
-    return err(memErr(OutOfGas))
+    return err(gasErr(OutOfGas))
   gasMeter.gasRemaining -= amount
   ok()
 

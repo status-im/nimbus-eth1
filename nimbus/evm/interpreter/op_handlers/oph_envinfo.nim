@@ -55,7 +55,7 @@ proc balanceEIP2929Op (k: var VmCtx): EvmResultVoid =
     address = ? cpt.stack.popAddress()
     gasCost = cpt.gasEip2929AccountCheck(address)
 
-  ? cpt.opcodeGastCost(Balance, gasCost, reason = "Balance EIP2929")
+  ? cpt.opcodeGasCost(Balance, gasCost, reason = "Balance EIP2929")
   cpt.stack.push cpt.getBalance(address)
 
 # ------------------
@@ -106,7 +106,7 @@ proc callDataCopyOp (k: var VmCtx): EvmResultVoid =
   let (memPos, copyPos, len) =
     (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
-  ? k.cpt.opcodeGastCost(CallDataCopy,
+  ? k.cpt.opcodeGasCost(CallDataCopy,
     k.cpt.gasCosts[CallDataCopy].m_handler(k.cpt.memory.len, memPos, len),
     reason = "CallDataCopy fee")
 
@@ -130,7 +130,7 @@ proc codeCopyOp (k: var VmCtx): EvmResultVoid =
   let (memPos, copyPos, len) =
     (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
-  ? cpt.opcodeGastCost(CodeCopy,
+  ? cpt.opcodeGasCost(CodeCopy,
     cpt.gasCosts[CodeCopy].m_handler(cpt.memory.len, memPos, len),
     reason = "CodeCopy fee")
 
@@ -158,7 +158,7 @@ proc extCodeSizeEIP2929Op (k: var VmCtx): EvmResultVoid =
     address = ? cpt.stack.popAddress()
     gasCost = cpt.gasEip2929AccountCheck(address)
 
-  ? cpt.opcodeGastCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
+  ? cpt.opcodeGasCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
   cpt.stack.push cpt.getCodeSize(address)
 
 # -----------
@@ -172,7 +172,7 @@ proc extCodeCopyOp (k: var VmCtx): EvmResultVoid =
     (memPos, codePos, len) =
       (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
 
-  ? cpt.opcodeGastCost(ExtCodeCopy,
+  ? cpt.opcodeGasCost(ExtCodeCopy,
       cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len),
       reason = "ExtCodeCopy fee")
 
@@ -192,7 +192,7 @@ proc extCodeCopyEIP2929Op (k: var VmCtx): EvmResultVoid =
 
     gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
                     cpt.gasEip2929AccountCheck(address)
-  ? cpt.opcodeGastCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
+  ? cpt.opcodeGasCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
 
   let code = cpt.getCode(address)
   cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
@@ -215,7 +215,7 @@ proc returnDataCopyOp (k: var VmCtx): EvmResultVoid =
     gasCost = k.cpt.gasCosts[ReturnDataCopy].m_handler(
       k.cpt.memory.len, memPos, len)
 
-  ? k.cpt.opcodeGastCost(ReturnDataCopy, gasCost, reason = "returnDataCopy fee")
+  ? k.cpt.opcodeGasCost(ReturnDataCopy, gasCost, reason = "returnDataCopy fee")
 
   if copyPos + len > k.cpt.returnData.len:
     return err(opErr(OutOfBounds))
@@ -239,7 +239,7 @@ proc extCodeHashEIP2929Op (k: var VmCtx): EvmResultVoid =
     address = ? k.cpt.stack.popAddress()
     gasCost = cpt.gasEip2929AccountCheck(address)
 
-  ? cpt.opcodeGastCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
+  ? cpt.opcodeGasCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
   cpt.stack.push cpt.getCodeHash(address)
 
 # ------------------------------------------------------------------------------
