@@ -38,7 +38,7 @@ proc rpcCallEvm*(args: TransactionArgs,
   var dbTx = com.db.ctx.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
-  ok(runComputation(params))
+  ok(runComputation(params, CallResult))
 
 proc rpcCallEvm*(args: TransactionArgs,
                  header: common.BlockHeader,
@@ -50,7 +50,7 @@ proc rpcCallEvm*(args: TransactionArgs,
   var dbTx = com.db.ctx.newTransaction()
   defer: dbTx.dispose() # always dispose state changes
 
-  ok(runComputation(params))
+  ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(args: TransactionArgs,
                      header: common.BlockHeader,
@@ -125,8 +125,8 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
     params.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
-    let res = runComputation(params)
-    ok(res.isError)
+    let res = runComputation(params, string)
+    ok(res.len > 0)
 
   # Execute the binary search and hone in on an executable gas limit
   while lo+1 < hi:
@@ -191,11 +191,10 @@ proc txCallEvm*(tx: Transaction,
                 vmState: BaseVMState): GasInt =
   let
     call = callParamsForTx(tx, sender, vmState)
-    res = runComputation(call)
-  res.gasUsed
+  runComputation(call, GasInt)
 
 proc testCallEvm*(tx: Transaction,
                   sender: EthAddress,
                   vmState: BaseVMState): CallResult =
   let call = callParamsForTest(tx, sender, vmState)
-  runComputation(call)
+  runComputation(call, CallResult)

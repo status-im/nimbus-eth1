@@ -139,7 +139,7 @@ proc expOp(k: var VmCtx): EvmResultVoid =
   ## 0x0A, Exponentiation
   let (base, exponent) = ? k.cpt.stack.popInt(2)
 
-  ? k.cpt.opcodeGastCost(Exp,
+  ? k.cpt.opcodeGasCost(Exp,
     k.cpt.gasCosts[Exp].d_handler(exponent),
     reason = "EXP: exponent bytes")
 

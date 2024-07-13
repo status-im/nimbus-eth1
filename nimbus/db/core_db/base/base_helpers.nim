@@ -69,8 +69,8 @@ template call*(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped 
 
 # ---------------
 
-func toError*(e: KvtError; s: string; error = Unspecified): CoreDbErrorRef =
-  CoreDbErrorRef(
+func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
+  CoreDbError(
     error:    error,
     ctx:      s,
     isAristo: false,
@@ -106,8 +106,8 @@ template call*(
 
 # ---------------
 
-func toError*(e: AristoError; s: string; error = Unspecified): CoreDbErrorRef =
-  CoreDbErrorRef(
+func toError*(e: AristoError; s: string; error = Unspecified): CoreDbError =
+  CoreDbError(
     error:    error,
     ctx:      s,
     isAristo: true,

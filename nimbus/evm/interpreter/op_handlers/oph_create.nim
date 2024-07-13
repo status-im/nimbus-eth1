@@ -110,7 +110,7 @@ proc createOp(k: var VmCtx): EvmResultVoid =
       memLength:      memLen)
     gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
 
-  ? cpt.opcodeGastCost(Create,
+  ? cpt.opcodeGasCost(Create,
     gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
@@ -192,7 +192,7 @@ proc create2Op(k: var VmCtx): EvmResultVoid =
   var gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
   gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
-  ? cpt.opcodeGastCost(Create2,
+  ? cpt.opcodeGasCost(Create2,
     gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)

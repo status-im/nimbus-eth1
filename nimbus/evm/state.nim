@@ -326,9 +326,8 @@ proc captureGasCost*(vmState: BaseVMState,
                     comp: Computation,
                     op: Op, gasCost: GasInt, gasRemaining: GasInt,
                     depth: int) =
-  if vmState.tracingEnabled:
-    let fixed = vmState.gasCosts[op].kind == GckFixed
-    vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
+  let fixed = vmState.gasCosts[op].kind == GckFixed
+  vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
 
 proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: int64,

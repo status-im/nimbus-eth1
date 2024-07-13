@@ -43,7 +43,7 @@ proc returnOp(k: var VmCtx): EvmResultVoid =
   let (startPos, size) = ? k.cpt.stack.popInt(2)
 
   let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-  ? k.cpt.opcodeGastCost(Return,
+  ? k.cpt.opcodeGasCost(Return,
     k.cpt.gasCosts[Return].m_handler(k.cpt.memory.len, pos, len),
     reason = "RETURN")
   k.cpt.memory.extend(pos, len)
@@ -57,7 +57,7 @@ proc revertOp(k: var VmCtx): EvmResultVoid =
   let (startPos, size) = ? k.cpt.stack.popInt(2)
 
   let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-  ? k.cpt.opcodeGastCost(Revert,
+  ? k.cpt.opcodeGasCost(Revert,
     k.cpt.gasCosts[Revert].m_handler(k.cpt.memory.len, pos, len),
     reason = "REVERT")
 
@@ -92,7 +92,7 @@ proc selfDestructEIP150Op(k: var VmCtx): EvmResultVoid =
     condition = not cpt.accountExists(beneficiary)
     gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
-  ? cpt.opcodeGastCost(SelfDestruct,
+  ? cpt.opcodeGasCost(SelfDestruct,
     gasCost, reason = "SELFDESTRUCT EIP150")
   cpt.selfDestruct(beneficiary)
   ok()
@@ -109,7 +109,7 @@ proc selfDestructEIP161Op(k: var VmCtx): EvmResultVoid =
     condition = isDead and not balance.isZero
     gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
-  ? cpt.opcodeGastCost(SelfDestruct,
+  ? cpt.opcodeGasCost(SelfDestruct,
     gasCost, reason = "SELFDESTRUCT EIP161")
   cpt.selfDestruct(beneficiary)
   ok()
@@ -137,7 +137,7 @@ proc selfDestructEIP2929Op(k: var VmCtx): EvmResultVoid =
         db.accessList(beneficiary)
         gasCost = gasCost + ColdAccountAccessCost
 
-  ? cpt.opcodeGastCost(SelfDestruct,
+  ? cpt.opcodeGasCost(SelfDestruct,
     gasCost, reason = "SELFDESTRUCT EIP2929")
   cpt.selfDestruct(beneficiary)
   ok()

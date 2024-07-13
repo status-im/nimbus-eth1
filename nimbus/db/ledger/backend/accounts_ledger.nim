@@ -623,12 +623,11 @@ proc selfDestructLen*(ac: AccountsLedgerRef): int =
 proc addLogEntry*(ac: AccountsLedgerRef, log: Log) =
   ac.savePoint.logEntries.add log
 
-proc logEntries*(ac: AccountsLedgerRef): seq[Log] =
+proc logEntries*(ac: AccountsLedgerRef): lent seq[Log] =
   ac.savePoint.logEntries
 
 proc getAndClearLogEntries*(ac: AccountsLedgerRef): seq[Log] =
-  result = ac.savePoint.logEntries
-  ac.savePoint.logEntries.setLen(0)
+  swap(result, ac.savePoint.logEntries)
 
 proc ripemdSpecial*(ac: AccountsLedgerRef) =
   ac.ripemdSpecial = true

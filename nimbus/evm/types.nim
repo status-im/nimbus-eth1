@@ -72,8 +72,8 @@ type
     # The execution computation
     vmState*:               BaseVMState
     msg*:                   Message
-    memory*:                EvmMemoryRef
-    stack*:                 EvmStackRef
+    memory*:                EvmMemory
+    stack*:                 EvmStack
     returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
@@ -96,7 +96,7 @@ type
     evmcStatus*: evmc_status_code
     info*      : string
     burnsGas*  : bool
-  
+
   GasMeter* = object
     gasRefunded*: int64
     gasRemaining*: GasInt
@@ -124,7 +124,7 @@ type
     DisableStateDiff
     EnableAccount
     DisableReturnData
-    
+
   TracerRef* = ref object of RootObj
     flags*: set[TracerFlags]
 

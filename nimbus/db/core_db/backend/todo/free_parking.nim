@@ -31,15 +31,15 @@ import
 # ------------------------------------------------------------------------------
 
 when false:
-  func toError(e: AristoError; s: string; error = Unspecified): CoreDbErrorRef =
-    CoreDbErrorRef(
+  func toError(e: AristoError; s: string; error = Unspecified): CoreDbError =
+    CoreDbError(
       error:    error,
       ctx:      s,
       isAristo: true,
       aErr:     e)
 
-  func toError(e: KvtError; s: string; error = Unspecified): CoreDbErrorRef =
-    CoreDbErrorRef(
+  func toError(e: KvtError; s: string; error = Unspecified): CoreDbError =
+    CoreDbError(
       error:    error,
       ctx:      s,
       isAristo: false,

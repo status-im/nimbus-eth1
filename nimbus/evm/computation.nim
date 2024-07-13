@@ -140,7 +140,7 @@ template getBlobBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.txCtx.blobBaseFee
 
-proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 {.gcsafe, raises:[].} =
+proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 =
   when evmc_enabled:
     let
       blockNumber = BlockNumber c.host.getTxContext().block_number
@@ -229,8 +229,8 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
   new result
   result.vmState = vmState
   result.msg = message
-  result.memory = EvmMemoryRef.new()
-  result.stack = EvmStackRef.new()
+  result.memory = EvmMemory.init()
+  result.stack = EvmStack.init()
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.sysCall = sysCall
@@ -248,8 +248,8 @@ func newComputation*(vmState: BaseVMState, sysCall: bool,
   new result
   result.vmState = vmState
   result.msg = message
-  result.memory = EvmMemoryRef.new()
-  result.stack = EvmStackRef.new()
+  result.memory = EvmMemory.init()
+  result.stack = EvmStack.init()
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.code = CodeStream.init(code)
@@ -418,7 +418,7 @@ proc refundSelfDestruct*(c: Computation) =
 func tracingEnabled*(c: Computation): bool =
   c.vmState.tracingEnabled
 
-func traceOpCodeStarted*(c: Computation, op: Op): int {.raises: [].} =
+func traceOpCodeStarted*(c: Computation, op: Op): int =
   c.vmState.captureOpStart(
     c,
     c.code.pc - 1,
@@ -426,7 +426,7 @@ func traceOpCodeStarted*(c: Computation, op: Op): int {.raises: [].} =
     c.gasMeter.gasRemaining,
     c.msg.depth + 1)
 
-func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.raises: [].} =
+func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) =
   c.vmState.captureOpEnd(
     c,
     c.code.pc - 1,
@@ -437,7 +437,7 @@ func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) {.raises: [].} =
     c.msg.depth + 1,
     opIndex)
 
-func traceError*(c: Computation) {.raises: [].} =
+func traceError*(c: Computation) =
   c.vmState.captureFault(
     c,
     c.code.pc - 1,
@@ -451,15 +451,15 @@ func traceError*(c: Computation) {.raises: [].} =
 func prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)
 
-func opcodeGastCost*(
-    c: Computation, op: Op, gasCost: GasInt, reason: string): EvmResultVoid
-    {.raises: [].} =
-  c.vmState.captureGasCost(
-    c,
-    op,
-    gasCost,
-    c.gasMeter.gasRemaining,
-    c.msg.depth + 1)
+func opcodeGasCost*(
+    c: Computation, op: Op, gasCost: GasInt, reason: static string): EvmResultVoid =
+  if c.vmState.tracingEnabled:
+    c.vmState.captureGasCost(
+      c,
+      op,
+      gasCost,
+      c.gasMeter.gasRemaining,
+      c.msg.depth + 1)
   c.gasMeter.consumeGas(gasCost, reason)
 
 # ------------------------------------------------------------------------------

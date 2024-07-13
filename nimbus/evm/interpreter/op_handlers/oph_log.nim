@@ -58,7 +58,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
   if memPos < 0 or len < 0:
     return err(opErr(OutOfBounds))
 
-  ? c.opcodeGastCost(opcode,
+  ? c.opcodeGasCost(opcode,
     c.gasCosts[opcode].m_handler(c.memory.len, memPos, len),
     reason = "Memory expansion, Log topic and data gas cost")
   c.memory.extend(memPos, len)
