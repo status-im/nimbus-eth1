@@ -16,136 +16,98 @@ import
   eth/common/[eth_types, eth_types_rlp],
   ../../rpc/rpc_calls/rpc_trace_calls,
   ../../../nimbus/common/chain_config,
-  ./state_bridge/state_diff,
+  ./state_bridge/[state_diff, world_state],
   ./[portal_bridge_conf, portal_bridge_common]
-
-proc getAccountOrDefault(
-    accountsTrie: HexaryTrie, addressHash: openArray[byte]
-): Account {.raises: [RlpError].} =
-  let accountBytes = accountsTrie.get(addressHash)
-  if accountBytes.len() == 0:
-    newAccount()
-  else:
-    rlp.decode(accountBytes, Account)
 
 # For now just using in-memory state tries
 # To-Do: Use RocksDb as the db backend
 # To-Do: Use location based trie implementation where path is used
 # instead of node hash is used as key for each value in the trie.
-proc toState*(
-    alloc: GenesisAlloc
-): (HexaryTrie, Table[EthAddress, HexaryTrie]) {.raises: [RlpError].} =
-  var accountsTrie = initHexaryTrie(newMemoryDB())
-  var storageTries = Table[EthAddress, HexaryTrie]()
-
+proc applyGenesisAccounts*(
+    worldState: WorldStateRef, alloc: GenesisAlloc
+) {.raises: [RlpError].} =
   for address, genAccount in alloc:
-    var storageRoot = EMPTY_ROOT_HASH
-    var codeHash = EMPTY_CODE_HASH
+    var accState = worldState.getAccount(address)
+
+    accState.setBalance(genAccount.balance)
+    accState.setNonce(genAccount.nonce)
 
     if genAccount.code.len() > 0:
-      var storageTrie = initHexaryTrie(newMemoryDB())
       for slotKey, slotValue in genAccount.storage:
-        let key = keccakHash(toBytesBE(slotKey)).data
-        let value = rlp.encode(slotValue)
-        storageTrie.put(key, value)
-      storageTries[address] = storageTrie
-      storageRoot = storageTrie.rootHash()
-      codeHash = keccakHash(genAccount.code)
+        accState.setStorage(slotKey, slotValue)
+      accState.setCode(genAccount.code)
 
-    let account = Account(
-      nonce: genAccount.nonce,
-      balance: genAccount.balance,
-      storageRoot: storageRoot,
-      codeHash: codeHash,
-    )
-    let key = keccakHash(address).data
-    let value = rlp.encode(account)
-    accountsTrie.put(key, value)
+    worldState.setAccount(address, accState)
 
-  (accountsTrie, storageTries)
-
-proc applyStateUpdates(
-    accountsTrie: var HexaryTrie,
-    storageTries: var Table[EthAddress, HexaryTrie],
-    bytecode: var Table[EthAddress, seq[byte]],
-    stateDiff: StateDiffRef,
+proc applyStateDiff(
+    worldState: WorldStateRef, stateDiff: StateDiffRef
 ) {.raises: [RlpError].} =
-  if stateDiff == nil:
-    return
-
-  # apply state changes
   for address, balanceDiff in stateDiff.balances:
     let
-      addressHash = keccakHash(address).data
       nonceDiff = stateDiff.nonces.getOrDefault(address)
       codeDiff = stateDiff.code.getOrDefault(address)
       storageDiff = stateDiff.storage.getOrDefault(address)
 
     var
       deleteAccount = false
-      account = accountsTrie.getAccountOrDefault(addressHash)
+      accState = worldState.getAccount(address)
 
     if balanceDiff.kind == create or balanceDiff.kind == update:
-      account.balance = balanceDiff.after
+      accState.setBalance(balanceDiff.after)
     elif balanceDiff.kind == delete:
       deleteAccount = true
 
     if nonceDiff.kind == create or nonceDiff.kind == update:
-      account.nonce = nonceDiff.after
+      accState.setNonce(nonceDiff.after)
     elif nonceDiff.kind == delete:
-      doAssert deleteAccount == true # should already be set to true from balanceDiff
+      doAssert deleteAccount == true
 
     if codeDiff.kind == create or codeDiff.kind == update:
-      bytecode[address] = codeDiff.after
-      account.codeHash = keccakHash(codeDiff.after)
+      accState.setCode(codeDiff.after)
     elif codeDiff.kind == delete:
-      doAssert deleteAccount == true # should already be set to true from balanceDiff
-
-    var storageTrie = storageTries.getOrDefault(address, initHexaryTrie(newMemoryDB()))
+      doAssert deleteAccount == true
 
     for slotKey, slotDiff in storageDiff:
-      let slotHash = keccakHash(toBytesBE(slotKey)).data
-
       if slotDiff.kind == create or slotDiff.kind == update:
         if slotDiff.after == 0:
-          storageTrie.del(slotHash)
+          accState.deleteStorage(slotKey)
         else:
-          storageTrie.put(slotHash, rlp.encode(slotDiff.after))
+          accState.setStorage(slotKey, slotDiff.after)
       elif slotDiff.kind == delete:
-        storageTrie.del(slotHash)
-
-    account.storageRoot = storageTrie.rootHash()
-    storageTries[address] = storageTrie
+        accState.deleteStorage(slotKey)
 
     if deleteAccount:
-      accountsTrie.del(addressHash)
-      storageTries.del(address)
-      bytecode.del(address)
+      worldState.deleteAccount(address)
     else:
-      accountsTrie.put(addressHash, rlp.encode(account))
+      worldState.setAccount(address, accState)
 
 proc applyBlockRewards(
-    accountsTrie: var HexaryTrie,
+    worldState: WorldStateRef,
     blockObject: BlockObject,
     uncleBlocks: openArray[BlockObject],
 ) {.raises: [RlpError].} =
-  const baseReward = 5.u256 * pow(10.u256, 18)
+  const baseReward = u256(5) * pow(u256(10), 18)
 
   block:
     # calculate block miner reward
-    let blockMinerAddrHash = keccakHash(blockObject.miner.EthAddress).data
-    var account = accountsTrie.getAccountOrDefault(blockMinerAddrHash)
-    account.balance += baseReward + (baseReward shr 5) * uncleBlocks.len().u256
-    accountsTrie.put(blockMinerAddrHash, rlp.encode(account))
+    let
+      minerAddress = EthAddress(blockObject.miner)
+      uncleInclusionReward = (baseReward shr 5) * u256(uncleBlocks.len())
+
+    var accState = worldState.getAccount(minerAddress)
+    accState.addBalance(baseReward + uncleInclusionReward)
+    worldState.setAccount(minerAddress, accState)
 
   # calculate uncle miners rewards
   for i, uncleBlock in uncleBlocks:
-    let uncleMinerAddrHash = keccakHash(uncleBlock.miner.EthAddress).data
-    var account = accountsTrie.getAccountOrDefault(uncleMinerAddrHash)
-    account.balance +=
-      ((8 + uncleBlock.number.uint64 - blockObject.number.uint64).u256 * baseReward) shr
-      3
-    accountsTrie.put(uncleMinerAddrHash, rlp.encode(account))
+    let
+      uncleMinerAddress = EthAddress(uncleBlock.miner)
+      uncleReward =
+        (u256(8 + uint64(uncleBlock.number) - uint64(blockObject.number)) * baseReward) shr
+        3
+    var accState = worldState.getAccount(uncleMinerAddress)
+    accState.addBalance(uncleReward)
+    worldState.setAccount(uncleMinerAddress, accState)
 
 proc runBackfillLoop(
     #portalClient: RpcClient,
@@ -153,10 +115,10 @@ proc runBackfillLoop(
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
   try:
-    let genesisAccounts = genesisBlockForNetwork(MainNet).alloc
-    var
-      (accountsTrie, storageTries) = toState(genesisAccounts)
-      bytecode: Table[EthAddress, seq[byte]]
+    let
+      worldState = WorldStateRef.init(newMemoryDB())
+      genesisAccounts = genesisBlockForNetwork(MainNet).alloc
+    applyGenesisAccounts(worldState, genesisAccounts)
 
     # for now we can only start from block 1 because the state is only in memory
     var currentBlockNumber: uint64 = 1
@@ -191,13 +153,20 @@ proc runBackfillLoop(
         await sleepAsync(1.seconds)
         continue
 
-      if currentBlockNumber mod 1000 == 0:
+      if currentBlockNumber mod 5000 == 0:
         echo "Current block number: ", currentBlockNumber
 
+      # if currentBlockNumber == 50111:
+      #   echo "stateDiffs.balances: ", stateDiffs[0].balances
+      #   echo "stateDiffs.nonces: ", stateDiffs[0].nonces
+      #   echo "stateDiffs.storage: ", stateDiffs[0].storage
+      #   echo "stateDiffs.codes: ", stateDiffs[0].code
+
       for stateDiff in stateDiffs:
-        applyStateUpdates(accountsTrie, storageTries, bytecode, stateDiff)
-      applyBlockRewards(accountsTrie, blockObject, uncleBlocks)
-      doAssert(blockObject.stateRoot.bytes() == accountsTrie.rootHash.data)
+        applyStateDiff(worldState, stateDiff)
+      applyBlockRewards(worldState, blockObject, uncleBlocks)
+
+      doAssert(blockObject.stateRoot.bytes() == worldState.stateRoot.data)
 
       inc currentBlockNumber
   except CatchableError as e:

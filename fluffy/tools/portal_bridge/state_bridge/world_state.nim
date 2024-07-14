@@ -10,9 +10,42 @@
 import
   std/tables, stint, eth/[common, trie, trie/db], eth/common/[eth_types, eth_types_rlp]
 
+# Account State definition
+
+type AccountState* = ref object
+  account: Account
+  storageUpdates: Table[UInt256, UInt256]
+  code: seq[byte]
+  codeUpdated: bool
+
+proc init(T: type AccountState, account = newAccount()): T =
+  T(account: account, codeUpdated: false)
+
+proc setBalance*(accState: var AccountState, balance: UInt256) =
+  accState.account.balance = balance
+
+proc addBalance*(accState: var AccountState, balance: UInt256) =
+  accState.account.balance += balance
+
+proc setNonce*(accState: var AccountState, nonce: AccountNonce) =
+  accState.account.nonce = nonce
+
+proc setStorage*(accState: var AccountState, slotKey: UInt256, slotValue: UInt256) =
+  accState.storageUpdates[slotKey] = slotValue
+
+proc deleteStorage*(accState: var AccountState, slotKey: UInt256) =
+  # setting to zero has the effect of deleting the slot
+  accState.setStorage(slotKey, 0.u256)
+
+proc setCode*(accState: var AccountState, code: seq[byte]) =
+  accState.code = code
+  accState.codeUpdated = true
+
+# World State definition
+
 type
-  AccountHash* = KeccakHash
-  SlotKeyHash* = KeccakHash
+  AccountHash = KeccakHash
+  SlotKeyHash = KeccakHash
 
   WorldStateRef* = ref object
     db: TrieDatabaseRef
@@ -23,120 +56,60 @@ type
 proc init*(T: type WorldStateRef, db: TrieDatabaseRef): T =
   WorldStateRef(
     db: db,
-    accountsTrie: initHexaryTrie(db, isPruning = false),
+    accountsTrie: initHexaryTrie(newMemoryDB(), isPruning = false),
     storageTries: newTable[AccountHash, HexaryTrie](),
-    bytecode: newTable[AccountHash, seq[byte]],
+    bytecode: newTable[AccountHash, seq[byte]](),
   )
 
-proc getAccountKey*(address: EthAddress): AccountHash =
+template stateRoot*(state: WorldStateRef): KeccakHash =
+  state.accountsTrie.rootHash()
+
+template toAccountKey(address: EthAddress): AccountHash =
   keccakHash(address)
 
-proc getStorageKey*(slotKey: UInt256): SlotKeyHash =
+template toStorageKey(slotKey: UInt256): SlotKeyHash =
   keccakHash(toBytesBE(slotKey))
 
-# accounts - lookup by account hash
-
 proc getAccount*(
-    state: WorldStateRef, accountKey: AccountHash
-): Account {.raises: [RlpError].} =
+    state: WorldStateRef, address: EthAddress
+): AccountState {.raises: [RlpError].} =
+  let accountKey = toAccountKey(address)
+
   if state.accountsTrie.contains(accountKey.data):
-    rlp.decode(state.accountsTrie.get(accountKey.data), Account)
+    let accountBytes = state.accountsTrie.get(accountKey.data)
+    AccountState.init(rlp.decode(accountBytes, Account))
   else:
-    newAccount()
+    AccountState.init()
 
-proc setAccount(
-    state: WorldStateRef, accountKey: AccountHash, account: Account
+proc setAccount*(
+    state: WorldStateRef, address: EthAddress, accState: AccountState
 ) {.raises: [RlpError].} =
-  state.accountsTrie.put(accountKey.data, rlp.encode(account))
-
-proc setAccountBalance*(
-    state: WorldStateRef, accountKey: AccountHash, balance: UInt256
-) {.raises: [RlpError].} =
-  var account = state.getAccount(accountKey)
-  account.balance = balance
-  state.setAccount(accountKey, account)
-
-proc setAccountNonce*(
-    state: WorldStateRef, accountKey: AccountHash, nonce: AccountNonce
-) {.raises: [RlpError].} =
-  var account = state.getAccount(accountKey)
-  account.nonce = nonce
-  state.setAccount(accountKey, account)
-
-proc setAccountStorageRoot(
-    state: WorldStateRef, accountKey: AccountHash, storageRoot: KeccakHash
-) {.raises: [RlpError].} =
-  var account = state.getAccount(accountKey)
-  account.storageRoot = storageRoot
-  state.setAccount(accountKey, account)
-
-proc setAccountCodeHash(
-    state: WorldStateRef, accountKey: AccountHash, codeHash: KeccakHash
-) {.raises: [RlpError].} =
-  var account = state.getAccount(accountKey)
-  account.codeHash = codeHash
-  state.setAccount(accountKey, account)
-
-proc deleteAccount*(
-    state: WorldStateRef, accountKey: AccountHash
-) {.raises: [RlpError].} =
-  # TODO: review delete when updating db backend
-  state.accountsTrie.del(accountKey.data)
-  state.storageTries.del(accountKey)
-  state.bytecode.del(accountKey)
-
-# storage - lookup by account hash + slot hash
-
-proc getStorage*(
-    state: WorldStateRef, accountKey: AccountHash, storageKey: SlotKeyHash
-): UInt256 {.raises: [RlpError].} =
-  if not state.storageTries.contains(accountKey):
-    return 0.u256
-
-  let storageTrie = state.storageTries.getOrDefault(accountKey)
-  if not storageTrie.contains(storageKey.data):
-    return 0.u256
-
-  rlp.decode(storageTrie.get(storageKey.data), UInt256)
-
-proc deleteStorage*(
-    state: WorldStateRef, accountKey: AccountHash, storageKey: SlotKeyHash
-) {.raises: [RlpError].} =
-  if not state.storageTries.contains(accountKey):
-    return
-
-  var storageTrie = state.storageTries.getOrDefault(accountKey)
-  storageTrie.del(storageKey.data)
-
-proc setStorage*(
-    state: WorldStateRef,
-    accountKey: AccountHash,
-    storageKey: SlotKeyHash,
-    value: UInt256,
-) {.raises: [RlpError].} =
-  if value == 0.u256:
-    state.deleteStorage(accountKey, storageKey)
-    return
+  let accountKey = toAccountKey(address)
 
   if not state.storageTries.contains(accountKey):
     state.storageTries[accountKey] = initHexaryTrie(state.db)
 
   var storageTrie = state.storageTries.getOrDefault(accountKey)
-  storageTrie.put(storageKey.data, rlp.encode(value))
+  for k, v in accState.storageUpdates:
+    if v == 0.u256:
+      storageTrie.del(toStorageKey(k).data)
+    else:
+      storageTrie.put(toStorageKey(k).data, rlp.encode(v))
 
-  state.setAccountStorageRoot(accountKey, storageTrie.rootHash())
+  state.storageTries[accountKey] = storageTrie
 
-# bytecode - lookup by account hash
+  var accountToSave = accState.account
+  accountToSave.storageRoot = storageTrie.rootHash()
 
-proc getCode*(state: WorldStateRef, accountKey: AccountHash): seq[byte] =
-  state.bytecode.getOrDefault(accountKey, @[])
+  if accState.codeUpdated:
+    state.bytecode[accountKey] = accState.code
+    accountToSave.codeHash = keccakHash(accState.code)
 
-proc setCode*(
-    state: WorldStateRef, accountKey: AccountHash, code: seq[byte]
-) {.raises: [RlpError].} =
-  state.bytecode[accountKey] = code
-  state.setAccountCodeHash(accountKey, keccakHash(code))
+  state.accountsTrie.put(accountKey.data, rlp.encode(accountToSave))
 
-# TODO:
-# apply genesis state
-# apply state update
+proc deleteAccount*(state: WorldStateRef, address: EthAddress) {.raises: [RlpError].} =
+  let accountKey = toAccountKey(address)
+
+  state.accountsTrie.del(accountKey.data)
+  state.storageTries.del(accountKey)
+  state.bytecode.del(accountKey)
