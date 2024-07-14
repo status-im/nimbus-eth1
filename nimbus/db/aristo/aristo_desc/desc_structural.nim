@@ -24,7 +24,7 @@ type
     ## Generalised key-value pair for a sub-trie. The main trie is the
     ## sub-trie with `root=VertexID(1)`.
     leafTie*: LeafTie                ## Full `Patricia Trie` path root-to-leaf
-    payload*: PayloadRef             ## Leaf data payload (see below)
+    payload*: LeafPayload             ## Leaf data payload (see below)
 
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
@@ -34,7 +34,7 @@ type
 
   AristoAccount* = object
     ## Application relevant part of an Ethereum account. Note that the storage
-    ## data/tree reference is not part of the account (see `PayloadRef` below.)
+    ## data/tree reference is not part of the account (see `LeafPayload` below.)
     nonce*:     AccountNonce         ## Some `uint64` type
     balance*:   UInt256
     codeHash*:  Hash256
@@ -45,7 +45,7 @@ type
     AccountData                      ## `Aristo account` with vertex IDs links
     StoData                          ## Slot storage data
 
-  PayloadRef* = ref object of RootRef
+  LeafPayload* = object
     ## The payload type depends on the sub-tree used. The `VertexID(1)` rooted
     ## sub-tree only has `AccountData` type payload, stoID-based have StoData
     ## while generic have RawData
@@ -63,7 +63,7 @@ type
     case vType*: VertexType
     of Leaf:
       lPfx*: NibblesBuf              ## Portion of path segment
-      lData*: PayloadRef             ## Reference to data payload
+      lData*: LeafPayload             ## Reference to data payload
     of Extension:
       ePfx*: NibblesBuf              ## Portion of path segment
       eVid*: VertexID                ## Edge to vertex with ID `eVid`
@@ -115,7 +115,7 @@ type
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                        ## Last used vertex ID
 
-    accPyls*: Table[Hash256, PayloadRef] ## Account path -> VertexRef
+    accLeaves*: Table[Hash256, VertexRef]    ## Account path -> VertexRef
 
   LayerRef* = ref LayerObj
   LayerObj* = object
@@ -137,15 +137,11 @@ func hash*(node: NodeRef): Hash =
   cast[pointer](node).hash
 
 # ------------------------------------------------------------------------------
-# Public helpers: `NodeRef` and `PayloadRef`
+# Public helpers: `NodeRef` and `LeafPayload`
 # ------------------------------------------------------------------------------
 
-proc `==`*(a, b: PayloadRef): bool =
+proc `==`*(a, b: LeafPayload): bool =
   ## Beware, potential deep comparison
-  if a.isNil:
-    return b.isNil
-  if b.isNil:
-    return false
   if unsafeAddr(a) != unsafeAddr(b):
     if a.pType != b.pType:
       return false
@@ -204,20 +200,20 @@ proc `==`*(a, b: NodeRef): bool =
 # Public helpers, miscellaneous functions
 # ------------------------------------------------------------------------------
 
-func dup*(pld: PayloadRef): PayloadRef =
+func dup*(pld: LeafPayload): LeafPayload =
   ## Duplicate payload.
   case pld.pType:
   of RawData:
-    PayloadRef(
+    LeafPayload(
       pType:    RawData,
       rawBlob:  pld.rawBlob)
   of AccountData:
-    PayloadRef(
+    LeafPayload(
       pType:   AccountData,
       account: pld.account,
       stoID:   pld.stoID)
   of StoData:
-    PayloadRef(
+    LeafPayload(
       pType:   StoData,
       stoData: pld.stoData
     )

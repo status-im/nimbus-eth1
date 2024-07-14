@@ -28,18 +28,19 @@ proc xPfx(vtx: VertexRef): NibblesBuf =
 # -----------
 
 proc layersPutLeaf(
-    db: AristoDbRef, rvid: RootedVertexID, path: NibblesBuf, payload: PayloadRef
-) =
+    db: AristoDbRef, rvid: RootedVertexID, path: NibblesBuf, payload: LeafPayload
+): VertexRef =
   let vtx = VertexRef(vType: Leaf, lPfx: path, lData: payload)
   db.layersPutVtx(rvid, vtx)
+  vtx
 
 proc insertBranch(
     db: AristoDbRef, # Database, top layer
     linkID: RootedVertexID, # Vertex ID to insert
     linkVtx: VertexRef, # Vertex to insert
     path: NibblesBuf,
-    payload: PayloadRef, # Leaf data payload
-): Result[void, AristoError] =
+    payload: LeafPayload, # Leaf data payload
+): Result[VertexRef, AristoError] =
   ##
   ## Insert `Extension->Branch` vertex chain or just a `Branch` vertex
   ##
@@ -97,7 +98,7 @@ proc insertBranch(
       forkVtx.bVid[linkInx] = local
       db.layersPutVtx((linkID.root, local), linkDup)
 
-  block:
+  let leafVtx = block:
     let local = db.vidFetch(pristine = true)
     forkVtx.bVid[leafInx] = local
     db.layersPutLeaf((linkID.root, local), path.slice(1 + n), payload)
@@ -112,15 +113,15 @@ proc insertBranch(
   else:
     db.layersPutVtx(linkID, forkVtx)
 
-  ok()
+  ok(leafVtx)
 
 proc concatBranchAndLeaf(
     db: AristoDbRef, # Database, top layer
     brVid: RootedVertexID, # Branch vertex ID from from `Hike` top
     brVtx: VertexRef, # Branch vertex, linked to from `Hike`
     path: NibblesBuf,
-    payload: PayloadRef, # Leaf data payload
-): Result[void, AristoError] =
+    payload: LeafPayload, # Leaf data payload
+): Result[VertexRef, AristoError] =
   ## Append argument branch vertex passed as argument `(brID,brVtx)` and then
   ## a `Leaf` vertex derived from the argument `payload`.
   ##
@@ -137,9 +138,7 @@ proc concatBranchAndLeaf(
   brDup.bVid[nibble] = vid
 
   db.layersPutVtx(brVid, brDup)
-  db.layersPutLeaf((brVid.root, vid), path.slice(1), payload)
-
-  ok()
+  ok db.layersPutLeaf((brVid.root, vid), path.slice(1), payload)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -149,8 +148,8 @@ proc mergePayloadImpl*(
     db: AristoDbRef, # Database, top layer
     root: VertexID, # MPT state root
     path: openArray[byte], # Leaf item to add to the database
-    payload: PayloadRef, # Payload value
-): Result[void, AristoError] =
+    payload: LeafPayload, # Payload value
+): Result[VertexRef, AristoError] =
   ## Merge the argument `(root,path)` key-value-pair into the top level vertex
   ## table of the database `db`. The `path` argument is used to address the
   ## leaf vertex with the payload. It is stored or updated on the database
@@ -167,8 +166,7 @@ proc mergePayloadImpl*(
 
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
-      db.layersPutLeaf((root, cur), path, payload)
-      return ok()
+      return ok db.layersPutLeaf((root, cur), path, payload)
 
   template resetKeys() =
     # Reset cached hashes of touched verticies
@@ -182,28 +180,30 @@ proc mergePayloadImpl*(
 
     case vtx.vType
     of Leaf:
-      if path == vtx.lPfx:
-        # Replace the current vertex with a new payload
+      let leafVtx =
+        if path == vtx.lPfx:
+          # Replace the current vertex with a new payload
 
-        if vtx.lData == payload:
-          # TODO is this still needed? Higher levels should already be doing
-          #      these checks
-          return err(MergeLeafPathCachedAlready)
+          if vtx.lData == payload:
+            # TODO is this still needed? Higher levels should already be doing
+            #      these checks
+            return err(MergeLeafPathCachedAlready)
 
-        if root == VertexID(1):
-          # TODO can we avoid this hack? it feels like the caller should already
-          #      have set an appropriate stoID - this "fixup" feels risky,
-          #      specially from a caching point of view
-          payload.stoID = vtx.lData.stoID
+          var payload = payload
+          if root == VertexID(1):
+            # TODO can we avoid this hack? it feels like the caller should already
+            #      have set an appropriate stoID - this "fixup" feels risky,
+            #      specially from a caching point of view
+            payload.stoID = vtx.lData.stoID
 
-        db.layersPutLeaf((root, cur), path, payload)
+          db.layersPutLeaf((root, cur), path, payload)
 
-      else:
-        # Turn leaf into branch, leaves with possible ext prefix
-        ? db.insertBranch((root, cur), vtx, path, payload)
+        else:
+          # Turn leaf into branch, leaves with possible ext prefix
+          ? db.insertBranch((root, cur), vtx, path, payload)
 
       resetKeys()
-      return ok()
+      return ok(leafVtx)
 
     of Extension:
       if vtx.ePfx.len == path.sharedPrefixLen(vtx.ePfx):
@@ -211,10 +211,10 @@ proc mergePayloadImpl*(
         path = path.slice(vtx.ePfx.len)
         vtx = ?db.getVtxRc((root, cur))
       else:
-        ? db.insertBranch((root, cur), vtx, path, payload)
+        let leafVtx = ? db.insertBranch((root, cur), vtx, path, payload)
 
         resetKeys()
-        return ok()
+        return ok(leafVtx)
     of Branch:
       let
         nibble = path[0]
@@ -225,9 +225,9 @@ proc mergePayloadImpl*(
         path = path.slice(1)
         vtx = ?db.getVtxRc((root, next))
       else:
-        ? db.concatBranchAndLeaf((root, cur), vtx, path, payload)
+        let leafVtx = ? db.concatBranchAndLeaf((root, cur), vtx, path, payload)
         resetKeys()
-        return ok()
+        return ok(leafVtx)
 
   err(MergeHikeFailed)
 

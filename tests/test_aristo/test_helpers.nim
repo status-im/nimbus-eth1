@@ -168,7 +168,7 @@ func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
           leafTie: LeafTie(
             root:  rootVid,
             path:  it.accKey.to(PathID)),
-          payload: PayloadRef(pType: RawData, rawBlob: it.accBlob))))
+          payload: LeafPayload(pType: RawData, rawBlob: it.accBlob))))
 
 func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
   var (rootKey, rootVid) = (Hash256(), VertexID(0))
@@ -185,7 +185,7 @@ func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
             leafTie: LeafTie(
               root:  rootVid,
               path:  it.slotHash.to(PathID)),
-            payload: PayloadRef(pType: RawData, rawBlob: it.slotData))))
+            payload: LeafPayload(pType: RawData, rawBlob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = s.data.proof
 

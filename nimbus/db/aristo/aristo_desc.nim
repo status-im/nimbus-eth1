@@ -84,7 +84,7 @@ type
     # Debugging data below, might go away in future
     xMap*: Table[HashKey,HashSet[RootedVertexID]] ## For pretty printing/debugging
 
-    accPyls*: KeyedQueue[AccountKey, PayloadRef]
+    accLeaves*: KeyedQueue[AccountKey, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -132,9 +132,6 @@ func isValid*(vtx: VertexRef): bool =
 
 func isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)
-
-func isValid*(pld: PayloadRef): bool =
-  pld != PayloadRef(nil)
 
 func isValid*(pid: PathID): bool =
   pid != VOID_PATH_ID

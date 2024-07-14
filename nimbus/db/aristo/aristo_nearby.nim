@@ -72,7 +72,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
 
 # ------------------
 
-proc toLeafTiePayload(hike: Hike): (LeafTie,PayloadRef) =
+proc toLeafTiePayload(hike: Hike): (LeafTie,LeafPayload) =
   ## Shortcut for iterators. This function will gloriously crash unless the
   ## `hike` argument is complete.
   (LeafTie(root: hike.root, path: hike.to(NibblesBuf).pathToTag.value),
@@ -414,7 +414,7 @@ proc right*(
 iterator rightPairs*(
     db: AristoDbRef;                    # Database layer
     start = low(LeafTie);               # Before or at first value
-      ): (LeafTie,PayloadRef) =
+      ): (LeafTie,LeafPayload) =
   ## Traverse the sub-trie implied by the argument `start` with increasing
   ## order.
   var
@@ -507,7 +507,7 @@ proc left*(
 iterator leftPairs*(
     db: AristoDbRef;                    # Database layer
     start = high(LeafTie);              # Before or at first value
-      ): (LeafTie,PayloadRef) =
+      ): (LeafTie,LeafPayload) =
   ## Traverse the sub-trie implied by the argument `start` with decreasing
   ## order. It will stop at any error. In order to reproduce an error, one
   ## can run the function `left()` on the last returned `LiefTie` item with

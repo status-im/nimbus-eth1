@@ -36,11 +36,11 @@ func mustBeGeneric(
   ok()
 
 
-proc retrievePayload(
+proc retrieveLeaf(
     db: AristoDbRef;
     root: VertexID;
     path: openArray[byte];
-      ): Result[PayloadRef,AristoError] =
+      ): Result[VertexRef,AristoError] =
   if path.len == 0:
     return err(FetchPathInvalid)
 
@@ -51,35 +51,35 @@ proc retrievePayload(
       return err(error)
 
     if vtx.vType == Leaf:
-      return ok vtx.lData
+      return ok vtx
 
   return err(FetchPathNotFound)
 
 proc retrieveAccountPayload(
     db: AristoDbRef;
     accPath: Hash256;
-      ): Result[PayloadRef,AristoError] =
-  if (let pyl = db.layersGetAccPayload(accPath); pyl.isSome()):
+      ): Result[LeafPayload,AristoError] =
+  if (let pyl = db.layersGetAccLeaf(accPath); pyl.isSome()):
     if not pyl[].isValid():
       return err(FetchPathNotFound)
-    return ok pyl[]
+    return ok pyl[].lData
 
   let accKey = accPath.to(AccountKey)
-  if (let pyl = db.accPyls.lruFetch(accKey); pyl.isSome()):
+  if (let pyl = db.accLeaves.lruFetch(accKey); pyl.isSome()):
     if not pyl[].isValid():
       return err(FetchPathNotFound)
-    return ok pyl[]
+    return ok pyl[].lData
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
   let
-    payload = db.retrievePayload(VertexID(1), accPath.data).valueOr:
+    payload = db.retrieveLeaf(VertexID(1), accPath.data).valueOr:
       if error == FetchAccInaccessible:
-        discard db.accPyls.lruAppend(accKey, nil, accLruSize)
+        discard db.accLeaves.lruAppend(accKey, nil, accLruSize)
         return err(FetchPathNotFound)
       return err(error)
 
-  ok db.accPyls.lruAppend(accKey, payload, accLruSize)
+  ok db.accLeaves.lruAppend(accKey, payload, accLruSize).lData
 
 proc retrieveMerkleHash(
     db: AristoDbRef;
@@ -105,7 +105,7 @@ proc hasPayload(
     root: VertexID;
     path: openArray[byte];
       ): Result[bool,AristoError] =
-  let error = db.retrievePayload(root, path).errorOr:
+  let error = db.retrieveLeaf(root, path).errorOr:
     return ok(true)
 
   if error == FetchPathNotFound:
@@ -218,9 +218,9 @@ proc fetchGenericData*(
   ## indexed by `path`.
   ##
   ? root.mustBeGeneric()
-  let pyl = ? db.retrievePayload(root, path)
-  assert pyl.pType == RawData   # debugging only
-  ok pyl.rawBlob
+  let pyl = ? db.retrieveLeaf(root, path)
+  assert pyl.lData.pType == RawData   # debugging only
+  ok pyl.lData.rawBlob
 
 proc fetchGenericState*(
     db: AristoDbRef;
@@ -249,9 +249,9 @@ proc fetchStorageData*(
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
   ##
-  let pyl = ? db.retrievePayload(? db.fetchStorageID accPath, stoPath.data)
-  assert pyl.pType == StoData   # debugging only
-  ok pyl.stoData
+  let pyl = ? db.retrieveLeaf(? db.fetchStorageID accPath, stoPath.data)
+  assert pyl.lData.pType == StoData   # debugging only
+  ok pyl.lData.stoData
 
 proc fetchStorageState*(
     db: AristoDbRef;
