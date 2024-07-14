@@ -84,15 +84,15 @@ proc toNode*(
       return err(missing)
     return ok node
 
-  of Extension:
-    let
-      vid = vtx.eVid
-      key = db.getKey((root, vid), beOk=beKeyOk)
-    if not key.isValid:
-      return err(@[vid])
-    let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vid)
-    node.key[0] = key
-    return ok node
+  # of Extension:
+  #   let
+  #     vid = vtx.eVid
+  #     key = db.getKey((root, vid), beOk=beKeyOk)
+  #   if not key.isValid:
+  #     return err(@[vid])
+  #   let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vid)
+  #   node.key[0] = key
+  #   return ok node
 
 
 iterator subVids*(vtx: VertexRef): VertexID =
@@ -107,8 +107,6 @@ iterator subVids*(vtx: VertexRef): VertexID =
     for vid in vtx.bVid:
       if vid.isValid:
         yield vid
-  of Extension:
-    yield vtx.eVid
 
 # ---------------------
 

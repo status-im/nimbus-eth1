@@ -16,7 +16,7 @@
 import
   eth/common,
   results,
-  "."/[aristo_compute, aristo_constants, aristo_desc, aristo_init, aristo_merge]
+  "."/[aristo_compute, aristo_constants, aristo_desc, aristo_init, aristo_delete, aristo_merge]
 
 # ------------------------------------------------------------------------------
 # Public functions, signature generator
@@ -41,6 +41,20 @@ proc merkleSignAdd*(
   if sdb.error == AristoError(0):
     sdb.count.inc
     discard sdb.db.mergeGenericData(sdb.root, key, val).valueOr:
+      sdb.`error` = error
+      sdb.errKey = @key
+      return
+
+
+proc merkleSignDelete*(
+    sdb: MerkleSignRef;
+    key: openArray[byte];
+    ) =
+  ## Add key-value item to the signature list. The order of the items to add
+  ## is irrelevant.
+  if sdb.error == AristoError(0):
+    sdb.count.inc
+    discard sdb.db.deleteGenericData(sdb.root, key).valueOr:
       sdb.`error` = error
       sdb.errKey = @key
       return

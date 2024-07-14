@@ -109,12 +109,13 @@ proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
           pType:   RawData,
           rawBlob: blobs[1]))
     else:
-      var node = NodeRef(
-        vType: Extension,
-        ePfx:  pathSegment)
-      node.key[0] = HashKey.fromBytes(blobs[1]).valueOr:
-        return aristoError(RlpExtHashKeyExpected)
-      return node
+      raiseAssert "TODO"
+      # var node = NodeRef(
+      #   vType: Extension,
+      #   ePfx:  pathSegment)
+      # node.key[0] = HashKey.fromBytes(blobs[1]).valueOr:
+      #   return aristoError(RlpExtHashKeyExpected)
+      # return node
   of 17:
     for n in [0,1]:
       links[n] = HashKey.fromBytes(blobs[n]).valueOr:
@@ -147,10 +148,10 @@ proc append*(writer: var RlpWriter; node: NodeRef) =
         writer.append node.key[n]
       writer.append EmptyBlob
 
-    of Extension:
-      writer.startList(2)
-      writer.append node.ePfx.toHexPrefix(isleaf = false)
-      writer.append node.key[0]
+    # of Extension:
+    #   writer.startList(2)
+    #   writer.append node.ePfx.toHexPrefix(isleaf = false)
+    #   writer.append node.key[0]
 
     of Leaf:
       proc getKey0(vid: VertexID): Result[HashKey,AristoError] {.noRaise.} =

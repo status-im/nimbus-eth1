@@ -111,9 +111,9 @@ proc checkTopCommon*(
                 break check42Links
               seen = true
           return err((rvid.vid,CheckAnyVtxBranchLinksMissing))
-      of Extension:
-        if vtx.ePfx.len == 0:
-          return err((rvid.vid,CheckAnyVtxExtPfxMissing))
+      # of Extension:
+      #   if vtx.ePfx.len == 0:
+      #     return err((rvid.vid,CheckAnyVtxExtPfxMissing))
     else:
       nNilVtx.inc
       let rc = db.layersGetKey rvid
