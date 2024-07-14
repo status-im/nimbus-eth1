@@ -48,9 +48,9 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
               break check42Links
             seen = true
         return err((rvid.vid,CheckBeVtxBranchLinksMissing))
-    of Extension:
-      if vtx.ePfx.len == 0:
-        return err((rvid.vid,CheckBeVtxExtPfxMissing))
+    # of Extension:
+    #   if vtx.ePfx.len == 0:
+    #     return err((rvid.vid,CheckBeVtxExtPfxMissing))
 
   for (rvid,key) in T.walkKeyBe db:
     if topVidBe.vid < rvid.vid:

@@ -206,9 +206,10 @@ proc ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
     case nd.vType:
     of Leaf:
       result &= nd.lPfx.ppPathPfx & "," & nd.lData.ppPayload(db)
-    of Extension:
-      result &= nd.ePfx.ppPathPfx & "," & nd.eVid.ppVid
+    # of Extension:
+    #   result &= nd.ePfx.ppPathPfx & "," & nd.eVid.ppVid
     of Branch:
+      result &= nd.ePfx.ppPathPfx & ":"
       for n in 0..15:
         if nd.bVid[n].isValid:
           result &= nd.bVid[n].ppVid

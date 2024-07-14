@@ -18,7 +18,7 @@ import
   unittest2,
   ../nimbus/db/aristo/aristo_desc,
   ./replay/[pp, undump_accounts, undump_storages],
-  ./test_aristo/[test_samples_xx, test_filter, test_helpers, test_misc, test_tx]
+  ./test_aristo/[test_samples_xx, test_filter, test_helpers, test_misc, test_tx, test_blobify]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]

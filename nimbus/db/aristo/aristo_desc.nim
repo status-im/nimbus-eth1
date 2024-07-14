@@ -23,7 +23,7 @@
 
 import
   std/[hashes, sets, tables],
-  stew/[assign2, keyed_queue],
+  stew/keyed_queue,
   eth/common,
   results,
   ./aristo_constants,

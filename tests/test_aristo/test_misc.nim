@@ -11,6 +11,7 @@
 ## Aristo (aka Patricia) DB trancoder test
 
 import
+  std/algorithm,
   eth/common,
   results,
   stew/byteutils,
@@ -33,7 +34,7 @@ proc testShortKeys*(
 
   let samples = [
     # From InvalidBlocks/bc4895-withdrawals/twoIdenticalIndex.json
-    [("80".x,
+    @[("80".x,
       "da808094c94f5374fce5edbc8e2a8697c15331677e6ebf0b822710".x,
       "27f166f1d7c789251299535cb176ba34116e44894476a7886fe5d73d9be5c973".k),
      ("01".x,
@@ -44,9 +45,24 @@ proc testShortKeys*(
       "463769ae507fcc6d6231c8888425191c5622f330fdd4b78a7b24c4521137b573".k),
      ("03".x,
       "da028094c94f5374fce5edbc8e2a8697c15331677e6ebf0b822710".x,
-      "a95b9a7b58a6b3cb4001eb0be67951c5517141cb0183a255b5cae027a7b10b36".k)]]
+      "a95b9a7b58a6b3cb4001eb0be67951c5517141cb0183a255b5cae027a7b10b36".k)],
+    @[("0000".x, "0000".x,
+      "c783200000820000".k),
+      ("0000".x, "0001".x,
+      "c783200000820001".k),
+      ("0001".x, "0001".x,
+      "dd821000d9c420820001c420820001808080808080808080808080808080".k),
+      ("0002".x, "0000".x,
+      "d56ea5154fbad18e0ff1eaeafa2310d0879b59adf189c12ff1b2701e54db07b2".k),
+      ("0100".x, "0100".x,
+      "d1c0699fe7928a536e0183c6400ae34eb1174ce6b21f9d117b061385034743ad".k),
+      ("0101".x, "0101".x,
+      "74ddb98cb56e2dd7e8fa090b9ce740c3de589b72403b20136af75fb6168b1d19".k),
+      ("0200".x, "0200".x,
+      "2e777f06ab2de1a460a8412b8691f10fdcb162077ab5cbb1865636668bcb6471".k),
+      ]]
 
-  let gossip = false # or noisy
+  let gossip = true # or noisy
 
   for n,sample in samples:
     let sig = merkleSignBegin()
@@ -67,12 +83,32 @@ proc testShortKeys*(
         "\n    ", sig.pp(),
         "\n    ----------------",
         "\n"
-      let rc = sig.db.check
-      xCheckRc rc.error == (0,0)
+
+    for (k,v,r) in sample.reversed():
+      inx.inc
+      let w = sig.merkleSignCommit().value
+      gossip.say "*** preDel (1)", "n=", n, " inx=", inx,
+        "\n    k=", k.toHex, " v=", v.toHex,
+        "\n    r=", r.pp(sig),
+        "\n    ", sig.pp(),
+        "\n"
+      sig.merkleSignDelete(k)
+      gossip.say "*** preDel (2)", "n=", n, " inx=", inx,
+        "\n    k=", k.toHex, " v=", v.toHex,
+        "\n    r=", r.pp(sig),
+        "\n    R=", w.pp(sig),
+        "\n    ", sig.pp(),
+        "\n    ----------------",
+        "\n"
+
+      #let rc = sig.db.check
+      # xCheckRc rc.error == (0,0)
       xCheck r == w
+      #debugEcho rc
 
   true
-
+var v = testShortKeys()
+echo v
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

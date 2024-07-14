@@ -16,8 +16,11 @@
 
 import
   std/[hashes, tables],
+  stint,
   eth/common,
   "."/[desc_error, desc_identifiers]
+
+export stint
 
 type
   LeafTiePayload* = object
@@ -29,7 +32,6 @@ type
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
     Leaf
-    Extension
     Branch
 
   AristoAccount* = object
@@ -64,10 +66,9 @@ type
     of Leaf:
       lPfx*: NibblesBuf              ## Portion of path segment
       lData*: LeafPayload             ## Reference to data payload
-    of Extension:
-      ePfx*: NibblesBuf              ## Portion of path segment
-      eVid*: VertexID                ## Edge to vertex with ID `eVid`
     of Branch:
+      ePfx*: NibblesBuf              ## Portion of path segment - if non-empty,
+                                     ## it's an extension node!
       bVid*: array[16,VertexID]      ## Edge list with vertex IDs
 
   NodeRef* = ref object of VertexRef
@@ -172,13 +173,9 @@ proc `==`*(a, b: VertexRef): bool =
     of Leaf:
       if a.lPfx != b.lPfx or a.lData != b.lData:
         return false
-    of Extension:
-      if a.ePfx != b.ePfx or a.eVid != b.eVid:
-        return false
     of Branch:
-      for n in 0..15:
-        if a.bVid[n] != b.bVid[n]:
-          return false
+      if a.ePfx != b.ePfx or a.bVid != b.bVid:
+        return false
   true
 
 proc `==`*(a, b: NodeRef): bool =
@@ -186,9 +183,6 @@ proc `==`*(a, b: NodeRef): bool =
   if a.VertexRef != b.VertexRef:
     return false
   case a.vType:
-  of Extension:
-    if a.key[0] != b.key[0]:
-      return false
   of Branch:
     for n in 0..15:
       if a.bVid[n] != 0.VertexID and a.key[n] != b.key[n]:
@@ -231,14 +225,10 @@ func dup*(vtx: VertexRef): VertexRef =
         vType: Leaf,
         lPfx:  vtx.lPfx,
         lData: vtx.lData.dup)
-    of Extension:
-      VertexRef(
-        vType: Extension,
-        ePfx:  vtx.ePfx,
-        eVid:  vtx.eVid)
     of Branch:
       VertexRef(
         vType: Branch,
+        ePfx:  vtx.ePfx,
         bVid:  vtx.bVid)
 
 func dup*(node: NodeRef): NodeRef =
@@ -254,15 +244,10 @@ func dup*(node: NodeRef): NodeRef =
         lPfx:  node.lPfx,
         lData: node.lData.dup,
         key:   node.key)
-    of Extension:
-      NodeRef(
-        vType: Extension,
-        ePfx:  node.ePfx,
-        eVid:  node.eVid,
-        key:   node.key)
     of Branch:
       NodeRef(
         vType: Branch,
+        ePfx:  node.ePfx,
         bVid:  node.bVid,
         key:   node.key)
 

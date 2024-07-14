@@ -21,7 +21,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc vidFetch*(db: AristoDbRef; pristine = false): VertexID =
+proc vidFetch*(db: AristoDbRef): VertexID =
   ## Fetch next vertex ID.
   ##
   if db.top.delta.vTop  == 0:

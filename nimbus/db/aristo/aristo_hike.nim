@@ -49,9 +49,7 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
     let leg = hike.legs[n]
     case leg.wp.vtx.vType:
     of Branch:
-      result = result & NibblesBuf.nibble(leg.nibble.byte)
-    of Extension:
-      result = result & leg.wp.vtx.ePfx
+      result = result & leg.wp.vtx.ePfx & NibblesBuf.nibble(leg.nibble.byte)
     of Leaf:
       result = result & leg.wp.vtx.lPfx
 
@@ -100,31 +98,18 @@ proc step*(
 
   of Branch:
     # There must be some more data (aka `tail`) after a `Branch` vertex.
-    if path.len == 0:
+    if path.len <= vtx.ePfx.len:
       return err(HikeBranchTailEmpty)
 
     let
-      nibble = path[0].int8
+      nibble = path[vtx.ePfx.len].int8
       nextVid = vtx.bVid[nibble]
 
     if not nextVid.isValid:
       return err(HikeBranchMissingEdge)
 
-    ok (vtx, path.slice(1), nextVid)
+    ok (vtx, path.slice(vtx.ePfx.len + 1), nextVid)
 
-  of Extension:
-    # There must be some more data (aka `tail`) after an `Extension` vertex.
-    if path.len == 0:
-      return err(HikeBranchTailEmpty)
-
-    if vtx.ePfx.len != path.sharedPrefixLen(vtx.ePfx):
-      return err(HikeExtTailMismatch) # Need to branch from here
-
-    let nextVid = vtx.eVid
-    if not nextVid.isValid:
-      return err(HikeExtMissingEdge)
-
-    ok (vtx, path.slice(vtx.ePfx.len), nextVid)
 
 iterator stepUp*(
     path: NibblesBuf;                            # Partial path
@@ -178,11 +163,8 @@ proc hikeUp*(
 
       break
 
-    of Extension:
-      hike.legs.add Leg(wp: wp, nibble: -1)
-
     of Branch:
-      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[0])
+      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[vtx.ePfx.len])
 
     hike.tail = path
     vid = next

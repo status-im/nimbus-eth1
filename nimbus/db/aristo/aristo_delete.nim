@@ -54,183 +54,6 @@ proc disposeOfVtx(
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc collapseBranch(
-    db: AristoDbRef;                   # Database, top layer
-    hike: Hike;                        # Fully expanded path
-    nibble: byte;                      # Applicable link for `Branch` vertex
-     ): Result[void,AristoError] =
-  ## Convert/merge vertices:
-  ## ::
-  ##   current            | becomes             | condition
-  ##                      |                     |
-  ##   ^3     ^2          |  ^3     ^2          |
-  ##   -------------------+---------------------+------------------
-  ##   Branch <br> Branch | Branch <ext> Branch | 2 < legs.len  (1)
-  ##   Ext    <br> Branch | <ext>        Branch | 2 < legs.len  (2)
-  ##          <br> Branch |        <ext> Branch | legs.len == 2 (3)
-  ##
-  ## Depending on whether the parent `par` is an extension, merge `br` into
-  ## `par`. Otherwise replace `br` by an extension.
-  ##
-  let br = hike.legs[^2].wp
-
-  var xt = VidVtxPair(                                   # Rewrite `br`
-    vid: br.vid,
-    vtx: VertexRef(
-      vType: Extension,
-      ePfx:  NibblesBuf.nibble(nibble),
-      eVid:  br.vtx.bVid[nibble]))
-
-  if 2 < hike.legs.len:                                  # (1) or (2)
-    let par = hike.legs[^3].wp
-    case par.vtx.vType:
-    of Branch:                                           # (1)
-      # Replace `br` (use `xt` as-is)
-      discard
-
-    of Extension:                                        # (2)
-      # Merge `br` into ^3 (update `xt`)
-      db.disposeOfVtx((hike.root, xt.vid))
-      xt.vid = par.vid
-      xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
-
-    of Leaf:
-      return err(DelLeafUnexpected)
-
-  else:                                                  # (3)
-    # Replace `br` (use `xt` as-is)
-    discard
-
-  db.layersPutVtx((hike.root, xt.vid), xt.vtx)
-  ok()
-
-
-proc collapseExt(
-    db: AristoDbRef;                   # Database, top layer
-    hike: Hike;                        # Fully expanded path
-    nibble: byte;                      # Link for `Branch` vertex `^2`
-    vtx: VertexRef;                    # Follow up extension vertex (nibble)
-     ): Result[void,AristoError] =
-  ## Convert/merge vertices:
-  ## ::
-  ##   ^3       ^2   `vtx` |   ^3      ^2    |
-  ##   --------------------+-----------------------+------------------
-  ##   Branch  <br>   Ext  |  Branch  <ext>  | 2 < legs.len  (1)
-  ##   Ext     <br>   Ext  |  <ext>          | 2 < legs.len  (2)
-  ##           <br>   Ext  |          <ext>  | legs.len == 2 (3)
-  ##
-  ## Merge `vtx` into `br` and unlink `vtx`.
-  ##
-  let br = hike.legs[^2].wp
-
-  var xt = VidVtxPair(                                   # Merge `vtx` into `br`
-    vid: br.vid,
-    vtx: VertexRef(
-      vType: Extension,
-      ePfx:  NibblesBuf.nibble(nibble) & vtx.ePfx,
-      eVid:  vtx.eVid))
-  db.disposeOfVtx((hike.root, br.vtx.bVid[nibble]))      # `vtx` is obsolete now
-
-  if 2 < hike.legs.len:                                  # (1) or (2)
-    let par = hike.legs[^3].wp
-    case par.vtx.vType:
-    of Branch:                                           # (1)
-      # Replace `br` by `^2 & vtx` (use `xt` as-is)
-      discard
-
-    of Extension:                                        # (2)
-      # Replace ^3 by `^3 & ^2 & vtx` (update `xt`)
-      db.disposeOfVtx((hike.root, xt.vid))
-      xt.vid = par.vid
-      xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
-
-    of Leaf:
-      return err(DelLeafUnexpected)
-
-  else:                                                  # (3)
-    # Replace ^2 by `^2 & vtx` (use `xt` as-is)
-    discard
-
-  db.layersPutVtx((hike.root, xt.vid), xt.vtx)
-  ok()
-
-
-proc collapseLeaf(
-    db: AristoDbRef;                   # Database, top layer
-    hike: Hike;                        # Fully expanded path
-    nibble: byte;                      # Link for `Branch` vertex `^2`
-    vtx: VertexRef;                    # Follow up leaf vertex (from nibble)
-     ): Result[void,AristoError] =
-  ## Convert/merge vertices:
-  ## ::
-  ##   current                  | becomes                    | condition
-  ##                            |                            |
-  ##    ^4     ^3     ^2  `vtx` | ^4      ^3     ^2          |
-  ##   -------------------------+----------------------------+------------------
-  ##   ..     Branch <br>  Leaf | ..     Branch       <Leaf> | 2 < legs.len  (1)
-  ##   Branch Ext    <br>  Leaf | Branch              <Leaf> | 3 < legs.len  (2)
-  ##          Ext    <br>  Leaf |              <Leaf>        | legs.len == 3 (3)
-  ##                 <br>  Leaf |              <Leaf>        | legs.len == 2 (4)
-  ##
-  ## Merge `<br>` and `Leaf` replacing one and removing the other.
-  ##
-  let br = hike.legs[^2].wp
-
-  var lf = VidVtxPair(                                   # Merge `br` into `vtx`
-    vid: br.vtx.bVid[nibble],
-    vtx: VertexRef(
-      vType: Leaf,
-      lPfx:  NibblesBuf.nibble(nibble) & vtx.lPfx,
-      lData: vtx.lData))
-  db.layersResKey((hike.root, lf.vid))                     # `vtx` was modified
-
-  if 2 < hike.legs.len:                                  # (1), (2), or (3)
-    db.disposeOfVtx((hike.root, br.vid))                 # `br` is obsolete now
-    # Merge `br` into the leaf `vtx` and unlink `br`.
-    let par = hike.legs[^3].wp.dup                       # Writable vertex
-    case par.vtx.vType:
-    of Branch:                                           # (1)
-      # Replace `vtx` by `^2 & vtx` (use `lf` as-is)
-      par.vtx.bVid[hike.legs[^3].nibble] = lf.vid
-      db.layersPutVtx((hike.root, par.vid), par.vtx)
-      db.layersPutVtx((hike.root, lf.vid), lf.vtx)
-      return ok()
-
-    of Extension:                                        # (2) or (3)
-      # Merge `^3` into `lf` but keep the leaf vertex ID unchanged. This
-      # can avoid some extra updates.
-      lf.vtx.lPfx = par.vtx.ePfx & lf.vtx.lPfx
-
-      if 3 < hike.legs.len:                              # (2)
-        # Grandparent exists
-        let gpr = hike.legs[^4].wp.dup                   # Writable vertex
-        if gpr.vtx.vType != Branch:
-          return err(DelBranchExpexted)
-        db.disposeOfVtx((hike.root, par.vid))            # `par` is obsolete now
-        gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
-        db.layersPutVtx((hike.root, gpr.vid), gpr.vtx)
-        db.layersPutVtx((hike.root, lf.vid), lf.vtx)
-        return ok()
-
-      # No grandparent, so ^3 is root vertex             # (3)
-      db.layersPutVtx((hike.root, par.vid), lf.vtx)
-      # Continue below
-
-    of Leaf:
-      return err(DelLeafUnexpected)
-
-  else:                                                  # (4)
-    # Replace ^2 by `^2 & vtx` (use `lf` as-is)          # `br` is root vertex
-    db.layersUpdateVtx((hike.root, br.vid), lf.vtx)
-    # Continue below
-
-  # Clean up stale leaf vertex which has moved to root position
-  db.disposeOfVtx((hike.root, lf.vid))
-
-  ok()
-
-# -------------------------
-
 proc delSubTreeImpl(
     db: AristoDbRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
@@ -280,9 +103,7 @@ proc delStoTreeImpl(
       if vtx.bVid[i].isValid:
         ? db.delStoTreeImpl(
           (rvid.root, vtx.bVid[i]), accPath,
-          stoPath & NibblesBuf.nibble(byte i))
-  of Extension:
-    ?db.delStoTreeImpl((rvid.root, vtx.eVid), accPath, stoPath & vtx.ePfx)
+          stoPath & vtx.ePfx & NibblesBuf.nibble(byte i))
 
   of Leaf:
     let stoPath = Hash256(data: (stoPath & vtx.lPfx).getBytes())
@@ -323,29 +144,39 @@ proc deleteImpl(
       let vid = hike.legs[n].wp.vid
       db.layersResKey((hike.root, vid))
 
-    let nibble = block:
+    let nbl = block:
       let rc = br.vtx.branchStillNeeded()
       if rc.isErr:
         return err(DelBranchWithoutRefs)
       rc.value
 
-    # Convert to `Extension` or `Leaf` vertex
-    if 0 <= nibble:
+    if 0 <= nbl:
+      # Branch has only one entry - convert it to a leaf or join with parent
+
       # Get child vertex (there must be one after a `Branch` node)
-      let nxt = block:
-        let vid = br.vtx.bVid[nibble]
-        VidVtxPair(vid: vid, vtx: db.getVtx (hike.root, vid))
-      if not nxt.vtx.isValid:
+      let
+        vid = br.vtx.bVid[nbl]
+        nxt = db.getVtx (hike.root, vid)
+      if not nxt.isValid:
         return err(DelVidStaleVtx)
 
-      # Collapse `Branch` vertex `br` depending on `nxt` vertex type
-      case nxt.vtx.vType:
-      of Branch:
-        ? db.collapseBranch(hike, nibble.byte)
-      of Extension:
-        ? db.collapseExt(hike, nibble.byte, nxt.vtx)
-      of Leaf:
-        ? db.collapseLeaf(hike, nibble.byte, nxt.vtx)
+      db.disposeOfVtx((hike.root, vid))
+
+      let vtx =
+        case nxt.vType
+        of Leaf:
+          VertexRef(
+            vType: Leaf,
+            lPfx:  br.vtx.ePfx & NibblesBuf.nibble(nbl.byte) & nxt.lPfx,
+            lData: nxt.lData)
+        of Branch:
+          VertexRef(
+            vType: Branch,
+            ePfx:  br.vtx.ePfx & NibblesBuf.nibble(nbl.byte) & nxt.ePfx,
+            bVid: nxt.bVid)
+
+      # Put the new vertex at the id of the obsolete branch
+      db.layersPutVtx((hike.root, br.vid), vtx)
 
   ok()
 

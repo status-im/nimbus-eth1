@@ -12,7 +12,9 @@ import
   std/[os],
   unittest2,
   ../nimbus/config,
-  ../nimbus/common/common
+  ../nimbus/common/common,
+  ../nimbus/db/aristo/aristo_debug
+
 
 const
   baseDir = [".", "tests", ".."/"tests", $DirSep]  # path containg repo
@@ -28,6 +30,7 @@ proc findFilePath(file: string): string =
 
 proc makeGenesis(networkId: NetworkId): BlockHeader =
   let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = networkParams(networkId))
+  debugEcho pp(com.db.defCtx.mpt)
   com.genesisHeader
 
 proc genesisTest() =
