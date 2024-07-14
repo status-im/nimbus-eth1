@@ -23,7 +23,7 @@
 
 import
   std/[hashes, sets, tables],
-  stew/keyed_queue,
+  stew/[assign2, keyed_queue],
   eth/common,
   results,
   ./aristo_constants,
@@ -92,6 +92,10 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
+    stoLeaves*: KeyedQueue[AccountKey, VertexRef]
+      ## Mixed account/storage path to payload cache - same as above but caches
+      ## the full lookup of storage slots
+
   AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
 
@@ -109,6 +113,18 @@ template `==`*(a, b: AccountKey): bool =
 
 template to*(a: Hash256, T: type AccountKey): T =
   AccountKey((ref Hash256)(data: a.data))
+
+template mixUp*(T: type AccountKey, accPath, stoPath: Hash256): Hash256 =
+  # Insecure but fast way of mixing the values of two hashes, for the purpose
+  # of quick lookups - this is certainly not a good idea for general Hash256
+  # values but account paths are generated from accounts which would be hard
+  # to create pre-images for, for the purpose of collisions with a particular
+  # storage slot
+  var v {.noinit.}: Hash256
+  for i in 0..<v.data.len:
+    # `+` wraps leaving all bits used
+    v.data[i] = accPath.data[i] + stoPath.data[i]
+  v
 
 func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
   tab.getOrDefault(w, VertexRef(nil))

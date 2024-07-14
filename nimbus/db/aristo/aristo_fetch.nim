@@ -59,27 +59,26 @@ proc retrieveAccountPayload(
     db: AristoDbRef;
     accPath: Hash256;
       ): Result[LeafPayload,AristoError] =
-  if (let pyl = db.layersGetAccLeaf(accPath); pyl.isSome()):
-    if not pyl[].isValid():
+  if (let leafVtx = db.layersGetAccLeaf(accPath); leafVtx.isSome()):
+    if not leafVtx[].isValid():
       return err(FetchPathNotFound)
-    return ok pyl[].lData
+    return ok leafVtx[].lData
 
   let accKey = accPath.to(AccountKey)
-  if (let pyl = db.accLeaves.lruFetch(accKey); pyl.isSome()):
-    if not pyl[].isValid():
+  if (let leafVtx = db.accLeaves.lruFetch(accKey); leafVtx.isSome()):
+    if not leafVtx[].isValid():
       return err(FetchPathNotFound)
-    return ok pyl[].lData
+    return ok leafVtx[].lData
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
   let
-    payload = db.retrieveLeaf(VertexID(1), accPath.data).valueOr:
+    leafVtx = db.retrieveLeaf(VertexID(1), accPath.data).valueOr:
       if error == FetchAccInaccessible:
-        discard db.accLeaves.lruAppend(accKey, nil, accLruSize)
         return err(FetchPathNotFound)
       return err(error)
 
-  ok db.accLeaves.lruAppend(accKey, payload, accLruSize).lData
+  ok db.accLeaves.lruAppend(accKey, leafVtx, accLruSize).lData
 
 proc retrieveMerkleHash(
     db: AristoDbRef;
@@ -157,11 +156,7 @@ proc fetchStorageID*(
   ## Public helper function for retrieving a storage (vertex) ID for a
   ## given account.
   let
-    payload = db.retrieveAccountPayload(accPath).valueOr:
-      if error == FetchAccInaccessible:
-        return err(FetchPathNotFound)
-      return err(error)
-
+    payload = ?db.retrieveAccountPayload(accPath)
     stoID = payload.stoID
 
   if not stoID.isValid:
@@ -169,6 +164,42 @@ proc fetchStorageID*(
 
   ok stoID
 
+proc retrieveStoragePayload(
+    db: AristoDbRef;
+    accPath: Hash256;
+    stoPath: Hash256;
+      ): Result[UInt256,AristoError] =
+  let mixPath = AccountKey.mixUp(accPath, stoPath)
+  if (let leafVtx = db.layersGetStoLeaf(mixPath); leafVtx.isSome()):
+    if not leafVtx[].isValid():
+      return err(FetchPathNotFound)
+    return ok leafVtx[].lData.stoData
+
+  let mixKey = mixPath.to(AccountKey)
+  if (let leafVtx = db.stoLeaves.lruFetch(mixKey); leafVtx.isSome()):
+    if not leafVtx[].isValid():
+      return err(FetchPathNotFound)
+    return ok leafVtx[].lData.stoData
+
+  # Updated payloads are stored in the layers so if we didn't find them there,
+  # it must have been in the database
+  let
+    leafVtx = db.retrieveLeaf(? db.fetchStorageID(accPath), stoPath.data).valueOr:
+      return err(error)
+
+  ok db.stoLeaves.lruAppend(mixKey, leafVtx, accLruSize).lData.stoData
+
+proc hasStoragePayload(
+    db: AristoDbRef;
+    accPath: Hash256;
+    stoPath: Hash256;
+      ): Result[bool,AristoError] =
+  let error = db.retrieveStoragePayload(accPath, stoPath).errorOr:
+    return ok(true)
+
+  if error == FetchPathNotFound:
+    return ok(false)
+  err(error)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -249,9 +280,9 @@ proc fetchStorageData*(
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
   ##
-  let pyl = ? db.retrieveLeaf(? db.fetchStorageID accPath, stoPath.data)
-  assert pyl.lData.pType == StoData   # debugging only
-  ok pyl.lData.stoData
+  let leafVtx = ? db.retrieveLeaf(? db.fetchStorageID accPath, stoPath.data)
+  assert leafVtx.lData.pType == StoData   # debugging only
+  ok leafVtx.lData.stoData
 
 proc fetchStorageState*(
     db: AristoDbRef;
@@ -273,7 +304,7 @@ proc hasPathStorage*(
   ## For a storage tree related to account `accPath`, query whether the data
   ## record indexed by `path` exists on the database.
   ##
-  db.hasPayload(? db.fetchStorageID accPath, stoPath.data)
+  db.hasStoragePayload(accPath, stoPath)
 
 proc hasStorageData*(
     db: AristoDbRef;

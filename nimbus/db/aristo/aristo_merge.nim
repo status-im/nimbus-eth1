@@ -137,6 +137,8 @@ proc mergeStorageData*(
         # Mark account path Merkle keys for update
         resetKeys()
 
+        db.layersPutStoLeaf(AccountKey.mixUp(accPath, stoPath), rc.value)
+
         if not stoID.isValid:
           # Make sure that there is an account that refers to that storage trie
           let leaf = vtx.dup # Dup on modify
