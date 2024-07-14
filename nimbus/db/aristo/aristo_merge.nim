@@ -51,10 +51,10 @@ proc mergeAccountRecord*(
   ## otherwise.
   ##
   let
-    pyl =  PayloadRef(pType: AccountData, account: accRec)
+    pyl =  LeafPayload(pType: AccountData, account: accRec)
     rc = db.mergePayloadImpl(VertexID(1), accPath.data, pyl)
   if rc.isOk:
-    db.layersPutAccPayload(accPath, pyl)
+    db.layersPutAccLeaf(accPath, rc.value)
     ok true
   elif rc.error in MergeNoAction:
     ok false
@@ -84,7 +84,7 @@ proc mergeGenericData*(
     return err(MergeStoRootNotAccepted)
 
   let
-    pyl = PayloadRef(pType: RawData, rawBlob: @data)
+    pyl = LeafPayload(pType: RawData, rawBlob: @data)
     rc = db.mergePayloadImpl(root, path, pyl)
   if rc.isOk:
     ok true
@@ -130,19 +130,18 @@ proc mergeStorageData*(
         useID = if stoID.isValid: stoID else: db.vidFetch()
 
         # Call merge
-        pyl = PayloadRef(pType: StoData, stoData: stoData)
+        pyl = LeafPayload(pType: StoData, stoData: stoData)
         rc = db.mergePayloadImpl(useID, stoPath.data, pyl)
 
       if rc.isOk:
         # Mark account path Merkle keys for update
         resetKeys()
 
-
         if not stoID.isValid:
           # Make sure that there is an account that refers to that storage trie
           let leaf = vtx.dup # Dup on modify
           leaf.lData.stoID = useID
-          db.layersPutAccPayload(accPath, leaf.lData)
+          db.layersPutAccLeaf(accPath, leaf)
           db.layersPutVtx((VertexID(1), touched[pos - 1]), leaf)
 
         return ok()

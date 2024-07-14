@@ -121,9 +121,7 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blobifyTo*(pyl: PayloadRef, data: var Blob) =
-  if pyl.isNil:
-    return
+proc blobifyTo*(pyl: LeafPayload, data: var Blob) =
   case pyl.pType
   of RawData:
     data &= pyl.rawBlob
@@ -248,22 +246,22 @@ proc blobify*(lSst: SavedState): Result[Blob,AristoError] =
 # -------------
 proc deblobify(
     data: openArray[byte];
-    T: type PayloadRef;
-      ): Result[PayloadRef,AristoError] =
+    T: type LeafPayload;
+      ): Result[LeafPayload,AristoError] =
   if data.len == 0:
-    return ok PayloadRef(pType: RawData)
+    return ok LeafPayload(pType: RawData)
 
   let mask = data[^1]
   if (mask and 0x10) > 0: # unstructured payload
-    return ok PayloadRef(pType: RawData, rawBlob: data[0 .. ^2])
+    return ok LeafPayload(pType: RawData, rawBlob: data[0 .. ^2])
 
   if (mask and 0x20) > 0: # Slot storage data
-    return ok PayloadRef(
+    return ok LeafPayload(
       pType: StoData,
       stoData: ?deblobify(data.toOpenArray(0, data.len - 2), UInt256))
 
   var
-    pAcc = PayloadRef(pType: AccountData)
+    pAcc = LeafPayload(pType: AccountData)
     start = 0
     lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
 
@@ -352,7 +350,7 @@ proc deblobify*(
       NibblesBuf.fromHexPrefix record.toOpenArray(pLen, rLen-1)
     if not isLeaf:
       return err(DeblobLeafGotExtPrefix)
-    let pyl = ? record.toOpenArray(0, pLen - 1).deblobify(PayloadRef)
+    let pyl = ? record.toOpenArray(0, pLen - 1).deblobify(LeafPayload)
     VertexRef(
       vType: Leaf,
       lPfx:  pathSegment,

@@ -180,21 +180,18 @@ proc ppPathPfx(pfx: NibblesBuf): string =
 proc ppNibble(n: int8): string =
   if n < 0: "ø" elif n < 10: $n else: n.toHexLsb
 
-proc ppPayload(p: PayloadRef, db: AristoDbRef): string =
-  if p.isNil:
-    result = "n/a"
-  else:
-    case p.pType:
-    of RawData:
-      result &= p.rawBlob.toHex.squeeze(hex=true)
-    of AccountData:
-      result = "("
-      result &= ($p.account.nonce).stripZeros(toExp=true) & ","
-      result &= ($p.account.balance).stripZeros(toExp=true) & ","
-      result &= p.stoID.ppVid & ","
-      result &= p.account.codeHash.ppCodeHash & ")"
-    of StoData:
-      result = $p.stoData
+proc ppPayload(p: LeafPayload, db: AristoDbRef): string =
+  case p.pType:
+  of RawData:
+    result &= p.rawBlob.toHex.squeeze(hex=true)
+  of AccountData:
+    result = "("
+    result &= ($p.account.nonce).stripZeros(toExp=true) & ","
+    result &= ($p.account.balance).stripZeros(toExp=true) & ","
+    result &= p.stoID.ppVid & ","
+    result &= p.account.codeHash.ppCodeHash & ")"
+  of StoData:
+    result = $p.stoData
 
 proc ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
   if not nd.isValid:
@@ -493,7 +490,7 @@ proc pp*(vid: VertexID): string =
 proc pp*(vLst: openArray[VertexID]): string =
   vLst.ppVidList
 
-proc pp*(p: PayloadRef, db = AristoDbRef(nil)): string =
+proc pp*(p: LeafPayload, db = AristoDbRef(nil)): string =
   p.ppPayload(db.orDefault)
 
 proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =

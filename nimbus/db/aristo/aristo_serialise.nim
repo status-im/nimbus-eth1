@@ -32,7 +32,7 @@ proc aristoError(error: AristoError): NodeRef =
   NodeRef(vType: Leaf, error: error)
 
 proc serialise(
-    pyl: PayloadRef;
+    pyl: LeafPayload;
     getKey: ResolveVidFn;
       ): Result[Blob,(VertexID,AristoError)] =
   ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
@@ -105,7 +105,7 @@ proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
       return NodeRef(
         vType:     Leaf,
         lPfx:      pathSegment,
-        lData:     PayloadRef(
+        lData:     LeafPayload(
           pType:   RawData,
           rawBlob: blobs[1]))
     else:
@@ -169,7 +169,7 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
 proc serialise*(
     db: AristoDbRef;
     root: VertexID;
-    pyl: PayloadRef;
+    pyl: LeafPayload;
       ): Result[Blob,(VertexID,AristoError)] =
   ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
   ## account type, otherwise pass the data as is.
