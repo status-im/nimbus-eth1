@@ -83,10 +83,15 @@ proc deltaPersistent*(
   ? be.putEndFn writeBatch                       # Finalise write batch
 
   # Copy back updated payloads
-  for accPath, pyl in db.balancer.accLeaves:
+  for accPath, vtx in db.balancer.accLeaves:
     let accKey = accPath.to(AccountKey)
-    if not db.accLeaves.lruUpdate(accKey, pyl):
-      discard db.accLeaves.lruAppend(accKey, pyl, accLruSize)
+    if not db.accLeaves.lruUpdate(accKey, vtx):
+      discard db.accLeaves.lruAppend(accKey, vtx, accLruSize)
+
+  for mixPath, vtx in db.balancer.stoLeaves:
+    let mixKey = mixPath.to(AccountKey)
+    if not db.stoLeaves.lruUpdate(mixKey, vtx):
+      discard db.stoLeaves.lruAppend(mixKey, vtx, accLruSize)
 
   # Update dudes and this descriptor
   ? updateSiblings.update().commit()

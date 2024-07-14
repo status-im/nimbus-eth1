@@ -58,7 +58,7 @@ proc collapseBranch(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Applicable link for `Branch` vertex
-     ): Result[void,(VertexID,AristoError)] =
+     ): Result[void,AristoError] =
   ## Convert/merge vertices:
   ## ::
   ##   current            | becomes             | condition
@@ -95,7 +95,7 @@ proc collapseBranch(
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
     of Leaf:
-      return err((par.vid,DelLeafUnexpected))
+      return err(DelLeafUnexpected)
 
   else:                                                  # (3)
     # Replace `br` (use `xt` as-is)
@@ -110,7 +110,7 @@ proc collapseExt(
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Link for `Branch` vertex `^2`
     vtx: VertexRef;                    # Follow up extension vertex (nibble)
-     ): Result[void,(VertexID,AristoError)] =
+     ): Result[void,AristoError] =
   ## Convert/merge vertices:
   ## ::
   ##   ^3       ^2   `vtx` |   ^3      ^2    |
@@ -145,7 +145,7 @@ proc collapseExt(
       xt.vtx.ePfx = par.vtx.ePfx & xt.vtx.ePfx
 
     of Leaf:
-      return err((par.vid,DelLeafUnexpected))
+      return err(DelLeafUnexpected)
 
   else:                                                  # (3)
     # Replace ^2 by `^2 & vtx` (use `xt` as-is)
@@ -160,7 +160,7 @@ proc collapseLeaf(
     hike: Hike;                        # Fully expanded path
     nibble: byte;                      # Link for `Branch` vertex `^2`
     vtx: VertexRef;                    # Follow up leaf vertex (from nibble)
-     ): Result[void,(VertexID,AristoError)] =
+     ): Result[void,AristoError] =
   ## Convert/merge vertices:
   ## ::
   ##   current                  | becomes                    | condition
@@ -205,7 +205,7 @@ proc collapseLeaf(
         # Grandparent exists
         let gpr = hike.legs[^4].wp.dup                   # Writable vertex
         if gpr.vtx.vType != Branch:
-          return err((gpr.vid,DelBranchExpexted))
+          return err(DelBranchExpexted)
         db.disposeOfVtx((hike.root, par.vid))            # `par` is obsolete now
         gpr.vtx.bVid[hike.legs[^4].nibble] = lf.vid
         db.layersPutVtx((hike.root, gpr.vid), gpr.vtx)
@@ -217,7 +217,7 @@ proc collapseLeaf(
       # Continue below
 
     of Leaf:
-      return err((par.vid,DelLeafUnexpected))
+      return err(DelLeafUnexpected)
 
   else:                                                  # (4)
     # Replace ^2 by `^2 & vtx` (use `lf` as-is)          # `br` is root vertex
@@ -261,17 +261,47 @@ proc delSubTreeImpl(
 
   ok()
 
+proc delStoTreeImpl(
+    db: AristoDbRef;                   # Database, top layer
+    rvid: RootedVertexID;                    # Root vertex
+    accPath: Hash256;
+    stoPath: NibblesBuf;
+      ): Result[void,AristoError] =
+  ## Implementation of *delete* sub-trie.
+
+  let vtx = db.getVtxRc(rvid).valueOr:
+    if error == GetVtxNotFound:
+      return ok()
+    return err(error)
+
+  case vtx.vType
+  of Branch:
+    for i in 0..15:
+      if vtx.bVid[i].isValid:
+        ? db.delStoTreeImpl(
+          (rvid.root, vtx.bVid[i]), accPath,
+          stoPath & NibblesBuf.nibble(byte i))
+  of Extension:
+    ?db.delStoTreeImpl((rvid.root, vtx.eVid), accPath, stoPath & vtx.ePfx)
+
+  of Leaf:
+    let stoPath = Hash256(data: (stoPath & vtx.lPfx).getBytes())
+    db.layersPutStoLeaf(AccountKey.mixUp(accPath, stoPath), nil)
+
+  db.disposeOfVtx(rvid)
+
+  ok()
 
 proc deleteImpl(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
-      ): Result[void,(VertexID,AristoError)] =
+      ): Result[void,AristoError] =
   ## Implementation of *delete* functionality.
 
   # Remove leaf entry
   let lf =  hike.legs[^1].wp
   if lf.vtx.vType != Leaf:
-    return err((lf.vid,DelLeafExpexted))
+    return err(DelLeafExpexted)
 
   db.disposeOfVtx((hike.root, lf.vid))
 
@@ -282,7 +312,7 @@ proc deleteImpl(
       wp.vtx = wp.vtx.dup # make sure that layers are not impliciteley modified
       wp
     if br.vtx.vType != Branch:
-      return err((br.vid,DelBranchExpexted))
+      return err(DelBranchExpexted)
 
     # Unlink child vertex from structural table
     br.vtx.bVid[hike.legs[^2].nibble] = VertexID(0)
@@ -296,7 +326,7 @@ proc deleteImpl(
     let nibble = block:
       let rc = br.vtx.branchStillNeeded()
       if rc.isErr:
-        return err((br.vid,DelBranchWithoutRefs))
+        return err(DelBranchWithoutRefs)
       rc.value
 
     # Convert to `Extension` or `Leaf` vertex
@@ -306,7 +336,7 @@ proc deleteImpl(
         let vid = br.vtx.bVid[nibble]
         VidVtxPair(vid: vid, vtx: db.getVtx (hike.root, vid))
       if not nxt.vtx.isValid:
-        return err((nxt.vid, DelVidStaleVtx))
+        return err(DelVidStaleVtx)
 
       # Collapse `Branch` vertex `br` depending on `nxt` vertex type
       case nxt.vtx.vType:
@@ -339,10 +369,9 @@ proc deleteAccountRecord*(
 
   # Delete storage tree if present
   if stoID.isValid:
-    ? db.delSubTreeImpl stoID
+    ? db.delStoTreeImpl((stoID, stoID), accPath, NibblesBuf())
 
-  db.deleteImpl(hike).isOkOr:
-    return err(error[1])
+  ?db.deleteImpl(hike)
 
   db.layersPutAccLeaf(accPath, nil)
 
@@ -375,8 +404,7 @@ proc deleteGenericData*(
       return err(DelPathNotFound)
     return err(error[1])
 
-  db.deleteImpl(hike).isOkOr:
-    return err(error[1])
+  ?db.deleteImpl(hike)
 
   ok(not db.getVtx((root, root)).isValid)
 
@@ -428,8 +456,9 @@ proc deleteStorageData*(
   # Mark account path Merkle keys for update
   db.updateAccountForHasher accHike
 
-  db.deleteImpl(stoHike).isOkOr:
-    return err(error[1])
+  ?db.deleteImpl(stoHike)
+
+  db.layersPutStoLeaf(AccountKey.mixUp(accPath, stoPath), nil)
 
   # Make sure that an account leaf has no dangling sub-trie
   if db.getVtx((stoID, stoID)).isValid:
@@ -440,7 +469,6 @@ proc deleteStorageData*(
   leaf.lData.stoID = VertexID(0)
   db.layersPutAccLeaf(accPath, leaf)
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
-  db.layersResKey((accHike.root, wpAcc.vid))
   ok(true)
 
 proc deleteStorageTree*(
@@ -464,14 +492,13 @@ proc deleteStorageTree*(
   # Mark account path Merkle keys for update
   db.updateAccountForHasher accHike
 
-  ? db.delSubTreeImpl stoID
+  ? db.delStoTreeImpl((stoID, stoID), accPath, NibblesBuf())
 
   # De-register the deleted storage tree from the accounts record
   let leaf = wpAcc.vtx.dup             # Dup on modify
   leaf.lData.stoID = VertexID(0)
   db.layersPutAccLeaf(accPath, leaf)
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
-  db.layersResKey((accHike.root, wpAcc.vid))
   ok()
 
 # ------------------------------------------------------------------------------

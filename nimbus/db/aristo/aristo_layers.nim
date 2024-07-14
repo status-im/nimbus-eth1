@@ -101,6 +101,15 @@ func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash256): Opt[VertexRef] =
 
   Opt.none(VertexRef)
 
+func layersGetStoLeaf*(db: AristoDbRef; mixPath: Hash256): Opt[VertexRef] =
+  db.top.delta.stoLeaves.withValue(mixPath, item):
+    return Opt.some(item[])
+
+  for w in db.rstack:
+    w.delta.stoLeaves.withValue(mixPath, item):
+      return Opt.some(item[])
+
+  Opt.none(VertexRef)
 
 # ------------------------------------------------------------------------------
 # Public functions: setter variants
@@ -147,8 +156,11 @@ proc layersUpdateVtx*(
   db.layersResKey(rvid)
 
 
-func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash256; pyl: VertexRef) =
-  db.top.delta.accLeaves[accPath] = pyl
+func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash256; leafVtx: VertexRef) =
+  db.top.delta.accLeaves[accPath] = leafVtx
+
+func layersPutStoLeaf*(db: AristoDbRef; mixPath: Hash256; leafVtx: VertexRef) =
+  db.top.delta.stoLeaves[mixPath] = leafVtx
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -165,8 +177,10 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   for (vid,key) in src.delta.kMap.pairs:
     trg.delta.kMap[vid] = key
   trg.delta.vTop = src.delta.vTop
-  for (accPath,pyl) in src.delta.accLeaves.pairs:
-    trg.delta.accLeaves[accPath] = pyl
+  for (accPath,leafVtx) in src.delta.accLeaves.pairs:
+    trg.delta.accLeaves[accPath] = leafVtx
+  for (mixPath,leafVtx) in src.delta.stoLeaves.pairs:
+    trg.delta.stoLeaves[mixPath] = leafVtx
 
 func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
@@ -183,6 +197,7 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
       kMap: layers[0].delta.kMap,
       vTop: layers[^1].delta.vTop,
       accLeaves: layers[0].delta.accLeaves,
+      stoLeaves: layers[0].delta.stoLeaves,
       ))
 
   # Consecutively merge other layers on top
@@ -191,8 +206,10 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
       result.delta.sTab[vid] = vtx
     for (vid,key) in layers[n].delta.kMap.pairs:
       result.delta.kMap[vid] = key
-    for (accPath,pyl) in layers[n].delta.accLeaves.pairs:
-      result.delta.accLeaves[accPath] = pyl
+    for (accPath,vtx) in layers[n].delta.accLeaves.pairs:
+      result.delta.accLeaves[accPath] = vtx
+    for (mixPath,vtx) in layers[n].delta.stoLeaves.pairs:
+      result.delta.stoLeaves[mixPath] = vtx
 
 # ------------------------------------------------------------------------------
 # Public iterators
