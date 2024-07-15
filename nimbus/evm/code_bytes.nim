@@ -16,16 +16,21 @@ type CodeBytesRef* = ref object
   bytes: seq[byte]
   invalidPositions: seq[byte] # bit seq of invalid jump positions
   processed: int
+  persisted*: bool ## This code stream has been persisted to the database
 
 template bitpos(pos: int): (int, byte) =
   (pos shr 3, 1'u8 shl (pos and 0x07))
 
-func init*(T: type CodeBytesRef, bytes: sink seq[byte]): CodeBytesRef =
+func init*(
+    T: type CodeBytesRef, bytes: sink seq[byte], persisted = false
+): CodeBytesRef =
   let ip = newSeq[byte]((bytes.len + 7) div 8)
-  CodeBytesRef(bytes: move(bytes), invalidPositions: ip)
+  CodeBytesRef(bytes: move(bytes), invalidPositions: ip, persisted: persisted)
 
-func init*(T: type CodeBytesRef, bytes: openArray[byte]): CodeBytesRef =
-  CodeBytesRef.init(@bytes)
+func init*(
+    T: type CodeBytesRef, bytes: openArray[byte], persisted = false
+): CodeBytesRef =
+  CodeBytesRef.init(@bytes, persisted = persisted)
 
 func init*(T: type CodeBytesRef, bytes: openArray[char]): CodeBytesRef =
   CodeBytesRef.init(bytes.toOpenArrayByte(0, bytes.high()))
