@@ -10,17 +10,14 @@
 import
   chronicles,
   stint,
-  eth/[common, trie, trie/db],
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[eth_types, eth_types_rlp],
   ../../rpc/rpc_calls/rpc_trace_calls,
   ../../../nimbus/common/chain_config,
-  ./state_bridge/[state_diff, world_state],
+  ./state_bridge/[database, state_diff, world_state],
   ./[portal_bridge_conf, portal_bridge_common]
 
-# For now just using in-memory state tries
-# To-Do: Use RocksDb as the db backend
 # To-Do: Use location based trie implementation where path is used
 # instead of node hash is used as key for each value in the trie.
 proc applyGenesisAccounts*(
@@ -116,7 +113,9 @@ proc runBackfillLoop(
 ) {.async: (raises: [CancelledError]).} =
   try:
     let
-      worldState = WorldStateRef.init(newMemoryDB())
+      dbPath = "./db"
+      db = DatabaseRef.init(dbPath).get()
+      worldState = WorldStateRef.init(db)
       genesisAccounts = genesisBlockForNetwork(MainNet).alloc
     applyGenesisAccounts(worldState, genesisAccounts)
 

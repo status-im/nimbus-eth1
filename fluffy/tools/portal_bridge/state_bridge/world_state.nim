@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/tables, stint, eth/[common, trie, trie/db], eth/common/[eth_types, eth_types_rlp]
+  stint, eth/[common, trie, trie/db], eth/common/[eth_types, eth_types_rlp], ./database
 
 # Account State definition
 
@@ -48,17 +48,17 @@ type
   SlotKeyHash = KeccakHash
 
   WorldStateRef* = ref object
-    db: TrieDatabaseRef
     accountsTrie: HexaryTrie
     storageTries: TableRef[AccountHash, HexaryTrie]
-    bytecode: TableRef[AccountHash, seq[byte]]
+    storageDb: TrieDatabaseRef
+    bytecodeDb: TrieDatabaseRef # maps AccountHash -> seq[byte]
 
-proc init*(T: type WorldStateRef, db: TrieDatabaseRef): T =
+proc init*(T: type WorldStateRef, db: DatabaseRef): T =
   WorldStateRef(
-    db: db,
-    accountsTrie: initHexaryTrie(newMemoryDB(), isPruning = false),
+    accountsTrie: initHexaryTrie(db.getAccountsBackend(), isPruning = false),
     storageTries: newTable[AccountHash, HexaryTrie](),
-    bytecode: newTable[AccountHash, seq[byte]](),
+    storageDb: db.getStorageBackend(),
+    bytecodeDb: db.getBytecodeBackend(),
   )
 
 template stateRoot*(state: WorldStateRef): KeccakHash =
@@ -87,7 +87,7 @@ proc setAccount*(
   let accountKey = toAccountKey(address)
 
   if not state.storageTries.contains(accountKey):
-    state.storageTries[accountKey] = initHexaryTrie(state.db)
+    state.storageTries[accountKey] = initHexaryTrie(state.storageDb, isPruning = false)
 
   var storageTrie = state.storageTries.getOrDefault(accountKey)
   for k, v in accState.storageUpdates:
@@ -102,7 +102,7 @@ proc setAccount*(
   accountToSave.storageRoot = storageTrie.rootHash()
 
   if accState.codeUpdated:
-    state.bytecode[accountKey] = accState.code
+    state.bytecodeDb.put(accountKey.data, accState.code)
     accountToSave.codeHash = keccakHash(accState.code)
 
   state.accountsTrie.put(accountKey.data, rlp.encode(accountToSave))
@@ -112,4 +112,4 @@ proc deleteAccount*(state: WorldStateRef, address: EthAddress) {.raises: [RlpErr
 
   state.accountsTrie.del(accountKey.data)
   state.storageTries.del(accountKey)
-  state.bytecode.del(accountKey)
+  state.bytecodeDb.del(accountKey.data)
