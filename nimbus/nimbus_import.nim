@@ -226,9 +226,10 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       historical_summaries: openArray[HistoricalSummary],
   ) =
     if blockNumber > 1:
-      importedSlot = blockNumber
+      importedSlot = ( blockNumber - lastEra1Block ) + firstSlotAfterMerge
       notice "Finding slot number after resuming import", importedSlot
       var parentHash: common.Hash256
+      var checkOnce = true
       let currentHash = com.db.getHeadBlockHash()
       while currentHash != parentHash:
         let clBlock = getBlockFromEra(
@@ -237,7 +238,11 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         if clBlock.isSome:
           let ethBlock = getEth1Block(clBlock.get())
           parentHash = ethBlock.header.parentHash
-
+          if checkOnce:
+            importedSlot += blockNumber - ethBlock.header.number - 1
+            checkOnce = false
+            continue
+          
         importedSlot += 1
       importedSlot -= 1
       notice "Found the slot to start with", importedSlot
