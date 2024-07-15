@@ -13,5 +13,5 @@ export eth_api_types, json
 
 createRpcSigsFromNim(RpcClient):
   proc trace_replayBlockTransactions(
-    blockId: RtBlockIdentifier, traceOpts: seq[string]
+    blockId: BlockIdentifier, traceOpts: seq[string]
   ): JsonNode

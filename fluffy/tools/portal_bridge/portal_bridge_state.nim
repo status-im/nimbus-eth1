@@ -109,18 +109,23 @@ proc applyBlockRewards(
 proc runBackfillLoop(
     #portalClient: RpcClient,
     web3Client: RpcClient,
+    stateDir: string,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
   try:
-    let
-      dbPath = "./db"
-      db = DatabaseRef.init(dbPath).get()
-      worldState = WorldStateRef.init(db)
-      genesisAccounts = genesisBlockForNetwork(MainNet).alloc
-    applyGenesisAccounts(worldState, genesisAccounts)
+    let db = DatabaseRef.init(stateDir).get()
+    defer:
+      db.close()
 
-    # for now we can only start from block 1 because the state is only in memory
-    var currentBlockNumber: uint64 = 1
+    let worldState = db.withTransaction:
+      let
+        # Requires an active transaction because it writes an emptyRlp node to tries on initialization
+        worldState = WorldStateRef.init(db)
+        genesisAccounts = genesisBlockForNetwork(MainNet).alloc
+      worldState.applyGenesisAccounts(genesisAccounts)
+      worldState
+
+    var currentBlockNumber = startBlockNumber
     echo "Starting from block number: ", currentBlockNumber
 
     while true:
@@ -161,9 +166,10 @@ proc runBackfillLoop(
       #   echo "stateDiffs.storage: ", stateDiffs[0].storage
       #   echo "stateDiffs.codes: ", stateDiffs[0].code
 
-      for stateDiff in stateDiffs:
-        applyStateDiff(worldState, stateDiff)
-      applyBlockRewards(worldState, blockObject, uncleBlocks)
+      db.withTransaction:
+        for stateDiff in stateDiffs:
+          applyStateDiff(worldState, stateDiff)
+        applyBlockRewards(worldState, blockObject, uncleBlocks)
 
       doAssert(blockObject.stateRoot.bytes() == worldState.stateRoot.data)
 
@@ -189,7 +195,9 @@ proc runState*(config: PortalBridgeConf) =
   # inside the bridge, and getting the blocks from era1 files.
 
   if config.backfillState:
-    asyncSpawn runBackfillLoop(web3Client, config.startBlockNumber)
+    asyncSpawn runBackfillLoop(
+      web3Client, config.stateDir.string, config.startBlockNumber
+    )
 
   while true:
     poll()
