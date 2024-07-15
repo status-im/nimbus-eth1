@@ -77,9 +77,8 @@ proc deltaUpdate*(
   ? be.putEndFn writeBatch
 
   # Update peer filter balance.
-  let rev = db.deltaReverse db.balancer
   for w in db.forked:
-    db.merge(rev, w.balancer)
+    db.merge(db.balancer, w.balancer)
 
   db.balancer = LayerDeltaRef(nil)
   ok()
