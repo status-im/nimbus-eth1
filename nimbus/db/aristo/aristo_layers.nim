@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, tables],
+  std/[enumerate, sequtils, sets, tables],
   eth/common,
   results,
   ./aristo_desc
@@ -56,40 +56,40 @@ func nLayersKey*(db: AristoDbRef): int =
 # Public functions: getter variants
 # ------------------------------------------------------------------------------
 
-func layersGetVtx*(db: AristoDbRef; rvid: RootedVertexID): Opt[VertexRef] =
+func layersGetVtx*(db: AristoDbRef; rvid: RootedVertexID): Opt[(VertexRef, int)] =
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
   db.top.delta.sTab.withValue(rvid, item):
-    return Opt.some(item[])
+    return Opt.some((item[], 0))
 
-  for w in db.rstack:
+  for i, w in enumerate(db.rstack):
     w.delta.sTab.withValue(rvid, item):
-      return Opt.some(item[])
+      return Opt.some((item[], i + 1))
 
-  Opt.none(VertexRef)
+  Opt.none((VertexRef, int))
 
 func layersGetVtxOrVoid*(db: AristoDbRef; rvid: RootedVertexID): VertexRef =
   ## Simplified version of `layersGetVtx()`
-  db.layersGetVtx(rvid).valueOr: VertexRef(nil)
+  db.layersGetVtx(rvid).valueOr((VertexRef(nil), 0))[0]
 
 
-func layersGetKey*(db: AristoDbRef; rvid: RootedVertexID): Opt[HashKey] =
+func layersGetKey*(db: AristoDbRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   ## Find a hash key on the cache layers. An `ok()` result might contain a void
   ## hash key if it is stored on the cache that way.
   ##
   db.top.delta.kMap.withValue(rvid, item):
-    return Opt.some(item[])
+    return Opt.some((item[], 0))
 
-  for w in db.rstack:
+  for i, w in enumerate(db.rstack):
     w.delta.kMap.withValue(rvid, item):
-      return ok(item[])
+      return ok((item[], i + 1))
 
-  Opt.none(HashKey)
+  Opt.none((HashKey, int))
 
 func layersGetKeyOrVoid*(db: AristoDbRef; rvid: RootedVertexID): HashKey =
   ## Simplified version of `layersGetKey()`
-  db.layersGetKey(rvid).valueOr: VOID_HASH_KEY
+  (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
 func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash256): Opt[VertexRef] =
   db.top.delta.accLeaves.withValue(accPath, item):

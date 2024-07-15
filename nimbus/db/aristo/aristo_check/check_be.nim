@@ -81,7 +81,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     for (rvid,vtx) in db.layersWalkVtx:
       if vtx.isValid and topVidCache.vid < rvid.vid:
         topVidCache = rvid
-      let key = db.layersGetKey(rvid).valueOr: VOID_HASH_KEY
+      let (key, _) = db.layersGetKey(rvid).valueOr: (VOID_HASH_KEY, 0)
       if not vtx.isValid:
         # Some vertex is to be deleted, the key must be empty
         if key.isValid:

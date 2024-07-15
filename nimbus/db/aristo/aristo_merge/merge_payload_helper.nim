@@ -50,7 +50,7 @@ proc mergePayloadImpl*(
     cur = root
     touched: array[NibblesBuf.high + 1, VertexID]
     pos = 0
-    vtx = db.getVtxRc((root, cur)).valueOr:
+    (vtx, _) = db.getVtxRc((root, cur)).valueOr:
       if error != GetVtxNotFound:
         return err(error)
 
@@ -120,7 +120,7 @@ proc mergePayloadImpl*(
         if next.isValid:
           cur = next
           path = path.slice(n + 1)
-          vtx = ?db.getVtxRc((root, next))
+          (vtx, _) = ?db.getVtxRc((root, next))
         else:
           # There's no vertex at the branch point - insert the payload as a new
           # leaf and update the existing branch

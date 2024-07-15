@@ -313,6 +313,21 @@ iterator rstack*(db: AristoDbRef): LayerRef =
   for i in 0..<db.stack.len:
     yield db.stack[db.stack.len - i - 1]
 
+proc deltaAtLevel*(db: AristoDbRef, level: int): LayerDeltaRef =
+  if level == 0:
+    db.top.delta
+  elif level > 0:
+    doAssert level <= db.stack.len
+    db.stack[^level].delta
+  elif level == -1:
+    doAssert db.balancer != nil
+    db.balancer
+  elif level == -2:
+    nil
+  else:
+    raiseAssert "Unknown level " & $level
+
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

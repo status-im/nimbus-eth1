@@ -33,7 +33,7 @@ proc getBeStateRoot(
   let srcRoot = block:
     let rc = db.getKeyBE rvid
     if rc.isOk:
-      rc.value
+      rc.value[0]
     elif rc.error == GetKeyNotFound:
       VOID_HASH_KEY
     else:

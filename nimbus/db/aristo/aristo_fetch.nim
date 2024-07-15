@@ -85,17 +85,18 @@ proc retrieveMerkleHash(
     root: VertexID;
     updateOk: bool;
       ): Result[Hash256,AristoError] =
-  let key = block:
+  let key =
     if updateOk:
       db.computeKey((root, root)).valueOr:
         if error == GetVtxNotFound:
           return ok(EMPTY_ROOT_HASH)
         return err(error)
     else:
-      db.getKeyRc((root, root)).valueOr:
+      let (key, _) = db.getKeyRc((root, root)).valueOr:
         if error == GetKeyNotFound:
           return ok(EMPTY_ROOT_HASH) # empty sub-tree
         return err(error)
+      key
   ok key.to(Hash256)
 
 

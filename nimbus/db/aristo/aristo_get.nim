@@ -73,33 +73,33 @@ proc getTuvBE*(
 proc getVtxBE*(
     db: AristoDbRef;
     rvid: RootedVertexID;
-      ): Result[VertexRef,AristoError] =
+      ): Result[(VertexRef, int),AristoError] =
   ## Get the vertex from the (filtered) backened if available.
   if not db.balancer.isNil:
     db.balancer.sTab.withValue(rvid, w):
       if w[].isValid:
-        return ok(w[])
+        return ok (w[], -1)
       return err(GetVtxNotFound)
-  db.getVtxUbe rvid
+  ok (? db.getVtxUbe rvid, -2)
 
 proc getKeyBE*(
     db: AristoDbRef;
     rvid: RootedVertexID;
-      ): Result[HashKey,AristoError] =
+      ): Result[(HashKey, int),AristoError] =
   ## Get the merkle hash/key from the (filtered) backend if available.
   if not db.balancer.isNil:
     db.balancer.kMap.withValue(rvid, w):
       if w[].isValid:
-        return ok(w[])
+        return ok((w[], -1))
       return err(GetKeyNotFound)
-  db.getKeyUbe rvid
+  ok ((?db.getKeyUbe rvid), -2)
 
 # ------------------
 
 proc getVtxRc*(
     db: AristoDbRef;
     rvid: RootedVertexID
-      ): Result[VertexRef,AristoError] =
+      ): Result[(VertexRef, int),AristoError] =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ##
   block body:
@@ -108,7 +108,7 @@ proc getVtxRc*(
     # error symbol `GetVtxNotFound`.
     let vtx = db.layersGetVtx(rvid).valueOr:
       break body
-    if vtx.isValid:
+    if vtx[0].isValid:
       return ok vtx
     else:
       return err(GetVtxNotFound)
@@ -119,10 +119,10 @@ proc getVtx*(db: AristoDbRef; rvid: RootedVertexID): VertexRef =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
-  db.getVtxRc(rvid).valueOr: VertexRef(nil)
+  db.getVtxRc(rvid).valueOr((VertexRef(nil), 0))[0]
 
 
-proc getKeyRc*(db: AristoDbRef; rvid: RootedVertexID): Result[HashKey,AristoError] =
+proc getKeyRc*(db: AristoDbRef; rvid: RootedVertexID): Result[(HashKey, int),AristoError] =
   ## Cascaded attempt to fetch a Merkle hash from the cache layers or the
   ## backend. This function will never return a `VOID_HASH_KEY` but rather
   ## some `GetKeyNotFound` or `GetKeyUpdateNeeded` error.
@@ -132,7 +132,7 @@ proc getKeyRc*(db: AristoDbRef; rvid: RootedVertexID): Result[HashKey,AristoErro
       break body
     # If there is a zero key value, the entry is either marked for being
     # updated or for deletion on the database. So check below.
-    if key.isValid:
+    if key[0].isValid:
       return ok key
 
     # The zero key value does not refer to an update mark if there is no
@@ -141,7 +141,7 @@ proc getKeyRc*(db: AristoDbRef; rvid: RootedVertexID): Result[HashKey,AristoErro
       # There was no vertex on the cache. So there must be one the backend (the
       # reason for the key lable to exists, at all.)
       return err(GetKeyUpdateNeeded)
-    if vtx.isValid:
+    if vtx[0].isValid:
       return err(GetKeyUpdateNeeded)
     else:
       # The vertex is to be deleted. So is the value key.
@@ -153,7 +153,7 @@ proc getKey*(db: AristoDbRef; rvid: RootedVertexID): HashKey =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
-  db.getKeyRc(rvid).valueOr: VOID_HASH_KEY
+  (db.getKeyRc(rvid).valueOr((VOID_HASH_KEY, 0)))[0]
 
 # ------------------------------------------------------------------------------
 # End

@@ -110,7 +110,7 @@ proc checkTopCommon*(
       let rc = db.layersGetKey rvid
       if rc.isErr:
         return err((rvid.vid,CheckAnyVtxEmptyKeyMissing))
-      if rc.value.isValid:
+      if rc.value[0].isValid:
         return err((rvid.vid,CheckAnyVtxEmptyKeyExpected))
 
   if vTop.distinctBase < LEAST_FREE_VID:

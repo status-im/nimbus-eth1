@@ -13,34 +13,49 @@
 import
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise]
+  "."/[aristo_desc, aristo_get, aristo_serialise]
 
-proc computeKey*(
+proc putKeyAtLevel(
+    db: AristoDbRef, rvid: RootedVertexID, key: HashKey, level: int
+): Result[void, AristoError] =
+  ## Store a hash key in the same layer where the corresponding vertex exists -
+  ## if `rvid` is not found in the layers it will be written directly to the
+  ## database backend assuming the value the key corresponds to was taken from
+  ## there
+  if level == -2:
+    let be = db.backend
+    doAssert be != nil, "source data is from the backend"
+    # TODO long-running batch here?
+    let writeBatch = ?be.putBegFn()
+    be.putKeyFn(writeBatch, rvid, key)
+    ?be.putEndFn writeBatch
+    ok()
+  else:
+    db.deltaAtLevel(level).kMap[rvid] = key
+    ok()
+
+func maxLevel(cur, other: int): int =
+  # Compare two levels and return the topmost in the stack, taking into account
+  # the odd reversal of order around the zero point
+  if cur < 0:
+    max(cur, other) # >= 0 is always more topmost than <0
+  elif other < 0:
+    cur
+  else:
+    min(cur, other) # Here the order is reversed and 0 is the top layer
+
+proc computeKeyImpl(
     db: AristoDbRef;                  # Database, top layer
     rvid: RootedVertexID;             # Vertex to convert
-      ): Result[HashKey, AristoError] =
-  # This is a variation on getKeyRc which computes the key instead of returning
-  # an error
-  # TODO it should not always write the key to the persistent storage
+      ): Result[(HashKey, int), AristoError] =
+  db.getKeyRc(rvid).isErrOr:
+    # Value cached either in layers or database
+    return ok value
 
-  proc getKey(db: AristoDbRef; rvid: RootedVertexID): HashKey =
-    block body:
-      let key = db.layersGetKey(rvid).valueOr:
-        break body
-      if key.isValid:
-        return key
-      else:
-        return VOID_HASH_KEY
-    let rc = db.getKeyBE rvid
-    if rc.isOk:
-      return rc.value
-    VOID_HASH_KEY
+  let (vtx, vl) = ? db.getVtxRc rvid
 
-  let key = getKey(db, rvid)
-  if key.isValid():
-    return ok key
-
-  let vtx = ? db.getVtxRc rvid
+  # Top-most level of all the verticies this hash compution depends on
+  var level = vl
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   var writer = initRlpWriter()
@@ -54,15 +69,16 @@ proc computeKey*(
     of AccountData:
       let
         stoID = vtx.lData.stoID
-        key = if stoID.isValid:
-          ?db.computeKey((stoID, stoID))
+        (akey, kl) = if stoID.isValid:
+          ?db.computeKeyImpl((stoID, stoID))
         else:
-          VOID_HASH_KEY
+          (VOID_HASH_KEY, -2)
+      level = maxLevel(level, kl)
 
       writer.append(encode Account(
         nonce:       vtx.lData.account.nonce,
         balance:     vtx.lData.account.balance,
-        storageRoot: key.to(Hash256),
+        storageRoot: akey.to(Hash256),
         codeHash:    vtx.lData.account.codeHash)
       )
     of RawData:
@@ -77,7 +93,9 @@ proc computeKey*(
       for n in 0..15:
         let vid = vtx.bVid[n]
         if vid.isValid:
-          w.append(?db.computeKey((rvid.root, vid)))
+          let (bkey, bl) = ?db.computeKeyImpl((rvid.root, vid))
+          level = maxLevel(level, bl)
+          w.append(bkey)
         else:
           w.append(VOID_HASH_KEY)
       w.append EmptyBlob
@@ -92,13 +110,22 @@ proc computeKey*(
       writeBranch(writer)
 
   let h = writer.finish().digestTo(HashKey, rvid.root == rvid.vid)
-  # TODO This shouldn't necessarily go into the database if we're just computing
-  #      a key ephemerally - it should however be cached for some tiem since
-  #      deep hash computations are expensive
-  db.layersPutKey(rvid, h)
-  ok h
 
+  # Cache the hash to the same storage layer as the the top-most value that it
+  # depends on (recursively) - this could be an ephemeral in-memory layer or the
+  # underlying database backend - typically, values closer to the root are more
+  # likely to live in an in-memory layer since any leaf change will lead to the
+  # root key also changing while leaves that have never been hashed will see
+  # their hash being saved directly to the backend.
+  ? db.putKeyAtLevel(rvid, h, level)
 
+  ok (h, level)
+
+proc computeKey*(
+    db: AristoDbRef;                  # Database, top layer
+    rvid: RootedVertexID;             # Vertex to convert
+      ): Result[HashKey, AristoError] =
+  ok (?computeKeyImpl(db, rvid))[0]
 
 # ------------------------------------------------------------------------------
 # End
