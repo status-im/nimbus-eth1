@@ -347,12 +347,16 @@ proc persistMode(acc: AccountRef): PersistMode =
       result = Remove
 
 proc persistCode(acc: AccountRef, ac: AccountsLedgerRef) =
-  if acc.code.len != 0:
+  if acc.code.len != 0 and not acc.code.persisted:
     let rc = ac.kvt.put(
       contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
     if rc.isErr:
       warn logTxt "persistCode()",
        codeHash=acc.statement.codeHash, error=($$rc.error)
+    else:
+      # If the ledger changes rolled back entirely from the database, the ledger
+      # code cache must also be cleared!
+      acc.code.persisted = true
 
 proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
   const info = "persistStorage(): "
@@ -452,7 +456,7 @@ proc getCode*(ac: AccountsLedgerRef, address: EthAddress): CodeBytesRef =
             warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
             CodeBytesRef()
           else:
-            let newCode = CodeBytesRef.init(move(rc.value))
+            let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
             ac.code.lruAppend(acc.statement.codeHash, newCode, codeLruSize)
       else:
         CodeBytesRef()
