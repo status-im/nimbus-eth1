@@ -43,7 +43,7 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
     Opt.none(T)
 
 proc run(config: PortalConf) {.raises: [CatchableError].} =
-  setupLogging(config.logLevel, config.logStdout)
+  setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
 
