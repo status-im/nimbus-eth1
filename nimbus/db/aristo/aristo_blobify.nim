@@ -318,7 +318,7 @@ proc deblobify*(
     let (isLeaf, pathSegment) =
       NibblesBuf.fromHexPrefix record.toOpenArray(offs, aInx - 1)
     if isLeaf:
-      return err(DeblobExtGotLeafPrefix)
+      return err(DeblobBranchGotLeafPrefix)
 
       # End `while`
     VertexRef(

@@ -31,8 +31,6 @@ const
   HikeAcceptableStopsNotFound* = {
       HikeBranchTailEmpty,
       HikeBranchMissingEdge,
-      HikeExtTailEmpty,
-      HikeExtTailMismatch,
       HikeLeafUnexpected,
       HikeNoLegs}
     ## When trying to find a leaf vertex the Patricia tree, there are several
