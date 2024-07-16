@@ -298,7 +298,7 @@ all_fluffy_tests: | build deps
 fluffy-test: | all_fluffy_portal_spec_tests all_fluffy_tests
 
 # builds the fluffy tools, wherever they are
-$(FLUFFY_TOOLS): | build deps
+$(FLUFFY_TOOLS): | build deps rocksdb
 	for D in $(FLUFFY_TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
