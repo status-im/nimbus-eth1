@@ -19,13 +19,12 @@ Contents
 
 * [4. *Patricia Trie* node serialisation with *Merkle hash* labelled edges](#ch4)
   + [4.1 Branch record serialisation](#ch4x1)
-  + [4.2 Extension record serialisation](#ch4x2)
-  + [4.3 Leaf record serialisation](#ch4x3)
-  + [4.4 Leaf record payload serialisation for account data](#ch4x4)
-  + [4.5 Leaf record payload serialisation for unstructured data](#ch4x5)
-  + [4.6 Serialisation of the top used vertex ID](#ch4x6)
-  + [4.7 Serialisation of a last saved state record](#ch4x7)
-  + [4.8 Serialisation record identifier identification](#ch4x8)
+  + [4.2 Leaf record serialisation](#ch4x2)
+  + [4.3 Leaf record payload serialisation for account data](#ch4x3)
+  + [4.4 Leaf record payload serialisation for unstructured data](#ch4x4)
+  + [4.5 Serialisation of the top used vertex ID](#ch4x5)
+  + [4.6 Serialisation of a last saved state record](#ch4x6)
+  + [4.7 Serialisation record identifier identification](#ch4x7)
 
 * [5. *Patricia Trie* implementation notes](#ch5)
   + [5.1 Database decriptor representation](#ch5x1)
@@ -238,14 +237,16 @@ and implemented as 64 bit values, stored *Big Endian* in the serialisation.
           |                          |       -- first vertexID
         8 +--+--+--+--+--+--+--+--+--+
           ...                                -- more vertexIDs
+          +--+
+          |  | ...                           -- nibble path segment
           +--+--+
           |     |                            -- access(16) bitmap
           +--+--+
-          |  |                               -- marker(8), 0x08
+          |  |                               -- marker(2) + pathSegmentLen(6)
           +--+
 
         where
-          marker(8) is the eight bit array *0000-1000*
+          marker(2) is the double bit array 10
 
 For a given index *n* between *0..15*, if the bit at position *n* of the bit
 vector *access(16)* is reset to zero, then there is no *n*-th structural
@@ -257,29 +258,13 @@ vector *access(16)* is reset to zero, then there is no *n*-th structural
 Note that data are stored *Big Endian*, so the bits *0..7* of *access* are
 stored in the right byte of the serialised bitmap.
 
+The nibble path segment of the *Branch* record is compact encoded or missing,
+at all. So an empty nibble path has at least one byte. The first path byte *P0*
+has bit 5 reset, i.e. *P0 and 0x20* is zero (bit 4 is set if the right nibble
+is the first part of the path.)
+
 <a name="ch4x2"></a>
-### 4.2 Extension record serialisation
-
-        0 +--+--+--+--+--+--+--+--+--+
-          |                          |       -- vertex ID
-        8 +--+--+--+--+--+--+--+--+--+
-          |  | ...                           -- path segment
-          +--+
-          || |                               -- marker(2) + pathSegmentLen(6)
-          +--+
-
-        where
-          marker(2) is the double bit array 10
-
-The path segment of the *Extension* record is compact encoded. So it has at
-least one byte. The first byte *P0* has bit 5 reset, i.e. *P0 and 0x20* is
-zero (bit 4 is set if the right nibble is the first part of the path.)
-
-Note that the *pathSegmentLen(6)* is redunant as it is determined by the length
-of the extension record (as *recordLen - 9*.)
-
-<a name="ch4x3"></a>
-### 4.3 Leaf record serialisation
+### 4.2 Leaf record serialisation
 
         0 +-- ..
           ...                                -- payload (may be empty)
@@ -299,8 +284,8 @@ also set if the right nibble is the first part of the path.)
 If present, the serialisation of the payload field can be either for account
 data, for RLP encoded or for unstructured data as defined below.
 
-<a name="ch4x4"></a>
-### 4.4 Leaf record payload serialisation for account data
+<a name="ch4x3"></a>
+### 4.3 Leaf record payload serialisation for account data
 
         0 +-- ..  --+
           |         |                        -- nonce, 0 or 8 bytes
@@ -325,8 +310,8 @@ the two bit value *10* as they refer to the nonce and the storage ID data
 fields. So, joining the *4 x bitmask(2)* word array to a single byte, the
 maximum value of that byte is 0x99.
 
-<a name="ch4x5"></a>
-### 4.5 Leaf record payload serialisation for unstructured data
+<a name="ch4x4"></a>
+### 4.4 Leaf record payload serialisation for unstructured data
 
         0 +--+ .. --+
           |  |      |                        -- data, at least one byte
@@ -337,8 +322,8 @@ maximum value of that byte is 0x99.
         where
           marker(8) is the eight bit array *0110-1011*
 
-<a name="ch4x6"></a>
-### 4.6 Serialisation of the top used vertex ID
+<a name="ch4x5"></a>
+### 4.5 Serialisation of the top used vertex ID
 
         0 +--+--+--+--+--+--+--+--+
           |                       |          -- last used vertex IDs
@@ -354,8 +339,8 @@ indicates that all ID values greater or equal than this value are free and can
 be used as vertex IDs. If this record is missing, the value *(1u64,0x01)* is
 assumed, i.e. the list with the single vertex ID *1*.
 
-<a name="ch4x7"></a>
-### 4.7 Serialisation of a last saved state record
+<a name="ch4x6"></a>
+### 4.6 Serialisation of a last saved state record
 
          0 +--+--+--+--+--+ .. --+--+ .. --+
            |                               | -- 32 bytes state hash
@@ -368,21 +353,20 @@ assumed, i.e. the list with the single vertex ID *1*.
         where
           marker(8) is the eight bit array *0111-111f*
 
-<a name="ch4x8"></a>
-### 4.8 Serialisation record identifier tags
+<a name="ch4x7"></a>
+### 4.7 Serialisation record identifier tags
 
 Any of the above records can uniquely be identified by its trailing marker,
 i.e. the last byte of a serialised record.
 
 |** Bit mask**| **Hex value**    | **Record type**      |**Chapter reference**|
 |:-----------:|:----------------:|:--------------------:|:-------------------:|
-|   0000 1000 | 0x08             | Branch record        | [4.1](#ch4x1)       |
-|   10xx xxxx | 0x80 + x(6)      | Extension record     | [4.2](#ch4x2)       |
-|   11xx xxxx | 0xC0 + x(6)      | Leaf record          | [4.3](#ch4x3)       |
-|   0xxx 0yyy | (x(3)<<4) + y(3) | Account payload      | [4.4](#ch4x4)       |
-|   0110 1011 | 0x6b             | Unstructured payload | [4.5](#ch4x5)       |
-|   0111 1100 | 0x7c             | Last used vertex ID  | [4.6](#ch4x6)       |
-|   0111 1111 | 0x7f             | Last saved state     | [4.7](#ch4x7)       |
+|   10xx xxxx | 0x80 + x(6)      | Branch record        | [4.1](#ch4x1)       |
+|   11xx xxxx | 0xC0 + x(6)      | Leaf record          | [4.2](#ch4x2)       |
+|   0xxx 0yyy | (x(3)<<4) + y(3) | Account payload      | [4.3](#ch4x3)       |
+|   0110 1011 | 0x6b             | Unstructured payload | [4.4](#ch4x4)       |
+|   0111 1100 | 0x7c             | Last used vertex ID  | [4.5](#ch4x5)       |
+|   0111 1111 | 0x7f             | Last saved state     | [4.6](#ch4x6)       |
 
 <a name="ch5"></a>
 5. *Patricia Trie* implementation notes
