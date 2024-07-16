@@ -18,7 +18,9 @@ import
   unittest2,
   ../nimbus/db/aristo/aristo_desc,
   ./replay/[pp, undump_accounts, undump_storages],
-  ./test_aristo/[test_samples_xx, test_filter, test_helpers, test_misc, test_tx, test_blobify]
+  ./test_aristo/test_short_keys,
+  ./test_aristo/test_blobify,
+  ./test_aristo/[test_samples_xx, test_filter, test_helpers, test_tx]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -70,13 +72,6 @@ proc setErrorLevel {.used.} =
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
 # ------------------------------------------------------------------------------
-
-proc miscRunner(noisy = true) =
-  suite "Aristo: Miscellaneous tests":
-
-    test "Short keys and other patholgical cases":
-      check noisy.testShortKeys()
-
 
 proc accountsRunner(
     noisy = true;
@@ -150,7 +145,6 @@ proc storagesRunner(
 # ------------------------------------------------------------------------------
 
 proc aristoMain*(noisy = defined(debug)) =
-  noisy.miscRunner()
   noisy.storagesRunner()
 
 when isMainModule:
@@ -164,7 +158,7 @@ when isMainModule:
     noisy.aristoMain()
 
   when true: # and false:
-    let persistent = false or true
+    let persistent = false # or true
     noisy.showElapsed("@snap_test_list"):
       for n,sam in snapTestList:
         noisy.accountsRunner(sam, persistent=persistent)

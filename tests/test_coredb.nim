@@ -59,7 +59,7 @@ when unittest2DisableParamFiltering:
     ##    -d:unittest2DisableParamFiltering \
     ##    ./tests/test_coredb.nim \
     ##       --output-level=VERBOSE \
-    ##       --sample=goerli-lp,goerli-ar
+    ##       --sample=main-am,main-ar
     ## or
     ## ::
     ##   nim c ... -d:unittest2DisableParamFiltering ./tests/test_coredb.nim
