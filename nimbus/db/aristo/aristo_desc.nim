@@ -34,8 +34,8 @@ from ./aristo_desc/desc_backend
 
 # Not auto-exporting backend
 export
-  aristo_constants, desc_error, desc_identifiers, desc_nibbles, desc_structural,
-  keyed_queue
+  tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
+  desc_structural, keyed_queue
 
 const
   accLruSize* = 1024 * 1024
