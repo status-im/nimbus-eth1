@@ -228,21 +228,17 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     if blockNumber > 1:
       importedSlot = (blockNumber - lastEra1Block) + firstSlotAfterMerge
       notice "Finding slot number after resuming import", importedSlot
- 
+
       # BlockNumber based slot finding
       var clNum = 0'u64
- 
+
       while clNum < blockNumber:
         let clBlock = getBlockFromEra(
-          era,
-          historical_roots,
-          historical_summaries,
-          Slot(importedSlot),
-          clConfig.cfg,
+          era, historical_roots, historical_summaries, Slot(importedSlot), clConfig.cfg
         ).valueOr:
           importedSlot += 1
           continue
-        
+
         clNum = getEth1BlockNumber(clBlock)
         importedSlot += blockNumber - clNum
 
