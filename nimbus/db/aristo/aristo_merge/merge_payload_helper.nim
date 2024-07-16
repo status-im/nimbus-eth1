@@ -154,6 +154,7 @@ proc mergePayloadImpl*(
 
         db.layersPutVtx((root, cur), branch)
 
+        resetKeys()
         return ok(leafVtx)
 
   err(MergeHikeFailed)

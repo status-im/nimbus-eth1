@@ -24,8 +24,8 @@ import
 
 proc toNode*(
     vtx: VertexRef;                    # Vertex to convert
-    root: VertexID;
-    db: AristoDbRef;                   # Database, top layer
+    root: VertexID;                    # Sub-tree root the `vtx` belongs to
+    db: AristoDbRef;                   # Database
     stopEarly = true;                  # Full list of missing links if `false`
     beKeyOk = true;                    # Allow fetching DB backend keys
       ): Result[NodeRef,seq[VertexID]] =
@@ -68,7 +68,7 @@ proc toNode*(
     return ok node
 
   of Branch:
-    let node = NodeRef(vType: Branch, bVid: vtx.bVid)
+    let node = NodeRef(vType: Branch, bVid: vtx.bVid, ePfx: vtx.ePfx)
     var missing: seq[VertexID]
     for n in 0 .. 15:
       let vid = vtx.bVid[n]
@@ -83,16 +83,6 @@ proc toNode*(
     if 0 < missing.len:
       return err(missing)
     return ok node
-
-  # of Extension:
-  #   let
-  #     vid = vtx.eVid
-  #     key = db.getKey((root, vid), beOk=beKeyOk)
-  #   if not key.isValid:
-  #     return err(@[vid])
-  #   let node = NodeRef(vType: Extension, ePfx: vtx.ePfx, eVid: vid)
-  #   node.key[0] = key
-  #   return ok node
 
 
 iterator subVids*(vtx: VertexRef): VertexID =
