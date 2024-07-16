@@ -65,7 +65,7 @@ type
     case vType*: VertexType
     of Leaf:
       lPfx*: NibblesBuf              ## Portion of path segment
-      lData*: LeafPayload             ## Reference to data payload
+      lData*: LeafPayload            ## Reference to data payload
     of Branch:
       ePfx*: NibblesBuf              ## Portion of path segment - if non-empty,
                                      ## it's an extension node!
@@ -185,8 +185,9 @@ proc `==`*(a, b: NodeRef): bool =
   case a.vType:
   of Branch:
     for n in 0..15:
-      if a.bVid[n] != 0.VertexID and a.key[n] != b.key[n]:
-        return false
+      if a.bVid[n] != 0.VertexID or b.bVid[n] != 0.VertexID:
+        if a.key[n] != b.key[n]:
+          return false
   else:
     discard
   true

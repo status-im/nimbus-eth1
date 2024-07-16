@@ -38,16 +38,10 @@ proc checkTopStrict*(
     elif key.isValid:
       # So `vtx` and `key` exist
       let node = vtx.toNode(rvid.root, db).valueOr:
-        return err((rvid.vid,CheckStkVtxIncomplete))
-      if key != node.digestTo(HashKey):
+        # not all sub-keys might be ready du to lazy hashing
+        continue
+      if key != node.digestTo(HashKey, rvid.root==rvid.vid):
         return err((rvid.vid,CheckStkVtxKeyMismatch))
-
-    elif db.layersGetKey(rvid).isErr:
-      # So `vtx` exists but not `key`, so cache is supposed dirty and the
-      # vertex has a zero entry.
-      # TODO when we're writing a brand new entry, we don't write a zero key
-      #      to the database to avoid the unnecessary delete traffic..
-      discard # return err((rvid.vid,CheckStkVtxKeyMissing))
 
     else: # Empty key flags key is for update
       zeroKeys.incl rvid.vid
@@ -69,7 +63,7 @@ proc checkTopProofMode*(
       if vtx.isValid:
         let node = vtx.toNode(rvid.root, db).valueOr:
           continue
-        if key != node.digestTo(HashKey):
+        if key != node.digestTo(HashKey, rvid.root == rvid.vid):
           return err((rvid.vid,CheckRlxVtxKeyMismatch))
   ok()
 
@@ -111,9 +105,6 @@ proc checkTopCommon*(
                 break check42Links
               seen = true
           return err((rvid.vid,CheckAnyVtxBranchLinksMissing))
-      # of Extension:
-      #   if vtx.ePfx.len == 0:
-      #     return err((rvid.vid,CheckAnyVtxExtPfxMissing))
     else:
       nNilVtx.inc
       let rc = db.layersGetKey rvid

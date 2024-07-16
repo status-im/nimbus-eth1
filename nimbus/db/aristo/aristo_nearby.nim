@@ -179,7 +179,7 @@ proc zeroAdjust(
         if n < 0:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
-        pfx = NibblesBuf.nibble(n.byte)
+        pfx = root.ePfx & NibblesBuf.nibble(n.byte)
 
       # of Extension:
       #   let ePfx = root.ePfx
