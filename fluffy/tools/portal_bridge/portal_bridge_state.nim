@@ -8,109 +8,21 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   chronicles,
   stint,
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[eth_types, eth_types_rlp],
-  ../../rpc/rpc_calls/rpc_trace_calls,
   ../../../nimbus/common/chain_config,
-  ./state_bridge/[database, state_diff, world_state],
+  ../../rpc/rpc_calls/rpc_trace_calls,
+  ./state_bridge/[database, state_diff, world_state_helper],
   ./[portal_bridge_conf, portal_bridge_common]
-
-# To-Do: Use location based trie implementation where path is used
-# instead of node hash is used as key for each value in the trie.
-proc applyGenesisAccounts*(
-    worldState: WorldStateRef, alloc: GenesisAlloc
-) {.raises: [RlpError].} =
-  for address, genAccount in alloc:
-    var accState = worldState.getAccount(address)
-
-    accState.setBalance(genAccount.balance)
-    accState.setNonce(genAccount.nonce)
-
-    if genAccount.code.len() > 0:
-      for slotKey, slotValue in genAccount.storage:
-        accState.setStorage(slotKey, slotValue)
-      accState.setCode(genAccount.code)
-
-    worldState.setAccount(address, accState)
-
-proc applyStateDiff(
-    worldState: WorldStateRef, stateDiff: StateDiffRef
-) {.raises: [RlpError].} =
-  for address, balanceDiff in stateDiff.balances:
-    let
-      nonceDiff = stateDiff.nonces.getOrDefault(address)
-      codeDiff = stateDiff.code.getOrDefault(address)
-      storageDiff = stateDiff.storage.getOrDefault(address)
-
-    var
-      deleteAccount = false
-      accState = worldState.getAccount(address)
-
-    if balanceDiff.kind == create or balanceDiff.kind == update:
-      accState.setBalance(balanceDiff.after)
-    elif balanceDiff.kind == delete:
-      deleteAccount = true
-
-    if nonceDiff.kind == create or nonceDiff.kind == update:
-      accState.setNonce(nonceDiff.after)
-    elif nonceDiff.kind == delete:
-      doAssert deleteAccount == true
-
-    if codeDiff.kind == create or codeDiff.kind == update:
-      accState.setCode(codeDiff.after)
-    elif codeDiff.kind == delete:
-      doAssert deleteAccount == true
-
-    for slotKey, slotDiff in storageDiff:
-      if slotDiff.kind == create or slotDiff.kind == update:
-        if slotDiff.after == 0:
-          accState.deleteStorage(slotKey)
-        else:
-          accState.setStorage(slotKey, slotDiff.after)
-      elif slotDiff.kind == delete:
-        accState.deleteStorage(slotKey)
-
-    if deleteAccount:
-      worldState.deleteAccount(address)
-    else:
-      worldState.setAccount(address, accState)
-
-proc applyBlockRewards(
-    worldState: WorldStateRef,
-    blockObject: BlockObject,
-    uncleBlocks: openArray[BlockObject],
-) {.raises: [RlpError].} =
-  const baseReward = u256(5) * pow(u256(10), 18)
-
-  block:
-    # calculate block miner reward
-    let
-      minerAddress = EthAddress(blockObject.miner)
-      uncleInclusionReward = (baseReward shr 5) * u256(uncleBlocks.len())
-
-    var accState = worldState.getAccount(minerAddress)
-    accState.addBalance(baseReward + uncleInclusionReward)
-    worldState.setAccount(minerAddress, accState)
-
-  # calculate uncle miners rewards
-  for i, uncleBlock in uncleBlocks:
-    let
-      uncleMinerAddress = EthAddress(uncleBlock.miner)
-      uncleReward =
-        (u256(8 + uint64(uncleBlock.number) - uint64(blockObject.number)) * baseReward) shr
-        3
-    var accState = worldState.getAccount(uncleMinerAddress)
-    accState.addBalance(uncleReward)
-    worldState.setAccount(uncleMinerAddress, accState)
 
 proc runBackfillLoop(
     #portalClient: RpcClient,
     web3Client: RpcClient,
-    stateDir: string,
-    startBlockNumber: uint64,
+    stateDir: string, #startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
   try:
     let db = DatabaseRef.init(stateDir).get()
@@ -119,14 +31,16 @@ proc runBackfillLoop(
 
     let worldState = db.withTransaction:
       let
-        # Requires an active transaction because it writes an emptyRlp node to tries on initialization
-        worldState = WorldStateRef.init(db)
+        # Requires an active transaction because it writes an emptyRlp node
+        # to tries on initialization
+        ws = WorldStateRef.init(db)
         genesisAccounts = genesisBlockForNetwork(MainNet).alloc
-      worldState.applyGenesisAccounts(genesisAccounts)
-      worldState
+      ws.applyGenesisAccounts(genesisAccounts)
+      ws
 
+    let startBlockNumber: uint64 = 1
+    info "Starting from block number: ", startBlockNumber
     var currentBlockNumber = startBlockNumber
-    echo "Starting from block number: ", currentBlockNumber
 
     while true:
       let
@@ -168,8 +82,11 @@ proc runBackfillLoop(
 
       db.withTransaction:
         for stateDiff in stateDiffs:
-          applyStateDiff(worldState, stateDiff)
-        applyBlockRewards(worldState, blockObject, uncleBlocks)
+          worldState.applyStateDiff(stateDiff)
+        let
+          blockData = (EthAddress(blockObject.miner), blockObject.number.uint64)
+          uncleBlocksData = uncleBlocks.mapIt((EthAddress(it.miner), it.number.uint64))
+        worldState.applyBlockRewards(blockData, uncleBlocksData)
 
       doAssert(blockObject.stateRoot.bytes() == worldState.stateRoot.data)
 
@@ -196,7 +113,7 @@ proc runState*(config: PortalBridgeConf) =
 
   if config.backfillState:
     asyncSpawn runBackfillLoop(
-      web3Client, config.stateDir.string, config.startBlockNumber
+      web3Client, config.stateDir.string #, config.startBlockNumber
     )
 
   while true:
