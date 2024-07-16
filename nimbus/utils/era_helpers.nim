@@ -134,6 +134,12 @@ proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[common.Withdrawal] =
     )
   return withdrawals
 
+proc getEth1BlockNumber*(blck: ForkedTrustedSignedBeaconBlock): uint64 =
+  ## Get the eth1 block number from a beacon block.
+  withBlck(blck):
+    when consensusFork >= ConsensusFork.Bellatrix:
+      return forkyBlck.message.body.execution_payload.block_number
+
 proc getEth1Block*(blck: ForkedTrustedSignedBeaconBlock): EthBlock =
   ## Convert a beacon block to an eth1 block.
   withBlck(blck):
