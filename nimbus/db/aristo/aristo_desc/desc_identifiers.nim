@@ -328,12 +328,20 @@ func to*(n: UInt256; T: type PathID): T =
 # Public helpers: Miscellaneous mappings
 # ------------------------------------------------------------------------------
 
-func digestTo*(data: openArray[byte]; T: type HashKey): T =
+func digestTo*(data: openArray[byte]; T: type HashKey; forceRoot = false): T =
   ## For argument `data` with length smaller than 32, import them as-is into
   ## the result. Otherwise import the Keccak hash of the argument `data`.
+  ##
+  ## If the argument `forceRoot` is set `true`, the `data` argument is always
+  ## hashed.
+  ##
+  ## Otherwise it is only hashed if the `data` length is at least 32 bytes.
+  ##
+  ## Otherwise it is converted as-is to a `HashKey` type result.
+  ##
   if data.len == 0:
     result.len = 0
-  elif data.len < 32:
+  elif data.len < 32 and not forceRoot:
     result.len = int8 data.len
     (addr result.data[0]).copyMem(unsafeAddr data[0], data.len)
   else:

@@ -87,11 +87,11 @@ proc computeKey*(
 
       writer.startList(2)
       writer.append(vtx.ePfx.toHexPrefix(isleaf = false))
-      writer.append(bwriter.finish().digestTo(HashKey))
+      writer.append(bwriter.finish().digestTo(HashKey, forceRoot=false))
     else:
       writeBranch(writer)
 
-  let h = writer.finish().digestTo(HashKey)
+  let h = writer.finish().digestTo(HashKey, rvid.root == rvid.vid)
   # TODO This shouldn't necessarily go into the database if we're just computing
   #      a key ephemerally - it should however be cached for some tiem since
   #      deep hash computations are expensive

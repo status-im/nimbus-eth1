@@ -65,10 +65,7 @@ iterator aristoReplicate[T](
   let p = mpt.call(forkTx, mpt.mpt, 0).valueOrApiError "aristoReplicate()"
   defer: discard mpt.call(forget, p)
   for (rVid,key,vtx,node) in T.replicate(p):
-    if key.len == 32:
-      yield (@(key.data), node.encode)
-    elif rVid.vid == CoreDbVidGeneric:
-      # FIXME: Would an assert rather be appropriate here?
-      yield (@(key.to(Hash256).data), node.encode)
+    for (k,v) in (key,node).to(seq[(Blob,Blob)]):
+      yield (k, v)
 
 # End
