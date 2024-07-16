@@ -14,6 +14,9 @@ import
   ../nimbus/config,
   ../nimbus/common/common
 
+#import ../nimbus/db/aristo/aristo_debug
+
+
 const
   baseDir = [".", "tests", ".."/"tests", $DirSep]  # path containg repo
   repoDir = [".", "customgenesis"]                 # alternative repo paths
@@ -28,6 +31,7 @@ proc findFilePath(file: string): string =
 
 proc makeGenesis(networkId: NetworkId): BlockHeader =
   let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = networkParams(networkId))
+  #debugEcho pp(com.db.defCtx.mpt)
   com.genesisHeader
 
 proc genesisTest() =

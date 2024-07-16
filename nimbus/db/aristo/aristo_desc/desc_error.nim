@@ -21,7 +21,6 @@ type
     BlobifyExtMissingRefs
     BlobifyExtPathOverflow
     BlobifyLeafPathOverflow
-    BlobifyNilFilter
     BlobifyNilVertex
 
 
@@ -32,7 +31,6 @@ type
     CheckAnyVtxEmptyKeyExpected
     CheckAnyVtxEmptyKeyMismatch
     CheckAnyVtxBranchLinksMissing
-    CheckAnyVtxExtPfxMissing
     CheckAnyVtxLockWithoutKey
     CheckAnyVTopUnset
 
@@ -41,14 +39,11 @@ type
     CheckBeCacheKeyNonEmpty
     CheckBeGarbledVTop
     CheckBeVtxBranchLinksMissing
-    CheckBeVtxExtPfxMissing
     CheckBeVtxInvalid
     CheckBeVtxMissing
 
     CheckStkKeyStrayZeroEntry
-    CheckStkVtxIncomplete
     CheckStkVtxKeyMismatch
-    CheckStkVtxKeyMissing
 
     CheckRlxVtxIncomplete
     CheckRlxVtxKeyMissing
@@ -56,55 +51,33 @@ type
 
 
     # De-serialiser from `blobify.nim`
-    DeblobNilArgument
+    Deblob256LenUnsupported
+    Deblob64LenUnsupported
+    DeblobBranchGotLeafPrefix
+    DeblobBranchTooShort
+    DeblobCodeLenUnsupported
+    DeblobExtSizeGarbled
+    DeblobLeafGotExtPrefix
+    DeblobLeafSizeGarbled
+    DeblobRVidLenUnsupported
     DeblobUnknown
     DeblobVtxTooShort
-    DeblobHashKeyExpected
-    DeblobBranchTooShort
-    DeblobBranchSizeGarbled
-    DeblobBranchInxOutOfRange
-    DeblobExtTooShort
-    DeblobExtSizeGarbled
-    DeblobExtGotLeafPrefix
-    DeblobLeafSizeGarbled
-    DeblobLeafGotExtPrefix
-    DeblobSizeGarbled
-    DeblobWrongType
     DeblobWrongSize
-    Deblob64LenUnsupported
-    Deblob256LenUnsupported
-    DeblobRVidLenUnsupported
-    DeblobNonceLenUnsupported
-    DeblobBalanceLenUnsupported
-    DeblobStorageLenUnsupported
-    DeblobCodeLenUnsupported
-    DeblobFilterTooShort
-    DeblobFilterGenTooShort
-    DeblobFilterTrpTooShort
-    DeblobFilterTrpVtxSizeGarbled
-    DeblobFilterSizeGarbled
+    DeblobWrongType
 
 
     # Deletion of vertex paths, `deleteXxx()`
     DelAccRootNotAccepted
     DelBranchExpexted
-    DelBranchLocked
     DelBranchWithoutRefs
     DelDanglingStoTrie
-    DelExtLocked
     DelLeafExpexted
-    DelLeafLocked
-    DelLeafUnexpected
     DelPathNotFound
-    DelPathTagError
     DelRootVidMissing
     DelStoAccMissing
     DelStoRootMissing
     DelStoRootNotAccepted
-    DelSubTreeAccRoot
-    DelSubTreeVoidRoot
     DelVidStaleVtx
-
 
     # Functions from `aristo_desc.nim`
     DescMustBeOnCentre
@@ -112,14 +85,14 @@ type
     DescStaleDescriptor
 
 
-    # Functions from  `aristo_filter.nim`
+    # Functions from  `aristo_delta.nim`
     FilBackendMissing
     FilBackendRoMode
-    FilNilFilterRejected
+    #FilNilFilterRejected
     FilSiblingsCommitUnfinshed
-    FilSrcTrgInconsistent
-    FilStateRootMismatch
-    FilTrgSrcMismatch
+    #FilSrcTrgInconsistent
+    #FilStateRootMismatch
+    #FilTrgSrcMismatch
 
 
     # Fetch functions from `aristo_fetch.nim`
@@ -148,9 +121,6 @@ type
     HikeBranchTailEmpty
     HikeDanglingEdge
     HikeEmptyPath
-    HikeExtMissingEdge
-    HikeExtTailEmpty
-    HikeExtTailMismatch
     HikeLeafUnexpected
     HikeNoLegs
     HikeRootMissing
@@ -160,34 +130,8 @@ type
     MergeHikeFailed # Ooops, internal error
     MergeAccRootNotAccepted
     MergeStoRootNotAccepted
-    MergeBranchGarbledNibble
-    MergeBranchGarbledTail
-    MergeBranchLinkLeafGarbled
-    MergeBranchLinkVtxPfxTooShort
-    MergeBranchProofModeLock
-    MergeBranchRootExpected
-    MergeHashKeyDiffersFromCached
-    MergeHashKeyInvalid
-    MergeLeafGarbledHike
     MergeLeafPathCachedAlready
     MergeLeafPathOnBackendAlready
-    MergeLeafProofModeLock
-    MergeLeafTypeAccountRequired
-    MergeLeafTypeRawDataRequired
-    MergeNodeAccountPayloadError
-    MergeNodeVidMissing
-    MergeNodeVtxDiffersFromExisting
-    MergeNonBranchProofModeLock
-    MergeProofInitMissing
-    MergeRevVidMustHaveBeenCached
-    MergeRootArgsIncomplete
-    MergeRootBranchLinkBusy
-    MergeRootKeyDiffersForVid
-    MergeRootKeyInvalid
-    MergeRootKeyMissing
-    MergeRootKeyNotInProof
-    MergeRootKeysMissing
-    MergeRootKeysOverflow
     MergeRootVidMissing
     MergeStoAccMissing
 
@@ -197,9 +141,7 @@ type
     NearbyBranchError
     NearbyDanglingLink
     NearbyEmptyHike
-    NearbyExtensionError
     NearbyFailed
-    NearbyBranchExpected
     NearbyLeafExpected
     NearbyNestingTooDeep
     NearbyPathTailUnexpected
@@ -232,24 +174,7 @@ type
     RdbBeWrTriggerActiveAlready
     RdbBeWrTriggerNilFn
     RdbGuestInstanceAborted
-    RdbGuestInstanceUnsupported
     RdbHashKeyExpected
-
-
-    # Rlp decoder, `read()`
-    Rlp2Or17ListEntries
-    RlpBlobExpected
-    RlpBranchHashKeyExpected
-    RlpEmptyBlobExpected
-    RlpExtHashKeyExpected
-    RlpHashKeyExpected
-    RlpNonEmptyBlobExpected
-    RlpOtherException
-    RlpRlpException
-
-
-    # Serialise decoder
-    SerCantResolveStorageRoot
 
 
     # Transaction wrappers
@@ -265,18 +190,6 @@ type
     TxPendingTx
     TxPrettyPointlessLayer
     TxStackGarbled
-    TxStackUnderflow
     TxStateRootMismatch
-
-
-    # Functions from `aristo_utils.nim`
-    UtilsAccLeafPayloadExpected
-    UtilsAccNodeUnsupported
-    UtilsAccPathMissing
-    UtilsAccStorageKeyMissing
-    UtilsAccVtxUnsupported
-    UtilsAccWrongStorageRoot
-    UtilsPayloadTypeUnsupported
-    UtilsStoRootMissing
 
 # End

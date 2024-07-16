@@ -16,7 +16,8 @@
 import
   eth/common,
   results,
-  "."/[aristo_compute, aristo_constants, aristo_desc, aristo_init, aristo_merge]
+  "."/[aristo_compute, aristo_desc, aristo_get, aristo_init,
+       aristo_delete, aristo_merge]
 
 # ------------------------------------------------------------------------------
 # Public functions, signature generator
@@ -45,16 +46,36 @@ proc merkleSignAdd*(
       sdb.errKey = @key
       return
 
+
+proc merkleSignDelete*(
+    sdb: MerkleSignRef;
+    key: openArray[byte];
+    ) =
+  ## Add key-value item to the signature list. The order of the items to add
+  ## is irrelevant.
+  if sdb.error == AristoError(0):
+    sdb.count.inc
+    discard sdb.db.deleteGenericData(sdb.root, key).valueOr:
+      sdb.`error` = error
+      sdb.errKey = @key
+      return
+
 proc merkleSignCommit*(
     sdb: MerkleSignRef;
-      ): Result[HashKey,(Blob,AristoError)] =
+      ): Result[Hash256,(Blob,AristoError)] =
   ## Finish with the list, calculate signature and return it.
   if sdb.count == 0:
-    return ok VOID_HASH_KEY
+    return ok EMPTY_ROOTHASH
   if sdb.error != AristoError(0):
     return err((sdb.errKey, sdb.error))
 
-  ok sdb.db.computeKey((sdb.root, sdb.root)).expect("ok")
+  let sign = sdb.db.computeKey((sdb.root, sdb.root)).valueOr:
+    if error == GetVtxNotFound:
+      if not sdb.db.getVtx((sdb.root, sdb.root)).isValid:
+        return ok EMPTY_ROOTHASH
+    raiseAssert "merkleSignCommit(): " & $error
+
+  ok sign.to(Hash256)
 
 # ------------------------------------------------------------------------------
 # End

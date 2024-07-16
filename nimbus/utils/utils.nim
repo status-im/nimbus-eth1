@@ -25,7 +25,7 @@ proc calcRootHash[T](items: openArray[T]): Hash256 {.gcsafe.} =
   let sig = merkleSignBegin()
   for i, t in items:
     sig.merkleSignAdd(rlp.encode(i.uint), rlp.encode(t))
-  sig.merkleSignCommit.value.to(Hash256)
+  sig.merkleSignCommit.value
 
 template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
   calcRootHash(transactions)

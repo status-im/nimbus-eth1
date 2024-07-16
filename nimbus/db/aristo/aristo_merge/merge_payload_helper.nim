@@ -18,12 +18,8 @@ import eth/common, results, ".."/[aristo_desc, aristo_get, aristo_layers, aristo
 
 proc xPfx(vtx: VertexRef): NibblesBuf =
   case vtx.vType
-  of Leaf:
-    vtx.lPfx
-  of Extension:
-    vtx.ePfx
-  of Branch:
-    raiseAssert "oops"
+  of Leaf: vtx.lPfx
+  of Branch: vtx.ePfx
 
 # -----------
 
@@ -33,112 +29,6 @@ proc layersPutLeaf(
   let vtx = VertexRef(vType: Leaf, lPfx: path, lData: payload)
   db.layersPutVtx(rvid, vtx)
   vtx
-
-proc insertBranch(
-    db: AristoDbRef, # Database, top layer
-    linkID: RootedVertexID, # Vertex ID to insert
-    linkVtx: VertexRef, # Vertex to insert
-    path: NibblesBuf,
-    payload: LeafPayload, # Leaf data payload
-): Result[VertexRef, AristoError] =
-  ##
-  ## Insert `Extension->Branch` vertex chain or just a `Branch` vertex
-  ##
-  ##   ... --(linkID)--> <linkVtx>
-  ##
-  ##   <-- immutable --> <---- mutable ----> ..
-  ##
-  ## will become either
-  ##
-  ##   --(linkID)-->
-  ##        <extVtx>             --(local1)-->
-  ##          <forkVtx>[linkInx] --(local2)--> <linkVtx*>
-  ##                   [leafInx] --(local3)--> <leafVtx>
-  ##
-  ## or in case that there is no common prefix
-  ##
-  ##   --(linkID)-->
-  ##          <forkVtx>[linkInx] --(local2)--> <linkVtx*>
-  ##                   [leafInx] --(local3)--> <leafVtx>
-  ##
-  ## *) vertex was slightly modified or removed if obsolete `Extension`
-  ##
-  if linkVtx.xPfx.len == 0:
-    return err(MergeBranchLinkVtxPfxTooShort)
-
-  let n = linkVtx.xPfx.sharedPrefixLen path
-  # Verify minimum requirements
-  doAssert n < path.len
-
-  # Provide and install `forkVtx`
-  let
-    forkVtx = VertexRef(vType: Branch)
-    linkInx = linkVtx.xPfx[n]
-    leafInx = path[n]
-
-  # Install `forkVtx`
-  block:
-    if linkVtx.vType == Leaf:
-      let
-        local = db.vidFetch(pristine = true)
-        linkDup = linkVtx.dup
-
-      linkDup.lPfx = linkVtx.lPfx.slice(1 + n)
-      forkVtx.bVid[linkInx] = local
-      db.layersPutVtx((linkID.root, local), linkDup)
-    elif linkVtx.ePfx.len == n + 1:
-      # This extension `linkVtx` becomes obsolete
-      forkVtx.bVid[linkInx] = linkVtx.eVid
-    else:
-      let
-        local = db.vidFetch
-        linkDup = linkVtx.dup
-
-      linkDup.ePfx = linkDup.ePfx.slice(1 + n)
-      forkVtx.bVid[linkInx] = local
-      db.layersPutVtx((linkID.root, local), linkDup)
-
-  let leafVtx = block:
-    let local = db.vidFetch(pristine = true)
-    forkVtx.bVid[leafInx] = local
-    db.layersPutLeaf((linkID.root, local), path.slice(1 + n), payload)
-
-  # Update in-beween glue linking `branch --[..]--> forkVtx`
-  if 0 < n:
-    let
-      vid = db.vidFetch()
-      extVtx = VertexRef(vType: Extension, ePfx: path.slice(0, n), eVid: vid)
-    db.layersPutVtx(linkID, extVtx)
-    db.layersPutVtx((linkID.root, vid), forkVtx)
-  else:
-    db.layersPutVtx(linkID, forkVtx)
-
-  ok(leafVtx)
-
-proc concatBranchAndLeaf(
-    db: AristoDbRef, # Database, top layer
-    brVid: RootedVertexID, # Branch vertex ID from from `Hike` top
-    brVtx: VertexRef, # Branch vertex, linked to from `Hike`
-    path: NibblesBuf,
-    payload: LeafPayload, # Leaf data payload
-): Result[VertexRef, AristoError] =
-  ## Append argument branch vertex passed as argument `(brID,brVtx)` and then
-  ## a `Leaf` vertex derived from the argument `payload`.
-  ##
-  if path.len == 0:
-    return err(MergeBranchGarbledTail)
-
-  let nibble = path[0].int8
-  doAssert not brVtx.bVid[nibble].isValid
-
-  let
-    brDup = brVtx.dup
-    vid = db.vidFetch(pristine = true)
-
-  brDup.bVid[nibble] = vid
-
-  db.layersPutVtx(brVid, brDup)
-  ok db.layersPutLeaf((brVid.root, vid), path.slice(1), payload)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -178,54 +68,92 @@ proc mergePayloadImpl*(
     touched[pos] = cur
     pos += 1
 
+    let n = path.sharedPrefixLen(vtx.xPfx)
     case vtx.vType
     of Leaf:
       let leafVtx =
-        if path == vtx.lPfx:
-          # Replace the current vertex with a new payload
+        if n == vtx.lPfx.len:
+          # Same path - replace the current vertex with a new payload
 
           if vtx.lData == payload:
             # TODO is this still needed? Higher levels should already be doing
             #      these checks
             return err(MergeLeafPathCachedAlready)
 
-          var payload = payload
           if root == VertexID(1):
+            var payload = payload.dup()
             # TODO can we avoid this hack? it feels like the caller should already
             #      have set an appropriate stoID - this "fixup" feels risky,
             #      specially from a caching point of view
             payload.stoID = vtx.lData.stoID
-
-          db.layersPutLeaf((root, cur), path, payload)
-
+            db.layersPutLeaf((root, cur), path, payload)
+          else:
+            db.layersPutLeaf((root, cur), path, payload)
         else:
-          # Turn leaf into branch, leaves with possible ext prefix
-          ? db.insertBranch((root, cur), vtx, path, payload)
+          # Turn leaf into a branch (or extension) then insert the two leaves
+          # into the branch
+          let branch = VertexRef(vType: Branch, ePfx: path.slice(0, n))
+          block: # Copy of existing leaf node, now one level deeper
+            let local = db.vidFetch()
+            branch.bVid[vtx.lPfx[n]] = local
+            discard db.layersPutLeaf((root, local), vtx.lPfx.slice(n + 1), vtx.lData)
+
+          let leafVtx = block: # Newly inserted leaf node
+            let local = db.vidFetch()
+            branch.bVid[path[n]] = local
+            db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+
+          # Put the branch at the vid where the leaf was
+          db.layersPutVtx((root, cur), branch)
+
+          leafVtx
 
       resetKeys()
       return ok(leafVtx)
-
-    of Extension:
-      if vtx.ePfx.len == path.sharedPrefixLen(vtx.ePfx):
-        cur = vtx.eVid
-        path = path.slice(vtx.ePfx.len)
-        vtx = ?db.getVtxRc((root, cur))
-      else:
-        let leafVtx = ? db.insertBranch((root, cur), vtx, path, payload)
-
-        resetKeys()
-        return ok(leafVtx)
     of Branch:
-      let
-        nibble = path[0]
-        next = vtx.bVid[nibble]
+      if vtx.ePfx.len == n:
+        # The existing branch is a prefix of the new entry
+        let
+          nibble = path[vtx.ePfx.len]
+          next = vtx.bVid[nibble]
 
-      if next.isValid:
-        cur = next
-        path = path.slice(1)
-        vtx = ?db.getVtxRc((root, next))
+        if next.isValid:
+          cur = next
+          path = path.slice(n + 1)
+          vtx = ?db.getVtxRc((root, next))
+        else:
+          # There's no vertex at the branch point - insert the payload as a new
+          # leaf and update the existing branch
+          let
+            local = db.vidFetch()
+            leafVtx = db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+            brDup = vtx.dup()
+
+          brDup.bVid[nibble] = local
+          db.layersPutVtx((root, cur), brDup)
+
+          resetKeys()
+          return ok(leafVtx)
       else:
-        let leafVtx = ? db.concatBranchAndLeaf((root, cur), vtx, path, payload)
+        # Partial path match - we need to split the existing branch at
+        # the point of divergence, inserting a new branch
+        let branch = VertexRef(vType: Branch, ePfx: path.slice(0, n))
+        block: # Copy the existing vertex and add it to the new branch
+          let local = db.vidFetch()
+          branch.bVid[vtx.ePfx[n]] = local
+
+          db.layersPutVtx(
+            (root, local),
+            VertexRef(vType: Branch, ePfx: vtx.ePfx.slice(n + 1), bVid: vtx.bVid),
+          )
+
+        let leafVtx = block: # add the new entry
+          let local = db.vidFetch()
+          branch.bVid[path[n]] = local
+          db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+
+        db.layersPutVtx((root, cur), branch)
+
         resetKeys()
         return ok(leafVtx)
 

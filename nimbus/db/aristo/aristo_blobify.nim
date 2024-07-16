@@ -16,6 +16,8 @@ import
   stew/[arrayops, endians2],
   ./aristo_desc
 
+export aristo_desc
+
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
 type
@@ -167,12 +169,8 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
   ## ::
   ##   Branch:
   ##     [VertexID, ...] -- list of up to 16 child vertices lookup keys
-  ##     uint64          -- lengths of each child vertex, each taking 4 bits
-  ##     0x08            -- marker(8)
-  ##
-  ##   Extension:
-  ##     VertexID       -- child vertex lookup key
-  ##     Blob           -- hex encoded partial path (at least one byte)
+  ##     Blob           -- hex encoded partial path (non-empty for extension nodes)
+  ##     uint64         -- lengths of each child vertex, each taking 4 bits
   ##     0x80 + xx      -- marker(2) + pathSegmentLen(6)
   ##
   ##   Leaf:
@@ -199,19 +197,21 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
         data &= tmp.data()
     if data.len == pos:
       return err(BlobifyBranchMissingRefs)
-    data &= lens.toBytesBE
-    data &= [0x08u8]
-  of Extension:
+
     let
-      pSegm = vtx.ePfx.toHexPrefix(isleaf = false)
+      pSegm =
+        if vtx.ePfx.len > 0:
+          vtx.ePfx.toHexPrefix(isleaf = false)
+        else:
+          @[]
       psLen = pSegm.len.byte
-    if psLen == 0 or 33 < psLen:
+    if 33 < psLen:
       return err(BlobifyExtPathOverflow)
-    if not vtx.eVid.isValid:
-      return err(BlobifyExtMissingRefs)
-    data &= vtx.eVid.blobify().data()
+
     data &= pSegm
+    data &= lens.toBytesBE
     data &= [0x80u8 or psLen]
+
   of Leaf:
     let
       pSegm = vtx.lPfx.toHexPrefix(isleaf = true)
@@ -296,12 +296,11 @@ proc deblobify*(
     return err(DeblobVtxTooShort)
 
   ok case record[^1] shr 6:
-  of 0: # `Branch` vertex
-    if record[^1] != 0x08u8:
-      return err(DeblobUnknown)
+  of 2: # `Branch` vertex
     if record.len < 11:                               # at least two edges
       return err(DeblobBranchTooShort)
     let
+      sLen = record[^1].int and 0x3f                  # length of path segment      aInx = record.len - 9
       aInx = record.len - 9
       aIny = record.len - 2
     var
@@ -316,28 +315,16 @@ proc deblobify*(
       inc n
       lens = lens shr 4
 
+    let (isLeaf, pathSegment) =
+      NibblesBuf.fromHexPrefix record.toOpenArray(offs, aInx - 1)
+    if isLeaf:
+      return err(DeblobBranchGotLeafPrefix)
+
       # End `while`
     VertexRef(
       vType: Branch,
+      ePfx:  pathSegment,
       bVid:  vtxList)
-
-  of 2: # `Extension` vertex
-    let
-      sLen = record[^1].int and 0x3f                  # length of path segment
-      rLen = record.len - 1                           # `vertexID` + path segm
-      pLen = rLen - sLen                              # payload length
-    if rLen < sLen or pLen < 1:
-      return err(DeblobLeafSizeGarbled)
-    let (isLeaf, pathSegment) =
-      NibblesBuf.fromHexPrefix record.toOpenArray(pLen, rLen - 1)
-    if isLeaf:
-      return err(DeblobExtGotLeafPrefix)
-
-    var offs = 0
-    VertexRef(
-      vType: Extension,
-      eVid:  VertexID(?load64(record, offs, pLen)),
-      ePfx:  pathSegment)
 
   of 3: # `Leaf` vertex
     let

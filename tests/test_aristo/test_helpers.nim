@@ -46,7 +46,7 @@ func to(a: NodeKey; T: type PathID): T =
 # Public pretty printing
 # ------------------------------------------------------------------------------
 
-func pp*(
+proc pp*(
     w: ProofTrieData;
     rootID: VertexID;
     db: AristoDbRef;
