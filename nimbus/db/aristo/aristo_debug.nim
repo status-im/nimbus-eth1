@@ -301,7 +301,7 @@ proc ppFilter(
     pfx = indent.toPfx
     pfx1 = indent.toPfx(1)
     pfx2 = indent.toPfx(2)
-  result = "<filter>"
+  result = "<balancer>"
   if fl.isNil:
     result &= " n/a"
     return

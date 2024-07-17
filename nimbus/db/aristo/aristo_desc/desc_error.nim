@@ -88,11 +88,7 @@ type
     # Functions from  `aristo_delta.nim`
     FilBackendMissing
     FilBackendRoMode
-    #FilNilFilterRejected
     FilSiblingsCommitUnfinshed
-    #FilSrcTrgInconsistent
-    #FilStateRootMismatch
-    #FilTrgSrcMismatch
 
 
     # Fetch functions from `aristo_fetch.nim`
@@ -188,8 +184,6 @@ type
     TxNotFound
     TxNotTopTx
     TxPendingTx
-    TxPrettyPointlessLayer
     TxStackGarbled
-    TxStateRootMismatch
 
 # End
