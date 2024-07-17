@@ -459,7 +459,9 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # un-set it if it has been set too early
       ctx.env.parentBeaconBlockRoot = Opt.none(Hash256)
 
-    if com.forkGTE(MergeFork):
+    let isMerged = config.terminalTotalDifficulty.isSome and 
+                   config.terminalTotalDifficulty.value == 0.u256
+    if isMerged:
       if ctx.env.currentRandom.isNone:
         raise newError(ErrorConfig, "post-merge requires currentRandom to be defined in env")
 

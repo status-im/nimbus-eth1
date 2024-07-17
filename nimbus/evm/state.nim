@@ -225,22 +225,22 @@ proc init*(
       tracer = tracer)
     return true
 
-proc coinbase*(vmState: BaseVMState): EthAddress =
+func coinbase*(vmState: BaseVMState): EthAddress =
   vmState.blockCtx.coinbase
 
-proc blockNumber*(vmState: BaseVMState): BlockNumber =
+func blockNumber*(vmState: BaseVMState): BlockNumber =
   # it should return current block number
   # and not head.number
   vmState.parent.number + 1
 
-proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
+func difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   if vmState.com.consensus == ConsensusType.POS:
     # EIP-4399/EIP-3675
     UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)
   else:
     vmState.blockCtx.difficulty
 
-proc baseFeePerGas*(vmState: BaseVMState): UInt256 =
+func baseFeePerGas*(vmState: BaseVMState): UInt256 =
   vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(

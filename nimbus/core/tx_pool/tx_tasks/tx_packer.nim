@@ -253,7 +253,7 @@ proc vmExecCommit(pst: TxPackerStateRef)
     raiseAssert "vmExecCommit(): state() failed " & $$error
   xp.chain.stateRoot = vmState.stateDB.rootHash
 
-  if vmState.com.forkGTE(Cancun):
+  if xp.chain.nextFork >= FkCancun:
     # EIP-4844
     xp.chain.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
     xp.chain.blobGasUsed = Opt.some(vmState.blobGasUsed)

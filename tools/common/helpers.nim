@@ -59,6 +59,7 @@ proc assignTime(c: ChainConfig, transitionFork: HardFork, t: EthTime) =
   let table = createForkTransitionTable(transitionFork,
     Opt.none(BlockNumber), Opt.some(t), Opt.none(DifficultyInt))
   c.populateFromForkTransitionTable(table)
+  c.terminalTotalDifficulty = Opt.some(0.u256)
 
 func getChainConfig*(network: string, c: ChainConfig) =
   c.daoForkSupport = false
@@ -110,6 +111,7 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
   of $TestFork.Merge, $TestFork.Paris:
     c.assignNumber(HardFork.MergeFork, BlockNumberZero)
+    c.terminalTotalDifficulty = Opt.some(0.u256)
   of $TestFork.ArrowGlacierToParisAtDiffC0000:
     c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
     c.terminalTotalDifficulty = Opt.some(0xC0000.u256)

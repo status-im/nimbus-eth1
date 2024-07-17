@@ -16,7 +16,7 @@ import results, ../common/common
 proc validateWithdrawals*(
     com: CommonRef, header: BlockHeader, withdrawals: Opt[seq[Withdrawal]]
 ): Result[void, string] =
-  if com.forkGTE(Shanghai):
+  if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:
       return err("Post-Shanghai block header must have withdrawalsRoot")
     elif withdrawals.isNone:

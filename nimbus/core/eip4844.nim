@@ -134,7 +134,7 @@ func validateEip4844Header*(
     com: CommonRef, header, parentHeader: BlockHeader,
     txs: openArray[Transaction]): Result[void, string] {.raises: [].} =
 
-  if not com.forkGTE(Cancun):
+  if not com.isCancunOrLater(header.timestamp):
     if header.blobGasUsed.isSome:
       return err("unexpected EIP-4844 blobGasUsed in block header")
 

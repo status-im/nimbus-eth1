@@ -305,6 +305,9 @@ func toEVMFork*(com: CommonRef): EVMFork =
 func isSpuriousOrLater*(com: CommonRef, number: BlockNumber): bool =
   com.toHardFork(number.forkDeterminationInfo) >= Spurious
 
+func isByzantiumOrLater*(com: CommonRef, number: BlockNumber): bool =
+  com.toHardFork(number.forkDeterminationInfo) >= Byzantium
+
 func isLondonOrLater*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
   com.toHardFork(number.forkDeterminationInfo) >= London
