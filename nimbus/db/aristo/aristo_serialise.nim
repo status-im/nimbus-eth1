@@ -59,74 +59,6 @@ proc serialise(
 # Public RLP transcoder mixins
 # ------------------------------------------------------------------------------
 
-when false: # free parking (not yet cruft)
-  proc read*(rlp: var Rlp; T: type NodeRef): T {.gcsafe, raises: [RlpError].} =
-    ## Mixin for RLP writer, a decoder with error return code in a `Dummy`
-    ## node if needed.
-    proc aristoError(error: AristoError): NodeRef =
-      ## Allows returning de
-      NodeRef(vType: Leaf, error: error)
-
-    if not rlp.isList:
-      # Otherwise `rlp.items` would raise a `Defect`
-      return aristoError(Rlp2Or17ListEntries)
-
-    var
-      blobs = newSeq[Blob](2)         # temporary, cache
-      links: array[16,HashKey]        # reconstruct branch node
-      top = 0                         # count entries and positions
-
-    # Collect lists of either 2 or 17 blob entries.
-    for w in rlp.items:
-      case top
-      of 0, 1:
-        if not w.isBlob:
-          return aristoError(RlpBlobExpected)
-        blobs[top] = rlp.read(Blob)
-      of 2 .. 15:
-        let blob = rlp.read(Blob)
-        links[top] = HashKey.fromBytes(blob).valueOr:
-          return aristoError(RlpBranchHashKeyExpected)
-      of 16:
-        if not w.isBlob or 0 < rlp.read(Blob).len:
-          return aristoError(RlpEmptyBlobExpected)
-      else:
-        return aristoError(Rlp2Or17ListEntries)
-      top.inc
-
-    # Verify extension data
-    case top
-    of 2:
-      if blobs[0].len == 0:
-        return aristoError(RlpNonEmptyBlobExpected)
-      let (isLeaf, pathSegment) = NibblesBuf.fromHexPrefix blobs[0]
-      if isLeaf:
-        return NodeRef(
-          vType:     Leaf,
-          lPfx:      pathSegment,
-          lData:     LeafPayload(
-            pType:   RawData,
-            rawBlob: blobs[1]))
-      else:
-        raiseAssert "TODO"
-        # var node = NodeRef(
-        #   vType: Extension,
-        #   ePfx:  pathSegment)
-        # node.key[0] = HashKey.fromBytes(blobs[1]).valueOr:
-        #   return aristoError(RlpExtHashKeyExpected)
-        # return node
-    of 17:
-      for n in [0,1]:
-        links[n] = HashKey.fromBytes(blobs[n]).valueOr:
-          return aristoError(RlpBranchHashKeyExpected)
-      return NodeRef(
-        vType: Branch,
-        key:   links)
-    else:
-      discard
-
-    aristoError(Rlp2Or17ListEntries)
-
 func append*(w: var RlpWriter; key: HashKey) =
   if 1 < key.len and key.len < 32:
     w.appendRawBytes key.data
@@ -150,7 +82,7 @@ proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
 
     if 0 < w.node.ePfx.len:
       # Do for embedded extension node
-      let brHash = wr.finish().digestTo(HashKey, forceRoot=false)
+      let brHash = wr.finish().digestTo(HashKey)
       result.add (@(brHash.data), wr.finish())
 
       wr = initRlpWriter()
@@ -174,12 +106,9 @@ proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
 
   result.add (@(w.key.data), wr.finish())
 
-proc digestTo*(node: NodeRef; T: type HashKey; forceRoot = false): T =
+proc digestTo*(node: NodeRef; T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key. Note
   ## that a `Dummy` node is encoded as as a `Leaf`.
-  ##
-  ## The argument `forceRoot` is passed on to the function
-  ## `desc_identifiers.digestTo()`.
   ##
   var wr = initRlpWriter()
   case node.vType:
@@ -192,7 +121,7 @@ proc digestTo*(node: NodeRef; T: type HashKey; forceRoot = false): T =
 
     # Do for embedded extension node
     if 0 < node.ePfx.len:
-      let brHash = wr.finish().digestTo(HashKey, forceRoot=false)
+      let brHash = wr.finish().digestTo(HashKey)
       wr= initRlpWriter()
       wr.startList(2)
       wr.append node.ePfx.toHexPrefix(isleaf = false)
@@ -209,7 +138,7 @@ proc digestTo*(node: NodeRef; T: type HashKey; forceRoot = false): T =
     wr.append node.lPfx.toHexPrefix(isleaf = true)
     wr.append node.lData.serialise(getKey0).value
 
-  wr.finish().digestTo(HashKey, forceRoot)
+  wr.finish().digestTo(HashKey)
 
 proc serialise*(
     db: AristoDbRef;

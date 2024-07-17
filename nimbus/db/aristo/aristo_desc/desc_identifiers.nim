@@ -57,24 +57,29 @@ type
     ## To reference the root itself, use (root, root).
 
   HashKey* = object
-    ## Ethereum MPTs use Keccak hashes as node links if the size of an RLP
-    ## encoded node is of size at least 32 bytes. Otherwise, the RLP encoded
-    ## node value is used as a pseudo node link (rather than a hash.) Such a
-    ## node is nor stored on key-value database. Rather the RLP encoded node
-    ## value is stored instead of a lode link in a parent node instead. Only
-    ## for the root hash, the top level node is always referred to by the
-    ## hash.
+    ## Ethereum reference MPTs use Keccak hashes as node links if the size of
+    ## an RLP encoded node is at least 32 bytes. Otherwise, the RLP encoded
+    ## node value is used as a pseudo node link (rather than a hash.) This is
+    ## specified in the yellow paper, appendix D. Only for the root hash, the
+    ## top level node is always referred to by the Keccak hash.
     ##
-    ## This compaction feature needed an abstraction of the `HashKey` object
+    ## On the `Aristo` database node links are called keys which are of this
+    ## very type `HashKey`. For key-value tables (which assign a key to a
+    ## vertex), the keys are always stored as such with length probably
+    ## smaller than 32, including for root vertex keys. Only when used as a
+    ## root state, the key of the latter is digested to a Keccak hash
+    ## on-the-fly.
+    ##
+    ## This compaction feature nees an abstraction of the hash link object
     ## which is either a `Hash256` or a `Blob` of length at most 31 bytes.
     ## This leaves two ways of representing an empty/void `HashKey` type.
     ## It may be available as an empty `Blob` of zero length, or the
     ## `Hash256` type of the Keccak hash of an empty `Blob` (see constant
     ## `EMPTY_ROOT_HASH`.)
     ##
-    ## For performance, we avoid storing blobs as `seq`, instead storing their
-    ## length and sharing the data "space".
-    ## TODO can we skip one byte of hash and reduce this type to 32 bytes?
+    ## For performance, storing blobs as `seq` is avoided, instead storing
+    ## their length and sharing the data "space".
+    ##
     buf: array[32, byte] # Either Hash256 or blob data, depending on `len`
     len: int8 # length in the case of blobs, or 32 when it's a hash
 
@@ -328,20 +333,22 @@ func to*(n: UInt256; T: type PathID): T =
 # Public helpers: Miscellaneous mappings
 # ------------------------------------------------------------------------------
 
-func digestTo*(data: openArray[byte]; T: type HashKey; forceRoot = false): T =
+func digestTo*(data: openArray[byte]; T: type HashKey): T =
   ## For argument `data` with length smaller than 32, import them as-is into
   ## the result. Otherwise import the Keccak hash of the argument `data`.
   ##
-  ## If the argument `forceRoot` is set `true`, the `data` argument is always
-  ## hashed.
+  ## The `data` argument is only hashed if the `data` length is at least
+  ## 32 bytes. Otherwise it is converted as-is to a `HashKey` type result.
   ##
-  ## Otherwise it is only hashed if the `data` length is at least 32 bytes.
-  ##
-  ## Otherwise it is converted as-is to a `HashKey` type result.
+  ## Note that for calculating a root state (when `data` is a serialised
+  ## vertex), one would use the expression `data.digestTo(HashKey).to(Hash256)`
+  ## which would always hash the `data` argument regardless of its length
+  ## (and might result in an `EMPTY_ROOT_HASH`.) See the comment at the
+  ## definition of the `HashKey` type for an explanation of its usage.
   ##
   if data.len == 0:
     result.len = 0
-  elif data.len < 32 and not forceRoot:
+  elif data.len < 32:
     result.len = int8 data.len
     (addr result.data[0]).copyMem(unsafeAddr data[0], data.len)
   else:

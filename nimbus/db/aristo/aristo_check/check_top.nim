@@ -40,7 +40,7 @@ proc checkTopStrict*(
       let node = vtx.toNode(rvid.root, db).valueOr:
         # not all sub-keys might be ready du to lazy hashing
         continue
-      if key != node.digestTo(HashKey, rvid.root==rvid.vid):
+      if key != node.digestTo(HashKey):
         return err((rvid.vid,CheckStkVtxKeyMismatch))
 
     else: # Empty key flags key is for update
@@ -63,7 +63,7 @@ proc checkTopProofMode*(
       if vtx.isValid:
         let node = vtx.toNode(rvid.root, db).valueOr:
           continue
-        if key != node.digestTo(HashKey, rvid.root == rvid.vid):
+        if key != node.digestTo(HashKey):
           return err((rvid.vid,CheckRlxVtxKeyMismatch))
   ok()
 
