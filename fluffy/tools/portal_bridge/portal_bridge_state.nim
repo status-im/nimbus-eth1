@@ -31,13 +31,13 @@ proc runBackfillCollectBlockDataLoop(
     web3Client: RpcClient,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
-  info "Starting state build loop"
+  debug "Starting state backfill collect block data loop"
 
   var currentBlockNumber = startBlockNumber
 
   while true:
-    if currentBlockNumber mod 5000 == 0:
-      info "Current block number: ", currentBlockNumber
+    if currentBlockNumber mod 10000 == 0:
+      info "Collecting block data for block number: ", blockNumber = currentBlockNumber
 
     let
       blockId = blockId(currentBlockNumber)
@@ -69,7 +69,7 @@ proc runBackfillCollectBlockDataLoop(
           break
         uncleBlocks.add(uncleBlock)
       except CatchableError as e:
-        error "Failed to get uncleBlockRequest"
+        error "Failed to get uncleBlockRequest", error = e.msg
         break
 
     if uncleBlocks.len() < uncleBlockRequests.len():
@@ -88,7 +88,7 @@ proc runBackfillCollectBlockDataLoop(
 proc runBackfillBuildStateLoop(
     blockDataQueue: AsyncQueue[BlockData], stateDir: string
 ) {.async: (raises: [CancelledError]).} =
-  info "Starting state backfill build  loop"
+  debug "Starting state backfill build state loop"
 
   let db = DatabaseRef.init(stateDir).get()
   defer:
@@ -110,6 +110,9 @@ proc runBackfillBuildStateLoop(
   while true:
     let blockData = await blockDataQueue.popFirst()
 
+    if blockData.blockNumber mod 10000 == 0:
+      info "Building state for block number: ", blockNumber = blockData.blockNumber
+
     db.withTransaction:
       for stateDiff in blockData.stateDiffs:
         worldState.applyStateDiff(stateDiff)
@@ -121,14 +124,16 @@ proc runBackfillBuildStateLoop(
       worldState.applyBlockRewards(minerData, uncleMinersData)
 
     doAssert(blockData.blockObject.stateRoot.bytes() == worldState.stateRoot.data)
-    if blockData.blockNumber mod 5000 == 0:
-      info "Applied stateDiffs to block", blockNumber = blockData.blockNumber
+    trace "State diffs successfully applied to block number:",
+      blockNumber = blockData.blockNumber
 
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockData]
 ) {.async: (raises: [CancelledError]).} =
+  debug "Starting state backfill metrics loop"
+
   while true:
-    await sleepAsync(5.seconds)
+    await sleepAsync(10.seconds)
     info "Block data queue length: ", queueLen = blockDataQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
@@ -149,11 +154,9 @@ proc runState*(config: PortalBridgeConf) =
   # inside the bridge, and getting the blocks from era1 files.
 
   if config.backfillState:
-    info "Starting state backfill"
-
     const startBlockNumber = 1
       # This will become a parameter in the config once we can support it
-    info "Starting from block number: ", startBlockNumber
+    info "Starting state backfill from block number: ", startBlockNumber
 
     const bufferSize = 1000 # Should we make this configurable?
     let blockDataQueue = newAsyncQueue[BlockData](bufferSize)
