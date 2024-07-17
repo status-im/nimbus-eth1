@@ -205,5 +205,8 @@ func lsPeekAddress*(stack: EvmStack, i: BackwardsIndex): EthAddress =
 func lsPeekMemRef*(stack: EvmStack, i: BackwardsIndex): int =
   fromStackElem(stack.values[i], UInt256).cleanMemRef
 
+func lsPeekSafeInt*(stack: EvmStack, i: BackwardsIndex): int =
+  fromStackElem(stack.values[i], UInt256).safeInt
+
 func lsShrink*(stack: EvmStack, x: int) =
   stack.values.setLen(stack.values.len - x)

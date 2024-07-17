@@ -52,7 +52,7 @@ when evmc_enabled:
       c.gasMeter.returnGas(GasInt c.res.gas_left)
       c.gasMeter.refundGas(c.res.gas_refund)
       if c.res.status_code == EVMC_SUCCESS:
-        ? c.stack.top(c.res.create_address)
+        c.stack.lsTop(c.res.create_address)
       elif c.res.status_code == EVMC_REVERT:
         # From create, only use `outputData` if child returned with `REVERT`.
         assign(c.returnData, makeOpenArray(c.res.output_data, c.res.output_size.int))
@@ -75,7 +75,7 @@ else:
 
       if child.isSuccess:
         c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-        ? c.stack.top child.msg.contractAddress
+        c.stack.lsTop child.msg.contractAddress
       elif not child.error.burnsGas: # Means return was `REVERT`.
         # From create, only use `outputData` if child returned with `REVERT`.
         c.returnData = child.output
@@ -90,14 +90,16 @@ else:
 proc createOp(k: var VmCtx): EvmResultVoid =
   ## 0xf0, Create a new account with associated code
   ? checkInStaticContext(k.cpt)
+  ? k.cpt.stack.lsCheck(3)
 
   let
     cpt       = k.cpt
-    endowment = ? cpt.stack.popInt()
-    memPos    = ? cpt.stack.popSafeInt()
-    memLen    = ? cpt.stack.peekSafeInt()
+    endowment = cpt.stack.lsPeekInt(^1)
+    memPos    = cpt.stack.lsPeekSafeInt(^2)
+    memLen    = cpt.stack.lsPeekSafeInt(^3)
 
-  ? cpt.stack.top(0)
+  cpt.stack.lsShrink(2)
+  cpt.stack.lsTop(0)
 
   # EIP-3860
   if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
@@ -168,16 +170,18 @@ proc createOp(k: var VmCtx): EvmResultVoid =
 proc create2Op(k: var VmCtx): EvmResultVoid =
   ## 0xf5, Behaves identically to CREATE, except using keccak256
   ? checkInStaticContext(k.cpt)
+  ? k.cpt.stack.lsCheck(4)
 
   let
     cpt       = k.cpt
-    endowment = ? cpt.stack.popInt()
-    memPos    = ? cpt.stack.popSafeInt()
-    memLen    = ? cpt.stack.popSafeInt()
-    salt256   = ? cpt.stack.peekInt()
+    endowment = cpt.stack.lsPeekInt(^1)
+    memPos    = cpt.stack.lsPeekSafeInt(^2)
+    memLen    = cpt.stack.lsPeekSafeInt(^3)
+    salt256   = cpt.stack.lsPeekInt(^4)
     salt      = ContractSalt(bytes: salt256.toBytesBE)
 
-  ? cpt.stack.top(0)
+  cpt.stack.lsShrink(3)
+  cpt.stack.lsTop(0)
 
   # EIP-3860
   if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
