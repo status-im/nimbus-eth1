@@ -17,9 +17,7 @@ import
 
 export chain_config, state_diff, world_state
 
-proc applyGenesisAccounts*(
-    worldState: WorldStateRef, alloc: GenesisAlloc
-) {.raises: [RlpError].} =
+proc applyGenesisAccounts*(worldState: WorldStateRef, alloc: GenesisAlloc) =
   for address, genAccount in alloc:
     var accState = worldState.getAccount(address)
 
@@ -33,9 +31,7 @@ proc applyGenesisAccounts*(
 
     worldState.setAccount(address, accState)
 
-proc applyStateDiff*(
-    worldState: WorldStateRef, stateDiff: StateDiffRef
-) {.raises: [RlpError].} =
+proc applyStateDiff*(worldState: WorldStateRef, stateDiff: StateDiffRef) =
   for address, balanceDiff in stateDiff.balances:
     let
       nonceDiff = stateDiff.nonces.getOrDefault(address)
@@ -79,7 +75,7 @@ proc applyBlockRewards*(
     worldState: WorldStateRef,
     minerData: tuple[miner: EthAddress, number: uint64],
     uncleMinersData: openArray[tuple[miner: EthAddress, number: uint64]],
-) {.raises: [RlpError].} =
+) =
   const baseReward = u256(5) * pow(u256(10), 18)
 
   block:

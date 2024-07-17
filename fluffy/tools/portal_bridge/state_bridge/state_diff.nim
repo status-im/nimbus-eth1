@@ -36,18 +36,18 @@ type
     storage*: Table[EthAddress, Table[UInt256, StateValueDiff[UInt256]]]
     code*: Table[EthAddress, StateValueDiff[Code]]
 
-proc toStateValue(T: type UInt256, hex: string): T {.raises: [CatchableError].} =
+proc toStateValue(T: type UInt256, hex: string): T {.raises: [ValueError].} =
   UInt256.fromHex(hex)
 
-proc toStateValue(T: type AccountNonce, hex: string): T {.raises: [CatchableError].} =
+proc toStateValue(T: type AccountNonce, hex: string): T {.raises: [ValueError].} =
   UInt256.fromHex(hex).truncate(uint64)
 
-proc toStateValue(T: type Code, hex: string): T {.raises: [CatchableError].} =
+proc toStateValue(T: type Code, hex: string): T {.raises: [ValueError].} =
   hexToSeqByte(hex)
 
 proc toStateValueDiff(
     diffJson: JsonNode, T: type StateValue
-): StateValueDiff[T] {.raises: [CatchableError].} =
+): StateValueDiff[T] {.raises: [ValueError].} =
   if diffJson.kind == JString and diffJson.getStr() == "=":
     return StateValueDiff[T](kind: unchanged)
   elif diffJson.kind == JObject:
@@ -68,7 +68,7 @@ proc toStateValueDiff(
   else:
     doAssert false # unreachable
 
-proc toStateDiff*(stateDiffJson: JsonNode): StateDiffRef {.raises: [CatchableError].} =
+proc toStateDiff(stateDiffJson: JsonNode): StateDiffRef {.raises: [ValueError].} =
   let stateDiff = StateDiffRef()
 
   for addrJson, accJson in stateDiffJson.pairs:
@@ -91,7 +91,7 @@ proc toStateDiff*(stateDiffJson: JsonNode): StateDiffRef {.raises: [CatchableErr
 
 proc toStateDiffs(
     blockTraceJson: JsonNode
-): seq[StateDiffRef] {.raises: [CatchableError].} =
+): seq[StateDiffRef] {.raises: [ValueError].} =
   var stateDiffs = newSeqOfCap[StateDiffRef](blockTraceJson.len())
   for blockTrace in blockTraceJson:
     stateDiffs.add(blockTrace["stateDiff"].toStateDiff())

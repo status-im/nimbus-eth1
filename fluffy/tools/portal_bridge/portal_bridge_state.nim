@@ -31,102 +31,105 @@ proc runBackfillCollectBlockDataLoop(
     web3Client: RpcClient,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
-  try:
-    var currentBlockNumber = startBlockNumber
+  info "Starting state build loop"
 
-    while true:
-      if currentBlockNumber mod 5000 == 0:
-        info "Current block number: ", currentBlockNumber
+  var currentBlockNumber = startBlockNumber
 
-      let
-        blockId = blockId(currentBlockNumber)
-        blockRequest = web3Client.getBlockByNumber(blockId, false)
-        stateDiffsRequest = web3Client.getStateDiffsByBlockNumber(blockId)
+  while true:
+    if currentBlockNumber mod 5000 == 0:
+      info "Current block number: ", currentBlockNumber
 
-        blockObject = (await blockRequest).valueOr:
-          error "Failed to get block", error
-          await sleepAsync(1.seconds)
-          continue
+    let
+      blockId = blockId(currentBlockNumber)
+      blockRequest = web3Client.getBlockByNumber(blockId, false)
+      stateDiffsRequest = web3Client.getStateDiffsByBlockNumber(blockId)
 
-      var uncleBlockRequests: seq[Future[Result[BlockObject, string]]]
-      for i in 0 .. blockObject.uncles.high:
-        uncleBlockRequests.add(
-          web3Client.getUncleByBlockNumberAndIndex(blockId, i.Quantity)
-        )
-
-      let stateDiffs = (await stateDiffsRequest).valueOr:
-        error "Failed to get state diffs", error
+      blockObject = (await blockRequest).valueOr:
+        error "Failed to get block", error
         await sleepAsync(1.seconds)
         continue
 
-      var uncleBlocks: seq[BlockObject]
-      for uncleBlockRequest in uncleBlockRequests:
+    var uncleBlockRequests: seq[Future[Result[BlockObject, string]]]
+    for i in 0 .. blockObject.uncles.high:
+      uncleBlockRequests.add(
+        web3Client.getUncleByBlockNumberAndIndex(blockId, i.Quantity)
+      )
+
+    let stateDiffs = (await stateDiffsRequest).valueOr:
+      error "Failed to get state diffs", error
+      await sleepAsync(1.seconds)
+      continue
+
+    var uncleBlocks: seq[BlockObject]
+    for uncleBlockRequest in uncleBlockRequests:
+      try:
         let uncleBlock = (await uncleBlockRequest).valueOr:
           error "Failed to get uncle blocks", error
           await sleepAsync(1.seconds)
           break
         uncleBlocks.add(uncleBlock)
-      if uncleBlocks.len() < uncleBlockRequests.len():
-        continue
+      except CatchableError as e:
+        error "Failed to get uncleBlockRequest"
+        break
 
-      let blockData = BlockData(
-        blockNumber: currentBlockNumber,
-        blockObject: blockObject,
-        stateDiffs: stateDiffs,
-        uncleBlocks: uncleBlocks,
-      )
-      await blockDataQueue.addLast(blockData)
+    if uncleBlocks.len() < uncleBlockRequests.len():
+      continue
 
-      inc currentBlockNumber
-  except CatchableError as e:
-    error "runBackfillCollectBlockDataLoop failed: ", error = e.msg
+    let blockData = BlockData(
+      blockNumber: currentBlockNumber,
+      blockObject: blockObject,
+      stateDiffs: stateDiffs,
+      uncleBlocks: uncleBlocks,
+    )
+    await blockDataQueue.addLast(blockData)
+
+    inc currentBlockNumber
 
 proc runBackfillBuildStateLoop(
     blockDataQueue: AsyncQueue[BlockData], stateDir: string
 ) {.async: (raises: [CancelledError]).} =
-  try:
-    let db = DatabaseRef.init(stateDir).get()
-    defer:
-      db.close()
+  info "Starting state backfill build  loop"
 
-    let worldState = db.withTransaction:
+  let db = DatabaseRef.init(stateDir).get()
+  defer:
+    db.close()
+
+  let worldState = db.withTransaction:
+    let
+      # Requires an active transaction because it writes an emptyRlp node
+      # to the accounts HexaryTrie on initialization
+      ws = WorldStateRef.init(db)
+      genesisAccounts =
+        try:
+          genesisBlockForNetwork(MainNet).alloc
+        except CatchableError as e:
+          raiseAssert(e.msg) # Should never happen
+    ws.applyGenesisAccounts(genesisAccounts)
+    ws
+
+  while true:
+    let blockData = await blockDataQueue.popFirst()
+
+    db.withTransaction:
+      for stateDiff in blockData.stateDiffs:
+        worldState.applyStateDiff(stateDiff)
       let
-        # Requires an active transaction because it writes an emptyRlp node
-        # to the accounts HexaryTrie on initialization
-        ws = WorldStateRef.init(db)
-        genesisAccounts = genesisBlockForNetwork(MainNet).alloc
-      ws.applyGenesisAccounts(genesisAccounts)
-      ws
+        minerData =
+          (EthAddress(blockData.blockObject.miner), blockData.blockObject.number.uint64)
+        uncleMinersData =
+          blockData.uncleBlocks.mapIt((EthAddress(it.miner), it.number.uint64))
+      worldState.applyBlockRewards(minerData, uncleMinersData)
 
-    while true:
-      let blockData = await blockDataQueue.popFirst()
-
-      db.withTransaction:
-        for stateDiff in blockData.stateDiffs:
-          worldState.applyStateDiff(stateDiff)
-        let
-          minerData = (
-            EthAddress(blockData.blockObject.miner), blockData.blockObject.number.uint64
-          )
-          uncleMinersData =
-            blockData.uncleBlocks.mapIt((EthAddress(it.miner), it.number.uint64))
-        worldState.applyBlockRewards(minerData, uncleMinersData)
-
-      doAssert(blockData.blockObject.stateRoot.bytes() == worldState.stateRoot.data)
-      if blockData.blockNumber mod 5000 == 0:
-        info "Applied stateDiffs to block", blockNumber = blockData.blockNumber
-  except CatchableError as e:
-    error "runBackfillBuildStateLoop failed: ", error = e.msg
+    doAssert(blockData.blockObject.stateRoot.bytes() == worldState.stateRoot.data)
+    if blockData.blockNumber mod 5000 == 0:
+      info "Applied stateDiffs to block", blockNumber = blockData.blockNumber
 
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockData]
 ) {.async: (raises: [CancelledError]).} =
-  try:
-    while true:
-      await sleepAsync(5.seconds)
-      info "Block data queue length: ", queueLen = blockDataQueue.len()
-  except CatchableError as e:
-    error "runBackfillMetricsLoop failed: ", error = e.msg
+  while true:
+    await sleepAsync(5.seconds)
+    info "Block data queue length: ", queueLen = blockDataQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
   let
