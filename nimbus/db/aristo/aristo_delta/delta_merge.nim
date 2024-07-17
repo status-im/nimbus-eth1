@@ -70,6 +70,12 @@ proc deltaMerge*(
       else:
         return err((rvid.vid,rc.error))
 
+  for (accPath,leafVtx) in upper.accLeaves.pairs:
+    newFilter.accLeaves[accPath] = leafVtx
+
+  for (mixPath,leafVtx) in upper.stoLeaves.pairs:
+    newFilter.stoLeaves[mixPath] = leafVtx
+
   ok newFilter
 
 # ------------------------------------------------------------------------------

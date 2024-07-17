@@ -233,22 +233,6 @@ proc mergeList*(
 
   (merged, dups, AristoError(0))
 
-
-proc mergeDummyAccLeaf*(
-    db: AristoDbRef;
-    pathID: int;
-    nonce: int;
-      ): Result[void,AristoError] =
-  # Add a dummy entry so the balancer logic can be triggered
-  let
-    acc = AristoAccount(nonce: nonce.AccountNonce)
-    rc = db.mergeAccountRecord(pathID.uint64.toBytesBE.keccakHash, acc)
-  if rc.isOk:
-    ok()
-  else:
-    err(rc.error)
-
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

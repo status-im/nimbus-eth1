@@ -368,10 +368,6 @@ proc testTxMergeAndDeleteOneByOne*(
         doSaveBeOk = ((u mod saveMod) == saveRest)
         (leaf, lid) = lvp
 
-      # Add a dummy entry so the balancer logic can be triggered
-      let rc = db.mergeDummyAccLeaf(n, runID)
-      xCheckRc rc.error == 0
-
       if doSaveBeOk:
         let saveBeOk = tx.saveToBackend(relax=relax, noisy=noisy, runID)
         xCheck saveBeOk:
@@ -437,11 +433,6 @@ proc testTxMergeAndDeleteSubTree*(
       else:
         AristoDbRef.init(MemBackendRef)
 
-    # Add a dummy entry so the balancer logic can be triggered
-    block:
-      let rc = db.mergeDummyAccLeaf(n, 42)
-      xCheckRc rc.error == 0
-
     # Start transaction (double frame for testing)
     xCheck db.txTop.isErr
     var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -487,12 +478,6 @@ proc testTxMergeAndDeleteSubTree*(
           " n=", n, "/", list.len,
           "\n    db\n    ", db.pp(backendOk=true),
           ""
-
-    # Update dummy entry so the journal logic can be triggered
-    block:
-      let rc = db.mergeDummyAccLeaf(n, 43)
-      xCheckRc rc.error == 0
-
     block:
       let saveBeOk = tx.saveToBackend(relax=false, noisy=noisy, 2+list.len*n)
       xCheck saveBeOk:
@@ -548,11 +533,6 @@ proc testTxMergeProofAndKvpList*(
       rootKey = w.root
       count = 0
     count.inc
-
-    # Add a dummy entry so the balancer logic can be triggered
-    block:
-      let rc = db.mergeDummyAccLeaf(n, 42)
-      xCheckRc rc.error == 0
 
     let
       testId = idPfx & "#" & $w.id & "." & $n

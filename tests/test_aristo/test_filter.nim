@@ -61,12 +61,11 @@ proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
     if n1 < dx.len:
       result &= "   ==========\n   "
 
-when false:
-  proc dump(dx: varargs[AristoDbRef]): string =
-    "".dump dx
+proc dump(dx: varargs[AristoDbRef]): string {.used.} =
+  "".dump dx
 
-  proc dump(w: DbTriplet): string =
-    "db".dump(w[0], w[1], w[2])
+proc dump(w: DbTriplet): string {.used.} =
+  "db".dump(w[0], w[1], w[2])
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -111,12 +110,6 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
     else:
       AristoDbRef.init MemBackendRef
 
-  block:
-    # Add a dummy entry so the balancer logic can be triggered in `persist()`
-    let rc = db.mergeDummyAccLeaf(0, 0)
-    xCheckRc rc.error == 0:
-      result = err(rc.error)
-
   # Set failed `xCheck()` error result
   result = err(AristoError 1)
 
@@ -145,12 +138,6 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
       db.finish(eradicate=true)
       xCheck (n, report.error) == (n,0)
 
-  block:
-    # Add a dummy entry so the balancer logic can be triggered in `persist()`
-    let rc = db.mergeDummyAccLeaf(0, 1)
-    xCheckRc rc.error == 0:
-      result = err(rc.error)
-
   return ok(dx)
 
 # ----------------------
@@ -159,6 +146,8 @@ proc cleanUp(dx: var DbTriplet) =
   if not dx[0].isNil:
     dx[0].finish(eradicate=true)
     dx.reset
+
+# ----------------------
 
 proc isDbEq(a, b: LayerDeltaRef; db: AristoDbRef; noisy = true): bool =
   ## Verify that argument filter `a` has the same effect on the
@@ -293,11 +282,6 @@ proc testDistributedAccess*(
       xCheck db2.balancer == db3.balancer
 
       block:
-        # Add dummy entry so the balancer logic can be triggered in `persist()`
-        let rc = db2.mergeDummyAccLeaf(0, 100+n)
-        xCheckRc rc.error == 0
-
-      block:
         let rc = db2.stow() # non-persistent
         xCheckRc rc.error == 0:
           noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
@@ -336,11 +320,6 @@ proc testDistributedAccess*(
         (db1, db2, db3) = (dy[0], dy[1], dy[2])
       defer:
         dy.cleanUp()
-
-      block:
-        # Add dummy entry so the balancer logic can be triggered in `persist()`
-        let rc = db2.mergeDummyAccLeaf(0, 100+n)
-        xCheckRc rc.error == 0
 
       # Build clause (12) from `aristo/README.md` example
       discard db2.reCentre()
