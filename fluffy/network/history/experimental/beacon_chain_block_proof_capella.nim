@@ -38,21 +38,27 @@ type
   HistoricalSummariesProof* = array[13, Digest]
 
   BeaconChainBlockProof* = object
-    # Total size (8 + 1 + 3 + 1 + 13) * 32 bytes + 4 bytes = 836 bytes
-    beaconBlockBodyProof*: BeaconBlockBodyProof
-    beaconBlockBodyRoot*: Digest
-    beaconBlockHeaderProof*: BeaconBlockHeaderProof
-    beaconBlockHeaderRoot*: Digest
+    # Total size (11 + 1 + 13) * 32 bytes + 4 bytes = 804 bytes
+    beaconBlockProof*: BeaconBlockProof
+    beaconBlockRoot*: Digest
     historicalSummariesProof*: HistoricalSummariesProof
     slot*: Slot
 
-func getHistoricalRootsIndex*(slot: Slot, cfg: RuntimeConfig): uint64 =
+template `[]`(x: openArray[Eth2Digest], chunk: Limit): Eth2Digest =
+  # Nim 2.0 requires arrays to be indexed by the same type they're declared with.
+  # Both HistoricalBatch.block_roots and HistoricalBatch.state_roots
+  # are declared with uint64. But `Limit = int64`.
+  # Looks like this template can be used as a workaround.
+  # See https://github.com/status-im/nimbus-eth1/pull/2384
+  x[chunk.uint64]
+
+func getHistoricalSummariesIndex*(slot: Slot, cfg: RuntimeConfig): uint64 =
   (slot - cfg.CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) div SLOTS_PER_HISTORICAL_ROOT
 
-func getHistoricalRootsIndex*(
+func getHistoricalSummariesIndex*(
     blockHeader: BeaconBlockHeader, cfg: RuntimeConfig
 ): uint64 =
-  getHistoricalRootsIndex(blockHeader.slot, cfg)
+  getHistoricalSummariesIndex(blockHeader.slot, cfg)
 
 # Builds proof to be able to verify that a BeaconBlock root is part of the
 # block_roots for given root.
@@ -71,42 +77,21 @@ func buildProof*(
 # is part of historical_summaries and thus canonical.
 func buildProof*(
     blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest],
-    blockHeader: BeaconBlockHeader,
-    blockBody: capella.TrustedBeaconBlockBody | capella.BeaconBlockBody,
+    beaconBlock: capella.TrustedBeaconBlock | capella.BeaconBlock,
 ): Result[BeaconChainBlockProof, string] =
   let
-    blockRootIndex = getBlockRootsIndex(blockHeader)
-
-    beaconBlockBodyProof = ?blockBody.buildProof()
-    beaconBlockHeaderProof = ?blockHeader.buildProof()
+    blockRootIndex = getBlockRootsIndex(beaconBlock)
+    beaconBlockProof = ?beaconBlock.buildProof()
     historicalSummariesProof = ?blockRoots.buildProof(blockRootIndex)
 
   ok(
     BeaconChainBlockProof(
-      beaconBlockBodyProof: beaconBlockBodyProof,
-      beaconBlockBodyRoot: hash_tree_root(blockBody),
-      beaconBlockHeaderProof: beaconBlockHeaderProof,
-      beaconBlockHeaderRoot: hash_tree_root(blockHeader),
+      beaconBlockProof: beaconBlockProof,
+      beaconBlockRoot: hash_tree_root(beaconBlock),
       historicalSummariesProof: historicalSummariesProof,
-      slot: blockHeader.slot,
+      slot: beaconBlock.slot,
     )
   )
-
-func verifyProof*(
-    blockHash: Digest, proof: BeaconBlockBodyProof, blockBodyRoot: Digest
-): bool =
-  let
-    gIndexTopLevel = (1 * 1 * 16 + 9)
-    gIndex = GeneralizedIndex(gIndexTopLevel * 1 * 16 + 12)
-
-  verify_merkle_multiproof(@[blockHash], proof, @[gIndex], blockBodyRoot)
-
-func verifyProof*(
-    blockBodyRoot: Digest, proof: BeaconBlockHeaderProof, blockHeaderRoot: Digest
-): bool =
-  let gIndex = GeneralizedIndex(12)
-
-  verify_merkle_multiproof(@[blockBodyRoot], proof, @[gIndex], blockHeaderRoot)
 
 func verifyProof*(
     blockHeaderRoot: Digest,
@@ -125,14 +110,11 @@ func verifyProof*(
     cfg: RuntimeConfig,
 ): bool =
   let
-    historicalRootsIndex = getHistoricalRootsIndex(proof.slot, cfg)
+    historicalRootsIndex = getHistoricalSummariesIndex(proof.slot, cfg)
     blockRootIndex = getBlockRootsIndex(proof.slot)
 
-  blockHash.verifyProof(proof.beaconBlockBodyProof, proof.beaconBlockBodyRoot) and
-    proof.beaconBlockBodyRoot.verifyProof(
-      proof.beaconBlockHeaderProof, proof.beaconBlockHeaderRoot
-    ) and
-    proof.beaconBlockHeaderRoot.verifyProof(
+  blockHash.verifyProof(proof.beaconBlockProof, proof.beaconBlockRoot) and
+    proof.beaconBlockRoot.verifyProof(
       proof.historicalSummariesProof,
       historical_summaries[historicalRootsIndex].block_summary_root,
       blockRootIndex,
