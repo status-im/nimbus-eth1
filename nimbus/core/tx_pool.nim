@@ -648,13 +648,13 @@ proc assembleBlock*(
           blobsBundle.blobs.add blob
 
   let com = xp.chain.com
-  if com.forkGTE(Shanghai):
+  if com.isShanghaiOrLater(blk.header.timestamp):
     blk.withdrawals = Opt.some(com.pos.withdrawals)
 
-  if not com.forkGTE(Cancun) and blobsBundle.commitments.len > 0:
+  if not com.isCancunOrLater(blk.header.timestamp) and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
   let blobsBundleOpt =
-    if com.forkGTE(Cancun):
+    if com.isCancunOrLater(blk.header.timestamp):
       doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
       doAssert blobsBundle.proofs.len == blobsBundle.blobs.len
       Opt.some blobsBundle

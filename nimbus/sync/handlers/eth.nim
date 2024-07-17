@@ -566,52 +566,16 @@ method handleNewBlock*(ctx: EthWireRef,
                        totalDifficulty: DifficultyInt):
                          Result[void, string]
     {.gcsafe.} =
-  if ctx.enableTxPool != Enabled:
-    when trMissingOrDisabledGossipOk:
-      notEnabled("handleNewBlock")
-    return ok()
-  try:
-    if ctx.chain.com.forkGTE(MergeFork):
-      debug "Dropping peer for sending NewBlock after merge (EIP-3675)",
-        peer, blockNumber=blk.header.number,
-        blockHash=blk.header.blockHash, totalDifficulty
-      asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
-      return ok()
-
-    if not ctx.newBlockHandler.handler.isNil:
-      ctx.newBlockHandler.handler(
-        ctx.newBlockHandler.arg,
-        peer, blk, totalDifficulty
-      )
-    return ok()
-  except CatchableError as exc:
-    return err(exc.msg)
+  # We dropped support for non-merge networks
+  err("block broadcasts disallowed")
 
 method handleNewBlockHashes*(ctx: EthWireRef,
                              peer: Peer,
                              hashes: openArray[NewBlockHashesAnnounce]):
                                Result[void, string]
     {.gcsafe.} =
-  if ctx.enableTxPool != Enabled:
-    when trMissingOrDisabledGossipOk:
-      notEnabled("handleNewBlockHashes")
-    return ok()
-  try:
-    if ctx.chain.com.forkGTE(MergeFork):
-      debug "Dropping peer for sending NewBlockHashes after merge (EIP-3675)",
-        peer, numHashes=hashes.len
-      asyncSpawn banPeer(ctx.peerPool, peer, PEER_LONG_BANTIME)
-      return ok()
-
-    if not ctx.newBlockHashesHandler.handler.isNil:
-      ctx.newBlockHashesHandler.handler(
-        ctx.newBlockHashesHandler.arg,
-        peer,
-        hashes
-      )
-    return ok()
-  except CatchableError as exc:
-    return err(exc.msg)
+  # We dropped support for non-merge networks
+  err("block announcements disallowed")
 
 # ------------------------------------------------------------------------------
 # End

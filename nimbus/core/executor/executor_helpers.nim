@@ -49,7 +49,7 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
 proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
 
   var rec: Receipt
-  if vmState.com.forkGTE(Byzantium):
+  if vmState.com.isByzantiumOrLater(vmState.blockNumber):
     rec.isHash = false
     rec.status = vmState.status
   else:

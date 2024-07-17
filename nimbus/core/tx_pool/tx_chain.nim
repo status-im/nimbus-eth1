@@ -194,10 +194,10 @@ proc getHeader*(dh: TxChainRef): BlockHeader
     blobGasUsed:   dh.txEnv.blobGasUsed,
     excessBlobGas: dh.txEnv.excessBlobGas)
 
-  if dh.com.forkGTE(Shanghai):
+  if dh.com.isShanghaiOrLater(result.timestamp):
     result.withdrawalsRoot = Opt.some(calcWithdrawalsRoot(dh.com.pos.withdrawals))
 
-  if dh.com.forkGTE(Cancun):
+  if dh.com.isCancunOrLater(result.timestamp):
     result.parentBeaconBlockRoot = Opt.some(dh.com.pos.parentBeaconBlockRoot)
 
   dh.prepareForSeal(result)

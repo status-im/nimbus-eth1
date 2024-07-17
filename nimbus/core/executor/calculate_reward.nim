@@ -16,9 +16,39 @@ import
 
 {.push raises: [].}
 
+# ------------------------------------------------------------------------------
+# Block reward helpers
+# ------------------------------------------------------------------------------
+
+func eth(n: int): UInt256 {.compileTime.} =
+  n.u256 * pow(10.u256, 18)
+
+const
+  eth5 = 5.eth
+  eth3 = 3.eth
+  eth2 = 2.eth
+  eth0 = 0.u256
+
+  BlockRewards: array[EVMFork, UInt256] = [
+    eth5, # Frontier
+    eth5, # Homestead
+    eth5, # Tangerine
+    eth5, # Spurious
+    eth3, # Byzantium
+    eth2, # Constantinople
+    eth2, # Petersburg
+    eth2, # Istanbul
+    eth2, # Berlin
+    eth2, # London
+    eth0, # Paris
+    eth0, # Shanghai
+    eth0, # Cancun
+    eth0, # Prague
+  ]
+
 proc calculateReward*(vmState: BaseVMState; account: EthAddress;
                       number: BlockNumber; uncles: openArray[BlockHeader]) =
-  let blockReward = vmState.com.blockReward()
+  let blockReward = BlockRewards[vmState.fork]
   var mainReward = blockReward
 
   for uncle in uncles:

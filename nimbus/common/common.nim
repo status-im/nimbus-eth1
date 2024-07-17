@@ -62,9 +62,6 @@ type
     # synchronizer need this
     syncProgress: SyncProgress
 
-    # current hard fork, updated after calling `hardForkTransition`
-    currentFork: HardFork
-
     # one of POW/POS, updated after calling `hardForkTransition`
     consensusType: ConsensusType
 
@@ -140,7 +137,7 @@ proc init(com         : CommonRef,
   com.pruneHistory= pruneHistory
   com.pos = CasperRef.new
 
-  # com.currentFork and com.consensusType
+  # com.consensusType
   # is set by hardForkTransition.
   # set it before creating genesis block
   # TD need to be some(0.u256) because it can be the genesis
@@ -150,16 +147,20 @@ proc init(com         : CommonRef,
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
   if genesis.isNil.not:
-    com.hardForkTransition(ForkDeterminationInfo(
-      number: 0.BlockNumber,
-      td: Opt.some(0.u256),
-      time: Opt.some(genesis.timestamp)
-    ))
+    let
+      forkDeterminer = ForkDeterminationInfo(
+        number: 0.BlockNumber,
+        td: Opt.some(0.u256),
+        time: Opt.some(genesis.timestamp)
+      )
+      fork = toHardFork(com.forkTransitionTable, forkDeterminer)
+
+    com.consensusTransition(fork)
 
     # Must not overwrite the global state on the single state DB
     if not db.getBlockHeader(0.BlockNumber, com.genesisHeader):
       com.genesisHeader = toGenesisHeader(genesis,
-        com.currentFork, com.db)
+        fork, com.db)
 
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
@@ -245,7 +246,6 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHeader: com.genesisHeader,
     syncProgress : com.syncProgress,
     networkId    : com.networkId,
-    currentFork  : com.currentFork,
     consensusType: com.consensusType,
     pos          : com.pos,
     pruneHistory : com.pruneHistory)
@@ -270,7 +270,6 @@ func hardForkTransition(
   ## Same thing happen before London block, TD can be ignored.
 
   let fork = com.toHardFork(forkDeterminer)
-  com.currentFork = fork
   com.consensusTransition(fork)
 
 func hardForkTransition*(
@@ -299,23 +298,15 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
 
-func toEVMFork*(com: CommonRef): EVMFork =
-  ToEVMFork[com.currentFork]
-
 func isSpuriousOrLater*(com: CommonRef, number: BlockNumber): bool =
   com.toHardFork(number.forkDeterminationInfo) >= Spurious
+
+func isByzantiumOrLater*(com: CommonRef, number: BlockNumber): bool =
+  com.toHardFork(number.forkDeterminationInfo) >= Byzantium
 
 func isLondonOrLater*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
   com.toHardFork(number.forkDeterminationInfo) >= London
-
-func forkGTE*(com: CommonRef, fork: HardFork): bool =
-  com.currentFork >= fork
-
-# TODO: move this consensus code to where it belongs
-func minerAddress*(com: CommonRef; header: BlockHeader): EthAddress =
-  # POW and POS return header.coinbase
-  return header.coinbase
 
 func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
   ## EIP 2364/2124
@@ -432,9 +423,6 @@ func chainId*(com: CommonRef): ChainId =
 func networkId*(com: CommonRef): NetworkId =
   com.networkId
 
-func blockReward*(com: CommonRef): UInt256 =
-  BlockRewards[com.currentFork]
-
 func genesisHash*(com: CommonRef): Hash256 =
   ## Getter
   com.genesisHash
@@ -474,12 +462,6 @@ func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   com.config.terminalTotalDifficulty = ttd
   # rebuild the MergeFork piece of the forkTransitionTable
   com.forkTransitionTable.mergeForkTransitionThreshold = com.config.mergeForkTransitionThreshold
-
-func setFork*(com: CommonRef, fork: HardFork): HardFork =
-  ## useful for testing
-  result = com.currentFork
-  com.currentFork = fork
-  com.consensusTransition(fork)
 
 func `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
   ## Activate or reset a call back handler for syncing.

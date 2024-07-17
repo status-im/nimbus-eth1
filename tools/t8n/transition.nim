@@ -299,7 +299,6 @@ proc exec(ctx: var TransContext,
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   let miner = ctx.env.currentCoinbase
-  let fork = vmState.com.toEVMFork
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
 
   let stateDB = vmState.stateDB
@@ -320,7 +319,7 @@ proc exec(ctx: var TransContext,
     withdrawalsRoot  : header.withdrawalsRoot
   )
 
-  if fork >= FkCancun:
+  if vmState.com.isCancunOrLater(ctx.env.currentTimestamp):
     result.result.blobGasUsed = Opt.some vmState.blobGasUsed
     if ctx.env.currentExcessBlobGas.isSome:
       result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
@@ -459,7 +458,9 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # un-set it if it has been set too early
       ctx.env.parentBeaconBlockRoot = Opt.none(Hash256)
 
-    if com.forkGTE(MergeFork):
+    let isMerged = config.terminalTotalDifficulty.isSome and
+                   config.terminalTotalDifficulty.value == 0.u256
+    if isMerged:
       if ctx.env.currentRandom.isNone:
         raise newError(ErrorConfig, "post-merge requires currentRandom to be defined in env")
 
