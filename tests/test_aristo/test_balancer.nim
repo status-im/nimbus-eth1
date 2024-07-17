@@ -243,7 +243,7 @@ proc checkBeOk(
 # Public test function
 # ------------------------------------------------------------------------------
 
-proc testDistributedAccess*(
+proc testBalancer*(
     noisy: bool;
     list: openArray[ProofTrieData];
     rdbPath: string;                          # Rocks DB storage directory
