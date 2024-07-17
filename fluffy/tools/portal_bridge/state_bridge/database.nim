@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import std/[os, sequtils], results, eth/trie/db, rocksdb
+import std/[os, tables, sequtils], results, eth/trie/db, rocksdb
 
 export results, db
 
@@ -22,14 +22,17 @@ type
   AccountsBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
+    updatedCache: TableRef[seq[byte], seq[byte]]
 
   StorageBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
+    updatedCache: TableRef[seq[byte], seq[byte]]
 
   BytecodeBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
+    updatedCache: TableRef[seq[byte], seq[byte]]
 
   DatabaseBackendRef = AccountsBackendRef | StorageBackendRef | BytecodeBackendRef
 
@@ -89,6 +92,7 @@ proc put(
     dbBackend: DatabaseBackendRef, key, val: openArray[byte]
 ) {.gcsafe, raises: [].} =
   doAssert dbBackend.tx.put(key, val, dbBackend.cfHandle).isOk()
+  dbBackend.updatedCache[@key] = @val
 
 proc get(
     dbBackend: DatabaseBackendRef, key: openArray[byte]
@@ -126,13 +130,15 @@ proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   db.storageBackend.tx = tx
   db.bytecodeBackend.tx = tx
 
+  db.accountsBackend.updatedCache = newTable[seq[byte], seq[byte]]()
+  db.storageBackend.updatedCache = newTable[seq[byte], seq[byte]]()
+  db.bytecodeBackend.updatedCache = newTable[seq[byte], seq[byte]]()
+
   ok()
 
 proc commitTransaction*(db: DatabaseRef): Result[void, string] =
   if db.pendingTransaction.isNil():
     return err("DatabaseRef: No pending transaction")
-
-  # TODO: need to support caching and returning a set of updated keys
 
   ?db.pendingTransaction.commit()
 
@@ -158,6 +164,15 @@ template withTransaction*(db: DatabaseRef, body: untyped): auto =
     body
   finally:
     db.commitTransaction().expect("Transaction should be commited")
+
+template accountsBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
+  db.accountsBackend.updatedCache
+
+template storageBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
+  db.storageBackend.updatedCache
+
+template bytecodeBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
+  db.bytecodeBackend.updatedCache
 
 proc close*(db: DatabaseRef) =
   if not db.pendingTransaction.isNil():

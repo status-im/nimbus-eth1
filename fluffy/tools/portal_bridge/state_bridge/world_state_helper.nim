@@ -52,7 +52,9 @@ proc applyStateDiff*(worldState: WorldStateRef, stateDiff: StateDiffRef) =
     elif nonceDiff.kind == delete:
       doAssert deleteAccount == true
 
-    if codeDiff.kind == create or codeDiff.kind == update:
+    if codeDiff.kind == create and codeDiff.after.len() > 0:
+      accState.setCode(codeDiff.after)
+    elif codeDiff.kind == update:
       accState.setCode(codeDiff.after)
     elif codeDiff.kind == delete:
       doAssert deleteAccount == true
