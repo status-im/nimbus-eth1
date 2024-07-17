@@ -342,7 +342,6 @@ type
   AristoApiPersistFn* =
     proc(db: AristoDbRef;
          nxtSid = 0u64;
-         chunkedMpt = false;
         ): Result[void,AristoError]
         {.noRaise.}
       ## Persistently store data onto backend database. If the system is
@@ -356,11 +355,6 @@ type
       ## database and the staged data area is cleared.
       ##
       ## The argument `nxtSid` will be the ID for the next saved state record.
-      ##
-      ## Staging the top layer cache might fail with a partial MPT when it is
-      ## set up from partial MPT chunks as it happens with `snap` sync
-      ## processing. In this case, the `chunkedMpt` argument must be set
-      ## `true` (see alse `fwdFilter()`.)
 
   AristoApiReCentreFn* =
     proc(db: AristoDbRef;

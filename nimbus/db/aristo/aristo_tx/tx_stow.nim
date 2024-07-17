@@ -25,7 +25,6 @@ import
 
 proc getBeStateRoot(
     db: AristoDbRef;
-    chunkedMpt: bool;
       ): Result[HashKey,AristoError] =
   ## Get the Merkle hash key for the current backend state root and check
   ## validity of top layer.
@@ -86,7 +85,6 @@ proc txStow*(
     db: AristoDbRef;                  # Database
     nxtSid: uint64;                   # Next state ID (aka block number)
     persistent: bool;                 # Stage only unless `true`
-    chunkedMpt: bool;                 # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## Worker for `stow()` and `persist()` variants.
   ##
@@ -98,7 +96,7 @@ proc txStow*(
     return err(TxBackendNotWritable)
 
   # Verify database consistency and get `src` field for update
-  let rc = db.getBeStateRoot chunkedMpt
+  let rc = db.getBeStateRoot()
   if rc.isErr and rc.error != TxPrettyPointlessLayer:
     return err(rc.error)
 
