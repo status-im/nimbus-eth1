@@ -31,6 +31,7 @@ import
   chronicles,
   eth/common,
   eth/common/eth_types,
+  stew/assign2,
   stint
 
 when not defined(evmc_enabled):
@@ -54,7 +55,7 @@ when evmc_enabled:
         ? c.stack.top(c.res.create_address)
       elif c.res.status_code == EVMC_REVERT:
         # From create, only use `outputData` if child returned with `REVERT`.
-        c.returnData = @(makeOpenArray(c.res.output_data, c.res.output_size.int))
+        assign(c.returnData, makeOpenArray(c.res.output_data, c.res.output_size.int))
       if not c.res.release.isNil:
         c.res.release(c.res)
       ok()
@@ -152,14 +153,14 @@ proc createOp(k: var VmCtx): EvmResultVoid =
     )
     c.execSubCreate(msg)
   else:
-    cpt.execSubCreate(
-      childMsg = Message(
-        kind:   EVMC_CREATE,
-        depth:  cpt.msg.depth + 1,
-        gas:    createMsgGas,
-        sender: cpt.msg.contractAddress,
-        value:  endowment,
-        data:   @(cpt.memory.read(memPos, memLen))))
+    var childMsg = Message(
+      kind:   EVMC_CREATE,
+      depth:  cpt.msg.depth + 1,
+      gas:    createMsgGas,
+      sender: cpt.msg.contractAddress,
+      value:  endowment)
+    assign(childMsg.data, cpt.memory.read(memPos, memLen))
+    cpt.execSubCreate(childMsg)
   ok()
 
 # ---------------------
@@ -234,15 +235,14 @@ proc create2Op(k: var VmCtx): EvmResultVoid =
     )
     c.execSubCreate(msg)
   else:
-    cpt.execSubCreate(
-      salt = salt,
-      childMsg = Message(
-        kind:   EVMC_CREATE2,
-        depth:  cpt.msg.depth + 1,
-        gas:    createMsgGas,
-        sender: cpt.msg.contractAddress,
-        value:  endowment,
-        data:   @(cpt.memory.read(memPos, memLen))))
+    var childMsg = Message(
+      kind:   EVMC_CREATE2,
+      depth:  cpt.msg.depth + 1,
+      gas:    createMsgGas,
+      sender: cpt.msg.contractAddress,
+      value:  endowment)
+    assign(childMsg.data, cpt.memory.read(memPos, memLen))
+    cpt.execSubCreate(salt = salt, childMsg = childMsg)
   ok()
 
 # ------------------------------------------------------------------------------
