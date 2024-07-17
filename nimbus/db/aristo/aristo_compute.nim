@@ -48,10 +48,15 @@ proc computeKeyImpl(
     db: AristoDbRef;                  # Database, top layer
     rvid: RootedVertexID;             # Vertex to convert
       ): Result[(HashKey, int), AristoError] =
+  ## Compute the key for an arbitrary vertex ID. If successful, the length of
+  ## the resulting key might be smaller than 32. If it is used as a root vertex
+  ## state/hash, it must be converted to a `Hash256` (using (`.to(Hash256)`) as
+  ## in `db.computeKey(rvid).value.to(Hash256)` which always results in a
+  ## 32 byte value.
+
   db.getKeyRc(rvid).isErrOr:
     # Value cached either in layers or database
     return ok value
-
   let (vtx, vl) = ? db.getVtxRc rvid
 
   # Top-most level of all the verticies this hash compution depends on
@@ -107,13 +112,13 @@ proc computeKeyImpl(
 
       writer.startList(2)
       writer.append(vtx.ePfx.toHexPrefix(isleaf = false))
-      writer.append(bwriter.finish().digestTo(HashKey, forceRoot=false))
+      writer.append(bwriter.finish().digestTo(HashKey))
     else:
       writeBranch(writer)
 
-  let h = writer.finish().digestTo(HashKey, rvid.root == rvid.vid)
+  let h = writer.finish().digestTo(HashKey)
 
-  # Cache the hash to the same storage layer as the the top-most value that it
+  # Cache the hash int the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
   # underlying database backend - typically, values closer to the root are more
   # likely to live in an in-memory layer since any leaf change will lead to the

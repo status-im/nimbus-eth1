@@ -48,14 +48,12 @@ proc dumpToYaml*[T](value: T, file: string): Result[void, string] =
     except Exception as e:
       raiseAssert(e.msg)
 
-  # To dump to yaml, avoiding TAGS and YAML version directives, no max line
-  # length.
+  # To dump to yaml, avoiding TAGS and YAML version directives
   var dumper = minimalDumper()
   dumper.setDefaultStyle()
   dumper.serialization.handles = @[]
   dumper.serialization.tagStyle = tsNone
   dumper.presentation.outputVersion = ovNone
-  dumper.presentation.maxLineLength = none(int)
 
   try:
     {.gcsafe.}:

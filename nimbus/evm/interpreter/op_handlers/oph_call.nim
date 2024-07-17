@@ -30,6 +30,7 @@ import
   chronicles,
   eth/common,
   eth/common/eth_types,
+  stew/assign2,
   stint
 
 when not defined(evmc_enabled):
@@ -158,7 +159,7 @@ proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
 when evmc_enabled:
   template execSubCall(c: Computation; msg: ref nimbus_message; p: LocalParams) =
     c.chainTo(msg):
-      c.returnData = @(makeOpenArray(c.res.output_data, c.res.output_size.int))
+      assign(c.returnData, makeOpenArray(c.res.output_data, c.res.output_size.int))
 
       let actualOutputSize = min(p.memOutLen, c.returnData.len)
       if actualOutputSize > 0:
@@ -263,19 +264,20 @@ proc callOp(k: var VmCtx): EvmResultVoid =
     )
     c.execSubCall(msg, p)
   else:
+    var childMsg = Message(
+      kind:            EVMC_CALL,
+      depth:           cpt.msg.depth + 1,
+      gas:             childGasLimit,
+      sender:          p.sender,
+      contractAddress: p.contractAddress,
+      codeAddress:     p.codeAddress,
+      value:           p.value,
+      flags:           p.flags)
+    assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
     cpt.execSubCall(
       memPos = p.memOutPos,
       memLen = p.memOutLen,
-      childMsg = Message(
-        kind:            EVMC_CALL,
-        depth:           cpt.msg.depth + 1,
-        gas:             childGasLimit,
-        sender:          p.sender,
-        contractAddress: p.contractAddress,
-        codeAddress:     p.codeAddress,
-        value:           p.value,
-        data:            @(cpt.memory.read(p.memInPos, p.memInLen)),
-        flags:           p.flags))
+      childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -335,19 +337,20 @@ proc callCodeOp(k: var VmCtx): EvmResultVoid =
     )
     c.execSubCall(msg, p)
   else:
+    var childMsg = Message(
+      kind:            EVMC_CALLCODE,
+      depth:           cpt.msg.depth + 1,
+      gas:             childGasLimit,
+      sender:          p.sender,
+      contractAddress: p.contractAddress,
+      codeAddress:     p.codeAddress,
+      value:           p.value,
+      flags:           p.flags)
+    assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
     cpt.execSubCall(
       memPos = p.memOutPos,
       memLen = p.memOutLen,
-      childMsg = Message(
-        kind:            EVMC_CALLCODE,
-        depth:           cpt.msg.depth + 1,
-        gas:             childGasLimit,
-        sender:          p.sender,
-        contractAddress: p.contractAddress,
-        codeAddress:     p.codeAddress,
-        value:           p.value,
-        data:            @(cpt.memory.read(p.memInPos, p.memInLen)),
-        flags:           p.flags))
+      childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -402,19 +405,20 @@ proc delegateCallOp(k: var VmCtx): EvmResultVoid =
     )
     c.execSubCall(msg, p)
   else:
+    var childMsg = Message(
+      kind:            EVMC_DELEGATECALL,
+      depth:           cpt.msg.depth + 1,
+      gas:             childGasLimit,
+      sender:          p.sender,
+      contractAddress: p.contractAddress,
+      codeAddress:     p.codeAddress,
+      value:           p.value,
+      flags:           p.flags)
+    assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
     cpt.execSubCall(
       memPos = p.memOutPos,
       memLen = p.memOutLen,
-      childMsg = Message(
-        kind:            EVMC_DELEGATECALL,
-        depth:           cpt.msg.depth + 1,
-        gas:             childGasLimit,
-        sender:          p.sender,
-        contractAddress: p.contractAddress,
-        codeAddress:     p.codeAddress,
-        value:           p.value,
-        data:            @(cpt.memory.read(p.memInPos, p.memInLen)),
-        flags:           p.flags))
+      childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -470,19 +474,20 @@ proc staticCallOp(k: var VmCtx): EvmResultVoid =
     )
     c.execSubCall(msg, p)
   else:
+    var childMsg = Message(
+      kind:            EVMC_CALL,
+      depth:           cpt.msg.depth + 1,
+      gas:             childGasLimit,
+      sender:          p.sender,
+      contractAddress: p.contractAddress,
+      codeAddress:     p.codeAddress,
+      value:           p.value,
+      flags:           p.flags)
+    assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
     cpt.execSubCall(
       memPos = p.memOutPos,
       memLen = p.memOutLen,
-      childMsg = Message(
-        kind:            EVMC_CALL,
-        depth:           cpt.msg.depth + 1,
-        gas:             childGasLimit,
-        sender:          p.sender,
-        contractAddress: p.contractAddress,
-        codeAddress:     p.codeAddress,
-        value:           p.value,
-        data:            @(cpt.memory.read(p.memInPos, p.memInLen)),
-        flags:           p.flags))
+      childMsg = childMsg)
   ok()
 
 # ------------------------------------------------------------------------------

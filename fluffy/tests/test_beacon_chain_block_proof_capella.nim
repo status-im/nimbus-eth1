@@ -20,13 +20,11 @@ import
 
 # Test suite for the proofs:
 # - historicalSummariesProof
-# - BeaconBlockHeaderProof
-# - BeaconBlockBodyProof
+# - BeaconBlockProof
 # and as last
 # - the chain of proofs, BeaconChainBlockProof:
-# BlockHash || BlockHeader
-# -> BeaconBlockBodyProof
-# -> BeaconBlockHeaderProof
+# BlockHash
+# -> BeaconBlockProof
 # -> historicalSummariesProof
 # historical_summaries
 #
@@ -95,7 +93,7 @@ suite "Beacon Chain Block Proofs - Capella":
         for i in blocksToTest:
           let
             beaconBlock = blocks[i].message
-            historicalRootsIndex = getHistoricalRootsIndex(beaconBlock.slot, cfg)
+            historicalRootsIndex = getHistoricalSummariesIndex(beaconBlock.slot, cfg)
             blockRootIndex = getBlockRootsIndex(beaconBlock.slot)
 
           let res = buildProof(blockRoots, blockRootIndex)
@@ -109,39 +107,17 @@ suite "Beacon Chain Block Proofs - Capella":
             blockRootIndex,
           )
 
-  test "BeaconBlockHeaderProof for BeaconBlockBody":
+  test "BeaconBlockProof for BeaconBlock":
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
     for i in blocksToTest:
-      let
-        beaconBlock = blocks[i].message
-        beaconBlockHeader = BeaconBlockHeader(
-          slot: beaconBlock.slot,
-          proposer_index: beaconBlock.proposer_index,
-          parent_root: beaconBlock.parent_root,
-          state_root: beaconBlock.state_root,
-          body_root: hash_tree_root(beaconBlock.body),
-        )
-        beaconBlockBody = beaconBlock.body
+      let beaconBlock = blocks[i].message
 
-      let res = buildProof(beaconBlockHeader)
+      let res = buildProof(beaconBlock)
       check res.isOk()
       let proof = res.get()
 
-      let leave = hash_tree_root(beaconBlockBody)
+      let leave = beaconBlock.body.execution_payload.block_hash
       check verifyProof(leave, proof, blocks[i].root)
-
-  test "BeaconBlockBodyProof for Execution BlockHeader":
-    # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
-    for i in blocksToTest:
-      let beaconBlockBody = blocks[i].message.body
-
-      let res = buildProof(beaconBlockBody)
-      check res.isOk()
-      let proof = res.get()
-
-      let leave = beaconBlockBody.execution_payload.block_hash
-      let root = hash_tree_root(beaconBlockBody)
-      check verifyProof(leave, proof, root)
 
   test "BeaconChainBlockProof for Execution BlockHeader":
     let blockRoots = getStateField(state[], block_roots).data
@@ -154,21 +130,12 @@ suite "Beacon Chain Block Proofs - Capella":
         for i in blocksToTest:
           let
             beaconBlock = blocks[i].message
-            beaconBlockHeader = BeaconBlockHeader(
-              slot: beaconBlock.slot,
-              proposer_index: beaconBlock.proposer_index,
-              parent_root: beaconBlock.parent_root,
-              state_root: beaconBlock.state_root,
-              body_root: hash_tree_root(beaconBlock.body),
-            )
-            beaconBlockBody = beaconBlock.body
-
             # Normally we would have an execution BlockHeader that holds this
             # value, but we skip the creation of that header for now and just take
             # the blockHash from the execution payload.
-            blockHash = beaconBlockBody.execution_payload.block_hash
+            blockHash = beaconBlock.body.execution_payload.block_hash
 
-          let proofRes = buildProof(blockRoots, beaconBlockHeader, beaconBlockBody)
+          let proofRes = buildProof(blockRoots, beaconBlock)
           check proofRes.isOk()
           let proof = proofRes.get()
 

@@ -136,7 +136,7 @@ proc installPortalApiHandlers*(
     let
       node = toNodeWithAddress(enr)
       foundContentResult =
-        await p.findContent(node, ByteList.init(hexToSeqByte(contentKey)))
+        await p.findContent(node, ContentKeyByteList.init(hexToSeqByte(contentKey)))
 
     if foundContentResult.isErr():
       raise newException(ValueError, $foundContentResult.error)
@@ -163,7 +163,7 @@ proc installPortalApiHandlers*(
       node = toNodeWithAddress(enr)
       key = hexToSeqByte(contentKey)
       content = hexToSeqByte(contentValue)
-      contentKV = ContentKV(contentKey: ByteList.init(key), content: content)
+      contentKV = ContentKV(contentKey: ContentKeyByteList.init(key), content: content)
       res = await p.offer(node, @[contentKV])
 
     if res.isOk():
@@ -184,7 +184,7 @@ proc installPortalApiHandlers*(
     contentKey: string
   ) -> ContentInfo:
     let
-      key = ByteList.init(hexToSeqByte(contentKey))
+      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
         raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
@@ -199,7 +199,7 @@ proc installPortalApiHandlers*(
     contentKey: string
   ) -> TraceContentLookupResult:
     let
-      key = ByteList.init(hexToSeqByte(contentKey))
+      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
         raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
@@ -217,7 +217,7 @@ proc installPortalApiHandlers*(
     contentKey: string, contentValue: string
   ) -> bool:
     let
-      key = ByteList.init(hexToSeqByte(contentKey))
+      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentValueBytes = hexToSeqByte(contentValue)
 
     let valueToStore =
@@ -252,7 +252,7 @@ proc installPortalApiHandlers*(
 
   rpcServer.rpc("portal_" & network & "LocalContent") do(contentKey: string) -> string:
     let
-      key = ByteList.init(hexToSeqByte(contentKey))
+      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
         raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
@@ -267,7 +267,7 @@ proc installPortalApiHandlers*(
     let
       key = hexToSeqByte(contentKey)
       content = hexToSeqByte(contentValue)
-      contentKeys = ContentKeysList(@[ByteList.init(key)])
+      contentKeys = ContentKeysList(@[ContentKeyByteList.init(key)])
       numberOfPeers =
         await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
 
@@ -279,7 +279,7 @@ proc installPortalApiHandlers*(
     let
       key = hexToSeqByte(contentKey)
       content = hexToSeqByte(contentValue)
-      contentKeys = ContentKeysList(@[ByteList.init(key)])
+      contentKeys = ContentKeysList(@[ContentKeyByteList.init(key)])
       numberOfPeers = await p.randomGossip(Opt.none(NodeId), contentKeys, @[content])
 
     return numberOfPeers

@@ -42,16 +42,16 @@ type
     of dummySelector:
       dummyField: uint64
 
-func encode*(contentKey: ContentKey): ByteList =
-  ByteList.init(SSZ.encode(contentKey))
+func encode*(contentKey: ContentKey): ContentKeyByteList =
+  ContentKeyByteList.init(SSZ.encode(contentKey))
 
-func decode*(contentKey: ByteList): Option[ContentKey] =
+func decode*(contentKey: ContentKeyByteList): Option[ContentKey] =
   try:
     some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SerializationError:
     return none[ContentKey]()
 
-func toContentId*(contentKey: ByteList): ContentId =
+func toContentId*(contentKey: ContentKeyByteList): ContentId =
   # TODO: Should we try to parse the content key here for invalid ones?
   let idHash = sha2.sha256.digest(contentKey.asSeq())
   readUintBE[256](idHash.data)

@@ -22,7 +22,7 @@ import
 
 const protocolId = [byte 0x50, 0x00]
 
-proc toContentId(contentKey: ByteList): results.Opt[ContentId] =
+proc toContentId(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   # Note: Returning sha256 digest as content id here. This content key to
   # content id derivation is different for the different content networks
   # and their content types.
@@ -74,7 +74,8 @@ procSuite "Portal Wire Protocol Tests":
 
     let pong = await proto1.ping(proto2.localNode)
 
-    let customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
+    let customPayload =
+      ByteList[2048](SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
 
     check:
       pong.isOk()
@@ -135,7 +136,7 @@ procSuite "Portal Wire Protocol Tests":
     check (await proto1.baseProtocol.ping(proto2.localNode)).isOk()
     check (await proto2.baseProtocol.ping(proto1.localNode)).isOk()
 
-    let contentKey = ByteList.init(@[1'u8])
+    let contentKey = ContentKeyByteList.init(@[1'u8])
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.
@@ -150,7 +151,7 @@ procSuite "Portal Wire Protocol Tests":
 
   asyncTest "Offer/Accept":
     let (proto1, proto2) = defaultTestSetup(rng)
-    let contentKeys = ContentKeysList(@[ByteList(@[byte 0x01, 0x02, 0x03])])
+    let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
     let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
 
@@ -166,8 +167,9 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
     var content: seq[ContentKV]
     for i in 0 ..< contentKeysLimit:
-      let contentKV =
-        ContentKV(contentKey: ByteList(@[byte i]), content: repeat(byte i, 5000))
+      let contentKV = ContentKV(
+        contentKey: ContentKeyByteList(@[byte i]), content: repeat(byte i, 5000)
+      )
       content.add(contentKV)
 
     let res = await proto1.offer(proto2.baseProtocol.localNode, content)
@@ -343,7 +345,7 @@ procSuite "Portal Wire Protocol Tests":
     var distances: seq[UInt256] = @[]
 
     for i in 0 ..< 40:
-      proto1.storeContent(ByteList.init(@[uint8(i)]), u256(i), item)
+      proto1.storeContent(ByteList[2048].init(@[uint8(i)]), u256(i), item)
       distances.add(u256(i) xor proto1.localNode.id)
 
     distances.sort(order = SortOrder.Descending)

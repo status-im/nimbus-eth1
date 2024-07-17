@@ -58,9 +58,9 @@ type
     of historicalSummaries:
       historicalSummariesKey*: HistoricalSummariesKey
 
-func encode*(contentKey: ContentKey): ByteList =
+func encode*(contentKey: ContentKey): ContentKeyByteList =
   doAssert(contentKey.contentType != unused)
-  ByteList.init(SSZ.encode(contentKey))
+  ContentKeyByteList.init(SSZ.encode(contentKey))
 
 proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
   mixin readSszValue
@@ -69,13 +69,13 @@ proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszErr
 
   readSszValue(data, val)
 
-func decode*(contentKey: ByteList): Opt[ContentKey] =
+func decode*(contentKey: ContentKeyByteList): Opt[ContentKey] =
   try:
     Opt.some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SerializationError:
     return Opt.none(ContentKey)
 
-func toContentId*(contentKey: ByteList): ContentId =
+func toContentId*(contentKey: ContentKeyByteList): ContentId =
   # TODO: Should we try to parse the content key here for invalid ones?
   let idHash = sha2.sha256.digest(contentKey.asSeq())
   readUintBE[256](idHash.data)

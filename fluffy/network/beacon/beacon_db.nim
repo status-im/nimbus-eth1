@@ -288,7 +288,7 @@ proc getLastFinalityUpdate*(db: BeaconDb): Opt[ForkedLightClientFinalityUpdate] 
 
 proc createGetHandler*(db: BeaconDb): DbGetHandler =
   return (
-    proc(contentKey: ByteList, contentId: ContentId): results.Opt[seq[byte]] =
+    proc(contentKey: ContentKeyByteList, contentId: ContentId): results.Opt[seq[byte]] =
       let contentKey = contentKey.decode().valueOr:
         # TODO: as this should not fail, maybe it is better to raiseAssert ?
         return Opt.none(seq[byte])
@@ -347,7 +347,7 @@ proc createGetHandler*(db: BeaconDb): DbGetHandler =
 proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
   return (
     proc(
-        contentKey: ByteList, contentId: ContentId, content: seq[byte]
+        contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
     ) {.raises: [], gcsafe.} =
       let contentKey = decode(contentKey).valueOr:
         # TODO: as this should not fail, maybe it is better to raiseAssert ?

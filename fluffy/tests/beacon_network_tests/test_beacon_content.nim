@@ -279,25 +279,25 @@ suite "Beacon Content Encodings":
 
 suite "Beacon ContentKey Encodings ":
   test "Invalid prefix - 0 value":
-    let encoded = ByteList.init(@[byte 0x00])
+    let encoded = ContentKeyByteList.init(@[byte 0x00])
     let decoded = decode(encoded)
 
     check decoded.isNone()
 
   test "Invalid prefix - before valid range":
-    let encoded = ByteList.init(@[byte 0x01])
+    let encoded = ContentKeyByteList.init(@[byte 0x01])
     let decoded = decode(encoded)
 
     check decoded.isNone()
 
   test "Invalid prefix - after valid range":
-    let encoded = ByteList.init(@[byte 0x14])
+    let encoded = ContentKeyByteList.init(@[byte 0x14])
     let decoded = decode(encoded)
 
     check decoded.isNone()
 
   test "Invalid key - empty input":
-    let encoded = ByteList.init(@[])
+    let encoded = ContentKeyByteList.init(@[])
     let decoded = decode(encoded)
 
     check decoded.isNone()

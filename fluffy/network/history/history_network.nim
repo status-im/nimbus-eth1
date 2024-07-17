@@ -59,7 +59,7 @@ type
 
   Block* = (BlockHeader, BlockBody)
 
-func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
 ## Calls to go from SSZ decoded Portal types to RLP fully decoded EL types
@@ -632,7 +632,7 @@ proc getBlock*(
   return ok(maybeBlock)
 
 proc validateContent(
-    n: HistoryNetwork, content: seq[byte], contentKey: ByteList
+    n: HistoryNetwork, content: seq[byte], contentKey: ContentKeyByteList
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   let key = contentKey.decode().valueOr:
     return false

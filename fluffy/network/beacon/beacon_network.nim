@@ -31,7 +31,7 @@ type BeaconNetwork* = ref object
   forkDigests*: ForkDigests
   processContentLoop: Future[void]
 
-func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
 proc validateHistoricalSummaries(
@@ -223,7 +223,7 @@ proc new*(
   )
 
 proc validateContent(
-    n: BeaconNetwork, content: seq[byte], contentKey: ByteList
+    n: BeaconNetwork, content: seq[byte], contentKey: ContentKeyByteList
 ): Result[void, string] =
   let key = contentKey.decode().valueOr:
     return err("Error decoding content key")

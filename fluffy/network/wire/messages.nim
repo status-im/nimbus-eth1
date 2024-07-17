@@ -26,7 +26,7 @@ const
   perContentKeyOverhead* = 4
 
 type
-  ContentKeysList* = List[ByteList, contentKeysLimit]
+  ContentKeysList* = List[ContentKeyByteList, contentKeysLimit]
   ContentKeysBitList* = BitList[contentKeysLimit]
 
   # TODO: should become part of the specific networks, considering it is custom.
@@ -50,31 +50,32 @@ type
 
   PingMessage* = object
     enrSeq*: uint64
-    customPayload*: ByteList
+    customPayload*: ByteList[2048]
 
   PongMessage* = object
     enrSeq*: uint64
-    customPayload*: ByteList
+    customPayload*: ByteList[2048]
 
   FindNodesMessage* = object
     distances*: List[uint16, 256]
 
   NodesMessage* = object
     total*: uint8
-    enrs*: List[ByteList, 32] # ByteList here is the rlp encoded ENR. This could
+    enrs*: List[ByteList[2048], 32]
+      # ByteList[2048] here is the rlp encoded ENR. This could
     # also be limited to ~300 bytes instead of 2048
 
   FindContentMessage* = object
-    contentKey*: ByteList
+    contentKey*: ContentKeyByteList
 
   ContentMessage* = object
     case contentMessageType*: ContentMessageType
     of connectionIdType:
       connectionId*: Bytes2
     of contentType:
-      content*: ByteList
+      content*: ByteList[2048]
     of enrsType:
-      enrs*: List[ByteList, 32]
+      enrs*: List[ByteList[2048], 32]
 
   OfferMessage* = object
     contentKeys*: ContentKeysList

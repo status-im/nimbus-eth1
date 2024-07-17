@@ -26,7 +26,7 @@ suite "State Validation - Test Vectors":
 
     for testData in testCase:
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let contentValueRetrieval = AccountTrieNodeRetrieval
         .decode(testData.content_value_retrieval.hexToSeqByte())
         .get()
@@ -42,7 +42,7 @@ suite "State Validation - Test Vectors":
 
     for testData in testCase:
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       var contentValueRetrieval = AccountTrieNodeRetrieval
         .decode(testData.content_value_retrieval.hexToSeqByte())
         .get()
@@ -62,7 +62,7 @@ suite "State Validation - Test Vectors":
 
     for testData in testCase:
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let contentValueRetrieval = ContractTrieNodeRetrieval
         .decode(testData.content_value_retrieval.hexToSeqByte())
         .get()
@@ -78,7 +78,7 @@ suite "State Validation - Test Vectors":
 
     for testData in testCase:
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       var contentValueRetrieval = ContractTrieNodeRetrieval
         .decode(testData.content_value_retrieval.hexToSeqByte())
         .get()
@@ -98,7 +98,7 @@ suite "State Validation - Test Vectors":
 
     for testData in testCase:
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let contentValueRetrieval = ContractCodeRetrieval
         .decode(testData.content_value_retrieval.hexToSeqByte())
         .get()
@@ -114,7 +114,7 @@ suite "State Validation - Test Vectors":
 
     for testData in testCase:
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       var contentValueRetrieval = ContractCodeRetrieval
         .decode(testData.content_value_retrieval.hexToSeqByte())
         .get()
@@ -138,8 +138,9 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         let contentValueOffer =
           AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -153,7 +154,7 @@ suite "State Validation - Test Vectors":
         continue # second test case only has root node and no recursive gossip
 
       let contentKey = ContentKey
-        .decode(testData.recursive_gossip.content_key.hexToSeqByte().ByteList)
+        .decode(testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList)
         .get()
       let contentValueOffer = AccountTrieNodeOffer
         .decode(testData.recursive_gossip.content_value_offer.hexToSeqByte())
@@ -180,7 +181,7 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
 
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let contentValueOffer =
         AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -201,7 +202,7 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       var contentValueOffer =
         AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -220,7 +221,7 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       var contentValueOffer =
         AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -237,7 +238,7 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       var contentValueOffer =
         AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -261,8 +262,9 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         let contentValueOffer = ContractTrieNodeOffer
           .decode(testData.content_value_offer.hexToSeqByte())
           .get()
@@ -277,7 +279,7 @@ suite "State Validation - Test Vectors":
         continue # second test case has no recursive gossip
 
       let contentKey = ContentKey
-        .decode(testData.recursive_gossip.content_key.hexToSeqByte().ByteList)
+        .decode(testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList)
         .get()
       let contentValueOffer = ContractTrieNodeOffer
         .decode(testData.recursive_gossip.content_value_offer.hexToSeqByte())
@@ -303,7 +305,7 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
 
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let contentValueOffer =
         ContractTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -324,8 +326,9 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer = ContractTrieNodeOffer
           .decode(testData.content_value_offer.hexToSeqByte())
           .get()
@@ -340,8 +343,9 @@ suite "State Validation - Test Vectors":
           res.error() == "hash of proof root node doesn't match the expected root hash"
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer = ContractTrieNodeOffer
           .decode(testData.content_value_offer.hexToSeqByte())
           .get()
@@ -356,8 +360,9 @@ suite "State Validation - Test Vectors":
           res.error() == "hash of proof root node doesn't match the expected root hash"
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer = ContractTrieNodeOffer
           .decode(testData.content_value_offer.hexToSeqByte())
           .get()
@@ -371,8 +376,9 @@ suite "State Validation - Test Vectors":
           .isErr()
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer = ContractTrieNodeOffer
           .decode(testData.content_value_offer.hexToSeqByte())
           .get()
@@ -386,8 +392,9 @@ suite "State Validation - Test Vectors":
           .isErr()
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer = ContractTrieNodeOffer
           .decode(testData.content_value_offer.hexToSeqByte())
           .get()
@@ -412,7 +419,7 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let contentValueOffer =
         ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -434,7 +441,7 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
 
       let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let contentValueOffer =
         ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -455,8 +462,9 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer =
           ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -470,8 +478,9 @@ suite "State Validation - Test Vectors":
           res.error() == "hash of proof root node doesn't match the expected root hash"
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer =
           ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -486,8 +495,9 @@ suite "State Validation - Test Vectors":
             "hash of bytecode doesn't match the code hash in the account proof"
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer =
           ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -500,8 +510,9 @@ suite "State Validation - Test Vectors":
           .isErr()
 
       block:
-        let contentKey =
-          ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+        let contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
         var contentValueOffer =
           ContractCodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -535,7 +546,8 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
 
       for kv in testData.recursive_gossip:
-        let contentKey = ContentKey.decode(kv.content_key.hexToSeqByte().ByteList).get()
+        let contentKey =
+          ContentKey.decode(kv.content_key.hexToSeqByte().ContentKeyByteList).get()
         let contentValueOffer =
           AccountTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
 
@@ -558,7 +570,8 @@ suite "State Validation - Test Vectors":
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
       for kv in testData.recursive_gossip:
-        let contentKey = ContentKey.decode(kv.content_key.hexToSeqByte().ByteList).get()
+        let contentKey =
+          ContentKey.decode(kv.content_key.hexToSeqByte().ContentKeyByteList).get()
         let contentValueOffer =
           ContractTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
 

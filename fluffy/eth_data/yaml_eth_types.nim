@@ -12,19 +12,15 @@ import ssz_serialization/types, stew/byteutils
 type
   YamlTestProofBellatrix* = object
     execution_block_header*: string # Not part of the actual proof
-    beacon_block_body_proof*: array[8, string]
-    beacon_block_body_root*: string
-    beacon_block_header_proof*: array[3, string]
-    beacon_block_header_root*: string
+    beacon_block_proof*: array[11, string]
+    beacon_block_root*: string
     historical_roots_proof*: array[14, string]
     slot*: uint64
 
   YamlTestProof* = object
     execution_block_header*: string # Not part of the actual proof
-    beacon_block_body_proof*: array[8, string]
-    beacon_block_body_root*: string
-    beacon_block_header_proof*: array[3, string]
-    beacon_block_header_root*: string
+    beacon_block_proof*: array[11, string]
+    beacon_block_root*: string
     historical_summaries_proof*: array[13, string]
     slot*: uint64
 

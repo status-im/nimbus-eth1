@@ -53,7 +53,8 @@ func asPortalBlock(
 
   let
     headerWithProof = BlockHeaderWithProof(
-      header: ByteList(rlp.encode(ethBlock.header)), proof: BlockHeaderProof.init()
+      header: ByteList[2048](rlp.encode(ethBlock.header)),
+      proof: BlockHeaderProof.init(),
     )
     portalBody = PortalBlockBodyShanghai(
       transactions: transactions, uncles: Uncles(@[byte 0xc0]), withdrawals: withdrawals

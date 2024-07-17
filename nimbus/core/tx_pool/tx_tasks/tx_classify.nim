@@ -95,7 +95,7 @@ proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool
 proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether the max gas consumption is within the gas limit (aka block
   ## size).
-  let trgLimit = xp.chain.limits.trgLimit
+  let trgLimit = xp.chain.gasLimit
   if trgLimit < item.tx.gasLimit:
     debug "invalid tx: gasLimit exceeded",
       maxLimit = trgLimit,
@@ -227,10 +227,7 @@ proc classifyValidatePacked*(xp: TxPoolRef;
     roDB = vmState.readOnlyStateDB
     baseFee = xp.chain.baseFee.uint64.u256
     fork = xp.chain.nextFork
-    gasLimit = if packItemsMaxGasLimit in xp.pFlags:
-                 xp.chain.limits.maxLimit
-               else:
-                 xp.chain.limits.trgLimit
+    gasLimit = xp.chain.gasLimit
     tx = item.tx.eip1559TxNormalization(xp.chain.baseFee.GasInt)
     excessBlobGas = calcExcessBlobGas(vmState.parent)
 
@@ -242,10 +239,7 @@ proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## in the VM.) This function checks whether the sum of the arguments
   ## `gasBurned` and `moreGasBurned` is within acceptable constraints.
   let totalGasUsed = gasBurned + moreBurned
-  if packItemsMaxGasLimit in xp.pFlags:
-    totalGasUsed < xp.chain.limits.maxLimit
-  else:
-    totalGasUsed < xp.chain.limits.trgLimit
+  totalGasUsed < xp.chain.gasLimit
 
 proc classifyPackedNext*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
@@ -256,10 +250,8 @@ proc classifyPackedNext*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
   ## `classifyPack()`.
   if packItemsTryHarder notin xp.pFlags:
     xp.classifyPacked(gasBurned, moreBurned)
-  elif packItemsMaxGasLimit in xp.pFlags:
-    gasBurned < xp.chain.limits.hwmLimit
   else:
-    gasBurned < xp.chain.limits.lwmLimit
+    gasBurned < xp.chain.gasLimit
 
 # ------------------------------------------------------------------------------
 # Public functionss

@@ -17,6 +17,7 @@ import
   chronicles,
   nimcrypto/[ripemd, sha2, utils],
   bncurve/[fields, groups],
+  stew/assign2,
   ../common/evmforks,
   ../core/eip4844,
   ./modexp,
@@ -104,7 +105,7 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
   var res = SigRes(sig: sig)
 
   # extract message hash, only need to copy when there is a valid signature
-  res.msgHash[0..31] = data[0..31]
+  assign(res.msgHash, data.toOpenArray(0, 31))
   ok(res)
 
 func simpleDecode(dst: var FQ2, src: openArray[byte]): bool {.noinit.} =
@@ -160,7 +161,7 @@ func ecRecover(c: Computation): EvmResultVoid =
       return err(prcErr(PrcInvalidSig))
 
   c.output.setLen(32)
-  c.output[12..31] = pubkey.toCanonicalAddress()
+  assign(c.output.toOpenArray(12, 31), pubkey.toCanonicalAddress())
   ok()
 
 func sha256(c: Computation): EvmResultVoid =
@@ -169,7 +170,7 @@ func sha256(c: Computation): EvmResultVoid =
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  c.output = @(sha2.sha256.digest(c.msg.data).data)
+  assign(c.output, sha2.sha256.digest(c.msg.data).data)
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
@@ -179,7 +180,7 @@ func ripemd160(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   c.output.setLen(32)
-  c.output[12..31] = @(ripemd.ripemd160.digest(c.msg.data).data)
+  assign(c.output.toOpenArray(12, 31), ripemd.ripemd160.digest(c.msg.data).data)
   ok()
 
 func identity(c: Computation): EvmResultVoid =
@@ -188,7 +189,7 @@ func identity(c: Computation): EvmResultVoid =
     gasFee = GasIdentity + wordCount.GasInt * GasIdentityWord
 
   ? c.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
-  c.output = c.msg.data
+  assign(c.output, c.msg.data)
   ok()
 
 func modExpFee(c: Computation,
@@ -288,10 +289,10 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   # maximum output len is the same as modLen
   # if it less than modLen, it will be zero padded at left
   if output.len >= modLen:
-    c.output = @(output[^modLen..^1])
+    assign(c.output, output.toOpenArray(output.len-modLen, output.len-1))
   else:
     c.output = newSeq[byte](modLen)
-    c.output[^output.len..^1] = output[0..^1]
+    assign(c.output.toOpenArray(c.output.len-output.len, c.output.len-1), output)
   ok()
 
 func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
@@ -311,7 +312,7 @@ func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
     # we can discard here because we supply proper buffer
     discard apo.get().toBytes(output)
 
-  c.output = @output
+  assign(c.output, output)
   ok()
 
 func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
@@ -332,7 +333,7 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
     # we can discard here because we supply buffer of proper size
     discard apo.get().toBytes(output)
 
-  c.output = @output
+  assign(c.output, output)
   ok()
 
 func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
@@ -370,7 +371,7 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
       # we can discard here because we supply buffer of proper size
       discard BNU256.one().toBytes(output)
 
-  c.output = @output
+  assign(c.output, output)
   ok()
 
 func blake2bf(c: Computation): EvmResultVoid =
@@ -385,7 +386,7 @@ func blake2bf(c: Computation): EvmResultVoid =
   if not blake2b_F(input, output):
     return err(prcErr(PrcInvalidParam))
   else:
-    c.output = @output
+    assign(c.output, output)
   ok()
 
 func blsG1Add*(c: Computation): EvmResultVoid =

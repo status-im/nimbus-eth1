@@ -133,7 +133,7 @@ proc asPortalBlockData*(
     )
 
     headerWithProof = BlockHeaderWithProof(
-      header: ByteList(rlp.encode(header)), proof: BlockHeaderProof.init()
+      header: ByteList[2048](rlp.encode(header)), proof: BlockHeaderProof.init()
     )
 
   var transactions: Transactions
@@ -178,7 +178,7 @@ proc asPortalBlockData*(
     )
 
     headerWithProof = BlockHeaderWithProof(
-      header: ByteList(rlp.encode(header)), proof: BlockHeaderProof.init()
+      header: ByteList[2048](rlp.encode(header)), proof: BlockHeaderProof.init()
     )
 
   var transactions: Transactions

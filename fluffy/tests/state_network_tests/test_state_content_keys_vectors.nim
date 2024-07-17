@@ -105,25 +105,25 @@ suite "State Content Keys":
       decoded.value().contractCodeKey.codeHash == codeHash
 
   test "Invalid prefix - 0 value":
-    let encoded = ByteList.init(@[byte 0x00])
+    let encoded = ContentKeyByteList.init(@[byte 0x00])
     let decoded = ContentKey.decode(encoded)
 
     check decoded.isErr()
 
   test "Invalid prefix - before valid range":
-    let encoded = ByteList.init(@[byte 0x01])
+    let encoded = ContentKeyByteList.init(@[byte 0x01])
     let decoded = ContentKey.decode(encoded)
 
     check decoded.isErr()
 
   test "Invalid prefix - after valid range":
-    let encoded = ByteList.init(@[byte 0x25])
+    let encoded = ContentKeyByteList.init(@[byte 0x25])
     let decoded = ContentKey.decode(encoded)
 
     check decoded.isErr()
 
   test "Invalid key - empty input":
-    let encoded = ByteList.init(@[])
+    let encoded = ContentKeyByteList.init(@[])
     let decoded = ContentKey.decode(encoded)
 
     check decoded.isErr()
