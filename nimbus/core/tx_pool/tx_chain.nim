@@ -29,21 +29,6 @@ import
   ./tx_chain/[tx_basefee, tx_gaslimits],
   ./tx_item
 
-export
-  TxChainGasLimits,
-  TxChainGasLimitsPc
-
-const
-  TRG_THRESHOLD_PER_CENT = ##\
-    ## VM executor may stop if this per centage of `trgLimit` has
-    ## been reached.
-    90
-
-  MAX_THRESHOLD_PER_CENT = ##\
-    ## VM executor may stop if this per centage of `maxLimit` has
-    ## been reached.
-    90
-
 type
   TxChainPackerEnv = tuple
     vmState: BaseVMState     ## current tx/packer environment
@@ -62,11 +47,8 @@ type
     ## block. This state is typically synchrionised with the canonical\
     ## block chain head when updated.
     com: CommonRef           ## Block chain config
-    lhwm: TxChainGasLimitsPc ## Hwm/lwm gas limit percentage
-
-    maxMode: bool            ## target or maximal limit for next block header
     roAcc: ReadOnlyStateDB   ## Accounts cache fixed on current sync header
-    limits: TxChainGasLimits ## Gas limits for packer and next header
+    gasLimit*: GasInt
     txEnv: TxChainPackerEnv  ## Assorted parameters, tx packer environment
     prepHeader: BlockHeader  ## Prepared Header from Consensus Engine
 
@@ -101,7 +83,7 @@ proc resetTxEnv(dh: TxChainRef; parent: BlockHeader; baseFeePerGas: Opt[UInt256]
   # because that is handled in vmState
   let blockCtx = BlockContext(
     timestamp    : dh.prepHeader.timestamp,
-    gasLimit     : (if dh.maxMode: dh.limits.maxLimit else: dh.limits.trgLimit),
+    gasLimit     : dh.gasLimit,
     baseFeePerGas: baseFeePerGas,
     prevRandao   : dh.prepHeader.prevRandao,
     difficulty   : dh.prepHeader.difficulty,
@@ -130,7 +112,7 @@ proc update(dh: TxChainRef; parent: BlockHeader)
   # Keep a separate accounts descriptor positioned at the sync point
   dh.roAcc = ReadOnlyStateDB(acc)
 
-  dh.limits = dh.com.gasLimitsGet(parent, dh.lhwm)
+  dh.gasLimit = dh.com.gasLimitsGet(parent)
   dh.resetTxEnv(parent, fee)
 
 # ------------------------------------------------------------------------------
@@ -143,10 +125,6 @@ proc new*(T: type TxChainRef; com: CommonRef): T
   new result
 
   result.com = com
-  result.lhwm.lwmTrg = TRG_THRESHOLD_PER_CENT
-  result.lhwm.hwmMax = MAX_THRESHOLD_PER_CENT
-  result.lhwm.gasFloor = DEFAULT_GAS_LIMIT
-  result.lhwm.gasCeil  = DEFAULT_GAS_LIMIT
   result.update(com.db.getCanonicalHead)
 
 # ------------------------------------------------------------------------------
@@ -219,18 +197,6 @@ func head*(dh: TxChainRef): BlockHeader =
   ## Getter
   dh.txEnv.vmState.parent
 
-func limits*(dh: TxChainRef): TxChainGasLimits =
-  ## Getter
-  dh.limits
-
-func lhwm*(dh: TxChainRef): TxChainGasLimitsPc =
-  ## Getter
-  dh.lhwm
-
-func maxMode*(dh: TxChainRef): bool =
-  ## Getter
-  dh.maxMode
-
 func feeRecipient*(dh: TxChainRef): EthAddress =
   ## Getter
   dh.com.pos.feeRecipient
@@ -299,24 +265,6 @@ proc `head=`*(dh: TxChainRef; val: BlockHeader)
   ## Setter, updates descriptor. This setter re-positions the `vmState` and
   ## account caches to a new insertion point on the block chain database.
   dh.update(val)
-
-func `lhwm=`*(dh: TxChainRef; val: TxChainGasLimitsPc) =
-  ## Setter, tuple `(lwmTrg,hwmMax)` will allow the packer to continue
-  ## up until the percentage level has been reached of the `trgLimit`, or
-  ## `maxLimit` depending on what has been activated.
-  if dh.lhwm != val:
-    dh.lhwm = val
-    let parent = dh.txEnv.vmState.parent
-    dh.limits = dh.com.gasLimitsGet(parent, dh.limits.gasLimit, dh.lhwm)
-    dh.txEnv.vmState.blockCtx.gasLimit = if dh.maxMode: dh.limits.maxLimit
-                                         else:          dh.limits.trgLimit
-
-func `maxMode=`*(dh: TxChainRef; val: bool) =
-  ## Setter, the packing mode (maximal or target limit) for the next block
-  ## header
-  dh.maxMode = val
-  dh.txEnv.vmState.blockCtx.gasLimit = if dh.maxMode: dh.limits.maxLimit
-                                       else:          dh.limits.trgLimit
 
 func `profit=`*(dh: TxChainRef; val: UInt256) =
   ## Setter

@@ -150,8 +150,6 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
   # reset blockValue before adding any tx
   xp.blockValue = 0.u256
 
-  xp.chain.maxMode = (packItemsMaxGasLimit in xp.pFlags)
-
   if xp.chain.com.daoForkSupport and
      xp.chain.com.daoForkBlock.get == xp.chain.head.number + 1:
     xp.chain.vmState.mutateStateDB:

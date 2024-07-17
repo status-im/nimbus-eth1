@@ -22,11 +22,8 @@ import
 # to import `tx_pool/*` sup-modules
 export
   pp,
-  tx_chain.TxChainGasLimits,
-  tx_chain.`maxMode=`,
   tx_chain.clearAccounts,
   tx_chain.com,
-  tx_chain.limits,
   tx_chain.nextFork,
   tx_chain.profit,
   tx_chain.receipts,
@@ -174,11 +171,6 @@ proc pp*(w: TxTabsItemsCount): string =
 
 proc pp*(w: TxTabsGasTotals): string =
   &"{w.pending}/{w.staged}/{w.packed}"
-
-proc pp*(w: TxChainGasLimits): string =
-  &"min={w.minLimit}" &
-    &" trg={w.lwmLimit}:{w.trgLimit}" &
-    &" max={w.hwmLimit}:{w.maxLimit}"
 
 # ------------------------------------------------------------------------------
 # Public functions, other
