@@ -1,6 +1,3 @@
-* Check whether `HashKey` can be reduced to a simple 32 byte array (see
-  *desc_identifiers.nim*)
-
 * Re-visit `delTree()`. Suggestion is deleting small trees on the memory later,
   otherwise only deleting the root vertex (so it becomes inaccessible) and
   remember the follow up vertices which can travel through the tx-layers

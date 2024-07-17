@@ -57,24 +57,29 @@ type
     ## To reference the root itself, use (root, root).
 
   HashKey* = object
-    ## Ethereum MPTs use Keccak hashes as node links if the size of an RLP
-    ## encoded node is of size at least 32 bytes. Otherwise, the RLP encoded
-    ## node value is used as a pseudo node link (rather than a hash.) Such a
-    ## node is nor stored on key-value database. Rather the RLP encoded node
-    ## value is stored instead of a lode link in a parent node instead. Only
-    ## for the root hash, the top level node is always referred to by the
-    ## hash.
+    ## Ethereum reference MPTs use Keccak hashes as node links if the size of
+    ## an RLP encoded node is at least 32 bytes. Otherwise, the RLP encoded
+    ## node value is used as a pseudo node link (rather than a hash.) This is
+    ## specified in the yellow paper, appendix D. Only for the root hash, the
+    ## top level node is always referred to by the Keccak hash.
     ##
-    ## This compaction feature needed an abstraction of the `HashKey` object
+    ## On the `Aristo` database node links are called keys which are of this
+    ## very type `HashKey`. For key-value tables (which assign a key to a
+    ## vertex), the keys are always stored as such with length probably
+    ## smaller than 32, including for root vertex keys. Only when used as a
+    ## root state, the key of the latter is digested to a Keccak hash
+    ## on-the-fly.
+    ##
+    ## This compaction feature nees an abstraction of the hash link object
     ## which is either a `Hash256` or a `Blob` of length at most 31 bytes.
     ## This leaves two ways of representing an empty/void `HashKey` type.
     ## It may be available as an empty `Blob` of zero length, or the
     ## `Hash256` type of the Keccak hash of an empty `Blob` (see constant
     ## `EMPTY_ROOT_HASH`.)
     ##
-    ## For performance, we avoid storing blobs as `seq`, instead storing their
-    ## length and sharing the data "space".
-    ## TODO can we skip one byte of hash and reduce this type to 32 bytes?
+    ## For performance, storing blobs as `seq` is avoided, instead storing
+    ## their length and sharing the data "space".
+    ##
     buf: array[32, byte] # Either Hash256 or blob data, depending on `len`
     len: int8 # length in the case of blobs, or 32 when it's a hash
 
