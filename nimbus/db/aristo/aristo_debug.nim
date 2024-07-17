@@ -159,7 +159,7 @@ proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
       let vtx = db.getVtx rv
       if vtx.isValid:
         let rc = vtx.toNode(rv.root, db)
-        if rc.isOk and key == rc.value.digestTo(HashKey, rv.root==rv.vid):
+        if rc.isOk and key == rc.value.digestTo(HashKey):
           rvid = rv
           break
     # Ok, assemble key representation
@@ -257,7 +257,7 @@ proc ppXMap*(
               let rc = vtx.toNode(w.root, db)
               if rc.isErr:
                 2
-              elif key != rc.value.digestTo(HashKey, root==w.vid):
+              elif key != rc.value.digestTo(HashKey):
                 3
               else:
                 4

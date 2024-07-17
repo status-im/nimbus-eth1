@@ -19,6 +19,12 @@ proc computeKey*(
     db: AristoDbRef;                  # Database, top layer
     rvid: RootedVertexID;             # Vertex to convert
       ): Result[HashKey, AristoError] =
+  ## Compute the key for an arbitrary vertex ID. If successful, the length of
+  ## the resulting key might be smaller than 32. If it is used as a root vertex
+  ## state/hash, it must be converted to a `Hash256` (using (`.to(Hash256)`) as
+  ## in `db.computeKey(rvid).value.to(Hash256)` which always results in a
+  ## 32 byte value.
+  ##
   # This is a variation on getKeyRc which computes the key instead of returning
   # an error
   # TODO it should not always write the key to the persistent storage
@@ -87,11 +93,12 @@ proc computeKey*(
 
       writer.startList(2)
       writer.append(vtx.ePfx.toHexPrefix(isleaf = false))
-      writer.append(bwriter.finish().digestTo(HashKey, forceRoot=false))
+      writer.append(bwriter.finish().digestTo(HashKey))
     else:
       writeBranch(writer)
 
-  let h = writer.finish().digestTo(HashKey, rvid.root == rvid.vid)
+  var h = writer.finish().digestTo(HashKey)
+
   # TODO This shouldn't necessarily go into the database if we're just computing
   #      a key ephemerally - it should however be cached for some tiem since
   #      deep hash computations are expensive

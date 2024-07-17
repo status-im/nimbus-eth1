@@ -333,20 +333,22 @@ func to*(n: UInt256; T: type PathID): T =
 # Public helpers: Miscellaneous mappings
 # ------------------------------------------------------------------------------
 
-func digestTo*(data: openArray[byte]; T: type HashKey; forceRoot = false): T =
+func digestTo*(data: openArray[byte]; T: type HashKey): T =
   ## For argument `data` with length smaller than 32, import them as-is into
   ## the result. Otherwise import the Keccak hash of the argument `data`.
   ##
-  ## If the argument `forceRoot` is set `true`, the `data` argument is always
-  ## hashed.
+  ## The `data` argument is only hashed if the `data` length is at least
+  ## 32 bytes. Otherwise it is converted as-is to a `HashKey` type result.
   ##
-  ## Otherwise it is only hashed if the `data` length is at least 32 bytes.
-  ##
-  ## Otherwise it is converted as-is to a `HashKey` type result.
+  ## Note that for calculating a root state (when `data` is a serialised
+  ## vertex), one would use the expression `data.digestTo(HashKey).to(Hash256)`
+  ## which would always hash the `data` argument regardless of its length
+  ## (and might result in an `EMPTY_ROOT_HASH`.) See the comment at the
+  ## definition of the `HashKey` type for an explanation of its usage.
   ##
   if data.len == 0:
     result.len = 0
-  elif data.len < 32 and not forceRoot:
+  elif data.len < 32:
     result.len = int8 data.len
     (addr result.data[0]).copyMem(unsafeAddr data[0], data.len)
   else:

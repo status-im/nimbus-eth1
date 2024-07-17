@@ -82,7 +82,7 @@ proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
 
     if 0 < w.node.ePfx.len:
       # Do for embedded extension node
-      let brHash = wr.finish().digestTo(HashKey, forceRoot=false)
+      let brHash = wr.finish().digestTo(HashKey)
       result.add (@(brHash.data), wr.finish())
 
       wr = initRlpWriter()
@@ -106,12 +106,9 @@ proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
 
   result.add (@(w.key.data), wr.finish())
 
-proc digestTo*(node: NodeRef; T: type HashKey; forceRoot = false): T =
+proc digestTo*(node: NodeRef; T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key. Note
   ## that a `Dummy` node is encoded as as a `Leaf`.
-  ##
-  ## The argument `forceRoot` is passed on to the function
-  ## `desc_identifiers.digestTo()`.
   ##
   var wr = initRlpWriter()
   case node.vType:
@@ -124,7 +121,7 @@ proc digestTo*(node: NodeRef; T: type HashKey; forceRoot = false): T =
 
     # Do for embedded extension node
     if 0 < node.ePfx.len:
-      let brHash = wr.finish().digestTo(HashKey, forceRoot=false)
+      let brHash = wr.finish().digestTo(HashKey)
       wr= initRlpWriter()
       wr.startList(2)
       wr.append node.ePfx.toHexPrefix(isleaf = false)
@@ -141,7 +138,7 @@ proc digestTo*(node: NodeRef; T: type HashKey; forceRoot = false): T =
     wr.append node.lPfx.toHexPrefix(isleaf = true)
     wr.append node.lData.serialise(getKey0).value
 
-  wr.finish().digestTo(HashKey, forceRoot)
+  wr.finish().digestTo(HashKey)
 
 proc serialise*(
     db: AristoDbRef;
