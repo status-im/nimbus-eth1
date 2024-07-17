@@ -283,15 +283,15 @@ proc dispose*(c: Computation) =
 proc rollback*(c: Computation) =
   c.vmState.stateDB.rollback(c.savePoint)
 
-func setError*(c: Computation, msg: string, burnsGas = false) =
-  c.error = Error(evmcStatus: EVMC_FAILURE, info: msg, burnsGas: burnsGas)
+func setError*(c: Computation, msg: sink string, burnsGas = false) =
+  c.error = Error(evmcStatus: EVMC_FAILURE, info: move(msg), burnsGas: burnsGas)
 
 func setError*(c: Computation, code: evmc_status_code, burnsGas = false) =
   c.error = Error(evmcStatus: code, info: $code, burnsGas: burnsGas)
 
 func setError*(
-    c: Computation, code: evmc_status_code, msg: string, burnsGas = false) =
-  c.error = Error(evmcStatus: code, info: msg, burnsGas: burnsGas)
+    c: Computation, code: evmc_status_code, msg: sink string, burnsGas = false) =
+  c.error = Error(evmcStatus: code, info: move(msg), burnsGas: burnsGas)
 
 func evmcStatus*(c: Computation): evmc_status_code =
   if c.isSuccess:
