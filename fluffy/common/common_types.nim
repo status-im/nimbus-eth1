@@ -7,20 +7,17 @@
 
 {.push raises: [].}
 
-import results, ssz_serialization, eth/rlp, stew/byteutils, nimcrypto/hash
+import results, ssz_serialization, eth/rlp, nimcrypto/hash
 
 export hash
 
 type
-  ByteList* = List[byte, 2048]
-  Bytes2* = array[2, byte]
-  Bytes32* = array[32, byte]
+  Bytes2* = ByteVector[2]
+  Bytes32* = ByteVector[32]
 
   ContentId* = UInt256
+  ContentKeyByteList* = ByteList[2048] # The encoded content key
   BlockHash* = MDigest[32 * 8] # Bytes32
-
-func `$`*(x: ByteList): string =
-  x.asSeq.toHex()
 
 func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
   try:

@@ -145,22 +145,22 @@ const
 
 type
   ToContentIdHandler* =
-    proc(contentKey: ByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
+    proc(contentKey: ContentKeyByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
 
   DbGetHandler* = proc(
-    contentKey: ByteList, contentId: ContentId
+    contentKey: ContentKeyByteList, contentId: ContentId
   ): results.Opt[seq[byte]] {.raises: [], gcsafe.}
 
-  DbStoreHandler* = proc(contentKey: ByteList, contentId: ContentId, content: seq[byte]) {.
-    raises: [], gcsafe
-  .}
+  DbStoreHandler* = proc(
+    contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
+  ) {.raises: [], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
 
   RadiusCache* = LRUCache[NodeId, UInt256]
 
   ContentKV* = object
-    contentKey*: ByteList
+    contentKey*: ContentKeyByteList
     content*: seq[byte]
 
   OfferRequestType = enum
@@ -239,7 +239,7 @@ type
     utpTransfer*: bool
     trace*: TraceObject
 
-func init*(T: type ContentKV, contentKey: ByteList, content: seq[byte]): T =
+func init*(T: type ContentKV, contentKey: ContentKeyByteList, content: seq[byte]): T =
   ContentKV(contentKey: contentKey, content: content)
 
 func init*(
@@ -324,11 +324,11 @@ func inRange*(p: PortalProtocol, contentId: ContentId): bool =
 
 func truncateEnrs(
     nodes: seq[Node], maxSize: int, enrOverhead: int
-): List[ByteList, 32] =
-  var enrs: List[ByteList, 32]
+): List[ByteList[2048], 32] =
+  var enrs: List[ByteList[2048], 32]
   var totalSize = 0
   for n in nodes:
-    let enr = ByteList.init(n.record.raw)
+    let enr = ByteList[2048].init(n.record.raw)
     if totalSize + enr.len() + enrOverhead <= maxSize:
       let res = enrs.add(enr)
       # With max payload of discv5 and the sizes of ENRs this should not occur.
@@ -354,19 +354,19 @@ func handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] 
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
   let p = PongMessage(
     enrSeq: p.localNode.record.seqNum,
-    customPayload: ByteList(SSZ.encode(customPayload)),
+    customPayload: ByteList[2048](SSZ.encode(customPayload)),
   )
 
   encodeMessage(p)
 
 proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
   if fn.distances.len == 0:
-    let enrs = List[ByteList, 32](@[])
+    let enrs = List[ByteList[2048], 32](@[])
     encodeMessage(NodesMessage(total: 1, enrs: enrs))
   elif fn.distances.contains(0):
     # A request for our own record.
-    let enr = ByteList(rlp.encode(p.localNode.record))
-    encodeMessage(NodesMessage(total: 1, enrs: List[ByteList, 32](@[enr])))
+    let enr = ByteList[2048](rlp.encode(p.localNode.record))
+    encodeMessage(NodesMessage(total: 1, enrs: List[ByteList[2048], 32](@[enr])))
   else:
     let distances = fn.distances.asSeq()
     if distances.all(
@@ -393,7 +393,7 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
     else:
       # invalid request, send empty back
-      let enrs = List[ByteList, 32](@[])
+      let enrs = List[ByteList[2048], 32](@[])
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
 
 proc handleFindContent(
@@ -422,7 +422,9 @@ proc handleFindContent(
       let content = contentResult.get()
       if content.len <= maxPayloadSize:
         return encodeMessage(
-          ContentMessage(contentMessageType: contentType, content: ByteList(content))
+          ContentMessage(
+            contentMessageType: contentType, content: ByteList[2048](content)
+          )
         )
       else:
         let connectionId = p.stream.addContentRequest(srcId, content)
@@ -648,7 +650,7 @@ proc pingImpl*(
   let customPayload = CustomPayload(dataRadius: p.dataRadius)
   let ping = PingMessage(
     enrSeq: p.localNode.record.seqNum,
-    customPayload: ByteList(SSZ.encode(customPayload)),
+    customPayload: ByteList[2048](SSZ.encode(customPayload)),
   )
 
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
@@ -662,7 +664,7 @@ proc findNodesImpl*(
   return await reqResponse[FindNodesMessage, NodesMessage](p, dst, fn)
 
 proc findContentImpl*(
-    p: PortalProtocol, dst: Node, contentKey: ByteList
+    p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
 ): Future[PortalResult[ContentMessage]] {.async: (raises: [CancelledError]).} =
   let fc = FindContentMessage(contentKey: contentKey)
 
@@ -675,7 +677,9 @@ proc offerImpl*(
 
   return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
 
-proc recordsFromBytes*(rawRecords: List[ByteList, 32]): PortalResult[seq[Record]] =
+proc recordsFromBytes*(
+    rawRecords: List[ByteList[2048], 32]
+): PortalResult[seq[Record]] =
   var records: seq[Record]
   for r in rawRecords.asSeq():
     let record = enr.Record.fromBytes(r.asSeq()).valueOr:
@@ -724,7 +728,7 @@ proc findNodes*(
     return err(nodesMessage.error)
 
 proc findContent*(
-    p: PortalProtocol, dst: Node, contentKey: ByteList
+    p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
 ): Future[PortalResult[FoundContent]] {.async: (raises: [CancelledError]).} =
   logScope:
     node = dst
@@ -1090,7 +1094,10 @@ proc lookup*(
   return closestNodes
 
 proc triggerPoke*(
-    p: PortalProtocol, nodes: seq[Node], contentKey: ByteList, content: seq[byte]
+    p: PortalProtocol,
+    nodes: seq[Node],
+    contentKey: ContentKeyByteList,
+    content: seq[byte],
 ) =
   ## In order to properly test gossip mechanisms (e.g. in Portal Hive),
   ## we need the option to turn off the POKE functionality as it influences
@@ -1118,7 +1125,7 @@ proc triggerPoke*(
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
 proc contentLookup*(
-    p: PortalProtocol, target: ByteList, targetId: UInt256
+    p: PortalProtocol, target: ContentKeyByteList, targetId: UInt256
 ): Future[Opt[ContentLookupResult]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
@@ -1222,7 +1229,7 @@ proc contentLookup*(
   return Opt.none(ContentLookupResult)
 
 proc traceContentLookup*(
-    p: PortalProtocol, target: ByteList, targetId: UInt256
+    p: PortalProtocol, target: ContentKeyByteList, targetId: UInt256
 ): Future[TraceContentLookupResult] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
@@ -1587,7 +1594,10 @@ proc randomGossipDiscardPeers*(
   discard await p.randomGossip(srcNodeId, contentKeys, content)
 
 proc storeContent*(
-    p: PortalProtocol, contentKey: ByteList, contentId: ContentId, content: seq[byte]
+    p: PortalProtocol,
+    contentKey: ContentKeyByteList,
+    contentId: ContentId,
+    content: seq[byte],
 ) =
   doAssert(p.dbPut != nil)
   p.dbPut(contentKey, contentId, content)

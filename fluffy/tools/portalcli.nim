@@ -207,7 +207,7 @@ proc discover(d: discv5_protocol.Protocol) {.async.} =
     info "Lookup finished", nodes = discovered.len
     await sleepAsync(30.seconds)
 
-proc testContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+proc testContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   # Note: Returning a static content id here, as in practice this depends
   # on the content key to content id derivation, which is different for the
   # different content networks. And we want these tests to be independent from
@@ -295,7 +295,7 @@ proc run(config: PortalCliConf) =
       echo nodes.error
   of findContent:
     # For now just some bogus bytes
-    let contentKey = ByteList.init(@[1'u8])
+    let contentKey = ContentKeyByteList.init(@[1'u8])
 
     let foundContent = waitFor portal.findContent(config.findContentTarget, contentKey)
 

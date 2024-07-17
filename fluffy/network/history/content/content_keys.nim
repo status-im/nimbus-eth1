@@ -63,16 +63,16 @@ func init*(T: type ContentKey, contentType: ContentType, hash: BlockHash | Diges
       contentType: contentType, epochRecordKey: EpochRecordKey(epochHash: hash)
     )
 
-func encode*(contentKey: ContentKey): ByteList =
-  ByteList.init(SSZ.encode(contentKey))
+func encode*(contentKey: ContentKey): ContentKeyByteList =
+  ContentKeyByteList.init(SSZ.encode(contentKey))
 
-func decode*(contentKey: ByteList): Opt[ContentKey] =
+func decode*(contentKey: ContentKeyByteList): Opt[ContentKey] =
   try:
     Opt.some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SerializationError:
     return Opt.none(ContentKey)
 
-func toContentId*(contentKey: ByteList): ContentId =
+func toContentId*(contentKey: ContentKeyByteList): ContentId =
   # TODO: Should we try to parse the content key here for invalid ones?
   let idHash = sha2.sha256.digest(contentKey.asSeq())
   readUintBE[256](idHash.data)
