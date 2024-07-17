@@ -221,7 +221,6 @@ proc collapse*(
 proc persist*(
     db: AristoDbRef;                  # Database
     nxtSid = 0u64;                    # Next state ID (aka block number)
-    chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## Persistently store data onto backend database. If the system is running
   ## without a database backend, the function returns immediately with an
@@ -234,20 +233,14 @@ proc persist*(
   ## and the staged data area is cleared. Wile performing this last step,
   ## the recovery journal is updated (if available.)
   ##
-  ## If the argument `nxtFid` is passed non-zero, it will be the ID for the
+  ## If the argument `nxtSid` is passed non-zero, it will be the ID for the
   ## next recovery journal record. If non-zero, this ID must be greater than
   ## all previous IDs (e.g. block number when stowing after block execution.)
   ##
-  ## Staging the top layer cache might fail with a partial MPT when it is
-  ## set up from partial MPT chunks as it happens with `snap` sync processing.
-  ## In this case, the `chunkedMpt` argument must be set `true` (see alse
-  ## `fwdFilter()`.)
-  ##
-  db.txStow(nxtSid, persistent=true, chunkedMpt=chunkedMpt)
+  db.txStow(nxtSid, persistent=true)
 
 proc stow*(
     db: AristoDbRef;                  # Database
-    chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## This function is similar to `persist()` stopping short of performing the
   ## final step storing on the persistent database. It fails if there is a
@@ -257,12 +250,7 @@ proc stow*(
   ## backend stage area and leaves it there. This function can be seen as
   ## a sort of a bottom level transaction `commit()`.
   ##
-  ## Staging the top layer cache might fail with a partial MPT when it is
-  ## set up from partial MPT chunks as it happens with `snap` sync processing.
-  ## In this case, the `chunkedMpt` argument must be set `true` (see alse
-  ## `fwdFilter()`.)
-  ##
-  db.txStow(nxtSid=0u64, persistent=false, chunkedMpt=chunkedMpt)
+  db.txStow(nxtSid=0u64, persistent=false)
 
 # ------------------------------------------------------------------------------
 # End

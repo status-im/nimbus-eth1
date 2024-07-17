@@ -20,9 +20,8 @@ import
 
 proc deltaMerge*(
     db: AristoDbRef;
-    upper: LayerDeltaRef;                      # Src filter, `nil` is ok
+    upper: LayerDeltaRef;                      # new filter, `nil` is ok
     lower: LayerDeltaRef;                      # Trg filter, `nil` is ok
-    beStateRoot: HashKey;                      # Merkle hash key
       ): Result[LayerDeltaRef,(VertexID,AristoError)] =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
@@ -70,6 +69,12 @@ proc deltaMerge*(
         newFilter.kMap.del rvid
       else:
         return err((rvid.vid,rc.error))
+
+  for (accPath,leafVtx) in upper.accLeaves.pairs:
+    newFilter.accLeaves[accPath] = leafVtx
+
+  for (mixPath,leafVtx) in upper.stoLeaves.pairs:
+    newFilter.stoLeaves[mixPath] = leafVtx
 
   ok newFilter
 

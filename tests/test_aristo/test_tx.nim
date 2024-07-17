@@ -120,7 +120,6 @@ proc innerCleanUp(db: var AristoDbRef): bool {.discardable.}  =
 
 proc schedStow(
     db: AristoDbRef;                  # Database
-    chunkedMpt = false;               # Partial data (e.g. from `snap`)
       ): Result[void,AristoError] =
   ## Scheduled storage
   let
@@ -129,13 +128,12 @@ proc schedStow(
                   else: db.balancer.sTab.len + db.balancer.kMap.len
     persistent = MaxFilterBulk < max(layersMeter, filterMeter)
   if persistent:
-    db.persist(chunkedMpt=chunkedMpt)
+    db.persist()
   else:
-    db.stow(chunkedMpt=chunkedMpt)
+    db.stow()
 
 proc saveToBackend(
     tx: var AristoTxRef;
-    chunkedMpt: bool;
     relax: bool;
     noisy: bool;
     debugID: int;
@@ -176,7 +174,7 @@ proc saveToBackend(
     xCheckErr rc.value.level < 0 # force error
 
   block:
-    let rc = db.schedStow(chunkedMpt=chunkedMpt)
+    let rc = db.schedStow()
     xCheckRc rc.error == 0
 
   block:
@@ -191,7 +189,6 @@ proc saveToBackend(
 
 proc saveToBackendWithOops(
     tx: var AristoTxRef;
-    chunkedMpt: bool;
     noisy: bool;
     debugID: int;
     oops: (int,AristoError);
@@ -224,7 +221,7 @@ proc saveToBackendWithOops(
     xCheckErr rc.value.level < 0 # force error
 
   block:
-    let rc = db.schedStow(chunkedMpt=chunkedMpt)
+    let rc = db.schedStow()
     xCheckRc rc.error == 0:
       noisy.say "***", "saveToBackendWithOops(8)",
         " debugID=", debugID,
@@ -371,13 +368,8 @@ proc testTxMergeAndDeleteOneByOne*(
         doSaveBeOk = ((u mod saveMod) == saveRest)
         (leaf, lid) = lvp
 
-      # Add a dummy entry so the balancer logic can be triggered
-      let rc = db.mergeDummyAccLeaf(n, runID)
-      xCheckRc rc.error == 0
-
       if doSaveBeOk:
-        let saveBeOk = tx.saveToBackend(
-          chunkedMpt=false, relax=relax, noisy=noisy, runID)
+        let saveBeOk = tx.saveToBackend(relax=relax, noisy=noisy, runID)
         xCheck saveBeOk:
           noisy.say "***", "del1by1(2)",
             " u=", u,
@@ -441,11 +433,6 @@ proc testTxMergeAndDeleteSubTree*(
       else:
         AristoDbRef.init(MemBackendRef)
 
-    # Add a dummy entry so the balancer logic can be triggered
-    block:
-      let rc = db.mergeDummyAccLeaf(n, 42)
-      xCheckRc rc.error == 0
-
     # Start transaction (double frame for testing)
     xCheck db.txTop.isErr
     var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -477,8 +464,7 @@ proc testTxMergeAndDeleteSubTree*(
 
     # === delete sub-tree ===
     block:
-      let saveBeOk = tx.saveToBackend(
-        chunkedMpt=false, relax=false, noisy=noisy, 1 + list.len * n)
+      let saveBeOk = tx.saveToBackend(relax=false, noisy=noisy, 1+list.len*n)
       xCheck saveBeOk:
         noisy.say "***", "del(1)",
           " n=", n, "/", list.len,
@@ -492,15 +478,8 @@ proc testTxMergeAndDeleteSubTree*(
           " n=", n, "/", list.len,
           "\n    db\n    ", db.pp(backendOk=true),
           ""
-
-    # Update dummy entry so the journal logic can be triggered
     block:
-      let rc = db.mergeDummyAccLeaf(n, 43)
-      xCheckRc rc.error == 0
-
-    block:
-      let saveBeOk = tx.saveToBackend(
-        chunkedMpt=false, relax=false, noisy=noisy, 2 + list.len * n)
+      let saveBeOk = tx.saveToBackend(relax=false, noisy=noisy, 2+list.len*n)
       xCheck saveBeOk:
         noisy.say "***", "del(3)",
           " n=", n, "/", list.len,
@@ -555,11 +534,6 @@ proc testTxMergeProofAndKvpList*(
       count = 0
     count.inc
 
-    # Add a dummy entry so the balancer logic can be triggered
-    block:
-      let rc = db.mergeDummyAccLeaf(n, 42)
-      xCheckRc rc.error == 0
-
     let
       testId = idPfx & "#" & $w.id & "." & $n
       runID = n
@@ -576,8 +550,7 @@ proc testTxMergeProofAndKvpList*(
     block:
       let
         oops = oopsTab.getOrDefault(testId,(0,AristoError(0)))
-        saveBeOk = tx.saveToBackendWithOops(
-          chunkedMpt=true, noisy=noisy, debugID=runID, oops)
+        saveBeOk = tx.saveToBackendWithOops(noisy=noisy, debugID=runID, oops)
       xCheck saveBeOk
 
     when true and false:
