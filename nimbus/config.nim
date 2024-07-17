@@ -148,7 +148,7 @@ type
       desc: "Directory where era1 (pre-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era1"
       name: "era1-dir" }: Option[OutDir]
-    
+
     eraDirOpt* {.
       desc: "Directory where era (post-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era"
@@ -558,7 +558,7 @@ func completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
 
 func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
-  if not fromURI(result, p):
+  result = fromURI(enr.Record, p).valueOr:
     raise newException(ValueError, "Invalid ENR")
 
 func completeCmdArg*(T: type enr.Record, val: string): seq[string] =
@@ -704,7 +704,7 @@ func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
     # could have been done and no Record would exist here.
     # TypedRecord should be reworked not to have public key as an option.
     pk = r.get(PublicKey).get()
-    tr = r.toTypedRecord().expect("id in valid record")
+    tr = TypedRecord.fromRecord(r)#.expect("id in valid record")
 
   if tr.ip.isNone():
     return err(IncorrectIP)

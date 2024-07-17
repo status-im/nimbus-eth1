@@ -10,7 +10,7 @@
 
 import
   ../../core_db,
-  "."/[api_tracking, base_config, base_desc]
+  "."/[base_config, base_desc]
 
 # ------------------------------------------------------------------------------
 # Public constructor helper
