@@ -106,15 +106,6 @@ proc complete(
       uHike.legs.add leg
       return ok(uHike) # done
 
-    # of Extension:
-    #   vid = vtx.eVid
-    #   if vid.isValid:
-    #     vtx = db.getVtx (hike.root, vid)
-    #     if vtx.isValid:
-    #       uHike.legs.add leg
-    #       continue
-    #   return err((vid,NearbyExtensionError)) # Oops, no way
-
     of Branch:
       when doLeast:
         leg.nibble = vtx.branchNibbleMin 0
@@ -180,16 +171,6 @@ proc zeroAdjust(
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
         pfx = root.ePfx & NibblesBuf.nibble(n.byte)
-
-      # of Extension:
-      #   let ePfx = root.ePfx
-      #   # Must be followed by a branch vertex
-      #   if not hike.accept ePfx:
-      #     break fail
-      #   let vtx = db.getVtx (hike.root, root.eVid)
-      #   if not vtx.isValid:
-      #     break fail
-      #   pfx =  ePfx
 
       of Leaf:
         pfx = root.lPfx
@@ -302,10 +283,6 @@ proc nearbyNext(
     of Branch:
       if top.nibble < 0 or uHike.tail.len == 0:
         return err((top.wp.vid,NearbyUnexpectedVtx))
-    # of Extension:
-    #   uHike.tail = top.wp.vtx.ePfx & uHike.tail
-    #   uHike.legs.setLen(uHike.legs.len - 1)
-    #   continue
 
     var
       step = top
@@ -327,9 +304,6 @@ proc nearbyNext(
       of Leaf:
         if uHike.accept vtx.lPfx:
           return uHike.complete(vid, db, hikeLenMax, doLeast=moveRight)
-      # of Extension:
-      #   if uHike.accept vtx.ePfx:
-      #     return uHike.complete(vid, db, hikeLenMax, doLeast=moveRight)
       of Branch:
         let nibble = uHike.tail[0].int8
         if start and accept nibble:
@@ -588,8 +562,6 @@ proc rightMissing*(
   case vtx.vType
   of Leaf:
     return ok(vtx.lPfx < hike.tail)
-  # of Extension:
-  #   return ok(vtx.ePfx < hike.tail)
   of Branch:
     return ok(vtx.branchNibbleMin(hike.tail[0].int8) < 0)
 
