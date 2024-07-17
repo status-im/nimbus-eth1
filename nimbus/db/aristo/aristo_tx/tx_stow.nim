@@ -61,18 +61,9 @@ proc getBeStateRoot(
 
 proc topMerge(db: AristoDbRef; src: HashKey): Result[void,AristoError] =
   ## Merge the `top` layer into the read-only balacer layer.
-  let ubeRoot = block:
-    const rvid = (VertexID(1), VertexID(1))
-    let rc = db.getKeyUbe rvid
-    if rc.isOk:
-      rc.value
-    elif rc.error == GetKeyNotFound:
-      VOID_HASH_KEY
-    else:
-      return err(rc.error)
 
   # This one will return the `db.top.delta` if `db.balancer.isNil`
-  db.balancer = db.deltaMerge(db.top.delta, db.balancer, ubeRoot).valueOr:
+  db.balancer = db.deltaMerge(db.top.delta, db.balancer).valueOr:
     return err(error[1])
 
   ok()
