@@ -18,10 +18,10 @@ import
 proc putKeyAtLevel(
     db: AristoDbRef, rvid: RootedVertexID, key: HashKey, level: int
 ): Result[void, AristoError] =
-  ## Store a hash key in the same layer where the corresponding vertex exists -
-  ## if `rvid` is not found in the layers it will be written directly to the
-  ## database backend assuming the value the key corresponds to was taken from
-  ## there
+  ## Store a hash key in the given layer or directly to the underlying database
+  ## which helps ensure that memory usage is proportional to the pending change
+  ## set (vertex data may have been committed to disk without computing the
+  ## corresponding hash!)
   if level == -2:
     let be = db.backend
     doAssert be != nil, "source data is from the backend"
@@ -64,21 +64,23 @@ proc computeKeyImpl(
   of Leaf:
     writer.startList(2)
     writer.append(vtx.lPfx.toHexPrefix(isLeaf = true))
-    # Need to resolve storage root for account leaf
+
     case vtx.lData.pType
     of AccountData:
       let
         stoID = vtx.lData.stoID
-        (akey, kl) = if stoID.isValid:
-          ?db.computeKeyImpl((stoID, stoID))
-        else:
-          (VOID_HASH_KEY, -2)
-      level = maxLevel(level, kl)
+        skey =
+          if stoID.isValid:
+            let (skey, sl) = ?db.computeKeyImpl((stoID, stoID))
+            level = maxLevel(level, sl)
+            skey
+          else:
+            VOID_HASH_KEY
 
       writer.append(encode Account(
         nonce:       vtx.lData.account.nonce,
         balance:     vtx.lData.account.balance,
-        storageRoot: akey.to(Hash256),
+        storageRoot: skey.to(Hash256),
         codeHash:    vtx.lData.account.codeHash)
       )
     of RawData:
