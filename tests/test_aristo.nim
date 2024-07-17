@@ -20,7 +20,7 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_aristo/test_short_keys,
   ./test_aristo/test_blobify,
-  ./test_aristo/[test_samples_xx, test_filter, test_helpers, test_tx]
+  ./test_aristo/[test_balancer, test_helpers, test_samples_xx, test_tx]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]
@@ -102,8 +102,8 @@ proc accountsRunner(
     test &"Delete accounts database sub-trees, {accLst.len} lists":
       check noisy.testTxMergeAndDeleteSubTree(accLst, dbDir)
 
-    test &"Distributed backend access {accLst.len} entries":
-      check noisy.testDistributedAccess(accLst, dbDir)
+    test &"Distributed backend balancers {accLst.len} entries":
+      check noisy.testBalancer(accLst, dbDir)
 
 
 proc storagesRunner(
@@ -137,8 +137,8 @@ proc storagesRunner(
     test &"Delete storage database sub-trees, {stoLst.len} lists":
       check noisy.testTxMergeAndDeleteSubTree(stoLst, dbDir)
 
-    test &"Distributed backend access {stoLst.len} entries":
-      check noisy.testDistributedAccess(stoLst, dbDir)
+    test &"Distributed backend balancers {stoLst.len} entries":
+      check noisy.testBalancer(stoLst, dbDir)
 
 # ------------------------------------------------------------------------------
 # Main function(s)
