@@ -39,35 +39,56 @@ func slt(x, y: UInt256): bool =
 
 proc addOp (k: var VmCtx): EvmResultVoid =
   ## 0x01, Addition
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push(lhs + rhs)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(lhs + rhs)
+  ok()
 
 proc mulOp(k: var VmCtx): EvmResultVoid =
   ## 0x02, Multiplication
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push(lhs * rhs)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(lhs * rhs)
+  ok()
 
 proc subOp(k: var VmCtx): EvmResultVoid =
   ## 0x03, Substraction
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push(lhs - rhs)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(lhs - rhs)
+  ok()
 
 proc divideOp(k: var VmCtx): EvmResultVoid =
   ## 0x04, Division
+  ? k.cpt.stack.lsCheck(2)
   let
-    (lhs, rhs) = ? k.cpt.stack.popInt(2)
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
     value = if rhs.isZero:
               # EVM special casing of div by 0
               zero(UInt256)
             else:
               lhs div rhs
 
-  k.cpt.stack.push value
-
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop value
+  ok()
 
 proc sdivOp(k: var VmCtx): EvmResultVoid =
   ## 0x05, Signed division
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
 
   var r: UInt256
   if rhs.isZero.not:
@@ -78,24 +99,32 @@ proc sdivOp(k: var VmCtx): EvmResultVoid =
     extractSign(b, signB)
     r = a div b
     setSign(r, signA xor signB)
-  k.cpt.stack.push(r)
 
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(r)
+  ok()
 
 proc moduloOp(k: var VmCtx): EvmResultVoid =
   ## 0x06, Modulo
+  ? k.cpt.stack.lsCheck(2)
   let
-    (lhs, rhs) = ? k.cpt.stack.popInt(2)
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
     value = if rhs.isZero:
               zero(UInt256)
             else:
               lhs mod rhs
 
-  k.cpt.stack.push value
-
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop value
+  ok()
 
 proc smodOp(k: var VmCtx): EvmResultVoid =
   ## 0x07, Signed modulo
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
 
   var r: UInt256
   if rhs.isZero.not:
@@ -106,38 +135,51 @@ proc smodOp(k: var VmCtx): EvmResultVoid =
     extractSign(v, sign)
     r = v mod m
     setSign(r, sign)
-  k.cpt.stack.push(r)
 
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop r
+  ok()
 
 proc addmodOp(k: var VmCtx): EvmResultVoid =
   ## 0x08, Modulo addition
   ## Intermediate computations do not roll over at 2^256
+  ? k.cpt.stack.lsCheck(3)
   let
-    (lhs, rhs, modulus) = ? k.cpt.stack.popInt(3)
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+    modulus = k.cpt.stack.lsPeekInt(^3)
     value = if modulus.isZero:
               zero(UInt256)
             else:
               addmod(lhs, rhs, modulus)
 
-  k.cpt.stack.push value
-
+  k.cpt.stack.lsShrink(2)
+  k.cpt.stack.lsTop value
+  ok()
 
 proc mulmodOp(k: var VmCtx): EvmResultVoid =
   ## 0x09, Modulo multiplication
   ## Intermediate computations do not roll over at 2^256
+  ? k.cpt.stack.lsCheck(3)
   let
-    (lhs, rhs, modulus) = ? k.cpt.stack.popInt(3)
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+    modulus = k.cpt.stack.lsPeekInt(^3)
     value = if modulus.isZero:
               zero(UInt256)
             else:
               mulmod(lhs, rhs, modulus)
 
-  k.cpt.stack.push value
-
+  k.cpt.stack.lsShrink(2)
+  k.cpt.stack.lsTop value
+  ok()
 
 proc expOp(k: var VmCtx): EvmResultVoid =
   ## 0x0A, Exponentiation
-  let (base, exponent) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    base = k.cpt.stack.lsPeekInt(^1)
+    exponent = k.cpt.stack.lsPeekInt(^2)
 
   ? k.cpt.opcodeGasCost(Exp,
     k.cpt.gasCosts[Exp].d_handler(exponent),
@@ -153,13 +195,17 @@ proc expOp(k: var VmCtx): EvmResultVoid =
               else:
                 zero(UInt256)
 
-  k.cpt.stack.push value
-
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop value
+  ok()
 
 proc signExtendOp(k: var VmCtx): EvmResultVoid =
   ## 0x0B, Sign extend
   ## Extend length of two’s complement signed integer.
-  let (bits, value) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    bits = k.cpt.stack.lsPeekInt(^1)
+    value = k.cpt.stack.lsPeekInt(^2)
 
   var res: UInt256
   if bits <= 31.u256:
@@ -174,64 +220,110 @@ proc signExtendOp(k: var VmCtx): EvmResultVoid =
       res = value and mask
   else:
     res = value
-  k.cpt.stack.push res
 
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop res
+  ok()
 
 proc ltOp(k: var VmCtx): EvmResultVoid =
   ## 0x10, Less-than comparison
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push((lhs < rhs).uint.u256)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop((lhs < rhs).uint.u256)
+  ok()
 
 proc gtOp(k: var VmCtx): EvmResultVoid =
   ## 0x11, Greater-than comparison
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push((lhs > rhs).uint.u256)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop((lhs > rhs).uint.u256)
+  ok()
 
 proc sltOp(k: var VmCtx): EvmResultVoid =
   ## 0x12, Signed less-than comparison
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push(slt(lhs, rhs).uint.u256)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(slt(lhs, rhs).uint.u256)
+  ok()
 
 proc sgtOp(k: var VmCtx): EvmResultVoid =
   ## 0x13, Signed greater-than comparison
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
   # Arguments are swapped and SLT is used.
-  k.cpt.stack.push(slt(rhs, lhs).uint.u256)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(slt(rhs, lhs).uint.u256)
+  ok()
 
 proc eqOp(k: var VmCtx): EvmResultVoid =
   ## 0x14, Equality comparison
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push((lhs == rhs).uint.u256)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop((lhs == rhs).uint.u256)
+  ok()
 
 proc isZeroOp(k: var VmCtx): EvmResultVoid =
   ## 0x15, Check if zero
-  let value = ? k.cpt.stack.popInt()
-  k.cpt.stack.push(value.isZero.uint.u256)
+  let value = ? k.cpt.stack.peekInt()
+  k.cpt.stack.lsTop(value.isZero.uint.u256)
+  ok()
 
 proc andOp(k: var VmCtx): EvmResultVoid =
   ## 0x16, Bitwise AND
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push(lhs and rhs)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(lhs and rhs)
+  ok()
 
 proc orOp(k: var VmCtx): EvmResultVoid =
   ## 0x17, Bitwise OR
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push(lhs or rhs)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(lhs or rhs)
+  ok()
 
 proc xorOp(k: var VmCtx): EvmResultVoid =
   ## 0x18, Bitwise XOR
-  let (lhs, rhs) = ? k.cpt.stack.popInt(2)
-  k.cpt.stack.push(lhs xor rhs)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    lhs = k.cpt.stack.lsPeekInt(^1)
+    rhs = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop(lhs xor rhs)
+  ok()
 
 proc notOp(k: var VmCtx): EvmResultVoid =
   ## 0x19, Check if zero
-  let value = ? k.cpt.stack.popInt()
-  k.cpt.stack.push(value.not)
+  let value = ? k.cpt.stack.peekInt()
+  k.cpt.stack.lsTop(value.not)
+  ok()
 
 proc byteOp(k: var VmCtx): EvmResultVoid =
   ## 0x20, Retrieve single byte from word.
+  ? k.cpt.stack.lsCheck(2)
   let
-    (position, value) = ? k.cpt.stack.popInt(2)
+    position = k.cpt.stack.lsPeekInt(^1)
+    value = k.cpt.stack.lsPeekInt(^2)
     val = if position >= 32.u256:
             zero(UInt256)
           else:
@@ -241,43 +333,57 @@ proc byteOp(k: var VmCtx): EvmResultVoid =
             else:
               cast[array[32, byte]](value)[31 - pos].u256
 
-  k.cpt.stack.push val
-
+  k.cpt.stack.lsShrink(1)
+  k.cpt.stack.lsTop val
+  ok()
 
 # Constantinople's new opcodes
 
 proc shlOp(k: var VmCtx): EvmResultVoid =
-  let (shift, num) = ? k.cpt.stack.popInt(2)
-  let shiftLen = shift.safeInt
+  ? k.cpt.stack.lsCheck(2)
+  let
+    shiftLen = k.cpt.stack.lsPeekSafeInt(^1)
+    num = k.cpt.stack.lsPeekInt(^2)
+
+  k.cpt.stack.lsShrink(1)
   if shiftLen >= 256:
-    k.cpt.stack.push 0
+    k.cpt.stack.lsTop 0
   else:
-    k.cpt.stack.push(num shl shiftLen)
+    k.cpt.stack.lsTop(num shl shiftLen)
+  ok()
 
 proc shrOp(k: var VmCtx): EvmResultVoid =
-  let (shift, num) = ? k.cpt.stack.popInt(2)
-  let shiftLen = shift.safeInt
+  ? k.cpt.stack.lsCheck(2)
+  let
+    shiftLen = k.cpt.stack.lsPeekSafeInt(^1)
+    num = k.cpt.stack.lsPeekInt(^2)
+
+  k.cpt.stack.lsShrink(1)
   if shiftLen >= 256:
-    k.cpt.stack.push 0
+    k.cpt.stack.lsTop 0
   else:
     # uint version of `shr`
-    k.cpt.stack.push(num shr shiftLen)
+    k.cpt.stack.lsTop(num shr shiftLen)
+  ok()
 
 proc sarOp(k: var VmCtx): EvmResultVoid =
+  ? k.cpt.stack.lsCheck(2)
   let
-    shiftLen = ? k.cpt.stack.popSafeInt()
-    num256 = ? k.cpt.stack.popInt()
+    shiftLen = k.cpt.stack.lsPeekSafeInt(^1)
+    num256 = k.cpt.stack.lsPeekInt(^2)
     num = cast[Int256](num256)
 
+  k.cpt.stack.lsShrink(1)
   if shiftLen >= 256:
     if num.isNegative:
-      k.cpt.stack.push(cast[UInt256]((-1).i256))
+      k.cpt.stack.lsTop(cast[UInt256]((-1).i256))
     else:
-      k.cpt.stack. push 0
+      k.cpt.stack.lsTop 0
   else:
     # int version of `shr` then force the result
     # into uint256
-    k.cpt.stack.push(cast[UInt256](num shr shiftLen))
+    k.cpt.stack.lsTop(cast[UInt256](num shr shiftLen))
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
