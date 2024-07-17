@@ -217,7 +217,8 @@ func buildHeaderWithProof*(
 
   ok(
     BlockHeaderWithProof(
-      header: ByteList.init(rlp.encode(header)), proof: BlockHeaderProof.init(proof)
+      header: ByteList[2048].init(rlp.encode(header)),
+      proof: BlockHeaderProof.init(proof),
     )
   )
 

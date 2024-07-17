@@ -47,14 +47,14 @@ procSuite "State Gossip - Gossip Offer":
 
       let
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_offer.hexToSeqByte()
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
 
         parentContentKeyBytes =
-          testData.recursive_gossip.content_key.hexToSeqByte().ByteList
+          testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList
         parentContentKey = ContentKey.decode(parentContentKeyBytes).get()
         parentContentId = toContentId(parentContentKeyBytes)
         parentContentValueBytes =
@@ -120,14 +120,14 @@ procSuite "State Gossip - Gossip Offer":
 
       let
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_offer.hexToSeqByte()
         contentValue = ContractTrieNodeOffer.decode(contentValueBytes).get()
 
         parentContentKeyBytes =
-          testData.recursive_gossip.content_key.hexToSeqByte().ByteList
+          testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList
         parentContentKey = ContentKey.decode(parentContentKeyBytes).get()
         parentContentId = toContentId(parentContentKeyBytes)
         parentContentValueBytes =
@@ -191,7 +191,7 @@ procSuite "State Gossip - Gossip Offer":
     for i, testData in testCase:
       let
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_offer.hexToSeqByte()
@@ -251,7 +251,7 @@ procSuite "State Gossip - Gossip Offer":
       let
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
         leafData = testData.recursive_gossip[0]
-        contentKeyBytes = leafData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = leafData.content_value.hexToSeqByte()
@@ -275,13 +275,13 @@ procSuite "State Gossip - Gossip Offer":
 
       # wait for recursive gossip to complete
       for node in testData.recursive_gossip:
-        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        let keyBytes = node.content_key.hexToSeqByte().ContentKeyByteList
         await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       # check that all nodes were received by both state instances
       for kv in testData.recursive_gossip:
         let
-          expectedKeyBytes = kv.content_key.hexToSeqByte().ByteList
+          expectedKeyBytes = kv.content_key.hexToSeqByte().ContentKeyByteList
           expectedKey = ContentKey.decode(expectedKeyBytes).get()
           expectedId = toContentId(expectedKeyBytes)
           expectedValue =
@@ -330,7 +330,7 @@ procSuite "State Gossip - Gossip Offer":
       let
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
         leafData = testData.recursive_gossip[0]
-        contentKeyBytes = leafData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = leafData.content_value.hexToSeqByte()
@@ -354,13 +354,13 @@ procSuite "State Gossip - Gossip Offer":
 
       # wait for recursive gossip to complete
       for node in testData.recursive_gossip:
-        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        let keyBytes = node.content_key.hexToSeqByte().ContentKeyByteList
         await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       # check that all nodes were received by both state instances
       for kv in testData.recursive_gossip:
         let
-          expectedKeyBytes = kv.content_key.hexToSeqByte().ByteList
+          expectedKeyBytes = kv.content_key.hexToSeqByte().ContentKeyByteList
           expectedKey = ContentKey.decode(expectedKeyBytes).get()
           expectedId = toContentId(expectedKeyBytes)
           expectedValue =

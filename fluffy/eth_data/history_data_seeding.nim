@@ -268,7 +268,7 @@ proc historyPropagateHeaders*(
 
 iterator headersWithProof*(
     f: Era1File, epochRecord: EpochRecordCached
-): (ByteList, seq[byte]) =
+): (ContentKeyByteList, seq[byte]) =
   for blockHeader in f.era1BlockHeaders:
     doAssert blockHeader.isPreMerge()
 
@@ -285,7 +285,7 @@ iterator headersWithProof*(
 
     yield (contentKey, contentValue)
 
-iterator blockContent*(f: Era1File): (ByteList, seq[byte]) =
+iterator blockContent*(f: Era1File): (ContentKeyByteList, seq[byte]) =
   for (header, body, receipts, _) in f.era1BlockTuples:
     let blockHash = header.blockHash()
 

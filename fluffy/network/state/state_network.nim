@@ -34,7 +34,7 @@ type StateNetwork* = ref object
   historyNetwork: Opt[HistoryNetwork]
   validateStateIsCanonical: bool
 
-func toContentIdHandler(contentKey: ByteList): results.Opt[ContentId] =
+func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
 
 proc new*(
@@ -147,7 +147,7 @@ proc getStateRootByBlockHash*(
 proc processOffer*(
     n: StateNetwork,
     maybeSrcNodeId: Opt[NodeId],
-    contentKeyBytes: ByteList,
+    contentKeyBytes: ContentKeyByteList,
     contentValueBytes: seq[byte],
     contentKey: AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey,
     V: type ContentOfferType,

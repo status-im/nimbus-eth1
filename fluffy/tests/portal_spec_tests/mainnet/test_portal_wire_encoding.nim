@@ -24,7 +24,7 @@ suite "Portal Wire Protocol Message Encodings":
       dataRadius = UInt256.high() - 1 # Full radius - 1
       enrSeq = 1'u64
       # Can be any custom payload, testing with just dataRadius here.
-      customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: dataRadius)))
+      customPayload = ByteList[2048](SSZ.encode(CustomPayload(dataRadius: dataRadius)))
       p = PingMessage(enrSeq: enrSeq, customPayload: customPayload)
 
     let encoded = encodeMessage(p)
@@ -44,7 +44,7 @@ suite "Portal Wire Protocol Message Encodings":
       dataRadius = UInt256.high() div 2.stuint(256) # Radius of half the UInt256
       enrSeq = 1'u64
       # Can be any custom payload, testing with just dataRadius here.
-      customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: dataRadius)))
+      customPayload = ByteList[2048](SSZ.encode(CustomPayload(dataRadius: dataRadius)))
       p = PongMessage(enrSeq: enrSeq, customPayload: customPayload)
 
     let encoded = encodeMessage(p)
@@ -109,7 +109,9 @@ suite "Portal Wire Protocol Message Encodings":
       e2 = res2.value
       total = 0x1'u8
       n = NodesMessage(
-        total: total, enrs: List[ByteList, 32](@[ByteList(e1.raw), ByteList(e2.raw)])
+        total: total,
+        enrs:
+          List[ByteList[2048], 32](@[ByteList[2048](e1.raw), ByteList[2048](e2.raw)]),
       )
 
     let encoded = encodeMessage(n)
@@ -124,13 +126,13 @@ suite "Portal Wire Protocol Message Encodings":
       message.kind == nodes
       message.nodes.total == total
       message.nodes.enrs.len() == 2
-      message.nodes.enrs[0] == ByteList(e1.raw)
-      message.nodes.enrs[1] == ByteList(e2.raw)
+      message.nodes.enrs[0] == ByteList[2048](e1.raw)
+      message.nodes.enrs[1] == ByteList[2048](e2.raw)
 
   test "FindContent Request":
     const contentKeyString = "0x706f7274616c"
     let
-      contentKey = ByteList.init(hexToSeqByte(contentKeyString))
+      contentKey = ContentKeyByteList.init(hexToSeqByte(contentKeyString))
       fc = FindContentMessage(contentKey: contentKey)
 
     let encoded = encodeMessage(fc)
@@ -165,7 +167,7 @@ suite "Portal Wire Protocol Message Encodings":
   test "Content Response - content payload":
     const contentString = "0x7468652063616b652069732061206c6965"
     let
-      content = ByteList(hexToSeqByte(contentString))
+      content = ByteList[2048](hexToSeqByte(contentString))
       c = ContentMessage(contentMessageType: contentType, content: content)
 
     let encoded = encodeMessage(c)
@@ -195,7 +197,7 @@ suite "Portal Wire Protocol Message Encodings":
     let
       e1 = res1.value
       e2 = res2.value
-      enrs = List[ByteList, 32](@[ByteList(e1.raw), ByteList(e2.raw)])
+      enrs = List[ByteList[2048], 32](@[ByteList[2048](e1.raw), ByteList[2048](e2.raw)])
       c = ContentMessage(contentMessageType: enrsType, enrs: enrs)
 
     let encoded = encodeMessage(c)
@@ -210,12 +212,12 @@ suite "Portal Wire Protocol Message Encodings":
       message.kind == MessageKind.content
       message.content.contentMessageType == enrsType
       message.content.enrs.len() == 2
-      message.content.enrs[0] == ByteList(e1.raw)
-      message.content.enrs[1] == ByteList(e2.raw)
+      message.content.enrs[0] == ByteList[2048](e1.raw)
+      message.content.enrs[1] == ByteList[2048](e2.raw)
 
   test "Content Response - empty enrs":
     let
-      enrs = List[ByteList, 32].init(@[])
+      enrs = List[ByteList[2048], 32].init(@[])
       c = ContentMessage(contentMessageType: enrsType, enrs: enrs)
     let encoded = encodeMessage(c)
     check encoded.toHex == "0502"
@@ -230,7 +232,8 @@ suite "Portal Wire Protocol Message Encodings":
 
   test "Offer Request":
     let
-      contentKeys = ContentKeysList(List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
+      contentKeys =
+        ContentKeysList(List(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])]))
       o = OfferMessage(contentKeys: contentKeys)
 
     let encoded = encodeMessage(o)

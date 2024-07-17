@@ -177,7 +177,7 @@ proc mockBlockHashToStateRoot*(
     blockHeader = BlockHeader(stateRoot: stateRoot)
     headerRlp = rlp.encode(blockHeader)
     blockHeaderWithProof = BlockHeaderWithProof(
-      header: ByteList.init(headerRlp), proof: BlockHeaderProof.init()
+      header: ByteList[2048].init(headerRlp), proof: BlockHeaderProof.init()
     )
     contentKeyBytes = history_content.ContentKey
       .init(history_content.ContentType.blockHeader, blockHash)

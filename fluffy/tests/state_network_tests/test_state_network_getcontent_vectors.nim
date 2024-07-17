@@ -37,7 +37,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_retrieval.hexToSeqByte()
@@ -68,7 +68,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
 
       let res =
@@ -90,7 +90,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_retrieval.hexToSeqByte()
@@ -122,7 +122,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
 
       let res = await stateNode1.stateNetwork.getContractTrieNode(
@@ -145,7 +145,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_retrieval.hexToSeqByte()
@@ -176,7 +176,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
 
       let res =
@@ -209,7 +209,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_retrieval.hexToSeqByte()
@@ -264,7 +264,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_retrieval.hexToSeqByte()
@@ -319,7 +319,7 @@ procSuite "State Network - Get Content":
 
     for testData in testCase:
       let
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_retrieval.hexToSeqByte()

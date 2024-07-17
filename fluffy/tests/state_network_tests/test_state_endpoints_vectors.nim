@@ -51,7 +51,7 @@ procSuite "State Endpoints":
       let
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
         leafData = testData.recursive_gossip[0]
-        contentKeyBytes = leafData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = leafData.content_value.hexToSeqByte()
@@ -72,7 +72,7 @@ procSuite "State Endpoints":
 
       # wait for recursive gossip to complete
       for node in testData.recursive_gossip:
-        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        let keyBytes = node.content_key.hexToSeqByte().ContentKeyByteList
         await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       let
@@ -158,7 +158,7 @@ procSuite "State Endpoints":
         testData = testCase[0]
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
         leafData = testData.recursive_gossip[0]
-        contentKeyBytes = leafData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = leafData.content_value.hexToSeqByte()
@@ -183,7 +183,7 @@ procSuite "State Endpoints":
         testData = testCase[1]
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
         leafData = testData.recursive_gossip[0]
-        contentKeyBytes = leafData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = leafData.content_value.hexToSeqByte()
@@ -204,7 +204,7 @@ procSuite "State Endpoints":
 
       # wait for recursive gossip to complete
       for node in testData.recursive_gossip:
-        let keyBytes = node.content_key.hexToSeqByte().ByteList
+        let keyBytes = node.content_key.hexToSeqByte().ContentKeyByteList
         await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
 
       let
@@ -232,7 +232,7 @@ procSuite "State Endpoints":
           raiseAssert "Cannot read test vector: " & error
         testData = testCase[0]
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        contentKeyBytes = testData.content_key.hexToSeqByte().ByteList
+        contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
         contentValueBytes = testData.content_value_offer.hexToSeqByte()

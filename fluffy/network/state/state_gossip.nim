@@ -94,7 +94,7 @@ func getParent*(offerWithKey: ContractTrieOfferWithKey): ContractTrieOfferWithKe
 proc gossipOffer*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
-    keyBytes: ByteList,
+    keyBytes: ContentKeyByteList,
     offerBytes: seq[byte],
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
@@ -107,7 +107,7 @@ proc gossipOffer*(
 proc gossipOffer*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
-    keyBytes: ByteList,
+    keyBytes: ContentKeyByteList,
     offerBytes: seq[byte],
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
@@ -120,7 +120,7 @@ proc gossipOffer*(
 proc gossipOffer*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
-    keyBytes: ByteList,
+    keyBytes: ContentKeyByteList,
     offerBytes: seq[byte],
     key: ContractCodeKey,
     offer: ContractCodeOffer,
@@ -135,7 +135,7 @@ proc gossipOffer*(
 proc recursiveGossipOffer*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
-    keyBytes: ByteList,
+    keyBytes: ContentKeyByteList,
     offerBytes: seq[byte],
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
@@ -160,7 +160,7 @@ proc recursiveGossipOffer*(
 proc recursiveGossipOffer*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
-    keyBytes: ByteList,
+    keyBytes: ContentKeyByteList,
     offerBytes: seq[byte],
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,

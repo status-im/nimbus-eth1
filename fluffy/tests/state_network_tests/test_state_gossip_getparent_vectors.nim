@@ -25,7 +25,8 @@ suite "State Gossip getParent - Test Vectors":
     for i, testData in testCase:
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
-      let key = ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let key =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let offer =
         AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -40,7 +41,7 @@ suite "State Gossip getParent - Test Vectors":
           key.accountTrieNodeKey.path.unpackNibbles().len()
         parentOffer.proof.len() == offer.proof.len() - 1
         parentKey.toContentKey().encode() ==
-          testData.recursive_gossip.content_key.hexToSeqByte().ByteList
+          testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList
         parentOffer.encode() ==
           testData.recursive_gossip.content_value_offer.hexToSeqByte()
         parentOffer.toRetrievalValue().encode() ==
@@ -55,7 +56,8 @@ suite "State Gossip getParent - Test Vectors":
     for i, testData in testCase:
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
-      let key = ContentKey.decode(testData.content_key.hexToSeqByte().ByteList).get()
+      let key =
+        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
       let offer =
         ContractTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
 
@@ -70,7 +72,7 @@ suite "State Gossip getParent - Test Vectors":
           key.contractTrieNodeKey.path.unpackNibbles().len()
         parentOffer.storageProof.len() == offer.storageProof.len() - 1
         parentKey.toContentKey().encode() ==
-          testData.recursive_gossip.content_key.hexToSeqByte().ByteList
+          testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList
         parentOffer.encode() ==
           testData.recursive_gossip.content_value_offer.hexToSeqByte()
         parentOffer.toRetrievalValue().encode() ==
@@ -89,7 +91,9 @@ suite "State Gossip getParent - Test Vectors":
       for j in 0 ..< testData.recursive_gossip.high:
         let
           key = ContentKey
-            .decode(testData.recursive_gossip[j].content_key.hexToSeqByte().ByteList)
+            .decode(
+              testData.recursive_gossip[j].content_key.hexToSeqByte().ContentKeyByteList
+            )
             .get()
           offer = AccountTrieNodeOffer
             .decode(testData.recursive_gossip[j].content_value.hexToSeqByte())
@@ -101,7 +105,7 @@ suite "State Gossip getParent - Test Vectors":
             key.accountTrieNodeKey.path.unpackNibbles().len()
           parentOffer.proof.len() == offer.proof.len() - 1
           parentKey.toContentKey().encode() ==
-            testData.recursive_gossip[j + 1].content_key.hexToSeqByte().ByteList
+            testData.recursive_gossip[j + 1].content_key.hexToSeqByte().ContentKeyByteList
           parentOffer.encode() ==
             testData.recursive_gossip[j + 1].content_value.hexToSeqByte()
 
@@ -118,7 +122,9 @@ suite "State Gossip getParent - Test Vectors":
       for j in 0 ..< testData.recursive_gossip.high:
         let
           key = ContentKey
-            .decode(testData.recursive_gossip[j].content_key.hexToSeqByte().ByteList)
+            .decode(
+              testData.recursive_gossip[j].content_key.hexToSeqByte().ContentKeyByteList
+            )
             .get()
           offer = ContractTrieNodeOffer
             .decode(testData.recursive_gossip[j].content_value.hexToSeqByte())
@@ -130,6 +136,6 @@ suite "State Gossip getParent - Test Vectors":
             key.contractTrieNodeKey.path.unpackNibbles().len()
           parentOffer.storageProof.len() == offer.storageProof.len() - 1
           parentKey.toContentKey().encode() ==
-            testData.recursive_gossip[j + 1].content_key.hexToSeqByte().ByteList
+            testData.recursive_gossip[j + 1].content_key.hexToSeqByte().ContentKeyByteList
           parentOffer.encode() ==
             testData.recursive_gossip[j + 1].content_value.hexToSeqByte()

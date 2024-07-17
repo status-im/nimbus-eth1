@@ -89,14 +89,14 @@ proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszErr
 
   readSszValue(data, val)
 
-func encode*(contentKey: ContentKey): ByteList =
+func encode*(contentKey: ContentKey): ContentKeyByteList =
   doAssert(contentKey.contentType != unused)
-  ByteList.init(SSZ.encode(contentKey))
+  ContentKeyByteList.init(SSZ.encode(contentKey))
 
-func decode*(T: type ContentKey, contentKey: ByteList): Result[T, string] =
+func decode*(T: type ContentKey, contentKey: ContentKeyByteList): Result[T, string] =
   decodeSsz(contentKey.asSeq(), T)
 
-func toContentId*(contentKey: ByteList): ContentId =
+func toContentId*(contentKey: ContentKeyByteList): ContentId =
   # TODO: Should we try to parse the content key here for invalid ones?
   let idHash = sha256.digest(contentKey.asSeq())
   readUintBE[256](idHash.data)

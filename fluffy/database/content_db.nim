@@ -447,7 +447,7 @@ proc adjustRadius(
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
-    proc(contentKey: ByteList, contentId: ContentId): Opt[seq[byte]] =
+    proc(contentKey: ContentKeyByteList, contentId: ContentId): Opt[seq[byte]] =
       let content = db.get(contentId).valueOr:
         return Opt.none(seq[byte])
 
@@ -459,7 +459,7 @@ proc createStoreHandler*(
 ): DbStoreHandler =
   return (
     proc(
-        contentKey: ByteList, contentId: ContentId, content: seq[byte]
+        contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
     ) {.raises: [], gcsafe.} =
       # always re-check that the key is in the node range to make sure only
       # content in range is stored.
