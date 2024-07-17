@@ -678,11 +678,6 @@ func gasTotals*(xp: TxPoolRef): TxTabsGasTotals =
   ## Getter, retrieves the current gas limit totals per bucket.
   xp.txDB.gasTotals
 
-func lwmTrgPercent*(xp: TxPoolRef): int =
-  ## Getter, `trgGasLimit` percentage for `lwmGasLimit` which is
-  ## `max(minGasLimit, trgGasLimit * lwmTrgPercent  / 100)`
-  xp.chain.lhwm.lwmTrg
-
 func flags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Getter, retrieves strategy symbols for how to process items and buckets.
   xp.pFlags
@@ -692,15 +687,6 @@ func head*(xp: TxPoolRef): BlockHeader =
   ## the same header as retrieved by the `getCanonicalHead()` (unless in the
   ## middle of a mining update.)
   xp.chain.head
-
-func hwmMaxPercent*(xp: TxPoolRef): int =
-  ## Getter, `maxGasLimit` percentage for `hwmGasLimit` which is
-  ## `max(trgGasLimit, maxGasLimit * hwmMaxPercent  / 100)`
-  xp.chain.lhwm.hwmMax
-
-func maxGasLimit*(xp: TxPoolRef): GasInt =
-  ## Getter, hard size limit when packing blocks (see also `trgGasLimit`.)
-  xp.chain.limits.maxLimit
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
 func minFeePrice*(xp: TxPoolRef): GasPrice =
@@ -741,11 +727,6 @@ func profitability*(xp: TxPoolRef): GasPrice =
   else:
     0.GasPrice
 
-func trgGasLimit*(xp: TxPoolRef): GasInt =
-  ## Getter, soft size limit when packing blocks (might be extended to
-  ## `maxGasLimit`)
-  xp.chain.limits.trgLimit
-
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -760,29 +741,9 @@ func `baseFee=`*(xp: TxPoolRef; val: GasPrice) {.raises: [KeyError].} =
   xp.txDB.baseFee = val
   xp.chain.baseFee = val
 
-func `lwmTrgPercent=`*(xp: TxPoolRef; val: int) =
-  ## Setter, `val` arguments outside `0..100` are ignored
-  if 0 <= val and val <= 100:
-    xp.chain.lhwm = (
-      lwmTrg: val,
-      hwmMax: xp.chain.lhwm.hwmMax,
-      gasFloor: xp.chain.lhwm.gasFloor,
-      gasCeil: xp.chain.lhwm.gasCeil
-    )
-
 func `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
   xp.pFlags = val
-
-func `hwmMaxPercent=`*(xp: TxPoolRef; val: int) =
-  ## Setter, `val` arguments outside `0..100` are ignored
-  if 0 <= val and val <= 100:
-    xp.chain.lhwm = (
-      lwmTrg: xp.chain.lhwm.lwmTrg,
-      hwmMax: val,
-      gasFloor: xp.chain.lhwm.gasFloor,
-      gasCeil: xp.chain.lhwm.gasCeil
-    )
 
 func `maxRejects=`*(xp: TxPoolRef; val: int) =
   ## Setter, the size of the waste basket. This setting becomes effective with
