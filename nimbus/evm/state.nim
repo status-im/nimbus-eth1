@@ -54,7 +54,7 @@ func blockCtx(com: CommonRef, header: BlockHeader):
     baseFeePerGas: header.baseFeePerGas,
     prevRandao   : header.prevRandao,
     difficulty   : header.difficulty,
-    coinbase     : com.minerAddress(header),
+    coinbase     : header.coinbase,
     excessBlobGas: header.excessBlobGas.get(0'u64),
   )
 

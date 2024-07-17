@@ -319,40 +319,6 @@ const
   ]
 
 # ------------------------------------------------------------------------------
-# Block reward helpers
-# ------------------------------------------------------------------------------
-
-func eth(n: int): UInt256 {.compileTime.} =
-  n.u256 * pow(10.u256, 18)
-
-const
-  eth5 = 5.eth
-  eth3 = 3.eth
-  eth2 = 2.eth
-  eth0 = 0.u256
-
-  BlockRewards*: array[HardFork, UInt256] = [
-    eth5, # Frontier
-    eth5, # Homestead
-    eth5, # DAOFork
-    eth5, # Tangerine
-    eth5, # Spurious
-    eth3, # Byzantium
-    eth2, # Constantinople
-    eth2, # Petersburg
-    eth2, # Istanbul
-    eth2, # MuirGlacier
-    eth2, # Berlin
-    eth2, # London
-    eth2, # ArrowGlacier
-    eth2, # GrayGlacier
-    eth0, # MergeFork
-    eth0, # Shanghai
-    eth0, # Cancun
-    eth0, # Prague
-  ]
-
-# ------------------------------------------------------------------------------
 # Fork ID helpers
 # ------------------------------------------------------------------------------
 type
