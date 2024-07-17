@@ -300,7 +300,6 @@ proc deblobify*(
     if record.len < 11:                               # at least two edges
       return err(DeblobBranchTooShort)
     let
-      sLen = record[^1].int and 0x3f                  # length of path segment      aInx = record.len - 9
       aInx = record.len - 9
       aIny = record.len - 2
     var
