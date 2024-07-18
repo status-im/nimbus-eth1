@@ -16,6 +16,7 @@
 import
   std/tables,
   results,
+  ../kvt_delta/delta_merge,
   ".."/[kvt_desc, kvt_delta]
 
 # ------------------------------------------------------------------------------
@@ -31,10 +32,8 @@ proc txStowOk*(
     return err(TxPendingTx)
   if 0 < db.stack.len:
     return err(TxStackGarbled)
-
-  if persistent and not db.deltaUpdateOk():
+  if persistent and not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
-
   ok()
 
 proc txStow*(
@@ -50,12 +49,16 @@ proc txStow*(
   ? db.txStowOk persistent
 
   if 0 < db.top.sTab.len:
-    db.deltaMerge db.top
+    # Note that `deltaMerge()` will return the 1st argument if the 2nd is `nil`
+    db.balancer = db.deltaMerge(db.top, db.balancer).valueOr:
+      return err(error[1])
+
+    # New empty top layer
     db.top = LayerRef()
 
   if persistent:
     # Move `balancer` data into persistent tables
-    ? db.deltaUpdate()
+    ? db.deltaPersistent()
 
   ok()
 

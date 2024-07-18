@@ -19,6 +19,22 @@ import
   ".."/[aristo_desc, aristo_delta, aristo_layers]
 
 # ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc txStowOk*(
+    db: AristoDbRef;                  # Database
+    persistent: bool;                 # Stage only unless `true`
+      ): Result[void,AristoError] =
+  if not db.txRef.isNil:
+    return err(TxPendingTx)
+  if 0 < db.stack.len:
+    return err(TxStackGarbled)
+  if persistent and not db.deltaPersistentOk():
+    return err(TxBackendNotWritable)
+  ok()
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -29,12 +45,7 @@ proc txStow*(
       ): Result[void,AristoError] =
   ## Worker for `stow()` and `persist()` variants.
   ##
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
-  if persistent and not db.deltaPersistentOk():
-    return err(TxBackendNotWritable)
+  ? db.txStowOk persistent
 
   if not db.top.isEmpty():
     # Note that `deltaMerge()` will return the 1st argument if the 2nd is `nil`

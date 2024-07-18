@@ -23,23 +23,12 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc deltaMerge*(
-    db: KvtDbRef;                      # Database
-    delta: LayerRef;                   # Filter to apply to database
-      ) =
-  ## Merge the argument `delta` into the balancer filter layer. Note that
-  ## this function has no control of the filter source. Having merged the
-  ## argument `delta`, all the `top` and `stack` layers should be cleared.
-  ##
-  db.merge(delta, db.balancer)
-
-
-proc deltaUpdateOk*(db: KvtDbRef): bool =
+proc deltaPersistentOk*(db: KvtDbRef): bool =
   ## Check whether the balancer filter can be merged into the backend
   not db.backend.isNil and db.isCentre
 
 
-proc deltaUpdate*(
+proc deltaPersistent*(
     db: KvtDbRef;                      # Database
     reCentreOk = false;
       ): Result[void,KvtError] =
@@ -71,17 +60,30 @@ proc deltaUpdate*(
   # Always re-centre to `parent` (in case `reCentreOk` was set)
   defer: discard parent.reCentre()
 
+  # Update forked balancers here do that errors are detected early (if any.)
+  if 0 < db.nForked:
+    var rollback: seq[(KvtDbRef,LayerRef)]
+    let rev = db.revFilter(db.balancer).valueOr:
+      return err(error[1])
+    # Sharing the `rev` object is safe as it is read-only.
+    for w in db.forked:
+      # Note that `deltaMerge()` will return the 1st arg if the 2nd is `nil`
+      let filter = db.deltaMerge(w.balancer, rev).valueOr:
+        # Oops, roll back and return error
+        for (d,f) in rollback:
+          d.balancer = f
+        return err(error[1])
+      rollback.add (w, w.balancer)
+      w.balancer = filter
+
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
   be.putKvpFn(writeBatch, db.balancer.sTab.pairs.toSeq)
   ? be.putEndFn writeBatch
 
-  # Update peer filter balance.
-  let rev = db.deltaReverse db.balancer
-  for w in db.forked:
-    db.merge(rev, w.balancer)
-
+  # Done with balancer, all saved to backend
   db.balancer = LayerRef(nil)
+
   ok()
 
 # ------------------------------------------------------------------------------

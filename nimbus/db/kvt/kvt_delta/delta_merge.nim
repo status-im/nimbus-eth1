@@ -10,6 +10,7 @@
 
 import
   std/tables,
+  eth/common,
   results,
   ".."/[kvt_desc, kvt_utils]
 
@@ -17,30 +18,40 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc merge*(
+proc deltaMerge*(
     db: KvtDbRef;                      # Database
     upper: LayerRef;                   # Filter to apply onto `lower`
-    lower: var LayerRef;               # Target filter, will be modified
-      ) =
-  ## Merge the argument filter `upper` onto the argument filter `lower`
-  ## relative to the *unfiltered* backend database on `db.backened`. The `lower`
-  ## filter argument will have been modified.
+    lower: LayerRef;                   # Target filter, will be modified
+      ): Result[LayerRef,(Blob,KvtError)] =
+  ## Merge argument `upper` into the `lower` filter instance.
   ##
-  ## In case that the argument `lower` is `nil`, it will be replaced by `upper`.
+  ## Note that the namimg `upper` and `lower` indicate that the filters are
+  ## stacked and the database access is `upper -> lower -> backend`.
   ##
+  # Degenerate case: `upper` is void
   if lower.isNil:
-    lower = upper
-  elif not upper.isNil:
-    for (key,val) in upper.sTab.pairs:
-      if val.isValid or not lower.sTab.hasKey key:
-        lower.sTab[key] = val
-      elif lower.sTab.getOrVoid(key).isValid:
-        let rc = db.getUbe key
-        if rc.isOk:
-          lower.sTab[key] = val # empty blob
-        else:
-          doAssert rc.error == GetNotFound
-          lower.sTab.del key # no need to keep that in merged filter
+    if upper.isNil:
+      # Even more degenerate case when both filters are void
+      return ok LayerRef(nil)
+    return ok(upper)
+
+  # Degenerate case: `upper` is non-trivial and `lower` is void
+  if upper.isNil:
+    return ok(lower)
+
+  # There is no need to deep copy table vertices as they will not be modified.
+  let newFilter = LayerRef(sTab: lower.sTab)
+
+  for (key,val) in upper.sTab.pairs:
+    if val.isValid or not lower.sTab.hasKey key:
+      lower.sTab[key] = val
+    elif lower.sTab.getOrVoid(key).isValid:
+      let rc = db.getUbe key
+      if rc.isOk:
+        lower.sTab[key] = val # empty blob
+      else:
+        doAssert rc.error == GetNotFound
+        lower.sTab.del key # no need to keep that in merged filter
 
 # ------------------------------------------------------------------------------
 # End
