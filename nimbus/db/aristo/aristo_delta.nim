@@ -65,7 +65,7 @@ proc deltaPersistent*(
 
   # Update forked balancers here do that errors are detected early (if any.)
   if 0 < db.nForked:
-    var rollback: seq[(AristoDbRef,LayerDeltaRef)]
+    var rollback: seq[(AristoDbRef,LayerRef)]
     let rev = db.revFilter(db.balancer).valueOr:
       return err(error[1])
     # Sharing the `rev` object is safe as it is read-only.
@@ -105,7 +105,7 @@ proc deltaPersistent*(
       discard db.stoLeaves.lruAppend(mixKey, vtx, accLruSize)
 
   # Done with balancer, all saved to backend
-  db.balancer = LayerDeltaRef(nil)
+  db.balancer = LayerRef(nil)
 
   ok()
 

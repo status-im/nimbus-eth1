@@ -24,17 +24,16 @@ import
 proc vidFetch*(db: AristoDbRef): VertexID =
   ## Fetch next vertex ID.
   ##
-  if db.top.delta.vTop  == 0:
-    db.top.delta.vTop = VertexID(LEAST_FREE_VID)
+  if db.top.vTop  == 0:
+    db.top.vTop = VertexID(LEAST_FREE_VID)
   else:
-    db.top.delta.vTop.inc
-  db.top.delta.vTop
+    db.top.vTop.inc
+  db.top.vTop
 
 proc vidDispose*(db: AristoDbRef; vid: VertexID) =
   ## Only top vertexIDs are disposed
-  if vid == db.top.delta.vTop and
-     LEAST_FREE_VID < db.top.delta.vTop.distinctBase:
-    db.top.delta.vTop.dec
+  if vid == db.top.vTop and LEAST_FREE_VID < db.top.vTop.distinctBase:
+    db.top.vTop.dec
 
 # ------------------------------------------------------------------------------
 # End

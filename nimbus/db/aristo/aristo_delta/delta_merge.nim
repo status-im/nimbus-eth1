@@ -20,20 +20,19 @@ import
 
 proc deltaMerge*(
     db: AristoDbRef;
-    upper: LayerDeltaRef;                      # new filter, `nil` is ok
-    lower: LayerDeltaRef;                      # Trg filter, `nil` is ok
-      ): Result[LayerDeltaRef,(VertexID,AristoError)] =
+    upper: LayerRef;                           # new filter, `nil` is ok
+    lower: LayerRef;                           # Trg filter, `nil` is ok
+      ): Result[LayerRef,(VertexID,AristoError)] =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
   ## Note that the namimg `upper` and `lower` indicate that the filters are
-  ## stacked and the database access is `upper -> lower -> backend` whereas
-  ## the `src/trg` matching logic goes the other way round.
+  ## stacked and the database access is `upper -> lower -> backend`.
   ##
   # Degenerate case: `upper` is void
   if lower.isNil:
     if upper.isNil:
       # Even more degenerate case when both filters are void
-      return ok LayerDeltaRef(nil)
+      return ok LayerRef(nil)
     return ok(upper)
 
   # Degenerate case: `upper` is non-trivial and `lower` is void
@@ -41,11 +40,16 @@ proc deltaMerge*(
     return ok(lower)
 
   # There is no need to deep copy table vertices as they will not be modified.
-  let newFilter = LayerDeltaRef(
+  let newFilter = LayerRef(
     sTab: lower.sTab,
     kMap: lower.kMap,
     vTop: upper.vTop)
 
+  # Note the similarity to the `layersMergeOnto()` function. The difference
+  # here is that blind/zero vertex entries are checked against the database
+  # and ignored if missing there.
+  #
+  # FIXME: Can we do without and just use `layersMergeOnto()`?
   for (rvid,vtx) in upper.sTab.pairs:
     if vtx.isValid or not newFilter.sTab.hasKey rvid:
       newFilter.sTab[rvid] = vtx
@@ -58,6 +62,7 @@ proc deltaMerge*(
       else:
         return err((rvid.vid,rc.error))
 
+  # Ditto (see earlier comment)
   for (rvid,key) in upper.kMap.pairs:
     if key.isValid or not newFilter.kMap.hasKey rvid:
       newFilter.kMap[rvid] = key

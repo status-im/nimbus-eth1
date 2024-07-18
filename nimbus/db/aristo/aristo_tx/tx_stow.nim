@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/tables,
   results,
   ../aristo_delta/delta_merge,
   ".."/[aristo_desc, aristo_delta, aristo_layers]
@@ -39,11 +38,11 @@ proc txStow*(
 
   if not db.top.isEmpty():
     # Note that `deltaMerge()` will return the 1st argument if the 2nd is `nil`
-    db.balancer = db.deltaMerge(db.top.delta, db.balancer).valueOr:
+    db.balancer = db.deltaMerge(db.top, db.balancer).valueOr:
       return err(error[1])
 
     # New empty top layer
-    db.top = LayerRef(delta: LayerDeltaRef(vTop: db.balancer.vTop))
+    db.top = LayerRef(vTop: db.balancer.vTop)
 
   if persistent:
     # Merge/move `balancer` into persistent tables (unless missing)
