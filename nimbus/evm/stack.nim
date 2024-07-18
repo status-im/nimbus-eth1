@@ -196,6 +196,9 @@ func lsTop*(stack: EvmStack,
             value: EvmStackInts | UInt256 | EthAddress | Hash256) =
   toStackElem(value, stack.values[^1])
 
+func lsTop*(stack: var EvmStack, value: openArray[byte]) =
+  toStackElem(value, stack.values[^1])
+
 func lsPeekInt*(stack: EvmStack, i: BackwardsIndex): UInt256 =
   fromStackElem(stack.values[i], UInt256)
 
@@ -207,6 +210,9 @@ func lsPeekMemRef*(stack: EvmStack, i: BackwardsIndex): int =
 
 func lsPeekSafeInt*(stack: EvmStack, i: BackwardsIndex): int =
   fromStackElem(stack.values[i], UInt256).safeInt
+
+func lsPeekTopic*(stack: EvmStack, i: BackwardsIndex): EvmStackBytes32 =
+  fromStackElem(stack.values[i], EvmStackBytes32)
 
 func lsShrink*(stack: EvmStack, x: int) =
   stack.values.setLen(stack.values.len - x)

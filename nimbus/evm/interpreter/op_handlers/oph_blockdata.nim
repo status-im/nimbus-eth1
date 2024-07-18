@@ -31,14 +31,16 @@ when not defined(evmc_enabled):
 
 proc blockhashOp (k: var VmCtx): EvmResultVoid =
   ## 0x40, Get the hash of one of the 256 most recent complete blocks.
+  ? k.cpt.stack.lsCheck(1)
   let
     cpt = k.cpt
-    blockNumber = ? cpt.stack.popInt()
+    blockNumber = cpt.stack.lsPeekInt(^1)
 
   if blockNumber > high(BlockNumber).u256:
-    cpt.stack.push Hash256()
+    cpt.stack.lsTop Hash256()
   else:
-    cpt.stack.push cpt.getBlockHash(blockNumber.truncate(BlockNumber))
+    cpt.stack.lsTop cpt.getBlockHash(blockNumber.truncate(BlockNumber))
+  ok()
 
 proc coinBaseOp (k: var VmCtx): EvmResultVoid =
   ## 0x41, Get the block's beneficiary address.
@@ -75,14 +77,16 @@ proc baseFeeOp (k: var VmCtx): EvmResultVoid =
 
 proc blobHashOp (k: var VmCtx): EvmResultVoid =
   ## 0x49, Get current transaction's EIP-4844 versioned hash.
+  ? k.cpt.stack.lsCheck(1)
   let
-    index = ? k.cpt.stack.popSafeInt()
+    index = k.cpt.stack.lsPeekSafeInt(^1)
     len = k.cpt.getVersionedHashesLen
 
   if index < len:
-    k.cpt.stack.push k.cpt.getVersionedHash(index)
+    k.cpt.stack.lsTop k.cpt.getVersionedHash(index)
   else:
-    k.cpt.stack.push 0
+    k.cpt.stack.lsTop 0
+  ok()
 
 proc blobBaseFeeOp (k: var VmCtx): EvmResultVoid =
   ## 0x4a, Get the block's base fee.

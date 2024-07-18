@@ -129,68 +129,87 @@ proc popOp(k: var VmCtx): EvmResultVoid =
 
 proc mloadOp (k: var VmCtx): EvmResultVoid =
   ## 0x51, Load word from memory
-  let memStartPos = ? k.cpt.stack.popInt()
 
-  let memPos = memStartPos.cleanMemRef
-  ? k.cpt.opcodeGasCost(Mload,
-    k.cpt.gasCosts[Mload].m_handler(k.cpt.memory.len, memPos, 32),
+  ? k.cpt.stack.lsCheck(1)
+  let
+    cpt = k.cpt
+    memPos = cpt.stack.lsPeekMemRef(^1)
+
+  ? cpt.opcodeGasCost(Mload,
+    cpt.gasCosts[Mload].m_handler(cpt.memory.len, memPos, 32),
     reason = "MLOAD: GasVeryLow + memory expansion")
 
-  k.cpt.memory.extend(memPos, 32)
-  k.cpt.stack.push k.cpt.memory.read32Bytes(memPos)
+  cpt.memory.extend(memPos, 32)
+  cpt.stack.lsTop cpt.memory.read32Bytes(memPos)
+  ok()
 
 
 proc mstoreOp (k: var VmCtx): EvmResultVoid =
   ## 0x52, Save word to memory
-  let (memStartPos, value) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    cpt    = k.cpt
+    memPos = cpt.stack.lsPeekMemRef(^1)
+    value  = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
 
-  let memPos = memStartPos.cleanMemRef
-  ? k.cpt.opcodeGasCost(Mstore,
-    k.cpt.gasCosts[Mstore].m_handler(k.cpt.memory.len, memPos, 32),
+  ? cpt.opcodeGasCost(Mstore,
+    cpt.gasCosts[Mstore].m_handler(cpt.memory.len, memPos, 32),
     reason = "MSTORE: GasVeryLow + memory expansion")
 
-  k.cpt.memory.extend(memPos, 32)
-  k.cpt.memory.write(memPos, value.toBytesBE)
+  cpt.memory.extend(memPos, 32)
+  cpt.memory.write(memPos, value.toBytesBE)
 
 
 proc mstore8Op (k: var VmCtx): EvmResultVoid =
   ## 0x53, Save byte to memory
-  let (memStartPos, value) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    cpt    = k.cpt
+    memPos = cpt.stack.lsPeekMemRef(^1)
+    value  = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
 
-  let memPos = memStartPos.cleanMemRef
-  ? k.cpt.opcodeGasCost(Mstore8,
-    k.cpt.gasCosts[Mstore8].m_handler(k.cpt.memory.len, memPos, 1),
+  ? cpt.opcodeGasCost(Mstore8,
+    cpt.gasCosts[Mstore8].m_handler(cpt.memory.len, memPos, 1),
     reason = "MSTORE8: GasVeryLow + memory expansion")
 
-  k.cpt.memory.extend(memPos, 1)
-  k.cpt.memory.write(memPos, value.toByteArrayBE[31])
+  cpt.memory.extend(memPos, 1)
+  cpt.memory.write(memPos, value.toByteArrayBE[31])
 
 
 # -------
 
 proc sloadOp (k: var VmCtx): EvmResultVoid =
   ## 0x54, Load word from storage.
+  ? k.cpt.stack.lsCheck(1)
   let
     cpt = k.cpt
-    slot = ? cpt.stack.popInt()
-  cpt.stack.push cpt.getStorage(slot)
+    slot = cpt.stack.lsPeekInt(^1)
+  cpt.stack.lsTop cpt.getStorage(slot)
+  ok()
 
 proc sloadEIP2929Op (k: var VmCtx): EvmResultVoid =
   ## 0x54, EIP2929: Load word from storage for Berlin and later
+  ? k.cpt.stack.lsCheck(1)
   let
     cpt = k.cpt
-    slot = ? cpt.stack.popInt()
+    slot = cpt.stack.lsPeekInt(^1)
     gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
   ? cpt.opcodeGasCost(Sload, gasCost, reason = "sloadEIP2929")
-  cpt.stack.push cpt.getStorage(slot)
+  cpt.stack.lsTop cpt.getStorage(slot)
+  ok()
 
 # -------
 
 proc sstoreOp (k: var VmCtx): EvmResultVoid =
   ## 0x55, Save word to storage.
+  ? k.cpt.stack.lsCheck(2)
   let
     cpt = k.cpt
-    (slot, newValue) = ? cpt.stack.popInt(2)
+    slot = cpt.stack.lsPeekInt(^1)
+    newValue = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
 
   ? checkInStaticContext(cpt)
   sstoreEvmcOrSstore(cpt, slot, newValue)
@@ -198,9 +217,12 @@ proc sstoreOp (k: var VmCtx): EvmResultVoid =
 
 proc sstoreEIP1283Op (k: var VmCtx): EvmResultVoid =
   ## 0x55, EIP1283: sstore for Constantinople and later
+  ? k.cpt.stack.lsCheck(2)
   let
     cpt = k.cpt
-    (slot, newValue) = ? cpt.stack.popInt(2)
+    slot = cpt.stack.lsPeekInt(^1)
+    newValue = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
 
   ? checkInStaticContext(cpt)
   sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
@@ -208,9 +230,12 @@ proc sstoreEIP1283Op (k: var VmCtx): EvmResultVoid =
 
 proc sstoreEIP2200Op (k: var VmCtx): EvmResultVoid =
   ## 0x55, EIP2200: sstore for Istanbul and later
+  ? k.cpt.stack.lsCheck(2)
   let
     cpt = k.cpt
-    (slot, newValue) = ? cpt.stack.popInt(2)
+    slot = cpt.stack.lsPeekInt(^1)
+    newValue = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
 
   ? checkInStaticContext(cpt)
   const SentryGasEIP2200 = 2300
@@ -223,9 +248,12 @@ proc sstoreEIP2200Op (k: var VmCtx): EvmResultVoid =
 
 proc sstoreEIP2929Op (k: var VmCtx): EvmResultVoid =
   ## 0x55, EIP2929: sstore for Berlin and later
+  ? k.cpt.stack.lsCheck(2)
   let
     cpt = k.cpt
-    (slot, newValue) = ? cpt.stack.popInt(2)
+    slot = cpt.stack.lsPeekInt(^1)
+    newValue = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
 
   ? checkInStaticContext(cpt)
 
@@ -257,7 +285,12 @@ proc jumpOp (k: var VmCtx): EvmResultVoid =
 
 proc jumpIOp (k: var VmCtx): EvmResultVoid =
   ## 0x57, Conditionally alter the program counter.
-  let (jumpTarget, testedValue) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    jumpTarget  = k.cpt.stack.lsPeekInt(^1)
+    testedValue = k.cpt.stack.lsPeekInt(^2)
+  k.cpt.stack.lsShrink(2)
+
   if testedValue.isZero:
     return ok()
   jumpImpl(k.cpt, jumpTarget)
@@ -283,33 +316,43 @@ proc jumpDestOp (k: var VmCtx): EvmResultVoid =
 
 proc tloadOp (k: var VmCtx): EvmResultVoid =
   ## 0x5c, Load word from transient storage.
+  ? k.cpt.stack.lsCheck(1)
   let
-    slot = ? k.cpt.stack.popInt()
-    val  = k.cpt.getTransientStorage(slot)
-  k.cpt.stack.push val
+    cpt  = k.cpt
+    slot = cpt.stack.lsPeekInt(^1)
+    val  = cpt.getTransientStorage(slot)
+  cpt.stack.lsTop val
+  ok()
 
 proc tstoreOp (k: var VmCtx): EvmResultVoid =
   ## 0x5d, Save word to transient storage.
   ? checkInStaticContext(k.cpt)
 
+  ? k.cpt.stack.lsCheck(2)
   let
-    slot = ? k.cpt.stack.popInt()
-    val  = ? k.cpt.stack.popInt()
-  k.cpt.setTransientStorage(slot, val)
+    cpt  = k.cpt
+    slot = cpt.stack.lsPeekInt(^1)
+    val  = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
+
+  cpt.setTransientStorage(slot, val)
   ok()
 
 proc mCopyOp (k: var VmCtx): EvmResultVoid =
   ## 0x5e, Copy memory
-  let (dst, src, size) = ? k.cpt.stack.popInt(3)
+  ? k.cpt.stack.lsCheck(3)
+  let
+    cpt    = k.cpt
+    dstPos = cpt.stack.lsPeekMemRef(^1)
+    srcPos = cpt.stack.lsPeekMemRef(^2)
+    len    = cpt.stack.lsPeekMemRef(^3)
+  cpt.stack.lsShrink(3)
 
-  let (dstPos, srcPos, len) =
-    (dst.cleanMemRef, src.cleanMemRef, size.cleanMemRef)
-
-  ? k.cpt.opcodeGasCost(Mcopy,
-    k.cpt.gasCosts[Mcopy].m_handler(k.cpt.memory.len, max(dstPos, srcPos), len),
+  ? cpt.opcodeGasCost(Mcopy,
+    cpt.gasCosts[Mcopy].m_handler(cpt.memory.len, max(dstPos, srcPos), len),
     reason = "Mcopy fee")
 
-  k.cpt.memory.copy(dstPos, srcPos, len)
+  cpt.memory.copy(dstPos, srcPos, len)
   ok()
 
 # ------------------------------------------------------------------------------
