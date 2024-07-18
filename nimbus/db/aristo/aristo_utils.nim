@@ -44,14 +44,14 @@ proc toNode*(
     block body:
       let key = db.layersGetKey(rvid).valueOr:
         break body
-      if key.isValid:
-        return key
+      if key[0].isValid:
+        return key[0]
       else:
         return VOID_HASH_KEY
     if beOk:
       let rc = db.getKeyBE rvid
       if rc.isOk:
-        return rc.value
+        return rc.value[0]
     VOID_HASH_KEY
 
   case vtx.vType:

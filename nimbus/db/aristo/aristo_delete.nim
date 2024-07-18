@@ -61,7 +61,7 @@ proc delSubTreeImpl(
   ## Implementation of *delete* sub-trie.
   var
     dispose = @[root]
-    rootVtx = db.getVtxRc((root, root)).valueOr:
+    (rootVtx, _) = db.getVtxRc((root, root)).valueOr:
       if error == GetVtxNotFound:
         return ok()
       return err(error)
@@ -73,7 +73,7 @@ proc delSubTreeImpl(
     for vtx in follow:
       for vid in vtx.subVids:
         # Exiting here leaves the tree as-is
-        let vtx = ? db.getVtxRc((root, vid))
+        let vtx = (? db.getVtxRc((root, vid)))[0]
         redo.add vtx
         dispose.add vid
     redo.swap follow
@@ -92,7 +92,7 @@ proc delStoTreeImpl(
       ): Result[void,AristoError] =
   ## Implementation of *delete* sub-trie.
 
-  let vtx = db.getVtxRc(rvid).valueOr:
+  let (vtx, _) = db.getVtxRc(rvid).valueOr:
     if error == GetVtxNotFound:
       return ok()
     return err(error)

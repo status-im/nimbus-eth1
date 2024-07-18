@@ -149,7 +149,7 @@ proc serialise*(
   ## account type, otherwise pass the data as is.
   ##
   proc getKey(vid: VertexID): Result[HashKey,AristoError] =
-    db.getKeyRc((root, vid))
+    ok (?db.getKeyRc((root, vid)))[0]
 
   pyl.serialise getKey
 

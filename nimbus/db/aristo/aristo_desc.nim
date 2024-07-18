@@ -34,8 +34,8 @@ from ./aristo_desc/desc_backend
 
 # Not auto-exporting backend
 export
-  aristo_constants, desc_error, desc_identifiers, desc_nibbles, desc_structural,
-  keyed_queue
+  tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
+  desc_structural, keyed_queue
 
 const
   accLruSize* = 1024 * 1024
@@ -312,6 +312,21 @@ iterator rstack*(db: AristoDbRef): LayerRef =
   # Stack in reverse order
   for i in 0..<db.stack.len:
     yield db.stack[db.stack.len - i - 1]
+
+proc deltaAtLevel*(db: AristoDbRef, level: int): LayerDeltaRef =
+  if level == 0:
+    db.top.delta
+  elif level > 0:
+    doAssert level <= db.stack.len
+    db.stack[^level].delta
+  elif level == -1:
+    doAssert db.balancer != nil
+    db.balancer
+  elif level == -2:
+    nil
+  else:
+    raiseAssert "Unknown level " & $level
+
 
 # ------------------------------------------------------------------------------
 # End

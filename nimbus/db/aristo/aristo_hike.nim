@@ -77,7 +77,7 @@ proc step*(
     path: NibblesBuf, rvid: RootedVertexID, db: AristoDbRef
       ): Result[(VertexRef, NibblesBuf, VertexID), AristoError] =
   # Fetch next vertex
-  let vtx = db.getVtxRc(rvid).valueOr:
+  let (vtx, _) = db.getVtxRc(rvid).valueOr:
     if error != GetVtxNotFound:
       return err(error)
 
