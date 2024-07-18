@@ -82,6 +82,9 @@ func getOrVoid*(tab: Table[Blob,Blob]; w: Blob): Blob =
 func isValid*(key: Blob): bool =
   key != EmptyBlob
 
+func isValid*(layer: LayerRef): bool =
+  layer != LayerRef(nil)
+
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------
@@ -162,13 +165,18 @@ proc fork*(
 
   ok clone
 
-iterator forked*(db: KvtDbRef): KvtDbRef =
+iterator forked*(db: KvtDbRef): tuple[db: KvtDbRef, isLast: bool] =
   ## Interate over all non centre descriptors (see comments on `reCentre()`
   ## for details.)
+  ##
+  ## The second `isLast` yielded loop entry is `true` if the yielded tuple
+  ## is the last entry in the list.
   if not db.dudes.isNil:
+    var nLeft = db.dudes.peers.len
     for dude in db.dudes.peers.items:
       if dude != db.dudes.centre:
-        yield dude
+        nLeft.dec
+        yield (dude, nLeft == 1)
 
 func nForked*(db: KvtDbRef): int =
   ## Returns the number of non centre descriptors (see comments on `reCentre()`
