@@ -24,7 +24,6 @@ import
   ../gas_meter,
   ../gas_costs,
   ../op_codes,
-  ../utils/utils_numeric,
   ./oph_defs,
   ./oph_helpers,
   eth/common,

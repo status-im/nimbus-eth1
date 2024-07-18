@@ -22,7 +22,6 @@ import
   ../../stack,
   ../gas_costs,
   ../op_codes,
-  ../utils/utils_numeric,
   ./oph_defs,
   eth/common
 
