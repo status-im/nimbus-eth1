@@ -7,7 +7,14 @@
 
 {.push raises: [].}
 
-import chronicles, json_rpc/rpcclient, ./portal_bridge_conf
+import
+  chronicles,
+  json_rpc/rpcclient,
+  web3/[eth_api, eth_api_types],
+  ../../rpc/rpc_calls/rpc_trace_calls,
+  ./portal_bridge_conf
+
+export rpcclient
 
 proc newRpcClientConnect*(url: JsonRpcUrl): RpcClient =
   ## Instantiate a new JSON-RPC client and try to connect. Will quit on failure.
@@ -28,3 +35,33 @@ proc newRpcClientConnect*(url: JsonRpcUrl): RpcClient =
       fatal "Failed to connect to JSON-RPC server", error = $e.msg, url = url.value
       quit QuitFailure
     client
+
+proc getBlockByNumber*(
+    client: RpcClient, blockId: BlockIdentifier, fullTransactions: bool = true
+): Future[Result[BlockObject, string]] {.async: (raises: []).} =
+  let blck =
+    try:
+      let res = await client.eth_getBlockByNumber(blockId, fullTransactions)
+      if res.isNil:
+        return err("EL failed to provide requested block")
+
+      res
+    except CatchableError as e:
+      return err("EL JSON-RPC eth_getBlockByNumber failed: " & e.msg)
+
+  return ok(blck)
+
+proc getUncleByBlockNumberAndIndex*(
+    client: RpcClient, blockId: BlockIdentifier, index: Quantity
+): Future[Result[BlockObject, string]] {.async: (raises: []).} =
+  let blck =
+    try:
+      let res = await client.eth_getUncleByBlockNumberAndIndex(blockId, index)
+      if res.isNil:
+        return err("EL failed to provide requested uncle block")
+
+      res
+    except CatchableError as e:
+      return err("EL JSON-RPC eth_getUncleByBlockNumberAndIndex failed: " & e.msg)
+
+  return ok(blck)
