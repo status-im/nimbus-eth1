@@ -10,37 +10,61 @@
 
 import
   std/tables,
-  results,
-  ".."/[kvt_desc, kvt_utils]
+  eth/common,
+  ../kvt_desc
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc layersMergeOnto(src: LayerRef; trg: var LayerObj) =
+  for (key,val) in src.sTab.pairs:
+    trg.sTab[key] = val
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc merge*(
-    db: KvtDbRef;                      # Database
-    upper: LayerDeltaRef;              # Filter to apply onto `lower`
-    lower: var LayerDeltaRef;          # Target filter, will be modified
-      ) =
-  ## Merge the argument filter `upper` onto the argument filter `lower`
-  ## relative to the *unfiltered* backend database on `db.backened`. The `lower`
-  ## filter argument will have been modified.
+proc deltaMerge*(
+    upper: LayerRef;                   # Think of `top`, `nil` is ok
+    modUpperOk: bool;                  # May re-use/modify `upper`
+    lower: LayerRef;                   # Think of `balancer`, `nil` is ok
+    modLowerOk: bool;                  # May re-use/modify `lower`
+      ): LayerRef =
+  ## Merge argument `upper` into the `lower` filter instance.
   ##
-  ## In case that the argument `lower` is `nil`, it will be replaced by `upper`.
+  ## Note that the namimg `upper` and `lower` indicate that the filters are
+  ## stacked and the database access is `upper -> lower -> backend`.
   ##
   if lower.isNil:
-    lower = upper
-  elif not upper.isNil:
-    for (key,val) in upper.sTab.pairs:
-      if val.isValid or not lower.sTab.hasKey key:
-        lower.sTab[key] = val
-      elif lower.sTab.getOrVoid(key).isValid:
-        let rc = db.getUbe key
-        if rc.isOk:
-          lower.sTab[key] = val # empty blob
-        else:
-          doAssert rc.error == GetNotFound
-          lower.sTab.del key # no need to keep that in merged filter
+    # Degenerate case: `upper` is void
+    result = upper
+
+  elif upper.isNil:
+    # Degenerate case: `lower` is void
+    result = lower
+
+  elif modLowerOk:
+    # Can modify `lower` which is the prefered action mode but applies only
+    # in cases where the `lower` argument is not shared.
+    layersMergeOnto(upper, lower[])
+    result = lower
+
+  elif not modUpperOk:
+    # Cannot modify any argument layers.
+    result = LayerRef(sTab: lower.sTab)
+    layersMergeOnto(upper, result[])
+
+  else:
+    # Otherwise avoid copying some tables by modifyinh `upper`. This is not
+    # completely free as the merge direction changes to merging the `lower`
+    # layer up into the higher prioritised `upper` layer (note that the `lower`
+    # argument filter is read-only.) Here again, the `upper` argument must not
+    # be a shared layer/filter.
+    for (key,val) in lower.sTab.pairs:
+      if not upper.sTab.hasKey(key):
+        upper.sTab[key] = val
+    result = upper
 
 # ------------------------------------------------------------------------------
 # End

@@ -30,7 +30,7 @@ func dup(sTab: Table[RootedVertexID,VertexRef]): Table[RootedVertexID,VertexRef]
 # ------------------------------------------------------------------------------
 
 func vTop*(db: AristoDbRef): VertexID =
-  db.top.delta.vTop
+  db.top.vTop
 
 # ------------------------------------------------------------------------------
 # Public getters/helpers
@@ -42,7 +42,7 @@ func nLayersVtx*(db: AristoDbRef): int =
   ## layers as there might be duplicate entries for the same vertex ID on
   ## different layers.
   ##
-  db.stack.mapIt(it.delta.sTab.len).foldl(a + b, db.top.delta.sTab.len)
+  db.stack.mapIt(it.sTab.len).foldl(a + b, db.top.sTab.len)
 
 func nLayersKey*(db: AristoDbRef): int =
   ## Number of vertex ID/key entries on the cache layers. This is an upper
@@ -50,7 +50,7 @@ func nLayersKey*(db: AristoDbRef): int =
   ## layers as there might be duplicate entries for the same vertex ID on
   ## different layers.
   ##
-  db.stack.mapIt(it.delta.kMap.len).foldl(a + b, db.top.delta.kMap.len)
+  db.stack.mapIt(it.kMap.len).foldl(a + b, db.top.kMap.len)
 
 # ------------------------------------------------------------------------------
 # Public functions: getter variants
@@ -60,11 +60,11 @@ func layersGetVtx*(db: AristoDbRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
-  db.top.delta.sTab.withValue(rvid, item):
+  db.top.sTab.withValue(rvid, item):
     return Opt.some((item[], 0))
 
   for i, w in enumerate(db.rstack):
-    w.delta.sTab.withValue(rvid, item):
+    w.sTab.withValue(rvid, item):
       return Opt.some((item[], i + 1))
 
   Opt.none((VertexRef, int))
@@ -78,11 +78,11 @@ func layersGetKey*(db: AristoDbRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   ## Find a hash key on the cache layers. An `ok()` result might contain a void
   ## hash key if it is stored on the cache that way.
   ##
-  db.top.delta.kMap.withValue(rvid, item):
+  db.top.kMap.withValue(rvid, item):
     return Opt.some((item[], 0))
 
   for i, w in enumerate(db.rstack):
-    w.delta.kMap.withValue(rvid, item):
+    w.kMap.withValue(rvid, item):
       return ok((item[], i + 1))
 
   Opt.none((HashKey, int))
@@ -92,21 +92,21 @@ func layersGetKeyOrVoid*(db: AristoDbRef; rvid: RootedVertexID): HashKey =
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
 func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash256): Opt[VertexRef] =
-  db.top.delta.accLeaves.withValue(accPath, item):
+  db.top.accLeaves.withValue(accPath, item):
     return Opt.some(item[])
 
   for w in db.rstack:
-    w.delta.accLeaves.withValue(accPath, item):
+    w.accLeaves.withValue(accPath, item):
       return Opt.some(item[])
 
   Opt.none(VertexRef)
 
 func layersGetStoLeaf*(db: AristoDbRef; mixPath: Hash256): Opt[VertexRef] =
-  db.top.delta.stoLeaves.withValue(mixPath, item):
+  db.top.stoLeaves.withValue(mixPath, item):
     return Opt.some(item[])
 
   for w in db.rstack:
-    w.delta.stoLeaves.withValue(mixPath, item):
+    w.stoLeaves.withValue(mixPath, item):
       return Opt.some(item[])
 
   Opt.none(VertexRef)
@@ -121,7 +121,7 @@ func layersPutVtx*(
     vtx: VertexRef;
       ) =
   ## Store a (potentally empty) vertex on the top layer
-  db.top.delta.sTab[rvid] = vtx
+  db.top.sTab[rvid] = vtx
 
 func layersResVtx*(
     db: AristoDbRef;
@@ -138,7 +138,7 @@ func layersPutKey*(
     key: HashKey;
       ) =
   ## Store a (potentally void) hash key on the top layer
-  db.top.delta.kMap[rvid] = key
+  db.top.kMap[rvid] = key
 
 
 func layersResKey*(db: AristoDbRef; rvid: RootedVertexID) =
@@ -157,14 +157,23 @@ proc layersUpdateVtx*(
 
 
 func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash256; leafVtx: VertexRef) =
-  db.top.delta.accLeaves[accPath] = leafVtx
+  db.top.accLeaves[accPath] = leafVtx
 
 func layersPutStoLeaf*(db: AristoDbRef; mixPath: Hash256; leafVtx: VertexRef) =
-  db.top.delta.stoLeaves[mixPath] = leafVtx
+  db.top.stoLeaves[mixPath] = leafVtx
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+func isEmpty*(ly: LayerRef): bool =
+  ## Returns `true` if the layer does not contain any changes, i.e. all the
+  ## tables are empty. The field `txUid` is ignored, here.
+  ly.sTab.len == 0 and
+  ly.kMap.len == 0 and
+  ly.accLeaves.len == 0 and
+  ly.stoLeaves.len == 0
+
 
 func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   ## Merges the argument `src` into the argument `trg` and returns `trg`. For
@@ -172,15 +181,15 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   ##
   trg.txUid = 0
 
-  for (vid,vtx) in src.delta.sTab.pairs:
-    trg.delta.sTab[vid] = vtx
-  for (vid,key) in src.delta.kMap.pairs:
-    trg.delta.kMap[vid] = key
-  trg.delta.vTop = src.delta.vTop
-  for (accPath,leafVtx) in src.delta.accLeaves.pairs:
-    trg.delta.accLeaves[accPath] = leafVtx
-  for (mixPath,leafVtx) in src.delta.stoLeaves.pairs:
-    trg.delta.stoLeaves[mixPath] = leafVtx
+  for (vid,vtx) in src.sTab.pairs:
+    trg.sTab[vid] = vtx
+  for (vid,key) in src.kMap.pairs:
+    trg.kMap[vid] = key
+  trg.vTop = src.vTop
+  for (accPath,leafVtx) in src.accLeaves.pairs:
+    trg.accLeaves[accPath] = leafVtx
+  for (mixPath,leafVtx) in src.stoLeaves.pairs:
+    trg.stoLeaves[mixPath] = leafVtx
 
 func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
@@ -192,24 +201,22 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
 
   # Set up initial layer (bottom layer)
   result = LayerRef(
-    delta: LayerDeltaRef(
-      sTab: layers[0].delta.sTab.dup,          # explicit dup for ref values
-      kMap: layers[0].delta.kMap,
-      vTop: layers[^1].delta.vTop,
-      accLeaves: layers[0].delta.accLeaves,
-      stoLeaves: layers[0].delta.stoLeaves,
-      ))
+    sTab: layers[0].sTab.dup,          # explicit dup for ref values
+    kMap: layers[0].kMap,
+    vTop: layers[^1].vTop,
+    accLeaves: layers[0].accLeaves,
+    stoLeaves: layers[0].stoLeaves)
 
   # Consecutively merge other layers on top
   for n in 1 ..< layers.len:
-    for (vid,vtx) in layers[n].delta.sTab.pairs:
-      result.delta.sTab[vid] = vtx
-    for (vid,key) in layers[n].delta.kMap.pairs:
-      result.delta.kMap[vid] = key
-    for (accPath,vtx) in layers[n].delta.accLeaves.pairs:
-      result.delta.accLeaves[accPath] = vtx
-    for (mixPath,vtx) in layers[n].delta.stoLeaves.pairs:
-      result.delta.stoLeaves[mixPath] = vtx
+    for (vid,vtx) in layers[n].sTab.pairs:
+      result.sTab[vid] = vtx
+    for (vid,key) in layers[n].kMap.pairs:
+      result.kMap[vid] = key
+    for (accPath,vtx) in layers[n].accLeaves.pairs:
+      result.accLeaves[accPath] = vtx
+    for (mixPath,vtx) in layers[n].stoLeaves.pairs:
+      result.stoLeaves[mixPath] = vtx
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -226,12 +233,12 @@ iterator layersWalkVtx*(
   ## the one with a zero vertex which are othewise skipped by the iterator.
   ## The `seen` argument must not be modified while the iterator is active.
   ##
-  for (rvid,vtx) in db.top.delta.sTab.pairs:
+  for (rvid,vtx) in db.top.sTab.pairs:
     yield (rvid,vtx)
     seen.incl rvid.vid
 
   for w in db.rstack:
-    for (rvid,vtx) in w.delta.sTab.pairs:
+    for (rvid,vtx) in w.sTab.pairs:
       if rvid.vid notin seen:
         yield (rvid,vtx)
         seen.incl rvid.vid
@@ -251,12 +258,12 @@ iterator layersWalkKey*(
   ## Walk over all `(VertexID,HashKey)` pairs on the cache layers. Note that
   ## entries are unsorted.
   var seen: HashSet[VertexID]
-  for (rvid,key) in db.top.delta.kMap.pairs:
+  for (rvid,key) in db.top.kMap.pairs:
     yield (rvid,key)
     seen.incl rvid.vid
 
   for w in db.rstack:
-    for (rvid,key) in w.delta.kMap.pairs:
+    for (rvid,key) in w.kMap.pairs:
       if rvid.vid notin seen:
         yield (rvid,key)
         seen.incl rvid.vid

@@ -14,10 +14,25 @@
 {.push raises: [].}
 
 import
-  std/tables,
   results,
   ../aristo_delta/delta_merge,
-  ".."/[aristo_desc, aristo_delta]
+  ".."/[aristo_desc, aristo_delta, aristo_layers]
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc txStowOk*(
+    db: AristoDbRef;                  # Database
+    persistent: bool;                 # Stage only unless `true`
+      ): Result[void,AristoError] =
+  if not db.txRef.isNil:
+    return err(TxPendingTx)
+  if 0 < db.stack.len:
+    return err(TxStackGarbled)
+  if persistent and not db.deltaPersistentOk():
+    return err(TxBackendNotWritable)
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -30,24 +45,18 @@ proc txStow*(
       ): Result[void,AristoError] =
   ## Worker for `stow()` and `persist()` variants.
   ##
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
-  if persistent and not db.deltaPersistentOk():
-    return err(TxBackendNotWritable)
+  ? db.txStowOk persistent
 
-  if db.top.delta.sTab.len != 0 or
-     db.top.delta.kMap.len != 0 or
-     db.top.delta.accLeaves.len != 0 or
-     db.top.delta.stoLeaves.len != 0:
-
-    # Note that `deltaMerge()` will return the 1st argument if the 2nd is `nil`
-    db.balancer = db.deltaMerge(db.top.delta, db.balancer).valueOr:
-      return err(error[1])
+  if not db.top.isEmpty():
+    # Note that `deltaMerge()` will return the `db.top` argument if the
+    # `db.balancer` is `nil`. Also, the `db.balancer` is read-only. In the
+    # case that there are no forked peers one can ignore that restriction as
+    # no balancer is shared.
+    db.balancer = deltaMerge(
+      db.top, modUpperOk = true, db.balancer, modLowerOk = db.nForked()==0)
 
     # New empty top layer
-    db.top = LayerRef(delta: LayerDeltaRef(vTop: db.balancer.vTop))
+    db.top = LayerRef(vTop: db.balancer.vTop)
 
   if persistent:
     # Merge/move `balancer` into persistent tables (unless missing)

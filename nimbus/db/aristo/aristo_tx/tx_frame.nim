@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/tables,
   results,
   ".."/[aristo_desc, aristo_layers]
 
@@ -81,10 +80,10 @@ proc txFrameBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   if db.txFrameLevel != db.stack.len:
     return err(TxStackGarbled)
 
-  let vTop = db.top.delta.vTop
+  let vTop = db.top.vTop
   db.stack.add db.top
   db.top = LayerRef(
-    delta: LayerDeltaRef(vTop: vTop),
+    vTop:  vTop,
     txUid: db.getTxUid)
 
   db.txRef = AristoTxRef(
@@ -123,18 +122,11 @@ proc txFrameCommit*(
   let db = ? tx.getDbDescFromTopTx()
 
   # Pop layer from stack and merge database top layer onto it
-  let merged = block:
-    if db.top.delta.sTab.len == 0 and
-       db.top.delta.kMap.len == 0:
-      # Avoid `layersMergeOnto()`
-      db.top.delta = db.stack[^1].delta
-      db.stack.setLen(db.stack.len-1)
-      db.top
-    else:
-      let layer = db.stack[^1]
-      db.stack.setLen(db.stack.len-1)
-      db.top.layersMergeOnto layer[]
-      layer
+  let merged = db.stack[^1]
+  db.stack.setLen(db.stack.len-1)
+  if not db.top.isEmpty():
+    # Only call `layersMergeOnto()` if layer is empty
+    db.top.layersMergeOnto merged[]
 
   # Install `merged` stack top layer and update stack
   db.top = merged

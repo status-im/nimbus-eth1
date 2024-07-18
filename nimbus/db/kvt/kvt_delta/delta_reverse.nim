@@ -10,6 +10,7 @@
 
 import
   std/tables,
+  eth/common,
   results,
   ".."/[kvt_desc, kvt_utils]
 
@@ -17,27 +18,29 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc deltaReverse*(
+proc revFilter*(
     db: KvtDbRef;                      # Database
-    delta: LayerDeltaRef;             # Filter to revert
-      ): LayerDeltaRef =
-  ## Assemble a reverse filter for the `delta` argument, i.e. changes to the
-  ## backend that reverse the effect of applying this to the balancer filter.
-  ## The resulting filter is calculated against the current *unfiltered*
-  ## backend (excluding optionally installed balancer filters.)
+    filter: LayerRef;                  # Filter to revert
+      ): Result[LayerRef,(Blob,KvtError)] =
+  ## Assemble reverse filter for the `filter` argument, i.e. changes to the
+  ## backend that reverse the effect of applying the this read-only filter.
   ##
-  ## If `delta` is `nil`, the result will be `nil` as well.
-  if not delta.isNil:
-    result = LayerDeltaRef()
+  ## This read-only filter is calculated against the current unfiltered
+  ## backend (excluding optionally installed read-only filter.)
+  ##
+  let rev = LayerRef()
 
-    # Calculate reverse changes for the `sTab[]` structural table
-    for key in delta.sTab.keys:
-      let rc = db.getUbe key
-      if rc.isOk:
-        result.sTab[key] = rc.value
-      else:
-        doAssert rc.error == GetNotFound
-        result.sTab[key] = EmptyBlob
+  # Calculate reverse changes for the `sTab[]` structural table
+  for key in filter.sTab.keys:
+    let rc = db.getUbe key
+    if rc.isOk:
+      rev.sTab[key] = rc.value
+    elif rc.error == GetNotFound:
+      rev.sTab[key] = EmptyBlob
+    else:
+      return err((key,rc.error))
+
+  ok(rev)
 
 # ------------------------------------------------------------------------------
 # End

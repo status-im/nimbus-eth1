@@ -134,7 +134,7 @@ proc findTx*(
 
   if db.txRef.isNil:
     # Try `(vid,key)` on top layer
-    let topKey = db.top.delta.kMap.getOrVoid rvid
+    let topKey = db.top.kMap.getOrVoid rvid
     if topKey == key:
       return ok(0)
 
@@ -143,11 +143,11 @@ proc findTx*(
     for (n,tx,layer,error) in db.txRef.txFrameWalk:
       if error != AristoError(0):
         return err(error)
-      if layer.delta.kMap.getOrVoid(rvid) == key:
+      if layer.kMap.getOrVoid(rvid) == key:
         return ok(n)
 
     # Try bottom layer
-    let botKey = db.stack[0].delta.kMap.getOrVoid rvid
+    let botKey = db.stack[0].kMap.getOrVoid rvid
     if botKey == key:
       return ok(db.stack.len)
 

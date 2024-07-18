@@ -89,7 +89,8 @@ type
     key*: Hash256                    ## Some state hash (if any)
     serial*: uint64                  ## Generic identifier from application
 
-  LayerDeltaRef* = ref object
+  LayerRef* = ref LayerObj
+  LayerObj* = object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
     ## a higher level take precedence over lower layer table entries. So an
     ## existing key-value table entry of a layer on top supersedes same key
@@ -119,12 +120,7 @@ type
     accLeaves*: Table[Hash256, VertexRef]  ## Account path -> VertexRef
     stoLeaves*: Table[Hash256, VertexRef]  ## Storage path -> VertexRef
 
-  LayerRef* = ref LayerObj
-  LayerObj* = object
-    ## Hexary trie database layer structures. Any layer holds the full
-    ## change relative to the backend.
-    delta*: LayerDeltaRef            ## Most structural tables held as deltas
-    txUid*: uint                     ## Transaction identifier if positive
+    txUid*: uint                           ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
@@ -132,7 +128,7 @@ type
 
 func init*(T: type LayerRef): T =
   ## Constructor, returns empty layer
-  T(delta: LayerDeltaRef())
+  T()
 
 func hash*(node: NodeRef): Hash =
   ## Table/KeyedQueue/HashSet mixin

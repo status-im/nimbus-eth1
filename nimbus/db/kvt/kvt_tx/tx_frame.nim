@@ -83,7 +83,6 @@ proc txFrameBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
 
   db.stack.add db.top
   db.top = LayerRef(
-    delta: LayerDeltaRef(),
     txUid: db.getTxUid)
   db.txRef = KvtTxRef(
     db:     db,
@@ -122,8 +121,8 @@ proc txFrameCommit*(
 
   # Replace the top two layers by its merged version
   let merged = db.stack[^1]
-  for (key,val) in db.top.delta.sTab.pairs:
-    merged.delta.sTab[key] = val
+  for (key,val) in db.top.sTab.pairs:
+    merged.sTab[key] = val
 
   # Install `merged` layer
   db.top = merged
