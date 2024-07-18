@@ -25,7 +25,7 @@ import
 
 proc deltaMerge*(
     db: KvtDbRef;                      # Database
-    delta: LayerDeltaRef;             # Filter to apply to database
+    delta: LayerRef;                   # Filter to apply to database
       ) =
   ## Merge the argument `delta` into the balancer filter layer. Note that
   ## this function has no control of the filter source. Having merged the
@@ -81,7 +81,7 @@ proc deltaUpdate*(
   for w in db.forked:
     db.merge(rev, w.balancer)
 
-  db.balancer = LayerDeltaRef(nil)
+  db.balancer = LayerRef(nil)
   ok()
 
 # ------------------------------------------------------------------------------

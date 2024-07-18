@@ -134,11 +134,11 @@ proc ppBe[T](be: T; db: KvtDbRef; indent: int): string =
 
 proc ppLayer(layer: LayerRef; db: KvtDbRef; indent = 4): string =
   let
-    tLen = layer.delta.sTab.len
+    tLen = layer.sTab.len
     info = "tab(" & $tLen & ")"
     pfx1 = indent.toPfx(1)
     pfx2 = if 0 < tLen: indent.toPfx(2) else: " "
-  "<layer>" & pfx1 & info & pfx2 & layer.delta.sTab.ppTab(db,indent+2)
+  "<layer>" & pfx1 & info & pfx2 & layer.sTab.ppTab(db,indent+2)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -152,7 +152,7 @@ proc pp*(
   case be.kind:
   of BackendMemory:
     result &= be.MemBackendRef.ppBe(db, indent)
-  of BackendRocksDB:
+  of BackendRocksDB,BackendRdbTriggered:
     result &= be.RdbBackendRef.ppBe(db, indent)
   of BackendVoid:
     result &= "<NoBackend>"

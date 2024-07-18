@@ -19,8 +19,8 @@ import
 
 proc merge*(
     db: KvtDbRef;                      # Database
-    upper: LayerDeltaRef;              # Filter to apply onto `lower`
-    lower: var LayerDeltaRef;          # Target filter, will be modified
+    upper: LayerRef;                   # Filter to apply onto `lower`
+    lower: var LayerRef;               # Target filter, will be modified
       ) =
   ## Merge the argument filter `upper` onto the argument filter `lower`
   ## relative to the *unfiltered* backend database on `db.backened`. The `lower`

@@ -18,14 +18,10 @@ import
   eth/common
 
 type
-  LayerDeltaRef* = ref object
-    ## Delta tables relative to previous layer
-    sTab*: Table[Blob,Blob]           ## Structural data table
-
   LayerRef* = ref object
     ## Kvt database layer structures. Any layer holds the full
     ## change relative to the backend.
-    delta*: LayerDeltaRef             ## Structural tables held as deltas
+    sTab*: Table[Blob,Blob]           ## Structural data table
     txUid*: uint                      ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
@@ -34,11 +30,11 @@ type
 
 func init*(T: type LayerRef): T =
   ## Constructor, returns empty layer
-  T(delta: LayerDeltaRef())
+  T()
 
-func dup*(ly: LayerDeltaRef): LayerDeltaRef =
+func dup*(ly: LayerRef): LayerRef =
   ## Duplicate/copy
-  LayerDeltaRef(sTab: ly.sTab)
+  LayerRef(sTab: ly.sTab)
 
 # ------------------------------------------------------------------------------
 # End

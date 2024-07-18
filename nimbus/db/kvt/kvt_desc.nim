@@ -46,7 +46,7 @@ type
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    balancer*: LayerDeltaRef          ## Apply read filter (locks writing)
+    balancer*: LayerRef               ## Balance out concurrent backend access
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: KvtTxRef                  ## Latest active transaction

@@ -49,9 +49,9 @@ proc txStow*(
   ##
   ? db.txStowOk persistent
 
-  if 0 < db.top.delta.sTab.len:
-    db.deltaMerge db.top.delta
-    db.top.delta = LayerDeltaRef()
+  if 0 < db.top.sTab.len:
+    db.deltaMerge db.top
+    db.top = LayerRef()
 
   if persistent:
     # Move `balancer` data into persistent tables

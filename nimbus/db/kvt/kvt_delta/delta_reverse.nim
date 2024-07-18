@@ -19,8 +19,8 @@ import
 
 proc deltaReverse*(
     db: KvtDbRef;                      # Database
-    delta: LayerDeltaRef;             # Filter to revert
-      ): LayerDeltaRef =
+    delta: LayerRef;                   # Filter to revert
+      ): LayerRef =
   ## Assemble a reverse filter for the `delta` argument, i.e. changes to the
   ## backend that reverse the effect of applying this to the balancer filter.
   ## The resulting filter is calculated against the current *unfiltered*
@@ -28,7 +28,7 @@ proc deltaReverse*(
   ##
   ## If `delta` is `nil`, the result will be `nil` as well.
   if not delta.isNil:
-    result = LayerDeltaRef()
+    result = LayerRef()
 
     # Calculate reverse changes for the `sTab[]` structural table
     for key in delta.sTab.keys:
