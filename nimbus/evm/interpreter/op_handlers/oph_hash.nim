@@ -22,7 +22,6 @@ import
   ../../stack,
   ../gas_costs,
   ../op_codes,
-  ../utils/utils_numeric,
   ./oph_defs,
   eth/common
 
@@ -32,24 +31,28 @@ import
 
 proc sha3Op(k: var VmCtx): EvmResultVoid =
   ## 0x20, Compute Keccak-256 hash.
+  ? k.cpt.stack.lsCheck(2)
   let
-    (startPos, length) = ? k.cpt.stack.popInt(2)
-    (pos, len) = (startPos.safeInt, length.safeInt)
+    cpt = k.cpt
+    pos = cpt.stack.lsPeekSafeInt(^1)
+    len = cpt.stack.lsPeekSafeInt(^2)
+  cpt.stack.lsShrink(1)
 
   if pos < 0 or len < 0 or pos > 2147483648'i64:
     return err(opErr(OutOfBounds))
 
-  ? k.cpt.opcodeGasCost(Op.Sha3,
-    k.cpt.gasCosts[Op.Sha3].m_handler(k.cpt.memory.len, pos, len),
-    reason = "SHA3: word gas cost")
+  ? cpt.opcodeGasCost(Op.Sha3,
+    cpt.gasCosts[Op.Sha3].m_handler(cpt.memory.len, pos, len),
+      reason = "SHA3: word gas cost")
 
-  k.cpt.memory.extend(pos, len)
+  cpt.memory.extend(pos, len)
 
-  let endRange = min(pos + len, k.cpt.memory.len) - 1
-  if endRange == -1 or pos >= k.cpt.memory.len:
-    k.cpt.stack.push(EMPTY_SHA3)
+  let endRange = min(pos + len, cpt.memory.len) - 1
+  if endRange == -1 or pos >= cpt.memory.len:
+    cpt.stack.lsTop(EMPTY_SHA3)
   else:
-    k.cpt.stack.push keccakHash k.cpt.memory.bytes.toOpenArray(pos, endRange)
+    cpt.stack.lsTop keccakHash k.cpt.memory.bytes.toOpenArray(pos, endRange)
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

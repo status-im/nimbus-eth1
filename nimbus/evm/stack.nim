@@ -164,7 +164,7 @@ func `[]`*(stack: EvmStack, i: BackwardsIndex, T: typedesc): EvmResult[T] =
 
 func peekInt*(stack: EvmStack): EvmResult[UInt256] =
   ? ensurePop(stack, 1)
-  ok(fromStackElem(stack.values[^1], Uint256))
+  ok(fromStackElem(stack.values[^1], UInt256))
 
 func peekAddress*(stack: EvmStack): EvmResult[EthAddress] =
   ? ensurePop(stack, 1)
@@ -184,3 +184,74 @@ iterator items*(stack: EvmStack): UInt256 =
 iterator pairs*(stack: EvmStack): (int, UInt256) =
   for i, v in stack.values:
     yield (i, v)
+
+# ------------------------------------------------------------------------------
+# Public functions with less safety
+# ------------------------------------------------------------------------------
+
+template lsCheck*(stack: EvmStack, expected: int): EvmResultVoid =
+  ensurePop(stack, expected)
+
+func lsTop*(stack: EvmStack,
+            value: EvmStackInts | UInt256 | EthAddress | Hash256) =
+  toStackElem(value, stack.values[^1])
+
+func lsTop*(stack: var EvmStack, value: openArray[byte]) =
+  toStackElem(value, stack.values[^1])
+
+func lsPeekInt*(stack: EvmStack, i: BackwardsIndex): UInt256 =
+  fromStackElem(stack.values[i], UInt256)
+
+func lsPeekAddress*(stack: EvmStack, i: BackwardsIndex): EthAddress =
+  fromStackElem(stack.values[i], EthAddress)
+
+func lsPeekMemRef*(stack: EvmStack, i: BackwardsIndex): int =
+  fromStackElem(stack.values[i], UInt256).cleanMemRef
+
+func lsPeekSafeInt*(stack: EvmStack, i: BackwardsIndex): int =
+  fromStackElem(stack.values[i], UInt256).safeInt
+
+func lsPeekTopic*(stack: EvmStack, i: BackwardsIndex): EvmStackBytes32 =
+  fromStackElem(stack.values[i], EvmStackBytes32)
+
+func lsShrink*(stack: EvmStack, x: int) =
+  stack.values.setLen(stack.values.len - x)
+
+template binaryOp*(stack: EvmStack, binOp): EvmResultVoid =
+  if stack.values.len >= 2:
+    stack.values[^2] = binOp(stack.values[^1], stack.values[^2])
+    stack.values.setLen(stack.values.len - 1)
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+
+template unaryOp*(stack: EvmStack, unOp): EvmResultVoid =
+  if stack.values.len >= 1:
+    stack.values[^1] = unOp(stack.values[^1])
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+
+template binaryWithTop*(stack: EvmStack, binOp): EvmResultVoid =
+  if stack.values.len >= 2:
+    binOp(stack.values[^2], stack.values[^1], stack.values[^2])
+    stack.values.setLen(stack.values.len - 1)
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+
+template unaryWithTop*(stack: EvmStack, unOp): EvmResultVoid =
+  if stack.values.len >= 1:
+    unOp(stack.values[^1], stack.values[^1], toStackElem)
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+
+template unaryAddress*(stack: EvmStack, unOp): EvmResultVoid =
+  if stack.values.len >= 1:
+    let address = fromStackElem(stack.values[^1], EthAddress)
+    toStackElem(unOp(address), stack.values[^1])
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+    

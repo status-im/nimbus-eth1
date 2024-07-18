@@ -30,6 +30,7 @@ proc opEnvMain*() =
       fork: London
       success: false
       memory: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack: "0x00"
 
     assembler: # CodeCopy OP
       title: "CODECOPY_1"
@@ -310,6 +311,7 @@ proc opEnvMain*() =
       stack:
         "0x5E"
         "0x07"
+        "0x471FD3AD3E9EEADEEC4608B92D16CE6B500704CC"
 
     assembler: # CODESIZE OP
       title: "CODESIZE_1"

@@ -23,7 +23,6 @@ import
   ../../types,
   ../gas_costs,
   ../op_codes,
-  ../utils/utils_numeric,
   ./oph_defs,
   ./oph_helpers,
   eth/common,
@@ -40,31 +39,40 @@ when not defined(evmc_enabled):
 
 proc returnOp(k: var VmCtx): EvmResultVoid =
   ## 0xf3, Halt execution returning output data.
-  let (startPos, size) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    cpt = k.cpt
+    pos = cpt.stack.lsPeekMemRef(^1)
+    len = cpt.stack.lsPeekMemRef(^2)
+  cpt.stack.lsShrink(2)
 
-  let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-  ? k.cpt.opcodeGasCost(Return,
-    k.cpt.gasCosts[Return].m_handler(k.cpt.memory.len, pos, len),
+  ? cpt.opcodeGasCost(Return,
+    cpt.gasCosts[Return].m_handler(cpt.memory.len, pos, len),
     reason = "RETURN")
-  k.cpt.memory.extend(pos, len)
-  assign(k.cpt.output, k.cpt.memory.read(pos, len))
+
+  cpt.memory.extend(pos, len)
+  assign(cpt.output, cpt.memory.read(pos, len))
   ok()
 
 
 proc revertOp(k: var VmCtx): EvmResultVoid =
   ## 0xfd, Halt execution reverting state changes but returning data
   ##       and remaining gas.
-  let (startPos, size) = ? k.cpt.stack.popInt(2)
+  ? k.cpt.stack.lsCheck(2)
+  let
+    cpt = k.cpt
+    pos = cpt.stack.lsPeekMemRef(^1)
+    len = cpt.stack.lsPeekMemRef(^2)
+  cpt.stack.lsShrink(2)
 
-  let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-  ? k.cpt.opcodeGasCost(Revert,
-    k.cpt.gasCosts[Revert].m_handler(k.cpt.memory.len, pos, len),
+  ? cpt.opcodeGasCost(Revert,
+    cpt.gasCosts[Revert].m_handler(cpt.memory.len, pos, len),
     reason = "REVERT")
 
-  k.cpt.memory.extend(pos, len)
-  assign(k.cpt.output, k.cpt.memory.read(pos, len))
+  cpt.memory.extend(pos, len)
+  assign(cpt.output, cpt.memory.read(pos, len))
   # setError(msg, false) will signal cheap revert
-  k.cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
+  cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
   ok()
 
 proc invalidOp(k: var VmCtx): EvmResultVoid =
@@ -74,8 +82,10 @@ proc invalidOp(k: var VmCtx): EvmResultVoid =
 
 proc selfDestructOp(k: var VmCtx): EvmResultVoid =
   ## 0xff, Halt execution and register account for later deletion.
-  let cpt = k.cpt
-  let beneficiary = ? cpt.stack.popAddress()
+  let
+    cpt = k.cpt
+    beneficiary = ? cpt.stack.popAddress()
+
   when defined(evmc_enabled):
     block:
       cpt.selfDestruct(beneficiary)

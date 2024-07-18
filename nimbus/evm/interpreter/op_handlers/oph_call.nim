@@ -62,8 +62,8 @@ type
     gasCallEIP2929:  GasInt
 
 
-proc updateStackAndParams(q: var LocalParams; c: Computation): EvmResultVoid =
-  ? c.stack.push(0)
+proc updateStackAndParams(q: var LocalParams; c: Computation) =
+  c.stack.lsTop(0)
 
   let
     outLen = calcMemSize(q.memOutPos, q.memOutLen)
@@ -92,24 +92,27 @@ proc updateStackAndParams(q: var LocalParams; c: Computation): EvmResultVoid =
           # The WarmStorageReadCostEIP2929 (100) is already deducted in
           # the form of a constant `gasCall`
           q.gasCallEIP2929 = ColdAccountAccessCost - WarmStorageReadCost
-  ok()
 
 proc callParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for callOp()
+
+  ? c.stack.lsCheck(7)
+
   var res = LocalParams(
-    gas            : ? c.stack.popInt(),
-    codeAddress    : ? c.stack.popAddress(),
-    value          : ? c.stack.popInt(),
-    memInPos       : ? c.stack.popMemRef(),
-    memInLen       : ? c.stack.popMemRef(),
-    memOutPos      : ? c.stack.popMemRef(),
-    memOutLen      : ? c.stack.popMemRef(),
+    gas            : c.stack.lsPeekInt(^1),
+    codeAddress    : c.stack.lsPeekAddress(^2),
+    value          : c.stack.lsPeekInt(^3),
+    memInPos       : c.stack.lsPeekMemRef(^4),
+    memInLen       : c.stack.lsPeekMemRef(^5),
+    memOutPos      : c.stack.lsPeekMemRef(^6),
+    memOutLen      : c.stack.lsPeekMemRef(^7),
     sender         : c.msg.contractAddress,
     flags          : c.msg.flags,
   )
 
+  c.stack.lsShrink(6)
   res.contractAddress = res.codeAddress
-  ? res.updateStackAndParams(c)
+  res.updateStackAndParams(c)
   ok(res)
 
 
@@ -122,38 +125,45 @@ proc callCodeParams(c: Computation): EvmResult[LocalParams] =
 
 proc delegateCallParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for delegateCall()
+
+  ? c.stack.lsCheck(6)
   var res = LocalParams(
-    gas            : ? c.stack.popInt(),
-    codeAddress    : ? c.stack.popAddress(),
-    memInPos       : ? c.stack.popMemRef(),
-    memInLen       : ? c.stack.popMemRef(),
-    memOutPos      : ? c.stack.popMemRef(),
-    memOutLen      : ? c.stack.popMemRef(),
+    gas            : c.stack.lsPeekInt(^1),
+    codeAddress    : c.stack.lsPeekAddress(^2),
+    memInPos       : c.stack.lsPeekMemRef(^3),
+    memInLen       : c.stack.lsPeekMemRef(^4),
+    memOutPos      : c.stack.lsPeekMemRef(^5),
+    memOutLen      : c.stack.lsPeekMemRef(^6),
     value          : c.msg.value,
     sender         : c.msg.sender,
     flags          : c.msg.flags,
     contractAddress: c.msg.contractAddress,
   )
-  ? res.updateStackAndParams(c)
+
+  c.stack.lsShrink(5)
+  res.updateStackAndParams(c)
   ok(res)
 
 
 proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
   ## Helper for staticCall()
+
+  ? c.stack.lsCheck(6)
   var res = LocalParams(
-    gas            : ? c.stack.popInt(),
-    codeAddress    : ? c.stack.popAddress(),
-    memInPos       : ? c.stack.popMemRef(),
-    memInLen       : ? c.stack.popMemRef(),
-    memOutPos      : ? c.stack.popMemRef(),
-    memOutLen      : ? c.stack.popMemRef(),
+    gas            : c.stack.lsPeekInt(^1),
+    codeAddress    : c.stack.lsPeekAddress(^2),
+    memInPos       : c.stack.lsPeekMemRef(^3),
+    memInLen       : c.stack.lsPeekMemRef(^4),
+    memOutPos      : c.stack.lsPeekMemRef(^5),
+    memOutLen      : c.stack.lsPeekMemRef(^6),
     value          : 0.u256,
     sender         : c.msg.contractAddress,
     flags          : {EVMC_STATIC},
   )
 
+  c.stack.lsShrink(5)
   res.contractAddress = res.codeAddress
-  ? res.updateStackAndParams(c)
+  res.updateStackAndParams(c)
   ok(res)
 
 when evmc_enabled:
@@ -170,7 +180,7 @@ when evmc_enabled:
       c.gasMeter.refundGas(c.res.gas_refund)
 
       if c.res.status_code == EVMC_SUCCESS:
-        ? c.stack.top(1)
+        c.stack.lsTop(1)
 
       if not c.res.release.isNil:
         c.res.release(c.res)
@@ -191,7 +201,7 @@ else:
 
       if child.isSuccess:
         c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-        ? c.stack.top(1)
+        c.stack.lsTop(1)
 
       c.returnData = child.output
       let actualOutputSize = min(memLen, child.output.len)

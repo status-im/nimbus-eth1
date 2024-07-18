@@ -24,7 +24,6 @@ import
   ../../types,
   ../gas_costs,
   ../op_codes,
-  ../utils/utils_numeric,
   ./oph_defs,
   ./oph_gen_handlers,
   ./oph_helpers,
@@ -52,8 +51,11 @@ proc fnInfo(n: int): string {.compileTime.} =
 proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid =
   static: doAssert(topicCount in 0 .. 4)
   ? checkInStaticContext(c)
-  let (memStartPosition, size) = ? c.stack.popInt(2)
-  let (memPos, len) = (memStartPosition.cleanMemRef, size.cleanMemRef)
+  const stackSize = 2 + topicCount
+  ? c.stack.lsCheck(stackSize)
+  let
+    memPos = c.stack.lsPeekMemRef(^1)
+    len    = c.stack.lsPeekMemRef(^2)
 
   if memPos < 0 or len < 0:
     return err(opErr(OutOfBounds))
@@ -66,7 +68,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
   when evmc_enabled:
     var topics: array[4, evmc_bytes32]
     for i in 0 ..< topicCount:
-      topics[i].bytes = ? c.stack.popTopic()
+      topics[i].bytes = c.stack.lsPeekTopic(^(i+3))
 
     c.host.emitLog(c.msg.contractAddress,
       c.memory.read(memPos, len),
@@ -75,13 +77,13 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
     var log: Log
     log.topics = newSeqOfCap[Topic](topicCount)
     for i in 0 ..< topicCount:
-      let topic = ? c.stack.popTopic()
-      log.topics.add topic
+      log.topics.add c.stack.lsPeekTopic(^(i+3))
 
     assign(log.data, c.memory.read(memPos, len))
     log.address = c.msg.contractAddress
     c.addLogEntry(log)
 
+  c.stack.lsShrink(stackSize)
   ok()
 
 const
