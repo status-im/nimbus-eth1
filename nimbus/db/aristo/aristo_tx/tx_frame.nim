@@ -124,8 +124,7 @@ proc txFrameCommit*(
 
   # Pop layer from stack and merge database top layer onto it
   let merged = block:
-    if db.top.delta.sTab.len == 0 and
-       db.top.delta.kMap.len == 0:
+    if db.top.isEmpty():
       # Avoid `layersMergeOnto()`
       db.top.delta = db.stack[^1].delta
       db.stack.setLen(db.stack.len-1)

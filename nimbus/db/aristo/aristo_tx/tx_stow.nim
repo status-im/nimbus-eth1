@@ -17,7 +17,7 @@ import
   std/tables,
   results,
   ../aristo_delta/delta_merge,
-  ".."/[aristo_desc, aristo_delta]
+  ".."/[aristo_desc, aristo_delta, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -37,11 +37,7 @@ proc txStow*(
   if persistent and not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
 
-  if db.top.delta.sTab.len != 0 or
-     db.top.delta.kMap.len != 0 or
-     db.top.delta.accLeaves.len != 0 or
-     db.top.delta.stoLeaves.len != 0:
-
+  if not db.top.isEmpty():
     # Note that `deltaMerge()` will return the 1st argument if the 2nd is `nil`
     db.balancer = db.deltaMerge(db.top.delta, db.balancer).valueOr:
       return err(error[1])

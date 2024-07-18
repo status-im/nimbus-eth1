@@ -166,6 +166,14 @@ func layersPutStoLeaf*(db: AristoDbRef; mixPath: Hash256; leafVtx: VertexRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
+func isEmpty*(ly: LayerRef): bool =
+  ## Returns `true` if the layer does not contain any changes, i.e. all the
+  ## tables are empty. The field `txUid` is ignored, here.
+  ly.delta.sTab.len == 0 and
+  ly.delta.kMap.len == 0 and
+  ly.delta.accLeaves.len == 0 and
+  ly.delta.stoLeaves.len == 0
+
 func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   ## Merges the argument `src` into the argument `trg` and returns `trg`. For
   ## the result layer, the `txUid` value set to `0`.
