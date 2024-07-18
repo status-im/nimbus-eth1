@@ -9,9 +9,9 @@
 
 import
   stint,
-  eth/[common, trie, trie/db],
+  eth/[common, trie, trie/db, trie/trie_defs],
   eth/common/[eth_types, eth_types_rlp],
-  ../../../common/common_types,
+  ../../../common/[common_types, common_utils],
   ./database
 
 # Account State definition
@@ -48,11 +48,12 @@ proc setCode*(accState: var AccountState, code: seq[byte]) =
 # World State definition
 
 type
-  AddressHash = KeccakHash
-  SlotKeyHash = KeccakHash
+  AddressHash* = KeccakHash
+  SlotKeyHash* = KeccakHash
 
   WorldStateRef* = ref object
-    accountKeyPreImages: TableRef[AddressHash, EthAddress]
+    db: DatabaseRef
+    accountPreimages: TableRef[AddressHash, EthAddress]
     accountsTrie: HexaryTrie
     storageTries: TableRef[AddressHash, HexaryTrie]
     storageDb: TrieDatabaseRef
@@ -60,7 +61,8 @@ type
 
 proc init*(T: type WorldStateRef, db: DatabaseRef): T =
   WorldStateRef(
-    accountKeyPreImages: newTable[AddressHash, EthAddress](),
+    db: db,
+    accountPreimages: newTable[AddressHash, EthAddress](),
     accountsTrie: initHexaryTrie(db.getAccountsBackend(), isPruning = false),
     storageTries: newTable[AddressHash, HexaryTrie](),
     storageDb: db.getStorageBackend(),
@@ -76,8 +78,9 @@ template toAccountKey(address: EthAddress): AddressHash =
 template toStorageKey(slotKey: UInt256): SlotKeyHash =
   keccakHash(toBytesBE(slotKey))
 
-proc getAccountKeyPreImages(state: WorldStateRef): TableRef[AddressHash, EthAddress] =
-  state.accountKeyPreImages
+proc getAccountPreImage(state: WorldStateRef, accountKey: AddressHash): EthAddress =
+  doAssert(state.accountPreimages.contains(accountKey))
+  state.accountPreimages.getOrDefault(accountKey)
 
 proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
   let accountKey = toAccountKey(address)
@@ -118,7 +121,7 @@ proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountSta
     state.accountsTrie.put(accountKey.data, rlp.encode(accountToSave))
 
     # TODO: Cleanup the preimages between each transaction or store them in the database
-    state.accountKeyPreImages[accountKey] = address
+    state.accountPreimages[accountKey] = address
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
@@ -131,3 +134,48 @@ proc deleteAccount*(state: WorldStateRef, address: EthAddress) =
     state.bytecodeDb.del(accountKey.data)
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
+
+proc clearPreimages*(state: WorldStateRef) =
+  state.accountPreimages.clear()
+
+# Returns the account proofs for all the updated accounts from the last transaction
+iterator updatedAccountProofs*(state: WorldStateRef): (EthAddress, seq[seq[byte]]) =
+  let trie = initHexaryTrie(
+    state.db.getAccountsUpdatedCache(), state.stateRoot(), isPruning = false
+  )
+
+  try:
+    for key in trie.keys():
+      if key.len() == 0:
+        continue # skip the empty node created on initialization
+      let address = state.getAccountPreImage(KeccakHash.fromBytes(key))
+      yield (address, trie.getBranch(key))
+  except RlpError as e:
+    raiseAssert(e.msg) # should never happen unless the database is corrupted
+
+# Returns the storage proofs for the updated slots for the given account from the last transaction
+iterator updatedStorageProofs*(
+    state: WorldStateRef, address: EthAddress
+): (SlotKeyHash, seq[seq[byte]]) =
+  let accState = state.getAccount(address)
+
+  let trie = initHexaryTrie(
+    state.db.getStorageUpdatedCache(), accState.account.storageRoot, isPruning = false
+  )
+
+  try:
+    for key in trie.keys():
+      if key.len() == 0:
+        continue # skip the empty node created on initialization
+      yield (KeccakHash.fromBytes(key), trie.getBranch(key))
+  except RlpError as e:
+    raiseAssert(e.msg) # should never happen unless the database is corrupted
+
+# Returns the updated bytecode for all accounts from the last transaction
+iterator updatedBytecode*(state: WorldStateRef): (EthAddress, seq[byte]) =
+  let updatedCache = state.db.getBytecodeUpdatedCache()
+  for key, value in updatedCache.pairsInMemoryDB():
+    if key == emptyRlpHash.data:
+      continue # skip the empty node created on initialization
+    let address = state.getAccountPreImage(KeccakHash.fromBytes(key))
+    yield (address, value)

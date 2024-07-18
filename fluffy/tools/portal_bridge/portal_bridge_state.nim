@@ -126,6 +126,9 @@ proc runBackfillBuildBlockOffersLoop(
     if blockData.blockNumber mod 10000 == 0:
       info "Building state for block number: ", blockNumber = blockData.blockNumber
 
+    # For now all WorldStateRef functions need to be inside a transaction
+    # because the DatabaseRef currently only supports reading and writing to/from
+    # a single active transaction.
     db.withTransaction:
       for stateDiff in blockData.stateDiffs:
         worldState.applyStateDiff(stateDiff)
@@ -135,6 +138,21 @@ proc runBackfillBuildBlockOffersLoop(
         uncleMinersData =
           blockData.uncleBlocks.mapIt((EthAddress(it.miner), it.number.uint64))
       worldState.applyBlockRewards(minerData, uncleMinersData)
+
+      for address, proof in worldState.updatedAccountProofs():
+        # echo "Account Address: ", address
+        # echo "Account Proof.len(): ", proof.len()
+
+        for slotHash, storageProof in worldState.updatedStorageProofs(address):
+          debug "Storage SlotHash: ", slotHash
+          debug "Storage Proof.len(): ", storageProofLen = storageProof.len()
+          debug "Storage Proof: ", storageProof
+
+      for address, code in worldState.updatedBytecode():
+        debug "Bytecode Address: ", address
+        debug "Bytecode: ", code
+
+      worldState.clearPreimages()
 
     doAssert(blockData.blockObject.stateRoot.bytes() == worldState.stateRoot.data)
     trace "State diffs successfully applied to block number:",

@@ -22,17 +22,17 @@ type
   AccountsBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
-    updatedCache: TableRef[seq[byte], seq[byte]]
+    updatedCache: TrieDatabaseRef
 
   StorageBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
-    updatedCache: TableRef[seq[byte], seq[byte]]
+    updatedCache: TrieDatabaseRef
 
   BytecodeBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
-    updatedCache: TableRef[seq[byte], seq[byte]]
+    updatedCache: TrieDatabaseRef
 
   DatabaseBackendRef = AccountsBackendRef | StorageBackendRef | BytecodeBackendRef
 
@@ -92,7 +92,7 @@ proc put(
     dbBackend: DatabaseBackendRef, key, val: openArray[byte]
 ) {.gcsafe, raises: [].} =
   doAssert dbBackend.tx.put(key, val, dbBackend.cfHandle).isOk()
-  dbBackend.updatedCache[@key] = @val
+  dbBackend.updatedCache.put(key, val)
 
 proc get(
     dbBackend: DatabaseBackendRef, key: openArray[byte]
@@ -111,14 +111,23 @@ proc del(
   else:
     false
 
-proc getAccountsBackend*(db: DatabaseRef): TrieDatabaseRef =
+proc getAccountsBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   trieDB(db.accountsBackend)
 
-proc getStorageBackend*(db: DatabaseRef): TrieDatabaseRef =
+proc getStorageBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   trieDB(db.storageBackend)
 
-proc getBytecodeBackend*(db: DatabaseRef): TrieDatabaseRef =
+proc getBytecodeBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   trieDB(db.bytecodeBackend)
+
+proc getAccountsUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+  db.accountsBackend.updatedCache
+
+proc getStorageUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+  db.storageBackend.updatedCache
+
+proc getBytecodeUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+  db.bytecodeBackend.updatedCache
 
 proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   if not db.pendingTransaction.isNil():
@@ -130,9 +139,9 @@ proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   db.storageBackend.tx = tx
   db.bytecodeBackend.tx = tx
 
-  db.accountsBackend.updatedCache = newTable[seq[byte], seq[byte]]()
-  db.storageBackend.updatedCache = newTable[seq[byte], seq[byte]]()
-  db.bytecodeBackend.updatedCache = newTable[seq[byte], seq[byte]]()
+  db.accountsBackend.updatedCache = newMemoryDB()
+  db.storageBackend.updatedCache = newMemoryDB()
+  db.bytecodeBackend.updatedCache = newMemoryDB()
 
   ok()
 
@@ -164,15 +173,6 @@ template withTransaction*(db: DatabaseRef, body: untyped): auto =
     body
   finally:
     db.commitTransaction().expect("Transaction should be commited")
-
-template accountsBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
-  db.accountsBackend.updatedCache
-
-template storageBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
-  db.storageBackend.updatedCache
-
-template bytecodeBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
-  db.bytecodeBackend.updatedCache
 
 proc close*(db: DatabaseRef) =
   if not db.pendingTransaction.isNil():
