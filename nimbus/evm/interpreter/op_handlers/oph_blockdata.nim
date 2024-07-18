@@ -19,6 +19,7 @@ import
   ../../computation,
   ../../stack,
   ../../evm_errors,
+  ../utils/utils_numeric,
   ../op_codes,
   ./oph_defs
 
@@ -31,16 +32,13 @@ when not defined(evmc_enabled):
 
 proc blockhashOp (k: var VmCtx): EvmResultVoid =
   ## 0x40, Get the hash of one of the 256 most recent complete blocks.
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    blockNumber = cpt.stack.lsPeekInt(^1)
+  template block256(top, number, conv) =
+    if number > high(BlockNumber).u256:
+      top = zero(UInt256)
+    else:
+      conv(k.cpt.getBlockHash(number.truncate(BlockNumber)), top)
 
-  if blockNumber > high(BlockNumber).u256:
-    cpt.stack.lsTop Hash256()
-  else:
-    cpt.stack.lsTop cpt.getBlockHash(blockNumber.truncate(BlockNumber))
-  ok()
+  k.cpt.stack.unaryWithTop(block256)
 
 proc coinBaseOp (k: var VmCtx): EvmResultVoid =
   ## 0x41, Get the block's beneficiary address.
@@ -77,16 +75,17 @@ proc baseFeeOp (k: var VmCtx): EvmResultVoid =
 
 proc blobHashOp (k: var VmCtx): EvmResultVoid =
   ## 0x49, Get current transaction's EIP-4844 versioned hash.
-  ? k.cpt.stack.lsCheck(1)
-  let
-    index = k.cpt.stack.lsPeekSafeInt(^1)
-    len = k.cpt.getVersionedHashesLen
+  template blob256(top, number, conv) =
+    let
+      index = number.safeInt
+      len = k.cpt.getVersionedHashesLen
 
-  if index < len:
-    k.cpt.stack.lsTop k.cpt.getVersionedHash(index)
-  else:
-    k.cpt.stack.lsTop 0
-  ok()
+    if index < len:
+      conv(k.cpt.getVersionedHash(index), top)
+    else:
+      top = zero(UInt256)
+
+  k.cpt.stack.unaryWithTop(blob256)
 
 proc blobBaseFeeOp (k: var VmCtx): EvmResultVoid =
   ## 0x4a, Get the block's base fee.

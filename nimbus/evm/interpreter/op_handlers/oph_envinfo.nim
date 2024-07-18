@@ -43,24 +43,17 @@ proc addressOp (k: var VmCtx): EvmResultVoid =
 
 proc balanceOp (k: var VmCtx): EvmResultVoid =
   ## 0x31, Get balance of the given account.
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    address = cpt.stack.lsPeekAddress(^1)
-  cpt.stack.lsTop cpt.getBalance(address)
-  ok()
+  template balance256(address): auto =
+    k.cpt.getBalance(address)
+  k.cpt.stack.unaryAddress(balance256)
 
 proc balanceEIP2929Op (k: var VmCtx): EvmResultVoid =
   ## 0x31, EIP292: Get balance of the given account for Berlin and later
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    address = cpt.stack.lsPeekAddress(^1)
-    gasCost = cpt.gasEip2929AccountCheck(address)
-
-  ? cpt.opcodeGasCost(Balance, gasCost, reason = "Balance EIP2929")
-  cpt.stack.lsTop cpt.getBalance(address)
-  ok()
+  template balanceEIP2929(address): auto =
+    let gasCost = k.cpt.gasEip2929AccountCheck(address)
+    ? k.cpt.opcodeGasCost(Balance, gasCost, reason = "Balance EIP2929")
+    k.cpt.getBalance(address)
+  k.cpt.stack.unaryAddress(balanceEIP2929)
 
 # ------------------
 
@@ -151,25 +144,18 @@ proc gasPriceOp (k: var VmCtx): EvmResultVoid =
 
 proc extCodeSizeOp (k: var VmCtx): EvmResultVoid =
   ## 0x3b, Get size of an account's code
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    address = cpt.stack.lsPeekAddress(^1)
-
-  cpt.stack.lsTop cpt.getCodeSize(address)
-  ok()
+  template ecs256(address): auto =
+    k.cpt.getCodeSize(address)
+  k.cpt.stack.unaryAddress(ecs256)
 
 proc extCodeSizeEIP2929Op (k: var VmCtx): EvmResultVoid =
   ## 0x3b, Get size of an account's code
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    address = cpt.stack.lsPeekAddress(^1)
-    gasCost = cpt.gasEip2929AccountCheck(address)
+  template ecsEIP2929(address): auto =
+    let gasCost = k.cpt.gasEip2929AccountCheck(address)
+    ? k.cpt.opcodeGasCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
+    k.cpt.getCodeSize(address)
 
-  ? cpt.opcodeGasCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP2929")
-  cpt.stack.lsTop cpt.getCodeSize(address)
-  ok()
+  k.cpt.stack.unaryAddress(ecsEIP2929)
 
 # -----------
 
@@ -243,25 +229,17 @@ proc returnDataCopyOp (k: var VmCtx): EvmResultVoid =
 
 proc extCodeHashOp (k: var VmCtx): EvmResultVoid =
   ## 0x3f, Returns the keccak256 hash of a contract’s code
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    address = cpt.stack.lsPeekAddress(^1)
-
-  cpt.stack.lsTop cpt.getCodeHash(address)
-  ok()
+  template ech256(address): auto =
+    k.cpt.getCodeHash(address)
+  k.cpt.stack.unaryAddress(ech256)
 
 proc extCodeHashEIP2929Op (k: var VmCtx): EvmResultVoid =
   ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    address = cpt.stack.lsPeekAddress(^1)
-    gasCost = cpt.gasEip2929AccountCheck(address)
-
-  ? cpt.opcodeGasCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
-  cpt.stack.lsTop cpt.getCodeHash(address)
-  ok()
+  template echEIP2929(address): auto =
+    let gasCost = k.cpt.gasEip2929AccountCheck(address)
+    ? k.cpt.opcodeGasCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
+    k.cpt.getCodeHash(address)
+  k.cpt.stack.unaryAddress(echEIP2929)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

@@ -181,23 +181,17 @@ proc mstore8Op (k: var VmCtx): EvmResultVoid =
 
 proc sloadOp (k: var VmCtx): EvmResultVoid =
   ## 0x54, Load word from storage.
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    slot = cpt.stack.lsPeekInt(^1)
-  cpt.stack.lsTop cpt.getStorage(slot)
-  ok()
+  template sload256(top, slot, conv) =
+    top = k.cpt.getStorage(slot)
+  k.cpt.stack.unaryWithTop(sload256)
 
 proc sloadEIP2929Op (k: var VmCtx): EvmResultVoid =
   ## 0x54, EIP2929: Load word from storage for Berlin and later
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    slot = cpt.stack.lsPeekInt(^1)
-    gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
-  ? cpt.opcodeGasCost(Sload, gasCost, reason = "sloadEIP2929")
-  cpt.stack.lsTop cpt.getStorage(slot)
-  ok()
+  template sloadEIP2929(top, slot, conv) =
+    let gasCost = k.cpt.gasEip2929AccountCheck(k.cpt.msg.contractAddress, slot)
+    ? k.cpt.opcodeGasCost(Sload, gasCost, reason = "sloadEIP2929")
+    top = k.cpt.getStorage(slot)
+  k.cpt.stack.unaryWithTop(sloadEIP2929)
 
 # -------
 

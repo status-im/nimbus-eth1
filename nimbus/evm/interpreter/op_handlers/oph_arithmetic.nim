@@ -39,106 +39,60 @@ func slt(x, y: UInt256): bool =
 
 proc addOp (k: var VmCtx): EvmResultVoid =
   ## 0x01, Addition
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(lhs + rhs)
-  ok()
+  k.cpt.stack.binaryOp(`+`)
 
 proc mulOp(k: var VmCtx): EvmResultVoid =
   ## 0x02, Multiplication
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(lhs * rhs)
-  ok()
+  k.cpt.stack.binaryOp(`*`)
 
 proc subOp(k: var VmCtx): EvmResultVoid =
   ## 0x03, Substraction
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(lhs - rhs)
-  ok()
+  k.cpt.stack.binaryOp(`-`)
 
 proc divideOp(k: var VmCtx): EvmResultVoid =
   ## 0x04, Division
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-    value = if rhs.isZero:
-              # EVM special casing of div by 0
-              zero(UInt256)
-            else:
-              lhs div rhs
+  template div256(top, lhs, rhs) =
+    if rhs.isZero:
+      # EVM special casing of div by 0
+      top = zero(UInt256)
+    else:
+      top = lhs div rhs
 
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop value
-  ok()
+  k.cpt.stack.binaryWithTop(div256)
 
 proc sdivOp(k: var VmCtx): EvmResultVoid =
   ## 0x05, Signed division
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
+  template sdiv256(top, lhs, rhs) =
+    if rhs.isZero.not:
+      var signA, signB: bool
+      extractSign(lhs, signA)
+      extractSign(rhs, signB)
+      top = lhs div rhs
+      setSign(top, signA xor signB)
 
-  var r: UInt256
-  if rhs.isZero.not:
-    var a = lhs
-    var b = rhs
-    var signA, signB: bool
-    extractSign(a, signA)
-    extractSign(b, signB)
-    r = a div b
-    setSign(r, signA xor signB)
-
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(r)
-  ok()
+  k.cpt.stack.binaryWithTop(sdiv256)
 
 proc moduloOp(k: var VmCtx): EvmResultVoid =
   ## 0x06, Modulo
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-    value = if rhs.isZero:
-              zero(UInt256)
-            else:
-              lhs mod rhs
+  template mod256(top, lhs, rhs) =
+    if rhs.isZero:
+      top = zero(UInt256)
+    else:
+      top = lhs mod rhs
 
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop value
-  ok()
+  k.cpt.stack.binaryWithTop(mod256)
 
 proc smodOp(k: var VmCtx): EvmResultVoid =
   ## 0x07, Signed modulo
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
+  template smod256(top, lhs, rhs) =
+    if rhs.isZero.not:
+      var sign: bool      
+      extractSign(rhs, sign)
+      extractSign(lhs, sign)
+      top = lhs mod rhs
+      setSign(top, sign)
 
-  var r: UInt256
-  if rhs.isZero.not:
-    var sign: bool
-    var v = lhs
-    var m = rhs
-    extractSign(m, sign)
-    extractSign(v, sign)
-    r = v mod m
-    setSign(r, sign)
-
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop r
-  ok()
+  k.cpt.stack.binaryWithTop(smod256)
 
 proc addmodOp(k: var VmCtx): EvmResultVoid =
   ## 0x08, Modulo addition
@@ -176,214 +130,152 @@ proc mulmodOp(k: var VmCtx): EvmResultVoid =
 
 proc expOp(k: var VmCtx): EvmResultVoid =
   ## 0x0A, Exponentiation
-  ? k.cpt.stack.lsCheck(2)
-  let
-    base = k.cpt.stack.lsPeekInt(^1)
-    exponent = k.cpt.stack.lsPeekInt(^2)
+  template exp256(top, base, exponent) =
+    ? k.cpt.opcodeGasCost(Exp,
+      k.cpt.gasCosts[Exp].d_handler(exponent),
+      reason = "EXP: exponent bytes")
 
-  ? k.cpt.opcodeGasCost(Exp,
-    k.cpt.gasCosts[Exp].d_handler(exponent),
-    reason = "EXP: exponent bytes")
+    if not base.isZero:
+      top = base.pow(exponent)
+    elif exponent.isZero:
+      # https://github.com/ethereum/yellowpaper/issues/257
+      # https://github.com/ethereum/tests/pull/460
+      # https://github.com/ewasm/evm2wasm/issues/137
+      top = 1.u256
+    else:
+      top = zero(UInt256)
 
-  let value = if not base.isZero:
-                base.pow(exponent)
-              elif exponent.isZero:
-                # https://github.com/ethereum/yellowpaper/issues/257
-                # https://github.com/ethereum/tests/pull/460
-                # https://github.com/ewasm/evm2wasm/issues/137
-                1.u256
-              else:
-                zero(UInt256)
-
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop value
-  ok()
+  k.cpt.stack.binaryWithTop(exp256)
 
 proc signExtendOp(k: var VmCtx): EvmResultVoid =
   ## 0x0B, Sign extend
   ## Extend length of two’s complement signed integer.
-  ? k.cpt.stack.lsCheck(2)
-  let
-    bits = k.cpt.stack.lsPeekInt(^1)
-    value = k.cpt.stack.lsPeekInt(^2)
-
-  var res: UInt256
-  if bits <= 31.u256:
-    let
-      one = 1.u256
-      testBit = bits.truncate(int) * 8 + 7
-      bitPos = one shl testBit
-      mask = bitPos - one
-    if not isZero(value and bitPos):
-      res = value or (not mask)
+  template se256(top, bits, value) =
+    const one = 1.u256
+    if bits <= 31.u256:
+      let        
+        testBit = bits.truncate(int) * 8 + 7
+        bitPos = one shl testBit
+        mask = bitPos - one
+      if not isZero(value and bitPos):
+        top = value or (not mask)
+      else:
+        top = value and mask
     else:
-      res = value and mask
-  else:
-    res = value
+      top = value
 
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop res
-  ok()
+  k.cpt.stack.binaryWithTop(se256)
 
 proc ltOp(k: var VmCtx): EvmResultVoid =
   ## 0x10, Less-than comparison
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop((lhs < rhs).uint.u256)
-  ok()
+  template lt256(lhs, rhs): auto =
+    (lhs < rhs).uint.u256
+  k.cpt.stack.binaryOp(lt256)
 
 proc gtOp(k: var VmCtx): EvmResultVoid =
   ## 0x11, Greater-than comparison
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop((lhs > rhs).uint.u256)
-  ok()
+  template gt256(lhs, rhs): auto =
+    (lhs > rhs).uint.u256
+  k.cpt.stack.binaryOp(gt256)
 
 proc sltOp(k: var VmCtx): EvmResultVoid =
   ## 0x12, Signed less-than comparison
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(slt(lhs, rhs).uint.u256)
-  ok()
+  template slt256(lhs, rhs): auto =
+    slt(lhs, rhs).uint.u256
+  k.cpt.stack.binaryOp(slt256)
 
 proc sgtOp(k: var VmCtx): EvmResultVoid =
   ## 0x13, Signed greater-than comparison
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
   # Arguments are swapped and SLT is used.
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(slt(rhs, lhs).uint.u256)
-  ok()
+  template sgt256(lhs, rhs): auto =
+    slt(rhs, lhs).uint.u256
+  k.cpt.stack.binaryOp(sgt256)
 
 proc eqOp(k: var VmCtx): EvmResultVoid =
   ## 0x14, Equality comparison
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop((lhs == rhs).uint.u256)
-  ok()
+  template eq256(lhs, rhs): auto =
+    (lhs == rhs).uint.u256
+  k.cpt.stack.binaryOp(eq256)
 
 proc isZeroOp(k: var VmCtx): EvmResultVoid =
   ## 0x15, Check if zero
-  let value = ? k.cpt.stack.peekInt()
-  k.cpt.stack.lsTop(value.isZero.uint.u256)
-  ok()
+  template zero256(value): auto =
+    value.isZero.uint.u256
+  k.cpt.stack.unaryOp(zero256)
 
 proc andOp(k: var VmCtx): EvmResultVoid =
   ## 0x16, Bitwise AND
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(lhs and rhs)
-  ok()
+  k.cpt.stack.binaryOp(`and`)
 
 proc orOp(k: var VmCtx): EvmResultVoid =
   ## 0x17, Bitwise OR
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(lhs or rhs)
-  ok()
+  k.cpt.stack.binaryOp(`or`)
 
 proc xorOp(k: var VmCtx): EvmResultVoid =
   ## 0x18, Bitwise XOR
-  ? k.cpt.stack.lsCheck(2)
-  let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop(lhs xor rhs)
-  ok()
+  k.cpt.stack.binaryOp(`xor`)
 
 proc notOp(k: var VmCtx): EvmResultVoid =
   ## 0x19, Check if zero
-  let value = ? k.cpt.stack.peekInt()
-  k.cpt.stack.lsTop(value.not)
-  ok()
+  k.cpt.stack.unaryOp(`not`)
 
 proc byteOp(k: var VmCtx): EvmResultVoid =
   ## 0x20, Retrieve single byte from word.
-  ? k.cpt.stack.lsCheck(2)
-  let
-    position = k.cpt.stack.lsPeekInt(^1)
-    value = k.cpt.stack.lsPeekInt(^2)
-    val = if position >= 32.u256:
-            zero(UInt256)
-          else:
-            let pos = position.truncate(int)
-            when system.cpuEndian == bigEndian:
-              cast[array[32, byte]](value)[pos].u256
-            else:
-              cast[array[32, byte]](value)[31 - pos].u256
+  template byte256(top, position, value) =
+    if position >= 32.u256:
+      top = zero(UInt256)
+    else:
+      let pos = position.truncate(int)
+      when system.cpuEndian == bigEndian:
+        top = cast[array[32, byte]](value)[pos].u256
+      else:
+        top = cast[array[32, byte]](value)[31 - pos].u256
 
-  k.cpt.stack.lsShrink(1)
-  k.cpt.stack.lsTop val
-  ok()
+  k.cpt.stack.binaryWithTop(byte256)
 
 # Constantinople's new opcodes
 
 proc shlOp(k: var VmCtx): EvmResultVoid =
-  ? k.cpt.stack.lsCheck(2)
-  let
-    shiftLen = k.cpt.stack.lsPeekSafeInt(^1)
-    num = k.cpt.stack.lsPeekInt(^2)
+  ## 0x1b, Shift left
+  template shl256(top, lhs, num) =
+    let shiftLen = lhs.safeInt
+    if shiftLen >= 256:
+      top = 0.u256
+    else:
+      top = num shl shiftLen
 
-  k.cpt.stack.lsShrink(1)
-  if shiftLen >= 256:
-    k.cpt.stack.lsTop 0
-  else:
-    k.cpt.stack.lsTop(num shl shiftLen)
-  ok()
+  k.cpt.stack.binaryWithTop(shl256)
 
 proc shrOp(k: var VmCtx): EvmResultVoid =
-  ? k.cpt.stack.lsCheck(2)
-  let
-    shiftLen = k.cpt.stack.lsPeekSafeInt(^1)
-    num = k.cpt.stack.lsPeekInt(^2)
+  ## 0x1c, Shift right logical
+  template shr256(top, lhs, num) =
+    let shiftLen = lhs.safeInt
+    if shiftLen >= 256:
+      top = 0.u256
+    else:
+      # uint version of `shr`
+      top = num shr shiftLen
 
-  k.cpt.stack.lsShrink(1)
-  if shiftLen >= 256:
-    k.cpt.stack.lsTop 0
-  else:
-    # uint version of `shr`
-    k.cpt.stack.lsTop(num shr shiftLen)
-  ok()
+  k.cpt.stack.binaryWithTop(shr256)
 
 proc sarOp(k: var VmCtx): EvmResultVoid =
-  ? k.cpt.stack.lsCheck(2)
-  let
-    shiftLen = k.cpt.stack.lsPeekSafeInt(^1)
-    num256 = k.cpt.stack.lsPeekInt(^2)
-    num = cast[Int256](num256)
+  ## 0x1d, Shift right arithmetic
+  template sar256(top, lhs, num256) =
+    let
+      shiftLen = lhs.safeInt
+      num = cast[Int256](num256)
 
-  k.cpt.stack.lsShrink(1)
-  if shiftLen >= 256:
-    if num.isNegative:
-      k.cpt.stack.lsTop(cast[UInt256]((-1).i256))
+    if shiftLen >= 256:
+      if num.isNegative:
+        top = cast[UInt256]((-1).i256)
+      else:
+        top = 0.u256
     else:
-      k.cpt.stack.lsTop 0
-  else:
-    # int version of `shr` then force the result
-    # into uint256
-    k.cpt.stack.lsTop(cast[UInt256](num shr shiftLen))
-  ok()
+      # int version of `shr` then force the result
+      # into uint256
+      top = cast[UInt256](num shr shiftLen)
+
+  k.cpt.stack.binaryWithTop(sar256)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

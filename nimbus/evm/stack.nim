@@ -216,3 +216,42 @@ func lsPeekTopic*(stack: EvmStack, i: BackwardsIndex): EvmStackBytes32 =
 
 func lsShrink*(stack: EvmStack, x: int) =
   stack.values.setLen(stack.values.len - x)
+
+template binaryOp*(stack: EvmStack, binOp): EvmResultVoid =
+  if stack.values.len >= 2:
+    stack.values[^2] = binOp(stack.values[^1], stack.values[^2])
+    stack.values.setLen(stack.values.len - 1)
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+
+template unaryOp*(stack: EvmStack, unOp): EvmResultVoid =
+  if stack.values.len >= 1:
+    stack.values[^1] = unOp(stack.values[^1])
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+
+template binaryWithTop*(stack: EvmStack, binOp): EvmResultVoid =
+  if stack.values.len >= 2:
+    binOp(stack.values[^2], stack.values[^1], stack.values[^2])
+    stack.values.setLen(stack.values.len - 1)
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+
+template unaryWithTop*(stack: EvmStack, unOp): EvmResultVoid =
+  if stack.values.len >= 1:
+    unOp(stack.values[^1], stack.values[^1], toStackElem)
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+
+template unaryAddress*(stack: EvmStack, unOp): EvmResultVoid =
+  if stack.values.len >= 1:
+    let address = fromStackElem(stack.values[^1], EthAddress)
+    toStackElem(unOp(address), stack.values[^1])
+    EvmResultVoid.ok()
+  else:
+    EvmResultVoid.err(stackErr(StackInsufficient))
+    
