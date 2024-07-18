@@ -48,19 +48,21 @@ proc setCode*(accState: var AccountState, code: seq[byte]) =
 # World State definition
 
 type
-  AccountHash = KeccakHash
+  AddressHash = KeccakHash
   SlotKeyHash = KeccakHash
 
   WorldStateRef* = ref object
+    accountKeyPreImages: TableRef[AddressHash, EthAddress]
     accountsTrie: HexaryTrie
-    storageTries: TableRef[AccountHash, HexaryTrie]
+    storageTries: TableRef[AddressHash, HexaryTrie]
     storageDb: TrieDatabaseRef
-    bytecodeDb: TrieDatabaseRef # maps AccountHash -> seq[byte]
+    bytecodeDb: TrieDatabaseRef # maps AddressHash -> seq[byte]
 
 proc init*(T: type WorldStateRef, db: DatabaseRef): T =
   WorldStateRef(
+    accountKeyPreImages: newTable[AddressHash, EthAddress](),
     accountsTrie: initHexaryTrie(db.getAccountsBackend(), isPruning = false),
-    storageTries: newTable[AccountHash, HexaryTrie](),
+    storageTries: newTable[AddressHash, HexaryTrie](),
     storageDb: db.getStorageBackend(),
     bytecodeDb: db.getBytecodeBackend(),
   )
@@ -68,11 +70,14 @@ proc init*(T: type WorldStateRef, db: DatabaseRef): T =
 template stateRoot*(state: WorldStateRef): KeccakHash =
   state.accountsTrie.rootHash()
 
-template toAccountKey(address: EthAddress): AccountHash =
+template toAccountKey(address: EthAddress): AddressHash =
   keccakHash(address)
 
 template toStorageKey(slotKey: UInt256): SlotKeyHash =
   keccakHash(toBytesBE(slotKey))
+
+proc getAccountKeyPreImages(state: WorldStateRef): TableRef[AddressHash, EthAddress] =
+  state.accountKeyPreImages
 
 proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
   let accountKey = toAccountKey(address)
@@ -111,6 +116,9 @@ proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountSta
       accountToSave.codeHash = keccakHash(accState.code)
 
     state.accountsTrie.put(accountKey.data, rlp.encode(accountToSave))
+
+    # TODO: Cleanup the preimages between each transaction or store them in the database
+    state.accountKeyPreImages[accountKey] = address
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 

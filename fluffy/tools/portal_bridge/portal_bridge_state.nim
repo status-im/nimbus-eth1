@@ -17,21 +17,31 @@ import
   eth/common/[eth_types, eth_types_rlp],
   ../../../nimbus/common/chain_config,
   ../../rpc/rpc_calls/rpc_trace_calls,
+  ../../network/state/state_content,
   ./state_bridge/[database, state_diff, world_state_helper],
   ./[portal_bridge_conf, portal_bridge_common]
 
-type BlockData = object
+type BlockDataRef = ref object
   blockNumber: uint64
   blockObject: BlockObject
   stateDiffs: seq[StateDiffRef]
   uncleBlocks: seq[BlockObject]
 
+type BlockOffersRef = ref object
+  blockNumber: uint64
+  accountTrieOffers: seq[(AccountTrieNodeKey, AccountTrieNodeOffer)]
+  contractTrieOffers: seq[(ContractTrieNodeKey, ContractTrieNodeOffer)]
+  contractCodeOffers: seq[(ContractCodeKey, ContractCodeOffer)]
+
 proc runBackfillCollectBlockDataLoop(
-    blockDataQueue: AsyncQueue[BlockData],
+    blockDataQueue: AsyncQueue[BlockDataRef],
     web3Client: RpcClient,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
-  debug "Starting state backfill collect block data loop"
+  info "Starting state backfill collect block data loop"
+
+  if web3Client of RpcHttpClient:
+    warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
 
   var currentBlockNumber = startBlockNumber
 
@@ -75,20 +85,23 @@ proc runBackfillCollectBlockDataLoop(
     if uncleBlocks.len() < uncleBlockRequests.len():
       continue
 
-    let blockData = BlockData(
-      blockNumber: currentBlockNumber,
-      blockObject: blockObject,
-      stateDiffs: stateDiffs,
-      uncleBlocks: uncleBlocks,
+    await blockDataQueue.addLast(
+      BlockDataRef(
+        blockNumber: currentBlockNumber,
+        blockObject: blockObject,
+        stateDiffs: stateDiffs,
+        uncleBlocks: uncleBlocks,
+      )
     )
-    await blockDataQueue.addLast(blockData)
 
     inc currentBlockNumber
 
-proc runBackfillBuildStateLoop(
-    blockDataQueue: AsyncQueue[BlockData], stateDir: string
+proc runBackfillBuildBlockOffersLoop(
+    blockDataQueue: AsyncQueue[BlockDataRef],
+    blockOffersQueue: AsyncQueue[BlockOffersRef],
+    stateDir: string,
 ) {.async: (raises: [CancelledError]).} =
-  debug "Starting state backfill build state loop"
+  info "Starting state backfill build block offers loop"
 
   let db = DatabaseRef.init(stateDir).get()
   defer:
@@ -128,13 +141,15 @@ proc runBackfillBuildStateLoop(
       blockNumber = blockData.blockNumber
 
 proc runBackfillMetricsLoop(
-    blockDataQueue: AsyncQueue[BlockData]
+    blockDataQueue: AsyncQueue[BlockDataRef],
+    blockOffersQueue: AsyncQueue[BlockOffersRef],
 ) {.async: (raises: [CancelledError]).} =
   debug "Starting state backfill metrics loop"
 
   while true:
     await sleepAsync(10.seconds)
-    info "Block data queue length: ", queueLen = blockDataQueue.len()
+    info "Block data queue length: ", blockDataQueueLen = blockDataQueue.len()
+    info "Block offers queue length: ", blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
   let
@@ -154,20 +169,26 @@ proc runState*(config: PortalBridgeConf) =
   # inside the bridge, and getting the blocks from era1 files.
 
   if config.backfillState:
-    const startBlockNumber = 1
-      # This will become a parameter in the config once we can support it
+    const
+      startBlockNumber = 1
+        # This will become a parameter in the config once we can support it
+      bufferSize = 1000 # Should we make this configurable?
+
     info "Starting state backfill from block number: ", startBlockNumber
 
-    const bufferSize = 1000 # Should we make this configurable?
-    let blockDataQueue = newAsyncQueue[BlockData](bufferSize)
+    let
+      blockDataQueue = newAsyncQueue[BlockDataRef](bufferSize)
+      blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
     asyncSpawn runBackfillCollectBlockDataLoop(
       blockDataQueue, web3Client, startBlockNumber
     )
 
-    asyncSpawn runBackfillBuildStateLoop(blockDataQueue, config.stateDir.string)
+    asyncSpawn runBackfillBuildBlockOffersLoop(
+      blockDataQueue, blockOffersQueue, config.stateDir.string
+    )
 
-    asyncSpawn runBackfillMetricsLoop(blockDataQueue)
+    asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)
 
   while true:
     poll()
