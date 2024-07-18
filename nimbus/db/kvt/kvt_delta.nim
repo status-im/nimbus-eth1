@@ -62,19 +62,19 @@ proc deltaPersistent*(
 
   # Update forked balancers here do that errors are detected early (if any.)
   if 0 < db.nForked:
-    var rollback: seq[(KvtDbRef,LayerRef)]
     let rev = db.revFilter(db.balancer).valueOr:
       return err(error[1])
-    # Sharing the `rev` object is safe as it is read-only.
-    for w in db.forked:
-      # Note that `deltaMerge()` will return the 1st arg if the 2nd is `nil`
-      let filter = db.deltaMerge(w.balancer, rev).valueOr:
-        # Oops, roll back and return error
-        for (d,f) in rollback:
-          d.balancer = f
-        return err(error[1])
-      rollback.add (w, w.balancer)
-      w.balancer = filter
+    if 0  < rev.sTab.len: # Can an empty `rev` happen at all?
+      var unsharedRevOk = true
+      for w in db.forked:
+        if not w.db.balancer.isValid:
+          unsharedRevOk = false
+        # The `rev` filter can be modified if one can make sure that it is
+        # not shared (i.e. only previously merged into the w.db.balancer.)
+        # Note that it is trivially true for a single fork.
+        let modLowerOk = w.isLast and unsharedRevOk
+        w.db.balancer = deltaMerge(
+          w.db.balancer, modUpperOk=false, rev, modLowerOk=modLowerOk)
 
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
