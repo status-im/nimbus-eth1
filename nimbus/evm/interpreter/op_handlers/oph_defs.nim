@@ -21,12 +21,11 @@ import
   ../op_codes
 
 type
-  VmCtx* = tuple
-    cpt: Computation          ## computation text
+  VmCpt* = Computation        ## computation text
 
   VmOpFn* =                   ## general op handler, return codes are passed
-                              ## back via argument descriptor ``k``
-    proc(k: var VmCtx): EvmResultVoid {.nimcall, gcsafe, raises:[].}
+                              ## back via argument descriptor ``cpt``
+    proc(cpt: VmCpt): EvmResultVoid {.nimcall, gcsafe, raises:[].}
 
   VmOpExec* = tuple           ## op code handler entry
     opCode: Op                ## index back-reference
@@ -41,7 +40,7 @@ type
 
 const
   VmOpIgnore*: VmOpFn =      ## No operation, placeholder function
-    proc(k: var VmCtx): EvmResultVoid = ok()
+    proc(cpt: VmCpt): EvmResultVoid = ok()
 
   # similar to: toSeq(Fork).mapIt({it}).foldl(a+b)
   VmOpAllForks* =

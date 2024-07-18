@@ -37,19 +37,19 @@ func slt(x, y: UInt256): bool =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc addOp (k: var VmCtx): EvmResultVoid =
+proc addOp(cpt: VmCpt): EvmResultVoid =
   ## 0x01, Addition
-  k.cpt.stack.binaryOp(`+`)
+  cpt.stack.binaryOp(`+`)
 
-proc mulOp(k: var VmCtx): EvmResultVoid =
+proc mulOp(cpt: VmCpt): EvmResultVoid =
   ## 0x02, Multiplication
-  k.cpt.stack.binaryOp(`*`)
+  cpt.stack.binaryOp(`*`)
 
-proc subOp(k: var VmCtx): EvmResultVoid =
+proc subOp(cpt: VmCpt): EvmResultVoid =
   ## 0x03, Substraction
-  k.cpt.stack.binaryOp(`-`)
+  cpt.stack.binaryOp(`-`)
 
-proc divideOp(k: var VmCtx): EvmResultVoid =
+proc divideOp(cpt: VmCpt): EvmResultVoid =
   ## 0x04, Division
   template div256(top, lhs, rhs) =
     if rhs.isZero:
@@ -58,9 +58,9 @@ proc divideOp(k: var VmCtx): EvmResultVoid =
     else:
       top = lhs div rhs
 
-  k.cpt.stack.binaryWithTop(div256)
+  cpt.stack.binaryWithTop(div256)
 
-proc sdivOp(k: var VmCtx): EvmResultVoid =
+proc sdivOp(cpt: VmCpt): EvmResultVoid =
   ## 0x05, Signed division
   template sdiv256(top, lhs, rhs) =
     if rhs.isZero.not:
@@ -70,9 +70,9 @@ proc sdivOp(k: var VmCtx): EvmResultVoid =
       top = lhs div rhs
       setSign(top, signA xor signB)
 
-  k.cpt.stack.binaryWithTop(sdiv256)
+  cpt.stack.binaryWithTop(sdiv256)
 
-proc moduloOp(k: var VmCtx): EvmResultVoid =
+proc moduloOp(cpt: VmCpt): EvmResultVoid =
   ## 0x06, Modulo
   template mod256(top, lhs, rhs) =
     if rhs.isZero:
@@ -80,9 +80,9 @@ proc moduloOp(k: var VmCtx): EvmResultVoid =
     else:
       top = lhs mod rhs
 
-  k.cpt.stack.binaryWithTop(mod256)
+  cpt.stack.binaryWithTop(mod256)
 
-proc smodOp(k: var VmCtx): EvmResultVoid =
+proc smodOp(cpt: VmCpt): EvmResultVoid =
   ## 0x07, Signed modulo
   template smod256(top, lhs, rhs) =
     if rhs.isZero.not:
@@ -92,47 +92,47 @@ proc smodOp(k: var VmCtx): EvmResultVoid =
       top = lhs mod rhs
       setSign(top, sign)
 
-  k.cpt.stack.binaryWithTop(smod256)
+  cpt.stack.binaryWithTop(smod256)
 
-proc addmodOp(k: var VmCtx): EvmResultVoid =
+proc addmodOp(cpt: VmCpt): EvmResultVoid =
   ## 0x08, Modulo addition
   ## Intermediate computations do not roll over at 2^256
-  ? k.cpt.stack.lsCheck(3)
+  ? cpt.stack.lsCheck(3)
   let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-    modulus = k.cpt.stack.lsPeekInt(^3)
+    lhs = cpt.stack.lsPeekInt(^1)
+    rhs = cpt.stack.lsPeekInt(^2)
+    modulus = cpt.stack.lsPeekInt(^3)
     value = if modulus.isZero:
               zero(UInt256)
             else:
               addmod(lhs, rhs, modulus)
 
-  k.cpt.stack.lsShrink(2)
-  k.cpt.stack.lsTop value
+  cpt.stack.lsShrink(2)
+  cpt.stack.lsTop value
   ok()
 
-proc mulmodOp(k: var VmCtx): EvmResultVoid =
+proc mulmodOp(cpt: VmCpt): EvmResultVoid =
   ## 0x09, Modulo multiplication
   ## Intermediate computations do not roll over at 2^256
-  ? k.cpt.stack.lsCheck(3)
+  ? cpt.stack.lsCheck(3)
   let
-    lhs = k.cpt.stack.lsPeekInt(^1)
-    rhs = k.cpt.stack.lsPeekInt(^2)
-    modulus = k.cpt.stack.lsPeekInt(^3)
+    lhs = cpt.stack.lsPeekInt(^1)
+    rhs = cpt.stack.lsPeekInt(^2)
+    modulus = cpt.stack.lsPeekInt(^3)
     value = if modulus.isZero:
               zero(UInt256)
             else:
               mulmod(lhs, rhs, modulus)
 
-  k.cpt.stack.lsShrink(2)
-  k.cpt.stack.lsTop value
+  cpt.stack.lsShrink(2)
+  cpt.stack.lsTop value
   ok()
 
-proc expOp(k: var VmCtx): EvmResultVoid =
+proc expOp(cpt: VmCpt): EvmResultVoid =
   ## 0x0A, Exponentiation
   template exp256(top, base, exponent) =
-    ? k.cpt.opcodeGasCost(Exp,
-      k.cpt.gasCosts[Exp].d_handler(exponent),
+    ? cpt.opcodeGasCost(Exp,
+      cpt.gasCosts[Exp].d_handler(exponent),
       reason = "EXP: exponent bytes")
 
     if not base.isZero:
@@ -145,9 +145,9 @@ proc expOp(k: var VmCtx): EvmResultVoid =
     else:
       top = zero(UInt256)
 
-  k.cpt.stack.binaryWithTop(exp256)
+  cpt.stack.binaryWithTop(exp256)
 
-proc signExtendOp(k: var VmCtx): EvmResultVoid =
+proc signExtendOp(cpt: VmCpt): EvmResultVoid =
   ## 0x0B, Sign extend
   ## Extend length of two’s complement signed integer.
   template se256(top, bits, value) =
@@ -164,62 +164,62 @@ proc signExtendOp(k: var VmCtx): EvmResultVoid =
     else:
       top = value
 
-  k.cpt.stack.binaryWithTop(se256)
+  cpt.stack.binaryWithTop(se256)
 
-proc ltOp(k: var VmCtx): EvmResultVoid =
+proc ltOp(cpt: VmCpt): EvmResultVoid =
   ## 0x10, Less-than comparison
   template lt256(lhs, rhs): auto =
     (lhs < rhs).uint.u256
-  k.cpt.stack.binaryOp(lt256)
+  cpt.stack.binaryOp(lt256)
 
-proc gtOp(k: var VmCtx): EvmResultVoid =
+proc gtOp(cpt: VmCpt): EvmResultVoid =
   ## 0x11, Greater-than comparison
   template gt256(lhs, rhs): auto =
     (lhs > rhs).uint.u256
-  k.cpt.stack.binaryOp(gt256)
+  cpt.stack.binaryOp(gt256)
 
-proc sltOp(k: var VmCtx): EvmResultVoid =
+proc sltOp(cpt: VmCpt): EvmResultVoid =
   ## 0x12, Signed less-than comparison
   template slt256(lhs, rhs): auto =
     slt(lhs, rhs).uint.u256
-  k.cpt.stack.binaryOp(slt256)
+  cpt.stack.binaryOp(slt256)
 
-proc sgtOp(k: var VmCtx): EvmResultVoid =
+proc sgtOp(cpt: VmCpt): EvmResultVoid =
   ## 0x13, Signed greater-than comparison
   # Arguments are swapped and SLT is used.
   template sgt256(lhs, rhs): auto =
     slt(rhs, lhs).uint.u256
-  k.cpt.stack.binaryOp(sgt256)
+  cpt.stack.binaryOp(sgt256)
 
-proc eqOp(k: var VmCtx): EvmResultVoid =
+proc eqOp(cpt: VmCpt): EvmResultVoid =
   ## 0x14, Equality comparison
   template eq256(lhs, rhs): auto =
     (lhs == rhs).uint.u256
-  k.cpt.stack.binaryOp(eq256)
+  cpt.stack.binaryOp(eq256)
 
-proc isZeroOp(k: var VmCtx): EvmResultVoid =
+proc isZeroOp(cpt: VmCpt): EvmResultVoid =
   ## 0x15, Check if zero
   template zero256(value): auto =
     value.isZero.uint.u256
-  k.cpt.stack.unaryOp(zero256)
+  cpt.stack.unaryOp(zero256)
 
-proc andOp(k: var VmCtx): EvmResultVoid =
+proc andOp(cpt: VmCpt): EvmResultVoid =
   ## 0x16, Bitwise AND
-  k.cpt.stack.binaryOp(`and`)
+  cpt.stack.binaryOp(`and`)
 
-proc orOp(k: var VmCtx): EvmResultVoid =
+proc orOp(cpt: VmCpt): EvmResultVoid =
   ## 0x17, Bitwise OR
-  k.cpt.stack.binaryOp(`or`)
+  cpt.stack.binaryOp(`or`)
 
-proc xorOp(k: var VmCtx): EvmResultVoid =
+proc xorOp(cpt: VmCpt): EvmResultVoid =
   ## 0x18, Bitwise XOR
-  k.cpt.stack.binaryOp(`xor`)
+  cpt.stack.binaryOp(`xor`)
 
-proc notOp(k: var VmCtx): EvmResultVoid =
+proc notOp(cpt: VmCpt): EvmResultVoid =
   ## 0x19, Check if zero
-  k.cpt.stack.unaryOp(`not`)
+  cpt.stack.unaryOp(`not`)
 
-proc byteOp(k: var VmCtx): EvmResultVoid =
+proc byteOp(cpt: VmCpt): EvmResultVoid =
   ## 0x20, Retrieve single byte from word.
   template byte256(top, position, value) =
     if position >= 32.u256:
@@ -231,11 +231,11 @@ proc byteOp(k: var VmCtx): EvmResultVoid =
       else:
         top = cast[array[32, byte]](value)[31 - pos].u256
 
-  k.cpt.stack.binaryWithTop(byte256)
+  cpt.stack.binaryWithTop(byte256)
 
 # Constantinople's new opcodes
 
-proc shlOp(k: var VmCtx): EvmResultVoid =
+proc shlOp(cpt: VmCpt): EvmResultVoid =
   ## 0x1b, Shift left
   template shl256(top, lhs, num) =
     let shiftLen = lhs.safeInt
@@ -244,9 +244,9 @@ proc shlOp(k: var VmCtx): EvmResultVoid =
     else:
       top = num shl shiftLen
 
-  k.cpt.stack.binaryWithTop(shl256)
+  cpt.stack.binaryWithTop(shl256)
 
-proc shrOp(k: var VmCtx): EvmResultVoid =
+proc shrOp(cpt: VmCpt): EvmResultVoid =
   ## 0x1c, Shift right logical
   template shr256(top, lhs, num) =
     let shiftLen = lhs.safeInt
@@ -256,9 +256,9 @@ proc shrOp(k: var VmCtx): EvmResultVoid =
       # uint version of `shr`
       top = num shr shiftLen
 
-  k.cpt.stack.binaryWithTop(shr256)
+  cpt.stack.binaryWithTop(shr256)
 
-proc sarOp(k: var VmCtx): EvmResultVoid =
+proc sarOp(cpt: VmCpt): EvmResultVoid =
   ## 0x1d, Shift right arithmetic
   template sar256(top, lhs, num256) =
     let
@@ -275,7 +275,7 @@ proc sarOp(k: var VmCtx): EvmResultVoid =
       # into uint256
       top = cast[UInt256](num shr shiftLen)
 
-  k.cpt.stack.binaryWithTop(sar256)
+  cpt.stack.binaryWithTop(sar256)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

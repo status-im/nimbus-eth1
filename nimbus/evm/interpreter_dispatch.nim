@@ -38,10 +38,8 @@ when optimizationCondition:
   # this is a top level pragma since nim 1.6.16
   {.optimization: speed.}
 
-proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool): EvmResultVoid =
+proc selectVM(c: VmCpt, fork: EVMFork, shouldPrepareTracer: bool): EvmResultVoid =
   ## Op code execution handler main loop.
-  var desc: VmCtx
-  desc.cpt = c
 
   # It's important not to re-prepare the tracer after
   # an async operation, only after a call/create.
@@ -99,12 +97,12 @@ proc selectVM(c: Computation, fork: EVMFork, shouldPrepareTracer: bool): EvmResu
         else:
           {.warning: "*** Unsupported OS => no handler switch optimisation".}
 
-      genOptimisedDispatcher(fork, c.instr, desc)
+      genOptimisedDispatcher(fork, c.instr, c)
 
     else:
       {.warning: "*** low memory compiler mode => program will be slow".}
 
-      genLowMemDispatcher(fork, c.instr, desc)
+      genLowMemDispatcher(fork, c.instr, c)
 
   ok()
 

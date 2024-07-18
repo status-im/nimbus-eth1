@@ -120,19 +120,17 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc popOp(k: var VmCtx): EvmResultVoid =
+proc popOp(cpt: VmCpt): EvmResultVoid =
   ## 0x50, Remove item from stack.
-  k.cpt.stack.popInt.isOkOr:
+  cpt.stack.popInt.isOkOr:
     return err(error)
   ok()
 
-proc mloadOp (k: var VmCtx): EvmResultVoid =
+proc mloadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x51, Load word from memory
 
-  ? k.cpt.stack.lsCheck(1)
-  let
-    cpt = k.cpt
-    memPos = cpt.stack.lsPeekMemRef(^1)
+  ? cpt.stack.lsCheck(1)
+  let memPos = cpt.stack.lsPeekMemRef(^1)
 
   ? cpt.opcodeGasCost(Mload,
     cpt.gasCosts[Mload].m_handler(cpt.memory.len, memPos, 32),
@@ -143,11 +141,10 @@ proc mloadOp (k: var VmCtx): EvmResultVoid =
   ok()
 
 
-proc mstoreOp (k: var VmCtx): EvmResultVoid =
+proc mstoreOp(cpt: VmCpt): EvmResultVoid =
   ## 0x52, Save word to memory
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt    = k.cpt
     memPos = cpt.stack.lsPeekMemRef(^1)
     value  = cpt.stack.lsPeekInt(^2)
   cpt.stack.lsShrink(2)
@@ -160,11 +157,10 @@ proc mstoreOp (k: var VmCtx): EvmResultVoid =
   cpt.memory.write(memPos, value.toBytesBE)
 
 
-proc mstore8Op (k: var VmCtx): EvmResultVoid =
+proc mstore8Op(cpt: VmCpt): EvmResultVoid =
   ## 0x53, Save byte to memory
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt    = k.cpt
     memPos = cpt.stack.lsPeekMemRef(^1)
     value  = cpt.stack.lsPeekInt(^2)
   cpt.stack.lsShrink(2)
@@ -179,27 +175,26 @@ proc mstore8Op (k: var VmCtx): EvmResultVoid =
 
 # -------
 
-proc sloadOp (k: var VmCtx): EvmResultVoid =
+proc sloadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x54, Load word from storage.
   template sload256(top, slot, conv) =
-    top = k.cpt.getStorage(slot)
-  k.cpt.stack.unaryWithTop(sload256)
+    top = cpt.getStorage(slot)
+  cpt.stack.unaryWithTop(sload256)
 
-proc sloadEIP2929Op (k: var VmCtx): EvmResultVoid =
+proc sloadEIP2929Op(cpt: VmCpt): EvmResultVoid =
   ## 0x54, EIP2929: Load word from storage for Berlin and later
   template sloadEIP2929(top, slot, conv) =
-    let gasCost = k.cpt.gasEip2929AccountCheck(k.cpt.msg.contractAddress, slot)
-    ? k.cpt.opcodeGasCost(Sload, gasCost, reason = "sloadEIP2929")
-    top = k.cpt.getStorage(slot)
-  k.cpt.stack.unaryWithTop(sloadEIP2929)
+    let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
+    ? cpt.opcodeGasCost(Sload, gasCost, reason = "sloadEIP2929")
+    top = cpt.getStorage(slot)
+  cpt.stack.unaryWithTop(sloadEIP2929)
 
 # -------
 
-proc sstoreOp (k: var VmCtx): EvmResultVoid =
+proc sstoreOp(cpt: VmCpt): EvmResultVoid =
   ## 0x55, Save word to storage.
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt = k.cpt
     slot = cpt.stack.lsPeekInt(^1)
     newValue = cpt.stack.lsPeekInt(^2)
   cpt.stack.lsShrink(2)
@@ -208,11 +203,10 @@ proc sstoreOp (k: var VmCtx): EvmResultVoid =
   sstoreEvmcOrSstore(cpt, slot, newValue)
 
 
-proc sstoreEIP1283Op (k: var VmCtx): EvmResultVoid =
+proc sstoreEIP1283Op(cpt: VmCpt): EvmResultVoid =
   ## 0x55, EIP1283: sstore for Constantinople and later
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt = k.cpt
     slot = cpt.stack.lsPeekInt(^1)
     newValue = cpt.stack.lsPeekInt(^2)
   cpt.stack.lsShrink(2)
@@ -221,11 +215,10 @@ proc sstoreEIP1283Op (k: var VmCtx): EvmResultVoid =
   sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
-proc sstoreEIP2200Op (k: var VmCtx): EvmResultVoid =
+proc sstoreEIP2200Op(cpt: VmCpt): EvmResultVoid =
   ## 0x55, EIP2200: sstore for Istanbul and later
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt = k.cpt
     slot = cpt.stack.lsPeekInt(^1)
     newValue = cpt.stack.lsPeekInt(^2)
   cpt.stack.lsShrink(2)
@@ -239,11 +232,10 @@ proc sstoreEIP2200Op (k: var VmCtx): EvmResultVoid =
   sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
 
 
-proc sstoreEIP2929Op (k: var VmCtx): EvmResultVoid =
+proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
   ## 0x55, EIP2929: sstore for Berlin and later
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt = k.cpt
     slot = cpt.stack.lsPeekInt(^1)
     newValue = cpt.stack.lsPeekInt(^2)
   cpt.stack.lsShrink(2)
@@ -270,60 +262,58 @@ proc sstoreEIP2929Op (k: var VmCtx): EvmResultVoid =
 
 # -------
 
-proc jumpOp (k: var VmCtx): EvmResultVoid =
+proc jumpOp(cpt: VmCpt): EvmResultVoid =
   ## 0x56, Alter the program counter
-  let jumpTarget = ? k.cpt.stack.popInt()
-  jumpImpl(k.cpt, jumpTarget)
+  let jumpTarget = ? cpt.stack.popInt()
+  cpt.jumpImpl(jumpTarget)
 
 
-proc jumpIOp (k: var VmCtx): EvmResultVoid =
+proc jumpIOp(cpt: VmCpt): EvmResultVoid =
   ## 0x57, Conditionally alter the program counter.
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    jumpTarget  = k.cpt.stack.lsPeekInt(^1)
-    testedValue = k.cpt.stack.lsPeekInt(^2)
-  k.cpt.stack.lsShrink(2)
+    jumpTarget  = cpt.stack.lsPeekInt(^1)
+    testedValue = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
 
   if testedValue.isZero:
     return ok()
-  jumpImpl(k.cpt, jumpTarget)
+  cpt.jumpImpl(jumpTarget)
 
-proc pcOp (k: var VmCtx): EvmResultVoid =
+proc pcOp(cpt: VmCpt): EvmResultVoid =
   ## 0x58, Get the value of the program counter prior to the increment
   ##       corresponding to this instruction.
-  k.cpt.stack.push max(k.cpt.code.pc - 1, 0)
+  cpt.stack.push max(cpt.code.pc - 1, 0)
 
-proc msizeOp (k: var VmCtx): EvmResultVoid =
+proc msizeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x59, Get the size of active memory in bytes.
-  k.cpt.stack.push k.cpt.memory.len
+  cpt.stack.push cpt.memory.len
 
-proc gasOp (k: var VmCtx): EvmResultVoid =
+proc gasOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5a, Get the amount of available gas, including the corresponding
   ##       reduction for the cost of this instruction.
-  k.cpt.stack.push k.cpt.gasMeter.gasRemaining
+  cpt.stack.push cpt.gasMeter.gasRemaining
 
-proc jumpDestOp (k: var VmCtx): EvmResultVoid =
+proc jumpDestOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect
   ##       on machine state during execution.
   ok()
 
-proc tloadOp (k: var VmCtx): EvmResultVoid =
+proc tloadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5c, Load word from transient storage.
-  ? k.cpt.stack.lsCheck(1)
+  ? cpt.stack.lsCheck(1)
   let
-    cpt  = k.cpt
     slot = cpt.stack.lsPeekInt(^1)
     val  = cpt.getTransientStorage(slot)
   cpt.stack.lsTop val
   ok()
 
-proc tstoreOp (k: var VmCtx): EvmResultVoid =
+proc tstoreOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5d, Save word to transient storage.
-  ? checkInStaticContext(k.cpt)
+  ? cpt.checkInStaticContext()
 
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt  = k.cpt
     slot = cpt.stack.lsPeekInt(^1)
     val  = cpt.stack.lsPeekInt(^2)
   cpt.stack.lsShrink(2)
@@ -331,11 +321,10 @@ proc tstoreOp (k: var VmCtx): EvmResultVoid =
   cpt.setTransientStorage(slot, val)
   ok()
 
-proc mCopyOp (k: var VmCtx): EvmResultVoid =
+proc mCopyOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5e, Copy memory
-  ? k.cpt.stack.lsCheck(3)
+  ? cpt.stack.lsCheck(3)
   let
-    cpt    = k.cpt
     dstPos = cpt.stack.lsPeekMemRef(^1)
     srcPos = cpt.stack.lsPeekMemRef(^2)
     len    = cpt.stack.lsPeekMemRef(^3)

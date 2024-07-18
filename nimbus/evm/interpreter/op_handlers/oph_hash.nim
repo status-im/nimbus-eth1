@@ -29,11 +29,10 @@ import
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc sha3Op(k: var VmCtx): EvmResultVoid =
+proc sha3Op(cpt: VmCpt): EvmResultVoid =
   ## 0x20, Compute Keccak-256 hash.
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt = k.cpt
     pos = cpt.stack.lsPeekSafeInt(^1)
     len = cpt.stack.lsPeekSafeInt(^2)
   cpt.stack.lsShrink(1)
@@ -51,7 +50,7 @@ proc sha3Op(k: var VmCtx): EvmResultVoid =
   if endRange == -1 or pos >= cpt.memory.len:
     cpt.stack.lsTop(EMPTY_SHA3)
   else:
-    cpt.stack.lsTop keccakHash k.cpt.memory.bytes.toOpenArray(pos, endRange)
+    cpt.stack.lsTop keccakHash cpt.memory.bytes.toOpenArray(pos, endRange)
   ok()
 
 # ------------------------------------------------------------------------------

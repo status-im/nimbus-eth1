@@ -19,7 +19,6 @@ import
 
 type
   OphNumToTextFn* = proc(n: int): string
-  # OpHanldlerImplFn* = proc(k: var VmCtx; n: static int): EvmResultVoid
 
 const
   recForkSet = "VmOpAllForks"
@@ -48,9 +47,9 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
                       body: untyped): untyped =
   ## Generate the equivalent of
   ## ::
-  ##  const <runHandler>: VmOpFn = proc (k: var VmCtx) =
+  ##  const <runHandler>: VmOpFn = proc(cpt: VmCpt) =
   ##    ## <itemInfo(n)>,
-  ##    <body(k,n)>
+  ##    <body(cpt,n)>
   ##
   ## for all `n` in `inxList`
   ##
@@ -61,12 +60,11 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
       fnName = ident(n.runHandler)
       comment = newCommentStmtNode(n.itemInfo)
 
-    # => push##Op: VmOpFn = proc (k: var VmCtx) = ...
+    # => push##Op: VmOpFn = proc(cpt: VmCpt) = ...
     result.add quote do:
-      proc `fnName`(k: var VmCtx): EvmResultVoid =
+      proc `fnName`(cpt: VmCpt): EvmResultVoid =
         `comment`
-        `body`(k,`n`)
-  # echo ">>>", result.repr
+        `body`(cpt,`n`)
 
 
 macro genOphList*(runHandler: static[OphNumToTextFn];
@@ -83,9 +81,7 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
   ##   (opCode: <opCode(n)>,
   ##    forks: VmOpAllForks,
   ##    info: <handlerInfo(n)>,
-  ##    exec: (prep: VmOpIgnore,
-  ##           run: <runHandler(n)>,
-  ##           post: VmOpIgnore))
+  ##    exec: <runHandler(n)>)
   ##
   ## for all `n` in `inxList`
   ##
@@ -113,7 +109,6 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
                    newIdentNode("VmOpExec")),
                  nnkPrefix.newTree(
                    newIdentNode("@"), records))))
-  # echo ">>> ", result.repr
 
 # ------------------------------------------------------------------------------
 # End
