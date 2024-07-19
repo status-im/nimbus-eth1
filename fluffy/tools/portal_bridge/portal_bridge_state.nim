@@ -12,13 +12,15 @@ import
   chronicles,
   chronos,
   stint,
+  # stew/byteutils,
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[eth_types, eth_types_rlp],
   ../../../nimbus/common/chain_config,
+  ../../common/common_utils,
   ../../rpc/rpc_calls/rpc_trace_calls,
   ../../network/state/state_content,
-  ./state_bridge/[database, state_diff, world_state_helper],
+  ./state_bridge/[database, state_diff, world_state_helper, offers_builder],
   ./[portal_bridge_conf, portal_bridge_common]
 
 type BlockDataRef = ref object
@@ -118,6 +120,23 @@ proc runBackfillBuildBlockOffersLoop(
         except CatchableError as e:
           raiseAssert(e.msg) # Should never happen
     ws.applyGenesisAccounts(genesisAccounts)
+
+    let genesisBlockHash = KeccakHash.fromHex(
+      "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
+    )
+
+    var builder = OffersBuilderRef.init(ws, genesisBlockHash)
+    builder.buildBlockOffers()
+
+    await blockOffersQueue.addLast(
+      BlockOffersRef(
+        blockNumber: 0.uint64,
+        accountTrieOffers: builder.getAccountTrieOffers(),
+        contractTrieOffers: builder.getContractTrieOffers(),
+        contractCodeOffers: builder.getContractCodeOffers(),
+      )
+    )
+
     ws
 
   while true:
@@ -130,6 +149,9 @@ proc runBackfillBuildBlockOffersLoop(
     # because the DatabaseRef currently only supports reading and writing to/from
     # a single active transaction.
     db.withTransaction:
+      defer:
+        worldState.clearPreimages()
+
       for stateDiff in blockData.stateDiffs:
         worldState.applyStateDiff(stateDiff)
       let
@@ -139,24 +161,23 @@ proc runBackfillBuildBlockOffersLoop(
           blockData.uncleBlocks.mapIt((EthAddress(it.miner), it.number.uint64))
       worldState.applyBlockRewards(minerData, uncleMinersData)
 
-      for address, proof in worldState.updatedAccountProofs():
-        # echo "Account Address: ", address
-        # echo "Account Proof.len(): ", proof.len()
+      doAssert(blockData.blockObject.stateRoot.bytes() == worldState.stateRoot.data)
+      trace "State diffs successfully applied to block number:",
+        blockNumber = blockData.blockNumber
 
-        for slotHash, storageProof in worldState.updatedStorageProofs(address):
-          debug "Storage SlotHash: ", slotHash
-          debug "Storage Proof.len(): ", storageProofLen = storageProof.len()
-          debug "Storage Proof: ", storageProof
+      var builder = OffersBuilderRef.init(
+        worldState, KeccakHash.fromBytes(blockData.blockObject.hash.bytes())
+      )
+      builder.buildBlockOffers()
 
-      for address, code in worldState.updatedBytecode():
-        debug "Bytecode Address: ", address
-        debug "Bytecode: ", code
-
-      worldState.clearPreimages()
-
-    doAssert(blockData.blockObject.stateRoot.bytes() == worldState.stateRoot.data)
-    trace "State diffs successfully applied to block number:",
-      blockNumber = blockData.blockNumber
+      await blockOffersQueue.addLast(
+        BlockOffersRef(
+          blockNumber: blockData.blockNumber,
+          accountTrieOffers: builder.getAccountTrieOffers(),
+          contractTrieOffers: builder.getContractTrieOffers(),
+          contractCodeOffers: builder.getContractCodeOffers(),
+        )
+      )
 
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockDataRef],
