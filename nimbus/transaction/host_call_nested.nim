@@ -114,9 +114,9 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
 # much stack as they like.
 
 proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
-    # This function must be declared with `{.noinline.}` to make sure it doesn't
-    # contribute to the stack frame of `callEvmcNested` below.
     {.noinline.} =
+  # This function must be declared with `{.noinline.}` to make sure it doesn't
+  # contribute to the stack frame of `callEvmcNested` below.
   # `call` is special.  Most host functions do `flip256` in `evmc_host_glue`
   # and `show` in `host_services`, but `call` needs to minimise C stack used
   # by nested EVM calls.  Just `flip256` in glue's `call` adds a lot of
@@ -138,9 +138,9 @@ proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
 
 proc afterExecEvmcNested(host: TransactionHost, child: Computation,
                          kind: EvmcCallKind): EvmcResult
-    # This function must be declared with `{.noinline.}` to make sure it doesn't
-    # contribute to the stack frame of `callEvmcNested` below.
     {.noinline.} =
+  # This function must be declared with `{.noinline.}` to make sure it doesn't
+  # contribute to the stack frame of `callEvmcNested` below.
   host.computation = host.saveComputation[^1]
   host.saveComputation[^1] = nil
   host.saveComputation.setLen(host.saveComputation.len - 1)
