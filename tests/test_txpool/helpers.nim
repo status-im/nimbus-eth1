@@ -10,7 +10,7 @@
 
 import
   std/[os, strformat, sequtils, strutils, times],
-  ../../nimbus/core/tx_pool/[tx_chain, tx_desc, tx_gauge, tx_item, tx_tabs],
+  ../../nimbus/core/tx_pool/[tx_chain, tx_desc, tx_item, tx_tabs],
   ../../nimbus/core/tx_pool/tx_tasks/[tx_packer, tx_recover],
   ../replay/[pp, undump_blocks_gz],
   chronicles,
@@ -25,14 +25,10 @@ export
   tx_chain.clearAccounts,
   tx_chain.com,
   tx_chain.nextFork,
-  tx_chain.profit,
-  tx_chain.receipts,
-  tx_chain.reward,
   tx_chain.vmState,
   tx_desc.chain,
   tx_desc.txDB,
   tx_desc.verify,
-  tx_gauge,
   tx_packer.packerVmExec,
   tx_recover.recoverItem,
   tx_tabs.TxTabsRef,
