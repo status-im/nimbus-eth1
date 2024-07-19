@@ -7,12 +7,6 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import
-  ./common/common,
-  ./common/genesis,
-  ./common/context
+import ./common/common, ./common/genesis, ./common/context
 
-export
-  common,
-  genesis,
-  context
+export common, genesis, context

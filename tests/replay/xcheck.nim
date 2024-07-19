@@ -8,8 +8,7 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-import
-  unittest2
+import unittest2
 
 # ------------------------------------------------------------------------------
 # Public workflow helpers
@@ -21,7 +20,7 @@ template xCheck*(expr: untyped): untyped =
     check expr
     return
 
-template xCheck*(expr: untyped; ifFalse: untyped): untyped =
+template xCheck*(expr: untyped, ifFalse: untyped): untyped =
   ## Note: this check will invoke `expr` twice
   if not (expr):
     block:
@@ -33,7 +32,7 @@ template xCheckRc*(expr: untyped): untyped =
   if rc.isErr:
     xCheck(expr)
 
-template xCheckRc*(expr: untyped; ifFalse: untyped): untyped =
+template xCheckRc*(expr: untyped, ifFalse: untyped): untyped =
   if rc.isErr:
     xCheck(expr, ifFalse)
 
@@ -41,7 +40,7 @@ template xCheckErr*(expr: untyped): untyped =
   if rc.isOk:
     xCheck(expr)
 
-template xCheckErr*(expr: untyped; ifFalse: untyped): untyped =
+template xCheckErr*(expr: untyped, ifFalse: untyped): untyped =
   if rc.isOk:
     xCheck(expr, ifFalse)
 

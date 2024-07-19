@@ -15,53 +15,50 @@
 {.push raises: [].}
 
 import
-  ../../evm_errors,
-  ../../types,
-  ../gas_costs,
-  eth/common,
-  eth/common/eth_types,
-  stint
+  ../../evm_errors, ../../types, ../gas_costs, eth/common, eth/common/eth_types, stint
 
 when defined(evmc_enabled):
-  import
-    ../../evmc_api,
-    evmc/evmc
+  import ../../evmc_api, evmc/evmc
 else:
-  import
-    ../../state,
-    ../../../db/ledger
+  import ../../state, ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
 
-proc gasEip2929AccountCheck*(c: Computation; address: EthAddress): GasInt =
+proc gasEip2929AccountCheck*(c: Computation, address: EthAddress): GasInt =
   when defined(evmc_enabled):
-    result = if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
-               ColdAccountAccessCost
-             else:
-               WarmStorageReadCost
+    result =
+      if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
+        ColdAccountAccessCost
+      else:
+        WarmStorageReadCost
   else:
     c.vmState.mutateStateDB:
-      result = if not db.inAccessList(address):
-                 db.accessList(address)
-                 ColdAccountAccessCost
-               else:
-                 WarmStorageReadCost
+      result =
+        if not db.inAccessList(address):
+          db.accessList(address)
+          ColdAccountAccessCost
+        else:
+          WarmStorageReadCost
 
-proc gasEip2929AccountCheck*(c: Computation; address: EthAddress, slot: UInt256): GasInt =
+proc gasEip2929AccountCheck*(
+    c: Computation, address: EthAddress, slot: UInt256
+): GasInt =
   when defined(evmc_enabled):
-    result = if c.host.accessStorage(address, slot) == EVMC_ACCESS_COLD:
-               ColdSloadCost
-             else:
-               WarmStorageReadCost
+    result =
+      if c.host.accessStorage(address, slot) == EVMC_ACCESS_COLD:
+        ColdSloadCost
+      else:
+        WarmStorageReadCost
   else:
     c.vmState.mutateStateDB:
-      result = if not db.inAccessList(address, slot):
-                 db.accessList(address, slot)
-                 ColdSloadCost
-               else:
-                 WarmStorageReadCost
+      result =
+        if not db.inAccessList(address, slot):
+          db.accessList(address, slot)
+          ColdSloadCost
+        else:
+          WarmStorageReadCost
 
 func checkInStaticContext*(c: Computation): EvmResultVoid =
   ## Verify static context in handler function, raise an error otherwise
@@ -75,4 +72,3 @@ func checkInStaticContext*(c: Computation): EvmResultVoid =
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-

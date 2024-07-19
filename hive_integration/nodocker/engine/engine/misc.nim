@@ -8,13 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ./engine_spec,
-  ../../../../nimbus/common/hardforks
+import ./engine_spec, ../../../../nimbus/common/hardforks
 
 # Runs a sanity test on a post Merge fork where a previous fork's (London) number is not zero
-type
-  NonZeroPreMergeFork* = ref object of EngineSpec
+type NonZeroPreMergeFork* = ref object of EngineSpec
 
 method withMainFork(cs: NonZeroPreMergeFork, fork: EngineFork): BaseSpec =
   var res = cs.clone()

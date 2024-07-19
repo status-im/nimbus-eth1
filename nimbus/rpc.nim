@@ -24,36 +24,26 @@ import
   ./nimbus_desc,
   ./graphql/ethapi
 
-export
-  common,
-  debug,
-  engine_api,
-  p2p,
-  jwt_auth,
-  cors,
-  rpc_server,
-  experimental,
-  oracle
+export common, debug, engine_api, p2p, jwt_auth, cors, rpc_server, experimental, oracle
 
 {.push gcsafe, raises: [].}
 
 const DefaultChunkSize = 8192
 
 func serverEnabled(conf: NimbusConf): bool =
-  conf.httpServerEnabled or
-    conf.engineApiServerEnabled
+  conf.httpServerEnabled or conf.engineApiServerEnabled
 
 func combinedServer(conf: NimbusConf): bool =
-  conf.httpServerEnabled and
-    conf.shareServerWithEngineApi
+  conf.httpServerEnabled and conf.shareServerWithEngineApi
 
-proc installRPC(server: RpcServer,
-                nimbus: NimbusNode,
-                conf: NimbusConf,
-                com: CommonRef,
-                oracle: Oracle,
-                flags: set[RpcFlag]) =
-
+proc installRPC(
+    server: RpcServer,
+    nimbus: NimbusNode,
+    conf: NimbusConf,
+    com: CommonRef,
+    oracle: Oracle,
+    flags: set[RpcFlag],
+) =
   setupCommonRpc(nimbus.ethNode, conf, server)
 
   if RpcFlag.Eth in flags:
@@ -73,20 +63,15 @@ proc installRPC(server: RpcServer,
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
   let rng = HmacDrbgContext.new()
-  RpcWebSocketHandler(
-    wsserver: WSServer.new(rng = rng),
-  )
+  RpcWebSocketHandler(wsserver: WSServer.new(rng = rng))
 
 proc newRpcHttpHandler(): RpcHttpHandler =
-  RpcHttpHandler(
-    maxChunkSize: DefaultChunkSize,
-  )
+  RpcHttpHandler(maxChunkSize: DefaultChunkSize)
 
-proc addHandler(handlers: var seq[RpcHandlerProc],
-                server: RpcHttpHandler) =
-
-  proc handlerProc(request: HttpRequestRef):
-        Future[RpcHandlerResult] {.async: (raises: []).} =
+proc addHandler(handlers: var seq[RpcHandlerProc], server: RpcHttpHandler) =
+  proc handlerProc(
+      request: HttpRequestRef
+  ): Future[RpcHandlerResult] {.async: (raises: []).} =
     try:
       let res = await server.serveHTTP(request)
       if res.isNil:
@@ -98,18 +83,15 @@ proc addHandler(handlers: var seq[RpcHandlerProc],
 
   handlers.add handlerProc
 
-proc addHandler(handlers: var seq[RpcHandlerProc],
-                server: RpcWebSocketHandler) =
-
-  proc handlerProc(request: HttpRequestRef):
-        Future[RpcHandlerResult] {.async: (raises: []).} =
-
+proc addHandler(handlers: var seq[RpcHandlerProc], server: RpcWebSocketHandler) =
+  proc handlerProc(
+      request: HttpRequestRef
+  ): Future[RpcHandlerResult] {.async: (raises: []).} =
     if not request.headers.contains("Sec-WebSocket-Version"):
       return RpcHandlerResult(status: RpcHandlerStatus.Skip)
 
     let stream = websock.AsyncStream(
-      reader: request.connection.mainReader,
-      writer: request.connection.mainWriter,
+      reader: request.connection.mainReader, writer: request.connection.mainWriter
     )
 
     let req = websock.HttpRequest(
@@ -128,11 +110,10 @@ proc addHandler(handlers: var seq[RpcHandlerProc],
 
   handlers.add handlerProc
 
-proc addHandler(handlers: var seq[RpcHandlerProc],
-                server: GraphqlHttpHandlerRef) =
-
-  proc handlerProc(request: HttpRequestRef):
-        Future[RpcHandlerResult] {.async: (raises: []).} =
+proc addHandler(handlers: var seq[RpcHandlerProc], server: GraphqlHttpHandlerRef) =
+  proc handlerProc(
+      request: HttpRequestRef
+  ): Future[RpcHandlerResult] {.async: (raises: []).} =
     try:
       let res = await server.serveHTTP(request)
       if res.isNil:
@@ -144,11 +125,14 @@ proc addHandler(handlers: var seq[RpcHandlerProc],
 
   handlers.add handlerProc
 
-proc addHttpServices(handlers: var seq[RpcHandlerProc],
-                     nimbus: NimbusNode, conf: NimbusConf,
-                     com: CommonRef, oracle: Oracle,
-                     protocols: set[ProtocolFlag]) =
-
+proc addHttpServices(
+    handlers: var seq[RpcHandlerProc],
+    nimbus: NimbusNode,
+    conf: NimbusConf,
+    com: CommonRef,
+    oracle: Oracle,
+    protocols: set[ProtocolFlag],
+) =
   # The order is important: graphql, ws, rpc
   # graphql depends on /graphl path
   # ws depends on Sec-WebSocket-Version header
@@ -162,21 +146,26 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
   if conf.wsEnabled:
     let server = newRpcWebsocketHandler()
     var rpcFlags = conf.getWsFlags()
-    if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
+    if ProtocolFlag.Eth in protocols:
+      rpcFlags.incl RpcFlag.Eth
     installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
 
   if conf.rpcEnabled:
     let server = newRpcHttpHandler()
     var rpcFlags = conf.getRpcFlags()
-    if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
+    if ProtocolFlag.Eth in protocols:
+      rpcFlags.incl RpcFlag.Eth
     installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
 
-proc addEngineApiServices(handlers: var seq[RpcHandlerProc],
-                          nimbus: NimbusNode, conf: NimbusConf,
-                          com: CommonRef, oracle: Oracle,) =
-
+proc addEngineApiServices(
+    handlers: var seq[RpcHandlerProc],
+    nimbus: NimbusNode,
+    conf: NimbusConf,
+    com: CommonRef,
+    oracle: Oracle,
+) =
   # The order is important: ws, rpc
 
   if conf.engineApiWsEnabled:
@@ -191,10 +180,14 @@ proc addEngineApiServices(handlers: var seq[RpcHandlerProc],
     installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
     handlers.addHandler(server)
 
-proc addServices(handlers: var seq[RpcHandlerProc],
-                 nimbus: NimbusNode, conf: NimbusConf,
-                 com: CommonRef, oracle: Oracle, protocols: set[ProtocolFlag]) =
-
+proc addServices(
+    handlers: var seq[RpcHandlerProc],
+    nimbus: NimbusNode,
+    conf: NimbusConf,
+    com: CommonRef,
+    oracle: Oracle,
+    protocols: set[ProtocolFlag],
+) =
   # The order is important: graphql, ws, rpc
 
   if conf.graphqlEnabled:
@@ -211,7 +204,8 @@ proc addServices(handlers: var seq[RpcHandlerProc],
 
     if conf.wsEnabled:
       var rpcFlags = conf.getWsFlags()
-      if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
+      if ProtocolFlag.Eth in protocols:
+        rpcFlags.incl RpcFlag.Eth
       installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
 
@@ -224,12 +218,14 @@ proc addServices(handlers: var seq[RpcHandlerProc],
 
     if conf.rpcEnabled:
       var rpcFlags = conf.getRpcFlags()
-      if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
+      if ProtocolFlag.Eth in protocols:
+        rpcFlags.incl RpcFlag.Eth
       installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
 
-proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
-               com: CommonRef, protocols: set[ProtocolFlag]) =
+proc setupRpc*(
+    nimbus: NimbusNode, conf: NimbusConf, com: CommonRef, protocols: set[ProtocolFlag]
+) =
   if not conf.serverEnabled:
     return
 
@@ -238,8 +234,8 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     # Create or load shared secret
     let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
     if rc.isErr:
-      fatal "Failed create or load shared secret",
-        msg = $(rc.unsafeError) # avoid side effects
+      fatal "Failed create or load shared secret", msg = $(rc.unsafeError)
+        # avoid side effects
       quit(QuitFailure)
     rc.value
 
@@ -256,7 +252,7 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     let address = initTAddress(conf.httpAddress, conf.httpPort)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
-      fatal "Cannot create RPC server", msg=res.error
+      fatal "Cannot create RPC server", msg = res.error
       quit(QuitFailure)
     nimbus.httpServer = res.get
     nimbus.httpServer.start()
@@ -269,7 +265,7 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     let address = initTAddress(conf.httpAddress, conf.httpPort)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
-      fatal "Cannot create RPC server", msg=res.error
+      fatal "Cannot create RPC server", msg = res.error
       quit(QuitFailure)
     nimbus.httpServer = res.get
     nimbus.httpServer.start()
@@ -281,7 +277,7 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     let address = initTAddress(conf.engineApiAddress, conf.engineApiPort)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
-      fatal "Cannot create RPC server", msg=res.error
+      fatal "Cannot create RPC server", msg = res.error
       quit(QuitFailure)
     nimbus.engineApiServer = res.get
     nimbus.engineApiServer.start()

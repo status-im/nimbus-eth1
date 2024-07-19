@@ -23,8 +23,7 @@ import
   stint,
   ./desc_nibbles
 
-export
-  desc_nibbles
+export desc_nibbles
 
 type
   VertexID* = distinct uint64
@@ -97,7 +96,6 @@ type
     length*: uint8
 
   # ----------
-
   LeafTie* = object
     ## Unique access key for a leaf vertex. It identifies a root vertex
     ## followed by a nibble path along the `Patricia Trie` down to a leaf
@@ -107,14 +105,15 @@ type
     ##
     ## Note that `LeafTie` objects have no representation in the `Aristo Trie`.
     ## They are used temporarily and in caches or backlog tables.
-    root*: VertexID                  ## Root ID for the sub-trie
-    path*: PathID                    ## Path into the `Patricia Trie`
+    root*: VertexID ## Root ID for the sub-trie
+    path*: PathID ## Path into the `Patricia Trie`
 
 # ------------------------------------------------------------------------------
 # Chronicles formatters
 # ------------------------------------------------------------------------------
 
-chronicles.formatIt(VertexID): $it
+chronicles.formatIt(VertexID):
+  $it
 
 # ------------------------------------------------------------------------------
 # Public helpers: `VertexID` scalar data model
@@ -126,18 +125,24 @@ func `==`*(a, b: VertexID): bool {.borrow.}
 func cmp*(a, b: VertexID): int {.borrow.}
 
 func `$`*(vid: VertexID): string =
-  "$" & (if vid == VertexID(0): "ø"
-         else: vid.uint64.toHex.strip(trailing=false,chars={'0'}).toLowerAscii)
+  "$" & (
+    if vid == VertexID(0): "ø"
+    else: vid.uint64.toHex.strip(trailing = false, chars = {'0'}).toLowerAscii
+  )
 
 func `$`*(rvid: RootedVertexID): string =
   $rvid.root & "/" & $rvid.vid
 
-func `==`*(a: VertexID; b: static[uint]): bool = (a == VertexID(b))
+func `==`*(a: VertexID, b: static[uint]): bool =
+  (a == VertexID(b))
 
 # Scalar model extension as in `IntervalSetRef[VertexID,uint64]`
-func `+`*(a: VertexID; b: uint64): VertexID = (a.uint64+b).VertexID
-func `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
-func `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
+func `+`*(a: VertexID, b: uint64): VertexID =
+  (a.uint64 + b).VertexID
+func `-`*(a: VertexID, b: uint64): VertexID =
+  (a.uint64 - b).VertexID
+func `-`*(a, b: VertexID): uint64 =
+  (a.uint64 - b.uint64)
 
 # ------------------------------------------------------------------------------
 # Public helpers: `PathID` ordered scalar data model
@@ -191,7 +196,12 @@ func `==`*(a, b: PathID): bool =
   a.pfx == b.pfx and a.length == b.length
 
 func cmp*(a, b: PathID): int =
-  if a < b: -1 elif b < a: 1 else: 0
+  if a < b:
+    -1
+  elif b < a:
+    1
+  else:
+    0
 
 # ------------------------------------------------------------------------------
 # Public helpers: `HashKey` ordered scalar data model
@@ -203,19 +213,19 @@ func len*(lid: HashKey): int =
 template data*(lid: HashKey): openArray[byte] =
   lid.buf.toOpenArray(0, lid.len - 1)
 
-func to*(lid: HashKey; T: type PathID): T =
+func to*(lid: HashKey, T: type PathID): T =
   ## Helper to bowrrow certain properties from `PathID`
   if lid.len == 32:
     PathID(pfx: UInt256.fromBytesBE lid.data, length: 64)
   elif 0 < lid.len:
     doAssert lid.len < 32
-    var a32: array[32,byte]
+    var a32: array[32, byte]
     (addr a32[0]).copyMem(unsafeAddr lid.data[0], lid.len)
     PathID(pfx: UInt256.fromBytesBE a32, length: 2 * lid.len.uint8)
   else:
     PathID()
 
-func fromBytes*(T: type HashKey; data: openArray[byte]): Result[T,void] =
+func fromBytes*(T: type HashKey, data: openArray[byte]): Result[T, void] =
   ## Write argument `data` of length 0 or between 2 and 32 bytes as a `HashKey`.
   ##
   ## A function argument `data` of length 32 is used as-is.
@@ -253,11 +263,11 @@ func cmp*(a, b: HashKey): int =
 # Public helpers: `LeafTie` ordered scalar data model
 # ------------------------------------------------------------------------------
 
-func high*(_: type LeafTie; root = VertexID(1)): LeafTie =
+func high*(_: type LeafTie, root = VertexID(1)): LeafTie =
   ## Highest possible `LeafTie` object for given root vertex.
   LeafTie(root: root, path: high(PathID))
 
-func low*(_: type LeafTie; root = VertexID(1)): LeafTie =
+func low*(_: type LeafTie, root = VertexID(1)): LeafTie =
   ## Lowest possible `LeafTie` object for given root vertex.
   LeafTie(root: root, path: low(PathID))
 
@@ -282,13 +292,18 @@ func `==`*(a, b: LeafTie): bool =
 func cmp*(a, b: LeafTie): int =
   ## This function assumes that the arguments `a` and `b` are normalised
   ## (see `normal()`.)
-  if a < b: -1 elif a == b: 0 else: 1
+  if a < b:
+    -1
+  elif a == b:
+    0
+  else:
+    1
 
 # ------------------------------------------------------------------------------
 # Public helpers: Reversible conversions between `PathID`, `HashKey`, etc.
 # ------------------------------------------------------------------------------
 
-func to*(pid: PathID; T: type NibblesBuf): T =
+func to*(pid: PathID, T: type NibblesBuf): T =
   ## Representation of a `PathID` as `NibbleSeq` (preserving full information)
   let nibbles = NibblesBuf.fromBytes(pid.pfx.toBytesBE)
   if pid.length < 64:
@@ -303,7 +318,7 @@ func `@`*(pid: PathID): Blob =
   if pid.length < 63:
     result.setLen((pid.length + 1) shl 1)
 
-func to*(lid: HashKey; T: type Hash256): T =
+func to*(lid: HashKey, T: type Hash256): T =
   ## Returns the `Hash236` key if available, otherwise the Keccak hash of
   ## the `Blob` version.
   if lid.len == 32:
@@ -313,7 +328,7 @@ func to*(lid: HashKey; T: type Hash256): T =
   else:
     EMPTY_ROOT_HASH
 
-func to*(key: Hash256; T: type HashKey): T =
+func to*(key: Hash256, T: type HashKey): T =
   ## This is an efficient version of `HashKey.fromBytes(key.data).value`, not
   ## to be confused with `digestTo(HashKey)`.
   if key == EMPTY_ROOT_HASH:
@@ -321,11 +336,11 @@ func to*(key: Hash256; T: type HashKey): T =
   else:
     T(len: 32, buf: key.data)
 
-func to*(n: SomeUnsignedInt; T: type PathID): T =
+func to*(n: SomeUnsignedInt, T: type PathID): T =
   ## Representation of a scalar as `PathID` (preserving full information)
   T(pfx: n.u256, length: 64)
 
-func to*(n: UInt256; T: type PathID): T =
+func to*(n: UInt256, T: type PathID): T =
   ## Representation of a scalar as `PathID` (preserving full information)
   T(pfx: n, length: 64)
 
@@ -333,7 +348,7 @@ func to*(n: UInt256; T: type PathID): T =
 # Public helpers: Miscellaneous mappings
 # ------------------------------------------------------------------------------
 
-func digestTo*(data: openArray[byte]; T: type HashKey): T =
+func digestTo*(data: openArray[byte], T: type HashKey): T =
   ## For argument `data` with length smaller than 32, import them as-is into
   ## the result. Otherwise import the Keccak hash of the argument `data`.
   ##
@@ -383,14 +398,16 @@ func hash*(a: HashKey): Hash =
 # ------------------------------------------------------------------------------
 
 func `$`*(vids: seq[VertexID]): string =
-  "[" & vids.toSeq.mapIt(
-    "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
-    ).join(",") & "]"
+  "[" &
+    vids.toSeq.mapIt("$" & it.uint64.toHex.strip(trailing = false, chars = {'0'})).join(
+      ","
+    ) & "]"
 
 func `$`*(vids: HashSet[VertexID]): string =
-  "{" & vids.toSeq.sorted.mapIt(
-    "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
-    ).join(",") & "}"
+  "{" &
+    vids.toSeq.sorted
+    .mapIt("$" & it.uint64.toHex.strip(trailing = false, chars = {'0'}))
+    .join(",") & "}"
 
 func `$`*(key: Hash256): string =
   let w = UInt256.fromBytesBE key.data
@@ -417,8 +434,7 @@ func `$`*(a: PathID): string =
     var dgts = $a.pfx.toHex
     if a.length < 64:
       dgts = dgts[0 ..< a.length]
-    result = dgts.strip(
-      leading=true, trailing=false, chars={'0'})
+    result = dgts.strip(leading = true, trailing = false, chars = {'0'})
   elif a.length != 0:
     result = "0"
   if a.length < 64:
@@ -426,8 +442,8 @@ func `$`*(a: PathID): string =
 
 func `$`*(a: LeafTie): string =
   if a.root != 0:
-    result = ($a.root.uint64.toHex).strip(
-      leading=true, trailing=false, chars={'0'})
+    result =
+      ($a.root.uint64.toHex).strip(leading = true, trailing = false, chars = {'0'})
   else:
     result = "0"
   result &= ":" & $a.path

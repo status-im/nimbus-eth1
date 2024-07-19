@@ -20,7 +20,8 @@ func init*(m: var GasMeter, startGas: GasInt) =
   m.gasRefunded = 0
 
 func consumeGas*(
-    gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid =
+    gasMeter: var GasMeter, amount: GasInt, reason: static string
+): EvmResultVoid =
   # TODO report reason - consumeGas is a hotspot in EVM execution so it has to
   #      be done carefully
   if amount > gasMeter.gasRemaining:
@@ -28,10 +29,10 @@ func consumeGas*(
   gasMeter.gasRemaining -= amount
   ok()
 
-func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
+func returnGas*(gasMeter: var GasMeter, amount: GasInt) =
   gasMeter.gasRemaining += amount
 
-func refundGas*(gasMeter: var GasMeter; amount: int64) =
+func refundGas*(gasMeter: var GasMeter, amount: int64) =
   # EIP-2183 Net gas metering for sstore is built upon idea
   # that the refund counter is only one in an EVM like geth does.
   # EIP-2183 gurantee that the counter can never go below zero.

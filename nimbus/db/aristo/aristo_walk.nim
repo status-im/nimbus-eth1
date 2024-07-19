@@ -18,9 +18,7 @@
 ##
 {.push raises: [].}
 
-import
-  ./aristo_walk/memory_only
-export
-  memory_only
+import ./aristo_walk/memory_only
+export memory_only
 
 # End

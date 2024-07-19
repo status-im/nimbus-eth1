@@ -8,10 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  json, strutils, os,
-  eth/common, httputils, nimcrypto/utils,
-  stint, stew/byteutils
+import json, strutils, os, eth/common, httputils, nimcrypto/utils, stint, stew/byteutils
 
 import ../nimbus/transaction, ../nimbus/utils/ec_recover
 
@@ -30,7 +27,8 @@ func encodeQuantity(value: SomeUnsignedInt): string =
 
 func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
   var i = 0
-  if s[i] == '0' and (s[i+1] in {'x', 'X'}): inc(i, 2)
+  if s[i] == '0' and (s[i + 1] in {'x', 'X'}):
+    inc(i, 2)
   if s.len - i > sizeof(T) * 2:
     raise newException(ValueError, "input hex too big for destination int")
   while i < s.len:
@@ -52,8 +50,7 @@ proc prefixHex*(x: UInt256): string =
 proc prefixHex*(x: string): string =
   "0x" & toLowerAscii(x)
 
-type
-  SomeData* = EthAddress | BloomFilter | BlockNonce
+type SomeData* = EthAddress | BloomFilter | BlockNonce
 
 proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
   let node = n[name]

@@ -8,10 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import
-  ../aristo/aristo_constants
+import ../aristo/aristo_constants
 
-export
-  EmptyBlob
+export EmptyBlob
 
 # End

@@ -43,8 +43,7 @@ const
   START_BLOCK = 330_000
   END_BLOCK = 1_000_000
 
-type
-  Hash256 = eth_types.Hash256
+type Hash256 = eth_types.Hash256
 
 template ethAddr*(x: Address): EthAddress =
   EthAddress x
@@ -53,10 +52,8 @@ template toHash256(hash: untyped): Hash256 =
   fromHex(Hash256, hash.toHex())
 
 proc updateStateUsingProofsAndCheckStateRoot(
-    stateDB: LedgerRef,
-    expectedStateRoot: Hash256,
-    proofs: seq[ProofResponse]) =
-
+    stateDB: LedgerRef, expectedStateRoot: Hash256, proofs: seq[ProofResponse]
+) =
   check:
     proofs.len() > 0
 
@@ -69,7 +66,10 @@ proc updateStateUsingProofsAndCheckStateRoot(
       storageHash = proof.storageHash.toHash256()
       slotProofs = proof.storageProof
 
-    if (balance == 0 and nonce == 0 and codeHash == ZERO_HASH256 and storageHash == ZERO_HASH256):
+    if (
+      balance == 0 and nonce == 0 and codeHash == ZERO_HASH256 and
+      storageHash == ZERO_HASH256
+    ):
       # Account doesn't exist:
       # The account was deleted due to a self destruct and the data no longer exists in the state.
       # The RPC API correctly returns zeroed values in this scenario which is the same behavior
@@ -77,7 +77,10 @@ proc updateStateUsingProofsAndCheckStateRoot(
       stateDB.setCode(address, @[])
       stateDB.clearStorage(address)
       stateDB.deleteAccount(address)
-    elif (balance == 0 and nonce == 0 and codeHash == EMPTY_CODE_HASH and storageHash == EMPTY_ROOT_HASH):
+    elif (
+      balance == 0 and nonce == 0 and codeHash == EMPTY_CODE_HASH and
+      storageHash == EMPTY_ROOT_HASH
+    ):
       # Account exists but is empty:
       # The account was deleted due to a self destruct or the storage was cleared/set to zero
       # and the bytecode is empty.
@@ -111,32 +114,30 @@ proc updateStateUsingProofsAndCheckStateRoot(
   check stateDB.rootHash == expectedStateRoot
 
 proc rpcGetProofsTrackStateChangesMain*() =
-
   suite "rpc getProofs track state changes tests":
-
     let client = newRpcHttpClient()
     waitFor client.connect(RPC_HOST, RPC_PORT, secure = false)
 
     test "Test tracking the changes introduced in every block":
-
-      let com = CommonRef.new(newCoreDbRef(
-        DefaultDbPersistent, DATABASE_PATH, DbOptions.init()))
+      let com = CommonRef.new(
+        newCoreDbRef(DefaultDbPersistent, DATABASE_PATH, DbOptions.init())
+      )
       com.initializeEmptyDb()
 
       let
         blockHeader = waitFor client.eth_getBlockByNumber(blockId(START_BLOCK), false)
         stateDB = LedgerRef.init(com.db, blockHeader.stateRoot.toHash256())
 
-      for i in START_BLOCK..END_BLOCK:
+      for i in START_BLOCK .. END_BLOCK:
         let
           blockNum = blockId(i.uint64)
-          blockHeader: BlockObject = waitFor client.eth_getBlockByNumber(blockNum, false)
+          blockHeader: BlockObject =
+            waitFor client.eth_getBlockByNumber(blockNum, false)
           proofs = waitFor client.exp_getProofsByBlockNumber(blockNum, true)
 
         updateStateUsingProofsAndCheckStateRoot(
-            stateDB,
-            blockHeader.stateRoot.toHash256(),
-            proofs)
+          stateDB, blockHeader.stateRoot.toHash256(), proofs
+        )
 
         if i mod 1000 == 0:
           echo "Block number: ", i

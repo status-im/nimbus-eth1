@@ -22,41 +22,38 @@ import
   ../init_common
 
 type
-  RdbWriteEventCb* =
-    proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
-      ## Call back closure function that passes the the write session handle
-      ## to a guest peer right after it was opened. The guest may store any
-      ## data on its own column family and return `true` if that worked
-      ## all right. Then the `Aristo` handler will stor its own columns and
-      ## finalise the write session.
-      ##
-      ## In case of an error when `false` is returned, `Aristo` will abort the
-      ## write session and return a session error.
+  RdbWriteEventCb* = proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
+    ## Call back closure function that passes the the write session handle
+    ## to a guest peer right after it was opened. The guest may store any
+    ## data on its own column family and return `true` if that worked
+    ## all right. Then the `Aristo` handler will stor its own columns and
+    ## finalise the write session.
+    ##
+    ## In case of an error when `false` is returned, `Aristo` will abort the
+    ## write session and return a session error.
 
   RdbInst* = object
-    admCol*: ColFamilyReadWrite        ## Admin column family handler
-    vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
-    keyCol*: ColFamilyReadWrite        ## Hash key column family handler
-    session*: WriteBatchRef            ## For batched `put()`
-    rdKeyLru*: KeyedQueue[VertexID,HashKey] ## Read cache
-    rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
+    admCol*: ColFamilyReadWrite ## Admin column family handler
+    vtxCol*: ColFamilyReadWrite ## Vertex column family handler
+    keyCol*: ColFamilyReadWrite ## Hash key column family handler
+    session*: WriteBatchRef ## For batched `put()`
+    rdKeyLru*: KeyedQueue[VertexID, HashKey] ## Read cache
+    rdVtxLru*: KeyedQueue[VertexID, VertexRef] ## Read cache
 
-    basePath*: string                  ## Database directory
-    trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
+    basePath*: string ## Database directory
+    trgWriteEvent*: RdbWriteEventCb ## Database piggiback call back handler
 
   AristoCFs* = enum
     ## Column family symbols/handles and names used on the database
-    AdmCF = "AriAdm"                   ## Admin column family name
-    VtxCF = "AriVtx"                   ## Vertex column family name
-    KeyCF = "AriKey"                   ## Hash key column family name
+    AdmCF = "AriAdm" ## Admin column family name
+    VtxCF = "AriVtx" ## Vertex column family name
+    KeyCF = "AriKey" ## Hash key column family name
 
 const
-  BaseFolder* = "nimbus"               ## Same as for Legacy DB
-  DataFolder* = "aristo"               ## Legacy DB has "data"
-  RdKeyLruMaxSize* = 80000
-    ## Max size of read cache for keys - ~4 levels of MPT
-  RdVtxLruMaxSize* = 80000
-    ## Max size of read cache for vertex IDs - ~4 levels of MPT
+  BaseFolder* = "nimbus" ## Same as for Legacy DB
+  DataFolder* = "aristo" ## Legacy DB has "data"
+  RdKeyLruMaxSize* = 80000 ## Max size of read cache for keys - ~4 levels of MPT
+  RdVtxLruMaxSize* = 80000 ## Max size of read cache for vertex IDs - ~4 levels of MPT
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -68,16 +65,14 @@ template logTxt*(info: static[string]): static[string] =
 template baseDb*(rdb: RdbInst): RocksDbReadWriteRef =
   rdb.admCol.db
 
-
 func baseDir*(rdb: RdbInst): string =
   rdb.basePath / BaseFolder
 
 func dataDir*(rdb: RdbInst): string =
   rdb.baseDir / DataFolder
 
-
 template toOpenArray*(xid: AdminTabID): openArray[byte] =
-  xid.uint64.toBytesBE.toOpenArray(0,7)
+  xid.uint64.toBytesBE.toOpenArray(0, 7)
 
 # ------------------------------------------------------------------------------
 # End

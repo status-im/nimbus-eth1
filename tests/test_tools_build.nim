@@ -9,7 +9,7 @@
 # when try to test buildability of these tools.
 # They never run in the CI so it is ok to combine them
 
-{. warning[UnusedImport]:off .}
+{.warning[UnusedImport]: off.}
 
 import
   #../premix/premix,         # -- currently disabled (no tracer at the moment)

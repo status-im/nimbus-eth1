@@ -15,12 +15,7 @@
 {.push raises: [].}
 
 import
-  ../../evm_errors,
-  ../../stack,
-  ../op_codes,
-  ./oph_defs,
-  ./oph_gen_handlers,
-  sequtils
+  ../../evm_errors, ../../stack, ../op_codes, ./oph_defs, ./oph_gen_handlers, sequtils
 
 # ------------------------------------------------------------------------------
 # Private, names & settings
@@ -33,19 +28,22 @@ proc opName(n: int): string {.compileTime.} =
   "Swap" & $n
 
 proc fnInfo(n: int): string {.compileTime.} =
-  var blurb = case n+1
-              of 1: "first"
-              of 2: "second"
-              of 3: "third"
-              else: $(n+1) & "th"
+  var blurb =
+    case n + 1
+    of 1:
+      "first"
+    of 2:
+      "second"
+    of 3:
+      "third"
+    else:
+      $(n + 1) & "th"
   "Exchange first and " & blurb & " stack items"
 
-
-template swapImpl(cpt: VmCpt; n: static int): EvmResultVoid =
+template swapImpl(cpt: VmCpt, n: static int): EvmResultVoid =
   cpt.stack.swap(n)
 
-const
-  inxRange = toSeq(1 .. 16)
+const inxRange = toSeq(1 .. 16)
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

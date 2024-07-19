@@ -8,25 +8,20 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/[os, osproc, strutils, json, streams],
-  unittest2
+import std/[os, osproc, strutils, json, streams], unittest2
 
-type
-  TestFile = object
-    fullPath: string
-    dispName: string
+type TestFile = object
+  fullPath: string
+  dispName: string
 
-const
-  testData = "tools" / "txparse" / "testdata"
+const testData = "tools" / "txparse" / "testdata"
 
 proc runTest(n: JsonNode): bool =
   let
     appDir = getAppDir()
     cmd = appDir / "txparse"
     input = n["input"].getStr
-    p = startProcess(cmd, options =
-      {poStdErrToStdOut, poUsePath, poEvalCommand})
+    p = startProcess(cmd, options = {poStdErrToStdOut, poUsePath, poEvalCommand})
     inp = inputStream(p)
     outp = outputStream(p)
 
@@ -44,7 +39,8 @@ proc runTest(n: JsonNode): bool =
       res.add("\n")
     else:
       exitCode = peekExitCode(p)
-      if exitCode != -1: break
+      if exitCode != -1:
+        break
 
   close(p)
 
@@ -78,8 +74,7 @@ proc collectFileNames(inputPath: string, fileNames: var seq[TestFile]) =
       continue
 
     fileNames.add TestFile(
-      fullPath: filename,
-      dispName: substr(filename, inputPath.len+1)
+      fullPath: filename, dispName: substr(filename, inputPath.len + 1)
     )
 
 proc main() =
@@ -91,4 +86,5 @@ proc main() =
       test input.dispName:
         let res = runTest(input.fullPath)
         check true == res
+
 main()

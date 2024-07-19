@@ -21,26 +21,25 @@ import
   ./core/executor,
   ./evm/[state, types],
   nimcrypto/utils as ncrutils,
-  web3/conversions, ./launcher,
+  web3/conversions,
+  ./launcher,
   results,
   ./beacon/web3_eth_conv
 
 proc getParentHeader(self: CoreDbRef, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
 
-type
-  SaveCtxEnv = object
-    db: CoreDbRef
-    ctx: CoreDbCtxRef
+type SaveCtxEnv = object
+  db: CoreDbRef
+  ctx: CoreDbCtxRef
 
-proc newCtx(com: CommonRef; root: eth_types.Hash256): SaveCtxEnv =
+proc newCtx(com: CommonRef, root: eth_types.Hash256): SaveCtxEnv =
   let ctx = com.db.ctxFromTx(root).valueOr:
     raiseAssert "setParentCtx: " & $$error
   SaveCtxEnv(db: com.db, ctx: ctx)
 
 proc setCtx(saveCtx: SaveCtxEnv): SaveCtxEnv =
   SaveCtxEnv(db: saveCtx.db, ctx: saveCtx.db.swapCtx saveCtx.ctx)
-
 
 proc `%`(x: openArray[byte]): JsonNode =
   result = %toHex(x, false)
@@ -114,9 +113,13 @@ const
   uncleName = "uncle"
   internalTxName = "internalTx"
 
-proc traceTransaction*(com: CommonRef, header: BlockHeader,
-                       transactions: openArray[Transaction], txIndex: uint64,
-                       tracerFlags: set[TracerFlags] = {}): JsonNode =
+proc traceTransaction*(
+    com: CommonRef,
+    header: BlockHeader,
+    transactions: openArray[Transaction],
+    txIndex: uint64,
+    tracerFlags: set[TracerFlags] = {},
+): JsonNode =
   let
     # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
@@ -126,14 +129,15 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
 
     saveCtx = setCtx com.newCtx(com.db.getParentHeader(header).stateRoot)
     vmState = BaseVMState.new(header, captureCom).valueOr:
-                return newJNull()
+      return newJNull()
     stateDb = vmState.stateDB
 
   defer:
     saveCtx.setCtx().ctx.forget()
     capture.forget()
 
-  if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
+  if header.txRoot == EMPTY_ROOT_HASH:
+    return newJNull()
   doAssert(transactions.calcTxRoot == header.txRoot)
   doAssert(transactions.len != 0)
 
@@ -145,8 +149,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     beforeRoot: common.Hash256
     beforeCtx: SaveCtxEnv
 
-  let
-    miner = vmState.coinbase()
+  let miner = vmState.coinbase()
 
   for idx, tx in transactions:
     let sender = tx.getSender
@@ -198,7 +201,9 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     result.dumpMemoryDB(capture)
 
 proc dumpBlockState*(com: CommonRef, blk: EthBlock, dumpState = false): JsonNode =
-  template header: BlockHeader = blk.header
+  template header(): BlockHeader =
+    blk.header
+
   let
     parent = com.db.getParentHeader(header)
     capture = com.db.newCapture.value
@@ -209,7 +214,7 @@ proc dumpBlockState*(com: CommonRef, blk: EthBlock, dumpState = false): JsonNode
 
     saveCtx = setCtx com.newCtx(parent.stateRoot)
     vmState = BaseVMState.new(header, captureCom, tracerInst).valueOr:
-                return newJNull()
+      return newJNull()
     miner = vmState.coinbase()
   defer:
     saveCtx.setCtx().ctx.forget()
@@ -261,8 +266,12 @@ proc dumpBlockState*(com: CommonRef, blk: EthBlock, dumpState = false): JsonNode
   if dumpState:
     result.dumpMemoryDB(capture)
 
-proc traceBlock*(com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = {}): JsonNode =
-  template header: BlockHeader = blk.header
+proc traceBlock*(
+    com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = {}
+): JsonNode =
+  template header(): BlockHeader =
+    blk.header
+
   let
     capture = com.db.newCapture.value
     captureCom = com.clone(capture.recorder)
@@ -270,13 +279,14 @@ proc traceBlock*(com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = 
 
     saveCtx = setCtx com.newCtx(com.db.getParentHeader(header).stateRoot)
     vmState = BaseVMState.new(header, captureCom, tracerInst).valueOr:
-                return newJNull()
+      return newJNull()
 
   defer:
     saveCtx.setCtx().ctx.forget()
     capture.forget()
 
-  if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
+  if header.txRoot == EMPTY_ROOT_HASH:
+    return newJNull()
   doAssert(blk.transactions.calcTxRoot == header.txRoot)
   doAssert(blk.transactions.len != 0)
 
@@ -295,14 +305,19 @@ proc traceBlock*(com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = 
   if TracerFlags.DisableState notin tracerFlags:
     result.dumpMemoryDB(capture)
 
-proc traceTransactions*(com: CommonRef, header: BlockHeader, transactions: openArray[Transaction]): JsonNode =
+proc traceTransactions*(
+    com: CommonRef, header: BlockHeader, transactions: openArray[Transaction]
+): JsonNode =
   result = newJArray()
   for i in 0 ..< transactions.len:
     result.add traceTransaction(com, header, transactions, i.uint64, {DisableState})
 
+proc dumpDebuggingMetaData*(
+    vmState: BaseVMState, blk: EthBlock, launchDebugger = true
+) =
+  template header(): BlockHeader =
+    blk.header
 
-proc dumpDebuggingMetaData*(vmState: BaseVMState, blk: EthBlock, launchDebugger = true) =
-  template header: BlockHeader = blk.header
   let
     com = vmState.com
     blockNumber = header.number
@@ -312,20 +327,22 @@ proc dumpDebuggingMetaData*(vmState: BaseVMState, blk: EthBlock, launchDebugger 
   defer:
     capture.forget()
 
-  let blockSummary = %{
-    "receiptsRoot": %("0x" & toHex(calcReceiptsRoot(vmState.receipts).data)),
-    "stateRoot": %("0x" & toHex(vmState.stateDB.rootHash.data)),
-    "logsBloom": %("0x" & toHex(bloom))
-  }
+  let blockSummary =
+    %{
+      "receiptsRoot": %("0x" & toHex(calcReceiptsRoot(vmState.receipts).data)),
+      "stateRoot": %("0x" & toHex(vmState.stateDB.rootHash.data)),
+      "logsBloom": %("0x" & toHex(bloom)),
+    }
 
-  var metaData = %{
-    "blockNumber": %blockNumber.toHex,
-    "txTraces": traceTransactions(captureCom, header, blk.transactions),
-    "stateDump": dumpBlockState(captureCom, blk),
-    "blockTrace": traceBlock(captureCom, blk, {DisableState}),
-    "receipts": toJson(vmState.receipts),
-    "block": blockSummary
-  }
+  var metaData =
+    %{
+      "blockNumber": %blockNumber.toHex,
+      "txTraces": traceTransactions(captureCom, header, blk.transactions),
+      "stateDump": dumpBlockState(captureCom, blk),
+      "blockTrace": traceBlock(captureCom, blk, {DisableState}),
+      "receipts": toJson(vmState.receipts),
+      "block": blockSummary,
+    }
 
   metaData.dumpMemoryDB(capture)
 

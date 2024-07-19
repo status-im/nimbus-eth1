@@ -35,19 +35,16 @@ import
   stint
 
 when not defined(evmc_enabled):
-  import
-    ../../state,
-    ../../../db/ledger
+  import ../../state, ../../../db/ledger
 else:
-  import
-    stew/saturation_arith
+  import stew/saturation_arith
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 when evmc_enabled:
-  template execSubCreate(c: Computation; msg: ref nimbus_message) =
+  template execSubCreate(c: Computation, msg: ref nimbus_message) =
     c.chainTo(msg):
       c.gasMeter.returnGas(GasInt c.res.gas_left)
       c.gasMeter.refundGas(c.res.gas_refund)
@@ -61,13 +58,13 @@ when evmc_enabled:
       ok()
 
 else:
-  proc execSubCreate(c: Computation; childMsg: Message;
-                    salt: ContractSalt = ZERO_CONTRACTSALT) {.raises: [].} =
+  proc execSubCreate(
+      c: Computation, childMsg: Message, salt: ContractSalt = ZERO_CONTRACTSALT
+  ) {.raises: [].} =
     ## Create new VM -- helper for `Create`-like operations
 
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
-    var
-      child = newComputation(c.vmState, false, childMsg, salt)
+    var child = newComputation(c.vmState, false, childMsg, salt)
 
     c.chainTo(child):
       if not child.shouldBurnGas:
@@ -81,21 +78,19 @@ else:
         c.returnData = child.output
       ok()
 
-
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-
 proc createOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf0, Create a new account with associated code
-  ? cpt.checkInStaticContext()
-  ? cpt.stack.lsCheck(3)
+  ?cpt.checkInStaticContext()
+  ?cpt.stack.lsCheck(3)
 
   let
     endowment = cpt.stack.lsPeekInt(^1)
-    memPos    = cpt.stack.lsPeekSafeInt(^2)
-    memLen    = cpt.stack.lsPeekSafeInt(^3)
+    memPos = cpt.stack.lsPeekSafeInt(^2)
+    memLen = cpt.stack.lsPeekSafeInt(^3)
 
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop(0)
@@ -106,22 +101,19 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     return err(opErr(InvalidInitCode))
 
   let
-    gasParams = GasParamsCr(
-      currentMemSize: cpt.memory.len,
-      memOffset:      memPos,
-      memLength:      memLen)
+    gasParams =
+      GasParamsCr(currentMemSize: cpt.memory.len, memOffset: memPos, memLength: memLen)
     gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
 
-  ? cpt.opcodeGasCost(Create,
-    gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
+  ?cpt.opcodeGasCost(
+    Create, gasCost, reason = "CREATE: GasCreate + memLen * memory expansion"
+  )
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
-      reason = "Stack too deep",
-      maxDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+      reason = "Stack too deep", maxDepth = MaxCallDepth, depth = cpt.msg.depth
     return ok()
 
   if endowment != 0:
@@ -136,12 +128,12 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   var createMsgGas = cpt.gasMeter.gasRemaining
   if cpt.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
-  ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
+  ?cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
   when evmc_enabled:
     let
       msg = new(nimbus_message)
-      c   = cpt
+      c = cpt
     msg[] = nimbus_message(
       kind: EVMC_CREATE,
       depth: (cpt.msg.depth + 1).int32,
@@ -155,11 +147,12 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     c.execSubCreate(msg)
   else:
     var childMsg = Message(
-      kind:   EVMC_CREATE,
-      depth:  cpt.msg.depth + 1,
-      gas:    createMsgGas,
+      kind: EVMC_CREATE,
+      depth: cpt.msg.depth + 1,
+      gas: createMsgGas,
       sender: cpt.msg.contractAddress,
-      value:  endowment)
+      value: endowment,
+    )
     assign(childMsg.data, cpt.memory.read(memPos, memLen))
     cpt.execSubCreate(childMsg)
   ok()
@@ -168,15 +161,15 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
 proc create2Op(cpt: VmCpt): EvmResultVoid =
   ## 0xf5, Behaves identically to CREATE, except using keccak256
-  ? cpt.checkInStaticContext()
-  ? cpt.stack.lsCheck(4)
+  ?cpt.checkInStaticContext()
+  ?cpt.stack.lsCheck(4)
 
   let
     endowment = cpt.stack.lsPeekInt(^1)
-    memPos    = cpt.stack.lsPeekSafeInt(^2)
-    memLen    = cpt.stack.lsPeekSafeInt(^3)
-    salt256   = cpt.stack.lsPeekInt(^4)
-    salt      = ContractSalt(bytes: salt256.toBytesBE)
+    memPos = cpt.stack.lsPeekSafeInt(^2)
+    memLen = cpt.stack.lsPeekSafeInt(^3)
+    salt256 = cpt.stack.lsPeekInt(^4)
+    salt = ContractSalt(bytes: salt256.toBytesBE)
 
   cpt.stack.lsShrink(3)
   cpt.stack.lsTop(0)
@@ -186,25 +179,21 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     trace "Initcode size exceeds maximum", initcodeSize = memLen
     return err(opErr(InvalidInitCode))
 
-  let
-    gasParams = GasParamsCr(
-      currentMemSize: cpt.memory.len,
-      memOffset:      memPos,
-      memLength:      memLen)
+  let gasParams =
+    GasParamsCr(currentMemSize: cpt.memory.len, memOffset: memPos, memLength: memLen)
 
   var gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
   gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
-  ? cpt.opcodeGasCost(Create2,
-    gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")
+  ?cpt.opcodeGasCost(
+    Create2, gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion"
+  )
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
-      reason = "Stack too deep",
-      maxDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+      reason = "Stack too deep", maxDepth = MaxCallDepth, depth = cpt.msg.depth
     return ok()
 
   if endowment != 0:
@@ -219,12 +208,12 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   var createMsgGas = cpt.gasMeter.gasRemaining
   if cpt.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
-  ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
+  ?cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
 
   when evmc_enabled:
     let
       msg = new(nimbus_message)
-      c   = cpt
+      c = cpt
     msg[] = nimbus_message(
       kind: EVMC_CREATE2,
       depth: (cpt.msg.depth + 1).int32,
@@ -238,11 +227,12 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     c.execSubCreate(msg)
   else:
     var childMsg = Message(
-      kind:   EVMC_CREATE2,
-      depth:  cpt.msg.depth + 1,
-      gas:    createMsgGas,
+      kind: EVMC_CREATE2,
+      depth: cpt.msg.depth + 1,
+      gas: createMsgGas,
       sender: cpt.msg.contractAddress,
-      value:  endowment)
+      value: endowment,
+    )
     assign(childMsg.data, cpt.memory.read(memPos, memLen))
     cpt.execSubCreate(salt = salt, childMsg = childMsg)
   ok()
@@ -251,21 +241,23 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-const
-  VmOpExecCreate*: seq[VmOpExec] = @[
-
-    (opCode: Create,    ## 0xf0, Create a new account with associated code
-     forks: VmOpAllForks,
-     name: "create",
-     info: "Create a new account with associated code",
-     exec: createOp),
-
-
-    (opCode: Create2,   ## 0xf5, Create using keccak256
-     forks: VmOpConstantinopleAndLater,
-     name: "create2",
-     info: "Behaves identically to CREATE, except using keccak256",
-     exec: create2Op)]
+const VmOpExecCreate*: seq[VmOpExec] =
+  @[
+    (
+      opCode: Create, ## 0xf0, Create a new account with associated code
+      forks: VmOpAllForks,
+      name: "create",
+      info: "Create a new account with associated code",
+      exec: createOp,
+    ),
+    (
+      opCode: Create2, ## 0xf5, Create using keccak256
+      forks: VmOpConstantinopleAndLater,
+      name: "create2",
+      info: "Behaves identically to CREATE, except using keccak256",
+      exec: create2Op,
+    ),
+  ]
 
 # ------------------------------------------------------------------------------
 # End

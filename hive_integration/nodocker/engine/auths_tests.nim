@@ -21,11 +21,13 @@ import
 # JWT Authentication Related
 const
   defaultJwtTokenSecretBytes = "secretsecretsecretsecretsecretse"
-  maxTimeDriftSeconds        = 60'i64
-  defaultProtectedHeader     = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
+  maxTimeDriftSeconds = 60'i64
+  defaultProtectedHeader = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
 
 createRpcSigsFromNim(RpcClient):
-  proc engine_exchangeTransitionConfigurationV1(transitionConfiguration: TransitionConfigurationV1): TransitionConfigurationV1
+  proc engine_exchangeTransitionConfigurationV1(
+    transitionConfiguration: TransitionConfigurationV1
+  ): TransitionConfigurationV1
 
 proc base64urlEncode(x: auto): string =
   base64.encode(x, safe = true).replace("=", "")
@@ -45,16 +47,19 @@ proc getClient(env: TestEnv, token: string): RpcHttpClient =
   waitFor client.connect("127.0.0.1", env.engine.httpPort, false)
   return client
 
-template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecretBytes: string, authOK: bool) =
+template genAuthTest(
+    procName: untyped,
+    timeDriftSeconds: int64,
+    customAuthSecretBytes: string,
+    authOK: bool,
+) =
   proc procName(env: TestEnv): bool =
     # Default values
     var
       # All test cases send a simple TransitionConfigurationV1 to check the Authentication mechanism (JWT)
-      tConf = TransitionConfigurationV1(
-        terminalTotalDifficulty: env.engine.ttd
-      )
+      tConf = TransitionConfigurationV1(terminalTotalDifficulty: env.engine.ttd)
       testSecret = customAuthSecretBytes
-      testTime   = getTime().toUnix
+      testTime = getTime().toUnix
 
     if testSecret.len == 0:
       testSecret = defaultJwtTokenSecretBytes
@@ -82,13 +87,12 @@ genAuthTest(authTest5, 1 - maxTimeDriftSeconds, "", true)
 genAuthTest(authTest6, maxTimeDriftSeconds + 1, "", false)
 genAuthTest(authTest7, maxTimeDriftSeconds - 1, "", true)
 
-type
-  AuthSpec* = ref object of BaseSpec
-    exec*: proc(env: TestEnv): bool
+type AuthSpec* = ref object of BaseSpec
+  exec*: proc(env: TestEnv): bool
 
 proc specExecute(ws: BaseSpec): bool =
   let
-    ws  = AuthSpec(ws)
+    ws = AuthSpec(ws)
     env = TestEnv.new("", true)
 
   env.engine.setRealTTD()
@@ -100,50 +104,36 @@ let authTestList* = [
   TestDesc(
     name: "JWT Authentication: No time drift, correct secret",
     run: specExecute,
-    spec: AuthSpec(
-      exec: authTest1,
-    )
+    spec: AuthSpec(exec: authTest1),
   ),
   TestDesc(
     name: "JWT Authentication: No time drift, incorrect secret (shorter)",
     run: specExecute,
-    spec: AuthSpec(
-      exec: authTest2,
-    )
+    spec: AuthSpec(exec: authTest2),
   ),
   TestDesc(
     name: "JWT Authentication: No time drift, incorrect secret (longer)",
     run: specExecute,
-    spec: AuthSpec(
-      exec: authTest3,
-    )
+    spec: AuthSpec(exec: authTest3),
   ),
   TestDesc(
     name: "JWT Authentication: Negative time drift, exceeding limit, correct secret",
     run: specExecute,
-    spec: AuthSpec(
-      exec: authTest4,
-    )
+    spec: AuthSpec(exec: authTest4),
   ),
   TestDesc(
     name: "JWT Authentication: Negative time drift, within limit, correct secret",
     run: specExecute,
-    spec: AuthSpec(
-      exec: authTest5,
-    )
+    spec: AuthSpec(exec: authTest5),
   ),
   TestDesc(
     name: "JWT Authentication: Positive time drift, exceeding limit, correct secret",
     run: specExecute,
-    spec: AuthSpec(
-      exec: authTest6,
-    )
+    spec: AuthSpec(exec: authTest6),
   ),
   TestDesc(
     name: "JWT Authentication: Positive time drift, within limit, correct secret",
     run: specExecute,
-    spec: AuthSpec(
-      exec: authTest7,
-    )
-  )
+    spec: AuthSpec(exec: authTest7),
+  ),
 ]

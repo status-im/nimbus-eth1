@@ -20,9 +20,7 @@
 ##
 {.push raises: [].}
 
-import
-  ./aristo_init/memory_only
-export
-  memory_only
+import ./aristo_init/memory_only
+export memory_only
 
 # End

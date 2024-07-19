@@ -16,13 +16,14 @@ import
   ../../../tests/test_helpers,
   ../../../nimbus/core/[tx_pool, block_import],
   ../../../nimbus/common,
-  graphql, ../sim_utils
+  graphql,
+  ../sim_utils
 
 const
-  baseFolder  = "hive_integration" / "nodocker" / "graphql"
-  blocksFile  = baseFolder / "init" / "blocks.rlp"
+  baseFolder = "hive_integration" / "nodocker" / "graphql"
+  blocksFile = baseFolder / "init" / "blocks.rlp"
   genesisFile = baseFolder / "init" / "genesis.json"
-  caseFolder  = baseFolder / "testcases"
+  caseFolder = baseFolder / "testcases"
 
 template testCond(expr: untyped) =
   if not (expr):
@@ -75,13 +76,11 @@ proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string): TestStatus 
 
 proc main() =
   let
-    conf    = makeConfig(@["--custom-network:" & genesisFile])
-    ethCtx  = newEthContext()
+    conf = makeConfig(@["--custom-network:" & genesisFile])
+    ethCtx = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    com     = CommonRef.new(newCoreDbRef DefaultDbMemory,
-      conf.networkId,
-      conf.networkParams
-    )
+    com =
+      CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
 
   com.initializeEmptyDb()
   let txPool = TxPoolRef.new(com)
@@ -97,8 +96,7 @@ proc main() =
   let head = com.db.getCanonicalHead()
   doAssert txPool.smartHead(head)
 
-  for fileName in walkDirRec(
-                 caseFolder, yieldFilter = {pcFile,pcLinkToFile}):
+  for fileName in walkDirRec(caseFolder, yieldFilter = {pcFile, pcLinkToFile}):
     if not fileName.endsWith(".json"):
       continue
 

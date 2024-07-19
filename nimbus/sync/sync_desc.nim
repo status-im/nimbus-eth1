@@ -15,48 +15,41 @@
 
 {.push raises: [].}
 
-import
-  eth/p2p,
-  ../core/chain,
-  ./handlers/eth
+import eth/p2p, ../core/chain, ./handlers/eth
 
-export
-  chain
+export chain
 
 type
   BuddyRunState* = enum
-    Running = 0             ## Running, default state
-    Stopped                 ## Stopped or about stopping
-    ZombieStop              ## Abandon/ignore (wait for pushed out of LRU table)
-    ZombieRun               ## Extra zombie state to potentially recover from
+    Running = 0 ## Running, default state
+    Stopped ## Stopped or about stopping
+    ZombieStop ## Abandon/ignore (wait for pushed out of LRU table)
+    ZombieRun ## Extra zombie state to potentially recover from
 
-  BuddyCtrlRef* = ref object
-    ## Control and state settings
-    runState: BuddyRunState     ## Access with getters
-    multiOk*: bool              ## Triggers `runSingle()` mode unless `true`
+  BuddyCtrlRef* = ref object ## Control and state settings
+    runState: BuddyRunState ## Access with getters
+    multiOk*: bool ## Triggers `runSingle()` mode unless `true`
 
-  BuddyRef*[S,W] = ref object
-    ## Worker peer state descriptor.
-    ctx*: CtxRef[S]             ## Shared data descriptor back reference
-    peer*: Peer                 ## Reference to eth p2pProtocol entry
-    ctrl*: BuddyCtrlRef         ## Control and state settings
-    only*: W                    ## Worker peer specific data
+  BuddyRef*[S, W] = ref object ## Worker peer state descriptor.
+    ctx*: CtxRef[S] ## Shared data descriptor back reference
+    peer*: Peer ## Reference to eth p2pProtocol entry
+    ctrl*: BuddyCtrlRef ## Control and state settings
+    only*: W ## Worker peer specific data
 
-  CtxRef*[S] = ref object
-    ## Shared state among all syncing peer workers (aka buddies.)
-    buddiesMax*: int            ## Max number of buddies
-    ethWireCtx*: EthWireRef     ## Eth protocol wire context (if available)
-    chain*: ChainRef            ## Block chain database (no need for `Peer`)
-    poolMode*: bool             ## Activate `runPool()` workers if set `true`
-    daemon*: bool               ## Enable global background job
-    exCtrlFile*: Opt[string]    ## Extra instructions file (if any)
-    pool*: S                    ## Shared context for all worker peers
+  CtxRef*[S] = ref object ## Shared state among all syncing peer workers (aka buddies.)
+    buddiesMax*: int ## Max number of buddies
+    ethWireCtx*: EthWireRef ## Eth protocol wire context (if available)
+    chain*: ChainRef ## Block chain database (no need for `Peer`)
+    poolMode*: bool ## Activate `runPool()` workers if set `true`
+    daemon*: bool ## Enable global background job
+    exCtrlFile*: Opt[string] ## Extra instructions file (if any)
+    pool*: S ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc `$`*[S,W](worker: BuddyRef[S,W]): string =
+proc `$`*[S, W](worker: BuddyRef[S, W]): string =
   $worker.peer & "$" & $worker.ctrl.runState
 
 # ------------------------------------------------------------------------------
@@ -84,10 +77,10 @@ proc zombie*(ctrl: BuddyCtrlRef): bool =
 # Public setters, `BuddyRunState` execution control functions
 # ------------------------------------------------------------------------------
 
-proc `zombie=`*(ctrl: BuddyCtrlRef; value: bool) =
+proc `zombie=`*(ctrl: BuddyCtrlRef, value: bool) =
   ## Setter
   if value:
-    case ctrl.runState:
+    case ctrl.runState
     of Running:
       ctrl.runState = ZombieRun
     of Stopped:
@@ -95,7 +88,7 @@ proc `zombie=`*(ctrl: BuddyCtrlRef; value: bool) =
     else:
       discard
   else:
-    case ctrl.runState:
+    case ctrl.runState
     of ZombieRun:
       ctrl.runState = Running
     of ZombieStop:
@@ -103,22 +96,22 @@ proc `zombie=`*(ctrl: BuddyCtrlRef; value: bool) =
     else:
       discard
 
-proc `stopped=`*(ctrl: BuddyCtrlRef; value: bool) =
+proc `stopped=`*(ctrl: BuddyCtrlRef, value: bool) =
   ## Setter
   if value:
-    case ctrl.runState:
+    case ctrl.runState
     of Running:
       ctrl.runState = Stopped
     else:
       discard
   else:
-    case ctrl.runState:
+    case ctrl.runState
     of Stopped:
       ctrl.runState = Running
     else:
       discard
 
-proc `forceRun=`*(ctrl: BuddyCtrlRef; value: bool) =
+proc `forceRun=`*(ctrl: BuddyCtrlRef, value: bool) =
   ## Setter, gets out of `Zombie` jail/locked state with `true argument.
   if value:
     ctrl.runState = Running

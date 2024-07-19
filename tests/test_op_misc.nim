@@ -8,15 +8,13 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  macro_assembler,
-  unittest2,
-  eth/common
+import macro_assembler, unittest2, eth/common
 
 proc opMiscMain*() =
   suite "Misc Opcodes":
-    assembler: # Log0 OP
-      title: "Log0"
+    assembler:
+      title:
+        "Log0"
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -29,11 +27,12 @@ proc opMiscMain*() =
       logs:
         (
           address: "0x460121576cc7df020759730751f92bd62fd78dd6",
-          data: "0x0000000000000000000000000000000000000000000000000000000000001234"
+          data: "0x0000000000000000000000000000000000000000000000000000000000001234",
         )
 
-    assembler: # Log1 OP
-      title: "Log1"
+    assembler:
+      title:
+        "Log1"
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -48,11 +47,12 @@ proc opMiscMain*() =
         (
           address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           topics: ["0x9999"],
-          data: "0x0000000000000000000000000000000000000000000000000000000000001234"
+          data: "0x0000000000000000000000000000000000000000000000000000000000001234",
         )
 
-    assembler: # Log2 OP
-      title: "Log2"
+    assembler:
+      title:
+        "Log2"
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -68,11 +68,12 @@ proc opMiscMain*() =
         (
           address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           topics: ["0x6666", "0x9999"],
-          data: "0x0000000000000000000000000000000000000000000000000000000000001234"
+          data: "0x0000000000000000000000000000000000000000000000000000000000001234",
         )
 
-    assembler: # Log3 OP
-      title: "Log3"
+    assembler:
+      title:
+        "Log3"
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -89,11 +90,12 @@ proc opMiscMain*() =
         (
           address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           topics: ["0x3333", "0x6666", "0x9999"],
-          data: "0x0000000000000000000000000000000000000000000000000000000000001234"
+          data: "0x0000000000000000000000000000000000000000000000000000000000001234",
         )
 
-    assembler: # Log4 OP
-      title: "Log4"
+    assembler:
+      title:
+        "Log4"
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -111,11 +113,12 @@ proc opMiscMain*() =
         (
           address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           topics: ["0x5555", "0x3333", "0x6666", "0x9999"],
-          data: "0x0000000000000000000000000000000000000000000000000000000000001234"
+          data: "0x0000000000000000000000000000000000000000000000000000000000001234",
         )
 
-    assembler: # Stop OP
-      title: "Stop_1"
+    assembler:
+      title:
+        "Stop_1"
       code:
         Push1 "0x20"
         Push1 "0x30"
@@ -132,8 +135,9 @@ proc opMiscMain*() =
         "0x11"
         "0x23"
 
-    assembler: # Return OP
-      title: "Return_1"
+    assembler:
+      title:
+        "Return_1"
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -141,11 +145,14 @@ proc opMiscMain*() =
         Push1 "0x20"
         Push1 "0x00"
         Return
-      memory: "0x1234"
-      output: "0x0000000000000000000000000000000000000000000000000000000000001234"
+      memory:
+        "0x1234"
+      output:
+        "0x0000000000000000000000000000000000000000000000000000000000001234"
 
-    assembler: # Return OP
-      title: "Return_2"
+    assembler:
+      title:
+        "Return_2"
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -156,10 +163,12 @@ proc opMiscMain*() =
       memory:
         "0x1234"
         "0x00"
-      output: "0x3400000000000000000000000000000000000000000000000000000000000000"
+      output:
+        "0x3400000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Return OP
-      title: "Return_3"
+    assembler:
+      title:
+        "Return_3"
       code:
         Push32 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
         Push1 "0x00"
@@ -167,11 +176,14 @@ proc opMiscMain*() =
         Push1 "0x20"
         Push1 "0x00"
         Return
-      memory: "0xa0b0c0d0e0f0a1b1c1d1e1f1a2b2c2d2e2f2a3b3c3d3e3f3a4b4c4d4e4f4a1b1"
-      output: "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
+      memory:
+        "0xa0b0c0d0e0f0a1b1c1d1e1f1a2b2c2d2e2f2a3b3c3d3e3f3a4b4c4d4e4f4a1b1"
+      output:
+        "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
 
-    assembler: # Return OP
-      title: "Return_4"
+    assembler:
+      title:
+        "Return_4"
       code:
         Push32 "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
         Push1 "0x00"
@@ -179,10 +191,12 @@ proc opMiscMain*() =
         Push1 "0x20"
         Push1 "0x10"
         Return
-      output: "0xE2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B100000000000000000000000000000000"
+      output:
+        "0xE2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B100000000000000000000000000000000"
       memory:
         "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
         "0x00"
+
 #[
   EIP-2315: Simple Subroutines for the EVM
   disabled reason: not included in Berlin hard fork

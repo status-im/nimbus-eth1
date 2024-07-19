@@ -24,7 +24,8 @@ const
   AutoValidateApiHooks = defined(release).not
     ## No validatinon needed for production suite.
 
-  KvtPersistentBackendOk = AutoValidateApiHooks # and false
+  KvtPersistentBackendOk = AutoValidateApiHooks
+    # and false
     ## Set true for persistent backend profiling (which needs an extra
     ## link library.)
 
@@ -35,38 +36,35 @@ when KvtPersistentBackendOk:
 {.pragma: noRaise, gcsafe, raises: [].}
 
 type
-  KvtDbProfListRef* = AristoDbProfListRef
-    ## Borrowed from `aristo_profile`
+  KvtDbProfListRef* = AristoDbProfListRef ## Borrowed from `aristo_profile`
 
-  KvtDbProfData* = AristoDbProfData
-    ## Borrowed from `aristo_profile`
+  KvtDbProfData* = AristoDbProfData ## Borrowed from `aristo_profile`
 
-  KvtApiCommitFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
-  KvtApiDelFn* = proc(db: KvtDbRef,
-    key: openArray[byte]): Result[void,KvtError] {.noRaise.}
+  KvtApiCommitFn* = proc(tx: KvtTxRef): Result[void, KvtError] {.noRaise.}
+  KvtApiDelFn* =
+    proc(db: KvtDbRef, key: openArray[byte]): Result[void, KvtError] {.noRaise.}
   KvtApiFinishFn* = proc(db: KvtDbRef, eradicate = false) {.noRaise.}
-  KvtApiForgetFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
-  KvtApiForkTxFn* = proc(db: KvtDbRef,
-    backLevel: int): Result[KvtDbRef,KvtError] {.noRaise.}
-  KvtApiGetFn* = proc(db: KvtDbRef,
-    key: openArray[byte]): Result[Blob,KvtError] {.noRaise.}
-  KvtApiLenFn* = proc(db: KvtDbRef,
-    key: openArray[byte]): Result[int,KvtError] {.noRaise.}
-  KvtApiHasKeyFn* = proc(db: KvtDbRef,
-    key: openArray[byte]): Result[bool,KvtError] {.noRaise.}
+  KvtApiForgetFn* = proc(db: KvtDbRef): Result[void, KvtError] {.noRaise.}
+  KvtApiForkTxFn* =
+    proc(db: KvtDbRef, backLevel: int): Result[KvtDbRef, KvtError] {.noRaise.}
+  KvtApiGetFn* =
+    proc(db: KvtDbRef, key: openArray[byte]): Result[Blob, KvtError] {.noRaise.}
+  KvtApiLenFn* =
+    proc(db: KvtDbRef, key: openArray[byte]): Result[int, KvtError] {.noRaise.}
+  KvtApiHasKeyFn* =
+    proc(db: KvtDbRef, key: openArray[byte]): Result[bool, KvtError] {.noRaise.}
   KvtApiIsCentreFn* = proc(db: KvtDbRef): bool {.noRaise.}
   KvtApiIsTopFn* = proc(tx: KvtTxRef): bool {.noRaise.}
   KvtApiLevelFn* = proc(db: KvtDbRef): int {.noRaise.}
   KvtApiNForkedFn* = proc(db: KvtDbRef): int {.noRaise.}
-  KvtApiPutFn* = proc(db: KvtDbRef,
-    key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
-  KvtApiReCentreFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
-  KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
-  KvtApiPersistFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
+  KvtApiPutFn* =
+    proc(db: KvtDbRef, key, data: openArray[byte]): Result[void, KvtError] {.noRaise.}
+  KvtApiReCentreFn* = proc(db: KvtDbRef): Result[void, KvtError] {.noRaise.}
+  KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void, KvtError] {.noRaise.}
+  KvtApiPersistFn* = proc(db: KvtDbRef): Result[void, KvtError] {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
-  KvtApiTxBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
-  KvtApiTxTopFn* =
-    proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
+  KvtApiTxBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef, KvtError] {.noRaise.}
+  KvtApiTxTopFn* = proc(db: KvtDbRef): Result[KvtTxRef, KvtError] {.noRaise.}
 
   KvtApiRef* = ref KvtApiObj
   KvtApiObj* = object of RootObj
@@ -92,38 +90,34 @@ type
     txBegin*: KvtApiTxBeginFn
     txTop*: KvtApiTxTopFn
 
-
   KvtApiProfNames* = enum
     ## index/name mapping for profile slots
-    KvtApiProfTotal          = "total"
+    KvtApiProfTotal = "total"
+    KvtApiProfCommitFn = "commit"
+    KvtApiProfDelFn = "del"
+    KvtApiProfFinishFn = "finish"
+    KvtApiProfForgetFn = "forget"
+    KvtApiProfForkTxFn = "forkTx"
+    KvtApiProfGetFn = "get"
+    KvtApiProfLenFn = "len"
+    KvtApiProfHasKeyFn = "hasKey"
+    KvtApiProfIsCentreFn = "isCentre"
+    KvtApiProfIsTopFn = "isTop"
+    KvtApiProfLevelFn = "level"
+    KvtApiProfNForkedFn = "nForked"
+    KvtApiProfPutFn = "put"
+    KvtApiProfReCentreFn = "reCentre"
+    KvtApiProfRollbackFn = "rollback"
+    KvtApiProfPersistFn = "persist"
+    KvtApiProfToKvtDbRefFn = "toKvtDbRef"
+    KvtApiProfTxBeginFn = "txBegin"
+    KvtApiProfTxTopFn = "txTop"
+    KvtApiProfBeGetKvpFn = "be/getKvp"
+    KvtApiProfBeLenKvpFn = "be/lenKvp"
+    KvtApiProfBePutKvpFn = "be/putKvp"
+    KvtApiProfBePutEndFn = "be/putEnd"
 
-    KvtApiProfCommitFn       = "commit"
-    KvtApiProfDelFn          = "del"
-    KvtApiProfFinishFn       = "finish"
-    KvtApiProfForgetFn       = "forget"
-    KvtApiProfForkTxFn       = "forkTx"
-    KvtApiProfGetFn          = "get"
-    KvtApiProfLenFn          = "len"
-    KvtApiProfHasKeyFn       = "hasKey"
-    KvtApiProfIsCentreFn     = "isCentre"
-    KvtApiProfIsTopFn        = "isTop"
-    KvtApiProfLevelFn        = "level"
-    KvtApiProfNForkedFn      = "nForked"
-    KvtApiProfPutFn          = "put"
-    KvtApiProfReCentreFn     = "reCentre"
-    KvtApiProfRollbackFn     = "rollback"
-    KvtApiProfPersistFn      = "persist"
-    KvtApiProfToKvtDbRefFn   = "toKvtDbRef"
-    KvtApiProfTxBeginFn      = "txBegin"
-    KvtApiProfTxTopFn        = "txTop"
-
-    KvtApiProfBeGetKvpFn     = "be/getKvp"
-    KvtApiProfBeLenKvpFn     = "be/lenKvp"
-    KvtApiProfBePutKvpFn     = "be/putKvp"
-    KvtApiProfBePutEndFn     = "be/putEnd"
-
-  KvtApiProfRef* = ref object of KvtApiRef
-    ## Profiling API extension of `KvtApiObj`
+  KvtApiProfRef* = ref object of KvtApiRef ## Profiling API extension of `KvtApiObj`
     data*: KvtDbProfListRef
     be*: BackendRef
 
@@ -132,7 +126,7 @@ type
 # ------------------------------------------------------------------------------
 
 when AutoValidateApiHooks:
-  proc validate(api: KvtApiObj|KvtApiRef) =
+  proc validate(api: KvtApiObj | KvtApiRef) =
     doAssert not api.commit.isNil
     doAssert not api.del.isNil
     doAssert not api.finish.isNil
@@ -157,14 +151,12 @@ when AutoValidateApiHooks:
     doAssert not prf.data.isNil
 
 proc dup(be: BackendRef): BackendRef =
-  case be.kind:
+  case be.kind
   of BackendMemory:
     return MemBackendRef(be).dup
-
   of BackendRocksDB, BackendRdbTriggered:
     when KvtPersistentBackendOk:
       return RdbBackendRef(be).dup
-
   of BackendVoid:
     discard
 
@@ -203,25 +195,26 @@ func init*(T: type KvtApiRef): T =
 
 func dup*(api: KvtApiRef): KvtApiRef =
   result = KvtApiRef(
-    commit:     api.commit,
-    del:        api.del,
-    finish:     api.finish,
-    forget:     api.forget,
-    forkTx:     api.forkTx,
-    get:        api.get,
-    len:        api.len,
-    hasKey:     api.hasKey,
-    isCentre:   api.isCentre,
-    isTop:      api.isTop,
-    level:      api.level,
-    nForked:    api.nForked,
-    put:        api.put,
-    reCentre:   api.reCentre,
-    rollback:   api.rollback,
-    persist:    api.persist,
+    commit: api.commit,
+    del: api.del,
+    finish: api.finish,
+    forget: api.forget,
+    forkTx: api.forkTx,
+    get: api.get,
+    len: api.len,
+    hasKey: api.hasKey,
+    isCentre: api.isCentre,
+    isTop: api.isTop,
+    level: api.level,
+    nForked: api.nForked,
+    put: api.put,
+    reCentre: api.reCentre,
+    rollback: api.rollback,
+    persist: api.persist,
     toKvtDbRef: api.toKvtDbRef,
-    txBegin:    api.txBegin,
-    txTop:      api.txTop)
+    txBegin: api.txBegin,
+    txTop: api.txTop,
+  )
   when AutoValidateApiHooks:
     result.validate
 
@@ -229,11 +222,7 @@ func dup*(api: KvtApiRef): KvtApiRef =
 # Public profile API constuctor
 # ------------------------------------------------------------------------------
 
-func init*(
-    T: type KvtApiProfRef;
-    api: KvtApiRef;
-    be = BackendRef(nil);
-      ): T =
+func init*(T: type KvtApiProfRef, api: KvtApiRef, be = BackendRef(nil)): T =
   ## This constructor creates a profiling API descriptor to be derived from
   ## an initialised `api` argument descriptor. For profiling the DB backend,
   ## the field `.be` of the result descriptor must be assigned to the
@@ -243,8 +232,7 @@ func init*(
   ## used to restore the previous set up.
   ##
   let
-    data = KvtDbProfListRef(
-      list: newSeq[KvtDbProfData](1 + high(KvtApiProfNames).ord))
+    data = KvtDbProfListRef(list: newSeq[KvtDbProfData](1 + high(KvtApiProfNames).ord))
     profApi = T(data: data)
 
   template profileRunner(n: KvtApiProfNames, code: untyped): untyped =
@@ -252,127 +240,103 @@ func init*(
     code
     data.update(n.ord, getTime() - start)
 
-  profApi.commit =
-    proc(a: KvtTxRef): auto =
-      KvtApiProfCommitFn.profileRunner:
-        result = api.commit(a)
+  profApi.commit = proc(a: KvtTxRef): auto =
+    KvtApiProfCommitFn.profileRunner:
+      result = api.commit(a)
 
-  profApi.del =
-    proc(a: KvtDbRef; b: openArray[byte]): auto =
-      KvtApiProfDelFn.profileRunner:
-        result = api.del(a, b)
+  profApi.del = proc(a: KvtDbRef, b: openArray[byte]): auto =
+    KvtApiProfDelFn.profileRunner:
+      result = api.del(a, b)
 
-  profApi.finish =
-    proc(a: KvtDbRef; b = false) =
-      KvtApiProfFinishFn.profileRunner:
-        api.finish(a, b)
+  profApi.finish = proc(a: KvtDbRef, b = false) =
+    KvtApiProfFinishFn.profileRunner:
+      api.finish(a, b)
 
-  profApi.forget =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfForgetFn.profileRunner:
-        result = api.forget(a)
+  profApi.forget = proc(a: KvtDbRef): auto =
+    KvtApiProfForgetFn.profileRunner:
+      result = api.forget(a)
 
-  profApi.forkTx =
-    proc(a: KvtDbRef, b: int): auto =
-      KvtApiProfForkTxFn.profileRunner:
-        result = api.forkTx(a, b)
+  profApi.forkTx = proc(a: KvtDbRef, b: int): auto =
+    KvtApiProfForkTxFn.profileRunner:
+      result = api.forkTx(a, b)
 
-  profApi.get =
-    proc(a: KvtDbRef, b: openArray[byte]): auto =
-      KvtApiProfGetFn.profileRunner:
-        result = api.get(a, b)
+  profApi.get = proc(a: KvtDbRef, b: openArray[byte]): auto =
+    KvtApiProfGetFn.profileRunner:
+      result = api.get(a, b)
 
-  profApi.len =
-    proc(a: KvtDbRef, b: openArray[byte]): auto =
-      KvtApiProfLenFn.profileRunner:
-        result = api.len(a, b)
+  profApi.len = proc(a: KvtDbRef, b: openArray[byte]): auto =
+    KvtApiProfLenFn.profileRunner:
+      result = api.len(a, b)
 
-  profApi.hasKey =
-    proc(a: KvtDbRef, b: openArray[byte]): auto =
-      KvtApiProfHasKeyFn.profileRunner:
-        result = api.hasKey(a, b)
+  profApi.hasKey = proc(a: KvtDbRef, b: openArray[byte]): auto =
+    KvtApiProfHasKeyFn.profileRunner:
+      result = api.hasKey(a, b)
 
-  profApi.isCentre =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfIsCentreFn.profileRunner:
-        result = api.isCentre(a)
+  profApi.isCentre = proc(a: KvtDbRef): auto =
+    KvtApiProfIsCentreFn.profileRunner:
+      result = api.isCentre(a)
 
-  profApi.isTop =
-    proc(a: KvtTxRef): auto =
-      KvtApiProfIsTopFn.profileRunner:
-        result = api.isTop(a)
+  profApi.isTop = proc(a: KvtTxRef): auto =
+    KvtApiProfIsTopFn.profileRunner:
+      result = api.isTop(a)
 
-  profApi.level =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfLevelFn.profileRunner:
-        result = api.level(a)
+  profApi.level = proc(a: KvtDbRef): auto =
+    KvtApiProfLevelFn.profileRunner:
+      result = api.level(a)
 
-  profApi.nForked =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfNForkedFn.profileRunner:
-        result = api.nForked(a)
+  profApi.nForked = proc(a: KvtDbRef): auto =
+    KvtApiProfNForkedFn.profileRunner:
+      result = api.nForked(a)
 
-  profApi.put =
-    proc(a: KvtDbRef; b, c: openArray[byte]): auto =
-      KvtApiProfPutFn.profileRunner:
-        result = api.put(a, b, c)
+  profApi.put = proc(a: KvtDbRef, b, c: openArray[byte]): auto =
+    KvtApiProfPutFn.profileRunner:
+      result = api.put(a, b, c)
 
-  profApi.reCentre =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfReCentreFn.profileRunner:
-        result = api.reCentre(a)
+  profApi.reCentre = proc(a: KvtDbRef): auto =
+    KvtApiProfReCentreFn.profileRunner:
+      result = api.reCentre(a)
 
-  profApi.rollback =
-    proc(a: KvtTxRef): auto =
-      KvtApiProfRollbackFn.profileRunner:
-        result = api.rollback(a)
+  profApi.rollback = proc(a: KvtTxRef): auto =
+    KvtApiProfRollbackFn.profileRunner:
+      result = api.rollback(a)
 
-  profApi.persist =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfPersistFn.profileRunner:
-        result = api.persist(a)
+  profApi.persist = proc(a: KvtDbRef): auto =
+    KvtApiProfPersistFn.profileRunner:
+      result = api.persist(a)
 
-  profApi.toKvtDbRef =
-     proc(a: KvtTxRef): auto =
-       KvtApiProfToKvtDbRefFn.profileRunner:
-         result = api.toKvtDbRef(a)
+  profApi.toKvtDbRef = proc(a: KvtTxRef): auto =
+    KvtApiProfToKvtDbRefFn.profileRunner:
+      result = api.toKvtDbRef(a)
 
-  profApi.txBegin =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfTxBeginFn.profileRunner:
-        result = api.txBegin(a)
+  profApi.txBegin = proc(a: KvtDbRef): auto =
+    KvtApiProfTxBeginFn.profileRunner:
+      result = api.txBegin(a)
 
-  profApi.txTop =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfTxTopFn.profileRunner:
-        result = api.txTop(a)
+  profApi.txTop = proc(a: KvtDbRef): auto =
+    KvtApiProfTxTopFn.profileRunner:
+      result = api.txTop(a)
 
   let beDup = be.dup()
   if beDup.isNil:
     profApi.be = be
-
   else:
-    beDup.getKvpFn =
-      proc(a: openArray[byte]): auto =
-        KvtApiProfBeGetKvpFn.profileRunner:
-          result = be.getKvpFn(a)
+    beDup.getKvpFn = proc(a: openArray[byte]): auto =
+      KvtApiProfBeGetKvpFn.profileRunner:
+        result = be.getKvpFn(a)
     data.list[KvtApiProfBeGetKvpFn.ord].masked = true
 
-    beDup.lenKvpFn =
-      proc(a: openArray[byte]): auto =
-        KvtApiProfBeLenKvpFn.profileRunner:
-          result = be.lenKvpFn(a)
+    beDup.lenKvpFn = proc(a: openArray[byte]): auto =
+      KvtApiProfBeLenKvpFn.profileRunner:
+        result = be.lenKvpFn(a)
     data.list[KvtApiProfBeLenKvpFn.ord].masked = true
 
-    beDup.putKvpFn =
-      proc(a: PutHdlRef; b: openArray[(Blob,Blob)]) =
-        be.putKvpFn(a,b)
+    beDup.putKvpFn = proc(a: PutHdlRef, b: openArray[(Blob, Blob)]) =
+      be.putKvpFn(a, b)
     data.list[KvtApiProfBePutKvpFn.ord].masked = true
 
-    beDup.putEndFn =
-      proc(a: PutHdlRef): auto =
-        KvtApiProfBePutEndFn.profileRunner:
-          result = be.putEndFn(a)
+    beDup.putEndFn = proc(a: PutHdlRef): auto =
+      KvtApiProfBePutEndFn.profileRunner:
+        result = be.putEndFn(a)
     data.list[KvtApiProfBePutEndFn.ord].masked = true
 
     profApi.be = beDup

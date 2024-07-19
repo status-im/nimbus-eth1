@@ -13,18 +13,15 @@
 ##
 {.push raises: [].}
 
-import
-  results,
-  ./tx_frame,
-  ".."/[aristo_desc, aristo_get, aristo_layers]
+import results, ./tx_frame, ".."/[aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc txFork*(
-    tx: AristoTxRef;                  # Transaction descriptor
-      ): Result[AristoDbRef,AristoError] =
+    tx: AristoTxRef, # Transaction descriptor
+): Result[AristoDbRef, AristoError] =
   ## Clone a transaction into a new DB descriptor accessing the same backend
   ## database (if any) as the argument `db`. The new descriptor is linked to
   ## the transaction parent and is fully functional as a forked instance (see
@@ -71,24 +68,18 @@ proc txFork*(
       return err(rc.error)
 
   # Set up clone associated to `db`
-  let txClone = ? db.fork(noToplayer = true, noFilter = false)
-  txClone.top = db.layersCc tx.level  # Provide tx level 1 stack
-  txClone.stack = @[stackLayer]       # Zero level stack
+  let txClone = ?db.fork(noToplayer = true, noFilter = false)
+  txClone.top = db.layersCc tx.level # Provide tx level 1 stack
+  txClone.stack = @[stackLayer] # Zero level stack
   txClone.top.txUid = 1
   txClone.txUidGen = 1
 
   # Install transaction similar to `tx` on clone
-  txClone.txRef = AristoTxRef(
-    db:    txClone,
-    txUid: 1,
-    level: 1)
+  txClone.txRef = AristoTxRef(db: txClone, txUid: 1, level: 1)
 
   ok(txClone)
 
-
-proc txForkTop*(
-    db: AristoDbRef;
-      ): Result[AristoDbRef,AristoError] =
+proc txForkTop*(db: AristoDbRef): Result[AristoDbRef, AristoError] =
   ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
   ## the top layer is cloned, and an empty transaction is set up. After
   ## successful fork the returned descriptor has transaction level 1.
@@ -96,8 +87,8 @@ proc txForkTop*(
   ## Use `aristo_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
-    let txClone = ? db.fork(noToplayer=true, noFilter=false)
-    txClone.top = db.layersCc         # Is a deep copy
+    let txClone = ?db.fork(noToplayer = true, noFilter = false)
+    txClone.top = db.layersCc # Is a deep copy
 
     discard txClone.txFrameBegin()
     return ok(txClone)
@@ -105,10 +96,7 @@ proc txForkTop*(
 
   db.txRef.txFork()
 
-
-proc txForkBase*(
-    db: AristoDbRef;
-      ): Result[AristoDbRef,AristoError] =
+proc txForkBase*(db: AristoDbRef): Result[AristoDbRef, AristoError] =
   ## Variant of `forkTx()`, sort of the opposite of `forkTop()`. This is the
   ## equivalent of top layer forking after all tranactions have been rolled
   ## back.
@@ -118,7 +106,7 @@ proc txForkBase*(
   if db.txRef.isNil:
     return db.txForkTop()
 
-  let txClone = ? db.fork(noToplayer=true, noFilter=false)
+  let txClone = ?db.fork(noToplayer = true, noFilter = false)
   txClone.top = db.layersCc 0
 
   discard txClone.txFrameBegin()

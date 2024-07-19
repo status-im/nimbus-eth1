@@ -28,12 +28,11 @@ proc deltaPersistentOk*(db: AristoDbRef): bool =
   ## Check whether the read-only filter can be merged into the backend
   not db.backend.isNil and db.isCentre
 
-
 proc deltaPersistent*(
-    db: AristoDbRef;                   # Database
-    nxtFid = 0u64;                     # Next filter ID (if any)
-    reCentreOk = false;
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database
+    nxtFid = 0u64, # Next filter ID (if any)
+    reCentreOk = false,
+): Result[void, AristoError] =
   ## Resolve (i.e. move) the balancer into the physical backend database.
   ##
   ## This needs write permission on the backend DB for the descriptor argument
@@ -59,9 +58,10 @@ proc deltaPersistent*(
   if db != parent:
     if not reCentreOk:
       return err(FilBackendRoMode)
-    ? db.reCentre()
+    ?db.reCentre()
   # Always re-centre to `parent` (in case `reCentreOk` was set)
-  defer: discard parent.reCentre()
+  defer:
+    discard parent.reCentre()
 
   # Update forked balancers here do that errors are detected early (if any.)
   if 0 < db.nForked:
@@ -76,22 +76,23 @@ proc deltaPersistent*(
         # not shared (i.e. only previously merged into the w.db.balancer.)
         # Note that it is trivially true for a single fork.
         let modLowerOk = w.isLast and unsharedRevOk
-        w.db.balancer = deltaMerge(
-          w.db.balancer, modUpperOk=false, rev, modLowerOk=modLowerOk)
+        w.db.balancer =
+          deltaMerge(w.db.balancer, modUpperOk = false, rev, modLowerOk = modLowerOk)
 
   let lSst = SavedState(
-    key:  EMPTY_ROOT_HASH,                       # placeholder for more
-    serial: nxtFid)
+    key: EMPTY_ROOT_HASH, # placeholder for more
+    serial: nxtFid,
+  )
 
   # Store structural single trie entries
-  let writeBatch = ? be.putBegFn()
+  let writeBatch = ?be.putBegFn()
   for rvid, vtx in db.balancer.sTab:
     be.putVtxFn(writeBatch, rvid, vtx)
   for rvid, key in db.balancer.kMap:
     be.putKeyFn(writeBatch, rvid, key)
   be.putTuvFn(writeBatch, db.balancer.vTop)
   be.putLstFn(writeBatch, lSst)
-  ? be.putEndFn writeBatch                       # Finalise write batch
+  ?be.putEndFn writeBatch # Finalise write batch
 
   # Copy back updated payloads
   for accPath, vtx in db.balancer.accLeaves:

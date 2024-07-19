@@ -10,8 +10,7 @@
 
 {.push raises: [].}
 
-import
-  ../../core_db/base/base_config
+import ../../core_db/base/base_config
 
 # Configuration section
 const

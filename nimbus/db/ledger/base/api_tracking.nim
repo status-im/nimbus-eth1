@@ -25,61 +25,59 @@ type
 
   LedgerFnInx* = enum
     ## Profiling table index
-    SummaryItem                = "total"
-
-    LdgAccessListFn            = "accessList"
-    LdgAccountExistsFn         = "accountExists"
-    LdgAddBalanceFn            = "addBalance"
-    LdgAddLogEntryFn           = "addLogEntry"
-    LdgBeginSavepointFn        = "beginSavepoint"
-    LdgClearStorageFn          = "clearStorage"
+    SummaryItem = "total"
+    LdgAccessListFn = "accessList"
+    LdgAccountExistsFn = "accountExists"
+    LdgAddBalanceFn = "addBalance"
+    LdgAddLogEntryFn = "addLogEntry"
+    LdgBeginSavepointFn = "beginSavepoint"
+    LdgClearStorageFn = "clearStorage"
     LdgClearTransientStorageFn = "clearTransientStorage"
-    LdgCollectWitnessDataFn    = "collectWitnessData"
-    LdgCommitFn                = "commit"
-    LdgContractCollisionFn     = "contractCollision"
-    LdgDeleteAccountFn         = "deleteAccount"
-    LdgDisposeFn               = "dispose"
-    LdgGetAccessListFn         = "getAcessList"
-    LdgGetAccountFn            = "getAccount"
+    LdgCollectWitnessDataFn = "collectWitnessData"
+    LdgCommitFn = "commit"
+    LdgContractCollisionFn = "contractCollision"
+    LdgDeleteAccountFn = "deleteAccount"
+    LdgDisposeFn = "dispose"
+    LdgGetAccessListFn = "getAcessList"
+    LdgGetAccountFn = "getAccount"
     LdgGetAndClearLogEntriesFn = "getAndClearLogEntries"
-    LdgGetBalanceFn            = "getBalance"
-    LdgGetCodeFn               = "getCode"
-    LdgGetCodeHashFn           = "getCodeHash"
-    LdgGetCodeSizeFn           = "getCodeSize"
-    LdgGetCommittedStorageFn   = "getCommittedStorage"
-    LdgGetNonceFn              = "getNonce"
-    LdgGetStorageFn            = "getStorage"
-    LdgGetStorageRootFn        = "getStorageRoot"
-    LdgGetTransientStorageFn   = "getTransientStorage"
-    LdgGetAthAccountFn         = "getEthAccount"
-    LdgInAccessListFn          = "inAccessList"
-    LdgIncNonceFn              = "incNonce"
-    LdgIsDeadAccountFn         = "isDeadAccount"
-    LdgIsEmptyAccountFn        = "isEmptyAccount"
-    LdgIsTopLevelCleanFn       = "isTopLevelClean"
-    LdgLogEntriesFn            = "logEntries"
-    LdgMakeMultiKeysFn         = "makeMultiKeys"
-    LdgPersistFn               = "persist"
-    LdgRipemdSpecialFn         = "ripemdSpecial"
-    LdgRollbackFn              = "rollback"
-    LdgRootHashFn              = "rootHash"
-    LdgSafeDisposeFn           = "safeDispose"
-    LdgSelfDestruct6780Fn      = "selfDestruct6780"
-    LdgSelfDestructFn          = "selfDestruct"
-    LdgSelfDestructLenFn       = "selfDestructLen"
-    LdgSetBalanceFn            = "setBalance"
-    LdgSetCodeFn               = "setCode"
-    LdgSetNonceFn              = "setNonce"
-    LdgSetStorageFn            = "setStorage"
-    LdgSetTransientStorageFn   = "setTransientStorage"
-    LdgStateFn                 = "state"
-    LdgSubBalanceFn            = "subBalance"
-
-    LdgAccountsIt              = "accounts"
-    LdgAdressesIt              = "addresses"
-    LdgCachedStorageIt         = "cachedStorage"
-    LdgPairsIt                 = "pairs"
-    LdgStorageIt               = "storage"
+    LdgGetBalanceFn = "getBalance"
+    LdgGetCodeFn = "getCode"
+    LdgGetCodeHashFn = "getCodeHash"
+    LdgGetCodeSizeFn = "getCodeSize"
+    LdgGetCommittedStorageFn = "getCommittedStorage"
+    LdgGetNonceFn = "getNonce"
+    LdgGetStorageFn = "getStorage"
+    LdgGetStorageRootFn = "getStorageRoot"
+    LdgGetTransientStorageFn = "getTransientStorage"
+    LdgGetAthAccountFn = "getEthAccount"
+    LdgInAccessListFn = "inAccessList"
+    LdgIncNonceFn = "incNonce"
+    LdgIsDeadAccountFn = "isDeadAccount"
+    LdgIsEmptyAccountFn = "isEmptyAccount"
+    LdgIsTopLevelCleanFn = "isTopLevelClean"
+    LdgLogEntriesFn = "logEntries"
+    LdgMakeMultiKeysFn = "makeMultiKeys"
+    LdgPersistFn = "persist"
+    LdgRipemdSpecialFn = "ripemdSpecial"
+    LdgRollbackFn = "rollback"
+    LdgRootHashFn = "rootHash"
+    LdgSafeDisposeFn = "safeDispose"
+    LdgSelfDestruct6780Fn = "selfDestruct6780"
+    LdgSelfDestructFn = "selfDestruct"
+    LdgSelfDestructLenFn = "selfDestructLen"
+    LdgSetBalanceFn = "setBalance"
+    LdgSetCodeFn = "setCode"
+    LdgSetNonceFn = "setNonce"
+    LdgSetStorageFn = "setStorage"
+    LdgSetTransientStorageFn = "setTransientStorage"
+    LdgStateFn = "state"
+    LdgSubBalanceFn = "subBalance"
+    LdgAccountsIt = "accounts"
+    LdgAdressesIt = "addresses"
+    LdgCachedStorageIt = "cachedStorage"
+    LdgPairsIt = "pairs"
+    LdgStorageIt = "storage"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -95,12 +93,16 @@ func toStr(w: Hash256): string =
   w.data.oaToStr
 
 func toStr(w: CodeBytesRef): string =
-  if w.isNil: "nil"
-  else: "[" & $w.bytes.len & "]"
+  if w.isNil:
+    "nil"
+  else:
+    "[" & $w.bytes.len & "]"
 
 func toStr(w: Blob): string =
-  if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
-  else: "Blob[" & $w.len & "]"
+  if 0 < w.len and w.len < 5:
+    "<" & w.oaToStr & ">"
+  else:
+    "Blob[" & $w.len & "]"
 
 func toStr(w: seq[Log]): string =
   "Logs[" & $w.len & "]"
@@ -112,30 +114,36 @@ func toStr(ela: Duration): string =
 # Public API logging helpers
 # ------------------------------------------------------------------------------
 
-func `$`*(w: CodeBytesRef): string {.used.} = w.toStr
-func `$`*(e: Elapsed): string = e.Duration.toStr
-func `$`*(l: seq[Log]): string = l.toStr
-func `$`*(b: Blob): string = b.toStr
-func `$$`*(a: EthAddress): string = a.toStr # otherwise collision w/existing `$`
-func `$$`*(h: Hash256): string = h.toStr    # otherwise collision w/existing `$`
+func `$`*(w: CodeBytesRef): string {.used.} =
+  w.toStr
+func `$`*(e: Elapsed): string =
+  e.Duration.toStr
+func `$`*(l: seq[Log]): string =
+  l.toStr
+func `$`*(b: Blob): string =
+  b.toStr
+func `$$`*(a: EthAddress): string =
+  a.toStr # otherwise collision w/existing `$`
+func `$$`*(h: Hash256): string =
+  h.toStr # otherwise collision w/existing `$`
 
 # ------------------------------------------------------------------------------
 # Public API logging framework
 # ------------------------------------------------------------------------------
 
-template beginTrackApi*(ldg: LedgerRef; s: LedgerFnInx) =
+template beginTrackApi*(ldg: LedgerRef, s: LedgerFnInx) =
   when LedgerEnableApiTracking:
-    const api {.inject,used.} = s      # Generally available
+    const api {.inject, used.} = s # Generally available
     let baStart {.inject.} = getTime() # Local use only
 
-template ifTrackApi*(ldg: LedgerRef; code: untyped) =
+template ifTrackApi*(ldg: LedgerRef, code: untyped) =
   when LedgerEnableApiTracking:
     when LedgerEnableApiProfiling:
-      let elapsed {.inject,used.} = (getTime() - baStart).Elapsed
+      let elapsed {.inject, used.} = (getTime() - baStart).Elapsed
       aristo_profile.update(ldg.profTab, api.ord, elapsed.Duration)
     if ldg.trackApi:
       when not LedgerEnableApiProfiling: # otherwise use variable above
-        let elapsed {.inject,used.} = (getTime() - baStart).Elapsed
+        let elapsed {.inject, used.} = (getTime() - baStart).Elapsed
       code
 
 # ------------------------------------------------------------------------------

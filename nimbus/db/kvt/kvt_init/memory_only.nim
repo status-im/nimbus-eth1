@@ -13,59 +13,47 @@
 ##
 {.push raises: [].}
 
-import
-  ../kvt_desc,
-  ../kvt_desc/desc_backend,
-  "."/[init_common, memory_db]
+import ../kvt_desc, ../kvt_desc/desc_backend, "."/[init_common, memory_db]
 
 type
   VoidBackendRef* = ref object of TypedBackendRef
     ## Dummy descriptor type, used as `nil` reference
 
-  MemOnlyBackend* = VoidBackendRef|MemBackendRef
+  MemOnlyBackend* = VoidBackendRef | MemBackendRef
 
-export
-  BackendType,
-  MemBackendRef
+export BackendType, MemBackendRef
 
 # ------------------------------------------------------------------------------
 # Public helpers
 # -----------------------------------------------------------------------------
 
-func kind*(
-    be: BackendRef;
-      ): BackendType =
+func kind*(be: BackendRef): BackendType =
   ## Retrieves the backend type symbol for a `be` backend database argument
   ## where `BackendVoid` is returned for the`nil` backend.
-  if be.isNil:
-    BackendVoid
-  else:
-    be.TypedBackendRef.beKind
+  if be.isNil: BackendVoid else: be.TypedBackendRef.beKind
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
 proc init*(
-    T: type KvtDbRef;                         # Target type
-    B: type MemOnlyBackend;                   # Backend type
-      ): T =
+    T: type KvtDbRef, # Target type
+    B: type MemOnlyBackend, # Backend type
+): T =
   ## Memory backend constructor.
   ##
   when B is VoidBackendRef:
     KvtDbRef(top: LayerRef.init())
-
   elif B is MemBackendRef:
     KvtDbRef(top: LayerRef.init(), backend: memoryBackend())
 
 proc init*(
-    T: type KvtDbRef;                         # Target type
-      ): T =
+    T: type KvtDbRef, # Target type
+): T =
   ## Shortcut for `KvtDbRef.init(VoidBackendRef)`
   KvtDbRef.init VoidBackendRef
- 
 
-proc finish*(db: KvtDbRef; eradicate = false) =
+proc finish*(db: KvtDbRef, eradicate = false) =
   ## Backend destructor. The argument `eradicate` indicates that a full
   ## database deletion is requested. If set `false` the outcome might differ
   ## depending on the type of backend (e.g. the `BackendMemory` backend will

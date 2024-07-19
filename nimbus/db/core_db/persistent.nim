@@ -22,21 +22,15 @@
 {.push raises: [].}
 
 import
-  ../aristo,
-  ./memory_only,
-  base_iterators_persistent,
-  ./backend/aristo_rocksdb,
-  ../opts
+  ../aristo, ./memory_only, base_iterators_persistent, ./backend/aristo_rocksdb, ../opts
 
-export
-  memory_only,
-  base_iterators_persistent
+export memory_only, base_iterators_persistent
 
 proc newCoreDbRef*(
-    dbType: static[CoreDbType];      # Database type symbol
-    path: string;                    # Storage path for database
-    opts: DbOptions;
-      ): CoreDbRef =
+    dbType: static[CoreDbType], # Database type symbol
+    path: string, # Storage path for database
+    opts: DbOptions,
+): CoreDbRef =
   ## Constructor for persistent type DB
   ##
   ## The production database type is `AristoDbRocks` which uses a single
@@ -44,7 +38,6 @@ proc newCoreDbRef*(
   ##
   when dbType == AristoDbRocks:
     newAristoRocksDbCoreDbRef path, opts
-
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}
 

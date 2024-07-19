@@ -20,43 +20,40 @@ import
   ./kvt_constants,
   ./kvt_desc/[desc_error, desc_structural]
 
-from ./kvt_desc/desc_backend
-  import BackendRef
+from ./kvt_desc/desc_backend import BackendRef
 
 # Not auto-exporting backend
-export
-  kvt_constants, desc_error, desc_structural
+export kvt_constants, desc_error, desc_structural
 
 type
-  KvtTxRef* = ref object
-    ## Transaction descriptor
-    db*: KvtDbRef                     ## Database descriptor
-    parent*: KvtTxRef                 ## Previous transaction
-    txUid*: uint                      ## Unique ID among transactions
-    level*: int                       ## Stack index for this transaction
+  KvtTxRef* = ref object ## Transaction descriptor
+    db*: KvtDbRef ## Database descriptor
+    parent*: KvtTxRef ## Previous transaction
+    txUid*: uint ## Unique ID among transactions
+    level*: int ## Stack index for this transaction
 
   DudesRef = ref object
     ## List of peers accessing the same database. This list is layzily
     ## allocated and might be kept with a single entry, i.e. so that
     ## `{centre} == peers`.
-    centre: KvtDbRef                  ## Link to peer with write permission
-    peers: HashSet[KvtDbRef]          ## List of all peers
+    centre: KvtDbRef ## Link to peer with write permission
+    peers: HashSet[KvtDbRef] ## List of all peers
 
   KvtDbRef* = ref object of RootRef
     ## Three tier database object supporting distributed instances.
-    top*: LayerRef                    ## Database working layer, mutable
-    stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    balancer*: LayerRef               ## Balance out concurrent backend access
-    backend*: BackendRef              ## Backend database (may well be `nil`)
+    top*: LayerRef ## Database working layer, mutable
+    stack*: seq[LayerRef] ## Stashed immutable parent layers
+    balancer*: LayerRef ## Balance out concurrent backend access
+    backend*: BackendRef ## Backend database (may well be `nil`)
 
-    txRef*: KvtTxRef                  ## Latest active transaction
-    txUidGen*: uint                   ## Tx-relative unique number generator
-    dudes: DudesRef                   ## Related DB descriptors
+    txRef*: KvtTxRef ## Latest active transaction
+    txUidGen*: uint ## Tx-relative unique number generator
+    dudes: DudesRef ## Related DB descriptors
 
     # Debugging data below, might go away in future
     xIdGen*: uint64
-    xMap*: Table[Blob,uint64]         ## For pretty printing
-    pAmx*: Table[uint64,Blob]         ## For pretty printing
+    xMap*: Table[Blob, uint64] ## For pretty printing
+    pAmx*: Table[uint64, Blob] ## For pretty printing
 
   KvtDbAction* = proc(db: KvtDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
@@ -65,7 +62,7 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc canMod(db: KvtDbRef): Result[void,KvtError] =
+proc canMod(db: KvtDbRef): Result[void, KvtError] =
   ## Ask for permission before doing nasty stuff
   if db.backend.isNil:
     ok()
@@ -76,7 +73,7 @@ proc canMod(db: KvtDbRef): Result[void,KvtError] =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func getOrVoid*(tab: Table[Blob,Blob]; w: Blob): Blob =
+func getOrVoid*(tab: Table[Blob, Blob], w: Blob): Blob =
   tab.getOrDefault(w, EmptyBlob)
 
 func isValid*(key: Blob): bool =
@@ -110,7 +107,7 @@ func getCentre*(db: KvtDbRef): KvtDbRef =
   ##
   if db.dudes.isNil: db else: db.dudes.centre
 
-proc reCentre*(db: KvtDbRef): Result[void,KvtError] =
+proc reCentre*(db: KvtDbRef): Result[void, KvtError] =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -125,15 +122,13 @@ proc reCentre*(db: KvtDbRef): Result[void,KvtError] =
   ## returns `false` must be single destructed with `forget()`.
   ##
   if not db.dudes.isNil and db.dudes.centre != db:
-    ? db.canMod()
+    ?db.canMod()
     db.dudes.centre = db
   ok()
 
 proc fork*(
-    db: KvtDbRef;
-    noTopLayer = false;
-    noFilter = false;
-      ): Result[KvtDbRef,KvtError] =
+    db: KvtDbRef, noTopLayer = false, noFilter = false
+): Result[KvtDbRef, KvtError] =
   ## This function creates a new empty descriptor accessing the same backend
   ## (if any) database as the argument `db`. This new descriptor joins the
   ## list of descriptors accessing the same backend database.
@@ -150,9 +145,7 @@ proc fork*(
   if db.dudes.isNil:
     db.dudes = DudesRef(centre: db, peers: @[db].toHashSet)
 
-  let clone = KvtDbRef(
-    backend: db.backend,
-    dudes:   db.dudes)
+  let clone = KvtDbRef(backend: db.backend, dudes: db.dudes)
 
   if not noFilter:
     clone.balancer = db.balancer # Ref is ok here (filters are immutable)
@@ -184,8 +177,7 @@ func nForked*(db: KvtDbRef): int =
   if not db.dudes.isNil:
     return db.dudes.peers.len - 1
 
-
-proc forget*(db: KvtDbRef): Result[void,KvtError] =
+proc forget*(db: KvtDbRef): Result[void, KvtError] =
   ## Destruct the non centre argument `db` descriptor (see comments on
   ## `reCentre()` for details.)
   ##
@@ -197,24 +189,24 @@ proc forget*(db: KvtDbRef): Result[void,KvtError] =
   elif db notin db.dudes.peers:
     err(StaleDescriptor)
   else:
-    ? db.canMod()
-    db.dudes.peers.excl db         # Unlink argument `db` from peers list
+    ?db.canMod()
+    db.dudes.peers.excl db # Unlink argument `db` from peers list
     ok()
 
-proc forgetOthers*(db: KvtDbRef): Result[void,KvtError] =
+proc forgetOthers*(db: KvtDbRef): Result[void, KvtError] =
   ## For the centre argument `db` descriptor (see comments on `reCentre()`
   ## for details), release all other descriptors accessing the same backend.
   ##
   if not db.dudes.isNil:
     if db.dudes.centre != db:
       return err(MustBeOnCentre)
-    ? db.canMod()
+    ?db.canMod()
     db.dudes = DudesRef(nil)
   ok()
 
 iterator rstack*(db: KvtDbRef): LayerRef =
   # Stack in reverse order
-  for i in 0..<db.stack.len:
+  for i in 0 ..< db.stack.len:
     yield db.stack[db.stack.len - i - 1]
 
 # ------------------------------------------------------------------------------

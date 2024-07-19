@@ -24,40 +24,40 @@ from std/sequtils import mapIt
 
 type
   BaseTx* = object of RootObj
-    recipient* : Opt[EthAddress]
-    gasLimit*  : GasInt
-    amount*    : UInt256
-    payload*   : seq[byte]
-    txType*    : Opt[TxType]
-    gasTip*    : GasInt
-    gasFee*    : GasInt
+    recipient*: Opt[EthAddress]
+    gasLimit*: GasInt
+    amount*: UInt256
+    payload*: seq[byte]
+    txType*: Opt[TxType]
+    gasTip*: GasInt
+    gasFee*: GasInt
     blobGasFee*: UInt256
-    blobCount* : int
-    blobID*    : BlobID
+    blobCount*: int
+    blobID*: BlobID
 
   BigInitcodeTx* = object of BaseTx
     initcodeLength*: int
-    padByte*       : uint8
-    initcode*      : seq[byte]
+    padByte*: uint8
+    initcode*: seq[byte]
 
   # Blob transaction creator
   BlobTx* = object of BaseTx
 
   TestAccount* = object
-    key*    : PrivateKey
+    key*: PrivateKey
     address*: EthAddress
-    index*  : int
+    index*: int
 
   TxSender* = ref object
     accounts: seq[TestAccount]
     nonceMap: Table[EthAddress, uint64]
-    txSent  : int
-    chainId : ChainID
+    txSent: int
+    chainId: ChainID
 
   MakeTxParams* = object
     chainId*: ChainID
-    key*    : PrivateKey
-    nonce*  : AccountNonce
+    key*: PrivateKey
+    nonce*: AccountNonce
 
   CustSig* = object
     V*: uint64
@@ -65,15 +65,15 @@ type
     S*: UInt256
 
   CustomTransactionData* = object
-    nonce*              : Opt[uint64]
+    nonce*: Opt[uint64]
     gasPriceOrGasFeeCap*: Opt[GasInt]
-    gasTipCap*          : Opt[GasInt]
-    gas*                : Opt[GasInt]
-    to*                 : Opt[common.EthAddress]
-    value*              : Opt[UInt256]
-    data*               : Opt[seq[byte]]
-    chainId*            : Opt[ChainId]
-    signature*          : Opt[CustSig]
+    gasTipCap*: Opt[GasInt]
+    gas*: Opt[GasInt]
+    to*: Opt[common.EthAddress]
+    value*: Opt[UInt256]
+    data*: Opt[seq[byte]]
+    chainId*: Opt[ChainId]
+    signature*: Opt[CustSig]
 
 const
   TestAccountCount = 1000
@@ -96,7 +96,7 @@ proc createAccount(idx: int): TestAccount =
   result.address = toAddress(result.key)
 
 proc createAccounts(sender: TxSender) =
-  for i in 0..<TestAccountCount:
+  for i in 0 ..< TestAccountCount:
     sender.accounts.add createAccount(i.int)
 
 proc getNextAccount*(sender: TxSender): TestAccount =
@@ -114,9 +114,8 @@ proc getLastNonce(sender: TxSender, address: EthAddress): uint64 =
 
 proc fillBalance(sender: TxSender, params: NetworkParams) =
   for x in sender.accounts:
-    params.genesis.alloc[x.address] = GenesisAccount(
-      balance: UInt256.fromHex("0x123450000000000000000"),
-    )
+    params.genesis.alloc[x.address] =
+      GenesisAccount(balance: UInt256.fromHex("0x123450000000000000000"))
 
 proc new*(_: type TxSender, params: NetworkParams): TxSender =
   result = TxSender(chainId: params.config.chainId)
@@ -125,55 +124,48 @@ proc new*(_: type TxSender, params: NetworkParams): TxSender =
 
 proc getTxType(tc: BaseTx, nonce: uint64): TxType =
   if tc.txType.isNone:
-    if nonce mod 2 == 0:
-      TxLegacy
-    else:
-      TxEIP1559
+    if nonce mod 2 == 0: TxLegacy else: TxEIP1559
   else:
     tc.txType.get
 
 proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
   let
-    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
-                else: gasPrice
-    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
-                else: gasTipPrice
+    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee else: gasPrice
+    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip else: gasTipPrice
 
   let txType = tc.getTxType(params.nonce)
   case txType
   of TxLegacy:
     PooledTransaction(
       tx: Transaction(
-        txType  : TxLegacy,
-        nonce   : params.nonce,
-        to      : tc.recipient,
-        value   : tc.amount,
+        txType: TxLegacy,
+        nonce: params.nonce,
+        to: tc.recipient,
+        value: tc.amount,
         gasLimit: tc.gasLimit,
         gasPrice: gasPrice,
-        payload : tc.payload
+        payload: tc.payload,
       )
     )
   of TxEip1559:
     PooledTransaction(
       tx: Transaction(
-        txType  : TxEIP1559,
-        nonce   : params.nonce,
+        txType: TxEIP1559,
+        nonce: params.nonce,
         gasLimit: tc.gasLimit,
         maxFeePerGas: gasFeeCap,
         maxPriorityFeePerGas: gasTipCap,
-        to      : tc.recipient,
-        value   : tc.amount,
-        payload : tc.payload,
-        chainId : params.chainId
+        to: tc.recipient,
+        value: tc.amount,
+        payload: tc.payload,
+        chainId: params.chainId,
       )
     )
   of TxEip4844:
     doAssert(tc.recipient.isSome, "recipient must be some")
     let
-      blobCount  = if tc.blobCount != 0: tc.blobCount
-                   else: MAX_BLOBS_PER_BLOCK
-      blobFeeCap = if tc.blobGasFee != 0.u256: tc.blobGasFee
-                   else: blobGasPrice.u256
+      blobCount = if tc.blobCount != 0: tc.blobCount else: MAX_BLOBS_PER_BLOCK
+      blobFeeCap = if tc.blobGasFee != 0.u256: tc.blobGasFee else: blobGasPrice.u256
 
     # Need tx wrap data that will pass blob verification
     var blobData = blobDataGenerator(tc.blobID, blobCount)
@@ -181,15 +173,15 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
 
     PooledTransaction(
       tx: Transaction(
-        txType  : TxEIP4844,
-        nonce   : params.nonce,
-        chainId : params.chainId,
+        txType: TxEIP4844,
+        nonce: params.nonce,
+        chainId: params.chainId,
         maxFeePerGas: gasFeeCap,
         maxPriorityFeePerGas: gasTipCap,
         gasLimit: tc.gasLimit,
-        to      : tc.recipient,
-        value   : tc.amount,
-        payload : tc.payload,
+        to: tc.recipient,
+        value: tc.amount,
+        payload: tc.payload,
         #AccessList: tc.AccessList,
         maxFeePerBlobGas: blobFeeCap,
         versionedHashes: system.move(blobData.hashes),
@@ -198,7 +190,7 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         blobs: blobData.blobs.mapIt(it.bytes),
         commitments: blobData.commitments.mapIt(it.bytes),
         proofs: blobData.proofs.mapIt(it.bytes),
-      )
+      ),
     )
   else:
     raiseAssert "unsupported tx type"
@@ -208,7 +200,8 @@ proc makeTx(params: MakeTxParams, tc: BaseTx): PooledTransaction =
   let tx = makeTxOfType(params, tc)
   PooledTransaction(
     tx: signTransaction(tx.tx, params.key, params.chainId, eip155 = true),
-    networkPayload: tx.networkPayload)
+    networkPayload: tx.networkPayload,
+  )
 
 proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): PooledTransaction =
   var tx = tc
@@ -224,80 +217,62 @@ proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): PooledTransaction =
   doAssert(tx.recipient.isNone, "invalid configuration for big contract tx creator")
   params.makeTx(tx.BaseTx)
 
-proc makeTx*(
-    sender: TxSender, tc: BaseTx, nonce: AccountNonce): PooledTransaction =
+proc makeTx*(sender: TxSender, tc: BaseTx, nonce: AccountNonce): PooledTransaction =
   let acc = sender.getNextAccount()
-  let params = MakeTxParams(
-    chainId: sender.chainId,
-    key: acc.key,
-    nonce: nonce
-  )
+  let params = MakeTxParams(chainId: sender.chainId, key: acc.key, nonce: nonce)
   params.makeTx(tc)
 
 proc makeTx*(
-    sender: TxSender,
-    tc: BigInitcodeTx,
-    nonce: AccountNonce): PooledTransaction =
+    sender: TxSender, tc: BigInitcodeTx, nonce: AccountNonce
+): PooledTransaction =
   let acc = sender.getNextAccount()
-  let params = MakeTxParams(
-    chainId: sender.chainId,
-    key: acc.key,
-    nonce: nonce
-  )
+  let params = MakeTxParams(chainId: sender.chainId, key: acc.key, nonce: nonce)
   params.makeTx(tc)
 
 proc makeNextTx*(sender: TxSender, tc: BaseTx): PooledTransaction =
   let
     acc = sender.getNextAccount()
     nonce = sender.getNextNonce(acc.address)
-    params = MakeTxParams(
-      chainId: sender.chainId,
-      key: acc.key,
-      nonce: nonce
-    )
+    params = MakeTxParams(chainId: sender.chainId, key: acc.key, nonce: nonce)
   params.makeTx(tc)
 
 proc sendNextTx*(sender: TxSender, client: RpcClient, tc: BaseTx): bool =
   let tx = sender.makeNextTx(tc)
   let rr = client.sendTransaction(tx)
   if rr.isErr:
-    error "sendNextTx: Unable to send transaction", msg=rr.error
+    error "sendNextTx: Unable to send transaction", msg = rr.error
     return false
 
   inc sender.txSent
   return true
 
-proc sendTx*(sender: TxSender, client: RpcClient, tc: BaseTx, nonce: AccountNonce): bool =
+proc sendTx*(
+    sender: TxSender, client: RpcClient, tc: BaseTx, nonce: AccountNonce
+): bool =
   let
     acc = sender.getNextAccount()
-    params = MakeTxParams(
-      chainId: sender.chainId,
-      key: acc.key,
-      nonce: nonce
-    )
+    params = MakeTxParams(chainId: sender.chainId, key: acc.key, nonce: nonce)
     tx = params.makeTx(tc)
 
   let rr = client.sendTransaction(tx)
   if rr.isErr:
-    error "sendTx: Unable to send transaction", msg=rr.error
+    error "sendTx: Unable to send transaction", msg = rr.error
     return false
 
   inc sender.txSent
   return true
 
-proc sendTx*(sender: TxSender, client: RpcClient, tc: BigInitcodeTx, nonce: AccountNonce): bool =
+proc sendTx*(
+    sender: TxSender, client: RpcClient, tc: BigInitcodeTx, nonce: AccountNonce
+): bool =
   let
     acc = sender.getNextAccount()
-    params = MakeTxParams(
-      chainId: sender.chainId,
-      key: acc.key,
-      nonce: nonce
-    )
+    params = MakeTxParams(chainId: sender.chainId, key: acc.key, nonce: nonce)
     tx = params.makeTx(tc)
 
   let rr = client.sendTransaction(tx)
   if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
+    error "Unable to send transaction", msg = rr.error
     return false
 
   inc sender.txSent
@@ -306,7 +281,7 @@ proc sendTx*(sender: TxSender, client: RpcClient, tc: BigInitcodeTx, nonce: Acco
 proc sendTx*(client: RpcClient, tx: PooledTransaction): bool =
   let rr = client.sendTransaction(tx)
   if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
+    error "Unable to send transaction", msg = rr.error
     return false
   return true
 
@@ -316,22 +291,20 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
   doAssert(tc.recipient.isSome, "nil recipient address")
 
   let
-    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
-                else: gasPrice
-    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
-                else: gasTipPrice
+    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee else: gasPrice
+    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip else: gasTipPrice
 
   # Collect fields for transaction
   let unsignedTx = Transaction(
-    txType    : TxEip4844,
-    chainId   : params.chainId,
-    nonce     : params.nonce,
+    txType: TxEip4844,
+    chainId: params.chainId,
+    nonce: params.nonce,
     maxPriorityFeePerGas: gasTipCap,
     maxFeePerGas: gasFeeCap,
-    gasLimit  : tc.gasLimit,
-    to        : tc.recipient,
-    value     : tc.amount,
-    payload   : tc.payload,
+    gasLimit: tc.gasLimit,
+    to: tc.recipient,
+    value: tc.amount,
+    payload: tc.payload,
     maxFeePerBlobGas: tc.blobGasFee,
     versionedHashes: data.hashes,
   )
@@ -339,9 +312,9 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
   PooledTransaction(
     tx: signTransaction(unsignedTx, params.key, params.chainId, eip155 = true),
     networkPayload: NetworkPayload(
-      blobs      : data.blobs.mapIt(it.bytes),
+      blobs: data.blobs.mapIt(it.bytes),
       commitments: data.commitments.mapIt(it.bytes),
-      proofs     : data.proofs.mapIt(it.bytes),
+      proofs: data.proofs.mapIt(it.bytes),
     ),
   )
 
@@ -349,64 +322,51 @@ proc getAccount*(sender: TxSender, idx: int): TestAccount =
   sender.accounts[idx]
 
 proc sendTx*(
-    sender: TxSender,
-    acc: TestAccount,
-    client: RpcClient,
-    tc: BlobTx): Result[PooledTransaction, void] =
+    sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx
+): Result[PooledTransaction, void] =
   let
     params = MakeTxParams(
-      chainId: sender.chainId,
-      key: acc.key,
-      nonce: sender.getNextNonce(acc.address),
+      chainId: sender.chainId, key: acc.key, nonce: sender.getNextNonce(acc.address)
     )
     tx = params.makeTx(tc)
 
   let rr = client.sendTransaction(tx)
   if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
+    error "Unable to send transaction", msg = rr.error
     return err()
 
   inc sender.txSent
   return ok(tx)
 
 proc replaceTx*(
-    sender: TxSender,
-    acc: TestAccount,
-    client: RpcClient,
-    tc: BlobTx): Result[PooledTransaction, void] =
+    sender: TxSender, acc: TestAccount, client: RpcClient, tc: BlobTx
+): Result[PooledTransaction, void] =
   let
     params = MakeTxParams(
-      chainId: sender.chainId,
-      key: acc.key,
-      nonce: sender.getLastNonce(acc.address),
+      chainId: sender.chainId, key: acc.key, nonce: sender.getLastNonce(acc.address)
     )
     tx = params.makeTx(tc)
 
   let rr = client.sendTransaction(tx)
   if rr.isErr:
-    error "Unable to send transaction", msg=rr.error
+    error "Unable to send transaction", msg = rr.error
     return err()
 
   inc sender.txSent
   return ok(tx)
 
 proc makeTx*(
-    sender: TxSender,
-    tc: BaseTx,
-    acc: TestAccount,
-    nonce: AccountNonce): PooledTransaction =
-  let
-    params = MakeTxParams(
-      chainId: sender.chainId,
-      key: acc.key,
-      nonce: nonce,
-    )
+    sender: TxSender, tc: BaseTx, acc: TestAccount, nonce: AccountNonce
+): PooledTransaction =
+  let params = MakeTxParams(chainId: sender.chainId, key: acc.key, nonce: nonce)
   params.makeTx(tc)
 
-proc customizeTransaction*(sender: TxSender,
-                           acc: TestAccount,
-                           baseTx: Transaction,
-                           custTx: CustomTransactionData): Transaction =
+proc customizeTransaction*(
+    sender: TxSender,
+    acc: TestAccount,
+    baseTx: Transaction,
+    custTx: CustomTransactionData,
+): Transaction =
   # Create a modified transaction base, from the base transaction and custTx mix
   var modTx = baseTx
   if custTx.nonce.isSome:

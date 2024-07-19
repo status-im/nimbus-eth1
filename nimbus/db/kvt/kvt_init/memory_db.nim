@@ -37,16 +37,15 @@ import
   ./init_common
 
 type
-  MemDbRef = ref object
-    ## Database
-    tab: Table[Blob,Blob]            ## Structural key-value table
+  MemDbRef = ref object ## Database
+    tab: Table[Blob, Blob] ## Structural key-value table
 
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
-    mdb: MemDbRef                    ## Database
+    mdb: MemDbRef ## Database
 
   MemPutHdlRef = ref object of TypedPutHdlRef
-    tab: Table[Blob,Blob]
+    tab: Table[Blob, Blob]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -55,16 +54,15 @@ type
 template logTxt(info: static[string]): static[string] =
   "MemoryDB " & info
 
-
 proc newSession(db: MemBackendRef): MemPutHdlRef =
   new result
   result.TypedPutHdlRef.beginSession db
 
-proc getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+proc getSession(hdl: PutHdlRef, db: MemBackendRef): MemPutHdlRef =
   hdl.TypedPutHdlRef.verifySession db
   hdl.MemPutHdlRef
 
-proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+proc endSession(hdl: PutHdlRef, db: MemBackendRef): MemPutHdlRef =
   hdl.TypedPutHdlRef.finishSession db
   hdl.MemPutHdlRef
 
@@ -73,81 +71,71 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 # ------------------------------------------------------------------------------
 
 proc getKvpFn(db: MemBackendRef): GetKvpFn =
-  result =
-    proc(key: openArray[byte]): Result[Blob,KvtError] =
-      if key.len == 0:
-        return err(KeyInvalid)
-      var data = db.mdb.tab.getOrVoid @key
-      if data.isValid:
-        return ok(move(data))
-      err(GetNotFound)
+  result = proc(key: openArray[byte]): Result[Blob, KvtError] =
+    if key.len == 0:
+      return err(KeyInvalid)
+    var data = db.mdb.tab.getOrVoid @key
+    if data.isValid:
+      return ok(move(data))
+    err(GetNotFound)
 
 proc lenKvpFn(db: MemBackendRef): LenKvpFn =
-  result =
-    proc(key: openArray[byte]): Result[int,KvtError] =
-      if key.len == 0:
-        return err(KeyInvalid)
-      var data = db.mdb.tab.getOrVoid @key
-      if data.isValid:
-        return ok(data.len)
-      err(GetNotFound)
+  result = proc(key: openArray[byte]): Result[int, KvtError] =
+    if key.len == 0:
+      return err(KeyInvalid)
+    var data = db.mdb.tab.getOrVoid @key
+    if data.isValid:
+      return ok(data.len)
+    err(GetNotFound)
 
 # -------------
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
-  result =
-    proc(): Result[PutHdlRef,KvtError] =
-      ok db.newSession()
+  result = proc(): Result[PutHdlRef, KvtError] =
+    ok db.newSession()
 
 proc putKvpFn(db: MemBackendRef): PutKvpFn =
-  result =
-    proc(hdl: PutHdlRef; kvps: openArray[(Blob,Blob)]) =
-      let hdl = hdl.getSession db
-      if hdl.error == KvtError(0):
-        for (k,v) in kvps:
-          if k.isValid:
-            hdl.tab[k] = v
-          else:
-            hdl.error = KeyInvalid
+  result = proc(hdl: PutHdlRef, kvps: openArray[(Blob, Blob)]) =
+    let hdl = hdl.getSession db
+    if hdl.error == KvtError(0):
+      for (k, v) in kvps:
+        if k.isValid:
+          hdl.tab[k] = v
+        else:
+          hdl.error = KeyInvalid
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
-  result =
-    proc(hdl: PutHdlRef): Result[void,KvtError] =
-      let hdl = hdl.endSession db
-      if hdl.error != KvtError(0):
-        debug logTxt "putEndFn: key/value failed", error=hdl.error
-        return err(hdl.error)
+  result = proc(hdl: PutHdlRef): Result[void, KvtError] =
+    let hdl = hdl.endSession db
+    if hdl.error != KvtError(0):
+      debug logTxt "putEndFn: key/value failed", error = hdl.error
+      return err(hdl.error)
 
-      for (k,v) in hdl.tab.pairs:
-        db.mdb.tab[k] = v
+    for (k, v) in hdl.tab.pairs:
+      db.mdb.tab[k] = v
 
-      ok()
+    ok()
 
 # -------------
 
 proc closeFn(db: MemBackendRef): CloseFn =
-  result =
-    proc(ignore: bool) =
-      discard
+  result = proc(ignore: bool) =
+    discard
 
 proc canModFn(db: MemBackendRef): CanModFn =
-  result =
-    proc(): Result[void,KvtError] =
-      ok()
+  result = proc(): Result[void, KvtError] =
+    ok()
 
 proc setWrReqFn(db: MemBackendRef): SetWrReqFn =
-  result =
-    proc(kvt: RootRef): Result[void,KvtError] =
-      err(RdbBeHostNotApplicable)
+  result = proc(kvt: RootRef): Result[void, KvtError] =
+    err(RdbBeHostNotApplicable)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc memoryBackend*: BackendRef =
-  let db = MemBackendRef(
-    beKind: BackendMemory,
-    mdb:    MemDbRef())
+proc memoryBackend*(): BackendRef =
+  let db = MemBackendRef(beKind: BackendMemory, mdb: MemDbRef())
 
   db.getKvpFn = getKvpFn db
   db.lenKvpFn = lenKvpFn db
@@ -171,11 +159,9 @@ proc dup*(db: MemBackendRef): MemBackendRef =
 # Public iterators (needs direct backend access)
 # ------------------------------------------------------------------------------
 
-iterator walk*(
-    be: MemBackendRef;
-      ): tuple[key: Blob, data: Blob] =
+iterator walk*(be: MemBackendRef): tuple[key: Blob, data: Blob] =
   ## Walk over all key-value pairs of the database.
-  for (key,data) in be.mdb.tab.pairs:
+  for (key, data) in be.mdb.tab.pairs:
     if data.isValid:
       yield (key, data)
     else:

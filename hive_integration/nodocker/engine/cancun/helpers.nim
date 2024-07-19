@@ -25,12 +25,11 @@ import
   ../../../../nimbus/beacon/web3_eth_conv,
   ./blobs
 
-type
-  TestBlobTxPool* = ref object
-    currentBlobID* : BlobID
-    currentTxIndex*: int
-    transactions*  : Table[common.Hash256, PooledTransaction]
-    hashesByIndex* : Table[int, common.Hash256]
+type TestBlobTxPool* = ref object
+  currentBlobID*: BlobID
+  currentTxIndex*: int
+  transactions*: Table[common.Hash256, PooledTransaction]
+  hashesByIndex*: Table[int, common.Hash256]
 
 const
   HISTORY_BUFFER_LENGTH* = 8191
@@ -42,7 +41,7 @@ const
 func getMinExcessBlobGasForBlobGasPrice(data_gas_price: uint64): uint64 =
   var
     current_excess_data_gas = 0'u64
-    current_data_gas_price  = 1'u64
+    current_data_gas_price = 1'u64
 
   while current_data_gas_price < data_gas_price:
     current_excess_data_gas += GAS_PER_BLOB.uint64
@@ -61,19 +60,21 @@ proc `==`(a: openArray[AccessTuple], b: openArray[AccessPair]): bool =
   if a.len != b.len:
     return false
 
-  for i in 0..<a.len:
+  for i in 0 ..< a.len:
     if a[i].address != w3Addr b[i].address:
       return false
     if a[i].storageKeys.len != b[i].storageKeys.len:
       return false
-    for j in 0..<a[i].storageKeys.len:
+    for j in 0 ..< a[i].storageKeys.len:
       if a[i].storageKeys[j].StorageKey != b[i].storageKeys[j]:
         return false
 
   return true
 
 # Test two different transactions with the same blob, and check the blob bundle.
-proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void, string] =
+proc verifyTransactionFromNode*(
+    client: RpcClient, tx: Transaction
+): Result[void, string] =
   let txHash = tx.rlpHash
   let res = client.txByHash(txHash)
   if res.isErr:
@@ -110,19 +111,32 @@ proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void
     return err("chain id is none, expect is some")
 
   if returnedTx.chainId.get.uint64 != tx.chainId.uint64:
-    return err("chain id mismatch: $1 != $2" % [$returnedTx.chainId.get.uint64, $tx.chainId.uint64])
+    return err(
+      "chain id mismatch: $1 != $2" %
+        [$returnedTx.chainId.get.uint64, $tx.chainId.uint64]
+    )
 
   if returnedTx.maxFeePerGas != tx.maxFeePerGas:
-    return err("max fee per gas mismatch: $1 != $2" % [$returnedTx.maxFeePerGas, $tx.maxFeePerGas])
+    return err(
+      "max fee per gas mismatch: $1 != $2" % [
+        $returnedTx.maxFeePerGas, $tx.maxFeePerGas
+      ]
+    )
 
   if returnedTx.maxPriorityFeePerGas != tx.maxPriorityFeePerGas:
-    return err("max priority fee per gas mismatch: $1 != $2" % [$returnedTx.maxPriorityFeePerGas, $tx.maxPriorityFeePerGas])
+    return err(
+      "max priority fee per gas mismatch: $1 != $2" %
+        [$returnedTx.maxPriorityFeePerGas, $tx.maxPriorityFeePerGas]
+    )
 
   if returnedTx.maxFeePerBlobGas.isNone:
     return err("expect maxFeePerBlobGas is some")
 
   if returnedTx.maxFeePerBlobGas.get != tx.maxFeePerBlobGas:
-    return err("max fee per data gas mismatch: $1 != $2" % [$returnedTx.maxFeePerBlobGas.get, $tx.maxFeePerBlobGas])
+    return err(
+      "max fee per data gas mismatch: $1 != $2" %
+        [$returnedTx.maxFeePerBlobGas.get, $tx.maxFeePerBlobGas]
+    )
 
   if returnedTx.versionedHashes.isNone:
     return err("expect versioned hashes is some")
@@ -144,19 +158,20 @@ proc beaconRootStorageIndexes*(timestamp: uint64): (UInt256, UInt256) =
 
   (timestampReduced.u256, timestampExtended.u256)
 
-
 type
   BlobWrapData* = object
     versionedHash*: common.Hash256
-    blob*         : kzg.KzgBlob
-    commitment*   : kzg.KZGCommitment
-    proof*        : kzg.KzgProof
+    blob*: kzg.KzgBlob
+    commitment*: kzg.KZGCommitment
+    proof*: kzg.KzgProof
 
   BlobData* = ref object
-    txs*  : seq[Transaction]
+    txs*: seq[Transaction]
     data*: seq[BlobWrapData]
 
-proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Result[BlobData, string] =
+proc getBlobDataInPayload*(
+    pool: TestBlobTxPool, payload: ExecutionPayload
+): Result[BlobData, string] =
   var blobData = BlobData()
 
   # Find all blob transactions included in the payload
@@ -179,16 +194,15 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
 
     let np = blobTx.networkPayload
     if blobTx.tx.versionedHashes.len != np.commitments.len or
-       np.commitments.len != np.blobs.len or
-       np.blobs.len != np.proofs.len:
+        np.commitments.len != np.blobs.len or np.blobs.len != np.proofs.len:
       return err("invalid blob wrap data")
 
-    for i in 0..<blobTx.tx.versionedHashes.len:
+    for i in 0 ..< blobTx.tx.versionedHashes.len:
       blobData.data.add BlobWrapData(
         versionedHash: blobTx.tx.versionedHashes[i],
-        commitment   : kzg.KzgCommitment(bytes: np.commitments[i]),
-        blob         : kzg.KzgBlob(bytes: np.blobs[i]),
-        proof        : kzg.KzgProof(bytes: np.proofs[i]),
+        commitment: kzg.KzgCommitment(bytes: np.commitments[i]),
+        blob: kzg.KzgBlob(bytes: np.blobs[i]),
+        proof: kzg.KzgProof(bytes: np.proofs[i]),
       )
     blobData.txs.add blobTx.tx
 
@@ -205,13 +219,12 @@ proc verifyBeaconRootStorage*(client: RpcClient, payload: ExecutionPayload): boo
   # Verify the timestamp key
   var r = client.storageAt(precompileAddress, timestampKey, blockNumber)
   if r.isErr:
-    error "verifyBeaconRootStorage", msg=r.error
+    error "verifyBeaconRootStorage", msg = r.error
     return false
 
   if r.get.u256 != payload.timestamp.uint64.u256:
     error "verifyBeaconRootStorage storage 1",
-      expect=payload.timestamp.uint64,
-      get=r.get.u256
+      expect = payload.timestamp.uint64, get = r.get.u256
     return false
 
   # Verify the beacon root key
@@ -219,8 +232,7 @@ proc verifyBeaconRootStorage*(client: RpcClient, payload: ExecutionPayload): boo
   let parentBeaconBlockRoot = timestampToBeaconRoot(payload.timestamp)
   if parentBeaconBlockRoot != r.get:
     error "verifyBeaconRootStorage storage 2",
-      expect=parentBeaconBlockRoot.toHex,
-      get=r.get.toHex
+      expect = parentBeaconBlockRoot.toHex, get = r.get.toHex
     return false
 
   return true

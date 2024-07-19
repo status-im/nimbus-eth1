@@ -8,22 +8,17 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  eth/common,
-  chronicles,
-  ./engine_spec
+import eth/common, chronicles, ./engine_spec
 
-type
-  BlockStatusRPCcheckType* = enum
-    LatestOnNewPayload            = "Latest Block on NewPayload"
-    LatestOnHeadBlockHash         = "Latest Block on HeadblockHash Update"
-    SafeOnSafeBlockHash           = "Safe Block on SafeblockHash Update"
-    FinalizedOnFinalizedBlockHash = "Finalized Block on FinalizedblockHash Update"
+type BlockStatusRPCcheckType* = enum
+  LatestOnNewPayload = "Latest Block on NewPayload"
+  LatestOnHeadBlockHash = "Latest Block on HeadblockHash Update"
+  SafeOnSafeBlockHash = "Safe Block on SafeblockHash Update"
+  FinalizedOnFinalizedBlockHash = "Finalized Block on FinalizedblockHash Update"
 
 type
   BlockStatus* = ref object of EngineSpec
-    checkType*: BlockStatusRPCcheckType
-    # TODO: Syncing   bool
+    checkType*: BlockStatusRPCcheckType # TODO: Syncing   bool
 
   Shadow = ref object
     txHash: common.Hash256
@@ -58,9 +53,9 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
     onPayloadProducerSelected: proc(): bool =
       let tc = BaseTx(
         recipient: Opt.some(ZeroAddr),
-        amount:     1.u256,
-        txType:     cs.txType,
-        gasLimit:   75000,
+        amount: 1.u256,
+        txType: cs.txType,
+        gasLimit: 75000,
       )
 
       let tx = env.makeNextTx(tc)

@@ -13,16 +13,13 @@
 ##
 {.push raises: [].}
 
-import
-  results,
-  ./tx_frame,
-  ".."/[kvt_desc, kvt_layers]
+import results, ./tx_frame, ".."/[kvt_desc, kvt_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc txFork*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
+proc txFork*(tx: KvtTxRef): Result[KvtDbRef, KvtError] =
   ## Clone a transaction into a new DB descriptor  accessing the same backend
   ## (if any) database as the argument `db`. The new descriptor is linked to
   ## the transaction parent and is fully functional as a forked instance (see
@@ -46,22 +43,18 @@ proc txFork*(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
     return err(TxArgStaleTx)
 
   # Set up clone associated to `db`
-  let txClone = ? db.fork()
+  let txClone = ?db.fork()
   txClone.top = db.layersCc tx.level
-  txClone.stack = @[LayerRef.init()]     # Provide tx level 1 stack
+  txClone.stack = @[LayerRef.init()] # Provide tx level 1 stack
   txClone.top.txUid = 1
-  txClone.txUidGen = 1                   # Used value of `txClone.top.txUid`
+  txClone.txUidGen = 1 # Used value of `txClone.top.txUid`
 
   # Install transaction similar to `tx` on clone
-  txClone.txRef = KvtTxRef(
-    db:    txClone,
-    txUid: 1,
-    level: 1)
+  txClone.txRef = KvtTxRef(db: txClone, txUid: 1, level: 1)
 
   ok(txClone)
 
-
-proc txForkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
+proc txForkTop*(db: KvtDbRef): Result[KvtDbRef, KvtError] =
   ## Variant of `forkTx()` for the top transaction if there is any. Otherwise
   ## the top layer is cloned, and an empty transaction is set up. After
   ## successful fork the returned descriptor has transaction level 1.
@@ -69,7 +62,7 @@ proc txForkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
   ## Use `kvt_desc.forget()` to clean up this descriptor.
   ##
   if db.txRef.isNil:
-    let dbClone = ? db.fork(noToplayer=true)
+    let dbClone = ?db.fork(noToplayer = true)
     dbClone.top = db.layersCc()
 
     discard dbClone.txFrameBegin()
@@ -77,14 +70,11 @@ proc txForkTop*(db: KvtDbRef): Result[KvtDbRef,KvtError] =
 
   db.txRef.txFork
 
-
-proc txForkBase*(
-    db: KvtDbRef;
-      ): Result[KvtDbRef,KvtError] =
+proc txForkBase*(db: KvtDbRef): Result[KvtDbRef, KvtError] =
   if db.txRef.isNil:
     return db.txForkTop()
 
-  let txClone = ? db.fork(noToplayer=true, noFilter=false)
+  let txClone = ?db.fork(noToplayer = true, noFilter = false)
   txClone.top = db.layersCc 0
 
   discard txClone.txFrameBegin()

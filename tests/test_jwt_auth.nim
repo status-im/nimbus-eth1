@@ -30,29 +30,26 @@ import
   graphql/[httpserver, httpclient],
   json_rpc/[rpcserver, rpcclient]
 
-type
-  UnGuardedKey =
-    array[jwtMinSecretLen,byte]
+type UnGuardedKey = array[jwtMinSecretLen, byte]
 
 const
-  jwtKeyFile ="jwtsecret.txt"       # external shared secret file
-  jwtKeyStripped ="jwtstripped.txt" # without leading 0x
-  jwtKeyCopy = jwtSecretFile        # file containing effective data key
+  jwtKeyFile = "jwtsecret.txt" # external shared secret file
+  jwtKeyStripped = "jwtstripped.txt" # without leading 0x
+  jwtKeyCopy = jwtSecretFile # file containing effective data key
 
-  baseDir = [".", "..", ".."/"..", $DirSep]
+  baseDir = [".", "..", ".." / "..", $DirSep]
   repoDir = [".", "tests" / "test_jwt_auth"]
 
-let
-  fakeKey = block:
-    var rc: JwtSharedKey
-    discard rc.fromHex((0..31).mapIt(15 - (it mod 16)).mapIt(it.byte).toHex)
-    rc
+let fakeKey = block:
+  var rc: JwtSharedKey
+  discard rc.fromHex((0 .. 31).mapIt(15 - (it mod 16)).mapIt(it.byte).toHex)
+  rc
 
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc findFilePath(file: string): Result[string,void] =
+proc findFilePath(file: string): Result[string, void] =
   for dir in baseDir:
     for repo in repoDir:
       let path = dir / repo / file
@@ -60,7 +57,7 @@ proc findFilePath(file: string): Result[string,void] =
         return ok(path)
   err()
 
-proc say(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
+proc say(noisy = false, pfx = "***", args: varargs[string, `$`]) =
   if noisy:
     if args.len == 0:
       echo "*** ", pfx
@@ -69,12 +66,12 @@ proc say(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
-proc setTraceLevel =
+proc setTraceLevel() =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.TRACE)
 
-proc setErrorLevel =
+proc setErrorLevel() =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
@@ -85,7 +82,7 @@ proc setErrorLevel =
 
 proc fakeGenSecret(fake: JwtSharedKey): JwtGenSecret =
   ## Key random generator, fake version
-  result = proc: JwtSharedKey =
+  result = proc(): JwtSharedKey =
     fake
 
 proc base64urlEncode(x: auto): string =
@@ -94,7 +91,7 @@ proc base64urlEncode(x: auto): string =
 
 func getIatToken(time: uint64): JsonNode =
   ## from nimbus-eth2, engine_authentication.nim
-  %* {"iat": time}
+  %*{"iat": time}
 
 proc getSignedToken(key: openArray[byte], payload: string): string =
   ## from nimbus-eth2, engine_authentication.nim
@@ -105,19 +102,21 @@ proc getSignedToken(key: openArray[byte], payload: string): string =
 proc getSignedToken2(key: openArray[byte], payload: string): string =
   ## Variant of `getSignedToken()`: different algorithm encoding
   let
-    jNode = %* {"alg": "HS256", "typ": "JWT" }
+    jNode = %*{"alg": "HS256", "typ": "JWT"}
     sData = base64urlEncode($jNode) & "." & base64urlEncode(payload)
   sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
-proc getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
+proc getHttpAuthReqHeader(secret: JwtSharedKey, time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
-proc getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
+proc getHttpAuthReqHeader2(secret: JwtSharedKey, time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken2($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
-proc createServer(serverAddress: TransportAddress, authHooks: seq[AuthHook] = @[]): GraphqlHttpServerRef =
+proc createServer(
+    serverAddress: TransportAddress, authHooks: seq[AuthHook] = @[]
+): GraphqlHttpServerRef =
   let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
   var ctx = GraphqlRef.new()
 
@@ -131,7 +130,7 @@ proc createServer(serverAddress: TransportAddress, authHooks: seq[AuthHook] = @[
     graphql = ctx,
     address = serverAddress,
     socketFlags = socketFlags,
-    authHooks = authHooks
+    authHooks = authHooks,
   )
 
   if res.isErr():
@@ -189,8 +188,7 @@ createRpcSigsFromNim(RpcClient):
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runKeyLoader(noisy = true;
-                  keyFile = jwtKeyFile; strippedFile = jwtKeyStripped) =
+proc runKeyLoader(noisy = true, keyFile = jwtKeyFile, strippedFile = jwtKeyStripped) =
   let
     filePath = keyFile.findFilePath.value
     fileInfo = keyFile.splitFile.name.split(".")[0]
@@ -206,10 +204,9 @@ proc runKeyLoader(noisy = true;
     jwtStrippedCmdOpt = &"--jwt-secret={strippedPath}"
 
   suite "EngineAuth: Load or generate shared secrets":
-
     test &"Load shared key file {fileInfo}":
       let
-        config = @[dataDirCmdOpt,jwtSecretCmdOpt].makeConfig
+        config = @[dataDirCmdOpt, jwtSecretCmdOpt].makeConfig
         secret = fakeKey.fakeGenSecret.jwtSharedSecret(config)
         lines = config.jwtSecret.get.string.readLines(1)
 
@@ -233,7 +230,7 @@ proc runKeyLoader(noisy = true;
 
     test &"Load shared key file {strippedInfo}, missing 0x prefix":
       let
-        config = @[dataDirCmdOpt,jwtStrippedCmdOpt].makeConfig
+        config = @[dataDirCmdOpt, jwtStrippedCmdOpt].makeConfig
         secret = fakeKey.fakeGenSecret.jwtSharedSecret(config)
         lines = config.jwtSecret.get.string.readLines(1)
 
@@ -256,9 +253,9 @@ proc runKeyLoader(noisy = true;
       check hexKey.cmpIgnoreCase(hexFake) != 0
 
     test &"Generate shared key file, store it in {jwtKeyCopy}":
-
       # Clean up after file generation
-      defer: localKeyFile.removeFile
+      defer:
+        localKeyFile.removeFile
 
       # Maybe a stale left over
       localKeyFile.removeFile
@@ -280,7 +277,7 @@ proc runKeyLoader(noisy = true;
       # Compare key against tcontents of shared key file
       check hexKey.cmpIgnoreCase(hexLine) == 0
 
-proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
+proc runJwtAuth(noisy = true, keyFile = jwtKeyFile) =
   let
     filePath = keyFile.findFilePath.value
     fileInfo = keyFile.splitFile.name.split(".")[0]
@@ -289,7 +286,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
 
     dataDirCmdOpt = &"--data-dir={dataDir}"
     jwtSecretCmdOpt = &"--jwt-secret={filePath}"
-    config = @[dataDirCmdOpt,jwtSecretCmdOpt].makeConfig
+    config = @[dataDirCmdOpt, jwtSecretCmdOpt].makeConfig
 
     # The secret is just used for extracting the key, it would otherwise
     # be hidden in the closure of the handler function
@@ -321,8 +318,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       let
         time = getTime().toUnix.uint64
         req = secret.value.getHttpAuthReqHeader(time)
-      noisy.say "***", "request",
-        " Authorization=", req.getString("Authorization")
+      noisy.say "***", "request", " Authorization=", req.getString("Authorization")
 
       setTraceLevel()
 
@@ -347,8 +343,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
         req = secret.value.getHttpAuthReqHeader2(time)
 
       # Assemble request header
-      noisy.say "***", "request",
-        " Authorization=", req.getString("Authorization")
+      noisy.say "***", "request", " Authorization=", req.getString("Authorization")
 
       setTraceLevel()
 
@@ -413,6 +408,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
     test "rpc query with uth":
       proc authHeaders(): seq[(string, string)] =
         req.toList
+
       let client = newRpcHttpClient(getHeaders = authHeaders)
       waitFor client.connect("http://" & $server.localAddress)
       let res = waitFor client.rpc_echo(100)
@@ -426,6 +422,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
     test "ws query with auth":
       proc authHeaders(): seq[(string, string)] =
         req.toList
+
       let client = newRpcWebSocketClient(authHeaders)
       waitFor client.connect("ws://" & $server.localAddress)
       let res = waitFor client.rpc_echo(123)
@@ -445,8 +442,7 @@ proc jwtAuthMain*(noisy = defined(debug)) =
   noisy.runJwtAuth
 
 when isMainModule:
-  const
-    noisy = defined(debug)
+  const noisy = defined(debug)
 
   setErrorLevel()
 

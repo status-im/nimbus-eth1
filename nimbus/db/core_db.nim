@@ -20,10 +20,8 @@
 ##
 {.push raises: [].}
 
-import
-  ./core_db/memory_only
-export
-  memory_only
+import ./core_db/memory_only
+export memory_only
 
 # Default database backend selection.
 const DefaultDbMemory* = AristoDbMemory

@@ -15,8 +15,7 @@ import
 
 export rpc_types
 
-type
-  BlockHeader = eth_types.BlockHeader
+type BlockHeader = eth_types.BlockHeader
 
 {.push raises: [].}
 
@@ -27,7 +26,9 @@ proc topicToDigest(t: seq[eth_types.Topic]): seq[Web3Topic] =
     resSeq.add(ht)
   return resSeq
 
-proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: seq[Receipt]): seq[FilterLog] =
+proc deriveLogs*(
+    header: BlockHeader, transactions: seq[Transaction], receipts: seq[Receipt]
+): seq[FilterLog] =
   ## Derive log fields, does not deal with pending log, only the logs with
   ## full data set
   doAssert(len(transactions) == len(receipts))
@@ -37,8 +38,7 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
 
   for i, receipt in receipts:
     for log in receipt.logs:
-      let filterLog = FilterLog(
-         # TODO investigate how to handle this field
+      let filterLog = FilterLog( # TODO investigate how to handle this field
         # - in nimbus info about log removel would need to be kept at synchronization
         # level, to keep track about potential re-orgs
         # - in fluffy there is no concept of re-org
@@ -51,7 +51,7 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
         address: w3Addr log.address,
         data: log.data,
         #  TODO topics should probably be kept as Hash256 in receipts
-        topics: topicToDigest(log.topics)
+        topics: topicToDigest(log.topics),
       )
 
       inc logIndex
@@ -68,11 +68,9 @@ func participateInFilter(x: AddressOrList): bool =
   true
 
 proc bloomFilter*(
-    bloom: eth_types.BloomFilter,
-    addresses: AddressOrList,
-    topics: seq[TopicOrList]): bool =
-
-  let bloomFilter = bFilter.BloomFilter(value:  StUint[2048].fromBytesBE(bloom))
+    bloom: eth_types.BloomFilter, addresses: AddressOrList, topics: seq[TopicOrList]
+): bool =
+  let bloomFilter = bFilter.BloomFilter(value: StUint[2048].fromBytesBE(bloom))
 
   if addresses.participateInFilter():
     var addrIncluded: bool = false
@@ -111,14 +109,12 @@ proc bloomFilter*(
   return true
 
 proc headerBloomFilter*(
-    header: BlockHeader,
-    addresses: AddressOrList,
-    topics: seq[TopicOrList]): bool =
+    header: BlockHeader, addresses: AddressOrList, topics: seq[TopicOrList]
+): bool =
   return bloomFilter(header.logsBloom, addresses, topics)
 
 proc matchTopics(log: FilterLog, topics: seq[TopicOrList]): bool =
   for i, sub in topics:
-
     if sub.kind == slkNull:
       # null subtopic i.e it matches all possible move to nex
       continue
@@ -142,19 +138,16 @@ proc matchTopics(log: FilterLog, topics: seq[TopicOrList]): bool =
   return true
 
 proc filterLogs*(
-    logs: openArray[FilterLog],
-    addresses: AddressOrList,
-    topics: seq[TopicOrList]): seq[FilterLog] =
-
+    logs: openArray[FilterLog], addresses: AddressOrList, topics: seq[TopicOrList]
+): seq[FilterLog] =
   var filteredLogs: seq[FilterLog] = newSeq[FilterLog]()
 
   for log in logs:
     if addresses.kind == slkSingle and (addresses.single != log.address):
       continue
 
-    if addresses.kind == slkList and
-       addresses.list.len > 0 and
-       (not addresses.list.contains(log.address)):
+    if addresses.kind == slkList and addresses.list.len > 0 and
+        (not addresses.list.contains(log.address)):
       continue
 
     if len(topics) > len(log.topics):

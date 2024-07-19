@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-{.push raises:[].}
+{.push raises: [].}
 
 import
   chronicles,
@@ -23,9 +23,9 @@ import
 logScope:
   topics = "beacon-buddy"
 
-const
-  extraTraceMessages = false # or true
-    ## Enabled additional logging noise
+const extraTraceMessages = false
+  # or true
+  ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -39,7 +39,7 @@ proc setup*(ctx: BeaconCtxRef): bool =
   ctx.pool.skeleton = SkeletonRef.new(ctx.chain)
   let res = ctx.pool.skeleton.open()
   if res.isErr:
-    error "Cannot open beacon skeleton", msg=res.error
+    error "Cannot open beacon skeleton", msg = res.error
     return false
 
   ctx.pool.mode.incl bmResumeSync
@@ -54,16 +54,13 @@ proc start*(buddy: BeaconBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  if peer.supports(protocol.eth) and
-     peer.state(protocol.eth).initialized:
-
+  if peer.supports(protocol.eth) and peer.state(protocol.eth).initialized:
     ctx.daemon = true
     return true
 
 proc stop*(buddy: BeaconBuddyRef) =
   ## Clean up this peer
   buddy.ctrl.stopped = true
-
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -77,7 +74,7 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
   ## `runSingle()`, or `runMulti()` functions.
   ##
 
-  debug "RUNDAEMON", id=ctx.pool.id
+  debug "RUNDAEMON", id = ctx.pool.id
 
   # Just wake up after long sleep (e.g. client terminated)
   if bmResumeSync in ctx.pool.mode:
@@ -109,7 +106,6 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
 
   await sleepAsync sleepDuration
 
-
 proc runSingle*(buddy: BeaconBuddyRef) {.async.} =
   ## This peer worker is invoked if the peer-local flag `buddy.ctrl.multiOk`
   ## is set `false` which is the default mode. This flag is updated by the
@@ -122,14 +118,13 @@ proc runSingle*(buddy: BeaconBuddyRef) {.async.} =
   ##
   ## Note that this function runs in `async` mode.
   ##
-  let
-    ctx = buddy.ctx
+  let ctx = buddy.ctx
 
-  debug "RUNSINGLE", id=ctx.pool.id
+  debug "RUNSINGLE", id = ctx.pool.id
 
   if buddy.ctrl.stopped:
     when extraTraceMessages:
-      trace "Single mode stopped", peer, pivotState=ctx.pool.pivotState
+      trace "Single mode stopped", peer, pivotState = ctx.pool.pivotState
     return # done with this buddy
 
   var napping = timer.seconds(2)
@@ -144,8 +139,7 @@ proc runSingle*(buddy: BeaconBuddyRef) {.async.} =
   if ctx.pool.jobs.len == 0:
     ctx.daemon = true
 
-
-proc runPool*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+proc runPool*(buddy: BeaconBuddyRef, last: bool, laps: int): bool =
   ## Once started, the function `runPool()` is called for all worker peers in
   ## sequence as the body of an iteration as long as the function returns
   ## `false`. There will be no other worker peer functions activated
@@ -161,10 +155,9 @@ proc runPool*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  let
-    ctx = buddy.ctx
+  let ctx = buddy.ctx
 
-  debug "RUNPOOL", id=ctx.pool.id
+  debug "RUNPOOL", id = ctx.pool.id
 
   # If a peer cannot finish it's job,
   # we will put it back into circulation.
@@ -183,16 +176,14 @@ proc runPool*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   # If there is no more jobs, stop
   ctx.pool.jobs.len == 0
 
-
 proc runMulti*(buddy: BeaconBuddyRef) {.async.} =
   ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set
   ## `true` which is typically done after finishing `runSingle()`. This
   ## instance can be simultaneously active for all peer workers.
   ##
-  let
-    ctx = buddy.ctx
+  let ctx = buddy.ctx
 
-  debug "RUNMULTI", id=ctx.pool.id
+  debug "RUNMULTI", id = ctx.pool.id
 
   # If each of peers get their job,
   # execute it until failure or success
@@ -202,7 +193,7 @@ proc runMulti*(buddy: BeaconBuddyRef) {.async.} =
 
   # Update persistent database
   #while not buddy.ctrl.stopped:
-    # Allow thread switch as `persistBlocks()` might be slow
+  # Allow thread switch as `persistBlocks()` might be slow
   await sleepAsync timer.milliseconds(10)
 
   # request new jobs, if available

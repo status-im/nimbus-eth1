@@ -8,7 +8,6 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-
 {.used.}
 
 import
@@ -16,7 +15,7 @@ import
   unittest2,
   eth/db/kvstore,
   ../../nimbus/db/kvstore_rocksdb,
-  eth/../tests/db/test_kvstore
+  eth /../ tests/db/test_kvstore
 
 suite "KvStore RocksDb Tests":
   const
@@ -48,8 +47,7 @@ suite "KvStore RocksDb Tests":
     let tmp = getTempDir() / "nimbus-test-db"
     removeDir(tmp)
 
-    let db = RocksStoreRef.init(tmp, "test",
-        namespaces = @[NS_DEFAULT, NS_OTHER])[]
+    let db = RocksStoreRef.init(tmp, "test", namespaces = @[NS_DEFAULT, NS_OTHER])[]
     defer:
       db.close()
 

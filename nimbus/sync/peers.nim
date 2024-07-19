@@ -9,13 +9,7 @@
 
 {.push raises: [].}
 
-import
-  std/[hashes, tables],
-  chronicles,
-  chronos,
-  eth/p2p,
-  eth/p2p/peer_pool,
-  ./protocol
+import std/[hashes, tables], chronicles, chronos, eth/p2p, eth/p2p/peer_pool, ./protocol
 
 # Currently, this module only handles static peers
 # but we can extend it to handles trusted peers as well
@@ -28,20 +22,23 @@ type
     connected: bool
 
   PMState = enum
-    Starting, Running, Stopping, Stopped
+    Starting
+    Running
+    Stopping
+    Stopped
 
   PeerManagerRef* = ref object
     state: PMState
     pool: PeerPool
     maxRetryCount: int # zero == infinite
     retryInterval: int # in seconds
-    reconnectStates: Table[Node,ReconnectState]
+    reconnectStates: Table[Node, ReconnectState]
     reconnectFut: Future[void]
 
 logScope:
   topics = "PeerManagerRef"
 
-template noKeyError(info: static[string]; code: untyped) =
+template noKeyError(info: static[string], code: untyped) =
   try:
     code
   except KeyError as e:
@@ -64,11 +61,11 @@ proc reconnect(pm: PeerManagerRef) {.async, gcsafe.} =
   for n in pm.reconnectStates.values:
     if not n.connected and pm.state == Running:
       if n.retryCount < pm.maxRetryCount or pm.maxRetryCount == 0:
-        trace "Reconnecting to", remote=n.node.node
+        trace "Reconnecting to", remote = n.node.node
         await pm.pool.connectToNode(n.node)
         inc n.retryCount
       elif n.retryCount == pm.maxRetryCount:
-        trace "Exceed max retry count, give up reconnecting", remote=n.node.node
+        trace "Exceed max retry count, give up reconnecting", remote = n.node.node
         inc n.retryCount
 
 proc runReconnectLoop(pm: PeerManagerRef) {.async, gcsafe.} =
@@ -83,11 +80,11 @@ proc runReconnectLoop(pm: PeerManagerRef) {.async, gcsafe.} =
 proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
   var po: PeerObserver
   po.onPeerConnected = proc(peer: Peer) {.gcsafe.} =
-    trace "Peer connected", remote=peer.remote.node
+    trace "Peer connected", remote = peer.remote.node
     pm.setConnected(peer, true)
 
   po.onPeerDisconnected = proc(peer: Peer) {.gcsafe.} =
-    trace "Peer disconnected", remote=peer.remote.node
+    trace "Peer disconnected", remote = peer.remote.node
     pm.setConnected(peer, false)
     if pm.state notin {Running, Stopped}:
       pm.state = Running
@@ -97,23 +94,21 @@ proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
   pm.pool.addObserver(pm, po)
 
   for enode in enodes:
-    let state = ReconnectState(
-      node: newNode(enode),
-      retryCount: 0,
-      connected: false
-    )
+    let state = ReconnectState(node: newNode(enode), retryCount: 0, connected: false)
     pm.reconnectStates[state.node] = state
 
-proc new*(_: type PeerManagerRef,
-          pool: PeerPool,
-          retryInterval: int,
-          maxRetryCount: int,
-          enodes: openArray[ENode]): PeerManagerRef =
+proc new*(
+    _: type PeerManagerRef,
+    pool: PeerPool,
+    retryInterval: int,
+    maxRetryCount: int,
+    enodes: openArray[ENode],
+): PeerManagerRef =
   result = PeerManagerRef(
     pool: pool,
     state: Starting,
     maxRetryCount: max(0, maxRetryCount),
-    retryInterval: max(5, retryInterval)
+    retryInterval: max(5, retryInterval),
   )
   result.setupManager(enodes)
 

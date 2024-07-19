@@ -8,23 +8,20 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/[strutils, typetraits],
-  chronicles,
-  ./engine_spec
+import std/[strutils, typetraits], chronicles, ./engine_spec
 
 type
   PayloadAttributesFieldChange* = enum
-    PayloadAttributesIncreaseTimestamp         = "Increase timestamp"
-    PayloadAttributesRandom                    = "Modify Random"
-    PayloadAttributesSuggestedFeeRecipient     = "Modify SuggestedFeeRecipient"
-    PayloadAttributesAddWithdrawal             = "Add Withdrawal"
-    PayloadAttributesModifyWithdrawalAmount    = "Modify Withdrawal Amount"
-    PayloadAttributesModifyWithdrawalIndex     = "Modify Withdrawal Index"
+    PayloadAttributesIncreaseTimestamp = "Increase timestamp"
+    PayloadAttributesRandom = "Modify Random"
+    PayloadAttributesSuggestedFeeRecipient = "Modify SuggestedFeeRecipient"
+    PayloadAttributesAddWithdrawal = "Add Withdrawal"
+    PayloadAttributesModifyWithdrawalAmount = "Modify Withdrawal Amount"
+    PayloadAttributesModifyWithdrawalIndex = "Modify Withdrawal Index"
     PayloadAttributesModifyWithdrawalValidator = "Modify Withdrawal Validator"
-    PayloadAttributesModifyWithdrawalAddress   = "Modify Withdrawal Address"
-    PayloadAttributesRemoveWithdrawal          = "Remove Withdrawal"
-    PayloadAttributesParentBeaconRoot          = "Modify Parent Beacon Root"
+    PayloadAttributesModifyWithdrawalAddress = "Modify Withdrawal Address"
+    PayloadAttributesRemoveWithdrawal = "Remove Withdrawal"
+    PayloadAttributesParentBeaconRoot = "Modify Parent Beacon Root"
 
   UniquePayloadIDTest* = ref object of EngineSpec
     fieldModification*: PayloadAttributesFieldChange
@@ -54,63 +51,67 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
   let ok = waitFor env.clMock.waitForTTD()
   testCond ok
 
-  let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
-    onPayloadAttributesGenerated: proc(): bool =
-      var attr = env.clMock.latestPayloadAttributes
-      case cs.fieldModification
-      of PayloadAttributesIncreaseTimestamp:
-        attr.timestamp = w3Qty(attr.timestamp, 1)
-      of PayloadAttributesRandom:
-        attr.prevRandao = attr.prevRandao.plusOne
-      of PayloadAttributesSuggestedFeeRecipient:
-        attr.suggestedFeeRecipient = attr.suggestedFeeRecipient.plusOne
-      of PayloadAttributesAddWithdrawal:
-        let newWithdrawal = WithdrawalV1()
-        var wd = attr.withdrawals.get
-        wd.add newWithdrawal
-        attr.withdrawals = Opt.some(wd)
-      of PayloadAttributesRemoveWithdrawal:
-        var wd = attr.withdrawals.get
-        wd.delete(0)
-        attr.withdrawals = Opt.some(wd)
-      of PayloadAttributesModifyWithdrawalAmount,
-        PayloadAttributesModifyWithdrawalIndex,
-        PayloadAttributesModifyWithdrawalValidator,
-        PayloadAttributesModifyWithdrawalAddress:
-        testCond attr.withdrawals.isSome:
-          fatal "Cannot modify withdrawal when there are no withdrawals"
-        var wds = attr.withdrawals.get
-        testCond wds.len > 0:
-          fatal "Cannot modify withdrawal when there are no withdrawals"
-
-        var wd = wds[0]
+  let pbRes = env.clMock.produceSingleBlock(
+    BlockProcessCallbacks(
+      onPayloadAttributesGenerated: proc(): bool =
+        var attr = env.clMock.latestPayloadAttributes
         case cs.fieldModification
-        of PayloadAttributesModifyWithdrawalAmount:
-          wd.amount = w3Qty(wd.amount, 1)
-        of PayloadAttributesModifyWithdrawalIndex:
-          wd.index = w3Qty(wd.index, 1)
-        of PayloadAttributesModifyWithdrawalValidator:
-          wd.validatorIndex = w3Qty(wd.validatorIndex, 1)
-        of PayloadAttributesModifyWithdrawalAddress:
-          wd.address = wd.address.plusOne
-        else:
-          fatal "Unknown field change", field=cs.fieldModification
-          return false
+        of PayloadAttributesIncreaseTimestamp:
+          attr.timestamp = w3Qty(attr.timestamp, 1)
+        of PayloadAttributesRandom:
+          attr.prevRandao = attr.prevRandao.plusOne
+        of PayloadAttributesSuggestedFeeRecipient:
+          attr.suggestedFeeRecipient = attr.suggestedFeeRecipient.plusOne
+        of PayloadAttributesAddWithdrawal:
+          let newWithdrawal = WithdrawalV1()
+          var wd = attr.withdrawals.get
+          wd.add newWithdrawal
+          attr.withdrawals = Opt.some(wd)
+        of PayloadAttributesRemoveWithdrawal:
+          var wd = attr.withdrawals.get
+          wd.delete(0)
+          attr.withdrawals = Opt.some(wd)
+        of PayloadAttributesModifyWithdrawalAmount,
+            PayloadAttributesModifyWithdrawalIndex,
+            PayloadAttributesModifyWithdrawalValidator,
+            PayloadAttributesModifyWithdrawalAddress:
+          testCond attr.withdrawals.isSome:
+            fatal "Cannot modify withdrawal when there are no withdrawals"
+          var wds = attr.withdrawals.get
+          testCond wds.len > 0:
+            fatal "Cannot modify withdrawal when there are no withdrawals"
 
-        wds[0] = wd
-        attr.withdrawals = Opt.some(wds)
-      of PayloadAttributesParentBeaconRoot:
-        testCond attr.parentBeaconBlockRoot.isSome:
-          fatal "Cannot modify parent beacon root when there is no parent beacon root"
-        let newBeaconRoot = attr.parentBeaconBlockRoot.get.plusOne
-        attr.parentBeaconBlockRoot = Opt.some(newBeaconRoot)
+          var wd = wds[0]
+          case cs.fieldModification
+          of PayloadAttributesModifyWithdrawalAmount:
+            wd.amount = w3Qty(wd.amount, 1)
+          of PayloadAttributesModifyWithdrawalIndex:
+            wd.index = w3Qty(wd.index, 1)
+          of PayloadAttributesModifyWithdrawalValidator:
+            wd.validatorIndex = w3Qty(wd.validatorIndex, 1)
+          of PayloadAttributesModifyWithdrawalAddress:
+            wd.address = wd.address.plusOne
+          else:
+            fatal "Unknown field change", field = cs.fieldModification
+            return false
 
-      # Request the payload with the modified attributes and add the payload ID to the list of known IDs
-      let version = env.engine.version(env.clMock.latestHeader.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
-      r.expectNoError()
-      testCond env.clMock.addPayloadID(env.engine, r.get.payloadID.get)
-      return true
-  ))
+          wds[0] = wd
+          attr.withdrawals = Opt.some(wds)
+        of PayloadAttributesParentBeaconRoot:
+          testCond attr.parentBeaconBlockRoot.isSome:
+            fatal "Cannot modify parent beacon root when there is no parent beacon root"
+          let newBeaconRoot = attr.parentBeaconBlockRoot.get.plusOne
+          attr.parentBeaconBlockRoot = Opt.some(newBeaconRoot)
+
+        # Request the payload with the modified attributes and add the payload ID to the list of known IDs
+        let version = env.engine.version(env.clMock.latestHeader.timestamp)
+        let r = env.engine.client.forkchoiceUpdated(
+          version, env.clMock.latestForkchoice, Opt.some(attr)
+        )
+        r.expectNoError()
+        testCond env.clMock.addPayloadID(env.engine, r.get.payloadID.get)
+        return true
+    )
+  )
   testCond pbRes
   return true

@@ -18,12 +18,9 @@ import
   ../nimbus/common,
   ../nimbus/db/opts,
   ../nimbus/db/[core_db/persistent, storage_types],
-  configuration  # must be late (compilation annoyance)
+  configuration # must be late (compilation annoyance)
 
-when defined(graphql):
-  import graphql_downloader
-else:
-  import downloader
+when defined(graphql): import graphql_downloader else: import downloader
 
 # `lmdb` is not used, anymore
 #
@@ -38,9 +35,10 @@ else:
 #     if not db.txCommit(): doAssert(false)
 
 template persistToDb(db: CoreDbRef, body: untyped) =
-  block: body
+  block:
+    body
 
-proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
+proc contains(kvt: CoreDbKvtRef, key: openArray[byte]): bool =
   kvt.hasKey(key).expect "valid bool"
 
 proc main() {.used.} =
@@ -59,11 +57,13 @@ proc main() {.used.} =
   let conf = configuration.getConfiguration()
   let com = CommonRef.new(
     newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()),
-    conf.netId, networkParams(conf.netId))
+    conf.netId,
+    networkParams(conf.netId),
+  )
 
   # move head to block number ...
   if conf.head != 0'u64:
-    var parentBlock = requestBlock(conf.head, { DownloadAndValidate })
+    var parentBlock = requestBlock(conf.head, {DownloadAndValidate})
     discard com.db.setHead(parentBlock.header)
 
   let kvt = com.db.ctx.getKvt()
@@ -79,7 +79,7 @@ proc main() {.used.} =
   let numBlocksToCommit = conf.numCommits
 
   var blocks = newSeqOfCap[EthBlock](numBlocksToCommit)
-  var one    = 1'u64
+  var one = 1'u64
 
   var numBlocks = 0
   var counter = 0
@@ -88,7 +88,7 @@ proc main() {.used.} =
   while true:
     var thisBlock: Block
     try:
-      thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
+      thisBlock = requestBlock(blockNumber, {DownloadAndValidate})
     except CatchableError as e:
       if retryCount < 3:
         warn "Unable to get block data via JSON-RPC API", error = e.msg
@@ -99,7 +99,8 @@ proc main() {.used.} =
         raise e
 
     blocks.add EthBlock.init(thisBlock.header, thisBlock.body)
-    info "REQUEST HEADER", blockNumber=blockNumber, txs=thisBlock.body.transactions.len
+    info "REQUEST HEADER",
+      blockNumber = blockNumber, txs = thisBlock.body.transactions.len
 
     inc numBlocks
     blockNumber += one
@@ -108,7 +109,8 @@ proc main() {.used.} =
       persistToDb(com.db):
         let res = chain.persistBlocks(blocks)
         res.isOkOr:
-          raise newException(ValidationError, "Error when validating blocks: " & res.error)
+          raise
+            newException(ValidationError, "Error when validating blocks: " & res.error)
       numBlocks = 0
       blocks.setLen(0)
 
@@ -120,7 +122,8 @@ proc main() {.used.} =
     persistToDb(com.db):
       let res = chain.persistBlocks(blocks)
       res.isOkOr:
-        raise newException(ValidationError, "Error when validating blocks: " & res.error)
+        raise
+          newException(ValidationError, "Error when validating blocks: " & res.error)
 
 when isMainModule:
   var message: string

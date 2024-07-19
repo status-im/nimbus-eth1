@@ -8,14 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/strutils,
-  ./engine_spec,
-  ../../../../nimbus/common/hardforks
+import std/strutils, ./engine_spec, ../../../../nimbus/common/hardforks
 
-type
-  ForkIDSpec* = ref object of EngineSpec
-    produceBlocksBeforePeering*: int
+type ForkIDSpec* = ref object of EngineSpec
+  produceBlocksBeforePeering*: int
 
 method withMainFork(cs: ForkIDSpec, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -23,7 +19,9 @@ method withMainFork(cs: ForkIDSpec, fork: EngineFork): BaseSpec =
   return res
 
 method getName(cs: ForkIDSpec): string =
-  var name = "Fork ID: Genesis at $1, $2 at $3" % [$cs.getGenesisTimestamp(), $cs.mainFork, $cs.forkTime]
+  var name =
+    "Fork ID: Genesis at $1, $2 at $3" %
+    [$cs.getGenesisTimestamp(), $cs.mainFork, $cs.forkTime]
   if cs.previousForkTime != 0:
     name.add ", $1 at $2" % [$cs.mainFork.pred, $cs.previousForkTime]
 
@@ -49,7 +47,9 @@ method execute(cs: ForkIDSpec, env: TestEnv): bool =
   testCond ok
 
   # Produce blocks before starting the test if required
-  testCond env.clMock.produceBlocks(cs.produceBlocksBeforePeering, BlockProcessCallbacks())
+  testCond env.clMock.produceBlocks(
+    cs.produceBlocksBeforePeering, BlockProcessCallbacks()
+  )
 
   # Get client index's enode
   let engine = env.addEngine()

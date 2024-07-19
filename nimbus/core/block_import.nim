@@ -9,14 +9,11 @@
 
 {.push raises: [].}
 
-import
-  chronicles,
-  eth/rlp, stew/io2,
-  ./chain,
-  ../common/common,
-  ../utils/utils
+import chronicles, eth/rlp, stew/io2, ./chain, ../common/common, ../utils/utils
 
-proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: string = ""): bool =
+proc importRlpBlock*(
+    blocksRlp: openArray[byte], com: CommonRef, importFile: string = ""
+): bool =
   var
     # the encoded rlp can contains one or more blocks
     rlp = rlpFromBytes(blocksRlp)
@@ -31,30 +28,25 @@ proc importRlpBlock*(blocksRlp: openArray[byte]; com: CommonRef; importFile: str
   #      that scenario the code needs to be rewritten to not persist the blocks
   #      to the state database until all have been processed
   while rlp.hasData:
-    blk[0] = try:
-      rlp.read(EthBlock)
-    except RlpError as e:
-      # terminate if there was a decoding error
-      error "rlp error",
-        fileName = importFile,
-        msg = e.msg,
-        exception = e.name
-      return false
+    blk[0] =
+      try:
+        rlp.read(EthBlock)
+      except RlpError as e:
+        # terminate if there was a decoding error
+        error "rlp error", fileName = importFile, msg = e.msg, exception = e.name
+        return false
 
-    chain.persistBlocks(blk).isOkOr():
+    chain.persistBlocks(blk).isOkOr:
       # register one more error and continue
-      error "import error",
-        fileName = importFile,
-        error
+      error "import error", fileName = importFile, error
       errorCount.inc
 
   return errorCount == 0
 
-proc importRlpBlock*(importFile: string; com: CommonRef): bool =
+proc importRlpBlock*(importFile: string, com: CommonRef): bool =
   let res = io2.readAllBytes(importFile)
   if res.isErr:
-    error "failed to import",
-      fileName = importFile
+    error "failed to import", fileName = importFile
     return false
 
   importRlpBlock(res.get, com, importFile)

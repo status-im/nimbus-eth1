@@ -15,11 +15,11 @@ import
   web3/execution_types,
   chronicles
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises: [CatchableError].}
 
-proc exchangeConf*(ben: BeaconEngineRef,
-                   conf: TransitionConfigurationV1):
-                       TransitionConfigurationV1 =
+proc exchangeConf*(
+    ben: BeaconEngineRef, conf: TransitionConfigurationV1
+): TransitionConfigurationV1 =
   trace "Engine API request received",
     meth = "exchangeTransitionConfigurationV1",
     ttd = conf.terminalTotalDifficulty,
@@ -28,48 +28,59 @@ proc exchangeConf*(ben: BeaconEngineRef,
 
   let
     com = ben.com
-    db  = com.db
+    db = com.db
     ttd = com.ttd
 
   if ttd.isNone:
-    raise newException(ValueError, "invalid ttd: EL (none) CL ($1)" % [
-      $conf.terminalTotalDifficulty])
+    raise newException(
+      ValueError, "invalid ttd: EL (none) CL ($1)" % [$conf.terminalTotalDifficulty]
+    )
 
   if conf.terminalTotalDifficulty != ttd.get:
-    raise newException(ValueError, "invalid ttd: EL ($1) CL ($2)" % [
-      $ttd.get, $conf.terminalTotalDifficulty])
+    raise newException(
+      ValueError,
+      "invalid ttd: EL ($1) CL ($2)" % [$ttd.get, $conf.terminalTotalDifficulty],
+    )
 
   let
     terminalBlockNumber = common.BlockNumber conf.terminalBlockNumber
-    terminalBlockHash   = ethHash conf.terminalBlockHash
+    terminalBlockHash = ethHash conf.terminalBlockHash
 
   if terminalBlockHash != common.Hash256():
     var headerHash: common.Hash256
 
     if not db.getBlockHash(terminalBlockNumber, headerHash):
-      raise newException(ValueError, "cannot get terminal block hash, number $1" %
-        [$terminalBlockNumber])
+      raise newException(
+        ValueError, "cannot get terminal block hash, number $1" % [$terminalBlockNumber]
+      )
 
     if terminalBlockHash != headerHash:
-      raise newException(ValueError, "invalid terminal block hash, got $1 want $2" %
-        [$terminalBlockHash, $headerHash])
+      raise newException(
+        ValueError,
+        "invalid terminal block hash, got $1 want $2" % [
+          $terminalBlockHash, $headerHash
+        ],
+      )
 
     var header: common.BlockHeader
     if not db.getBlockHeader(headerHash, header):
-      raise newException(ValueError, "cannot get terminal block header, hash $1" %
-        [$terminalBlockHash])
+      raise newException(
+        ValueError, "cannot get terminal block header, hash $1" % [$terminalBlockHash]
+      )
 
     return TransitionConfigurationV1(
       terminalTotalDifficulty: ttd.get,
-      terminalBlockHash      : w3Hash headerHash,
-      terminalBlockNumber    : w3Qty header.number
+      terminalBlockHash: w3Hash headerHash,
+      terminalBlockNumber: w3Qty header.number,
     )
 
   if terminalBlockNumber != 0'u64:
-    raise newException(ValueError, "invalid terminal block number: $1" % [
-      $terminalBlockNumber])
+    raise newException(
+      ValueError, "invalid terminal block number: $1" % [$terminalBlockNumber]
+    )
 
   if terminalBlockHash != common.Hash256():
-    raise newException(ValueError, "invalid terminal block hash, no terminal header set")
+    raise
+      newException(ValueError, "invalid terminal block hash, no terminal header set")
 
   TransitionConfigurationV1(terminalTotalDifficulty: ttd.get)

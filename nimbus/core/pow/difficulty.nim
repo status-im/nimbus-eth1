@@ -8,19 +8,17 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ../../common/common
+import ../../common/common
 
-export
-  common
+export common
 
 const
-  ExpDiffPeriod           = 100000.u256
+  ExpDiffPeriod = 100000.u256
   DifficultyBoundDivisorU = 2048.u256
   DifficultyBoundDivisorI = 2048.i256
-  DurationLimit           = 13
-  MinimumDifficultyU      = 131072.u256
-  MinimumDifficultyI      = 131072.i256
+  DurationLimit = 13
+  MinimumDifficultyU = 131072.u256
+  MinimumDifficultyI = 131072.i256
   bigOne = 1.u256
   bigTwo = 2.u256
   bigNine = 9.i256
@@ -45,7 +43,7 @@ template difficultyBomb(periodCount: UInt256) =
 # block's time and difficulty. The calculation uses the Frontier rules.
 func calcDifficultyFrontier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   var diff: DifficultyInt
-  let adjust  = parent.difficulty div DifficultyBoundDivisorU
+  let adjust = parent.difficulty div DifficultyBoundDivisorU
   let time = timeStamp
   let parentTime = parent.timestamp
 
@@ -99,11 +97,12 @@ func calcDifficultyHomestead*(timeStamp: EthTime, parent: BlockHeader): Difficul
 # makeDifficultyCalculator creates a difficultyCalculator with the given bomb-delay.
 # the difficulty is calculated with Byzantium rules, which differs from Homestead in
 # how uncles affect the calculation
-func makeDifficultyCalculator(bombDelay: static[int], timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+func makeDifficultyCalculator(
+    bombDelay: static[int], timeStamp: EthTime, parent: BlockHeader
+): DifficultyInt =
   # Note, the calculations below looks at the parent number, which is 1 below
   # the block number. Thus we remove one from the delay given
-  const
-    bombDelayFromParent = bombDelay.u256 - bigOne
+  const bombDelayFromParent = bombDelay.u256 - bigOne
 
   # https:#github.com/ethereum/EIPs/issues/100.
   # algorithm:
@@ -145,18 +144,24 @@ func makeDifficultyCalculator(bombDelay: static[int], timeStamp: EthTime, parent
 
   result = diff
 
-template calcDifficultyByzantium*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+template calcDifficultyByzantium*(
+    timeStamp: EthTime, parent: BlockHeader
+): DifficultyInt =
   ## "EIP-649: Metropolis Difficulty Bomb Delay and Block Reward Reduction"
   ## <https://eips.ethereum.org/EIPS/eip-649>
   makeDifficultyCalculator(3_000_000, timeStamp, parent)
 
-template calcDifficultyConstantinople*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+template calcDifficultyConstantinople*(
+    timeStamp: EthTime, parent: BlockHeader
+): DifficultyInt =
   ## "EIP-1234: Constantinople Difficulty Bomb Delay and Block Reward Adjustment"
   ## <https://eips.ethereum.org/EIPS/eip-1234>
   ## Keep using Byzantium's rules but offset the bomb 5.0M blocks.
   makeDifficultyCalculator(5_000_000, timeStamp, parent)
 
-template calcDifficultyMuirGlacier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+template calcDifficultyMuirGlacier*(
+    timeStamp: EthTime, parent: BlockHeader
+): DifficultyInt =
   ## "EIP-2384: Muir Glacier Difficulty Bomb Delay"
   ## <https://eips.ethereum.org/EIPS/eip-2384>
   ## Offset the bomb 4.0M more blocks than Constantinople, total 9.0M blocks.
@@ -168,19 +173,25 @@ template calcDifficultyLondon*(timeStamp: EthTime, parent: BlockHeader): Difficu
   ## Offset the bomb a total of 9.7M blocks.
   makeDifficultyCalculator(9_700_000, timeStamp, parent)
 
-template calcDifficultyArrowGlacier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+template calcDifficultyArrowGlacier*(
+    timeStamp: EthTime, parent: BlockHeader
+): DifficultyInt =
   ## "EIP-4345: Difficulty Bomb Delay to June 2022"
   ## <https://eips.ethereum.org/EIPS/eip-4345>
   ## Offset the bomb a total of 10.7M blocks.
   makeDifficultyCalculator(10_700_000, timeStamp, parent)
 
-template calcDifficultyGrayGlacier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+template calcDifficultyGrayGlacier*(
+    timeStamp: EthTime, parent: BlockHeader
+): DifficultyInt =
   ## "EIP-4345: Difficulty Bomb Delay to September 2022"
   ## <https://eips.ethereum.org/EIPS/eip-5133>
   ## Offset the bomb a total of 11.4M blocks.
   makeDifficultyCalculator(11_400_000, timeStamp, parent)
 
-func calcDifficulty*(com: CommonRef, timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+func calcDifficulty*(
+    com: CommonRef, timeStamp: EthTime, parent: BlockHeader
+): DifficultyInt =
   let next = com.toHardFork(parent.forkDeterminationInfo.adjustForNextBlock)
   if next >= GrayGlacier:
     result = calcDifficultyGrayGlacier(timeStamp, parent)

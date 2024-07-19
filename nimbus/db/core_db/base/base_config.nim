@@ -27,10 +27,9 @@ const
   EnableCaptJournal = defined(release).not
     ## Enables the tracer facility. If set `true` capture journal directives
     ## like `newCapture()` will be available.
-  
-  NoisyCaptJournal = true
-    ## Provide extra logging with the tracer facility if available.
-  
+
+  NoisyCaptJournal = true ## Provide extra logging with the tracer facility if available.
+
   EnableApiJumpTable = false
     ## This flag enables the functions jump table even if `EnableApiProfiling`
     ## and `EnableCaptJournal` is set `false` in realease mode. This setting

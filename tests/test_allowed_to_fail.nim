@@ -15,82 +15,92 @@
 import strutils
 
 func slowGSTTests(folder: string, name: string): bool =
-  result = folder == "stQuadraticComplexityTest" or
-    name in @["randomStatetest352.json", "randomStatetest1.json",
-             "randomStatetest32.json", "randomStatetest347.json",
-             "randomStatetest393.json", "randomStatetest626.json",
-             "CALLCODE_Bounds.json", "DELEGATECALL_Bounds3.json",
-             "CALLCODE_Bounds4.json", "CALL_Bounds.json",
-             "DELEGATECALL_Bounds2.json", "CALL_Bounds3.json",
-             "CALLCODE_Bounds2.json", "CALLCODE_Bounds3.json",
-             "DELEGATECALL_Bounds.json", "CALL_Bounds2a.json",
-             "CALL_Bounds2.json",
-             "CallToNameRegistratorMemOOGAndInsufficientBalance.json",
-             "CallToNameRegistratorTooMuchMemory0.json",
+  result =
+    folder == "stQuadraticComplexityTest" or
+    name in
+    @[
+      "randomStatetest352.json",
+      "randomStatetest1.json",
+      "randomStatetest32.json",
+      "randomStatetest347.json",
+      "randomStatetest393.json",
+      "randomStatetest626.json",
+      "CALLCODE_Bounds.json",
+      "DELEGATECALL_Bounds3.json",
+      "CALLCODE_Bounds4.json",
+      "CALL_Bounds.json",
+      "DELEGATECALL_Bounds2.json",
+      "CALL_Bounds3.json",
+      "CALLCODE_Bounds2.json",
+      "CALLCODE_Bounds3.json",
+      "DELEGATECALL_Bounds.json",
+      "CALL_Bounds2a.json",
+      "CALL_Bounds2.json",
+      "CallToNameRegistratorMemOOGAndInsufficientBalance.json",
+      "CallToNameRegistratorTooMuchMemory0.json",
 
-              # all these tests below actually pass
-              # but they are very slow
+      # all these tests below actually pass
+      # but they are very slow
 
-              # constantinople slow tests
-              "Create2Recursive.json",
+      # constantinople slow tests
+      "Create2Recursive.json",
 
-              # byzantium slow tests
-              "LoopCallsDepthThenRevert3.json",
-              "LoopCallsDepthThenRevert2.json",
-              "LoopCallsDepthThenRevert.json",
-              "static_Call50000.json",
-              "static_Call50000_ecrec.json",
-              "static_Call50000_identity.json",
-              "static_Call50000_identity2.json",
-              "static_Call50000_rip160.json",
-              "static_Call50000_sha256.json",
-              "LoopCallsThenRevert.json",
-              "LoopDelegateCallsDepthThenRevert.json",
-              "recursiveCreateReturnValue.json",
-              "static_Call1024PreCalls2.json",
-              "Callcode1024BalanceTooLow.json",
-              "static_Call1024BalanceTooLow.json",
-              "static_Call1024BalanceTooLow2.json",
-              "static_Call1024OOG.json",
-              "static_Call1024PreCalls3.json",
-              "static_Call1024PreCalls.json",
-              "static_Call1MB1024Calldepth.json",
+      # byzantium slow tests
+      "LoopCallsDepthThenRevert3.json",
+      "LoopCallsDepthThenRevert2.json",
+      "LoopCallsDepthThenRevert.json",
+      "static_Call50000.json",
+      "static_Call50000_ecrec.json",
+      "static_Call50000_identity.json",
+      "static_Call50000_identity2.json",
+      "static_Call50000_rip160.json",
+      "static_Call50000_sha256.json",
+      "LoopCallsThenRevert.json",
+      "LoopDelegateCallsDepthThenRevert.json",
+      "recursiveCreateReturnValue.json",
+      "static_Call1024PreCalls2.json",
+      "Callcode1024BalanceTooLow.json",
+      "static_Call1024BalanceTooLow.json",
+      "static_Call1024BalanceTooLow2.json",
+      "static_Call1024OOG.json",
+      "static_Call1024PreCalls3.json",
+      "static_Call1024PreCalls.json",
+      "static_Call1MB1024Calldepth.json",
 
-              # Homestead recursives
-              "ContractCreationSpam.json",
-              "Call1024OOG.json",
-              "Call1024PreCalls.json",
-              "CallRecursiveBombPreCall.json",
-              "Delegatecall1024.json",
-              "Delegatecall1024OOG.json",
-              "JUMPDEST_Attack.json",
-              "JUMPDEST_AttackwithJump.json",
-              "ABAcalls1.json",
-              "ABAcalls2.json",
-              "CallRecursiveBomb0.json",
-              "CallRecursiveBomb0_OOG_atMaxCallDepth.json",
-              "CallRecursiveBomb1.json",
-              "CallRecursiveBomb2.json",
-              "CallRecursiveBombLog.json",
-              "CallRecursiveBombLog2.json",
-              "Call1024BalanceTooLow.json",
+      # Homestead recursives
+      "ContractCreationSpam.json",
+      "Call1024OOG.json",
+      "Call1024PreCalls.json",
+      "CallRecursiveBombPreCall.json",
+      "Delegatecall1024.json",
+      "Delegatecall1024OOG.json",
+      "JUMPDEST_Attack.json",
+      "JUMPDEST_AttackwithJump.json",
+      "ABAcalls1.json",
+      "ABAcalls2.json",
+      "CallRecursiveBomb0.json",
+      "CallRecursiveBomb0_OOG_atMaxCallDepth.json",
+      "CallRecursiveBomb1.json",
+      "CallRecursiveBomb2.json",
+      "CallRecursiveBombLog.json",
+      "CallRecursiveBombLog2.json",
+      "Call1024BalanceTooLow.json",
 
-              # Frontier recursives
-              "Callcode1024OOG.json",
-              "callcallcodecall_ABCB_RECURSIVE.json",
-              "callcallcodecallcode_ABCB_RECURSIVE.json",
-              "callcodecallcall_ABCB_RECURSIVE.json",
-              "callcodecallcallcode_ABCB_RECURSIVE.json",
-              "callcodecallcodecall_ABCB_RECURSIVE.json",
-              "callcodecallcodecallcode_ABCB_RECURSIVE.json",
-              "callcallcallcode_ABCB_RECURSIVE.json",
+      # Frontier recursives
+      "Callcode1024OOG.json",
+      "callcallcodecall_ABCB_RECURSIVE.json",
+      "callcallcodecallcode_ABCB_RECURSIVE.json",
+      "callcodecallcall_ABCB_RECURSIVE.json",
+      "callcodecallcallcode_ABCB_RECURSIVE.json",
+      "callcodecallcodecall_ABCB_RECURSIVE.json",
+      "callcodecallcodecallcode_ABCB_RECURSIVE.json",
+      "callcallcallcode_ABCB_RECURSIVE.json",
 
-              # Istanbul slow tests
-              "CALLBlake2f_MaxRounds.json",
-              "loopMul.json",
-              "loopExp.json",
-
-              ]
+      # Istanbul slow tests
+      "CALLBlake2f_MaxRounds.json",
+      "loopMul.json",
+      "loopExp.json",
+    ]
 
 func skipGSTTests*(folder: string, name: string): bool =
   # we skip tests that are slow or expected to fail for now
@@ -106,30 +116,31 @@ func skipVMTests*(folder: string, name: string): bool =
   result = (folder == "vmPerformance" and "loop" in name)
 
 func skipBCTests*(folder: string, name: string): bool =
-  name in @[
-    # BlockChain slow tests
-    "SuicideIssue.json",
+  name in
+    @[
+      # BlockChain slow tests
+      "SuicideIssue.json",
 
-    # BC huge memory consumption
-    "randomStatetest94.json",
-    "DelegateCallSpam.json",
-  ]
+      # BC huge memory consumption
+      "randomStatetest94.json",
+      "DelegateCallSpam.json",
+    ]
 
 func skipNewBCTests*(folder: string, name: string): bool =
   if folder in ["vmPerformance"]:
     return true
-    
+
   # the new BC tests also contains these slow tests
   # for Istanbul fork
   if slowGSTTests(folder, name):
     return true
 
-  name in @[
-    # BC huge memory consumption
-    "randomStatetest94.json",
-    "DelegateCallSpam.json",
-  ]
-  
+  name in
+    @[
+      # BC huge memory consumption
+      "randomStatetest94.json", "DelegateCallSpam.json",
+    ]
+
 func skipPrecompilesTests*(folder: string, name: string): bool =
   # EIP2565: modExp gas cost
   # reason: included in berlin

@@ -17,16 +17,14 @@ import
 # this import not guarded by `when defined(evmc_enabled)`
 # because we want to use evmc types such as evmc_call_kind
 # and evmc_flags
-import
-  evmc/evmc
+import evmc/evmc
 
 export evmc
 
 {.push raises: [].}
 
 when defined(evmc_enabled):
-  import
-    ./evmc_api
+  import ./evmc_api
 
 # Select between small-stack recursion and no recursion.  Both are good, fast,
 # low resource using methods.  Keep both here because true EVMC API requires
@@ -39,63 +37,62 @@ type
     CollectWitnessData
 
   BlockContext* = object
-    timestamp*        : EthTime
-    gasLimit*         : GasInt
-    baseFeePerGas*    : Opt[UInt256]
-    prevRandao*       : Hash256
-    difficulty*       : UInt256
-    coinbase*         : EthAddress
-    excessBlobGas*    : uint64
+    timestamp*: EthTime
+    gasLimit*: GasInt
+    baseFeePerGas*: Opt[UInt256]
+    prevRandao*: Hash256
+    difficulty*: UInt256
+    coinbase*: EthAddress
+    excessBlobGas*: uint64
 
   TxContext* = object
-    origin*         : EthAddress
-    gasPrice*       : GasInt
+    origin*: EthAddress
+    gasPrice*: GasInt
     versionedHashes*: VersionedHashes
-    blobBaseFee*    : UInt256
+    blobBaseFee*: UInt256
 
   BaseVMState* = ref object of RootObj
-    com*              : CommonRef
-    stateDB*          : LedgerRef
-    gasPool*          : GasInt
-    parent*           : BlockHeader
-    blockCtx*         : BlockContext
-    txCtx*            : TxContext
-    flags*            : set[VMFlag]
-    fork*             : EVMFork
-    tracer*           : TracerRef
-    receipts*         : seq[Receipt]
+    com*: CommonRef
+    stateDB*: LedgerRef
+    gasPool*: GasInt
+    parent*: BlockHeader
+    blockCtx*: BlockContext
+    txCtx*: TxContext
+    flags*: set[VMFlag]
+    fork*: EVMFork
+    tracer*: TracerRef
+    receipts*: seq[Receipt]
     cumulativeGasUsed*: GasInt
-    gasCosts*         : GasCosts
-    blobGasUsed*      : uint64
+    gasCosts*: GasCosts
+    blobGasUsed*: uint64
 
-  Computation* = ref object
-    # The execution computation
-    vmState*:               BaseVMState
-    msg*:                   Message
-    memory*:                EvmMemory
-    stack*:                 EvmStack
-    returnStack*:           seq[int]
-    gasMeter*:              GasMeter
-    code*:                  CodeStream
-    output*:                seq[byte]
-    returnData*:            seq[byte]
-    error*:                 Error
-    savePoint*:             LedgerSpRef
-    instr*:                 Op
-    opIndex*:               int
+  Computation* = ref object # The execution computation
+    vmState*: BaseVMState
+    msg*: Message
+    memory*: EvmMemory
+    stack*: EvmStack
+    returnStack*: seq[int]
+    gasMeter*: GasMeter
+    code*: CodeStream
+    output*: seq[byte]
+    returnData*: seq[byte]
+    error*: Error
+    savePoint*: LedgerSpRef
+    instr*: Op
+    opIndex*: int
     when defined(evmc_enabled):
-      host*:                HostContext
-      child*:               ref nimbus_message
-      res*:                 nimbus_result
+      host*: HostContext
+      child*: ref nimbus_message
+      res*: nimbus_result
     else:
-      parent*, child*:      Computation
-    continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
-    sysCall*:               bool
+      parent*, child*: Computation
+    continuation*: proc(): EvmResultVoid {.gcsafe, raises: [].}
+    sysCall*: bool
 
   Error* = ref object
     evmcStatus*: evmc_status_code
-    info*      : string
-    burnsGas*  : bool
+    info*: string
+    burnsGas*: bool
 
   GasMeter* = object
     gasRefunded*: int64
@@ -106,15 +103,15 @@ type
   MsgFlags* = evmc_flags
 
   Message* = ref object
-    kind*:             CallKind
-    depth*:            int
-    gas*:              GasInt
-    sender*:           EthAddress
-    contractAddress*:  EthAddress
-    codeAddress*:      EthAddress
-    value*:            UInt256
-    data*:             seq[byte]
-    flags*:            MsgFlags
+    kind*: CallKind
+    depth*: int
+    gas*: GasInt
+    sender*: EthAddress
+    contractAddress*: EthAddress
+    codeAddress*: EthAddress
+    value*: UInt256
+    data*: seq[byte]
+    flags*: MsgFlags
 
   TracerFlags* {.pure.} = enum
     DisableStorage
@@ -137,48 +134,98 @@ method captureTxEnd*(ctx: TracerRef, restGas: GasInt) {.base, gcsafe.} =
   discard
 
 # Top call frame
-method captureStart*(ctx: TracerRef, comp: Computation,
-                     sender: EthAddress, to: EthAddress,
-                     create: bool, input: openArray[byte],
-                     gasLimit: GasInt, value: UInt256) {.base, gcsafe.} =
+method captureStart*(
+    ctx: TracerRef,
+    comp: Computation,
+    sender: EthAddress,
+    to: EthAddress,
+    create: bool,
+    input: openArray[byte],
+    gasLimit: GasInt,
+    value: UInt256,
+) {.base, gcsafe.} =
   discard
 
-method captureEnd*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                   gasUsed: GasInt, error: Opt[string]) {.base, gcsafe.} =
+method captureEnd*(
+    ctx: TracerRef,
+    comp: Computation,
+    output: openArray[byte],
+    gasUsed: GasInt,
+    error: Opt[string],
+) {.base, gcsafe.} =
   discard
 
 # Rest of call frames
-method captureEnter*(ctx: TracerRef, comp: Computation, op: Op,
-                     sender: EthAddress, to: EthAddress,
-                     input: openArray[byte], gasLimit: GasInt,
-                     value: UInt256) {.base, gcsafe.} =
+method captureEnter*(
+    ctx: TracerRef,
+    comp: Computation,
+    op: Op,
+    sender: EthAddress,
+    to: EthAddress,
+    input: openArray[byte],
+    gasLimit: GasInt,
+    value: UInt256,
+) {.base, gcsafe.} =
   discard
 
-method captureExit*(ctx: TracerRef, comp: Computation, output: openArray[byte],
-                    gasUsed: GasInt, error: Opt[string]) {.base, gcsafe.} =
+method captureExit*(
+    ctx: TracerRef,
+    comp: Computation,
+    output: openArray[byte],
+    gasUsed: GasInt,
+    error: Opt[string],
+) {.base, gcsafe.} =
   discard
 
 # Opcode level
-method captureOpStart*(ctx: TracerRef, comp: Computation,
-                       fixed: bool, pc: int, op: Op, gas: GasInt,
-                       depth: int): int {.base, gcsafe.} =
+method captureOpStart*(
+    ctx: TracerRef,
+    comp: Computation,
+    fixed: bool,
+    pc: int,
+    op: Op,
+    gas: GasInt,
+    depth: int,
+): int {.base, gcsafe.} =
   discard
 
-method captureGasCost*(ctx: TracerRef, comp: Computation,
-                       fixed: bool, op: Op, gasCost: GasInt,
-                       gasRemaining: GasInt, depth: int) {.base, gcsafe.} =
+method captureGasCost*(
+    ctx: TracerRef,
+    comp: Computation,
+    fixed: bool,
+    op: Op,
+    gasCost: GasInt,
+    gasRemaining: GasInt,
+    depth: int,
+) {.base, gcsafe.} =
   discard
 
-method captureOpEnd*(ctx: TracerRef, comp: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
-                     rData: openArray[byte],
-                     depth: int, opIndex: int) {.base, gcsafe.} =
+method captureOpEnd*(
+    ctx: TracerRef,
+    comp: Computation,
+    fixed: bool,
+    pc: int,
+    op: Op,
+    gas: GasInt,
+    refund: int64,
+    rData: openArray[byte],
+    depth: int,
+    opIndex: int,
+) {.base, gcsafe.} =
   discard
 
-method captureFault*(ctx: TracerRef, comp: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
-                     rData: openArray[byte],
-                     depth: int, error: Opt[string]) {.base, gcsafe.} =
+method captureFault*(
+    ctx: TracerRef,
+    comp: Computation,
+    fixed: bool,
+    pc: int,
+    op: Op,
+    gas: GasInt,
+    refund: int64,
+    rData: openArray[byte],
+    depth: int,
+    error: Opt[string],
+) {.base, gcsafe.} =
   discard
 
 # Called at the start of EVM interpreter loop

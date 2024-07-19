@@ -13,20 +13,16 @@
 ##
 {.push raises: [].}
 
-import
-  std/tables,
-  results,
-  ../kvt_delta/delta_merge,
-  ".."/[kvt_desc, kvt_delta]
+import std/tables, results, ../kvt_delta/delta_merge, ".."/[kvt_desc, kvt_delta]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc txStowOk*(
-    db: KvtDbRef;                     # Database
-    persistent: bool;                 # Stage only unless `true`
-      ): Result[void,KvtError] =
+    db: KvtDbRef, # Database
+    persistent: bool, # Stage only unless `true`
+): Result[void, KvtError] =
   ## Verify that `txStow()` can go ahead
   if not db.txRef.isNil:
     return err(TxPendingTx)
@@ -37,31 +33,31 @@ proc txStowOk*(
   ok()
 
 proc txStow*(
-    db: KvtDbRef;                     # Database
-    persistent: bool;                 # Stage only unless `true`
-      ): Result[void,KvtError] =
+    db: KvtDbRef, # Database
+    persistent: bool, # Stage only unless `true`
+): Result[void, KvtError] =
   ## The function saves the data from the top layer cache into the
   ## backend database.
   ##
   ## If there is no backend the function returns immediately with an error.
   ## The same happens if there is a pending transaction.
   ##
-  ? db.txStowOk persistent
+  ?db.txStowOk persistent
 
   if 0 < db.top.sTab.len:
     # Note that `deltaMerge()` will return the `db.top` argument if the
     # `db.balancer` is `nil`. Also, the `db.balancer` is read-only. In the
     # case that there are no forked peers one can ignore that restriction as
     # no balancer is shared.
-    db.balancer = deltaMerge(
-      db.top, modUpperOk = true, db.balancer, modLowerOk = db.nForked()==0)
+    db.balancer =
+      deltaMerge(db.top, modUpperOk = true, db.balancer, modLowerOk = db.nForked() == 0)
 
     # New empty top layer
     db.top = LayerRef()
 
   if persistent:
     # Move `balancer` data into persistent tables
-    ? db.deltaPersistent()
+    ?db.deltaPersistent()
 
   ok()
 

@@ -20,11 +20,11 @@ import
 # Withdrawals sync spec:
 # Specifies a withdrawals test where the withdrawals happen and then a
 # client needs to sync and apply the withdrawals.
-type
-  SyncSpec* = ref object of WDBaseSpec
-    syncSteps*: int  # Sync block chunks that will be passed as head through FCUs to the syncing client
-    syncShouldFail*: bool
-    sleep*: int
+type SyncSpec* = ref object of WDBaseSpec
+  syncSteps*: int
+    # Sync block chunks that will be passed as head through FCUs to the syncing client
+  syncShouldFail*: bool
+  sleep*: int
 
 proc doSync(ws: SyncSpec, client: RpcClient, clMock: CLMocker): Future[bool] {.async.} =
   if ws.sleep == 0:
@@ -40,7 +40,7 @@ proc doSync(ws: SyncSpec, client: RpcClient, clMock: CLMocker): Future[bool] {.a
 
     let r = client.forkchoiceUpdatedV2(clMock.latestForkchoice)
     if r.isErr:
-      error "fcu error", msg=r.error
+      error "fcu error", msg = r.error
       return false
 
     let s = r.get
@@ -75,7 +75,7 @@ proc execute*(ws: SyncSpec, env: TestEnv): bool =
   let bn = env.clMock.latestHeader.number
   let res = ws.wdHistory.verifyWithdrawals(bn, Opt.none(uint64), sec.client)
   if res.isErr:
-    error "wd history error", msg=res.error
+    error "wd history error", msg = res.error
     return false
 
   return true

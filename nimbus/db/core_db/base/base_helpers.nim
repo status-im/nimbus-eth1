@@ -10,17 +10,13 @@
 
 {.push raises: [].}
 
-import
-  "../.."/[aristo, kvt],
-  "."/[base_config, base_desc]
+import "../.."/[aristo, kvt], "."/[base_config, base_desc]
 
 when CoreDbAutoValidateDescriptors:
-  import
-    ./base_validate
+  import ./base_validate
 
 when CoreDbEnableProfiling:
-  import
-    ./api_tracking
+  import ./api_tracking
 
 # ------------------------------------------------------------------------------
 # Public constructor helper
@@ -34,13 +30,13 @@ proc bless*(db: CoreDbRef): CoreDbRef =
     db.profTab = CoreDbProfListRef.init()
   db
 
-proc bless*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
+proc bless*(db: CoreDbRef, ctx: CoreDbCtxRef): CoreDbCtxRef =
   ctx.parent = db
   when CoreDbAutoValidateDescriptors:
     ctx.validate
   ctx
 
-proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbMptRef | CoreDbTxRef): auto =
+proc bless*(ctx: CoreDbCtxRef, dsc: CoreDbMptRef | CoreDbTxRef): auto =
   dsc.ctx = ctx
   when CoreDbAutoValidateDescriptors:
     dsc.validate
@@ -58,23 +54,19 @@ template ctx*(kvt: CoreDbKvtRef): CoreDbCtxRef =
 
 # ---------------
 
-template call*(api: KvtApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(api: KvtApiRef, fn: untyped, args: varArgs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
   else:
     fn(args)
 
-template call*(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(kvt: CoreDbKvtRef, fn: untyped, args: varArgs[untyped]): untyped =
   kvt.distinctBase.parent.kvtApi.call(fn, args)
 
 # ---------------
 
-func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
-  CoreDbError(
-    error:    error,
-    ctx:      s,
-    isAristo: false,
-    kErr:     e)
+func toError*(e: KvtError, s: string, error = Unspecified): CoreDbError =
+  CoreDbError(error: error, ctx: s, isAristo: false, kErr: e)
 
 # ------------------------------------------------------------------------------
 # Public Aristo helpers
@@ -91,27 +83,21 @@ template ctx*(acc: CoreDbAccRef): CoreDbCtxRef =
 
 # ---------------
 
-template call*(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(api: AristoApiRef, fn: untyped, args: varArgs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
   else:
     fn(args)
 
 template call*(
-    acc: CoreDbAccRef | CoreDbMptRef;
-    fn: untyped;
-    args: varArgs[untyped];
-      ): untyped =
+    acc: CoreDbAccRef | CoreDbMptRef, fn: untyped, args: varArgs[untyped]
+): untyped =
   acc.distinctBase.parent.ariApi.call(fn, args)
 
 # ---------------
 
-func toError*(e: AristoError; s: string; error = Unspecified): CoreDbError =
-  CoreDbError(
-    error:    error,
-    ctx:      s,
-    isAristo: true,
-    aErr:     e)
+func toError*(e: AristoError, s: string, error = Unspecified): CoreDbError =
+  CoreDbError(error: error, ctx: s, isAristo: true, aErr: e)
 
 # ------------------------------------------------------------------------------
 # End

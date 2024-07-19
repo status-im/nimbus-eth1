@@ -10,7 +10,9 @@
 
 import macros
 
-macro fill_enum_table_holes*(enumTy: typedesc[enum], nop_filler, body: untyped): untyped =
+macro fill_enum_table_holes*(
+    enumTy: typedesc[enum], nop_filler, body: untyped
+): untyped =
   ## Fill the holes of table mapping for enum with a default value
   ##
   ## For example for enum

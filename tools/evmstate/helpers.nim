@@ -56,9 +56,7 @@ proc fromJson(T: type AccessList, n: JsonNode): AccessList =
     return
 
   for x in n:
-    var ap = AccessPair(
-      address: EthAddress.fromJson(x["address"])
-    )
+    var ap = AccessPair(address: EthAddress.fromJson(x["address"]))
     let sks = x["storageKeys"]
     for sk in sks:
       ap.storageKeys.add hexToByteArray(sk.getStr, 32)
@@ -103,16 +101,16 @@ proc txType(n: JsonNode): TxType =
 
 proc parseHeader*(n: JsonNode): BlockHeader =
   BlockHeader(
-    coinbase   : required(EthAddress, "currentCoinbase"),
-    difficulty : required(DifficultyInt, "currentDifficulty"),
-    number     : required(BlockNumber, "currentNumber"),
-    gasLimit   : required(GasInt, "currentGasLimit"),
-    timestamp  : required(EthTime, "currentTimestamp"),
-    stateRoot  : emptyRlpHash,
-    mixHash    : omitZero(Hash256, "currentRandom"),
-    baseFeePerGas  : optional(UInt256, "currentBaseFee"),
+    coinbase: required(EthAddress, "currentCoinbase"),
+    difficulty: required(DifficultyInt, "currentDifficulty"),
+    number: required(BlockNumber, "currentNumber"),
+    gasLimit: required(GasInt, "currentGasLimit"),
+    timestamp: required(EthTime, "currentTimestamp"),
+    stateRoot: emptyRlpHash,
+    mixHash: omitZero(Hash256, "currentRandom"),
+    baseFeePerGas: optional(UInt256, "currentBaseFee"),
     withdrawalsRoot: optional(Hash256, "currentWithdrawalsRoot"),
-    excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
+    excessBlobGas: optional(uint64, "currentExcessBlobGas"),
     parentBeaconBlockRoot: optional(Hash256, "currentBeaconRoot"),
   )
 
@@ -125,18 +123,18 @@ proc parseParentHeader*(n: JsonNode): BlockHeader =
 
 proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
   var tx = Transaction(
-    txType  : txType(n),
-    nonce   : required(AccountNonce, "nonce"),
+    txType: txType(n),
+    nonce: required(AccountNonce, "nonce"),
     gasLimit: required(GasInt, "gasLimit", gasIndex),
-    value   : required(UInt256, "value", valueIndex),
-    payload : required(Blob, "data", dataIndex),
-    chainId : ChainId(1),
+    value: required(UInt256, "value", valueIndex),
+    payload: required(Blob, "data", dataIndex),
+    chainId: ChainId(1),
     gasPrice: omitZero(GasInt, "gasPrice"),
-    maxFeePerGas        : omitZero(GasInt, "maxFeePerGas"),
-    accessList          : omitZero(AccessList, "accessLists", dataIndex),
+    maxFeePerGas: omitZero(GasInt, "maxFeePerGas"),
+    accessList: omitZero(AccessList, "accessLists", dataIndex),
     maxPriorityFeePerGas: omitZero(GasInt, "maxPriorityFeePerGas"),
-    maxFeePerBlobGas    : omitZero(UInt256, "maxFeePerBlobGas"),
-    versionedHashes     : omitZero(VersionedHashes, "blobVersionedHashes")
+    maxFeePerBlobGas: omitZero(UInt256, "maxFeePerBlobGas"),
+    versionedHashes: omitZero(VersionedHashes, "blobVersionedHashes"),
   )
 
   let rawTo = n["to"].getStr
@@ -149,15 +147,17 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
 proc parseTx*(txData, index: JsonNode): Transaction =
   let
     dataIndex = index["data"].getInt
-    gasIndex  = index["gas"].getInt
-    valIndex  = index["value"].getInt
+    gasIndex = index["gas"].getInt
+    valIndex = index["value"].getInt
   parseTx(txData, dataIndex, gasIndex, valIndex)
 
 proc setupStateDB*(wantedState: JsonNode, stateDB: LedgerRef) =
   for ac, accountData in wantedState:
     let account = hexToByteArray[20](ac)
     for slot, value in accountData{"storage"}:
-      stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
+      stateDB.setStorage(
+        account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr)
+      )
 
     stateDB.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
     stateDB.setCode(account, fromJson(Blob, accountData["code"]))
@@ -167,8 +167,8 @@ iterator postState*(node: JsonNode): (EthAddress, GenesisAccount) =
   for ac, accountData in node:
     let account = hexToByteArray[20](ac)
     var ga = GenesisAccount(
-      nonce  : fromJson(AccountNonce, accountData["nonce"]),
-      code   : fromJson(Blob, accountData["code"]),
+      nonce: fromJson(AccountNonce, accountData["nonce"]),
+      code: fromJson(Blob, accountData["code"]),
       balance: fromJson(UInt256, accountData["balance"]),
     )
 

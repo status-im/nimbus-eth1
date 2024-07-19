@@ -8,11 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import
-  kvt_init/persistent as init_persistent,
-  kvt_walk/persistent as walk_persistent
-export
-  init_persistent,
-  walk_persistent
+import kvt_init/persistent as init_persistent, kvt_walk/persistent as walk_persistent
+export init_persistent, walk_persistent
 
 # End

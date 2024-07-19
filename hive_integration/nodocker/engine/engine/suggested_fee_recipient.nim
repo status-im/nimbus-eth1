@@ -8,15 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/strutils,
-  chronicles,
-  ./engine_spec,
-  ../../../../nimbus/transaction
+import std/strutils, chronicles, ./engine_spec, ../../../../nimbus/transaction
 
-type
-  SuggestedFeeRecipientTest* = ref object of EngineSpec
-    transactionCount*: int
+type SuggestedFeeRecipientTest* = ref object of EngineSpec
+  transactionCount*: int
 
 method withMainFork(cs: SuggestedFeeRecipientTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -40,12 +35,12 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
     txRecipient = EthAddress.randomBytes()
 
   # Send multiple transactions
-  for i in 0..<cs.transactionCount:
+  for i in 0 ..< cs.transactionCount:
     let tc = BaseTx(
-      recipient:  Opt.some(txRecipient),
-      amount:     0.u256,
-      txType:     cs.txType,
-      gasLimit:   75000,
+      recipient: Opt.some(txRecipient),
+      amount: 0.u256,
+      txType: cs.txType,
+      gasLimit: 75000,
     )
     let ok = env.sendNextTx(env.engine, tc)
     testCond ok:
@@ -58,17 +53,16 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
   # Calculate the fees and check that they match the balance of the fee recipient
   let r = env.engine.client.latestBlock()
   testCond r.isOk:
-    error "cannot get latest header", msg=r.error
+    error "cannot get latest header", msg = r.error
 
   let blockIncluded = r.get
 
   testCond blockIncluded.txs.len == cs.transactionCount:
-    error "expect transactions", get=blockIncluded.txs.len, expect=cs.transactionCount
+    error "expect transactions",
+      get = blockIncluded.txs.len, expect = cs.transactionCount
 
   testCond feeRecipient == blockIncluded.header.coinbase:
-    error "expect coinbase",
-      get=blockIncluded.header.coinbase,
-      expect=feeRecipient
+    error "expect coinbase", get = blockIncluded.header.coinbase, expect = feeRecipient
 
   var feeRecipientFees = 0.u256
   for tx in blockIncluded.txs:
@@ -76,11 +70,10 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
 
     let r = env.engine.client.txReceipt(tx.rlpHash)
     testCond r.isOk:
-      fatal "unable to obtain receipt", msg=r.error
+      fatal "unable to obtain receipt", msg = r.error
 
     let receipt = r.get
     feeRecipientFees = feeRecipientFees + effGasTip.u256 * receipt.gasUsed.u256
-
 
   var s = env.engine.client.balanceAt(feeRecipient)
   s.expectBalanceEqual(feeRecipientFees)

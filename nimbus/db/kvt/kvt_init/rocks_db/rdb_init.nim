@@ -29,19 +29,18 @@ export rdb_desc, results
 # ------------------------------------------------------------------------------
 
 proc init*(
-    rdb: var RdbInst;
-    basePath: string;
-    dbOpts: DbOptionsRef;
-    cfOpts: ColFamilyOptionsRef;
-      ): Result[void,(KvtError,string)] =
+    rdb: var RdbInst,
+    basePath: string,
+    dbOpts: DbOptionsRef,
+    cfOpts: ColFamilyOptionsRef,
+): Result[void, (KvtError, string)] =
   ## Database backend constructor for stand-alone version
   ##
   const initFailed = "RocksDB/init() failed"
 
   rdb.basePath = basePath
 
-  let
-    dataDir = rdb.dataDir
+  let dataDir = rdb.dataDir
   try:
     dataDir.createDir
   except OSError, IOError:
@@ -51,23 +50,21 @@ proc init*(
   let cfs = KvtCFs.mapIt(($it).initColFamilyDescriptor cfOpts)
 
   # Open database for the extended family :)
-  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
+  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies = cfs).valueOr:
     raiseAssert initFailed & " cannot create base descriptor: " & error
 
   # Initialise column handlers (this stores implicitely `baseDb`)
   for col in KvtCFs:
     rdb.store[col] = baseDb.getColFamily($col).valueOr:
-      raiseAssert initFailed & " cannot initialise " &
-        $col & " descriptor: " & error
+      raiseAssert initFailed & " cannot initialise " & $col & " descriptor: " & error
   ok()
 
 proc guestCFs*(T: type RdbInst, cfOpts: ColFamilyOptionsRef): seq =
-   KvtCFs.toSeq.mapIt(initColFamilyDescriptor($it, cfOpts))
+  KvtCFs.toSeq.mapIt(initColFamilyDescriptor($it, cfOpts))
 
 proc init*(
-    rdb: var RdbInst;
-    oCfs: openArray[ColFamilyReadWrite];
-      ): Result[void,(KvtError,string)] =
+    rdb: var RdbInst, oCfs: openArray[ColFamilyReadWrite]
+): Result[void, (KvtError, string)] =
   ## Initalise column handlers piggy-backing on the `Aristo` backend.
   ##
   # Collect column family descriptors (this stores implicitely `baseDb`)
@@ -77,8 +74,7 @@ proc init*(
 
   ok()
 
-
-proc destroy*(rdb: var RdbInst; eradicate: bool) =
+proc destroy*(rdb: var RdbInst, eradicate: bool) =
   ## Destructor (no need to do anything if piggybacked)
   if 0 < rdb.basePath.len:
     rdb.baseDb.close()
@@ -94,7 +90,6 @@ proc destroy*(rdb: var RdbInst; eradicate: bool) =
             if 0 < w.len and w[^1] != '~':
               break done
           rdb.baseDir.removeDir
-
       except CatchableError:
         discard
 

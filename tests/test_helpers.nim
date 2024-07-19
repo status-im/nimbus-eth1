@@ -7,7 +7,10 @@
 
 import
   std/[os, macros, json, strformat, strutils, tables],
-  stew/byteutils, net, eth/[keys, p2p], unittest2,
+  stew/byteutils,
+  net,
+  eth/[keys, p2p],
+  unittest2,
   testutils/markdown_reports,
   ../nimbus/[constants, config, transaction, errors],
   ../nimbus/db/ledger,
@@ -37,17 +40,20 @@ const
 
   nameToFork* = revmap(forkNames)
 
-func skipNothing*(folder: string, name: string): bool = false
+func skipNothing*(folder: string, name: string): bool =
+  false
 
 var status = initOrderedTable[string, OrderedTable[string, Status]]()
 
-proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode): NimNode {.compileTime.} =
+proc jsonTestImpl*(
+    inputFolder, outputName: string, handler, skipTest: NimNode
+): NimNode {.compileTime.} =
   let
     testStatusIMPL = ident("testStatusIMPL")
     # workaround for strformat in quote do: https://github.com/nim-lang/Nim/issues/8220
     symbol {.used.} = newIdentNode"symbol"
-    final  {.used.} = newIdentNode"final"
-    name   {.used.} = newIdentNode"name"
+    final {.used.} = newIdentNode"final"
+    name {.used.} = newIdentNode"name"
     formatted {.used.} = newStrLitNode"{symbol[final]} {name:<64}{$final}{'\n'}"
 
   result = quote:
@@ -83,19 +89,29 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
             status[last][name] = Status.Skip
 
     suiteTeardown:
-      status.sort do (a: (string, OrderedTable[string, Status]),
-                      b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
+      status.sort do(
+        a: (string, OrderedTable[string, Status]),
+        b: (string, OrderedTable[string, Status])
+      ) -> int:
+        cmp(a[0], b[0])
 
       generateReport(`outputName`, status)
       status.clear()
 
-macro jsonTest*(inputFolder, outputName: static[string], handler: untyped, skipTest: untyped = skipNothing): untyped =
+macro jsonTest*(
+    inputFolder, outputName: static[string],
+    handler: untyped,
+    skipTest: untyped = skipNothing,
+): untyped =
   result = jsonTestImpl(inputFolder, outputName, handler, skipTest)
 
-macro jsonTest*(inputFolder: static[string], handler: untyped, skipTest: untyped = skipNothing): untyped =
+macro jsonTest*(
+    inputFolder: static[string], handler: untyped, skipTest: untyped = skipNothing
+): untyped =
   result = jsonTestImpl(inputFolder, inputFolder, handler, skipTest)
 
-func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
+func ethAddressFromHex*(s: string): EthAddress =
+  hexToByteArray(s, result)
 
 func safeHexToSeqByte*(hexStr: string): seq[byte] =
   if hexStr == "":
@@ -121,7 +137,10 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       #if not found:
       #  raise newException(ValidationError, "account not found:  " & ac)
       if actualValue != wantedValue:
-        raise newException(ValidationError, &"{ac} storageDiff: [{slot}] {actualValue.toHex} != {wantedValue.toHex}")
+        raise newException(
+          ValidationError,
+          &"{ac} storageDiff: [{slot}] {actualValue.toHex} != {wantedValue.toHex}",
+        )
 
     let
       wantedCode = hexToSeqByte(accountData{"code"}.getStr)
@@ -133,25 +152,37 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       actualNonce = stateDB.getNonce(account)
 
     if wantedCode != actualCode:
-      raise newException(ValidationError, &"{ac} codeDiff {wantedCode.toHex} != {actualCode.toHex}")
+      raise newException(
+        ValidationError, &"{ac} codeDiff {wantedCode.toHex} != {actualCode.toHex}"
+      )
     if wantedBalance != actualBalance:
-      raise newException(ValidationError, &"{ac} balanceDiff {wantedBalance.toHex} != {actualBalance.toHex}")
+      raise newException(
+        ValidationError,
+        &"{ac} balanceDiff {wantedBalance.toHex} != {actualBalance.toHex}",
+      )
     if wantedNonce != actualNonce:
-      raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
+      raise newException(
+        ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}"
+      )
 
 proc setupEthNode*(
-    conf: NimbusConf, ctx: EthContext,
-    capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
+    conf: NimbusConf,
+    ctx: EthContext,
+    capabilities: varargs[ProtocolInfo, `protocolInfo`],
+): EthereumNode =
   let keypair = ctx.getNetKeys(conf.netKey, conf.dataDir.string).tryGet()
-  let srvAddress = Address(
-    ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
+  let srvAddress =
+    Address(ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
 
   var node = newEthereumNode(
-    keypair, srvAddress,
+    keypair,
+    srvAddress,
     conf.networkId,
     conf.agentString,
     addAllCapabilities = false,
-    bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort)
+    bindUdpPort = conf.udpPort,
+    bindTcpPort = conf.tcpPort,
+  )
 
   for capability in capabilities:
     node.addCapability capability

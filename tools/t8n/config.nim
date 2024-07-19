@@ -8,119 +8,124 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/[options, os, strutils],
-  confutils, stint,
-  ./types
+import std/[options, os, strutils], confutils, stint, ./types
 
-export
-  options, stint
+export options, stint
 
 func combineForks(): string =
-  for x in low(TestFork)..high(TestFork):
+  for x in low(TestFork) .. high(TestFork):
     result.add "- " & $x & "\n"
 
-const
-  availableForks = combineForks()
+const availableForks = combineForks()
 
 type
   HexOrInt* = distinct uint64
 
   T8NConf* = object of RootObj
     traceEnabled* {.
-      desc: "Enable and set where to put full EVM trace logs"
+      desc: "Enable and set where to put full EVM trace logs",
       longDesc:
-        "`stdout` - into the stdout output\n" &
-        "`stderr` - into the stderr output\n" &
+        "`stdout` - into the stdout output\n" & "`stderr` - into the stderr output\n" &
         "<file>   - into the file <file>-<txIndex>.jsonl\n" &
-        "none     - output.basedir/trace-<txIndex>-<txhash>.jsonl\n"
-      defaultValue: none(string)
-      defaultValueDesc: "disabled"
-      name: "trace" }: Option[string]
+        "none     - output.basedir/trace-<txIndex>-<txhash>.jsonl\n",
+      defaultValue: none(string),
+      defaultValueDesc: "disabled",
+      name: "trace"
+    .}: Option[string]
 
     traceMemory* {.
-      desc: "Enable full memory dump in traces"
-      defaultValue: false
-      name: "trace.memory" }: bool
+      desc: "Enable full memory dump in traces",
+      defaultValue: false,
+      name: "trace.memory"
+    .}: bool
 
     traceNostack* {.
-      desc: "Disable stack output in traces"
-      defaultValue: false
-      name: "trace.nostack" }: bool
+      desc: "Disable stack output in traces", defaultValue: false, name: "trace.nostack"
+    .}: bool
 
     traceReturnData* {.
-      desc: "Enable return data output in traces"
-      defaultValue: false
-      name: "trace.returndata" }: bool
+      desc: "Enable return data output in traces",
+      defaultValue: false,
+      name: "trace.returndata"
+    .}: bool
 
     outputBaseDir* {.
-      desc: "Specifies where output files are placed. Will be created if it does not exist"
-      defaultValue: ""
-      name: "output.basedir" }: string
+      desc:
+        "Specifies where output files are placed. Will be created if it does not exist",
+      defaultValue: "",
+      name: "output.basedir"
+    .}: string
 
     outputBody* {.
-      desc: "If set, the RLP of the transactions (block body) will be written to this file"
-      defaultValue: ""
-      name: "output.body" }: string
+      desc:
+        "If set, the RLP of the transactions (block body) will be written to this file",
+      defaultValue: "",
+      name: "output.body"
+    .}: string
 
     outputAlloc* {.
-      desc: "Determines where to put the `alloc` of the post-state."
+      desc: "Determines where to put the `alloc` of the post-state.",
       longDesc:
-        "`stdout` - into the stdout output\n" &
-        "`stderr` - into the stderr output\n" &
-        "<file>   - into the file <file>\n"
-      defaultValue: "alloc.json"
-      name: "output.alloc" }: string
+        "`stdout` - into the stdout output\n" & "`stderr` - into the stderr output\n" &
+        "<file>   - into the file <file>\n",
+      defaultValue: "alloc.json",
+      name: "output.alloc"
+    .}: string
 
     outputResult* {.
-      desc: "Determines where to put the `result` (stateroot, txroot etc) of the post-state."
+      desc:
+        "Determines where to put the `result` (stateroot, txroot etc) of the post-state.",
       longDesc:
-        "`stdout` - into the stdout output\n" &
-        "`stderr` - into the stderr output\n" &
-        "<file>   - into the file <file>\n"
-      defaultValue: "result.json"
-      name: "output.result" }: string
+        "`stdout` - into the stdout output\n" & "`stderr` - into the stderr output\n" &
+        "<file>   - into the file <file>\n",
+      defaultValue: "result.json",
+      name: "output.result"
+    .}: string
 
     inputAlloc* {.
-      desc: "`stdin` or file name of where to find the prestate alloc to use."
-      defaultValue: "alloc.json"
-      name: "input.alloc" }: string
+      desc: "`stdin` or file name of where to find the prestate alloc to use.",
+      defaultValue: "alloc.json",
+      name: "input.alloc"
+    .}: string
 
     inputEnv* {.
-      desc: "`stdin` or file name of where to find the prestate env to use."
-      defaultValue: "env.json"
-      name: "input.env" }: string
+      desc: "`stdin` or file name of where to find the prestate env to use.",
+      defaultValue: "env.json",
+      name: "input.env"
+    .}: string
 
     inputTxs* {.
-      desc: "`stdin` or file name of where to find the transactions to apply. " &
+      desc:
+        "`stdin` or file name of where to find the transactions to apply. " &
         "If the file extension is '.rlp', then the data is interpreted as an RLP list of signed transactions. " &
-        "The '.rlp' format is identical to the output.body format."
-      defaultValue: "txs.json"
-      name: "input.txs" }: string
+        "The '.rlp' format is identical to the output.body format.",
+      defaultValue: "txs.json",
+      name: "input.txs"
+    .}: string
 
     stateReward* {.
-      desc: "Mining reward. Set to -1 to disable"
-      defaultValue: some(0.u256)
-      defaultValueDesc: "-1"
-      name: "state.reward" }: Option[UInt256]
+      desc: "Mining reward. Set to -1 to disable",
+      defaultValue: some(0.u256),
+      defaultValueDesc: "-1",
+      name: "state.reward"
+    .}: Option[UInt256]
 
-    stateChainId* {.
-      desc: "ChainID to use"
-      defaultValue: 1
-      name: "state.chainid" }: HexOrInt
+    stateChainId* {.desc: "ChainID to use", defaultValue: 1, name: "state.chainid".}:
+      HexOrInt
 
     stateFork* {.
-      desc: "Name of ruleset to use."
-      longDesc: $availableForks
-      defaultValue: "GrayGlacier"
-      name: "state.fork" }: string
+      desc: "Name of ruleset to use.",
+      longDesc: $availableForks,
+      defaultValue: "GrayGlacier",
+      name: "state.fork"
+    .}: string
 
     verbosity* {.
-      desc: "sets the verbosity level"
-      longDesc:
-        "0 = silent, 1 = error, 2 = warn, 3 = info, 4 = debug, 5 = detail"
-      defaultValue: 3
-      name: "verbosity" }: int
+      desc: "sets the verbosity level",
+      longDesc: "0 = silent, 1 = error, 2 = warn, 3 = info, 4 = debug, 5 = detail",
+      defaultValue: 3,
+      name: "verbosity"
+    .}: int
 
 proc parseCmdArg(T: type Option[UInt256], p: string): T =
   if p == "-1":
@@ -143,12 +148,12 @@ proc completeCmdArg(T: type HexOrInt, val: string): seq[string] =
   return @[]
 
 proc notCmd(x: string): bool =
-  if x.len == 0: return true
+  if x.len == 0:
+    return true
 
   # negative number
-  if x.len >= 2 and
-    x[0] == '-' and
-    x[1].isDigit: return true
+  if x.len >= 2 and x[0] == '-' and x[1].isDigit:
+    return true
 
   # else
   x[0] != '-'
@@ -157,13 +162,13 @@ proc convertToNimStyle(cmds: openArray[string]): seq[string] =
   # convert something like '--key value' to '--key=value'
   var i = 0
   while i < cmds.len:
-    if notCmd(cmds[i]) or i == cmds.len-1:
+    if notCmd(cmds[i]) or i == cmds.len - 1:
       result.add cmds[i]
       inc i
       continue
 
-    if i < cmds.len and notCmd(cmds[i+1]):
-      result.add cmds[i] & "=" & cmds[i+1]
+    if i < cmds.len and notCmd(cmds[i + 1]):
+      result.add cmds[i] & "=" & cmds[i + 1]
       inc i
     else:
       result.add cmds[i]
@@ -172,7 +177,7 @@ proc convertToNimStyle(cmds: openArray[string]): seq[string] =
 
 const
   Copyright = "Copyright (c) 2022 Status Research & Development GmbH"
-  Version   = "Nimbus-t8n 0.2.2"
+  Version = "Nimbus-t8n 0.2.2"
 
 # force the compiler to instantiate T8NConf.load
 # rather than have to export parseCmdArg
@@ -183,7 +188,7 @@ proc initT8NConf(cmdLine: openArray[string]): T8NConf =
   result = T8NConf.load(
     cmdLine.convertToNimStyle,
     version = Version,
-    copyrightBanner = Version & "\n" & Copyright
+    copyrightBanner = Version & "\n" & Copyright,
   )
   {.pop.}
 

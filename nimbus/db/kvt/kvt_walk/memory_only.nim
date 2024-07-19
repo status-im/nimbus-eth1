@@ -17,21 +17,18 @@ import
   ".."/[kvt_desc, kvt_init],
   ./walk_private
 
-export
-  memory_db,
-  memory_only
+export memory_db, memory_only
 
 # ------------------------------------------------------------------------------
 # Public iterators (all in one)
 # ------------------------------------------------------------------------------
 
-iterator walkPairs*[T: MemBackendRef|VoidBackendRef](
-   _: type T;
-   db: KvtDbRef;
-     ): tuple[key: Blob, data: Blob] =
+iterator walkPairs*[T: MemBackendRef | VoidBackendRef](
+    _: type T, db: KvtDbRef
+): tuple[key: Blob, data: Blob] =
   ## Iterate over backend filters.
-  for (key,data) in walkPairsImpl[T](db):
-    yield (key,data)
+  for (key, data) in walkPairsImpl[T](db):
+    yield (key, data)
 
 # ------------------------------------------------------------------------------
 # End

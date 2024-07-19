@@ -43,8 +43,9 @@ proc test5*() =
         check res.isOk
 
     test "canonical height should be at block 2":
-      let r = skel.insertBlocks([
-        EthBlock.init(block1, emptyBody), EthBlock.init(block2, emptyBody)], false)
+      let r = skel.insertBlocks(
+        [EthBlock.init(block1, emptyBody), EthBlock.init(block2, emptyBody)], false
+      )
       check r.isOk
       check r.get == 2
 

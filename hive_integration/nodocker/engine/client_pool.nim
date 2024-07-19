@@ -8,13 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  json_rpc/rpcclient,
-  ./engine_env
+import json_rpc/rpcclient, ./engine_env
 
-type
-  ClientPool* = ref object
-    clients: seq[EngineEnv]
+type ClientPool* = ref object
+  clients: seq[EngineEnv]
 
 proc add*(pool: ClientPool, client: EngineEnv) =
   pool.clients.add client

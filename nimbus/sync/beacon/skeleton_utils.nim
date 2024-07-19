@@ -8,8 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import
-  ./skeleton_desc
+import ./skeleton_desc
 
 {.push gcsafe, raises: [].}
 
@@ -29,16 +28,16 @@ func u64*(h: BlockHeader): uint64 =
   h.number
 
 func blockHash*(x: Opt[BlockHeader]): Hash256 =
-  if x.isSome: x.get.blockHash
-  else: zeroBlockHash
+  if x.isSome: x.get.blockHash else: zeroBlockHash
 
 func numberStr*(x: Opt[BlockHeader]): string =
-  if x.isSome: $(x.get.u64)
-  else: "N/A"
+  if x.isSome:
+    $(x.get.u64)
+  else:
+    "N/A"
 
 func blockHashStr*(x: Opt[BlockHeader]): string =
-  if x.isSome: x.get.blockHash.short
-  else: "N/A"
+  if x.isSome: x.get.blockHash.short else: "N/A"
 
 func blockHashStr*(x: BlockHeader): string =
   x.blockHash.short
@@ -54,9 +53,7 @@ func short(s: Segment): string =
   s.next.short
 
 func `$`*(s: Segment): string =
-  result = "head: " & $s.head &
-         ", tail: " & $s.tail &
-         ", next: " & s.short
+  result = "head: " & $s.head & ", tail: " & $s.tail & ", next: " & s.short
 
 # ------------------------------------------------------------------------------
 # Progress helpers
@@ -114,7 +111,7 @@ proc removeLast*(sk: SkeletonRef) =
   discard sk.progress.segments.pop
 
 proc removeSecond*(sk: SkeletonRef) =
-  sk.progress.segments.delete(sk.len-2)
+  sk.progress.segments.delete(sk.len - 2)
 
 proc removeAllButLast*(sk: SkeletonRef) =
   let last = sk.progress.segments.pop

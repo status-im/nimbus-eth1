@@ -7,23 +7,17 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import
-  std/[strutils, os],
-  manager,
-  stew/[io2, byteutils],
-  results,
-  eth/keys
+import std/[strutils, os], manager, stew/[io2, byteutils], results, eth/keys
 
 export manager
 
 {.push raises: [].}
 
-type
-  EthContext* = ref object
-    am*: AccountsManager
-    # You should only create one instance of the RNG per application / library
-    # Ref is used so that it can be shared between components
-    rng*: ref HmacDrbgContext
+type EthContext* = ref object
+  am*: AccountsManager
+  # You should only create one instance of the RNG per application / library
+  # Ref is used so that it can be shared between components
+  rng*: ref HmacDrbgContext
 
 proc newEthContext*(): EthContext =
   result = new(EthContext)
@@ -43,8 +37,9 @@ proc containsOnlyHexDigits(hex: string): bool =
       return false
   true
 
-proc getNetKeys*(ctx: EthContext, netKey, dataDir: string): Result[KeyPair, string]
-    {.gcsafe, raises: [OSError]} =
+proc getNetKeys*(
+    ctx: EthContext, netKey, dataDir: string
+): Result[KeyPair, string] {.gcsafe, raises: [OSError].} =
   if netKey.len == 0 or netKey == "random":
     let privateKey = ctx.randomPrivateKey()
     return ok(privateKey.toKeyPair())

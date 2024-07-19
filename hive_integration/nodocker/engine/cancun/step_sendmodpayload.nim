@@ -8,28 +8,23 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/strutils,
-  chronicles,
-  ./step_desc,
-  ./customizer,
-  ../test_env,
-  ../types
+import std/strutils, chronicles, ./step_desc, ./customizer, ../test_env, ../types
 
 # Send a modified version of the latest payload produced using NewPayloadV3
-type
-  SendModifiedLatestPayload* = ref object of TestStep
-    clientID*            : int
-    newPayloadCustomizer*: NewPayloadCustomizer
+type SendModifiedLatestPayload* = ref object of TestStep
+  clientID*: int
+  newPayloadCustomizer*: NewPayloadCustomizer
 
 method execute*(step: SendModifiedLatestPayload, ctx: CancunTestContext): bool =
   # Get the latest payload
-  doAssert(step.newPayloadCustomizer.isNil.not, "TEST-FAIL: no payload customizer available")
+  doAssert(
+    step.newPayloadCustomizer.isNil.not, "TEST-FAIL: no payload customizer available"
+  )
 
   var
     env = ctx.env
-    payload        = env.clMock.latestExecutableData
-    expectedError  = step.newPayloadCustomizer.getExpectedError()
+    payload = env.clMock.latestExecutableData
+    expectedError = step.newPayloadCustomizer.getExpectedError()
     expectedStatus = PayloadExecutionStatus.valid
 
   doAssert(env.clMock.latestBlobsBundle.isSome, "TEST-FAIL: no blob bundle available")
@@ -56,8 +51,9 @@ method execute*(step: SendModifiedLatestPayload, ctx: CancunTestContext): bool =
   return true
 
 method description*(step: SendModifiedLatestPayload): string =
-  let desc = "SendModifiedLatestPayload: client $1, expected invalid=$2" % [
-    $step.clientID, $step.newPayloadCustomizer.getExpectInvalidStatus()]
+  let desc =
+    "SendModifiedLatestPayload: client $1, expected invalid=$2" %
+    [$step.clientID, $step.newPayloadCustomizer.getExpectInvalidStatus()]
   #[
     TODO: Figure out if we need this.
     if step.VersionedHashes != nil {

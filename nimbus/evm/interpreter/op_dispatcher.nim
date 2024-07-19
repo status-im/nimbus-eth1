@@ -27,10 +27,7 @@ import
   chronicles,
   macros
 
-export
-  EVMFork, Op,
-  oph_defs,
-  gas_meter
+export EVMFork, Op, oph_defs, gas_meter
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -43,24 +40,22 @@ template handleStopDirective(cpt: VmCpt) =
     cpt.opIndex = cpt.traceOpCodeStarted(Stop)
     cpt.traceOpCodeEnded(Stop, cpt.opIndex)
 
-
-template handleFixedGasCostsDirective(fork: EVMFork; op: Op; cpt: VmCpt) =
+template handleFixedGasCostsDirective(fork: EVMFork, op: Op, cpt: VmCpt) =
   if cpt.tracingEnabled:
     cpt.opIndex = cpt.traceOpCodeStarted(op)
 
-  ? cpt.opcodeGasCost(op, cpt.gasCosts[op].cost, reason = $op)
-  ? vmOpHandlers[fork][op].run(cpt)
+  ?cpt.opcodeGasCost(op, cpt.gasCosts[op].cost, reason = $op)
+  ?vmOpHandlers[fork][op].run(cpt)
 
   # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
   if cpt.tracingEnabled and cpt.continuation.isNil:
     cpt.traceOpCodeEnded(op, cpt.opIndex)
 
-
-template handleOtherDirective(fork: EVMFork; op: Op; cpt: VmCpt) =
+template handleOtherDirective(fork: EVMFork, op: Op, cpt: VmCpt) =
   if cpt.tracingEnabled:
     cpt.opIndex = cpt.traceOpCodeStarted(op)
 
-  ? vmOpHandlers[fork][op].run(cpt)
+  ?vmOpHandlers[fork][op].run(cpt)
 
   # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
   if cpt.tracingEnabled and cpt.continuation.isNil:
@@ -72,30 +67,33 @@ template handleOtherDirective(fork: EVMFork; op: Op; cpt: VmCpt) =
 
 # reminiscent of Mamy's opTableToCaseStmt() from original VM
 proc toCaseStmt(forkArg, opArg, cpt: NimNode): NimNode =
-
   # Outer case/switch => Op
-  let branchOnOp = quote do: `opArg`
+  let branchOnOp = quote:
+    `opArg`
   result = nnkCaseStmt.newTree(branchOnOp)
   for op in Op:
-    let asOp = quote do: Op(`op`)
+    let asOp = quote:
+      Op(`op`)
 
     # Inner case/switch => Fork
-    let branchOnFork = quote do: `forkArg`
+    let branchOnFork = quote:
+      `forkArg`
     var forkCaseSubExpr = nnkCaseStmt.newTree(branchOnFork)
     for fork in EVMFork:
-      let asFork = quote do: EVMFork(`fork`)
+      let asFork = quote:
+        EVMFork(`fork`)
       let gcTable = forkToGck[fork]
 
       let branchStmt = block:
         if op == Stop:
-          quote do:
+          quote:
             handleStopDirective(`cpt`)
         elif gcTable[op] == GckFixed:
-          quote do:
-            handleFixedGasCostsDirective(`asFork`,`asOp`,`cpt`)
+          quote:
+            handleFixedGasCostsDirective(`asFork`, `asOp`, `cpt`)
         else:
-          quote do:
-            handleOtherDirective(`asFork`,`asOp`,`cpt`)
+          quote:
+            handleOtherDirective(`asFork`, `asOp`, `cpt`)
 
       forkCaseSubExpr.add nnkOfBranch.newTree(asFork, branchStmt)
 
@@ -103,14 +101,14 @@ proc toCaseStmt(forkArg, opArg, cpt: NimNode): NimNode =
     let branchStmt = block:
       case op
       of Stop, Return, Revert, SelfDestruct:
-        quote do:
+        quote:
           `forkCaseSubExpr`
           break
       else:
         # Anyway, the point is that now we might as well just do this check
         # for *every* opcode (other than Return/Revert/etc, which need to
         # break no matter what).
-        quote do:
+        quote:
           `forkCaseSubExpr`
           if not `cpt`.continuation.isNil:
             break
@@ -124,11 +122,10 @@ proc toCaseStmt(forkArg, opArg, cpt: NimNode): NimNode =
 # Public macros/functions
 # ------------------------------------------------------------------------------
 
-macro genOptimisedDispatcher*(fork: EVMFork; op: Op; cpt: VmCpt): untyped =
+macro genOptimisedDispatcher*(fork: EVMFork, op: Op, cpt: VmCpt): untyped =
   result = fork.toCaseStmt(op, cpt)
 
-
-template genLowMemDispatcher*(fork: EVMFork; op: Op; cpt: VmCpt) =
+template genLowMemDispatcher*(fork: EVMFork, op: Op, cpt: VmCpt) =
   if op == Stop:
     handleStopDirective(cpt)
     break
@@ -151,7 +148,6 @@ template genLowMemDispatcher*(fork: EVMFork; op: Op; cpt: VmCpt) =
 # ------------------------------------------------------------------------------
 
 when isMainModule and isChatty:
-
   import ../types
 
   proc optimised(cpt: VmCpt, fork: EVMFork): EvmResultVoid {.compileTime.} =

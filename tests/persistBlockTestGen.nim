@@ -18,8 +18,7 @@ import
   ../nimbus/db/core_db/persistent
 
 proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
-  let
-    parentNumber = blockNumber - 1
+  let parentNumber = blockNumber - 1
 
   var
     capture = com.db.newCapture.value
@@ -33,9 +32,7 @@ proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
   discard captureCom.db.setHead(parent, true)
   discard chain.persistBlocks([blk])
 
-  var metaData = %{
-    "blockNumber": %blockNumber.toHex
-  }
+  var metaData = %{"blockNumber": %blockNumber.toHex}
 
   metaData.dumpMemoryDB(capture)
   writeFile("block" & $blockNumber & ".json", metaData.pretty())
@@ -55,8 +52,7 @@ proc main() {.used.} =
   # nimbus --rpcapi: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newCoreDbRef(
-    DefaultDbPersistent, string conf.dataDir, DbOptions.init())
+  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir, DbOptions.init())
   let com = CommonRef.new(db)
 
   com.dumpTest(97)
@@ -71,10 +67,10 @@ proc main() {.used.} =
   com.dumpTest(49439) # call opcode bug
   com.dumpTest(49891) # number opcode bug
   com.dumpTest(50111) # apply message bug
-  com.dumpTest(78458 )
-  com.dumpTest(81383 ) # tracer gas cost, stop opcode
-  com.dumpTest(81666 ) # create opcode
-  com.dumpTest(85858 ) # call oog
+  com.dumpTest(78458)
+  com.dumpTest(81383) # tracer gas cost, stop opcode
+  com.dumpTest(81666) # create opcode
+  com.dumpTest(85858) # call oog
   com.dumpTest(116524) # codecall address
   com.dumpTest(146675) # precompiled contracts ecRecover
   com.dumpTest(196647) # not enough gas to call
@@ -86,9 +82,9 @@ proc main() {.used.} =
   com.dumpTest(299804) # GasInt overflow
   com.dumpTest(420301) # computation gas cost LTE(<=) 0 to LT(<) 0
   com.dumpTest(512335) # create apply message
-  com.dumpTest(47216)   # regression
-  com.dumpTest(652148)  # contract transfer bug
-  com.dumpTest(668910)  # uncleared logs bug
+  com.dumpTest(47216) # regression
+  com.dumpTest(652148) # contract transfer bug
+  com.dumpTest(668910) # uncleared logs bug
   com.dumpTest(1_017_395) # sha256 and ripemd precompiles wordcount bug
   com.dumpTest(1_149_150) # need to swallow precompiles errors
   com.dumpTest(1_155_095) # homestead codeCost OOG

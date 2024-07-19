@@ -13,9 +13,7 @@ import
   ../../nimbus/[evm/state, evm/types],
   ../../nimbus/db/ledger
 
-proc coinbaseStateClearing*(vmState: BaseVMState,
-                            miner: EthAddress,
-                            touched = true) =
+proc coinbaseStateClearing*(vmState: BaseVMState, miner: EthAddress, touched = true) =
   # This is necessary due to the manner in which the state tests are
   # generated. State tests are generated from the BlockChainTest tests
   # in which these transactions are included in the larger context of a

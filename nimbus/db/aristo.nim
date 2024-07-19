@@ -13,21 +13,13 @@
 ##
 {.push raises: [].}
 
-import
-  aristo/[aristo_api, aristo_constants, aristo_sign]
-export
-  aristo_api, aristo_constants, aristo_sign
+import aristo/[aristo_api, aristo_constants, aristo_sign]
+export aristo_api, aristo_constants, aristo_sign
 
-import
-  aristo/aristo_init
-export
-  MemBackendRef,
-  VoidBackendRef,
-  finish,
-  init
+import aristo/aristo_init
+export MemBackendRef, VoidBackendRef, finish, init
 
-import
-  aristo/aristo_nearby
+import aristo/aristo_nearby
 export
   leftPairs, # iterators
   rightPairs,
@@ -35,21 +27,10 @@ export
   rightPairsGeneric,
   rightPairsStorage
 
-import
-  aristo/aristo_desc/[desc_identifiers, desc_structural]
-export
-  AristoAccount,
-  desc_identifiers,
-  `==`
+import aristo/aristo_desc/[desc_identifiers, desc_structural]
+export AristoAccount, desc_identifiers, `==`
 
-import
-  aristo/aristo_desc
-export
-  AristoDbAction,
-  AristoDbRef,
-  AristoError,
-  AristoTxRef,
-  MerkleSignRef,
-  isValid
+import aristo/aristo_desc
+export AristoDbAction, AristoDbRef, AristoError, AristoTxRef, MerkleSignRef, isValid
 
 # End

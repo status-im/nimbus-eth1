@@ -34,17 +34,18 @@ proc opName(n: int): string {.compileTime.} =
   "Push" & $n
 
 proc fnInfo(n: int): string {.compileTime.} =
-  var blurb = case n
-              of 1: "byte"
-              else: $n & " bytes"
+  var blurb =
+    case n
+    of 1:
+      "byte"
+    else:
+      $n & " bytes"
   "Push " & blurb & " on the stack"
 
-
-template pushImpl(cpt: VmCpt; n: static int): EvmResultVoid =
+template pushImpl(cpt: VmCpt, n: static int): EvmResultVoid =
   cpt.stack.push cpt.code.readVmWord(n)
 
-const
-  inxRange = toSeq(1 .. 32)
+const inxRange = toSeq(1 .. 32)
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -58,7 +59,6 @@ genOphHandlers fnName, fnInfo, inxRange, pushImpl
 
 genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName
 
-
 # Push0 needs to be slightly different because it's only available after
 # Shanghai (EIP-3855). But it still seems like it belongs in this file.
 # (Alternatively, we could make genOphList accept some more information
@@ -69,14 +69,16 @@ proc push0Op(cpt: VmCpt): EvmResultVoid =
   ## 0x5f, push 0 onto the stack
   cpt.stack.push(0)
 
-const
-  VmOpExecPushZero*: seq[VmOpExec] = @[
-
-    (opCode: Push0,       ## 0x5f, push 0 onto the stack
-     forks: VmOpShanghaiAndLater,
-     name: "Push0",
-     info: "Push 0 on the stack",
-     exec: push0Op)]
+const VmOpExecPushZero*: seq[VmOpExec] =
+  @[
+    (
+      opCode: Push0, ## 0x5f, push 0 onto the stack
+      forks: VmOpShanghaiAndLater,
+      name: "Push0",
+      info: "Push 0 on the stack",
+      exec: push0Op,
+    )
+  ]
 
 # ------------------------------------------------------------------------------
 # End

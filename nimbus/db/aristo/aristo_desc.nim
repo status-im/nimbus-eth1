@@ -29,28 +29,23 @@ import
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_nibbles, desc_structural]
 
-from ./aristo_desc/desc_backend
-  import BackendRef
+from ./aristo_desc/desc_backend import BackendRef
 
 # Not auto-exporting backend
 export
-  tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
-  desc_structural, keyed_queue
+  tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles, desc_structural,
+  keyed_queue
 
-const
-  accLruSize* = 1024 * 1024
-    # LRU cache size for accounts that have storage
+const accLruSize* = 1024 * 1024 # LRU cache size for accounts that have storage
 
 type
-  AristoTxRef* = ref object
-    ## Transaction descriptor
-    db*: AristoDbRef                  ## Database descriptor
-    parent*: AristoTxRef              ## Previous transaction
-    txUid*: uint                      ## Unique ID among transactions
-    level*: int                       ## Stack index for this transaction
+  AristoTxRef* = ref object ## Transaction descriptor
+    db*: AristoDbRef ## Database descriptor
+    parent*: AristoTxRef ## Previous transaction
+    txUid*: uint ## Unique ID among transactions
+    level*: int ## Stack index for this transaction
 
-  MerkleSignRef* = ref object
-    ## Simple Merkle signature calculatior for key-value lists
+  MerkleSignRef* = ref object ## Simple Merkle signature calculatior for key-value lists
     root*: VertexID
     db*: AristoDbRef
     count*: uint
@@ -61,8 +56,8 @@ type
     ## List of peers accessing the same database. This list is layzily
     ## allocated and might be kept with a single entry, i.e. so that
     ## `{centre} == peers`.
-    centre: AristoDbRef               ## Link to peer with write permission
-    peers: HashSet[AristoDbRef]       ## List of all peers
+    centre: AristoDbRef ## Link to peer with write permission
+    peers: HashSet[AristoDbRef] ## List of all peers
 
   AccountKey* = distinct ref Hash256
     # `ref` version of the account path / key
@@ -72,17 +67,17 @@ type
 
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
-    top*: LayerRef                    ## Database working layer, mutable
-    stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    balancer*: LayerRef               ## Balance out concurrent backend access
-    backend*: BackendRef              ## Backend database (may well be `nil`)
+    top*: LayerRef ## Database working layer, mutable
+    stack*: seq[LayerRef] ## Stashed immutable parent layers
+    balancer*: LayerRef ## Balance out concurrent backend access
+    backend*: BackendRef ## Backend database (may well be `nil`)
 
-    txRef*: AristoTxRef               ## Latest active transaction
-    txUidGen*: uint                   ## Tx-relative unique number generator
-    dudes: DudesRef                   ## Related DB descriptors
+    txRef*: AristoTxRef ## Latest active transaction
+    txUidGen*: uint ## Tx-relative unique number generator
+    dudes: DudesRef ## Related DB descriptors
 
     # Debugging data below, might go away in future
-    xMap*: Table[HashKey,HashSet[RootedVertexID]] ## For pretty printing/debugging
+    xMap*: Table[HashKey, HashSet[RootedVertexID]] ## For pretty printing/debugging
 
     accLeaves*: KeyedQueue[AccountKey, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by
@@ -121,24 +116,26 @@ template mixUp*(T: type AccountKey, accPath, stoPath: Hash256): Hash256 =
   # to create pre-images for, for the purpose of collisions with a particular
   # storage slot
   var v {.noinit.}: Hash256
-  for i in 0..<v.data.len:
+  for i in 0 ..< v.data.len:
     # `+` wraps leaving all bits used
     v.data[i] = accPath.data[i] + stoPath.data[i]
   v
 
-func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
+func getOrVoid*[W](tab: Table[W, VertexRef], w: W): VertexRef =
   tab.getOrDefault(w, VertexRef(nil))
 
-func getOrVoid*[W](tab: Table[W,NodeRef]; w: W): NodeRef =
+func getOrVoid*[W](tab: Table[W, NodeRef], w: W): NodeRef =
   tab.getOrDefault(w, NodeRef(nil))
 
-func getOrVoid*[W](tab: Table[W,HashKey]; w: W): HashKey =
+func getOrVoid*[W](tab: Table[W, HashKey], w: W): HashKey =
   tab.getOrDefault(w, VOID_HASH_KEY)
 
-func getOrVoid*[W](tab: Table[W,RootedVertexID]; w: W): RootedVertexID =
+func getOrVoid*[W](tab: Table[W, RootedVertexID], w: W): RootedVertexID =
   tab.getOrDefault(w, default(RootedVertexID))
 
-func getOrVoid*[W](tab: Table[W,HashSet[RootedVertexID]]; w: W): HashSet[RootedVertexID] =
+func getOrVoid*[W](
+    tab: Table[W, HashSet[RootedVertexID]], w: W
+): HashSet[RootedVertexID] =
   tab.getOrDefault(w, default(HashSet[RootedVertexID]))
 
 # --------
@@ -196,7 +193,7 @@ func getCentre*(db: AristoDbRef): AristoDbRef =
   ##
   if db.dudes.isNil: db else: db.dudes.centre
 
-proc reCentre*(db: AristoDbRef): Result[void,AristoError] =
+proc reCentre*(db: AristoDbRef): Result[void, AristoError] =
   ## Re-focus the `db` argument descriptor so that it becomes the centre.
   ## Nothing is done if the `db` descriptor is the centre, already.
   ##
@@ -215,10 +212,8 @@ proc reCentre*(db: AristoDbRef): Result[void,AristoError] =
   ok()
 
 proc fork*(
-    db: AristoDbRef;
-    noTopLayer = false;
-    noFilter = false;
-      ): Result[AristoDbRef,AristoError] =
+    db: AristoDbRef, noTopLayer = false, noFilter = false
+): Result[AristoDbRef, AristoError] =
   ## This function creates a new empty descriptor accessing the same backend
   ## (if any) database as the argument `db`. This new descriptor joins the
   ## list of descriptors accessing the same backend database.
@@ -240,9 +235,7 @@ proc fork*(
   if db.dudes.isNil:
     db.dudes = DudesRef(centre: db, peers: @[db].toHashSet)
 
-  let clone = AristoDbRef(
-    dudes:   db.dudes,
-    backend: db.backend)
+  let clone = AristoDbRef(dudes: db.dudes, backend: db.backend)
 
   if not noFilter:
     clone.balancer = db.balancer # Ref is ok here (filters are immutable)
@@ -283,8 +276,7 @@ func nForked*(db: AristoDbRef): int =
   if not db.dudes.isNil:
     return db.dudes.peers.len - 1
 
-
-proc forget*(db: AristoDbRef): Result[void,AristoError] =
+proc forget*(db: AristoDbRef): Result[void, AristoError] =
   ## Destruct the non centre argument `db` descriptor (see comments on
   ## `reCentre()` for details.)
   ##
@@ -296,10 +288,10 @@ proc forget*(db: AristoDbRef): Result[void,AristoError] =
   elif db notin db.dudes.peers:
     err(DescStaleDescriptor)
   else:
-    db.dudes.peers.excl db         # Unlink argument `db` from peers list
+    db.dudes.peers.excl db # Unlink argument `db` from peers list
     ok()
 
-proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
+proc forgetOthers*(db: AristoDbRef): Result[void, AristoError] =
   ## For the centre argument `db` descriptor (see comments on `reCentre()`
   ## for details), destruct all other descriptors accessing the same backend.
   ##
@@ -316,7 +308,7 @@ proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
 
 iterator rstack*(db: AristoDbRef): LayerRef =
   # Stack in reverse order
-  for i in 0..<db.stack.len:
+  for i in 0 ..< db.stack.len:
     yield db.stack[db.stack.len - i - 1]
 
 proc deltaAtLevel*(db: AristoDbRef, level: int): LayerRef =
@@ -332,7 +324,6 @@ proc deltaAtLevel*(db: AristoDbRef, level: int): LayerRef =
     nil
   else:
     raiseAssert "Unknown level " & $level
-
 
 # ------------------------------------------------------------------------------
 # End

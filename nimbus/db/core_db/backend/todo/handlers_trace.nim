@@ -36,61 +36,52 @@ import
   ../../base/base_desc,
   "."/[handlers_kvt, handlers_aristo]
 
-const
-  EnableDebugLog = CoreDbEnableApiTracking
+const EnableDebugLog = CoreDbEnableApiTracking
 
 type
   TraceKdbRecorder = object
-    base: KvtBaseRef              ## Restore position
-    savedApi: KvtApiRef           ## Restore data
+    base: KvtBaseRef ## Restore position
+    savedApi: KvtApiRef ## Restore data
 
   TraceAdbRecorder = object
     base: AristoBaseRef
     savedApi: AristoApiRef
 
-  TracerBlobRef* = ref object
-    ## `Kvt` journal entry
-    blind: bool                   ## Marked `true` for `get()` logs
+  TracerBlobRef* = ref object ## `Kvt` journal entry
+    blind: bool ## Marked `true` for `get()` logs
     old: Blob
     cur: Blob
 
-  TracerPylRef* = ref object
-    ## `Aristo` journal entry
-    blind: bool                   ## Marked `true` for `fetch()` logs
-    accPath: PathID               ## Account path needed for storage data
-    old: LeafPayload               ## Deleted or just cached payload version
-    cur: LeafPayload               ## Updated/current or just cached
-    curBlob: Blob                 ## Serialised version for `cur` accounts data
+  TracerPylRef* = ref object ## `Aristo` journal entry
+    blind: bool ## Marked `true` for `fetch()` logs
+    accPath: PathID ## Account path needed for storage data
+    old: LeafPayload ## Deleted or just cached payload version
+    cur: LeafPayload ## Updated/current or just cached
+    curBlob: Blob ## Serialised version for `cur` accounts data
 
-  TracerBlobTabRef* =
-    TableRef[Blob,TracerBlobRef]
+  TracerBlobTabRef* = TableRef[Blob, TracerBlobRef]
 
-  TracerPylTabRef* =
-    TableRef[LeafTie,TracerPylRef]
+  TracerPylTabRef* = TableRef[LeafTie, TracerPylRef]
 
-  TracerLogInstRef* = ref object
-    ## Logger instance
+  TracerLogInstRef* = ref object ## Logger instance
     txLevel: int
     flags: set[CoreDbCaptFlags]
-    kvtJournal: TableRef[KvtDbRef,TracerBlobTabRef]
-    mptJournal: TableRef[AristoDbRef,TracerPylTabRef]
+    kvtJournal: TableRef[KvtDbRef, TracerBlobTabRef]
+    mptJournal: TableRef[AristoDbRef, TracerPylTabRef]
 
   TraceRecorderRef* = ref object of RootRef
-    inst: seq[TracerLogInstRef]   ## Production stack for log database
-    kdb: TraceKdbRecorder         ## Contains restore information
-    adb: TraceAdbRecorder         ## Contains restore information
+    inst: seq[TracerLogInstRef] ## Production stack for log database
+    kdb: TraceKdbRecorder ## Contains restore information
+    adb: TraceAdbRecorder ## Contains restore information
 
-proc push*(tr: TraceRecorderRef; flags: set[CoreDbCaptFlags]) {.gcsafe.}
+proc push*(tr: TraceRecorderRef, flags: set[CoreDbCaptFlags]) {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 when EnableDebugLog:
-  import
-    std/strutils,
-    chronicles,
-    stew/byteutils
+  import std/strutils, chronicles, stew/byteutils
 
   func toStr(key: openArray[byte]): string =
     key.toHex
@@ -104,8 +95,9 @@ when EnableDebugLog:
   func `$`(root: VertexID): string =
     let vid = root.uint64
     if 0 < vid:
-      "$" & vid.toHex.toLowerAscii
-               .strip(leading=true, trailing=false, chars={'0'})
+      "$" & vid.toHex.toLowerAscii.strip(
+        leading = true, trailing = false, chars = {'0'}
+      )
     else:
       "$ø"
 
@@ -117,13 +109,10 @@ when EnableDebugLog:
       "@" & q
 
   func `$`(pyl: LeafPayload): string =
-    case pyl.pType:
-    of RawData:
-      pyl.rawBlob.toStr
-    of RlpData:
-      pyl.rlpBlob.toStr
-    of AccountData:
-      "<AccountData>"
+    case pyl.pType
+    of RawData: pyl.rawBlob.toStr
+    of RlpData: pyl.rlpBlob.toStr
+    of AccountData: "<AccountData>"
 
   func `$`(tpl: TracerPylRef): string =
     result = "("
@@ -164,18 +153,15 @@ when EnableDebugLog:
 # -------------------------
 
 func leafTie(
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[LeafTie,(VertexID,AristoError)] =
+    root: VertexID, path: openArray[byte]
+): Result[LeafTie, (VertexID, AristoError)] =
   let tag = path.pathToTag.valueOr:
     return err((root, error))
   ok LeafTie(root: root, path: tag)
 
 proc blobify(
-    pyl: LeafPayload;
-    api: AristoApiRef;
-    mpt: AristoDbRef;
-      ): Result[Blob,(VertexID,AristoError)] =
+    pyl: LeafPayload, api: AristoApiRef, mpt: AristoDbRef
+): Result[Blob, (VertexID, AristoError)] =
   var blob = EmptyBlob
   if pyl.pType == AccountData:
     blob = block:
@@ -184,29 +170,22 @@ proc blobify(
         rc.value
       else:
         # TODO ? api.hashify(mpt)
-        ? api.serialise(mpt, pyl)
+        ?api.serialise(mpt, pyl)
   ok(blob)
 
 # -------------------------------
 
 proc kvtJournalPut(
-    tr: TraceRecorderRef;
-    kvt: KvtDbRef;
-    key: openArray[byte];
-    tbl: TracerBlobRef;
-      ) =
+    tr: TraceRecorderRef, kvt: KvtDbRef, key: openArray[byte], tbl: TracerBlobRef
+) =
   ## Add or update journal entry recording `kvt` modification
   var byKvt = tr.inst[^1].kvtJournal.getOrDefault kvt
   if byKvt.isNil:
-    byKvt = newTable[Blob,TracerBlobRef]()
+    byKvt = newTable[Blob, TracerBlobRef]()
     tr.inst[^1].kvtJournal[kvt] = byKvt
   byKvt[@key] = tbl
 
-proc kvtJournalDel(
-    tr: TraceRecorderRef;
-    kvt: KvtDbRef;
-    key: openArray[byte];
-      ) =
+proc kvtJournalDel(tr: TraceRecorderRef, kvt: KvtDbRef, key: openArray[byte]) =
   ## Remove journal entry recording `kvt` modification
   var byKvt = tr.inst[^1].kvtJournal.getOrDefault kvt
   if byKvt.isNil:
@@ -215,11 +194,8 @@ proc kvtJournalDel(
       tr.inst[^1].kvtJournal.del kvt
 
 proc kvtJournalGet(
-    tr: TraceRecorderRef;
-    kvt: KvtDbRef;
-    key: openArray[byte];
-    modOnly = true;
-      ): TracerBlobRef =
+    tr: TraceRecorderRef, kvt: KvtDbRef, key: openArray[byte], modOnly = true
+): TracerBlobRef =
   ## Get journal entry recording `kvt` modification. If the argument `modOnly`
   ## is false, also blind entries are returned.
   var byKvt = tr.inst[^1].kvtJournal.getOrDefault kvt
@@ -228,25 +204,17 @@ proc kvtJournalGet(
     if not modOnly or tbl.isNil or not tbl.blind: # or not (not isNil and blind)
       return tbl
 
-
 proc mptJournalPut(
-    tr: TraceRecorderRef;
-    mpt: AristoDbRef;
-    key: LeafTie;
-    tpl: TracerPylRef;
-      ) =
+    tr: TraceRecorderRef, mpt: AristoDbRef, key: LeafTie, tpl: TracerPylRef
+) =
   ## Add or update journal entry recording `mpt` modification
   var byMpt = tr.inst[^1].mptJournal.getOrDefault mpt
   if byMpt.isNil:
-    byMpt = newTable[LeafTie,TracerPylRef]()
+    byMpt = newTable[LeafTie, TracerPylRef]()
     tr.inst[^1].mptJournal[mpt] = byMpt
   byMpt[key] = tpl
 
-proc mptJournalDel(
-    tr: TraceRecorderRef;
-    mpt: AristoDbRef;
-    key: LeafTie;
-      ) =
+proc mptJournalDel(tr: TraceRecorderRef, mpt: AristoDbRef, key: LeafTie) =
   ## Remove journal entry recording `mpt` modification
   let byMpt = tr.inst[^1].mptJournal.getOrDefault mpt
   if not byMpt.isNil:
@@ -255,11 +223,8 @@ proc mptJournalDel(
       tr.inst[^1].mptJournal.del mpt
 
 proc mptJournalGet(
-    tr: TraceRecorderRef;
-    mpt: AristoDbRef;
-    key: LeafTie;
-    modOnly = true;
-      ): TracerPylRef =
+    tr: TraceRecorderRef, mpt: AristoDbRef, key: LeafTie, modOnly = true
+): TracerPylRef =
   ## Get journal entry recording `mpt` modification. If the argument `modOnly`
   ## is false, also blind entries are returned.
   let byMpt = tr.inst[^1].mptJournal.getOrDefault mpt
@@ -268,25 +233,20 @@ proc mptJournalGet(
     if not modOnly or pyl.isNil or not pyl.blind: # or not (not isNil and blind)
       return pyl
 
-proc mptJournalAcountUpdate(
-    tr: TraceRecorderRef;
-    mpt: AristoDbRef;
-    accPath: PathID;
-      ) =
+proc mptJournalAcountUpdate(tr: TraceRecorderRef, mpt: AristoDbRef, accPath: PathID) =
   let
     lty = LeafTie(root: VertexID(1), path: accPath)
-    jrn = tr.mptJournalGet(mpt, lty, modOnly=true)
+    jrn = tr.mptJournalGet(mpt, lty, modOnly = true)
   if jrn.isNil:
     # Just delete
     tr.mptJournalDel(mpt, lty)
   else:
     # Update cache
     let pyl = tr.adb.savedApi.fetchPayload(mpt, VertexID(1), @accPath).valueOr:
-      raiseAssert "mptJournalAcountUpdate() failed to re-fetch($1" & "," &
-        $accPath & "): " & $error
+      raiseAssert "mptJournalAcountUpdate() failed to re-fetch($1" & "," & $accPath &
+        "): " & $error
     jrn.cur.account.storageID = pyl.account.storageID
     tr.mptJournalPut(mpt, lty, jrn)
-
 
 proc popDiscard(tr: TraceRecorderRef) =
   ## Pop top journal.
@@ -302,35 +262,35 @@ proc popRestore(tr: TraceRecorderRef) =
   tr.inst.setLen(tr.inst.len - 1) # pop
 
   let mApi = tr.adb.savedApi
-  for (mpt,mptTab) in inst.mptJournal.pairs:
+  for (mpt, mptTab) in inst.mptJournal.pairs:
     var deferredDelete: seq[(LeafTie, TracerPylRef)]
-    for (key,tpl) in mptTab.pairs:
+    for (key, tpl) in mptTab.pairs:
       if not tpl.blind:
         let (root, path, accPath) = (key.root, @(key.path), tpl.accPath)
         if tpl.old.isNil:
           if PersistPut notin inst.flags:
             # Storage tries need to be deleted first, then the accounts
             if key.root.distinctBase < LEAST_FREE_VID:
-              deferredDelete.add (key,tpl)
+              deferredDelete.add (key, tpl)
             else:
               mApi.delete(mpt, root, path, accPath).isOkOr:
-                raiseAssert info & " failed to delete(" &
-                  $root & "," & $path & "," & $accPath & "): " & $error[1]
+                raiseAssert info & " failed to delete(" & $root & "," & $path & "," &
+                  $accPath & "): " & $error[1]
         else:
           if PersistDel notin inst.flags:
             mApi.mergePayload(mpt, root, path, tpl.old, accPath).isOkOr:
-              raiseAssert info & " failed to merge(" &
-                $root & "," & $path & "," & $accPath & "): " & $error
+              raiseAssert info & " failed to merge(" & $root & "," & $path & "," &
+                $accPath & "): " & $error
     # Delete accounts now (if any)
-    for (key,tpl) in deferredDelete:
+    for (key, tpl) in deferredDelete:
       let (root, path, accPath) = (key.root, @(key.path), tpl.accPath)
       mApi.delete(mpt, root, path, accPath).isOkOr:
-        raiseAssert info & " failed to delete(" &
-          $root & "," & $path & "," & $accPath & "): " & $error[1]
+        raiseAssert info & " failed to delete(" & $root & "," & $path & "," & $accPath &
+          "): " & $error[1]
 
   let kApi = tr.kdb.savedApi
-  for (kvt,kvtTab) in inst.kvtJournal.pairs:
-    for (key,tbl) in kvtTab.pairs:
+  for (kvt, kvtTab) in inst.kvtJournal.pairs:
+    for (key, tbl) in kvtTab.pairs:
       if not tbl.blind:
         if tbl.old.len == 0:
           if PersistPut notin inst.flags:
@@ -347,524 +307,480 @@ proc popMerge(tr: TraceRecorderRef) =
   let inst = tr.inst[^1]
   tr.inst.setLen(tr.inst.len - 1) # pop
 
-  for (mpt,mptTab) in inst.mptJournal.pairs:
-    for (key,tpl) in mptTab.pairs:
+  for (mpt, mptTab) in inst.mptJournal.pairs:
+    for (key, tpl) in mptTab.pairs:
       let jrn = tr.mptJournalGet(mpt, key)
       if not jrn.isNil:
         if jrn.old != tpl.cur:
           tpl.old = jrn.old
         else:
           tpl.blind = true
-      tr.mptJournalPut(mpt, key,tpl)
+      tr.mptJournalPut(mpt, key, tpl)
 
-  for (kvt,kvtTab) in inst.kvtJournal.pairs:
-    for (key,tbl) in kvtTab.pairs:
+  for (kvt, kvtTab) in inst.kvtJournal.pairs:
+    for (key, tbl) in kvtTab.pairs:
       let jrn = tr.kvtJournalGet(kvt, key)
       if not jrn.isNil:
         if jrn.old != tbl.cur:
           tbl.old = jrn.old
         else:
           tbl.blind = true
-      tr.kvtJournalPut(kvt, key,tbl)
+      tr.kvtJournalPut(kvt, key, tbl)
 
-
-proc pushNew(tr: TraceRecorderRef; flags: set[CoreDbCaptFlags]) =
+proc pushNew(tr: TraceRecorderRef, flags: set[CoreDbCaptFlags]) =
   ## Add a new journal
   tr.inst.add TracerLogInstRef(
-    kvtJournal: newTable[KvtDbRef,TracerBlobTabRef](),
-    mptJournal: newTable[AristoDbRef,TracerPylTabRef](),
-    flags:      flags)
+    kvtJournal: newTable[KvtDbRef, TracerBlobTabRef](),
+    mptJournal: newTable[AristoDbRef, TracerPylTabRef](),
+    flags: flags,
+  )
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc traceRecorder(
-    tr: TraceRecorderRef;
-    base: KvtBaseRef;
-      ): TraceKdbRecorder =
+proc traceRecorder(tr: TraceRecorderRef, base: KvtBaseRef): TraceKdbRecorder =
   let
     api = base.api
     tracerApi = api.dup
 
   # Update production api
-  tracerApi.get =
-    proc(kvt: KvtDbRef; key: openArray[byte]): Result[Blob,KvtError] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace get"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
-
-      # Use journal entry if available
-      let jrn = tr.kvtJournalGet(kvt, key, modOnly=false)
-      if not jrn.isNil:
-        when EnableDebugLog:
-          debug logTxt, level, flags, key=key.toStr, log="get()", data=($jrn)
-        if jrn.cur.len == 0:
-          return err(use_kvt.GetNotFound)
-        else:
-          return ok jrn.cur
-
+  tracerApi.get = proc(kvt: KvtDbRef, key: openArray[byte]): Result[Blob, KvtError] =
+    when EnableDebugLog:
+      const logTxt = "trace get"
       let
-        # Find entry on DB
-        data = api.get(kvt, key).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key=key.toStr, error
-          return err(error) # No way
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
 
-        # Journal entry
-        tbl = TracerBlobRef(blind: true, cur: data)
-
-      # Update journal
-      tr.kvtJournalPut(kvt, key, tbl)
+    # Use journal entry if available
+    let jrn = tr.kvtJournalGet(kvt, key, modOnly = false)
+    if not jrn.isNil:
       when EnableDebugLog:
-        debug logTxt, level, flags, key=key.toStr, data=($tbl)
-
-      ok(data)
-
-  tracerApi.del =
-    proc(kvt: KvtDbRef; key: openArray[byte]): Result[void,KvtError] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace del"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
-      let
-        # Find entry on DB
-        data = api.get(kvt, key).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key=key.toStr, error
-          if error != use_kvt.GetNotFound:
-            return err(error)
-          return ok()
-
-      # Delete from DB
-      api.del(kvt, key).isOkOr:
-        when EnableDebugLog:
-          debug logTxt, level, flags, key=key.toStr, error
-        return err(error)
-
-      # Update journal
-      let jrn = tr.kvtJournalGet(kvt, key)
-      if jrn.isNil:
-        let tbl = TracerBlobRef(old: data)
-        tr.kvtJournalPut(kvt, key, tbl)
-        when EnableDebugLog:
-          debug logTxt, level, flags, key=key.toStr, log="put()", data=($tbl)
-
-      elif jrn.old.len == 0:
-        # Was just added earlier
-       tr.kvtJournalDel(kvt, key) # Undo earlier stuff
-       when EnableDebugLog:
-         debug logTxt, level, flags, key=key.toStr, log="del()"
-
+        debug logTxt, level, flags, key = key.toStr, log = "get()", data = ($jrn)
+      if jrn.cur.len == 0:
+        return err(use_kvt.GetNotFound)
       else:
-        # Was modified earlier
-        let tbl = TracerBlobRef(old: jrn.old)
-        tr.kvtJournalPut(kvt, key, tbl)
+        return ok jrn.cur
+
+    let
+      # Find entry on DB
+      data = api.get(kvt, key).valueOr:
         when EnableDebugLog:
-          debug logTxt, level, flags, key=key.toStr, log="put()", data=($tbl)
+          debug logTxt, level, flags, key = key.toStr, error
+        return err(error) # No way
 
-      ok()
+      # Journal entry
+      tbl = TracerBlobRef(blind: true, cur: data)
 
-  tracerApi.put =
-    proc(kvt: KvtDbRef; key, data: openArray[byte]): Result[void,KvtError] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace put"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
+    # Update journal
+    tr.kvtJournalPut(kvt, key, tbl)
+    when EnableDebugLog:
+      debug logTxt, level, flags, key = key.toStr, data = ($tbl)
+
+    ok(data)
+
+  tracerApi.del = proc(kvt: KvtDbRef, key: openArray[byte]): Result[void, KvtError] =
+    when EnableDebugLog:
+      const logTxt = "trace del"
       let
-        # Create journal entry
-        tbl = TracerBlobRef(cur: @data)
-
-      # Update journal entry so that previous state is saved
-      let jrn = tr.kvtJournalGet(kvt, key)
-      if jrn.isNil:
-        # Find current entry on the DB
-        let rc = api.get(kvt, key)
-        if rc.isOk:
-          tbl.old = rc.value
-        elif rc.error != use_kvt.GetNotFound:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key=key.toStr, error=rc.error
-          return err(rc.error)
-      elif 0 < jrn.old.len:
-        tbl.old = jrn.old
-
-      # Store on DB
-      api.put(kvt, key, data).isOkOr:
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
+    let
+      # Find entry on DB
+      data = api.get(kvt, key).valueOr:
         when EnableDebugLog:
-          debug logTxt, level, flags, key=key.toStr, data=data.toStr
-        return err(error)
+          debug logTxt, level, flags, key = key.toStr, error
+        if error != use_kvt.GetNotFound:
+          return err(error)
+        return ok()
 
+    # Delete from DB
+    api.del(kvt, key).isOkOr:
+      when EnableDebugLog:
+        debug logTxt, level, flags, key = key.toStr, error
+      return err(error)
+
+    # Update journal
+    let jrn = tr.kvtJournalGet(kvt, key)
+    if jrn.isNil:
+      let tbl = TracerBlobRef(old: data)
       tr.kvtJournalPut(kvt, key, tbl)
       when EnableDebugLog:
-        debug logTxt, level, flags, key=key.toStr, data=($tbl)
+        debug logTxt, level, flags, key = key.toStr, log = "put()", data = ($tbl)
+    elif jrn.old.len == 0: # Was just added earlier
+      tr.kvtJournalDel(kvt, key) # Undo earlier stuff
+      when EnableDebugLog:
+        debug logTxt, level, flags, key = key.toStr, log = "del()"
+    else:
+      # Was modified earlier
+      let tbl = TracerBlobRef(old: jrn.old)
+      tr.kvtJournalPut(kvt, key, tbl)
+      when EnableDebugLog:
+        debug logTxt, level, flags, key = key.toStr, log = "put()", data = ($tbl)
 
-      ok()
+    ok()
+
+  tracerApi.put = proc(
+      kvt: KvtDbRef, key, data: openArray[byte]
+  ): Result[void, KvtError] =
+    when EnableDebugLog:
+      const logTxt = "trace put"
+      let
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
+    let
+      # Create journal entry
+      tbl = TracerBlobRef(cur: @data)
+
+    # Update journal entry so that previous state is saved
+    let jrn = tr.kvtJournalGet(kvt, key)
+    if jrn.isNil:
+      # Find current entry on the DB
+      let rc = api.get(kvt, key)
+      if rc.isOk:
+        tbl.old = rc.value
+      elif rc.error != use_kvt.GetNotFound:
+        when EnableDebugLog:
+          debug logTxt, level, flags, key = key.toStr, error = rc.error
+        return err(rc.error)
+    elif 0 < jrn.old.len:
+      tbl.old = jrn.old
+
+    # Store on DB
+    api.put(kvt, key, data).isOkOr:
+      when EnableDebugLog:
+        debug logTxt, level, flags, key = key.toStr, data = data.toStr
+      return err(error)
+
+    tr.kvtJournalPut(kvt, key, tbl)
+    when EnableDebugLog:
+      debug logTxt, level, flags, key = key.toStr, data = ($tbl)
+
+    ok()
 
   # It is enough to catch transactions on the `Kvt` tracer only
-  tracerApi.txBegin =
-    proc(kvt: KvtDbRef): Result[KvtTxRef,KvtError] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace txBegin"
-        let
-          level = tr.inst.len - 1
-          txLevel = tr.inst[^1].txLevel
+  tracerApi.txBegin = proc(kvt: KvtDbRef): Result[KvtTxRef, KvtError] =
+    when EnableDebugLog:
+      const logTxt = "trace txBegin"
       let
+        level = tr.inst.len - 1
+        txLevel = tr.inst[^1].txLevel
+    let
+      flags = tr.inst[^1].flags
+      tx = api.txBegin(kvt).valueOr:
+        when EnableDebugLog:
+          debug logTxt, level, txLevel, flags, error
+        return err(error)
+
+    tr.push flags
+    tr.inst[^1].txLevel = api.level kvt
+    doAssert 0 < tr.inst[^1].txLevel
+    when EnableDebugLog:
+      debug logTxt, level = (level + 1), txLevel = tr.inst[^1].txLevel, flags
+
+    ok tx
+
+  tracerApi.commit = proc(tx: KvtTxRef): Result[void, KvtError] =
+    when EnableDebugLog:
+      const logTxt = "trace commit"
+      let
+        level = tr.inst.len - 1
         flags = tr.inst[^1].flags
-        tx = api.txBegin(kvt).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, txLevel, flags, error
-          return err(error)
+        txLevel = tr.inst[^1].txLevel
+      debug logTxt, level, txLevel, flags
 
-      tr.push flags
-      tr.inst[^1].txLevel = api.level kvt
-      doAssert 0 < tr.inst[^1].txLevel
+    # Make sure that the system is properly nested
+    doAssert tr.inst[^1].txLevel == api.level api.toKvtDbRef(tx)
+    tr.popMerge()
+
+    api.commit(tx).isOkOr:
       when EnableDebugLog:
-        debug logTxt, level=(level+1), txLevel= tr.inst[^1].txLevel, flags
+        debug logTxt, level, txLevel, flags, error
+      return err(error)
 
-      ok tx
+    ok()
 
-  tracerApi.commit =
-    proc(tx: KvtTxRef): Result[void,KvtError] =
+  tracerApi.rollback = proc(tx: KvtTxRef): Result[void, KvtError] =
+    when EnableDebugLog:
+      const logTxt = "trace rollback"
+      let
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
+        txLevel = tr.inst[^1].txLevel
+      debug logTxt, level, txLevel, flags
+
+    # Make sure that the system is properly nested
+    doAssert tr.inst[^1].txLevel == api.level api.toKvtDbRef(tx)
+    tr.popDiscard()
+
+    api.rollback(tx).isOkOr:
       when EnableDebugLog:
-        const
-          logTxt = "trace commit"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
-          txLevel = tr.inst[^1].txLevel
-        debug logTxt, level, txLevel, flags
+        debug logTxt, level, txLevel, flags, error
+      return err(error)
 
-      # Make sure that the system is properly nested
-      doAssert tr.inst[^1].txLevel == api.level api.toKvtDbRef(tx)
-      tr.popMerge()
+    ok()
 
-      api.commit(tx).isOkOr:
-        when EnableDebugLog:
-          debug logTxt, level, txLevel, flags, error
-        return err(error)
-
-      ok()
-
-  tracerApi.rollback =
-    proc(tx: KvtTxRef): Result[void,KvtError] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace rollback"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
-          txLevel = tr.inst[^1].txLevel
-        debug logTxt, level, txLevel, flags
-
-      # Make sure that the system is properly nested
-      doAssert tr.inst[^1].txLevel == api.level api.toKvtDbRef(tx)
-      tr.popDiscard()
-
-      api.rollback(tx).isOkOr:
-        when EnableDebugLog:
-          debug logTxt, level, txLevel, flags, error
-        return err(error)
-
-      ok()
-
-  result = TraceKdbRecorder(
-    base:     base,
-    savedApi: api)
+  result = TraceKdbRecorder(base: base, savedApi: api)
   base.api = tracerApi
 
   assert result.savedApi != base.api
   assert result.savedApi.del != base.api.del
   assert result.savedApi.hasKey == base.api.hasKey
 
-
-proc traceRecorder(
-    tr: TraceRecorderRef;
-    base: AristoBaseRef;
-      ): TraceAdbRecorder =
+proc traceRecorder(tr: TraceRecorderRef, base: AristoBaseRef): TraceAdbRecorder =
   let
     api = base.api
     tracerApi = api.dup
 
-  tracerApi.fetchPayload =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-           ): Result[LeafPayload,(VertexID,AristoError)] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace fetchPayload"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
+  tracerApi.fetchPayload = proc(
+      mpt: AristoDbRef, root: VertexID, path: openArray[byte]
+  ): Result[LeafPayload, (VertexID, AristoError)] =
+    when EnableDebugLog:
+      const logTxt = "trace fetchPayload"
       let
-        key = leafTie(root, path).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, root, path=path.toStr, error=error[1]
-          return err(error)
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
+    let key = leafTie(root, path).valueOr:
+      when EnableDebugLog:
+        debug logTxt, level, flags, root, path = path.toStr, error = error[1]
+      return err(error)
 
-      let jrn = tr.mptJournalGet(mpt, key, modOnly=false)
-      if not jrn.isNil:
+    let jrn = tr.mptJournalGet(mpt, key, modOnly = false)
+    if not jrn.isNil:
+      when EnableDebugLog:
+        debug logTxt, level, flags, key, log = "get()", data = ($jrn)
+      if jrn.cur.isNil:
+        return err((VertexID(0), FetchPathNotFound))
+      else:
+        return ok jrn.cur
+
+    let
+      # Find on DB
+      pyl = api.fetchPayload(mpt, root, path).valueOr:
         when EnableDebugLog:
-          debug logTxt, level, flags, key, log="get()", data=($jrn)
-        if jrn.cur.isNil:
-          return err((VertexID(0),FetchPathNotFound))
-        else:
-          return ok jrn.cur
+          debug logTxt, level, flags, key, error = error[1]
+        return err(error)
 
+      # Serialise (if needed)
+      blob = pyl.blobify(api, mpt).valueOr:
+        when EnableDebugLog:
+          debug logTxt, level, flags, key, error = error[1]
+        return err(error)
+
+      # Journal entry
+      tPyl = TracerPylRef(blind: true, cur: pyl, curBlob: blob)
+
+    # Update journal
+    tr.mptJournalPut(mpt, key, tPyl)
+    when EnableDebugLog:
+      debug logTxt, level, flags, key, log = "put()", data = ($tPyl)
+
+    ok pyl
+
+  tracerApi.delete = proc(
+      mpt: AristoDbRef, root: VertexID, path: openArray[byte], accPath: PathID
+  ): Result[bool, (VertexID, AristoError)] =
+    when EnableDebugLog:
+      const logTxt = "trace delete"
       let
-        # Find on DB
-        pyl = api.fetchPayload(mpt, root, path).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, error=error[1]
-          return err(error)
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
+    let
+      key = leafTie(root, path).valueOr:
+        when EnableDebugLog:
+          debug logTxt, level, flags, root, path = path.toStr, error = error[1]
+        return err(error)
 
-        # Serialise (if needed)
-        blob = pyl.blobify(api, mpt).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, error=error[1]
-          return err(error)
+      # Find entry on the DB
+      pyl = api.fetchPayload(mpt, root, path).valueOr:
+        when EnableDebugLog:
+          debug logTxt, level, flags, key, error = error[1]
+        if error[1] == FetchPathNotFound:
+          return err((error[0], DelPathNotFound))
+        return err(error)
 
-        # Journal entry
-        tPyl = TracerPylRef(blind: true, cur: pyl, curBlob: blob)
+      # Delete from DB
+      deleted = api.delete(mpt, root, path, accPath).valueOr:
+        when EnableDebugLog:
+          debug logTxt, level, flags, key, error
+        return err(error)
 
-      # Update journal
-      tr.mptJournalPut(mpt, key, tPyl)
+    # Update journal
+    let jrn = tr.mptJournalGet(mpt, key)
+    if jrn.isNil:
+      let tpl = TracerPylRef(old: pyl, accPath: accPath)
+      tr.mptJournalPut(mpt, key, tpl)
       when EnableDebugLog:
-        debug logTxt, level, flags, key, log="put()", data=($tPyl)
-
-      ok pyl
-
-  tracerApi.delete =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-         accPath: PathID;
-           ): Result[bool,(VertexID,AristoError)] =
+        debug logTxt, level, flags, key, log = "put()", data = ($tpl)
+    elif jrn.old.isNil: # Was just added earlier
+      tr.mptJournalDel(mpt, key) # Undo earlier stuff
       when EnableDebugLog:
-        const
-          logTxt = "trace delete"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
+        debug logTxt, level, flags, key, log = "del()"
+    else:
+      # Was modified earlier, keep the old value
+      let tpl = TracerPylRef(old: jrn.old, accPath: jrn.accPath)
+      tr.mptJournalPut(mpt, key, tpl)
+      when EnableDebugLog:
+        debug logTxt, level, flags, key, log = "put()", data = ($tpl)
+
+    if LEAST_FREE_VID <= root.distinctBase:
+      tr.mptJournalAcountUpdate(mpt, accPath)
+
+    ok deleted
+
+  tracerApi.delTree = proc(
+      mpt: AristoDbRef, root: VertexID, accPath: PathID
+  ): Result[void, (VertexID, AristoError)] =
+    when EnableDebugLog:
+      const logTxt = "trace delTree"
       let
-        key = leafTie(root, path).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, root, path=path.toStr, error=error[1]
-          return err(error)
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
 
-        # Find entry on the DB
-        pyl = api.fetchPayload(mpt, root, path).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, error=error[1]
-          if error[1] == FetchPathNotFound:
-            return err((error[0], DelPathNotFound))
-          return err(error)
+    # TODO: collect all paths on this tree
+    var deletedRows: seq[(LeafTie, LeafPayload)]
 
-        # Delete from DB
-        deleted = api.delete(mpt, root, path, accPath).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, error
-          return err(error)
+    # Delete from DB
+    api.delTree(mpt, root, accPath).isOkOr:
+      when EnableDebugLog:
+        debug logTxt, level, flags, error
+      return err(error)
 
-      # Update journal
+    # Update journal
+    for (key, pyl) in deletedRows:
       let jrn = tr.mptJournalGet(mpt, key)
       if jrn.isNil:
         let tpl = TracerPylRef(old: pyl, accPath: accPath)
         tr.mptJournalPut(mpt, key, tpl)
         when EnableDebugLog:
-          debug logTxt, level, flags, key, log="put()", data=($tpl)
-
+          debug logTxt, level, flags, key, log = "put()", data = ($tpl)
       elif jrn.old.isNil:
         # Was just added earlier
-       tr.mptJournalDel(mpt, key) # Undo earlier stuff
-       when EnableDebugLog:
-         debug logTxt, level, flags, key, log="del()"
-
+        tr.mptJournalDel(mpt, key) # Undo earlier stuff
+        when EnableDebugLog:
+          debug logTxt, level, flags, key, log = "del()"
       else:
         # Was modified earlier, keep the old value
         let tpl = TracerPylRef(old: jrn.old, accPath: jrn.accPath)
         tr.mptJournalPut(mpt, key, tpl)
         when EnableDebugLog:
-          debug logTxt, level, flags, key, log="put()", data=($tpl)
+          debug logTxt, level, flags, key, log = "put()", data = ($tpl)
 
-      if LEAST_FREE_VID <= root.distinctBase:
-        tr.mptJournalAcountUpdate(mpt, accPath)
+    if LEAST_FREE_VID <= root.distinctBase:
+      tr.mptJournalAcountUpdate(mpt, accPath)
 
-      ok deleted
+    ok()
 
-  tracerApi.delTree =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         accPath: PathID;
-           ): Result[void,(VertexID,AristoError)] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace delTree"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
-
-      # TODO: collect all paths on this tree
-      var deletedRows: seq[(LeafTie,LeafPayload)]
-
-      # Delete from DB
-      api.delTree(mpt, root, accPath).isOkOr:
-        when EnableDebugLog:
-          debug logTxt, level, flags, error
-        return err(error)
-
-      # Update journal
-      for (key,pyl) in deletedRows:
-        let jrn = tr.mptJournalGet(mpt, key)
-        if jrn.isNil:
-          let tpl = TracerPylRef(old: pyl, accPath: accPath)
-          tr.mptJournalPut(mpt, key, tpl)
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, log="put()", data=($tpl)
-        elif jrn.old.isNil:
-          # Was just added earlier
-          tr.mptJournalDel(mpt, key) # Undo earlier stuff
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, log="del()"
-        else:
-          # Was modified earlier, keep the old value
-          let tpl = TracerPylRef(old: jrn.old, accPath: jrn.accPath)
-          tr.mptJournalPut(mpt, key, tpl)
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, log="put()", data=($tpl)
-
-      if LEAST_FREE_VID <= root.distinctBase:
-        tr.mptJournalAcountUpdate(mpt, accPath)
-
-      ok()
-
-  tracerApi.merge =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-         data: openArray[byte];
-         accPath: PathID;
-           ): Result[bool,AristoError] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace merge"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
+  tracerApi.merge = proc(
+      mpt: AristoDbRef,
+      root: VertexID,
+      path: openArray[byte],
+      data: openArray[byte],
+      accPath: PathID,
+  ): Result[bool, AristoError] =
+    when EnableDebugLog:
+      const logTxt = "trace merge"
       let
-        key = leafTie(root, path).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, root, path=path.toStr, error=error[1]
-          return err(error[1])
-
-        # Create journal entry, `pType` same as generated by `merge()`
-        tpl = TracerPylRef(
-          accPath: accPath,
-          cur:     LeafPayload(pType: RawData, rawBlob: @data))
-
-      # Update journal
-      let jrn = tr.mptJournalGet(mpt, key)
-      if jrn.isNil:
-        # Find current entry on the DB
-        let rc = api.fetchPayload(mpt, root, path)
-        if rc.isOk:
-          tpl.old = rc.value
-        elif rc.error[1] != FetchPathNotFound:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, error=rc.error[1]
-          return err(rc.error[1])
-      elif not jrn.old.isNil:
-        tpl.old = jrn.old
-        tpl.accPath = jrn.accPath
-
-      # Merge on DB
-      let merged = api.merge(mpt, root, path, data, accPath).valueOr:
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
+    let
+      key = leafTie(root, path).valueOr:
         when EnableDebugLog:
-          debug logTxt, level, flags, key, accPath, error
-        return err(error)
+          debug logTxt, level, flags, root, path = path.toStr, error = error[1]
+        return err(error[1])
 
-      if LEAST_FREE_VID <= root.distinctBase:
-        tr.mptJournalAcountUpdate(mpt, accPath)
+      # Create journal entry, `pType` same as generated by `merge()`
+      tpl =
+        TracerPylRef(accPath: accPath, cur: LeafPayload(pType: RawData, rawBlob: @data))
 
-      tr.mptJournalPut(mpt, key, tpl)
+    # Update journal
+    let jrn = tr.mptJournalGet(mpt, key)
+    if jrn.isNil:
+      # Find current entry on the DB
+      let rc = api.fetchPayload(mpt, root, path)
+      if rc.isOk:
+        tpl.old = rc.value
+      elif rc.error[1] != FetchPathNotFound:
+        when EnableDebugLog:
+          debug logTxt, level, flags, key, error = rc.error[1]
+        return err(rc.error[1])
+    elif not jrn.old.isNil:
+      tpl.old = jrn.old
+      tpl.accPath = jrn.accPath
+
+    # Merge on DB
+    let merged = api.merge(mpt, root, path, data, accPath).valueOr:
       when EnableDebugLog:
-        debug logTxt, level, flags, key, accPath, log="put()", data=($tpl)
+        debug logTxt, level, flags, key, accPath, error
+      return err(error)
 
-      ok merged
+    if LEAST_FREE_VID <= root.distinctBase:
+      tr.mptJournalAcountUpdate(mpt, accPath)
 
-  tracerApi.mergePayload =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-         pyl: LeafPayload;
-         accPath = VOID_PATH_ID;
-           ): Result[bool,AristoError] =
-      when EnableDebugLog:
-        const
-          logTxt = "trace mergePayload"
-        let
-          level = tr.inst.len - 1
-          flags = tr.inst[^1].flags
+    tr.mptJournalPut(mpt, key, tpl)
+    when EnableDebugLog:
+      debug logTxt, level, flags, key, accPath, log = "put()", data = ($tpl)
+
+    ok merged
+
+  tracerApi.mergePayload = proc(
+      mpt: AristoDbRef,
+      root: VertexID,
+      path: openArray[byte],
+      pyl: LeafPayload,
+      accPath = VOID_PATH_ID,
+  ): Result[bool, AristoError] =
+    when EnableDebugLog:
+      const logTxt = "trace mergePayload"
       let
-        key = leafTie(root, path).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, root, path=path.toStr, error=error[1]
-          return err(error[1])
-
-        # Create serialised payload
-        blob = pyl.blobify(api, mpt).valueOr:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, error=error[1]
-          return err(error[1])
-
-        # Create journal entry
-        tpl = TracerPylRef(
-          accPath: accPath,
-          cur:     pyl,
-          curBlob: blob)
-
-      # Update journal
-      let jrn = tr.mptJournalGet(mpt, key)
-      if jrn.isNil:
-        # Find current entry on the DB
-        let rc = api.fetchPayload(mpt, root, path)
-        if rc.isOk:
-          tpl.old = rc.value
-        elif rc.error[1] != FetchPathNotFound:
-          when EnableDebugLog:
-            debug logTxt, level, flags, key, error=rc.error[1]
-          return err(rc.error[1])
-      elif not jrn.old.isNil:
-        tpl.old = jrn.old
-        tpl.accPath = jrn.accPath
-
-      # Merge on DB
-      let merged = api.mergePayload(mpt, root, path, pyl, accPath).valueOr:
+        level = tr.inst.len - 1
+        flags = tr.inst[^1].flags
+    let
+      key = leafTie(root, path).valueOr:
         when EnableDebugLog:
-          debug logTxt, level, flags, key, accPath, error
-        return err(error)
+          debug logTxt, level, flags, root, path = path.toStr, error = error[1]
+        return err(error[1])
 
-      if LEAST_FREE_VID <= root.distinctBase:
-        tr.mptJournalAcountUpdate(mpt, accPath)
+      # Create serialised payload
+      blob = pyl.blobify(api, mpt).valueOr:
+        when EnableDebugLog:
+          debug logTxt, level, flags, key, error = error[1]
+        return err(error[1])
 
-      tr.mptJournalPut(mpt, key, tpl)
+      # Create journal entry
+      tpl = TracerPylRef(accPath: accPath, cur: pyl, curBlob: blob)
+
+    # Update journal
+    let jrn = tr.mptJournalGet(mpt, key)
+    if jrn.isNil:
+      # Find current entry on the DB
+      let rc = api.fetchPayload(mpt, root, path)
+      if rc.isOk:
+        tpl.old = rc.value
+      elif rc.error[1] != FetchPathNotFound:
+        when EnableDebugLog:
+          debug logTxt, level, flags, key, error = rc.error[1]
+        return err(rc.error[1])
+    elif not jrn.old.isNil:
+      tpl.old = jrn.old
+      tpl.accPath = jrn.accPath
+
+    # Merge on DB
+    let merged = api.mergePayload(mpt, root, path, pyl, accPath).valueOr:
       when EnableDebugLog:
-        debug logTxt, level, flags, key, accPath, log="put()", data=($tpl)
+        debug logTxt, level, flags, key, accPath, error
+      return err(error)
 
-      ok merged
+    if LEAST_FREE_VID <= root.distinctBase:
+      tr.mptJournalAcountUpdate(mpt, accPath)
 
-  result = TraceAdbRecorder(
-    base:     base,
-    savedApi: api)
+    tr.mptJournalPut(mpt, key, tpl)
+    when EnableDebugLog:
+      debug logTxt, level, flags, key, accPath, log = "put()", data = ($tpl)
+
+    ok merged
+
+  result = TraceAdbRecorder(base: base, savedApi: api)
   base.api = tracerApi
 
   assert result.savedApi != base.api
@@ -880,19 +796,19 @@ proc topInst*(tr: TraceRecorderRef): TracerLogInstRef =
   doAssert 0 < tr.inst.len
   tr.inst[^1]
 
-func kLog*(inst: TracerLogInstRef): TableRef[Blob,Blob] =
+func kLog*(inst: TracerLogInstRef): TableRef[Blob, Blob] =
   ## Export `Kvt` journal
-  result = newTable[Blob,Blob]()
-  for (_,kvtTab) in inst.kvtJournal.pairs:
-    for (key,tbl) in kvtTab.pairs:
+  result = newTable[Blob, Blob]()
+  for (_, kvtTab) in inst.kvtJournal.pairs:
+    for (key, tbl) in kvtTab.pairs:
       if tbl.cur.len != 0:
         result[key] = tbl.cur
 
-func mLog*(inst: TracerLogInstRef): TableRef[LeafTie,LeafPayload] =
+func mLog*(inst: TracerLogInstRef): TableRef[LeafTie, LeafPayload] =
   ## Export `mpt` journal
-  result = newTable[LeafTie,LeafPayload]()
-  for (_,mptTab) in inst.mptJournal.pairs:
-    for (key,tpl) in mptTab.pairs:
+  result = newTable[LeafTie, LeafPayload]()
+  for (_, mptTab) in inst.mptJournal.pairs:
+    for (key, tpl) in mptTab.pairs:
       if not tpl.cur.isNil:
         result[key] = tpl.cur
 
@@ -907,10 +823,7 @@ proc pop*(tr: TraceRecorderRef): bool =
     tr.popRestore()
     return true
 
-proc push*(
-    tr: TraceRecorderRef;
-    flags: set[CoreDbCaptFlags];
-      ) =
+proc push*(tr: TraceRecorderRef, flags: set[CoreDbCaptFlags]) =
   ## Push overlay logger instance
   doAssert 0 < tr.inst.len
   tr.pushNew flags
@@ -920,11 +833,11 @@ proc push*(
 # ------------------------------------------------------------------------------
 
 proc init*(
-    tr: TraceRecorderRef;         # Recorder desc to initialise
-    kBase: KvtBaseRef;            # `Kvt` base descriptor
-    aBase: AristoBaseRef;         # `Aristo` base descriptor
-    flags: set[CoreDbCaptFlags];
-      ) =
+    tr: TraceRecorderRef, # Recorder desc to initialise
+    kBase: KvtBaseRef, # `Kvt` base descriptor
+    aBase: AristoBaseRef, # `Aristo` base descriptor
+    flags: set[CoreDbCaptFlags],
+) =
   ## Constructor, create initial/base tracer descriptor
   tr.inst.setLen(0)
   tr.pushNew flags

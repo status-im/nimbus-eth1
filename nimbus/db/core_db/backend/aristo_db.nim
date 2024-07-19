@@ -21,7 +21,7 @@ import
 # Public constructor and helper
 # ------------------------------------------------------------------------------
 
-proc create*(dbType: CoreDbType; kvt: KvtDbRef; mpt: AristoDbRef): CoreDbRef =
+proc create*(dbType: CoreDbType, kvt: KvtDbRef, mpt: AristoDbRef): CoreDbRef =
   ## Constructor helper
   var db = CoreDbRef(dbType: dbType)
   db.defCtx = db.bless CoreDbCtxRef(mpt: mpt, kvt: kvt)
@@ -43,13 +43,13 @@ proc create*(dbType: CoreDbType; kvt: KvtDbRef; mpt: AristoDbRef): CoreDbRef =
 
 proc newAristoMemoryCoreDbRef*(): CoreDbRef =
   result = AristoDbMemory.create(
-    KvtDbRef.init(use_kvt.MemBackendRef),
-    AristoDbRef.init(use_ari.MemBackendRef))
+    KvtDbRef.init(use_kvt.MemBackendRef), AristoDbRef.init(use_ari.MemBackendRef)
+  )
 
 proc newAristoVoidCoreDbRef*(): CoreDbRef =
   AristoDbVoid.create(
-    KvtDbRef.init(use_kvt.VoidBackendRef),
-    AristoDbRef.init(use_ari.VoidBackendRef))
+    KvtDbRef.init(use_kvt.VoidBackendRef), AristoDbRef.init(use_ari.VoidBackendRef)
+  )
 
 # ------------------------------------------------------------------------------
 # End

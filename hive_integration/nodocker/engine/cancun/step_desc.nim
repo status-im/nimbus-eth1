@@ -8,10 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ../types,
-  ../test_env,
-  ./helpers
+import ../types, ../test_env, ./helpers
 
 type
   CancunTestContext* = object
@@ -19,8 +16,7 @@ type
     txPool*: TestBlobTxPool
 
   # Interface to represent a single step in a test vector
-  TestStep* = ref object of RootRef
-    # Executes the step
+  TestStep* = ref object of RootRef # Executes the step
 
   # Contains the base spec for all cancun tests.
   CancunSpec* = ref object of BaseSpec

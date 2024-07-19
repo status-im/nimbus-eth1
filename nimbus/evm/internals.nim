@@ -17,18 +17,9 @@ import
   ./stack,
   ./memory
 
-export
-  utils_numeric,
-  code_stream,
-  gas_costs,
-  gas_meter,
-  op_codes,
-  memory,
-  stack
+export utils_numeric, code_stream, gas_costs, gas_meter, op_codes, memory, stack
 
 when defined(evmc_enabled):
-  import
-    ./interpreter/evmc_gas_costs
+  import ./interpreter/evmc_gas_costs
 
-  export
-    evmc_gas_costs
+  export evmc_gas_costs

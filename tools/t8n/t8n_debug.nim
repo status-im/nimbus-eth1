@@ -17,7 +17,8 @@ import
   ../../nimbus/beacon/web3_eth_conv
 
 const
-  testFile = "tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4844_blobs/fork_transition_excess_blob_gas.json"
+  testFile =
+    "tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4844_blobs/fork_transition_excess_blob_gas.json"
   #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcRandomBlockhashTest/randomStatetest224BC.json"
   #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcRandomBlockhashTest/randomStatetest631BC.json"
   #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcStateTests/blockhashTests.json"
@@ -92,17 +93,16 @@ BCTResult.useDefaultReaderIn BCTConv
 BCTEnv.useDefaultWriterIn BCTConv
 BCTInput.useDefaultWriterIn BCTConv
 
-proc readValue*(r: var JsonReader[BCTConv], val: var BCTFile)
-       {.gcsafe, raises: [IOError, SerializationError].} =
+proc readValue*(
+    r: var JsonReader[BCTConv], val: var BCTFile
+) {.gcsafe, raises: [IOError, SerializationError].} =
   r.parseObject(key):
-    val.cases.add BCTCase(
-      name: key,
-      data: r.readValue(BCTData)
-    )
+    val.cases.add BCTCase(name: key, data: r.readValue(BCTData))
 
-proc writeValue*(w: var JsonWriter[BCTConv], v: BCTHashes)
-      {.gcsafe, raises: [IOError].} =
-  w.writeObject():
+proc writeValue*(
+    w: var JsonWriter[BCTConv], v: BCTHashes
+) {.gcsafe, raises: [IOError].} =
+  w.writeObject:
     for x in v.hashes:
       w.writeField($x.number, x.hash)
 
@@ -116,12 +116,12 @@ proc toBctEnv(parentBlock, currentBlock: EthBlock, hashes: BCTHashes): BCTEnv =
     parent = parentBlock.header
     current = currentBlock.header
 
-  result.currentCoinbase   = w3Addr(current.coinbase)
-  result.currentGasLimit   = w3Qty(current.gasLimit)
-  result.currentNumber     = w3Qty(current.number)
-  result.currentTimestamp  = Opt.some w3Qty(current.timestamp)
+  result.currentCoinbase = w3Addr(current.coinbase)
+  result.currentGasLimit = w3Qty(current.gasLimit)
+  result.currentNumber = w3Qty(current.number)
+  result.currentTimestamp = Opt.some w3Qty(current.timestamp)
   result.currentDifficulty = current.difficulty
-  result.currentRandom     = Opt.some w3Hash(current.mixHash)
+  result.currentRandom = Opt.some w3Hash(current.mixHash)
 
   # t8n should able to calculate these values itself if not supplied
   #result.currentBaseFee        = current.baseFeePerGas
@@ -129,21 +129,21 @@ proc toBctEnv(parentBlock, currentBlock: EthBlock, hashes: BCTHashes): BCTEnv =
   #result.currentExcessBlobGas  = w3Qty(current.excessBlobGas)
 
   result.parentBeaconBlockRoot = w3Hash(current.parentBeaconBlockRoot)
-  result.parentDifficulty      = Opt.some parent.difficulty
-  result.parentTimestamp       = Opt.some w3Qty(parent.timestamp)
-  result.parentUncleHash       = Opt.some w3Hash(parent.ommersHash)
+  result.parentDifficulty = Opt.some parent.difficulty
+  result.parentTimestamp = Opt.some w3Qty(parent.timestamp)
+  result.parentUncleHash = Opt.some w3Hash(parent.ommersHash)
 
-  result.parentBaseFee       = parent.baseFeePerGas
-  result.parentGasUsed       = Opt.some w3Qty(parent.gasUsed)
-  result.parentGasLimit      = Opt.some w3Qty(parent.gasLimit)
-  result.parentBlobGasUsed   = w3Qty(parent.blobGasUsed)
+  result.parentBaseFee = parent.baseFeePerGas
+  result.parentGasUsed = Opt.some w3Qty(parent.gasUsed)
+  result.parentGasLimit = Opt.some w3Qty(parent.gasLimit)
+  result.parentBlobGasUsed = w3Qty(parent.blobGasUsed)
   result.parentExcessBlobGas = w3Qty(parent.excessBlobGas)
-  result.withdrawals         = w3Withdrawals(currentBlock.withdrawals)
-  result.blockHashes         = hashes
+  result.withdrawals = w3Withdrawals(currentBlock.withdrawals)
+  result.blockHashes = hashes
 
-func toInput(prevAlloc: JsonString,
-             prevBlock, currBlock: EthBlock,
-             hashes: BCTHashes): string =
+func toInput(
+    prevAlloc: JsonString, prevBlock, currBlock: EthBlock, hashes: BCTHashes
+): string =
   let input = BCTInput(
     alloc: prevAlloc,
     env: toBctEnv(prevBlock, currBlock, hashes),
@@ -153,14 +153,12 @@ func toInput(prevAlloc: JsonString,
 
 func collectHashes(genesis: EthBlock, blocks: openArray[EthBlock]): BCTHashes =
   result.hashes.add BCTHash(
-    number: w3Qty(genesis.header.number),
-    hash: w3Hash(rlpHash(genesis.header)),
+    number: w3Qty(genesis.header.number), hash: w3Hash(rlpHash(genesis.header))
   )
 
   for blk in blocks:
     result.hashes.add BCTHash(
-      number: w3Qty(blk.header.number),
-      hash: w3Hash(rlpHash(blk.header)),
+      number: w3Qty(blk.header.number), hash: w3Hash(rlpHash(blk.header))
     )
 
 func eth(n: int): UInt256 {.compileTime.} =
@@ -172,27 +170,26 @@ const
   eth2 = 2.eth
   eth0 = 0.u256
 
-const
-  BlockRewards = [
-    (eth5, "Frontier"),
-    (eth5, "Homestead"),
-    (eth5, "DAOFork"),
-    (eth5, "Tangerine"),
-    (eth5, "Spurious"),
-    (eth3, "Byzantium"),
-    (eth2, "Constantinople"),
-    (eth2, "Petersburg"),
-    (eth2, "Istanbul"),
-    (eth2, "MuirGlacier"),
-    (eth2, "Berlin"),
-    (eth2, "London"),
-    (eth2, "ArrowGlacier"),
-    (eth2, "GrayGlacier"),
-    (eth0, "MergeFork"),
-    (eth0, "Shanghai"),
-    (eth0, "Cancun"),
-    (eth0, "Prague"),
-  ]
+const BlockRewards = [
+  (eth5, "Frontier"),
+  (eth5, "Homestead"),
+  (eth5, "DAOFork"),
+  (eth5, "Tangerine"),
+  (eth5, "Spurious"),
+  (eth3, "Byzantium"),
+  (eth2, "Constantinople"),
+  (eth2, "Petersburg"),
+  (eth2, "Istanbul"),
+  (eth2, "MuirGlacier"),
+  (eth2, "Berlin"),
+  (eth2, "London"),
+  (eth2, "ArrowGlacier"),
+  (eth2, "GrayGlacier"),
+  (eth0, "MergeFork"),
+  (eth0, "Shanghai"),
+  (eth0, "Cancun"),
+  (eth0, "Prague"),
+]
 
 func blockReward(network: string): string =
   for z in BlockRewards:
@@ -202,7 +199,8 @@ func blockReward(network: string): string =
 proc BCTMain() =
   try:
     let bctFile = BCTConv.loadFile(testFile, BCTFile, allowUnknownFields = true)
-    let cmd = "t8n --output.alloc stdout --output.result stdout --input.alloc stdin --input.env stdin --input.txs stdin --state.fork "
+    let cmd =
+      "t8n --output.alloc stdout --output.result stdout --input.alloc stdin --input.env stdin --input.txs stdin --state.fork "
 
     for c in bctFile.cases:
       var
@@ -231,13 +229,17 @@ proc BCTMain() =
 
         let
           parsedOutput = BCTConv.decode(output, BCTOutput, allowUnknownFields = true)
-          stateRoot    = ethHash(parsedOutput.result.stateRoot)
+          stateRoot = ethHash(parsedOutput.result.stateRoot)
 
         debugEcho "BlockNumber, EXITCODE, resultStateRoot, expectedStateRoot, status: ",
-          currBlock.header.number, ", ",
-          exitCode, ", ",
-          stateRoot, ", ",
-          currBlock.header.stateRoot, ", ",
+          currBlock.header.number,
+          ", ",
+          exitCode,
+          ", ",
+          stateRoot,
+          ", ",
+          currBlock.header.stateRoot,
+          ", ",
           if stateRoot != currBlock.header.stateRoot: "FAILED" else: "OK"
 
         if stateRoot != currBlock.header.stateRoot:
@@ -247,7 +249,6 @@ proc BCTMain() =
           quit(QuitFailure)
 
         prevAlloc = parsedOutput.alloc
-
   except SerializationError as exc:
     debugEcho "Something error"
     debugEcho exc.formatMsg(testFile)

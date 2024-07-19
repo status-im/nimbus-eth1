@@ -10,11 +10,9 @@
 
 {.push raises: [].}
 
-import
-  results
+import results
 
-export
-  results
+export results
 
 type
   EvmErrorCode* {.pure.} = enum
@@ -43,31 +41,19 @@ type
   EvmResult*[T] = Result[T, EvmErrorObj]
 
 template gasErr*(errCode): auto =
-  EvmErrorObj(
-    code: EvmErrorCode.errCode,
-  )
+  EvmErrorObj(code: EvmErrorCode.errCode)
 
 template memErr*(errCode): auto =
-  EvmErrorObj(
-    code: EvmErrorCode.errCode,
-  )
+  EvmErrorObj(code: EvmErrorCode.errCode)
 
 template stackErr*(errCode): auto =
-  EvmErrorObj(
-    code: EvmErrorCode.errCode,
-  )
+  EvmErrorObj(code: EvmErrorCode.errCode)
 
 template prcErr*(errCode): auto =
-  EvmErrorObj(
-    code: EvmErrorCode.errCode,
-  )
+  EvmErrorObj(code: EvmErrorCode.errCode)
 
 template opErr*(errCode): auto =
-  EvmErrorObj(
-    code: EvmErrorCode.errCode,
-  )
+  EvmErrorObj(code: EvmErrorCode.errCode)
 
 template evmErr*(errCode): auto =
-  EvmErrorObj(
-    code: EvmErrorCode.errCode,
-  )
+  EvmErrorObj(code: EvmErrorCode.errCode)

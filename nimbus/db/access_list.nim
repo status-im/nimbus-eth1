@@ -8,10 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/[tables, sets],
-  stint,
-  eth/common
+import std/[tables, sets], stint, eth/common
 
 type
   SlotSet = HashSet[UInt256]
@@ -71,10 +68,7 @@ proc clear*(ac: var AccessList) {.inline.} =
 
 func getAccessList*(ac: AccessList): common.AccessList =
   for address, slots in ac.slots:
-    result.add common.AccessPair(
-      address    : address,
-      storageKeys: slots.toStorageKeys,
-    )
+    result.add common.AccessPair(address: address, storageKeys: slots.toStorageKeys)
 
 func equal*(ac: AccessList, other: var AccessList): bool =
   if ac.slots.len != other.slots.len:

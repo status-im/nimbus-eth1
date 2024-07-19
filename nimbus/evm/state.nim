@@ -27,13 +27,14 @@ func determineFork(vmState: BaseVMState): EVMFork =
   vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
 
 proc init(
-      self:         BaseVMState;
-      ac:           LedgerRef,
-      parent:       BlockHeader;
-      blockCtx:     BlockContext;
-      com:          CommonRef;
-      tracer:       TracerRef,
-      flags:        set[VMFlag] = self.flags) =
+    self: BaseVMState,
+    ac: LedgerRef,
+    parent: BlockHeader,
+    blockCtx: BlockContext,
+    com: CommonRef,
+    tracer: TracerRef,
+    flags: set[VMFlag] = self.flags,
+) =
   ## Initialisation helper
   assign(self.parent, parent)
   self.blockCtx = blockCtx
@@ -46,34 +47,32 @@ proc init(
   self.fork = self.determineFork
   self.gasCosts = self.fork.forkToSchedule
 
-func blockCtx(com: CommonRef, header: BlockHeader):
-                BlockContext =
+func blockCtx(com: CommonRef, header: BlockHeader): BlockContext =
   BlockContext(
-    timestamp    : header.timestamp,
-    gasLimit     : header.gasLimit,
+    timestamp: header.timestamp,
+    gasLimit: header.gasLimit,
     baseFeePerGas: header.baseFeePerGas,
-    prevRandao   : header.prevRandao,
-    difficulty   : header.difficulty,
-    coinbase     : header.coinbase,
+    prevRandao: header.prevRandao,
+    difficulty: header.difficulty,
+    coinbase: header.coinbase,
     excessBlobGas: header.excessBlobGas.get(0'u64),
   )
 
 # --------------
 
-proc `$`*(vmState: BaseVMState): string
-    {.gcsafe, raises: [].} =
+proc `$`*(vmState: BaseVMState): string {.gcsafe, raises: [].} =
   if vmState.isNil:
     result = "nil"
   else:
-    result = &"VMState:"&
-             &"\n  blockNumber: {vmState.parent.number + 1}"
+    result = &"VMState:" & &"\n  blockNumber: {vmState.parent.number + 1}"
 
 proc new*(
-      T:        type BaseVMState;
-      parent:   BlockHeader;     ## parent header, account sync position
-      blockCtx: BlockContext;
-      com:      CommonRef;       ## block chain config
-      tracer:   TracerRef = nil): T =
+    T: type BaseVMState,
+    parent: BlockHeader, ## parent header, account sync position
+    blockCtx: BlockContext,
+    com: CommonRef, ## block chain config
+    tracer: TracerRef = nil,
+): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -83,17 +82,19 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac       = LedgerRef.init(com.db, parent.stateRoot),
-    parent   = parent,
+    ac = LedgerRef.init(com.db, parent.stateRoot),
+    parent = parent,
     blockCtx = blockCtx,
-    com      = com,
-    tracer   = tracer)
+    com = com,
+    tracer = tracer,
+  )
 
-proc reinit*(self:     BaseVMState;     ## Object descriptor
-             parent:   BlockHeader;     ## parent header, account sync pos.
-             blockCtx: BlockContext;
-             linear: bool
-             ): bool =
+proc reinit*(
+    self: BaseVMState, ## Object descriptor
+    parent: BlockHeader, ## parent header, account sync pos.
+    blockCtx: BlockContext,
+    linear: bool,
+): bool =
   ## Re-initialise state descriptor. The `LedgerRef` database is
   ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
   ## already. Accumulated state data are reset. When linear, we assume that
@@ -106,58 +107,58 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   if self.stateDB.isTopLevelClean:
     let
       tracer = self.tracer
-      com    = self.com
-      db     = com.db
-      ac     = if linear or self.stateDB.rootHash == parent.stateRoot: self.stateDB
-               else: LedgerRef.init(db, parent.stateRoot)
-      flags  = self.flags
+      com = self.com
+      db = com.db
+      ac =
+        if linear or self.stateDB.rootHash == parent.stateRoot:
+          self.stateDB
+        else:
+          LedgerRef.init(db, parent.stateRoot)
+      flags = self.flags
     self[].reset
     self.init(
-      ac       = ac,
-      parent   = parent,
+      ac = ac,
+      parent = parent,
       blockCtx = blockCtx,
-      com      = com,
-      tracer   = tracer,
-      flags    = flags)
+      com = com,
+      tracer = tracer,
+      flags = flags,
+    )
     return true
   # else: false
 
-proc reinit*(self:   BaseVMState; ## Object descriptor
-             parent: BlockHeader; ## parent header, account sync pos.
-             header: BlockHeader; ## header with tx environment data fields
-             linear: bool
-             ): bool =
+proc reinit*(
+    self: BaseVMState, ## Object descriptor
+    parent: BlockHeader, ## parent header, account sync pos.
+    header: BlockHeader, ## header with tx environment data fields
+    linear: bool,
+): bool =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
   ## cache and the `header` is used as a container to pass the `timestamp`,
   ## `gasLimit`, and `fee` values.
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
-  self.reinit(
-    parent   = parent,
-    blockCtx = self.com.blockCtx(header),
-    linear = linear
-    )
+  self.reinit(parent = parent, blockCtx = self.com.blockCtx(header), linear = linear)
 
-proc reinit*(self:      BaseVMState; ## Object descriptor
-             header:    BlockHeader; ## header with tx environment data fields
-             ): bool =
+proc reinit*(
+    self: BaseVMState, ## Object descriptor
+    header: BlockHeader, ## header with tx environment data fields
+): bool =
   ## This is a variant of the `reinit()` function above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `update()` variant, above.
   var parent: BlockHeader
   self.com.db.getBlockHeader(header.parentHash, parent) and
-    self.reinit(
-      parent    = parent,
-      header    = header,
-      linear    = false)
+    self.reinit(parent = parent, header = header, linear = false)
 
 proc init*(
-      self:   BaseVMState;     ## Object descriptor
-      parent: BlockHeader;     ## parent header, account sync position
-      header: BlockHeader;     ## header with tx environment data fields
-      com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil) =
+    self: BaseVMState, ## Object descriptor
+    parent: BlockHeader, ## parent header, account sync position
+    header: BlockHeader, ## header with tx environment data fields
+    com: CommonRef, ## block chain config
+    tracer: TracerRef = nil,
+) =
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -166,18 +167,20 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac       = LedgerRef.init(com.db, parent.stateRoot),
-    parent   = parent,
+    ac = LedgerRef.init(com.db, parent.stateRoot),
+    parent = parent,
     blockCtx = com.blockCtx(header),
-    com      = com,
-    tracer   = tracer)
+    com = com,
+    tracer = tracer,
+  )
 
 proc new*(
-      T:      type BaseVMState;
-      parent: BlockHeader;     ## parent header, account sync position
-      header: BlockHeader;     ## header with tx environment data fields
-      com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil): T =
+    T: type BaseVMState,
+    parent: BlockHeader, ## parent header, account sync position
+    header: BlockHeader, ## header with tx environment data fields
+    com: CommonRef, ## block chain config
+    tracer: TracerRef = nil,
+): T =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -185,44 +188,34 @@ proc new*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   new result
-  result.init(
-    parent = parent,
-    header = header,
-    com    = com,
-    tracer = tracer)
+  result.init(parent = parent, header = header, com = com, tracer = tracer)
 
 proc new*(
-      T:      type BaseVMState;
-      header: BlockHeader;     ## header with tx environment data fields
-      com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil): EvmResult[T] =
+    T: type BaseVMState,
+    header: BlockHeader, ## header with tx environment data fields
+    com: CommonRef, ## block chain config
+    tracer: TracerRef = nil,
+): EvmResult[T] =
   ## This is a variant of the `new()` constructor above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `new()` variant, above.
   var parent: BlockHeader
   if com.db.getBlockHeader(header.parentHash, parent):
-    ok(BaseVMState.new(
-      parent = parent,
-      header = header,
-      com    = com,
-      tracer = tracer))
+    ok(BaseVMState.new(parent = parent, header = header, com = com, tracer = tracer))
   else:
     err(evmErr(EvmHeaderNotFound))
 
 proc init*(
-      vmState: BaseVMState;
-      header:  BlockHeader;     ## header with tx environment data fields
-      com:     CommonRef;       ## block chain config
-      tracer:  TracerRef = nil): bool =
+    vmState: BaseVMState,
+    header: BlockHeader, ## header with tx environment data fields
+    com: CommonRef, ## block chain config
+    tracer: TracerRef = nil,
+): bool =
   ## Variant of `new()` which does not throw an exception on a dangling
   ## `BlockHeader` parent hash reference.
   var parent: BlockHeader
   if com.db.getBlockHeader(header.parentHash, parent):
-    vmState.init(
-      parent = parent,
-      header = header,
-      com    = com,
-      tracer = tracer)
+    vmState.init(parent = parent, header = header, com = com, tracer = tracer)
     return true
 
 func coinbase*(vmState: BaseVMState): EthAddress =
@@ -244,7 +237,8 @@ func baseFeePerGas*(vmState: BaseVMState): UInt256 =
   vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
-    vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.gcsafe, base.} =
+    vmState: BaseVMState, blockNumber: BlockNumber
+): Hash256 {.gcsafe, base.} =
   let db = vmState.com.db
   try:
     var blockHash: Hash256
@@ -270,15 +264,19 @@ proc status*(vmState: BaseVMState): bool =
   ExecutionOK in vmState.flags
 
 proc `status=`*(vmState: BaseVMState, status: bool) =
- if status: vmState.flags.incl ExecutionOK
- else: vmState.flags.excl ExecutionOK
+  if status:
+    vmState.flags.incl ExecutionOK
+  else:
+    vmState.flags.excl ExecutionOK
 
 proc collectWitnessData*(vmState: BaseVMState): bool =
   CollectWitnessData in vmState.flags
 
 proc `collectWitnessData=`*(vmState: BaseVMState, status: bool) =
-  if status: vmState.flags.incl CollectWitnessData
-  else: vmState.flags.excl CollectWitnessData
+  if status:
+    vmState.flags.incl CollectWitnessData
+  else:
+    vmState.flags.excl CollectWitnessData
 
 func tracingEnabled*(vmState: BaseVMState): bool =
   vmState.tracer.isNil.not
@@ -291,56 +289,96 @@ proc captureTxEnd*(vmState: BaseVMState, restGas: GasInt) =
   if vmState.tracingEnabled:
     vmState.tracer.captureTxEnd(restGas)
 
-proc captureStart*(vmState: BaseVMState, comp: Computation,
-                   sender: EthAddress, to: EthAddress,
-                   create: bool, input: openArray[byte],
-                   gasLimit: GasInt, value: UInt256) =
+proc captureStart*(
+    vmState: BaseVMState,
+    comp: Computation,
+    sender: EthAddress,
+    to: EthAddress,
+    create: bool,
+    input: openArray[byte],
+    gasLimit: GasInt,
+    value: UInt256,
+) =
   if vmState.tracingEnabled:
     vmState.tracer.captureStart(comp, sender, to, create, input, gasLimit, value)
 
-proc captureEnd*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
-                 gasUsed: GasInt, error: Opt[string]) =
+proc captureEnd*(
+    vmState: BaseVMState,
+    comp: Computation,
+    output: openArray[byte],
+    gasUsed: GasInt,
+    error: Opt[string],
+) =
   if vmState.tracingEnabled:
     vmState.tracer.captureEnd(comp, output, gasUsed, error)
 
-proc captureEnter*(vmState: BaseVMState, comp: Computation, op: Op,
-                   sender: EthAddress, to: EthAddress,
-                   input: openArray[byte], gasLimit: GasInt,
-                   value: UInt256) =
+proc captureEnter*(
+    vmState: BaseVMState,
+    comp: Computation,
+    op: Op,
+    sender: EthAddress,
+    to: EthAddress,
+    input: openArray[byte],
+    gasLimit: GasInt,
+    value: UInt256,
+) =
   if vmState.tracingEnabled:
     vmState.tracer.captureEnter(comp, op, sender, to, input, gasLimit, value)
 
-proc captureExit*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
-                  gasUsed: GasInt, error: Opt[string]) =
+proc captureExit*(
+    vmState: BaseVMState,
+    comp: Computation,
+    output: openArray[byte],
+    gasUsed: GasInt,
+    error: Opt[string],
+) =
   if vmState.tracingEnabled:
     vmState.tracer.captureExit(comp, output, gasUsed, error)
 
-proc captureOpStart*(vmState: BaseVMState, comp: Computation, pc: int,
-                   op: Op, gas: GasInt,
-                   depth: int): int =
+proc captureOpStart*(
+    vmState: BaseVMState, comp: Computation, pc: int, op: Op, gas: GasInt, depth: int
+): int =
   if vmState.tracingEnabled:
     let fixed = vmState.gasCosts[op].kind == GckFixed
     result = vmState.tracer.captureOpStart(comp, fixed, pc, op, gas, depth)
 
-proc captureGasCost*(vmState: BaseVMState,
-                    comp: Computation,
-                    op: Op, gasCost: GasInt, gasRemaining: GasInt,
-                    depth: int) =
+proc captureGasCost*(
+    vmState: BaseVMState,
+    comp: Computation,
+    op: Op,
+    gasCost: GasInt,
+    gasRemaining: GasInt,
+    depth: int,
+) =
   let fixed = vmState.gasCosts[op].kind == GckFixed
   vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
 
-proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
-                   op: Op, gas: GasInt, refund: int64,
-                   rData: openArray[byte],
-                   depth: int, opIndex: int) =
+proc captureOpEnd*(
+    vmState: BaseVMState,
+    comp: Computation,
+    pc: int,
+    op: Op,
+    gas: GasInt,
+    refund: int64,
+    rData: openArray[byte],
+    depth: int,
+    opIndex: int,
+) =
   if vmState.tracingEnabled:
     let fixed = vmState.gasCosts[op].kind == GckFixed
     vmState.tracer.captureOpEnd(comp, fixed, pc, op, gas, refund, rData, depth, opIndex)
 
-proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
-                   op: Op, gas: GasInt, refund: int64,
-                   rData: openArray[byte],
-                   depth: int, error: Opt[string]) =
+proc captureFault*(
+    vmState: BaseVMState,
+    comp: Computation,
+    pc: int,
+    op: Op,
+    gas: GasInt,
+    refund: int64,
+    rData: openArray[byte],
+    depth: int,
+    error: Opt[string],
+) =
   if vmState.tracingEnabled:
     let fixed = vmState.gasCosts[op].kind == GckFixed
     vmState.tracer.captureFault(comp, fixed, pc, op, gas, refund, rData, depth, error)

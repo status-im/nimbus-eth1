@@ -17,44 +17,36 @@
 
 type
   UtilsErrorType* = enum
-    resetUtilsError = ##\
-      ## Default/reset value (use `utilsNoError` below rather than this valie)
-      (0, "no error")
-
-    errMissingSignature = ##\
-      ## is returned if the `extraData` header field does not seem to contain
-      ## a 65 byte secp256k1 signature.
-      "extraData 65 byte signature suffix missing"
-
-    errSigPrefixError = ##\
-      ## Unsupported value of the (R,S) signature prefix V.
-      "unsupported (R,S) signature prefix V value"
-
-    errSkSigResult = ##\
-      ## eth/keys subsytem error: signature
-      "signature error"
-
-    errSkPubKeyResult = ##\
-      ## eth/keys subsytem error: public key
-      "public key error"
-
-    errItemNotFound = ##\
-      ## database lookup failed
-      "not found"
-
-    errTxEncError = ##\
-      ## TRansaction encoding error
-      "tx enc error"
+    ##\
+    ## Default/reset value (use `utilsNoError` below rather than this valie)
+    resetUtilsError = (0, "no error")
+    ##\
+    ## is returned if the `extraData` header field does not seem to contain
+    ## a 65 byte secp256k1 signature.
+    errMissingSignature = "extraData 65 byte signature suffix missing"
+    ##\
+    ## Unsupported value of the (R,S) signature prefix V.
+    errSigPrefixError = "unsupported (R,S) signature prefix V value"
+    ##\
+    ## eth/keys subsytem error: signature
+    errSkSigResult = "signature error"
+    ##\
+    ## eth/keys subsytem error: public key
+    errSkPubKeyResult = "public key error"
+    ##\
+    ## database lookup failed
+    errItemNotFound = "not found"
+    ##\
+    ## TRansaction encoding error
+    errTxEncError = "tx enc error"
 
   UtilsError* = ##\
     ## Error message, tinned component + explanatory text (if any)
-    (UtilsErrorType,string)
+    (UtilsErrorType, string)
 
-
-const
-  utilsNoError* = ##\
-    ## No-error constant
-    (resetUtilsError, "")
+const utilsNoError* = ##\
+  ## No-error constant
+  (resetUtilsError, "")
 
 proc `$`*(e: UtilsError): string =
   ## Join text fragments

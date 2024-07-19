@@ -34,35 +34,30 @@ import
   stint
 
 when not defined(evmc_enabled):
-  import
-    ../../state,
-    ../../../db/ledger
+  import ../../state, ../../../db/ledger
 else:
-  import
-    stew/saturation_arith
+  import stew/saturation_arith
 
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
 
-type
-  LocalParams = object
-    gas:             UInt256
-    value:           UInt256
-    codeAddress:     EthAddress
-    sender:          EthAddress
-    memInPos:        int
-    memInLen:        int
-    memOutPos:       int
-    memOutLen:       int
-    flags:           MsgFlags
-    memOffset:       int
-    memLength:       int
-    contractAddress: EthAddress
-    gasCallEIP2929:  GasInt
+type LocalParams = object
+  gas: UInt256
+  value: UInt256
+  codeAddress: EthAddress
+  sender: EthAddress
+  memInPos: int
+  memInLen: int
+  memOutPos: int
+  memOutLen: int
+  flags: MsgFlags
+  memOffset: int
+  memLength: int
+  contractAddress: EthAddress
+  gasCallEIP2929: GasInt
 
-
-proc updateStackAndParams(q: var LocalParams; c: Computation) =
+proc updateStackAndParams(q: var LocalParams, c: Computation) =
   c.stack.lsTop(0)
 
   let
@@ -96,18 +91,18 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
 proc callParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for callOp()
 
-  ? c.stack.lsCheck(7)
+  ?c.stack.lsCheck(7)
 
   var res = LocalParams(
-    gas            : c.stack.lsPeekInt(^1),
-    codeAddress    : c.stack.lsPeekAddress(^2),
-    value          : c.stack.lsPeekInt(^3),
-    memInPos       : c.stack.lsPeekMemRef(^4),
-    memInLen       : c.stack.lsPeekMemRef(^5),
-    memOutPos      : c.stack.lsPeekMemRef(^6),
-    memOutLen      : c.stack.lsPeekMemRef(^7),
-    sender         : c.msg.contractAddress,
-    flags          : c.msg.flags,
+    gas: c.stack.lsPeekInt(^1),
+    codeAddress: c.stack.lsPeekAddress(^2),
+    value: c.stack.lsPeekInt(^3),
+    memInPos: c.stack.lsPeekMemRef(^4),
+    memInLen: c.stack.lsPeekMemRef(^5),
+    memOutPos: c.stack.lsPeekMemRef(^6),
+    memOutLen: c.stack.lsPeekMemRef(^7),
+    sender: c.msg.contractAddress,
+    flags: c.msg.flags,
   )
 
   c.stack.lsShrink(6)
@@ -115,28 +110,26 @@ proc callParams(c: Computation): EvmResult[LocalParams] =
   res.updateStackAndParams(c)
   ok(res)
 
-
 proc callCodeParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for callCodeOp()
-  var res = ? c.callParams()
+  var res = ?c.callParams()
   res.contractAddress = c.msg.contractAddress
   ok(res)
-
 
 proc delegateCallParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for delegateCall()
 
-  ? c.stack.lsCheck(6)
+  ?c.stack.lsCheck(6)
   var res = LocalParams(
-    gas            : c.stack.lsPeekInt(^1),
-    codeAddress    : c.stack.lsPeekAddress(^2),
-    memInPos       : c.stack.lsPeekMemRef(^3),
-    memInLen       : c.stack.lsPeekMemRef(^4),
-    memOutPos      : c.stack.lsPeekMemRef(^5),
-    memOutLen      : c.stack.lsPeekMemRef(^6),
-    value          : c.msg.value,
-    sender         : c.msg.sender,
-    flags          : c.msg.flags,
+    gas: c.stack.lsPeekInt(^1),
+    codeAddress: c.stack.lsPeekAddress(^2),
+    memInPos: c.stack.lsPeekMemRef(^3),
+    memInLen: c.stack.lsPeekMemRef(^4),
+    memOutPos: c.stack.lsPeekMemRef(^5),
+    memOutLen: c.stack.lsPeekMemRef(^6),
+    value: c.msg.value,
+    sender: c.msg.sender,
+    flags: c.msg.flags,
     contractAddress: c.msg.contractAddress,
   )
 
@@ -144,21 +137,20 @@ proc delegateCallParams(c: Computation): EvmResult[LocalParams] =
   res.updateStackAndParams(c)
   ok(res)
 
-
-proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
+proc staticCallParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for staticCall()
 
-  ? c.stack.lsCheck(6)
+  ?c.stack.lsCheck(6)
   var res = LocalParams(
-    gas            : c.stack.lsPeekInt(^1),
-    codeAddress    : c.stack.lsPeekAddress(^2),
-    memInPos       : c.stack.lsPeekMemRef(^3),
-    memInLen       : c.stack.lsPeekMemRef(^4),
-    memOutPos      : c.stack.lsPeekMemRef(^5),
-    memOutLen      : c.stack.lsPeekMemRef(^6),
-    value          : 0.u256,
-    sender         : c.msg.contractAddress,
-    flags          : {EVMC_STATIC},
+    gas: c.stack.lsPeekInt(^1),
+    codeAddress: c.stack.lsPeekAddress(^2),
+    memInPos: c.stack.lsPeekMemRef(^3),
+    memInLen: c.stack.lsPeekMemRef(^4),
+    memOutPos: c.stack.lsPeekMemRef(^5),
+    memOutLen: c.stack.lsPeekMemRef(^6),
+    value: 0.u256,
+    sender: c.msg.contractAddress,
+    flags: {EVMC_STATIC},
   )
 
   c.stack.lsShrink(5)
@@ -167,14 +159,13 @@ proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
   ok(res)
 
 when evmc_enabled:
-  template execSubCall(c: Computation; msg: ref nimbus_message; p: LocalParams) =
+  template execSubCall(c: Computation, msg: ref nimbus_message, p: LocalParams) =
     c.chainTo(msg):
       assign(c.returnData, makeOpenArray(c.res.output_data, c.res.output_size.int))
 
       let actualOutputSize = min(p.memOutLen, c.returnData.len)
       if actualOutputSize > 0:
-        ? c.memory.write(p.memOutPos,
-          c.returnData.toOpenArray(0, actualOutputSize - 1))
+        ?c.memory.write(p.memOutPos, c.returnData.toOpenArray(0, actualOutputSize - 1))
 
       c.gasMeter.returnGas(GasInt c.res.gas_left)
       c.gasMeter.refundGas(c.res.gas_refund)
@@ -187,13 +178,12 @@ when evmc_enabled:
       ok()
 
 else:
-  proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
+  proc execSubCall(c: Computation, childMsg: Message, memPos, memLen: int) =
     ## Call new VM -- helper for `Call`-like operations
 
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     # <memPos> and <memLen> are provided by value and need not be captured
-    var
-      child = newComputation(c.vmState, false, childMsg)
+    var child = newComputation(c.vmState, false, childMsg)
 
     c.chainTo(child):
       if not child.shouldBurnGas:
@@ -206,7 +196,7 @@ else:
       c.returnData = child.output
       let actualOutputSize = min(memLen, child.output.len)
       if actualOutputSize > 0:
-        ? c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
+        ?c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
       ok()
 
 # ------------------------------------------------------------------------------
@@ -216,33 +206,34 @@ else:
 proc callOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf1, Message-Call into an account
   if EVMC_STATIC in cpt.msg.flags:
-    let val = ? cpt.stack[^3, UInt256]
+    let val = ?cpt.stack[^3, UInt256]
     if val > 0.u256:
       return err(opErr(StaticContext))
 
   let
-    p = ? cpt.callParams
-    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler(
-      p.value,
-      GasParams(
-        kind:           Call,
-        isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIP2929: p.gasCallEIP2929,
-        contractGas:    p.gas,
-        currentMemSize: cpt.memory.len,
-        memOffset:      p.memOffset,
-        memLength:      p.memLength))
+    p = ?cpt.callParams
+    (gasCost, childGasLimit) =
+      ?cpt.gasCosts[Call].c_handler(
+        p.value,
+        GasParams(
+          kind: Call,
+          isNewAccount: not cpt.accountExists(p.contractAddress),
+          gasLeft: cpt.gasMeter.gasRemaining,
+          gasCallEIP2929: p.gasCallEIP2929,
+          contractGas: p.gas,
+          currentMemSize: cpt.memory.len,
+          memOffset: p.memOffset,
+          memLength: p.memLength,
+        ),
+      )
 
-  ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
+  ?cpt.opcodeGasCost(Call, gasCost, reason = $Call)
 
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+      reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -257,35 +248,33 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   when evmc_enabled:
     let
       msg = new(nimbus_message)
-      c   = cpt
+      c = cpt
     msg[] = nimbus_message(
-      kind        : EVMC_CALL,
-      depth       : (cpt.msg.depth + 1).int32,
-      gas         : int64.saturate(childGasLimit),
-      sender      : p.sender,
-      recipient   : p.contractAddress,
+      kind: EVMC_CALL,
+      depth: (cpt.msg.depth + 1).int32,
+      gas: int64.saturate(childGasLimit),
+      sender: p.sender,
+      recipient: p.contractAddress,
       code_address: p.codeAddress,
-      input_data  : cpt.memory.readPtr(p.memInPos),
-      input_size  : p.memInLen.uint,
-      value       : toEvmc(p.value),
-      flags       : p.flags
+      input_data: cpt.memory.readPtr(p.memInPos),
+      input_size: p.memInLen.uint,
+      value: toEvmc(p.value),
+      flags: p.flags,
     )
     c.execSubCall(msg, p)
   else:
     var childMsg = Message(
-      kind:            EVMC_CALL,
-      depth:           cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
+      kind: EVMC_CALL,
+      depth: cpt.msg.depth + 1,
+      gas: childGasLimit,
+      sender: p.sender,
       contractAddress: p.contractAddress,
-      codeAddress:     p.codeAddress,
-      value:           p.value,
-      flags:           p.flags)
+      codeAddress: p.codeAddress,
+      value: p.value,
+      flags: p.flags,
+    )
     assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
-    cpt.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = childMsg)
+    cpt.execSubCall(memPos = p.memOutPos, memLen = p.memOutLen, childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -293,28 +282,29 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf2, Message-call into this account with an alternative account's code.
   let
-    p = ? cpt.callCodeParams
-    (gasCost, childGasLimit) = ? cpt.gasCosts[CallCode].c_handler(
-      p.value,
-      GasParams(
-        kind:           CallCode,
-        isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIP2929: p.gasCallEIP2929,
-        contractGas:    p.gas,
-        currentMemSize: cpt.memory.len,
-        memOffset:      p.memOffset,
-        memLength:      p.memLength))
+    p = ?cpt.callCodeParams
+    (gasCost, childGasLimit) =
+      ?cpt.gasCosts[CallCode].c_handler(
+        p.value,
+        GasParams(
+          kind: CallCode,
+          isNewAccount: not cpt.accountExists(p.contractAddress),
+          gasLeft: cpt.gasMeter.gasRemaining,
+          gasCallEIP2929: p.gasCallEIP2929,
+          contractGas: p.gas,
+          currentMemSize: cpt.memory.len,
+          memOffset: p.memOffset,
+          memLength: p.memLength,
+        ),
+      )
 
-  ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
+  ?cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
 
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+      reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -329,35 +319,33 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   when evmc_enabled:
     let
       msg = new(nimbus_message)
-      c   = cpt
+      c = cpt
     msg[] = nimbus_message(
-      kind        : EVMC_CALLCODE,
-      depth       : (cpt.msg.depth + 1).int32,
-      gas         : int64.saturate(childGasLimit),
-      sender      : p.sender,
-      recipient   : p.contractAddress,
+      kind: EVMC_CALLCODE,
+      depth: (cpt.msg.depth + 1).int32,
+      gas: int64.saturate(childGasLimit),
+      sender: p.sender,
+      recipient: p.contractAddress,
       code_address: p.codeAddress,
-      input_data  : cpt.memory.readPtr(p.memInPos),
-      input_size  : p.memInLen.uint,
-      value       : toEvmc(p.value),
-      flags       : p.flags
+      input_data: cpt.memory.readPtr(p.memInPos),
+      input_size: p.memInLen.uint,
+      value: toEvmc(p.value),
+      flags: p.flags,
     )
     c.execSubCall(msg, p)
   else:
     var childMsg = Message(
-      kind:            EVMC_CALLCODE,
-      depth:           cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
+      kind: EVMC_CALLCODE,
+      depth: cpt.msg.depth + 1,
+      gas: childGasLimit,
+      sender: p.sender,
       contractAddress: p.contractAddress,
-      codeAddress:     p.codeAddress,
-      value:           p.value,
-      flags:           p.flags)
+      codeAddress: p.codeAddress,
+      value: p.value,
+      flags: p.flags,
+    )
     assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
-    cpt.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = childMsg)
+    cpt.execSubCall(memPos = p.memOutPos, memLen = p.memOutLen, childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -366,27 +354,28 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf4, Message-call into this account with an alternative account's
   ##       code, but persisting the current values for sender and value.
   let
-    p = ? cpt.delegateCallParams
-    (gasCost, childGasLimit) = ? cpt.gasCosts[DelegateCall].c_handler(
-      p.value,
-      GasParams(
-        kind:           DelegateCall,
-        isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIP2929: p.gasCallEIP2929,
-        contractGas:    p.gas,
-        currentMemSize: cpt.memory.len,
-        memOffset:      p.memOffset,
-        memLength:      p.memLength))
+    p = ?cpt.delegateCallParams
+    (gasCost, childGasLimit) =
+      ?cpt.gasCosts[DelegateCall].c_handler(
+        p.value,
+        GasParams(
+          kind: DelegateCall,
+          isNewAccount: not cpt.accountExists(p.contractAddress),
+          gasLeft: cpt.gasMeter.gasRemaining,
+          gasCallEIP2929: p.gasCallEIP2929,
+          contractGas: p.gas,
+          currentMemSize: cpt.memory.len,
+          memOffset: p.memOffset,
+          memLength: p.memLength,
+        ),
+      )
 
-  ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
+  ?cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
 
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+      reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -396,35 +385,33 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   when evmc_enabled:
     let
       msg = new(nimbus_message)
-      c   = cpt
+      c = cpt
     msg[] = nimbus_message(
-      kind        : EVMC_DELEGATECALL,
-      depth       : (cpt.msg.depth + 1).int32,
-      gas         : int64.saturate(childGasLimit),
-      sender      : p.sender,
-      recipient   : p.contractAddress,
+      kind: EVMC_DELEGATECALL,
+      depth: (cpt.msg.depth + 1).int32,
+      gas: int64.saturate(childGasLimit),
+      sender: p.sender,
+      recipient: p.contractAddress,
       code_address: p.codeAddress,
-      input_data  : cpt.memory.readPtr(p.memInPos),
-      input_size  : p.memInLen.uint,
-      value       : toEvmc(p.value),
-      flags       : p.flags
+      input_data: cpt.memory.readPtr(p.memInPos),
+      input_size: p.memInLen.uint,
+      value: toEvmc(p.value),
+      flags: p.flags,
     )
     c.execSubCall(msg, p)
   else:
     var childMsg = Message(
-      kind:            EVMC_DELEGATECALL,
-      depth:           cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
+      kind: EVMC_DELEGATECALL,
+      depth: cpt.msg.depth + 1,
+      gas: childGasLimit,
+      sender: p.sender,
       contractAddress: p.contractAddress,
-      codeAddress:     p.codeAddress,
-      value:           p.value,
-      flags:           p.flags)
+      codeAddress: p.codeAddress,
+      value: p.value,
+      flags: p.flags,
+    )
     assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
-    cpt.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = childMsg)
+    cpt.execSubCall(memPos = p.memOutPos, memLen = p.memOutLen, childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -433,28 +420,29 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   ## 0xfa, Static message-call into an account.
 
   let
-    p = ? cpt.staticCallParams
-    (gasCost, childGasLimit) = ? cpt.gasCosts[StaticCall].c_handler(
-      p.value,
-      GasParams(
-        kind:           StaticCall,
-        isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIP2929: p.gasCallEIP2929,
-        contractGas:    p.gas,
-        currentMemSize: cpt.memory.len,
-        memOffset:      p.memOffset,
-        memLength:      p.memLength))
+    p = ?cpt.staticCallParams
+    (gasCost, childGasLimit) =
+      ?cpt.gasCosts[StaticCall].c_handler(
+        p.value,
+        GasParams(
+          kind: StaticCall,
+          isNewAccount: not cpt.accountExists(p.contractAddress),
+          gasLeft: cpt.gasMeter.gasRemaining,
+          gasCallEIP2929: p.gasCallEIP2929,
+          contractGas: p.gas,
+          currentMemSize: cpt.memory.len,
+          memOffset: p.memOffset,
+          memLength: p.memLength,
+        ),
+      )
 
-  ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
+  ?cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
 
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+      reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -464,71 +452,72 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   when evmc_enabled:
     let
       msg = new(nimbus_message)
-      c   = cpt
+      c = cpt
     msg[] = nimbus_message(
-      kind        : EVMC_CALL,
-      depth       : (cpt.msg.depth + 1).int32,
-      gas         : int64.saturate(childGasLimit),
-      sender      : p.sender,
-      recipient   : p.contractAddress,
+      kind: EVMC_CALL,
+      depth: (cpt.msg.depth + 1).int32,
+      gas: int64.saturate(childGasLimit),
+      sender: p.sender,
+      recipient: p.contractAddress,
       code_address: p.codeAddress,
-      input_data  : cpt.memory.readPtr(p.memInPos),
-      input_size  : p.memInLen.uint,
-      value       : toEvmc(p.value),
-      flags       : p.flags
+      input_data: cpt.memory.readPtr(p.memInPos),
+      input_size: p.memInLen.uint,
+      value: toEvmc(p.value),
+      flags: p.flags,
     )
     c.execSubCall(msg, p)
   else:
     var childMsg = Message(
-      kind:            EVMC_CALL,
-      depth:           cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
+      kind: EVMC_CALL,
+      depth: cpt.msg.depth + 1,
+      gas: childGasLimit,
+      sender: p.sender,
       contractAddress: p.contractAddress,
-      codeAddress:     p.codeAddress,
-      value:           p.value,
-      flags:           p.flags)
+      codeAddress: p.codeAddress,
+      value: p.value,
+      flags: p.flags,
+    )
     assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
-    cpt.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = childMsg)
+    cpt.execSubCall(memPos = p.memOutPos, memLen = p.memOutLen, childMsg = childMsg)
   ok()
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-const
-  VmOpExecCall*: seq[VmOpExec] = @[
-
-    (opCode: Call,         ## 0xf1, Message-Call into an account
-     forks: VmOpAllForks,
-     name: "call",
-     info: "Message-Call into an account",
-     exec: callOp),
-
-
-    (opCode: CallCode,     ## 0xf2, Message-Call with alternative code
-     forks: VmOpAllForks,
-     name: "callCode",
-     info: "Message-call into this account with alternative account's code",
-     exec: callCodeOp),
-
-
-    (opCode: DelegateCall, ## 0xf4, CallCode with persisting sender and value
-     forks: VmOpHomesteadAndLater,
-     name: "delegateCall",
-     info: "Message-call into this account with an alternative account's " &
-           "code but persisting the current values for sender and value.",
-     exec: delegateCallOp),
-
-
-    (opCode: StaticCall,   ## 0xfa, Static message-call into an account
-     forks: VmOpByzantiumAndLater,
-     name: "staticCall",
-     info: "Static message-call into an account",
-     exec: staticCallOp)]
+const VmOpExecCall*: seq[VmOpExec] =
+  @[
+    (
+      opCode: Call, ## 0xf1, Message-Call into an account
+      forks: VmOpAllForks,
+      name: "call",
+      info: "Message-Call into an account",
+      exec: callOp,
+    ),
+    (
+      opCode: CallCode, ## 0xf2, Message-Call with alternative code
+      forks: VmOpAllForks,
+      name: "callCode",
+      info: "Message-call into this account with alternative account's code",
+      exec: callCodeOp,
+    ),
+    (
+      opCode: DelegateCall, ## 0xf4, CallCode with persisting sender and value
+      forks: VmOpHomesteadAndLater,
+      name: "delegateCall",
+      info:
+        "Message-call into this account with an alternative account's " &
+        "code but persisting the current values for sender and value.",
+      exec: delegateCallOp,
+    ),
+    (
+      opCode: StaticCall, ## 0xfa, Static message-call into an account
+      forks: VmOpByzantiumAndLater,
+      name: "staticCall",
+      info: "Static message-call into an account",
+      exec: staticCallOp,
+    ),
+  ]
 
 # ------------------------------------------------------------------------------
 # End

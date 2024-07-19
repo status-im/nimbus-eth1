@@ -13,17 +13,15 @@
 ##
 {.push raises: [].}
 
-import
-  std/tables,
-  eth/common
+import std/tables, eth/common
 
 type
   LayerRef* = ref LayerObj
   LayerObj* = object
     ## Kvt database layer structures. Any layer holds the full
     ## change relative to the backend.
-    sTab*: Table[Blob,Blob]           ## Structural data table
-    txUid*: uint                      ## Transaction identifier if positive
+    sTab*: Table[Blob, Blob] ## Structural data table
+    txUid*: uint ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)

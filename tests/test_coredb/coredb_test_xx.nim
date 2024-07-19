@@ -8,34 +8,30 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-import
-  eth/common,
-  ../../nimbus/db/core_db,
-  ../../nimbus/common/chain_config
+import eth/common, ../../nimbus/db/core_db, ../../nimbus/common/chain_config
 
-type
-  CaptureSpecs* = object
-    name*: string            ## Sample name, also used as default db directory
-    case builtIn*: bool
-    of true:
-      network*: NetworkId    ## Built-in network ID (unless `config` below)
-    else:
-      genesis*: string       ## Optional config file (instead of `network`)
-    files*: seq[string]      ## Names of capture files
-    numBlocks*: int          ## Number of blocks to load
-    dbType*: CoreDbType      ## Use `CoreDbType(0)` for default
-    dbName*: string          ## Dedicated name for database directory
+type CaptureSpecs* = object
+  name*: string ## Sample name, also used as default db directory
+  case builtIn*: bool
+  of true:
+    network*: NetworkId ## Built-in network ID (unless `config` below)
+  else:
+    genesis*: string ## Optional config file (instead of `network`)
+  files*: seq[string] ## Names of capture files
+  numBlocks*: int ## Number of blocks to load
+  dbType*: CoreDbType ## Use `CoreDbType(0)` for default
+  dbName*: string ## Dedicated name for database directory
 
 func cloneWith(
-    dsc: CaptureSpecs;
-    name = "";
-    network = NetworkId(0);
-    genesis = "";
-    files = seq[string].default;
-    numBlocks = 0;
-    dbType = CoreDbType(0);
-    dbName = "";
-      ): CaptureSpecs =
+    dsc: CaptureSpecs,
+    name = "",
+    network = NetworkId(0),
+    genesis = "",
+    files = seq[string].default,
+    numBlocks = 0,
+    dbType = CoreDbType(0),
+    dbName = "",
+): CaptureSpecs =
   result = dsc
   if network != NetworkId(0):
     result.builtIn = true
@@ -61,99 +57,78 @@ func cloneWith(
   else:
     result.dbName = dbName
 
-
 # Must not use `const` here, see `//github.com/nim-lang/Nim/issues/23295`
 # Waiting for fix `//github.com/nim-lang/Nim/pull/23297` (or similar) to
 # appear on local `Nim` compiler version.
 let
   mainSample = CaptureSpecs(
     builtIn: true,
-    name:    "main",
+    name: "main",
     network: MainNet,
-    files:  @["mainnet-00000-5ec1ffb8.era1"], # on local replay folder
+    files: @["mainnet-00000-5ec1ffb8.era1"], # on local replay folder
     numBlocks: high(int),
-    dbType: AristoDbRocks)
+    dbType: AristoDbRocks,
+  )
 
   mainSampleEx = CaptureSpecs(
     builtIn: true,
-    name:    "main",
+    name: "main",
     network: MainNet,
     # The extren repo is identified by a tag file
-    files:   @["mainnet-extern.era1"])        # on external repo
+    files: @["mainnet-extern.era1"],
+  ) # on external repo
 
   # ------------------
 
   # Supposed to run mostly on defaults, object name tag: m=memory, r=rocksDB
-  mainTest0m* = mainSample
-    .cloneWith(
-      name      = "-am-some",
-      numBlocks = 1_000)
+  mainTest0m* = mainSample.cloneWith(name = "-am-some", numBlocks = 1_000)
 
-  mainTest1m* = mainSample
-    .cloneWith(
-      name      = "-am",
-      numBlocks = high(int))
+  mainTest1m* = mainSample.cloneWith(name = "-am", numBlocks = high(int))
 
-  mainTest2r* = mainSample
-    .cloneWith(
-      name      = "-ar-some",
-      numBlocks = 500,
-      dbType    = AristoDbRocks,
-      dbName    = "main-open") # for resuming on the same persistent DB
+  mainTest2r* = mainSample.cloneWith(
+    name = "-ar-some", numBlocks = 500, dbType = AristoDbRocks, dbName = "main-open"
+  ) # for resuming on the same persistent DB
 
-  mainTest3r* = mainSample
-    .cloneWith(
-      name      = "-ar-more",
-      numBlocks = 1_000,
-      dbType    = AristoDbRocks,
-      dbName    = "main-open") # for resuming on the same persistent DB
+  mainTest3r* = mainSample.cloneWith(
+    name = "-ar-more", numBlocks = 1_000, dbType = AristoDbRocks, dbName = "main-open"
+  ) # for resuming on the same persistent DB
 
-  mainTest4r* = mainSample
-    .cloneWith(
-      name      = "-ar",
-      dbType    = AristoDbRocks,
-      dbName    = "main-open") # for resuming on the same persistent DB
+  mainTest4r* =
+    mainSample.cloneWith(name = "-ar", dbType = AristoDbRocks, dbName = "main-open")
+    # for resuming on the same persistent DB
 
   # -----------------------
+  mainTest5m* = mainSampleEx.cloneWith(name = "-ex-am", numBlocks = 500_000)
 
-  mainTest5m* = mainSampleEx
-    .cloneWith(
-      name      = "-ex-am",
-      numBlocks = 500_000)
+  mainTest6r* = mainSampleEx.cloneWith(
+    name = "-ex-ar-some",
+    numBlocks = 257_400,
+    dbType = AristoDbRocks,
+    dbName = "main-open",
+  ) # for resuming on the same persistent DB
 
-  mainTest6r* = mainSampleEx
-    .cloneWith(
-      name      = "-ex-ar-some",
-      numBlocks = 257_400,
-      dbType    = AristoDbRocks,
-      dbName    = "main-open") # for resuming on the same persistent DB
+  mainTest7r* = mainSampleEx.cloneWith(
+    name = "-ex-ar-more",
+    numBlocks = 1_460_700, # failure at 1,460,736
+    dbType = AristoDbRocks,
+    dbName = "main-open",
+  ) # for resuming on the same persistent DB
 
-  mainTest7r* = mainSampleEx
-    .cloneWith(
-      name      = "-ex-ar-more",
-      numBlocks = 1_460_700,   # failure at 1,460,736
-      dbType    = AristoDbRocks,
-      dbName    = "main-open") # for resuming on the same persistent DB
+  mainTest8r* = mainSampleEx.cloneWith(
+    name = "-ex-ar-more2",
+    numBlocks = 1_460_735, # failure at 1,460,736
+    dbType = AristoDbRocks,
+    dbName = "main-open",
+  ) # for resuming on the same persistent DB
 
-  mainTest8r* = mainSampleEx
-    .cloneWith(
-      name      = "-ex-ar-more2",
-      numBlocks = 1_460_735,   # failure at 1,460,736
-      dbType    = AristoDbRocks,
-      dbName    = "main-open") # for resuming on the same persistent DB
-
-  mainTest9r* = mainSampleEx
-    .cloneWith(
-      name      = "-ex-ar",
-      numBlocks = high(int),
-      dbType    = AristoDbRocks,
-      dbName    = "main-open") # for resuming on the same persistent DB
+  mainTest9r* = mainSampleEx.cloneWith(
+    name = "-ex-ar", numBlocks = high(int), dbType = AristoDbRocks, dbName = "main-open"
+  ) # for resuming on the same persistent DB
 
   # ------------------
-
   allSamples* = [
-    mainTest0m, mainTest1m, mainTest2r, mainTest3r, mainTest4r,
-    mainTest5m, mainTest6r, mainTest7r, mainTest8r, mainTest9r,
+    mainTest0m, mainTest1m, mainTest2r, mainTest3r, mainTest4r, mainTest5m, mainTest6r,
+    mainTest7r, mainTest8r, mainTest9r,
   ]
 
 # End

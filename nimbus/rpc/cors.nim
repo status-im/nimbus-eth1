@@ -19,26 +19,24 @@ import
 {.push gcsafe, raises: [].}
 
 proc sameOrigin(a, b: Uri): bool =
-  a.hostname == b.hostname and
-    a.scheme == b.scheme and
-    a.port == b.port
+  a.hostname == b.hostname and a.scheme == b.scheme and a.port == b.port
 
 proc containsOrigin(list: seq[Uri], origin: Uri): bool =
   for x in list:
-    if x.sameOrigin(origin): return true
+    if x.sameOrigin(origin):
+      return true
 
-const
-  HookOK = HttpResponseRef(nil)
+const HookOK = HttpResponseRef(nil)
 
 proc httpCors*(allowedOrigins: seq[Uri]): RpcAuthHook =
-  proc handler(req: HttpRequestRef): Future[HttpResponseRef]
-        {.gcsafe, async: (raises: [CatchableError]).} =
+  proc handler(
+      req: HttpRequestRef
+  ): Future[HttpResponseRef] {.gcsafe, async: (raises: [CatchableError]).} =
     let origins = req.headers.getList("Origin")
     let everyOriginAllowed = allowedOrigins.len == 0
 
     if origins.len > 1:
-      return await req.respond(Http400,
-        "Only a single Origin header must be specified")
+      return await req.respond(Http400, "Only a single Origin header must be specified")
 
     if origins.len == 0:
       # maybe not a CORS request

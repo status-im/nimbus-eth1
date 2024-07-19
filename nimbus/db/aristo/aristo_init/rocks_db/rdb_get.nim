@@ -22,13 +22,10 @@ import
   ../init_common,
   ./rdb_desc
 
-const
-  extraTraceMessages = false
-    ## Enable additional logging noise
+const extraTraceMessages = false ## Enable additional logging noise
 
 when extraTraceMessages:
-  import
-    chronicles
+  import chronicles
 
   logScope:
     topics = "aristo-rocksdb"
@@ -37,16 +34,16 @@ when extraTraceMessages:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[Blob,(AristoError,string)] =
+proc getAdm*(rdb: RdbInst, xid: AdminTabID): Result[Blob, (AristoError, string)] =
   var res: Blob
   let onData = proc(data: openArray[byte]) =
     res = @data
 
   let gotData = rdb.admCol.get(xid.toOpenArray, onData).valueOr:
-     const errSym = RdbBeDriverGetAdmError
-     when extraTraceMessages:
-       trace logTxt "getAdm", xid, error=errSym, info=error
-     return err((errSym,error))
+    const errSym = RdbBeDriverGetAdmError
+    when extraTraceMessages:
+      trace logTxt "getAdm", xid, error = errSym, info = error
+    return err((errSym, error))
 
   # Correct result if needed
   if not gotData:
@@ -54,25 +51,26 @@ proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[Blob,(AristoError,string)] =
   ok move(res)
 
 proc getKey*(
-    rdb: var RdbInst;
-    rvid: RootedVertexID;
-      ): Result[HashKey,(AristoError,string)] =
+    rdb: var RdbInst, rvid: RootedVertexID
+): Result[HashKey, (AristoError, string)] =
   # Try LRU cache first
   var rc = rdb.rdKeyLru.lruFetch(rvid.vid)
   if rc.isOK:
     return ok(move(rc.value))
 
   # Otherwise fetch from backend database
-  var res: Result[HashKey,(AristoError,string)]
+  var res: Result[HashKey, (AristoError, string)]
   let onData = proc(data: openArray[byte]) =
-    res = HashKey.fromBytes(data).mapErr(proc(): auto =
-      (RdbHashKeyExpected,""))
+    res = HashKey.fromBytes(data).mapErr(
+        proc(): auto =
+          (RdbHashKeyExpected, "")
+      )
 
   let gotData = rdb.keyCol.get(rvid.blobify().data(), onData).valueOr:
-     const errSym = RdbBeDriverGetKeyError
-     when extraTraceMessages:
-       trace logTxt "getKey", rvid, error=errSym, info=error
-     return err((errSym,error))
+    const errSym = RdbBeDriverGetKeyError
+    when extraTraceMessages:
+      trace logTxt "getKey", rvid, error = errSym, info = error
+    return err((errSym, error))
 
   # Correct result if needed
   if not gotData:
@@ -84,25 +82,26 @@ proc getKey*(
   ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), RdKeyLruMaxSize)
 
 proc getVtx*(
-    rdb: var RdbInst;
-    rvid: RootedVertexID;
-      ): Result[VertexRef,(AristoError,string)] =
+    rdb: var RdbInst, rvid: RootedVertexID
+): Result[VertexRef, (AristoError, string)] =
   # Try LRU cache first
   var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
   if rc.isOK:
     return ok(move(rc.value))
 
   # Otherwise fetch from backend database
-  var res: Result[VertexRef,(AristoError,string)]
+  var res: Result[VertexRef, (AristoError, string)]
   let onData = proc(data: openArray[byte]) =
-    res = data.deblobify(VertexRef).mapErr(proc(error: AristoError): auto =
-      (error,""))
+    res = data.deblobify(VertexRef).mapErr(
+        proc(error: AristoError): auto =
+          (error, "")
+      )
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
     when extraTraceMessages:
-      trace logTxt "getVtx", vid, error=errSym, info=error
-    return err((errSym,error))
+      trace logTxt "getVtx", vid, error = errSym, info = error
+    return err((errSym, error))
 
   if not gotData:
     res = ok(VertexRef(nil))

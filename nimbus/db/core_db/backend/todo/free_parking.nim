@@ -23,7 +23,7 @@ import
 #  the end of this source file
 
 # Annotation helper(s)
-{.pragma:  noRaise, gcsafe, raises: [].}
+{.pragma: noRaise, gcsafe, raises: [].}
 {.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
 
 # ------------------------------------------------------------------------------
@@ -31,24 +31,13 @@ import
 # ------------------------------------------------------------------------------
 
 when false:
-  func toError(e: AristoError; s: string; error = Unspecified): CoreDbError =
-    CoreDbError(
-      error:    error,
-      ctx:      s,
-      isAristo: true,
-      aErr:     e)
+  func toError(e: AristoError, s: string, error = Unspecified): CoreDbError =
+    CoreDbError(error: error, ctx: s, isAristo: true, aErr: e)
 
-  func toError(e: KvtError; s: string; error = Unspecified): CoreDbError =
-    CoreDbError(
-      error:    error,
-      ctx:      s,
-      isAristo: false,
-      kErr:     e)
+  func toError(e: KvtError, s: string, error = Unspecified): CoreDbError =
+    CoreDbError(error: error, ctx: s, isAristo: false, kErr: e)
 
-  proc kvtForget(
-      cKvt: CoreDbKvtRef;
-      info: static[string];
-        ): CoreDbRc[void] =
+  proc kvtForget(cKvt: CoreDbKvtRef, info: static[string]): CoreDbRc[void] =
     ## Free parking here
     let
       base = cKvt.parent.kdbBase
@@ -64,29 +53,26 @@ when false:
         return err(rc.error.toError(base, info))
     ok()
 
-  proc cptMethods(
-      tracer: AristoTracerRef;
-        ): CoreDbCaptFns =
+  proc cptMethods(tracer: AristoTracerRef): CoreDbCaptFns =
     ## Free parking here --  currently disabled
     let
-      tr = tracer         # So it can savely be captured
-      db = tr.parent      # Will not change and can be captured
-      log = tr.topInst()  # Ditto
+      tr = tracer # So it can savely be captured
+      db = tr.parent # Will not change and can be captured
+      log = tr.topInst() # Ditto
 
     CoreDbCaptFns(
       recorderFn: proc(): CoreDbRef =
         db,
-
-      logDbFn: proc(): TableRef[Blob,Blob] =
+      logDbFn: proc(): TableRef[Blob, Blob] =
         log.kLog,
-
       getFlagsFn: proc(): set[CoreDbCaptFlags] =
         log.flags,
-
       forgetFn: proc() =
         if not tracer.pop():
           tr.parent.tracer = AristoTracerRef(nil)
-          tr.restore())
+          tr.restore()
+      ,
+    )
 
   proc tracerSetup(flags: set[CoreDbCaptFlags]): CoreDbCaptRef =
     ## Free parking here --  currently disabled
@@ -98,11 +84,11 @@ when false:
     CoreDbCaptRef(methods: db.tracer.cptMethods)
 
   proc init(
-      T: type CoreDbCtxRef;
-      base: CoreDbAriBaseRef;
-      colState: Hash256;
-      colType: CoreDbColType;
-        ): CoreDbRc[CoreDbCtxRef] =
+      T: type CoreDbCtxRef,
+      base: CoreDbAriBaseRef,
+      colState: Hash256,
+      colType: CoreDbColType,
+  ): CoreDbRc[CoreDbCtxRef] =
     const info = "fromTxFn()"
 
     if colType.ord == 0:

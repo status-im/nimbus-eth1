@@ -25,30 +25,29 @@ import
 {.push raises: [].}
 
 type
-  TxPoolCallBackRecursion* = object of Defect
-    ## Attempt to recurse a call back function
+  TxPoolCallBackRecursion* = object of Defect ## Attempt to recurse a call back function
 
   TxPoolFlags* = enum ##\
     ## Processing strategy selector symbols
-
-    stageItems1559MinFee ##\
+    stageItems1559MinFee
+      ##\
       ## Stage tx items with `tx.maxFee` at least `minFeePrice`. Other items
       ## are left or set pending. This symbol affects post-London tx items,
       ## only.
-
-    stageItems1559MinTip ##\
+    stageItems1559MinTip
+      ##\
       ## Stage tx items with `tx.effectiveGasTip(baseFee)` at least
       ## `minTipPrice`. Other items are considered underpriced and left
       ## or set pending. This symbol affects post-London tx items, only.
-
-    stageItemsPlMinPrice ##\
+    stageItemsPlMinPrice
+      ##\
       ## Stage tx items with `tx.gasPrice` at least `minPreLondonGasPrice`.
       ## Other items are considered underpriced and left or set pending.
       ## This symbol affects pre-London tx items, only.
 
     # -----------
-
-    packItemsMaxGasLimit ##\
+    packItemsMaxGasLimit
+      ##\
       ## It set, the *packer* will execute and collect additional items from
       ## the `staged` bucket while accumulating `gasUsed` as long as
       ## `maxGasLimit` is not exceeded. If `packItemsTryHarder` flag is also
@@ -58,8 +57,8 @@ type
       ## Otherwise the *packer* will accumulate up until `trgGasLimit` is
       ## not exceeded, and not stop until at least `lwmGasLimit` is reached
       ## in case `packItemsTryHarder` is also set,
-
-    packItemsTryHarder ##\
+    packItemsTryHarder
+      ##\
       ## It set, the *packer* will *not* stop accumulaing transactions up until
       ## the `lwmGasLimit` or `hwmGasLimit` is reached, depending on whether
       ## the `packItemsMaxGasLimit` is set. Otherwise, accumulating stops
@@ -67,39 +66,42 @@ type
       ## `maxGasLimit` depending on `packItemsMaxGasLimit`.
 
     # -----------
-
-    autoUpdateBucketsDB ##\
+    autoUpdateBucketsDB
+      ##\
       ## Automatically update the state buckets after running batch jobs if
       ## the `dirtyBuckets` flag is also set.
-
-    autoZombifyUnpacked ##\
+    autoZombifyUnpacked
+      ##\
       ## Automatically dispose *pending* or *staged* txs that were queued
       ## at least `lifeTime` ago.
-
-    autoZombifyPacked ##\
+    autoZombifyPacked
+      ##\
       ## Automatically dispose *packed* txs that were queued
       ## at least `lifeTime` ago.
 
-  TxPoolParam* = tuple          ## Getter/setter accessible parameters
-    minFeePrice: GasPrice       ## Gas price enforced by the pool, `gasFeeCap`
-    minTipPrice: GasPrice       ## Desired tip-per-tx target, `effectiveGasTip`
-    minPlGasPrice: GasPrice     ## Desired pre-London min `gasPrice`
-    dirtyBuckets: bool          ## Buckets need to be updated
-    doubleCheck: seq[TxItemRef] ## Check items after moving block chain head
-    flags: set[TxPoolFlags]     ## Processing strategy symbols
+  TxPoolParam* =
+    tuple
+      ## Getter/setter accessible parameters
+      minFeePrice: GasPrice ## Gas price enforced by the pool, `gasFeeCap`
+      minTipPrice: GasPrice ## Desired tip-per-tx target, `effectiveGasTip`
+      minPlGasPrice: GasPrice ## Desired pre-London min `gasPrice`
+      dirtyBuckets: bool ## Buckets need to be updated
+      doubleCheck: seq[TxItemRef] ## Check items after moving block chain head
+      flags: set[TxPoolFlags] ## Processing strategy symbols
 
-  TxPoolRef* = ref object of RootObj ##\
+  TxPoolRef* = ref object of RootObj
+    ##\
     ## Transaction pool descriptor
-    startDate: Time             ## Start date (read-only)
+    startDate: Time ## Start date (read-only)
 
-    chain: TxChainRef           ## block chain state
-    txDB: TxTabsRef             ## Transaction lists & tables
+    chain: TxChainRef ## block chain state
+    txDB: TxTabsRef ## Transaction lists & tables
 
-    lifeTime*: times.Duration   ## Maximum life time of a tx in the system
-    priceBump*: uint            ## Min precentage price when superseding
-    blockValue*: UInt256        ## Sum of reward received by feeRecipient
+    lifeTime*: times.Duration ## Maximum life time of a tx in the system
+    priceBump*: uint ## Min precentage price when superseding
+    blockValue*: UInt256 ## Sum of reward received by feeRecipient
 
-    param: TxPoolParam          ## Getter/Setter parameters
+    param: TxPoolParam ## Getter/Setter parameters
 
 const
   txItemLifeTime = ##\
@@ -116,19 +118,16 @@ const
 
   txMinFeePrice = 1.GasPrice
   txMinTipPrice = 1.GasPrice
-  txPoolFlags = {stageItems1559MinTip,
-                  stageItems1559MinFee,
-                  stageItemsPlMinPrice,
-                  packItemsTryHarder,
-                  autoUpdateBucketsDB,
-                  autoZombifyUnpacked}
+  txPoolFlags = {
+    stageItems1559MinTip, stageItems1559MinFee, stageItemsPlMinPrice,
+    packItemsTryHarder, autoUpdateBucketsDB, autoZombifyUnpacked,
+  }
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: TxPoolRef; com: CommonRef)
-    {.gcsafe,raises: [CatchableError].} =
+proc init*(xp: TxPoolRef, com: CommonRef) {.gcsafe, raises: [CatchableError].} =
   ## Constructor, returns new tx-pool descriptor.
   xp.startDate = getTime().utc.toTime
 
@@ -188,11 +187,11 @@ func txDB*(xp: TxPoolRef): TxTabsRef =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-func `pDirtyBuckets=`*(xp: TxPoolRef; val: bool) =
+func `pDirtyBuckets=`*(xp: TxPoolRef, val: bool) =
   ## Setter
   xp.param.dirtyBuckets = val
 
-func pDoubleCheckAdd*(xp: TxPoolRef; val: seq[TxItemRef]) =
+func pDoubleCheckAdd*(xp: TxPoolRef, val: seq[TxItemRef]) =
   ## Pseudo setter
   xp.param.doubleCheck.add val
 
@@ -200,19 +199,19 @@ func pDoubleCheckFlush*(xp: TxPoolRef) =
   ## Pseudo setter
   xp.param.doubleCheck.setLen(0)
 
-func `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
+func `pFlags=`*(xp: TxPoolRef, val: set[TxPoolFlags]) =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.flags = val
 
-func `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `pMinFeePrice=`*(xp: TxPoolRef, val: GasPrice) =
   ## Setter
   xp.param.minFeePrice = val
 
-func `pMinTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `pMinTipPrice=`*(xp: TxPoolRef, val: GasPrice) =
   ## Setter
   xp.param.minTipPrice = val
 
-func `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
+func `pMinPlGasPrice=`*(xp: TxPoolRef, val: GasPrice) =
   ## Setter
   xp.param.minPlGasPrice = val
 
@@ -220,8 +219,7 @@ func `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
 # Public functions, heplers (debugging only)
 # ------------------------------------------------------------------------------
 
-proc verify*(xp: TxPoolRef): Result[void,TxInfo]
-    {.gcsafe, raises: [CatchableError].} =
+proc verify*(xp: TxPoolRef): Result[void, TxInfo] {.gcsafe, raises: [CatchableError].} =
   ## Verify descriptor and subsequent data structures.
 
   block:
@@ -236,7 +234,7 @@ proc verify*(xp: TxPoolRef): Result[void,TxInfo]
     lastNonce: AccountNonce
     lastSublist: TxSenderSchedRef
 
-  for (_,nonceList) in xp.txDB.incAccount:
+  for (_, nonceList) in xp.txDB.incAccount:
     for item in nonceList.incNonce:
       if not initOk or lastSender != item.sender:
         initOk = true
@@ -249,7 +247,7 @@ proc verify*(xp: TxPoolRef): Result[void,TxInfo]
         return err(txInfoVfyNonceChain)
 
       # verify bucket boundary conditions
-      case item.status:
+      case item.status
       of txItemPending:
         discard
       of txItemStaged:

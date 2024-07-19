@@ -8,13 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/json,
-  chronos, results, eth/common,
-  graphql/httpclient,
-  ./parser
+import std/json, chronos, results, eth/common, graphql/httpclient, ./parser
 
-const ethQuery = """
+const ethQuery =
+  """
 fragment headerFields on Block {
   parentHash: parent { value: hash }
   sha3Uncles: ommerHash
@@ -69,10 +66,9 @@ query getBlock($blockNumber: Long!) {
 }
 """
 
-type
-  Block* = object
-    header*: BlockHeader
-    body*: BlockBody
+type Block* = object
+  header*: BlockHeader
+  body*: BlockBody
 
 proc fromJson(_: type ChainId, n: JsonNode, name: string): ChainId =
   var chainId: int
@@ -104,12 +100,12 @@ proc requestBlock*(blockNumber: BlockNumber, parseTx = true): Block =
   result.header = parseBlockHeader(nh)
 
   if parseTx:
-   let txs = nh["transactions"]
-   for txn in txs:
-     var tx = parseTransaction(txn)
-     tx.chainId = chainId
-     validateTxSenderAndHash(txn, tx)
-     result.body.transactions.add tx
+    let txs = nh["transactions"]
+    for txn in txs:
+      var tx = parseTransaction(txn)
+      tx.chainId = chainId
+      validateTxSenderAndHash(txn, tx)
+      result.body.transactions.add tx
 
   let uncles = nh["ommers"]
   for un in uncles:

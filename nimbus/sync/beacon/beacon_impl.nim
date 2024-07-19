@@ -37,17 +37,14 @@ func makeGetBodyJob(header: BlockHeader, setHead: bool): BeaconJob =
       headerHash: header.blockHash,
       sumHash: header.sumHash,
       header: header,
-      setHead: setHead
-    )
+      setHead: setHead,
+    ),
   )
 
-func makeGetBlocksJob(number, maxResults: uint64) : BeaconJob =
+func makeGetBlocksJob(number, maxResults: uint64): BeaconJob =
   BeaconJob(
     mode: bjmGetBlocks,
-    getBlocksJob: BeaconJobGetBlocks(
-      number: number,
-      maxResults: maxResults,
-    )
+    getBlocksJob: BeaconJobGetBlocks(number: number, maxResults: maxResults),
   )
 
 func makeHeaderRequest(number: uint64, maxResults: uint64): BlocksRequest =
@@ -55,19 +52,21 @@ func makeHeaderRequest(number: uint64, maxResults: uint64): BlocksRequest =
     startBlock: HashOrNum(isHash: false, number: number),
     maxResults: maxResults.uint,
     skip: 0,
-    reverse: true
+    reverse: true,
   )
 
-func makeGetBodiesJob(headers: sink seq[BlockHeader],
-                      headerHash: sink seq[Hash256],
-                      reqBodies: sink seq[bool]): BeaconJob =
+func makeGetBodiesJob(
+    headers: sink seq[BlockHeader],
+    headerHash: sink seq[Hash256],
+    reqBodies: sink seq[bool],
+): BeaconJob =
   BeaconJob(
     mode: bjmGetBodies,
     getBodiesJob: BeaconJobGetBodies(
-      headers   : system.move(headers),
+      headers: system.move(headers),
       headerHash: system.move(headerHash),
-      reqBodies : system.move(reqBodies)
-    )
+      reqBodies: system.move(reqBodies),
+    ),
   )
 
 proc requeue(buddy: BeaconBuddyRef, job: BeaconJob) =
@@ -77,18 +76,22 @@ proc requeue(buddy: BeaconBuddyRef, job: BeaconJob) =
 proc jobDone(buddy: BeaconBuddyRef) =
   buddy.only.job = nil
 
-proc mapBodiesToHeader(buddy: BeaconBuddyRef,
-                       job: BeaconJob,
-                       bodies: openArray[BlockBody],
-                       reqBodies: openArray[bool]) {.raises: [].} =
-  doAssert(job.mode == bjmGetBlocks or
-           job.mode == bjmGetBodies,
-           "mapBodiesToHeader doesn't allow this job: " & $job.mode)
+proc mapBodiesToHeader(
+    buddy: BeaconBuddyRef,
+    job: BeaconJob,
+    bodies: openArray[BlockBody],
+    reqBodies: openArray[bool],
+) {.raises: [].} =
+  doAssert(
+    job.mode == bjmGetBlocks or job.mode == bjmGetBodies,
+    "mapBodiesToHeader doesn't allow this job: " & $job.mode,
+  )
   var
-    headers = if job.mode == bjmGetBlocks:
-                system.move(job.getBlocksJob.headers)
-              else:
-                system.move(job.getBodiesJob.headers)
+    headers =
+      if job.mode == bjmGetBlocks:
+        system.move(job.getBlocksJob.headers)
+      else:
+        system.move(job.getBodiesJob.headers)
     map = Table[Hash256, int]()
 
   for i, x in bodies:
@@ -119,25 +122,26 @@ proc mapBodiesToHeader(buddy: BeaconBuddyRef,
       job.getBodiesJob.headers.add headers[i]
       job.getBodiesJob.bodies.add bodies[z]
 
-proc putBlocks(ctx: BeaconCtxRef,
-               skel: SkeletonRef,
-               headers: openArray[BlockHeader],
-               bodies: openArray[BlockBody]) =
-
+proc putBlocks(
+    ctx: BeaconCtxRef,
+    skel: SkeletonRef,
+    headers: openArray[BlockHeader],
+    bodies: openArray[BlockBody],
+) =
   for i, body in bodies:
     let r = skel.putBody(headers[i], body)
     doAssert(r.isOk)
 
   let res = skel.putBlocks(headers)
   if res.isErr:
-    error "putBlocks->putBlocks", msg=res.error
+    error "putBlocks->putBlocks", msg = res.error
     return
 
   let z = res.get
   if FillCanonical in z.status:
     let rr = skel.fillCanonicalChain()
     if rr.isErr:
-      error "putBlocks->fillCanonicalChain", msg=rr.error
+      error "putBlocks->fillCanonicalChain", msg = rr.error
       return
 
 proc setupTally*(ctx: BeaconCtxRef) =
@@ -167,7 +171,7 @@ proc headTally(ctx: BeaconCtxRef, head: uint64) =
     let maxPt = rc.get().maxPt
     if head > maxPt:
       # new head
-      discard ctx.pool.mask.merge(maxPt+1, head-1)
+      discard ctx.pool.mask.merge(maxPt + 1, head - 1)
   else:
     # initialize
     discard ctx.pool.mask.merge(1'u64, head)
@@ -192,7 +196,7 @@ proc resumeSync*(ctx: BeaconCtxRef): Future[bool] {.async.} =
   let last = skel.last
   let res = skel.getHeader(last.head)
   if res.isErr:
-    error "resumeSync->getHeader", msg=res.error
+    error "resumeSync->getHeader", msg = res.error
     return false
 
   let maybeHeader = res.get
@@ -202,14 +206,14 @@ proc resumeSync*(ctx: BeaconCtxRef): Future[bool] {.async.} =
   let header = maybeHeader.get
   let r = skel.initSync(header)
   if r.isErr:
-    error "resumeSync->initSync", msg=r.error
+    error "resumeSync->initSync", msg = r.error
     return false
 
   let z = r.get
   if FillCanonical in z.status:
     let rr = skel.fillCanonicalChain()
     if rr.isErr:
-      error "resumeSync->fillCanonicalChain", msg=rr.error
+      error "resumeSync->fillCanonicalChain", msg = rr.error
       return false
 
   # collect gaps of skeleton, excluding genesis
@@ -248,25 +252,24 @@ proc setSyncTarget*(ctx: BeaconCtxRef): Future[void] {.async.} =
     let job = makeGetBodyJob(header, setHead = true)
     ctx.pool.jobs.addLast(job)
   else:
-    error "setSyncTarget.setHead", msg=res.error
+    error "setSyncTarget.setHead", msg = res.error
 
 proc fillBlocksGaps*(ctx: BeaconCtxRef, least: uint64, last: uint64) =
   if last - least < MaxGetBlocks:
-    ctx.reduceTally(last-least, last)
-    let job = makeGetBlocksJob(last, last-least+1)
+    ctx.reduceTally(last - least, last)
+    let job = makeGetBlocksJob(last, last - least + 1)
     ctx.pool.jobs.addLast(job)
     return
 
-  var
-    max = last
+  var max = last
 
   while true:
-    ctx.reduceTally(max-MaxGetBlocks, max)
+    ctx.reduceTally(max - MaxGetBlocks, max)
     let job = makeGetBlocksJob(max, MaxGetBlocks)
     ctx.pool.jobs.addLast(job)
     if ctx.pool.jobs.len > MaxJobsQueue:
       return
-    max = max-MaxGetBlocks
+    max = max - MaxGetBlocks
     if max <= MaxGetBlocks:
       break
 
@@ -288,8 +291,7 @@ proc executeGetBodyJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.a
   let b = await peer.getBlockBodies([job.getBodyJob.headerHash])
   if b.isNone:
     debug "executeGetBodyJob->getBodies none",
-      hash=job.getBodyJob.headerHash.short,
-      number=job.getBodyJob.header.number
+      hash = job.getBodyJob.headerHash.short, number = job.getBodyJob.header.number
     # retry with other peer
     buddy.requeue job
     return
@@ -297,8 +299,7 @@ proc executeGetBodyJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.a
   let bodies = b.get
   if bodies.blocks.len == 0:
     debug "executeGetBodyJob->getBodies isZero",
-      hash=job.getBodyJob.headerHash.short,
-      number=job.getBodyJob.header.number
+      hash = job.getBodyJob.headerHash.short, number = job.getBodyJob.header.number
     # retry with other peer
     buddy.requeue job
     return
@@ -308,8 +309,7 @@ proc executeGetBodyJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.a
   if bodySumHash != job.getBodyJob.sumHash:
     # retry with other peer
     debug "executeGetBodyJob->sumHash",
-      expect=job.getBodyJob.sumHash.short,
-      get=bodySumHash.short
+      expect = job.getBodyJob.sumHash.short, get = bodySumHash.short
     buddy.requeue job
     return
 
@@ -318,14 +318,14 @@ proc executeGetBodyJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.a
   if job.getBodyJob.setHead:
     let res = skel.setHead(job.getBodyJob.header)
     if res.isErr:
-      error "executeGetBodyJob->setHead", msg=res.error
+      error "executeGetBodyJob->setHead", msg = res.error
       # something wrong
       return
     status = res.get().status
   else:
     let res = skel.putBlocks([job.getBodyJob.header])
     if res.isErr:
-      error "executeGetBodyJob->putBlocks", msg=res.error
+      error "executeGetBodyJob->putBlocks", msg = res.error
       return
     status = res.get().status
 
@@ -334,12 +334,14 @@ proc executeGetBodyJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.a
   if FillCanonical in status:
     let rr = skel.fillCanonicalChain()
     if rr.isErr:
-      error "executeGetBodyJob->fillCanonicalChain", msg=rr.error
+      error "executeGetBodyJob->fillCanonicalChain", msg = rr.error
       return
 
   buddy.jobDone()
 
-proc executeGetBlocksJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.async.} =
+proc executeGetBlocksJob*(
+    buddy: BeaconBuddyRef, job: BeaconJob
+): Future[void] {.async.} =
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -358,7 +360,7 @@ proc executeGetBlocksJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {
 
   var
     headerHashes = newSeqOfCap[Hash256](numHeaders)
-    reqBodies  = newSeqOfCap[bool](numHeaders)
+    reqBodies = newSeqOfCap[bool](numHeaders)
     numRequest = 0
 
   for i, x in job.getBlocksJob.headers:
@@ -371,22 +373,23 @@ proc executeGetBlocksJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {
 
   if numRequest == 0:
     # all bodies are empty
-    for _ in 0..<numHeaders:
+    for _ in 0 ..< numHeaders:
       job.getBlocksJob.bodies.add BlockBody()
   else:
     let b = await peer.getBlockBodies(headerHashes)
     if b.isNone:
       debug "executeGetBlocksJob->getBodies none"
       # retry with other peer
-      buddy.requeue makeGetBodiesJob(job.getBlocksJob.headers,
-        headerHashes, reqBodies)
+      buddy.requeue makeGetBodiesJob(job.getBlocksJob.headers, headerHashes, reqBodies)
       return
     buddy.mapBodiesToHeader(job, b.get().blocks, reqBodies)
 
   ctx.putBlocks(skel, job.getBlocksJob.headers, job.getBlocksJob.bodies)
   buddy.jobDone()
 
-proc executeGetBodiesJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.async.} =
+proc executeGetBodiesJob*(
+    buddy: BeaconBuddyRef, job: BeaconJob
+): Future[void] {.async.} =
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -412,8 +415,8 @@ proc executeJob*(buddy: BeaconBuddyRef, job: BeaconJob): Future[void] {.async.} 
     of bjmGetBodies:
       await executeGetBodiesJob(buddy, job)
   except TransportError as ex:
-    error "executeJob->TransportError", msg=ex.msg
+    error "executeJob->TransportError", msg = ex.msg
   except CatchableError as ex:
-    error "executeJob->OtherError", msg=ex.msg
+    error "executeJob->OtherError", msg = ex.msg
     # retry with other peer
     buddy.requeue job

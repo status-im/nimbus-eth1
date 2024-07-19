@@ -22,17 +22,13 @@ import
   ./ledger/base/[base_config, base_desc, base_helpers],
   ./ledger/[base, base_iterators]
 
-export
-  AccountsLedgerRef,
-  base,
-  base_config,
-  base_iterators
+export AccountsLedgerRef, base, base_config, base_iterators
 
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc init*(_: type LedgerRef, db: CoreDbRef; root: Hash256): LedgerRef =
+proc init*(_: type LedgerRef, db: CoreDbRef, root: Hash256): LedgerRef =
   LedgerRef(ac: AccountsLedgerRef.init(db, root)).bless(db)
 
 # ------------------------------------------------------------------------------

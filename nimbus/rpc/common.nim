@@ -9,8 +9,11 @@
 
 import
   eth/common,
-  stint, json_rpc/server, json_rpc/errors,
-  eth/p2p, eth/p2p/enode,
+  stint,
+  json_rpc/server,
+  json_rpc/errors,
+  eth/p2p,
+  eth/p2p/enode,
   ../config,
   ../beacon/web3_eth_conv,
   web3/conversions
@@ -20,14 +23,14 @@ import
 type
   NodePorts = object
     discovery: string
-    listener : string
+    listener: string
 
   NodeInfo = object
-    id    : string # UInt256 hex
-    name  : string
-    enode : string # Enode string
-    ip    : string # address string
-    ports : NodePorts
+    id: string # UInt256 hex
+    name: string
+    enode: string # Enode string
+    ip: string # address string
+    ports: NodePorts
 
 NodePorts.useDefaultSerializationIn JrpcConv
 NodeInfo.useDefaultSerializationIn JrpcConv
@@ -59,10 +62,8 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
         name: conf.agentString,
         enode: $enode,
         ip: $enode.address.ip,
-        ports: NodePorts(
-          discovery: $enode.address.udpPort,
-          listener: $enode.address.tcpPort
-        )
+        ports:
+          NodePorts(discovery: $enode.address.udpPort, listener: $enode.address.tcpPort),
       )
 
     return nodeInfo

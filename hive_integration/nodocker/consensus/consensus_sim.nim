@@ -21,10 +21,7 @@ import
 proc processChainData(cd: ChainData): TestStatus =
   let
     networkId = NetworkId(cd.params.config.chainId)
-    com = CommonRef.new(newCoreDbRef DefaultDbMemory,
-      networkId,
-      cd.params
-    )
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, networkId, cd.params)
 
   com.initializeEmptyDb()
 
@@ -40,9 +37,7 @@ proc processChainData(cd: ChainData): TestStatus =
     TestStatus.OK
   else:
     trace "block hash not equal",
-      got=blockHash,
-      number=head.number,
-      expected=cd.lastBlockHash
+      got = blockHash, number = head.number, expected = cd.lastBlockHash
     TestStatus.Failed
 
 proc main() =

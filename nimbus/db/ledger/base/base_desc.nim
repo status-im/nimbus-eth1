@@ -10,9 +10,7 @@
 
 {.push raises: [].}
 
-import
-  ../../aristo/aristo_profile,
-  ../backend/accounts_ledger
+import ../../aristo/aristo_profile, ../backend/accounts_ledger
 
 type
   LedgerProfListRef* = AristoDbProfListRef
@@ -21,12 +19,10 @@ type
   LedgerProfData* = AristoDbProfData
     ## Borrowed from `aristo_profile`, only used in profiling mode
 
-  LedgerSpRef* = LedgerSavePoint
-    ## Object for check point or save point
+  LedgerSpRef* = LedgerSavePoint ## Object for check point or save point
 
-  LedgerRef* = ref object of RootRef
-    ## Root object with closures
-    trackApi*: bool             ## For debugging
+  LedgerRef* = ref object of RootRef ## Root object with closures
+    trackApi*: bool ## For debugging
     profTab*: LedgerProfListRef ## Profiling data (if any)
     ac*: AccountsLedgerRef
 

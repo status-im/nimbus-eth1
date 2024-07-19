@@ -23,12 +23,12 @@ import
 # ------------------------------------------------------------------------------
 
 proc toNode*(
-    vtx: VertexRef;                    # Vertex to convert
-    root: VertexID;                    # Sub-tree root the `vtx` belongs to
-    db: AristoDbRef;                   # Database
-    stopEarly = true;                  # Full list of missing links if `false`
-    beKeyOk = true;                    # Allow fetching DB backend keys
-      ): Result[NodeRef,seq[VertexID]] =
+    vtx: VertexRef, # Vertex to convert
+    root: VertexID, # Sub-tree root the `vtx` belongs to
+    db: AristoDbRef, # Database
+    stopEarly = true, # Full list of missing links if `false`
+    beKeyOk = true, # Allow fetching DB backend keys
+): Result[NodeRef, seq[VertexID]] =
   ## Convert argument the vertex `vtx` to a node type. Missing Merkle hash
   ## keys are searched for on the argument database `db`.
   ##
@@ -40,7 +40,7 @@ proc toNode*(
   ## only from the cache layer. This does not affect a link key for a payload
   ## storage root.
   ##
-  proc getKey(db: AristoDbRef; rvid: RootedVertexID; beOk: bool): HashKey =
+  proc getKey(db: AristoDbRef, rvid: RootedVertexID, beOk: bool): HashKey =
     block body:
       let key = db.layersGetKey(rvid).valueOr:
         break body
@@ -54,7 +54,7 @@ proc toNode*(
         return rc.value[0]
     VOID_HASH_KEY
 
-  case vtx.vType:
+  case vtx.vType
   of Leaf:
     let node = NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
     # Need to resolve storage root for account leaf
@@ -66,14 +66,13 @@ proc toNode*(
           return err(@[vid])
         node.key[0] = key
     return ok node
-
   of Branch:
     let node = NodeRef(vType: Branch, bVid: vtx.bVid, ePfx: vtx.ePfx)
     var missing: seq[VertexID]
     for n in 0 .. 15:
       let vid = vtx.bVid[n]
       if vid.isValid:
-        let key = db.getKey((root, vid), beOk=beKeyOk)
+        let key = db.getKey((root, vid), beOk = beKeyOk)
         if key.isValid:
           node.key[n] = key
         elif stopEarly:
@@ -84,10 +83,9 @@ proc toNode*(
       return err(missing)
     return ok node
 
-
 iterator subVids*(vtx: VertexRef): VertexID =
   ## Returns the list of all sub-vertex IDs for the argument `vtx`.
-  case vtx.vType:
+  case vtx.vType
   of Leaf:
     if vtx.lData.pType == AccountData:
       let vid = vtx.lData.stoID
@@ -101,9 +99,9 @@ iterator subVids*(vtx: VertexRef): VertexID =
 # ---------------------
 
 proc updateAccountForHasher*(
-    db: AristoDbRef;                   # Database
-    hike: Hike;                        # Return value from `retrieveStorageID()`
-      ) =
+    db: AristoDbRef, # Database
+    hike: Hike, # Return value from `retrieveStorageID()`
+) =
   ## The argument `hike` is used to mark/reset the keys along the implied
   ## vertex path for being re-calculated.
   ##

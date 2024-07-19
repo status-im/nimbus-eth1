@@ -17,39 +17,31 @@ import
   unittest2,
   ../../nimbus/db/opts,
   ../../nimbus/db/core_db/backend/aristo_rocksdb,
-  ../../nimbus/db/aristo/[
-    aristo_check,
-    aristo_debug,
-    aristo_desc,
-    aristo_get,
-    aristo_persistent,
-    aristo_tx],
+  ../../nimbus/db/aristo/
+    [aristo_check, aristo_debug, aristo_desc, aristo_get, aristo_persistent, aristo_tx],
   ../replay/xcheck,
   ./test_helpers
 
 type
-  LeafQuartet =
-    array[0..3, seq[LeafTiePayload]]
+  LeafQuartet = array[0 .. 3, seq[LeafTiePayload]]
 
-  DbTriplet =
-    array[0..2, AristoDbRef]
+  DbTriplet = array[0 .. 2, AristoDbRef]
 
-const
-  testRootVid = VertexID(2)
-    ## Need to reconfigure for the test, root ID 1 cannot be deleted as a trie
+const testRootVid = VertexID(2)
+  ## Need to reconfigure for the test, root ID 1 cannot be deleted as a trie
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
+proc dump(pfx: string, dx: varargs[AristoDbRef]): string =
   if 0 < dx.len:
     result = "\n   "
   var
     pfx = pfx
     qfx = ""
   if pfx.len == 0:
-    (pfx,qfx) = ("[","]")
+    (pfx, qfx) = ("[", "]")
   elif 1 < dx.len:
     pfx = pfx & "#"
   for n in 0 ..< dx.len:
@@ -57,7 +49,7 @@ proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
     result &= pfx
     if 1 < dx.len:
       result &= $n1
-    result &= qfx & "\n    " & dx[n].pp(backendOk=true) & "\n"
+    result &= qfx & "\n    " & dx[n].pp(backendOk = true) & "\n"
     if n1 < dx.len:
       result &= "   ==========\n   "
 
@@ -87,11 +79,11 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
     else:
       if collect.len == 0:
         let a = lst.len div 4
-        yield [lst[0 ..< a], lst[a ..< 2*a], lst[2*a ..< 3*a], lst[3*a .. ^1]]
+        yield [lst[0 ..< a], lst[a ..< 2 * a], lst[2 * a ..< 3 * a], lst[3 * a .. ^1]]
       else:
         if collect.len == 1:
           let a = lst.len div 3
-          yield [collect[0], lst[0 ..< a], lst[a ..< 2*a], lst[a .. ^1]]
+          yield [collect[0], lst[0 ..< a], lst[a ..< 2 * a], lst[a .. ^1]]
         elif collect.len == 2:
           let a = lst.len div 2
           yield [collect[0], collect[1], lst[0 ..< a], lst[a .. ^1]]
@@ -99,7 +91,7 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
           yield [collect[0], collect[1], collect[2], lst]
         collect.setLen(0)
 
-proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
+proc dbTriplet(w: LeafQuartet, rdbPath: string): Result[DbTriplet, AristoError] =
   let db = block:
     if 0 < rdbPath.len:
       let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
@@ -117,7 +109,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   block:
     let report = db.mergeList w[0]
     if report.error != 0:
-      db.finish(eradicate=true)
+      db.finish(eradicate = true)
       xCheck report.error == 0
     let rc = db.persist()
     xCheckRc rc.error == 0:
@@ -133,10 +125,10 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
 
   # Clause (9) from `aristo/README.md` example
   for n in 0 ..< dx.len:
-    let report = dx[n].mergeList w[n+1]
+    let report = dx[n].mergeList w[n + 1]
     if report.error != 0:
-      db.finish(eradicate=true)
-      xCheck (n, report.error) == (n,0)
+      db.finish(eradicate = true)
+      xCheck (n, report.error) == (n, 0)
 
   return ok(dx)
 
@@ -144,12 +136,12 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
 
 proc cleanUp(dx: var DbTriplet) =
   if not dx[0].isNil:
-    dx[0].finish(eradicate=true)
+    dx[0].finish(eradicate = true)
     dx.reset
 
 # ----------------------
 
-proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
+proc isDbEq(a, b: LayerRef, db: AristoDbRef, noisy = true): bool =
   ## Verify that argument filter `a` has the same effect on the
   ## physical/unfiltered backend of `db` as argument filter `b`.
   if a.isNil:
@@ -158,15 +150,14 @@ proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
     return false
   if unsafeAddr(a[]) != unsafeAddr(b[]):
     if a.kMap.getOrVoid((testRootVid, testRootVid)) !=
-       b.kMap.getOrVoid((testRootVid, testRootVid)) or
-       a.vTop != b.vTop:
+        b.kMap.getOrVoid((testRootVid, testRootVid)) or a.vTop != b.vTop:
       return false
 
     # Void entries may differ unless on physical backend
     var (aTab, bTab) = (a.sTab, b.sTab)
     if aTab.len < bTab.len:
       aTab.swap bTab
-    for (vid,aVtx) in aTab.pairs:
+    for (vid, aVtx) in aTab.pairs:
       let bVtx = bTab.getOrVoid vid
       bTab.del vid
 
@@ -180,7 +171,6 @@ proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
         let vtx = if aVtx.isValid: aVtx else: bVtx
         if vtx != rc.value:
           return false
-
       elif not vid.isValid and not bTab.hasKey vid:
         let rc = db.getVtxUbe vid
         if rc.isOk:
@@ -196,7 +186,7 @@ proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
     var (aMap, bMap) = (a.kMap, b.kMap)
     if aMap.len < bMap.len:
       aMap.swap bMap
-    for (vid,aKey) in aMap.pairs:
+    for (vid, aKey) in aMap.pairs:
       let bKey = bMap.getOrVoid vid
       bMap.del vid
 
@@ -210,7 +200,6 @@ proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
         let key = if aKey.isValid: aKey else: bKey
         if key != rc.value:
           return false
-
       elif not vid.isValid and not bMap.hasKey vid:
         let rc = db.getKeyUbe vid
         if rc.isOk:
@@ -226,17 +215,12 @@ proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
 
 # ----------------------
 
-proc checkBeOk(
-    dx: DbTriplet;
-    forceCache = false;
-    noisy = true;
-      ): bool =
+proc checkBeOk(dx: DbTriplet, forceCache = false, noisy = true): bool =
   ## ..
   for n in 0 ..< dx.len:
     let rc = dx[n].checkBE()
-    xCheckRc rc.error == (0,0):
-      noisy.say "***", "db checkBE failed",
-        " n=", n, "/", dx.len-1
+    xCheckRc rc.error == (0, 0):
+      noisy.say "***", "db checkBE failed", " n=", n, "/", dx.len - 1
   true
 
 # ------------------------------------------------------------------------------
@@ -244,10 +228,10 @@ proc checkBeOk(
 # ------------------------------------------------------------------------------
 
 proc testBalancer*(
-    noisy: bool;
-    list: openArray[ProofTrieData];
-    rdbPath: string;                          # Rocks DB storage directory
-       ): bool =
+    noisy: bool,
+    list: openArray[ProofTrieData],
+    rdbPath: string, # Rocks DB storage directory
+): bool =
   var n = 0
   for w in list.quadripartite:
     n.inc
@@ -260,7 +244,6 @@ proc testBalancer*(
 
     # Work through clauses (8)..(11) from `aristo/README.md` example
     block:
-
       # Clause (8) from `aristo/README.md` example
       var
         dx = block:
@@ -297,7 +280,7 @@ proc testBalancer*(
 
       # Check/verify backends
       block:
-        let ok = dx.checkBeOk(noisy=noisy)
+        let ok = dx.checkBeOk(noisy = noisy)
         xCheck ok:
           noisy.say "*** testDistributedAccess (4)", "n=", n, "db3".dump db3
 
@@ -338,19 +321,15 @@ proc testBalancer*(
       # Clause (14) from `aristo/README.md` check
       let c11Fil1_eq_db1RoFilter = c11Filter1.isDbEq(db1.balancer, db1, noisy)
       xCheck c11Fil1_eq_db1RoFilter:
-        noisy.say "*** testDistributedAccess (7)", "n=", n,
-          "db1".dump(db1),
-          ""
+        noisy.say "*** testDistributedAccess (7)", "n=", n, "db1".dump(db1), ""
 
       # Clause (15) from `aristo/README.md` check
       let c11Fil3_eq_db3RoFilter = c11Filter3.isDbEq(db3.balancer, db3, noisy)
       xCheck c11Fil3_eq_db3RoFilter:
-        noisy.say "*** testDistributedAccess (8)", "n=", n,
-          "db3".dump(db3),
-          ""
+        noisy.say "*** testDistributedAccess (8)", "n=", n, "db3".dump(db3), ""
       # Check/verify backends
       block:
-        let ok = dy.checkBeOk(noisy=noisy)
+        let ok = dy.checkBeOk(noisy = noisy)
         xCheck ok
 
       when false: # or true:

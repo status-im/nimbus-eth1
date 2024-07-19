@@ -18,9 +18,7 @@
 ##
 {.push raises: [].}
 
-import
-  ./kvt_walk/memory_only
-export
-  memory_only
+import ./kvt_walk/memory_only
+export memory_only
 
 # End

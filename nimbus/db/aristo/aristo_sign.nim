@@ -16,8 +16,8 @@
 import
   eth/common,
   results,
-  "."/[aristo_compute, aristo_desc, aristo_get, aristo_init,
-       aristo_delete, aristo_merge]
+  "."/
+    [aristo_compute, aristo_desc, aristo_get, aristo_init, aristo_delete, aristo_merge]
 
 # ------------------------------------------------------------------------------
 # Public functions, signature generator
@@ -28,15 +28,9 @@ proc merkleSignBegin*(): MerkleSignRef =
   let
     db = AristoDbRef.init VoidBackendRef
     vid = VertexID(2)
-  MerkleSignRef(
-    root: vid,
-    db:   db)
+  MerkleSignRef(root: vid, db: db)
 
-proc merkleSignAdd*(
-    sdb: MerkleSignRef;
-    key: openArray[byte];
-    val: openArray[byte];
-    ) =
+proc merkleSignAdd*(sdb: MerkleSignRef, key: openArray[byte], val: openArray[byte]) =
   ## Add key-value item to the signature list. The order of the items to add
   ## is irrelevant.
   if sdb.error == AristoError(0):
@@ -46,11 +40,7 @@ proc merkleSignAdd*(
       sdb.errKey = @key
       return
 
-
-proc merkleSignDelete*(
-    sdb: MerkleSignRef;
-    key: openArray[byte];
-    ) =
+proc merkleSignDelete*(sdb: MerkleSignRef, key: openArray[byte]) =
   ## Add key-value item to the signature list. The order of the items to add
   ## is irrelevant.
   if sdb.error == AristoError(0):
@@ -60,9 +50,7 @@ proc merkleSignDelete*(
       sdb.errKey = @key
       return
 
-proc merkleSignCommit*(
-    sdb: MerkleSignRef;
-      ): Result[Hash256,(Blob,AristoError)] =
+proc merkleSignCommit*(sdb: MerkleSignRef): Result[Hash256, (Blob, AristoError)] =
   ## Finish with the list, calculate signature and return it.
   if sdb.count == 0:
     return ok EMPTY_ROOTHASH

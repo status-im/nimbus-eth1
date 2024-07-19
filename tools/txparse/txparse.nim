@@ -25,7 +25,6 @@ proc parseTx(hexLine: string) =
 
     # everything ok
     echo "0x", address.toHex
-
   except RlpError as ex:
     echo "err: ", ex.msg
   except ValueError as ex:

@@ -7,8 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import
-  ../nimbus/compile_info
+import ../nimbus/compile_info
 
 import
   std/[os, strutils, net],
@@ -36,9 +35,7 @@ when defined(evmc_enabled):
 ## * No multiple bind addresses support
 ## * No database support
 
-proc basicServices(nimbus: NimbusNode,
-                   conf: NimbusConf,
-                   com: CommonRef) =
+proc basicServices(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   nimbus.txPool = TxPoolRef.new(com)
 
   # txPool must be informed of active head
@@ -69,8 +66,9 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
       fatal "Import private key error", msg = res.error()
       quit(QuitFailure)
 
-proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              com: CommonRef, protocols: set[ProtocolFlag]) =
+proc setupP2P(
+    nimbus: NimbusNode, conf: NimbusConf, com: CommonRef, protocols: set[ProtocolFlag]
+) =
   ## Creating P2P Server
   let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
   if kpres.isErr:
@@ -78,11 +76,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     quit(QuitFailure)
 
   let keypair = kpres.get()
-  var address = Address(
-    ip: conf.listenAddress,
-    tcpPort: conf.tcpPort,
-    udpPort: conf.udpPort
-  )
+  var address =
+    Address(ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
 
   if conf.nat.hasExtIp:
     # any required port redirection is assumed to be done by hand
@@ -95,48 +90,55 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     # and discovery for NAT-related objects.
     if extIP.isSome:
       address.ip = extIP.get()
-      let extPorts = redirectPorts(tcpPort = address.tcpPort,
-                                   udpPort = address.udpPort,
-                                   description = NimbusName & " " & NimbusVersion)
+      let extPorts = redirectPorts(
+        tcpPort = address.tcpPort,
+        udpPort = address.udpPort,
+        description = NimbusName & " " & NimbusVersion,
+      )
       if extPorts.isSome:
         (address.tcpPort, address.udpPort) = extPorts.get()
 
   let bootstrapNodes = conf.getBootNodes()
 
   nimbus.ethNode = newEthereumNode(
-    keypair, address, conf.networkId, conf.agentString,
-    addAllCapabilities = false, minPeers = conf.maxPeers,
+    keypair,
+    address,
+    conf.networkId,
+    conf.agentString,
+    addAllCapabilities = false,
+    minPeers = conf.maxPeers,
     bootstrapNodes = bootstrapNodes,
-    bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
+    bindUdpPort = conf.udpPort,
+    bindTcpPort = conf.tcpPort,
     bindIp = conf.listenAddress,
-    rng = nimbus.ctx.rng)
+    rng = nimbus.ctx.rng,
+  )
 
   # Add protocol capabilities based on protocol flags
   for w in protocols:
-    case w: # handle all possibilities
+    case w # handle all possibilities
     of ProtocolFlag.Eth:
       nimbus.ethNode.addEthHandlerCapability(
-        nimbus.ethNode.peerPool,
-        nimbus.chainRef,
-        nimbus.txPool)
+        nimbus.ethNode.peerPool, nimbus.chainRef, nimbus.txPool
+      )
     #of ProtocolFlag.Snap:
     #  nimbus.ethNode.addSnapHandlerCapability(
     #    nimbus.ethNode.peerPool,
     #    nimbus.chainRef)
   # Cannot do without minimal `eth` capability
   if ProtocolFlag.Eth notin protocols:
-    nimbus.ethNode.addEthHandlerCapability(
-      nimbus.ethNode.peerPool,
-      nimbus.chainRef)
+    nimbus.ethNode.addEthHandlerCapability(nimbus.ethNode.peerPool, nimbus.chainRef)
 
   # Early-initialise "--snap-sync" before starting any network connections.
   block:
     let
-      exCtrlFile = if conf.syncCtrlFile.isNone: Opt.none(string)
-                   else: Opt.some(conf.syncCtrlFile.get)
-      tickerOK = conf.logLevel in {
-        LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
-    case conf.syncMode:
+      exCtrlFile =
+        if conf.syncCtrlFile.isNone:
+          Opt.none(string)
+        else:
+          Opt.some(conf.syncCtrlFile.get)
+      tickerOK = conf.logLevel in {LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
+    case conf.syncMode
     #of SyncMode.Snap:
     #  # Minimal capability needed for sync only
     #  if ProtocolFlag.Snap notin protocols:
@@ -147,32 +149,30 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     #    tickerOK, exCtrlFile)
     of SyncMode.Default:
       nimbus.beaconSyncRef = BeaconSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers
       )
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
   if staticPeers.len > 0:
     nimbus.peerManager = PeerManagerRef.new(
-      nimbus.ethNode.peerPool,
-      conf.reconnectInterval,
-      conf.reconnectMaxRetry,
-      staticPeers
+      nimbus.ethNode.peerPool, conf.reconnectInterval, conf.reconnectMaxRetry,
+      staticPeers,
     )
     nimbus.peerManager.start()
 
   # Start Eth node
   if conf.maxPeers > 0:
     var waitForPeers = true
-    case conf.syncMode:
+    case conf.syncMode
     #of SyncMode.Snap:
     #  waitForPeers = false
     of SyncMode.Default:
       discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
-      waitForPeers = waitForPeers)
-
+      waitForPeers = waitForPeers,
+    )
 
 proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
   # metrics logging
@@ -188,10 +188,11 @@ proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
 
   # metrics server
   if conf.metricsEnabled:
-    info "Starting metrics HTTP server", address = conf.metricsAddress, port = conf.metricsPort
+    info "Starting metrics HTTP server",
+      address = conf.metricsAddress, port = conf.metricsPort
     let res = MetricsHttpServerRef.new($conf.metricsAddress, conf.metricsPort)
     if res.isErr:
-      fatal "Failed to create metrics server", msg=res.error
+      fatal "Failed to create metrics server", msg = res.error
       quit(QuitFailure)
 
     nimbus.metricsServer = res.get
@@ -205,9 +206,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(logFile, fmAppend)
 
-  info "Launching execution client",
-      version = FullVersionStr,
-      conf
+  info "Launching execution client", version = FullVersionStr, conf
 
   when defined(evmc_enabled):
     evmcSetLibraryPath(conf.evm)
@@ -217,19 +216,19 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     let fileName = conf.trustedSetupFile.get()
     let res = Kzg.loadTrustedSetup(fileName)
     if res.isErr:
-      fatal "Cannot load Kzg trusted setup from file", msg=res.error
+      fatal "Cannot load Kzg trusted setup from file", msg = res.error
       quit(QuitFailure)
   else:
     let res = loadKzgTrustedSetup()
     if res.isErr:
-      fatal "Cannot load baked in Kzg trusted setup", msg=res.error
+      fatal "Cannot load baked in Kzg trusted setup", msg = res.error
       quit(QuitFailure)
 
   createDir(string conf.dataDir)
   let coreDB =
     # Resolve statically for database type
-    case conf.chainDbMode:
-    of Aristo,AriPrune:
+    case conf.chainDbMode
+    of Aristo, AriPrune:
       AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
 
   setupMetrics(nimbus, conf)
@@ -238,7 +237,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     db = coreDB,
     pruneHistory = (conf.chainDbMode == AriPrune),
     networkId = conf.networkId,
-    params = conf.networkParams)
+    params = conf.networkParams,
+  )
 
   defer:
     com.db.finish()
@@ -257,9 +257,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupRpc(nimbus, conf, com, protocols)
 
     if conf.maxPeers > 0:
-      case conf.syncMode:
-      of SyncMode.Default:
-        nimbus.beaconSyncRef.start
+      case conf.syncMode
+      of SyncMode.Default: nimbus.beaconSyncRef.start
       #of SyncMode.Snap:
       #  nimbus.snapSyncRef.start
 
@@ -288,6 +287,7 @@ when isMainModule:
       setupForeignThreadGc()
     nimbus.state = NimbusState.Stopping
     echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
+
   setControlCHook(controlCHandler)
 
   ## Show logs on stdout until we get the user's logging choice

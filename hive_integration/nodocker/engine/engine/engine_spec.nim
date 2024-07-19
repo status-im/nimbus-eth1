@@ -8,21 +8,14 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ../types,
-  ../test_env,
-  ../base_spec
+import ../types, ../test_env, ../base_spec
 
-export
-  base_spec,
-  test_env,
-  types
+export base_spec, test_env, types
 
-type
-  EngineSpec* = ref object of BaseSpec
-    ttd*: int64
-    chainFile*: string
-    enableConfigureCLMock*: bool
+type EngineSpec* = ref object of BaseSpec
+  ttd*: int64
+  chainFile*: string
+  enableConfigureCLMock*: bool
 
 method withMainFork*(tc: EngineSpec, fork: EngineFork): BaseSpec {.base.} =
   doAssert(false, "withMainFork not implemented")

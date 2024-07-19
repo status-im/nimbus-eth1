@@ -22,22 +22,21 @@ from std/sequtils import mapIt
 
 {.push raises: [].}
 
-type
-  Bytes64 = array[64, byte]
+type Bytes64 = array[64, byte]
 
 const
-  BLS_MODULUS_STR = "52435875175126190479447740508185965837690552500527637822603658699938581184513"
+  BLS_MODULUS_STR =
+    "52435875175126190479447740508185965837690552500527637822603658699938581184513"
   BLS_MODULUS* = parse(BLS_MODULUS_STR, UInt256, 10).toBytesBE
   PrecompileInputLength = 192
 
 proc pointEvaluationResult(): Bytes64 {.compileTime.} =
-  result[0..<32] = FIELD_ELEMENTS_PER_BLOB.u256.toBytesBE[0..^1]
-  result[32..^1] = BLS_MODULUS[0..^1]
+  result[0 ..< 32] = FIELD_ELEMENTS_PER_BLOB.u256.toBytesBE[0 ..^ 1]
+  result[32 ..^ 1] = BLS_MODULUS[0 ..^ 1]
 
 const
   PointEvaluationResult* = pointEvaluationResult()
   POINT_EVALUATION_PRECOMPILE_GAS* = 50000.GasInt
-
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
 proc kzgToVersionedHash*(kzg: kzg.KzgCommitment): VersionedHash =
@@ -61,10 +60,10 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
 
   let
     versionedHash = KzgBytes32.copyFrom(input, 0, 31)
-    z =  KzgBytes32.copyFrom(input, 32, 63)
-    y =  KzgBytes32.copyFrom(input, 64, 95)
-    commitment =  KzgBytes48.copyFrom(input, 96, 143)
-    kzgProof =  KzgBytes48.copyFrom(input, 144, 191)
+    z = KzgBytes32.copyFrom(input, 32, 63)
+    y = KzgBytes32.copyFrom(input, 64, 95)
+    commitment = KzgBytes48.copyFrom(input, 96, 143)
+    kzgProof = KzgBytes48.copyFrom(input, 144, 191)
 
   if kzgToVersionedHash(commitment).data != versionedHash.bytes:
     return err("versionedHash should equal to kzgToVersionedHash(commitment)")
@@ -115,15 +114,11 @@ proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
 # getBlobBaseFee implements get_data_gas_price from EIP-4844
 func getBlobBaseFee*(excessBlobGas: uint64): UInt256 =
   fakeExponential(
-    MIN_BLOB_GASPRICE.u256,
-    excessBlobGas.u256,
-    BLOB_GASPRICE_UPDATE_FRACTION.u256
+    MIN_BLOB_GASPRICE.u256, excessBlobGas.u256, BLOB_GASPRICE_UPDATE_FRACTION.u256
   )
 
-proc calcDataFee*(versionedHashesLen: int,
-                  excessBlobGas: uint64): UInt256 =
-  getTotalBlobGas(versionedHashesLen).u256 *
-    getBlobBaseFee(excessBlobGas)
+proc calcDataFee*(versionedHashesLen: int, excessBlobGas: uint64): UInt256 =
+  getTotalBlobGas(versionedHashesLen).u256 * getBlobBaseFee(excessBlobGas)
 
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:
@@ -131,9 +126,8 @@ func blobGasUsed(txs: openArray[Transaction]): uint64 =
 
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
-    com: CommonRef, header, parentHeader: BlockHeader,
-    txs: openArray[Transaction]): Result[void, string] {.raises: [].} =
-
+    com: CommonRef, header, parentHeader: BlockHeader, txs: openArray[Transaction]
+): Result[void, string] {.raises: [].} =
   if not com.isCancunOrLater(header.timestamp):
     if header.blobGasUsed.isSome:
       return err("unexpected EIP-4844 blobGasUsed in block header")
@@ -156,7 +150,10 @@ func validateEip4844Header*(
     excessBlobGas = calcExcessBlobGas(parentHeader)
 
   if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-    return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+    return err(
+      "blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " &
+        $MAX_BLOB_GAS_PER_BLOCK
+    )
 
   if headerBlobGasUsed != blobGasUsed:
     return err("calculated blobGas not equal header.blobGasUsed")
@@ -166,30 +163,29 @@ func validateEip4844Header*(
 
   return ok()
 
-proc validateBlobTransactionWrapper*(tx: PooledTransaction):
-                                     Result[void, string] {.raises: [].} =
+proc validateBlobTransactionWrapper*(
+    tx: PooledTransaction
+): Result[void, string] {.raises: [].} =
   if tx.networkPayload.isNil:
     return err("tx wrapper is none")
 
   # note: assert blobs are not malformatted
-  let goodFormatted = tx.tx.versionedHashes.len ==
-                      tx.networkPayload.commitments.len and
-                      tx.tx.versionedHashes.len ==
-                      tx.networkPayload.blobs.len and
-                      tx.tx.versionedHashes.len ==
-                      tx.networkPayload.proofs.len
+  let goodFormatted =
+    tx.tx.versionedHashes.len == tx.networkPayload.commitments.len and
+    tx.tx.versionedHashes.len == tx.networkPayload.blobs.len and
+    tx.tx.versionedHashes.len == tx.networkPayload.proofs.len
 
   if not goodFormatted:
     return err("tx wrapper is ill formatted")
 
-  let commitments = tx.networkPayload.commitments.mapIt(
-                      kzg.KzgCommitment(bytes: it))
+  let commitments = tx.networkPayload.commitments.mapIt(kzg.KzgCommitment(bytes: it))
 
   # Verify that commitments match the blobs by checking the KZG proof
   let res = kzg.verifyBlobKzgProofBatch(
-              tx.networkPayload.blobs.mapIt(kzg.KzgBlob(bytes: it)),
-              commitments,
-              tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it)))
+    tx.networkPayload.blobs.mapIt(kzg.KzgBlob(bytes: it)),
+    commitments,
+    tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it)),
+  )
 
   if res.isErr:
     return err(res.error)

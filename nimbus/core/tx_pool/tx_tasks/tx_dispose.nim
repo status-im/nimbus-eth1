@@ -31,7 +31,7 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc utcNow: Time =
+proc utcNow(): Time =
   getTime().utc.toTime
 
 #proc pp(t: Time): string =
@@ -41,8 +41,9 @@ proc utcNow: Time =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc deleteOtherNonces(xp: TxPoolRef; item: TxItemRef; newerThan: Time): bool
-    {.gcsafe,raises: [KeyError].} =
+proc deleteOtherNonces(
+    xp: TxPoolRef, item: TxItemRef, newerThan: Time
+): bool {.gcsafe, raises: [KeyError].} =
   let rc = xp.txDB.bySender.eq(item.sender).sub
   if rc.isOk:
     for other in rc.value.data.incNonce(item.tx.nonce):
@@ -56,7 +57,7 @@ proc deleteOtherNonces(xp: TxPoolRef; item: TxItemRef; newerThan: Time): bool
 # ------------------------------------------------------------------------------
 
 # core/tx_pool.go(384): for addr := range pool.queue {
-proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [KeyError].} =
+proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe, raises: [KeyError].} =
   ## Any non-local transaction old enough will be removed. This will not
   ## apply to items in the packed queue.
   let
@@ -90,10 +91,9 @@ proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [KeyError].} =
         if not xp.txDB.byItemID.hasKey(rc.value.key):
           break
 
-
-proc disposeItemAndHigherNonces*(xp: TxPoolRef; item: TxItemRef;
-                                 reason, otherReason: TxInfo): int
-    {.gcsafe,raises: [CatchableError].} =
+proc disposeItemAndHigherNonces*(
+    xp: TxPoolRef, item: TxItemRef, reason, otherReason: TxInfo
+): int {.gcsafe, raises: [CatchableError].} =
   ## Move item and higher nonces per sender to wastebasket.
   if xp.txDB.dispose(item, reason):
     result = 1
@@ -106,9 +106,9 @@ proc disposeItemAndHigherNonces*(xp: TxPoolRef; item: TxItemRef;
         if xp.txDB.dispose(otherItem, otherReason):
           result.inc
 
-
-proc disposeById*(xp: TxPoolRef; itemIDs: openArray[Hash256]; reason: TxInfo)
-    {.gcsafe,raises: [KeyError].}=
+proc disposeById*(
+    xp: TxPoolRef, itemIDs: openArray[Hash256], reason: TxInfo
+) {.gcsafe, raises: [KeyError].} =
   ## Dispose items by item ID wihtout checking whether this makes other items
   ## unusable (e.g. with higher nonces for the same sender.)
   for itemID in itemIDs:

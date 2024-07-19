@@ -29,24 +29,21 @@ import
   ".."/[tx_chain, tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
   "."/[tx_bucket, tx_classify]
 
-type
-  TxPackerStateRef = ref object
-    xp: TxPoolRef
-    tr: CoreDbMptRef
-    cleanState: bool
-    numBlobPerBlock: int
+type TxPackerStateRef = ref object
+  xp: TxPoolRef
+  tr: CoreDbMptRef
+  cleanState: bool
+  numBlobPerBlock: int
 
-const
-  receiptsExtensionSize = ##\
-    ## Number of slots to extend the `receipts[]` at the same time.
-    20
+const receiptsExtensionSize = ##\
+  ## Number of slots to extend the `receipts[]` at the same time.
+  20
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc persist(pst: TxPackerStateRef)
-    {.gcsafe,raises: [].} =
+proc persist(pst: TxPackerStateRef) {.gcsafe, raises: [].} =
   ## Smart wrapper
   if not pst.cleanState:
     let fork = pst.xp.chain.nextFork
@@ -57,7 +54,7 @@ proc persist(pst: TxPackerStateRef)
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
+proc runTx(pst: TxPackerStateRef, item: TxItemRef): GasInt =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
   let
@@ -69,8 +66,9 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
   doAssert 0 <= gasUsed
   gasUsed
 
-proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
-    {.gcsafe,raises: [CatchableError].} =
+proc runTxCommit(
+    pst: TxPackerStateRef, item: TxItemRef, gasBurned: GasInt
+) {.gcsafe, raises: [CatchableError].} =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
   let
@@ -115,15 +113,15 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
 
   # Add the item to the `packed` bucket. This implicitely increases the
   # receipts index `inx` at the next visit of this function.
-  discard xp.txDB.reassign(item,txItemPacked)
+  discard xp.txDB.reassign(item, txItemPacked)
 
 # ------------------------------------------------------------------------------
 # Private functions: packer packerVmExec() helpers
 # ------------------------------------------------------------------------------
 
-proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
-    {.gcsafe,raises: [CatchableError].} =
-
+proc vmExecInit(
+    xp: TxPoolRef
+): Result[TxPackerStateRef, string] {.gcsafe, raises: [CatchableError].} =
   # Flush `packed` bucket
   xp.bucketFlushPacked
 
@@ -138,13 +136,14 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
 
   let packer = TxPackerStateRef( # return value
     xp: xp,
-    tr: AristoDbMemory.newCoreDbRef().ctx.getGeneric(clearData=true),
+    tr: AristoDbMemory.newCoreDbRef().ctx.getGeneric(clearData = true),
     numBlobPerBlock: 0,
   )
   ok(packer)
 
-proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
-    {.gcsafe,raises: [CatchableError].}  =
+proc vmExecGrabItem(
+    pst: TxPackerStateRef, item: TxItemRef
+): Result[bool, void] {.gcsafe, raises: [CatchableError].} =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
   ## values are below the maximum block size.
   let
@@ -184,7 +183,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
     vmState.stateDB.rollback(accTx)
     if xp.classifyPackedNext(vmState.cumulativeGasUsed, gasUsed):
       return ok(false) # continue with next account
-    return err()       # otherwise stop collecting
+    return err() # otherwise stop collecting
 
   # Commit account state DB
   vmState.stateDB.commit(accTx)
@@ -197,9 +196,7 @@ proc vmExecGrabItem(pst: TxPackerStateRef; item: TxItemRef): Result[bool,void]
 
   ok(true) # fetch the very next item
 
-
-proc vmExecCommit(pst: TxPackerStateRef)
-    {.gcsafe,raises: [].} =
+proc vmExecCommit(pst: TxPackerStateRef) {.gcsafe, raises: [].} =
   let
     xp = pst.xp
     vmState = xp.chain.vmState
@@ -222,33 +219,34 @@ proc vmExecCommit(pst: TxPackerStateRef)
 
   xp.chain.receiptsRoot = vmState.receipts.calcReceiptsRoot
   xp.chain.logsBloom = vmState.receipts.createBloom
-  xp.chain.txRoot = pst.tr.state(updateOk=true).valueOr:
+  xp.chain.txRoot = pst.tr.state(updateOk = true).valueOr:
     raiseAssert "vmExecCommit(): state() failed " & $$error
   xp.chain.stateRoot = vmState.stateDB.rootHash
-
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc packerVmExec*(xp: TxPoolRef): Result[void, string] {.gcsafe,raises: [CatchableError].} =
+proc packerVmExec*(
+    xp: TxPoolRef
+): Result[void, string] {.gcsafe, raises: [CatchableError].} =
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.chain.com.db
   let dbTx = db.ctx.newTransaction()
-  defer: dbTx.dispose()
+  defer:
+    dbTx.dispose()
 
   var pst = xp.vmExecInit.valueOr:
     return err(error)
 
   block loop:
-    for (_,nonceList) in pst.xp.txDB.packingOrderAccounts(txItemStaged):
-
+    for (_, nonceList) in pst.xp.txDB.packingOrderAccounts(txItemStaged):
       block account:
         for item in nonceList.incNonce:
           let rc = pst.vmExecGrabItem(item)
           if rc.isErr:
-            break loop    # stop
+            break loop # stop
           if not rc.value:
             break account # continue with next account
 

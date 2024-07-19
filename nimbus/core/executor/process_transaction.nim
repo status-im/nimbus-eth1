@@ -28,7 +28,7 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
+proc eip1559BaseFee(header: BlockHeader, fork: EVMFork): UInt256 =
   ## Actually, `baseFee` should be 0 for pre-London headers already. But this
   ## function just plays safe. In particular, the `test_general_state_json.nim`
   ## module modifies this block header `baseFee` field unconditionally :(.
@@ -36,13 +36,13 @@ proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
     result = header.baseFeePerGas.get(0.u256)
 
 proc commitOrRollbackDependingOnGasUsed(
-    vmState: BaseVMState;
-    accTx: LedgerSpRef;
-    header: BlockHeader;
-    tx: Transaction;
-    gasBurned: GasInt;
-    priorityFee: GasInt;
-      ): Result[GasInt, string] =
+    vmState: BaseVMState,
+    accTx: LedgerSpRef,
+    header: BlockHeader,
+    tx: Transaction,
+    gasBurned: GasInt,
+    priorityFee: GasInt,
+): Result[GasInt, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
@@ -50,8 +50,10 @@ proc commitOrRollbackDependingOnGasUsed(
   if header.gasLimit < vmState.cumulativeGasUsed + gasBurned:
     try:
       vmState.stateDB.rollback(accTx)
-      return err("invalid tx: block header gasLimit reached. gasLimit=$1, gasUsed=$2, addition=$3" % [
-        $header.gasLimit, $vmState.cumulativeGasUsed, $gasBurned])
+      return err(
+        "invalid tx: block header gasLimit reached. gasLimit=$1, gasUsed=$2, addition=$3" %
+          [$header.gasLimit, $vmState.cumulativeGasUsed, $gasBurned]
+      )
     except ValueError as ex:
       return err(ex.msg)
   else:
@@ -66,11 +68,11 @@ proc commitOrRollbackDependingOnGasUsed(
     return ok(gasBurned)
 
 proc processTransactionImpl(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
-    header:  BlockHeader; ## Header for the block containing the current tx
-      ): Result[GasInt, string] =
+    vmState: BaseVMState, ## Parent accounts environment for transaction
+    tx: Transaction, ## Transaction to validate
+    sender: EthAddress, ## tx.getSender or tx.ecRecover
+    header: BlockHeader, ## Header for the block containing the current tx
+): Result[GasInt, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
@@ -88,15 +90,18 @@ proc processTransactionImpl(
 
   # buy gas, then the gas goes into gasMeter
   if vmState.gasPool < tx.gasLimit:
-    return err("gas limit reached. gasLimit=" & $vmState.gasPool &
-      ", gasNeeded=" & $tx.gasLimit)
+    return err(
+      "gas limit reached. gasLimit=" & $vmState.gasPool & ", gasNeeded=" & $tx.gasLimit
+    )
 
   vmState.gasPool -= tx.gasLimit
 
   let blobGasUsed = tx.getTotalBlobGas
   if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-    return err("blobGasUsed " & $blobGasUsed &
-      " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+    return err(
+      "blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " &
+        $MAX_BLOB_GAS_PER_BLOCK
+    )
   vmState.blobGasUsed += blobGasUsed
 
   # Actually, the eip-1559 reference does not mention an early exit.
@@ -105,9 +110,10 @@ proc processTransactionImpl(
   # before leaving is crucial for some unit tests that us a direct/deep call
   # of the `processTransaction()` function. So there is no `return err()`
   # statement, here.
-  let txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, fork)
+  let txRes = roDB.validateTransaction(
+    tx, sender, header.gasLimit, baseFee256, excessBlobGas, fork
+  )
   if txRes.isOk:
-
     # EIP-1153
     vmState.stateDB.clearTransientStorage()
 
@@ -118,7 +124,9 @@ proc processTransactionImpl(
       gasBurned = tx.txCallEvm(sender, vmState)
     vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
-    res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
+    res = commitOrRollbackDependingOnGasUsed(
+      vmState, accTx, header, tx, gasBurned, priorityFee
+    )
   else:
     res = err(txRes.error)
 
@@ -132,8 +140,9 @@ proc processTransactionImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
-                              Result[void, string] =
+proc processBeaconBlockRoot*(
+    vmState: BaseVMState, beaconRoot: Hash256
+): Result[void, string] =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
@@ -141,19 +150,19 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   let
     statedb = vmState.stateDB
     call = CallParams(
-      vmState  : vmState,
-      sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
-      to       : BEACON_ROOTS_ADDRESS,
-      input    : @(beaconRoot.data),
+      vmState: vmState,
+      sender: SYSTEM_ADDRESS,
+      gasLimit: 30_000_000.GasInt,
+      gasPrice: 0.GasInt,
+      to: BEACON_ROOTS_ADDRESS,
+      input: @(beaconRoot.data),
 
       # It's a systemCall, no need for other knicks knacks
-      sysCall     : true,
+      sysCall: true,
       noAccessList: true,
-      noIntrinsic : true,
-      noGasCharge : true,
-      noRefund    : true,
+      noIntrinsic: true,
+      noGasCharge: true,
+      noRefund: true,
     )
 
   # runComputation a.k.a syscall/evm.call
@@ -165,11 +174,11 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   ok()
 
 proc processTransaction*(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
-    header:  BlockHeader; ## Header for the block containing the current tx
-      ): Result[GasInt,string] =
+    vmState: BaseVMState, ## Parent accounts environment for transaction
+    tx: Transaction, ## Transaction to validate
+    sender: EthAddress, ## tx.getSender or tx.ecRecover
+    header: BlockHeader, ## Header for the block containing the current tx
+): Result[GasInt, string] =
   vmState.processTransactionImpl(tx, sender, header)
 
 # ------------------------------------------------------------------------------

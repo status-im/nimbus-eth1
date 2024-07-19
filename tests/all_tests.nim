@@ -7,39 +7,40 @@
 
 import ./all_tests_macro
 
-{. warning[UnusedImport]:off .}
+{.warning[UnusedImport]: off.}
 
 cliBuilder:
-  import  ./test_ledger,
-          ./test_jwt_auth,
-          ./test_evm_support,
-          ./test_genesis,
-          ./test_precompiles,
-          ./test_generalstate_json,
-          #./test_tracer_json,                     -- temporarily disabled
-          #./test_persistblock_json,               -- fails
-          #./test_rpc,                             -- fails
-          ./test_filters,
-          ./test_op_arith,
-          ./test_op_bit,
-          ./test_op_env,
-          ./test_op_memory,
-          ./test_op_misc,
-          ./test_op_custom,
-          ./test_difficulty,
-          ./test_transaction_json,
-          ./test_blockchain_json,
-          ./test_forked_chain,
-          ./test_forkid,
-          ./test_multi_keys,
-          #./test_graphql,                         -- fails
-          ./test_configuration,
-          #./test_txpool,                          -- fails
-          ./test_txpool2,
-          #./test_merge,                           -- fails
-          ./test_eip4844,
-          ./test_beacon/test_skeleton,
-          #./test_getproof_json,                   -- fails
-          #./test_rpc_experimental_json,           -- fails
-          ./test_aristo,
-          ./test_coredb
+  import
+    ./test_ledger,
+    ./test_jwt_auth,
+    ./test_evm_support,
+    ./test_genesis,
+    ./test_precompiles,
+    ./test_generalstate_json,
+    #./test_tracer_json,                     -- temporarily disabled
+    #./test_persistblock_json,               -- fails
+    #./test_rpc,                             -- fails
+    ./test_filters,
+    ./test_op_arith,
+    ./test_op_bit,
+    ./test_op_env,
+    ./test_op_memory,
+    ./test_op_misc,
+    ./test_op_custom,
+    ./test_difficulty,
+    ./test_transaction_json,
+    ./test_blockchain_json,
+    ./test_forked_chain,
+    ./test_forkid,
+    ./test_multi_keys,
+    #./test_graphql,                         -- fails
+    ./test_configuration,
+    #./test_txpool,                          -- fails
+    ./test_txpool2,
+    #./test_merge,                           -- fails
+    ./test_eip4844,
+    ./test_beacon/test_skeleton,
+    #./test_getproof_json,                   -- fails
+    #./test_rpc_experimental_json,           -- fails
+    ./test_aristo,
+    ./test_coredb

@@ -1081,8 +1081,7 @@ proc lookup*(
           closestNodes.lowerBound(
             n,
             proc(x: Node, n: Node): int =
-              cmp(p.distance(x.id, target), p.distance(n.id, target))
-            ,
+              cmp(p.distance(x.id, target), p.distance(n.id, target)),
           ),
         )
 
@@ -1201,8 +1200,7 @@ proc contentLookup*(
               closestNodes.lowerBound(
                 n,
                 proc(x: Node, n: Node): int =
-                  cmp(p.distance(x.id, targetId), p.distance(n.id, targetId))
-                ,
+                  cmp(p.distance(x.id, targetId), p.distance(n.id, targetId)),
               ),
             )
 
@@ -1335,8 +1333,7 @@ proc traceContentLookup*(
               closestNodes.lowerBound(
                 n,
                 proc(x: Node, n: Node): int =
-                  cmp(p.distance(x.id, targetId), dist)
-                ,
+                  cmp(p.distance(x.id, targetId), dist),
               ),
             )
 

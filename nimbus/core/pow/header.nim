@@ -5,23 +5,24 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-
-import
-  std/[strformat],
-  ./difficulty
+import std/[strformat], ./difficulty
 
 export BlockHeader
 
-proc hasUncles*(header: BlockHeader): bool = header.ommersHash != EMPTY_UNCLE_HASH
+proc hasUncles*(header: BlockHeader): bool =
+  header.ommersHash != EMPTY_UNCLE_HASH
 
 proc `$`*(header: BlockHeader): string =
-  result = &"BlockHeader(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.number} gasLimit: {header.gasLimit})"
+  result =
+    &"BlockHeader(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.number} gasLimit: {header.gasLimit})"
 
 # CalcGasLimit computes the gas limit of the next block after parent. It aims
 # to keep the baseline gas above the provided floor, and increase it towards the
 # ceil if the blocks are full. If the ceil is exceeded, it will always decrease
 # the gas allowance.
-func computeGasLimit*(parentGasUsed, parentGasLimit, gasFloor, gasCeil: GasInt): GasInt =
+func computeGasLimit*(
+    parentGasUsed, parentGasLimit, gasFloor, gasCeil: GasInt
+): GasInt =
   # contrib = (parentGasUsed * 3 / 2) / 1024
   let contrib = (parentGasUsed + parentGasUsed div 2) div GAS_LIMIT_ADJUSTMENT_FACTOR
 
@@ -45,7 +46,6 @@ func computeGasLimit*(parentGasUsed, parentGasLimit, gasFloor, gasCeil: GasInt):
     limit = parentGasLimit + decay
     if limit > gasFloor:
       limit = gasFloor
-
   elif limit > gasCeil:
     limit = parentGasLimit - decay
     if limit < gasCeil:

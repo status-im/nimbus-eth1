@@ -19,22 +19,15 @@
 {.push raises: [].}
 
 import
-  rocksdb,
-  results,
-  ../../aristo,
-  ../../opts,
-  ../kvt_desc,
-  "."/[rocks_db, memory_only]
+  rocksdb, results, ../../aristo, ../../opts, ../kvt_desc, "."/[rocks_db, memory_only]
 
-export
-  RdbBackendRef,
-  memory_only
+export RdbBackendRef, memory_only
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func toErr0(err: (KvtError,string)): KvtError =
+func toErr0(err: (KvtError, string)): KvtError =
   err[0]
 
 # ------------------------------------------------------------------------------
@@ -42,24 +35,25 @@ func toErr0(err: (KvtError,string)): KvtError =
 # ------------------------------------------------------------------------------
 
 proc init*(
-    T: type KvtDbRef;
-    B: type RdbBackendRef;
-    basePath: string;
-    dbOpts: DbOptionsRef;
-    cfOpts: ColFamilyOptionsRef;
-      ): Result[KvtDbRef,KvtError] =
+    T: type KvtDbRef,
+    B: type RdbBackendRef,
+    basePath: string,
+    dbOpts: DbOptionsRef,
+    cfOpts: ColFamilyOptionsRef,
+): Result[KvtDbRef, KvtError] =
   ## Generic constructor for `RocksDb` backend
   ##
   ok KvtDbRef(
     top: LayerRef.init(),
-    backend: ? rocksDbKvtBackend(basePath, dbOpts, cfOpts).mapErr toErr0)
+    backend: ?rocksDbKvtBackend(basePath, dbOpts, cfOpts).mapErr toErr0,
+  )
 
 proc init*(
-    T: type KvtDbRef;
-    B: type RdbBackendRef;
-    adb: AristoDbRef;
-    oCfs: openArray[ColFamilyReadWrite];
-      ): Result[KvtDbRef,KvtError] =
+    T: type KvtDbRef,
+    B: type RdbBackendRef,
+    adb: AristoDbRef,
+    oCfs: openArray[ColFamilyReadWrite],
+): Result[KvtDbRef, KvtError] =
   ## Constructor for `RocksDb` backend which piggybacks on the `Aristo`
   ## backend. The following changes will occur after successful instantiation:
   ##
@@ -84,8 +78,8 @@ proc init*(
   ##   anyway.)
   ##
   ok KvtDbRef(
-    top: LayerRef.init(),
-    backend: ? rocksDbKvtTriggeredBackend(adb, oCfs).mapErr toErr0)
+    top: LayerRef.init(), backend: ?rocksDbKvtTriggeredBackend(adb, oCfs).mapErr toErr0
+  )
 
 # ------------------------------------------------------------------------------
 # End

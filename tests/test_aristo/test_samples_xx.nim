@@ -8,21 +8,19 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-import
-  std/os,
-  eth/common
+import std/os, eth/common
 
 type
   AccountsSample* = object
-    name*: string   ## sample name, also used as sub-directory for db separation
+    name*: string ## sample name, also used as sub-directory for db separation
     file*: string
     firstItem*: int
     lastItem*: int
 
   CaptureSpecs* = object
-    name*: string   ## sample name, also used as sub-directory for db separation
+    name*: string ## sample name, also used as sub-directory for db separation
     network*: NetworkId
-    file*: string   ## name of capture file
+    file*: string ## name of capture file
     numBlocks*: int ## Number of blocks to load
 
   SnapSyncSpecs* = object
@@ -35,97 +33,94 @@ type
 
 const
   snapTest0* = AccountsSample(
-    name: "sample0",
-    file: "sample0.txt.gz",
-    firstItem: 0,
-    lastItem: high(int))
+    name: "sample0", file: "sample0.txt.gz", firstItem: 0, lastItem: high(int)
+  )
 
-  snapTest1* = AccountsSample(
-    name: "test1",
-    file: snapTest0.file,
-    lastItem: 0) # Only the first `snap/1` reply from the sample
+  snapTest1* = AccountsSample(name: "test1", file: snapTest0.file, lastItem: 0)
+    # Only the first `snap/1` reply from the sample
 
-  snapTest2* = AccountsSample(
-    name: "sample1",
-    file: "sample1.txt.gz",
-    lastItem: high(int))
+  snapTest2* =
+    AccountsSample(name: "sample1", file: "sample1.txt.gz", lastItem: high(int))
 
-  snapTest3* = AccountsSample(
-    name: "test3",
-    file: snapTest2.file,
-    lastItem: 0) # Only the first `snap/1` reply from the sample
+  snapTest3* = AccountsSample(name: "test3", file: snapTest2.file, lastItem: 0)
+    # Only the first `snap/1` reply from the sample
 
   # Also for storage tests
-  snapTest4* = AccountsSample(
-    name: "sample2",
-    file: "sample2.txt.gz",
-    lastItem: high(int))
+  snapTest4* =
+    AccountsSample(name: "sample2", file: "sample2.txt.gz", lastItem: high(int))
 
   # Also for storage tests
-  snapTest5* = AccountsSample(
-    name: "sample3",
-    file: "sample3.txt.gz",
-    lastItem: high(int))
+  snapTest5* =
+    AccountsSample(name: "sample3", file: "sample3.txt.gz", lastItem: high(int))
 
   # ----------------------
-
   snapOther0a* = AccountsSample(
     name: "Other0a",
     file: "account" / "account0_00_06_dump.txt.gz",
     firstItem: 0,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOther0b* = AccountsSample(
     name: "Other0b",
     file: "account" / "account0_07_08_dump.txt.gz",
     firstItem: 0,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOther1a* = AccountsSample(
     name: "Other1a",
     file: "account" / "account1_09_09_dump.txt.gz",
     firstItem: 0,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOther1b* = AccountsSample(
     name: "Other1b",
     file: "account" / "account1_10_17_dump.txt.gz",
     firstItem: 0,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOther2* = AccountsSample(
     name: "Other2",
     file: "account" / "account2_18_25_dump.txt.gz",
     firstItem: 1,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOther3* = AccountsSample(
     name: "Other3",
     file: "account" / "account3_26_33_dump.txt.gz",
     firstItem: 2,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOther4* = AccountsSample(
     name: "Other4",
     file: "account" / "account4_34_41_dump.txt.gz",
     firstItem: 0,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOther5* = AccountsSample(
     name: "Other5",
     file: "account" / "account5_42_49_dump.txt.gz",
     firstItem: 2,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOther6* = AccountsSample(
     name: "Other6",
     file: "account" / "account6_50_54_dump.txt.gz",
     firstItem: 0,
-    lastItem: high(int))
+    lastItem: high(int),
+  )
 
   snapOtherList* = [
-    snapOther0a, snapOther0b, snapOther1a, snapOther1b, snapOther2,
-    snapOther3,  snapOther4,  snapOther5,  snapOther6]
+    snapOther0a, snapOther0b, snapOther1a, snapOther1b, snapOther2, snapOther3,
+    snapOther4, snapOther5, snapOther6,
+  ]
 
   #<state-root-id> <sample-id-range> <state-root>
   #                                   <range-base>
@@ -180,15 +175,11 @@ const
   #6 50..54 11eba9ec2f204c8165a245f9d05bb7ebb5bfdbdbcccc1a849d8ab2b23550cc12
 
   # ------------------------
+  snapTestList* = [snapTest0, snapTest1, snapTest2, snapTest3]
 
-  snapTestList* = [
-    snapTest0, snapTest1, snapTest2, snapTest3]
+  snapTestStorageList* = [snapTest4, snapTest5]
 
-  snapTestStorageList* = [
-    snapTest4, snapTest5]
-
-  snapOtherHealingList* = [
-    @[snapOther0b, snapOther2, snapOther4],
-    @[snapOther0a, snapOther1a, snapOther5]]
+  snapOtherHealingList* =
+    [@[snapOther0b, snapOther2, snapOther4], @[snapOther0a, snapOther1a, snapOther5]]
 
 # End

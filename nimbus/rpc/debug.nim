@@ -12,7 +12,8 @@ import
   json_rpc/rpcserver,
   ./rpc_utils,
   ./rpc_types,
-  ../tracer, ../evm/types,
+  ../tracer,
+  ../evm/types,
   ../common/common,
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
@@ -20,13 +21,12 @@ import
 
 {.push raises: [].}
 
-type
-  TraceOptions = object
-    disableStorage: Opt[bool]
-    disableMemory: Opt[bool]
-    disableStack: Opt[bool]
-    disableState: Opt[bool]
-    disableStateDiff: Opt[bool]
+type TraceOptions = object
+  disableStorage: Opt[bool]
+  disableMemory: Opt[bool]
+  disableStack: Opt[bool]
+  disableState: Opt[bool]
+  disableStateDiff: Opt[bool]
 
 TraceOptions.useDefaultSerializationIn JrpcConv
 
@@ -36,16 +36,23 @@ proc isTrue(x: Opt[bool]): bool =
 proc traceOptionsToFlags(options: Opt[TraceOptions]): set[TracerFlags] =
   if options.isSome:
     let opts = options.get
-    if opts.disableStorage.isTrue: result.incl TracerFlags.DisableStorage
-    if opts.disableMemory.isTrue : result.incl TracerFlags.DisableMemory
-    if opts.disableStack.isTrue  : result.incl TracerFlags.DisableStack
-    if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
-    if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
+    if opts.disableStorage.isTrue:
+      result.incl TracerFlags.DisableStorage
+    if opts.disableMemory.isTrue:
+      result.incl TracerFlags.DisableMemory
+    if opts.disableStack.isTrue:
+      result.incl TracerFlags.DisableStack
+    if opts.disableState.isTrue:
+      result.incl TracerFlags.DisableState
+    if opts.disableStateDiff.isTrue:
+      result.incl TracerFlags.DisableStateDiff
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
   let chainDB = com.db
 
-  rpcsrv.rpc("debug_traceTransaction") do(data: Web3Hash, options: Opt[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceTransaction") do(
+    data: Web3Hash, options: Opt[TraceOptions]
+  ) -> JsonNode:
     ## The traceTransaction debugging method will attempt to run the transaction in the exact
     ## same manner as it was executed on the network. It will replay any transaction that may
     ## have been executed prior to this one before it will finally attempt to execute the
@@ -91,7 +98,9 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
 
     dumpBlockState(com, blk)
 
-  rpcsrv.rpc("debug_traceBlockByNumber") do(quantityTag: BlockTag, options: Opt[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceBlockByNumber") do(
+    quantityTag: BlockTag, options: Opt[TraceOptions]
+  ) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
     ## that were included included in this block.
     ##
@@ -106,7 +115,9 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
 
     traceBlock(com, EthBlock.init(move(header), move(body)), flags)
 
-  rpcsrv.rpc("debug_traceBlockByHash") do(data: Web3Hash, options: Opt[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceBlockByHash") do(
+    data: Web3Hash, options: Opt[TraceOptions]
+  ) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
     ## that were included included in this block.
     ##
@@ -125,8 +136,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     ## Sets the current head of the local chain by block number.
     ## Note, this is a destructive action and may severely damage your chain.
     ## Use with extreme caution.
-    let
-      header = chainDB.headerFromTag(quantityTag)
+    let header = chainDB.headerFromTag(quantityTag)
     chainDB.setHead(header)
 
   rpcsrv.rpc("debug_getRawBlock") do(quantityTag: BlockTag) -> seq[byte]:

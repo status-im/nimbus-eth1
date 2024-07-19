@@ -28,15 +28,11 @@ import
   ./filters,
   ./p2p
 
-type
-  BlockHeader = eth_types.BlockHeader
+type BlockHeader = eth_types.BlockHeader
 
 proc getMultiKeys*(
-    com: CommonRef,
-    blockHeader: BlockHeader,
-    statePostExecution: bool): MultiKeysRef
-    {.raises: [RlpError, BlockNotFound, ValueError].} =
-
+    com: CommonRef, blockHeader: BlockHeader, statePostExecution: bool
+): MultiKeysRef {.raises: [RlpError, BlockNotFound, ValueError].} =
   let
     chainDB = com.db
     blk = chainDB.getEthBlock(blockHeader.number)
@@ -44,13 +40,14 @@ proc getMultiKeys*(
     # Once we enable pruning we will need to check if the block state has been pruned
     # before trying to initialize the VM as we do here.
     vmState = BaseVMState.new(blk.header, com).valueOr:
-                raise newException(ValueError, "Cannot create vm state")
+      raise newException(ValueError, "Cannot create vm state")
 
   vmState.collectWitnessData = true # Enable saving witness data
   vmState.com.hardForkTransition(blockHeader)
 
   let dbTx = vmState.com.db.ctx.newTransaction()
-  defer: dbTx.dispose()
+  defer:
+    dbTx.dispose()
 
   # Execute the block of transactions and collect the keys of the touched account state
   processBlock(vmState, blk).expect("success")
@@ -61,10 +58,7 @@ proc getMultiKeys*(
 
   mkeys
 
-proc getBlockProofs*(
-    accDB: LedgerRef,
-    mkeys: MultiKeysRef): seq[ProofResponse] =
-
+proc getBlockProofs*(accDB: LedgerRef, mkeys: MultiKeysRef): seq[ProofResponse] =
   var blockProofs = newSeq[ProofResponse]()
 
   for keyData in mkeys.keys:
@@ -80,7 +74,6 @@ proc getBlockProofs*(
   return blockProofs
 
 proc setupExpRpc*(com: CommonRef, server: RpcServer) =
-
   let chainDB = com.db
 
   proc getStateDB(header: BlockHeader): LedgerRef =
@@ -88,7 +81,9 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
     # we don't use accounst_cache here because it's only read operations
     LedgerRef.init(chainDB, header.stateRoot)
 
-  server.rpc("exp_getProofsByBlockNumber") do(quantityTag: BlockTag, statePostExecution: bool) -> seq[ProofResponse]:
+  server.rpc("exp_getProofsByBlockNumber") do(
+    quantityTag: BlockTag, statePostExecution: bool
+  ) -> seq[ProofResponse]:
     ## Returns the block proofs for a block by block number or tag.
     ##
     ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -99,9 +94,10 @@ proc setupExpRpc*(com: CommonRef, server: RpcServer) =
       blockHeader = chainDB.headerFromTag(quantityTag)
       mkeys = getMultiKeys(com, blockHeader, statePostExecution)
 
-    let accDB = if statePostExecution:
-      getStateDB(blockHeader)
-    else:
-      getStateDB(chainDB.getBlockHeader(blockHeader.parentHash))
+    let accDB =
+      if statePostExecution:
+        getStateDB(blockHeader)
+      else:
+        getStateDB(chainDB.getBlockHeader(blockHeader.parentHash))
 
     return getBlockProofs(accDB, mkeys)

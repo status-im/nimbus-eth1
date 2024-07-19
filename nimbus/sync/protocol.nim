@@ -21,33 +21,25 @@
 ##   ..aliases..             -- type names, syntactic sugar (see below)
 ##
 
-import
-  ./protocol/eth68 as proto_eth
+import ./protocol/eth68 as proto_eth
 
 type eth* = eth68
 
 # ---------------
 
-import
-  ./protocol/snap1 as proto_snap
+import ./protocol/snap1 as proto_snap
 
-export
-  proto_eth,
-  proto_snap
+export proto_eth, proto_snap
 
 type
   snap* = snap1
 
-  SnapAccountRange* = accountRangeObj
-    ## Syntactic sugar, type defined in `snap1`
+  SnapAccountRange* = accountRangeObj ## Syntactic sugar, type defined in `snap1`
 
-  SnapStorageRanges* = storageRangesObj
-    ## Ditto
+  SnapStorageRanges* = storageRangesObj ## Ditto
 
-  SnapByteCodes* = byteCodesObj
-    ## Ditto
+  SnapByteCodes* = byteCodesObj ## Ditto
 
-  SnapTrieNodes* = trieNodesObj
-    ## Ditto
+  SnapTrieNodes* = trieNodesObj ## Ditto
 
 # End

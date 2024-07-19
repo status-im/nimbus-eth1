@@ -13,18 +13,12 @@
 ##
 {.push raises: [].}
 
-import
-  eth/common,
-  rocksdb,
-  ./rdb_desc
+import eth/common, rocksdb, ./rdb_desc
 
-const
-  extraTraceMessages = false
-    ## Enable additional logging noise
+const extraTraceMessages = false ## Enable additional logging noise
 
 when extraTraceMessages:
-  import
-    chronicles
+  import chronicles
 
   logScope:
     topics = "aristo-rocksdb"
@@ -40,11 +34,12 @@ iterator walk*(rdb: RdbInst): tuple[key: Blob, data: Blob] =
   block walkBody:
     let rit = rdb.store[KvtGeneric].openIterator().valueOr:
       when extraTraceMessages:
-        trace logTxt "walk", pfx="all", error
+        trace logTxt "walk", pfx = "all", error
       break walkBody
-    defer: rit.close()
+    defer:
+      rit.close()
 
-    for (key,val) in rit.pairs:
+    for (key, val) in rit.pairs:
       if 0 < key.len:
         yield (key, val)
 

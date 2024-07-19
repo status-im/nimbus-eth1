@@ -129,7 +129,8 @@ proc procBlkEpilogue(
     # large ranges of blocks, implicitly limiting its size using the gas limit
     db.persist(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
-      clearCache = true)
+      clearCache = true,
+    )
 
   if not skipValidation:
     let stateDB = vmState.stateDB
@@ -144,10 +145,10 @@ proc procBlkEpilogue(
 
     if not skipReceipts:
       let bloom = createBloom(vmState.receipts)
-  
+
       if header.logsBloom != bloom:
         return err("bloom mismatch")
-  
+
       let receiptsRoot = calcReceiptsRoot(vmState.receipts)
       if header.receiptsRoot != receiptsRoot:
         # TODO replace logging with better error

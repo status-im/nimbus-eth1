@@ -23,71 +23,62 @@ type
     ## Needed for local `$` as it would be ambiguous for `Duration`
 
   CoreDbApiTrackRef* =
-    CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
-    CoreDbTxRef
+    CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef | CoreDbTxRef
 
   CoreDbFnInx* = enum
     ## Profiling table index
-    SummaryItem         = "total"
-
-    AccClearStorageFn   = "clearStorage"
-    AccDeleteFn         = "acc/delete"
-    AccFetchFn          = "acc/fetch"
-    AccForgetFn         = "acc/forget"
-    AccHasPathFn        = "acc/hasPath"
-    AccMergeFn          = "acc/merge"
-    AccRecastFn         = "recast"
-    AccStateFn          = "acc/state"
-
-    AccSlotFetchFn      = "slotFetch"
-    AccSlotDeleteFn     = "slotDelete"
-    AccSlotHasPathFn    = "slotHasPath"
-    AccSlotMergeFn      = "slotMerge"
-    AccSlotStateFn      = "slotState"
+    SummaryItem = "total"
+    AccClearStorageFn = "clearStorage"
+    AccDeleteFn = "acc/delete"
+    AccFetchFn = "acc/fetch"
+    AccForgetFn = "acc/forget"
+    AccHasPathFn = "acc/hasPath"
+    AccMergeFn = "acc/merge"
+    AccRecastFn = "recast"
+    AccStateFn = "acc/state"
+    AccSlotFetchFn = "slotFetch"
+    AccSlotDeleteFn = "slotDelete"
+    AccSlotHasPathFn = "slotHasPath"
+    AccSlotMergeFn = "slotMerge"
+    AccSlotStateFn = "slotState"
     AccSlotStateEmptyFn = "slotStateEmpty"
     AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
-    AccSlotPairsIt      = "slotPairs"
-
-    BaseFinishFn        = "finish"
-    BaseLevelFn         = "level"
-    BaseNewCaptureFn    = "newCapture"
-    BaseNewCtxFromTxFn  = "ctxFromTx"
-    BaseNewTxFn         = "newTransaction"
-    BasePersistentFn    = "persistent"
+    AccSlotPairsIt = "slotPairs"
+    BaseFinishFn = "finish"
+    BaseLevelFn = "level"
+    BaseNewCaptureFn = "newCapture"
+    BaseNewCtxFromTxFn = "ctxFromTx"
+    BaseNewTxFn = "newTransaction"
+    BasePersistentFn = "persistent"
     BaseStateBlockNumberFn = "stateBlockNumber"
-    BaseSwapCtxFn       = "swapCtx"
-
-    CptLogDbFn          = "cpt/logDb"
-    CptRecorderFn       = "cpt/recorder"
-    CptForgetFn         = "cpt/forget"
-
-    CtxForgetFn         = "ctx/forget"
-    CtxGetAccountsFn    = "getAccounts"
-    CtxGetGenericFn     = "getGeneric"
-
-    KvtDelFn            = "del"
-    KvtGetFn            = "get"
-    KvtGetOrEmptyFn     = "getOrEmpty"
-    KvtHasKeyFn         = "hasKey"
-    KvtLenFn            = "len"
-    KvtPairsIt          = "pairs"
-    KvtPutFn            = "put"
-
-    MptDeleteFn         = "mpt/delete"
-    MptFetchFn          = "mpt/fetch"
-    MptFetchOrEmptyFn   = "mpt/fetchOrEmpty"
-    MptForgetFn         = "mpt/forget"
-    MptHasPathFn        = "mpt/hasPath"
-    MptMergeFn          = "mpt/merge"
-    MptPairsIt          = "mpt/pairs"
-    MptReplicateIt      = "mpt/replicate"
-    MptStateFn          = "mpt/state"
-
-    TxCommitFn          = "commit"
-    TxDisposeFn         = "dispose"
-    TxLevelFn           = "level"
-    TxRollbackFn        = "rollback"
-    TxSaveDisposeFn     = "safeDispose"
+    BaseSwapCtxFn = "swapCtx"
+    CptLogDbFn = "cpt/logDb"
+    CptRecorderFn = "cpt/recorder"
+    CptForgetFn = "cpt/forget"
+    CtxForgetFn = "ctx/forget"
+    CtxGetAccountsFn = "getAccounts"
+    CtxGetGenericFn = "getGeneric"
+    KvtDelFn = "del"
+    KvtGetFn = "get"
+    KvtGetOrEmptyFn = "getOrEmpty"
+    KvtHasKeyFn = "hasKey"
+    KvtLenFn = "len"
+    KvtPairsIt = "pairs"
+    KvtPutFn = "put"
+    MptDeleteFn = "mpt/delete"
+    MptFetchFn = "mpt/fetch"
+    MptFetchOrEmptyFn = "mpt/fetchOrEmpty"
+    MptForgetFn = "mpt/forget"
+    MptHasPathFn = "mpt/hasPath"
+    MptMergeFn = "mpt/merge"
+    MptPairsIt = "mpt/pairs"
+    MptReplicateIt = "mpt/replicate"
+    MptStateFn = "mpt/state"
+    TxCommitFn = "commit"
+    TxDisposeFn = "dispose"
+    TxLevelFn = "level"
+    TxRollbackFn = "rollback"
+    TxSaveDisposeFn = "safeDispose"
 
 func toStr*(e: CoreDbError): string {.gcsafe.}
 
@@ -106,43 +97,74 @@ func toStr(w: Hash256): string =
   if w == EMPTY_ROOT_HASH: "EMPTY_ROOT_HASH" else: w.data.oaToStr
 
 func toLenStr(w: Blob): string =
-  if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
-  else: "Blob[" & $w.len & "]"
+  if 0 < w.len and w.len < 5:
+    "<" & w.oaToStr & ">"
+  else:
+    "Blob[" & $w.len & "]"
 
 func toStr(ela: Duration): string =
   aristo_profile.toStr(ela)
 
-func toStr*(rc: CoreDbRc[int]|CoreDbRc[UInt256]): string =
-  if rc.isOk: "ok(" & $rc.value & ")" else: "err(" & rc.error.toStr & ")"
+func toStr*(rc: CoreDbRc[int] | CoreDbRc[UInt256]): string =
+  if rc.isOk:
+    "ok(" & $rc.value & ")"
+  else:
+    "err(" & rc.error.toStr & ")"
 
 func toStr(rc: CoreDbRc[bool]): string =
-  if rc.isOk: "ok(" & $rc.value & ")" else: "err(" & rc.error.toStr & ")"
+  if rc.isOk:
+    "ok(" & $rc.value & ")"
+  else:
+    "err(" & rc.error.toStr & ")"
 
 func toStr(rc: CoreDbRc[void]): string =
-  if rc.isOk: "ok()" else: "err(" & rc.error.toStr & ")"
+  if rc.isOk:
+    "ok()"
+  else:
+    "err(" & rc.error.toStr & ")"
 
 func toStr(rc: CoreDbRc[Blob]): string =
-  if rc.isOk: "ok(Blob[" & $rc.value.len & "])"
-  else: "err(" & rc.error.toStr & ")"
+  if rc.isOk:
+    "ok(Blob[" & $rc.value.len & "])"
+  else:
+    "err(" & rc.error.toStr & ")"
 
 func toStr(rc: CoreDbRc[Hash256]): string =
-  if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
+  if rc.isOk:
+    "ok(" & rc.value.toStr & ")"
+  else:
+    "err(" & rc.error.toStr & ")"
 
 func toStr(rc: CoreDbRc[Account]): string =
-  if rc.isOk: "ok(Account)" else: "err(" & rc.error.toStr & ")"
+  if rc.isOk:
+    "ok(Account)"
+  else:
+    "err(" & rc.error.toStr & ")"
 
 func toStr(rc: CoreDbRc[CoreDbAccount]): string =
-  if rc.isOk: "ok(AristoAccount)" else: "err(" & rc.error.toStr & ")"
+  if rc.isOk:
+    "ok(AristoAccount)"
+  else:
+    "err(" & rc.error.toStr & ")"
 
-func toStr[T](rc: CoreDbRc[T]; ifOk: static[string]): string =
-  if rc.isOk: "ok(" & ifOk & ")" else: "err(" & rc.error.toStr & ")"
+func toStr[T](rc: CoreDbRc[T], ifOk: static[string]): string =
+  if rc.isOk:
+    "ok(" & ifOk & ")"
+  else:
+    "err(" & rc.error.toStr & ")"
 
-func toStr(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
-func toStr(rc: CoreDbRc[CoreDbKvtRef]): string = rc.toStr "kvt"
-func toStr(rc: CoreDbRc[CoreDbTxRef]): string = rc.toStr "tx"
-func toStr(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
-func toStr(rc: CoreDbRc[CoreDbMptRef]): string = rc.toStr "mpt"
-func toStr(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"
+func toStr(rc: CoreDbRc[CoreDbRef]): string =
+  rc.toStr "db"
+func toStr(rc: CoreDbRc[CoreDbKvtRef]): string =
+  rc.toStr "kvt"
+func toStr(rc: CoreDbRc[CoreDbTxRef]): string =
+  rc.toStr "tx"
+func toStr(rc: CoreDbRc[CoreDbCtxRef]): string =
+  rc.toStr "ctx"
+func toStr(rc: CoreDbRc[CoreDbMptRef]): string =
+  rc.toStr "mpt"
+func toStr(rc: CoreDbRc[CoreDbAccRef]): string =
+  rc.toStr "acc"
 
 # ------------------------------------------------------------------------------
 # Public API logging helpers
@@ -159,41 +181,40 @@ func toStr*(w: openArray[byte]): string =
   w.oaToStr
 
 func toLenStr*(w: openArray[byte]): string =
-  if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
-  else: "openArray[" & $w.len & "]"
+  if 0 < w.len and w.len < 5:
+    "<" & w.oaToStr & ">"
+  else:
+    "openArray[" & $w.len & "]"
 
-func `$`*[T](rc: CoreDbRc[T]): string = rc.toStr
-func `$`*(t: Elapsed): string = t.Duration.toStr
-func `$`*(e: EthAddress): string = e.toStr
-func `$$`*(h: Hash256): string = h.toStr # otherwise collision w/existing `$`
+func `$`*[T](rc: CoreDbRc[T]): string =
+  rc.toStr
+func `$`*(t: Elapsed): string =
+  t.Duration.toStr
+func `$`*(e: EthAddress): string =
+  e.toStr
+func `$$`*(h: Hash256): string =
+  h.toStr # otherwise collision w/existing `$`
 
 # ------------------------------------------------------------------------------
 # Public new API logging framework
 # ------------------------------------------------------------------------------
 
-template setTrackNewApi*(
-    w: CoreDbApiTrackRef;
-    s: static[CoreDbFnInx];
-    code: untyped;
-      ) =
+template setTrackNewApi*(w: CoreDbApiTrackRef, s: static[CoreDbFnInx], code: untyped) =
   ## Template with code section that will be discarded if logging is
   ## disabled at compile time when `EnableApiTracking` is `false`.
   when CoreDbEnableApiTracking:
     #w.beginNewApi(s)
     when CoreDbEnableProfiling:
-      const bnaCtx {.inject.} = s       # Local use only
+      const bnaCtx {.inject.} = s # Local use only
     let bnaStart {.inject.} = getTime() # Local use only
     code
-  const api {.inject,used.} = s
+  const api {.inject, used.} = s
 
-template setTrackNewApi*(
-    w: CoreDbApiTrackRef;
-    s: static[CoreDbFnInx];
-      ) =
+template setTrackNewApi*(w: CoreDbApiTrackRef, s: static[CoreDbFnInx]) =
   w.setTrackNewApi(s):
     discard
 
-template ifTrackNewApi*(w: CoreDbApiTrackRef; code: untyped) =
+template ifTrackNewApi*(w: CoreDbApiTrackRef, code: untyped) =
   when CoreDbEnableApiTracking:
     #w.endNewApiIf:
     #  code
@@ -202,16 +223,18 @@ template ifTrackNewApi*(w: CoreDbApiTrackRef; code: untyped) =
         let db = w
       elif typeof(w) is CoreDbTxRef:
         let db = w.ctx.parent
-        if w.isNil: break body
+        if w.isNil:
+          break body
       else:
         let db = w.distinctBase.parent
-        if w.distinctBase.isNil: break body
+        if w.distinctBase.isNil:
+          break body
       when CoreDbEnableProfiling:
-        let elapsed {.inject,used.} = (getTime() - bnaStart).Elapsed
+        let elapsed {.inject, used.} = (getTime() - bnaStart).Elapsed
         aristo_profile.update(db.profTab, bnaCtx.ord, elapsed.Duration)
       if db.trackCoreDbApi:
         when not CoreDbEnableProfiling: # otherwise use variable above
-          let elapsed {.inject,used.} = (getTime() - bnaStart).Elapsed
+          let elapsed {.inject, used.} = (getTime() - bnaStart).Elapsed
         code
 
 # ------------------------------------------------------------------------------

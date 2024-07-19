@@ -18,40 +18,45 @@ import
 
 import eth/common/eth_types as common
 
-export
-  primitives
+export primitives
 
 type
-  Web3Hash*          = web3types.Hash256
-  Web3Address*       = web3types.Address
-  Web3Bloom*         = web3types.FixedBytes[256]
-  Web3Quantity*      = web3types.Quantity
-  Web3PrevRandao*    = web3types.FixedBytes[32]
-  Web3ExtraData*     = web3types.DynamicBytes[0, 32]
-  Web3BlockNumber*   = web3types.BlockNumber
-  Web3Topic*         = eth_api_types.Topic
-  Web3Tx*            = engine_api_types.TypedTransaction
-  Web3Blob*          = engine_api_types.Blob
-  Web3KZGProof*      = engine_api_types.KZGProof
+  Web3Hash* = web3types.Hash256
+  Web3Address* = web3types.Address
+  Web3Bloom* = web3types.FixedBytes[256]
+  Web3Quantity* = web3types.Quantity
+  Web3PrevRandao* = web3types.FixedBytes[32]
+  Web3ExtraData* = web3types.DynamicBytes[0, 32]
+  Web3BlockNumber* = web3types.BlockNumber
+  Web3Topic* = eth_api_types.Topic
+  Web3Tx* = engine_api_types.TypedTransaction
+  Web3Blob* = engine_api_types.Blob
+  Web3KZGProof* = engine_api_types.KZGProof
   Web3KZGCommitment* = engine_api_types.KZGCommitment
 
-{.push gcsafe, raises:[].}
+{.push gcsafe, raises: [].}
 
 # ------------------------------------------------------------------------------
 # Pretty printers
 # ------------------------------------------------------------------------------
 
 proc `$`*(x: Opt[common.Hash256]): string =
-  if x.isNone: "none"
-  else: x.get().data.toHex
+  if x.isNone:
+    "none"
+  else:
+    x.get().data.toHex
 
 proc `$`*(x: Opt[Web3Hash]): string =
-  if x.isNone: "none"
-  else: x.get().toHex
+  if x.isNone:
+    "none"
+  else:
+    x.get().toHex
 
 proc `$`*(x: Opt[PayloadID]): string =
-  if x.isNone: "none"
-  else: x.get().toHex
+  if x.isNone:
+    "none"
+  else:
+    x.get().toHex
 
 proc `$`*(x: Web3Quantity): string =
   $distinctBase(x)
@@ -81,8 +86,10 @@ template unsafeQuantityToInt64*(q: Web3Quantity): int64 =
   int64 q
 
 func u64*(x: Opt[Web3Quantity]): Opt[uint64] =
-  if x.isNone: Opt.none(uint64)
-  else: Opt.some(uint64 x.get)
+  if x.isNone:
+    Opt.none(uint64)
+  else:
+    Opt.some(uint64 x.get)
 
 func u256*(x: Web3Quantity): UInt256 =
   u256(x.uint64)
@@ -100,23 +107,29 @@ func ethHash*(x: Web3PrevRandao): common.Hash256 =
   common.Hash256(data: distinctBase x)
 
 func ethHash*(x: Opt[Web3Hash]): Opt[common.Hash256] =
-  if x.isNone: Opt.none(common.Hash256)
-  else: Opt.some(ethHash x.get)
+  if x.isNone:
+    Opt.none(common.Hash256)
+  else:
+    Opt.some(ethHash x.get)
 
 func ethHashes*(list: openArray[Web3Hash]): seq[common.Hash256] =
   for x in list:
     result.add ethHash(x)
 
 func ethHashes*(list: Opt[seq[Web3Hash]]): Opt[seq[common.Hash256]] =
-  if list.isNone: Opt.none(seq[common.Hash256])
-  else: Opt.some ethHashes(list.get)
+  if list.isNone:
+    Opt.none(seq[common.Hash256])
+  else:
+    Opt.some ethHashes(list.get)
 
 func ethAddr*(x: Web3Address): common.EthAddress =
   EthAddress x
 
 func ethAddr*(x: Opt[Web3Address]): Opt[common.EthAddress] =
-  if x.isNone: Opt.none(common.EthAddress)
-  else: Opt.some(EthAddress x.get)
+  if x.isNone:
+    Opt.none(common.EthAddress)
+  else:
+    Opt.some(EthAddress x.get)
 
 func ethAddrs*(list: openArray[Web3Address]): seq[common.EthAddress] =
   for x in list:
@@ -137,22 +150,23 @@ func ethWithdrawal*(x: WithdrawalV1): common.Withdrawal =
   result.address = x.address.EthAddress
   result.amount = x.amount.uint64
 
-func ethWithdrawals*(list: openArray[WithdrawalV1]):
-                       seq[common.Withdrawal] =
+func ethWithdrawals*(list: openArray[WithdrawalV1]): seq[common.Withdrawal] =
   result = newSeqOfCap[common.Withdrawal](list.len)
   for x in list:
     result.add ethWithdrawal(x)
 
-func ethWithdrawals*(x: Opt[seq[WithdrawalV1]]):
-                       Opt[seq[common.Withdrawal]] =
-  if x.isNone: Opt.none(seq[common.Withdrawal])
-  else: Opt.some(ethWithdrawals x.get)
+func ethWithdrawals*(x: Opt[seq[WithdrawalV1]]): Opt[seq[common.Withdrawal]] =
+  if x.isNone:
+    Opt.none(seq[common.Withdrawal])
+  else:
+    Opt.some(ethWithdrawals x.get)
 
-func ethTx*(x: Web3Tx): common.Transaction {.gcsafe, raises:[RlpError].} =
+func ethTx*(x: Web3Tx): common.Transaction {.gcsafe, raises: [RlpError].} =
   result = rlp.decode(distinctBase x, common.Transaction)
 
-func ethTxs*(list: openArray[Web3Tx]):
-               seq[common.Transaction] {.gcsafe, raises:[RlpError].} =
+func ethTxs*(
+    list: openArray[Web3Tx]
+): seq[common.Transaction] {.gcsafe, raises: [RlpError].} =
   result = newSeqOfCap[common.Transaction](list.len)
   for x in list:
     result.add ethTx(x)
@@ -164,8 +178,7 @@ func storageKeys(list: seq[FixedBytes[32]]): seq[StorageKey] =
 func ethAccessList*(list: openArray[AccessTuple]): common.AccessList =
   for x in list:
     result.add common.AccessPair(
-      address    : ethAddr x.address,
-      storageKeys: storageKeys x.storageKeys,
+      address: ethAddr x.address, storageKeys: storageKeys x.storageKeys
     )
 
 func ethAccessList*(x: Opt[seq[AccessTuple]]): common.AccessList =
@@ -184,7 +197,8 @@ func w3Hashes*(list: openArray[common.Hash256]): seq[Web3Hash] =
     result.add Web3Hash x.data
 
 func w3Hashes*(z: Opt[seq[common.Hash256]]): Opt[seq[Web3Hash]] =
-  if z.isNone: Opt.none(seq[Web3Hash])
+  if z.isNone:
+    Opt.none(seq[Web3Hash])
   else:
     let list = z.get
     var v = newSeqOfCap[Web3Hash](list.len)
@@ -193,8 +207,10 @@ func w3Hashes*(z: Opt[seq[common.Hash256]]): Opt[seq[Web3Hash]] =
     Opt.some(v)
 
 func w3Hash*(x: Opt[common.Hash256]): Opt[BlockHash] =
-  if x.isNone: Opt.none(BlockHash)
-  else: Opt.some(BlockHash x.get.data)
+  if x.isNone:
+    Opt.none(BlockHash)
+  else:
+    Opt.some(BlockHash x.get.data)
 
 func w3Hash*(x: common.BlockHeader): BlockHash =
   BlockHash rlpHash(x).data
@@ -232,8 +248,10 @@ func w3Qty*(x: Web3Quantity, y: uint64): Web3Quantity =
   Web3Quantity(x.uint64 + y)
 
 func w3Qty*(x: Opt[uint64]): Opt[Web3Quantity] =
-  if x.isNone: Opt.none(Web3Quantity)
-  else: Opt.some(Web3Quantity x.get)
+  if x.isNone:
+    Opt.none(Web3Quantity)
+  else:
+    Opt.some(Web3Quantity x.get)
 
 func w3Qty*(x: uint64): Web3Quantity =
   Web3Quantity(x)
@@ -242,8 +260,10 @@ func w3Qty*(x: int64): Web3Quantity =
   Web3Quantity(x)
 
 func w3BlockNumber*(x: Opt[uint64]): Opt[Web3BlockNumber] =
-  if x.isNone: Opt.none(Web3BlockNumber)
-  else: Opt.some(Web3BlockNumber x.get)
+  if x.isNone:
+    Opt.none(Web3BlockNumber)
+  else:
+    Opt.some(Web3BlockNumber x.get)
 
 func w3BlockNumber*(x: uint64): Web3BlockNumber =
   Web3BlockNumber(x)
@@ -259,10 +279,10 @@ func w3ExtraData*(x: common.Blob): Web3ExtraData =
 
 func w3Withdrawal*(w: common.Withdrawal): WithdrawalV1 =
   WithdrawalV1(
-    index         : Web3Quantity w.index,
+    index: Web3Quantity w.index,
     validatorIndex: Web3Quantity w.validatorIndex,
-    address       : Web3Address  w.address,
-    amount        : Web3Quantity w.amount
+    address: Web3Address w.address,
+    amount: Web3Quantity w.amount,
   )
 
 func w3Withdrawals*(list: openArray[common.Withdrawal]): seq[WithdrawalV1] =
@@ -270,10 +290,11 @@ func w3Withdrawals*(list: openArray[common.Withdrawal]): seq[WithdrawalV1] =
   for x in list:
     result.add w3Withdrawal(x)
 
-func w3Withdrawals*(x: Opt[seq[common.Withdrawal]]):
-                     Opt[seq[WithdrawalV1]] =
-  if x.isNone: Opt.none(seq[WithdrawalV1])
-  else: Opt.some(w3Withdrawals x.get)
+func w3Withdrawals*(x: Opt[seq[common.Withdrawal]]): Opt[seq[WithdrawalV1]] =
+  if x.isNone:
+    Opt.none(seq[WithdrawalV1])
+  else:
+    Opt.some(w3Withdrawals x.get)
 
 func w3Tx*(tx: common.Transaction): Web3Tx =
   Web3Tx rlp.encode(tx)
@@ -284,10 +305,7 @@ func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
     result.add w3Tx(tx)
 
 proc w3AccessTuple*(ac: AccessPair): AccessTuple =
-  AccessTuple(
-    address: w3Addr ac.address,
-    storageKeys: w3Hash(ac.storageKeys)
-  )
+  AccessTuple(address: w3Addr ac.address, storageKeys: w3Hash(ac.storageKeys))
 
 proc w3AccessList*(list: openArray[AccessPair]): seq[AccessTuple] =
   result = newSeqOfCap[AccessTuple](list.len)

@@ -10,13 +10,19 @@
 
 import
   std/strutils,
-  json, stew/byteutils,
+  json,
+  stew/byteutils,
   results,
-  ../nimbus/db/[core_db, storage_types], eth/[rlp, common],
+  ../nimbus/db/[core_db, storage_types],
+  eth/[rlp, common],
   ../nimbus/tracer
 
-proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: BlockNumber, parent: BlockHeader, blk: EthBlock) =
-  template header: BlockHeader = blk.header
+proc generatePrestate*(
+    nimbus, geth: JsonNode, blockNumber: BlockNumber, parent: BlockHeader, blk: EthBlock
+) =
+  template header(): BlockHeader =
+    blk.header
+
   let
     state = nimbus["state"]
     headerHash = rlpHash(header)
@@ -37,10 +43,7 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: BlockNumber, parent:
     kvt.put(key, value).isOkOr:
       raiseAssert "generatePrestate(): put() (loop) failed " & $$error
 
-  var metaData = %{
-    "blockNumber": %blockNumber.toHex,
-    "geth": geth
-  }
+  var metaData = %{"blockNumber": %blockNumber.toHex, "geth": geth}
 
   metaData.dumpMemoryDB(chainDB)
   writeFile("block" & $blockNumber & ".json", metaData.pretty())

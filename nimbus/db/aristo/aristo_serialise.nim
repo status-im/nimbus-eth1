@@ -10,30 +10,23 @@
 
 {.push raises: [].}
 
-import
-  eth/[common, rlp],
-  results,
-  "."/[aristo_constants, aristo_desc, aristo_get]
+import eth/[common, rlp], results, "."/[aristo_constants, aristo_desc, aristo_get]
 
-type
-  ResolveVidFn = proc(
-      vid: VertexID;
-        ): Result[HashKey,AristoError]
-        {.gcsafe, raises: [].}
-    ## Resolve storage root vertex ID
+type ResolveVidFn =
+  proc(vid: VertexID): Result[HashKey, AristoError] {.gcsafe, raises: [].}
+  ## Resolve storage root vertex ID
 
 # ------------------------------------------------------------------------------
 # Private helper
 # ------------------------------------------------------------------------------
 
 proc serialise(
-    pyl: LeafPayload;
-    getKey: ResolveVidFn;
-      ): Result[Blob,(VertexID,AristoError)] =
+    pyl: LeafPayload, getKey: ResolveVidFn
+): Result[Blob, (VertexID, AristoError)] =
   ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
   ## account type, otherwise pass the data as is.
   ##
-  case pyl.pType:
+  case pyl.pType
   of RawData:
     ok pyl.rawBlob
   of AccountData:
@@ -42,16 +35,17 @@ proc serialise(
       key = block:
         if vid.isValid:
           vid.getKey.valueOr:
-            let w = (vid,error)
+            let w = (vid, error)
             return err(w)
         else:
           VOID_HASH_KEY
 
     ok rlp.encode Account(
-      nonce:       pyl.account.nonce,
-      balance:     pyl.account.balance,
+      nonce: pyl.account.nonce,
+      balance: pyl.account.balance,
       storageRoot: key.to(Hash256),
-      codeHash:    pyl.account.codeHash)
+      codeHash: pyl.account.codeHash,
+    )
   of StoData:
     ok rlp.encode pyl.stoData
 
@@ -59,7 +53,7 @@ proc serialise(
 # Public RLP transcoder mixins
 # ------------------------------------------------------------------------------
 
-func append*(w: var RlpWriter; key: HashKey) =
+func append*(w: var RlpWriter, key: HashKey) =
   if 1 < key.len and key.len < 32:
     w.appendRawBytes key.data
   else:
@@ -67,16 +61,16 @@ func append*(w: var RlpWriter; key: HashKey) =
 
 # ---------------------
 
-proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
+proc to*(w: tuple[key: HashKey, node: NodeRef], T: type seq[(Blob, Blob)]): T =
   ## Convert the argument pait `w` to a single or a double pair of
   ## `(<key>,<rlp-encoded-node>)` tuples. Only in case of a combined extension
   ## and branch vertex argument, there are is a double pair result.
   var wr = initRlpWriter()
-  case w.node.vType:
+  case w.node.vType
   of Branch:
     # Do branch node
     wr.startList(17)
-    for n in 0..15:
+    for n in 0 .. 15:
       wr.append w.node.key[n]
     wr.append EmptyBlob
 
@@ -92,12 +86,8 @@ proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
     else:
       # Do for pure branch node
       result.add (@(w.key.data), wr.finish())
-
   of Leaf:
-    proc getKey0(
-        vid: VertexID;
-          ): Result[HashKey,AristoError]
-          {.gcsafe, raises: [].} =
+    proc getKey0(vid: VertexID): Result[HashKey, AristoError] {.gcsafe, raises: [].} =
       ok(w.node.key[0]) # always succeeds
 
     wr.startList(2)
@@ -106,32 +96,28 @@ proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
 
   result.add (@(w.key.data), wr.finish())
 
-proc digestTo*(node: NodeRef; T: type HashKey): T =
+proc digestTo*(node: NodeRef, T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key. Note
   ## that a `Dummy` node is encoded as as a `Leaf`.
   ##
   var wr = initRlpWriter()
-  case node.vType:
+  case node.vType
   of Branch:
     # Do branch node
     wr.startList(17)
-    for n in 0..15:
+    for n in 0 .. 15:
       wr.append node.key[n]
     wr.append EmptyBlob
 
     # Do for embedded extension node
     if 0 < node.ePfx.len:
       let brHash = wr.finish().digestTo(HashKey)
-      wr= initRlpWriter()
+      wr = initRlpWriter()
       wr.startList(2)
       wr.append node.ePfx.toHexPrefix(isleaf = false)
       wr.append brHash
-
   of Leaf:
-    proc getKey0(
-        vid: VertexID;
-          ): Result[HashKey,AristoError]
-          {.gcsafe, raises: [].} =
+    proc getKey0(vid: VertexID): Result[HashKey, AristoError] {.gcsafe, raises: [].} =
       ok(node.key[0]) # always succeeds
 
     wr.startList(2)
@@ -141,14 +127,12 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
   wr.finish().digestTo(HashKey)
 
 proc serialise*(
-    db: AristoDbRef;
-    root: VertexID;
-    pyl: LeafPayload;
-      ): Result[Blob,(VertexID,AristoError)] =
+    db: AristoDbRef, root: VertexID, pyl: LeafPayload
+): Result[Blob, (VertexID, AristoError)] =
   ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
   ## account type, otherwise pass the data as is.
   ##
-  proc getKey(vid: VertexID): Result[HashKey,AristoError] =
+  proc getKey(vid: VertexID): Result[HashKey, AristoError] =
     ok (?db.getKeyRc((root, vid)))[0]
 
   pyl.serialise getKey

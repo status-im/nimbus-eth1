@@ -26,19 +26,18 @@ import
 # ------------------------------------------------------------------------------
 
 proc initImpl(
-    rdb: var RdbInst;
-    basePath: string;
+    rdb: var RdbInst,
+    basePath: string,
     dbOpts: DbOptionsRef,
-    cfOpts: ColFamilyOptionsRef;
-    guestCFs: openArray[ColFamilyDescriptor] = [];
-      ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
+    cfOpts: ColFamilyOptionsRef,
+    guestCFs: openArray[ColFamilyDescriptor] = [],
+): Result[seq[ColFamilyReadWrite], (AristoError, string)] =
   ## Database backend constructor
   const initFailed = "RocksDB/init() failed"
 
   rdb.basePath = basePath
 
-  let
-    dataDir = rdb.dataDir
+  let dataDir = rdb.dataDir
   try:
     dataDir.createDir
   except OSError, IOError:
@@ -70,7 +69,7 @@ proc initImpl(
   let cfs = useCFs.toSeq.mapIt(it.initColFamilyDescriptor cfOpts) & guestCFq
 
   # Open database for the extended family :)
-  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
+  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies = cfs).valueOr:
     raiseAssert initFailed & " cannot create base descriptor: " & error
 
   # Initialise column handlers (this stores implicitely `baseDb`)
@@ -88,17 +87,16 @@ proc initImpl(
 # ------------------------------------------------------------------------------
 
 proc init*(
-    rdb: var RdbInst;
-    basePath: string;
-    dbOpts: DbOptionsRef;
-    cfOpts: ColFamilyOptionsRef;
-    guestCFs: openArray[ColFamilyDescriptor];
-      ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
+    rdb: var RdbInst,
+    basePath: string,
+    dbOpts: DbOptionsRef,
+    cfOpts: ColFamilyOptionsRef,
+    guestCFs: openArray[ColFamilyDescriptor],
+): Result[seq[ColFamilyReadWrite], (AristoError, string)] =
   ## Temporarily define a guest CF list here.
   rdb.initImpl(basePath, dbOpts, cfOpts, guestCFs)
 
-
-proc destroy*(rdb: var RdbInst; eradicate: bool) =
+proc destroy*(rdb: var RdbInst, eradicate: bool) =
   ## Destructor
   rdb.baseDb.close()
 
@@ -113,7 +111,6 @@ proc destroy*(rdb: var RdbInst; eradicate: bool) =
           if 0 < w.len and w[^1] != '~':
             break done
         rdb.baseDir.removeDir
-
     except CatchableError:
       discard
 

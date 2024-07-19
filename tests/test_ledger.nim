@@ -27,22 +27,21 @@ import
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
-  hexPrivKey  = "af1a9be9f1a54421cac82943820a0fe0f601bb5f4f6d0bccc81c613f0ce6ae22"
+  hexPrivKey = "af1a9be9f1a54421cac82943820a0fe0f601bb5f4f6d0bccc81c613f0ce6ae22"
 
 # The above privKey will generate this address
 # senderAddr  = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
 
-type
-  TestEnv = object
-    com: CommonRef
-    xdb: CoreDbRef
-    txs: seq[Transaction]
-    txi: seq[int] # selected index into txs[] (crashable sender addresses)
-    vaultKey: PrivateKey
-    nonce   : uint64
-    chainId : ChainId
-    xp      : TxPoolRef
-    chain   : ChainRef
+type TestEnv = object
+  com: CommonRef
+  xdb: CoreDbRef
+  txs: seq[Transaction]
+  txi: seq[int] # selected index into txs[] (crashable sender addresses)
+  vaultKey: PrivateKey
+  nonce: uint64
+  chainId: ChainId
+  xp: TxPoolRef
+  chain: ChainRef
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -58,23 +57,20 @@ proc pp*(tx: Transaction): string =
 proc pp*(h: KeccakHash): string =
   h.data.toHex[52 .. 63].toLowerAscii
 
-proc pp*(tx: Transaction; ledger: LedgerRef): string =
+proc pp*(tx: Transaction, ledger: LedgerRef): string =
   let address = tx.getSender
-  "(" & address.pp &
-    "," & $tx.nonce &
-    ";" & $ledger.getNonce(address) &
-    "," & $ledger.getBalance(address) &
-    ")"
+  "(" & address.pp & "," & $tx.nonce & ";" & $ledger.getNonce(address) & "," &
+    $ledger.getBalance(address) & ")"
 
 when isMainModule:
   import chronicles
 
-  proc setTraceLevel =
+  proc setTraceLevel() =
     discard
     when defined(chronicles_runtime_filtering) and loggingEnabled:
       setLogLevel(LogLevel.TRACE)
 
-  proc setErrorLevel =
+  proc setErrorLevel() =
     discard
     when defined(chronicles_runtime_filtering) and loggingEnabled:
       setLogLevel(LogLevel.ERROR)
@@ -91,47 +87,41 @@ proc privKey(keyHex: string): PrivateKey =
   kRes.get()
 
 proc initEnv(): TestEnv =
-  let
-    conf = makeConfig(@[
-      "--custom-network:" & genesisFile
-    ])
+  let conf = makeConfig(@["--custom-network:" & genesisFile])
 
-  let
-    com = CommonRef.new(
-      newCoreDbRef DefaultDbMemory,
-      conf.networkId,
-      conf.networkParams
-    )
+  let com =
+    CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
   com.initializeEmptyDb()
 
   TestEnv(
-    com     : com,
-    xdb     : com.db,
+    com: com,
+    xdb: com.db,
     vaultKey: privKey(hexPrivKey),
-    nonce   : 0'u64,
-    chainId : conf.networkParams.config.chainId,
-    xp      : TxPoolRef.new(com),
-    chain   : newChain(com),
+    nonce: 0'u64,
+    chainId: conf.networkParams.config.chainId,
+    xp: TxPoolRef.new(com),
+    chain: newChain(com),
   )
 
 func makeTx(
     env: var TestEnv,
     recipient: EthAddress,
     amount: UInt256,
-    payload: openArray[byte] = []): Transaction =
+    payload: openArray[byte] = [],
+): Transaction =
   const
     gasLimit = 75000.GasInt
     gasPrice = 30.gwei
 
   let tx = Transaction(
-    txType  : TxLegacy,
-    chainId : env.chainId,
-    nonce   : AccountNonce(env.nonce),
+    txType: TxLegacy,
+    chainId: env.chainId,
+    nonce: AccountNonce(env.nonce),
     gasPrice: gasPrice,
     gasLimit: gasLimit,
-    to      : Opt.some(recipient),
-    value   : amount,
-    payload : @payload
+    to: Opt.some(recipient),
+    value: amount,
+    payload: @payload,
   )
 
   inc env.nonce
@@ -139,14 +129,14 @@ func makeTx(
 
 func initAddr(z: int): EthAddress =
   const L = sizeof(result)
-  result[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
+  result[L - sizeof(uint32) ..^ 1] = toBytesBE(z.uint32)
 
-proc importBlocks(env: TestEnv; blk: EthBlock) =
+proc importBlocks(env: TestEnv, blk: EthBlock) =
   env.chain.persistBlocks([blk]).isOkOr:
-    raiseAssert "persistBlocks() failed at block #" &
-      $blk.header.number & " msg: " & error
+    raiseAssert "persistBlocks() failed at block #" & $blk.header.number & " msg: " &
+      error
 
-proc getLedger(com: CommonRef; header: BlockHeader): LedgerRef =
+proc getLedger(com: CommonRef, header: BlockHeader): LedgerRef =
   LedgerRef.init(com.db, header.stateRoot)
 
 func getRecipient(tx: Transaction): EthAddress =
@@ -162,8 +152,7 @@ proc modBalance(ac: LedgerRef, address: EthAddress) =
   # ac.blindBalanceSetter(address)
   ac.addBalance(address, 1.u256)
 
-
-proc runTrial2ok(env: TestEnv, ledger: LedgerRef; inx: int) =
+proc runTrial2ok(env: TestEnv, ledger: LedgerRef, inx: int) =
   ## Run two blocks, the first one with *rollback*.
   let eAddr = env.txs[inx].getRecipient
 
@@ -179,8 +168,7 @@ proc runTrial2ok(env: TestEnv, ledger: LedgerRef; inx: int) =
 
   ledger.persist()
 
-
-proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
+proc runTrial3(env: TestEnv, ledger: LedgerRef, inx: int, rollback: bool) =
   ## Run three blocks, the second one optionally with *rollback*.
   let eAddr = env.txs[inx].getRecipient
 
@@ -207,8 +195,7 @@ proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
     ledger.commit(accTx)
     ledger.persist()
 
-
-proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) =
+proc runTrial3Survive(env: TestEnv, ledger: LedgerRef, inx: int, noisy = false) =
   ## Run three blocks with extra db frames and *rollback*.
   let eAddr = env.txs[inx].getRecipient
 
@@ -242,8 +229,7 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
 
     dbTx.commit()
 
-
-proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
+proc runTrial4(env: TestEnv, ledger: LedgerRef, inx: int, rollback: bool) =
   ## Like `runTrial3()` but with four blocks and extra db transaction frames.
   let eAddr = env.txs[inx].getRecipient
 
@@ -307,8 +293,8 @@ proc runLedgerTransactionTests(noisy = true) =
         recipientSeed = 501
         blockTime = EthTime.now()
 
-      for _ in 0..<NumBlocks:
-        for _ in 0..<NumTransactions:
+      for _ in 0 ..< NumBlocks:
+        for _ in 0 ..< NumTransactions:
           let recipient = initAddr(recipientSeed)
           let tx = env.makeTx(recipient, 1.u256)
           let res = env.xp.addLocal(PooledTransaction(tx: tx), force = true)
@@ -336,7 +322,7 @@ proc runLedgerTransactionTests(noisy = true) =
         let body = BlockBody(
           transactions: blk.txs,
           uncles: blk.uncles,
-          withdrawals: Opt.some(newSeq[Withdrawal]())
+          withdrawals: Opt.some(newSeq[Withdrawal]()),
         )
         env.importBlocks(EthBlock.init(blk.header, body))
 
@@ -345,10 +331,10 @@ proc runLedgerTransactionTests(noisy = true) =
           env.txs.add tx
 
     test &"Collect unique recipient addresses from {env.txs.len} txs," &
-        &" head=#{env.xdb.getCanonicalHead.number}":
+      &" head=#{env.xdb.getCanonicalHead.number}":
       # since we generate our own transactions instead of replaying
       # from testnet blocks, the recipients already unique.
-      for n,tx in env.txs:
+      for n, tx in env.txs:
         #let a = tx.getRecipient
         env.txi.add n
 
@@ -356,7 +342,8 @@ proc runLedgerTransactionTests(noisy = true) =
       let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
-        defer: dbTx.dispose()
+        defer:
+          dbTx.dispose()
         let ledger = env.com.getLedger(head)
         env.runTrial2ok(ledger, n)
 
@@ -364,16 +351,18 @@ proc runLedgerTransactionTests(noisy = true) =
       let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
-        defer: dbTx.dispose()
+        defer:
+          dbTx.dispose()
         let ledger = env.com.getLedger(head)
         env.runTrial3(ledger, n, rollback = true)
 
     test &"Run {env.txi.len} three-step trials with extra db frame rollback" &
-        " throwing Exceptions":
+      " throwing Exceptions":
       let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
-        defer: dbTx.dispose()
+        defer:
+          dbTx.dispose()
         let ledger = env.com.getLedger(head)
         env.runTrial3Survive(ledger, n, noisy)
 
@@ -381,7 +370,8 @@ proc runLedgerTransactionTests(noisy = true) =
       let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
-        defer: dbTx.dispose()
+        defer:
+          dbTx.dispose()
         let ledger = env.com.getLedger(head)
         env.runTrial3(ledger, n, rollback = false)
 
@@ -389,7 +379,8 @@ proc runLedgerTransactionTests(noisy = true) =
       let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
-        defer: dbTx.dispose()
+        defer:
+          dbTx.dispose()
         let ledger = env.com.getLedger(head)
         env.runTrial4(ledger, n, rollback = true)
 
@@ -401,9 +392,10 @@ proc runLedgerBasicOperationsTests() =
       var
         memDB = newCoreDbRef DefaultDbMemory
         stateDB {.used.} = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
-        address {.used.} = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+        address {.used.} =
+          hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
-        rootHash {.used.} : KeccakHash
+        rootHash {.used.}: KeccakHash
 
     test "accountExists and isDeadAccount":
       check stateDB.accountExists(address) == false
@@ -431,7 +423,7 @@ proc runLedgerBasicOperationsTests() =
       privateAccess(AccountRef)
       var x = AccountRef(
         overlayStorage: Table[UInt256, UInt256](),
-        originalStorage: newTable[UInt256, UInt256]()
+        originalStorage: newTable[UInt256, UInt256](),
       )
 
       x.overlayStorage[10.u256] = 11.u256
@@ -524,7 +516,8 @@ proc runLedgerBasicOperationsTests() =
       check ac.getCode(addr2) == code
       let
         key = contractHashKey(keccakHash(code))
-        val = memDB.ctx.getKvt().get(key.toOpenArray).valueOr: EmptyBlob
+        val = memDB.ctx.getKvt().get(key.toOpenArray).valueOr:
+            EmptyBlob
       check val == code
 
     test "accessList operations":
@@ -537,7 +530,7 @@ proc runLedgerBasicOperationsTests() =
       proc verifySlots(ac: LedgerRef, address: int, slots: varargs[int]): bool =
         let a = address.initAddr
         if not ac.inAccessList(a):
-            return false
+          return false
 
         for c in slots:
           if not ac.inAccessList(a, c.u256):

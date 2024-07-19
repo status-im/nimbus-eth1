@@ -10,26 +10,19 @@
 
 {.push raises: [].}
 
-import
-  std/sets,
-  eth/common,
-  ./aristo_desc/desc_identifiers
+import std/sets, eth/common, ./aristo_desc/desc_identifiers
 
 const
   EmptyBlob* = seq[byte].default
     ## Useful shortcut (borrowed from `sync/snap/constants.nim`)
 
-  EmptyVidSeq* = seq[VertexID].default
-    ## Useful shortcut
+  EmptyVidSeq* = seq[VertexID].default ## Useful shortcut
 
-  EmptyVidSet* = EmptyVidSeq.toHashSet
-    ## Useful shortcut
+  EmptyVidSet* = EmptyVidSeq.toHashSet ## Useful shortcut
 
-  VOID_HASH_KEY* = HashKey()
-    ## Void equivalent for Merkle hash value
+  VOID_HASH_KEY* = HashKey() ## Void equivalent for Merkle hash value
 
-  VOID_PATH_ID* = PathID()
-    ## Void equivalent for Merkle hash value
+  VOID_PATH_ID* = PathID() ## Void equivalent for Merkle hash value
 
   LEAST_FREE_VID* = 100
     ## Vids smaller are used as known state roots and cannot be recycled. Only

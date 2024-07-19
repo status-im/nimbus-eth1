@@ -22,7 +22,9 @@ proc txInPayload*(payload: ExecutionPayload, txHash: common.Hash256): bool =
     if rlpHash(currTx) == txHash:
       return true
 
-proc checkPrevRandaoValue*(client: RpcClient, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
+proc checkPrevRandaoValue*(
+    client: RpcClient, expectedPrevRandao: common.Hash256, blockNumber: uint64
+): bool =
   let storageKey = blockNumber.u256
   let r = client.storageAt(prevRandaoContractAddr, storageKey)
   let expected = FixedBytes[32](expectedPrevRandao.data)

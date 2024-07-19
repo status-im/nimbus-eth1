@@ -21,26 +21,24 @@ import
   ../../../../nimbus/core/eip4844,
   ../../../../nimbus/common/common
 
-type
-  NewPayloads* = ref object of TestStep
-    # Payload Count
-    payloadCount*: int
-    # Number of blob transactions that are expected to be included in the payload
-    expectedIncludedBlobCount*: int
-    # Blob IDs expected to be found in the payload
-    expectedBlobs*: seq[BlobID]
-    # Delay between FcU and GetPayload calls
-    getPayloadDelay*: int
-    # GetPayload modifier when requesting the new Payload
-    getPayloadCustomizer*: GetPayloadCustomizer
-    # ForkchoiceUpdate modifier when requesting the new Payload
-    fcUOnPayloadRequest*: ForkchoiceUpdatedCustomizer
-    # Extra modifications on NewPayload to potentially generate an invalid payload
-    newPayloadCustomizer*: NewPayloadCustomizer
-    # ForkchoiceUpdate modifier when setting the new payload as head
-    fcUOnHeadSet*: ForkchoiceUpdatedCustomizer
-    # Expected responses on the NewPayload call
-    expectationDescription*: string
+type NewPayloads* = ref object of TestStep # Payload Count
+  payloadCount*: int
+  # Number of blob transactions that are expected to be included in the payload
+  expectedIncludedBlobCount*: int
+  # Blob IDs expected to be found in the payload
+  expectedBlobs*: seq[BlobID]
+  # Delay between FcU and GetPayload calls
+  getPayloadDelay*: int
+  # GetPayload modifier when requesting the new Payload
+  getPayloadCustomizer*: GetPayloadCustomizer
+  # ForkchoiceUpdate modifier when requesting the new Payload
+  fcUOnPayloadRequest*: ForkchoiceUpdatedCustomizer
+  # Extra modifications on NewPayload to potentially generate an invalid payload
+  newPayloadCustomizer*: NewPayloadCustomizer
+  # ForkchoiceUpdate modifier when setting the new payload as head
+  fcUOnHeadSet*: ForkchoiceUpdatedCustomizer
+  # Expected responses on the NewPayload call
+  expectationDescription*: string
 
 func getPayloadCount(step: NewPayloads): int =
   var payloadCount = step.payloadCount
@@ -48,17 +46,18 @@ func getPayloadCount(step: NewPayloads): int =
     payloadCount = 1
   return payloadCount
 
-proc verifyPayload(step: NewPayloads,
-                   com: CommonRef,
-                   client: RpcClient,
-                   blobTxsInPayload: openArray[Transaction],
-                   shouldOverrideBuilder: Opt[bool],
-                   payload: ExecutionPayload,
-                   previousPayload = Opt.none(ExecutionPayload)): bool =
-
+proc verifyPayload(
+    step: NewPayloads,
+    com: CommonRef,
+    client: RpcClient,
+    blobTxsInPayload: openArray[Transaction],
+    shouldOverrideBuilder: Opt[bool],
+    payload: ExecutionPayload,
+    previousPayload = Opt.none(ExecutionPayload),
+): bool =
   var
     parentExcessBlobGas = 0'u64
-    parentBlobGasUsed   = 0'u64
+    parentBlobGasUsed = 0'u64
 
   if previousPayload.isSome:
     let prevPayload = previousPayload.get
@@ -71,7 +70,7 @@ proc verifyPayload(step: NewPayloads,
   let
     parent = common.BlockHeader(
       excessBlobGas: Opt.some(parentExcessBlobGas),
-      blobGasUsed: Opt.some(parentBlobGasUsed)
+      blobGasUsed: Opt.some(parentBlobGasUsed),
     )
     expectedExcessBlobGas = calcExcessBlobGas(parent)
 
@@ -86,8 +85,7 @@ proc verifyPayload(step: NewPayloads,
 
     if payload.excessBlobGas.get.uint64 != expectedExcessBlobGas:
       error "payload contains incorrect excessDataGas",
-        want=expectedExcessBlobGas,
-        have=payload.excessBlobGas.get.uint64
+        want = expectedExcessBlobGas, have = payload.excessBlobGas.get.uint64
       return false
 
     if shouldOverrideBuilder.isNone:
@@ -111,13 +109,11 @@ proc verifyPayload(step: NewPayloads,
 
     if totalBlobCount != step.expectedIncludedBlobCount:
       error "expected blobs in transactions",
-        expect=step.expectedIncludedBlobCount,
-        got=totalBlobCount
+        expect = step.expectedIncludedBlobCount, got = totalBlobCount
       return false
 
     if not verifyBeaconRootStorage(client, payload):
       return false
-
   else:
     if payload.excessBlobGas.isSome:
       error "payload contains non-nil excessDataGas pre-fork"
@@ -129,31 +125,30 @@ proc verifyPayload(step: NewPayloads,
 
   return true
 
-proc verifyBlobBundle(step: NewPayloads,
-                      blobDataInPayload: openArray[BlobWrapData],
-                      payload: ExecutionPayload,
-                      blobBundle: BlobsBundleV1): bool =
-
+proc verifyBlobBundle(
+    step: NewPayloads,
+    blobDataInPayload: openArray[BlobWrapData],
+    payload: ExecutionPayload,
+    blobBundle: BlobsBundleV1,
+): bool =
   if blobBundle.blobs.len != blobBundle.commitments.len or
       blobBundle.blobs.len != blobBundle.proofs.len:
     error "unexpected length in blob bundle",
-      blobs=len(blobBundle.blobs),
-      proofs=len(blobBundle.proofs),
-      kzgs=len(blobBundle.commitments)
+      blobs = len(blobBundle.blobs),
+      proofs = len(blobBundle.proofs),
+      kzgs = len(blobBundle.commitments)
     return false
 
   if len(blobBundle.blobs) != step.expectedIncludedBlobCount:
     error "expected blobs",
-      expect=step.expectedIncludedBlobCount,
-      get=len(blobBundle.blobs)
+      expect = step.expectedIncludedBlobCount, get = len(blobBundle.blobs)
     return false
 
   # Verify that the calculated amount of blobs in the payload matches the
   # amount of blobs in the bundle
   if len(blobDataInPayload) != len(blobBundle.blobs):
     error "expected blobs in the bundle",
-      expect=len(blobDataInPayload),
-      get=len(blobBundle.blobs)
+      expect = len(blobDataInPayload), get = len(blobBundle.blobs)
     return false
 
   for i, blobData in blobDataInPayload:
@@ -162,15 +157,15 @@ proc verifyBlobBundle(step: NewPayloads,
     let bundleProof = blobBundle.proofs[i].bytes
 
     if bundleCommitment != blobData.commitment.bytes:
-      error "KZG mismatch at index of the bundle", index=i
+      error "KZG mismatch at index of the bundle", index = i
       return false
 
     if bundleBlob != blobData.blob.bytes:
-      error "blob mismatch at index of the bundle", index=i
+      error "blob mismatch at index of the bundle", index = i
       return false
 
     if bundleProof != blobData.proof.bytes:
-      error "proof mismatch at index of the bundle", index=i
+      error "proof mismatch at index of the bundle", index = i
       return false
 
   if len(step.expectedBlobs) != 0:
@@ -188,11 +183,10 @@ proc verifyBlobBundle(step: NewPayloads,
 
   return true
 
-type
-  Shadow = ref object
-    p: int
-    payloadCount: int
-    prevPayload: ExecutionPayload
+type Shadow = ref object
+  p: int
+  payloadCount: int
+  prevPayload: ExecutionPayload
 
 method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
   # Create a new payload
@@ -204,165 +198,178 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
     env.clMock.payloadProductionClientDelay = step.getPayloadDelay
 
   var shadow = Shadow(
-    payloadCount: step.getPayloadCount(),
-    prevPayload: env.clMock.latestPayloadBuilt
+    payloadCount: step.getPayloadCount(), prevPayload: env.clMock.latestPayloadBuilt
   )
 
-  for p in 0..<shadow.payloadCount:
+  for p in 0 ..< shadow.payloadCount:
     shadow.p = p
-    let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
-      onPayloadAttributesGenerated: proc(): bool =
-        if step.fcUOnPayloadRequest != nil:
-          step.fcUOnPayloadRequest.setEngineAPIVersionResolver(env.engine.com)
+    let pbRes = env.clMock.produceSingleBlock(
+      BlockProcessCallbacks(
+        onPayloadAttributesGenerated: proc(): bool =
+          if step.fcUOnPayloadRequest != nil:
+            step.fcUOnPayloadRequest.setEngineAPIVersionResolver(env.engine.com)
 
+            var
+              payloadAttributes = env.clMock.latestPayloadAttributes
+              forkchoiceState = env.clMock.latestForkchoice
+              expectedError = step.fcUOnPayloadRequest.getExpectedError()
+              expectedStatus = PayloadExecutionStatus.valid
+              timestamp = env.clMock.latestHeader.timestamp.uint64
+
+            payloadAttributes =
+              step.fcUOnPayloadRequest.getPayloadAttributes(payloadAttributes)
+            let version = step.fcUOnPayloadRequest.forkchoiceUpdatedVersion(
+              timestamp, Opt.some(payloadAttributes.timestamp.uint64)
+            )
+
+            if step.fcUOnPayloadRequest.getExpectInvalidStatus():
+              expectedStatus = PayloadExecutionStatus.invalid
+
+            let r = env.engine.client.forkchoiceUpdated(
+              version, forkchoiceState, Opt.some(payloadAttributes)
+            )
+            if expectedError != 0:
+              r.expectErrorCode(expectedError, step.expectationDescription)
+            else:
+              r.expectNoError(step.expectationDescription)
+              r.expectPayloadStatus(expectedStatus)
+
+              if r.get().payloadID.isSome:
+                testCond env.clMock.addPayloadID(env.engine, r.get().payloadID.get())
+
+          return true,
+        onRequestNextPayload: proc(): bool =
+          # Get the next payload
+          if step.getPayloadCustomizer != nil:
+            step.getPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
+
+            var
+              payloadAttributes = env.clMock.latestPayloadAttributes
+              payloadID = env.clMock.nextPayloadID
+              expectedError = step.getPayloadCustomizer.getExpectedError()
+              timestamp = payloadAttributes.timestamp.uint64
+              version = step.getPayloadCustomizer.getPayloadVersion(timestamp)
+
+            payloadID = step.getPayloadCustomizer.getPayloadID(payloadID)
+
+            # We are going to sleep twice because there is no way to skip the CL Mock's sleep
+            let period = chronos.seconds(step.getPayloadDelay)
+            waitFor sleepAsync(period)
+
+            let r = env.engine.client.getPayload(payloadID, version)
+            if expectedError != 0:
+              r.expectErrorCode(expectedError, step.expectationDescription)
+            else:
+              r.expectNoError(step.expectationDescription)
+
+          return true,
+        onGetPayload: proc(): bool =
+          # Get the latest blob bundle
           var
-            payloadAttributes = env.clMock.latestPayloadAttributes
-            forkchoiceState   = env.clMock.latestForkchoice
-            expectedError     = step.fcUOnPayloadRequest.getExpectedError()
-            expectedStatus    = PayloadExecutionStatus.valid
-            timestamp         = env.clMock.latestHeader.timestamp.uint64
+            blobBundle = env.clMock.latestBlobsBundle
+            payload = env.clMock.latestPayloadBuilt
 
-          payloadAttributes = step.fcUOnPayloadRequest.getPayloadAttributes(payloadAttributes)
-          let version = step.fcUOnPayloadRequest.forkchoiceUpdatedVersion(timestamp, Opt.some(payloadAttributes.timestamp.uint64))
+          if not env.engine.com.isCancunOrLater(payload.timestamp.EthTime):
+            # Nothing to do
+            return true
 
-          if step.fcUOnPayloadRequest.getExpectInvalidStatus():
-            expectedStatus = PayloadExecutionStatus.invalid
+          if blobBundle.isNone:
+            fatal "Error getting blobs bundle",
+              payload = shadow.p + 1, count = shadow.payloadCount
+            return false
 
-          let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState, Opt.some(payloadAttributes))
-          if expectedError != 0:
-            r.expectErrorCode(expectedError, step.expectationDescription)
-          else:
-            r.expectNoError(step.expectationDescription)
-            r.expectPayloadStatus(expectedStatus)
+          let res = getBlobDataInPayload(ctx.txPool, payload)
+          if res.isErr:
+            fatal "Error retrieving blob bundle",
+              payload = shadow.p + 1, count = shadow.payloadCount, msg = res.error
+            return false
 
-            if r.get().payloadID.isSome:
-              testCond env.clMock.addPayloadID(env.engine, r.get().payloadID.get())
+          let blobData = res.get
 
-        return true
-      ,
-      onRequestNextPayload: proc(): bool =
-        # Get the next payload
-        if step.getPayloadCustomizer != nil:
-          step.getPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
+          if not step.verifyBlobBundle(blobData.data, payload, blobBundle.get):
+            fatal "Error verifying blob bundle",
+              payload = shadow.p + 1, count = shadow.payloadCount
+            return false
 
-          var
-            payloadAttributes = env.clMock.latestPayloadAttributes
-            payloadID         = env.clMock.nextPayloadID
-            expectedError     = step.getPayloadCustomizer.getExpectedError()
-            timestamp         = payloadAttributes.timestamp.uint64
-            version           = step.getPayloadCustomizer.getPayloadVersion(timestamp)
+          return true,
+        onNewPayloadBroadcast: proc(): bool =
+          if step.newPayloadCustomizer != nil:
+            step.newPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
+            # Send a test NewPayload directive with either a modified payload or modifed versioned hashes
+            var
+              payload = env.clMock.latestExecutableData
+              expectedError = step.newPayloadCustomizer.getExpectedError()
+              expectedStatus = PayloadExecutionStatus.valid
 
-          payloadID = step.getPayloadCustomizer.getPayloadID(payloadID)
+            # Send a custom new payload
+            payload = step.newPayloadCustomizer.customizePayload(payload)
+            let version =
+              step.newPayloadCustomizer.newPayloadVersion(payload.timestamp.uint64)
 
-          # We are going to sleep twice because there is no way to skip the CL Mock's sleep
-          let period = chronos.seconds(step.getPayloadDelay)
-          waitFor sleepAsync(period)
+            if step.newPayloadCustomizer.getExpectInvalidStatus():
+              expectedStatus = PayloadExecutionStatus.invalid
 
-          let r = env.engine.client.getPayload(payloadID, version)
-          if expectedError != 0:
-            r.expectErrorCode(expectedError, step.expectationDescription)
-          else:
-            r.expectNoError(step.expectationDescription)
+            let r = env.client.newPayload(version, payload)
+            if expectedError != 0:
+              r.expectErrorCode(expectedError, step.expectationDescription)
+            else:
+              r.expectNoError(step.expectationDescription)
+              r.expectStatus(expectedStatus)
 
-        return true
-      ,
-      onGetPayload: proc(): bool =
-        # Get the latest blob bundle
-        var
-          blobBundle = env.clMock.latestBlobsBundle
-          payload    = env.clMock.latestPayloadBuilt
+          if step.fcUOnHeadSet != nil:
+            step.fcUOnHeadSet.setEngineAPIVersionResolver(env.engine.com)
 
-        if not env.engine.com.isCancunOrLater(payload.timestamp.EthTime):
-          # Nothing to do
-          return true
+            var
+              forkchoiceState = env.clMock.latestForkchoice
+              expectedError = step.fcUOnHeadSet.getExpectedError()
+              expectedStatus = PayloadExecutionStatus.valid
+              timestamp = env.clMock.latestPayloadBuilt.timestamp.uint64
+              version = step.fcUOnHeadSet.forkchoiceUpdatedVersion(timestamp)
 
-        if blobBundle.isNone:
-          fatal "Error getting blobs bundle", payload=shadow.p+1, count=shadow.payloadCount
-          return false
+            if step.fcUOnHeadSet.getExpectInvalidStatus():
+              expectedStatus = PayloadExecutionStatus.invalid
 
-        let res = getBlobDataInPayload(ctx.txPool, payload)
-        if res.isErr:
-          fatal "Error retrieving blob bundle", payload=shadow.p+1, count=shadow.payloadCount, msg=res.error
-          return false
+            forkchoiceState.headBlockHash = env.clMock.latestPayloadBuilt.blockHash
 
-        let blobData = res.get
+            let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState)
+            if expectedError != 0:
+              r.expectErrorCode(expectedError, step.expectationDescription)
+            else:
+              r.expectNoError(step.expectationDescription)
+              r.expectPayloadStatus(expectedStatus)
 
-        if not step.verifyBlobBundle(blobData.data, payload, blobBundle.get):
-          fatal "Error verifying blob bundle",  payload=shadow.p+1, count=shadow.payloadCount
-          return false
+          return true,
+        onForkchoiceBroadcast: proc(): bool =
+          # Verify the transaction receipts on incorporated transactions
+          let payload = env.clMock.latestPayloadBuilt
 
-        return true
-      ,
-      onNewPayloadBroadcast: proc(): bool =
-        if step.newPayloadCustomizer != nil:
-          step.newPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
-          # Send a test NewPayload directive with either a modified payload or modifed versioned hashes
-          var
-            payload        = env.clMock.latestExecutableData
-            expectedError  = step.newPayloadCustomizer.getExpectedError()
-            expectedStatus = PayloadExecutionStatus.valid
+          let res = getBlobDataInPayload(ctx.txPool, payload)
+          if res.isErr:
+            fatal "Error retrieving blob bundle",
+              payload = shadow.p + 1, count = shadow.payloadCount, msg = res.error
+            return false
 
-          # Send a custom new payload
-          payload = step.newPayloadCustomizer.customizePayload(payload)
-          let
-            version = step.newPayloadCustomizer.newPayloadVersion(payload.timestamp.uint64)
+          let blobData = res.get
+          if not step.verifyPayload(
+            env.engine.com,
+            env.engine.client,
+            blobData.txs,
+            env.clMock.latestShouldOverrideBuilder,
+            payload,
+            Opt.some(shadow.prevPayload),
+          ):
+            fatal "Error verifying payload",
+              payload = shadow.p + 1, count = shadow.payloadCount
+            return false
 
-          if step.newPayloadCustomizer.getExpectInvalidStatus():
-            expectedStatus = PayloadExecutionStatus.invalid
-
-          let r = env.client.newPayload(version, payload)
-          if expectedError != 0:
-            r.expectErrorCode(expectedError, step.expectationDescription)
-          else:
-            r.expectNoError(step.expectationDescription)
-            r.expectStatus(expectedStatus)
-
-        if step.fcUOnHeadSet != nil:
-          step.fcUOnHeadSet.setEngineAPIVersionResolver(env.engine.com)
-
-          var
-            forkchoiceState = env.clMock.latestForkchoice
-            expectedError   = step.fcUOnHeadSet.getExpectedError()
-            expectedStatus  = PayloadExecutionStatus.valid
-            timestamp       = env.clMock.latestPayloadBuilt.timestamp.uint64
-            version         = step.fcUOnHeadSet.forkchoiceUpdatedVersion(timestamp)
-
-          if step.fcUOnHeadSet.getExpectInvalidStatus():
-            expectedStatus = PayloadExecutionStatus.invalid
-
-          forkchoiceState.headBlockHash = env.clMock.latestPayloadBuilt.blockHash
-
-          let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState)
-          if expectedError != 0:
-            r.expectErrorCode(expectedError, step.expectationDescription)
-          else:
-            r.expectNoError(step.expectationDescription)
-            r.expectPayloadStatus(expectedStatus)
-
-        return true
-      ,
-      onForkchoiceBroadcast: proc(): bool =
-        # Verify the transaction receipts on incorporated transactions
-        let payload = env.clMock.latestPayloadBuilt
-
-        let res = getBlobDataInPayload(ctx.txPool, payload)
-        if res.isErr:
-          fatal "Error retrieving blob bundle", payload=shadow.p+1, count=shadow.payloadCount, msg=res.error
-          return false
-
-        let blobData = res.get
-        if not step.verifyPayload(env.engine.com, env.engine.client,
-                   blobData.txs, env.clMock.latestShouldOverrideBuilder,
-                   payload, Opt.some(shadow.prevPayload)):
-          fatal "Error verifying payload", payload=shadow.p+1, count=shadow.payloadCount
-          return false
-
-        shadow.prevPayload = env.clMock.latestPayloadBuilt
-        return true
-    ))
+          shadow.prevPayload = env.clMock.latestPayloadBuilt
+          return true,
+      )
+    )
 
     testCond pbRes
-    info "Correctly produced payload", payload=shadow.p+1, count=shadow.payloadCount
+    info "Correctly produced payload",
+      payload = shadow.p + 1, count = shadow.payloadCount
 
   if step.getPayloadDelay != 0:
     # Restore the original delay
@@ -370,13 +377,11 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
 
   return true
 
-
 method description*(step: NewPayloads): string =
   #[
     TODO: Figure out if we need this.
     if step.VersionedHashes != nil {
       return fmt.Sprintf("NewPayloads: %d payloads, %d blobs expected, %s", step.getPayloadCount(), step.ExpectedIncludedBlobCount, step.VersionedHashes.Description())
   ]#
-  "NewPayloads: $1 payloads, $2 blobs expected" % [
-    $step.getPayloadCount(), $step.expectedIncludedBlobCount
-  ]
+  "NewPayloads: $1 payloads, $2 blobs expected" %
+    [$step.getPayloadCount(), $step.expectedIncludedBlobCount]

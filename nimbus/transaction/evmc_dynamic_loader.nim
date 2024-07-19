@@ -8,10 +8,7 @@
 
 {.push raises: [].}
 
-import
-  std/[dynlib, strformat, strutils, os],
-  chronicles,
-  evmc/evmc, ../config
+import std/[dynlib, strformat, strutils, os], chronicles, evmc/evmc, ../config
 
 # The built-in Nimbus EVM, via imported C function.
 proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc, raises: [], gcsafe.}
@@ -77,13 +74,13 @@ proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
     sym = symAddr(lib, fallback)
     if sym.isNil:
       warn "EVMC create function not found in library", path
-      warn "Tried this library symbol", symbol=symbolName
-      warn "Tried this library symbol", symbol=fallback
+      warn "Tried this library symbol", symbol = symbolName
+      warn "Tried this library symbol", symbol = fallback
       return (nil, "")
 
   return (cast[evmc_create_vm_name_fn](sym), path)
 
-proc evmcLoadVMShowDetail(): ptr evmc_vm  =
+proc evmcLoadVMShowDetail(): ptr evmc_vm =
   let (vmCreate, vmDescription) = evmcLoadVMGetCreateFn()
   if vmCreate.isNil:
     return nil
@@ -93,20 +90,26 @@ proc evmcLoadVMShowDetail(): ptr evmc_vm  =
     vm = vmCreate()
 
   if vm.isNil:
-    warn "The loaded EVM did not create a VM when requested",
-      `from`=vmDescription
+    warn "The loaded EVM did not create a VM when requested", `from` = vmDescription
     return nil
 
   if vm.abi_version != EVMC_ABI_VERSION:
     warn "The loaded EVM is for an incompatible EVMC ABI",
-      requireABI=EVMC_ABI_VERSION, loadedABI=vm.abi_version,
-      `from`=vmDescription
-    warn "The loaded EVM will not be used", `from`=vmDescription
+      requireABI = EVMC_ABI_VERSION, loadedABI = vm.abi_version, `from` = vmDescription
+    warn "The loaded EVM will not be used", `from` = vmDescription
     return nil
 
-  let name = if vm.name.isNil: "<nil>" else: $vm.name
-  let version = if vm.version.isNil: "<nil>" else: $vm.version
-  info "Using EVM", name=name, version=version, `from`=vmDescription
+  let name =
+    if vm.name.isNil:
+      "<nil>"
+    else:
+      $vm.name
+  let version =
+    if vm.version.isNil:
+      "<nil>"
+    else:
+      $vm.version
+  info "Using EVM", name = name, version = version, `from` = vmDescription
   return vm
 
 proc evmcLoadVMCached*(): ptr evmc_vm =

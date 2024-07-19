@@ -26,12 +26,11 @@ import
   ../../db/ledger,
   ../evm_errors
 
-type
-  LegacyTracer* = ref object of TracerRef
-    trace: JsonNode
-    accounts: HashSet[EthAddress]
-    storageKeys: seq[HashSet[UInt256]]
-    gas: GasInt
+type LegacyTracer* = ref object of TracerRef
+  trace: JsonNode
+  accounts: HashSet[EthAddress]
+  storageKeys: seq[HashSet[UInt256]]
+  gas: GasInt
 
 proc hash*(x: UInt256): Hash =
   result = hash(x.toByteArrayBE)
@@ -53,10 +52,7 @@ proc newLegacyTracer*(flags: set[TracerFlags]): LegacyTracer =
   trace["returnValue"] = %""
   trace["structLogs"] = newJArray()
 
-  LegacyTracer(
-    flags: flags,
-    trace: trace
-  )
+  LegacyTracer(flags: flags, trace: trace)
 
 method capturePrepare*(ctx: LegacyTracer, comp: Computation, depth: int) {.gcsafe.} =
   if depth >= ctx.storageKeys.len:
@@ -68,12 +64,17 @@ method capturePrepare*(ctx: LegacyTracer, comp: Computation, depth: int) {.gcsaf
   ctx.storageKeys[depth] = HashSet[UInt256]()
 
 # Opcode level
-method captureOpStart*(ctx: LegacyTracer, c: Computation,
-                       fixed: bool, pc: int, op: Op, gas: GasInt,
-                       depth: int): int {.gcsafe.} =
+method captureOpStart*(
+    ctx: LegacyTracer,
+    c: Computation,
+    fixed: bool,
+    pc: int,
+    op: Op,
+    gas: GasInt,
+    depth: int,
+): int {.gcsafe.} =
   try:
-    let
-      j = newJObject()
+    let j = newJObject()
     ctx.trace["structLogs"].add(j)
 
     j["op"] = %(($op).toUpperAscii)
@@ -95,7 +96,8 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation,
       const chunkLen = 32
       let numChunks = c.memory.len div chunkLen
       for i in 0 ..< numChunks:
-        let memHex = c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
+        let memHex =
+          c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
         mem.add(%(memHex.toUpperAscii))
       j["memory"] = mem
 
@@ -103,7 +105,9 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation,
       case op
       of Call, CallCode, DelegateCall, StaticCall:
         if c.stack.len > 2:
-          ctx.accounts.incl c.stack[^2, EthAddress].expect("stack constains more than 2 elements")
+          ctx.accounts.incl c.stack[^2, EthAddress].expect(
+            "stack constains more than 2 elements"
+          )
       of ExtCodeCopy, ExtCodeSize, Balance, SelfDestruct:
         if c.stack.len > 1:
           ctx.accounts.incl c.stack[^1, EthAddress].expect("stack is not empty")
@@ -113,22 +117,30 @@ method captureOpStart*(ctx: LegacyTracer, c: Computation,
     if TracerFlags.DisableStorage notin ctx.flags:
       if op == Sstore:
         if c.stack.len > 1:
-          ctx.rememberStorageKey(c.msg.depth,
-            c.stack[^1, UInt256].expect("stack is not empty"))
+          ctx.rememberStorageKey(
+            c.msg.depth, c.stack[^1, UInt256].expect("stack is not empty")
+          )
 
     result = ctx.trace["structLogs"].len - 1
   except KeyError as ex:
-    error "LegacyTracer captureOpStart", msg=ex.msg
+    error "LegacyTracer captureOpStart", msg = ex.msg
   except ValueError as ex:
-    error "LegacyTracer captureOpStart", msg=ex.msg
+    error "LegacyTracer captureOpStart", msg = ex.msg
 
-method captureOpEnd*(ctx: LegacyTracer, c: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
-                     rData: openArray[byte],
-                     depth: int, opIndex: int) {.gcsafe.} =
+method captureOpEnd*(
+    ctx: LegacyTracer,
+    c: Computation,
+    fixed: bool,
+    pc: int,
+    op: Op,
+    gas: GasInt,
+    refund: int64,
+    rData: openArray[byte],
+    depth: int,
+    opIndex: int,
+) {.gcsafe.} =
   try:
-    let
-      j = ctx.trace["structLogs"].elems[opIndex]
+    let j = ctx.trace["structLogs"].elems[opIndex]
 
     # TODO: figure out how to get storage
     # when contract execution interrupted by exception
@@ -148,14 +160,22 @@ method captureOpEnd*(ctx: LegacyTracer, c: Computation,
       j["returnValue"] = returnValue
       ctx.trace["returnValue"] = returnValue
   except KeyError as ex:
-    error "LegacyTracer captureOpEnd", msg=ex.msg
+    error "LegacyTracer captureOpEnd", msg = ex.msg
   except RlpError as ex:
-    error "LegacyTracer captureOpEnd", msg=ex.msg
+    error "LegacyTracer captureOpEnd", msg = ex.msg
 
-method captureFault*(ctx: LegacyTracer, comp: Computation,
-                     fixed: bool, pc: int, op: Op, gas: GasInt, refund: int64,
-                     rData: openArray[byte],
-                     depth: int, error: Opt[string]) {.gcsafe.} =
+method captureFault*(
+    ctx: LegacyTracer,
+    comp: Computation,
+    fixed: bool,
+    pc: int,
+    op: Op,
+    gas: GasInt,
+    refund: int64,
+    rData: openArray[byte],
+    depth: int,
+    error: Opt[string],
+) {.gcsafe.} =
   try:
     if ctx.trace["structLogs"].elems.len > 0:
       let j = ctx.trace["structLogs"].elems[^1]
@@ -164,7 +184,7 @@ method captureFault*(ctx: LegacyTracer, comp: Computation,
 
     ctx.trace["failed"] = %true
   except KeyError as ex:
-    error "LegacyTracer captureOpEnd", msg=ex.msg
+    error "LegacyTracer captureOpEnd", msg = ex.msg
 
 proc getTracingResult*(ctx: LegacyTracer): JsonNode =
   ctx.trace

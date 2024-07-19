@@ -161,32 +161,27 @@ proc run*(
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.phase0),
     proc(signedBlock: phase0.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
-    ,
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
   )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.altair),
     proc(signedBlock: altair.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
-    ,
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
   )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.bellatrix),
     proc(signedBlock: bellatrix.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
-    ,
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
   )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.capella),
     proc(signedBlock: capella.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
-    ,
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
   )
   network.addValidator(
     getBeaconBlocksTopic(forkDigests.deneb),
     proc(signedBlock: deneb.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock))
-    ,
+      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
   )
   lightClient.installMessageValidators()
 

@@ -18,18 +18,16 @@ import
   ../aristo/aristo_init/rocks_db,
   ../aristo/[aristo_desc, aristo_walk/persistent, aristo_serialise, aristo_tx],
   ../kvt, # needed for `aristo_replicate`
-  ./base/[api_tracking, base_config, base_desc], ./base
+  ./base/[api_tracking, base_config, base_desc],
+  ./base
 
-include
-  ./backend/aristo_replicate
+include ./backend/aristo_replicate
 
 when CoreDbEnableApiTracking:
-  import
-    chronicles
+  import chronicles
   logScope:
     topics = "core_db"
-  const
-    logTxt = "API"
+  const logTxt = "API"
 
 # Annotation helper(s)
 {.pragma: rlpRaise, gcsafe, raises: [CoreDbApiError].}
@@ -42,19 +40,21 @@ iterator replicatePersistent*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
   ## Extended version of `replicate()` for `Aristo` persistent backend.
   ##
   mpt.setTrackNewApi MptReplicateIt
-  case mpt.dbType:
+  case mpt.dbType
   of AristoDbMemory:
-    for k,v in aristoReplicate[use_ari.MemBackendRef](mpt):
-      yield (k,v)
+    for k, v in aristoReplicate[use_ari.MemBackendRef](mpt):
+      yield (k, v)
   of AristoDbVoid:
-    for k,v in aristoReplicate[use_ari.VoidBackendRef](mpt):
-      yield (k,v)
+    for k, v in aristoReplicate[use_ari.VoidBackendRef](mpt):
+      yield (k, v)
   of AristoDbRocks:
     for k, v in aristoReplicate[rocks_db.RdbBackendRef](mpt):
       yield (k, v)
   else:
-    raiseAssert: "Unsupported database type: " & $mpt.dbType
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed
+    raiseAssert:
+      "Unsupported database type: " & $mpt.dbType
+  mpt.ifTrackNewApi:
+    debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

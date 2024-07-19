@@ -38,7 +38,9 @@ export
 
 type
   NimbusState* = enum
-    Starting, Running, Stopping
+    Starting
+    Running
+    Stopping
 
   NimbusNode* = ref object
     httpServer*: NimbusHttpServerRef

@@ -8,12 +8,9 @@
 # those terms.
 
 when false:
-  import
-    std/importutils
+  import std/importutils
 
-import
-  json_rpc/servers/httpserver as jrpc_server,
-  chronos/apps/http/httpserver {.all.}
+import json_rpc/servers/httpserver as jrpc_server, chronos/apps/http/httpserver {.all.}
 
 type
   RpcHttpServerParams = object
@@ -44,11 +41,12 @@ type
     Immediate
     KeepConnection
 
-  RpcAuthHook* = proc(request: HttpRequestRef): Future[HttpResponseRef]
-                  {.gcsafe, async: (raises: [CatchableError]).}
+  RpcAuthHook* = proc(request: HttpRequestRef): Future[HttpResponseRef] {.
+    gcsafe, async: (raises: [CatchableError])
+  .}
 
-  RpcHandlerProc* = proc(request: HttpRequestRef): Future[RpcHandlerResult]
-                      {.async: (raises: []).}
+  RpcHandlerProc* =
+    proc(request: HttpRequestRef): Future[RpcHandlerResult] {.async: (raises: []).}
 
   NimbusHttpServer* = object of RootObj
     server: HttpServerRef
@@ -96,41 +94,35 @@ proc resolvedAddress(address: string): Result[TransportAddress, string] =
   except CatchableError:
     return err("Failed to decode HTTP server address")
 
-proc createServer(address: TransportAddress,
-                  params: RpcHttpServerParams): HttpResult[HttpServerRef] =
-
-  proc processCallback(req: RequestFence):
-          Future[HttpResponseRef] {.
-            async: (raises: [CancelledError]).} =
+proc createServer(
+    address: TransportAddress, params: RpcHttpServerParams
+): HttpResult[HttpServerRef] =
+  proc processCallback(
+      req: RequestFence
+  ): Future[HttpResponseRef] {.async: (raises: [CancelledError]).} =
     # This is a dummy callback because we are going to
     # create our own callback
     return nil
 
   HttpServerRef.new(
-    address,
-    processCallback,
-    params.serverFlags,
-    params.socketFlags,
-    params.serverUri,
-    params.serverIdent,
-    params.maxConnections,
-    params.bufferSize,
-    params.backlogSize,
-    params.httpHeadersTimeout,
-    params.maxHeadersSize,
-    params.maxRequestBodySize)
+    address, processCallback, params.serverFlags, params.socketFlags, params.serverUri,
+    params.serverIdent, params.maxConnections, params.bufferSize, params.backlogSize,
+    params.httpHeadersTimeout, params.maxHeadersSize, params.maxRequestBodySize,
+  )
 
-proc createServer(address: string,
-                  params: RpcHttpServerParams): HttpResult[HttpServerRef] =
+proc createServer(
+    address: string, params: RpcHttpServerParams
+): HttpResult[HttpServerRef] =
   ## Create new server and assign it to ``address``.
   let serverAddress = resolvedAddress(address).valueOr:
     return err(error)
   createServer(serverAddress, params)
 
-proc newHttpServerWithParams*(address: TransportAddress or string,
-                              authHooks: sink seq[RpcAuthHook] = @[],
-                              handlers: sink seq[RpcHandlerProc]):
-                                HttpResult[NimbusHttpServerRef] =
+proc newHttpServerWithParams*(
+    address: TransportAddress or string,
+    authHooks: sink seq[RpcAuthHook] = @[],
+    handlers: sink seq[RpcHandlerProc],
+): HttpResult[NimbusHttpServerRef] =
   ## Create new server and assign it to ``address``.
   let params = defaultRpcHttpServerParams()
   let inner = createServer(address, params)
@@ -145,9 +137,9 @@ proc newHttpServerWithParams*(address: TransportAddress or string,
 
   return ok(server)
 
-proc invokeProcessCallback(nserver: NimbusHttpServerRef,
-                           req: RequestFence): Future[RpcHandlerResult] {.
-     async: (raises: []).} =
+proc invokeProcessCallback(
+    nserver: NimbusHttpServerRef, req: RequestFence
+): Future[RpcHandlerResult] {.async: (raises: []).} =
   when false:
     let server = nserver.server
     privateAccess(type server)
@@ -157,10 +149,8 @@ proc invokeProcessCallback(nserver: NimbusHttpServerRef,
       server.processCallback(req)
 
   if req.isErr:
-    return RpcHandlerResult(
-      status: RpcHandlerStatus.Response,
-      response: defaultResponse(),
-    )
+    return
+      RpcHandlerResult(status: RpcHandlerStatus.Response, response: defaultResponse())
 
   let request = req.get()
   # If hook result is not nil,
@@ -169,14 +159,10 @@ proc invokeProcessCallback(nserver: NimbusHttpServerRef,
     for hook in nserver.authHooks:
       let res = await hook(request)
       if not res.isNil:
-        return RpcHandlerResult(
-          status: RpcHandlerStatus.Response,
-          response: res,
-        )
+        return RpcHandlerResult(status: RpcHandlerStatus.Response, response: res)
   except CatchableError as exc:
     return RpcHandlerResult(
-      status: RpcHandlerStatus.Response,
-      response: defaultResponse(exc),
+      status: RpcHandlerStatus.Response, response: defaultResponse(exc)
     )
 
   # If handler result.status != Skip,
@@ -187,15 +173,12 @@ proc invokeProcessCallback(nserver: NimbusHttpServerRef,
       return res
 
   # not handled
-  return RpcHandlerResult(
-    status: RpcHandlerStatus.Response,
-    response: defaultResponse(),
-  )
+  return
+    RpcHandlerResult(status: RpcHandlerStatus.Response, response: defaultResponse())
 
-proc processRequest(nserver: NimbusHttpServerRef,
-                    connection: HttpConnectionRef,
-                    connId: string): Future[RpcProcessExitType] {.
-     async: (raises: []).} =
+proc processRequest(
+    nserver: NimbusHttpServerRef, connection: HttpConnectionRef, connId: string
+): Future[RpcProcessExitType] {.async: (raises: []).} =
   let server = nserver.server
   let requestFence = await getRequestFence(server, connection)
   if requestFence.isErr():
@@ -220,7 +203,8 @@ proc processRequest(nserver: NimbusHttpServerRef,
         return RpcProcessExitType.Immediate
 
     case response.status
-    of RpcHandlerStatus.Skip: discard
+    of RpcHandlerStatus.Skip:
+      discard
     of RpcHandlerStatus.Response:
       let res = await connection.sendDefaultResponse(requestFence, response.response)
       return RpcProcessExitType(res.ord)
@@ -235,21 +219,22 @@ proc processRequest(nserver: NimbusHttpServerRef,
         request.response = Opt.none(HttpResponseRef)
       await request.closeWait()
 
-proc processLoop(nserver: NimbusHttpServerRef, holder: HttpConnectionHolderRef) {.async: (raises: []).} =
+proc processLoop(
+    nserver: NimbusHttpServerRef, holder: HttpConnectionHolderRef
+) {.async: (raises: []).} =
   let
     server = holder.server
     transp = holder.transp
     connectionId = holder.connectionId
-    connection =
-      block:
-        let res = await getConnectionFence(server, transp)
-        if res.isErr():
-          if res.error.kind != HttpServerError.InterruptError:
-            discard await noCancel(
-              invokeProcessCallback(nserver, RequestFence.err(res.error)))
-          server.connections.del(connectionId)
-          return
-        res.get()
+    connection = block:
+      let res = await getConnectionFence(server, transp)
+      if res.isErr():
+        if res.error.kind != HttpServerError.InterruptError:
+          discard
+            await noCancel(invokeProcessCallback(nserver, RequestFence.err(res.error)))
+        server.connections.del(connectionId)
+        return
+      res.get()
 
   holder.connection = connection
 
@@ -305,35 +290,30 @@ proc closeWait*(server: NimbusHttpServerRef) {.async: (raises: []).} =
 func localAddress*(server: NimbusHttpServerRef): TransportAddress =
   server.server.instance.localAddress()
 
-proc addServer*(server: RpcHttpServer,
-                address: TransportAddress,
-                params: RpcHttpServerParams): Result[void, string] =
+proc addServer*(
+    server: RpcHttpServer, address: TransportAddress, params: RpcHttpServerParams
+): Result[void, string] =
   try:
     server.addHttpServer(
-      address,
-      params.socketFlags,
-      params.serverUri,
-      params.serverIdent,
-      params.maxConnections,
-      params.bufferSize,
-      params.backlogSize,
-      params.httpHeadersTimeout,
-      params.maxHeadersSize,
-      params.maxRequestBodySize)
+      address, params.socketFlags, params.serverUri, params.serverIdent,
+      params.maxConnections, params.bufferSize, params.backlogSize,
+      params.httpHeadersTimeout, params.maxHeadersSize, params.maxRequestBodySize,
+    )
     return ok()
   except CatchableError as exc:
     return err(exc.msg)
 
-proc addServer*(server: RpcHttpServer,
-                address: string,
-                params: RpcHttpServerParams): Result[void, string] =
+proc addServer*(
+    server: RpcHttpServer, address: string, params: RpcHttpServerParams
+): Result[void, string] =
   let serverAddress = resolvedAddress(address).valueOr:
     return err(error)
 
   server.addServer(serverAddress, params)
 
-proc newRpcHttpServerWithParams*(address: TransportAddress,
-            authHooks: seq[HttpAuthHook] = @[]): Result[RpcHttpServer, string] =
+proc newRpcHttpServerWithParams*(
+    address: TransportAddress, authHooks: seq[HttpAuthHook] = @[]
+): Result[RpcHttpServer, string] =
   ## Create new server and assign it to addresses ``addresses``.
   let server = RpcHttpServer.new(authHooks)
   let params = defaultRpcHttpServerParams()
@@ -341,8 +321,9 @@ proc newRpcHttpServerWithParams*(address: TransportAddress,
     return err(error)
   ok(server)
 
-proc newRpcHttpServerWithParams*(address: string,
-            authHooks: seq[HttpAuthHook] = @[]): Result[RpcHttpServer, string] =
+proc newRpcHttpServerWithParams*(
+    address: string, authHooks: seq[HttpAuthHook] = @[]
+): Result[RpcHttpServer, string] =
   let server = RpcHttpServer.new(authHooks)
   let params = defaultRpcHttpServerParams()
   server.addServer(address, params).isOkOr:

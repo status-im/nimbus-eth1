@@ -8,182 +8,165 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-type
-  AristoError* = enum
-    NothingSerious = 0
+type AristoError* = enum
+  NothingSerious = 0
 
-    # Miscelaneous/unclassified handy helpers
-    GenericError
+  # Miscelaneous/unclassified handy helpers
+  GenericError
 
+  # Data record transcoders, `blobify()` from `blobify.nim`
+  BlobifyBranchMissingRefs
+  BlobifyExtMissingRefs
+  BlobifyExtPathOverflow
+  BlobifyLeafPathOverflow
+  BlobifyNilVertex
 
-    # Data record transcoders, `blobify()` from `blobify.nim`
-    BlobifyBranchMissingRefs
-    BlobifyExtMissingRefs
-    BlobifyExtPathOverflow
-    BlobifyLeafPathOverflow
-    BlobifyNilVertex
+  # Cache checker `checkCache()`
+  CheckAnyVidDeadStorageRoot
+  CheckAnyVidSharedStorageRoot
+  CheckAnyVtxEmptyKeyMissing
+  CheckAnyVtxEmptyKeyExpected
+  CheckAnyVtxEmptyKeyMismatch
+  CheckAnyVtxBranchLinksMissing
+  CheckAnyVtxLockWithoutKey
+  CheckAnyVTopUnset
+  CheckBeCacheGarbledVTop
+  CheckBeCacheKeyDangling
+  CheckBeCacheKeyNonEmpty
+  CheckBeGarbledVTop
+  CheckBeVtxBranchLinksMissing
+  CheckBeVtxInvalid
+  CheckBeVtxMissing
+  CheckStkKeyStrayZeroEntry
+  CheckStkVtxKeyMismatch
+  CheckRlxVtxIncomplete
+  CheckRlxVtxKeyMissing
+  CheckRlxVtxKeyMismatch
 
+  # De-serialiser from `blobify.nim`
+  Deblob256LenUnsupported
+  Deblob64LenUnsupported
+  DeblobBranchGotLeafPrefix
+  DeblobBranchTooShort
+  DeblobCodeLenUnsupported
+  DeblobExtSizeGarbled
+  DeblobLeafGotExtPrefix
+  DeblobLeafSizeGarbled
+  DeblobRVidLenUnsupported
+  DeblobUnknown
+  DeblobVtxTooShort
+  DeblobWrongSize
+  DeblobWrongType
 
-    # Cache checker `checkCache()`
-    CheckAnyVidDeadStorageRoot
-    CheckAnyVidSharedStorageRoot
-    CheckAnyVtxEmptyKeyMissing
-    CheckAnyVtxEmptyKeyExpected
-    CheckAnyVtxEmptyKeyMismatch
-    CheckAnyVtxBranchLinksMissing
-    CheckAnyVtxLockWithoutKey
-    CheckAnyVTopUnset
+  # Deletion of vertex paths, `deleteXxx()`
+  DelAccRootNotAccepted
+  DelBranchExpexted
+  DelBranchWithoutRefs
+  DelDanglingStoTrie
+  DelLeafExpexted
+  DelPathNotFound
+  DelRootVidMissing
+  DelStoAccMissing
+  DelStoRootMissing
+  DelStoRootNotAccepted
+  DelVidStaleVtx
 
-    CheckBeCacheGarbledVTop
-    CheckBeCacheKeyDangling
-    CheckBeCacheKeyNonEmpty
-    CheckBeGarbledVTop
-    CheckBeVtxBranchLinksMissing
-    CheckBeVtxInvalid
-    CheckBeVtxMissing
+  # Functions from `aristo_desc.nim`
+  DescMustBeOnCentre
+  DescNotAllowedOnCentre
+  DescStaleDescriptor
 
-    CheckStkKeyStrayZeroEntry
-    CheckStkVtxKeyMismatch
+  # Functions from  `aristo_delta.nim`
+  FilBackendMissing
+  FilBackendRoMode
+  FilSiblingsCommitUnfinshed
 
-    CheckRlxVtxIncomplete
-    CheckRlxVtxKeyMissing
-    CheckRlxVtxKeyMismatch
+  # Fetch functions from `aristo_fetch.nim`
+  FetchAccInaccessible
+  FetchAccPathWithoutLeaf
+  FetchAccRootNotAccepted
+  FetchLeafKeyInvalid
+  FetchPathInvalid
+  FetchPathNotFound
+  FetchRootVidMissing
+  FetchStoRootNotAccepted
 
+  # Get functions from `aristo_get.nim`
+  GetFilNotFound
+  GetFqsNotFound
+  GetKeyNotFound
+  GetKeyUpdateNeeded
+  GetLstNotFound
+  GetTuvNotFound
+  GetVtxNotFound
 
-    # De-serialiser from `blobify.nim`
-    Deblob256LenUnsupported
-    Deblob64LenUnsupported
-    DeblobBranchGotLeafPrefix
-    DeblobBranchTooShort
-    DeblobCodeLenUnsupported
-    DeblobExtSizeGarbled
-    DeblobLeafGotExtPrefix
-    DeblobLeafSizeGarbled
-    DeblobRVidLenUnsupported
-    DeblobUnknown
-    DeblobVtxTooShort
-    DeblobWrongSize
-    DeblobWrongType
+  # Path function `hikeUp()`
+  HikeBranchMissingEdge
+  HikeBranchTailEmpty
+  HikeDanglingEdge
+  HikeEmptyPath
+  HikeLeafUnexpected
+  HikeNoLegs
+  HikeRootMissing
 
+  # Merge leaf `merge()`
+  MergeHikeFailed # Ooops, internal error
+  MergeAccRootNotAccepted
+  MergeStoRootNotAccepted
+  MergeLeafPathCachedAlready
+  MergeLeafPathOnBackendAlready
+  MergeRootVidMissing
+  MergeStoAccMissing
 
-    # Deletion of vertex paths, `deleteXxx()`
-    DelAccRootNotAccepted
-    DelBranchExpexted
-    DelBranchWithoutRefs
-    DelDanglingStoTrie
-    DelLeafExpexted
-    DelPathNotFound
-    DelRootVidMissing
-    DelStoAccMissing
-    DelStoRootMissing
-    DelStoRootNotAccepted
-    DelVidStaleVtx
+  # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
+  NearbyBeyondRange
+  NearbyBranchError
+  NearbyDanglingLink
+  NearbyEmptyHike
+  NearbyFailed
+  NearbyLeafExpected
+  NearbyNestingTooDeep
+  NearbyPathTailUnexpected
+  NearbyUnexpectedVtx
+  NearbyVidInvalid
 
-    # Functions from `aristo_desc.nim`
-    DescMustBeOnCentre
-    DescNotAllowedOnCentre
-    DescStaleDescriptor
+  # Path/nibble/key conversions in `aisto_path.nim`
+  PathExpected64Nibbles
+  PathAtMost64Nibbles
+  PathExpectedLeaf
 
+  # RocksDB backend
+  RdbBeCantCreateDataDir
+  RdbBeCantCreateTmpDir
+  RdbBeDriverDelAdmError
+  RdbBeDriverDelKeyError
+  RdbBeDriverDelVtxError
+  RdbBeDriverGetAdmError
+  RdbBeDriverGetKeyError
+  RdbBeDriverGetVtxError
+  RdbBeDriverGuestError
+  RdbBeDriverPutAdmError
+  RdbBeDriverPutKeyError
+  RdbBeDriverPutVtxError
+  RdbBeDriverWriteError
+  RdbBeTypeUnsupported
+  RdbBeWrSessionUnfinished
+  RdbBeWrTriggerActiveAlready
+  RdbBeWrTriggerNilFn
+  RdbGuestInstanceAborted
+  RdbHashKeyExpected
 
-    # Functions from  `aristo_delta.nim`
-    FilBackendMissing
-    FilBackendRoMode
-    FilSiblingsCommitUnfinshed
-
-
-    # Fetch functions from `aristo_fetch.nim`
-    FetchAccInaccessible
-    FetchAccPathWithoutLeaf
-    FetchAccRootNotAccepted
-    FetchLeafKeyInvalid
-    FetchPathInvalid
-    FetchPathNotFound
-    FetchRootVidMissing
-    FetchStoRootNotAccepted
-
-
-    # Get functions from `aristo_get.nim`
-    GetFilNotFound
-    GetFqsNotFound
-    GetKeyNotFound
-    GetKeyUpdateNeeded
-    GetLstNotFound
-    GetTuvNotFound
-    GetVtxNotFound
-
-
-    # Path function `hikeUp()`
-    HikeBranchMissingEdge
-    HikeBranchTailEmpty
-    HikeDanglingEdge
-    HikeEmptyPath
-    HikeLeafUnexpected
-    HikeNoLegs
-    HikeRootMissing
-
-
-    # Merge leaf `merge()`
-    MergeHikeFailed # Ooops, internal error
-    MergeAccRootNotAccepted
-    MergeStoRootNotAccepted
-    MergeLeafPathCachedAlready
-    MergeLeafPathOnBackendAlready
-    MergeRootVidMissing
-    MergeStoAccMissing
-
-
-    # Neighbour vertex, tree traversal `nearbyRight()` and `nearbyLeft()`
-    NearbyBeyondRange
-    NearbyBranchError
-    NearbyDanglingLink
-    NearbyEmptyHike
-    NearbyFailed
-    NearbyLeafExpected
-    NearbyNestingTooDeep
-    NearbyPathTailUnexpected
-    NearbyUnexpectedVtx
-    NearbyVidInvalid
-
-
-    # Path/nibble/key conversions in `aisto_path.nim`
-    PathExpected64Nibbles
-    PathAtMost64Nibbles
-    PathExpectedLeaf
-
-
-    # RocksDB backend
-    RdbBeCantCreateDataDir
-    RdbBeCantCreateTmpDir
-    RdbBeDriverDelAdmError
-    RdbBeDriverDelKeyError
-    RdbBeDriverDelVtxError
-    RdbBeDriverGetAdmError
-    RdbBeDriverGetKeyError
-    RdbBeDriverGetVtxError
-    RdbBeDriverGuestError
-    RdbBeDriverPutAdmError
-    RdbBeDriverPutKeyError
-    RdbBeDriverPutVtxError
-    RdbBeDriverWriteError
-    RdbBeTypeUnsupported
-    RdbBeWrSessionUnfinished
-    RdbBeWrTriggerActiveAlready
-    RdbBeWrTriggerNilFn
-    RdbGuestInstanceAborted
-    RdbHashKeyExpected
-
-
-    # Transaction wrappers
-    TxAccRootMissing
-    TxArgStaleTx
-    TxArgsUseless
-    TxBackendNotWritable
-    TxLevelTooDeep
-    TxLevelUseless
-    TxNoPendingTx
-    TxNotFound
-    TxNotTopTx
-    TxPendingTx
-    TxStackGarbled
+  # Transaction wrappers
+  TxAccRootMissing
+  TxArgStaleTx
+  TxArgsUseless
+  TxBackendNotWritable
+  TxLevelTooDeep
+  TxLevelUseless
+  TxNoPendingTx
+  TxNotFound
+  TxNotTopTx
+  TxPendingTx
+  TxStackGarbled
 
 # End

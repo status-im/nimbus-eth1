@@ -9,11 +9,15 @@
 
 import
   std/[strutils],
-  stew/byteutils, stint,
+  stew/byteutils,
+  stint,
   results,
-  eth/common/eth_types_rlp, chronos,
-  graphql, graphql/graphql as context,
-  graphql/common/types, graphql/httpserver,
+  eth/common/eth_types_rlp,
+  chronos,
+  graphql,
+  graphql/graphql as context,
+  graphql/common/types,
+  graphql/httpserver,
   graphql/instruments/query_complexity,
   ../db/[ledger],
   ../rpc/rpc_types,
@@ -29,17 +33,17 @@ export httpserver
 
 type
   EthTypes = enum
-    ethAccount      = "Account"
-    ethLog          = "Log"
-    ethTransaction  = "Transaction"
-    ethBlock        = "Block"
-    ethCallResult   = "CallResult"
-    ethSyncState    = "SyncState"
-    ethPending      = "Pending"
-    ethQuery        = "Query"
-    ethMutation     = "Mutation"
-    ethAccessTuple  = "AccessTuple"
-    ethWithdrawal   = "Withdrawal"
+    ethAccount = "Account"
+    ethLog = "Log"
+    ethTransaction = "Transaction"
+    ethBlock = "Block"
+    ethCallResult = "CallResult"
+    ethSyncState = "SyncState"
+    ethPending = "Pending"
+    ethQuery = "Query"
+    ethMutation = "Mutation"
+    ethAccessTuple = "AccessTuple"
+    ethWithdrawal = "Withdrawal"
 
   HeaderNode = ref object of Node
     header: common.BlockHeader
@@ -92,24 +96,27 @@ proc toBlockNumber(n: Node): common.BlockNumber {.gcsafe, raises: [ValueError].}
     doAssert(false, "unknown node type: " & $n.kind)
 
 proc headerNode(ctx: GraphqlContextRef, header: common.BlockHeader): Node =
-  HeaderNode(
-    kind: nkMap,
-    typeName: ctx.ids[ethBlock],
-    pos: Pos(),
-    header: header
-  )
+  HeaderNode(kind: nkMap, typeName: ctx.ids[ethBlock], pos: Pos(), header: header)
 
-proc accountNode(ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: LedgerRef): Node =
+proc accountNode(
+    ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: LedgerRef
+): Node =
   AccountNode(
     kind: nkMap,
     typeName: ctx.ids[ethAccount],
     pos: Pos(),
     account: acc,
     address: address,
-    db: db
+    db: db,
   )
 
-proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: uint64, blockNumber: common.BlockNumber, baseFee: Opt[UInt256]): Node =
+proc txNode(
+    ctx: GraphqlContextRef,
+    tx: Transaction,
+    index: uint64,
+    blockNumber: common.BlockNumber,
+    baseFee: Opt[UInt256],
+): Node =
   TxNode(
     kind: nkMap,
     typeName: ctx.ids[ethTransaction],
@@ -117,34 +124,19 @@ proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: uint64, blockNumber:
     tx: tx,
     index: index,
     blockNumber: blockNumber,
-    baseFee: baseFee
+    baseFee: baseFee,
   )
 
 proc logNode(ctx: GraphqlContextRef, log: Log, index: int, tx: TxNode): Node =
   LogNode(
-    kind: nkMap,
-    typeName: ctx.ids[ethLog],
-    pos: Pos(),
-    log: log,
-    index: index,
-    tx: tx
+    kind: nkMap, typeName: ctx.ids[ethLog], pos: Pos(), log: log, index: index, tx: tx
   )
 
 proc aclNode(ctx: GraphqlContextRef, accessPair: AccessPair): Node =
-  AclNode(
-    kind: nkMap,
-    typeName: ctx.ids[ethAccessTuple],
-    pos: Pos(),
-    acl: accessPair
-  )
+  AclNode(kind: nkMap, typeName: ctx.ids[ethAccessTuple], pos: Pos(), acl: accessPair)
 
 proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
-  WdNode(
-    kind: nkMap,
-    typeName: ctx.ids[ethWithdrawal],
-    pos: Pos(),
-    wd: wd
-  )
+  WdNode(kind: nkMap, typeName: ctx.ids[ethWithdrawal], pos: Pos(), wd: wd)
 
 proc getStateDB(com: CommonRef, header: common.BlockHeader): LedgerRef =
   ## Retrieves the account db from canonical head
@@ -205,25 +197,24 @@ proc bigIntNode(val: UInt256): RespResult =
 
 proc bigIntNode(x: uint64 | int64): RespResult =
   # stdlib toHex is not suitable for hive
-  const
-    HexChars = "0123456789abcdef"
+  const HexChars = "0123456789abcdef"
 
   if x == 0:
     return ok(Node(kind: nkString, stringVal: "0x0", pos: Pos()))
 
   var
     n = cast[uint64](x)
-    r: array[2*sizeof(uint64), char]
+    r: array[2 * sizeof(uint64), char]
     i = 0
   while n > 0:
     r[i] = HexChars[int(n and 0xF)]
     n = n shr 4
     inc i
-  var hex = newString(i+2)
+  var hex = newString(i + 2)
   hex[0] = '0'
   hex[1] = 'x'
   while i > 0:
-    hex[hex.len-i] = r[i-1]
+    hex[hex.len - i] = r[i - 1]
     dec i
   ok(Node(kind: nkString, stringVal: hex, pos: Pos()))
 
@@ -263,7 +254,9 @@ proc getOmmers(ctx: GraphqlContextRef, ommersHash: common.Hash256): RespResult =
   except CatchableError as e:
     err("can't get ommers: " & e.msg)
 
-proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: common.Hash256, index: int): RespResult =
+proc getOmmerAt(
+    ctx: GraphqlContextRef, ommersHash: common.Hash256, index: int
+): RespResult =
   try:
     let uncles = getUncles(ctx.chainDB, ommersHash)
     if uncles.len == 0:
@@ -312,7 +305,9 @@ proc getWithdrawals(ctx: GraphqlContextRef, header: common.BlockHeader): RespRes
   except CatchableError as e:
     err("can't get transactions: " & e.msg)
 
-proc getTxAt(ctx: GraphqlContextRef, header: common.BlockHeader, index: uint64): RespResult =
+proc getTxAt(
+    ctx: GraphqlContextRef, header: common.BlockHeader, index: uint64
+): RespResult =
   try:
     var tx: Transaction
     if getTransactionByIndex(ctx.chainDB, header.txRoot, index.uint16, tx):
@@ -344,7 +339,9 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: common.Hash256): RespResult =
   except CatchableError as e:
     err("can't get transaction by hash '" & hash.data.toHex & "': $2" & e.msg)
 
-proc accountNode(ctx: GraphqlContextRef, header: common.BlockHeader, address: EthAddress): RespResult =
+proc accountNode(
+    ctx: GraphqlContextRef, header: common.BlockHeader, address: EthAddress
+): RespResult =
   try:
     let db = getStateDB(ctx.com, header)
     when false:
@@ -359,15 +356,19 @@ proc accountNode(ctx: GraphqlContextRef, header: common.BlockHeader, address: Et
 
 func hexCharToInt(c: char): uint64 =
   case c
-  of 'a'..'f': return c.uint64 - 'a'.uint64 + 10'u64
-  of 'A'..'F': return c.uint64 - 'A'.uint64 + 10'u64
-  of '0'..'9': return c.uint64 - '0'.uint64
-  else: doAssert(false, "invalid hex digit: " & $c)
+  of 'a' .. 'f':
+    return c.uint64 - 'a'.uint64 + 10'u64
+  of 'A' .. 'F':
+    return c.uint64 - 'A'.uint64 + 10'u64
+  of '0' .. '9':
+    return c.uint64 - '0'.uint64
+  else:
+    doAssert(false, "invalid hex digit: " & $c)
 
 proc parseU64(node: Node): uint64 =
   if node.kind == nkString:
     if node.stringVal.len > 2 and node.stringVal[1] == 'x':
-      for i in 2..<node.stringVal.len:
+      for i in 2 ..< node.stringVal.len:
         let c = node.stringVal[i]
         result = result * 16 + hexCharToInt(c)
     else:
@@ -381,13 +382,14 @@ proc validateHex(x: Node, minLen = 0): NodeResult =
   if x.stringVal.len < 2:
     return err("hex is too short")
   if x.stringVal.len != 2 + minLen * 2 and minLen != 0:
-    return err("expect hex with len '" &
-      $(2 * minLen + 2) & "', got '" & $x.stringVal.len & "'")
+    return err(
+      "expect hex with len '" & $(2 * minLen + 2) & "', got '" & $x.stringVal.len & "'"
+    )
   if x.stringVal.len mod 2 != 0:
     return err("hex must have even number of nibbles")
   if x.stringVal[0] != '0' or x.stringVal[1] != 'x':
     return err("hex should be prefixed by '0x'")
-  for i in 2..<x.stringVal.len:
+  for i in 2 ..< x.stringVal.len:
     if x.stringVal[i] notin HexDigits:
       return err("invalid chars in hex")
   ok(x)
@@ -396,22 +398,24 @@ proc padBytes(n: Node, prefixLen, minLen: int) =
   let tmp = n.stringVal
   if prefixLen != 0:
     n.stringVal = newString(minLen + prefixLen)
-    for i in 0..<prefixLen:
+    for i in 0 ..< prefixLen:
       n.stringVal[i] = tmp[i]
     let zeros = minLen - tmp.len + prefixLen
-    for i in 0..<zeros:
+    for i in 0 ..< zeros:
       n.stringVal[i + prefixLen] = '0'
-    for i in 2..<tmp.len:
-      n.stringVal[i+zeros] = tmp[i]
+    for i in 2 ..< tmp.len:
+      n.stringVal[i + zeros] = tmp[i]
   else:
     n.stringVal = newString(minLen)
     let zeros = minLen - tmp.len
-    for i in 0..<zeros:
+    for i in 0 ..< zeros:
       n.stringVal[i] = '0'
-    for i in 0..<tmp.len:
-      n.stringVal[i+zeros] = tmp[i]
+    for i in 0 ..< tmp.len:
+      n.stringVal[i + zeros] = tmp[i]
 
-proc validateFixedLenHex(x: Node, minLen: int, kind: string, padding = false): NodeResult =
+proc validateFixedLenHex(
+    x: Node, minLen: int, kind: string, padding = false
+): NodeResult =
   if x.stringVal.len < 2:
     return err(kind & " hex is too short")
 
@@ -423,15 +427,18 @@ proc validateFixedLenHex(x: Node, minLen: int, kind: string, padding = false): N
     let expectedLen = minLen * 2 + prefixLen
     if x.stringVal.len < expectedLen:
       if not padding:
-        return err("$1 len is too short: expect $2 got $3" %
-          [kind, $expectedLen, $x.stringVal.len])
+        return err(
+          "$1 len is too short: expect $2 got $3" %
+            [kind, $expectedLen, $x.stringVal.len]
+        )
       else:
         padBytes(x, prefixLen, minLen * 2)
     elif x.stringVal.len > expectedLen:
-      return err("$1 len is too long: expect $2 got $3" %
-        [kind, $expectedLen, $x.stringVal.len])
+      return err(
+        "$1 len is too long: expect $2 got $3" % [kind, $expectedLen, $x.stringVal.len]
+      )
 
-    for i in prefixLen..<x.stringVal.len:
+    for i in prefixLen ..< x.stringVal.len:
       if x.stringVal[i] notin HexDigits:
         return err("invalid chars in $1 hex" % [kind])
 
@@ -439,21 +446,27 @@ proc validateFixedLenHex(x: Node, minLen: int, kind: string, padding = false): N
   except ValueError as exc:
     err(exc.msg)
 
-proc scalarBytes32(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, noSideEffect, raises:[].} =
+proc scalarBytes32(
+    ctx: GraphqlRef, typeNode, node: Node
+): NodeResult {.cdecl, gcsafe, noSideEffect, raises: [].} =
   ## Bytes32 is a 32 byte binary string,
   ## represented as 0x-prefixed hexadecimal.
   if node.kind != nkString:
     return err("expect hex string, but got '" & $node.kind & "'")
   validateFixedLenHex(node, 32, "Bytes32", padding = true)
 
-proc scalarAddress(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, noSideEffect, raises:[].} =
+proc scalarAddress(
+    ctx: GraphqlRef, typeNode, node: Node
+): NodeResult {.cdecl, gcsafe, noSideEffect, raises: [].} =
   ## Address is a 20 byte Ethereum address,
   ## represented as 0x-prefixed hexadecimal.
   if node.kind != nkString:
     return err("expect hex string, but got '" & $node.kind & "'")
   validateFixedLenHex(node, 20, "Address")
 
-proc scalarBytes(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, noSideEffect, raises:[].} =
+proc scalarBytes(
+    ctx: GraphqlRef, typeNode, node: Node
+): NodeResult {.cdecl, gcsafe, noSideEffect, raises: [].} =
   ## Bytes is an arbitrary length binary string,
   ## represented as 0x-prefixed hexadecimal.
   ## An empty byte string is represented as '0x'.
@@ -462,7 +475,9 @@ proc scalarBytes(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcs
     return err("expect hex string, but got '" & $node.kind & "'")
   validateHex(node)
 
-proc scalarBigInt(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, noSideEffect, raises:[].} =
+proc scalarBigInt(
+    ctx: GraphqlRef, typeNode, node: Node
+): NodeResult {.cdecl, gcsafe, noSideEffect, raises: [].} =
   ## BigInt is a large integer. Input is accepted as
   ## either a JSON number or as a string.
   ## Strings may be either decimal or 0x-prefixed hexadecimal.
@@ -480,14 +495,14 @@ proc scalarBigInt(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gc
           # 256 bits = 32 bytes = 64 hex nibbles
           # 64 hex nibbles + '0x' prefix = 66 bytes
           return err("Big Int hex should not exceed 66 bytes")
-        for i in 2..<node.stringVal.len:
+        for i in 2 ..< node.stringVal.len:
           if node.stringVal[i] notin HexDigits:
             return err("invalid chars in BigInt hex")
         ok(node)
       elif HexDigits in node.stringVal:
         if node.stringVal.len > 64:
           return err("Big Int hex should not exceed 64 bytes")
-        for i in 0..<node.stringVal.len:
+        for i in 0 ..< node.stringVal.len:
           if node.stringVal[i] notin HexDigits:
             return err("invalid chars in BigInt hex")
         ok(node)
@@ -501,7 +516,9 @@ proc scalarBigInt(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gc
   except CatchableError as e:
     err("scalar BigInt error: " & e.msg)
 
-proc scalarLong(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, noSideEffect.} =
+proc scalarLong(
+    ctx: GraphqlRef, typeNode, node: Node
+): NodeResult {.cdecl, gcsafe, noSideEffect.} =
   ## Long is a 64 bit unsigned integer.
   const maxU64 = uint64.high.u256
   try:
@@ -565,7 +582,7 @@ const accountProcs = {
   "balance": accountBalance,
   "transactionCount": accountTxCount,
   "code": accountCode,
-  "storage": accountStorage
+  "storage": accountStorage,
 }
 
 proc logIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -603,7 +620,7 @@ const logProcs = {
   "index": logIndex,
   "topics": logTopics,
   "data": logData,
-  "transaction": logTransaction
+  "transaction": logTransaction,
 }
 
 proc txHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -624,10 +641,11 @@ proc txFrom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
 
-  let blockNumber = if params[0].val.kind != nkEmpty:
-    parseU64(params[0].val)
-  else:
-    tx.blockNumber
+  let blockNumber =
+    if params[0].val.kind != nkEmpty:
+      parseU64(params[0].val)
+    else:
+      tx.blockNumber
 
   var sender: EthAddress
   if not getSender(tx.tx, sender):
@@ -642,10 +660,11 @@ proc txTo(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
 
-  let blockNumber = if params[0].val.kind != nkEmpty:
-    parseU64(params[0].val)
-  else:
-    tx.blockNumber
+  let blockNumber =
+    if params[0].val.kind != nkEmpty:
+      parseU64(params[0].val)
+    else:
+      tx.blockNumber
 
   if tx.tx.contractCreation:
     return ok(respNull())
@@ -678,14 +697,18 @@ proc txMaxFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
   else:
     ok(respNull())
 
-proc txMaxPriorityFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txMaxPriorityFeePerGas(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
   if tx.tx.txType >= TxEip1559:
     bigIntNode(tx.tx.maxPriorityFeePerGas)
   else:
     ok(respNull())
 
-proc txEffectiveGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txEffectiveGasPrice(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
   if tx.baseFee.isNone:
     return bigIntNode(tx.tx.gasPrice)
@@ -725,11 +748,15 @@ proc txGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
   let tx = TxNode(parent)
   longNode(tx.gasUsed)
 
-proc txCumulativeGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txCumulativeGasUsed(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
   longNode(tx.receipt.cumulativeGasUsed)
 
-proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txCreatedContract(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
   var sender: EthAddress
@@ -782,14 +809,18 @@ proc txAccessList(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
       list.add aclNode(ctx, x)
     ok(list)
 
-proc txMaxFeePerBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txMaxFeePerBlobGas(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
   if tx.tx.txType < TxEIP4844:
     ok(respNull())
   else:
     longNode(tx.tx.maxFeePerBlobGas)
 
-proc txVersionedHashes(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc txVersionedHashes(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
   if tx.tx.txType < TxEIP4844:
     ok(respNull())
@@ -837,7 +868,7 @@ const txProcs = {
   "maxFeePerBlobGas": txMaxFeePerBlobGas,
   "versionedHashes": txVersionedHashes,
   "raw": txRaw,
-  "rawReceipt": txRawReceipt
+  "rawReceipt": txRawReceipt,
 }
 
 proc aclAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -854,10 +885,7 @@ proc aclStorageKeys(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
       list.add resp(n).get()
     ok(list)
 
-const aclProcs = {
-  "address": aclAddress,
-  "storageKeys": aclStorageKeys
-}
+const aclProcs = {"address": aclAddress, "storageKeys": aclStorageKeys}
 
 proc wdIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let w = WdNode(parent)
@@ -875,14 +903,12 @@ proc wdAmount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.}
   let w = WdNode(parent)
   longNode(w.wd.amount)
 
-const wdProcs = {
-  "index": wdIndex,
-  "validator": wdValidator,
-  "address": wdAddress,
-  "amount": wdAmount
-}
+const wdProcs =
+  {"index": wdIndex, "validator": wdValidator, "address": wdAddress, "amount": wdAmount}
 
-proc blockNumberImpl(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockNumberImpl(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   longNode(h.header.number)
 
@@ -900,11 +926,15 @@ proc blockNonce(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma
   let h = HeaderNode(parent)
   ok(resp("0x" & h.header.nonce.toHex))
 
-proc blockTransactionsRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockTransactionsRoot(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   resp(h.header.txRoot)
 
-proc blockTransactionCount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockTransactionCount(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   ctx.getTxCount(h.header.txRoot)
@@ -913,7 +943,9 @@ proc blockStateRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
   let h = HeaderNode(parent)
   resp(h.header.stateRoot)
 
-proc blockReceiptsRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockReceiptsRoot(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   resp(h.header.receiptsRoot)
 
@@ -946,17 +978,23 @@ proc blockMixHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   let h = HeaderNode(parent)
   resp(h.header.mixHash)
 
-proc blockDifficulty(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockDifficulty(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   bigIntNode(h.header.difficulty)
 
-proc blockTotalDifficulty(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockTotalDifficulty(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   let hash = blockHash(h.header)
   getTotalDifficulty(ctx, hash)
 
-proc blockOmmerCount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockOmmerCount(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   getOmmerCount(ctx, h.header.ommersHash)
@@ -976,13 +1014,17 @@ proc blockOmmerHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
   let h = HeaderNode(parent)
   resp(h.header.ommersHash)
 
-proc blockTransactions(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockTransactions(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   {.cast(noSideEffect).}:
     getTxs(ctx, h.header)
 
-proc blockTransactionAt(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockTransactionAt(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   try:
@@ -1006,14 +1048,14 @@ proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
     err(ex.msg)
 
 const
-  fFrom     = 0
-  fTo       = 1
+  fFrom = 0
+  fTo = 1
   fGasLimit = 2
   fGasPrice = 3
-  fMaxFee   = 4
+  fMaxFee = 4
   fMaxPriorityFee = 5
-  fValue    = 6
-  fData     = 7
+  fValue = 6
+  fData = 7
 
 template isSome(n: Node, field: int): bool =
   # [0] is the field's name node
@@ -1055,14 +1097,15 @@ proc toTxArgs(n: Node): TransactionArgs {.gcsafe, raises: [ValueError].} =
   optionalHexU256(result.value, n, fValue)
   optionalBytes(result.data, n, fData)
 
-proc makeCall(ctx: GraphqlContextRef, args: TransactionArgs,
-              header: common.BlockHeader): RespResult =
+proc makeCall(
+    ctx: GraphqlContextRef, args: TransactionArgs, header: common.BlockHeader
+): RespResult =
   let res = rpcCallEvm(args, header, ctx.com).valueOr:
-              return err("Failed to call rpcCallEvm")
+    return err("Failed to call rpcCallEvm")
   var map = respMap(ctx.ids[ethCallResult])
-  map["data"]    = resp("0x" & res.output.toHex)
+  map["data"] = resp("0x" & res.output.toHex)
   map["gasUsed"] = longNode(res.gasUsed).get()
-  map["status"]  = longNode(if res.isError: 0 else: 1).get()
+  map["status"] = longNode(if res.isError: 0 else: 1).get()
   ok(map)
 
 proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1076,7 +1119,9 @@ proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
   except CatchableError as em:
     err("call error: " & em.msg)
 
-proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockEstimateGas(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   let param = params[0].val
@@ -1085,51 +1130,62 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
     # TODO: DEFAULT_RPC_GAS_CAP should configurable
     {.cast(noSideEffect).}:
       let gasUsed = rpcEstimateGas(args, h.header, ctx.com, DEFAULT_RPC_GAS_CAP).valueOr:
-                      return err("Failed to call rpcEstimateGas")
+        return err("Failed to call rpcEstimateGas")
       longNode(gasUsed)
   except CatchableError as em:
     err("estimateGas error: " & em.msg)
 
-proc blockBaseFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockBaseFeePerGas(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   if h.header.baseFeePerGas.isSome:
     bigIntNode(h.header.baseFeePerGas.get)
   else:
     ok(respNull())
 
-proc blockWithdrawalsRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockWithdrawalsRoot(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   if h.header.withdrawalsRoot.isSome:
     resp(h.header.withdrawalsRoot.get)
   else:
     ok(respNull())
 
-proc blockWithdrawals(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockWithdrawals(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   getWithdrawals(ctx, h.header)
 
-proc blockBlobGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockBlobGasUsed(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   if h.header.blobGasUsed.isSome:
     longNode(h.header.blobGasUsed.get)
   else:
     ok(respNull())
 
-proc blockExcessBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockExcessBlobGas(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   if h.header.excessBlobGas.isSome:
     longNode(h.header.excessBlobGas.get)
   else:
     ok(respNull())
 
-proc blockParentBeaconBlockRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc blockParentBeaconBlockRoot(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
   if h.header.parentBeaconBlockRoot.isSome:
     resp(h.header.parentBeaconBlockRoot.get)
   else:
     ok(respNull())
-
 
 const blockProcs = {
   "parent": blockParent,
@@ -1170,51 +1226,66 @@ const blockProcs = {
 proc callResultData(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   ok(parent.map[0].val)
 
-proc callResultGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc callResultGasUsed(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   ok(parent.map[1].val)
 
-proc callResultStatus(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc callResultStatus(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   ok(parent.map[2].val)
 
-const callResultProcs = {
-  "data": callResultData,
-  "gasUsed": callResultGasUsed,
-  "status": callResultStatus
-}
+const callResultProcs =
+  {"data": callResultData, "gasUsed": callResultGasUsed, "status": callResultStatus}
 
-proc syncStateStartingBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc syncStateStartingBlock(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   longNode(ctx.com.syncStart)
 
-proc syncStateCurrentBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc syncStateCurrentBlock(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   longNode(ctx.com.syncCurrent)
 
-proc syncStateHighestBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc syncStateHighestBlock(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   longNode(ctx.com.syncHighest)
 
-proc syncStatePulledStates(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc syncStatePulledStates(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   # TODO: what is this ?
   ok(respNull())
 
-proc syncStateKnownStates(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc syncStateKnownStates(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   # TODO: what is this ?
   ok(respNull())
 
 const syncStateProcs = {
   "startingBlock": syncStateStartingBlock,
-  "currentBlock":  syncStateCurrentBlock,
-  "highestBlock":  syncStateHighestBlock,
-  "pulledStates":  syncStatePulledStates,
-  "knownStates":   syncStateKnownStates
+  "currentBlock": syncStateCurrentBlock,
+  "highestBlock": syncStateHighestBlock,
+  "pulledStates": syncStatePulledStates,
+  "knownStates": syncStateKnownStates,
 }
 
-proc pendingTransactionCount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc pendingTransactionCount(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   # TODO: stub, missing impl
   err("not implemented")
 
-proc pendingTransactions(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc pendingTransactions(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   # TODO: stub, missing impl
   err("not implemented")
 
@@ -1226,7 +1297,9 @@ proc pendingCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
   # TODO: stub, missing impl
   err("not implemented")
 
-proc pendingEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc pendingEstimateGas(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   # TODO: stub, missing impl
   err("not implemented")
 
@@ -1235,7 +1308,7 @@ const pendingProcs = {
   "transactions": pendingTransactions,
   "account": pendingAccount,
   "call": pendingCall,
-  "estimateGas": pendingEstimateGas
+  "estimateGas": pendingEstimateGas,
 }
 
 proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): common.BlockNumber =
@@ -1284,8 +1357,7 @@ proc queryBlocks(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
   let toNumber = pickBlockNumber(ctx, to)
 
   if fromNumber > toNumber:
-    return err("from(" & $fromNumber &
-      ") is bigger than to(" & $toNumber & ")")
+    return err("from(" & $fromNumber & ") is bigger than to(" & $toNumber & ")")
 
   # TODO: what is the maximum number here?
   if toNumber - fromNumber > 32'u64:
@@ -1307,7 +1379,9 @@ proc queryPending(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   # TODO: stub, missing impl
   err("not implemented")
 
-proc queryTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc queryTransaction(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   try:
     let hash = toHash(params[0].val)
@@ -1328,7 +1402,9 @@ proc queryGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPra
   except CatchableError as em:
     err("can't get gasPrice: " & em.msg)
 
-proc queryProtocolVersion(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc queryProtocolVersion(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   for n in ctx.ethNode.capabilities:
     if n.name == "eth":
@@ -1339,7 +1415,9 @@ proc querySyncing(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   let ctx = GraphqlContextRef(ud)
   ok(respMap(ctx.ids[ethSyncState]))
 
-proc queryMaxPriorityFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc queryMaxPriorityFeePerGas(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   # TODO: stub, missing impl
   err("not implemented")
 
@@ -1358,15 +1436,17 @@ const queryProcs = {
   "protocolVersion": queryProtocolVersion,
   "syncing": querySyncing,
   "maxPriorityFeePerGas": queryMaxPriorityFeePerGas,
-  "chainID": queryChainId
+  "chainID": queryChainId,
 }
 
-proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+proc sendRawTransaction(
+    ud: RootRef, params: Args, parent: Node
+): RespResult {.apiPragma.} =
   # if tx validation failed, the result will be null
   let ctx = GraphqlContextRef(ud)
   try:
-    let data   = hexToSeqByte(params[0].val.stringVal)
-    let tx     = decodePooledTx(data) # we want to know if it is a valid tx blob
+    let data = hexToSeqByte(params[0].val.stringVal)
+    let tx = decodePooledTx(data) # we want to know if it is a valid tx blob
     let txHash = rlpHash(tx)
 
     ctx.txPool.add(tx)
@@ -1376,35 +1456,30 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
       return resp(txHash)
     else:
       return err(res.error)
-
   except CatchableError as em:
     return err("failed to process raw transaction: " & em.msg)
 
-const mutationProcs = {
-  "sendRawTransaction": sendRawTransaction
-}
+const mutationProcs = {"sendRawTransaction": sendRawTransaction}
 
-const
-  ethSchema = staticRead("ethapi.ql")
+const ethSchema = staticRead("ethapi.ql")
 
 type
   QcNames = enum
-    qcType   = "__Type"
+    qcType = "__Type"
     qcFields = "fields"
-    qcBlock  = "block"
+    qcBlock = "block"
     qcTransaction = "Transaction"
 
   EthQueryComplexity = ref object of QueryComplexity
     names: array[QcNames, Name]
 
-proc calcQC(qc: QueryComplexity, field: FieldRef): int {.cdecl,
-            gcsafe, apiRaises.} =
+proc calcQC(qc: QueryComplexity, field: FieldRef): int {.cdecl, gcsafe, apiRaises.} =
   let qc = EthQueryComplexity(qc)
   if field.parentType.sym.name == qc.names[qcType] and
-     field.field.name.name == qc.names[qcFields]:
+      field.field.name.name == qc.names[qcFields]:
     return 100
   elif field.parentType.sym.name == qc.names[qcTransaction] and
-     field.field.name.name == qc.names[qcBlock]:
+      field.field.name.name == qc.names[qcBlock]:
     return 100
   else:
     return 1
@@ -1429,17 +1504,17 @@ proc initEthApi(ctx: GraphqlContextRef) =
     let name = ctx.createName($n)
     ctx.ids[n] = name
 
-  ctx.addResolvers(ctx, ctx.ids[ethAccount    ], accountProcs)
-  ctx.addResolvers(ctx, ctx.ids[ethLog        ], logProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethAccount], accountProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethLog], logProcs)
   ctx.addResolvers(ctx, ctx.ids[ethTransaction], txProcs)
-  ctx.addResolvers(ctx, ctx.ids[ethBlock      ], blockProcs)
-  ctx.addResolvers(ctx, ctx.ids[ethCallResult ], callResultProcs)
-  ctx.addResolvers(ctx, ctx.ids[ethSyncState  ], syncStateProcs)
-  ctx.addResolvers(ctx, ctx.ids[ethPending    ], pendingProcs)
-  ctx.addResolvers(ctx, ctx.ids[ethQuery      ], queryProcs)
-  ctx.addResolvers(ctx, ctx.ids[ethMutation   ], mutationProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethBlock], blockProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethCallResult], callResultProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethSyncState], syncStateProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethPending], pendingProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethQuery], queryProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethMutation], mutationProcs)
   ctx.addResolvers(ctx, ctx.ids[ethAccessTuple], aclProcs)
-  ctx.addResolvers(ctx, ctx.ids[ethWithdrawal ], wdProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethWithdrawal], wdProcs)
 
   var qc = newQC(ctx)
   ctx.addInstrument(qc)
@@ -1449,22 +1524,18 @@ proc initEthApi(ctx: GraphqlContextRef) =
     echo res.error
     quit(QuitFailure)
 
-proc setupGraphqlContext*(com: CommonRef,
-                          ethNode: EthereumNode,
-                          txPool: TxPoolRef): GraphqlContextRef =
-  let ctx = GraphqlContextRef(
-    chainDB: com.db,
-    com    : com,
-    ethNode: ethNode,
-    txPool : txPool
-  )
+proc setupGraphqlContext*(
+    com: CommonRef, ethNode: EthereumNode, txPool: TxPoolRef
+): GraphqlContextRef =
+  let ctx =
+    GraphqlContextRef(chainDB: com.db, com: com, ethNode: ethNode, txPool: txPool)
   graphql.init(ctx)
   ctx.initEthApi()
   ctx
 
-proc setupGraphqlHttpHandler*(com: CommonRef,
-                              ethNode: EthereumNode,
-                              txPool: TxPoolRef): GraphqlHttpHandlerRef =
+proc setupGraphqlHttpHandler*(
+    com: CommonRef, ethNode: EthereumNode, txPool: TxPoolRef
+): GraphqlHttpHandlerRef =
   let ctx = setupGraphqlContext(com, ethNode, txPool)
   GraphqlHttpHandlerRef.new(ctx)
 

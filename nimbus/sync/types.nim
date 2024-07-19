@@ -10,11 +10,7 @@
 
 {.push raises: [].}
 
-import
-  std/[math, hashes],
-  eth/common/eth_types_rlp,
-  results,
-  stew/byteutils
+import std/[math, hashes], eth/common/eth_types_rlp, results, stew/byteutils
 
 type
   BlockHash* = distinct Hash256
@@ -39,12 +35,12 @@ proc new*(T: type BlockHash): T =
 # Public (probably non-trivial) type conversions
 # ------------------------------------------------------------------------------
 
-proc to*(num: SomeInteger; T: type float): T =
+proc to*(num: SomeInteger, T: type float): T =
   ## Convert to float. Result an d argument are not strictly equivalent. Though
   ## sort of `(num.to(float) + 0.5).int == num` might hold in many cases.
   num.T
 
-proc to*(longNum: UInt256; T: type float): T =
+proc to*(longNum: UInt256, T: type float): T =
   ## Convert to float (see also comment at `num.to(float)`, above.)
   let mantissaLen = 256 - longNum.leadingZeros
   if mantissaLen <= 64:
@@ -53,15 +49,15 @@ proc to*(longNum: UInt256; T: type float): T =
     let exp = mantissaLen - 64
     (longNum shr exp).truncate(uint64).T * (2.0 ^ exp)
 
-proc to*(w: BlockHash; T: type Hash256): T =
+proc to*(w: BlockHash, T: type Hash256): T =
   ## Syntactic sugar
   w.Hash256
 
-proc to*(w: seq[BlockHash]; T: type seq[Hash256]): T =
+proc to*(w: seq[BlockHash], T: type seq[Hash256]): T =
   ## Ditto
   cast[seq[Hash256]](w)
 
-proc to*(bh: BlockHash; T: type HashOrNum): T =
+proc to*(bh: BlockHash, T: type HashOrNum): T =
   ## Convert argument blocj hash `bh` to `HashOrNum`
   T(isHash: true, hash: bh.Hash256)
 
@@ -69,19 +65,18 @@ proc to*(bh: BlockHash; T: type HashOrNum): T =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc read*(rlp: var Rlp, T: type BlockHash): T
-    {.gcsafe, raises: [RlpError]} =
+proc read*(rlp: var Rlp, T: type BlockHash): T {.gcsafe, raises: [RlpError].} =
   ## RLP mixin reader
   rlp.read(Hash256).T
 
-proc append*(writer: var RlpWriter; h: BlockHash) =
+proc append*(writer: var RlpWriter, h: BlockHash) =
   ## RLP mixin
   append(writer, h.Hash256)
 
-proc `==`*(a: BlockHash; b: Hash256): bool =
+proc `==`*(a: BlockHash, b: Hash256): bool =
   a.Hash256 == b
 
-proc `==`*[T: BlockHash](a,b: T): bool =
+proc `==`*[T: BlockHash](a, b: T): bool =
   a.Hash256 == b.Hash256
 
 proc hash*(root: BlockHash): Hash =
@@ -104,12 +99,17 @@ func `$`*(blob: Blob): string =
 
 func `$`*(hashOrNum: HashOrNum): string =
   # It's always obvious which one from the visible length of the string.
-  if hashOrNum.isHash: $hashOrNum.hash
-  else: $hashOrNum.number
+  if hashOrNum.isHash:
+    $hashOrNum.hash
+  else:
+    $hashOrNum.number
 
 func toStr*(n: BlockNumber): string =
   ## Pretty print block number, explicitely format with a leading hash `#`
-  if n == high(BlockNumber): "high" else:"#" & $n
+  if n == high(BlockNumber):
+    "high"
+  else:
+    "#" & $n
 
 func toStr*(n: Opt[BlockNumber]): string =
   if n.isNone: "n/a" else: n.get.toStr

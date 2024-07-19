@@ -8,14 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  eth/common,
-  stint,
-  evmc/evmc,
-  ../utils/utils
+import eth/common, stint, evmc/evmc, ../utils/utils
 
-const
-  evmc_native* {.booldefine.} = false
+const evmc_native* {.booldefine.} = false
 
 func toEvmc*(a: EthAddress): evmc_address {.inline.} =
   cast[evmc_address](a)

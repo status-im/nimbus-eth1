@@ -8,48 +8,46 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-type
-  KvtError* = enum
-    NothingSerious = 0
-    GenericError
+type KvtError* = enum
+  NothingSerious = 0
+  GenericError
+  GetNotFound
+  KeyInvalid
+  DataInvalid
 
-    GetNotFound
-    KeyInvalid
-    DataInvalid
+  # RocksDB backend
+  RdbBeCantCreateDataDir
+  RdbBeDelayedAlreadyRegistered
+  RdbBeDelayedLocked
+  RdbBeDelayedNotReady
+  RdbBeDriverDelError
+  RdbBeDriverGetError
+  RdbBeDriverInitError
+  RdbBeDriverPutError
+  RdbBeDriverWriteError
+  RdbBeHostError
+  RdbBeHostNotApplicable
 
-    # RocksDB backend
-    RdbBeCantCreateDataDir
-    RdbBeDelayedAlreadyRegistered
-    RdbBeDelayedLocked
-    RdbBeDelayedNotReady
-    RdbBeDriverDelError
-    RdbBeDriverGetError
-    RdbBeDriverInitError
-    RdbBeDriverPutError
-    RdbBeDriverWriteError
-    RdbBeHostError
-    RdbBeHostNotApplicable
+  # Transaction wrappers
+  TxArgStaleTx
+  TxBackendNotWritable
+  TxLevelTooDeep
+  TxLevelUseless
+  TxNoPendingTx
+  TxNotTopTx
+  TxPendingTx
+  TxPersistDelayed
+  TxStackGarbled
+  TxStackUnderflow
 
-    # Transaction wrappers
-    TxArgStaleTx
-    TxBackendNotWritable
-    TxLevelTooDeep
-    TxLevelUseless
-    TxNoPendingTx
-    TxNotTopTx
-    TxPendingTx
-    TxPersistDelayed
-    TxStackGarbled
-    TxStackUnderflow
+  # Filter management
+  FilBackendMissing
+  FilBackendRoMode
+  FilSiblingsCommitUnfinshed
 
-    # Filter management
-    FilBackendMissing
-    FilBackendRoMode
-    FilSiblingsCommitUnfinshed
-
-    # Functions from `kvt_desc`
-    MustBeOnCentre
-    NotAllowedOnCentre
-    StaleDescriptor
+  # Functions from `kvt_desc`
+  MustBeOnCentre
+  NotAllowedOnCentre
+  StaleDescriptor
 
 # End

@@ -13,20 +13,12 @@
 
 {.push raises: [].}
 
-import
-  eth/common,
-  rocksdb,
-  results,
-  "../.."/[kvt_constants, kvt_desc],
-  ./rdb_desc
+import eth/common, rocksdb, results, "../.."/[kvt_constants, kvt_desc], ./rdb_desc
 
-const
-  extraTraceMessages = false
-    ## Enable additional logging noise
+const extraTraceMessages = false ## Enable additional logging noise
 
 when extraTraceMessages:
-  import
-    chronicles
+  import chronicles
 
   logScope:
     topics = "kvt-rocksdb"
@@ -35,10 +27,7 @@ when extraTraceMessages:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc get*(
-    rdb: RdbInst;
-    key: openArray[byte],
-      ): Result[Blob,(KvtError,string)] =
+proc get*(rdb: RdbInst, key: openArray[byte]): Result[Blob, (KvtError, string)] =
   var res: Blob
   let onData: DataProc = proc(data: openArray[byte]) =
     res = @data
@@ -46,17 +35,14 @@ proc get*(
   let gotData = rdb.store[KvtGeneric].get(key, onData).valueOr:
     const errSym = RdbBeDriverGetError
     when extraTraceMessages:
-      trace logTxt "get", error=errSym, info=error
-    return err((errSym,error))
+      trace logTxt "get", error = errSym, info = error
+    return err((errSym, error))
 
   if not gotData:
     res = EmptyBlob
   ok move(res)
 
-proc len*(
-    rdb: RdbInst;
-    key: openArray[byte],
-      ): Result[int,(KvtError,string)] =
+proc len*(rdb: RdbInst, key: openArray[byte]): Result[int, (KvtError, string)] =
   var res: int
   let onData: DataProc = proc(data: openArray[byte]) =
     res = data.len
@@ -64,8 +50,8 @@ proc len*(
   let gotData = rdb.store[KvtGeneric].get(key, onData).valueOr:
     const errSym = RdbBeDriverGetError
     when extraTraceMessages:
-      trace logTxt "len", error=errSym, info=error
-    return err((errSym,error))
+      trace logTxt "len", error = errSym, info = error
+    return err((errSym, error))
 
   if not gotData:
     res = 0

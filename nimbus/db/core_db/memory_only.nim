@@ -17,24 +17,17 @@ import
   ./base/base_config,
   "."/[base_iterators, core_apps]
 
-import
-  ./base except bless
+import ./base except bless
 
-export
-  EmptyBlob,
-  base,
-  base_config,
-  base_iterators,
-  common,
-  core_apps
+export EmptyBlob, base, base_config, base_iterators, common, core_apps
 
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
 proc newCoreDbRef*(
-    dbType: static[CoreDbType];      # Database type symbol
-      ): CoreDbRef =
+    dbType: static[CoreDbType], # Database type symbol
+): CoreDbRef =
   ## Constructor for volatile/memory type DB
   ##
   ## Note: Using legacy notation `newCoreDbRef()` rather than
@@ -42,10 +35,8 @@ proc newCoreDbRef*(
   ##
   when dbType == AristoDbMemory:
     newAristoMemoryCoreDbRef()
-
   elif dbType == AristoDbVoid:
     newAristoVoidCoreDbRef()
-
   else:
     {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()".}
 

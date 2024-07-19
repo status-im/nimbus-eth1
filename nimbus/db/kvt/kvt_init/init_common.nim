@@ -10,39 +10,37 @@
 
 {.push raises: [].}
 
-import
-  ../kvt_desc,
-  ../kvt_desc/desc_backend
+import ../kvt_desc, ../kvt_desc/desc_backend
 
-const
-  verifyIxId = true # and false
-    ## Enforce session tracking
+const verifyIxId = true
+  # and false
+  ## Enforce session tracking
 
 type
   BackendType* = enum
-    BackendVoid = 0                  ## For providing backend-less constructor
-    BackendMemory                    ## Same as Aristo
-    BackendRocksDB                   ## Same as Aristo
-    BackendRdbTriggered              ## Piggybacked on remote write session
+    BackendVoid = 0 ## For providing backend-less constructor
+    BackendMemory ## Same as Aristo
+    BackendRocksDB ## Same as Aristo
+    BackendRdbTriggered ## Piggybacked on remote write session
 
   TypedBackendRef* = ref TypedBackendObj
   TypedBackendObj* = object of BackendObj
-    beKind*: BackendType             ## Backend type identifier
+    beKind*: BackendType ## Backend type identifier
     when verifyIxId:
-      txGen: uint                    ## Transaction ID generator (for debugging)
-      txId: uint                     ## Active transaction ID (for debugging)
+      txGen: uint ## Transaction ID generator (for debugging)
+      txId: uint ## Active transaction ID (for debugging)
 
   TypedPutHdlRef* = ref object of PutHdlRef
-    error*: KvtError                 ## Track error while collecting transaction
-    info*: string                    ##  Error description (if any)
+    error*: KvtError ## Track error while collecting transaction
+    info*: string ##  Error description (if any)
     when verifyIxId:
-      txId: uint                     ## Transaction ID (for debugging)
+      txId: uint ## Transaction ID (for debugging)
 
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc beginSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
+proc beginSession*(hdl: TypedPutHdlRef, db: TypedBackendRef) =
   when verifyIxId:
     doAssert db.txId == 0
     if db.txGen == 0:
@@ -51,16 +49,16 @@ proc beginSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
     hdl.txId = db.txGen
     db.txGen.inc
 
-proc verifySession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
+proc verifySession*(hdl: TypedPutHdlRef, db: TypedBackendRef) =
   when verifyIxId:
     doAssert db.txId == hdl.txId
 
-proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
+proc finishSession*(hdl: TypedPutHdlRef, db: TypedBackendRef) =
   when verifyIxId:
     doAssert db.txId == hdl.txId
     db.txId = 0
 
-proc init*(trg: var TypedBackendObj; src: TypedBackendObj) =
+proc init*(trg: var TypedBackendObj, src: TypedBackendObj) =
   desc_backend.init(trg, src)
   trg.beKind = src.beKind
   when verifyIxId:

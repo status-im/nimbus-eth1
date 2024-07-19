@@ -8,9 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  chronicles,
-  "."/[config, transition]
+import chronicles, "."/[config, transition]
 
 # we are using chronicles LogLevel
 # instead of our LogLevel

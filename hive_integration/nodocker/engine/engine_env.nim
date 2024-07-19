@@ -28,54 +28,52 @@ import
     sync/handlers,
     beacon/beacon_engine,
     beacon/web3_eth_conv,
-    common
+    common,
   ],
   ../../../tests/test_helpers,
   web3/execution_types
 
 from ./node import setBlock
 
-export
-  results
+export results
 
-type
-  EngineEnv* = ref object
-    conf   : NimbusConf
-    com    : CommonRef
-    node   : EthereumNode
-    server : RpcHttpServer
-    ttd    : DifficultyInt
-    client : RpcHttpClient
-    sync   : BeaconSyncRef
-    txPool : TxPoolRef
-    chain  : ChainRef
+type EngineEnv* = ref object
+  conf: NimbusConf
+  com: CommonRef
+  node: EthereumNode
+  server: RpcHttpServer
+  ttd: DifficultyInt
+  client: RpcHttpClient
+  sync: BeaconSyncRef
+  txPool: TxPoolRef
+  chain: ChainRef
 
 const
-  baseFolder  = "hive_integration/nodocker/engine"
+  baseFolder = "hive_integration/nodocker/engine"
   genesisFile = baseFolder & "/init/genesis.json"
-  sealerKey   = baseFolder & "/init/sealer.key"
+  sealerKey = baseFolder & "/init/sealer.key"
   chainFolder = baseFolder & "/chains"
-  jwtSecret   = "0x7365637265747365637265747365637265747365637265747365637265747365"
+  jwtSecret = "0x7365637265747365637265747365637265747365637265747365637265747365"
 
 proc makeCom*(conf: NimbusConf): CommonRef =
-  CommonRef.new(
-    newCoreDbRef DefaultDbMemory,
-    conf.networkId,
-    conf.networkParams
-  )
+  CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
 
 proc envConfig*(): NimbusConf =
-  makeConfig(@[
-    "--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
-    "--custom-network:" & genesisFile,
-    "--listen-address: 127.0.0.1",
-  ])
+  makeConfig(
+    @[
+      "--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
+      "--custom-network:" & genesisFile,
+      "--listen-address: 127.0.0.1",
+    ]
+  )
 
 proc envConfig*(conf: ChainConfig): NimbusConf =
   result = envConfig()
   result.networkParams.config = conf
 
-proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): EngineEnv =
+proc newEngineEnv*(
+    conf: var NimbusConf, chainFile: string, enableAuth: bool
+): EngineEnv =
   if chainFile.len > 0:
     # disable clique if we are using PoW chain
     conf.networkParams.config.consensusType = ConsensusType.POW
@@ -86,17 +84,14 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     quit(QuitFailure)
 
   let
-    node  = setupEthNode(conf, ctx)
-    com   = makeCom(conf)
+    node = setupEthNode(conf, ctx)
+    com = makeCom(conf)
     chain = newChain(com)
 
   com.initializeEmptyDb()
   let txPool = TxPoolRef.new(com)
 
-  node.addEthHandlerCapability(
-    node.peerPool,
-    chain,
-    txPool)
+  node.addEthHandlerCapability(node.peerPool, chain, txPool)
 
   # txPool must be informed of active head
   # so it can know the latest account state
@@ -109,16 +104,20 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     quit(QuitFailure)
 
   let
-    hooks  = if enableAuth: @[httpJwtAuth(key)]
-             else: @[]
+    hooks =
+      if enableAuth:
+        @[httpJwtAuth(key)]
+      else:
+        @[]
     server = newRpcHttpServerWithParams("127.0.0.1:" & $conf.httpPort, hooks).valueOr:
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)
 
-    sync   = if com.ttd().isSome:
-               BeaconSyncRef.init(node, chain, ctx.rng, conf.maxPeers, id=conf.tcpPort.int)
-             else:
-               BeaconSyncRef(nil)
+    sync =
+      if com.ttd().isSome:
+        BeaconSyncRef.init(node, chain, ctx.rng, conf.maxPeers, id = conf.tcpPort.int)
+      else:
+        BeaconSyncRef(nil)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
     oracle = Oracle.new(com)
 
@@ -142,14 +141,14 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   node.startListening()
 
   EngineEnv(
-    conf   : conf,
-    com    : com,
-    node   : node,
-    server : server,
-    client : client,
-    sync   : sync,
-    txPool : txPool,
-    chain  : chain
+    conf: conf,
+    com: com,
+    node: node,
+    server: server,
+    client: client,
+    sync: sync,
+    txPool: txPool,
+    chain: chain,
   )
 
 proc close*(env: EngineEnv) =
@@ -192,11 +191,14 @@ proc peer*(env: EngineEnv): Peer =
   for peer in env.node.peers:
     return peer
 
-proc getTxsInPool*(env: EngineEnv, txHashes: openArray[common.Hash256]): seq[Transaction] =
+proc getTxsInPool*(
+    env: EngineEnv, txHashes: openArray[common.Hash256]
+): seq[Transaction] =
   result = newSeqOfCap[Transaction](txHashes.len)
   for txHash in txHashes:
     let res = env.txPool.getItem(txHash)
-    if res.isErr: continue
+    if res.isErr:
+      continue
     let item = res.get
     if item.reject == txInfoOk:
       result.add item.tx

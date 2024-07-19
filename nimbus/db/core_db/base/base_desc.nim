@@ -10,17 +10,13 @@
 
 {.push raises: [].}
 
-import
-  results,
-  "../.."/[aristo, aristo/aristo_profile, kvt],
-  ./base_config
+import results, "../.."/[aristo, aristo/aristo_profile, kvt], ./base_config
 
-type
-  CoreDbType* = enum
-    Ooops
-    AristoDbMemory            ## Memory backend emulator
-    AristoDbRocks             ## RocksDB backend
-    AristoDbVoid              ## No backend
+type CoreDbType* = enum
+  Ooops
+  AristoDbMemory ## Memory backend emulator
+  AristoDbRocks ## RocksDB backend
+  AristoDbVoid ## No backend
 
 const
   CoreDbPersistentTypes* = {AristoDbRocks}
@@ -36,7 +32,7 @@ type
   CoreDbProfData* = AristoDbProfData
     ## Borrowed from `aristo_profile`, only used in profiling mode
 
-  CoreDbRc*[T] = Result[T,CoreDbError]
+  CoreDbRc*[T] = Result[T, CoreDbError]
 
   CoreDbAccount* = AristoAccount
     ## Generic account record representation. The data fields
@@ -48,7 +44,6 @@ type
   CoreDbErrorCode* = enum
     Unset = 0
     Unspecified
-
     AccNotFound
     ColUnacceptable
     HashNotAvailable
@@ -61,49 +56,44 @@ type
   # --------------------------------------------------
   # Production descriptors
   # --------------------------------------------------
-  CoreDbRef* = ref object
-    ## Database descriptor
-    dbType*: CoreDbType           ## Type of database backend
-    defCtx*: CoreDbCtxRef         ## Default context
+  CoreDbRef* = ref object ## Database descriptor
+    dbType*: CoreDbType ## Type of database backend
+    defCtx*: CoreDbCtxRef ## Default context
 
     # Optional api interface (can be re-directed/intercepted)
-    ariApi*: AristoApiRef         ## `Aristo` api
-    kvtApi*: KvtApiRef            ## `KVT` api
+    ariApi*: AristoApiRef ## `Aristo` api
+    kvtApi*: KvtApiRef ## `KVT` api
 
     # Optional profiling and debugging stuff
     when CoreDbEnableApiTracking:
-      trackLedgerApi*: bool       ## Debugging, suggestion for ledger
-      trackCoreDbApi*: bool       ## Debugging, support
+      trackLedgerApi*: bool ## Debugging, suggestion for ledger
+      trackCoreDbApi*: bool ## Debugging, support
     when CoreDbEnableApiJumpTable:
       profTab*: CoreDbProfListRef ## Profiling data (if any)
-      ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
-      tracerHook*: RootRef        ## Debugging/tracing
+      ledgerHook*: RootRef ## Debugging/profiling, to be used by ledger
+      tracerHook*: RootRef ## Debugging/tracing
 
   CoreDbCtxRef* = ref object
     ## Shared context for `CoreDbMptRef`, `CoreDbAccRef`, `CoreDbKvtRef`
     parent*: CoreDbRef
-    mpt*: AristoDbRef           ## `Aristo` database
-    kvt*: KvtDbRef              ## `KVT` key-value table
+    mpt*: AristoDbRef ## `Aristo` database
+    kvt*: KvtDbRef ## `KVT` key-value table
 
-  CoreDbKvtRef* = distinct CoreDbCtxRef
-    ## Statically initialised Key-Value pair table
+  CoreDbKvtRef* = distinct CoreDbCtxRef ## Statically initialised Key-Value pair table
 
   CoreDbAccRef* = distinct CoreDbCtxRef
     ## Similar to `CoreDbKvtRef`, only dealing with `Aristo` accounts
 
-  CoreDbMptRef* = distinct CoreDbCtxRef
-    ## Generic MPT
+  CoreDbMptRef* = distinct CoreDbCtxRef ## Generic MPT
 
-  CoreDbTxRef* = ref object
-    ## Transaction descriptor
-    ctx*: CoreDbCtxRef          ## Context (also contains `Aristo` descriptor)
-    aTx*: AristoTxRef           ## `Aristo` transaction (if any)
-    kTx*: KvtTxRef              ## `KVT` transaction (if any)
+  CoreDbTxRef* = ref object ## Transaction descriptor
+    ctx*: CoreDbCtxRef ## Context (also contains `Aristo` descriptor)
+    aTx*: AristoTxRef ## `Aristo` transaction (if any)
+    kTx*: KvtTxRef ## `KVT` transaction (if any)
 
-  CoreDbError* = object
-    ## Generic error object
+  CoreDbError* = object ## Generic error object
     error*: CoreDbErrorCode
-    ctx*: string     ## Context where the exception or error occured
+    ctx*: string ## Context where the exception or error occured
     case isAristo*: bool
     of true:
       aErr*: AristoError

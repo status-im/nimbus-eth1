@@ -17,8 +17,7 @@ import
   ../../utils/utils,
   ../../core/chain
 
-export
-  eth_types_rlp.blockHash
+export eth_types_rlp.blockHash
 
 {.push gcsafe, raises: [].}
 
@@ -30,7 +29,8 @@ logScope:
 # ------------------------------------------------------------------------------
 
 template get(sk: SkeletonRef, key: untyped): untyped =
-  sk.db.ctx.getKvt().get(key.toOpenArray).valueOr: EmptyBlob
+  sk.db.ctx.getKvt().get(key.toOpenArray).valueOr:
+    EmptyBlob
 
 template put(sk: SkeletonRef, key, val: untyped): untyped =
   let rc = sk.db.ctx.getKvt().put(key.toOpenArray, val)
@@ -54,17 +54,13 @@ proc append(w: var RlpWriter, p: Progress) =
 
 proc readImpl(rlp: var Rlp, T: type Segment): Segment {.raises: [RlpError].} =
   rlp.tryEnterList()
-  Segment(
-    head: rlp.read(uint64),
-    tail: rlp.read(uint64),
-    next: rlp.read(Hash256),
-  )
+  Segment(head: rlp.read(uint64), tail: rlp.read(uint64), next: rlp.read(Hash256))
 
 proc readImpl(rlp: var Rlp, T: type Progress): Progress {.raises: [RlpError].} =
   rlp.tryEnterList()
   Progress(
     segments: rlp.read(seq[Segment]),
-    linked  : rlp.read(bool),
+    linked: rlp.read(bool),
     canonicalHeadReset: rlp.read(bool),
   )
 
@@ -72,9 +68,9 @@ proc readImpl(rlp: var Rlp, T: type Progress): Progress {.raises: [RlpError].} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getHeader*(sk: SkeletonRef,
-                number: uint64,
-                onlySkeleton: bool = false): Result[Opt[BlockHeader], string] =
+proc getHeader*(
+    sk: SkeletonRef, number: uint64, onlySkeleton: bool = false
+): Result[Opt[BlockHeader], string] =
   ## Gets a block from the skeleton or canonical db by number.
   try:
     let rawHeader = sk.get(skeletonHeaderKey(number.BlockNumber))
@@ -95,10 +91,9 @@ proc getHeader*(sk: SkeletonRef,
   except RlpError as ex:
     err(ex.msg)
 
-proc getHeader*(sk: SkeletonRef,
-                blockHash: Hash256,
-                onlySkeleton: bool = false):
-                  Result[Opt[BlockHeader], string] =
+proc getHeader*(
+    sk: SkeletonRef, blockHash: Hash256, onlySkeleton: bool = false
+): Result[Opt[BlockHeader], string] =
   ## Gets a skeleton block from the db by hash
   try:
     let rawNumber = sk.get(skeletonBlockHashToNumberKey(blockHash))
@@ -125,19 +120,18 @@ proc putHeader*(sk: SkeletonRef, header: BlockHeader) =
   ## Writes a skeleton block header to the db by number
   let encodedHeader = rlp.encode(header)
   sk.put(skeletonHeaderKey(header.number), encodedHeader)
-  sk.put(
-    skeletonBlockHashToNumberKey(header.blockHash),
-    rlp.encode(header.number)
-  )
+  sk.put(skeletonBlockHashToNumberKey(header.blockHash), rlp.encode(header.number))
 
-proc putBody*(sk: SkeletonRef, header: BlockHeader, body: BlockBody): Result[void, string] =
+proc putBody*(
+    sk: SkeletonRef, header: BlockHeader, body: BlockBody
+): Result[void, string] =
   ## Writes block body to db
   try:
     let
       encodedBody = rlp.encode(body)
-      bodyHash    = sumHash(body)
-      headerHash  = header.blockHash
-      keyHash     = sumHash(headerHash, bodyHash)
+      bodyHash = sumHash(body)
+      headerHash = header.blockHash
+      keyHash = sumHash(headerHash, bodyHash)
     sk.put(skeletonBodyKey(keyHash), encodedBody)
     ok()
   except CatchableError as ex:
@@ -148,10 +142,10 @@ proc getBody*(sk: SkeletonRef, header: BlockHeader): Result[Opt[BlockBody], stri
   ## sumHash is the hash of [txRoot, ommersHash, wdRoot]
   try:
     let
-      bodyHash   = header.sumHash
+      bodyHash = header.sumHash
       headerHash = header.blockHash
-      keyHash    = sumHash(headerHash, bodyHash)
-      rawBody    = sk.get(skeletonBodyKey(keyHash))
+      keyHash = sumHash(headerHash, bodyHash)
+      rawBody = sk.get(skeletonBodyKey(keyHash))
     if rawBody.len > 0:
       return ok(Opt.some rlp.decode(rawBody, BlockBody))
     ok(Opt.none BlockBody)
@@ -195,15 +189,15 @@ proc resetCanonicalHead*(sk: SkeletonRef, newHead, oldHead: uint64) =
   debug "RESET CANONICAL", newHead, oldHead
   sk.chain.com.syncCurrent = newHead.BlockNumber
 
-proc insertBlocks*(sk: SkeletonRef,
-                   blocks: openArray[EthBlock],
-                   fromEngine: bool): Result[uint64, string] =
-  discard ? sk.chain.persistBlocks(blocks)
+proc insertBlocks*(
+    sk: SkeletonRef, blocks: openArray[EthBlock], fromEngine: bool
+): Result[uint64, string] =
+  discard ?sk.chain.persistBlocks(blocks)
   ok(blocks.len.uint64)
 
-proc insertBlock*(sk: SkeletonRef,
-                  header: BlockHeader,
-                  fromEngine: bool): Result[uint64, string] =
+proc insertBlock*(
+    sk: SkeletonRef, header: BlockHeader, fromEngine: bool
+): Result[uint64, string] =
   let maybeBody = sk.getBody(header).valueOr:
     return err(error)
   if maybeBody.isNone:

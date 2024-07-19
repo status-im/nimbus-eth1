@@ -22,15 +22,8 @@ type
     lastBlockHash*: string
     blocksRlp*: seq[Blob]
 
-const genFields = [
-  "nonce",
-  "timestamp",
-  "extraData",
-  "gasLimit",
-  "difficulty",
-  "mixHash",
-  "coinbase"
-]
+const genFields =
+  ["nonce", "timestamp", "extraData", "gasLimit", "difficulty", "mixHash", "coinbase"]
 
 proc parseChainConfig(n: JsonNode): ChainConfig =
   getChainConfig(n["network"].getStr)
@@ -51,9 +44,7 @@ proc parseGenesis(n: JsonNode): Genesis =
   parseGenesis($genesis)
 
 proc extractChainData*(n: JsonNode): ChainData =
-  result.params = NetworkParams(
-    genesis: parseGenesis(n),
-    config : parseChainConfig(n))
+  result.params = NetworkParams(genesis: parseGenesis(n), config: parseChainConfig(n))
   result.lastBlockHash = n["lastblockhash"].getStr
 
   let blks = n["blocks"]

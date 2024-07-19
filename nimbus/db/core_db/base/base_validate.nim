@@ -9,12 +9,9 @@
 
 {.push raises: [].}
 
-import
-  ../../aristo,
-  ./base_desc
+import ../../aristo, ./base_desc
 
-type
-  ValidateSubDesc* = CoreDbCtxRef | CoreDbTxRef # | CoreDbCaptRef
+type ValidateSubDesc* = CoreDbCtxRef | CoreDbTxRef # | CoreDbCaptRef
 
 # ------------------------------------------------------------------------------
 # Private helpers

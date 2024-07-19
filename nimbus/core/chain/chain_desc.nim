@@ -10,56 +10,46 @@
 
 {.push raises: [].}
 
-import
-  ../../common/common,
-  ../../utils/utils,
-  ../../evm/types
+import ../../common/common, ../../utils/utils, ../../evm/types
 
-export
-  common
+export common
 
-type
-  ChainRef* = ref object of RootRef
-    com: CommonRef
-      ## common block chain configuration
-      ## used throughout entire app
+type ChainRef* = ref object of RootRef
+  com: CommonRef
+    ## common block chain configuration
+    ## used throughout entire app
 
-    extraValidation: bool ##\
-      ## Trigger extra validation, currently within `persistBlocks()`
-      ## function only.
+  extraValidation: bool
+    ##\
+    ## Trigger extra validation, currently within `persistBlocks()`
+    ## function only.
 
-    verifyFrom: BlockNumber ##\
-      ## First block to when `extraValidation` will be applied (only
-      ## effective if `extraValidation` is true.)
+  verifyFrom: BlockNumber
+    ##\
+    ## First block to when `extraValidation` will be applied (only
+    ## effective if `extraValidation` is true.)
 
-    vmState: BaseVMState
-      ## If it's not nil, block validation will use this
-      ## If it's nil, a new vmState state will be created.
+  vmState: BaseVMState
+    ## If it's not nil, block validation will use this
+    ## If it's nil, a new vmState state will be created.
 
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
-func newChain*(com: CommonRef,
-               extraValidation: bool,
-               vmState = BaseVMState(nil)): ChainRef =
+func newChain*(
+    com: CommonRef, extraValidation: bool, vmState = BaseVMState(nil)
+): ChainRef =
   ## Constructor for the `Chain` descriptor object.
   ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
-  ChainRef(
-    com: com,
-    extraValidation: extraValidation,
-    vmState: vmState
-  )
+  ChainRef(com: com, extraValidation: extraValidation, vmState: vmState)
 
 func newChain*(com: CommonRef): ChainRef =
   ## Constructor for the `Chain` descriptor object. All sub-object descriptors
   ## are initialised with defaults. So is extra block chain validation
   let extraValidation = com.consensus == ConsensusType.POS
-  ChainRef(
-    com: com,
-    extraValidation: extraValidation,
-  )
+  ChainRef(com: com, extraValidation: extraValidation)
 
 # ------------------------------------------------------------------------------
 # Public `Chain` getters
@@ -84,8 +74,7 @@ func verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
 
-proc currentBlock*(c: ChainRef): BlockHeader
-  {.gcsafe, raises: [CatchableError].} =
+proc currentBlock*(c: ChainRef): BlockHeader {.gcsafe, raises: [CatchableError].} =
   ## currentBlock retrieves the current head block of the canonical chain.
   ## Ideally the block should be retrieved from the blockchain's internal cache.
   ## but now it's enough to retrieve it from database
@@ -95,12 +84,12 @@ proc currentBlock*(c: ChainRef): BlockHeader
 # Public `Chain` setters
 # ------------------------------------------------------------------------------
 
-func `extraValidation=`*(c: ChainRef; extraValidation: bool) =
+func `extraValidation=`*(c: ChainRef, extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables
   ## extra block chain validation.
   c.extraValidation = extraValidation
 
-func `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
+func `verifyFrom=`*(c: ChainRef, verifyFrom: BlockNumber) =
   ## Setter. The  assignment value `verifyFrom` defines the first block where
   ## validation should start if the `Clique` field `extraValidation` was set
   ## `true`.

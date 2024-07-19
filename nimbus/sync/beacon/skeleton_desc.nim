@@ -17,13 +17,7 @@ import
   ../../db/core_db,
   ../../core/chain
 
-export
-  eth_types,
-  core_db,
-  chain,
-  chronicles,
-  results,
-  times
+export eth_types, core_db, chain, chronicles, results, times
 
 {.push gcsafe, raises: [].}
 
@@ -36,8 +30,8 @@ type
   # a new one of these every time it is restarted until the subchain grows large
   # enough to connect with a previous subchain.
   Segment* = ref object
-    head*: uint64  # Block number of the newest header in the subchain
-    tail*: uint64  # Block number of the oldest header in the subchain
+    head*: uint64 # Block number of the newest header in the subchain
+    tail*: uint64 # Block number of the oldest header in the subchain
     next*: Hash256 # Block hash of the next oldest header in the subchain
 
   # Database entry to allow suspending and resuming a chain sync.
@@ -46,24 +40,24 @@ type
   # suspended skeleton sync without prior knowledge of all prior suspension points.
   Progress* = ref object
     segments*: seq[Segment]
-    linked*  : bool
+    linked*: bool
     canonicalHeadReset*: bool
 
   SkeletonConfig* = ref object
     fillCanonicalBackStep*: uint64
-    subchainMergeMinimum* : uint64
+    subchainMergeMinimum*: uint64
 
   # The Skeleton chain class helps support beacon sync by accepting head blocks
   # while backfill syncing the rest of the chain.
   SkeletonRef* = ref object
     progress*: Progress
-    pulled*  : uint64       # Number of headers downloaded in this run
-    filling* : bool         # Whether we are actively filling the canonical chain
-    started* : Time         # Timestamp when the skeleton syncer was created
-    logged*  : Time         # Timestamp when progress was last logged to user
-    db*      : CoreDbRef
-    chain*   : ChainRef
-    conf*    : SkeletonConfig
+    pulled*: uint64 # Number of headers downloaded in this run
+    filling*: bool # Whether we are actively filling the canonical chain
+    started*: Time # Timestamp when the skeleton syncer was created
+    logged*: Time # Timestamp when progress was last logged to user
+    db*: CoreDbRef
+    chain*: ChainRef
+    conf*: SkeletonConfig
     fillLogIndex*: uint64
 
   SkeletonStatus* = enum
@@ -92,7 +86,7 @@ type
 
   StatusAndReorg* = object
     status*: set[SkeletonStatus]
-    reorg* : bool
+    reorg*: bool
 
   BodyRange* = object
     min*: uint64

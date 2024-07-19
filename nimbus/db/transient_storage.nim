@@ -8,10 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  tables,
-  stint,
-  eth/common
+import tables, stint, eth/common
 
 type
   StorageTable = ref object
@@ -38,8 +35,9 @@ proc init*(ac: var TransientStorage) =
 proc init*(_: type TransientStorage): TransientStorage {.inline.} =
   result.init()
 
-func getStorage*(ac: TransientStorage,
-                 address: EthAddress, slot: UInt256): (bool, UInt256) =
+func getStorage*(
+    ac: TransientStorage, address: EthAddress, slot: UInt256
+): (bool, UInt256) =
   var table = ac.map.getOrDefault(address)
   if table.isNil:
     return (false, 0.u256)
@@ -49,8 +47,7 @@ func getStorage*(ac: TransientStorage,
   do:
     return (false, 0.u256)
 
-proc setStorage*(ac: var TransientStorage,
-                 address: EthAddress, slot, value: UInt256) =
+proc setStorage*(ac: var TransientStorage, address: EthAddress, slot, value: UInt256) =
   var table = ac.map.getOrDefault(address)
   if table.isNil:
     table = StorageTable()

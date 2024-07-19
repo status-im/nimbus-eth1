@@ -15,8 +15,7 @@ import
   ../../nimbus/sync/[protocol, snap/range_desc],
   ./gunzip
 
-import
-  nimcrypto/utils except toHex
+import nimcrypto/utils except toHex
 
 type
   UndumpState = enum
@@ -31,8 +30,7 @@ type
     UndumpError
     UndumpSkipUntilCommit
 
-  UndumpStorages* = object
-    ## Palatable output for iterator
+  UndumpStorages* = object ## Palatable output for iterator
     root*: Hash256
     data*: AccountStorageRange
     seenAccounts*: int
@@ -49,23 +47,20 @@ template say(args: varargs[untyped]) =
 proc toByteSeq(s: string): seq[byte] =
   utils.fromHex(s)
 
-proc fromHex(T: type Hash256; s: string): T =
+proc fromHex(T: type Hash256, s: string): T =
   result.data = ByteArray32.fromHex(s)
 
-proc fromHex(T: type NodeKey; s: string): T =
+proc fromHex(T: type NodeKey, s: string): T =
   ByteArray32.fromHex(s).T
 
-proc fromHex(T: type NodeTag; s: string): T =
+proc fromHex(T: type NodeTag, s: string): T =
   UInt256.fromBytesBE(ByteArray32.fromHex(s)).T
 
 # ------------------------------------------------------------------------------
 # Public capture
 # ------------------------------------------------------------------------------
 
-proc dumpStorages*(
-    root: Hash256;
-    data: AccountStorageRange
-      ): string =
+proc dumpStorages*(root: Hash256, data: AccountStorageRange): string =
   ## Dump account and storage data in parseable Ascii text
   proc ppStr(blob: Blob): string =
     blob.toHex
@@ -117,7 +112,7 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
   if not gzFile.fileExists:
     raiseAssert &"No such file: \"{gzFile}\""
 
-  for lno,line in gzFile.gunzipLines:
+  for lno, line in gzFile.gunzipLines:
     if line.len == 0 or line[0] == '#':
       continue
     var flds = line.split
@@ -129,11 +124,10 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
     #    " nSlots=", nSlots,
     #    " flds=", flds
 
-    case state:
+    case state
     of UndumpSkipUntilCommit:
       if flds.len == 1 and flds[0] == "commit":
         state = UndumpStoragesHeader
-
     of UndumpStoragesHeader, UndumpError:
       if flds.len == 3 and flds[0] == "storages":
         nAccounts = flds[1].parseUInt
@@ -147,9 +141,8 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
         seenAccounts.inc
         continue
       if state != UndumpError:
-         state = UndumpError
-         say &"*** line {lno}: expected storages header, got {line}"
-
+        state = UndumpError
+        say &"*** line {lno}: expected storages header, got {line}"
     of UndumpStoragesRoot:
       if flds.len == 1:
         data.root = Hash256.fromHex(flds[0])
@@ -160,7 +153,6 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
         continue
       state = UndumpError
       say &"*** line {lno}: expected storages state root, got {line}"
-
     of UndumpSlotsHeader:
       if flds.len == 2 and flds[0] == "slots":
         nSlots = flds[1].parseUInt
@@ -168,17 +160,15 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
         continue
       state = UndumpError
       say &"*** line {lno}: expected slots header, got {line}"
-
     of UndumpSlotsAccount:
       if flds.len == 1:
         data.data.storages.add AccountSlots(
-          account: AccountSlotsHeader(
-          accKey:  NodeKey.fromHex(flds[0])))
+          account: AccountSlotsHeader(accKey: NodeKey.fromHex(flds[0]))
+        )
         state = UndumpSlotsRoot
         continue
       state = UndumpError
       say &"*** line {lno}: expected slots account, got {line}"
-
     of UndumpSlotsRoot:
       if flds.len == 1:
         data.data.storages[^1].account.storageRoot = Hash256.fromHex(flds[0])
@@ -186,12 +176,11 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
         continue
       state = UndumpError
       say &"*** line {lno}: expected slots storage root, got {line}"
-
     of UndumpSlotsList:
       if flds.len == 2:
         data.data.storages[^1].data.add SnapStorage(
-          slotHash: Hash256.fromHex(flds[0]),
-          slotData: flds[1].toByteSeq)
+          slotHash: Hash256.fromHex(flds[0]), slotData: flds[1].toByteSeq
+        )
         nSlots.dec
         if 0 < nSlots:
           continue
@@ -206,7 +195,6 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
         continue
       state = UndumpError
       say &"*** line {lno}: expected slot data, got {line}"
-
     of UndumpProofs:
       if flds.len == 1:
         data.data.proof.add flds[0].toByteSeq.to(SnapProof)
@@ -221,7 +209,6 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
         continue
       state = UndumpError
       say &"*** expected proof data, got {line}"
-
     of UndumpCommit:
       if flds.len == 1 and flds[0] == "commit":
         data.seenAccounts = seenAccounts

@@ -8,23 +8,21 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ../../nimbus/common/common,
-  ./types
+import ../../nimbus/common/common, ./types
 
-export
-  types
+export types
 
 const
   BlockNumberZero = 0.BlockNumber
   BlockNumberFive = 5.BlockNumber
   TimeZero = EthTime(0)
 
-proc createForkTransitionTable(transitionFork: HardFork,
-                               b: Opt[BlockNumber],
-                               t: Opt[EthTime],
-                               ttd: Opt[DifficultyInt]): ForkTransitionTable =
-
+proc createForkTransitionTable(
+    transitionFork: HardFork,
+    b: Opt[BlockNumber],
+    t: Opt[EthTime],
+    ttd: Opt[DifficultyInt],
+): ForkTransitionTable =
   proc blockNumberToUse(f: HardFork): Opt[BlockNumber] =
     if f < transitionFork:
       Opt.some(BlockNumberZero)
@@ -51,13 +49,15 @@ proc createForkTransitionTable(transitionFork: HardFork,
     result.timeThresholds[f] = timeToUse(f)
 
 proc assignNumber(c: ChainConfig, transitionFork: HardFork, n: BlockNumber) =
-  let table = createForkTransitionTable(transitionFork,
-    Opt.some(n), Opt.none(EthTime), Opt.none(DifficultyInt))
+  let table = createForkTransitionTable(
+    transitionFork, Opt.some(n), Opt.none(EthTime), Opt.none(DifficultyInt)
+  )
   c.populateFromForkTransitionTable(table)
 
 proc assignTime(c: ChainConfig, transitionFork: HardFork, t: EthTime) =
-  let table = createForkTransitionTable(transitionFork,
-    Opt.none(BlockNumber), Opt.some(t), Opt.none(DifficultyInt))
+  let table = createForkTransitionTable(
+    transitionFork, Opt.none(BlockNumber), Opt.some(t), Opt.none(DifficultyInt)
+  )
   c.populateFromForkTransitionTable(table)
   c.terminalTotalDifficulty = Opt.some(0.u256)
 

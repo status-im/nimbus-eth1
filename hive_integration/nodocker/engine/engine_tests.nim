@@ -33,7 +33,7 @@ import
   ./engine/misc,
   ./engine/rpc
 
-proc getGenesis(cs: EngineSpec, param: NetworkParams) =  
+proc getGenesis(cs: EngineSpec, param: NetworkParams) =
   # Set the terminal total difficulty
   let realTTD = param.genesis.difficulty + cs.ttd.u256
   param.config.terminalTotalDifficulty = Opt.some(realTTD)
@@ -58,8 +58,8 @@ proc executeEngineSpec*(ws: BaseSpec): bool =
     ws.getGenesisFn(ws, conf.networkParams)
   else:
     cs.getGenesis(conf.networkParams)
-    
-  let env  = TestEnv.new(conf)
+
+  let env = TestEnv.new(conf)
   env.engine.setRealTTD()
   env.setupCLMock()
   if cs.enableConfigureCLMock:
@@ -81,15 +81,11 @@ proc makeEngineTest*(): seq[EngineSpec] =
     let list = [
       InvalidPayloadAttributesTest(
         description: "Zero timestamp",
-        customizer: BasePayloadAttributesCustomizer(
-          timestamp: Opt.some(0'u64),
-        ),
+        customizer: BasePayloadAttributesCustomizer(timestamp: Opt.some(0'u64)),
       ),
       InvalidPayloadAttributesTest(
         description: "Parent timestamp",
-        customizer: TimestampDeltaPayloadAttributesCustomizer(
-          timestampDelta: -1,
-        ),
+        customizer: TimestampDeltaPayloadAttributesCustomizer(timestampDelta: -1),
       ),
     ]
 
@@ -100,76 +96,51 @@ proc makeEngineTest*(): seq[EngineSpec] =
       result.add y
 
   # Invalid Transaction ChainID Tests
-  result.add InvalidTxChainIDTest(
-    txType: Opt.some(TxLegacy),
-  )
+  result.add InvalidTxChainIDTest(txType: Opt.some(TxLegacy))
 
-  result.add InvalidTxChainIDTest(
-    txType: Opt.some(TxEip1559),
-  )
+  result.add InvalidTxChainIDTest(txType: Opt.some(TxEip1559))
 
   # Invalid Ancestor Re-Org Tests (Reveal Via NewPayload)
   for invalidIndex in [1, 9, 10]:
     for emptyTxs in [false, true]:
       result.add InvalidMissingAncestorReOrgTest(
-        slotsToSafe:       32,
-        slotsToFinalized:  64,
-        sidechainLength:   10,
-        invalidIndex:      invalidIndex,
-        invalidField:      InvalidStateRoot,
+        slotsToSafe: 32,
+        slotsToFinalized: 64,
+        sidechainLength: 10,
+        invalidIndex: invalidIndex,
+        invalidField: InvalidStateRoot,
         emptyTransactions: emptyTxs,
-        enableConfigureCLMock: true
+        enableConfigureCLMock: true,
       )
 
   # Invalid Payload Tests
-  const
-    invalidPayloadBlockFields = [
-      InvalidParentHash,
-      InvalidStateRoot,
-      InvalidReceiptsRoot,
-      InvalidNumber,
-      InvalidGasLimit,
-      InvalidGasUsed,
-      InvalidTimestamp,
-      InvalidPrevRandao,
-      RemoveTransaction,
-    ]
+  const invalidPayloadBlockFields = [
+    InvalidParentHash, InvalidStateRoot, InvalidReceiptsRoot, InvalidNumber,
+    InvalidGasLimit, InvalidGasUsed, InvalidTimestamp, InvalidPrevRandao,
+    RemoveTransaction,
+  ]
 
   for invalidField in invalidPayloadBlockFields:
     for syncing in [false, true]:
-     if invalidField == InvalidStateRoot:
-       result.add InvalidPayloadTestCase(
-          invalidField:      invalidField,
-          syncing:           syncing,
-          emptyTransactions: true,
-       )
+      if invalidField == InvalidStateRoot:
+        result.add InvalidPayloadTestCase(
+          invalidField: invalidField, syncing: syncing, emptyTransactions: true
+        )
 
-     result.add InvalidPayloadTestCase(
-        invalidField: invalidField,
-        syncing:      syncing,
-     )
+      result.add InvalidPayloadTestCase(invalidField: invalidField, syncing: syncing)
 
   # Register bad hash tests
   for syncing in [false, true]:
     for sidechain in [false, true]:
-      result.add BadHashOnNewPayload(
-        syncing:   syncing,
-        sidechain: sidechain,
-      )
+      result.add BadHashOnNewPayload(syncing: syncing, sidechain: sidechain)
 
   # Parent hash == block hash tests
   result.add ParentHashOnNewPayload(syncing: false)
   result.add ParentHashOnNewPayload(syncing: true)
 
-  result.add PayloadBuildAfterInvalidPayloadTest(
-    invalidField: InvalidStateRoot,
-  )
+  result.add PayloadBuildAfterInvalidPayloadTest(invalidField: InvalidStateRoot)
 
-  const forkchoiceStateField = [
-    HeadBlockHash,
-    SafeBlockHash,
-    FinalizedBlockHash,
-  ]
+  const forkchoiceStateField = [HeadBlockHash, SafeBlockHash, FinalizedBlockHash]
 
   # Register ForkchoiceUpdate tests
   for field in forkchoiceStateField:
@@ -177,46 +148,34 @@ proc makeEngineTest*(): seq[EngineSpec] =
     result.add ForkchoiceUpdatedUnknownBlockHashTest(field: field)
 
   # PrevRandao opcode tests
-  result.add PrevRandaoTransactionTest(
-    txType: Opt.some(TxLegacy)
-  )
+  result.add PrevRandaoTransactionTest(txType: Opt.some(TxLegacy))
 
-  result.add PrevRandaoTransactionTest(
-    txType: Opt.some(TxEip1559),
-  )
+  result.add PrevRandaoTransactionTest(txType: Opt.some(TxEip1559))
 
   # Suggested Fee Recipient Tests
-  result.add SuggestedFeeRecipientTest(
-    txType: Opt.some(TxLegacy),
-    transactionCount: 20,
-  )
+  result.add SuggestedFeeRecipientTest(txType: Opt.some(TxLegacy), transactionCount: 20)
 
   result.add SuggestedFeeRecipientTest(
-    txType: Opt.some(TxEip1559),
-    transactionCount: 20,
+    txType: Opt.some(TxEip1559), transactionCount: 20
   )
 
   # Payload Execution Tests
   result.add ReExecutePayloadTest()
   result.add InOrderPayloadExecutionTest()
   result.add MultiplePayloadsExtendingCanonicalChainTest(
-    setHeadToFirstPayloadReceived: true,
+    setHeadToFirstPayloadReceived: true
   )
 
   result.add MultiplePayloadsExtendingCanonicalChainTest(
-    setHeadToFirstPayloadReceived: false,
+    setHeadToFirstPayloadReceived: false
   )
 
   result.add NewPayloadOnSyncingClientTest()
   result.add NewPayloadWithMissingFcUTest()
 
   const invalidPayloadBlockField = [
-    InvalidTransactionSignature,
-    InvalidTransactionNonce,
-    InvalidTransactionGasPrice,
-    InvalidTransactionGasTipPrice,
-    InvalidTransactionGas,
-    InvalidTransactionValue,
+    InvalidTransactionSignature, InvalidTransactionNonce, InvalidTransactionGasPrice,
+    InvalidTransactionGasTipPrice, InvalidTransactionGas, InvalidTransactionValue,
     InvalidTransactionChainID,
   ]
 
@@ -227,36 +186,34 @@ proc makeEngineTest*(): seq[EngineSpec] =
       if invalidField != InvalidTransactionGasTipPrice:
         for testTxType in [TxLegacy, TxEip1559]:
           result.add InvalidPayloadTestCase(
-            txType:                Opt.some(testTxType),
-            invalidField:          invalidField,
-            syncing:               syncing,
+            txType: Opt.some(testTxType),
+            invalidField: invalidField,
+            syncing: syncing,
             invalidDetectedOnSync: invalidDetectedOnSync,
           )
       else:
         result.add InvalidPayloadTestCase(
-          txType:                Opt.some(TxEip1559),
-          invalidField:          invalidField,
-          syncing:               syncing,
+          txType: Opt.some(TxEip1559),
+          invalidField: invalidField,
+          syncing: syncing,
           invalidDetectedOnSync: invalidDetectedOnSync,
         )
 
   const payloadAttributesFieldChange = [
-    PayloadAttributesIncreaseTimestamp,
-    PayloadAttributesRandom,
+    PayloadAttributesIncreaseTimestamp, PayloadAttributesRandom,
     PayloadAttributesSuggestedFeeRecipient,
   ]
 
   # Payload ID Tests
   for payloadAttributeFieldChange in payloadAttributesFieldChange:
-    result.add UniquePayloadIDTest(
-      fieldModification: payloadAttributeFieldChange,
-    )
+    result.add UniquePayloadIDTest(fieldModification: payloadAttributeFieldChange)
 
   # Endpoint Versions Tests
   # Early upgrade of ForkchoiceUpdated when requesting a payload
   result.add ForkchoiceUpdatedOnPayloadRequestTest(
     name: "Early upgrade",
-    about: """
+    about:
+      """
       Early upgrade of ForkchoiceUpdated when requesting a payload.
       The test sets the fork height to 1, and the block timestamp increments to 2
       seconds each block.
@@ -265,21 +222,17 @@ proc makeEngineTest*(): seq[EngineSpec] =
       The test then reduces the timestamp by 1, but still uses the next forkchoice updated
       version, which should result in UNSUPPORTED_FORK_ERROR error.
     """,
-    forkHeight:              1,
+    forkHeight: 1,
     blockTimestampIncrement: 2,
-    forkchoiceUpdatedCustomizer: UpgradeForkchoiceUpdatedVersion(
-      expectedError: engineApiUnsupportedFork,
-    ),
-    payloadAttributescustomizer: TimestampDeltaPayloadAttributesCustomizer(
-      timestampDelta:       -1,
-    ),
+    forkchoiceUpdatedCustomizer:
+      UpgradeForkchoiceUpdatedVersion(expectedError: engineApiUnsupportedFork),
+    payloadAttributescustomizer:
+      TimestampDeltaPayloadAttributesCustomizer(timestampDelta: -1),
   )
 
   # Register RPC tests
   let blockStatusRPCCheckType = [
-    LatestOnNewPayload,
-    LatestOnHeadBlockHash,
-    SafeOnSafeBlockHash,
+    LatestOnNewPayload, LatestOnHeadBlockHash, SafeOnSafeBlockHash,
     FinalizedOnFinalizedBlockHash,
   ]
 
@@ -287,14 +240,14 @@ proc makeEngineTest*(): seq[EngineSpec] =
     result.add BlockStatus(checkType: field)
 
   # Fork ID Tests
-  for genesisTimestamp in 0..1:
-    for forkTime in 0..2:
-      for prevForkTime in 0..forkTime:
-        for currentBlock in 0..1:
+  for genesisTimestamp in 0 .. 1:
+    for forkTime in 0 .. 2:
+      for prevForkTime in 0 .. forkTime:
+        for currentBlock in 0 .. 1:
           result.add ForkIDSpec(
-            mainFork:         ForkParis,
+            mainFork: ForkParis,
             genesistimestamp: genesisTimestamp,
-            forkTime:         forkTime.uint64,
+            forkTime: forkTime.uint64,
             previousForkTime: prevForkTime.uint64,
             produceBlocksBeforePeering: currentBlock,
           )
@@ -304,56 +257,42 @@ proc makeEngineTest*(): seq[EngineSpec] =
   # Sidechain re-org tests
   result.add SidechainReOrgTest()
   result.add ReOrgBackFromSyncingTest(
-    slotsToSafe:      32,
-    slotsToFinalized: 64,
-    enableConfigureCLMock: true,
+    slotsToSafe: 32, slotsToFinalized: 64, enableConfigureCLMock: true
   )
 
   result.add ReOrgPrevValidatedPayloadOnSideChainTest(
-    slotsToSafe:      32,
-    slotsToFinalized: 64,
-    enableConfigureCLMock: true,
+    slotsToSafe: 32, slotsToFinalized: 64, enableConfigureCLMock: true
   )
 
   result.add SafeReOrgToSideChainTest(
-    slotsToSafe:      1,
-    slotsToFinalized: 2,
-    enableConfigureCLMock: true,
+    slotsToSafe: 1, slotsToFinalized: 2, enableConfigureCLMock: true
   )
 
   # Re-org a transaction out of a block, or into a new block
-  result.add TransactionReOrgTest(
-    scenario: TransactionReOrgScenarioReOrgOut,
-  )
+  result.add TransactionReOrgTest(scenario: TransactionReOrgScenarioReOrgOut)
 
-  result.add TransactionReOrgTest(
-    scenario: TransactionReOrgScenarioReOrgDifferentBlock,
-  )
+  result.add TransactionReOrgTest(scenario: TransactionReOrgScenarioReOrgDifferentBlock)
 
-  result.add TransactionReOrgTest(
-    scenario: TransactionReOrgScenarioNewPayloadOnRevert,
-  )
+  result.add TransactionReOrgTest(scenario: TransactionReOrgScenarioNewPayloadOnRevert)
 
-  result.add TransactionReOrgTest(
-    scenario: TransactionReOrgScenarioReOrgBackIn,
-  )
+  result.add TransactionReOrgTest(scenario: TransactionReOrgScenarioReOrgBackIn)
 
   # Re-Org back into the canonical chain tests
   result.add ReOrgBackToCanonicalTest(
-    slotsToSafe:      10,
+    slotsToSafe: 10,
     slotsToFinalized: 20,
-    timeoutSeconds:   60,
+    timeoutSeconds: 60,
     transactionPerPayload: 1,
-    reOrgDepth:            5,
+    reOrgDepth: 5,
     enableConfigureCLMock: true,
   )
 
   result.add ReOrgBackToCanonicalTest(
-    slotsToSafe:      32,
+    slotsToSafe: 32,
     slotsToFinalized: 64,
-    timeoutSeconds:   120,
-    transactionPerPayload:     50,
-    reOrgDepth:                10,
+    timeoutSeconds: 120,
+    transactionPerPayload: 50,
+    reOrgDepth: 10,
     executeSidePayloadOnReOrg: true,
     enableConfigureCLMock: true,
   )
@@ -372,16 +311,12 @@ proc makeEngineTest*(): seq[EngineSpec] =
       InvalidTransactionNonce,
       InvalidTransactionGas,
       InvalidTransactionGasPrice,
-      InvalidTransactionValue,
-      # InvalidOmmers, Unsupported now
+      InvalidTransactionValue, # InvalidOmmers, Unsupported now
     ]
 
     eightList = [
-      InvalidReceiptsRoot,
-      InvalidGasLimit,
-      InvalidGasUsed,
-      InvalidTimestamp,
-      InvalidPrevRandao
+      InvalidReceiptsRoot, InvalidGasLimit, InvalidGasUsed, InvalidTimestamp,
+      InvalidPrevRandao,
     ]
 
   # Invalid Ancestor Re-Org Tests (Reveal Via Sync)
@@ -393,33 +328,29 @@ proc makeEngineTest*(): seq[EngineSpec] =
 
       if invalidField == InvalidStateRoot:
         result.add InvalidMissingAncestorReOrgSyncTest(
-          timeoutSeconds:   60,
-          slotsToSafe:      32,
+          timeoutSeconds: 60,
+          slotsToSafe: 32,
           slotsToFinalized: 64,
-          invalidField:       invalidField,
+          invalidField: invalidField,
           reOrgFromCanonical: reOrgFromCanonical,
-          emptyTransactions:  true,
-          invalidIndex:       invalidIndex,
+          emptyTransactions: true,
+          invalidIndex: invalidIndex,
           enableConfigureCLMock: true,
         )
 
       result.add InvalidMissingAncestorReOrgSyncTest(
-        timeoutSeconds:   60,
-        slotsToSafe:      32,
+        timeoutSeconds: 60,
+        slotsToSafe: 32,
         slotsToFinalized: 64,
-        invalidField:       invalidField,
+        invalidField: invalidField,
         reOrgFromCanonical: reOrgFromCanonical,
-        invalidIndex:       invalidIndex,
+        invalidIndex: invalidIndex,
         enableConfigureCLMock: true,
       )
 
 proc fillEngineTests(): seq[TestDesc] =
   let list = makeEngineTest()
   for x in list:
-    result.add TestDesc(
-      name: x.getName(),
-      run: executeEngineSpec,
-      spec: x,
-    )
+    result.add TestDesc(name: x.getName(), run: executeEngineSpec, spec: x)
 
 let engineTestList* = fillEngineTests()

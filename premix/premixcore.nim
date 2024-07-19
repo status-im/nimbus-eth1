@@ -9,21 +9,27 @@
 # according to those terms.
 
 import
-  json, strutils, os,
-  chronicles, eth/common,
-  ../nimbus/transaction, ../nimbus/launcher,
-  ./js_tracer, ./parser, ./downloader
+  json,
+  strutils,
+  os,
+  chronicles,
+  eth/common,
+  ../nimbus/transaction,
+  ../nimbus/launcher,
+  ./js_tracer,
+  ./parser,
+  ./downloader
 
 proc fakeAlloc(n: JsonNode) =
-  const
-    chunk = repeat('0', 64)
+  const chunk = repeat('0', 64)
 
   for i in 1 ..< n.len:
-    if not n[i].hasKey("memory"): return
+    if not n[i].hasKey("memory"):
+      return
     let
-      prevMem = n[i-1]["memory"]
+      prevMem = n[i - 1]["memory"]
       currMem = n[i]["memory"]
-      prevPc = n[i-1]["pc"].getInt()
+      prevPc = n[i - 1]["pc"].getInt()
       currPc = n[i]["pc"].getInt()
 
     if currMem.len > prevMem.len and prevPc == currPc - 1:
@@ -70,15 +76,14 @@ proc processNimbusData*(nimbus: JsonNode) =
     trace["structLogs"].fakeAlloc()
 
 proc generatePremixData*(nimbus, geth: JsonNode) =
-  var premixData = %{
-    "nimbus": nimbus,
-    "geth": geth
-  }
+  var premixData = %{"nimbus": nimbus, "geth": geth}
 
   var data = "var premixData = " & premixData.pretty & "\n"
   writeFile(getFileDir("index.html") / "premixData.js", data)
 
-proc hasInternalTx(tx: Transaction, blockNumber: BlockNumber, sender: EthAddress): bool =
+proc hasInternalTx(
+    tx: Transaction, blockNumber: BlockNumber, sender: EthAddress
+): bool =
   let
     number = %(blockNumber.prefixHex)
     recipient = tx.getRecipient(sender)
@@ -91,12 +96,12 @@ proc hasInternalTx(tx: Transaction, blockNumber: BlockNumber, sender: EthAddress
   recipientHasCode
 
 proc jsonTracer(tracer: string): JsonNode =
-  result = %{ "tracer": %tracer }
+  result = %{"tracer": %tracer}
 
 proc requestInternalTx(txHash, tracer: JsonNode): JsonNode =
   let txTrace = request("debug_traceTransaction", %[txHash, tracer])
   if txTrace.kind == JNull:
-    error "requested postState not available", txHash=txHash
+    error "requested postState not available", txHash = txHash
     raise newException(ValueError, "Error when retrieving transaction postState")
   result = txTrace
 
@@ -106,17 +111,18 @@ proc requestAccount*(premix: JsonNode, blockNumber: BlockNumber, address: EthAdd
     address = address.prefixHex
     proof = request("eth_getProof", %[%address, %[], number])
 
-  let account = %{
-    "address": %address,
-    "codeHash": proof["codeHash"],
-    "storageRoot": proof["storageHash"],
-    "balance": proof["balance"],
-    "nonce": proof["nonce"],
-    "code": newJString("0x"),
-    "storage": newJObject(),
-    "accountProof": proof["accountProof"],
-    "storageProof": proof["storageProof"]
-  }
+  let account =
+    %{
+      "address": %address,
+      "codeHash": proof["codeHash"],
+      "storageRoot": proof["storageHash"],
+      "balance": proof["balance"],
+      "nonce": proof["nonce"],
+      "code": newJString("0x"),
+      "storage": newJObject(),
+      "accountProof": proof["accountProof"],
+      "storageProof": proof["storageProof"],
+    }
   premix.add account
 
 proc padding(x: string): JsonNode =
@@ -132,39 +138,41 @@ proc updateAccount*(address: string, account: JsonNode, blockNumber: BlockNumber
     storage.add %k
 
   let proof = request("eth_getProof", %[%address, storage, number])
-  account["address"]     = %address
-  account["codeHash"]    = proof["codeHash"]
+  account["address"] = %address
+  account["codeHash"] = proof["codeHash"]
   account["storageRoot"] = proof["storageHash"]
-  account["nonce"]       = proof["nonce"]
-  account["balance"]     = proof["balance"]
-  account["accountProof"]= proof["accountProof"]
-  account["storageProof"]= proof["storageProof"]
+  account["nonce"] = proof["nonce"]
+  account["balance"] = proof["balance"]
+  account["accountProof"] = proof["accountProof"]
+  account["storageProof"] = proof["storageProof"]
   for x in proof["storageProof"]:
     x["value"] = padding(x["value"].getStr())
     account["storage"][x["key"].getStr] = x["value"]
 
 proc requestPostState*(premix, n: JsonNode, blockNumber: BlockNumber) =
-  type
-    TxKind {.pure.} = enum
-      Regular
-      ContractCreation
-      ContractCall
+  type TxKind {.pure.} = enum
+    Regular
+    ContractCreation
+    ContractCall
 
   let txs = n["transactions"]
-  if txs.len == 0: return
+  if txs.len == 0:
+    return
 
   let tracer = jsonTracer(postStateTracer)
   for t in txs:
     var txKind = TxKind.Regular
     let tx = parseTransaction(t)
     let sender = tx.getSender
-    if tx.contractCreation: txKind = TxKind.ContractCreation
+    if tx.contractCreation:
+      txKind = TxKind.ContractCreation
     if hasInternalTx(tx, blockNumber, sender):
       let txTrace = requestInternalTx(t["hash"], tracer)
       for address, account in txTrace:
         updateAccount(address, account, blockNumber)
         premix.add account
-      if not tx.contractCreation: txKind = TxKind.ContractCall
+      if not tx.contractCreation:
+        txKind = TxKind.ContractCall
     else:
       premix.requestAccount(blockNumber, tx.getRecipient(sender))
       premix.requestAccount(blockNumber, sender)

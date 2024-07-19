@@ -23,8 +23,7 @@ import ../evm/computation except fromEvmc, toEvmc
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
   dealloc(res.output_data)
 
-proc beforeExecCreateEvmcNested(host: TransactionHost,
-                                m: EvmcMessage): Computation =
+proc beforeExecCreateEvmcNested(host: TransactionHost, m: EvmcMessage): Computation =
   # TODO: use evmc_message to avoid copy
   let childMsg = Message(
     kind: CallKind(m.kind.ord),
@@ -32,13 +31,14 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
     gas: GasInt m.gas,
     sender: m.sender.fromEvmc,
     value: m.value.fromEvmc,
-    data: @(makeOpenArray(m.inputData, m.inputSize.int))
+    data: @(makeOpenArray(m.inputData, m.inputSize.int)),
   )
-  return newComputation(host.vmState, false, childMsg,
-                        cast[ContractSalt](m.create2_salt))
+  return
+    newComputation(host.vmState, false, childMsg, cast[ContractSalt](m.create2_salt))
 
-proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
-                               res: var EvmcResult) {.inline.} =
+proc afterExecCreateEvmcNested(
+    host: TransactionHost, child: Computation, res: var EvmcResult
+) {.inline.} =
   if not child.shouldBurnGas:
     res.gas_left = int64.saturate(child.gasMeter.gasRemaining)
 
@@ -55,26 +55,29 @@ proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
       copyMem(res.output_data, child.output[0].addr, child.output.len)
       res.release = evmcResultRelease
 
-proc beforeExecCallEvmcNested(host: TransactionHost,
-                              m: EvmcMessage): Computation {.inline.} =
+proc beforeExecCallEvmcNested(
+    host: TransactionHost, m: EvmcMessage
+): Computation {.inline.} =
   let childMsg = Message(
     kind: CallKind(m.kind.ord),
     depth: m.depth,
     gas: GasInt m.gas,
     sender: m.sender.fromEvmc,
     codeAddress: m.code_address.fromEvmc,
-    contractAddress: if m.kind == EVMC_CALL:
-                       m.recipient.fromEvmc
-                     else:
-                       host.computation.msg.contractAddress,
+    contractAddress:
+      if m.kind == EVMC_CALL:
+        m.recipient.fromEvmc
+      else:
+        host.computation.msg.contractAddress,
     value: m.value.fromEvmc,
     data: @(makeOpenArray(m.inputData, m.inputSize.int)),
     flags: m.flags,
   )
   return newComputation(host.vmState, false, childMsg)
 
-proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
-                             res: var EvmcResult) {.inline.} =
+proc afterExecCallEvmcNested(
+    host: TransactionHost, child: Computation, res: var EvmcResult
+) {.inline.} =
   if not child.shouldBurnGas:
     res.gas_left = int64.saturate(child.gasMeter.gasRemaining)
 
@@ -113,8 +116,9 @@ proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
 # The functions `beforeExecEvmcNested` and `afterExecEvmcNested` can use as
 # much stack as they like.
 
-proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
-    {.noinline.} =
+proc beforeExecEvmcNested(
+    host: TransactionHost, msg: EvmcMessage
+): Computation {.noinline.} =
   # This function must be declared with `{.noinline.}` to make sure it doesn't
   # contribute to the stack frame of `callEvmcNested` below.
   # `call` is special.  Most host functions do `flip256` in `evmc_host_glue`
@@ -125,20 +129,23 @@ proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
   var msg = msg # Make a local copy that's ok to modify.
   msg.value = flip256(msg.value)
   host.showCallEntry(msg)
-  let c = if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
-            beforeExecCreateEvmcNested(host, msg)
-          else:
-            beforeExecCallEvmcNested(host, msg)
+  let c =
+    if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
+      beforeExecCreateEvmcNested(host, msg)
+    else:
+      beforeExecCallEvmcNested(host, msg)
   when defined(evmc_enabled):
-    c.host.init(cast[ptr nimbus_host_interface](host.hostInterface),
-                cast[typeof(c.host.context)](host))
+    c.host.init(
+      cast[ptr nimbus_host_interface](host.hostInterface),
+      cast[typeof(c.host.context)](host),
+    )
   host.saveComputation.add(host.computation)
   host.computation = c
   return c
 
-proc afterExecEvmcNested(host: TransactionHost, child: Computation,
-                         kind: EvmcCallKind): EvmcResult
-    {.noinline.} =
+proc afterExecEvmcNested(
+    host: TransactionHost, child: Computation, kind: EvmcCallKind
+): EvmcResult {.noinline.} =
   # This function must be declared with `{.noinline.}` to make sure it doesn't
   # contribute to the stack frame of `callEvmcNested` below.
   host.computation = host.saveComputation[^1]

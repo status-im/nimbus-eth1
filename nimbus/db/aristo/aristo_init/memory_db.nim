@@ -36,25 +36,24 @@ import
   ../aristo_blobify,
   ./init_common
 
-const
-   extraTraceMessages = false # or true
-     ## Enabled additional logging noise
+const extraTraceMessages = false
+  # or true
+  ## Enabled additional logging noise
 
 type
-  MemDbRef = ref object
-    ## Database
-    sTab: Table[RootedVertexID,Blob]       ## Structural vertex table making up a trie
-    kMap: Table[RootedVertexID,HashKey]    ## Merkle hash key mapping
-    tUvi: Option[VertexID]           ## Top used vertex ID
-    lSst: Opt[SavedState]            ## Last saved state
+  MemDbRef = ref object ## Database
+    sTab: Table[RootedVertexID, Blob] ## Structural vertex table making up a trie
+    kMap: Table[RootedVertexID, HashKey] ## Merkle hash key mapping
+    tUvi: Option[VertexID] ## Top used vertex ID
+    lSst: Opt[SavedState] ## Last saved state
 
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
-    mdb: MemDbRef                    ## Database
+    mdb: MemDbRef ## Database
 
   MemPutHdlRef = ref object of TypedPutHdlRef
-    sTab: Table[RootedVertexID,Blob]
-    kMap: Table[RootedVertexID,HashKey]
+    sTab: Table[RootedVertexID, Blob]
+    kMap: Table[RootedVertexID, HashKey]
     tUvi: Option[VertexID]
     lSst: Opt[SavedState]
 
@@ -75,11 +74,11 @@ proc newSession(db: MemBackendRef): MemPutHdlRef =
   new result
   result.TypedPutHdlRef.beginSession db
 
-proc getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+proc getSession(hdl: PutHdlRef, db: MemBackendRef): MemPutHdlRef =
   hdl.TypedPutHdlRef.verifySession db
   hdl.MemPutHdlRef
 
-proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+proc endSession(hdl: PutHdlRef, db: MemBackendRef): MemPutHdlRef =
   hdl.TypedPutHdlRef.finishSession db
   hdl.MemPutHdlRef
 
@@ -88,144 +87,126 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 # ------------------------------------------------------------------------------
 
 proc getVtxFn(db: MemBackendRef): GetVtxFn =
-  result =
-    proc(rvid: RootedVertexID): Result[VertexRef,AristoError] =
-      # Fetch serialised data record
-      let data = db.mdb.sTab.getOrDefault(rvid, EmptyBlob)
-      if 0 < data.len:
-        let rc = data.deblobify(VertexRef)
-        when extraTraceMessages:
-          if rc.isErr:
-            trace logTxt "getVtxFn() failed", error=rc.error
-        return rc
-      err(GetVtxNotFound)
+  result = proc(rvid: RootedVertexID): Result[VertexRef, AristoError] =
+    # Fetch serialised data record
+    let data = db.mdb.sTab.getOrDefault(rvid, EmptyBlob)
+    if 0 < data.len:
+      let rc = data.deblobify(VertexRef)
+      when extraTraceMessages:
+        if rc.isErr:
+          trace logTxt "getVtxFn() failed", error = rc.error
+      return rc
+    err(GetVtxNotFound)
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
-  result =
-    proc(rvid: RootedVertexID): Result[HashKey,AristoError] =
-      let key = db.mdb.kMap.getOrVoid rvid
-      if key.isValid:
-        return ok key
-      err(GetKeyNotFound)
+  result = proc(rvid: RootedVertexID): Result[HashKey, AristoError] =
+    let key = db.mdb.kMap.getOrVoid rvid
+    if key.isValid:
+      return ok key
+    err(GetKeyNotFound)
 
 proc getTuvFn(db: MemBackendRef): GetTuvFn =
-  result =
-    proc(): Result[VertexID,AristoError]=
-      if db.mdb.tUvi.isSome:
-        return ok db.mdb.tUvi.unsafeGet
-      err(GetTuvNotFound)
+  result = proc(): Result[VertexID, AristoError] =
+    if db.mdb.tUvi.isSome:
+      return ok db.mdb.tUvi.unsafeGet
+    err(GetTuvNotFound)
 
 proc getLstFn(db: MemBackendRef): GetLstFn =
-  result =
-    proc(): Result[SavedState,AristoError]=
-      if db.mdb.lSst.isSome:
-        return ok db.mdb.lSst.unsafeGet
-      err(GetLstNotFound)
+  result = proc(): Result[SavedState, AristoError] =
+    if db.mdb.lSst.isSome:
+      return ok db.mdb.lSst.unsafeGet
+    err(GetLstNotFound)
 
 # -------------
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
-  result =
-    proc(): Result[PutHdlRef,AristoError] =
-      ok db.newSession()
-
+  result = proc(): Result[PutHdlRef, AristoError] =
+    ok db.newSession()
 
 proc putVtxFn(db: MemBackendRef): PutVtxFn =
-  result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef) =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        if vtx.isValid:
-          let rc = vtx.blobify()
-          if rc.isErr:
-            hdl.error = TypedPutHdlErrRef(
-              pfx:  VtxPfx,
-              vid:  rvid.vid,
-              code: rc.error)
-            return
-          hdl.sTab[rvid] = rc.value
-        else:
-          hdl.sTab[rvid] = EmptyBlob
+  result = proc(hdl: PutHdlRef, rvid: RootedVertexID, vtx: VertexRef) =
+    let hdl = hdl.getSession db
+    if hdl.error.isNil:
+      if vtx.isValid:
+        let rc = vtx.blobify()
+        if rc.isErr:
+          hdl.error = TypedPutHdlErrRef(pfx: VtxPfx, vid: rvid.vid, code: rc.error)
+          return
+        hdl.sTab[rvid] = rc.value
+      else:
+        hdl.sTab[rvid] = EmptyBlob
 
 proc putKeyFn(db: MemBackendRef): PutKeyFn =
-  result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID, key: HashKey) =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        hdl.kMap[rvid] = key
+  result = proc(hdl: PutHdlRef, rvid: RootedVertexID, key: HashKey) =
+    let hdl = hdl.getSession db
+    if hdl.error.isNil:
+      hdl.kMap[rvid] = key
 
 proc putTuvFn(db: MemBackendRef): PutTuvFn =
-  result =
-    proc(hdl: PutHdlRef; vs: VertexID)  =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        hdl.tUvi = some(vs)
+  result = proc(hdl: PutHdlRef, vs: VertexID) =
+    let hdl = hdl.getSession db
+    if hdl.error.isNil:
+      hdl.tUvi = some(vs)
 
 proc putLstFn(db: MemBackendRef): PutLstFn =
-  result =
-    proc(hdl: PutHdlRef; lst: SavedState) =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        let rc = lst.blobify # test
-        if rc.isOk:
-          hdl.lSst = Opt.some(lst)
-        else:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            aid:  AdmTabIdLst,
-            code: rc.error)
+  result = proc(hdl: PutHdlRef, lst: SavedState) =
+    let hdl = hdl.getSession db
+    if hdl.error.isNil:
+      let rc = lst.blobify # test
+      if rc.isOk:
+        hdl.lSst = Opt.some(lst)
+      else:
+        hdl.error = TypedPutHdlErrRef(pfx: AdmPfx, aid: AdmTabIdLst, code: rc.error)
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
-  result =
-    proc(hdl: PutHdlRef): Result[void,AristoError] =
-      let hdl = hdl.endSession db
-      if not hdl.error.isNil:
-        when extraTraceMessages:
-          case hdl.error.pfx:
-          of VtxPfx, KeyPfx: trace logTxt "putEndFn: vtx/key failed",
-            pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
-          of AdmPfx: trace logTxt "putEndFn: admin failed",
-            pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
-          of Oops: trace logTxt "putEndFn: failed",
-             pfx=hdl.error.pfx, error=hdl.error.code
-        return err(hdl.error.code)
+  result = proc(hdl: PutHdlRef): Result[void, AristoError] =
+    let hdl = hdl.endSession db
+    if not hdl.error.isNil:
+      when extraTraceMessages:
+        case hdl.error.pfx
+        of VtxPfx, KeyPfx:
+          trace logTxt "putEndFn: vtx/key failed",
+            pfx = hdl.error.pfx, vid = hdl.error.vid, error = hdl.error.code
+        of AdmPfx:
+          trace logTxt "putEndFn: admin failed",
+            pfx = AdmPfx, aid = hdl.error.aid.uint64, error = hdl.error.code
+        of Oops:
+          trace logTxt "putEndFn: failed", pfx = hdl.error.pfx, error = hdl.error.code
+      return err(hdl.error.code)
 
-      for (vid,data) in hdl.sTab.pairs:
-        if 0 < data.len:
-          db.mdb.sTab[vid] = data
-        else:
-          db.mdb.sTab.del vid
+    for (vid, data) in hdl.sTab.pairs:
+      if 0 < data.len:
+        db.mdb.sTab[vid] = data
+      else:
+        db.mdb.sTab.del vid
 
-      for (vid,key) in hdl.kMap.pairs:
-        if key.isValid:
-          db.mdb.kMap[vid] = key
-        else:
-          db.mdb.kMap.del vid
+    for (vid, key) in hdl.kMap.pairs:
+      if key.isValid:
+        db.mdb.kMap[vid] = key
+      else:
+        db.mdb.kMap.del vid
 
-      let tuv = hdl.tUvi.get(otherwise = VertexID(0))
-      if tuv.isValid:
-        db.mdb.tUvi = some(tuv)
+    let tuv = hdl.tUvi.get(otherwise = VertexID(0))
+    if tuv.isValid:
+      db.mdb.tUvi = some(tuv)
 
-      if hdl.lSst.isSome:
-        db.mdb.lSst = hdl.lSst
+    if hdl.lSst.isSome:
+      db.mdb.lSst = hdl.lSst
 
-      ok()
+    ok()
 
 # -------------
 
 proc closeFn(db: MemBackendRef): CloseFn =
-  result =
-    proc(ignore: bool) =
-      discard
+  result = proc(ignore: bool) =
+    discard
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc memoryBackend*(): BackendRef =
-  let db = MemBackendRef(
-    beKind: BackendMemory,
-    mdb:    MemDbRef())
+  let db = MemBackendRef(beKind: BackendMemory, mdb: MemDbRef())
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
@@ -252,29 +233,24 @@ proc dup*(db: MemBackendRef): MemBackendRef =
 # Public iterators (needs direct backend access)
 # ------------------------------------------------------------------------------
 
-iterator walkVtx*(
-    be: MemBackendRef;
-      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
+iterator walkVtx*(be: MemBackendRef): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
-  for n,rvid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
+  for n, rvid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
     let data = be.mdb.sTab.getOrDefault(rvid, EmptyBlob)
     if 0 < data.len:
       let rc = data.deblobify VertexRef
       if rc.isErr:
         when extraTraceMessages:
-          debug logTxt "walkVtxFn() skip", n, rvid, error=rc.error
+          debug logTxt "walkVtxFn() skip", n, rvid, error = rc.error
       else:
         yield (rvid, rc.value)
 
-iterator walkKey*(
-    be: MemBackendRef;
-      ): tuple[rvid: RootedVertexID, key: HashKey] =
+iterator walkKey*(be: MemBackendRef): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Iteration over the Markle hash sub-table.
   for rvid in be.mdb.kMap.keys.toSeq.mapIt(it).sorted:
     let key = be.mdb.kMap.getOrVoid(rvid)
     if key.isValid:
       yield (rvid, key)
-
 
 # ------------------------------------------------------------------------------
 # End

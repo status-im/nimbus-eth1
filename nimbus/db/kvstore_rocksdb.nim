@@ -10,11 +10,7 @@
 
 {.push raises: [].}
 
-import
-  std/[os, sequtils],
-  results,
-  rocksdb,
-  eth/db/kvstore
+import std/[os, sequtils], results, rocksdb, eth/db/kvstore
 
 export kvstore
 
@@ -33,15 +29,13 @@ proc rocksDb*(store: RocksStoreRef): RocksDbReadWriteRef =
   store.db
 
 proc get*(
-    store: RocksStoreRef,
-    key: openArray[byte],
-    onData: kvstore.DataProc): KvResult[bool] =
+    store: RocksStoreRef, key: openArray[byte], onData: kvstore.DataProc
+): KvResult[bool] =
   store.db.get(key, onData)
 
 proc find*(
-    store: RocksStoreRef,
-    prefix: openArray[byte],
-    onFind: kvstore.KeyValueProc): KvResult[int] =
+    store: RocksStoreRef, prefix: openArray[byte], onFind: kvstore.KeyValueProc
+): KvResult[int] =
   raiseAssert "Unimplemented"
 
 proc put*(store: RocksStoreRef, key, value: openArray[byte]): KvResult[void] =
@@ -51,7 +45,6 @@ proc contains*(store: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
   store.db.keyExists(key)
 
 proc del*(store: RocksStoreRef, key: openArray[byte]): KvResult[bool] =
-
   let rc = store.db.keyExists(key)
   if rc.isErr:
     return rc
@@ -71,11 +64,8 @@ proc close*(store: RocksStoreRef) =
   store.db.close()
 
 proc init*(
-    T: type RocksStoreRef,
-    basePath: string,
-    name: string,
-    namespaces = @["default"]): KvResult[T] =
-
+    T: type RocksStoreRef, basePath: string, name: string, namespaces = @["default"]
+): KvResult[T] =
   let dataDir = basePath / name / "data"
 
   try:
@@ -83,8 +73,13 @@ proc init*(
   except OSError, IOError:
     return err("RocksStoreRef: cannot create database directory")
 
-  let db = ? openRocksDb(dataDir, columnFamilies = namespaces.mapIt(
-      initColFamilyDescriptor(it, defaultColFamilyOptions(autoClose = true))))
+  let db =
+    ?openRocksDb(
+      dataDir,
+      columnFamilies = namespaces.mapIt(
+        initColFamilyDescriptor(it, defaultColFamilyOptions(autoClose = true))
+      ),
+    )
   ok(T(db: db))
 
 # ------------------------------------------------------------------------------
@@ -95,15 +90,13 @@ proc name*(store: RocksNamespaceRef): string =
   store.colFamily.name
 
 proc get*(
-    ns: RocksNamespaceRef,
-    key: openArray[byte],
-    onData: kvstore.DataProc): KvResult[bool] =
+    ns: RocksNamespaceRef, key: openArray[byte], onData: kvstore.DataProc
+): KvResult[bool] =
   ns.colFamily.get(key, onData)
 
 proc find*(
-    ns: RocksNamespaceRef,
-    prefix: openArray[byte],
-    onFind: kvstore.KeyValueProc): KvResult[int] =
+    ns: RocksNamespaceRef, prefix: openArray[byte], onFind: kvstore.KeyValueProc
+): KvResult[int] =
   raiseAssert "Unimplemented"
 
 proc put*(ns: RocksNamespaceRef, key, value: openArray[byte]): KvResult[void] =
@@ -113,7 +106,7 @@ proc contains*(ns: RocksNamespaceRef, key: openArray[byte]): KvResult[bool] =
   ns.colFamily.keyExists(key)
 
 proc del*(ns: RocksNamespaceRef, key: openArray[byte]): KvResult[bool] =
-  let exists = ? ns.colFamily.keyExists(key)
+  let exists = ?ns.colFamily.keyExists(key)
   if not exists:
     return ok(false)
 
@@ -130,9 +123,7 @@ proc close*(ns: RocksNamespaceRef) =
   # To close the database, call close on RocksStoreRef.
   raiseAssert "Unimplemented"
 
-proc openNamespace*(
-    store: RocksStoreRef,
-    name: string): KvResult[RocksNamespaceRef] =
+proc openNamespace*(store: RocksStoreRef, name: string): KvResult[RocksNamespaceRef] =
   doAssert not store.db.isClosed()
 
   ok(RocksNamespaceRef(colFamily: ?store.db.getColFamily(name)))

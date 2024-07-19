@@ -21,13 +21,10 @@ import
   ../../aristo_blobify,
   ../../aristo_desc/desc_identifiers
 
-const
-  extraTraceMessages = false
-    ## Enable additional logging noise
+const extraTraceMessages = false ## Enable additional logging noise
 
 when extraTraceMessages:
-  import
-    chronicles
+  import chronicles
 
   logScope:
     topics = "aristo-rocksdb"
@@ -46,9 +43,10 @@ iterator walkAdm*(rdb: RdbInst): tuple[xid: uint64, data: Blob] =
       when extraTraceMessages:
         trace logTxt "walkAdm()", error
       break walkBody
-    defer: rit.close()
+    defer:
+      rit.close()
 
-    for (key,val) in rit.pairs:
+    for (key, val) in rit.pairs:
       if key.len == 8 and val.len != 0:
         yield (uint64.fromBytesBE key, val)
 
@@ -62,15 +60,15 @@ iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
       when extraTraceMessages:
         trace logTxt "walkKey()", error
       break walkBody
-    defer: rit.close()
+    defer:
+      rit.close()
 
-    for (key,val) in rit.pairs:
+    for (key, val) in rit.pairs:
       if val.len != 0:
         let rvid = key.deblobify(RootedVertexID).valueOr:
           continue
 
         yield (rvid, val)
-
 
 iterator walkVtx*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
   ## Walk over key-value pairs of the hash key column of the database.
@@ -82,9 +80,10 @@ iterator walkVtx*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
       when extraTraceMessages:
         trace logTxt "walkVtx()", error
       break walkBody
-    defer: rit.close()
+    defer:
+      rit.close()
 
-    for (key,val) in rit.pairs:
+    for (key, val) in rit.pairs:
       if val.len != 0:
         let rvid = key.deblobify(RootedVertexID).valueOr:
           continue

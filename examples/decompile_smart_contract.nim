@@ -10,8 +10,7 @@
 
 import ../nimbus/evm/code_stream, strformat
 
-var c =
-  CodeStream.init(CodeBytesRef.fromHex("0x6003600202600055").expect("valid code"))
+var c = CodeStream.init(CodeBytesRef.fromHex("0x6003600202600055").expect("valid code"))
 
 let opcodes = c.decompile()
 for op in opcodes:

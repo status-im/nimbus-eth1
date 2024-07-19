@@ -7,8 +7,10 @@
 
 import
   std/[strutils, tables, json, os, sets],
-  ./test_helpers, ./test_allowed_to_fail,
-  ../nimbus/core/executor, test_config,
+  ./test_helpers,
+  ./test_allowed_to_fail,
+  ../nimbus/core/executor,
+  test_config,
   ../nimbus/transaction,
   ../nimbus/[evm/state, evm/types],
   ../nimbus/db/ledger,
@@ -24,29 +26,28 @@ import
   stew/byteutils,
   results
 
-type
-  TestCtx = object
-    name: string
-    parent: BlockHeader
-    header: BlockHeader
-    pre: JsonNode
-    tx: Transaction
-    expectedHash: Hash256
-    expectedLogs: Hash256
-    chainConfig: ChainConfig
-    debugMode: bool
-    trace: bool
-    index: int
-    fork: string
+type TestCtx = object
+  name: string
+  parent: BlockHeader
+  header: BlockHeader
+  pre: JsonNode
+  tx: Transaction
+  expectedHash: Hash256
+  expectedLogs: Hash256
+  chainConfig: ChainConfig
+  debugMode: bool
+  trace: bool
+  index: int
+  fork: string
 
-var
-  trustedSetupLoaded = false
+var trustedSetupLoaded = false
 
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
-  for i in 0..<x.len: result[i] = x[i].byte
+  for i in 0 ..< x.len:
+    result[i] = x[i].byte
 
-method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256 =
+method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 =
   if blockNumber >= vmState.blockNumber:
     return Hash256()
   elif blockNumber < 0:
@@ -57,32 +58,43 @@ method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256
     return keccakHash(toBytes($blockNumber))
 
 func normalizeFileName(x: string): string =
-  const invalidChars = ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', ',', ';', '=']
+  const invalidChars =
+    ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', ',', ';', '=']
   result = newStringOfCap(x.len)
   for c in x:
-    if c in invalidChars: result.add '_'
-    else: result.add c
+    if c in invalidChars:
+      result.add '_'
+    else:
+      result.add c
 
 proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success: bool) =
   let tracerInst = LegacyTracer(vmState.tracer)
-  let tracingResult = if ctx.trace: tracerInst.getTracingResult() else: %[]
-  let debugData = %{
-    "gasUsed": %gasUsed,
-    "structLogs": tracingResult,
-    "accounts": vmState.dumpAccounts()
-  }
+  let tracingResult =
+    if ctx.trace:
+      tracerInst.getTracingResult()
+    else:
+      %[]
+  let debugData =
+    %{
+      "gasUsed": %gasUsed,
+      "structLogs": tracingResult,
+      "accounts": vmState.dumpAccounts(),
+    }
   let status = if success: "_success" else: "_failed"
   let fileName = normalizeFileName(ctx.name)
-  writeFile(fileName & "_" & ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty())
+  writeFile(
+    fileName & "_" & ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty()
+  )
 
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
-    com    = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
     parent = BlockHeader(stateRoot: emptyRlpHash)
-    tracer = if ctx.trace:
-               newLegacyTracer({})
-             else:
-               LegacyTracer(nil)
+    tracer =
+      if ctx.trace:
+        newLegacyTracer({})
+      else:
+        LegacyTracer(nil)
 
   if com.isCancunOrLater(ctx.header.timestamp):
     if not trustedSetupLoaded:
@@ -92,12 +104,8 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
         quit(QuitFailure)
       trustedSetupLoaded = true
 
-  let vmState = BaseVMState.new(
-      parent = parent,
-      header = ctx.header,
-      com    = com,
-      tracer = tracer,
-    )
+  let vmState =
+    BaseVMState.new(parent = parent, header = ctx.header, com = com, tracer = tracer)
 
   var gasUsed: GasInt
   let sender = ctx.tx.getSender()
@@ -110,8 +118,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     # during the next call to `getComittedStorage`
     db.persist()
 
-  let rc = vmState.processTransaction(
-                ctx.tx, sender, ctx.header)
+  let rc = vmState.processTransaction(ctx.tx, sender, ctx.header)
   if rc.isOk:
     gasUsed = rc.value
 
@@ -125,11 +132,13 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     let actualLogsHash = rlpHash(logEntries)
     check(ctx.expectedLogs == actualLogsHash)
     if ctx.debugMode:
-      let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
+      let success =
+        ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
       ctx.dumpDebugData(vmState, gasUsed, success)
 
-proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
-                 trace = false, debugMode = false) =
+proc testFixture(
+    fixtures: JsonNode, testStatusIMPL: var TestStatus, trace = false, debugMode = false
+) =
   var ctx: TestCtx
   var fixture: JsonNode
   for label, child in fixtures:
@@ -137,16 +146,16 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
     ctx.name = label
     break
 
-  ctx.pre    = fixture["pre"]
+  ctx.pre = fixture["pre"]
   ctx.parent = parseParentHeader(fixture["env"])
   ctx.header = parseHeader(fixture["env"])
-  ctx.trace  = trace
+  ctx.trace = trace
   ctx.debugMode = debugMode
 
   let
-    post   = fixture["post"]
+    post = fixture["post"]
     txData = fixture["transaction"]
-    conf   = getConfiguration()
+    conf = getConfiguration()
 
   template prepareFork(forkName: string) =
     try:

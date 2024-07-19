@@ -20,14 +20,14 @@ const
   # example from clique, signer: 658bdf435d810c91414ec09147daa6db62406379
   prvKey = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
 
-proc signature(tx: Transaction; key: PrivateKey): (uint64,UInt256,UInt256) =
+proc signature(tx: Transaction, key: PrivateKey): (uint64, UInt256, UInt256) =
   let
     hashData = tx.txHashNoSignature.data
     signature = key.sign(SkMessage(hashData)).toRaw
     v = signature[64].uint64
 
-  result[1] = UInt256.fromBytesBE(signature[0..31])
-  result[2] = UInt256.fromBytesBE(signature[32..63])
+  result[1] = UInt256.fromBytesBE(signature[0 .. 31])
+  result[2] = UInt256.fromBytesBE(signature[32 .. 63])
 
   if tx.txType == TxLegacy:
     if tx.V >= EIP155_CHAIN_ID_OFFSET:
@@ -40,16 +40,14 @@ proc signature(tx: Transaction; key: PrivateKey): (uint64,UInt256,UInt256) =
     # currently unsupported, will skip this one .. see `txModPair()`
     result[0] = 0'u64
 
-
-proc sign(tx: Transaction; key: PrivateKey): Transaction =
-  let (V,R,S) = tx.signature(key)
+proc sign(tx: Transaction, key: PrivateKey): Transaction =
+  let (V, R, S) = tx.signature(key)
   result = tx
   result.V = V
   result.R = R
   result.S = S
 
-
-proc sign(header: BlockHeader; key: PrivateKey): BlockHeader =
+proc sign(header: BlockHeader, key: PrivateKey): BlockHeader =
   let
     hashData = header.blockHash.data
     signature = key.sign(SkMessage(hashData)).toRaw
@@ -63,8 +61,9 @@ let
   pubTestKey* = prvTestKey.toPublicKey
   testAddress* = pubTestKey.toCanonicalAddress
 
-proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
-              (TxItemRef,Transaction,Transaction) =
+proc txModPair*(
+    item: TxItemRef, nonce: int, priceBump: int
+): (TxItemRef, Transaction, Transaction) =
   ## Produce pair of modified txs, might fail => so try another one
   var tx0 = item.tx
   tx0.nonce = nonce.AccountNonce
@@ -83,18 +82,19 @@ proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
     let rc = tx1Signed.ecRecover
     if rc.isErr or rc.value != testAddress:
       return
-  (item,tx0Signed,tx1Signed)
+  (item, tx0Signed, tx1Signed)
 
 proc testKeySign*(header: BlockHeader): BlockHeader =
   ## Sign the header and embed the signature in extra data
   header.sign(prvTestKey)
 
-proc signerFunc*(signer: EthAddress, msg: openArray[byte]):
-                Result[array[RawSignatureSize, byte], cstring] {.gcsafe.} =
+proc signerFunc*(
+    signer: EthAddress, msg: openArray[byte]
+): Result[array[RawSignatureSize, byte], cstring] {.gcsafe.} =
   doAssert(signer == testAddress)
   let
     data = keccakHash(msg)
-    rawSign  = sign(prvTestKey, SkMessage(data.data)).toRaw
+    rawSign = sign(prvTestKey, SkMessage(data.data)).toRaw
 
   ok(rawSign)
 

@@ -10,10 +10,7 @@
 
 {.push raises: [].}
 
-import
-  eth/common,
-  results,
-  "."/[aristo_desc, aristo_get, aristo_serialise]
+import eth/common, results, "."/[aristo_desc, aristo_get, aristo_serialise]
 
 proc putKeyAtLevel(
     db: AristoDbRef, rvid: RootedVertexID, key: HashKey, level: int
@@ -45,9 +42,9 @@ func maxLevel(cur, other: int): int =
     min(cur, other) # Here the order is reversed and 0 is the top layer
 
 proc computeKeyImpl(
-    db: AristoDbRef;                  # Database, top layer
-    rvid: RootedVertexID;             # Vertex to convert
-      ): Result[(HashKey, int), AristoError] =
+    db: AristoDbRef, # Database, top layer
+    rvid: RootedVertexID, # Vertex to convert
+): Result[(HashKey, int), AristoError] =
   ## Compute the key for an arbitrary vertex ID. If successful, the length of
   ## the resulting key might be smaller than 32. If it is used as a root vertex
   ## state/hash, it must be converted to a `Hash256` (using (`.to(Hash256)`) as
@@ -57,7 +54,7 @@ proc computeKeyImpl(
   db.getKeyRc(rvid).isErrOr:
     # Value cached either in layers or database
     return ok value
-  let (vtx, vl) = ? db.getVtxRc rvid
+  let (vtx, vl) = ?db.getVtxRc rvid
 
   # Top-most level of all the verticies this hash compution depends on
   var level = vl
@@ -65,7 +62,7 @@ proc computeKeyImpl(
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   var writer = initRlpWriter()
 
-  case vtx.vType:
+  case vtx.vType
   of Leaf:
     writer.startList(2)
     writer.append(vtx.lPfx.toHexPrefix(isLeaf = true))
@@ -82,22 +79,23 @@ proc computeKeyImpl(
           else:
             VOID_HASH_KEY
 
-      writer.append(encode Account(
-        nonce:       vtx.lData.account.nonce,
-        balance:     vtx.lData.account.balance,
-        storageRoot: skey.to(Hash256),
-        codeHash:    vtx.lData.account.codeHash)
+      writer.append(
+        encode Account(
+          nonce: vtx.lData.account.nonce,
+          balance: vtx.lData.account.balance,
+          storageRoot: skey.to(Hash256),
+          codeHash: vtx.lData.account.codeHash,
+        )
       )
     of RawData:
       writer.append(vtx.lData.rawBlob)
     of StoData:
       # TODO avoid memory allocation when encoding storage data
       writer.append(rlp.encode(vtx.lData.stoData))
-
   of Branch:
     template writeBranch(w: var RlpWriter) =
       w.startList(17)
-      for n in 0..15:
+      for n in 0 .. 15:
         let vid = vtx.bVid[n]
         if vid.isValid:
           let (bkey, bl) = ?db.computeKeyImpl((rvid.root, vid))
@@ -106,6 +104,7 @@ proc computeKeyImpl(
         else:
           w.append(VOID_HASH_KEY)
       w.append EmptyBlob
+
     if vtx.ePfx.len > 0: # Extension node
       var bwriter = initRlpWriter()
       writeBranch(bwriter)
@@ -124,14 +123,14 @@ proc computeKeyImpl(
   # likely to live in an in-memory layer since any leaf change will lead to the
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
-  ? db.putKeyAtLevel(rvid, h, level)
+  ?db.putKeyAtLevel(rvid, h, level)
 
   ok (h, level)
 
 proc computeKey*(
-    db: AristoDbRef;                  # Database, top layer
-    rvid: RootedVertexID;             # Vertex to convert
-      ): Result[HashKey, AristoError] =
+    db: AristoDbRef, # Database, top layer
+    rvid: RootedVertexID, # Vertex to convert
+): Result[HashKey, AristoError] =
   ok (?computeKeyImpl(db, rvid))[0]
 
 # ------------------------------------------------------------------------------

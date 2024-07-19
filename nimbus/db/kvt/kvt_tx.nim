@@ -14,16 +14,13 @@
 {.push raises: [].}
 
 import
-  results,
-  ./kvt_tx/[tx_fork, tx_frame, tx_stow],
-  ./kvt_init/memory_only,
-  ./kvt_desc
+  results, ./kvt_tx/[tx_fork, tx_frame, tx_stow], ./kvt_init/memory_only, ./kvt_desc
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-func txTop*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
+func txTop*(db: KvtDbRef): Result[KvtTxRef, KvtError] =
   ## Getter, returns top level transaction if there is any.
   db.txFrameTop()
 
@@ -44,7 +41,7 @@ func level*(db: KvtDbRef): int =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func to*(tx: KvtTxRef; T: type[KvtDbRef]): T =
+func to*(tx: KvtTxRef, T: type[KvtDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
   tx.db
 
@@ -53,9 +50,8 @@ func toKvtDbRef*(tx: KvtTxRef): KvtDbRef =
   tx.db
 
 proc forkTx*(
-    db: KvtDbRef;
-    backLevel: int;                   # Backward location of transaction
-      ): Result[KvtDbRef,KvtError] =
+    db: KvtDbRef, backLevel: int, # Backward location of transaction
+): Result[KvtDbRef, KvtError] =
   ## Fork a new descriptor obtained from parts of the argument database
   ## as described by arguments `db` and `backLevel`.
   ##
@@ -99,13 +95,13 @@ proc forkTx*(
 
   # Plain fork, include `roFilter`
   if backLevel == -1:
-    let xb = ? db.fork(noFilter=false)
+    let xb = ?db.fork(noFilter = false)
     discard xb.txFrameBegin()
     return ok(xb)
 
   # Plain fork, unfiltered backend
   if backLevel == -2:
-    let xb = ? db.fork(noFilter=true)
+    let xb = ?db.fork(noFilter = true)
     discard xb.txFrameBegin()
     return ok(xb)
 
@@ -115,7 +111,7 @@ proc forkTx*(
 # Public functions: Transaction frame
 # ------------------------------------------------------------------------------
 
-proc txBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
+proc txBegin*(db: KvtDbRef): Result[KvtTxRef, KvtError] =
   ## Starts a new transaction.
   ##
   ## Example:
@@ -129,8 +125,8 @@ proc txBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
   db.txFrameBegin()
 
 proc rollback*(
-    tx: KvtTxRef;                     # Top transaction on database
-      ): Result[void,KvtError] =
+    tx: KvtTxRef, # Top transaction on database
+): Result[void, KvtError] =
   ## Given a *top level* handle, this function discards all database operations
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
@@ -138,8 +134,8 @@ proc rollback*(
   tx.txFrameRollback()
 
 proc commit*(
-    tx: KvtTxRef;                     # Top transaction on database
-      ): Result[void,KvtError] =
+    tx: KvtTxRef, # Top transaction on database
+): Result[void, KvtError] =
   ## Given a *top level* handle, this function accepts all database operations
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
@@ -147,9 +143,9 @@ proc commit*(
   tx.txFrameCommit()
 
 proc collapse*(
-    tx: KvtTxRef;                     # Top transaction on database
-    commit: bool;                     # Commit if `true`, otherwise roll back
-      ): Result[void,KvtError] =
+    tx: KvtTxRef, # Top transaction on database
+    commit: bool, # Commit if `true`, otherwise roll back
+): Result[void, KvtError] =
   ## Iterated application of `commit()` or `rollback()` performing the
   ## something similar to
   ## ::
@@ -165,8 +161,8 @@ proc collapse*(
 # ------------------------------------------------------------------------------
 
 proc persist*(
-    db: KvtDbRef;                     # Database
-      ): Result[void,KvtError] =
+    db: KvtDbRef, # Database
+): Result[void, KvtError] =
   ## Persistently store data onto backend database. If the system is running
   ## without a database backend, the function returns immediately with an
   ## error. The same happens if there is a pending transaction.
@@ -180,15 +176,15 @@ proc persist*(
   ##
   # Register for saving if piggybacked on remote database
   if db.backend.kind == BackendRdbTriggered:
-    ? db.txStowOk(persistent=true)
-    ? db.backend.setWrReqFn db
+    ?db.txStowOk(persistent = true)
+    ?db.backend.setWrReqFn db
     return err(TxPersistDelayed)
 
-  db.txStow(persistent=true)
+  db.txStow(persistent = true)
 
 proc stow*(
-    db: KvtDbRef;                     # Database
-      ): Result[void,KvtError] =
+    db: KvtDbRef, # Database
+): Result[void, KvtError] =
   ## This function is similar to `persist()` stopping short of performing the
   ## final step storing on the persistent database. It fails if there is a
   ## pending transaction.
@@ -197,7 +193,7 @@ proc stow*(
   ## backend stage area and leaves it there. This function can be seen as
   ## a sort of a bottom level transaction `commit()`.
   ##
-  db.txStow(persistent=false)
+  db.txStow(persistent = false)
 
 # ------------------------------------------------------------------------------
 # End

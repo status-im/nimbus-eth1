@@ -1,4 +1,3 @@
-
 # Nimbus
 # Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
@@ -10,15 +9,8 @@
 # according to those terms.
 
 import
-  ./executor/[
-    calculate_reward,
-    executor_helpers,
-    process_block,
-    process_transaction]
+  ./executor/[calculate_reward, executor_helpers, process_block, process_transaction]
 
 export
-  calculate_reward,
-  executor_helpers.createBloom,
-  executor_helpers.makeReceipt,
-  process_block,
-  process_transaction
+  calculate_reward, executor_helpers.createBloom, executor_helpers.makeReceipt,
+  process_block, process_transaction

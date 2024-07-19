@@ -17,15 +17,14 @@ import
 # Tests that a running skeleton sync can be extended with properly linked up
 # headers but not with side chains.
 
-type
-  TestCase = object
-    name    : string
-    blocks  : seq[BlockHeader]    # Database content (besides the genesis)
-    head    : BlockHeader         # New head header to announce to reorg to
-    extend  : BlockHeader         # New head header to announce to extend with
-    force   : bool                # To force set head not just to extend
-    newState: seq[Subchain]       # Expected sync state after the reorg
-    err     : Opt[SkeletonStatus] # Whether extension succeeds or not
+type TestCase = object
+  name: string
+  blocks: seq[BlockHeader] # Database content (besides the genesis)
+  head: BlockHeader # New head header to announce to reorg to
+  extend: BlockHeader # New head header to announce to extend with
+  force: bool # To force set head not just to extend
+  newState: seq[Subchain] # Expected sync state after the reorg
+  err: Opt[SkeletonStatus] # Whether extension succeeds or not
 
 let testCases = [
   # Initialize a sync and try to extend it with a subsequent block.
@@ -55,7 +54,8 @@ let testCases = [
   # Initialize a sync and try to extend it with a number-wise sequential
   # header, but a hash wise non-linking one.
   TestCase(
-    name: "Initialize a sync and try to extend it with a number-wise sequential alternate block",
+    name:
+      "Initialize a sync and try to extend it with a number-wise sequential alternate block",
     head: block49B,
     extend: block50,
     newState: @[subchain(49, 49)],
@@ -85,7 +85,7 @@ let testCases = [
     newState: @[subchain(50, 50)],
     err: Opt.some ReorgDenied,
   ),
-  ]
+]
 
 proc test2*() =
   suite "Tests that a running skeleton sync can be extended":

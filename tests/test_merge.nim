@@ -31,7 +31,7 @@ type
     `method`: string
     params: JSonNode
     expect: JsonString
-    error : JsonString
+    error: JsonString
 
   Step = ref StepObj
   Steps = seq[Step]
@@ -62,13 +62,10 @@ proc newPayload(step: Step, client: RpcClient, testStatusIMPL: var TestStatus) =
 proc runTest(steps: Steps) =
   let
     conf = makeConfig(@["--custom-network:" & paramsFile])
-    ctx  = newEthContext()
+    ctx = newEthContext()
     ethNode = setupEthNode(conf, ctx, eth)
-    com = CommonRef.new(
-      newCoreDbRef DefaultDbMemory,
-      conf.networkId,
-      conf.networkParams
-    )
+    com =
+      CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
     chainRef = newChain(com)
 
   com.initializeEmptyDb()
@@ -77,10 +74,8 @@ proc runTest(steps: Steps) =
     rpcServer = newRpcSocketServer(["127.0.0.1:0"])
     client = newRpcSocketClient()
     txPool = TxPoolRef.new(com, conf.engineSigner)
-    sealingEngine = SealingEngineRef.new(
-      chainRef, ctx, conf.engineSigner,
-      txPool, EnginePostMerge
-    )
+    sealingEngine =
+      SealingEngineRef.new(chainRef, ctx, conf.engineSigner, txPool, EnginePostMerge)
     beaconEngine = BeaconEngineRef.new(txPool, chainRef)
     oracle = Oracle.new(com)
 

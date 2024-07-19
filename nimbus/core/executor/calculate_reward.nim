@@ -8,11 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ../../db/ledger,
-  ../../common/common,
-  ../../evm/state,
-  ../../evm/types
+import ../../db/ledger, ../../common/common, ../../evm/state, ../../evm/types
 
 {.push raises: [].}
 
@@ -46,8 +42,12 @@ const
     eth0, # Prague
   ]
 
-proc calculateReward*(vmState: BaseVMState; account: EthAddress;
-                      number: BlockNumber; uncles: openArray[BlockHeader]) =
+proc calculateReward*(
+    vmState: BaseVMState,
+    account: EthAddress,
+    number: BlockNumber,
+    uncles: openArray[BlockHeader],
+) =
   let blockReward = BlockRewards[vmState.fork]
   var mainReward = blockReward
 
@@ -63,9 +63,9 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
   vmState.mutateStateDB:
     db.addBalance(account, mainReward)
 
-
-proc calculateReward*(vmState: BaseVMState;
-                      header: BlockHeader; uncles: openArray[BlockHeader]) =
+proc calculateReward*(
+    vmState: BaseVMState, header: BlockHeader, uncles: openArray[BlockHeader]
+) =
   vmState.calculateReward(header.coinbase, header.number, uncles)
 
 # End

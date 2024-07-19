@@ -28,25 +28,27 @@ import
 {.push raises: [].}
 
 type
-  TxAddStats* = tuple ##\
-    ## Status code returned from the `addTxs()` function
-
-    stagedIndicator: bool ##\
-      ## If `true`, this value indicates that at least one item was added to\
-      ## the `staged` bucket (which suggest a re-run of the packer.)
-
-    topItems: seq[TxItemRef] ##\
-      ## For each sender where txs were added to the bucket database or waste\
-      ## basket, this list keeps the items with the highest nonce (handy for\
-      ## chasing nonce gaps after a back-move of the block chain head.)
+  TxAddStats* =
+    tuple
+      ##\
+      ## Status code returned from the `addTxs()` function
+      stagedIndicator: bool
+        ##\
+        ## If `true`, this value indicates that at least one item was added to\
+        ## the `staged` bucket (which suggest a re-run of the packer.)
+      topItems: seq[TxItemRef]
+        ##\
+        ## For each sender where txs were added to the bucket database or waste\
+        ## basket, this list keeps the items with the highest nonce (handy for\
+        ## chasing nonce gaps after a back-move of the block chain head.)
 
   NonceList = ##\
     ## Temporary sorter list
-    SortedSet[AccountNonce,TxItemRef]
+    SortedSet[AccountNonce, TxItemRef]
 
   AccountNonceTab = ##\
     ## Temporary sorter table
-    Table[EthAddress,NonceList]
+    Table[EthAddress, NonceList]
 
 logScope:
   topics = "tx-pool add transaction"
@@ -55,8 +57,9 @@ logScope:
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc getItemList(tab: var AccountNonceTab; key: EthAddress): var NonceList
-    {.gcsafe,raises: [KeyError].} =
+proc getItemList(
+    tab: var AccountNonceTab, key: EthAddress
+): var NonceList {.gcsafe, raises: [KeyError].} =
   if not tab.hasKey(key):
     tab[key] = NonceList.init
   tab[key]
@@ -65,9 +68,9 @@ proc getItemList(tab: var AccountNonceTab; key: EthAddress): var NonceList
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
-
+proc supersede(
+    xp: TxPoolRef, item: TxItemRef
+): Result[void, TxInfo] {.gcsafe, raises: [CatchableError].} =
   var current: TxItemRef
 
   block:
@@ -105,8 +108,9 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
-    {.discardable,gcsafe,raises: [CatchableError].} =
+proc addTx*(
+    xp: TxPoolRef, item: TxItemRef
+): bool {.discardable, gcsafe, raises: [CatchableError].} =
   ## Add a transaction item. It is tested and stored in either of the `pending`
   ## or `staged` buckets, or disposed into the waste basket. The function
   ## returns `true` if the item was added to the `staged` bucket.
@@ -128,9 +132,7 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
       break txErrorFrame
 
     # Update initial state bucket
-    item.status =
-        if xp.classifyActive(item): txItemStaged
-        else:                       txItemPending
+    item.status = if xp.classifyActive(item): txItemStaged else: txItemPending
 
     # Insert into database
     block:
@@ -154,9 +156,9 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTxs*(xp: TxPoolRef;
-             txs: openArray[PooledTransaction]; info = ""): TxAddStats
-    {.discardable,gcsafe,raises: [CatchableError].} =
+proc addTxs*(
+    xp: TxPoolRef, txs: openArray[PooledTransaction], info = ""
+): TxAddStats {.discardable, gcsafe, raises: [CatchableError].} =
   ## Add a list of transactions. The list is sorted after nonces and txs are
   ## tested and stored into either of the `pending` or `staged` buckets, or
   ## disposed o the waste basket. The function returns the tuple
@@ -208,7 +210,7 @@ proc addTxs*(xp: TxPoolRef;
       lastItem: TxItemRef # => nil
 
     while rc.isOk:
-      let (nonce,item) = (rc.value.key,rc.value.data)
+      let (nonce, item) = (rc.value.key, rc.value.data)
       if xp.addTx(item):
         result.stagedIndicator = true
 

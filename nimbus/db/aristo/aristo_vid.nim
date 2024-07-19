@@ -13,9 +13,7 @@
 ##
 {.push raises: [].}
 
-import
-  std/typetraits,
-  ./aristo_desc
+import std/typetraits, ./aristo_desc
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -24,13 +22,13 @@ import
 proc vidFetch*(db: AristoDbRef): VertexID =
   ## Fetch next vertex ID.
   ##
-  if db.top.vTop  == 0:
+  if db.top.vTop == 0:
     db.top.vTop = VertexID(LEAST_FREE_VID)
   else:
     db.top.vTop.inc
   db.top.vTop
 
-proc vidDispose*(db: AristoDbRef; vid: VertexID) =
+proc vidDispose*(db: AristoDbRef, vid: VertexID) =
   ## Only top vertexIDs are disposed
   if vid == db.top.vTop and LEAST_FREE_VID < db.top.vTop.distinctBase:
     db.top.vTop.dec

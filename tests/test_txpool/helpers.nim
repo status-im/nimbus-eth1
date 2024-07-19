@@ -15,51 +15,29 @@ import
   ../replay/[pp, undump_blocks_gz],
   chronicles,
   eth/[common, keys],
-  stew/[byteutils,keyed_queue, sorted_set],
+  stew/[byteutils, keyed_queue, sorted_set],
   stint
 
 # Make sure that the runner can stay on public view without the need
 # to import `tx_pool/*` sup-modules
 export
-  pp,
-  tx_chain.clearAccounts,
-  tx_chain.com,
-  tx_chain.nextFork,
-  tx_chain.vmState,
-  tx_desc.chain,
-  tx_desc.txDB,
-  tx_desc.verify,
-  tx_packer.packerVmExec,
-  tx_recover.recoverItem,
-  tx_tabs.TxTabsRef,
-  tx_tabs.decAccount,
-  tx_tabs.dispose,
-  tx_tabs.eq,
-  tx_tabs.flushRejects,
-  tx_tabs.gasLimits,
-  tx_tabs.ge,
-  tx_tabs.gt,
-  tx_tabs.incAccount,
-  tx_tabs.incNonce,
-  tx_tabs.le,
-  tx_tabs.len,
-  tx_tabs.lt,
-  tx_tabs.nItems,
-  tx_tabs.reassign,
-  tx_tabs.reject,
-  tx_tabs.verify,
-  undumpBlocksGz
+  pp, tx_chain.clearAccounts, tx_chain.com, tx_chain.nextFork, tx_chain.vmState,
+  tx_desc.chain, tx_desc.txDB, tx_desc.verify, tx_packer.packerVmExec,
+  tx_recover.recoverItem, tx_tabs.TxTabsRef, tx_tabs.decAccount, tx_tabs.dispose,
+  tx_tabs.eq, tx_tabs.flushRejects, tx_tabs.gasLimits, tx_tabs.ge, tx_tabs.gt,
+  tx_tabs.incAccount, tx_tabs.incNonce, tx_tabs.le, tx_tabs.len, tx_tabs.lt,
+  tx_tabs.nItems, tx_tabs.reassign, tx_tabs.reject, tx_tabs.verify, undumpBlocksGz
 
 const
   # pretty printing
   localInfo* = block:
-    var rc: array[bool,string]
+    var rc: array[bool, string]
     rc[true] = "L"
     rc[false] = "R"
     rc
 
   statusInfo* = block:
-    var rc: array[TxItemStatus,string]
+    var rc: array[TxItemStatus, string]
     rc[txItemPending] = "*"
     rc[txItemStaged] = "S"
     rc[txItemPacked] = "P"
@@ -80,13 +58,13 @@ proc joinXX(s: string): string =
     result = s[0 ..< 8]
   else:
     result = "0" & s[0 ..< 7]
-  result &= "..(" & $((s.len + 1) div 2) & ").." & s[s.len-16 ..< s.len]
+  result &= "..(" & $((s.len + 1) div 2) & ").." & s[s.len - 16 ..< s.len]
 
 proc joinXX(q: seq[string]): string =
   q.join("").joinXX
 
 proc toXX[T](s: T): string =
-  s.toHex.strip(leading=true,chars={'0'}).toLowerAscii
+  s.toHex.strip(leading = true, chars = {'0'}).toLowerAscii
 
 proc toXX(q: Blob): string =
   q.mapIt(it.toHex2).join(":")
@@ -97,14 +75,14 @@ proc toXX(a: EthAddress): string =
 proc toXX(h: Hash256): string =
   h.data.mapIt(it.toHex2).joinXX
 
-proc toXX(v: uint64; r,s: UInt256): string =
+proc toXX(v: uint64, r, s: UInt256): string =
   v.toXX & ":" & ($r).joinXX & ":" & ($s).joinXX
 
 # ------------------------------------------------------------------------------
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
-proc pp*(q: seq[(EthAddress,int)]): string =
+proc pp*(q: seq[(EthAddress, int)]): string =
   "[" & q.mapIt(&"{it[0].pp}:{it[1]:03d}").join(",") & "]"
 
 proc pp*(w: TxItemStatus): string =
@@ -135,18 +113,17 @@ proc pp*(tx: Transaction): string =
   if 0 < tx.accessList.len:
     result &= ",accessList=" & $tx.accessList
 
-  result &= ",VRS=" & tx.V.toXX(tx.R,tx.S)
+  result &= ",VRS=" & tx.V.toXX(tx.R, tx.S)
   result &= ")"
 
 proc pp*(w: TxItemRef): string =
   ## Pretty print item (use for debugging)
   let s = w.tx.pp
-  result = "(timeStamp=" & ($w.timeStamp).replace(' ','_') &
-    ",hash=" & w.itemID.toXX &
-    ",status=" & w.status.pp &
-    "," & s[1 ..< s.len]
+  result =
+    "(timeStamp=" & ($w.timeStamp).replace(' ', '_') & ",hash=" & w.itemID.toXX &
+    ",status=" & w.status.pp & "," & s[1 ..< s.len]
 
-proc pp*(txs: openArray[Transaction]; pfx = ""): string =
+proc pp*(txs: openArray[Transaction], pfx = ""): string =
   let txt = block:
     var rc = ""
     if 0 < txs.len:
@@ -155,11 +132,9 @@ proc pp*(txs: openArray[Transaction]; pfx = ""): string =
         rc &= ";" & txs[n].pp
       rc &= "]"
     rc
-  txt.multiReplace([
-    (",", &",\n   {pfx}"),
-    (";", &",\n  {pfx}")])
+  txt.multiReplace([(",", &",\n   {pfx}"), (";", &",\n  {pfx}")])
 
-proc pp*(txs: openArray[Transaction]; pfxLen: int): string =
+proc pp*(txs: openArray[Transaction], pfxLen: int): string =
   txs.pp(" ".repeat(pfxLen))
 
 proc pp*(w: TxTabsItemsCount): string =
@@ -175,7 +150,7 @@ proc pp*(w: TxTabsGasTotals): string =
 proc toHex*(acc: EthAddress): string =
   acc.toHex
 
-proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
+proc say*(noisy = false, pfx = "***", args: varargs[string, `$`]) =
   if noisy:
     if args.len == 0:
       echo "*** ", pfx
@@ -184,18 +159,19 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
-proc setTraceLevel* =
+proc setTraceLevel*() =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.TRACE)
 
-proc setErrorLevel* =
+proc setErrorLevel*() =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
 
-proc findFilePath*(file: string;
-                   baseDir, repoDir: openArray[string]): Result[string,void] =
+proc findFilePath*(
+    file: string, baseDir, repoDir: openArray[string]
+): Result[string, void] =
   for dir in baseDir:
     for repo in repoDir:
       let path = dir / repo / file

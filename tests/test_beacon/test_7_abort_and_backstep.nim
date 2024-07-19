@@ -35,11 +35,15 @@ proc test7*() =
         break
 
     let
-      genesis   = env.chain.com.genesisHeader
-      block1    = env.chain.com.header(1, genesis, genesis,
-        "6BD9564DD3F4028E3E56F62F1BE52EC8F893CC4FD7DB75DB6A1DC3EB2858998C")
-      block2    = env.chain.com.header(2, block1, block1,
-        "32DAA84E151F4C8C6BD4D9ADA4392488FFAFD42ACDE1E9C662B3268C911A5CCC")
+      genesis = env.chain.com.genesisHeader
+      block1 = env.chain.com.header(
+        1, genesis, genesis,
+        "6BD9564DD3F4028E3E56F62F1BE52EC8F893CC4FD7DB75DB6A1DC3EB2858998C",
+      )
+      block2 = env.chain.com.header(
+        2, block1, block1,
+        "32DAA84E151F4C8C6BD4D9ADA4392488FFAFD42ACDE1E9C662B3268C911A5CCC",
+      )
       block3PoW = env.chain.com.header(3, block2, block2)
       block4InvalidPoS = header(4, block3PoW, block3PoW, 0)
       emptyBody = emptyBody()

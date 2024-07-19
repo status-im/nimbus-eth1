@@ -8,34 +8,33 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  eth/p2p, eth/p2p/rlpx,
-  chronos, testutils/unittests,
-  ../nimbus/sync/protocol
+import eth/p2p, eth/p2p/rlpx, chronos, testutils/unittests, ../nimbus/sync/protocol
 
 var nextPort = 30303
 
 proc localAddress*(port: int): Address =
   let port = Port(port)
-  result = Address(udpPort: port, tcpPort: port,
-                   ip: parseIpAddress("127.0.0.1"))
+  result = Address(udpPort: port, tcpPort: port, ip: parseIpAddress("127.0.0.1"))
 
 proc setupTestNode*(
-    rng: ref HmacDrbgContext,
-    capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode {.gcsafe.} =
+    rng: ref HmacDrbgContext, capabilities: varargs[ProtocolInfo, `protocolInfo`]
+): EthereumNode {.gcsafe.} =
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])
   var node = newEthereumNode(
-    keys1, localAddress(nextPort), NetworkId(1),
+    keys1,
+    localAddress(nextPort),
+    NetworkId(1),
     addAllCapabilities = false,
-    bindUdpPort = Port(nextPort), bindTcpPort = Port(nextPort),
-    rng = rng)
+    bindUdpPort = Port(nextPort),
+    bindTcpPort = Port(nextPort),
+    rng = rng,
+  )
   nextPort.inc
   for capability in capabilities:
     node.addCapability capability
 
   node
-
 
 suite "Testing protocol handlers":
   asyncTest "Failing connection handler":

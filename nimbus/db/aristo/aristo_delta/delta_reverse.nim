@@ -8,20 +8,16 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import
-  std/tables,
-  eth/common,
-  results,
-  ".."/[aristo_desc, aristo_get]
+import std/tables, eth/common, results, ".."/[aristo_desc, aristo_get]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc revFilter*(
-    db: AristoDbRef;                   # Database
-    filter: LayerRef;                  # Filter to revert
-      ): Result[LayerRef,(VertexID,AristoError)] =
+    db: AristoDbRef, # Database
+    filter: LayerRef, # Filter to revert
+): Result[LayerRef, (VertexID, AristoError)] =
   ## Assemble reverse filter for the `filter` argument, i.e. changes to the
   ## backend that reverse the effect of applying the this read-only filter.
   ##
@@ -46,7 +42,7 @@ proc revFilter*(
     elif rc.error == GetVtxNotFound:
       rev.sTab[rvid] = VertexRef(nil)
     else:
-      return err((rvid.vid,rc.error))
+      return err((rvid.vid, rc.error))
 
   # Calculate reverse changes for the `kMap` sequence.
   for rvid in filter.kMap.keys:
@@ -56,7 +52,7 @@ proc revFilter*(
     elif rc.error == GetKeyNotFound:
       rev.kMap[rvid] = VOID_HASH_KEY
     else:
-      return err((rvid.vid,rc.error))
+      return err((rvid.vid, rc.error))
 
   ok(rev)
 

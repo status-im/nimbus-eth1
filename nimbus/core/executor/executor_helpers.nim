@@ -11,15 +11,10 @@
 {.push raises: [].}
 
 import
-  ../../common/common,
-  ../../db/ledger,
-  ../../evm/state,
-  ../../evm/types,
-  eth/[bloom]
+  ../../common/common, ../../db/ledger, ../../evm/state, ../../evm/types, eth/[bloom]
 
 type
-  ExecutorError* = object of CatchableError
-    ## Catch and relay exception error
+  ExecutorError* = object of CatchableError ## Catch and relay exception error
 
   # TODO: these types need to be removed
   # once eth/bloom and eth/common sync'ed
@@ -46,15 +41,14 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
     bloom.value = bloom.value or logsBloom(rec.logs).value
   result = bloom.value.toBytesBE
 
-proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
-
+proc makeReceipt*(vmState: BaseVMState, txType: TxType): Receipt =
   var rec: Receipt
   if vmState.com.isByzantiumOrLater(vmState.blockNumber):
     rec.isHash = false
     rec.status = vmState.status
   else:
     rec.isHash = true
-    rec.hash   = vmState.stateDB.rootHash
+    rec.hash = vmState.stateDB.rootHash
     # we set the status for the t8n output consistency
     rec.status = vmState.status
 

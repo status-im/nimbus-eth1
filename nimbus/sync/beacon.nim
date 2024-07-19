@@ -21,46 +21,44 @@ import
 logScope:
   topics = "beacon-sync"
 
-type
-  BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
+type BeaconSyncRef* = RunnerSyncRef[BeaconCtxData, BeaconBuddyData]
 
-const
-  extraTraceMessages = false # or true
-    ## Enable additional logging noise
+const extraTraceMessages = false
+  # or true
+  ## Enable additional logging noise
 
 # ------------------------------------------------------------------------------
 # Private logging helpers
 # ------------------------------------------------------------------------------
 
-template traceMsg(f, info: static[string]; args: varargs[untyped]) =
+template traceMsg(f, info: static[string], args: varargs[untyped]) =
   trace "Snap scheduler " & f & "() " & info, args
 
-template traceMsgCtx(f, info: static[string]; c: BeaconCtxRef) =
+template traceMsgCtx(f, info: static[string], c: BeaconCtxRef) =
   when extraTraceMessages:
     block:
       let
         poolMode {.inject.} = c.poolMode
-        daemon   {.inject.} = c.daemon
+        daemon {.inject.} = c.daemon
       f.traceMsg info, poolMode, daemon
 
-template traceMsgBuddy(f, info: static[string]; b: BeaconBuddyRef) =
+template traceMsgBuddy(f, info: static[string], b: BeaconBuddyRef) =
   when extraTraceMessages:
     block:
       let
-        peer     {.inject.} = b.peer
+        peer {.inject.} = b.peer
         runState {.inject.} = b.ctrl.state
-        multiOk  {.inject.} = b.ctrl.multiOk
+        multiOk {.inject.} = b.ctrl.multiOk
         poolMode {.inject.} = b.ctx.poolMode
-        daemon   {.inject.} = b.ctx.daemon
+        daemon {.inject.} = b.ctx.daemon
       f.traceMsg info, peer, runState, multiOk, poolMode, daemon
 
-
-template tracerFrameCtx(f: static[string]; c: BeaconCtxRef; code: untyped) =
+template tracerFrameCtx(f: static[string], c: BeaconCtxRef, code: untyped) =
   f.traceMsgCtx "begin", c
   code
   f.traceMsgCtx "end", c
 
-template tracerFrameBuddy(f: static[string]; b: BeaconBuddyRef; code: untyped) =
+template tracerFrameBuddy(f: static[string], b: BeaconBuddyRef, code: untyped) =
   f.traceMsgBuddy "begin", b
   code
   f.traceMsgBuddy "end", b
@@ -89,7 +87,7 @@ proc runStop(buddy: BeaconBuddyRef) =
   tracerFrameBuddy("runStop", buddy):
     worker.stop(buddy)
 
-proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+proc runPool(buddy: BeaconBuddyRef, last: bool, laps: int): bool =
   tracerFrameBuddy("runPool", buddy):
     result = worker.runPool(buddy, last, laps)
 
@@ -110,10 +108,10 @@ func updateBeaconHeaderCB(ctx: BeaconSyncRef): SyncReqNewHeadCB =
   ## for the RPC module.
   result = proc(h: BlockHeader) {.gcsafe, raises: [].} =
     try:
-      debug "REQUEST SYNC", number=h.number, hash=h.blockHash.short
+      debug "REQUEST SYNC", number = h.number, hash = h.blockHash.short
       waitFor ctx.ctx.appendSyncTarget(h)
     except CatchableError as ex:
-      error "updateBeconHeaderCB error", msg=ex.msg
+      error "updateBeconHeaderCB error", msg = ex.msg
 
 proc enableRpcMagic(ctx: BeaconSyncRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
@@ -125,12 +123,13 @@ proc enableRpcMagic(ctx: BeaconSyncRef) =
 # ------------------------------------------------------------------------------
 
 proc init*(
-    T: type BeaconSyncRef;
-    ethNode: EthereumNode;
-    chain: ChainRef;
-    rng: ref HmacDrbgContext;
-    maxPeers: int;
-    id: int = 0): T =
+    T: type BeaconSyncRef,
+    ethNode: EthereumNode,
+    chain: ChainRef,
+    rng: ref HmacDrbgContext,
+    maxPeers: int,
+    id: int = 0,
+): T =
   new result
   result.initSync(ethNode, chain, maxPeers, Opt.none(string))
   result.ctx.pool.rng = rng
@@ -138,8 +137,8 @@ proc init*(
 
 proc start*(ctx: BeaconSyncRef) =
   ## Beacon Sync always begin with stop mode
-  doAssert ctx.startSync()      # Initialize subsystems
-  ctx.enableRpcMagic()      # Allow external pivot update via RPC
+  doAssert ctx.startSync() # Initialize subsystems
+  ctx.enableRpcMagic() # Allow external pivot update via RPC
 
 proc stop*(ctx: BeaconSyncRef) =
   ctx.stopSync()

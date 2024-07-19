@@ -10,8 +10,7 @@
 
 {.push raises: [].}
 
-import
-  era1_db/db_desc
+import era1_db/db_desc
 
 export db_Desc
 

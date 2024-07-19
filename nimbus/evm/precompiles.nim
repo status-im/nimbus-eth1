@@ -27,25 +27,25 @@ import
 type
   PrecompileAddresses* = enum
     # Frontier to Spurious Dragron
-    paEcRecover  = 0x01,
-    paSha256     = 0x02,
-    paRipeMd160  = 0x03,
-    paIdentity   = 0x04,
+    paEcRecover = 0x01
+    paSha256 = 0x02
+    paRipeMd160 = 0x03
+    paIdentity = 0x04
     # Byzantium and Constantinople
-    paModExp     = 0x05,
-    paEcAdd      = 0x06,
-    paEcMul      = 0x07,
-    paPairing    = 0x08,
+    paModExp = 0x05
+    paEcAdd = 0x06
+    paEcMul = 0x07
+    paPairing = 0x08
     # Istanbul
-    paBlake2bf   = 0x09,
+    paBlake2bf = 0x09
     # Cancun
-    paPointEvaluation = 0x0A,
+    paPointEvaluation = 0x0A
     # Prague (EIP-2537)
-    paBlsG1Add   = 0x0b,
-    paBlsG1Mul   = 0x0c,
-    paBlsG1MultiExp = 0x0d,
-    paBlsG2Add   = 0x0e,
-    paBlsG2Mul   = 0x0f,
+    paBlsG1Add = 0x0b
+    paBlsG1Mul = 0x0c
+    paBlsG1MultiExp = 0x0d
+    paBlsG2Add = 0x0e
+    paBlsG2Mul = 0x0f
     # EIP-2537: disabled; reason: gas price discrepancies, TODO
     # paBlsG2MultiExp
     # paBlsPairing
@@ -61,11 +61,16 @@ type
 # ------------------------------------------------------------------------------
 
 func getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
-  if fork < FkByzantium: paIdentity
-  elif fork < FkIstanbul: paPairing
-  elif fork < FkCancun: paBlake2bf
-  elif fork < FkPrague: paPointEvaluation
-  else: PrecompileAddresses.high
+  if fork < FkByzantium:
+    paIdentity
+  elif fork < FkIstanbul:
+    paPairing
+  elif fork < FkCancun:
+    paBlake2bf
+  elif fork < FkPrague:
+    paPointEvaluation
+  else:
+    PrecompileAddresses.high
 
 func validPrecompileAddr(addrByte, maxPrecompileAddr: byte): bool =
   (addrByte in PrecompileAddresses.low.byte .. maxPrecompileAddr)
@@ -74,9 +79,11 @@ func validPrecompileAddr(addrByte: byte, fork: EVMFork): bool =
   let maxPrecompileAddr = getMaxPrecompileAddr(fork)
   validPrecompileAddr(addrByte, maxPrecompileAddr.byte)
 
-func getSignature(c: Computation): EvmResult[SigRes]  =
+func getSignature(c: Computation): EvmResult[SigRes] =
   # input is Hash, V, R, S
-  template data: untyped = c.msg.data
+  template data(): untyped =
+    c.msg.data
+
   var bytes: array[65, byte] # will hold R[32], S[32], V[1], in that order
   let maxPos = min(data.high, 127)
 
@@ -86,9 +93,9 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
 
   let v = data[63]
   # check if V[32] is 27 or 28
-  if not (v.int in 27..28):
+  if not (v.int in 27 .. 28):
     return err(prcErr(PrcInvalidSig))
-  for x in 32..<63:
+  for x in 32 ..< 63:
     if data[x] != 0:
       return err(prcErr(PrcInvalidSig))
 
@@ -98,7 +105,7 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
   # used for R and S
   if maxPos >= 64:
     # Copy message data to buffer
-    bytes[0..(maxPos-64)] = data[64..maxPos]
+    bytes[0 .. (maxPos - 64)] = data[64 .. maxPos]
 
   let sig = Signature.fromRaw(bytes).valueOr:
     return err(prcErr(PrcInvalidSig))
@@ -113,13 +120,13 @@ func simpleDecode(dst: var FQ2, src: openArray[byte]): bool {.noinit.} =
   # because we want to check `value > modulus`
   result = false
   if dst.c1.fromBytes(src.toOpenArray(0, 31)) and
-     dst.c0.fromBytes(src.toOpenArray(32, 63)):
+      dst.c0.fromBytes(src.toOpenArray(32, 63)):
     result = true
 
 template simpleDecode(dst: var FQ, src: openArray[byte]): bool =
   fromBytes(dst, src)
 
-func getPoint[T: G1|G2](_: typedesc[T], data: openArray[byte]): EvmResult[Point[T]] =
+func getPoint[T: G1 | G2](_: typedesc[T], data: openArray[byte]): EvmResult[Point[T]] =
   when T is G1:
     const nextOffset = 32
     var px, py: FQ
@@ -151,12 +158,10 @@ func getFR(data: openArray[byte]): EvmResult[FR] =
 # ------------------------------------------------------------------------------
 
 func ecRecover(c: Computation): EvmResultVoid =
-  ? c.gasMeter.consumeGas(
-    GasECRecover,
-    reason="ECRecover Precompile")
+  ?c.gasMeter.consumeGas(GasECRecover, reason = "ECRecover Precompile")
 
   let
-    sig = ? c.getSignature()
+    sig = ?c.getSignature()
     pubkey = recover(sig.sig, SkMessage(sig.msgHash)).valueOr:
       return err(prcErr(PrcInvalidSig))
 
@@ -169,7 +174,7 @@ func sha256(c: Computation): EvmResultVoid =
     wordCount = wordCount(c.msg.data.len)
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
-  ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
+  ?c.gasMeter.consumeGas(gasFee, reason = "SHA256 Precompile")
   assign(c.output, sha2.sha256.digest(c.msg.data).data)
   ok()
 
@@ -178,7 +183,7 @@ func ripemd160(c: Computation): EvmResultVoid =
     wordCount = wordCount(c.msg.data.len)
     gasFee = GasRIPEMD160 + wordCount.GasInt * GasRIPEMD160Word
 
-  ? c.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
+  ?c.gasMeter.consumeGas(gasFee, reason = "RIPEMD160 Precompile")
   c.output.setLen(32)
   assign(c.output.toOpenArray(12, 31), ripemd.ripemd160.digest(c.msg.data).data)
   ok()
@@ -188,21 +193,24 @@ func identity(c: Computation): EvmResultVoid =
     wordCount = wordCount(c.msg.data.len)
     gasFee = GasIdentity + wordCount.GasInt * GasIdentityWord
 
-  ? c.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
+  ?c.gasMeter.consumeGas(gasFee, reason = "Identity Precompile")
   assign(c.output, c.msg.data)
   ok()
 
-func modExpFee(c: Computation,
-               baseLen, expLen, modLen: UInt256,
-               fork: EVMFork): EvmResult[GasInt] =
-  template data: untyped {.dirty.} =
+func modExpFee(
+    c: Computation, baseLen, expLen, modLen: UInt256, fork: EVMFork
+): EvmResult[GasInt] =
+  template data(): untyped {.dirty.} =
     c.msg.data
 
   func mulComplexity(x: UInt256): UInt256 =
     ## Estimates the difficulty of Karatsuba multiplication
-    if x <= 64.u256: x * x
-    elif x <= 1024.u256: x * x div 4.u256 + 96.u256 * x - 3072.u256
-    else: x * x div 16.u256 + 480.u256 * x - 199680.u256
+    if x <= 64.u256:
+      x * x
+    elif x <= 1024.u256:
+      x * x div 4.u256 + 96.u256 * x - 3072.u256
+    else:
+      x * x div 16.u256 + 480.u256 * x - 199680.u256
 
   func mulComplexityEIP2565(x: UInt256): UInt256 =
     # gas = ceil(x div 8) ^ 2
@@ -214,14 +222,14 @@ func modExpFee(c: Computation,
     let
       baseL = baseLen.safeInt
       expL = expLen.safeInt
-      first32 = if baseL.uint64 + expL.uint64 < high(int32).uint64 and baseL < data.len:
-                  data.rangeToPadded[:UInt256](96 + baseL, 95 + baseL + expL, min(expL, 32))
-                else:
-                  0.u256
+      first32 =
+        if baseL.uint64 + expL.uint64 < high(int32).uint64 and baseL < data.len:
+          rangeToPadded[UInt256](data, 96 + baseL, 95 + baseL + expL, min(expL, 32))
+        else:
+          0.u256
 
     if expLen <= 32:
-      if first32.isZero(): 0.u256
-      else: first32.log2.u256    # highest-bit in exponent
+      if first32.isZero(): 0.u256 else: first32.log2.u256 # highest-bit in exponent
     else:
       if not first32.isZero:
         8.u256 * (expLen - 32.u256) + first32.log2.u256
@@ -229,14 +237,14 @@ func modExpFee(c: Computation,
         8.u256 * (expLen - 32.u256)
 
   template gasCalc(comp, divisor: untyped): untyped =
-    (
-      max(modLen, baseLen).comp *
-      max(adjExpLen, 1.u256)
-    ) div divisor
+    (max(modLen, baseLen).comp * max(adjExpLen, 1.u256)) div divisor
 
   # EIP2565: modExp gas cost
-  let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
-               else: gasCalc(mulComplexity, GasQuadDivisor)
+  let gasFee =
+    if fork >= FkBerlin:
+      gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
+    else:
+      gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
     return err(gasErr(OutOfGas))
@@ -252,19 +260,19 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   ## Yellow Paper Appendix E
   ## EIP-198 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md
   # Parsing the data
-  template data: untyped {.dirty.} =
+  template data(): untyped {.dirty.} =
     c.msg.data
 
   let # lengths Base, Exponent, Modulus
-    baseL = data.rangeToPadded[:UInt256](0, 31, 32)
-    expL  = data.rangeToPadded[:UInt256](32, 63, 32)
-    modL  = data.rangeToPadded[:UInt256](64, 95, 32)
+    baseL = rangeToPadded[UInt256](data, 0, 31, 32)
+    expL = rangeToPadded[UInt256](data, 32, 63, 32)
+    modL = rangeToPadded[UInt256](data, 64, 95, 32)
     baseLen = baseL.safeInt
-    expLen  = expL.safeInt
-    modLen  = modL.safeInt
+    expLen = expL.safeInt
+    modLen = modL.safeInt
 
-  let gasFee = ? modExpFee(c, baseL, expL, modL, fork)
-  ? c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+  let gasFee = ?modExpFee(c, baseL, expL, modL, fork)
+  ?c.gasMeter.consumeGas(gasFee, reason = "ModExp Precompile")
 
   if baseLen == 0 and modLen == 0:
     # This is a special case where expLength can be very big.
@@ -283,30 +291,30 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let output = modExp(
     data.rangeToPadded(96, baseLen),
     data.rangeToPadded(96 + baseLen, expLen),
-    data.rangeToPadded(96 + baseLen + expLen, modLen)
+    data.rangeToPadded(96 + baseLen + expLen, modLen),
   )
 
   # maximum output len is the same as modLen
   # if it less than modLen, it will be zero padded at left
   if output.len >= modLen:
-    assign(c.output, output.toOpenArray(output.len-modLen, output.len-1))
+    assign(c.output, output.toOpenArray(output.len - modLen, output.len - 1))
   else:
     c.output = newSeq[byte](modLen)
-    assign(c.output.toOpenArray(c.output.len-output.len, c.output.len-1), output)
+    assign(c.output.toOpenArray(c.output.len - output.len, c.output.len - 1), output)
   ok()
 
 func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
-  ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
+  ?c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
   var
     input: array[128, byte]
     output: array[64, byte]
   # Padding data
   let len = min(c.msg.data.len, 128) - 1
-  input[0..len] = c.msg.data[0..len]
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
+  input[0 .. len] = c.msg.data[0 .. len]
+  var p1 = ?G1.getPoint(input.toOpenArray(0, 63))
+  var p2 = ?G1.getPoint(input.toOpenArray(64, 127))
   var apo = (p1 + p2).toAffine()
   if isSome(apo):
     # we can discard here because we supply proper buffer
@@ -317,7 +325,7 @@ func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 
 func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
-  ? c.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
+  ?c.gasMeter.consumeGas(gasFee, reason = "ecMul Precompile")
 
   var
     input: array[96, byte]
@@ -325,9 +333,9 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 
   # Padding data
   let len = min(c.msg.data.len, 96) - 1
-  input[0..len] = c.msg.data[0..len]
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var fr = ? getFR(input.toOpenArray(64, 95))
+  input[0 .. len] = c.msg.data[0 .. len]
+  var p1 = ?G1.getPoint(input.toOpenArray(0, 63))
+  var fr = ?getFR(input.toOpenArray(64, 95))
   var apo = (p1 * fr).toAffine()
   if isSome(apo):
     # we can discard here because we supply buffer of proper size
@@ -342,11 +350,12 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
     return err(prcErr(PrcInvalidParam))
 
   let numPoints = GasInt msglen div 192
-  let gasFee = if fork < FkIstanbul:
-                 GasECPairingBase + numPoints * GasECPairingPerPoint
-               else:
-                 GasECPairingBaseIstanbul + numPoints * GasECPairingPerPointIstanbul
-  ? c.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
+  let gasFee =
+    if fork < FkIstanbul:
+      GasECPairingBase + numPoints * GasECPairingPerPoint
+    else:
+      GasECPairingBaseIstanbul + numPoints * GasECPairingPerPointIstanbul
+  ?c.gasMeter.consumeGas(gasFee, reason = "ecPairing Precompile")
 
   var output: array[32, byte]
   if msglen == 0:
@@ -358,12 +367,12 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
     # Pairing accumulator
     var acc = FQ12.one()
 
-    for i in 0..<count:
+    for i in 0 ..< count:
       let s = i * 192
       # Loading AffinePoint[G1], bytes from [0..63]
-      var p1 = ? G1.getPoint(c.msg.data.toOpenArray(s, s + 63))
+      var p1 = ?G1.getPoint(c.msg.data.toOpenArray(s, s + 63))
       # Loading AffinePoint[G2], bytes from [64..191]
-      var p2 = ? G2.getPoint(c.msg.data.toOpenArray(s + 64, s + 191))
+      var p2 = ?G2.getPoint(c.msg.data.toOpenArray(s + 64, s + 191))
       # Accumulate pairing result
       acc = acc * pairing(p1, p2)
 
@@ -375,12 +384,12 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
   ok()
 
 func blake2bf(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   if len(input) == blake2FInputLength:
     let gasFee = GasInt(beLoad32(input, 0))
-    ? c.gasMeter.consumeGas(gasFee, reason="blake2bf Precompile")
+    ?c.gasMeter.consumeGas(gasFee, reason = "blake2bf Precompile")
 
   var output: array[64, byte]
   if not blake2b_F(input, output):
@@ -390,13 +399,13 @@ func blake2bf(c: Computation): EvmResultVoid =
   ok()
 
 func blsG1Add*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   if input.len != 256:
     return err(prcErr(PrcInvalidParam))
 
-  ? c.gasMeter.consumeGas(Bls12381G1AddGas, reason="blsG1Add Precompile")
+  ?c.gasMeter.consumeGas(Bls12381G1AddGas, reason = "blsG1Add Precompile")
 
   var a, b: BLS_G1
   if not a.decodePoint(input.toOpenArray(0, 127)):
@@ -413,13 +422,13 @@ func blsG1Add*(c: Computation): EvmResultVoid =
   ok()
 
 func blsG1Mul*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   if input.len != 160:
     return err(prcErr(PrcInvalidParam))
 
-  ? c.gasMeter.consumeGas(Bls12381G1MulGas, reason="blsG1Mul Precompile")
+  ?c.gasMeter.consumeGas(Bls12381G1MulGas, reason = "blsG1Mul Precompile")
 
   var a: BLS_G1
   if not a.decodePoint(input.toOpenArray(0, 127)):
@@ -436,22 +445,16 @@ func blsG1Mul*(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
   ok()
 
-const
-  Bls12381MultiExpDiscountTable = [
-    1200, 888, 764, 641, 594, 547, 500, 453, 438, 423,
-    408, 394, 379, 364, 349, 334, 330, 326, 322, 318,
-    314, 310, 306, 302, 298, 294, 289, 285, 281, 277,
-    273, 269, 268, 266, 265, 263, 262, 260, 259, 257,
-    256, 254, 253, 251, 250, 248, 247, 245, 244, 242,
-    241, 239, 238, 236, 235, 233, 232, 231, 229, 228,
-    226, 225, 223, 222, 221, 220, 219, 219, 218, 217,
-    216, 216, 215, 214, 213, 213, 212, 211, 211, 210,
-    209, 208, 208, 207, 206, 205, 205, 204, 203, 202,
-    202, 201, 200, 199, 199, 198, 197, 196, 196, 195,
-    194, 193, 193, 192, 191, 191, 190, 189, 188, 188,
-    187, 186, 185, 185, 184, 183, 182, 182, 181, 180,
-    179, 179, 178, 177, 176, 176, 175, 174
-  ]
+const Bls12381MultiExpDiscountTable = [
+  1200, 888, 764, 641, 594, 547, 500, 453, 438, 423, 408, 394, 379, 364, 349, 334, 330,
+  326, 322, 318, 314, 310, 306, 302, 298, 294, 289, 285, 281, 277, 273, 269, 268, 266,
+  265, 263, 262, 260, 259, 257, 256, 254, 253, 251, 250, 248, 247, 245, 244, 242, 241,
+  239, 238, 236, 235, 233, 232, 231, 229, 228, 226, 225, 223, 222, 221, 220, 219, 219,
+  218, 217, 216, 216, 215, 214, 213, 213, 212, 211, 211, 210, 209, 208, 208, 207, 206,
+  205, 205, 204, 203, 202, 202, 201, 200, 199, 199, 198, 197, 196, 196, 195, 194, 193,
+  193, 192, 191, 191, 190, 189, 188, 188, 187, 186, 185, 185, 184, 183, 182, 182, 181,
+  180, 179, 179, 178, 177, 176, 176, 175, 174,
+]
 
 func calcBlsMultiExpGas(K: GasInt, gasCost: GasInt): GasInt =
   # Calculate G1 point, scalar value pair length
@@ -461,14 +464,17 @@ func calcBlsMultiExpGas(K: GasInt, gasCost: GasInt): GasInt =
 
   const dLen = Bls12381MultiExpDiscountTable.len
   # Lookup discount value for G1 point, scalar value pair length
-  let discount = if K < dLen: GasInt Bls12381MultiExpDiscountTable[K-1]
-                 else: GasInt Bls12381MultiExpDiscountTable[dLen-1]
+  let discount =
+    if K < dLen:
+      GasInt Bls12381MultiExpDiscountTable[K - 1]
+    else:
+      GasInt Bls12381MultiExpDiscountTable[dLen - 1]
 
   # Calculate gas and return the result
   result = (K * gasCost * discount) div 1000
 
 func blsG1MultiExp*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   const L = 160
@@ -479,7 +485,7 @@ func blsG1MultiExp*(c: Computation): EvmResultVoid =
     K = input.len div L
     gas = calcBlsMultiExpGas(GasInt K, Bls12381G1MulGas)
 
-  ? c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
+  ?c.gasMeter.consumeGas(gas, reason = "blsG1MultiExp Precompile")
 
   var
     p: BLS_G1
@@ -487,15 +493,15 @@ func blsG1MultiExp*(c: Computation): EvmResultVoid =
     acc: BLS_G1
 
   # Decode point scalar pairs
-  for i in 0..<K:
+  for i in 0 ..< K:
     let off = L * i
 
     # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+127)):
+    if not p.decodePoint(input.toOpenArray(off, off + 127)):
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+128, off+159)):
+    if not s.fromBytes(input.toOpenArray(off + 128, off + 159)):
       return err(prcErr(PrcInvalidParam))
 
     p.mul(s)
@@ -510,13 +516,13 @@ func blsG1MultiExp*(c: Computation): EvmResultVoid =
   ok()
 
 func blsG2Add*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   if input.len != 512:
     return err(prcErr(PrcInvalidParam))
 
-  ? c.gasMeter.consumeGas(Bls12381G2AddGas, reason="blsG2Add Precompile")
+  ?c.gasMeter.consumeGas(Bls12381G2AddGas, reason = "blsG2Add Precompile")
 
   var a, b: BLS_G2
   if not a.decodePoint(input.toOpenArray(0, 255)):
@@ -533,13 +539,13 @@ func blsG2Add*(c: Computation): EvmResultVoid =
   ok()
 
 func blsG2Mul*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   if input.len != 288:
     return err(prcErr(PrcInvalidParam))
 
-  ? c.gasMeter.consumeGas(Bls12381G2MulGas, reason="blsG2Mul Precompile")
+  ?c.gasMeter.consumeGas(Bls12381G2MulGas, reason = "blsG2Mul Precompile")
 
   var a: BLS_G2
   if not a.decodePoint(input.toOpenArray(0, 255)):
@@ -557,7 +563,7 @@ func blsG2Mul*(c: Computation): EvmResultVoid =
   ok()
 
 func blsG2MultiExp*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   const L = 288
@@ -568,7 +574,7 @@ func blsG2MultiExp*(c: Computation): EvmResultVoid =
     K = input.len div L
     gas = calcBlsMultiExpGas(GasInt K, Bls12381G2MulGas)
 
-  ? c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
+  ?c.gasMeter.consumeGas(gas, reason = "blsG2MultiExp Precompile")
 
   var
     p: BLS_G2
@@ -576,15 +582,15 @@ func blsG2MultiExp*(c: Computation): EvmResultVoid =
     acc: BLS_G2
 
   # Decode point scalar pairs
-  for i in 0..<K:
+  for i in 0 ..< K:
     let off = L * i
 
     # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+255)):
+    if not p.decodePoint(input.toOpenArray(off, off + 255)):
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+256, off+287)):
+    if not s.fromBytes(input.toOpenArray(off + 256, off + 287)):
       return err(prcErr(PrcInvalidParam))
 
     p.mul(s)
@@ -599,7 +605,7 @@ func blsG2MultiExp*(c: Computation): EvmResultVoid =
   ok()
 
 func blsPairing*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   const L = 384
@@ -610,7 +616,7 @@ func blsPairing*(c: Computation): EvmResultVoid =
     K = input.len div L
     gas = Bls12381PairingBaseGas + K.GasInt * Bls12381PairingPerPairGas
 
-  ? c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
+  ?c.gasMeter.consumeGas(gas, reason = "blsG2Pairing Precompile")
 
   var
     g1: BLS_G1P
@@ -618,15 +624,15 @@ func blsPairing*(c: Computation): EvmResultVoid =
     acc: BLS_ACC
 
   # Decode pairs
-  for i in 0..<K:
+  for i in 0 ..< K:
     let off = L * i
 
     # Decode G1 point
-    if not g1.decodePoint(input.toOpenArray(off, off+127)):
+    if not g1.decodePoint(input.toOpenArray(off, off + 127)):
       return err(prcErr(PrcInvalidPoint))
 
     # Decode G2 point
-    if not g2.decodePoint(input.toOpenArray(off+128, off+383)):
+    if not g2.decodePoint(input.toOpenArray(off + 128, off + 383)):
       return err(prcErr(PrcInvalidPoint))
 
     # 'point is on curve' check already done,
@@ -649,13 +655,13 @@ func blsPairing*(c: Computation): EvmResultVoid =
   ok()
 
 func blsMapG1*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   if input.len != 64:
     return err(prcErr(PrcInvalidParam))
 
-  ? c.gasMeter.consumeGas(Bls12381MapG1Gas, reason="blsMapG1 Precompile")
+  ?c.gasMeter.consumeGas(Bls12381MapG1Gas, reason = "blsMapG1 Precompile")
 
   var fe: BLS_FE
   if not fe.decodeFE(input):
@@ -669,13 +675,13 @@ func blsMapG1*(c: Computation): EvmResultVoid =
   ok()
 
 func blsMapG2*(c: Computation): EvmResultVoid =
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
   if input.len != 128:
     return err(prcErr(PrcInvalidParam))
 
-  ? c.gasMeter.consumeGas(Bls12381MapG2Gas, reason="blsMapG2 Precompile")
+  ?c.gasMeter.consumeGas(Bls12381MapG2Gas, reason = "blsMapG2 Precompile")
 
   var fe: BLS_FE2
   if not fe.decodeFE(input):
@@ -693,11 +699,12 @@ proc pointEvaluation(c: Computation): EvmResultVoid =
   # Also verify that the provided commitment matches the provided versioned_hash.
   # The data is encoded as follows: versioned_hash | z | y | commitment | proof |
 
-  template input: untyped =
+  template input(): untyped =
     c.msg.data
 
-  ? c.gasMeter.consumeGas(POINT_EVALUATION_PRECOMPILE_GAS,
-      reason = "EIP-4844 Point Evaluation Precompile")
+  ?c.gasMeter.consumeGas(
+    POINT_EVALUATION_PRECOMPILE_GAS, reason = "EIP-4844 Point Evaluation Precompile"
+  )
 
   pointEvaluation(input).isOkOr:
     return err(prcErr(PrcValidationError))
@@ -713,7 +720,7 @@ proc pointEvaluation(c: Computation): EvmResultVoid =
 iterator activePrecompiles*(fork: EVMFork): EthAddress =
   var res: EthAddress
   let maxPrecompileAddr = getMaxPrecompileAddr(fork)
-  for c in PrecompileAddresses.low..maxPrecompileAddr:
+  for c in PrecompileAddresses.low .. maxPrecompileAddr:
     if validPrecompileAddr(c.byte, maxPrecompileAddr.byte):
       res[^1] = c.byte
       yield res
@@ -723,7 +730,7 @@ func activePrecompilesList*(fork: EVMFork): seq[EthAddress] =
     result.add address
 
 proc execPrecompiles*(c: Computation, fork: EVMFork): bool =
-  for i in 0..18:
+  for i in 0 .. 18:
     if c.msg.codeAddress[i] != 0:
       return false
 
@@ -732,22 +739,38 @@ proc execPrecompiles*(c: Computation, fork: EVMFork): bool =
     return false
 
   let precompile = PrecompileAddresses(lb)
-  let res = case precompile
-    of paEcRecover: ecRecover(c)
-    of paSha256: sha256(c)
-    of paRipeMd160: ripemd160(c)
-    of paIdentity: identity(c)
-    of paModExp: modExp(c, fork)
-    of paEcAdd: bn256ecAdd(c, fork)
-    of paEcMul: bn256ecMul(c, fork)
-    of paPairing: bn256ecPairing(c, fork)
-    of paBlake2bf: blake2bf(c)
-    of paPointEvaluation: pointEvaluation(c)
-    of paBlsG1Add: blsG1Add(c)
-    of paBlsG1Mul: blsG1Mul(c)
-    of paBlsG1MultiExp: blsG1MultiExp(c)
-    of paBlsG2Add: blsG2Add(c)
-    of paBlsG2Mul: blsG2Mul(c)
+  let res =
+    case precompile
+    of paEcRecover:
+      ecRecover(c)
+    of paSha256:
+      sha256(c)
+    of paRipeMd160:
+      ripemd160(c)
+    of paIdentity:
+      identity(c)
+    of paModExp:
+      modExp(c, fork)
+    of paEcAdd:
+      bn256ecAdd(c, fork)
+    of paEcMul:
+      bn256ecMul(c, fork)
+    of paPairing:
+      bn256ecPairing(c, fork)
+    of paBlake2bf:
+      blake2bf(c)
+    of paPointEvaluation:
+      pointEvaluation(c)
+    of paBlsG1Add:
+      blsG1Add(c)
+    of paBlsG1Mul:
+      blsG1Mul(c)
+    of paBlsG1MultiExp:
+      blsG1MultiExp(c)
+    of paBlsG2Add:
+      blsG2Add(c)
+    of paBlsG2Mul:
+      blsG2Mul(c)
     # EIP 2537: disabled; gas price changes/discrepancies in test vectors
     # of paBlsG2MultiExp: blsG2MultiExp(c)
     # of paBlsPairing: blsPairing(c)

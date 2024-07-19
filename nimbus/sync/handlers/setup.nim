@@ -10,51 +10,39 @@
 
 {.used, push raises: [].}
 
-import
-  eth/p2p,
-  ../../core/[chain, tx_pool],
-  ../protocol,
-  ./eth as handlers_eth
+import eth/p2p, ../../core/[chain, tx_pool], ../protocol, ./eth as handlers_eth
 
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `eth`
 # ------------------------------------------------------------------------------
 
 proc setEthHandlerNewBlocksAndHashes*(
-    node: EthereumNode;
-    blockHandler: NewBlockHandler;
-    hashesHandler: NewBlockHashesHandler;
-    arg: pointer;
-      ) {.gcsafe, raises: [].} =
+    node: EthereumNode,
+    blockHandler: NewBlockHandler,
+    hashesHandler: NewBlockHashesHandler,
+    arg: pointer,
+) {.gcsafe, raises: [].} =
   let w = EthWireRef(node.protocolState protocol.eth)
   w.setNewBlockHandler(blockHandler, arg)
   w.setNewBlockHashesHandler(hashesHandler, arg)
 
 proc addEthHandlerCapability*(
-    node: EthereumNode;
-    peerPool: PeerPool;
-    chain: ChainRef;
-    txPool = TxPoolRef(nil);
-      ) =
+    node: EthereumNode, peerPool: PeerPool, chain: ChainRef, txPool = TxPoolRef(nil)
+) =
   ## Install `eth` handlers. Passing `txPool` as `nil` installs the handler
   ## in minimal/outbound mode.
-  node.addCapability(
-    protocol.eth,
-    EthWireRef.new(chain, txPool, peerPool))
+  node.addCapability(protocol.eth, EthWireRef.new(chain, txPool, peerPool))
 
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `snap`
 # ------------------------------------------------------------------------------
 
 when false: # needs to be updated
-  import
-    ./snap as handlers_snap
+  import ./snap as handlers_snap
 
   proc addSnapHandlerCapability*(
-      node: EthereumNode;
-      peerPool: PeerPool;
-      chain = ChainRef(nil);
-        ) =
+      node: EthereumNode, peerPool: PeerPool, chain = ChainRef(nil)
+  ) =
     ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
     ## in minimal/outbound mode.
     if chain.isNil:

@@ -19,27 +19,20 @@ import
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
-  senderAddr  = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
+  senderAddr = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
 
-type
-  TestEnv = object
-    conf: NimbusConf
+type TestEnv = object
+  conf: NimbusConf
 
 proc setupEnv(): TestEnv =
-  let
-    conf = makeConfig(@[
-      "--custom-network:" & genesisFile
-    ])
+  let conf = makeConfig(@["--custom-network:" & genesisFile])
 
   TestEnv(conf: conf)
 
 proc newCom(env: TestEnv): CommonRef =
-  let
-    com = CommonRef.new(
-      newCoreDbRef DefaultDbMemory,
-      env.conf.networkId,
-      env.conf.networkParams
-    )
+  let com = CommonRef.new(
+    newCoreDbRef DefaultDbMemory, env.conf.networkId, env.conf.networkParams
+  )
 
   com.initializeEmptyDb()
   com
@@ -49,13 +42,8 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock): EthBlock
     parentBlk.header
 
   var wds = newSeqOfCap[Withdrawal](number.int)
-  for i in 0..<number:
-    wds.add Withdrawal(
-      index: i,
-      validatorIndex: 1,
-      address: senderAddr,
-      amount: 1,
-    )
+  for i in 0 ..< number:
+    wds.add Withdrawal(index: i, validatorIndex: 1, address: senderAddr, amount: 1)
 
   let ledger = LedgerRef.init(com.db, parent.stateRoot)
   for wd in wds:
@@ -64,30 +52,30 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock): EthBlock
   ledger.persist()
 
   let wdRoot = calcWithdrawalsRoot(wds)
-  var body = BlockBody(
-    withdrawals: Opt.some(move(wds))
-  )
+  var body = BlockBody(withdrawals: Opt.some(move(wds)))
 
   let header = BlockHeader(
-    number     : number,
-    parentHash : parent.blockHash,
-    difficulty : 0.u256,
-    timestamp  : parent.timestamp + 1,
-    gasLimit   : parent.gasLimit,
-    stateRoot  : ledger.state,
-    txRoot     : parent.txRoot,
-    baseFeePerGas  : parent.baseFeePerGas,
-    receiptsRoot   : parent.receiptsRoot,
-    ommersHash     : parent.ommersHash,
+    number: number,
+    parentHash: parent.blockHash,
+    difficulty: 0.u256,
+    timestamp: parent.timestamp + 1,
+    gasLimit: parent.gasLimit,
+    stateRoot: ledger.state,
+    txRoot: parent.txRoot,
+    baseFeePerGas: parent.baseFeePerGas,
+    receiptsRoot: parent.receiptsRoot,
+    ommersHash: parent.ommersHash,
     withdrawalsRoot: Opt.some(wdRoot),
-    blobGasUsed    : parent.blobGasUsed,
-    excessBlobGas  : parent.excessBlobGas,
+    blobGasUsed: parent.blobGasUsed,
+    excessBlobGas: parent.excessBlobGas,
     parentBeaconBlockRoot: parent.parentBeaconBlockRoot,
   )
 
   EthBlock.init(header, body)
 
-proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock, extraData: byte): EthBlock =
+proc makeBlk(
+    com: CommonRef, number: BlockNumber, parentBlk: EthBlock, extraData: byte
+): EthBlock =
   var blk = com.makeBlk(number, parentBlk)
   blk.header.extraData = @[extraData]
   blk

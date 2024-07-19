@@ -8,27 +8,19 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/[os, parseopt, strutils],
-  eth/common,
-  stint,
-  chronicles,
-  ../nimbus/config
+import std/[os, parseopt, strutils], eth/common, stint, chronicles, ../nimbus/config
 
-from ../nimbus/common/chain_config import
-  MainNet,
-  SepoliaNet,
-  HoleskyNet
+from ../nimbus/common/chain_config import MainNet, SepoliaNet, HoleskyNet
 
 type
   ConfigStatus* = enum
     ## Configuration status flags
-    Success,                      ## Success
-    EmptyOption,                  ## No options in category
-    ErrorUnknownOption,           ## Unknown option in command line found
-    ErrorParseOption,             ## Error in parsing command line option
-    ErrorIncorrectOption,         ## Option has incorrect value
-    Error                         ## Unspecified error
+    Success ## Success
+    EmptyOption ## No options in category
+    ErrorUnknownOption ## Unknown option in command line found
+    ErrorParseOption ## Error in parsing command line option
+    ErrorIncorrectOption ## Option has incorrect value
+    Error ## Unspecified error
 
   PremixConfiguration* = ref object
     dataDir*: string
@@ -44,7 +36,7 @@ proc getConfiguration*(): PremixConfiguration {.gcsafe.}
 proc processInteger(v: string, o: var int): ConfigStatus =
   ## Convert string to integer.
   try:
-    o  = parseInt(v)
+    o = parseInt(v)
     result = Success
   except ValueError:
     result = ErrorParseOption
@@ -74,9 +66,12 @@ proc processBlockNumber(val: string, o: var BlockNumber): ConfigStatus =
 
 func processNetId(val: string, o: var NetworkId): ConfigStatus =
   case val.toLowerAscii()
-  of "main": o = MainNet
-  of "sepolia": o = SepoliaNet
-  of "holesky": o = HoleskyNet
+  of "main":
+    o = MainNet
+  of "sepolia":
+    o = SepoliaNet
+  of "holesky":
+    o = HoleskyNet
 
 template checkArgument(fun, o, value: untyped) =
   ## Checks if arguments got processed successfully
@@ -108,7 +103,8 @@ proc processArguments*(msg: var string): ConfigStatus =
       case key.toLowerAscii()
       of "help":
         return EmptyOption
-      of "datadir": config.dataDir = value
+      of "datadir":
+        config.dataDir = value
       of "maxblocks":
         checkArgument(processInteger, config.maxBlocks, value)
       of "head":
@@ -120,15 +116,16 @@ proc processArguments*(msg: var string): ConfigStatus =
         checkArgument(processNetId, config.netId, value)
       else:
         msg = "Unknown option " & key
-        if value.len > 0: msg = msg & " : " & value
+        if value.len > 0:
+          msg = msg & " : " & value
         return ErrorUnknownOption
     of cmdEnd:
       msg = "Error processing option [" & key & "]"
       return ErrorParseOption
 
   info "Using configuration parameters: ",
-      datadir = config.dataDir,
-      maxblocks = config.maxBlocks,
-      head = config.head,
-      numcommits = config.numCommits,
-      netid = config.netId
+    datadir = config.dataDir,
+    maxblocks = config.maxBlocks,
+    head = config.head,
+    numcommits = config.numCommits,
+    netid = config.netId

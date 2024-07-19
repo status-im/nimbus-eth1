@@ -38,7 +38,9 @@ proc runTest(filename: string): bool =
 template skipTest(folder, name: untyped): bool =
   skipNewGSTTests(folder, name)
 
-proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[TestFile]) =
+proc collectFileNames(
+    inputPath: string, map: var StatusMap, fileNames: var seq[TestFile]
+) =
   for fileName in walkDirRec(inputPath):
     if not fileName.endsWith(".json"):
       continue
@@ -52,8 +54,7 @@ proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[
       continue
 
     fileNames.add TestFile(
-      fullPath: fileName,
-      dispName: substr(fileName, inputPath.len+1)
+      fullPath: fileName, dispName: substr(fileName, inputPath.len + 1)
     )
 
 proc main() =
@@ -74,8 +75,11 @@ proc main() =
         if res:
           status[last][name] = Status.OK
 
-    status.sort do (a: (string, OrderedTable[string, Status]),
-                    b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
+    status.sort do(
+      a: (string, OrderedTable[string, Status]),
+      b: (string, OrderedTable[string, Status])
+    ) -> int:
+      cmp(a[0], b[0])
 
     generateReport("evmstate", status)
 

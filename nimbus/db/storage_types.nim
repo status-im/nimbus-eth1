@@ -8,8 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  eth/common
+import eth/common
 
 type
   DBKeyKind* = enum
@@ -29,8 +28,7 @@ type
     skeletonHeader = 12
     skeletonBody = 13
 
-  DbKey* = object
-    # The first byte stores the key type. The rest are key-specific values
+  DbKey* = object # The first byte stores the key type. The rest are key-specific values
     data*: array[33, byte]
     dataEndPos*: uint8 # the last populated position in the data
 
@@ -106,7 +104,7 @@ func skeletonBodyKey*(h: Hash256): DbKey {.inline.} =
   result.dataEndPos = uint8 32
 
 func hashIndexKey*(hash: Hash256, index: uint16): HashIndexKey =
-  result[0..31] = hash.data
+  result[0 .. 31] = hash.data
   result[32] = byte(index and 0xFF)
   result[33] = byte((index shl 8) and 0xFF)
 

@@ -15,8 +15,7 @@ import
   ../../nimbus/sync/[protocol, snap/range_desc],
   ./gunzip
 
-import
-  nimcrypto/utils except toHex
+import nimcrypto/utils except toHex
 
 type
   UndumpState = enum
@@ -29,8 +28,7 @@ type
     UndumpError
     UndumpSkipUntilCommit
 
-  UndumpAccounts* = object
-    ## Palatable output for iterator
+  UndumpAccounts* = object ## Palatable output for iterator
     root*: Hash256
     base*: NodeTag
     data*: PackedAccountRange
@@ -48,24 +46,20 @@ template say(args: varargs[untyped]) =
 proc toByteSeq(s: string): seq[byte] =
   utils.fromHex(s)
 
-proc fromHex(T: type Hash256; s: string): T =
+proc fromHex(T: type Hash256, s: string): T =
   result.data = ByteArray32.fromHex(s)
 
-proc fromHex(T: type NodeKey; s: string): T =
+proc fromHex(T: type NodeKey, s: string): T =
   ByteArray32.fromHex(s).T
 
-proc fromHex(T: type NodeTag; s: string): T =
+proc fromHex(T: type NodeTag, s: string): T =
   UInt256.fromBytesBE(ByteArray32.fromHex(s)).T
 
 # ------------------------------------------------------------------------------
 # Public capture
 # ------------------------------------------------------------------------------
 
-proc dumpAccounts*(
-    root: Hash256;
-    base: NodeTag;
-    data: PackedAccountRange;
-      ): string =
+proc dumpAccounts*(root: Hash256, base: NodeTag, data: PackedAccountRange): string =
   ## Dump accounts data in parseable Ascii text
   proc ppStr(blob: Blob): string =
     blob.toHex
@@ -111,7 +105,7 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
   if not gzFile.fileExists:
     raiseAssert &"No such file: \"{gzFile}\""
 
-  for lno,line in gzFile.gunzipLines:
+  for lno, line in gzFile.gunzipLines:
     if line.len == 0 or line[0] == '#':
       continue
     var flds = line.split
@@ -122,11 +116,10 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
     #    " nProofs=", nProofs,
     #    " flds=", flds
 
-    case state:
+    case state
     of UndumpSkipUntilCommit:
       if flds.len == 1 and flds[0] == "commit":
         state = UndumpHeader
-
     of UndumpHeader, UndumpError:
       if flds.len == 3 and flds[0] == "accounts":
         nAccounts = flds[1].parseUInt
@@ -140,9 +133,8 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
         state = UndumpSkipUntilCommit
         continue
       if state != UndumpError:
-         state = UndumpError
-         say &"*** line {lno}: expected header, got {line}"
-
+        state = UndumpError
+        say &"*** line {lno}: expected header, got {line}"
     of UndumpStateRoot:
       if flds.len == 1:
         data.root = Hash256.fromHex(flds[0])
@@ -150,7 +142,6 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
         continue
       state = UndumpError
       say &"*** line {lno}: expected state root, got {line}"
-
     of UndumpBase:
       if flds.len == 1:
         data.base = NodeTag.fromHex(flds[0])
@@ -164,12 +155,11 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
         continue
       state = UndumpError
       say &"*** line {lno}: expected account base, got {line}"
-
     of UndumpAccountList:
       if flds.len == 2:
         data.data.accounts.add PackedAccount(
-          accKey: NodeKey.fromHex(flds[0]),
-          accBlob: flds[1].toByteSeq)
+          accKey: NodeKey.fromHex(flds[0]), accBlob: flds[1].toByteSeq
+        )
         nAccounts.dec
         if 0 < nAccounts:
           continue
@@ -180,7 +170,6 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
         continue
       state = UndumpError
       say &"*** line {lno}: expected account data, got {line}"
-
     of UndumpProofs:
       if flds.len == 1:
         data.data.proof.add flds[0].toByteSeq.to(SnapProof)
@@ -190,7 +179,6 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
         continue
       state = UndumpError
       say &"*** expected proof data, got {line}"
-
     of UndumpCommit:
       if flds.len == 1 and flds[0] == "commit":
         data.seenAccounts = seenAccounts

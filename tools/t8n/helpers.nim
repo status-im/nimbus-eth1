@@ -19,8 +19,7 @@ import
   ./types,
   ./txpriv
 
-export
-  helpers
+export helpers
 
 proc parseHexOrInt[T](x: string): T =
   when T is UInt256:
@@ -77,9 +76,7 @@ proc fromJson(T: type AccessList, n: JsonNode, field: string): AccessList =
     return
 
   for x in z:
-    var ap = AccessPair(
-      address: EthAddress.fromJson(x, "address")
-    )
+    var ap = AccessPair(address: EthAddress.fromJson(x, "address"))
     let sks = x["storageKeys"]
     for sk in sks:
       ap.storageKeys.add hexToByteArray(sk.getStr(), 32)
@@ -87,8 +84,7 @@ proc fromJson(T: type AccessList, n: JsonNode, field: string): AccessList =
 
 proc fromJson(T: type Ommer, n: JsonNode): Ommer =
   Ommer(
-    delta: fromJson(uint64, n, "delta"),
-    address: fromJson(EthAddress, n, "address")
+    delta: fromJson(uint64, n, "delta"), address: fromJson(EthAddress, n, "address")
   )
 
 proc fromJson(T: type Withdrawal, n: JsonNode): Withdrawal =
@@ -96,7 +92,7 @@ proc fromJson(T: type Withdrawal, n: JsonNode): Withdrawal =
     index: fromJson(uint64, n, "index"),
     validatorIndex: fromJson(uint64, n, "validatorIndex"),
     address: fromJson(EthAddress, n, "address"),
-    amount: fromJson(uint64, n, "amount")
+    amount: fromJson(uint64, n, "amount"),
   )
 
 proc fromJson(T: type VersionedHashes, n: JsonNode, field: string): VersionedHashes =
@@ -259,7 +255,9 @@ proc parseTxTyped(item: var Rlp): Result[Transaction, string] =
   except RlpError as x:
     return err(x.msg)
 
-proc parseTxJson(ctx: TransContext, i: int, chainId: ChainId): Result[Transaction, string] =
+proc parseTxJson(
+    ctx: TransContext, i: int, chainId: ChainId
+): Result[Transaction, string] =
   try:
     let n = ctx.txs.n[i]
     return ok(parseTx(n, chainId))
@@ -294,28 +292,27 @@ proc parseTxs*(ctx: var TransContext, txs: JsonNode) =
   if txs.kind == JNull:
     return
   if txs.kind != JArray:
-    raise newError(ErrorJson,
-      "Transaction list should be a JSON array, got=" & $txs.kind)
-  ctx.txs = TxsList(
-    txsType: TxsJson,
-    n: txs)
+    raise
+      newError(ErrorJson, "Transaction list should be a JSON array, got=" & $txs.kind)
+  ctx.txs = TxsList(txsType: TxsJson, n: txs)
 
 proc parseTxsRlp*(ctx: var TransContext, hexData: string) =
   let bytes = hexToSeqByte(hexData)
-  ctx.txs = TxsList(
-    txsType: TxsRlp,
-    r: rlpFromBytes(bytes)
-  )
+  ctx.txs = TxsList(txsType: TxsRlp, r: rlpFromBytes(bytes))
   if ctx.txs.r.isList.not:
     raise newError(ErrorRlp, "RLP Transaction list should be a list")
 
 proc parseInputFromStdin*(ctx: var TransContext) =
   let data = stdin.readAll()
   let n = json.parseJson(data)
-  if n.hasKey("alloc"): ctx.parseAlloc(n["alloc"])
-  if n.hasKey("env"): ctx.parseEnv(n["env"])
-  if n.hasKey("txs"): ctx.parseTxs(n["txs"])
-  if n.hasKey("txsRlp"): ctx.parseTxsRlp(n["txsRlp"].getStr())
+  if n.hasKey("alloc"):
+    ctx.parseAlloc(n["alloc"])
+  if n.hasKey("env"):
+    ctx.parseEnv(n["env"])
+  if n.hasKey("txs"):
+    ctx.parseTxs(n["txs"])
+  if n.hasKey("txsRlp"):
+    ctx.parseTxsRlp(n["txsRlp"].getStr())
 
 template stripLeadingZeros(value: string): string =
   var cidx = 0
@@ -378,33 +375,35 @@ proc `@@`(x: BloomFilter): JsonNode =
   %("0x" & toHex[256](x))
 
 proc `@@`(x: Log): JsonNode =
-  result = %{
-    "address": @@(x.address),
-    "topics" : @@(x.topics),
-    "data"   : @@(x.data)
-  }
+  result = %{"address": @@(x.address), "topics": @@(x.topics), "data": @@(x.data)}
 
 proc `@@`(x: TxReceipt): JsonNode =
-  result = %{
-    "root"             : if x.root == Hash256(): %("0x") else: @@(x.root),
-    "status"           : @@(x.status),
-    "cumulativeGasUsed": @@(x.cumulativeGasUsed),
-    "logsBloom"        : @@(x.logsBloom),
-    "logs"             : if x.logs.len == 0: newJNull() else: @@(x.logs),
-    "transactionHash"  : @@(x.transactionHash),
-    "contractAddress"  : @@(x.contractAddress),
-    "gasUsed"          : @@(x.gasUsed),
-    "blockHash"        : @@(x.blockHash),
-    "transactionIndex" : @@(x.transactionIndex)
-  }
+  result =
+    %{
+      "root":
+        if x.root == Hash256():
+          %("0x")
+        else:
+          @@(x.root),
+      "status": @@(x.status),
+      "cumulativeGasUsed": @@(x.cumulativeGasUsed),
+      "logsBloom": @@(x.logsBloom),
+      "logs":
+        if x.logs.len == 0:
+          newJNull()
+        else:
+          @@(x.logs),
+      "transactionHash": @@(x.transactionHash),
+      "contractAddress": @@(x.contractAddress),
+      "gasUsed": @@(x.gasUsed),
+      "blockHash": @@(x.blockHash),
+      "transactionIndex": @@(x.transactionIndex),
+    }
   if x.txType > TxLegacy:
     result["type"] = %("0x" & toHex(x.txType.int, 1))
 
 proc `@@`(x: RejectedTx): JsonNode =
-  result = %{
-    "index": %(x.index),
-    "error": %(x.error)
-  }
+  result = %{"index": %(x.index), "error": %(x.error)}
 
 proc `@@`[T](x: seq[T]): JsonNode =
   result = newJArray()
@@ -418,16 +417,17 @@ proc `@@`[T](x: Opt[T]): JsonNode =
     @@(x.get())
 
 proc `@@`*(x: ExecutionResult): JsonNode =
-  result = %{
-    "stateRoot"   : @@(x.stateRoot),
-    "txRoot"      : @@(x.txRoot),
-    "receiptsRoot": @@(x.receiptsRoot),
-    "logsHash"    : @@(x.logsHash),
-    "logsBloom"   : @@(x.logsBloom),
-    "receipts"    : @@(x.receipts),
-    "currentDifficulty": @@(x.currentDifficulty),
-    "gasUsed"     : @@(x.gasUsed)
-  }
+  result =
+    %{
+      "stateRoot": @@(x.stateRoot),
+      "txRoot": @@(x.txRoot),
+      "receiptsRoot": @@(x.receiptsRoot),
+      "logsHash": @@(x.logsHash),
+      "logsBloom": @@(x.logsBloom),
+      "receipts": @@(x.receipts),
+      "currentDifficulty": @@(x.currentDifficulty),
+      "gasUsed": @@(x.gasUsed),
+    }
   if x.rejected.len > 0:
     result["rejected"] = @@(x.rejected)
   if x.currentBaseFee.isSome:

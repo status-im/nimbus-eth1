@@ -13,9 +13,7 @@
 ##
 {.push raises: [].}
 
-import
-  ./kvt_init/memory_only
-export
-  memory_only
+import ./kvt_init/memory_only
+export memory_only
 
 # End

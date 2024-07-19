@@ -28,13 +28,14 @@ proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
     blockTrace = traceBlock(captureCom, blk, {DisableState})
     receipts = dumpReceipts(captureCom.db, blk.header)
 
-  var metaData = %{
-    "blockNumber": %blockNumber.toHex,
-    "txTraces": txTrace,
-    "stateDump": stateDump,
-    "blockTrace": blockTrace,
-    "receipts": receipts
-  }
+  var metaData =
+    %{
+      "blockNumber": %blockNumber.toHex,
+      "txTraces": txTrace,
+      "stateDump": stateDump,
+      "blockTrace": blockTrace,
+      "receipts": receipts,
+    }
 
   metaData.dumpMemoryDB(capture)
   writeFile("block" & $blockNumber & ".json", metaData.pretty())
@@ -54,8 +55,7 @@ proc main() {.used.} =
   # nimbus --rpc-api: eth, debug --prune: archive
 
   var conf = makeConfig()
-  let db = newCoreDbRef(
-    DefaultDbPersistent, string conf.dataDir, DbOptions.init())
+  let db = newCoreDbRef(DefaultDbPersistent, string conf.dataDir, DbOptions.init())
   let com = CommonRef.new(db)
 
   com.dumpTest(97)

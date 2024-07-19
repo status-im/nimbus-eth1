@@ -9,12 +9,7 @@
 # according to those terms.
 
 import
-  std/times,
-  chronicles,
-  results,
-  ./types,
-  ../sim_utils,
-  ../../../nimbus/core/eip4844
+  std/times, chronicles, results, ./types, ../sim_utils, ../../../nimbus/core/eip4844
 
 import
   ./engine_tests,
@@ -30,8 +25,7 @@ proc combineTests(): seq[TestDesc] =
   result.add engineTestList
   result.add cancunTestList
 
-let
-  testList = combineTests()
+let testList = combineTests()
 
 proc main() =
   var stat: SimStat
@@ -39,14 +33,11 @@ proc main() =
 
   let res = loadKzgTrustedSetup()
   if res.isErr:
-    fatal "Cannot load baked in Kzg trusted setup", msg=res.error
+    fatal "Cannot load baked in Kzg trusted setup", msg = res.error
     quit(QuitFailure)
 
   for x in testList:
-    let status = if x.run(x.spec):
-                   TestStatus.OK
-                 else:
-                   TestStatus.Failed
+    let status = if x.run(x.spec): TestStatus.OK else: TestStatus.Failed
     stat.inc(x.name, status)
 
   let elpd = getTime() - start

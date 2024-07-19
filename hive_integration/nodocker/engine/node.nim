@@ -22,7 +22,7 @@ import
     core/chain/chain_desc,
     core/executor/calculate_reward,
     core/executor/process_transaction,
-    core/executor/process_block
+    core/executor/process_block,
   ],
   chronicles,
   results
@@ -30,9 +30,9 @@ import
 {.push raises: [].}
 
 proc processBlock(
-    vmState: BaseVMState;  ## Parent environment of header/body block
-    blk:     EthBlock;  ## Header/body block to add to the blockchain
-    ): Result[void, string] =
+    vmState: BaseVMState, ## Parent environment of header/body block
+    blk: EthBlock, ## Header/body block to add to the blockchain
+): Result[void, string] =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not.
   ##
@@ -41,20 +41,22 @@ proc processBlock(
   ## the `poa` descriptor is currently unused and only provided for later
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
-  template header: BlockHeader = blk.header
+  template header(): BlockHeader =
+    blk.header
+
   var dbTx = vmState.com.db.ctx.newTransaction()
-  defer: dbTx.dispose()
+  defer:
+    dbTx.dispose()
 
   let com = vmState.com
-  if com.daoForkSupport and
-     com.daoForkBlock.get == header.number:
+  if com.daoForkSupport and com.daoForkBlock.get == header.number:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
   if header.parentBeaconBlockRoot.isSome:
-    ? vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
+    ?vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
 
-  ? processTransactions(vmState, header, blk.transactions)
+  ?processTransactions(vmState, header, blk.transactions)
 
   if com.isShanghaiOrLater(header.timestamp):
     for withdrawal in blk.withdrawals.get:
@@ -75,25 +77,26 @@ proc processBlock(
 
   ok()
 
-proc getVmState(c: ChainRef, header: BlockHeader):
-                 Result[BaseVMState, void] =
+proc getVmState(c: ChainRef, header: BlockHeader): Result[BaseVMState, void] =
   if c.vmState.isNil.not:
     return ok(c.vmState)
 
   let vmState = BaseVMState()
   if not vmState.init(header, c.com):
-    debug "Cannot initialise VmState",
-      number = header.number
+    debug "Cannot initialise VmState", number = header.number
     return err()
 
   return ok(vmState)
 
 # A stripped down version of persistBlocks without validation
 # intended to accepts invalid block
-proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
-  template header: BlockHeader = blk.header
+proc setBlock*(c: ChainRef, blk: EthBlock): Result[void, string] =
+  template header(): BlockHeader =
+    blk.header
+
   let dbTx = c.db.ctx.newTransaction()
-  defer: dbTx.dispose()
+  defer:
+    dbTx.dispose()
 
   c.com.hardForkTransition(header)
 
@@ -102,10 +105,11 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
     vmState = c.getVmState(header).valueOr:
       return err("no vmstate")
     stateRootChpt = vmState.parent.stateRoot # Check point
-  ? vmState.processBlock(blk)
+  ?vmState.processBlock(blk)
 
   if not c.db.persistHeader(
-      header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory):
+    header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
+  ):
     return err("Could not persist header")
 
   try:

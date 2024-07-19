@@ -17,13 +17,13 @@ import
 
 type
   DumpAccount* = ref object
-    balance* : UInt256
-    nonce*   : AccountNonce
-    root*    : Hash256
+    balance*: UInt256
+    nonce*: AccountNonce
+    root*: Hash256
     codeHash*: Hash256
-    code*    : Blob
-    key*     : Hash256
-    storage* : Table[UInt256, UInt256]
+    code*: Blob
+    key*: Hash256
+    storage*: Table[UInt256, UInt256]
 
   StateDump* = ref object
     root*: Hash256
@@ -47,14 +47,15 @@ proc `%`*(x: Table[UInt256, UInt256]): JsonNode =
     result["0x" & k.toHex] = %(v)
 
 proc `%`*(x: DumpAccount): JsonNode =
-  result = %{
-    "balance" : %(x.balance),
-    "nonce"   : %(x.nonce),
-    "root"    : %(x.root),
-    "codeHash": %(x.codeHash),
-    "code"    : %(x.code),
-    "key"     : %(x.key)
-  }
+  result =
+    %{
+      "balance": %(x.balance),
+      "nonce": %(x.nonce),
+      "root": %(x.root),
+      "codeHash": %(x.codeHash),
+      "code": %(x.code),
+      "key": %(x.key),
+    }
   if x.storage.len > 0:
     result["storage"] = %(x.storage)
 
@@ -64,19 +65,16 @@ proc `%`*(x: Table[EthAddress, DumpAccount]): JsonNode =
     result["0x" & k.toHex] = %(v)
 
 proc `%`*(x: StateDump): JsonNode =
-  result = %{
-    "root": %(x.root),
-    "accounts": %(x.accounts)
-  }
+  result = %{"root": %(x.root), "accounts": %(x.accounts)}
 
 proc dumpAccount*(db: LedgerRef, acc: EthAddress): DumpAccount =
   result = DumpAccount(
-    balance : db.getBalance(acc),
-    nonce   : db.getNonce(acc),
-    root    : db.getStorageRoot(acc),
+    balance: db.getBalance(acc),
+    nonce: db.getNonce(acc),
+    root: db.getStorageRoot(acc),
     codeHash: db.getCodeHash(acc),
-    code    : db.getCode(acc).bytes(),
-    key     : keccakHash(acc)
+    code: db.getCode(acc).bytes(),
+    key: keccakHash(acc),
   )
   for k, v in db.cachedStorage(acc):
     result.storage[k] = v
@@ -86,13 +84,9 @@ proc dumpAccounts*(db: LedgerRef): Table[EthAddress, DumpAccount] =
     result[acc] = dumpAccount(db, acc)
 
 proc dumpState*(db: LedgerRef): StateDump =
-  StateDump(
-    root: db.rootHash,
-    accounts: dumpAccounts(db)
-  )
+  StateDump(root: db.rootHash, accounts: dumpAccounts(db))
 
 proc dumpAccounts*(stateDB: LedgerRef, addresses: openArray[EthAddress]): JsonNode =
   result = newJObject()
   for ac in addresses:
     result[ac.toHex] = %dumpAccount(stateDB, ac)
-

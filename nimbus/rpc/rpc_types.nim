@@ -8,13 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  web3/eth_api_types,
-  ../beacon/web3_eth_conv
+import web3/eth_api_types, ../beacon/web3_eth_conv
 
-export
-  eth_api_types,
-  web3_eth_conv
+export eth_api_types, web3_eth_conv
 
 type
   FilterLog* = eth_api_types.LogObject

@@ -8,18 +8,13 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/sequtils,
-  eth/common
+import std/sequtils, eth/common
 
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc startAt*(
-    h: openArray[EthBlock];
-    start: uint64;
-      ): seq[EthBlock] =
+proc startAt*(h: openArray[EthBlock], start: uint64): seq[EthBlock] =
   ## Filter out blocks with smaller `blockNumber`
   if start.BlockNumber <= h[0].header.number:
     return h.toSeq()
@@ -30,10 +25,7 @@ proc startAt*(
       n.inc
     return h[n ..< h.len]
 
-proc stopAfter*(
-    h: openArray[EthBlock];
-    last: uint64;
-      ): seq[EthBlock] =
+proc stopAfter*(h: openArray[EthBlock], last: uint64): seq[EthBlock] =
   ## Filter out blocks with larger `blockNumber`
   if h[^1].header.number <= last.BlockNumber:
     return h.toSeq()

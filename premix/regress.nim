@@ -17,8 +17,7 @@ import
   ../nimbus/db/core_db/persistent,
   configuration # must be late (compilation annoyance)
 
-const
-  numBlocks = 256
+const numBlocks = 256
 
 proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
   var
@@ -30,7 +29,8 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
     blocks[i] = com.db.getEthBlock(blockNumber + i.BlockNumber)
 
   let transaction = com.db.ctx.newTransaction()
-  defer: transaction.dispose()
+  defer:
+    transaction.dispose()
 
   for i in 0 ..< numBlocks:
     stdout.write blockNumber + i.BlockNumber
@@ -52,8 +52,8 @@ proc validateBlock(com: CommonRef, blockNumber: BlockNumber): BlockNumber =
 proc main() {.used.} =
   let
     conf = getConfiguration()
-    com = CommonRef.new(newCoreDbRef(
-      DefaultDbPersistent, conf.dataDir, DbOptions.init()))
+    com =
+      CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
   # move head to block number ...
   if conf.head == 0'u64:

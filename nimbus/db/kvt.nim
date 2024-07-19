@@ -13,26 +13,13 @@
 ##
 {.push raises: [].}
 
-import
-  kvt/[kvt_api, kvt_constants]
-export
-  kvt_api, kvt_constants
+import kvt/[kvt_api, kvt_constants]
+export kvt_api, kvt_constants
 
-import
-  kvt/kvt_init
-export
-  MemBackendRef,
-  VoidBackendRef,
-  finish,
-  init
+import kvt/kvt_init
+export MemBackendRef, VoidBackendRef, finish, init
 
-import
-  kvt/kvt_desc
-export
-  KvtDbAction,
-  KvtDbRef,
-  KvtError,
-  KvtTxRef,
-  isValid
+import kvt/kvt_desc
+export KvtDbAction, KvtDbRef, KvtError, KvtTxRef, isValid
 
 # End

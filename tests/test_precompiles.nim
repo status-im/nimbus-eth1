@@ -7,33 +7,43 @@
 
 import
   std/[strformat, strutils, json, os, tables, macros],
-  unittest2, stew/byteutils,
+  unittest2,
+  stew/byteutils,
   eth/[keys, trie],
   ../nimbus/common/common,
   ../tools/common/helpers as chp,
-  ../nimbus/[evm/computation,
+  ../nimbus/[
+    evm/computation,
     evm/state,
     evm/types,
     constants,
     evm/precompiles {.all.},
     transaction,
-    transaction/call_evm
-    ],
+    transaction/call_evm,
+  ],
+  ./test_helpers,
+  ./test_allowed_to_fail
 
-  ./test_helpers, ./test_allowed_to_fail
+proc initAddress(i: byte): EthAddress =
+  result[19] = i
 
-proc initAddress(i: byte): EthAddress = result[19] = i
-
-template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddresses): untyped =
+template doTest(
+    fixture: JsonNode, vmState: BaseVMState, address: PrecompileAddresses
+): untyped =
   for test in fixture:
     let
       expectedErr = test.hasKey("ExpectedError")
-      expected = if test.hasKey("Expected"): hexToSeqByte(test["Expected"].getStr) else: @[]
+      expected =
+        if test.hasKey("Expected"):
+          hexToSeqByte(test["Expected"].getStr)
+        else:
+          @[]
       dataStr = test["Input"].getStr
-      gasExpected = if test.hasKey("Gas"):
-                      Opt.some(GasInt test["Gas"].getInt)
-                    else:
-                      Opt.none(GasInt)
+      gasExpected =
+        if test.hasKey("Gas"):
+          Opt.some(GasInt test["Gas"].getInt)
+        else:
+          Opt.none(GasInt)
 
     let unsignedTx = Transaction(
       txType: TxLegacy,
@@ -42,7 +52,11 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
       gasLimit: 1_000_000_000.GasInt,
       to: Opt.some initAddress(address.byte),
       value: 0.u256,
-      payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
+      payload:
+        if dataStr.len > 0:
+          dataStr.hexToSeqByte
+        else:
+          @[],
     )
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
     let fixtureResult = testCallEvm(tx, tx.getSender, vmState)
@@ -52,7 +66,8 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
     else:
       check not fixtureResult.isError
       let c = fixtureResult.output == expected
-      if not c: echo "Output  : " & fixtureResult.output.toHex & "\nExpected: " & expected.toHex
+      if not c:
+        echo "Output  : " & fixtureResult.output.toHex & "\nExpected: " & expected.toHex
       check c
 
       if gasExpected.isSome:
@@ -61,36 +76,50 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
         check fixtureResult.gasUsed == gasExpected.get
 
 proc parseFork(x: string): string =
-  result = x.capitalizeAscii  
-  
+  result = x.capitalizeAscii
+
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let
     label = fixtures["func"].getStr
-    conf  = getChainConfig(parseFork(fixtures["fork"].getStr))
-    data  = fixtures["data"]
-    privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
+    conf = getChainConfig(parseFork(fixtures["fork"].getStr))
+    data = fixtures["data"]
+    privateKey = PrivateKey.fromHex(
+      "7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d"
+    )[]
     com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = conf)
     vmState = BaseVMState.new(
-      BlockHeader(number: 1'u64, stateRoot: emptyRlpHash),
-      BlockHeader(),
-      com
+      BlockHeader(number: 1'u64, stateRoot: emptyRlpHash), BlockHeader(), com
     )
 
   case toLowerAscii(label)
-  of "ecrecover": data.doTest(vmState, paEcRecover)
-  of "sha256"   : data.doTest(vmState, paSha256)
-  of "ripemd"   : data.doTest(vmState, paRipeMd160)
-  of "identity" : data.doTest(vmState, paIdentity)
-  of "modexp"   : data.doTest(vmState, paModExp)
-  of "bn256add" : data.doTest(vmState, paEcAdd)
-  of "bn256mul" : data.doTest(vmState, paEcMul)
-  of "ecpairing": data.doTest(vmState, paPairing)
-  of "blake2f"  : data.doTest(vmState, paBlake2bf)
-  of "blsg1add" : data.doTest(vmState, paBlsG1Add)
-  of "blsg1mul" : data.doTest(vmState, paBlsG1Mul)
-  of "blsg1multiexp" : data.doTest(vmState, paBlsG1MultiExp)
-  of "blsg2add" : data.doTest(vmState, paBlsG2Add)
-  of "blsg2mul" : data.doTest(vmState, paBlsG2Mul)
+  of "ecrecover":
+    data.doTest(vmState, paEcRecover)
+  of "sha256":
+    data.doTest(vmState, paSha256)
+  of "ripemd":
+    data.doTest(vmState, paRipeMd160)
+  of "identity":
+    data.doTest(vmState, paIdentity)
+  of "modexp":
+    data.doTest(vmState, paModExp)
+  of "bn256add":
+    data.doTest(vmState, paEcAdd)
+  of "bn256mul":
+    data.doTest(vmState, paEcMul)
+  of "ecpairing":
+    data.doTest(vmState, paPairing)
+  of "blake2f":
+    data.doTest(vmState, paBlake2bf)
+  of "blsg1add":
+    data.doTest(vmState, paBlsG1Add)
+  of "blsg1mul":
+    data.doTest(vmState, paBlsG1Mul)
+  of "blsg1multiexp":
+    data.doTest(vmState, paBlsG1MultiExp)
+  of "blsg2add":
+    data.doTest(vmState, paBlsG2Add)
+  of "blsg2mul":
+    data.doTest(vmState, paBlsG2Mul)
   # EIP 2537: disabled due to gas price changes/discprepancies
   #of "blsg2multiexp": data.doTest(vmState, paBlsG2MultiExp)
   #of "blspairing": data.doTest(vmState, paBlsPairing)

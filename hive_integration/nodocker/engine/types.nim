@@ -22,16 +22,14 @@ import
 
 from ../../../nimbus/common/chain_config import NetworkParams
 
-export
-  execution_types,
-  web3_eth_conv
+export execution_types, web3_eth_conv
 
 type
   EngineFork* = enum
-    ForkNone     = "none"
-    ForkParis    = "Merge"
+    ForkNone = "none"
+    ForkParis = "Merge"
     ForkShanghai = "Shanghai"
-    ForkCancun   = "Cancun"
+    ForkCancun = "Cancun"
 
   BaseSpec* = ref object of RootObj
     txType*: Opt[TxType]
@@ -50,37 +48,37 @@ type
     getGenesisFn*: proc(cs: BaseSpec, param: NetworkParams)
 
   TestDesc* = object
-    name* : string
+    name*: string
     about*: string
-    run*  : proc(spec: BaseSpec): bool
-    spec* : BaseSpec
+    run*: proc(spec: BaseSpec): bool
+    spec*: BaseSpec
 
   ExecutableData* = object
     basePayload*: ExecutionPayload
-    beaconRoot* : Opt[common.Hash256]
-    attr*       : PayloadAttributes
+    beaconRoot*: Opt[common.Hash256]
+    attr*: PayloadAttributes
     versionedHashes*: Opt[seq[common.Hash256]]
 
 const
   DefaultTimeout* = 60 # seconds
   DefaultSleep* = 1
-  prevRandaoContractAddr* = hexToByteArray[20]("0000000000000000000000000000000000000316")
+  prevRandaoContractAddr* =
+    hexToByteArray[20]("0000000000000000000000000000000000000316")
   GenesisTimestamp* = 0x1234
-  Head*      = "latest"
-  Pending*   = "pending"
+  Head* = "latest"
+  Pending* = "pending"
   Finalized* = "finalized"
-  Safe*      = "safe"
+  Safe* = "safe"
 
 func toAddress*(x: UInt256): EthAddress =
   var
     mm = x.toByteArrayBE
     x = 0
-  for i in 12..31:
+  for i in 12 .. 31:
     result[x] = mm[i]
     inc x
 
-const
-  ZeroAddr* =  toAddress(0.u256)
+const ZeroAddr* = toAddress(0.u256)
 
 func toHash*(x: UInt256): common.Hash256 =
   common.Hash256(data: x.toByteArrayBE)
@@ -124,14 +122,14 @@ template expectErrorCode*(res: untyped, errCode: int) =
   testCond res.isErr:
     error "unexpected result, want error, get ok"
   testCond res.error.find($errCode) != -1:
-    error "unexpected error code", expect=errCode, got=res.error
+    error "unexpected error code", expect = errCode, got = res.error
 
 template expectNoError*(res: untyped) =
   testCond res.isOk
 
 template expectPayload*(res: untyped, payload: ExecutionPayload) =
   testCond res.isOk:
-    error "Unexpected getPayload Error", msg=res.error
+    error "Unexpected getPayload Error", msg = res.error
   let x = res.get
   when typeof(x) is ExecutionPayloadV1:
     testCond x == payload.V1:
@@ -145,40 +143,37 @@ template expectPayload*(res: untyped, payload: ExecutionPayload) =
 
 template expectWithdrawalsRoot*(res: untyped, wdRoot: Opt[common.Hash256]) =
   testCond res.isOk:
-    error "Unexpected error", msg=res.error
+    error "Unexpected error", msg = res.error
   let h = res.get
   testCond h.withdrawalsRoot == wdRoot:
     error "wdroot mismatch"
 
 template expectBalanceEqual*(res: untyped, expectedBalance: UInt256) =
   testCond res.isOk:
-    error "Unexpected error", msg=res.error
+    error "Unexpected error", msg = res.error
   testCond res.get == expectedBalance:
-    error "balance mismatch", expect=expectedBalance, get=res.get
+    error "balance mismatch", expect = expectedBalance, get = res.get
 
 template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash) =
   testCond res.isOk:
-    error "Unexpected error", msg=res.error
+    error "Unexpected error", msg = res.error
   let s = res.get
   when s is PayloadStatusV1:
     testCond s.latestValidHash.isSome:
-      error "Expect latest valid hash isSome",
-        msg=s.validationError.get("NO MSG")
+      error "Expect latest valid hash isSome", msg = s.validationError.get("NO MSG")
     testCond s.latestValidHash.get == expectedHash:
       error "latest valid hash mismatch",
-        expect=expectedHash.short,
-        get=s.latestValidHash.get.short
+        expect = expectedHash.short, get = s.latestValidHash.get.short
   else:
     testCond s.payloadStatus.latestValidHash.isSome:
       error "Expect latest valid hash isSome"
     testCond s.payloadStatus.latestValidHash.get == expectedHash:
       error "latest valid hash mismatch",
-        expect=expectedHash.short,
-        get=s.payloadStatus.latestValidHash.get.short
+        expect = expectedHash.short, get = s.payloadStatus.latestValidHash.get.short
 
 template expectLatestValidHash*(res: untyped) =
   testCond res.isOk:
-    error "Unexpected error", msg=res.error
+    error "Unexpected error", msg = res.error
   let s = res.get
   when s is ForkchoiceUpdatedResponse:
     testCond s.payloadStatus.latestValidHash.isNone:
@@ -191,29 +186,30 @@ template expectErrorCode*(res: untyped, errCode: int, expectedDesc: string) =
   testCond res.isErr:
     error "unexpected result, want error, get ok"
   testCond res.error.find($errCode) != -1:
-    fatal "DEBUG", msg=expectedDesc, expected=errCode, got=res.error
+    fatal "DEBUG", msg = expectedDesc, expected = errCode, got = res.error
 
 template expectNoError*(res: untyped, expectedDesc: string) =
   testCond res.isOk:
-    fatal "DEBUG", msg=expectedDesc, err=res.error
+    fatal "DEBUG", msg = expectedDesc, err = res.error
 
 template expectStatusEither*(res: untyped, cond: openArray[PayloadExecutionStatus]) =
   testCond res.isOk:
-    error "Unexpected expectStatusEither error", msg=res.error
+    error "Unexpected expectStatusEither error", msg = res.error
   let s = res.get()
   when s is PayloadStatusV1:
     testCond s.status in cond:
       error "Unexpected expectStatusEither status",
-        expect=cond, get=s.status, msg=s.validationError.get("NO MSG")
+        expect = cond, get = s.status, msg = s.validationError.get("NO MSG")
   else:
     testCond s.payloadStatus.status in cond:
       error "Unexpected expectStatusEither status",
-        expect=cond, get=s.payloadStatus.status,
-        msg=s.payloadStatus.validationError.get("NO MSG")
+        expect = cond,
+        get = s.payloadStatus.status,
+        msg = s.payloadStatus.validationError.get("NO MSG")
 
 template expectNoValidationError*(res: untyped) =
   testCond res.isOk:
-    error "Unexpected expectNoValidationError error", msg=res.error
+    error "Unexpected expectNoValidationError error", msg = res.error
   let s = res.get()
   when s is PayloadStatusV1:
     testCond s.validationError.isNone:
@@ -224,24 +220,24 @@ template expectNoValidationError*(res: untyped) =
 
 template expectPayloadStatus*(res: untyped, cond: PayloadExecutionStatus) =
   testCond res.isOk:
-    error "Unexpected FCU Error", msg=res.error
+    error "Unexpected FCU Error", msg = res.error
   let s = res.get()
   testCond s.payloadStatus.status == cond:
-    error "Unexpected FCU status", expect=cond, get=s.payloadStatus.status
+    error "Unexpected FCU status", expect = cond, get = s.payloadStatus.status
 
 template expectStatus*(res: untyped, cond: PayloadExecutionStatus) =
   testCond res.isOk:
-    error "Unexpected newPayload error", msg=res.error
+    error "Unexpected newPayload error", msg = res.error
   let s = res.get()
   testCond s.status == cond:
-    error "Unexpected newPayload status", expect=cond, get=s.status
+    error "Unexpected newPayload status", expect = cond, get = s.status
 
 template expectPayloadID*(res: untyped, id: Opt[PayloadID]) =
   testCond res.isOk:
-    error "Unexpected expectPayloadID Error", msg=res.error
+    error "Unexpected expectPayloadID Error", msg = res.error
   let s = res.get()
   testCond s.payloadId == id:
-    error "Unexpected expectPayloadID payloadID", expect=id, get=s.payloadId
+    error "Unexpected expectPayloadID payloadID", expect = id, get = s.payloadId
 
 template expectError*(res: untyped) =
   testCond res.isErr:
@@ -249,61 +245,62 @@ template expectError*(res: untyped) =
 
 template expectHash*(res: untyped, hash: common.Hash256) =
   testCond res.isOk:
-    error "Unexpected expectHash Error", msg=res.error
+    error "Unexpected expectHash Error", msg = res.error
   let s = res.get()
   testCond s.blockHash == hash:
-    error "Unexpected expectHash", expect=hash.short, get=s.blockHash.short
+    error "Unexpected expectHash", expect = hash.short, get = s.blockHash.short
 
 template expectStorageEqual*(res: untyped, expectedValue: FixedBytes[32]) =
   testCond res.isOk:
-    error "expectStorageEqual", msg=res.error
+    error "expectStorageEqual", msg = res.error
   testCond res.get == expectedValue:
-    error "invalid storage", get=res.get, expect=expectedValue
+    error "invalid storage", get = res.get, expect = expectedValue
 
 template expectBlobGasUsed*(res: untyped, expected: uint64) =
   testCond res.isOk:
-    error "expectBlobGasUsed", msg=res.error
+    error "expectBlobGasUsed", msg = res.error
   let rec = res.get
   testCond rec.blobGasUsed.isSome:
     error "expect blobGasUsed isSome"
   testCond rec.blobGasUsed.get == expected:
-    error "expectBlobGasUsed", expect=expected, get=rec.blobGasUsed.get
+    error "expectBlobGasUsed", expect = expected, get = rec.blobGasUsed.get
 
 template expectBlobGasPrice*(res: untyped, expected: UInt256) =
   testCond res.isOk:
-    error "expectBlobGasPrice", msg=res.error
+    error "expectBlobGasPrice", msg = res.error
   let rec = res.get
   testCond rec.blobGasPrice.isSome:
     error "expect blobGasPrice isSome"
   testCond rec.blobGasPrice.get == expected:
-    error "expectBlobGasPrice", expect=expected, get=rec.blobGasPrice.get
+    error "expectBlobGasPrice", expect = expected, get = rec.blobGasPrice.get
 
 template expectNumber*(res: untyped, expected: uint64) =
   testCond res.isOk:
-    error "expectNumber", msg=res.error
+    error "expectNumber", msg = res.error
   testCond res.get == expected:
-    error "expectNumber", expect=expected, get=res.get
+    error "expectNumber", expect = expected, get = res.get
 
 template expectTransactionHash*(res: untyped, expected: common.Hash256) =
   testCond res.isOk:
-    error "expectTransactionHash", msg=res.error
+    error "expectTransactionHash", msg = res.error
   let rec = res.get
   testCond rec.txHash == expected:
-    error "expectTransactionHash", expect=expected.short, get=rec.txHash.short
+    error "expectTransactionHash", expect = expected.short, get = rec.txHash.short
 
 template expectPayloadParentHash*(res: untyped, expected: Web3Hash) =
   testCond res.isOk:
-    error "expectPayloadParentHash", msg=res.error
+    error "expectPayloadParentHash", msg = res.error
   let rec = res.get
   testCond rec.executionPayload.parentHash == expected:
-    error "expectPayloadParentHash", expect=expected.short, get=rec.executionPayload.parentHash.short
+    error "expectPayloadParentHash",
+      expect = expected.short, get = rec.executionPayload.parentHash.short
 
 template expectBlockHash*(res: untyped, expected: common.Hash256) =
   testCond res.isOk:
-    error "expectBlockHash", msg=res.error
+    error "expectBlockHash", msg = res.error
   let rec = res.get
   testCond rec.blockHash == expected:
-    error "expectBlockHash", expect=expected.short, get=rec.blockHash.short
+    error "expectBlockHash", expect = expected.short, get = rec.blockHash.short
 
 func timestamp*(x: ExecutableData): auto =
   x.basePayload.timestamp

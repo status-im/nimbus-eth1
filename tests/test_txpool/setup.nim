@@ -24,8 +24,9 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
-    {.gcsafe,raises: [CatchableError].} =
+proc setStatus(
+    xp: TxPoolRef, item: TxItemRef, status: TxItemStatus
+) {.gcsafe, raises: [CatchableError].} =
   ## Change/update the status of the transaction item.
   if status != item.status:
     discard xp.txDB.reassign(item, status)
@@ -42,15 +43,14 @@ type
     address: EthAddress
     signer: PrivateKey
 
-const
-  genesisFile = "tests/customgenesis/cancun123.json"
+const genesisFile = "tests/customgenesis/cancun123.json"
 
 proc initTxEnv(chainId: ChainID): TxEnv =
   result.rng = newRng()
   result.chainId = chainId
 
 proc getSigner(env: var TxEnv, address: EthAddress): Signer =
-  env.map.withValue(address, val) do:
+  env.map.withValue(address, val):
     let newAddress = val[]
     return Signer(address: newAddress, signer: env.signers[newAddress])
   do:
@@ -77,24 +77,16 @@ proc fillGenesis(env: var TxEnv, param: NetworkParams) =
 
   for k, v in map:
     let s = env.getSigner(k)
-    param.genesis.alloc[s.address] = GenesisAccount(
-      balance: v + v,
-    )
+    param.genesis.alloc[s.address] = GenesisAccount(balance: v + v)
 
 proc setupTxPool*(getStatus: proc(): TxItemStatus): (CommonRef, TxPoolRef, int) =
-  let
-    conf = makeConfig(@[
-      "--custom-network:" & genesisFile
-    ])
+  let conf = makeConfig(@["--custom-network:" & genesisFile])
 
   var txEnv = initTxEnv(conf.networkParams.config.chainId)
   txEnv.fillGenesis(conf.networkParams)
 
-  let com = CommonRef.new(
-    newCoreDbRef DefaultDbMemory,
-    conf.networkId,
-    conf.networkParams
-  )
+  let com =
+    CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
 
   com.initializeEmptyDb()
   let txPool = TxPoolRef.new(com)
@@ -109,12 +101,12 @@ proc setupTxPool*(getStatus: proc(): TxItemStatus): (CommonRef, TxPoolRef, int) 
   (com, txPool, txEnv.txs.len)
 
 proc toTxPool*(
-    com: CommonRef;               ## to be modified, initialisier for `TxPool`
-    itList: seq[TxItemRef];       ## import items into new `TxPool` (read only)
-    baseFee = 0.GasPrice;         ## initalise with `baseFee` (unless 0)
-    local: seq[EthAddress] = @[]; ## local addresses
-    noisy = true): TxPoolRef =
-
+    com: CommonRef, ## to be modified, initialisier for `TxPool`
+    itList: seq[TxItemRef], ## import items into new `TxPool` (read only)
+    baseFee = 0.GasPrice, ## initalise with `baseFee` (unless 0)
+    local: seq[EthAddress] = @[], ## local addresses
+    noisy = true,
+): TxPoolRef =
   doAssert not com.isNil
 
   result = TxPoolRef.new(com)
@@ -122,7 +114,7 @@ proc toTxPool*(
   result.maxRejects = itList.len
 
   let noLocals = local.len == 0
-  var localAddr: Table[EthAddress,bool]
+  var localAddr: Table[EthAddress, bool]
   for a in local:
     localAddr[a] = true
 
@@ -136,17 +128,17 @@ proc toTxPool*(
         doAssert result.addRemote(item.pooledTx, true).isOk
   doAssert result.nItems.total == itList.len
 
-
 proc toTxPool*(
-    com: CommonRef;               ## to be modified, initialisier for `TxPool`
-    timeGap: var Time;            ## to be set, time in the middle of time gap
-    nGapItems: var int;           ## to be set, # items before time gap
-    itList: var seq[TxItemRef];   ## import items into new `TxPool` (read only)
-    baseFee = 0.GasPrice;         ## initalise with `baseFee` (unless 0)
-    itemsPC = 30;                 ## % number if items befor time gap
-    delayMSecs = 200;             ## size of time vap
-    local: seq[EthAddress] = @[]; ## local addresses
-    noisy = true): TxPoolRef =
+    com: CommonRef, ## to be modified, initialisier for `TxPool`
+    timeGap: var Time, ## to be set, time in the middle of time gap
+    nGapItems: var int, ## to be set, # items before time gap
+    itList: var seq[TxItemRef], ## import items into new `TxPool` (read only)
+    baseFee = 0.GasPrice, ## initalise with `baseFee` (unless 0)
+    itemsPC = 30, ## % number if items befor time gap
+    delayMSecs = 200, ## size of time vap
+    local: seq[EthAddress] = @[], ## local addresses
+    noisy = true,
+): TxPoolRef =
   ## Variant of `toTxPoolFromSeq()` with a time gap between consecutive
   ## items on the `remote` queue
   doAssert not com.isNil
@@ -157,15 +149,14 @@ proc toTxPool*(
   result.maxRejects = itList.len
 
   let noLocals = local.len == 0
-  var localAddr: Table[EthAddress,bool]
+  var localAddr: Table[EthAddress, bool]
   for a in local:
     localAddr[a] = true
 
   let
     delayAt = itList.len * itemsPC div 100
     middleOfTimeGap = initDuration(milliSeconds = delayMSecs div 2)
-  const
-    tFmt = "yyyy-MM-dd'T'HH-mm-ss'.'fff"
+  const tFmt = "yyyy-MM-dd'T'HH-mm-ss'.'fff"
 
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for n in 0 ..< itList.len:
@@ -176,7 +167,7 @@ proc toTxPool*(
         doAssert result.addLocal(item.pooledTx, true).isOk
       else:
         doAssert result.addRemote(item.pooledTx, true).isOk
-      if n < 3 or delayAt-3 <= n and n <= delayAt+3 or itList.len-4 < n:
+      if n < 3 or delayAt - 3 <= n and n <= delayAt + 3 or itList.len - 4 < n:
         let t = result.getItem(item.itemID).value.timeStamp.format(tFmt, utc())
         noisy.say &"added item {n} time={t}"
       if delayAt == n:
@@ -191,12 +182,11 @@ proc toTxPool*(
   doAssert result.nItems.total == itList.len
   doAssert result.nItems.disposed == 0
 
-
 proc toItems*(xp: TxPoolRef): seq[TxItemRef] =
   toSeq(xp.txDB.byItemID.nextValues)
 
-proc toItems*(xp: TxPoolRef; label: TxItemStatus): seq[TxItemRef] =
-  for (_,nonceList) in xp.txDB.decAccount(label):
+proc toItems*(xp: TxPoolRef, label: TxItemStatus): seq[TxItemRef] =
+  for (_, nonceList) in xp.txDB.decAccount(label):
     result.add toSeq(nonceList.incNonce)
 
 proc setItemStatusFromInfo*(xp: TxPoolRef) =
@@ -207,13 +197,13 @@ proc setItemStatusFromInfo*(xp: TxPoolRef) =
     if w.len > 0:
       xp.setStatus(item, w[0])
 
-
-proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
-                  (BlockHeader, seq[Transaction], seq[EthAddress]) {.inline.} =
+proc getBackHeader*(
+    xp: TxPoolRef, nTxs, nAccounts: int
+): (BlockHeader, seq[Transaction], seq[EthAddress]) {.inline.} =
   ## back track the block chain for at least `nTxs` transactions and
   ## `nAccounts` sender accounts
   var
-    accTab: Table[EthAddress,bool]
+    accTab: Table[EthAddress, bool]
     txsLst: seq[Transaction]
     backHash = xp.head.blockHash
     backHeader = xp.head
@@ -224,7 +214,7 @@ proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
     txsLst.add backBody.transactions
     backHash = backHeader.parentHash
     if not xp.chain.com.db.getBlockHeader(backHash, backHeader) or
-       not xp.chain.com.db.getBlockBody(backHash, backBody):
+        not xp.chain.com.db.getBlockBody(backHash, backBody):
       break
 
     # collect accounts unless max reached

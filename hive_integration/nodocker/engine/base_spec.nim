@@ -45,7 +45,7 @@ func getGenesisTimestamp*(s: BaseSpec): uint64 =
   return genesisTimestamp.uint64
 
 func getBlockTime*(s: BaseSpec, blockNumber: uint64): uint64 =
-  return s.getGenesisTimestamp() + blockNumber*s.getBlockTimeIncrements().uint64
+  return s.getGenesisTimestamp() + blockNumber * s.getBlockTimeIncrements().uint64
 
 func getForkTime*(s: BaseSpec): uint64 =
   var forkTime = s.forkTime
@@ -61,8 +61,9 @@ method getForkConfig*(s: BaseSpec): ChainConfig {.base.} =
     forkConfig = getChainConfig($mainFork)
     genesisTimestamp = s.getGenesisTimestamp()
 
-  doAssert(previousForkTime <= forkTime,
-    "previous fork time cannot be greater than fork time")
+  doAssert(
+    previousForkTime <= forkTime, "previous fork time cannot be greater than fork time"
+  )
 
   if mainFork == ForkParis:
     # Cannot configure a fork before Paris, skip test

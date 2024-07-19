@@ -42,42 +42,45 @@ proc opName(n: int): string {.compileTime.} =
   "Log" & $n
 
 proc fnInfo(n: int): string {.compileTime.} =
-  var blurb = case n
-              of 1: "topic"
-              else: "topics"
+  var blurb =
+    case n
+    of 1: "topic"
+    else: "topics"
   "Append log record with " & $n & " " & blurb
 
-
 proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid =
-  static: doAssert(topicCount in 0 .. 4)
-  ? checkInStaticContext(c)
+  static:
+    doAssert(topicCount in 0 .. 4)
+  ?checkInStaticContext(c)
   const stackSize = 2 + topicCount
-  ? c.stack.lsCheck(stackSize)
+  ?c.stack.lsCheck(stackSize)
   let
     memPos = c.stack.lsPeekMemRef(^1)
-    len    = c.stack.lsPeekMemRef(^2)
+    len = c.stack.lsPeekMemRef(^2)
 
   if memPos < 0 or len < 0:
     return err(opErr(OutOfBounds))
 
-  ? c.opcodeGasCost(opcode,
+  ?c.opcodeGasCost(
+    opcode,
     c.gasCosts[opcode].m_handler(c.memory.len, memPos, len),
-    reason = "Memory expansion, Log topic and data gas cost")
+    reason = "Memory expansion, Log topic and data gas cost",
+  )
   c.memory.extend(memPos, len)
 
   when evmc_enabled:
     var topics: array[4, evmc_bytes32]
     for i in 0 ..< topicCount:
-      topics[i].bytes = c.stack.lsPeekTopic(^(i+3))
+      topics[i].bytes = c.stack.lsPeekTopic(^(i + 3))
 
-    c.host.emitLog(c.msg.contractAddress,
-      c.memory.read(memPos, len),
-      topics[0].addr, topicCount)
+    c.host.emitLog(
+      c.msg.contractAddress, c.memory.read(memPos, len), topics[0].addr, topicCount
+    )
   else:
     var log: Log
     log.topics = newSeqOfCap[Topic](topicCount)
     for i in 0 ..< topicCount:
-      log.topics.add c.stack.lsPeekTopic(^(i+3))
+      log.topics.add c.stack.lsPeekTopic(^(i + 3))
 
     assign(log.data, c.memory.read(memPos, len))
     log.address = c.msg.contractAddress
@@ -98,7 +101,7 @@ const
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc wrapperFn(cpt: VmCpt; n: static int): EvmResultVoid =
+proc wrapperFn(cpt: VmCpt, n: static int): EvmResultVoid =
   cpt.logImpl(logOpArg[n], n)
 
 genOphHandlers fnName, fnInfo, inxRange, wrapperFn

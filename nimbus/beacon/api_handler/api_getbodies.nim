@@ -16,15 +16,15 @@ import
   ../../db/core_db,
   ./api_utils
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises: [CatchableError].}
 
-const
-  maxBodyRequest = 32
+const maxBodyRequest = 32
 
-proc getPayloadBodyByHeader(db: CoreDbRef,
-        header: common.BlockHeader,
-        output: var seq[Opt[ExecutionPayloadBodyV1]]) =
-
+proc getPayloadBodyByHeader(
+    db: CoreDbRef,
+    header: common.BlockHeader,
+    output: var seq[Opt[ExecutionPayloadBodyV1]],
+) =
   var body: common.BlockBody
   if not db.getBlockBody(header, body):
     output.add Opt.none(ExecutionPayloadBodyV1)
@@ -37,20 +37,23 @@ proc getPayloadBodyByHeader(db: CoreDbRef,
       wds.add w3Withdrawal(w)
 
   output.add(
-    Opt.some(ExecutionPayloadBodyV1(
-      transactions: txs,
-      # pre Shanghai block return null withdrawals
-      # post Shanghai block return at least empty slice
-      withdrawals: if header.withdrawalsRoot.isSome:
-                     Opt.some(wds)
-                   else:
-                     Opt.none(seq[WithdrawalV1])
-    ))
+    Opt.some(
+      ExecutionPayloadBodyV1(
+        transactions: txs,
+        # pre Shanghai block return null withdrawals
+        # post Shanghai block return at least empty slice
+        withdrawals:
+          if header.withdrawalsRoot.isSome:
+            Opt.some(wds)
+          else:
+            Opt.none(seq[WithdrawalV1]),
+      )
+    )
   )
 
-proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
-                             hashes: seq[Web3Hash]):
-                               seq[Opt[ExecutionPayloadBodyV1]] =
+proc getPayloadBodiesByHash*(
+    ben: BeaconEngineRef, hashes: seq[Web3Hash]
+): seq[Opt[ExecutionPayloadBodyV1]] =
   if hashes.len > maxBodyRequest:
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
 
@@ -62,9 +65,9 @@ proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
       continue
     db.getPayloadBodyByHeader(header, result)
 
-proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
-                              start: uint64, count: uint64):
-                                seq[Opt[ExecutionPayloadBodyV1]] =
+proc getPayloadBodiesByRange*(
+    ben: BeaconEngineRef, start: uint64, count: uint64
+): seq[Opt[ExecutionPayloadBodyV1]] =
   if start == 0:
     raise invalidParams("start block should greater than zero")
 
@@ -76,17 +79,17 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
 
   let
     com = ben.com
-    db  = com.db
+    db = com.db
     current = com.syncCurrent
 
   var
     header: common.BlockHeader
-    last = start+count-1
+    last = start + count - 1
 
   if last > current:
     last = current
 
-  for bn in start..last:
+  for bn in start .. last:
     if not db.getBlockHeader(bn, header):
       result.add Opt.none(ExecutionPayloadBodyV1)
       continue

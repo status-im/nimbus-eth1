@@ -10,11 +10,7 @@
 
 {.push raises: [].}
 
-import
-  chronicles,
-  results,
-  eth/[common, p2p, p2p/private/p2p_types],
-  ../../types
+import chronicles, results, eth/[common, p2p, p2p/private/p2p_types], ../../types
 
 logScope:
   topics = "eth-wire"
@@ -26,7 +22,7 @@ type
 
   ChainForkId* = object
     forkHash*: array[4, byte] # The RLP encoding must be exactly 4 bytes.
-    forkNext*: uint64         # The RLP encoding must be variable-length
+    forkNext*: uint64 # The RLP encoding must be variable-length
 
   EthWireBase* = ref object of RootRef
 
@@ -50,63 +46,49 @@ const
 proc notImplemented(name: string) =
   debug "Method not implemented", meth = name
 
-method getStatus*(ctx: EthWireBase): Result[EthState, string]
-    {.base, gcsafe.} =
+method getStatus*(ctx: EthWireBase): Result[EthState, string] {.base, gcsafe.} =
   notImplemented("getStatus")
 
-method getReceipts*(ctx: EthWireBase,
-                    hashes: openArray[Hash256]):
-                      Result[seq[seq[Receipt]], string]
-    {.base, gcsafe.} =
+method getReceipts*(
+    ctx: EthWireBase, hashes: openArray[Hash256]
+): Result[seq[seq[Receipt]], string] {.base, gcsafe.} =
   notImplemented("getReceipts")
 
-method getPooledTxs*(ctx: EthWireBase,
-                     hashes: openArray[Hash256]):
-                       Result[seq[PooledTransaction], string]
-    {.base, gcsafe.} =
+method getPooledTxs*(
+    ctx: EthWireBase, hashes: openArray[Hash256]
+): Result[seq[PooledTransaction], string] {.base, gcsafe.} =
   notImplemented("getPooledTxs")
 
-method getBlockBodies*(ctx: EthWireBase,
-                       hashes: openArray[Hash256]):
-                         Result[seq[BlockBody], string]
-    {.base, gcsafe.} =
+method getBlockBodies*(
+    ctx: EthWireBase, hashes: openArray[Hash256]
+): Result[seq[BlockBody], string] {.base, gcsafe.} =
   notImplemented("getBlockBodies")
 
-method getBlockHeaders*(ctx: EthWireBase,
-                        req: BlocksRequest):
-                          Result[seq[BlockHeader], string]
-    {.base, gcsafe.} =
+method getBlockHeaders*(
+    ctx: EthWireBase, req: BlocksRequest
+): Result[seq[BlockHeader], string] {.base, gcsafe.} =
   notImplemented("getBlockHeaders")
 
-method handleNewBlock*(ctx: EthWireBase,
-                       peer: Peer,
-                       blk: EthBlock,
-                       totalDifficulty: DifficultyInt):
-                         Result[void, string]
-    {.base, gcsafe.} =
+method handleNewBlock*(
+    ctx: EthWireBase, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt
+): Result[void, string] {.base, gcsafe.} =
   notImplemented("handleNewBlock")
 
-method handleAnnouncedTxs*(ctx: EthWireBase,
-                           peer: Peer,
-                           txs: openArray[Transaction]):
-                             Result[void, string]
-    {.base, gcsafe.} =
+method handleAnnouncedTxs*(
+    ctx: EthWireBase, peer: Peer, txs: openArray[Transaction]
+): Result[void, string] {.base, gcsafe.} =
   notImplemented("handleAnnouncedTxs")
 
 method handleAnnouncedTxsHashes*(
-  ctx: EthWireBase;
-  peer: Peer;
-  txTypes: Blob;
-  txSizes: openArray[int];
-  txHashes: openArray[Hash256];
-    ): Result[void, string]
-    {.base, gcsafe.} =
+    ctx: EthWireBase,
+    peer: Peer,
+    txTypes: Blob,
+    txSizes: openArray[int],
+    txHashes: openArray[Hash256],
+): Result[void, string] {.base, gcsafe.} =
   notImplemented("handleAnnouncedTxsHashes/eth68")
 
-method handleNewBlockHashes*(ctx: EthWireBase,
-                             peer: Peer,
-                             hashes: openArray[NewBlockHashesAnnounce]):
-                               Result[void, string]
-    {.base, gcsafe.} =
+method handleNewBlockHashes*(
+    ctx: EthWireBase, peer: Peer, hashes: openArray[NewBlockHashesAnnounce]
+): Result[void, string] {.base, gcsafe.} =
   notImplemented("handleNewBlockHashes")
-

@@ -16,7 +16,8 @@ import
   ../common/common,
   ../db/core_db,
   ../db/ledger,
-  ../constants, stint,
+  ../constants,
+  stint,
   ../utils/utils,
   ../transaction,
   ../transaction/call_evm,
@@ -28,23 +29,24 @@ import
   ../evm/tracer/access_list_tracer,
   ../evm/evm_errors
 
+const defaultTag = blockId("latest")
 
-const
-  defaultTag = blockId("latest")
+type BlockHeader = common.BlockHeader
 
-type
-  BlockHeader = common.BlockHeader
-
-proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
-    {.gcsafe, raises: [CatchableError].} =
-
+proc headerFromTag*(
+    chain: CoreDbRef, blockId: BlockTag
+): BlockHeader {.gcsafe, raises: [CatchableError].} =
   if blockId.kind == bidAlias:
     let tag = blockId.alias.toLowerAscii
     case tag
-    of "latest": result = chain.getCanonicalHead()
-    of "earliest": result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
-    of "safe": result = chain.safeHeader()
-    of "finalized": result = chain.finalizedHeader()
+    of "latest":
+      result = chain.getCanonicalHead()
+    of "earliest":
+      result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
+    of "safe":
+      result = chain.safeHeader()
+    of "finalized":
+      result = chain.finalizedHeader()
     of "pending":
       #TODO: Implement get pending block
       # We currently fall back to `latest` so that the `tx-spammer` in
@@ -58,14 +60,16 @@ proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): BlockHeader
     let blockNum = blockId.number.uint64
     result = chain.getBlockHeader(blockNum)
 
-proc headerFromTag*(chain: CoreDbRef, blockTag: Opt[BlockTag]): BlockHeader
-    {.gcsafe, raises: [CatchableError].} =
+proc headerFromTag*(
+    chain: CoreDbRef, blockTag: Opt[BlockTag]
+): BlockHeader {.gcsafe, raises: [CatchableError].} =
   let blockId = blockTag.get(defaultTag)
   chain.headerFromTag(blockId)
 
-proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
-    {.gcsafe, raises: [CatchableError].} =
-  var prices  = newSeqOfCap[GasInt](64)
+proc calculateMedianGasPrice*(
+    chain: CoreDbRef
+): GasInt {.gcsafe, raises: [CatchableError].} =
+  var prices = newSeqOfCap[GasInt](64)
   let header = chain.getCanonicalHead()
   for encodedTx in chain.getBlockTransactionData(header.txRoot):
     let tx = decodeTx(encodedTx)
@@ -91,8 +95,9 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
   const minGasPrice = 30_000_000_000.GasInt
   result = max(result, minGasPrice)
 
-proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
-    {.gcsafe, raises: [CatchableError].} =
+proc unsignedTx*(
+    tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce
+): Transaction {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
     result.to = Opt.some(ethAddr(tx.to.get))
 
@@ -131,10 +136,11 @@ proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
   for x in list:
     result.add toWd(x)
 
-proc populateTransactionObject*(tx: Transaction,
-                                optionalHeader: Opt[BlockHeader] = Opt.none(BlockHeader),
-                                txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject
-    {.gcsafe, raises: [ValidationError].} =
+proc populateTransactionObject*(
+    tx: Transaction,
+    optionalHeader: Opt[BlockHeader] = Opt.none(BlockHeader),
+    txIndex: Opt[uint64] = Opt.none(uint64),
+): TransactionObject {.gcsafe, raises: [ValidationError].} =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
   if optionalHeader.isSome:
@@ -166,8 +172,9 @@ proc populateTransactionObject*(tx: Transaction,
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
     result.blobVersionedHashes = Opt.some(w3Hashes tx.versionedHashes)
 
-proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject
-    {.gcsafe, raises: [CatchableError].} =
+proc populateBlockObject*(
+    header: BlockHeader, chain: CoreDbRef, fullTx: bool, isUncle = false
+): BlockObject {.gcsafe, raises: [CatchableError].} =
   let blockHash = header.blockHash
   result = BlockObject()
 
@@ -189,8 +196,8 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
   let size = sizeof(BlockHeader) - sizeof(common.Blob) + header.extraData.len
   result.size = Quantity(size)
 
-  result.gasLimit  = w3Qty(header.gasLimit)
-  result.gasUsed   = w3Qty(header.gasUsed)
+  result.gasLimit = w3Qty(header.gasLimit)
+  result.gasUsed = w3Qty(header.gasUsed)
   result.timestamp = w3Qty(header.timestamp)
   result.baseFeePerGas = header.baseFeePerGas
 
@@ -201,7 +208,9 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
     if fullTx:
       var i = 0'u64
       for tx in chain.getBlockTransactions(header):
-        result.transactions.add txOrHash(populateTransactionObject(tx, Opt.some(header), Opt.some(i)))
+        result.transactions.add txOrHash(
+          populateTransactionObject(tx, Opt.some(header), Opt.some(i))
+        )
         inc i
     else:
       for x in chain.getBlockTransactionHashes(header):
@@ -209,7 +218,8 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
 
   if header.withdrawalsRoot.isSome:
     result.withdrawalsRoot = Opt.some(w3Hash header.withdrawalsRoot.get)
-    result.withdrawals = Opt.some(toWdList(chain.getWithdrawals(header.withdrawalsRoot.get)))
+    result.withdrawals =
+      Opt.some(toWdList(chain.getWithdrawals(header.withdrawalsRoot.get)))
 
   if header.blobGasUsed.isSome:
     result.blobGasUsed = Opt.some(w3Qty(header.blobGasUsed.get))
@@ -220,9 +230,13 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
   if header.parentBeaconBlockRoot.isSome:
     result.parentBeaconBlockRoot = Opt.some(w3Hash header.parentBeaconBlockRoot.get)
 
-proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
-                      txIndex: uint64, header: BlockHeader): ReceiptObject
-    {.gcsafe, raises: [ValidationError].} =
+proc populateReceipt*(
+    receipt: Receipt,
+    gasUsed: GasInt,
+    tx: Transaction,
+    txIndex: uint64,
+    header: BlockHeader,
+): ReceiptObject {.gcsafe, raises: [ValidationError].} =
   result = ReceiptObject()
   result.transactionHash = w3Hash tx.rlpHash
   result.transactionIndex = w3Qty(txIndex)
@@ -260,7 +274,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
       # The actual fields
       address: w3Addr log.address,
       data: log.data,
-      topics: topics
+      topics: topics,
     )
     result.logs.add(logObject)
 
@@ -278,17 +292,15 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
   result.effectiveGasPrice = w3Qty(normTx.gasPrice)
 
   if tx.txType == TxEip4844:
-    result.blobGasUsed = Opt.some(w3Qty(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
+    result.blobGasUsed =
+      Opt.some(w3Qty(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
     result.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
 
-proc createAccessList*(header: BlockHeader,
-                       com: CommonRef,
-                       args: TransactionArgs): AccessListResult =
-
+proc createAccessList*(
+    header: BlockHeader, com: CommonRef, args: TransactionArgs
+): AccessListResult =
   template handleError(msg: string) =
-    return AccessListResult(
-      error: Opt.some(msg),
-    )
+    return AccessListResult(error: Opt.some(msg))
 
   var args = args
 
@@ -298,21 +310,20 @@ proc createAccessList*(header: BlockHeader,
 
   let
     vmState = BaseVMState.new(header, com).valueOr:
-                handleError("failed to create vmstate: " & $error.code)
-    fork    = com.toEVMFork(forkDeterminationInfo(header.number, header.timestamp))
-    sender  = args.sender
+      handleError("failed to create vmstate: " & $error.code)
+    fork = com.toEVMFork(forkDeterminationInfo(header.number, header.timestamp))
+    sender = args.sender
     # TODO: nonce should be retrieved from txPool
-    nonce   = vmState.stateDB.getNonce(sender)
-    to      = if args.to.isSome: ethAddr args.to.get
-              else: generateAddress(sender, nonce)
+    nonce = vmState.stateDB.getNonce(sender)
+    to =
+      if args.to.isSome:
+        ethAddr args.to.get
+      else:
+        generateAddress(sender, nonce)
     precompiles = activePrecompilesList(fork)
 
-  var
-    prevTracer = AccessListTracer.new(
-      ethAccessList args.accessList,
-      sender,
-      to,
-      precompiles)
+  var prevTracer =
+    AccessListTracer.new(ethAccessList args.accessList, sender, to, precompiles)
 
   while true:
     # Retrieve the current access list to expand
@@ -324,19 +335,18 @@ proc createAccessList*(header: BlockHeader,
 
     # Apply the transaction with the access list tracer
     let
-      tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
+      tracer = AccessListTracer.new(accessList, sender, to, precompiles)
       vmState = BaseVMState.new(header, com, tracer).valueOr:
-                  handleError("failed to create vmstate: " & $error.code)
-      res     = rpcCallEvm(args, header, com, vmState).valueOr:
-                  handleError("failed to call evm: " & $error.code)
+        handleError("failed to create vmstate: " & $error.code)
+      res = rpcCallEvm(args, header, com, vmState).valueOr:
+        handleError("failed to call evm: " & $error.code)
 
     if res.isError:
       handleError("failed to apply transaction: " & res.error)
 
     if tracer.equal(prevTracer):
       return AccessListResult(
-        accessList: w3AccessList accessList,
-        gasUsed: w3Qty res.gasUsed,
+        accessList: w3AccessList accessList, gasUsed: w3Qty res.gasUsed
       )
 
     prevTracer = tracer

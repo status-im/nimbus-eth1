@@ -20,12 +20,10 @@ import
   ../protocol,
   ../types
 
-export
-  types
+export types
 
 type
-  ByteArray32* = array[32,byte]
-    ## Used for 32 byte database keys
+  ByteArray32* = array[32, byte] ## Used for 32 byte database keys
 
   NodeKey* = distinct ByteArray32
     ## Hash key without the hash wrapper (as opposed to `NodeTag` which is a
@@ -35,11 +33,11 @@ type
     ## Trie leaf item, account hash etc. This data type is a representation
     ## for a `NodeKey` geared up for arithmetic and comparing keys.
 
-  NodeTagRange* = Interval[NodeTag,UInt256]
+  NodeTagRange* = Interval[NodeTag, UInt256]
     ## Interval `[minPt,maxPt]` of` NodeTag` elements, can be managed in an
     ## `IntervalSet` data type.
 
-  NodeTagRangeSet* = IntervalSetRef[NodeTag,UInt256]
+  NodeTagRangeSet* = IntervalSetRef[NodeTag, UInt256]
     ## Managed structure to handle non-adjacent `NodeTagRange` intervals
 
   NodeSpecs* = object
@@ -51,17 +49,17 @@ type
     ## * Node data. If the `data` argument is non-empty, the `partialPath`
     ##   fields can/will be used as function argument for various functions
     ##   when healing.
-    partialPath*: Blob             ## Compact encoded partial path nibbles
-    nodeKey*: NodeKey              ## Derived from node hash
-    data*: Blob                    ## Node data (might not be present)
+    partialPath*: Blob ## Compact encoded partial path nibbles
+    nodeKey*: NodeKey ## Derived from node hash
+    data*: Blob ## Node data (might not be present)
 
   PackedAccountRange* = object
     ## Re-packed version of `SnapAccountRange`. The reason why repacking is
     ## needed is that the `snap/1` protocol uses another RLP encoding than is
     ## used for storing in the database. So the `PackedAccount` is `BaseDB`
     ## trie compatible.
-    accounts*: seq[PackedAccount]  ## List of re-packed accounts data
-    proof*: seq[SnapProof]         ## Boundary proofs
+    accounts*: seq[PackedAccount] ## List of re-packed accounts data
+    proof*: seq[SnapProof] ## Boundary proofs
 
   PackedAccount* = object
     ## In fact, the `snap/1` driver returns the `Account` structure which is
@@ -69,31 +67,28 @@ type
     accKey*: NodeKey
     accBlob*: Blob
 
-  AccountCodeHeader* = object
-    ## Contract code header
-    accKey*: NodeKey                ## Owner account
-    codeHash*: Hash256              ## Contarct code hash
+  AccountCodeHeader* = object ## Contract code header
+    accKey*: NodeKey ## Owner account
+    codeHash*: Hash256 ## Contarct code hash
 
-  AccountSlotsHeader* = object
-    ## Storage root header
-    accKey*: NodeKey                ## Owner account, maybe unnecessary
-    storageRoot*: Hash256           ## Start of storage tree
+  AccountSlotsHeader* = object ## Storage root header
+    accKey*: NodeKey ## Owner account, maybe unnecessary
+    storageRoot*: Hash256 ## Start of storage tree
     subRange*: Opt[NodeTagRange] ## Sub-range of slot range covered
 
   AccountSlotsChanged* = object
     ## Variant of `AccountSlotsHeader` representing some transition
-    account*: AccountSlotsHeader    ## Account header
+    account*: AccountSlotsHeader ## Account header
     newRange*: Opt[NodeTagRange] ## New sub-range (if-any)
 
   AccountStorageRange* = object
     ## List of storage descriptors, the last `AccountSlots` storage data might
     ## be incomplete and the `proof` is needed for proving validity.
-    storages*: seq[AccountSlots]    ## List of accounts and storage data
-    proof*: seq[SnapProof]          ## Boundary proofs for last entry
-    base*: NodeTag                  ## Lower limit for last entry w/proof
+    storages*: seq[AccountSlots] ## List of accounts and storage data
+    proof*: seq[SnapProof] ## Boundary proofs for last entry
+    base*: NodeTag ## Lower limit for last entry w/proof
 
-  AccountSlots* = object
-    ## Account storage descriptor
+  AccountSlots* = object ## Account storage descriptor
     account*: AccountSlotsHeader
     data*: seq[SnapStorage]
 
@@ -103,41 +98,40 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc to*(tag: NodeTag; T: type Hash256): T =
+proc to*(tag: NodeTag, T: type Hash256): T =
   ## Convert to serialised equivalent
   result.data = tag.UInt256.toBytesBE
 
-proc to*(key: NodeKey; T: type NodeTag): T =
+proc to*(key: NodeKey, T: type NodeTag): T =
   ## Convert from serialised equivalent
   UInt256.fromBytesBE(key.ByteArray32).T
 
-proc to*(key: Hash256; T: type NodeTag): T =
+proc to*(key: Hash256, T: type NodeTag): T =
   ## Syntactic sugar
   key.data.NodeKey.to(T)
 
-proc to*(tag: NodeTag; T: type NodeKey): T =
+proc to*(tag: NodeTag, T: type NodeKey): T =
   ## Syntactic sugar
   tag.UInt256.toBytesBE.T
 
-proc to*(hash: Hash256; T: type NodeKey): T =
+proc to*(hash: Hash256, T: type NodeKey): T =
   ## Syntactic sugar
   hash.data.NodeKey
 
-proc to*(key: NodeKey; T: type Hash256): T =
+proc to*(key: NodeKey, T: type Hash256): T =
   ## Syntactic sugar
   T(data: key.ByteArray32)
 
-proc to*(key: NodeKey; T: type Blob): T =
+proc to*(key: NodeKey, T: type Blob): T =
   ## Syntactic sugar
   key.ByteArray32.toSeq
 
-proc to*(n: SomeUnsignedInt|UInt256; T: type NodeTag): T =
+proc to*(n: SomeUnsignedInt | UInt256, T: type NodeTag): T =
   ## Syntactic sugar
   n.u256.T
 
-proc digestTo*(data: Blob; T: type NodeKey): T =
+proc digestTo*(data: Blob, T: type NodeKey): T =
   keccakHash(data).data.T
-
 
 proc hash*(a: NodeKey): Hash =
   ## Table/KeyedQueue mixin
@@ -151,7 +145,7 @@ proc `==`*(a, b: NodeKey): bool =
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc init*(key: var NodeKey; data: openArray[byte]): bool =
+proc init*(key: var NodeKey, data: openArray[byte]): bool =
   ## Import argument `data` into `key` which must have length either `32`, or
   ## `0`. The latter case is equivalent to an all zero byte array of size `32`.
   if data.len == 32:
@@ -161,7 +155,7 @@ proc init*(key: var NodeKey; data: openArray[byte]): bool =
     key.reset
     return true
 
-proc init*(tag: var NodeTag; data: openArray[byte]): bool =
+proc init*(tag: var NodeTag, data: openArray[byte]): bool =
   ## Similar to `init(key: var NodeHash; .)`.
   var key: NodeKey
   if key.init(data):
@@ -172,42 +166,59 @@ proc init*(tag: var NodeTag; data: openArray[byte]): bool =
 # Public rlp support
 # ------------------------------------------------------------------------------
 
-proc read*[T: NodeTag|NodeKey](rlp: var Rlp, W: type T): T
-    {.gcsafe, raises: [RlpError].} =
+proc read*[T: NodeTag | NodeKey](
+    rlp: var Rlp, W: type T
+): T {.gcsafe, raises: [RlpError].} =
   rlp.read(Hash256).to(T)
 
-proc append*(writer: var RlpWriter, val: NodeTag|NodeKey) =
+proc append*(writer: var RlpWriter, val: NodeTag | NodeKey) =
   writer.append(val.to(Hash256))
 
 # ------------------------------------------------------------------------------
 # Public `NodeTag` and `NodeTagRange` functions
 # ------------------------------------------------------------------------------
 
-proc u256*(lp: NodeTag): UInt256 = lp.UInt256
-proc low*(T: type NodeTag): T = low(UInt256).T
-proc high*(T: type NodeTag): T = high(UInt256).T
+proc u256*(lp: NodeTag): UInt256 =
+  lp.UInt256
 
-proc `+`*(a: NodeTag; b: UInt256): NodeTag = (a.u256+b).NodeTag
-proc `-`*(a: NodeTag; b: UInt256): NodeTag = (a.u256-b).NodeTag
-proc `-`*(a, b: NodeTag): UInt256 = (a.u256 - b.u256)
+proc low*(T: type NodeTag): T =
+  low(UInt256).T
 
-proc `==`*(a, b: NodeTag): bool = a.u256 == b.u256
-proc `<=`*(a, b: NodeTag): bool = a.u256 <= b.u256
-proc `<`*(a, b: NodeTag): bool = a.u256 < b.u256
+proc high*(T: type NodeTag): T =
+  high(UInt256).T
 
-proc cmp*(x, y: NodeTag): int = cmp(x.UInt256, y.UInt256)
+proc `+`*(a: NodeTag, b: UInt256): NodeTag =
+  (a.u256 + b).NodeTag
+
+proc `-`*(a: NodeTag, b: UInt256): NodeTag =
+  (a.u256 - b).NodeTag
+
+proc `-`*(a, b: NodeTag): UInt256 =
+  (a.u256 - b.u256)
+
+proc `==`*(a, b: NodeTag): bool =
+  a.u256 == b.u256
+
+proc `<=`*(a, b: NodeTag): bool =
+  a.u256 <= b.u256
+
+proc `<`*(a, b: NodeTag): bool =
+  a.u256 < b.u256
+
+proc cmp*(x, y: NodeTag): int =
+  cmp(x.UInt256, y.UInt256)
 
 proc hash*(a: NodeTag): Hash =
   ## Mixin for `Table` or `keyedQueue`
   a.to(Hash256).data.hash
 
-proc digestTo*(data: Blob; T: type NodeTag): T =
+proc digestTo*(data: Blob, T: type NodeTag): T =
   ## Hash the `data` argument
   keccakHash(data).to(T)
 
 const
   # Cannot be defined earlier: `NodeTag` operations needed
-  FullNodeTagRange* = NodeTagRange.new(low(NodeTag),high(NodeTag))
+  FullNodeTagRange* = NodeTagRange.new(low(NodeTag), high(NodeTag))
 
 # ------------------------------------------------------------------------------
 # Public functions: `NodeTagRange` helpers
@@ -228,7 +239,6 @@ proc isEmpty*(lrs: openArray[NodeTagRangeSet]): bool =
 proc isEmpty*(iv: NodeTagRange): bool =
   ## Ditto for an interval range.
   false # trivially by definition
-
 
 proc isFull*(lrs: NodeTagRangeSet): bool =
   ## Returns `true` if the argument set `lrs` contains of the single
@@ -253,12 +263,11 @@ proc isFull*(iv: NodeTagRange): bool =
   ## Ditto for an interval range.
   iv == FullNodeTagRange
 
-
 proc emptyFactor*(lrs: NodeTagRangeSet): float =
   ## Relative uncovered total, i.e. `#points-not-covered / 2^256` to be used
   ## in statistics or triggers.
   if 0 < lrs.total:
-    ((high(NodeTag) - lrs.total).u256 + 1).to(float) / (2.0^256)
+    ((high(NodeTag) - lrs.total).u256 + 1).to(float) / (2.0 ^ 256)
   elif lrs.chunks == 0:
     1.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
@@ -282,14 +291,13 @@ proc emptyFactor*(lrs: openArray[NodeTagRangeSet]): float =
   if accu == 0.to(NodeTag):
     1.0
   else:
-    ((high(NodeTag) - accu) + 1).to(float) / (2.0^256)
-
+    ((high(NodeTag) - accu) + 1).to(float) / (2.0 ^ 256)
 
 proc fullFactor*(lrs: NodeTagRangeSet): float =
   ## Relative covered total, i.e. `#points-covered / 2^256` to be used
   ## in statistics or triggers
   if 0 < lrs.total:
-    lrs.total.to(float) / (2.0^256)
+    lrs.total.to(float) / (2.0 ^ 256)
   elif lrs.chunks == 0:
     0.0 # `total` represents the residue class `mod 2^256` from `0`..`(2^256-1)`
   else:
@@ -309,12 +317,12 @@ proc fullFactor*(lrs: openArray[NodeTagRangeSet]): float =
       discard
     else: # number of points in `ivSet` is `2^256 + 1`
       return 1.0
-  accu.u256.to(float) / (2.0^256)
+  accu.u256.to(float) / (2.0 ^ 256)
 
 proc fullFactor*(iv: NodeTagRange): float =
   ## Relative covered length of an inetrval, i.e. `#points-covered / 2^256`
   if 0 < iv.len:
-    iv.len.to(float) / (2.0^256)
+    iv.len.to(float) / (2.0 ^ 256)
   else:
     1.0 # number of points in `iv` is `2^256 + 1`
 
@@ -353,16 +361,14 @@ proc leafRangePp*(iv: NodeTagRange): string =
   ## Variant of `leafRangePp()`
   leafRangePp(iv.minPt, iv.maxPt)
 
-
 proc `$`*(a, b: NodeTag): string =
   ## Prettyfied prototype
-  leafRangePp(a,b)
+  leafRangePp(a, b)
 
 proc `$`*(iv: NodeTagRange): string =
   leafRangePp iv
 
-
-proc fullPC3*(w: NodeTagRangeSet|NodeTagRange): string =
+proc fullPC3*(w: NodeTagRangeSet | NodeTagRange): string =
   ## Pretty print fill state of range sets.
   if w.isEmpty:
     "0%"
@@ -382,7 +388,7 @@ proc fullPC3*(w: openArray[NodeTagRangeSet]): string =
   if w.isEmpty:
     "0%"
   else:
-    let partition = "~" & $w.mapIt(it.chunks).foldl(a+b)
+    let partition = "~" & $w.mapIt(it.chunks).foldl(a + b)
     if w.isFull:
       "100%" & partition
     else:
@@ -392,12 +398,11 @@ proc fullPC3*(w: openArray[NodeTagRangeSet]): string =
       else:
         "99.999" & partition
 
-
 proc dump*(
-    ranges: openArray[NodeTagRangeSet];
-    moan: proc(overlap: UInt256; iv: NodeTagRange) {.gcsafe, raises: [].};
-    printRangesMax = high(int);
-      ): string =
+    ranges: openArray[NodeTagRangeSet],
+    moan: proc(overlap: UInt256, iv: NodeTagRange) {.gcsafe, raises: [].},
+    printRangesMax = high(int),
+): string =
   ## Dump/anlalyse range sets
   var
     cache: NodeTagRangeSet
@@ -441,10 +446,7 @@ proc dump*(
     result &= toSeq(cache.increasing).mapIt($it)[0 ..< printRangesMax].join(",")
     result &= " " & $(cache.chunks - printRangesMax) & " more .."
 
-proc dump*(
-    range: NodeTagRangeSet;
-    printRangesMax = high(int);
-      ): string =
+proc dump*(range: NodeTagRangeSet, printRangesMax = high(int)): string =
   ## Ditto
   [range].dump(nil, printRangesMax)
 

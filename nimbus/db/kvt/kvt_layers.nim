@@ -10,11 +10,7 @@
 
 {.push raises: [].}
 
-import
-  std/[sequtils, sets, tables],
-  eth/common,
-  results,
-  ./kvt_desc
+import std/[sequtils, sets, tables], eth/common, results, ./kvt_desc
 
 # ------------------------------------------------------------------------------
 # Public getters/helpers
@@ -31,7 +27,7 @@ func nLayersKeys*(db: KvtDbRef): int =
 # Public functions: get function
 # ------------------------------------------------------------------------------
 
-func layersLen*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[int] =
+func layersLen*(db: KvtDbRef, key: openArray[byte] | seq[byte]): Opt[int] =
   ## Returns the size of the value associated with `key`.
   ##
   when key isnot seq[byte]:
@@ -46,12 +42,12 @@ func layersLen*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[int] =
 
   Opt.none(int)
 
-func layersHasKey*(db: KvtDbRef; key: openArray[byte]|seq[byte]): bool =
+func layersHasKey*(db: KvtDbRef, key: openArray[byte] | seq[byte]): bool =
   ## Return `true` if the argument key is cached.
   ##
   db.layersLen(key).isSome()
 
-func layersGet*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[Blob] =
+func layersGet*(db: KvtDbRef, key: openArray[byte] | seq[byte]): Opt[Blob] =
   ## Find an item on the cache layers. An `ok()` result might contain an
   ## empty value if it is stored on the cache  that way.
   ##
@@ -71,7 +67,7 @@ func layersGet*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[Blob] =
 # Public functions: put function
 # ------------------------------------------------------------------------------
 
-func layersPut*(db: KvtDbRef; key: openArray[byte]; data: openArray[byte]) =
+func layersPut*(db: KvtDbRef, key: openArray[byte], data: openArray[byte]) =
   ## Store a (potentally empty) value on the top layer
   db.top.sTab[@key] = @data
 
@@ -79,19 +75,22 @@ func layersPut*(db: KvtDbRef; key: openArray[byte]; data: openArray[byte]) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
+func layersCc*(db: KvtDbRef, level = high(int)): LayerRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
   ## If the `level` argument is too large, the maximum transaction level is
   ## returned. For the result layer, the `txUid` value set to `0`.
-  let layers = if db.stack.len <= level: db.stack & @[db.top]
-               else:                     db.stack[0 .. level]
+  let layers =
+    if db.stack.len <= level:
+      db.stack & @[db.top]
+    else:
+      db.stack[0 .. level]
 
   # Set up initial layer (bottom layer)
   result = LayerRef(sTab: layers[0].sTab)
 
   # Consecutively merge other layers on top
   for n in 1 ..< layers.len:
-    for (key,val) in layers[n].sTab.pairs:
+    for (key, val) in layers[n].sTab.pairs:
       result.sTab[key] = val
 
 # ------------------------------------------------------------------------------
@@ -99,9 +98,8 @@ func layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
 # ------------------------------------------------------------------------------
 
 iterator layersWalk*(
-    db: KvtDbRef;
-    seen: var HashSet[Blob];
-      ): tuple[key: Blob, data: Blob] =
+    db: KvtDbRef, seen: var HashSet[Blob]
+): tuple[key: Blob, data: Blob] =
   ## Walk over all key-value pairs on the cache layers. Note that
   ## entries are unsorted.
   ##
@@ -109,23 +107,21 @@ iterator layersWalk*(
   ## the one with a zero vertex which are othewise skipped by the iterator.
   ## The `seen` argument must not be modified while the iterator is active.
   ##
-  for (key,val) in db.top.sTab.pairs:
-    yield (key,val)
+  for (key, val) in db.top.sTab.pairs:
+    yield (key, val)
     seen.incl key
 
   for w in db.rstack:
-    for (key,val) in w.sTab.pairs:
+    for (key, val) in w.sTab.pairs:
       if key notin seen:
-        yield (key,val)
+        yield (key, val)
         seen.incl key
 
-iterator layersWalk*(
-    db: KvtDbRef;
-      ): tuple[key: Blob, data: Blob] =
+iterator layersWalk*(db: KvtDbRef): tuple[key: Blob, data: Blob] =
   ## Variant of `layersWalk()`.
   var seen: HashSet[Blob]
-  for (key,val) in db.layersWalk seen:
-    yield (key,val)
+  for (key, val) in db.layersWalk seen:
+    yield (key, val)
 
 # ------------------------------------------------------------------------------
 # End

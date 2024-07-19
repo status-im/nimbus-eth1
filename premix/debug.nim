@@ -15,7 +15,8 @@ import
   results,
   ../nimbus/[evm/state, evm/types],
   ../nimbus/core/executor,
-  ./premixcore, ./prestate,
+  ./premixcore,
+  ./prestate,
   ../nimbus/tracer,
   ../nimbus/common/common
 
@@ -35,7 +36,8 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: BlockNum
     parent = com.db.getBlockHeader(parentNumber)
     blk = com.db.getEthBlock(blockNumber)
   let transaction = memoryDB.ctx.newTransaction()
-  defer: transaction.dispose()
+  defer:
+    transaction.dispose()
 
   let
     vmState = BaseVMState.new(parent, blk.header, com)
@@ -50,8 +52,8 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: CoreDbRef, blockNumber: BlockNum
   vmState.dumpDebuggingMetaData(blk, false)
   let
     fileName = "debug" & $blockNumber & ".json"
-    nimbus   = json.parseFile(fileName)
-    geth     = blockEnv["geth"]
+    nimbus = json.parseFile(fileName)
+    geth = blockEnv["geth"]
 
   processNimbusData(nimbus)
 

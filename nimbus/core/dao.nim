@@ -21,7 +21,8 @@ const
   DAOForkExtraRange* = 10
 
   # DAORefundContract is the address of the refund contract to send DAO balances to.
-  DAORefundContract: EthAddress = hexToByteArray[20]("0xbf4ed7b27f1d666546e30d74d50d173d20bca754")
+  DAORefundContract: EthAddress =
+    hexToByteArray[20]("0xbf4ed7b27f1d666546e30d74d50d173d20bca754")
 
   DAODrainList = [
     hexToByteArray[20]("0xd4fe7bc31cedb7bfb8a345f31e668033056b2728"),
@@ -139,7 +140,7 @@ const
     hexToByteArray[20]("0xf4c64518ea10f995918a454158c6b61407ea345c"),
     hexToByteArray[20]("0x7602b46df5390e432ef1c307d4f2c9ff6d65cc97"),
     hexToByteArray[20]("0xbb9bc244d798123fde783fcc1c72d3bb8c189413"),
-    hexToByteArray[20]("0x807640a13483f8ac783c557fcdf27be11ea4ac7a")
+    hexToByteArray[20]("0x807640a13483f8ac783c557fcdf27be11ea4ac7a"),
   ]
 
 # ApplyDAOHardFork modifies the state database according to the DAO hard-fork

@@ -12,656 +12,871 @@ import macro_assembler, unittest2
 
 proc opBitMain*() =
   suite "Bitwise Opcodes":
-    assembler: # And OP
-      title: "AND_1"
+    assembler:
+      title:
+        "AND_1"
       code:
         Push1 "0x0A"
         Push1 "0x0A"
         And
-      stack: "0x000000000000000000000000000000000000000000000000000000000000000A"
+      stack:
+        "0x000000000000000000000000000000000000000000000000000000000000000A"
 
-    assembler: # And OP
-      title: "AND_2"
-      code:
-        Push1 "0xC0"
-        Push1 "0x0A"
-        And
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
-
-    assembler: # And OP mal data
-      title: "AND_3"
+    assembler:
+      title:
+        "AND_2"
       code:
         Push1 "0xC0"
+        Push1 "0x0A"
         And
-      success: false
-      stack: "0xC0"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Or OP
-      title: "OR_1"
+    assembler:
+      title:
+        "AND_3"
+      code:
+        Push1 "0xC0"
+        And
+      success:
+        false
+      stack:
+        "0xC0"
+
+    assembler:
+      title:
+        "OR_1"
       code:
         Push1 "0xF0"
         Push1 "0x0F"
         Or
-      stack: "0x00000000000000000000000000000000000000000000000000000000000000FF"
+      stack:
+        "0x00000000000000000000000000000000000000000000000000000000000000FF"
 
-    assembler: # Or OP
-      title: "OR_2"
+    assembler:
+      title:
+        "OR_2"
       code:
         Push1 "0xC3"
         Push1 "0x3C"
         Or
-      stack: "0x00000000000000000000000000000000000000000000000000000000000000FF"
+      stack:
+        "0x00000000000000000000000000000000000000000000000000000000000000FF"
 
-    assembler: # Or OP mal data
-      title: "OR_3"
+    assembler:
+      title:
+        "OR_3"
       code:
         Push1 "0xC0"
         Or
-      success: false
-      stack: "0xC0"
+      success:
+        false
+      stack:
+        "0xC0"
 
-    assembler: # Xor OP
-      title: "XOR_1"
+    assembler:
+      title:
+        "XOR_1"
       code:
         Push1 "0xFF"
         Push1 "0xFF"
         Xor
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Xor OP
-      title: "XOR_2"
+    assembler:
+      title:
+        "XOR_2"
       code:
         Push1 "0x0F"
         Push1 "0xF0"
         Xor
-      stack: "0x00000000000000000000000000000000000000000000000000000000000000FF"
+      stack:
+        "0x00000000000000000000000000000000000000000000000000000000000000FF"
 
-    assembler: # Xor OP mal data
-      title: "XOR_3"
+    assembler:
+      title:
+        "XOR_3"
       code:
         Push1 "0xC0"
         Xor
-      success: false
-      stack: "0xC0"
+      success:
+        false
+      stack:
+        "0xC0"
 
-    assembler: # Byte OP
-      title: "BYTE_1"
+    assembler:
+      title:
+        "BYTE_1"
       code:
         Push6 "0xAABBCCDDEEFF"
         Push1 "0x1E"
         Byte
-      stack: "0x00000000000000000000000000000000000000000000000000000000000000EE"
+      stack:
+        "0x00000000000000000000000000000000000000000000000000000000000000EE"
 
-    assembler: # Byte OP
-      title: "BYTE_2"
+    assembler:
+      title:
+        "BYTE_2"
       code:
         Push6 "0xAABBCCDDEEFF"
         Push1 "0x20"
         Byte
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Byte OP
-      title: "BYTE_3"
+    assembler:
+      title:
+        "BYTE_3"
       code:
         Push6 "0xAABBCCDDEE3A"
         Push1 "0x1F"
         Byte
-      stack: "0x000000000000000000000000000000000000000000000000000000000000003A"
+      stack:
+        "0x000000000000000000000000000000000000000000000000000000000000003A"
 
-    assembler: # Byte OP mal data
-      title: "BYTE_4"
+    assembler:
+      title:
+        "BYTE_4"
       code:
         Push6 "0xAABBCCDDEE3A"
         Byte
-      success: false
-      stack: "0xAABBCCDDEE3A"
+      success:
+        false
+      stack:
+        "0xAABBCCDDEE3A"
 
-    assembler: # Shl OP
-      title: "SHL_1"
+    assembler:
+      title:
+        "SHL_1"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push1 "0x00"
         Shl
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Shl OP
-      title: "SHL_2"
+    assembler:
+      title:
+        "SHL_2"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push1 "0x01"
         Shl
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000002"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000002"
 
-    assembler: # Shl OP
-      title: "SHL_3"
+    assembler:
+      title:
+        "SHL_3"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push1 "0xff"
         Shl
-      fork: Constantinople
-      stack: "0x8000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x8000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shl OP
-      title: "SHL_4"
+    assembler:
+      title:
+        "SHL_4"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push2 "0x0100"
         Shl
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shl OP
-      title: "SHL_5"
+    assembler:
+      title:
+        "SHL_5"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push2 "0x0101"
         Shl
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shl OP
-      title: "SHL_6"
+    assembler:
+      title:
+        "SHL_6"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0x00"
         Shl
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Shl OP
-      title: "SHL_7"
+    assembler:
+      title:
+        "SHL_7"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0x01"
         Shl
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
 
-    assembler: # Shl OP
-      title: "SHL_8"
+    assembler:
+      title:
+        "SHL_8"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0xff"
         Shl
-      fork: Constantinople
-      stack: "0x8000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x8000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shl OP
-      title: "SHL_9"
+    assembler:
+      title:
+        "SHL_9"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push2 "0x0100"
         Shl
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shl OP
-      title: "SHL_10"
+    assembler:
+      title:
+        "SHL_10"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000000"
         Push1 "0x01"
         Shl
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shl OP
-      title: "SHL_11"
+    assembler:
+      title:
+        "SHL_11"
       code:
         Push32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0x01"
         Shl
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
 
-    assembler: # Shr OP
-      title: "SHR_1"
+    assembler:
+      title:
+        "SHR_1"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push1 "0x00"
         Shr
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Shr OP
-      title: "SHR_2"
+    assembler:
+      title:
+        "SHR_2"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push1 "0x01"
         Shr
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shr OP
-      title: "SHR_3"
+    assembler:
+      title:
+        "SHR_3"
       code:
         Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         Push1 "0x01"
         Shr
-      fork: Constantinople
-      stack: "0x4000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x4000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shr OP
-      title: "SHR_4"
+    assembler:
+      title:
+        "SHR_4"
       code:
         Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         Push1 "0xff"
         Shr
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Shr OP
-      title: "SHR_5"
+    assembler:
+      title:
+        "SHR_5"
       code:
         Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         Push2 "0x0100"
         Shr
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shr OP
-      title: "SHR_6"
+    assembler:
+      title:
+        "SHR_6"
       code:
         Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         Push2 "0x0101"
         Shr
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shr OP
-      title: "SHR_7"
+    assembler:
+      title:
+        "SHR_7"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0x00"
         Shr
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Shr OP
-      title: "SHR_8"
+    assembler:
+      title:
+        "SHR_8"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0x01"
         Shr
-      fork: Constantinople
-      stack: "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Shr OP
-      title: "SHR_9"
+    assembler:
+      title:
+        "SHR_9"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0xff"
         Shr
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Shr OP
-      title: "SHR_10"
+    assembler:
+      title:
+        "SHR_10"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push2 "0x0100"
         Shr
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Shr OP
-      title: "SHR_11"
+    assembler:
+      title:
+        "SHR_11"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000000"
         Push1 "0x01"
         Shr
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Sar OP
-      title: "SAR_1"
+    assembler:
+      title:
+        "SAR_1"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push1 "0x00"
         Sar
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Sar OP
-      title: "SAR_2"
+    assembler:
+      title:
+        "SAR_2"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
         Push1 "0x01"
         Sar
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Sar OP
-      title: "SAR_3"
+    assembler:
+      title:
+        "SAR_3"
       code:
         Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         Push1 "0x01"
         Sar
-      fork: Constantinople
-      stack: "0xC000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0xC000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Sar OP
-      title: "SAR_4"
+    assembler:
+      title:
+        "SAR_4"
       code:
         Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         Push1 "0xff"
         Sar
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Sar OP
-      title: "SAR_5"
+    assembler:
+      title:
+        "SAR_5"
       code:
         Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         Push2 "0x0100"
         Sar
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Sar OP
-      title: "SAR_6"
+    assembler:
+      title:
+        "SAR_6"
       code:
         Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
         Push2 "0x0101"
         Sar
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Sar OP
-      title: "SAR_7"
+    assembler:
+      title:
+        "SAR_7"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0x00"
         Sar
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Sar OP
-      title: "SAR_8"
+    assembler:
+      title:
+        "SAR_8"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0x01"
         Sar
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Sar OP
-      title: "SAR_9"
+    assembler:
+      title:
+        "SAR_9"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0xff"
         Sar
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Sar OP
-      title: "SAR_10"
+    assembler:
+      title:
+        "SAR_10"
       code:
         Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push2 "0x0100"
         Sar
-      fork: Constantinople
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      fork:
+        Constantinople
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
-    assembler: # Sar OP
-      title: "SAR_11"
+    assembler:
+      title:
+        "SAR_11"
       code:
         Push32 "0x0000000000000000000000000000000000000000000000000000000000000000"
         Push1 "0x01"
         Sar
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Sar OP
-      title: "SAR_12"
+    assembler:
+      title:
+        "SAR_12"
       code:
         Push32 "0x4000000000000000000000000000000000000000000000000000000000000000"
         Push1 "0xfe"
         Sar
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Sar OP
-      title: "SAR_13"
+    assembler:
+      title:
+        "SAR_13"
       code:
         Push32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0xf8"
         Sar
-      fork: Constantinople
-      stack: "0x000000000000000000000000000000000000000000000000000000000000007F"
+      fork:
+        Constantinople
+      stack:
+        "0x000000000000000000000000000000000000000000000000000000000000007F"
 
-    assembler: # Sar OP
-      title: "SAR_14"
+    assembler:
+      title:
+        "SAR_14"
       code:
         Push32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0xfe"
         Sar
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Sar OP
-      title: "SAR_15"
+    assembler:
+      title:
+        "SAR_15"
       code:
         Push32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push1 "0xff"
         Sar
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Sar OP
-      title: "SAR_16"
+    assembler:
+      title:
+        "SAR_16"
       code:
         Push32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         Push2 "0x0100"
         Sar
-      fork: Constantinople
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      fork:
+        Constantinople
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # IsZero OP
-      title: "ISZERO_1"
+    assembler:
+      title:
+        "ISZERO_1"
       code:
         Push1 "0x00"
         IsZero
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # IsZero OP
-      title: "ISZERO_2"
+    assembler:
+      title:
+        "ISZERO_2"
       code:
         Push1 "0x2A"
         IsZero
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # IsZero OP mal data
-      title: "ISZERO_3"
-      code: IsZero
-      success: false
+    assembler:
+      title:
+        "ISZERO_3"
+      code:
+        IsZero
+      success:
+        false
 
-    assembler: # Eq OP
-      title: "EQ_1"
+    assembler:
+      title:
+        "EQ_1"
       code:
         Push1 "0x2A"
         Push1 "0x2A"
         Eq
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Eq OP
-      title: "EQ_2"
+    assembler:
+      title:
+        "EQ_2"
       code:
         Push3 "0x2A3B4C"
         Push3 "0x2A3B4C"
         Eq
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Eq OP
-      title: "EQ_3"
+    assembler:
+      title:
+        "EQ_3"
       code:
         Push3 "0x2A3B5C"
         Push3 "0x2A3B4C"
         Eq
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Eq OP mal data
-      title: "EQ_4"
+    assembler:
+      title:
+        "EQ_4"
       code:
         Push3 "0x2A3B4C"
         Eq
-      success: false
-      stack: "0x2A3B4C"
+      success:
+        false
+      stack:
+        "0x2A3B4C"
 
-    assembler: # Gt OP
-      title: "GT_1"
+    assembler:
+      title:
+        "GT_1"
       code:
         Push1 "0x01"
         Push1 "0x02"
         Gt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Gt OP
-      title: "GT_2"
+    assembler:
+      title:
+        "GT_2"
       code:
         Push1 "0x01"
         Push2 "0x0F00"
         Gt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Gt OP
-      title: "GT_3"
+    assembler:
+      title:
+        "GT_3"
       code:
         Push4 "0x01020304"
         Push2 "0x0F00"
         Gt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Gt OP mal data
-      title: "GT_4"
+    assembler:
+      title:
+        "GT_4"
       code:
         Push3 "0x2A3B4C"
         Gt
-      success: false
-      stack: "0x2A3B4C"
+      success:
+        false
+      stack:
+        "0x2A3B4C"
 
-    assembler: # Sgt OP
-      title: "SGT_1"
+    assembler:
+      title:
+        "SGT_1"
       code:
         Push1 "0x01"
         Push1 "0x02"
         Sgt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Sgt OP
-      title: "SGT_2"
+    assembler:
+      title:
+        "SGT_2"
       code:
-        Push32 "0x000000000000000000000000000000000000000000000000000000000000001E" #   30
-        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56" # -170
+        Push32 "0x000000000000000000000000000000000000000000000000000000000000001E"
+          #   30
+        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
+          # -170
         Sgt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Sgt OP
-      title: "SGT_3"
+    assembler:
+      title:
+        "SGT_3"
       code:
-        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56" # -170
-        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF57" # -169
+        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
+          # -170
+        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF57"
+          # -169
         Sgt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Sgt OP mal
-      title: "SGT_4"
+    assembler:
+      title:
+        "SGT_4"
       code:
-        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56" # -170
+        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
+          # -170
         Sgt
-      success: false
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
+      success:
+        false
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
 
-    assembler: # Lt OP
-      title: "LT_1"
+    assembler:
+      title:
+        "LT_1"
       code:
         Push1 "0x01"
         Push1 "0x02"
         Lt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Lt OP
-      title: "LT_2"
+    assembler:
+      title:
+        "LT_2"
       code:
         Push1 "0x01"
         Push2 "0x0F00"
         Lt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Lt OP
-      title: "LT_3"
+    assembler:
+      title:
+        "LT_3"
       code:
         Push4 "0x01020304"
         Push2 "0x0F00"
         Lt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Lt OP mal data
-      title: "LT_4"
+    assembler:
+      title:
+        "LT_4"
       code:
         Push3 "0x2A3B4C"
         Lt
-      success: false
-      stack: "0x2A3B4C"
+      success:
+        false
+      stack:
+        "0x2A3B4C"
 
-    assembler: # Slt OP
-      title: "SLT_1"
+    assembler:
+      title:
+        "SLT_1"
       code:
         Push1 "0x01"
         Push1 "0x02"
         Slt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Slt OP
-      title: "SLT_2"
+    assembler:
+      title:
+        "SLT_2"
       code:
-        Push32 "0x000000000000000000000000000000000000000000000000000000000000001E" #   30
-        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56" # -170
+        Push32 "0x000000000000000000000000000000000000000000000000000000000000001E"
+          #   30
+        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
+          # -170
         Slt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    assembler: # Slt OP
-      title: "SLT_3"
+    assembler:
+      title:
+        "SLT_3"
       code:
-        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56" # -170
-        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF57" # -169
+        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
+          # -170
+        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF57"
+          # -169
         Slt
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack:
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    assembler: # Slt OP mal
-      title: "SLT_4"
+    assembler:
+      title:
+        "SLT_4"
       code:
-        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56" # -170
+        Push32 "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
+          # -170
         Slt
-      success: false
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
+      success:
+        false
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF56"
 
-    assembler: # Not OP
-      title: "NOT_1"
+    assembler:
+      title:
+        "NOT_1"
       code:
         Push1 "0x01"
         Not
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
 
-    assembler: # Not OP
-      title: "NOT_2"
+    assembler:
+      title:
+        "NOT_2"
       code:
         Push2 "0xA003"
         Not
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5FFC"
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5FFC"
 
-    assembler: # BNOT OP
-      title: "BNOT_4"
-      code: Not
-      success: false
+    assembler:
+      title:
+        "BNOT_4"
+      code:
+        Not
+      success:
+        false
 
-    assembler: # Not OP
-      title: "NOT_5"
+    assembler:
+      title:
+        "NOT_5"
       code:
         Push1 "0x00"
         Not
-      stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      stack:
+        "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
 when isMainModule:
   opBitMain()

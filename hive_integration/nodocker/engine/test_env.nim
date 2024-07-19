@@ -23,31 +23,25 @@ import
   ./types,
   ./cancun/customizer
 
-export
-  clmock,
-  engine_client,
-  client_pool,
-  engine_env,
-  tx_sender
+export clmock, engine_client, client_pool, engine_env, tx_sender
 
-type
-  TestEnv* = ref object
-    conf      : NimbusConf
-    chainFile : string
-    enableAuth: bool
-    port      : int
-    httpPort  : int
-    clients   : ClientPool
-    sender    : TxSender
-    clMock*   : CLMocker
+type TestEnv* = ref object
+  conf: NimbusConf
+  chainFile: string
+  enableAuth: bool
+  port: int
+  httpPort: int
+  clients: ClientPool
+  sender: TxSender
+  clMock*: CLMocker
 
 proc makeEnv(conf: NimbusConf): TestEnv =
   TestEnv(
-    conf    : conf,
-    port    : 30303,
+    conf: conf,
+    port: 30303,
     httpPort: 8545,
-    clients : ClientPool(),
-    sender  : TxSender.new(conf.networkParams),
+    clients: ClientPool(),
+    sender: TxSender.new(conf.networkParams),
   )
 
 proc addEngine(env: TestEnv, conf: var NimbusConf): EngineEnv =
@@ -97,7 +91,9 @@ func sender*(env: TestEnv): TxSender =
 proc setupCLMock*(env: TestEnv) =
   env.clMock = newClMocker(env.engine, env.engine.com)
 
-proc addEngine*(env: TestEnv, addToCL: bool = true, connectBootNode: bool = true): EngineEnv =
+proc addEngine*(
+    env: TestEnv, addToCL: bool = true, connectBootNode: bool = true
+): EngineEnv =
   doAssert(env.clMock.isNil.not)
   var conf = env.conf # clone the conf
   let eng = env.addEngine(conf)
@@ -116,17 +112,15 @@ func numEngines*(env: TestEnv): int =
 func accounts*(env: TestEnv, idx: int): TestAccount =
   env.sender.getAccount(idx)
 
-proc makeTx*(
-    env: TestEnv, tc: BaseTx, nonce: AccountNonce): PooledTransaction =
+proc makeTx*(env: TestEnv, tc: BaseTx, nonce: AccountNonce): PooledTransaction =
   env.sender.makeTx(tc, nonce)
 
-proc makeTx*(
-    env: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): PooledTransaction =
+proc makeTx*(env: TestEnv, tc: BigInitcodeTx, nonce: AccountNonce): PooledTransaction =
   env.sender.makeTx(tc, nonce)
 
 proc makeTxs*(env: TestEnv, tc: BaseTx, num: int): seq[PooledTransaction] =
   result = newSeqOfCap[PooledTransaction](num)
-  for _ in 0..<num:
+  for _ in 0 ..< num:
     result.add env.sender.makeNextTx(tc)
 
 proc makeNextTx*(env: TestEnv, tc: BaseTx): PooledTransaction =
@@ -136,7 +130,7 @@ proc sendNextTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx): bool =
   env.sender.sendNextTx(eng.client, tc)
 
 proc sendNextTxs*(env: TestEnv, eng: EngineEnv, tc: BaseTx, num: int): bool =
-  for i in 0..<num:
+  for i in 0 ..< num:
     if not env.sender.sendNextTx(eng.client, tc):
       return false
   return true
@@ -144,11 +138,12 @@ proc sendNextTxs*(env: TestEnv, eng: EngineEnv, tc: BaseTx, num: int): bool =
 proc sendTx*(env: TestEnv, eng: EngineEnv, tc: BaseTx, nonce: AccountNonce): bool =
   env.sender.sendTx(eng.client, tc, nonce)
 
-proc sendTx*(env: TestEnv, eng: EngineEnv, tc: BigInitcodeTx, nonce: AccountNonce): bool =
+proc sendTx*(
+    env: TestEnv, eng: EngineEnv, tc: BigInitcodeTx, nonce: AccountNonce
+): bool =
   env.sender.sendTx(eng.client, tc, nonce)
 
-proc sendTxs*(
-    env: TestEnv, eng: EngineEnv, txs: openArray[PooledTransaction]): bool =
+proc sendTxs*(env: TestEnv, eng: EngineEnv, txs: openArray[PooledTransaction]): bool =
   for tx in txs:
     if not sendTx(eng.client, tx):
       return false
@@ -171,41 +166,34 @@ proc sendTx*(env: TestEnv, tx: PooledTransaction): bool =
   sendTx(client, tx)
 
 proc sendTx*(
-    env: TestEnv,
-    sender: TestAccount,
-    eng: EngineEnv,
-    tc: BlobTx): Result[PooledTransaction, void] =
+    env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx
+): Result[PooledTransaction, void] =
   env.sender.sendTx(sender, eng.client, tc)
 
 proc replaceTx*(
-    env: TestEnv,
-    sender: TestAccount,
-    eng: EngineEnv,
-    tc: BlobTx): Result[PooledTransaction, void] =
+    env: TestEnv, sender: TestAccount, eng: EngineEnv, tc: BlobTx
+): Result[PooledTransaction, void] =
   env.sender.replaceTx(sender, eng.client, tc)
 
 proc makeTx*(
-    env: TestEnv,
-    tc: BaseTx,
-    sender: TestAccount,
-    nonce: AccountNonce): PooledTransaction =
+    env: TestEnv, tc: BaseTx, sender: TestAccount, nonce: AccountNonce
+): PooledTransaction =
   env.sender.makeTx(tc, sender, nonce)
 
-proc customizeTransaction*(env: TestEnv,
-                           acc: TestAccount,
-                           baseTx: Transaction,
-                           custTx: CustomTransactionData): Transaction =
+proc customizeTransaction*(
+    env: TestEnv, acc: TestAccount, baseTx: Transaction, custTx: CustomTransactionData
+): Transaction =
   env.sender.customizeTransaction(acc, baseTx, custTx)
 
-proc generateInvalidPayload*(env: TestEnv,
-                             data: ExecutableData,
-                             payloadField: InvalidPayloadBlockField): ExecutableData =
+proc generateInvalidPayload*(
+    env: TestEnv, data: ExecutableData, payloadField: InvalidPayloadBlockField
+): ExecutableData =
   env.sender.generateInvalidPayload(data, payloadField)
 
 proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash256): bool =
   let res = waitFor env.client.verifyPoWProgress(lastBlockHash)
   if res.isErr:
-    error "verify PoW Progress error", msg=res.error
+    error "verify PoW Progress error", msg = res.error
     return false
 
   true

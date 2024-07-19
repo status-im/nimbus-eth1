@@ -20,12 +20,5 @@ import
 # ------------------------------------------------------------------------------
 
 export
-  invalidStatus,
-  getPayload,
-  getPayloadV3,
-  getPayloadV4,
-  getPayloadBodiesByHash,
-  getPayloadBodiesByRange,
-  exchangeConf,
-  newPayload,
-  forkchoiceUpdated
+  invalidStatus, getPayload, getPayloadV3, getPayloadV4, getPayloadBodiesByHash,
+  getPayloadBodiesByRange, exchangeConf, newPayload, forkchoiceUpdated

@@ -33,12 +33,12 @@ type
 
 func getBlobList*(startId: BlobID, count: int): BlobIDs =
   result = newSeq[BlobID](count)
-  for i in 0..<count:
+  for i in 0 ..< count:
     result[i] = startId + BlobID(i)
 
 func getBlobList*(startId: BlobID, count: int, addition: BlobID): BlobIDs =
-  result = newSeq[BlobID](count+1)
-  for i in 0..<count:
+  result = newSeq[BlobID](count + 1)
+  for i in 0 ..< count:
     result[i] = startId + BlobID(i)
   result[^1] = addition
 
@@ -51,10 +51,10 @@ func getBlobListByIndex*(startIndex: BlobID, endIndex: BlobID): BlobIDs =
 
   result = newSeq[BlobID](count)
   if endIndex > startIndex:
-    for i in 0..<count:
+    for i in 0 ..< count:
       result[i] = startIndex + BlobID(i)
   else:
-    for i in 0..<count:
+    for i in 0 ..< count:
       result[i] = endIndex - BlobID(i)
 
 func verifyBlob*(blobId: BlobID, blob: kzg.KzgBlob): bool =
@@ -69,11 +69,11 @@ func verifyBlob*(blobId: BlobID, blob: kzg.KzgBlob): bool =
   # First 32 bytes are the hash of the blob ID
   var currentHashed = sha256.digest(blobIdBytes)
 
-  for chunkIdx in 0..<FIELD_ELEMENTS_PER_BLOB:
+  for chunkIdx in 0 ..< FIELD_ELEMENTS_PER_BLOB:
     var expectedFieldElem = currentHashed.data
 
     # Check that no 32 bytes chunks are greater than the BLS modulus
-    for i in 0..<32:
+    for i in 0 ..< 32:
       # blobByteIdx = 32 - i - 1
       let blobByteIdx = i
       if expectedFieldElem[blobByteIdx] < BLS_MODULUS[i]:
@@ -89,7 +89,7 @@ func verifyBlob*(blobId: BlobID, blob: kzg.KzgBlob): bool =
           # This chunk is greater than the modulus, but we can't reduce it in this byte position, so we will try in the next byte position
           expectedFieldElem[blobByteIdx] = BLS_MODULUS[i]
 
-    if not equalMem(blob.bytes[chunkIdx*32].unsafeaddr, expectedFieldElem[0].addr, 32):
+    if not equalMem(blob.bytes[chunkIdx * 32].unsafeaddr, expectedFieldElem[0].addr, 32):
       return false
 
     # Hash the current hash
@@ -108,11 +108,11 @@ proc fillBlob(blobId: BlobID): KzgBlob =
   # First 32 bytes are the hash of the blob ID
   var currentHashed = sha256.digest(blobIdBytes)
 
-  for chunkIdx in 0..<FIELD_ELEMENTS_PER_BLOB:
-    copyMem(result.bytes[chunkIdx*32].addr, currentHashed.data[0].addr, 32)
+  for chunkIdx in 0 ..< FIELD_ELEMENTS_PER_BLOB:
+    copyMem(result.bytes[chunkIdx * 32].addr, currentHashed.data[0].addr, 32)
 
     # Check that no 32 bytes chunks are greater than the BLS modulus
-    for i in 0..<32:
+    for i in 0 ..< 32:
       #blobByteIdx = ((chunkIdx + 1) * 32) - i - 1
       let blobByteIdx = (chunkIdx * 32) + i
       if result.bytes[blobByteIdx] < BLS_MODULUS[i]:
@@ -149,7 +149,7 @@ proc blobDataGenerator*(startBlobId: BlobID, blobCount: int): BlobTxWrapData =
   result.hashes = newSeq[Hash256](blobCount)
   result.proofs = newSeq[kzg.KzgProof](blobCount)
 
-  for i in 0..<blobCount:
+  for i in 0 ..< blobCount:
     let res = generateBlob(startBlobId + BlobID(i))
     result.blobs[i] = res.blob
     result.commitments[i] = res.commitment

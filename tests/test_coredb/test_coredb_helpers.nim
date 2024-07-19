@@ -15,26 +15,24 @@ import
   ../../nimbus/db/core_db/backend/aristo_rocksdb,
   ../../nimbus/db/[core_db, opts]
 
-type
-  CdbTypeEx* = enum
-    CdbOoops
-    CdbAristoMemory = AristoDbMemory ## Memory backend emulator
-    CdbAristoRocks  = AristoDbRocks  ## RocksDB backend
-    CdbAristoVoid   = AristoDbVoid   ## No backend
-    CdbAristoDualRocks               ## Dual RocksDB backends for Kvt & Aristo
+type CdbTypeEx* = enum
+  CdbOoops
+  CdbAristoMemory = AristoDbMemory ## Memory backend emulator
+  CdbAristoRocks = AristoDbRocks ## RocksDB backend
+  CdbAristoVoid = AristoDbVoid ## No backend
+  CdbAristoDualRocks ## Dual RocksDB backends for Kvt & Aristo
 
-func to*(cdb: CoreDbType; T: type CdbTypeEx): T =
-  case cdb:
+func to*(cdb: CoreDbType, T: type CdbTypeEx): T =
+  case cdb
   # Let the compiler find out whether the enum is complete
   of Ooops, AristoDbMemory, AristoDbRocks, AristoDbVoid:
     return CdbTypeEx(cdb.ord)
 
-const
-  CdbTypeExPersistent* =
-    CoreDbPersistentTypes.mapIt(it.to(CdbTypeEx)) & @[CdbAristoDualRocks]
+const CdbTypeExPersistent* =
+  CoreDbPersistentTypes.mapIt(it.to(CdbTypeEx)) & @[CdbAristoDualRocks]
 
 func `$`*(w: CdbTypeEx): string =
-  case w:
+  case w
   of CdbOoops, CdbAristoMemory, CdbAristoRocks, CdbAristoVoid:
     $CoreDbType(w.ord)
   of CdbAristoDualRocks:

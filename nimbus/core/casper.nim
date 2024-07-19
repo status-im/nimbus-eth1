@@ -6,26 +6,24 @@
 # at your option.
 # This file may not be copied, modified, or distributed except according to
 # those terms.
-import
-  eth/common
+import eth/common
 
-type
-  CasperRef* = ref object
-    feeRecipient: EthAddress
-    timestamp   : EthTime
-    prevRandao  : Hash256
-    withdrawals : seq[Withdrawal] ## EIP-4895
-    beaconRoot  : Hash256 ## EIP-4788
+type CasperRef* = ref object
+  feeRecipient: EthAddress
+  timestamp: EthTime
+  prevRandao: Hash256
+  withdrawals: seq[Withdrawal] ## EIP-4895
+  beaconRoot: Hash256 ## EIP-4788
 
 proc prepare*(ctx: CasperRef, header: var BlockHeader) =
-  header.coinbase   = ctx.feeRecipient
-  header.timestamp  = ctx.timestamp
+  header.coinbase = ctx.feeRecipient
+  header.timestamp = ctx.timestamp
   header.prevRandao = ctx.prevRandao
   header.difficulty = DifficultyInt.zero
 
-proc prepareForSeal*(ctx: CasperRef, header: var BlockHeader) {.gcsafe, raises:[].} =
-  header.nonce      = default(BlockNonce)
-  header.extraData  = @[] # TODO: probably this should be configurable by user?
+proc prepareForSeal*(ctx: CasperRef, header: var BlockHeader) {.gcsafe, raises: [].} =
+  header.nonce = default(BlockNonce)
+  header.extraData = @[] # TODO: probably this should be configurable by user?
   # this repetition, assigning prevRandao is because how txpool works
   header.prevRandao = ctx.prevRandao
 

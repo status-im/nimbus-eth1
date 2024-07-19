@@ -20,14 +20,13 @@ import
   ../nimbus/db/core_db/persistent,
   ../nimbus/core/chain,
   ./replay/pp,
-  ./test_coredb/[
-    coredb_test_xx, test_chainsync, test_coredb_helpers, test_helpers]
+  ./test_coredb/[coredb_test_xx, test_chainsync, test_coredb_helpers, test_helpers]
 
 const
   # If `true`, this compile time option set up `unittest2` for manual parsing
   unittest2DisableParamFiltering {.booldefine.} = false
 
-  baseDir = [".", "..", ".."/"..", $DirSep]
+  baseDir = [".", "..", ".." / "..", $DirSep]
   repoDir = [".", "tests", "nimbus-eth1-blobs"]
   subDir = ["replay", "test_coredb", "custom-network", "main-era1"]
 
@@ -69,11 +68,14 @@ when unittest2DisableParamFiltering:
     ## At the moment, only the `--sample=` additional option is provided.
     ##
     # Define sample list from the command line (if any)
-    const optPfx =  "--sample=" # Custom option with sample list
+    const optPfx = "--sample=" # Custom option with sample list
 
     proc parseError(s = "") =
-      let msg = if 0 < s.len: "Unsupported \"" & optPfx & "\" list item: " & s
-                else: "Empty \"" & optPfx & " list"
+      let msg =
+        if 0 < s.len:
+          "Unsupported \"" & optPfx & "\" list item: " & s
+        else:
+          "Empty \"" & optPfx & " list"
       echo "*** ", getAppFilename().splitFile.name, ": ", msg
       echo "    Available: ", allSamples.mapIt(it.name).sorted.join(" ")
       quit(99)
@@ -100,47 +102,52 @@ when unittest2DisableParamFiltering:
 else:
   # Kill the compilation process iff the directive `cmdLineConfig()` is used
   template cmdLineConfig(): untyped {.used.} =
-    {.error: "cmdLineConfig() needs compiler option "&
-      " -d:unittest2DisableParamFiltering".}
-
+    {.
+      error:
+        "cmdLineConfig() needs compiler option " & " -d:unittest2DisableParamFiltering"
+    .}
 
 proc findFilePath(
-    file: string;
-    baseDir: openArray[string] = baseDir;
-    repoDir: openArray[string] = repoDir;
-    subDir: openArray[string] = subDir;
-      ): Result[string,void] =
+    file: string,
+    baseDir: openArray[string] = baseDir,
+    repoDir: openArray[string] = repoDir,
+    subDir: openArray[string] = subDir,
+): Result[string, void] =
   file.findFilePathHelper(baseDir, repoDir, subDir)
-
 
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath.value.splitFile.dir
-
 
 proc flushDbDir(s: string) =
   if s != "":
     let dataDir = s / "nimbus"
     if (dataDir / "data").dirExists:
       # Typically under Windows: there might be stale file locks.
-      try: dataDir.removeDir except CatchableError: discard
+      try:
+        dataDir.removeDir
+      except CatchableError:
+        discard
     block dontClearUnlessEmpty:
       for w in s.walkDir:
         break dontClearUnlessEmpty
-      try: s.removeDir except CatchableError: discard
+      try:
+        s.removeDir
+      except CatchableError:
+        discard
 
 # ----------------
 
-proc setTraceLevel {.used.} =
+proc setTraceLevel() {.used.} =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.TRACE)
 
-proc setDebugLevel {.used.} =
+proc setDebugLevel() {.used.} =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.DEBUG)
 
-proc setErrorLevel {.used.} =
+proc setErrorLevel() {.used.} =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
@@ -150,19 +157,21 @@ proc setErrorLevel {.used.} =
 # ------------------------------------------------------------------------------
 
 proc initRunnerDB(
-    path: string;
-    specs: CaptureSpecs;
-    dbType: CdbTypeEx;
-    pruneHistory: bool;
-     ): CommonRef =
+    path: string, specs: CaptureSpecs, dbType: CdbTypeEx, pruneHistory: bool
+): CommonRef =
   let coreDB =
     # Resolve for static `dbType`
-    case dbType:
-    of CdbAristoMemory: AristoDbMemory.newCoreDbRef()
-    of CdbAristoRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
-    of CdbAristoDualRocks: newCdbAriAristoDualRocks(path, DbOptions.init())
-    of CdbAristoVoid: AristoDbVoid.newCoreDbRef()
-    of CdbOoops: raiseAssert "Ooops"
+    case dbType
+    of CdbAristoMemory:
+      AristoDbMemory.newCoreDbRef()
+    of CdbAristoRocks:
+      AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+    of CdbAristoDualRocks:
+      newCdbAriAristoDualRocks(path, DbOptions.init())
+    of CdbAristoVoid:
+      AristoDbVoid.newCoreDbRef()
+    of CdbOoops:
+      raiseAssert "Ooops"
 
   when false: # or true:
     setDebugLevel()
@@ -180,10 +189,8 @@ proc initRunnerDB(
     networkId = params.config.chainId.NetworkId
 
   result = CommonRef.new(
-    db = coreDB,
-    networkId = networkId,
-    params = params,
-    pruneHistory = pruneHistory)
+    db = coreDB, networkId = networkId, params = params, pruneHistory = pruneHistory
+  )
 
   result.initializeEmptyDb
 
@@ -197,27 +204,30 @@ proc initRunnerDB(
 # ------------------------------------------------------------------------------
 
 proc chainSyncRunner(
-    noisy = true;
-    capture = memorySampleDefault;
-    dbType =  CdbTypeEx(0);
-    pruneHistory = false;
-    profilingOk = false;
-    finalDiskCleanUpOk = true;
-    enaLoggingOk = false;
-    lastOneExtraOk = true;
-    oldLogAlign = false;
-      ) =
-
+    noisy = true,
+    capture = memorySampleDefault,
+    dbType = CdbTypeEx(0),
+    pruneHistory = false,
+    profilingOk = false,
+    finalDiskCleanUpOk = true,
+    enaLoggingOk = false,
+    lastOneExtraOk = true,
+    oldLogAlign = false,
+) =
   ## Test backend database and ledger
   let
-    fileInfo = capture.files[0]
-                      .splitFile.name.split(".")[0]
-                      .strip(leading=false, chars={'0'..'9'})
-    filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
+    fileInfo = capture.files[0].splitFile.name.split(".")[0].strip(
+      leading = false, chars = {'0' .. '9'}
+    )
+    filePaths = capture.files.mapIt(it.findFilePath(baseDir, repoDir).value)
     baseDir = getTmpDir() / capture.dbName & "-chain-sync"
     dbDir = baseDir / "tmp"
     numBlocks = capture.numBlocks
-    numBlocksInfo = if numBlocks == high(int): "all" else: $numBlocks
+    numBlocksInfo =
+      if numBlocks == high(int):
+        "all"
+      else:
+        $numBlocks
 
     dbType = block:
       # Decreasing priority: dbType, capture.dbType, dbTypeDefault
@@ -231,42 +241,47 @@ proc chainSyncRunner(
     persistent = dbType in CdbTypeExPersistent
 
   defer:
-    if persistent: baseDir.flushDbDir
+    if persistent:
+      baseDir.flushDbDir
 
   suite &"CoreDB and LedgerRef API on {fileInfo}, {dbType}":
-
     test &"Ledger API {numBlocksInfo} blocks":
-      let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+      let com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
-        if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
-        if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
+        if profilingOk:
+          noisy.test_chainSyncProfilingPrint numBlocks
+        if persistent and finalDiskCleanUpOk:
+          dbDir.flushDbDir
 
       when CoreDbEnableApiTracking:
         if noisy:
           com.db.trackCoreDbApi = true
           com.db.trackLedgerApi = true
 
-      check noisy.test_chainSync(filePaths, com, numBlocks,
-        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
-        oldLogAlign=oldLogAlign)
-
+      check noisy.test_chainSync(
+        filePaths,
+        com,
+        numBlocks,
+        lastOneExtra = lastOneExtraOk,
+        enaLogging = enaLoggingOk,
+        oldLogAlign = oldLogAlign,
+      )
 
 proc persistentSyncPreLoadAndResumeRunner(
-    noisy = true;
-    capture = persistentSampleDefault;
-    dbType = CdbTypeEx(0);
-    profilingOk = false;
-    pruneHistory = false;
-    finalDiskCleanUpOk = true;
-    enaLoggingOk = false;
-    lastOneExtraOk = true;
-    oldLogAlign = false;
-      ) =
+    noisy = true,
+    capture = persistentSampleDefault,
+    dbType = CdbTypeEx(0),
+    profilingOk = false,
+    pruneHistory = false,
+    finalDiskCleanUpOk = true,
+    enaLoggingOk = false,
+    lastOneExtraOk = true,
+    oldLogAlign = false,
+) =
   ## Test backend database and ledger
   let
-    filePaths = capture.files.mapIt(it.findFilePath(baseDir,repoDir).value)
+    filePaths = capture.files.mapIt(it.findFilePath(baseDir, repoDir).value)
     baseDir = getTmpDir() / capture.dbName & "-chain-sync"
     dbDir = baseDir / "tmp"
 
@@ -280,47 +295,62 @@ proc persistentSyncPreLoadAndResumeRunner(
       effDbType
 
   doAssert dbType in CdbTypeExPersistent
-  defer: baseDir.flushDbDir
+  defer:
+    baseDir.flushDbDir
 
   let
     firstPart = min(capture.numBlocks div 2, 200_000)
     secndPart = capture.numBlocks
-    secndPartInfo = if secndPart == high(int): "all" else: $secndPart
+    secndPartInfo =
+      if secndPart == high(int):
+        "all"
+      else:
+        $secndPart
 
   suite &"CoreDB pre-load and resume test ..{firstPart}..{secndPartInfo}":
-
     test "Populate db by initial sample parts":
-      let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+      let com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
-        if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
+        if profilingOk:
+          noisy.test_chainSyncProfilingPrint firstPart
 
       when CoreDbEnableApiTracking:
         if noisy:
           com.db.trackCoreDbApi = true
           com.db.trackLedgerApi = true
 
-      check noisy.test_chainSync(filePaths, com, firstPart,
-        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
-        oldLogAlign=oldLogAlign)
+      check noisy.test_chainSync(
+        filePaths,
+        com,
+        firstPart,
+        lastOneExtra = lastOneExtraOk,
+        enaLogging = enaLoggingOk,
+        oldLogAlign = oldLogAlign,
+      )
 
     test &"Continue with rest of sample":
-      let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+      let com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
-        if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
-        if finalDiskCleanUpOk: dbDir.flushDbDir
+        if profilingOk:
+          noisy.test_chainSyncProfilingPrint secndPart
+        if finalDiskCleanUpOk:
+          dbDir.flushDbDir
 
       when CoreDbEnableApiTracking:
         if noisy:
           com.db.trackCoreDbApi = true
           com.db.trackLedgerApi = true
 
-      check noisy.test_chainSync(filePaths, com, secndPart,
-        lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
-        oldLogAlign=oldLogAlign)
+      check noisy.test_chainSync(
+        filePaths,
+        com,
+        secndPart,
+        lastOneExtra = lastOneExtraOk,
+        enaLogging = enaLoggingOk,
+        oldLogAlign = oldLogAlign,
+      )
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -331,10 +361,8 @@ proc coreDbMain*(noisy = defined(debug)) =
   noisy.persistentSyncPreLoadAndResumeRunner()
 
 when isMainModule:
-  const
-    noisy {.used.} = defined(debug) or true
-  var
-    sampleList: seq[CaptureSpecs]
+  const noisy {.used.} = defined(debug) or true
+  var sampleList: seq[CaptureSpecs]
 
   setErrorLevel()
 
@@ -352,7 +380,7 @@ when isMainModule:
   when true: # and false:
     import std/times
     var state: (Duration, int)
-    for n,capture in sampleList:
+    for n, capture in sampleList:
       noisy.profileSection("@sample #" & $n, state):
         noisy.chainSyncRunner(
           #dbType = CdbAristoDualRocks,
@@ -360,7 +388,7 @@ when isMainModule:
           #pruneHistory = true,
           #profilingOk = true,
           #finalDiskCleanUpOk = false,
-          oldLogAlign = true
+          oldLogAlign = true,
         )
 
     noisy.say "***", "total: ", state[0].pp, " sections: ", state[1]

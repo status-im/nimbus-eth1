@@ -20,19 +20,22 @@ import
   ../../../../nimbus/sync/protocol
 
 # A step that requests a Transaction hash via P2P and expects the correct full blob tx
-type
-  DevP2PRequestPooledTransactionHash* = ref object of TestStep
-    # Client index to request the transaction hash from
-    clientIndex*: int
-    # Transaction Index to request
-    transactionIndexes*: seq[int]
-    # Wait for a new pooled transaction message before actually requesting the transaction
-    waitForNewPooledTransaction*: bool
+type DevP2PRequestPooledTransactionHash* = ref object of TestStep
+  # Client index to request the transaction hash from
+  clientIndex*: int
+  # Transaction Index to request
+  transactionIndexes*: seq[int]
+  # Wait for a new pooled transaction message before actually requesting the transaction
+  waitForNewPooledTransaction*: bool
 
-method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext): bool =
+method execute*(
+    step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
+): bool =
   # Get client index's enode
   let env = ctx.env
-  doAssert(step.clientIndex < env.numEngines, "invalid client index" & $step.clientIndex)
+  doAssert(
+    step.clientIndex < env.numEngines, "invalid client index" & $step.clientIndex
+  )
   let engine = env.engines(step.clientIndex)
   let sec = env.addEngine(false, false)
 
@@ -40,17 +43,17 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
 
   var
     txHashes = newSeq[common.Hash256](step.transactionIndexes.len)
-    txs      = newSeq[PooledTransaction](step.transactionIndexes.len)
+    txs = newSeq[PooledTransaction](step.transactionIndexes.len)
 
   for i, txIndex in step.transactionIndexes:
     if not ctx.txPool.hashesByIndex.hasKey(txIndex):
-      error "transaction not found", index=step.transactionIndexes[i]
+      error "transaction not found", index = step.transactionIndexes[i]
       return false
 
     txHashes[i] = ctx.txPool.hashesByIndex[txIndex]
 
     if not ctx.txPool.transactions.hasKey(txHashes[i]):
-      error "transaction not found", hash=txHashes[i].short
+      error "transaction not found", hash = txHashes[i].short
       return false
 
     txs[i] = ctx.txPool.transactions[txHashes[i]]
@@ -71,8 +74,7 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
     let secTxs = sec.getTxsInPool(txHashes)
     if secTxs.len != txHashes.len:
       error "expected txs from newPooledTxs num mismatch",
-        expect=txHashes.len,
-        get=secTxs.len
+        expect = txHashes.len, get = secTxs.len
       return false
 
     for i, secTx in secTxs:
@@ -81,8 +83,7 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
 
       if secTxBytes.len != localTxBytes.len:
         error "expected tx from newPooledTxs size mismatch",
-          expect=localTxBytes.len,
-          get=secTxBytes.len
+          expect = localTxBytes.len, get = secTxBytes.len
         return false
 
       if secTxBytes != localTxBytes:
@@ -99,8 +100,7 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
   let remoteTxs = res.get
   if remoteTxs.transactions.len != txHashes.len:
     error "expected txs from getPooledTransactions num mismatch",
-      expect=txHashes.len,
-      get=remoteTxs.transactions.len
+      expect = txHashes.len, get = remoteTxs.transactions.len
     return false
 
   for i, remoteTx in remoteTxs.transactions:
@@ -109,8 +109,7 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
 
     if remoteTxBytes.len != localTxBytes.len:
       error "expected tx from getPooledTransactions size mismatch",
-        expect=localTxBytes.len,
-        get=remoteTxBytes.len
+        expect = localTxBytes.len, get = remoteTxBytes.len
       return false
 
     if remoteTxBytes != localTxBytes:
@@ -120,5 +119,5 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
   return true
 
 method description*(step: DevP2PRequestPooledTransactionHash): string =
-  "DevP2PRequestPooledTransactionHash: client $1, transaction indexes $1" % [
-    $step.clientIndex, $step.transactionIndexes]
+  "DevP2PRequestPooledTransactionHash: client $1, transaction indexes $1" %
+    [$step.clientIndex, $step.transactionIndexes]

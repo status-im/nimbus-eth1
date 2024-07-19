@@ -9,10 +9,7 @@
 # except according to those terms.
 
 import
-  aristo_init/persistent as init_persistent,
-  aristo_walk/persistent as walk_persistent
-export
-  init_persistent,
-  walk_persistent
+  aristo_init/persistent as init_persistent, aristo_walk/persistent as walk_persistent
+export init_persistent, walk_persistent
 
 # End

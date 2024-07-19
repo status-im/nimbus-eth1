@@ -22,22 +22,16 @@ import
   ../kvt_desc,
   "."/[memory_only, walk_private]
 
-export
-  rocks_db,
-  memory_only,
-  persistent
+export rocks_db, memory_only, persistent
 
 # ------------------------------------------------------------------------------
 # Public iterators (all in one)
 # ------------------------------------------------------------------------------
 
-iterator walkPairs*(
-   T: type RdbBackendRef;
-   db: KvtDbRef;
-     ): tuple[key: Blob, data: Blob] =
+iterator walkPairs*(T: type RdbBackendRef, db: KvtDbRef): tuple[key: Blob, data: Blob] =
   ## Iterate over backend filters.
-  for (key,data) in walkPairsImpl[T](db):
-    yield (key,data)
+  for (key, data) in walkPairsImpl[T](db):
+    yield (key, data)
 
 # ------------------------------------------------------------------------------
 # End

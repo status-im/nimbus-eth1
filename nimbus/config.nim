@@ -9,20 +9,8 @@
 {.push raises: [].}
 
 import
-  std/[
-    options,
-    strutils,
-    times,
-    os,
-    uri,
-    net
-  ],
-  pkg/[
-    chronicles,
-    confutils,
-    confutils/defs,
-    confutils/std/net
-  ],
+  std/[options, strutils, times, os, uri, net],
+  pkg/[chronicles, confutils, confutils/defs, confutils/std/net],
   eth/[common, net/utils, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
   "."/[constants, compile_info, version],
   common/chain_config,
@@ -33,33 +21,21 @@ export net, defs
 const
   # TODO: fix this agent-string format to match other
   # eth clients format
-  NimbusIdent* = "$# v$# [$#: $#, $#, $#]" % [
-    NimbusName,
-    NimbusVersion,
-    hostOS,
-    hostCPU,
-    VmName,
-    GitRevision
-  ]
+  NimbusIdent* =
+    "$# v$# [$#: $#, $#, $#]" %
+    [NimbusName, NimbusVersion, hostOS, hostCPU, VmName, GitRevision]
 
 let
   # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
-  NimbusCopyright* = "Copyright (c) 2018-" &
-    $(now().utc.year) &
-    " Status Research & Development GmbH"
+  NimbusCopyright* =
+    "Copyright (c) 2018-" & $(now().utc.year) & " Status Research & Development GmbH"
 
   # e.g.:
   # Nimbus v0.1.0 [windows: amd64, rocksdb, evmc, dda8914f]
   # Copyright (c) 2018-2021 Status Research & Development GmbH
-  NimbusBuild* = "$#\p$#" % [
-    NimbusIdent,
-    NimbusCopyright,
-  ]
+  NimbusBuild* = "$#\p$#" % [NimbusIdent, NimbusCopyright]
 
-  NimbusHeader* = "$#\p\p$#" % [
-    NimbusBuild,
-    version.NimVersion
-  ]
+  NimbusHeader* = "$#\p\p$#" % [NimbusBuild, version.NimVersion]
 
 func defaultDataDir*(): string =
   when defined(windows):
@@ -82,14 +58,15 @@ func getLogLevels(): string =
 
 const
   defaultDataDirDesc = defaultDataDir()
-  defaultPort              = 30303
+  defaultPort = 30303
   defaultMetricsServerPort = 9093
-  defaultHttpPort          = 8545
-  defaultEngineApiPort     = 8550
-  defaultListenAddress      = (static parseIpAddress("0.0.0.0"))
+  defaultHttpPort = 8545
+  defaultEngineApiPort = 8550
+  defaultListenAddress = (static parseIpAddress("0.0.0.0"))
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
-  defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
-  defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
+  defaultListenAddressDesc = $defaultListenAddress & ", meaning all network interfaces"
+  defaultAdminListenAddressDesc =
+    $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
 
 # `when` around an option doesn't work with confutils; it fails to compile.
@@ -99,10 +76,15 @@ when defined(evmc_enabled):
 else:
   {.pragma: includeIfEvmc, ignore.}
 
-const sharedLibText = if defined(linux): " (*.so, *.so.N)"
-                      elif defined(windows): " (*.dll)"
-                      elif defined(macosx): " (*.dylib)"
-                      else: ""
+const sharedLibText =
+  if defined(linux):
+    " (*.so, *.so.N)"
+  elif defined(windows):
+    " (*.dll)"
+  elif defined(macosx):
+    " (*.dylib)"
+  else:
+    ""
 
 type
   ChainDbMode* {.pure.} = enum
@@ -115,14 +97,14 @@ type
 
   ProtocolFlag* {.pure.} = enum
     ## Protocol flags
-    Eth                           ## enable eth subprotocol
+    Eth ## enable eth subprotocol
     #Snap                          ## enable snap sub-protocol
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
-    Eth                           ## enable eth_ set of RPC API
-    Debug                         ## enable debug_ set of RPC API
-    Exp                           ## enable exp_ set of RPC API
+    Eth ## enable eth_ set of RPC API
+    Debug ## enable debug_ set of RPC API
+    Exp ## enable exp_ set of RPC API
 
   DiscoveryType* {.pure.} = enum
     None
@@ -130,428 +112,479 @@ type
     V5
 
   SyncMode* {.pure.} = enum
-    Default
-    #Snap                          ## Beware, experimental
+    Default #Snap                          ## Beware, experimental
 
-  NimbusConf* = object of RootObj
-    ## Main Nimbus configuration object
-
+  NimbusConf* = object of RootObj ## Main Nimbus configuration object
     dataDir* {.
-      separator: "ETHEREUM OPTIONS:"
-      desc: "The directory where nimbus will store all blockchain data"
-      defaultValue: defaultDataDir()
-      defaultValueDesc: $defaultDataDirDesc
-      abbr: "d"
-      name: "data-dir" }: OutDir
+      separator: "ETHEREUM OPTIONS:",
+      desc: "The directory where nimbus will store all blockchain data",
+      defaultValue: defaultDataDir(),
+      defaultValueDesc: $defaultDataDirDesc,
+      abbr: "d",
+      name: "data-dir"
+    .}: OutDir
 
     era1DirOpt* {.
-      desc: "Directory where era1 (pre-merge) archive can be found"
-      defaultValueDesc: "<data-dir>/era1"
-      name: "era1-dir" }: Option[OutDir]
+      desc: "Directory where era1 (pre-merge) archive can be found",
+      defaultValueDesc: "<data-dir>/era1",
+      name: "era1-dir"
+    .}: Option[OutDir]
 
     eraDirOpt* {.
-      desc: "Directory where era (post-merge) archive can be found"
-      defaultValueDesc: "<data-dir>/era"
-      name: "era-dir" }: Option[OutDir]
+      desc: "Directory where era (post-merge) archive can be found",
+      defaultValueDesc: "<data-dir>/era",
+      name: "era-dir"
+    .}: Option[OutDir]
 
     keyStore* {.
-      desc: "Load one or more keystore files from this directory"
-      defaultValue: defaultKeystoreDir()
-      defaultValueDesc: "inside datadir"
-      abbr: "k"
-      name: "key-store" }: OutDir
+      desc: "Load one or more keystore files from this directory",
+      defaultValue: defaultKeystoreDir(),
+      defaultValueDesc: "inside datadir",
+      abbr: "k",
+      name: "key-store"
+    .}: OutDir
 
     chainDbMode* {.
-      desc: "Blockchain database"
+      desc: "Blockchain database",
       longDesc:
         "- Aristo   -- Single state DB, full node\n" &
-        "- AriPrune -- Aristo with curbed block history (for testing)\n" &
-        ""
-      defaultValue: ChainDbMode.Aristo
-      defaultValueDesc: $ChainDbMode.Aristo
-      abbr : "p"
-      name: "chaindb" }: ChainDbMode
+        "- AriPrune -- Aristo with curbed block history (for testing)\n" & "",
+      defaultValue: ChainDbMode.Aristo,
+      defaultValueDesc: $ChainDbMode.Aristo,
+      abbr: "p",
+      name: "chaindb"
+    .}: ChainDbMode
 
     syncMode* {.
-      desc: "Specify particular blockchain sync mode."
+      desc: "Specify particular blockchain sync mode.",
       longDesc:
         "- default   -- beacon sync mode\n" &
         # "- snap      -- experimental snap mode (development only)\n" &
-        ""
-      defaultValue: SyncMode.Default
-      defaultValueDesc: $SyncMode.Default
-      abbr: "y"
-      name: "sync-mode" .}: SyncMode
+        "",
+      defaultValue: SyncMode.Default,
+      defaultValueDesc: $SyncMode.Default,
+      abbr: "y",
+      name: "sync-mode"
+    .}: SyncMode
 
     syncCtrlFile* {.
-      desc: "Specify a file that is regularly checked for updates. If it " &
-            "exists it is checked for whether it contains extra information " &
-            "specific to the type of sync process. This option is primarily " &
-            "intended only for sync testing and debugging."
-      abbr: "z"
-      name: "sync-ctrl-file" }: Option[string]
+      desc:
+        "Specify a file that is regularly checked for updates. If it " &
+        "exists it is checked for whether it contains extra information " &
+        "specific to the type of sync process. This option is primarily " &
+        "intended only for sync testing and debugging.",
+      abbr: "z",
+      name: "sync-ctrl-file"
+    .}: Option[string]
 
     importKey* {.
-      desc: "Import unencrypted 32 bytes hex private key from a file"
-      defaultValue: ""
-      abbr: "e"
-      name: "import-key" }: InputFile
+      desc: "Import unencrypted 32 bytes hex private key from a file",
+      defaultValue: "",
+      abbr: "e",
+      name: "import-key"
+    .}: InputFile
 
     verifyFrom* {.
-      desc: "Enable extra verification when current block number greater than verify-from"
-      defaultValueDesc: ""
-      name: "verify-from" }: Option[uint64]
+      desc:
+        "Enable extra verification when current block number greater than verify-from",
+      defaultValueDesc: "",
+      name: "verify-from"
+    .}: Option[uint64]
 
     evm* {.
-      desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
-      defaultValue: ""
-      name: "evm"
-      includeIfEvmc }: string
+      desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText,
+      defaultValue: "",
+      name: "evm",
+      includeIfEvmc
+    .}: string
 
     trustedSetupFile* {.
-      desc: "Load EIP-4844 trusted setup file"
-      defaultValue: none(string)
-      defaultValueDesc: "Baked in trusted setup"
-      name: "trusted-setup-file" .}: Option[string]
+      desc: "Load EIP-4844 trusted setup file",
+      defaultValue: none(string),
+      defaultValueDesc: "Baked in trusted setup",
+      name: "trusted-setup-file"
+    .}: Option[string]
 
     network {.
-      separator: "\pETHEREUM NETWORK OPTIONS:"
-      desc: "Name or id number of Ethereum network(mainnet(1), sepolia(11155111), holesky(17000), other=custom)"
+      separator: "\pETHEREUM NETWORK OPTIONS:",
+      desc:
+        "Name or id number of Ethereum network(mainnet(1), sepolia(11155111), holesky(17000), other=custom)",
       longDesc:
         "- mainnet: Ethereum main network\n" &
         "- sepolia: Test network (proof-of-work)\n" &
-        "- holesky: The holesovice post-merge testnet"
-      defaultValue: "" # the default value is set in makeConfig
-      defaultValueDesc: "mainnet(1)"
-      abbr: "i"
-      name: "network" }: string
+        "- holesky: The holesovice post-merge testnet",
+      defaultValue: "", # the default value is set in makeConfig
+      defaultValueDesc: "mainnet(1)",
+      abbr: "i",
+      name: "network"
+    .}: string
 
     customNetwork {.
-      desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
-      defaultValueDesc: ""
-      abbr: "c"
-      name: "custom-network" }: Option[NetworkParams]
+      desc:
+        "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)",
+      defaultValueDesc: "",
+      abbr: "c",
+      name: "custom-network"
+    .}: Option[NetworkParams]
 
     networkId* {.
-      ignore # this field is not processed by confutils
-      defaultValue: MainNet # the defaultValue value is set by `makeConfig`
-      name: "network-id"}: NetworkId
+      ignore, # this field is not processed by confutils
+      defaultValue: MainNet, # the defaultValue value is set by `makeConfig`
+      name: "network-id"
+    .}: NetworkId
 
     networkParams* {.
-      ignore # this field is not processed by confutils
-      defaultValue: NetworkParams() # the defaultValue value is set by `makeConfig`
-      name: "network-params"}: NetworkParams
+      ignore, # this field is not processed by confutils
+      defaultValue: NetworkParams(), # the defaultValue value is set by `makeConfig`
+      name: "network-params"
+    .}: NetworkParams
 
     logLevel* {.
-      separator: "\pLOGGING AND DEBUGGING OPTIONS:"
-      desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
-      defaultValue: LogLevel.INFO
-      defaultValueDesc: $LogLevel.INFO
-      name: "log-level" }: LogLevel
+      separator: "\pLOGGING AND DEBUGGING OPTIONS:",
+      desc: "Sets the log level for process and topics (" & logLevelDesc & ")",
+      defaultValue: LogLevel.INFO,
+      defaultValueDesc: $LogLevel.INFO,
+      name: "log-level"
+    .}: LogLevel
 
     logFile* {.
-      desc: "Specifies a path for the written Json log file"
-      name: "log-file" }: Option[OutFile]
+      desc: "Specifies a path for the written Json log file", name: "log-file"
+    .}: Option[OutFile]
 
     logMetricsEnabled* {.
-      desc: "Enable metrics logging"
-      defaultValue: false
-      name: "log-metrics" .}: bool
+      desc: "Enable metrics logging", defaultValue: false, name: "log-metrics"
+    .}: bool
 
     logMetricsInterval* {.
-      desc: "Interval at which to log metrics, in seconds"
-      defaultValue: 10
-      name: "log-metrics-interval" .}: int
+      desc: "Interval at which to log metrics, in seconds",
+      defaultValue: 10,
+      name: "log-metrics-interval"
+    .}: int
 
     metricsEnabled* {.
-      desc: "Enable the built-in metrics HTTP server"
-      defaultValue: false
-      name: "metrics" }: bool
+      desc: "Enable the built-in metrics HTTP server",
+      defaultValue: false,
+      name: "metrics"
+    .}: bool
 
     metricsPort* {.
-      desc: "Listening port of the built-in metrics HTTP server"
-      defaultValue: defaultMetricsServerPort
-      defaultValueDesc: $defaultMetricsServerPort
-      name: "metrics-port" }: Port
+      desc: "Listening port of the built-in metrics HTTP server",
+      defaultValue: defaultMetricsServerPort,
+      defaultValueDesc: $defaultMetricsServerPort,
+      name: "metrics-port"
+    .}: Port
 
     metricsAddress* {.
-      desc: "Listening IP address of the built-in metrics HTTP server"
-      defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "metrics-address" }: IpAddress
+      desc: "Listening IP address of the built-in metrics HTTP server",
+      defaultValue: defaultAdminListenAddress,
+      defaultValueDesc: $defaultAdminListenAddressDesc,
+      name: "metrics-address"
+    .}: IpAddress
 
     bootstrapNodes {.
-      separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes(as enode URL) to use when connecting to the network"
-      defaultValue: @[]
-      defaultValueDesc: ""
-      abbr: "b"
-      name: "bootstrap-node" }: seq[string]
+      separator: "\pNETWORKING OPTIONS:",
+      desc:
+        "Specifies one or more bootstrap nodes(as enode URL) to use when connecting to the network",
+      defaultValue: @[],
+      defaultValueDesc: "",
+      abbr: "b",
+      name: "bootstrap-node"
+    .}: seq[string]
 
     bootstrapFile {.
-      desc: "Specifies a line-delimited file of bootstrap Ethereum network addresses(enode URL). " &
-            "By default, addresses will be added to bootstrap node list. " &
-            "But if the first line equals to `override` word, it will override built-in list"
-      defaultValue: ""
-      name: "bootstrap-file" }: InputFile
+      desc:
+        "Specifies a line-delimited file of bootstrap Ethereum network addresses(enode URL). " &
+        "By default, addresses will be added to bootstrap node list. " &
+        "But if the first line equals to `override` word, it will override built-in list",
+      defaultValue: "",
+      name: "bootstrap-file"
+    .}: InputFile
 
     bootstrapEnrs {.
-      desc: "ENR URI of node to bootstrap discovery from. Argument may be repeated"
-      defaultValue: @[]
-      defaultValueDesc: ""
-      name: "bootstrap-enr" }: seq[enr.Record]
+      desc: "ENR URI of node to bootstrap discovery from. Argument may be repeated",
+      defaultValue: @[],
+      defaultValueDesc: "",
+      name: "bootstrap-enr"
+    .}: seq[enr.Record]
 
     staticPeers {.
-      desc: "Connect to one or more trusted peers(as enode URL)"
-      defaultValue: @[]
-      defaultValueDesc: ""
-      name: "static-peers" }: seq[string]
+      desc: "Connect to one or more trusted peers(as enode URL)",
+      defaultValue: @[],
+      defaultValueDesc: "",
+      name: "static-peers"
+    .}: seq[string]
 
     staticPeersFile {.
-      desc: "Specifies a line-delimited file of trusted peers addresses(enode URL)" &
-            "to be added to the --static-peers list. If the first line equals to the word `override`, "&
-            "the file contents will replace the --static-peers list"
-      defaultValue: ""
-      name: "static-peers-file" }: InputFile
+      desc:
+        "Specifies a line-delimited file of trusted peers addresses(enode URL)" &
+        "to be added to the --static-peers list. If the first line equals to the word `override`, " &
+        "the file contents will replace the --static-peers list",
+      defaultValue: "",
+      name: "static-peers-file"
+    .}: InputFile
 
     staticPeersEnrs {.
-      desc: "ENR URI of node to connect to as trusted peer. Argument may be repeated"
-      defaultValue: @[]
-      defaultValueDesc: ""
-      name: "static-peer-enr" }: seq[enr.Record]
+      desc: "ENR URI of node to connect to as trusted peer. Argument may be repeated",
+      defaultValue: @[],
+      defaultValueDesc: "",
+      name: "static-peer-enr"
+    .}: seq[enr.Record]
 
     reconnectMaxRetry* {.
-      desc: "Specifies max number of retries if static peers disconnected/not connected. " &
-            "0 = infinite."
-      defaultValue: 0
-      name: "reconnect-max-retry" }: int
+      desc:
+        "Specifies max number of retries if static peers disconnected/not connected. " &
+        "0 = infinite.",
+      defaultValue: 0,
+      name: "reconnect-max-retry"
+    .}: int
 
     reconnectInterval* {.
-      desc: "Interval in seconds before next attempt to reconnect to static peers. Min 5 seconds."
-      defaultValue: 15
-      name: "reconnect-interval" }: int
+      desc:
+        "Interval in seconds before next attempt to reconnect to static peers. Min 5 seconds.",
+      defaultValue: 15,
+      name: "reconnect-interval"
+    .}: int
 
     listenAddress* {.
-      desc: "Listening IP address for Ethereum P2P and Discovery traffic"
-      defaultValue: defaultListenAddress
-      defaultValueDesc: $defaultListenAddressDesc
-      name: "listen-address" }: IpAddress
+      desc: "Listening IP address for Ethereum P2P and Discovery traffic",
+      defaultValue: defaultListenAddress,
+      defaultValueDesc: $defaultListenAddressDesc,
+      name: "listen-address"
+    .}: IpAddress
 
     tcpPort* {.
-      desc: "Ethereum P2P network listening TCP port"
-      defaultValue: defaultPort
-      defaultValueDesc: $defaultPort
-      name: "tcp-port" }: Port
+      desc: "Ethereum P2P network listening TCP port",
+      defaultValue: defaultPort,
+      defaultValueDesc: $defaultPort,
+      name: "tcp-port"
+    .}: Port
 
     udpPort* {.
-      desc: "Ethereum P2P network listening UDP port"
-      defaultValue: 0 # set udpPort defaultValue in `makeConfig`
-      defaultValueDesc: "default to --tcp-port"
-      name: "udp-port" }: Port
+      desc: "Ethereum P2P network listening UDP port",
+      defaultValue: 0, # set udpPort defaultValue in `makeConfig`
+      defaultValueDesc: "default to --tcp-port",
+      name: "udp-port"
+    .}: Port
 
     maxPeers* {.
-      desc: "Maximum number of peers to connect to"
-      defaultValue: 25
-      name: "max-peers" }: int
+      desc: "Maximum number of peers to connect to", defaultValue: 25, name: "max-peers"
+    .}: int
 
     nat* {.
-      desc: "Specify method to use for determining public address. " &
-            "Must be one of: any, none, upnp, pmp, extip:<IP>"
-      defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
-      defaultValueDesc: "any"
-      name: "nat" .}: NatConfig
+      desc:
+        "Specify method to use for determining public address. " &
+        "Must be one of: any, none, upnp, pmp, extip:<IP>",
+      defaultValue: NatConfig(hasExtIp: false, nat: NatAny),
+      defaultValueDesc: "any",
+      name: "nat"
+    .}: NatConfig
 
     discovery* {.
-      desc: "Specify method to find suitable peer in an Ethereum network (None, V4, V5)"
+      desc: "Specify method to find suitable peer in an Ethereum network (None, V4, V5)",
       longDesc:
         "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
         "- V4  : Node Discovery Protocol v4(default)\n" &
-        "- V5  : Node Discovery Protocol v5"
-      defaultValue: DiscoveryType.V4
-      defaultValueDesc: $DiscoveryType.V4
-      name: "discovery" .}: DiscoveryType
+        "- V5  : Node Discovery Protocol v5",
+      defaultValue: DiscoveryType.V4,
+      defaultValueDesc: $DiscoveryType.V4,
+      name: "discovery"
+    .}: DiscoveryType
 
     netKey* {.
-      desc: "P2P ethereum node (secp256k1) private key (random, path, hex)"
+      desc: "P2P ethereum node (secp256k1) private key (random, path, hex)",
       longDesc:
         "- random: generate random network key for this node instance\n" &
         "- path  : path to where the private key will be loaded or auto generated\n" &
-        "- hex   : 32 bytes hex of network private key"
-      defaultValue: "random"
-      name: "net-key" .}: string
+        "- hex   : 32 bytes hex of network private key",
+      defaultValue: "random",
+      name: "net-key"
+    .}: string
 
     agentString* {.
-      desc: "Node agent string which is used as identifier in network"
-      defaultValue: NimbusIdent
-      defaultValueDesc: $NimbusIdent
-      name: "agent-string" .}: string
+      desc: "Node agent string which is used as identifier in network",
+      defaultValue: NimbusIdent,
+      defaultValueDesc: $NimbusIdent,
+      name: "agent-string"
+    .}: string
 
     protocols {.
-      desc: "Enable specific set of server protocols (available: Eth, " &
-            " None.) This will not affect the sync mode"
-            # " Snap, None.) This will not affect the sync mode"
-      defaultValue: @[]
-      defaultValueDesc: $ProtocolFlag.Eth
-      name: "protocols" .}: seq[string]
+      desc:
+        "Enable specific set of server protocols (available: Eth, " &
+        " None.) This will not affect the sync mode",
+        # " Snap, None.) This will not affect the sync mode"
+      defaultValue: @[],
+      defaultValueDesc: $ProtocolFlag.Eth,
+      name: "protocols"
+    .}: seq[string]
 
     rocksdbMaxOpenFiles {.
-      hidden
-      defaultValue: defaultMaxOpenFiles
-      defaultValueDesc: $defaultMaxOpenFiles
-      name: "debug-rocksdb-max-open-files".}: int
+      hidden,
+      defaultValue: defaultMaxOpenFiles,
+      defaultValueDesc: $defaultMaxOpenFiles,
+      name: "debug-rocksdb-max-open-files"
+    .}: int
 
     rocksdbWriteBufferSize {.
-      hidden
-      defaultValue: defaultWriteBufferSize
-      defaultValueDesc: $defaultWriteBufferSize
-      name: "debug-rocksdb-write-buffer-size".}: int
+      hidden,
+      defaultValue: defaultWriteBufferSize,
+      defaultValueDesc: $defaultWriteBufferSize,
+      name: "debug-rocksdb-write-buffer-size"
+    .}: int
 
     rocksdbRowCacheSize {.
-      hidden
-      defaultValue: defaultRowCacheSize
-      defaultValueDesc: $defaultRowCacheSize
-      name: "debug-rocksdb-row-cache-size".}: int
+      hidden,
+      defaultValue: defaultRowCacheSize,
+      defaultValueDesc: $defaultRowCacheSize,
+      name: "debug-rocksdb-row-cache-size"
+    .}: int
 
     rocksdbBlockCacheSize {.
-      hidden
-      defaultValue: defaultBlockCacheSize
-      defaultValueDesc: $defaultBlockCacheSize
-      name: "debug-rocksdb-block-cache-size".}: int
+      hidden,
+      defaultValue: defaultBlockCacheSize,
+      defaultValueDesc: $defaultBlockCacheSize,
+      name: "debug-rocksdb-block-cache-size"
+    .}: int
 
-    case cmd* {.
-      command
-      defaultValue: NimbusCmd.noCommand }: NimbusCmd
-
+    case cmd* {.command, defaultValue: NimbusCmd.noCommand.}: NimbusCmd
     of noCommand:
       httpPort* {.
-        separator: "\pLOCAL SERVICES OPTIONS:"
-        desc: "Listening port of the HTTP server(rpc, ws, graphql)"
-        defaultValue: defaultHttpPort
-        defaultValueDesc: $defaultHttpPort
-        name: "http-port" }: Port
+        separator: "\pLOCAL SERVICES OPTIONS:",
+        desc: "Listening port of the HTTP server(rpc, ws, graphql)",
+        defaultValue: defaultHttpPort,
+        defaultValueDesc: $defaultHttpPort,
+        name: "http-port"
+      .}: Port
 
       httpAddress* {.
-        desc: "Listening IP address of the HTTP server(rpc, ws, graphql)"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "http-address" }: IpAddress
+        desc: "Listening IP address of the HTTP server(rpc, ws, graphql)",
+        defaultValue: defaultAdminListenAddress,
+        defaultValueDesc: $defaultAdminListenAddressDesc,
+        name: "http-address"
+      .}: IpAddress
 
       rpcEnabled* {.
-        desc: "Enable the JSON-RPC server"
-        defaultValue: false
-        name: "rpc" }: bool
+        desc: "Enable the JSON-RPC server", defaultValue: false, name: "rpc"
+      .}: bool
 
       rpcApi {.
-        desc: "Enable specific set of RPC API (available: eth, debug, exp)"
-        defaultValue: @[]
-        defaultValueDesc: $RpcFlag.Eth
-        name: "rpc-api" }: seq[string]
+        desc: "Enable specific set of RPC API (available: eth, debug, exp)",
+        defaultValue: @[],
+        defaultValueDesc: $RpcFlag.Eth,
+        name: "rpc-api"
+      .}: seq[string]
 
       wsEnabled* {.
-        desc: "Enable the Websocket JSON-RPC server"
-        defaultValue: false
-        name: "ws" }: bool
+        desc: "Enable the Websocket JSON-RPC server", defaultValue: false, name: "ws"
+      .}: bool
 
       wsApi {.
-        desc: "Enable specific set of Websocket RPC API (available: eth, debug, exp)"
-        defaultValue: @[]
-        defaultValueDesc: $RpcFlag.Eth
-        name: "ws-api" }: seq[string]
+        desc: "Enable specific set of Websocket RPC API (available: eth, debug, exp)",
+        defaultValue: @[],
+        defaultValueDesc: $RpcFlag.Eth,
+        name: "ws-api"
+      .}: seq[string]
 
       graphqlEnabled* {.
-        desc: "Enable the GraphQL HTTP server"
-        defaultValue: false
-        name: "graphql" }: bool
+        desc: "Enable the GraphQL HTTP server", defaultValue: false, name: "graphql"
+      .}: bool
 
       engineApiEnabled* {.
-        desc: "Enable the Engine API"
-        defaultValue: false
-        name: "engine-api" .}: bool
+        desc: "Enable the Engine API", defaultValue: false, name: "engine-api"
+      .}: bool
 
       engineApiPort* {.
-        desc: "Listening port for the Engine API(http and ws)"
-        defaultValue: defaultEngineApiPort
-        defaultValueDesc: $defaultEngineApiPort
-        name: "engine-api-port" .}: Port
+        desc: "Listening port for the Engine API(http and ws)",
+        defaultValue: defaultEngineApiPort,
+        defaultValueDesc: $defaultEngineApiPort,
+        name: "engine-api-port"
+      .}: Port
 
       engineApiAddress* {.
-        desc: "Listening address for the Engine API(http and ws)"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "engine-api-address" .}: IpAddress
+        desc: "Listening address for the Engine API(http and ws)",
+        defaultValue: defaultAdminListenAddress,
+        defaultValueDesc: $defaultAdminListenAddressDesc,
+        name: "engine-api-address"
+      .}: IpAddress
 
       engineApiWsEnabled* {.
-        desc: "Enable the WebSocket Engine API"
-        defaultValue: false
-        name: "engine-api-ws" .}: bool
+        desc: "Enable the WebSocket Engine API",
+        defaultValue: false,
+        name: "engine-api-ws"
+      .}: bool
 
       allowedOrigins* {.
-        desc: "Comma separated list of domains from which to accept cross origin requests"
-        defaultValue: @[]
-        defaultValueDesc: "*"
-        name: "allowed-origins" .}: seq[string]
+        desc:
+          "Comma separated list of domains from which to accept cross origin requests",
+        defaultValue: @[],
+        defaultValueDesc: "*",
+        name: "allowed-origins"
+      .}: seq[string]
 
       # github.com/ethereum/execution-apis/
       #   /blob/v1.0.0-alpha.8/src/engine/authentication.md#key-distribution
       jwtSecret* {.
-        desc: "Path to a file containing a 32 byte hex-encoded shared secret" &
+        desc:
+          "Path to a file containing a 32 byte hex-encoded shared secret" &
           " needed for websocket authentication. By default, the secret key" &
-          " is auto-generated."
-        defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
-        name: "jwt-secret" .}: Option[InputFile]
-
+          " is auto-generated.",
+        defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)",
+        name: "jwt-secret"
+      .}: Option[InputFile]
     of `import`:
       blocksFile* {.
-        argument
-        desc: "One or more RLP encoded block(s) files"
-        name: "blocks-file" }: seq[InputFile]
+        argument, desc: "One or more RLP encoded block(s) files", name: "blocks-file"
+      .}: seq[InputFile]
 
       maxBlocks* {.
-        desc: "Maximum number of blocks to import"
-        defaultValue: uint64.high()
-        name: "max-blocks" .}: uint64
+        desc: "Maximum number of blocks to import",
+        defaultValue: uint64.high(),
+        name: "max-blocks"
+      .}: uint64
 
       chunkSize* {.
-        desc: "Number of blocks per database transaction"
-        defaultValue: 8192
-        name: "chunk-size" .}: uint64
+        desc: "Number of blocks per database transaction",
+        defaultValue: 8192,
+        name: "chunk-size"
+      .}: uint64
 
       csvStats* {.
-        hidden
-        desc: "Save performance statistics to CSV"
-        name: "debug-csv-stats".}: Option[string]
+        hidden, desc: "Save performance statistics to CSV", name: "debug-csv-stats"
+      .}: Option[string]
 
       # TODO validation and storage options should be made non-hidden when the
       #      UX has stabilised and era1 storage is in the app
       fullValidation* {.
-        hidden
-        desc: "Enable full per-block validation (slow)"
-        defaultValue: false
-        name: "debug-full-validation".}: bool
+        hidden,
+        desc: "Enable full per-block validation (slow)",
+        defaultValue: false,
+        name: "debug-full-validation"
+      .}: bool
 
       noValidation* {.
-        hidden
-        desc: "Disble per-chunk validation"
-        defaultValue: true
-        name: "debug-no-validation".}: bool
+        hidden,
+        desc: "Disble per-chunk validation",
+        defaultValue: true,
+        name: "debug-no-validation"
+      .}: bool
 
       storeBodies* {.
-        hidden
-        desc: "Store block blodies in database"
-        defaultValue: false
-        name: "debug-store-bodies".}: bool
+        hidden,
+        desc: "Store block blodies in database",
+        defaultValue: false,
+        name: "debug-store-bodies"
+      .}: bool
 
       # TODO this option should probably only cover the redundant parts, ie
       #      those that are in era1 files - era files presently do not store
       #      receipts
       storeReceipts* {.
-        hidden
-        desc: "Store receipts in database"
-        defaultValue: false
-        name: "debug-store-receipts".}: bool
+        hidden,
+        desc: "Store receipts in database",
+        defaultValue: false,
+        name: "debug-store-receipts"
+      .}: bool
 
-func parseCmdArg(T: type NetworkId, p: string): T
-    {.gcsafe, raises: [ValueError].} =
+func parseCmdArg(T: type NetworkId, p: string): T {.gcsafe, raises: [ValueError].} =
   parseInt(p).T
 
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
@@ -564,16 +597,14 @@ func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
 func completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-func processList(v: string, o: var seq[string])
-    =
+func processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.
   if len(v) > 0:
     for n in v.split({' ', ','}):
       if len(n) > 0:
         o.add(n)
 
-proc parseCmdArg(T: type NetworkParams, p: string): T
-    {.gcsafe, raises: [ValueError].} =
+proc parseCmdArg(T: type NetworkParams, p: string): T {.gcsafe, raises: [ValueError].} =
   try:
     if not loadNetworkParams(p, result):
       raise newException(ValueError, "failed to load customNetwork")
@@ -588,25 +619,22 @@ func setBootnodes(output: var seq[ENode], nodeUris: openArray[string]) =
   for item in nodeUris:
     output.add(ENode.fromString(item).expect("valid hardcoded ENode"))
 
-iterator repeatingList(listOfList: openArray[string]): string
-    =
+iterator repeatingList(listOfList: openArray[string]): string =
   for strList in listOfList:
     var list = newSeq[string]()
     processList(strList, list)
     for item in list:
       yield item
 
-proc append(output: var seq[ENode], nodeUris: openArray[string])
-    =
+proc append(output: var seq[ENode], nodeUris: openArray[string]) =
   for item in repeatingList(nodeUris):
     let res = ENode.fromString(item)
     if res.isErr:
-      warn "Ignoring invalid bootstrap address", address=item
+      warn "Ignoring invalid bootstrap address", address = item
       continue
     output.add res.get()
 
-iterator strippedLines(filename: string): (int, string)
-    {.gcsafe, raises: [IOError].} =
+iterator strippedLines(filename: string): (int, string) {.gcsafe, raises: [IOError].} =
   var i = 0
   for line in lines(filename):
     let stripped = strip(line)
@@ -617,8 +645,7 @@ iterator strippedLines(filename: string): (int, string)
       yield (i, stripped)
       inc i
 
-proc loadEnodeFile(fileName: string; output: var seq[ENode]; info: string)
-    =
+proc loadEnodeFile(fileName: string, output: var seq[ENode], info: string) =
   if fileName.len == 0:
     return
 
@@ -631,11 +658,11 @@ proc loadEnodeFile(fileName: string; output: var seq[ENode]; info: string)
 
       let res = ENode.fromString(ln)
       if res.isErr:
-        warn "Ignoring invalid address", address=ln, line=i, file=fileName, purpose=info
+        warn "Ignoring invalid address",
+          address = ln, line = i, file = fileName, purpose = info
         continue
 
       output.add res.get()
-
   except IOError as e:
     error "Could not read file", msg = e.msg, purpose = info
     quit 1
@@ -652,9 +679,12 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
 
   let network = toLowerAscii(conf.network)
   case network
-  of "mainnet": return some MainNet
-  of "sepolia": return some SepoliaNet
-  of "holesky": return some HoleskyNet
+  of "mainnet":
+    return some MainNet
+  of "sepolia":
+    return some SepoliaNet
+  of "holesky":
+    return some HoleskyNet
   else:
     try:
       some parseInt(network).NetworkId
@@ -669,11 +699,13 @@ proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
   var noneOk = false
   for item in repeatingList(conf.protocols):
     case item.toLowerAscii()
-    of "eth": result.incl ProtocolFlag.Eth
+    of "eth":
+      result.incl ProtocolFlag.Eth
     # of "snap": result.incl ProtocolFlag.Snap
-    of "none": noneOk = true
+    of "none":
+      noneOk = true
     else:
-      error "Unknown protocol", name=item
+      error "Unknown protocol", name = item
       quit QuitFailure
   if noneOk and 0 < result.len:
     error "Setting none contradicts wire protocols", names = $result
@@ -685,11 +717,14 @@ proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
 
   for item in repeatingList(api):
     case item.toLowerAscii()
-    of "eth": result.incl RpcFlag.Eth
-    of "debug": result.incl RpcFlag.Debug
-    of "exp": result.incl RpcFlag.Exp
+    of "eth":
+      result.incl RpcFlag.Eth
+    of "debug":
+      result.incl RpcFlag.Debug
+    of "exp":
+      result.incl RpcFlag.Exp
     else:
-      error "Unknown RPC API: ", name=item
+      error "Unknown RPC API: ", name = item
       quit QuitFailure
 
 proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
@@ -704,7 +739,7 @@ func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
     # could have been done and no Record would exist here.
     # TypedRecord should be reworked not to have public key as an option.
     pk = r.get(PublicKey).get()
-    tr = TypedRecord.fromRecord(r)#.expect("id in valid record")
+    tr = TypedRecord.fromRecord(r) #.expect("id in valid record")
 
   if tr.ip.isNone():
     return err(IncorrectIP)
@@ -713,14 +748,16 @@ func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
   if tr.tcp.isNone():
     return err(IncorrectPort)
 
-  ok(ENode(
-    pubkey: pk,
-    address: Address(
-      ip: utils.ipv4(tr.ip.get()),
-      udpPort: Port(tr.udp.get()),
-      tcpPort: Port(tr.tcp.get())
+  ok(
+    ENode(
+      pubkey: pk,
+      address: Address(
+        ip: utils.ipv4(tr.ip.get()),
+        udpPort: Port(tr.udp.get()),
+        tcpPort: Port(tr.tcp.get()),
+      ),
     )
-  ))
+  )
 
 proc getBootNodes*(conf: NimbusConf): seq[ENode] =
   var bootstrapNodes: seq[ENode]
@@ -778,13 +815,10 @@ func engineApiServerEnabled*(conf: NimbusConf): bool =
   conf.engineApiEnabled or conf.engineApiWsEnabled
 
 func shareServerWithEngineApi*(conf: NimbusConf): bool =
-  conf.engineApiServerEnabled and
-    conf.engineApiPort == conf.httpPort
+  conf.engineApiServerEnabled and conf.engineApiPort == conf.httpPort
 
 func httpServerEnabled*(conf: NimbusConf): bool =
-  conf.graphqlEnabled or
-    conf.wsEnabled or
-    conf.rpcEnabled
+  conf.graphqlEnabled or conf.wsEnabled or conf.rpcEnabled
 
 func era1Dir*(conf: NimbusConf): OutDir =
   conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))
@@ -804,18 +838,16 @@ func dbOptions*(conf: NimbusConf): DbOptions =
 #         annotated environment.
 {.pop.}
 
-proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
-    {.raises: [CatchableError].} =
+proc makeConfig*(
+    cmdLine = commandLineParams()
+): NimbusConf {.raises: [CatchableError].} =
   ## Note: this function is not gc-safe
 
   # The try/catch clause can go away when `load()` is clean
   try:
     {.push warning[ProveInit]: off.}
-    result = NimbusConf.load(
-      cmdLine,
-      version = NimbusBuild,
-      copyrightBanner = NimbusHeader
-    )
+    result =
+      NimbusConf.load(cmdLine, version = NimbusBuild, copyrightBanner = NimbusHeader)
     {.pop.}
   except CatchableError as e:
     raise e
@@ -849,12 +881,12 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
 
   # see issue #1346
   if result.keyStore.string == defaultKeystoreDir() and
-     result.dataDir.string != defaultDataDir():
+      result.dataDir.string != defaultDataDir():
     result.keyStore = OutDir(result.dataDir.string / "keystore")
 
   # For consistency
   if result.syncCtrlFile.isSome and result.syncCtrlFile.unsafeGet == "":
-    error "Argument missing", option="sync-ctrl-file"
+    error "Argument missing", option = "sync-ctrl-file"
     quit QuitFailure
 
 when isMainModule:

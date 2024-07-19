@@ -12,7 +12,8 @@
 
 import
   std/[tables, times, hashes, sets, sequtils],
-  chronicles, chronos,
+  chronicles,
+  chronos,
   stew/endians2,
   eth/p2p,
   eth/p2p/peer_pool,
@@ -28,17 +29,12 @@ type
   HashToTime = TableRef[Hash256, Time]
 
   NewBlockHandler* = proc(
-    arg: pointer,
-    peer: Peer,
-    blk: EthBlock,
-    totalDifficulty: DifficultyInt) {.
-      gcsafe, raises: [CatchableError].}
+    arg: pointer, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt
+  ) {.gcsafe, raises: [CatchableError].}
 
   NewBlockHashesHandler* = proc(
-    arg: pointer,
-    peer: Peer,
-    hashes: openArray[NewBlockHashesAnnounce]) {.
-      gcsafe, raises: [CatchableError].}
+    arg: pointer, peer: Peer, hashes: openArray[NewBlockHashesAnnounce]
+  ) {.gcsafe, raises: [CatchableError].}
 
   NewBlockHandlerPair = object
     arg: pointer
@@ -88,25 +84,21 @@ proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
   let res = ctx.txPool.getItem(txHash)
   res.isOk
 
-proc successorHeader(db: CoreDbRef,
-                     h: BlockHeader,
-                     output: var BlockHeader,
-                     skip = 0'u): bool =
+proc successorHeader(
+    db: CoreDbRef, h: BlockHeader, output: var BlockHeader, skip = 0'u
+): bool =
   let offset = 1 + skip.BlockNumber
   if h.number <= (not 0.BlockNumber) - offset:
     result = db.getBlockHeader(h.number + offset, output)
 
-proc ancestorHeader(db: CoreDbRef,
-                     h: BlockHeader,
-                     output: var BlockHeader,
-                     skip = 0'u): bool =
+proc ancestorHeader(
+    db: CoreDbRef, h: BlockHeader, output: var BlockHeader, skip = 0'u
+): bool =
   let offset = 1 + skip.BlockNumber
   if h.number >= offset:
     result = db.getBlockHeader(h.number - offset, output)
 
-proc blockHeader(db: CoreDbRef,
-                 b: HashOrNum,
-                 output: var BlockHeader): bool =
+proc blockHeader(db: CoreDbRef, b: HashOrNum, output: var BlockHeader): bool =
   if b.isHash:
     db.getBlockHeader(b.hash, output)
   else:
@@ -128,13 +120,11 @@ proc getPeers(ctx: EthWireRef, thisPeer: Peer): seq[Peer] =
 proc banExpiredReconnect(arg: pointer) =
   # Reconnect to peer after ban period if pool is empty
   try:
-
     let reconnect = cast[ReconnectRef](arg)
     if reconnect.pool.len > 0:
       return
 
     asyncSpawn reconnect.pool.connectToNode(reconnect.node)
-
   except TransportError:
     debug "Transport got closed during banExpiredReconnect"
   except CatchableError as e:
@@ -142,21 +132,12 @@ proc banExpiredReconnect(arg: pointer) =
 
 proc banPeer(pool: PeerPool, peer: Peer, banTime: chronos.Duration) {.async.} =
   try:
-
     await peer.disconnect(SubprotocolReason)
 
     let expired = Moment.fromNow(banTime)
-    let reconnect = ReconnectRef(
-      pool: pool,
-      node: peer.remote
-    )
+    let reconnect = ReconnectRef(pool: pool, node: peer.remote)
 
-    discard setTimer(
-      expired,
-      banExpiredReconnect,
-      cast[pointer](reconnect)
-    )
-
+    discard setTimer(expired, banExpiredReconnect, cast[pointer](reconnect))
   except TransportError:
     debug "Transport got closed during banPeer"
   except CatchableError as e:
@@ -185,7 +166,7 @@ proc cleanupKnownByPeer(ctx: EthWireRef) =
 
 proc addToKnownByPeer(ctx: EthWireRef, txHashes: openArray[Hash256], peer: Peer) =
   var map: HashToTime
-  ctx.knownByPeer.withValue(peer, val) do:
+  ctx.knownByPeer.withValue(peer, val):
     map = val[]
   do:
     map = newTable[Hash256, Time]()
@@ -195,12 +176,14 @@ proc addToKnownByPeer(ctx: EthWireRef, txHashes: openArray[Hash256], peer: Peer)
     if txHash notin map:
       map[txHash] = getTime()
 
-proc addToKnownByPeer(ctx: EthWireRef,
-                      txHashes: openArray[Hash256],
-                      peer: Peer,
-                      newHashes: var seq[Hash256]) =
+proc addToKnownByPeer(
+    ctx: EthWireRef,
+    txHashes: openArray[Hash256],
+    peer: Peer,
+    newHashes: var seq[Hash256],
+) =
   var map: HashToTime
-  ctx.knownByPeer.withValue(peer, val) do:
+  ctx.knownByPeer.withValue(peer, val):
     map = val[]
   do:
     map = newTable[Hash256, Time]()
@@ -216,9 +199,9 @@ proc addToKnownByPeer(ctx: EthWireRef,
 # Private functions: async workers
 # ------------------------------------------------------------------------------
 
-proc sendNewTxHashes(ctx: EthWireRef,
-                     txHashes: seq[Hash256],
-                     peers: seq[Peer]): Future[void] {.async.} =
+proc sendNewTxHashes(
+    ctx: EthWireRef, txHashes: seq[Hash256], peers: seq[Peer]
+): Future[void] {.async.} =
   try:
     for peer in peers:
       # Add to known tx hashes and get hashes still to send to peer
@@ -232,46 +215,43 @@ proc sendNewTxHashes(ctx: EthWireRef,
           await newPooledTransactionHashes(
             peer,
             1u8.repeat hashesToSend.len, # type
-            0.repeat hashesToSend.len,   # sizes
-            hashesToSend)
+            0.repeat hashesToSend.len, # sizes
+            hashesToSend,
+          )
         else:
           await newPooledTransactionHashes(peer, hashesToSend)
-
   except TransportError:
     debug "Transport got closed during sendNewTxHashes"
   except CatchableError as e:
     debug "Exception in sendNewTxHashes", exc = e.name, err = e.msg
 
-proc sendTransactions(ctx: EthWireRef,
-                      txHashes: seq[Hash256],
-                      txs: seq[Transaction],
-                      peers: seq[Peer]): Future[void] {.async.} =
+proc sendTransactions(
+    ctx: EthWireRef, txHashes: seq[Hash256], txs: seq[Transaction], peers: seq[Peer]
+): Future[void] {.async.} =
   try:
     for peer in peers:
       # This is used to avoid re-sending along pooledTxHashes
       # announcements/re-broadcasts
       ctx.addToKnownByPeer(txHashes, peer)
       await peer.transactions(txs)
-
   except TransportError:
     debug "Transport got closed during sendTransactions"
   except CatchableError as e:
     debug "Exception in sendTransactions", exc = e.name, err = e.msg
 
-proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Future[void] {.async.} =
-  debug "fetchTx: requesting txs",
-    number = reqHashes.len
+proc fetchTransactions(
+    ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer
+): Future[void] {.async.} =
+  debug "fetchTx: requesting txs", number = reqHashes.len
 
   try:
-
     let res = await peer.getPooledTransactions(reqHashes)
     if res.isNone:
       error "not able to get pooled transactions"
       return
 
     let txs = res.get()
-    debug "fetchTx: received requested txs",
-      number = txs.transactions.len
+    debug "fetchTx: received requested txs", number = txs.transactions.len
 
     # Remove from pending list regardless if tx is in result
     for tx in txs.transactions:
@@ -279,7 +259,6 @@ proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Fu
       ctx.pending.excl txHash
 
     ctx.txPool.add(txs.transactions)
-
   except TransportError:
     debug "Transport got closed during fetchTransactions"
     return
@@ -315,25 +294,22 @@ proc onPeerConnected(ctx: EthWireRef, peer: Peer) =
   if txHashes.len == 0:
     return
 
-  debug "announce tx hashes to newly connected peer",
-    number = txHashes.len
+  debug "announce tx hashes to newly connected peer", number = txHashes.len
 
   asyncSpawn ctx.sendNewTxHashes(txHashes, @[peer])
 
 proc onPeerDisconnected(ctx: EthWireRef, peer: Peer) =
-  debug "remove peer from knownByPeer",
-    peer
+  debug "remove peer from knownByPeer", peer
 
   ctx.knownByPeer.del(peer)
 
 proc setupPeerObserver(ctx: EthWireRef) =
   var po = PeerObserver(
-    onPeerConnected:
-      proc(p: Peer) {.gcsafe.} =
-        ctx.onPeerConnected(p),
-    onPeerDisconnected:
-      proc(p: Peer) {.gcsafe.} =
-        ctx.onPeerDisconnected(p))
+    onPeerConnected: proc(p: Peer) {.gcsafe.} =
+      ctx.onPeerConnected(p),
+    onPeerDisconnected: proc(p: Peer) {.gcsafe.} =
+      ctx.onPeerDisconnected(p),
+  )
   po.setProtocol protocol.eth
   ctx.peerPool.addObserver(ctx, po)
 
@@ -341,17 +317,17 @@ proc setupPeerObserver(ctx: EthWireRef) =
 # Public constructor/destructor
 # ------------------------------------------------------------------------------
 
-proc new*(_: type EthWireRef,
-          chain: ChainRef,
-          txPool: TxPoolRef,
-          peerPool: PeerPool): EthWireRef =
+proc new*(
+    _: type EthWireRef, chain: ChainRef, txPool: TxPoolRef, peerPool: PeerPool
+): EthWireRef =
   let ctx = EthWireRef(
     db: chain.db,
     chain: chain,
     txPool: txPool,
     peerPool: peerPool,
     enableTxPool: Enabled,
-    lastCleanup: getTime())
+    lastCleanup: getTime(),
+  )
   if txPool.isNil:
     ctx.enableTxPool = NotAvailable
     when trMissingOrDisabledGossipOk:
@@ -365,22 +341,18 @@ proc new*(_: type EthWireRef,
 # ------------------------------------------------------------------------------
 
 proc setNewBlockHandler*(ctx: EthWireRef, handler: NewBlockHandler, arg: pointer) =
-  ctx.newBlockHandler = NewBlockHandlerPair(
-    arg: arg,
-    handler: handler
-  )
+  ctx.newBlockHandler = NewBlockHandlerPair(arg: arg, handler: handler)
 
-proc setNewBlockHashesHandler*(ctx: EthWireRef, handler: NewBlockHashesHandler, arg: pointer) =
-  ctx.newBlockHashesHandler = NewBlockHashesHandlerPair(
-    arg: arg,
-    handler: handler
-  )
+proc setNewBlockHashesHandler*(
+    ctx: EthWireRef, handler: NewBlockHashesHandler, arg: pointer
+) =
+  ctx.newBlockHashesHandler = NewBlockHashesHandlerPair(arg: arg, handler: handler)
 
 # ------------------------------------------------------------------------------
 # Public getters/setters
 # ------------------------------------------------------------------------------
 
-proc `txPoolEnabled=`*(ctx: EthWireRef; ena: bool) {.gcsafe, raises: [].} =
+proc `txPoolEnabled=`*(ctx: EthWireRef, ena: bool) {.gcsafe, raises: [].} =
   if ctx.enableTxPool != NotAvailable:
     ctx.enableTxPool = if ena: Enabled else: Suspended
 
@@ -391,8 +363,7 @@ proc txPoolEnabled*(ctx: EthWireRef): bool {.gcsafe, raises: [].} =
 # Public functions: eth wire protocol handlers
 # ------------------------------------------------------------------------------
 
-method getStatus*(ctx: EthWireRef): Result[EthState, string]
-    {.gcsafe.} =
+method getStatus*(ctx: EthWireRef): Result[EthState, string] {.gcsafe.} =
   try:
     let
       db = ctx.db
@@ -400,25 +371,23 @@ method getStatus*(ctx: EthWireRef): Result[EthState, string]
       bestBlock = db.getCanonicalHead()
       forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
-    return ok(EthState(
-      totalDifficulty: db.headTotalDifficulty,
-      genesisHash: com.genesisHash,
-      bestBlockHash: bestBlock.blockHash,
-      forkId: ChainForkId(
-        forkHash: forkId.crc.toBytesBE,
-        forkNext: forkId.nextFork
+    return ok(
+      EthState(
+        totalDifficulty: db.headTotalDifficulty,
+        genesisHash: com.genesisHash,
+        bestBlockHash: bestBlock.blockHash,
+        forkId: ChainForkId(forkHash: forkId.crc.toBytesBE, forkNext: forkId.nextFork),
       )
-    ))
+    )
   except EVMError as exc:
     # TODO: Why an EVM Error in database?
     return err(exc.msg)
   except RlpError as exc:
     return err(exc.msg)
 
-method getReceipts*(ctx: EthWireRef,
-                    hashes: openArray[Hash256]):
-                      Result[seq[seq[Receipt]], string]
-    {.gcsafe.} =
+method getReceipts*(
+    ctx: EthWireRef, hashes: openArray[Hash256]
+): Result[seq[seq[Receipt]], string] {.gcsafe.} =
   try:
     let db = ctx.db
     var header: BlockHeader
@@ -433,10 +402,9 @@ method getReceipts*(ctx: EthWireRef,
   except RlpError as exc:
     return err(exc.msg)
 
-method getPooledTxs*(ctx: EthWireRef,
-                     hashes: openArray[Hash256]):
-                       Result[seq[PooledTransaction], string]
-    {.gcsafe.} =
+method getPooledTxs*(
+    ctx: EthWireRef, hashes: openArray[Hash256]
+): Result[seq[PooledTransaction], string] {.gcsafe.} =
   let txPool = ctx.txPool
   var list: seq[PooledTransaction]
   for txHash in hashes:
@@ -447,10 +415,9 @@ method getPooledTxs*(ctx: EthWireRef,
       trace "handlers.getPooledTxs: tx not found", txHash
   ok(list)
 
-method getBlockBodies*(ctx: EthWireRef,
-                       hashes: openArray[Hash256]):
-                        Result[seq[BlockBody], string]
-    {.gcsafe.} =
+method getBlockBodies*(
+    ctx: EthWireRef, hashes: openArray[Hash256]
+): Result[seq[BlockBody], string] {.gcsafe.} =
   try:
     let db = ctx.db
     var body: BlockBody
@@ -465,10 +432,9 @@ method getBlockBodies*(ctx: EthWireRef,
   except RlpError as exc:
     return err(exc.msg)
 
-method getBlockHeaders*(ctx: EthWireRef,
-                        req: BlocksRequest):
-                          Result[seq[BlockHeader], string]
-    {.gcsafe.} =
+method getBlockHeaders*(
+    ctx: EthWireRef, req: BlocksRequest
+): Result[seq[BlockHeader], string] {.gcsafe.} =
   try:
     let db = ctx.db
     var foundBlock: BlockHeader
@@ -489,12 +455,9 @@ method getBlockHeaders*(ctx: EthWireRef,
   except RlpError as exc:
     return err(exc.msg)
 
-method handleAnnouncedTxs*(ctx: EthWireRef,
-                           peer: Peer,
-                           txs: openArray[Transaction]):
-                             Result[void, string]
-    {.gcsafe.} =
-
+method handleAnnouncedTxs*(
+    ctx: EthWireRef, peer: Peer, txs: openArray[Transaction]
+): Result[void, string] {.gcsafe.} =
   try:
     if ctx.enableTxPool != Enabled:
       when trMissingOrDisabledGossipOk:
@@ -504,8 +467,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
     if txs.len == 0:
       return ok()
 
-    debug "received new transactions",
-      number = txs.len
+    debug "received new transactions", number = txs.len
 
     if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
       ctx.cleanupKnownByPeer()
@@ -538,20 +500,20 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
     if numPeers == 0 or validTxs.len == 0:
       return ok()
 
-    asyncSpawn ctx.sendTransactions(txHashes, validTxs, peers[0..<sendFull])
+    asyncSpawn ctx.sendTransactions(txHashes, validTxs, peers[0 ..< sendFull])
 
-    asyncSpawn ctx.sendNewTxHashes(newTxHashes, peers[sendFull..^1])
+    asyncSpawn ctx.sendNewTxHashes(newTxHashes, peers[sendFull ..^ 1])
     return ok()
   except CatchableError as exc:
     return err(exc.msg)
 
 method handleAnnouncedTxsHashes*(
-      ctx: EthWireRef;
-      peer: Peer;
-      txTypes: Blob;
-      txSizes: openArray[int];
-      txHashes: openArray[Hash256];
-        ): Result[void, string] =
+    ctx: EthWireRef,
+    peer: Peer,
+    txTypes: Blob,
+    txSizes: openArray[int],
+    txHashes: openArray[Hash256],
+): Result[void, string] =
   ## `Eth68` method
   if ctx.enableTxPool != Enabled:
     when trMissingOrDisabledGossipOk:
@@ -560,20 +522,15 @@ method handleAnnouncedTxsHashes*(
 
   notImplemented "handleAnnouncedTxsHashes()/eth68"
 
-method handleNewBlock*(ctx: EthWireRef,
-                       peer: Peer,
-                       blk: EthBlock,
-                       totalDifficulty: DifficultyInt):
-                         Result[void, string]
-    {.gcsafe.} =
+method handleNewBlock*(
+    ctx: EthWireRef, peer: Peer, blk: EthBlock, totalDifficulty: DifficultyInt
+): Result[void, string] {.gcsafe.} =
   # We dropped support for non-merge networks
   err("block broadcasts disallowed")
 
-method handleNewBlockHashes*(ctx: EthWireRef,
-                             peer: Peer,
-                             hashes: openArray[NewBlockHashesAnnounce]):
-                               Result[void, string]
-    {.gcsafe.} =
+method handleNewBlockHashes*(
+    ctx: EthWireRef, peer: Peer, hashes: openArray[NewBlockHashesAnnounce]
+): Result[void, string] {.gcsafe.} =
   # We dropped support for non-merge networks
   err("block announcements disallowed")
 

@@ -126,10 +126,7 @@ proc toRocksDb*(
   # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L719
   # Flushing the oldest
   let writeBufferSize =
-    if opts.writeBufferSize > 0:
-      opts.writeBufferSize
-    else:
-      cfOpts.writeBufferSize
+    if opts.writeBufferSize > 0: opts.writeBufferSize else: cfOpts.writeBufferSize
 
   dbOpts.maxTotalWalSize = 2 * writeBufferSize
 
@@ -148,7 +145,9 @@ proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
     # Sharing opts means we also share caches between column families!
     (dbOpts, cfOpts) = opts.toRocksDb()
     guestCFs = RdbInst.guestCFs(cfOpts)
-    (adb, oCfs) = AristoDbRef.init(use_ari.RdbBackendRef, path, dbOpts, cfOpts, guestCFs).valueOr:
+    (adb, oCfs) = AristoDbRef.init(
+      use_ari.RdbBackendRef, path, dbOpts, cfOpts, guestCFs
+    ).valueOr:
       raiseAssert aristoFail & ": " & $error
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, adb, oCfs).valueOr:
       raiseAssert kvtFail & ": " & $error

@@ -18,8 +18,7 @@ import
   ../types,
   ../../../../nimbus/transaction
 
-type
-  BlockValueSpec* = ref object of WDBaseSpec
+type BlockValueSpec* = ref object of WDBaseSpec
 
 proc execute*(ws: BlockValueSpec, env: TestEnv): bool =
   WDBaseSpec(ws).skipBaseVerifications = true
@@ -48,6 +47,5 @@ proc execute*(ws: BlockValueSpec, env: TestEnv): bool =
   doAssert(env.clMock.latestBlockValue.isSome)
   testCond totalValue == env.clMock.latestBlockValue.get:
     error "Unexpected block value returned on GetPayloadV2",
-      expect=totalValue,
-      get=env.clMock.latestBlockValue.get
+      expect = totalValue, get = env.clMock.latestBlockValue.get
   return true

@@ -26,20 +26,16 @@ import
 const
   baseFolder = "hive_integration/nodocker/pyspec"
   supportedNetwork = [
-    "Merge",
-    "Shanghai",
-    "MergeToShanghaiAtTime15k",
-    "Cancun",
+    "Merge", "Shanghai", "MergeToShanghaiAtTime15k", "Cancun",
     "ShanghaiToCancunAtTime15k",
   ]
 
-type
-  Payload = object
-    badBlock: bool
-    payload: ExecutionPayload
-    beaconRoot: Opt[common.Hash256]
+type Payload = object
+  badBlock: bool
+  payload: ExecutionPayload
+  beaconRoot: Opt[common.Hash256]
 
-proc getPayload(node: JsonNode): Payload  =
+proc getPayload(node: JsonNode): Payload =
   try:
     let
       rlpBytes = hexToSeqByte(node.getStr)
@@ -50,9 +46,7 @@ proc getPayload(node: JsonNode): Payload  =
       beaconRoot: blk.header.parentBeaconBlockRoot,
     )
   except RlpError:
-    Payload(
-      badBlock: true,
-    )
+    Payload(badBlock: true)
 
 proc validatePostState(node: JsonNode, t: TestEnv): bool =
   # check nonce, balance & storage of accounts in final block against fixture values
@@ -73,19 +67,13 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
     # check final nonce & balance matches expected in fixture
     if genesisAccount.nonce != nonceRes.value:
       echo "nonce recieved from account 0x",
-        account.toHex,
-        " doesn't match expected ",
-        genesisAccount.nonce,
-        " got ",
+        account.toHex, " doesn't match expected ", genesisAccount.nonce, " got ",
         nonceRes.value
       return false
 
     if genesisAccount.balance != balanceRes.value:
       echo "balance recieved from account 0x",
-        account.toHex,
-        " doesn't match expected ",
-        genesisAccount.balance,
-        " got ",
+        account.toHex, " doesn't match expected ", genesisAccount.balance, " got ",
         balanceRes.value
       return false
 
@@ -95,21 +83,14 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
         let sRes = t.rpcClient.storageAt(account, slot)
         if sRes.isErr:
           echo "unable to call storage from account: 0x",
-            account.toHex,
-            " at slot 0x",
-            slot.toHex
+            account.toHex, " at slot 0x", slot.toHex
           echo sRes.error
           return false
 
         if val.w3FixedBytes != sRes.value:
           echo "storage recieved from account 0x",
-            account.toHex,
-            " at slot 0x",
-            slot.toHex,
-            " doesn't match expected 0x",
-            val.toHex,
-            " got 0x",
-            sRes.value.toHex
+            account.toHex, " at slot 0x", slot.toHex, " doesn't match expected 0x",
+            val.toHex, " got 0x", sRes.value.toHex
           return false
 
   return true
@@ -126,10 +107,11 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
   result = TestStatus.OK
   for blkNode in blks:
-    let expectedStatus = if "expectException" in blkNode:
-                           PayloadExecutionStatus.invalid
-                         else:
-                           PayloadExecutionStatus.valid
+    let expectedStatus =
+      if "expectException" in blkNode:
+        PayloadExecutionStatus.invalid
+      else:
+        PayloadExecutionStatus.valid
     let
       badBlock = blkNode.hasKey("expectException")
       payload = getPayload(blkNode["rlp"])
@@ -146,8 +128,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
     let res = t.rpcClient.newPayload(payload.payload, payload.beaconRoot)
     if res.isErr:
       result = TestStatus.Failed
-      echo "unable to send block ",
-        payload.payload.blockNumber.uint64, ": ", res.error
+      echo "unable to send block ", payload.payload.blockNumber.uint64, ": ", res.error
       break
 
     let pStatus = res.value
@@ -157,9 +138,8 @@ proc runTest(node: JsonNode, network: string): TestStatus =
     if pStatus.status != expectedStatus:
       result = TestStatus.Failed
       echo "payload status mismatch for block ",
-        payload.payload.blockNumber.uint64,
-        ", status: ", pStatus.status,
-        ",expected: ", expectedStatus
+        payload.payload.blockNumber.uint64, ", status: ", pStatus.status, ",expected: ",
+        expectedStatus
       if pStatus.validationError.isSome:
         echo pStatus.validationError.get
       break
@@ -182,11 +162,9 @@ proc runTest(node: JsonNode, network: string): TestStatus =
   t.stopELClient()
 
 const
-  skipName = [
-    "nothing skipped",
-  ]
+  skipName = ["nothing skipped"]
 
-  caseFolderCancun   = "tests/fixtures/eth_tests/BlockchainTests/Pyspecs"
+  caseFolderCancun = "tests/fixtures/eth_tests/BlockchainTests/Pyspecs"
   caseFolderShanghai = baseFolder & "/testcases"
 
 proc collectTestVectors(): seq[string] =

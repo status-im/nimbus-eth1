@@ -14,20 +14,16 @@
 {.push raises: [].}
 
 import
-  std/tables,
-  eth/common,
-  results,
-  ./kvt_desc/desc_backend,
-  "."/[kvt_desc, kvt_layers]
+  std/tables, eth/common, results, ./kvt_desc/desc_backend, "."/[kvt_desc, kvt_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
 # ------------------------------------------------------------------------------
 
 proc getUbe*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[Blob,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record
+): Result[Blob, KvtError] =
   ## For the argument `key` return the associated value from the backend
   ## database if available.
   ##
@@ -37,9 +33,9 @@ proc getUbe*(
   err(GetNotFound)
 
 proc getUbeLen*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[int,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record
+): Result[int, KvtError] =
   ## For the argument `key` return the associated value from the backend
   ## database if available.
   ##
@@ -49,9 +45,9 @@ proc getUbeLen*(
   err(GetNotFound)
 
 proc getBe*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[Blob,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record
+): Result[Blob, KvtError] =
   ## Get the vertex from the (filtered) backened if available.
   if not db.balancer.isNil:
     db.balancer.sTab.withValue(@key, w):
@@ -61,9 +57,9 @@ proc getBe*(
   db.getUbe key
 
 proc getBeLen*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[int,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record
+): Result[int, KvtError] =
   ## Get the vertex from the (filtered) backened if available.
   if not db.balancer.isNil:
     db.balancer.sTab.withValue(@key, w):
@@ -75,10 +71,10 @@ proc getBeLen*(
 # ------------
 
 proc put*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record to store
-    data: openArray[byte];            # Value of database record to store
-      ): Result[void,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record to store
+    data: openArray[byte], # Value of database record to store
+): Result[void, KvtError] =
   ## For the argument `key` associated the argument `data` as value (which
   ## will be marked in the top layer cache.)
   if key.len == 0:
@@ -89,11 +85,10 @@ proc put*(
   db.layersPut(key, data)
   ok()
 
-
 proc del*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record to delete
-      ): Result[void,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record to delete
+): Result[void, KvtError] =
   ## For the argument `key` delete the associated value (which will be marked
   ## in the top layer cache.)
   if key.len == 0:
@@ -105,9 +100,9 @@ proc del*(
 # ------------
 
 proc get*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[Blob,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record
+): Result[Blob, KvtError] =
   ## For the argument `key` return the associated value preferably from the
   ## top layer, or the database otherwise.
   ##
@@ -120,9 +115,9 @@ proc get*(
   return ok(move(data))
 
 proc len*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[int,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record
+): Result[int, KvtError] =
   ## For the argument `key` return the length of the associated value,
   ## preferably from the top layer, or the database otherwise.
   ##
@@ -134,9 +129,9 @@ proc len*(
   ok(len)
 
 proc hasKey*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[bool,KvtError] =
+    db: KvtDbRef, # Database
+    key: openArray[byte], # Key of database record
+): Result[bool, KvtError] =
   ## For the argument `key` return the associated value preferably from the
   ## top layer, or the database otherwise.
   ##

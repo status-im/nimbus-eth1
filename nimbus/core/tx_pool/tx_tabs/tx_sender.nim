@@ -22,40 +22,43 @@ import
   results,
   ../../eip4844
 
-
 type
-  TxSenderNonceRef* = ref object ##\
+  TxSenderNonceRef* = ref object
+    ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction\
     ## item lists.
-    gasLimits: GasInt     ## Accumulated gas limits
-    profit: float64       ## Aggregated `effectiveGasTip*gasLimit` values
-    nonceList: SortedSet[AccountNonce,TxItemRef]
+    gasLimits: GasInt ## Accumulated gas limits
+    profit: float64 ## Aggregated `effectiveGasTip*gasLimit` values
+    nonceList: SortedSet[AccountNonce, TxItemRef]
 
-  TxSenderSchedRef* = ref object ##\
+  TxSenderSchedRef* = ref object
+    ##\
     ## For a sender, items can be accessed by *nonce*, or *status,nonce*.
-    size: int             ## Total number of items
-    statusList: array[TxItemStatus,TxSenderNonceRef]
+    size: int ## Total number of items
+    statusList: array[TxItemStatus, TxSenderNonceRef]
     allList: TxSenderNonceRef
 
-  TxSenderTab* = object ##\
+  TxSenderTab* = object
+    ##\
     ## Per address table This is table provided as a keyed queue so deletion\
     ## while traversing is supported and predictable.
-    size: int             ## Total number of items
-    baseFee: GasInt     ## For aggregating `effectiveGasTip` => `gasTipSum`
-    addrList: KeyedQueue[EthAddress,TxSenderSchedRef]
+    size: int ## Total number of items
+    baseFee: GasInt ## For aggregating `effectiveGasTip` => `gasTipSum`
+    addrList: KeyedQueue[EthAddress, TxSenderSchedRef]
 
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
-    txSenderAny = 0       ## All entries status (aka bucket name) ...
+    txSenderAny = 0 ## All entries status (aka bucket name) ...
     txSenderPending
     txSenderStaged
     txSenderPacked
 
-  TxSenderInx = object ##\
+  TxSenderInx = object
+    ##\
     ## Internal access data
     schedData: TxSenderSchedRef
-    statusNonce: TxSenderNonceRef       ## status items sub-list
-    allNonce: TxSenderNonceRef          ## all items sub-list
+    statusNonce: TxSenderNonceRef ## status items sub-list
+    allNonce: TxSenderNonceRef ## all items sub-list
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -79,14 +82,12 @@ func differs(a, b: float64): bool =
   ## Syntactic sugar, crude comparator for large integer values a and b coded
   ## as `float64`. This function is mainly provided for the `verify()` function.
   # note that later NIM compilers also provide `almostEqual()`
-  const
-    epsilon = 1.0e+15'f64           # just arbitrary, something small
+  const epsilon = 1.0e+15'f64 # just arbitrary, something small
   let
     x = max(a, b)
     y = min(a, b)
-    z = if x == 0: 1'f64 else: x    # 1f64 covers the case x == y == 0.0
+    z = if x == 0: 1'f64 else: x # 1f64 covers the case x == y == 0.0
   epsilon < (x - y) / z
-
 
 func toSenderSchedule(status: TxItemStatus): TxSenderSchedule =
   case status
@@ -120,11 +121,12 @@ proc getRank(schedData: TxSenderSchedRef): int64 =
 
   profit.int64
 
-proc maxProfit(item: TxItemRef; baseFee: GasInt): float64 =
+proc maxProfit(item: TxItemRef, baseFee: GasInt): float64 =
   ## Profit calculator
-  item.tx.gasLimit.float64 * item.tx.effectiveGasTip(baseFee).float64 + item.tx.getTotalBlobGas.float64
+  item.tx.gasLimit.float64 * item.tx.effectiveGasTip(baseFee).float64 +
+    item.tx.getTotalBlobGas.float64
 
-proc recalcProfit(nonceData: TxSenderNonceRef; baseFee: GasInt) =
+proc recalcProfit(nonceData: TxSenderNonceRef, baseFee: GasInt) =
   ## Re-calculate profit value depending on `baseFee`
   nonceData.profit = 0.0
   var rc = nonceData.nonceList.ge(AccountNonce.low)
@@ -137,8 +139,9 @@ proc recalcProfit(nonceData: TxSenderNonceRef; baseFee: GasInt) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
-    {.gcsafe,raises: [KeyError].} =
+proc mkInxImpl(
+    gt: var TxSenderTab, item: TxItemRef
+): Result[TxSenderInx, void] {.gcsafe, raises: [KeyError].} =
   var inxData: TxSenderInx
 
   if gt.addrList.hasKey(item.sender):
@@ -171,10 +174,9 @@ proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
 
   return ok(inxData)
 
-
-proc getInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
-    {.gcsafe,raises: [KeyError].} =
-
+proc getInxImpl(
+    gt: var TxSenderTab, item: TxItemRef
+): Result[TxSenderInx, void] {.gcsafe, raises: [KeyError].} =
   var inxData: TxSenderInx
   if not gt.addrList.hasKey(item.sender):
     return err()
@@ -203,8 +205,9 @@ proc init*(gt: var TxSenderTab) =
 # Public functions, base management operations
 # ------------------------------------------------------------------------------
 
-proc insert*(gt: var TxSenderTab; item: TxItemRef): bool
-    {.gcsafe,raises: [KeyError].} =
+proc insert*(
+    gt: var TxSenderTab, item: TxItemRef
+): bool {.gcsafe, raises: [KeyError].} =
   ## Add transaction `item` to the list. The function has no effect if the
   ## transaction exists, already.
   let rc = gt.mkInxImpl(item)
@@ -223,9 +226,9 @@ proc insert*(gt: var TxSenderTab; item: TxItemRef): bool
     inx.allNonce.profit += tip
     return true
 
-
-proc delete*(gt: var TxSenderTab; item: TxItemRef): bool
-    {.gcsafe,raises: [KeyError].} =
+proc delete*(
+    gt: var TxSenderTab, item: TxItemRef
+): bool {.gcsafe, raises: [KeyError].} =
   let rc = gt.getInxImpl(item)
   if rc.isOk:
     let
@@ -253,9 +256,9 @@ proc delete*(gt: var TxSenderTab; item: TxItemRef): bool
     inx.statusNonce.profit -= tip
     return true
 
-
-proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
+proc verify*(
+    gt: var TxSenderTab
+): Result[void, TxInfo] {.gcsafe, raises: [CatchableError].} =
   ## Walk `EthAddress` > `TxSenderLocus` > `AccountNonce` > items
 
   block:
@@ -303,13 +306,13 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
         statusProfit += bucketProfit
 
         if differs(statusData.profit, bucketProfit):
-          echo "*** verify (1) ", statusData.profit," != ", bucketProfit
+          echo "*** verify (1) ", statusData.profit, " != ", bucketProfit
           return err(txInfoVfySenderProfits)
 
         # verify that `recalcProfit()` works
         statusData.recalcProfit(gt.baseFee)
         if differs(statusData.profit, bucketProfit):
-          echo "*** verify (2) ", statusData.profit," != ", bucketProfit
+          echo "*** verify (2) ", statusData.profit, " != ", bucketProfit
           return err(txInfoVfySenderProfits)
 
     # allList
@@ -336,17 +339,17 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
           allCount.inc
 
         if differs(allData.profit, allProfit):
-          echo "*** verify (3) ", allData.profit," != ", allProfit
+          echo "*** verify (3) ", allData.profit, " != ", allProfit
           return err(txInfoVfySenderProfits)
 
         # verify that `recalcProfit()` works
         allData.recalcProfit(gt.baseFee)
         if differs(allData.profit, allProfit):
-          echo "*** verify (4) ", allData.profit," != ", allProfit
+          echo "*** verify (4) ", allData.profit, " != ", allProfit
           return err(txInfoVfySenderProfits)
 
     if differs(allProfit, statusProfit):
-      echo "*** verify (5) ", allProfit," != ", statusProfit
+      echo "*** verify (5) ", allProfit, " != ", statusProfit
       return err(txInfoVfySenderProfits)
     if allGas != statusGas:
       return err(txInfoVfySenderTotal)
@@ -375,7 +378,7 @@ proc baseFee*(gt: var TxSenderTab): GasInt =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `baseFee=`*(gt: var TxSenderTab; val: GasInt) =
+proc `baseFee=`*(gt: var TxSenderTab, val: GasInt) =
   ## Setter. When invoked, there is *always* a re-calculation of the profit
   ## values stored with the sender address.
   gt.baseFee = val
@@ -403,9 +406,9 @@ proc nItems*(gt: var TxSenderTab): int =
   ## Getter, total number of items in the list
   gt.size
 
-
-proc rank*(gt: var TxSenderTab; sender: EthAddress): Result[int64,void]
-    {.gcsafe,raises: [KeyError].} =
+proc rank*(
+    gt: var TxSenderTab, sender: EthAddress
+): Result[int64, void] {.gcsafe, raises: [KeyError].} =
   ## The *rank* of the `sender` argument address is the
   ## ::
   ##    maxProfit() / gasLimits()
@@ -416,10 +419,9 @@ proc rank*(gt: var TxSenderTab; sender: EthAddress): Result[int64,void]
     return ok(gt.addrList[sender].getRank)
   err()
 
-
-proc eq*(gt: var TxSenderTab; sender: EthAddress):
-       SortedSetResult[EthAddress,TxSenderSchedRef]
-    {.gcsafe,raises: [KeyError].} =
+proc eq*(
+    gt: var TxSenderTab, sender: EthAddress
+): SortedSetResult[EthAddress, TxSenderSchedRef] {.gcsafe, raises: [KeyError].} =
   if gt.addrList.hasKey(sender):
     return toSortedSetResult(key = sender, data = gt.addrList[sender])
   err(rbNotFound)
@@ -431,53 +433,52 @@ proc eq*(gt: var TxSenderTab; sender: EthAddress):
 proc len*(schedData: TxSenderSchedRef): int =
   schedData.nActive
 
-
 proc nItems*(schedData: TxSenderSchedRef): int =
   ## Getter, total number of items in the sub-list
   schedData.size
 
-proc nItems*(rc: SortedSetResult[EthAddress,TxSenderSchedRef]): int =
+proc nItems*(rc: SortedSetResult[EthAddress, TxSenderSchedRef]): int =
   if rc.isOk:
     return rc.value.data.nItems
   0
 
-
-proc eq*(schedData: TxSenderSchedRef; status: TxItemStatus):
-       SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
+proc eq*(
+    schedData: TxSenderSchedRef, status: TxItemStatus
+): SortedSetResult[TxSenderSchedule, TxSenderNonceRef] =
   ## Return by status sub-list
   let nonceData = schedData.statusList[status]
   if nonceData.isNil:
     return err(rbNotFound)
   toSortedSetResult(key = status.toSenderSchedule, data = nonceData)
 
-proc eq*(rc: SortedSetResult[EthAddress,TxSenderSchedRef];
-         status: TxItemStatus):
-           SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
+proc eq*(
+    rc: SortedSetResult[EthAddress, TxSenderSchedRef], status: TxItemStatus
+): SortedSetResult[TxSenderSchedule, TxSenderNonceRef] =
   ## Return by status sub-list
   if rc.isOk:
     return rc.value.data.eq(status)
   err(rc.error)
 
-
-proc sub*(schedData: TxSenderSchedRef):
-        SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
+proc sub*(
+    schedData: TxSenderSchedRef
+): SortedSetResult[TxSenderSchedule, TxSenderNonceRef] =
   ## Return all-entries sub-list
   let nonceData = schedData.allList
   if nonceData.isNil:
     return err(rbNotFound)
   toSortedSetResult(key = txSenderAny, data = nonceData)
 
-proc sub*(rc: SortedSetResult[EthAddress,TxSenderSchedRef]):
-        SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
+proc sub*(
+    rc: SortedSetResult[EthAddress, TxSenderSchedRef]
+): SortedSetResult[TxSenderSchedule, TxSenderNonceRef] =
   ## Return all-entries sub-list
   if rc.isOk:
     return rc.value.data.sub
   err(rc.error)
 
-
-proc eq*(schedData: TxSenderSchedRef;
-         key: TxSenderSchedule):
-           SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
+proc eq*(
+    schedData: TxSenderSchedRef, key: TxSenderSchedule
+): SortedSetResult[TxSenderSchedule, TxSenderNonceRef] =
   ## Variant of `eq()` using unified key schedule
   case key
   of txSenderAny:
@@ -489,9 +490,9 @@ proc eq*(schedData: TxSenderSchedRef;
   of txSenderPacked:
     return schedData.eq(txItemPacked)
 
-proc eq*(rc: SortedSetResult[EthAddress,TxSenderSchedRef];
-         key: TxSenderSchedule):
-           SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
+proc eq*(
+    rc: SortedSetResult[EthAddress, TxSenderSchedRef], key: TxSenderSchedule
+): SortedSetResult[TxSenderSchedule, TxSenderNonceRef] =
   if rc.isOk:
     return rc.value.data.eq(key)
   err(rc.error)
@@ -504,25 +505,22 @@ proc nItems*(nonceData: TxSenderNonceRef): int =
   ## Getter, total number of items in the sub-list
   nonceData.nonceList.len
 
-proc nItems*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]): int =
+proc nItems*(rc: SortedSetResult[TxSenderSchedule, TxSenderNonceRef]): int =
   if rc.isOk:
     return rc.value.data.nItems
   0
-
 
 proc gasLimits*(nonceData: TxSenderNonceRef): GasInt =
   ## Getter, aggregated valued of `gasLimit` for all items in the
   ## argument list.
   nonceData.gasLimits
 
-proc gasLimits*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]):
-              GasInt =
+proc gasLimits*(rc: SortedSetResult[TxSenderSchedule, TxSenderNonceRef]): GasInt =
   ## Getter variant of `gasLimits()`, returns `0` if `rc.isErr`
   ## evaluates `true`.
   if rc.isOk:
     return rc.value.data.gasLimits
   0
-
 
 proc maxProfit*(nonceData: TxSenderNonceRef): float64 =
   ## Getter, maximum profit value for the current item list. This is the
@@ -532,70 +530,69 @@ proc maxProfit*(nonceData: TxSenderNonceRef): float64 =
   ## of the `float64` data type.
   nonceData.profit
 
-proc maxProfit*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]):
-              float64 =
+proc maxProfit*(rc: SortedSetResult[TxSenderSchedule, TxSenderNonceRef]): float64 =
   ## Variant of `profit()`, returns `GasPriceEx.low` if `rc.isErr`
   ## evaluates `true`.
   if rc.isOk:
     return rc.value.data.profit
   float64.low
 
-
-proc eq*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
+proc eq*(
+    nonceData: TxSenderNonceRef, nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   nonceData.nonceList.eq(nonce)
 
-proc eq*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
-         nonce: AccountNonce):
-           SortedSetResult[AccountNonce,TxItemRef] =
+proc eq*(
+    rc: SortedSetResult[TxSenderSchedule, TxSenderNonceRef], nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   if rc.isOk:
     return rc.value.data.eq(nonce)
   err(rc.error)
 
-
-proc ge*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
+proc ge*(
+    nonceData: TxSenderNonceRef, nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   nonceData.nonceList.ge(nonce)
 
-proc ge*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
-         nonce: AccountNonce):
-           SortedSetResult[AccountNonce,TxItemRef] =
+proc ge*(
+    rc: SortedSetResult[TxSenderSchedule, TxSenderNonceRef], nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   if rc.isOk:
     return rc.value.data.ge(nonce)
   err(rc.error)
 
-
-proc gt*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
+proc gt*(
+    nonceData: TxSenderNonceRef, nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   nonceData.nonceList.gt(nonce)
 
-proc gt*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
-         nonce: AccountNonce):
-           SortedSetResult[AccountNonce,TxItemRef] =
+proc gt*(
+    rc: SortedSetResult[TxSenderSchedule, TxSenderNonceRef], nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   if rc.isOk:
     return rc.value.data.gt(nonce)
   err(rc.error)
 
-
-proc le*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
+proc le*(
+    nonceData: TxSenderNonceRef, nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   nonceData.nonceList.le(nonce)
 
-proc le*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
-         nonce: AccountNonce):
-           SortedSetResult[AccountNonce,TxItemRef] =
+proc le*(
+    rc: SortedSetResult[TxSenderSchedule, TxSenderNonceRef], nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   if rc.isOk:
     return rc.value.data.le(nonce)
   err(rc.error)
 
-
-proc lt*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
+proc lt*(
+    nonceData: TxSenderNonceRef, nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   nonceData.nonceList.lt(nonce)
 
-proc lt*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
-         nonce: AccountNonce):
-           SortedSetResult[AccountNonce,TxItemRef] =
+proc lt*(
+    rc: SortedSetResult[TxSenderSchedule, TxSenderNonceRef], nonce: AccountNonce
+): SortedSetResult[AccountNonce, TxItemRef] =
   if rc.isOk:
     return rc.value.data.lt(nonce)
   err(rc.error)
@@ -604,7 +601,7 @@ proc lt*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator accounts*(gt: var TxSenderTab): (EthAddress,int64) =
+iterator accounts*(gt: var TxSenderTab): (EthAddress, int64) =
   ## Sender account traversal, returns the account address and the rank
   ## for that account.
   for p in gt.addrList.nextPairs:

@@ -26,17 +26,21 @@ import
 logScope:
   topics = "tx-pool recover item"
 
-let
-  nullSender = block:
-    var rc: EthAddress
-    rc
+let nullSender = block:
+  var rc: EthAddress
+  rc
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc recoverItem*(xp: TxPoolRef; tx: PooledTransaction; status = txItemPending;
-                  info = ""; acceptExisting = false): Result[TxItemRef,TxInfo] =
+proc recoverItem*(
+    xp: TxPoolRef,
+    tx: PooledTransaction,
+    status = txItemPending,
+    info = "",
+    acceptExisting = false,
+): Result[TxItemRef, TxInfo] =
   ## Recover item from waste basket or create new. It is an error if the item
   ## is in the buckets database, already.
   ##

@@ -24,7 +24,6 @@ proc ccm(cc: NetworkParams) =
 
 proc test6*() =
   suite "should abort filling the canonical chain if the terminal block is invalid":
-
     let env = setupEnv(extraValidation = true, ccm)
     let skel = SkeletonRef.new(env.chain)
 
@@ -37,20 +36,26 @@ proc test6*() =
         break
 
     let
-      genesis   = env.chain.com.genesisHeader
-      block1    = env.chain.com.header(1, genesis, genesis,
-        "6BD9564DD3F4028E3E56F62F1BE52EC8F893CC4FD7DB75DB6A1DC3EB2858998C")
-      block2    = env.chain.com.header(2, block1, block1,
-        "32DAA84E151F4C8C6BD4D9ADA4392488FFAFD42ACDE1E9C662B3268C911A5CCC")
+      genesis = env.chain.com.genesisHeader
+      block1 = env.chain.com.header(
+        1, genesis, genesis,
+        "6BD9564DD3F4028E3E56F62F1BE52EC8F893CC4FD7DB75DB6A1DC3EB2858998C",
+      )
+      block2 = env.chain.com.header(
+        2, block1, block1,
+        "32DAA84E151F4C8C6BD4D9ADA4392488FFAFD42ACDE1E9C662B3268C911A5CCC",
+      )
       block3PoW = env.chain.com.header(3, block2, block2)
       block3PoS = header(3, block2, block2, 0)
       block4InvalidPoS = header(4, block3PoS, block3PoW, 0)
       block4PoS = header(4, block3PoS, block3PoS, 0)
-      block5    = header(5, block4PoS, block4PoS, 0)
+      block5 = header(5, block4PoS, block4PoS, 0)
       emptyBody = emptyBody()
 
     test "put body":
-      for header in [block1, block2, block3PoW, block3PoS, block4InvalidPoS, block4PoS, block5]:
+      for header in [
+        block1, block2, block3PoW, block3PoS, block4InvalidPoS, block4PoS, block5
+      ]:
         let res = skel.putBody(header, emptyBody)
         check res.isOk
 

@@ -21,8 +21,7 @@ import
   ../nimbus/common/common,
   ../nimbus/core/eip4844
 
-const
-  debugMode = false
+const debugMode = false
 
 type
   BlockDesc = object
@@ -41,10 +40,7 @@ proc parseBlocks(node: JsonNode): seq[BlockDesc] =
     try:
       let blockRLP = hexToSeqByte(x["rlp"].getStr)
       let blk = rlp.decode(blockRLP, EthBlock)
-      result.add BlockDesc(
-        blk: blk,
-        badBlock: "expectException" in x,
-      )
+      result.add BlockDesc(blk: blk, badBlock: "expectException" in x)
     except RlpError:
       # invalid rlp will not participate in block validation
       # e.g. invalid rlp received from network
@@ -58,24 +54,23 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.network = node["network"].getStr
   result.pre = node["pre"]
 
-proc rootExists(db: CoreDbRef; root: Hash256): bool =
-  let state = db.ctx.getAccounts().state(updateOk=true).valueOr:
-    return false
+proc rootExists(db: CoreDbRef, root: Hash256): bool =
+  let state = db.ctx.getAccounts().state(updateOk = true).valueOr:
+      return false
   state == root
 
 proc executeCase(node: JsonNode): bool =
   let
-    env     = parseEnv(node)
-    memDB   = newCoreDbRef DefaultDbMemory
+    env = parseEnv(node)
+    memDB = newCoreDbRef DefaultDbMemory
     stateDB = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
-    config  = getChainConfig(env.network)
-    com     = CommonRef.new(memDB, config)
+    config = getChainConfig(env.network)
+    com = CommonRef.new(memDB, config)
 
   setupStateDB(env.pre, stateDB)
   stateDB.persist()
 
-  if not com.db.persistHeader(env.genesisHeader,
-                              com.consensus == ConsensusType.POS):
+  if not com.db.persistHeader(env.genesisHeader, com.consensus == ConsensusType.POS):
     debugEcho "Failed to put genesis header into database"
     return false
 
@@ -105,8 +100,8 @@ proc executeCase(node: JsonNode): bool =
   let head = com.db.getCanonicalHead()
   let headHash = head.blockHash
   if headHash != env.lastBlockHash:
-    debugEcho "lastestBlockHash mismatch, get: ", headHash,
-      " expect: ", env.lastBlockHash
+    debugEcho "lastestBlockHash mismatch, get: ",
+      headHash, " expect: ", env.lastBlockHash
     return false
 
   if not memDB.rootExists(lastStateRoot):
@@ -148,6 +143,8 @@ when isMainModule:
       let node = json.parseFile(name)
       executeFile(node, testStatusIMPL)
 
-    executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcTotalDifficultyTest/sideChainWithMoreTransactions.json")
+    executeFile(
+      "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcTotalDifficultyTest/sideChainWithMoreTransactions.json"
+    )
   else:
     blockchainJsonMain()

@@ -20,31 +20,22 @@ import
   ../common/[common, evmforks],
   ../utils/utils,
   stew/byteutils,
-  chronicles, chronos,
+  chronicles,
+  chronos,
   eth/[keys],
   sets
 
-export
-  common
+export common
 
 logScope:
   topics = "vm computation"
 
 when defined(evmc_enabled):
-  import
-    evmc/evmc,
-    evmc_helpers,
-    evmc_api,
-    stew/ptrops
+  import evmc/evmc, evmc_helpers, evmc_api, stew/ptrops
 
-  export
-    evmc,
-    evmc_helpers,
-    evmc_api,
-    ptrops
+  export evmc, evmc_helpers, evmc_api, ptrops
 
-const
-  evmc_enabled* = defined(evmc_enabled)
+const evmc_enabled* = defined(evmc_enabled)
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -144,7 +135,7 @@ proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 =
   when evmc_enabled:
     let
       blockNumber = BlockNumber c.host.getTxContext().block_number
-      ancestorDepth  = blockNumber - number - 1
+      ancestorDepth = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
       return Hash256()
     if number >= blockNumber:
@@ -191,8 +182,7 @@ template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
   when evmc_enabled:
     c.host.getCodeHash(address)
   else:
-    let
-      db = c.vmState.readOnlyStateDB
+    let db = c.vmState.readOnlyStateDB
     if not db.accountExists(address) or db.isEmptyAccount(address):
       default(Hash256)
     else:
@@ -214,18 +204,20 @@ template setTransientStorage*(c: Computation, slot, val: UInt256) =
   when evmc_enabled:
     c.host.setTransientStorage(c.msg.contractAddress, slot, val)
   else:
-    c.vmState.stateDB.
-      setTransientStorage(c.msg.contractAddress, slot, val)
+    c.vmState.stateDB.setTransientStorage(c.msg.contractAddress, slot, val)
 
 template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
   when evmc_enabled:
     c.host.getTransientStorage(c.msg.contractAddress, slot)
   else:
-    c.vmState.readOnlyStateDB.
-      getTransientStorage(c.msg.contractAddress, slot)
+    c.vmState.readOnlyStateDB.getTransientStorage(c.msg.contractAddress, slot)
 
-proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
-                     salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
+proc newComputation*(
+    vmState: BaseVMState,
+    sysCall: bool,
+    message: Message,
+    salt: ContractSalt = ZERO_CONTRACTSALT,
+): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -240,11 +232,11 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
     result.code = CodeStream.init(message.data)
     message.data = @[]
   else:
-    result.code = CodeStream.init(
-      vmState.readOnlyStateDB.getCode(message.codeAddress))
+    result.code = CodeStream.init(vmState.readOnlyStateDB.getCode(message.codeAddress))
 
-func newComputation*(vmState: BaseVMState, sysCall: bool,
-                     message: Message, code: CodeBytesRef): Computation =
+func newComputation*(
+    vmState: BaseVMState, sysCall: bool, message: Message, code: CodeBytesRef
+): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -290,14 +282,12 @@ func setError*(c: Computation, code: evmc_status_code, burnsGas = false) =
   c.error = Error(evmcStatus: code, info: $code, burnsGas: burnsGas)
 
 func setError*(
-    c: Computation, code: evmc_status_code, msg: sink string, burnsGas = false) =
+    c: Computation, code: evmc_status_code, msg: sink string, burnsGas = false
+) =
   c.error = Error(evmcStatus: code, info: move(msg), burnsGas: burnsGas)
 
 func evmcStatus*(c: Computation): evmc_status_code =
-  if c.isSuccess:
-    EVMC_SUCCESS
-  else:
-    c.error.evmcStatus
+  if c.isSuccess: EVMC_SUCCESS else: c.error.evmcStatus
 
 func errorOpt*(c: Computation): Opt[string] =
   if c.isSuccess:
@@ -308,9 +298,10 @@ func errorOpt*(c: Computation): Opt[string] =
 
 proc writeContract*(c: Computation) =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
-    tracer args, newContract=($c.msg.contractAddress),
-      blockNumber=c.vmState.blockNumber,
-      parentHash=($c.vmState.parent.blockHash)
+    tracer args,
+      newContract = ($c.msg.contractAddress),
+      blockNumber = c.vmState.blockNumber,
+      parentHash = ($c.vmState.parent.blockHash)
 
   # In each check below, they are guarded by `len > 0`.  This includes writing
   # out the code, because the account already has zero-length code to handle
@@ -327,8 +318,10 @@ proc writeContract*(c: Computation) =
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
-    withExtra trace, "New contract code exceeds EIP-170 limit",
-      codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
+    withExtra trace,
+      "New contract code exceeds EIP-170 limit",
+      codeSize = len,
+      maxSize = EIP170_MAX_CODE_SIZE
     c.setError(EVMC_OUT_OF_GAS, true)
     return
 
@@ -344,9 +337,9 @@ proc writeContract*(c: Computation) =
     codeCost = c.gasCosts[Create].cr_handler(0.u256, gasParams)
 
   if codeCost <= c.gasMeter.gasRemaining:
-    c.gasMeter.consumeGas(codeCost,
-      reason = "Write new contract code").
-        expect("enough gas since we checked against gasRemaining")
+    c.gasMeter.consumeGas(codeCost, reason = "Write new contract code").expect(
+      "enough gas since we checked against gasRemaining"
+    )
     c.vmState.mutateStateDB:
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
@@ -363,10 +356,7 @@ proc writeContract*(c: Computation) =
     # The account already has zero-length code to handle nested calls.
     withExtra trace, "New contract given empty code by pre-Homestead rules"
 
-template chainTo*(c: Computation,
-                  toChild: typeof(c.child),
-                  after: untyped) =
-
+template chainTo*(c: Computation, toChild: typeof(c.child), after: untyped) =
   c.child = toChild
   c.continuation = proc(): EvmResultVoid {.gcsafe, raises: [].} =
     c.continuation = nil
@@ -412,7 +402,7 @@ func getGasRefund*(c: Computation): GasInt =
 # Using `proc` as `selfDestructLen()` might be `proc` in logging mode
 proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
-  let num  = c.vmState.stateDB.selfDestructLen
+  let num = c.vmState.stateDB.selfDestructLen
   c.gasMeter.refundGas(cost * num)
 
 func tracingEnabled*(c: Computation): bool =
@@ -420,11 +410,8 @@ func tracingEnabled*(c: Computation): bool =
 
 func traceOpCodeStarted*(c: Computation, op: Op): int =
   c.vmState.captureOpStart(
-    c,
-    c.code.pc - 1,
-    op,
-    c.gasMeter.gasRemaining,
-    c.msg.depth + 1)
+    c, c.code.pc - 1, op, c.gasMeter.gasRemaining, c.msg.depth + 1
+  )
 
 func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) =
   c.vmState.captureOpEnd(
@@ -435,7 +422,8 @@ func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) =
     c.gasMeter.gasRefunded,
     c.returnData,
     c.msg.depth + 1,
-    opIndex)
+    opIndex,
+  )
 
 func traceError*(c: Computation) =
   c.vmState.captureFault(
@@ -446,20 +434,17 @@ func traceError*(c: Computation) =
     c.gasMeter.gasRefunded,
     c.returnData,
     c.msg.depth + 1,
-    c.errorOpt)
+    c.errorOpt,
+  )
 
 func prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)
 
 func opcodeGasCost*(
-    c: Computation, op: Op, gasCost: GasInt, reason: static string): EvmResultVoid =
+    c: Computation, op: Op, gasCost: GasInt, reason: static string
+): EvmResultVoid =
   if c.vmState.tracingEnabled:
-    c.vmState.captureGasCost(
-      c,
-      op,
-      gasCost,
-      c.gasMeter.gasRemaining,
-      c.msg.depth + 1)
+    c.vmState.captureGasCost(c, op, gasCost, c.gasMeter.gasRemaining, c.msg.depth + 1)
   c.gasMeter.consumeGas(gasCost, reason)
 
 # ------------------------------------------------------------------------------

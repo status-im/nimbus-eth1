@@ -16,7 +16,7 @@ export strutils, os, unittest2, osproc
 proc executeMyself(numModules: int, names: openArray[string]): int =
   let appName = getAppFilename()
   var elpdList = newSeq[Duration](numModules)
-  for i in 0..<numModules:
+  for i in 0 ..< numModules:
     let start = getTime()
     let execResult = execCmd(appName & " " & $i)
     let elpd = getTime() - start
@@ -26,7 +26,7 @@ proc executeMyself(numModules: int, names: openArray[string]): int =
     result = result or execResult
 
   var f = open("all_test.md", fmWrite)
-  for i in 0..<numModules:
+  for i in 0 ..< numModules:
     f.write("* " & names[i])
     f.write("  - " & elpdList[i].short)
     f.write("\n")
@@ -43,10 +43,7 @@ proc ofStmt(idx: int, singleModule: NimNode): NimNode =
 
   # construct `of` branch
   # of idx: moduleMain()
-  result = nnkOfBranch.newTree(
-    newLit(idx),
-    newCall(moduleMain)
-  )
+  result = nnkOfBranch.newTree(newLit(idx), newCall(moduleMain))
 
 proc toModuleNames(importStmt: NimNode): NimNode =
   result = nnkBracket.newTree
@@ -61,7 +58,8 @@ macro cliBuilder*(stmtList: typed): untyped =
 
   # case paramStr(1).parseInt
   var caseStmt = nnkCaseStmt.newTree(
-    quote do: paramStr(1).parseInt
+    quote do:
+      paramStr(1).parseInt
   )
 
   # of 0: codeStreamMain()
@@ -74,10 +72,11 @@ macro cliBuilder*(stmtList: typed): untyped =
   # else:
   #   echo "invalid argument"
   caseStmt.add nnkElse.newTree(
-    quote do: echo "invalid argument"
+    quote do:
+      echo "invalid argument"
   )
 
-  result = quote do:
+  result = quote:
     if paramCount() == 0:
       const names = `moduleNames`
       quit(executeMyself(`moduleCount`, names))

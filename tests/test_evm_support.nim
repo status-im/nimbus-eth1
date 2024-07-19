@@ -106,10 +106,10 @@ proc runStackTests() =
       check stack.push(123).isOk
       check stack.popInt(2).error.code == EvmErrorCode.StackInsufficient
 
-proc memory32: EvmMemory =
+proc memory32(): EvmMemory =
   result = EvmMemory.init(32)
 
-proc memory128: EvmMemory =
+proc memory128(): EvmMemory =
   result = EvmMemory.init(123)
 
 proc runMemoryTests() =
@@ -122,8 +122,10 @@ proc runMemoryTests() =
 
     test "write rejects values beyond memory size":
       var mem = memory128()
-      check mem.write(startPos = 128, value = @[1.byte, 0.byte, 1.byte, 0.byte]).error.code == EvmErrorCode.MemoryFull
-      check mem.write(startPos = 128, value = 1.byte).error.code == EvmErrorCode.MemoryFull
+      check mem.write(startPos = 128, value = @[1.byte, 0.byte, 1.byte, 0.byte]).error.code ==
+        EvmErrorCode.MemoryFull
+      check mem.write(startPos = 128, value = 1.byte).error.code ==
+        EvmErrorCode.MemoryFull
 
     test "extends appropriately extends memory":
       var mem = EvmMemory.init()
@@ -187,7 +189,9 @@ proc runCodeStreamTests() =
       check(not codeStream.isValidOpcode(4))
 
     test "isValidOpcode 0":
-      var codeStream = CodeStream.init(@[2.byte, 3.byte, 0x72.byte].concat(repeat(4.byte, 32)).concat(@[5.byte]))
+      var codeStream = CodeStream.init(
+        @[2.byte, 3.byte, 0x72.byte].concat(repeat(4.byte, 32)).concat(@[5.byte])
+      )
       # valid: 0 - 2 :: 22 - 35
       # invalid: 3-21 (PUSH19) :: 36+ (too long)
       check(codeStream.isValidOpcode(0))
@@ -200,7 +204,11 @@ proc runCodeStreamTests() =
       check(not codeStream.isValidOpcode(36))
 
     test "isValidOpcode 1":
-      let test = @[2.byte, 3.byte, 0x7d.byte].concat(repeat(4.byte, 32)).concat(@[5.byte, 0x7e.byte]).concat(repeat(4.byte, 35)).concat(@[1.byte, 0x61.byte, 1.byte, 1.byte, 1.byte])
+      let test = @[2.byte, 3.byte, 0x7d.byte]
+        .concat(repeat(4.byte, 32))
+        .concat(@[5.byte, 0x7e.byte])
+        .concat(repeat(4.byte, 35))
+        .concat(@[1.byte, 0x61.byte, 1.byte, 1.byte, 1.byte])
       var codeStream = CodeStream.init(test)
       # valid: 0 - 2 :: 33 - 36 :: 68 - 73 :: 76
       # invalid: 3 - 32 (PUSH30) :: 37 - 67 (PUSH31) :: 74, 75 (PUSH2) :: 77+ (too long)
@@ -231,10 +239,10 @@ proc runCodeStreamTests() =
       check(codeStream.isValidOpcode(4))
       check(not codeStream.isValidOpcode(5))
 
+proc initGasMeter(startGas: GasInt): GasMeter =
+  result.init(startGas)
 
-proc initGasMeter(startGas: GasInt): GasMeter = result.init(startGas)
-
-proc gasMeters: seq[GasMeter] =
+proc gasMeters(): seq[GasMeter] =
   @[initGasMeter(10), initGasMeter(100), initGasMeter(999)]
 
 template runTest(body: untyped) =
@@ -288,20 +296,19 @@ proc runMiscTests() =
       check toAddress(0x10, 0x0, 0x0).toInt == 0x100000
 
     test "calcGasLimitEIP1559":
-      type
-        GLT = object
-          limit: GasInt
-          max  : GasInt
-          min  : GasInt
+      type GLT = object
+        limit: GasInt
+        max: GasInt
+        min: GasInt
 
       const testData = [
         GLT(limit: 20000000, max: 20019530, min: 19980470),
-        GLT(limit: 40000000, max: 40039061, min: 39960939)
+        GLT(limit: 40000000, max: 40039061, min: 39960939),
       ]
 
       for x in testData:
         # Increase
-        var have = calcGasLimit1559(x.limit, 2*x.limit)
+        var have = calcGasLimit1559(x.limit, 2 * x.limit)
         var want = x.max
         check have == want
 
@@ -311,13 +318,13 @@ proc runMiscTests() =
         check have == want
 
         # Small decrease
-        have = calcGasLimit1559(x.limit, x.limit-1)
-        want = x.limit-1
+        have = calcGasLimit1559(x.limit, x.limit - 1)
+        want = x.limit - 1
         check have == want
 
         # Small increase
-        have = calcGasLimit1559(x.limit, x.limit+1)
-        want = x.limit+1
+        have = calcGasLimit1559(x.limit, x.limit + 1)
+        want = x.limit + 1
         check have == want
 
         # No change
@@ -326,17 +333,18 @@ proc runMiscTests() =
         check have == want
 
 const
-  data = [0x5b.uint8, 0x5a, 0x5a, 0x30, 0x30, 0x30, 0x30, 0x72, 0x00, 0x00, 0x00, 0x58,
-    0x58, 0x24, 0x58, 0x58, 0x3a, 0x19, 0x75, 0x75, 0x2e, 0x2e, 0x2e, 0x2e,
-    0xec, 0x9f, 0x69, 0x67, 0x7f, 0xff, 0xff, 0xff, 0xff, 0x6c, 0x5a, 0x32,
-    0x07, 0xf4, 0x75, 0x75, 0xf5, 0x75, 0x75, 0x75, 0x7f, 0x5b, 0xd9, 0x32,
-    0x5a, 0x07, 0x19, 0x34, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e,
-    0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e,
-    0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0xec,
-    0x9f, 0x69, 0x67, 0x7f, 0xff, 0xff, 0xff, 0xff, 0x6c, 0xfc, 0xf7, 0xfc,
-    0xfc, 0xfc, 0xfc, 0xf4, 0x03, 0x03, 0x81, 0x81, 0x81, 0xfb, 0x7a, 0x30,
-    0x80, 0x3d, 0x59, 0x59, 0x59, 0x59, 0x81, 0x00, 0x59, 0x2f, 0x45, 0x30,
-    0x32, 0xf4, 0x5d, 0x5b, 0x37, 0x19]
+  data = [
+    0x5b.uint8, 0x5a, 0x5a, 0x30, 0x30, 0x30, 0x30, 0x72, 0x00, 0x00, 0x00, 0x58, 0x58,
+    0x24, 0x58, 0x58, 0x3a, 0x19, 0x75, 0x75, 0x2e, 0x2e, 0x2e, 0x2e, 0xec, 0x9f, 0x69,
+    0x67, 0x7f, 0xff, 0xff, 0xff, 0xff, 0x6c, 0x5a, 0x32, 0x07, 0xf4, 0x75, 0x75, 0xf5,
+    0x75, 0x75, 0x75, 0x7f, 0x5b, 0xd9, 0x32, 0x5a, 0x07, 0x19, 0x34, 0x2e, 0x2e, 0x2e,
+    0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e,
+    0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e, 0x2e,
+    0xec, 0x9f, 0x69, 0x67, 0x7f, 0xff, 0xff, 0xff, 0xff, 0x6c, 0xfc, 0xf7, 0xfc, 0xfc,
+    0xfc, 0xfc, 0xf4, 0x03, 0x03, 0x81, 0x81, 0x81, 0xfb, 0x7a, 0x30, 0x80, 0x3d, 0x59,
+    0x59, 0x59, 0x59, 0x81, 0x00, 0x59, 0x2f, 0x45, 0x30, 0x32, 0xf4, 0x5d, 0x5b, 0x37,
+    0x19,
+  ]
 
   codeAddress = hexToByteArray[20]("000000000000000000000000636f6e7472616374")
   coinbase = hexToByteArray[20]("4444588443C3a91288c5002483449Aba1054192b")
@@ -352,15 +360,10 @@ proc runTestOverflow() =
     )
 
     let com = CommonRef.new(
-      newCoreDbRef(DefaultDbMemory),
-      config = chainConfigForNetwork(MainNet)
+      newCoreDbRef(DefaultDbMemory), config = chainConfigForNetwork(MainNet)
     )
 
-    let s = BaseVMState.new(
-      header,
-      header,
-      com,
-    )
+    let s = BaseVMState.new(header, header, com)
 
     s.stateDB.setCode(codeAddress, @data)
     let unsignedTx = Transaction(
@@ -371,10 +374,12 @@ proc runTestOverflow() =
       gasLimit: 30000000,
       to: Opt.some codeAddress,
       value: 0.u256,
-      payload: @data
+      payload: @data,
     )
 
-    let privateKey = PrivateKey.fromHex("0000000000000000000000000000000000000000000000000000001000000000")[]
+    let privateKey = PrivateKey.fromHex(
+      "0000000000000000000000000000000000000000000000000000001000000000"
+    )[]
     let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
     let res = testCallEvm(tx, tx.getSender, s)
 

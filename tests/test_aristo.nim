@@ -23,9 +23,9 @@ import
   ./test_aristo/[test_balancer, test_helpers, test_samples_xx, test_tx]
 
 const
-  baseDir = [".", "..", ".."/"..", $DirSep]
+  baseDir = [".", "..", ".." / "..", $DirSep]
   repoDir = [".", "tests", "nimbus-eth1-blobs"]
-  subDir = ["replay", "test_aristo", "replay"/"snap"]
+  subDir = ["replay", "test_aristo", "replay" / "snap"]
 
   # Reference file for finding the database directory
   sampleDirRefFile = "sample0.txt.gz"
@@ -39,11 +39,11 @@ const
 # ------------------------------------------------------------------------------
 
 proc findFilePath(
-     file: string;
-     baseDir: openArray[string] = baseDir;
-     repoDir: openArray[string] = repoDir;
-     subDir: openArray[string] = subDir;
-       ): Result[string,void] =
+    file: string,
+    baseDir: openArray[string] = baseDir,
+    repoDir: openArray[string] = repoDir,
+    subDir: openArray[string] = subDir,
+): Result[string, void] =
   for dir in baseDir:
     if dir.dirExists:
       for repo in repoDir:
@@ -59,12 +59,12 @@ proc findFilePath(
 proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath.value.splitFile.dir
 
-proc setTraceLevel {.used.} =
+proc setTraceLevel() {.used.} =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.TRACE)
 
-proc setErrorLevel {.used.} =
+proc setErrorLevel() {.used.} =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
@@ -74,25 +74,31 @@ proc setErrorLevel {.used.} =
 # ------------------------------------------------------------------------------
 
 proc accountsRunner(
-    noisy = true;
-    sample = accSample;
-    resetDb = false;
-    cmpBackends = true;
-    persistent = true;
-      ) =
+    noisy = true,
+    sample = accSample,
+    resetDb = false,
+    cmpBackends = true,
+    persistent = true,
+) =
   let
     accLst = sample.to(seq[UndumpAccounts]).to(seq[ProofTrieData])
-    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
+    fileInfo = sample.file.splitPath.tail.replace(".txt.gz", "")
     listMode = if resetDb: "" else: ", merged dumps"
     baseDir = getTmpDir() / sample.name & "-accounts"
-    dbDir = if persistent: baseDir / "tmp" else: ""
+    dbDir =
+      if persistent:
+        baseDir / "tmp"
+      else:
+        ""
     isPersistent = if persistent: "persistent DB" else: "mem DB only"
 
   defer:
-    try: baseDir.removeDir except CatchableError: discard
+    try:
+      baseDir.removeDir
+    except CatchableError:
+      discard
 
   suite &"Aristo: accounts data dump from {fileInfo}{listMode}, {isPersistent}":
-
     test &"Merge {accLst.len} proof & account lists to database":
       check noisy.testTxMergeProofAndKvpList(accLst, dbDir, resetDb)
 
@@ -105,31 +111,35 @@ proc accountsRunner(
     test &"Distributed backend balancers {accLst.len} entries":
       check noisy.testBalancer(accLst, dbDir)
 
-
 proc storagesRunner(
-    noisy = true;
-    sample = storSample;
-    resetDb = false;
-    oops: KnownHasherFailure = @[];
-    cmpBackends = true;
-    persistent = true;
-      ) =
+    noisy = true,
+    sample = storSample,
+    resetDb = false,
+    oops: KnownHasherFailure = @[],
+    cmpBackends = true,
+    persistent = true,
+) =
   let
     stoLst = sample.to(seq[UndumpStorages]).to(seq[ProofTrieData])
-    fileInfo = sample.file.splitPath.tail.replace(".txt.gz","")
+    fileInfo = sample.file.splitPath.tail.replace(".txt.gz", "")
     listMode = if resetDb: "" else: ", merged dumps"
     baseDir = getTmpDir() / sample.name & "-storage"
-    dbDir = if persistent: baseDir / "tmp" else: ""
+    dbDir =
+      if persistent:
+        baseDir / "tmp"
+      else:
+        ""
     isPersistent = if persistent: "persistent DB" else: "mem DB only"
 
   defer:
-    try: baseDir.removeDir except CatchableError: discard
+    try:
+      baseDir.removeDir
+    except CatchableError:
+      discard
 
   suite &"Aristo: storages data dump from {fileInfo}{listMode}, {isPersistent}":
-
     test &"Merge {stoLst.len} proof & slots lists to database":
-      check noisy.testTxMergeProofAndKvpList(
-        stoLst, dbDir, resetDb, fileInfo, oops)
+      check noisy.testTxMergeProofAndKvpList(stoLst, dbDir, resetDb, fileInfo, oops)
 
     test &"Delete storage database successively, {stoLst.len} lists":
       check noisy.testTxMergeAndDeleteOneByOne(stoLst, dbDir)
@@ -148,8 +158,7 @@ proc aristoMain*(noisy = defined(debug)) =
   noisy.storagesRunner()
 
 when isMainModule:
-  const
-    noisy = defined(debug) or true
+  const noisy = defined(debug) or true
 
   setErrorLevel()
 
@@ -160,12 +169,12 @@ when isMainModule:
   when true: # and false:
     let persistent = false # or true
     noisy.showElapsed("@snap_test_list"):
-      for n,sam in snapTestList:
-        noisy.accountsRunner(sam, persistent=persistent)
+      for n, sam in snapTestList:
+        noisy.accountsRunner(sam, persistent = persistent)
     noisy.showElapsed("@snap_test_storage_list"):
-      for n,sam in snapTestStorageList:
-        noisy.accountsRunner(sam, persistent=persistent)
-        noisy.storagesRunner(sam, persistent=persistent)
+      for n, sam in snapTestStorageList:
+        noisy.accountsRunner(sam, persistent = persistent)
+        noisy.storagesRunner(sam, persistent = persistent)
 
 # ------------------------------------------------------------------------------
 # End

@@ -11,22 +11,23 @@ import
   std/[json],
   stew/byteutils,
   eth/[p2p, rlp],
-  graphql, ../nimbus/graphql/ethapi, graphql/test_common,
+  graphql,
+  ../nimbus/graphql/ethapi,
+  graphql/test_common,
   ../nimbus/sync/protocol,
   ../nimbus/config,
   ../nimbus/core/[chain, tx_pool],
   ../nimbus/common/[common, context],
   ./test_helpers
 
-type
-  EthBlock = object
-    header: BlockHeader
-    transactions: seq[Transaction]
-    uncles: seq[BlockHeader]
+type EthBlock = object
+  header: BlockHeader
+  transactions: seq[Transaction]
+  uncles: seq[BlockHeader]
 
 const
   caseFolder = "tests/graphql"
-  dataFolder  = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcUncleTest"
+  dataFolder = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcUncleTest"
 
 proc toBlock(n: JsonNode, key: string): EthBlock =
   let rlpBlob = hexToSeqByte(n[key].str)
@@ -34,13 +35,13 @@ proc toBlock(n: JsonNode, key: string): EthBlock =
 
 proc setupChain(): CommonRef =
   let config = ChainConfig(
-    chainId             : MainNet.ChainId,
-    byzantiumBlock      : some(0.BlockNumber),
-    constantinopleBlock : some(0.BlockNumber),
-    petersburgBlock     : some(0.BlockNumber),
-    istanbulBlock       : some(0.BlockNumber),
-    muirGlacierBlock    : some(0.BlockNumber),
-    berlinBlock         : some(10.BlockNumber)
+    chainId: MainNet.ChainId,
+    byzantiumBlock: some(0.BlockNumber),
+    constantinopleBlock: some(0.BlockNumber),
+    petersburgBlock: some(0.BlockNumber),
+    istanbulBlock: some(0.BlockNumber),
+    muirGlacierBlock: some(0.BlockNumber),
+    berlinBlock: some(10.BlockNumber),
   )
 
   var jn = json.parseFile(dataFolder & "/oneUncle.json")
@@ -51,28 +52,21 @@ proc setupChain(): CommonRef =
 
   let gen = jn.toBlock("genesisRLP")
   var genesis = Genesis(
-    nonce     : gen.header.nonce,
-    extraData : gen.header.extraData,
-    gasLimit  : gen.header.gasLimit,
+    nonce: gen.header.nonce,
+    extraData: gen.header.extraData,
+    gasLimit: gen.header.gasLimit,
     difficulty: gen.header.difficulty,
-    mixHash   : gen.header.mixHash,
-    coinBase  : gen.header.coinbase,
-    timestamp : gen.header.timestamp,
-    baseFeePerGas: gen.header.fee
+    mixHash: gen.header.mixHash,
+    coinBase: gen.header.coinbase,
+    timestamp: gen.header.timestamp,
+    baseFeePerGas: gen.header.fee,
   )
   if not parseGenesisAlloc($(jn["pre"]), genesis.alloc):
     quit(QuitFailure)
 
-  let customNetwork = NetworkParams(
-    config: config,
-    genesis: genesis
-  )
+  let customNetwork = NetworkParams(config: config, genesis: genesis)
 
-  let com = CommonRef.new(
-    newCoreDbRef DefaultDbMemory,
-    CustomNet,
-    customNetwork
-  )
+  let com = CommonRef.new(newCoreDbRef DefaultDbMemory, CustomNet, customNetwork)
   com.initializeEmptyDb()
 
   let blocks = jn["blocks"]
@@ -81,10 +75,7 @@ proc setupChain(): CommonRef =
   for n in blocks:
     let ethBlock = n.toBlock("rlp")
     headers.add ethBlock.header
-    bodies.add BlockBody(
-      transactions: ethBlock.transactions,
-      uncles: ethBlock.uncles
-    )
+    bodies.add BlockBody(transactions: ethBlock.transactions, uncles: ethBlock.uncles)
 
   let chain = newChain(com)
   let res = chain.persistBlocks(headers, bodies)
@@ -94,11 +85,11 @@ proc setupChain(): CommonRef =
 
 proc graphqlMain*() =
   let
-    conf    = makeTestConfig()
-    ethCtx  = newEthContext()
+    conf = makeTestConfig()
+    ethCtx = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    com     = setupChain()
-    txPool  = TxPoolRef.new(com)
+    com = setupChain()
+    txPool = TxPoolRef.new(com)
 
   let ctx = setupGraphqlContext(com, ethNode, txPool)
   when isMainModule:

@@ -10,15 +10,11 @@
 
 import
   ./handlers/eth as handlers_eth,
-  ./handlers/setup as handlers_setup
-  #./handlers/snap as handlers_snap # -- todo 
+  ./handlers/setup as handlers_setup #./handlers/snap as handlers_snap # -- todo 
 
-export
-  handlers_eth, handlers_setup
-  #handlers_snap
+export handlers_eth, handlers_setup #handlers_snap
 
 static:
-  type
-    StopMoaningAboutUnusedEth {.used.} = EthWireRef
+  type StopMoaningAboutUnusedEth {.used.} = EthWireRef
 
 # End

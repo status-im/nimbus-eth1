@@ -20,7 +20,7 @@ iterator undumpBlocksEra1*(
     dir: string,
     least = low(uint64), # First block to extract
     stopAfter = high(uint64), # Last block to extract
-    doAssertOk = false;
+    doAssertOk = false,
 ): seq[EthBlock] =
   let db = Era1DbRef.init(dir, "mainnet").expect("Era files present")
   defer:

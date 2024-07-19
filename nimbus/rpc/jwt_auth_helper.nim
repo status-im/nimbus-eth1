@@ -8,15 +8,16 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  json_serialization
+import json_serialization
 
 type
-  JwtHeader* = object ##\
+  JwtHeader* = object
+    ##\
     ## Template used for JSON unmarshalling
     typ*, alg*: string
 
-  JwtIatPayload* = object ##\
+  JwtIatPayload* = object
+    ##\
     ## Template used for JSON unmarshalling
     iat*: uint64
 
@@ -34,12 +35,14 @@ JwtIatPayload.useDefaultSerializationIn JAuth
 
 {.push gcsafe, raises: [].}
 
-proc decodeJwtHeader*(jsonBytes: string): JwtHeader
-        {.gcsafe, raises: [SerializationError].} =
+proc decodeJwtHeader*(
+    jsonBytes: string
+): JwtHeader {.gcsafe, raises: [SerializationError].} =
   JAuth.decode(jsonBytes, JwtHeader)
 
-proc decodeJwtIatPayload*(jsonBytes: string): JwtIatPayload
-        {.gcsafe, raises: [SerializationError].} =
+proc decodeJwtIatPayload*(
+    jsonBytes: string
+): JwtIatPayload {.gcsafe, raises: [SerializationError].} =
   JAuth.decode(jsonBytes, JwtIatPayload)
 
 {.pop.}

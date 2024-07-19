@@ -9,7 +9,9 @@
 {.push raises: [].}
 
 import
-  eth/common/eth_types, stint, stew/ptrops,
+  eth/common/eth_types,
+  stint,
+  stew/ptrops,
   chronos,
   results,
   stew/saturation_arith,
@@ -23,59 +25,59 @@ import
 import ../evm/computation except fromEvmc, toEvmc
 
 when defined(evmc_enabled):
-  import
-    ../utils/utils,
-    ./host_services
+  import ../utils/utils, ./host_services
 else:
-  import
-    ../evm/state_transactions
+  import ../evm/state_transactions
 
 type
   # Standard call parameters.
   CallParams* = object
-    vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    origin*:       Opt[HostAddress]     # Default origin is `sender`.
-    gasPrice*:     GasInt               # Gas price for this call.
-    gasLimit*:     GasInt               # Maximum gas available for this call.
-    sender*:       HostAddress          # Sender account.
-    to*:           HostAddress          # Recipient (ignored when `isCreate`).
-    isCreate*:     bool                 # True if this is a contract creation.
-    value*:        HostValue            # Value sent from sender to recipient.
-    input*:        seq[byte]            # Input data.
-    accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
-    versionedHashes*: VersionedHashes   # EIP-4844 (Cancun) blob versioned hashes
-    noIntrinsic*:  bool                 # Don't charge intrinsic gas.
-    noAccessList*: bool                 # Don't initialise EIP-2929 access list.
-    noGasCharge*:  bool                 # Don't charge sender account for gas.
-    noRefund*:     bool                 # Don't apply gas refund/burn rule.
-    sysCall*:      bool                 # System call or ordinary call
+    vmState*: BaseVMState # Chain, database, state, block, fork.
+    origin*: Opt[HostAddress] # Default origin is `sender`.
+    gasPrice*: GasInt # Gas price for this call.
+    gasLimit*: GasInt # Maximum gas available for this call.
+    sender*: HostAddress # Sender account.
+    to*: HostAddress # Recipient (ignored when `isCreate`).
+    isCreate*: bool # True if this is a contract creation.
+    value*: HostValue # Value sent from sender to recipient.
+    input*: seq[byte] # Input data.
+    accessList*: AccessList # EIP-2930 (Berlin) tx access list.
+    versionedHashes*: VersionedHashes # EIP-4844 (Cancun) blob versioned hashes
+    noIntrinsic*: bool # Don't charge intrinsic gas.
+    noAccessList*: bool # Don't initialise EIP-2929 access list.
+    noGasCharge*: bool # Don't charge sender account for gas.
+    noRefund*: bool # Don't apply gas refund/burn rule.
+    sysCall*: bool # System call or ordinary call
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
   CallResult* = object
-    error*:           string            # Something if the call failed.
-    gasUsed*:         GasInt            # Gas used by the call.
-    contractAddress*: EthAddress        # Created account (when `isCreate`).
-    output*:          seq[byte]         # Output data.
-    stack*:           EvmStack       # EVM stack on return (for test only).
-    memory*:          EvmMemory      # EVM memory on return (for test only).
+    error*: string # Something if the call failed.
+    gasUsed*: GasInt # Gas used by the call.
+    contractAddress*: EthAddress # Created account (when `isCreate`).
+    output*: seq[byte] # Output data.
+    stack*: EvmStack # EVM stack on return (for test only).
+    memory*: EvmMemory # EVM memory on return (for test only).
 
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
 
 proc hostToComputationMessage*(msg: EvmcMessage): Message =
   Message(
-    kind:            CallKind(msg.kind.ord),
-    depth:           msg.depth,
-    gas:             GasInt msg.gas,
-    sender:          msg.sender.fromEvmc,
+    kind: CallKind(msg.kind.ord),
+    depth: msg.depth,
+    gas: GasInt msg.gas,
+    sender: msg.sender.fromEvmc,
     contractAddress: msg.recipient.fromEvmc,
-    codeAddress:     msg.code_address.fromEvmc,
-    value:           msg.value.fromEvmc,
+    codeAddress: msg.code_address.fromEvmc,
+    value: msg.value.fromEvmc,
     # When input size is zero, input data pointer may be null.
-    data:            if msg.input_size <= 0: @[]
-                     else: @(makeOpenArray(msg.input_data, msg.input_size.int)),
-    flags:           msg.flags
+    data:
+      if msg.input_size <= 0:
+        @[]
+      else:
+        @(makeOpenArray(msg.input_data, msg.input_size.int)),
+    flags: msg.flags,
   )
 
 func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
@@ -92,7 +94,7 @@ func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
       gas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
-  let gasZero    = gasFees[fork][GasTXDataZero]
+  let gasZero = gasFees[fork][GasTXDataZero]
   let gasNonZero = gasFees[fork][GasTXDataNonZero]
   for b in call.input:
     gas += (if b == 0: gasZero else: gasNonZero)
@@ -135,10 +137,10 @@ proc initialAccessListEIP2929(call: CallParams) =
 proc setupHost(call: CallParams): TransactionHost =
   let vmState = call.vmState
   vmState.txCtx = TxContext(
-    origin         : call.origin.get(call.sender),
-    gasPrice       : call.gasPrice,
+    origin: call.origin.get(call.sender),
+    gasPrice: call.gasPrice,
     versionedHashes: call.versionedHashes,
-    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas),
+    blobBaseFee: getBlobBaseFee(vmState.blockCtx.excessBlobGas),
   )
 
   var intrinsicGas: GasInt = 0
@@ -146,18 +148,17 @@ proc setupHost(call: CallParams): TransactionHost =
     intrinsicGas = intrinsicGas(call, vmState)
 
   let host = TransactionHost(
-    vmState:       vmState,
+    vmState: vmState,
     msg: EvmcMessage(
-      kind:         if call.isCreate: EVMC_CREATE else: EVMC_CALL,
+      kind: if call.isCreate: EVMC_CREATE else: EVMC_CALL,
       # Default: flags:       {},
       # Default: depth:       0,
-      gas:          int64.saturate(call.gasLimit - intrinsicGas),
-      recipient:    call.to.toEvmc,
+      gas: int64.saturate(call.gasLimit - intrinsicGas),
+      recipient: call.to.toEvmc,
       code_address: call.to.toEvmc,
-      sender:       call.sender.toEvmc,
-      value:        call.value.toEvmc,
-    )
-    # All other defaults in `TransactionHost` are fine.
+      sender: call.sender.toEvmc,
+      value: call.value.toEvmc,
+    ), # All other defaults in `TransactionHost` are fine.
   )
 
   # Generate new contract address, prepare code, and update message `recipient`
@@ -188,7 +189,6 @@ proc setupHost(call: CallParams): TransactionHost =
     host.computation = newComputation(vmState, call.sysCall, cMsg, code)
 
     host.code = code
-
   else:
     if call.input.len > 0:
       host.msg.input_size = call.input.len.csize_t
@@ -200,9 +200,10 @@ proc setupHost(call: CallParams): TransactionHost =
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, call.sysCall, cMsg)
 
-  vmState.captureStart(host.computation, call.sender, call.to,
-                       call.isCreate, call.input,
-                       call.gasLimit, call.value)
+  vmState.captureStart(
+    host.computation, call.sender, call.to, call.isCreate, call.input, call.gasLimit,
+    call.value,
+  )
 
   return host
 
@@ -220,9 +221,11 @@ when defined(evmc_enabled):
 
     c.gasMeter.gasRemaining = GasInt callResult.gas_left
     c.msg.contractAddress = callResult.create_address.fromEvmc
-    c.output = if callResult.output_size <= 0: @[]
-               else: @(makeOpenArray(callResult.output_data,
-                                     callResult.output_size.int))
+    c.output =
+      if callResult.output_size <= 0:
+        @[]
+      else:
+        @(makeOpenArray(callResult.output_data, callResult.output_size.int))
     if not callResult.release.isNil:
       {.gcsafe.}:
         callResult.release(callResult)
@@ -248,18 +251,15 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
 
       # EIP-4844
       if fork >= FkCancun:
-        let blobFee = calcDataFee(call.versionedHashes.len,
-          vmState.blockCtx.excessBlobGas)
+        let blobFee =
+          calcDataFee(call.versionedHashes.len, vmState.blockCtx.excessBlobGas)
         db.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
   let c = host.computation
 
   # EIP-3529: Reduction in refunds
-  let MaxRefundQuotient = if host.vmState.fork >= FkLondon:
-                            5.GasInt
-                          else:
-                            2.GasInt
+  let MaxRefundQuotient = if host.vmState.fork >= FkLondon: 5.GasInt else: 2.GasInt
 
   # Calculated gas used, taking into account refund rules.
   if call.noRefund:
@@ -275,8 +275,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     host.vmState.mutateStateDB:
       db.addBalance(call.sender, result.u256 * call.gasPrice.u256)
 
-proc finishRunningComputation(
-    host: TransactionHost, call: CallParams, T: type): T =
+proc finishRunningComputation(host: TransactionHost, call: CallParams, T: type): T =
   let c = host.computation
 
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
@@ -291,8 +290,11 @@ proc finishRunningComputation(
       result.error = c.error.info
     result.gasUsed = call.gasLimit - gasRemaining
     result.output = system.move(c.output)
-    result.contractAddress = if call.isCreate: c.msg.contractAddress
-                            else: default(HostAddress)
+    result.contractAddress =
+      if call.isCreate:
+        c.msg.contractAddress
+      else:
+        default(HostAddress)
     result.stack = move(c.stack)
     result.memory = move(c.memory)
   elif T is GasInt:

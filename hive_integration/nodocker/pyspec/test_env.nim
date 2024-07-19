@@ -24,20 +24,19 @@ import
     rpc,
     sync/protocol,
     beacon/beacon_engine,
-    common
+    common,
   ],
   ../../../tests/test_helpers,
   ../../../tools/evmstate/helpers
 
-type
-  TestEnv* = ref object
-    conf*: NimbusConf
-    ctx: EthContext
-    ethNode: EthereumNode
-    com: CommonRef
-    chainRef: ChainRef
-    rpcServer: RpcHttpServer
-    rpcClient*: RpcHttpClient
+type TestEnv* = ref object
+  conf*: NimbusConf
+  ctx: EthContext
+  ethNode: EthereumNode
+  com: CommonRef
+  chainRef: ChainRef
+  rpcServer: RpcHttpServer
+  rpcClient*: RpcHttpClient
 
 proc genesisHeader(node: JsonNode): BlockHeader =
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
@@ -45,12 +44,9 @@ proc genesisHeader(node: JsonNode): BlockHeader =
 
 proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
   let memDB = newCoreDbRef DefaultDbMemory
-  t.ctx  = newEthContext()
+  t.ctx = newEthContext()
   t.ethNode = setupEthNode(t.conf, t.ctx, eth)
-  t.com = CommonRef.new(
-      memDB,
-      conf
-    )
+  t.com = CommonRef.new(memDB, conf)
   t.chainRef = newChain(t.com, extraValidation = true)
   let
     stateDB = LedgerRef.init(memDB, emptyRlpHash)
@@ -61,11 +57,10 @@ proc setupELClient*(t: TestEnv, conf: ChainConfig, node: JsonNode) =
 
   doAssert stateDB.rootHash == genesisHeader.stateRoot
 
-  doAssert t.com.db.persistHeader(genesisHeader,
-    t.com.consensus == ConsensusType.POS)
+  doAssert t.com.db.persistHeader(genesisHeader, t.com.consensus == ConsensusType.POS)
   doAssert(t.com.db.getCanonicalHead().blockHash == genesisHeader.blockHash)
 
-  let txPool  = TxPoolRef.new(t.com)
+  let txPool = TxPoolRef.new(t.com)
   t.rpcServer = newRpcHttpServer(["127.0.0.1:8545"])
 
   let beaconEngine = BeaconEngineRef.new(txPool, t.chainRef)

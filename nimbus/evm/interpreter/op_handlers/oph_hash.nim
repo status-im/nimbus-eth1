@@ -31,7 +31,7 @@ import
 
 proc sha3Op(cpt: VmCpt): EvmResultVoid =
   ## 0x20, Compute Keccak-256 hash.
-  ? cpt.stack.lsCheck(2)
+  ?cpt.stack.lsCheck(2)
   let
     pos = cpt.stack.lsPeekSafeInt(^1)
     len = cpt.stack.lsPeekSafeInt(^2)
@@ -40,9 +40,11 @@ proc sha3Op(cpt: VmCpt): EvmResultVoid =
   if pos < 0 or len < 0 or pos > 2147483648'i64:
     return err(opErr(OutOfBounds))
 
-  ? cpt.opcodeGasCost(Op.Sha3,
+  ?cpt.opcodeGasCost(
+    Op.Sha3,
     cpt.gasCosts[Op.Sha3].m_handler(cpt.memory.len, pos, len),
-      reason = "SHA3: word gas cost")
+    reason = "SHA3: word gas cost",
+  )
 
   cpt.memory.extend(pos, len)
 
@@ -57,14 +59,16 @@ proc sha3Op(cpt: VmCpt): EvmResultVoid =
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-const
-  VmOpExecHash*: seq[VmOpExec] = @[
-
-    (opCode: Op.Sha3,     ## 0x20, Keccak-256
-     forks: VmOpAllForks,
-     name: "sha3",
-     info: "Compute Keccak-256 hash",
-     exec: sha3Op)]
+const VmOpExecHash*: seq[VmOpExec] =
+  @[
+    (
+      opCode: Op.Sha3, ## 0x20, Keccak-256
+      forks: VmOpAllForks,
+      name: "sha3",
+      info: "Compute Keccak-256 hash",
+      exec: sha3Op,
+    )
+  ]
 
 # ------------------------------------------------------------------------------
 # End

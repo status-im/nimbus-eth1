@@ -8,8 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  eth/common, eth/trie/nibbles, algorithm
+import eth/common, eth/trie/nibbles, algorithm
 
 type
   KeyHash* = array[32, byte]
@@ -56,7 +55,8 @@ func cmpHash(a, b: KeyHash): int =
   var m = min(a.len, b.len)
   while i < m:
     result = a[i].int - b[i].int
-    if result != 0: return
+    if result != 0:
+      return
     inc(i)
   result = a.len - b.len
 
@@ -64,7 +64,7 @@ func cmpHash(a, b: KeyData): int =
   cmpHash(a.hash, b.hash)
 
 func getNibble(x: openArray[byte], i: int): byte =
-  if(i and 0x01) == 0x01:
+  if (i and 0x01) == 0x01:
     result = x[i shr 1] and 0x0F
   else:
     result = x[i shr 1] shr 4
@@ -86,24 +86,32 @@ proc newMultiKeys*(keys: openArray[AccountKey]): MultiKeysRef =
       hash: keccakHash(a.address).data,
       address: a.address,
       codeTouched: a.codeTouched,
-      storageKeys: a.storageKeys)
+      storageKeys: a.storageKeys,
+    )
   result.keys.sort(cmpHash)
 
 proc newMultiKeys*(keys: openArray[StorageSlot]): MultiKeysRef =
   result = new MultiKeysRef
   result.keys = newSeq[KeyData](keys.len)
   for i, a in keys:
-    result.keys[i] = KeyData(storageMode: true, hash: keccakHash(a).data, storageSlot: a)
+    result.keys[i] =
+      KeyData(storageMode: true, hash: keccakHash(a).data, storageSlot: a)
   result.keys.sort(cmpHash)
 
 # never mix storageMode!
-proc add*(m: MultiKeysRef, address: EthAddress, codeTouched: bool, storageKeys = MultiKeysRef(nil)) =
+proc add*(
+    m: MultiKeysRef,
+    address: EthAddress,
+    codeTouched: bool,
+    storageKeys = MultiKeysRef(nil),
+) =
   m.keys.add KeyData(
     storageMode: false,
     hash: keccakHash(address).data,
     address: address,
     codeTouched: codeTouched,
-    storageKeys: storageKeys)
+    storageKeys: storageKeys,
+  )
 
 proc add*(m: MultiKeysRef, slot: StorageSlot) =
   m.keys.add KeyData(storageMode: true, hash: keccakHash(slot).data, storageSlot: slot)
@@ -122,7 +130,7 @@ func groups*(m: MultiKeysRef, parentGroup: Group, depth: int): BranchGroup =
   # each group consist of at least one key
   var g = Group(first: parentGroup.first)
   var nibble = getNibble(m.keys[g.first].hash, depth)
-  for i in parentGroup.first..parentGroup.last:
+  for i in parentGroup.first .. parentGroup.last:
     let currNibble = getNibble(m.keys[i].hash, depth)
     if currNibble != nibble:
       # close current group and start a new group
@@ -137,7 +145,9 @@ func groups*(m: MultiKeysRef, parentGroup: Group, depth: int): BranchGroup =
   setBranchMaskBit(result.mask, nibble.int)
   result.groups[nibble.int] = g
 
-func groups*(m: MultiKeysRef, depth: int, n: NibblesSeq, parentGroup: Group): MatchGroup =
+func groups*(
+    m: MultiKeysRef, depth: int, n: NibblesSeq, parentGroup: Group
+): MatchGroup =
   # using common-prefix comparison, this func
   # will produce one match group or no match at all
   var g = Group(first: parentGroup.first)
@@ -169,7 +179,7 @@ func groups*(m: MultiKeysRef, depth: int, n: NibblesSeq, parentGroup: Group): Ma
       if not compareNibbles(m.keys[i].hash, depth, n):
         # case 3: no match, match, and no match
         g.last = i - 1
-        return MatchGroup(match: true,  group: g)
+        return MatchGroup(match: true, group: g)
       inc i
 
     # case 4: no match and match

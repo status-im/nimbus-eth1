@@ -21,56 +21,52 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkTopStrict*(
-    db: AristoDbRef;                   # Database, top layer
-      ): Result[void,(VertexID,AristoError)] =
+    db: AristoDbRef, # Database, top layer
+): Result[void, (VertexID, AristoError)] =
   # No need to specify zero keys if implied by a leaf path with valid target
   # vertex ID (i.e. not deleted).
   var zeroKeys: HashSet[VertexID]
-  for (rvid,vtx) in db.layersWalkVtx:
+  for (rvid, vtx) in db.layersWalkVtx:
     let key = db.layersGetKeyOrVoid rvid
 
     if not vtx.isValid:
       if key.isValid:
-        return err((rvid.vid,CheckStkVtxKeyMismatch))
+        return err((rvid.vid, CheckStkVtxKeyMismatch))
       else: # Empty key flags key is for update
         zeroKeys.incl rvid.vid
-
     elif key.isValid:
       # So `vtx` and `key` exist
       let node = vtx.toNode(rvid.root, db).valueOr:
         # not all sub-keys might be ready du to lazy hashing
         continue
       if key != node.digestTo(HashKey):
-        return err((rvid.vid,CheckStkVtxKeyMismatch))
-
+        return err((rvid.vid, CheckStkVtxKeyMismatch))
     else: # Empty key flags key is for update
       zeroKeys.incl rvid.vid
 
-  for (rvid,key) in db.layersWalkKey:
+  for (rvid, key) in db.layersWalkKey:
     if not key.isValid and rvid.vid notin zeroKeys:
       if not db.getVtx(rvid).isValid:
-        return err((rvid.vid,CheckStkKeyStrayZeroEntry))
+        return err((rvid.vid, CheckStkKeyStrayZeroEntry))
 
   ok()
 
-
 proc checkTopProofMode*(
-    db: AristoDbRef;                               # Database, top layer
-      ): Result[void,(VertexID,AristoError)] =
-  for (rvid,key) in db.layersWalkKey:
-    if key.isValid:                              # Otherwise to be deleted
+    db: AristoDbRef, # Database, top layer
+): Result[void, (VertexID, AristoError)] =
+  for (rvid, key) in db.layersWalkKey:
+    if key.isValid: # Otherwise to be deleted
       let vtx = db.getVtx rvid
       if vtx.isValid:
         let node = vtx.toNode(rvid.root, db).valueOr:
           continue
         if key != node.digestTo(HashKey):
-          return err((rvid.vid,CheckRlxVtxKeyMismatch))
+          return err((rvid.vid, CheckRlxVtxKeyMismatch))
   ok()
 
-
 proc checkTopCommon*(
-    db: AristoDbRef;                   # Database, top layer
-      ): Result[void,(VertexID,AristoError)] =
+    db: AristoDbRef, # Database, top layer
+): Result[void, (VertexID, AristoError)] =
   # Some `kMap[]` entries may ne void indicating backend deletion
   let
     kMapCount = db.layersWalkKey.toSeq.mapIt(it[1]).filterIt(it.isValid).len
@@ -82,19 +78,19 @@ proc checkTopCommon*(
 
   # Collect leafs and check deleted entries
   var nNilVtx = 0
-  for (rvid,vtx) in db.layersWalkVtx:
+  for (rvid, vtx) in db.layersWalkVtx:
     if vtx.isValid:
       if topVid < rvid.vid:
         topVid = rvid.vid
-      case vtx.vType:
+      case vtx.vType
       of Leaf:
         if vtx.lData.pType == AccountData:
           let stoVid = vtx.lData.stoID
           if stoVid.isValid:
             if stoVid in stoRoots:
-              return err((stoVid,CheckAnyVidSharedStorageRoot))
+              return err((stoVid, CheckAnyVidSharedStorageRoot))
             if vTop < stoVid:
-              return err((stoVid,CheckAnyVidDeadStorageRoot))
+              return err((stoVid, CheckAnyVidDeadStorageRoot))
             stoRoots.incl stoVid
       of Branch:
         block check42Links:
@@ -104,30 +100,29 @@ proc checkTopCommon*(
               if seen:
                 break check42Links
               seen = true
-          return err((rvid.vid,CheckAnyVtxBranchLinksMissing))
+          return err((rvid.vid, CheckAnyVtxBranchLinksMissing))
     else:
       nNilVtx.inc
       let rc = db.layersGetKey rvid
       if rc.isErr:
-        return err((rvid.vid,CheckAnyVtxEmptyKeyMissing))
+        return err((rvid.vid, CheckAnyVtxEmptyKeyMissing))
       if rc.value[0].isValid:
-        return err((rvid.vid,CheckAnyVtxEmptyKeyExpected))
+        return err((rvid.vid, CheckAnyVtxEmptyKeyExpected))
 
   if vTop.distinctBase < LEAST_FREE_VID:
     # Verify that all vids are below `LEAST_FREE_VID`
     if topVid.distinctBase < LEAST_FREE_VID:
-      for (rvid,key) in db.layersWalkKey:
+      for (rvid, key) in db.layersWalkKey:
         if key.isValid and LEAST_FREE_VID <= rvid.vid.distinctBase:
-          return err((topVid,CheckAnyVTopUnset))
+          return err((topVid, CheckAnyVTopUnset))
 
   # If present, there are at least as many deleted hashes as there are deleted
   # vertices.
   if kMapNilCount != 0 and kMapNilCount < nNilVtx:
-    return err((VertexID(0),CheckAnyVtxEmptyKeyMismatch))
+    return err((VertexID(0), CheckAnyVtxEmptyKeyMismatch))
 
   ok()
 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-

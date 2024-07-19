@@ -13,21 +13,12 @@
 
 {.push raises: [].}
 
-import
-  eth/common,
-  rocksdb,
-  results,
-  ../../kvt_desc,
-  ./rdb_desc
+import eth/common, rocksdb, results, ../../kvt_desc, ./rdb_desc
 
-const
-  extraTraceMessages = false
-    ## Enable additional logging noise
+const extraTraceMessages = false ## Enable additional logging noise
 
 when extraTraceMessages:
-  import
-    chronicles,
-    stew/byteutils
+  import chronicles, stew/byteutils
 
   logScope:
     topics = "kvt-rocksdb"
@@ -56,33 +47,33 @@ proc rollback*(rdb: var RdbInst) =
   if not rdb.session.isClosed():
     rdb.disposeSession()
 
-proc commit*(rdb: var RdbInst): Result[void,(KvtError,string)] =
+proc commit*(rdb: var RdbInst): Result[void, (KvtError, string)] =
   if not rdb.session.isClosed():
-    defer: rdb.disposeSession()
+    defer:
+      rdb.disposeSession()
     rdb.baseDb.write(rdb.session).isOkOr:
       const errSym = RdbBeDriverWriteError
       when extraTraceMessages:
-        trace logTxt "commit", error=errSym, info=error
-      return err((errSym,error))
+        trace logTxt "commit", error = errSym, info = error
+      return err((errSym, error))
   ok()
 
 proc put*(
-    rdb: RdbInst;
-    data: openArray[(Blob,Blob)];
-      ): Result[void,(Blob,KvtError,string)] =
-  for (key,val) in data:
+    rdb: RdbInst, data: openArray[(Blob, Blob)]
+): Result[void, (Blob, KvtError, string)] =
+  for (key, val) in data:
     if val.len == 0:
       rdb.session.delete(key, rdb.store[KvtGeneric].handle()).isOkOr:
         const errSym = RdbBeDriverDelError
         when extraTraceMessages:
-          trace logTxt "del", key, error=errSym, info=error
-        return err((key,errSym,error))
+          trace logTxt "del", key, error = errSym, info = error
+        return err((key, errSym, error))
     else:
       rdb.session.put(key, val, rdb.store[KvtGeneric].handle()).isOkOr:
         const errSym = RdbBeDriverPutError
         when extraTraceMessages:
-          trace logTxt "put", key, error=errSym, info=error
-        return err((key,errSym,error))
+          trace logTxt "put", key, error = errSym, info = error
+        return err((key, errSym, error))
   ok()
 
 # ------------------------------------------------------------------------------

@@ -18,21 +18,21 @@ import
   ./chain_config
 
 # Annotation helpers
-{.pragma:    noRaise, gcsafe, raises: [].}
-{.pragma:   rlpRaise, gcsafe, raises: [RlpError].}
+{.pragma: noRaise, gcsafe, raises: [].}
+{.pragma: rlpRaise, gcsafe, raises: [RlpError].}
 {.pragma: catchRaise, gcsafe, raises: [CatchableError].}
 
 type
   GenesisAddAccountFn = proc(
-    address: EthAddress; nonce: AccountNonce; balance: UInt256;
-    code: openArray[byte]) {.catchRaise.}
+    address: EthAddress, nonce: AccountNonce, balance: UInt256, code: openArray[byte]
+  ) {.catchRaise.}
 
-  GenesisSetStorageFn = proc(
-    address: EthAddress; slot: UInt256; val: UInt256) {.rlpRaise.}
+  GenesisSetStorageFn =
+    proc(address: EthAddress, slot: UInt256, val: UInt256) {.rlpRaise.}
 
   GenesisCommitFn = proc() {.noRaise.}
 
-  GenesisRootHashFn = proc: Hash256 {.noRaise.}
+  GenesisRootHashFn = proc(): Hash256 {.noRaise.}
 
   GenesisLedgerRef* = ref object
     ## Exportable ledger DB just for initialising Genesis.
@@ -46,51 +46,38 @@ type
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc initAccountsLedgerRef(
-    db: CoreDbRef;
-     ): GenesisLedgerRef =
+proc initAccountsLedgerRef(db: CoreDbRef): GenesisLedgerRef =
   ## Methods jump table
   let ac = LedgerRef.init(db, EMPTY_ROOT_HASH)
 
   GenesisLedgerRef(
     addAccount: proc(
-        address: EthAddress;
-        nonce: AccountNonce;
-        balance: UInt256;
-        code: openArray[byte];
-          ) =
+        address: EthAddress,
+        nonce: AccountNonce,
+        balance: UInt256,
+        code: openArray[byte],
+    ) =
       ac.setNonce(address, nonce)
       ac.setBalance(address, balance)
       ac.setCode(address, @code),
-
-    setStorage: proc(
-        address: EthAddress;
-        slot: UInt256;
-        val: UInt256;
-          ) =
+    setStorage: proc(address: EthAddress, slot: UInt256, val: UInt256) =
       ac.setStorage(address, slot, val),
-
     commit: proc() =
       ac.persist(),
-
     rootHash: proc(): Hash256 =
-      ac.state())
+      ac.state(),
+  )
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc newStateDB*(
-    db: CoreDbRef;
-      ): GenesisLedgerRef =
+proc newStateDB*(db: CoreDbRef): GenesisLedgerRef =
   db.initAccountsLedgerRef()
 
 proc toGenesisHeader*(
-    g: Genesis;
-    sdb: GenesisLedgerRef;
-    fork: HardFork;
-      ): BlockHeader
-      {.gcsafe, raises: [CatchableError].} =
+    g: Genesis, sdb: GenesisLedgerRef, fork: HardFork
+): BlockHeader {.gcsafe, raises: [CatchableError].} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
   ## of the `db` descriptor argument.
   ##
@@ -117,7 +104,7 @@ proc toGenesisHeader*(
     parentHash: GENESIS_PARENT_HASH,
     txRoot: EMPTY_ROOT_HASH,
     receiptsRoot: EMPTY_ROOT_HASH,
-    ommersHash: EMPTY_UNCLE_HASH
+    ommersHash: EMPTY_UNCLE_HASH,
   )
 
   if g.baseFeePerGas.isSome:
@@ -135,31 +122,32 @@ proc toGenesisHeader*(
     result.withdrawalsRoot = Opt.some(EMPTY_ROOT_HASH)
 
   if fork >= Cancun:
-    result.blobGasUsed           = Opt.some g.blobGasUsed.get(0'u64)
-    result.excessBlobGas         = Opt.some g.excessBlobGas.get(0'u64)
+    result.blobGasUsed = Opt.some g.blobGasUsed.get(0'u64)
+    result.excessBlobGas = Opt.some g.excessBlobGas.get(0'u64)
     result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(Hash256())
 
 proc toGenesisHeader*(
-    genesis: Genesis;
-    fork: HardFork;
-    db = CoreDbRef(nil)): BlockHeader
-      {.gcsafe, raises: [CatchableError].} =
+    genesis: Genesis, fork: HardFork, db = CoreDbRef(nil)
+): BlockHeader {.gcsafe, raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
-    db  = if db.isNil: AristoDbMemory.newCoreDbRef() else: db
+    db =
+      if db.isNil:
+        AristoDbMemory.newCoreDbRef()
+      else:
+        db
     sdb = db.newStateDB()
   toGenesisHeader(genesis, sdb, fork)
 
 proc toGenesisHeader*(
-    params: NetworkParams;
-    db = CoreDbRef(nil)
-      ): BlockHeader
-      {.raises: [CatchableError].} =
+    params: NetworkParams, db = CoreDbRef(nil)
+): BlockHeader {.raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
-  let map  = toForkTransitionTable(params.config)
-  let fork = map.toHardFork(forkDeterminationInfo(0.BlockNumber, params.genesis.timestamp))
+  let map = toForkTransitionTable(params.config)
+  let fork =
+    map.toHardFork(forkDeterminationInfo(0.BlockNumber, params.genesis.timestamp))
   toGenesisHeader(params.genesis, fork, db)
 
 # ------------------------------------------------------------------------------

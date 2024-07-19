@@ -19,14 +19,16 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers,
-       aristo_utils, aristo_vid]
+  "."/[
+    aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers, aristo_utils,
+    aristo_vid,
+  ]
 
 # ------------------------------------------------------------------------------
 # Private heplers
 # ------------------------------------------------------------------------------
 
-proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
+proc branchStillNeeded(vtx: VertexRef): Result[int, void] =
   ## Returns the nibble if there is only one reference left.
   var nibble = -1
   for n in 0 .. 15:
@@ -42,22 +44,22 @@ proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
 # -----------
 
 proc disposeOfVtx(
-    db: AristoDbRef;                   # Database, top layer
-    rvid: RootedVertexID;              # Vertex ID to clear
-      ) =
+    db: AristoDbRef, # Database, top layer
+    rvid: RootedVertexID, # Vertex ID to clear
+) =
   # Remove entry
   db.layersResVtx(rvid)
   db.layersResKey(rvid)
-  db.vidDispose rvid.vid               # Recycle ID
+  db.vidDispose rvid.vid # Recycle ID
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc delSubTreeImpl(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # Root vertex
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database, top layer
+    root: VertexID, # Root vertex
+): Result[void, AristoError] =
   ## Implementation of *delete* sub-trie.
   var
     dispose = @[root]
@@ -73,7 +75,7 @@ proc delSubTreeImpl(
     for vtx in follow:
       for vid in vtx.subVids:
         # Exiting here leaves the tree as-is
-        let vtx = (? db.getVtxRc((root, vid)))[0]
+        let vtx = (?db.getVtxRc((root, vid)))[0]
         redo.add vtx
         dispose.add vid
     redo.swap follow
@@ -85,11 +87,11 @@ proc delSubTreeImpl(
   ok()
 
 proc delStoTreeImpl(
-    db: AristoDbRef;                   # Database, top layer
-    rvid: RootedVertexID;                    # Root vertex
-    accPath: Hash256;
-    stoPath: NibblesBuf;
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database, top layer
+    rvid: RootedVertexID, # Root vertex
+    accPath: Hash256,
+    stoPath: NibblesBuf,
+): Result[void, AristoError] =
   ## Implementation of *delete* sub-trie.
 
   let (vtx, _) = db.getVtxRc(rvid).valueOr:
@@ -99,12 +101,13 @@ proc delStoTreeImpl(
 
   case vtx.vType
   of Branch:
-    for i in 0..15:
+    for i in 0 .. 15:
       if vtx.bVid[i].isValid:
-        ? db.delStoTreeImpl(
-          (rvid.root, vtx.bVid[i]), accPath,
-          stoPath & vtx.ePfx & NibblesBuf.nibble(byte i))
-
+        ?db.delStoTreeImpl(
+          (rvid.root, vtx.bVid[i]),
+          accPath,
+          stoPath & vtx.ePfx & NibblesBuf.nibble(byte i),
+        )
   of Leaf:
     let stoPath = Hash256(data: (stoPath & vtx.lPfx).getBytes())
     db.layersPutStoLeaf(AccountKey.mixUp(accPath, stoPath), nil)
@@ -114,13 +117,13 @@ proc delStoTreeImpl(
   ok()
 
 proc deleteImpl(
-    db: AristoDbRef;                   # Database, top layer
-    hike: Hike;                        # Fully expanded path
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database, top layer
+    hike: Hike, # Fully expanded path
+): Result[void, AristoError] =
   ## Implementation of *delete* functionality.
 
   # Remove leaf entry
-  let lf =  hike.legs[^1].wp
+  let lf = hike.legs[^1].wp
   if lf.vtx.vType != Leaf:
     return err(DelLeafExpexted)
 
@@ -167,13 +170,15 @@ proc deleteImpl(
         of Leaf:
           VertexRef(
             vType: Leaf,
-            lPfx:  br.vtx.ePfx & NibblesBuf.nibble(nbl.byte) & nxt.lPfx,
-            lData: nxt.lData)
+            lPfx: br.vtx.ePfx & NibblesBuf.nibble(nbl.byte) & nxt.lPfx,
+            lData: nxt.lData,
+          )
         of Branch:
           VertexRef(
             vType: Branch,
-            ePfx:  br.vtx.ePfx & NibblesBuf.nibble(nbl.byte) & nxt.ePfx,
-            bVid: nxt.bVid)
+            ePfx: br.vtx.ePfx & NibblesBuf.nibble(nbl.byte) & nxt.ePfx,
+            bVid: nxt.bVid,
+          )
 
       # Put the new vertex at the id of the obsolete branch
       db.layersPutVtx((hike.root, br.vid), vtx)
@@ -185,9 +190,8 @@ proc deleteImpl(
 # ------------------------------------------------------------------------------
 
 proc deleteAccountRecord*(
-    db: AristoDbRef;
-    accPath: Hash256;
-      ): Result[void,AristoError] =
+    db: AristoDbRef, accPath: Hash256
+): Result[void, AristoError] =
   ## Delete the account leaf entry addressed by the argument `path`. If this
   ## leaf entry referres to a storage tree, this one will be deleted as well.
   ##
@@ -200,7 +204,7 @@ proc deleteAccountRecord*(
 
   # Delete storage tree if present
   if stoID.isValid:
-    ? db.delStoTreeImpl((stoID, stoID), accPath, NibblesBuf())
+    ?db.delStoTreeImpl((stoID, stoID), accPath, NibblesBuf())
 
   ?db.deleteImpl(hike)
 
@@ -208,12 +212,9 @@ proc deleteAccountRecord*(
 
   ok()
 
-
 proc deleteGenericData*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
+    db: AristoDbRef, root: VertexID, path: openArray[byte]
+): Result[bool, AristoError] =
   ## Delete the leaf data entry addressed by the argument `path`.  The MPT
   ## sub-tree the leaf data entry is subsumed under is passed as argument
   ## `root` which must be greater than `VertexID(1)` and smaller than
@@ -240,9 +241,9 @@ proc deleteGenericData*(
   ok(not db.getVtx((root, root)).isValid)
 
 proc deleteGenericTree*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # Root vertex
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database, top layer
+    root: VertexID, # Root vertex
+): Result[void, AristoError] =
   ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
   ##
   # Verify that `root` is neither an accounts tree nor a strorage tree.
@@ -255,12 +256,11 @@ proc deleteGenericTree*(
 
   db.delSubTreeImpl root
 
-
 proc deleteStorageData*(
-    db: AristoDbRef;
-    accPath: Hash256;          # Implies storage data tree
-    stoPath: Hash256;
-      ): Result[bool,AristoError] =
+    db: AristoDbRef,
+    accPath: Hash256, # Implies storage data tree
+    stoPath: Hash256,
+): Result[bool, AristoError] =
   ## For a given account argument `accPath`, this function deletes the
   ## argument `stoPath` from the associated storage tree (if any, at all.) If
   ## the if the argument `stoPath` deleted was the last one on the storage tree,
@@ -296,16 +296,16 @@ proc deleteStorageData*(
     return ok(false)
 
   # De-register the deleted storage tree from the account record
-  let leaf = wpAcc.vtx.dup           # Dup on modify
+  let leaf = wpAcc.vtx.dup # Dup on modify
   leaf.lData.stoID = VertexID(0)
   db.layersPutAccLeaf(accPath, leaf)
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   ok(true)
 
 proc deleteStorageTree*(
-    db: AristoDbRef;                   # Database, top layer
-    accPath: Hash256;          # Implies storage data tree
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database, top layer
+    accPath: Hash256, # Implies storage data tree
+): Result[void, AristoError] =
   ## Variant of `deleteStorageData()` for purging the whole storage tree
   ## associated to the account argument `accPath`.
   ##
@@ -323,10 +323,10 @@ proc deleteStorageTree*(
   # Mark account path Merkle keys for update
   db.updateAccountForHasher accHike
 
-  ? db.delStoTreeImpl((stoID, stoID), accPath, NibblesBuf())
+  ?db.delStoTreeImpl((stoID, stoID), accPath, NibblesBuf())
 
   # De-register the deleted storage tree from the accounts record
-  let leaf = wpAcc.vtx.dup             # Dup on modify
+  let leaf = wpAcc.vtx.dup # Dup on modify
   leaf.lData.stoID = VertexID(0)
   db.layersPutAccLeaf(accPath, leaf)
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)

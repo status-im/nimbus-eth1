@@ -30,8 +30,7 @@ type
 proc init*(_: type AccountsManager): AccountsManager =
   discard
 
-proc loadKeystores*(am: var AccountsManager, path: string):
-                      Result[void, string] =
+proc loadKeystores*(am: var AccountsManager, path: string): Result[void, string] =
   try:
     createDir(path)
     for filename in walkDirRec(path):
@@ -43,13 +42,17 @@ proc loadKeystores*(am: var AccountsManager, path: string):
 
   ok()
 
-proc getAccount*(am: var AccountsManager, address: EthAddress): Result[NimbusAccount, string] =
-  am.accounts.withValue(address, value) do:
+proc getAccount*(
+    am: var AccountsManager, address: EthAddress
+): Result[NimbusAccount, string] =
+  am.accounts.withValue(address, value):
     return ok(value[])
   do:
     return err("getAccount: not available " & address.toHex)
 
-proc unlockAccount*(am: var AccountsManager, address: EthAddress, password: string): Result[void, string] =
+proc unlockAccount*(
+    am: var AccountsManager, address: EthAddress, password: string
+): Result[void, string] =
   let accRes = am.getAccount(address)
   if accRes.isErr:
     return err(accRes.error)
@@ -65,7 +68,7 @@ proc unlockAccount*(am: var AccountsManager, address: EthAddress, password: stri
   err($res.error)
 
 proc lockAccount*(am: var AccountsManager, address: EthAddress): Result[void, string] =
-  am.accounts.withValue(address, acc) do:
+  am.accounts.withValue(address, acc):
     acc.unlocked = false
     burnMem(acc.privateKey)
     am.accounts[address] = acc[]
@@ -80,7 +83,9 @@ iterator addresses*(am: AccountsManager): EthAddress =
   for a in am.accounts.keys:
     yield a
 
-proc importPrivateKey*(am: var AccountsManager, fileName: string): Result[void, string] =
+proc importPrivateKey*(
+    am: var AccountsManager, fileName: string
+): Result[void, string] =
   try:
     let pkhex = readFile(fileName)
     let res = PrivateKey.fromHex(pkhex.strip)
@@ -90,10 +95,7 @@ proc importPrivateKey*(am: var AccountsManager, fileName: string): Result[void, 
     let seckey = res.get()
     let acc = seckey.toPublicKey().toCanonicalAddress()
 
-    am.accounts[acc] = NimbusAccount(
-      privateKey: seckey,
-      unlocked: true
-      )
+    am.accounts[acc] = NimbusAccount(privateKey: seckey, unlocked: true)
 
     return ok()
   except CatchableError as ex:

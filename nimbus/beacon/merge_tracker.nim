@@ -9,19 +9,14 @@
 
 {.push gcsafe, raises: [].}
 
-import
-  chronicles,
-  eth/rlp,
-  results,
-  ../db/[core_db, storage_types]
+import chronicles, eth/rlp, results, ../db/[core_db, storage_types]
 
 type
   # transitionStatus describes the status of eth1/2 transition. This switch
   # between modes is a one-way action which is triggered by corresponding
   # consensus-layer message.
-  TransitionStatus = object
-    # The flag is set when the first NewHead message received
-    leftPoW   : bool
+  TransitionStatus = object # The flag is set when the first NewHead message received
+    leftPoW: bool
 
     # The flag is set when the first FinalisedBlock message received
     enteredPoS: bool
@@ -30,7 +25,7 @@ type
   # transition status. It's a common structure can be used in both full node
   # and light client.
   MergeTracker* = object
-    db    : CoreDbRef
+    db: CoreDbRef
     status: TransitionStatus
 
 # ------------------------------------------------------------------------------
@@ -55,10 +50,7 @@ proc readStatus(db: CoreDbRef): TransitionStatus =
 # ------------------------------------------------------------------------------
 
 proc init*(_: type MergeTracker, db: CoreDbRef): MergeTracker =
-  MergeTracker(
-    db: db,
-    status: db.readStatus()
-  )
+  MergeTracker(db: db, status: db.readStatus())
 
 # ------------------------------------------------------------------------------
 # Public functions, setters

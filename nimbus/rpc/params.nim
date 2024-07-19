@@ -18,12 +18,9 @@ import
   ../evm/evm_errors,
   ./rpc_types
 
-export
-  web3_eth_conv,
-  rpc_types
+export web3_eth_conv, rpc_types
 
-const
-  ZeroAddr = w3Addr ZERO_ADDRESS
+const ZeroAddr = w3Addr ZERO_ADDRESS
 
 func sender*(args: TransactionArgs): EthAddress =
   ethAddr args.source.get(ZeroAddr)
@@ -31,12 +28,15 @@ func sender*(args: TransactionArgs): EthAddress =
 func destination*(args: TransactionArgs): EthAddress =
   ethAddr args.to.get(ZeroAddr)
 
-proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
-                   globalGasCap: GasInt, baseFee: Opt[UInt256]): EvmResult[CallParams] =
-
+proc toCallParams*(
+    vmState: BaseVMState,
+    args: TransactionArgs,
+    globalGasCap: GasInt,
+    baseFee: Opt[UInt256],
+): EvmResult[CallParams] =
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
-    (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
+      (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err(evmErr(EvmInvalidParam))
 
   # Set default gas & gas price if none were set
@@ -49,9 +49,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
 
   if globalGasCap != 0 and globalGasCap < gasLimit:
     warn "Caller gas above allowance, capping",
-      requested = gasLimit,
-      cap = globalGasCap,
-      gasLimit = globalGasCap
+      requested = gasLimit, cap = globalGasCap, gasLimit = globalGasCap
 
   var gasPrice = GasInt args.gasPrice.get(0.Quantity)
   if baseFee.isSome:
@@ -71,17 +69,19 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     else:
       @[]
 
-  ok(CallParams(
-    vmState:         vmState,
-    sender:          args.sender,
-    to:              args.destination,
-    isCreate:        args.to.isNone,
-    gasLimit:        gasLimit,
-    gasPrice:        gasPrice,
-    value:           args.value.get(0.u256),
-    input:           args.payload(),
-    accessList:      ethAccessList args.accessList,
-    versionedHashes: args.versionedHashes,
-  ))
+  ok(
+    CallParams(
+      vmState: vmState,
+      sender: args.sender,
+      to: args.destination,
+      isCreate: args.to.isNone,
+      gasLimit: gasLimit,
+      gasPrice: gasPrice,
+      value: args.value.get(0.u256),
+      input: args.payload(),
+      accessList: ethAccessList args.accessList,
+      versionedHashes: args.versionedHashes,
+    )
+  )
 
 {.pop.}

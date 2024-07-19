@@ -10,8 +10,10 @@
 
 import
   std/[json, strutils],
-  json_rpc/[rpcclient], httputils,
-  eth/common, chronicles,
+  json_rpc/[rpcclient],
+  httputils,
+  eth/common,
+  chronicles,
   ../nimbus/utils/utils,
   ./parser
 
@@ -32,9 +34,8 @@ type
     DownloadAndValidate
 
 proc request*(
-    methodName: string,
-    params: JsonNode,
-    client: Option[RpcClient] = none[RpcClient]()): JsonNode =
+    methodName: string, params: JsonNode, client: Option[RpcClient] = none[RpcClient]()
+): JsonNode =
   if client.isSome():
     let res = waitFor client.unsafeGet().call(methodName, params)
     result = JrpcConv.decode(res.string, JsonNode)
@@ -47,9 +48,8 @@ proc request*(
     waitFor client.close()
 
 proc requestBlockBody(
-    n: JsonNode,
-    blockNumber: BlockNumber,
-    client: Option[RpcClient] = none[RpcClient]()): BlockBody =
+    n: JsonNode, blockNumber: BlockNumber, client: Option[RpcClient] = none[RpcClient]()
+): BlockBody =
   let txs = n["transactions"]
   if txs.len > 0:
     result.transactions = newSeqOfCap[Transaction](txs.len)
@@ -64,15 +64,16 @@ proc requestBlockBody(
     let blockNumber = blockNumber.prefixHex
     for i in 0 ..< uncles.len:
       let idx = i.prefixHex
-      let uncle = request("eth_getUncleByBlockNumberAndIndex", %[%blockNumber, %idx], client)
+      let uncle =
+        request("eth_getUncleByBlockNumberAndIndex", %[%blockNumber, %idx], client)
       if uncle.kind == JNull:
-        error "requested uncle not available", blockNumber=blockNumber, uncleIdx=i
+        error "requested uncle not available", blockNumber = blockNumber, uncleIdx = i
         raise newException(ValueError, "Error when retrieving block uncles")
       result.uncles.add parseBlockHeader(uncle)
 
 proc requestReceipts(
-    n: JsonNode,
-    client: Option[RpcClient] = none[RpcClient]()): seq[Receipt] =
+    n: JsonNode, client: Option[RpcClient] = none[RpcClient]()
+): seq[Receipt] =
   let txs = n["transactions"]
   if txs.len > 0:
     result = newSeqOfCap[Receipt](txs.len)
@@ -80,49 +81,51 @@ proc requestReceipts(
       let txHash = tx["hash"]
       let rec = request("eth_getTransactionReceipt", %[txHash], client)
       if rec.kind == JNull:
-        error "requested receipt not available", txHash=txHash
+        error "requested receipt not available", txHash = txHash
         raise newException(ValueError, "Error when retrieving block receipts")
       result.add parseReceipt(rec)
 
 proc requestTxTraces(
-    n: JsonNode,
-    client: Option[RpcClient] = none[RpcClient]()): JsonNode =
+    n: JsonNode, client: Option[RpcClient] = none[RpcClient]()
+): JsonNode =
   result = newJArray()
   let txs = n["transactions"]
-  if txs.len == 0: return
+  if txs.len == 0:
+    return
   for tx in txs:
     let txHash = tx["hash"]
     let txTrace = request("debug_traceTransaction", %[txHash], client)
     if txTrace.kind == JNull:
-      error "requested trace not available", txHash=txHash
+      error "requested trace not available", txHash = txHash
       raise newException(ValueError, "Error when retrieving transaction trace")
     result.add txTrace
 
 proc requestHeader*(
-    blockNumber: BlockNumber,
-    client: Option[RpcClient] = none[RpcClient]()): JsonNode =
+    blockNumber: BlockNumber, client: Option[RpcClient] = none[RpcClient]()
+): JsonNode =
   result = request("eth_getBlockByNumber", %[%blockNumber.prefixHex, %true], client)
   if result.kind == JNull:
-    error "requested block not available", blockNumber=blockNumber
+    error "requested block not available", blockNumber = blockNumber
     raise newException(ValueError, "Error when retrieving block header")
 
 proc requestBlock*(
     blockNumber: BlockNumber,
     flags: set[DownloadFlags] = {},
-    client: Option[RpcClient] = none[RpcClient]()): Block =
+    client: Option[RpcClient] = none[RpcClient](),
+): Block =
   let header = requestHeader(blockNumber, client)
-  result.jsonData   = header
-  result.header     = parseBlockHeader(header)
-  result.body       = requestBlockBody(header, blockNumber, client)
+  result.jsonData = header
+  result.header = parseBlockHeader(header)
+  result.body = requestBlockBody(header, blockNumber, client)
 
   if DownloadTxTrace in flags:
-    result.traces     = requestTxTraces(header, client)
+    result.traces = requestTxTraces(header, client)
 
   if DownloadReceipts in flags:
-    result.receipts   = requestReceipts(header, client)
+    result.receipts = requestReceipts(header, client)
     if DownloadAndValidate in flags:
       let
-        receiptsRoot   = calcReceiptsRoot(result.receipts).prefixHex
+        receiptsRoot = calcReceiptsRoot(result.receipts).prefixHex
         receiptsRootOK = result.header.receiptsRoot.prefixHex
       if receiptsRoot != receiptsRootOK:
         debug "wrong receipt root", receiptsRoot, receiptsRootOK, blockNumber
@@ -130,12 +133,12 @@ proc requestBlock*(
 
   if DownloadAndValidate in flags:
     let
-      txRoot        = calcTxRoot(result.body.transactions).prefixHex
-      txRootOK      = result.header.txRoot.prefixHex
-      ommersHash    = rlpHash(result.body.uncles).prefixHex
-      ommersHashOK  = result.header.ommersHash.prefixHex
-      headerHash    = rlpHash(result.header).prefixHex
-      headerHashOK  = header["hash"].getStr().toLowerAscii
+      txRoot = calcTxRoot(result.body.transactions).prefixHex
+      txRootOK = result.header.txRoot.prefixHex
+      ommersHash = rlpHash(result.body.uncles).prefixHex
+      ommersHashOK = result.header.ommersHash.prefixHex
+      headerHash = rlpHash(result.header).prefixHex
+      headerHashOK = header["hash"].getStr().toLowerAscii
 
     if txRoot != txRootOK:
       debug "wrong tx root", txRoot, txRootOK, blockNumber

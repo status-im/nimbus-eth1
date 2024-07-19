@@ -48,8 +48,10 @@ proc getGenesis(param: NetworkParams) =
   # Add bytecode pre deploy to the EIP-4788 address.
   param.genesis.alloc[BEACON_ROOTS_ADDRESS] = GenesisAccount(
     balance: 0.u256,
-    nonce:   1,
-    code:    hexToSeqByte("3373fffffffffffffffffffffffffffffffffffffffe14604d57602036146024575f5ffd5b5f35801560495762001fff810690815414603c575f5ffd5b62001fff01545f5260205ff35b5f5ffd5b62001fff42064281555f359062001fff015500"),
+    nonce: 1,
+    code: hexToSeqByte(
+      "3373fffffffffffffffffffffffffffffffffffffffe14604d57602036146024575f5ffd5b5f35801560495762001fff810690815414603c575f5ffd5b62001fff01545f5260205ff35b5f5ffd5b62001fff42064281555f359062001fff015500"
+    ),
   )
 
 # Execution specification reference:
@@ -60,26 +62,23 @@ proc specExecute(ws: BaseSpec): bool =
     conf = envConfig(ws.getForkConfig())
 
   getGenesis(conf.networkParams)
-  let env  = TestEnv.new(conf)
+  let env = TestEnv.new(conf)
   env.engine.setRealTTD()
   env.setupCLMock()
   ws.configureCLMock(env.clMock)
 
   testCond waitFor env.clMock.waitForTTD()
 
-  let blobTestCtx = CancunTestContext(
-    env: env,
-    txPool: TestBlobTxPool(),
-  )
+  let blobTestCtx = CancunTestContext(env: env, txPool: TestBlobTxPool())
 
   if cs.getPayloadDelay != 0:
     env.clMock.payloadProductionClientDelay = cs.getPayloadDelay
 
   result = true
   for stepId, step in cs.testSequence:
-    echo "INFO: Executing step ", stepId+1, ": ", step.description()
+    echo "INFO: Executing step ", stepId + 1, ": ", step.description()
     if not step.execute(blobTestCtx):
-      fatal "FAIL: Error executing", step=stepId+1
+      fatal "FAIL: Error executing", step = stepId + 1
       result = false
       break
 
@@ -89,7 +88,8 @@ proc specExecute(ws: BaseSpec): bool =
 let cancunTestListA* = [
   TestDesc(
     name: "Blob Transactions On Block 1, Shanghai Genesis",
-    about: """
+    about:
+      """
       Tests the Cancun fork since Block 1.
 
       Verifications performed:
@@ -108,56 +108,57 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 1,
-        testSequence: @[
-        # We are starting at Shanghai genesis so send a couple payloads to reach the fork
-        NewPayloads().TestStep,
+      testSequence:
+        @[
+          # We are starting at Shanghai genesis so send a couple payloads to reach the fork
+          NewPayloads().TestStep,
 
-        # First, we send a couple of blob transactions on genesis,
-        # with enough data gas cost to make sure they are included in the first block.
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
+          # First, we send a couple of blob transactions on genesis,
+          # with enough data gas cost to make sure they are included in the first block.
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
+          ),
 
-        # We create the first payload, and verify that the blob transactions
-        # are included in the payload.
-        # We also verify that the blob transactions are included in the blobs bundle.
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
+          # We create the first payload, and verify that the blob transactions
+          # are included in the payload.
+          # We also verify that the blob transactions are included in the blobs bundle.
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
 
-        # Try to increase the data gas cost of the blob transactions
-        # by maxing out the number of blobs for the next payloads.
-        SendBlobTransactions(
-          transactionCount:              DATA_GAS_COST_INCREMENT_EXCEED_BLOBS div (MAX_BLOBS_PER_BLOCK-TARGET_BLOBS_PER_BLOCK) + 1,
-          blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
+          # Try to increase the data gas cost of the blob transactions
+          # by maxing out the number of blobs for the next payloads.
+          SendBlobTransactions(
+            transactionCount:
+              DATA_GAS_COST_INCREMENT_EXCEED_BLOBS div
+              (MAX_BLOBS_PER_BLOCK - TARGET_BLOBS_PER_BLOCK) + 1,
+            blobsPerTransaction: MAX_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
+          ),
 
-        # Next payloads will have max data blobs each
-        NewPayloads(
-          payloadCount:              DATA_GAS_COST_INCREMENT_EXCEED_BLOBS div (MAX_BLOBS_PER_BLOCK - TARGET_BLOBS_PER_BLOCK),
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-        ),
+          # Next payloads will have max data blobs each
+          NewPayloads(
+            payloadCount:
+              DATA_GAS_COST_INCREMENT_EXCEED_BLOBS div
+              (MAX_BLOBS_PER_BLOCK - TARGET_BLOBS_PER_BLOCK),
+            expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
+          ),
 
-        # But there will be an empty payload, since the data gas cost increased
-        # and the last blob transaction was not included.
-        NewPayloads(
-          expectedIncludedBlobCount: 0,
-        ),
+          # But there will be an empty payload, since the data gas cost increased
+          # and the last blob transaction was not included.
+          NewPayloads(expectedIncludedBlobCount: 0),
 
-        # But it will be included in the next payload
-        NewPayloads(
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-        ),
-      ]
-    )
+          # But it will be included in the next payload
+          NewPayloads(expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK),
+        ],
+    ),
   ),
-
   TestDesc(
     name: "Blob Transactions On Block 1, Cancun Genesis",
-    about: """
+    about:
+      """
       Tests the Cancun fork since genesis.
 
       Verifications performed:
@@ -166,54 +167,56 @@ let cancunTestListA* = [
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(), # Create a single empty payload to push the client through the fork.
-        # First, we send a couple of blob transactions on genesis,
-        # with enough data gas cost to make sure they are included in the first block.
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
+      testSequence:
+        @[
+          NewPayloads(),
+            # Create a single empty payload to push the client through the fork.
+          # First, we send a couple of blob transactions on genesis,
+          # with enough data gas cost to make sure they are included in the first block.
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
+          ),
 
-        # We create the first payload, and verify that the blob transactions
-        # are included in the payload.
-        # We also verify that the blob transactions are included in the blobs bundle.
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
+          # We create the first payload, and verify that the blob transactions
+          # are included in the payload.
+          # We also verify that the blob transactions are included in the blobs bundle.
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
 
-        # Try to increase the data gas cost of the blob transactions
-        # by maxing out the number of blobs for the next payloads.
-        SendBlobTransactions(
-          transactionCount:              DATA_GAS_COST_INCREMENT_EXCEED_BLOBS div (MAX_BLOBS_PER_BLOCK-TARGET_BLOBS_PER_BLOCK) + 1,
-          blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
+          # Try to increase the data gas cost of the blob transactions
+          # by maxing out the number of blobs for the next payloads.
+          SendBlobTransactions(
+            transactionCount:
+              DATA_GAS_COST_INCREMENT_EXCEED_BLOBS div
+              (MAX_BLOBS_PER_BLOCK - TARGET_BLOBS_PER_BLOCK) + 1,
+            blobsPerTransaction: MAX_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
+          ),
 
-        # Next payloads will have max data blobs each
-        NewPayloads(
-          payloadCount:              DATA_GAS_COST_INCREMENT_EXCEED_BLOBS div (MAX_BLOBS_PER_BLOCK - TARGET_BLOBS_PER_BLOCK),
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-        ),
+          # Next payloads will have max data blobs each
+          NewPayloads(
+            payloadCount:
+              DATA_GAS_COST_INCREMENT_EXCEED_BLOBS div
+              (MAX_BLOBS_PER_BLOCK - TARGET_BLOBS_PER_BLOCK),
+            expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
+          ),
 
-        # But there will be an empty payload, since the data gas cost increased
-        # and the last blob transaction was not included.
-        NewPayloads(
-          expectedIncludedBlobCount: 0,
-        ),
+          # But there will be an empty payload, since the data gas cost increased
+          # and the last blob transaction was not included.
+          NewPayloads(expectedIncludedBlobCount: 0),
 
-        # But it will be included in the next payload
-        NewPayloads(
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-        ),
-      ]
+          # But it will be included in the next payload
+          NewPayloads(expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK),
+        ],
     ),
   ),
-
   TestDesc(
     name: "Blob Transaction Ordering, Single Account",
-    about: """
+    about:
+      """
       Send N blob transactions with MAX_BLOBS_PER_BLOCK-1 blobs each,
       using account A.
       Using same account, and an increased nonce from the previously sent
@@ -227,38 +230,35 @@ let cancunTestListA* = [
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        # First send the MAX_BLOBS_PER_BLOCK-1 blob transactions.
-        SendBlobTransactions(
-          transactionCount:              5,
-          blobsPerTransaction:           MAX_BLOBS_PER_BLOCK - 1,
-          blobTransactionMaxBlobGasCost: u256(100),
-        ),
-        # Then send the single-blob transactions
-        SendBlobTransactions(
-          transactionCount:              MAX_BLOBS_PER_BLOCK + 1,
-          blobsPerTransaction:           1,
-          blobTransactionMaxBlobGasCost: u256(100),
-        ),
+      testSequence:
+        @[
+          # First send the MAX_BLOBS_PER_BLOCK-1 blob transactions.
+          SendBlobTransactions(
+            transactionCount: 5,
+            blobsPerTransaction: MAX_BLOBS_PER_BLOCK - 1,
+            blobTransactionMaxBlobGasCost: u256(100),
+          ),
+          # Then send the single-blob transactions
+          SendBlobTransactions(
+            transactionCount: MAX_BLOBS_PER_BLOCK + 1,
+            blobsPerTransaction: 1,
+            blobTransactionMaxBlobGasCost: u256(100),
+          ),
 
-        # First four payloads have MAX_BLOBS_PER_BLOCK-1 blobs each
-        NewPayloads(
-          payloadCount:              4,
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK - 1,
-        ),
+          # First four payloads have MAX_BLOBS_PER_BLOCK-1 blobs each
+          NewPayloads(
+            payloadCount: 4, expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK - 1
+          ),
 
-        # The rest of the payloads have full blobs
-        NewPayloads(
-          payloadCount:              2,
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-        ),
-      ]
+          # The rest of the payloads have full blobs
+          NewPayloads(payloadCount: 2, expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK),
+        ],
     ),
   ),
-
   TestDesc(
     name: "Blob Transaction Ordering, Single Account 2",
-    about: """
+    about:
+      """
       Send N blob transactions with MAX_BLOBS_PER_BLOCK-1 blobs each,
       using account A.
       Using same account, and an increased nonce from the previously sent
@@ -273,46 +273,43 @@ let cancunTestListA* = [
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        # First send the MAX_BLOBS_PER_BLOCK-1 blob transactions.
-        SendBlobTransactions(
-          transactionCount:              5,
-          blobsPerTransaction:           MAX_BLOBS_PER_BLOCK - 1,
-          blobTransactionMaxBlobGasCost: u256(100),
-        ),
+      testSequence:
+        @[
+          # First send the MAX_BLOBS_PER_BLOCK-1 blob transactions.
+          SendBlobTransactions(
+            transactionCount: 5,
+            blobsPerTransaction: MAX_BLOBS_PER_BLOCK - 1,
+            blobTransactionMaxBlobGasCost: u256(100),
+          ),
 
-        # Then send the dual-blob transaction
-        SendBlobTransactions(
-          transactionCount:              1,
-          blobsPerTransaction:           2,
-          blobTransactionMaxBlobGasCost: u256(100),
-        ),
+          # Then send the dual-blob transaction
+          SendBlobTransactions(
+            transactionCount: 1,
+            blobsPerTransaction: 2,
+            blobTransactionMaxBlobGasCost: u256(100),
+          ),
 
-        # Then send the single-blob transactions
-        SendBlobTransactions(
-          transactionCount:              MAX_BLOBS_PER_BLOCK - 2,
-          blobsPerTransaction:           1,
-          blobTransactionMaxBlobGasCost: u256(100),
-        ),
+          # Then send the single-blob transactions
+          SendBlobTransactions(
+            transactionCount: MAX_BLOBS_PER_BLOCK - 2,
+            blobsPerTransaction: 1,
+            blobTransactionMaxBlobGasCost: u256(100),
+          ),
 
-        # First five payloads have MAX_BLOBS_PER_BLOCK-1 blobs each
-        NewPayloads(
-          payloadCount:              5,
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK - 1,
-        ),
+          # First five payloads have MAX_BLOBS_PER_BLOCK-1 blobs each
+          NewPayloads(
+            payloadCount: 5, expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK - 1
+          ),
 
-        # The rest of the payloads have full blobs
-        NewPayloads(
-          payloadCount:              1,
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-        ),
-      ]
+          # The rest of the payloads have full blobs
+          NewPayloads(payloadCount: 1, expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK),
+        ],
     ),
   ),
-
   TestDesc(
     name: "Blob Transaction Ordering, Multiple Accounts",
-    about: """
+    about:
+      """
       Send N blob transactions with MAX_BLOBS_PER_BLOCK-1 blobs each,
       using account A.
       Send N blob transactions with 1 blob each from account B.
@@ -324,34 +321,32 @@ let cancunTestListA* = [
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        # First send the MAX_BLOBS_PER_BLOCK-1 blob transactions from
-        # account A.
-        SendBlobTransactions(
-          transactionCount:              5,
-          blobsPerTransaction:           MAX_BLOBS_PER_BLOCK - 1,
-          blobTransactionMaxBlobGasCost: u256(100),
-          accountIndex:                  0,
-        ),
-        # Then send the single-blob transactions from account B
-        SendBlobTransactions(
-          transactionCount:              5,
-          blobsPerTransaction:           1,
-          blobTransactionMaxBlobGasCost: u256(100),
-          accountIndex:                  1,
-        ),
-        # All payloads have full blobs
-        NewPayloads(
-          payloadCount:              5,
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-        ),
-      ]
+      testSequence:
+        @[
+          # First send the MAX_BLOBS_PER_BLOCK-1 blob transactions from
+          # account A.
+          SendBlobTransactions(
+            transactionCount: 5,
+            blobsPerTransaction: MAX_BLOBS_PER_BLOCK - 1,
+            blobTransactionMaxBlobGasCost: u256(100),
+            accountIndex: 0,
+          ),
+          # Then send the single-blob transactions from account B
+          SendBlobTransactions(
+            transactionCount: 5,
+            blobsPerTransaction: 1,
+            blobTransactionMaxBlobGasCost: u256(100),
+            accountIndex: 1,
+          ),
+          # All payloads have full blobs
+          NewPayloads(payloadCount: 5, expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK),
+        ],
     ),
   ),
-
   TestDesc(
     name: "Blob Transaction Ordering, Multiple Clients",
-    about: """
+    about:
+      """
       Send N blob transactions with MAX_BLOBS_PER_BLOCK-1 blobs each,
       using account A, to client A.
       Send N blob transactions with 1 blob each from account B, to client
@@ -364,106 +359,103 @@ let cancunTestListA* = [
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        # Start a secondary client to also receive blob transactions
-        LaunchClients(
-          #engineStarter: hive_rpc.HiveRPCEngineStarter{),
-          # Skip adding the second client to the CL Mock to guarantee
-          # that all payloads are produced by client A.
-          # This is done to not have client B prioritizing single-blob
-          # transactions to fill one single payload.
-          skipAddingToCLMock: true,
-        ),
+      testSequence:
+        @[
+          # Start a secondary client to also receive blob transactions
+          LaunchClients(
+            #engineStarter: hive_rpc.HiveRPCEngineStarter{),
+            # Skip adding the second client to the CL Mock to guarantee
+            # that all payloads are produced by client A.
+            # This is done to not have client B prioritizing single-blob
+            # transactions to fill one single payload.
+            skipAddingToCLMock: true
+          ),
 
-        # Create a block without any blobs to get past genesis
-        NewPayloads(
-          payloadCount:              1,
-          expectedIncludedBlobCount: 0,
-        ),
+          # Create a block without any blobs to get past genesis
+          NewPayloads(payloadCount: 1, expectedIncludedBlobCount: 0),
 
-        # First send the MAX_BLOBS_PER_BLOCK-1 blob transactions from
-        # account A, to client A.
-        SendBlobTransactions(
-          transactionCount:              5,
-          blobsPerTransaction:           MAX_BLOBS_PER_BLOCK - 1,
-          blobTransactionMaxBlobGasCost: u256(120),
-          accountIndex:                  0,
-          clientIndex:                   0,
-        ),
-        # Then send the single-blob transactions from account B, to client
-        # B.
-        SendBlobTransactions(
-          transactionCount:              5,
-          blobsPerTransaction:           1,
-          blobTransactionMaxBlobGasCost: u256(100),
-          accountIndex:                  1,
-          clientIndex:                   1,
-        ),
+          # First send the MAX_BLOBS_PER_BLOCK-1 blob transactions from
+          # account A, to client A.
+          SendBlobTransactions(
+            transactionCount: 5,
+            blobsPerTransaction: MAX_BLOBS_PER_BLOCK - 1,
+            blobTransactionMaxBlobGasCost: u256(120),
+            accountIndex: 0,
+            clientIndex: 0,
+          ),
+          # Then send the single-blob transactions from account B, to client
+          # B.
+          SendBlobTransactions(
+            transactionCount: 5,
+            blobsPerTransaction: 1,
+            blobTransactionMaxBlobGasCost: u256(100),
+            accountIndex: 1,
+            clientIndex: 1,
+          ),
 
-        # All payloads have full blobs
-        NewPayloads(
-          payloadCount:              5,
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-          # Wait a bit more on before requesting the built payload from the client
-          getPayloadDelay: 2,
-        ),
-      ]
+          # All payloads have full blobs
+          NewPayloads(
+            payloadCount: 5,
+            expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
+            # Wait a bit more on before requesting the built payload from the client
+            getPayloadDelay: 2,
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "Replace Blob Transactions",
-    about: """
+    about:
+      """
       Test sending multiple blob transactions with the same nonce, but
       higher gas tip so the transaction is replaced.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        # Send multiple blob transactions with the same nonce.
-        SendBlobTransactions( # Blob ID 0
-          transactionCount:              1,
-          blobTransactionMaxBlobGasCost: u256(1),
-          blobTransactionGasFeeCap:      GasInt(10 ^ 9),
-          blobTransactionGasTipCap:      GasInt(10 ^ 9),
-        ),
-        SendBlobTransactions( # Blob ID 1
-          transactionCount:              1,
-          blobTransactionMaxBlobGasCost: u256(10 ^ 2),
-          blobTransactionGasFeeCap:      GasInt(10 ^ 10),
-          blobTransactionGasTipCap:      GasInt(10 ^ 10),
-          replaceTransactions:           true,
-        ),
-        SendBlobTransactions( # Blob ID 2
-          transactionCount:              1,
-          blobTransactionMaxBlobGasCost: u256(10 ^ 3),
-          blobTransactionGasFeeCap:      GasInt(10 ^ 11),
-          blobTransactionGasTipCap:      GasInt(10 ^ 11),
-          replaceTransactions:           true,
-        ),
-        SendBlobTransactions( # Blob ID 3
-          transactionCount:              1,
-          blobTransactionMaxBlobGasCost: u256(10 ^ 4),
-          blobTransactionGasFeeCap:      GasInt(10 ^ 12),
-          blobTransactionGasTipCap:      GasInt(10 ^ 12),
-          replaceTransactions:           true,
-        ),
+      testSequence:
+        @[
+          # Send multiple blob transactions with the same nonce.
+          SendBlobTransactions( # Blob ID 0
+            transactionCount: 1,
+            blobTransactionMaxBlobGasCost: u256(1),
+            blobTransactionGasFeeCap: GasInt(10 ^ 9),
+            blobTransactionGasTipCap: GasInt(10 ^ 9),
+          ),
+          SendBlobTransactions( # Blob ID 1
+            transactionCount: 1,
+            blobTransactionMaxBlobGasCost: u256(10 ^ 2),
+            blobTransactionGasFeeCap: GasInt(10 ^ 10),
+            blobTransactionGasTipCap: GasInt(10 ^ 10),
+            replaceTransactions: true,
+          ),
+          SendBlobTransactions( # Blob ID 2
+            transactionCount: 1,
+            blobTransactionMaxBlobGasCost: u256(10 ^ 3),
+            blobTransactionGasFeeCap: GasInt(10 ^ 11),
+            blobTransactionGasTipCap: GasInt(10 ^ 11),
+            replaceTransactions: true,
+          ),
+          SendBlobTransactions( # Blob ID 3
+            transactionCount: 1,
+            blobTransactionMaxBlobGasCost: u256(10 ^ 4),
+            blobTransactionGasFeeCap: GasInt(10 ^ 12),
+            blobTransactionGasTipCap: GasInt(10 ^ 12),
+            replaceTransactions: true,
+          ),
 
-        # We create the first payload, which must contain the blob tx
-        # with the higher tip.
-        NewPayloads(
-          expectedIncludedBlobCount: 1,
-          expectedblobs:             @[BlobID(3)],
-        ),
-      ]
+          # We create the first payload, which must contain the blob tx
+          # with the higher tip.
+          NewPayloads(expectedIncludedBlobCount: 1, expectedblobs: @[BlobID(3)]),
+        ],
     ),
   ),
 
   # ForkchoiceUpdatedV3 before cancun
   TestDesc(
     name: "ForkchoiceUpdatedV3 Set Head to Shanghai Payload, Nil Payload Attributes",
-    about: """
+    about:
+      """
       Test sending ForkchoiceUpdatedV3 to set the head of the chain to a Shanghai payload:
       - Send NewPayloadV2 with Shanghai payload on block 1
       - Use ForkchoiceUpdatedV3 to set the head to the payload, with nil payload attributes
@@ -474,20 +466,22 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          fcUOnHeadSet: UpgradeForkchoiceUpdatedVersion(),
-          expectationDescription: """
+      testSequence:
+        @[
+          NewPayloads(
+            fcUOnHeadSet: UpgradeForkchoiceUpdatedVersion(),
+            expectationDescription:
+              """
           ForkchoiceUpdatedV3 before Cancun returns no error without payload attributes
           """,
-        ).TestStep,
-      ]
+          ).TestStep
+        ],
     ),
   ),
-
   TestDesc(
     name: "ForkchoiceUpdatedV3 To Request Shanghai Payload, Nil Beacon Root",
-    about: """
+    about:
+      """
       Test sending ForkchoiceUpdatedV3 to request a Shanghai payload:
       - Payload Attributes uses Shanghai timestamp
       - Payload Attributes' Beacon Root is nil
@@ -498,22 +492,25 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          fcUOnPayloadRequest: UpgradeForkchoiceUpdatedVersion(
-            expectedError: engineApiInvalidPayloadAttributes,
-          ),
-          expectationDescription: """
+      testSequence:
+        @[
+          NewPayloads(
+            fcUOnPayloadRequest: UpgradeForkchoiceUpdatedVersion(
+              expectedError: engineApiInvalidPayloadAttributes
+            ),
+            expectationDescription:
+              """
           ForkchoiceUpdatedV3 before Cancun with any nil field must return INVALID_PAYLOAD_ATTRIBUTES (code $1)
-          """ % [$engineApiInvalidPayloadAttributes],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiInvalidPayloadAttributes],
+          ).TestStep
+        ],
     ),
   ),
-
   TestDesc(
     name: "ForkchoiceUpdatedV3 To Request Shanghai Payload, Zero Beacon Root",
-    about: """
+    about:
+      """
       Test sending ForkchoiceUpdatedV3 to request a Shanghai payload:
       - Payload Attributes uses Shanghai timestamp
       - Payload Attributes' Beacon Root zero
@@ -524,24 +521,28 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          fcUOnPayloadRequest: UpgradeForkchoiceUpdatedVersion(
-            beaconRoot: Opt.some(common.Hash256()),
-            expectedError: engineApiUnsupportedFork,
-          ),
-          expectationDescription: """
+      testSequence:
+        @[
+          NewPayloads(
+            fcUOnPayloadRequest: UpgradeForkchoiceUpdatedVersion(
+              beaconRoot: Opt.some(common.Hash256()),
+              expectedError: engineApiUnsupportedFork,
+            ),
+            expectationDescription:
+              """
           ForkchoiceUpdatedV3 before Cancun with beacon root must return UNSUPPORTED_FORK_ERROR (code $1)
-          """ % [$engineApiUnsupportedFork],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiUnsupportedFork],
+          ).TestStep
+        ],
     ),
   ),
 
   # ForkchoiceUpdatedV2 before cancun with beacon root
   TestDesc(
     name: "ForkchoiceUpdatedV2 To Request Shanghai Payload, Zero Beacon Root",
-    about: """
+    about:
+      """
       Test sending ForkchoiceUpdatedV2 to request a Cancun payload:
       - Payload Attributes uses Shanghai timestamp
       - Payload Attributes' Beacon Root zero
@@ -552,24 +553,28 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
-            beaconRoot: Opt.some(common.Hash256()),
-            expectedError: engineApiInvalidPayloadAttributes,
-          ),
-          expectationDescription: """
+      testSequence:
+        @[
+          NewPayloads(
+            fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
+              beaconRoot: Opt.some(common.Hash256()),
+              expectedError: engineApiInvalidPayloadAttributes,
+            ),
+            expectationDescription:
+              """
           ForkchoiceUpdatedV2 before Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES (code $1)
-          """ % [$engineApiInvalidPayloadAttributes],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiInvalidPayloadAttributes],
+          ).TestStep
+        ],
     ),
   ),
 
   # ForkchoiceUpdatedV2 after cancun
   TestDesc(
     name: "ForkchoiceUpdatedV2 To Request Cancun Payload, Zero Beacon Root",
-    about: """
+    about:
+      """
       Test sending ForkchoiceUpdatedV2 to request a Cancun payload:
       - Payload Attributes uses Cancun timestamp
       - Payload Attributes' Beacon Root zero
@@ -580,23 +585,26 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 1,
-      testSequence: @[
-        NewPayloads(
-          fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
-            beaconRoot: Opt.some(common.Hash256()),
-            expectedError: engineApiInvalidPayloadAttributes,
-          ),
-          expectationDescription: """
+      testSequence:
+        @[
+          NewPayloads(
+            fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
+              beaconRoot: Opt.some(common.Hash256()),
+              expectedError: engineApiInvalidPayloadAttributes,
+            ),
+            expectationDescription:
+              """
           ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES (code $1)
-          """ % [$engineApiInvalidPayloadAttributes],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiInvalidPayloadAttributes],
+          ).TestStep
+        ],
     ),
   ),
-
   TestDesc(
     name: "ForkchoiceUpdatedV2 To Request Cancun Payload, Nil Beacon Root",
-    about: """
+    about:
+      """
       Test sending ForkchoiceUpdatedV2 to request a Cancun payload:
       - Payload Attributes uses Cancun timestamp
       - Payload Attributes' Beacon Root nil (not provided)
@@ -607,24 +615,27 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 1,
-      testSequence: @[
-        NewPayloads(
-          fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
-            removeBeaconRoot: true,
-            expectedError: engineApiUnsupportedFork,
-          ),
-          expectationDescription: """
+      testSequence:
+        @[
+          NewPayloads(
+            fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
+              removeBeaconRoot: true, expectedError: engineApiUnsupportedFork
+            ),
+            expectationDescription:
+              """
           ForkchoiceUpdatedV2 after Cancun must return UNSUPPORTED_FORK_ERROR (code $1)
-          """ % [$engineApiUnsupportedFork],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiUnsupportedFork],
+          ).TestStep
+        ],
     ),
   ),
 
   # ForkchoiceUpdatedV3 with modified BeaconRoot Attribute
   TestDesc(
     name: "ForkchoiceUpdatedV3 Modifies Payload ID on Different Beacon Root",
-    about: """
+    about:
+      """
       Test requesting a Cancun Payload using ForkchoiceUpdatedV3 twice with the beacon root
       payload attribute as the only change between requests and verify that the payload ID is
       different.
@@ -632,37 +643,37 @@ let cancunTestListA* = [
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              1,
-          blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(100),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-          fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
-            beaconRoot: Opt.some(common.Hash256()),
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: 1,
+            blobsPerTransaction: MAX_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(100),
           ),
-        ),
-        SendBlobTransactions(
-          transactionCount:              1,
-          blobsPerTransaction:           MAX_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(100),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
-          fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
-             beaconRoot: Opt.some(toHash(1.u256)),
+          NewPayloads(
+            expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
+            fcUOnPayloadRequest:
+              BaseForkchoiceUpdatedCustomizer(beaconRoot: Opt.some(common.Hash256())),
           ),
-        ),
-      ]
+          SendBlobTransactions(
+            transactionCount: 1,
+            blobsPerTransaction: MAX_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(100),
+          ),
+          NewPayloads(
+            expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
+            fcUOnPayloadRequest:
+              BaseForkchoiceUpdatedCustomizer(beaconRoot: Opt.some(toHash(1.u256))),
+          ),
+        ],
     ),
   ),
 
   # GetPayloadV3 Before Cancun, Negative Tests
   TestDesc(
     name: "GetPayloadV3 To Request Shanghai Payload",
-    about: """
+    about:
+      """
       Test requesting a Shanghai PayloadID using GetPayloadV3.
       Verify that client returns UNSUPPORTED_FORK_ERROR.
       """,
@@ -670,23 +681,26 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          getPayloadCustomizer: UpgradeGetPayloadVersion(
-            expectedError: engineApiUnsupportedFork,
-          ),
-          expectationDescription: """
+      testSequence:
+        @[
+          NewPayloads(
+            getPayloadCustomizer:
+              UpgradeGetPayloadVersion(expectedError: engineApiUnsupportedFork),
+            expectationDescription:
+              """
           GetPayloadV3 To Request Shanghai Payload must return UNSUPPORTED_FORK_ERROR (code $1)
-          """ % [$engineApiUnsupportedFork],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiUnsupportedFork],
+          ).TestStep
+        ],
     ),
   ),
 
   # GetPayloadV2 After Cancun, Negative Tests
   TestDesc(
     name: "GetPayloadV2 To Request Cancun Payload",
-    about: """
+    about:
+      """
       Test requesting a Cancun PayloadID using GetPayloadV2.
       Verify that client returns UNSUPPORTED_FORK_ERROR.
       """,
@@ -694,23 +708,27 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 1,
-      testSequence: @[
-        NewPayloads(
-          getPayloadCustomizer: DowngradeGetPayloadVersion(
-            expectedError: engineApiUnsupportedFork,
-          ),
-          expectationDescription: """
+      testSequence:
+        @[
+          NewPayloads(
+            getPayloadCustomizer:
+              DowngradeGetPayloadVersion(expectedError: engineApiUnsupportedFork),
+            expectationDescription:
+              """
           GetPayloadV2 To Request Cancun Payload must return UNSUPPORTED_FORK_ERROR (code $1)
-          """ % [$engineApiUnsupportedFork],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiUnsupportedFork],
+          ).TestStep
+        ],
     ),
   ),
 
   # NewPayloadV3 Before Cancun, Negative Tests
   TestDesc(
-    name: "NewPayloadV3 Before Cancun, Nil Data Fields, Nil Versioned Hashes, Nil Beacon Root",
-    about: """
+    name:
+      "NewPayloadV3 Before Cancun, Nil Data Fields, Nil Versioned Hashes, Nil Beacon Root",
+    about:
+      """
       Test sending NewPayloadV3 Before Cancun with:
       - nil ExcessBlobGas
       - nil BlobGasUsed
@@ -723,25 +741,29 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: UpgradeNewPayloadVersion(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer()
+      testSequence:
+        @[
+          NewPayloads(
+            newPayloadCustomizer: UpgradeNewPayloadVersion(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer()
+              ),
+              expectedError: engineApiInvalidParams,
             ),
-            expectedError: engineApiInvalidParams,
-          ),
-          expectationDescription: """
+            expectationDescription:
+              """
           NewPayloadV3 before Cancun with any nil field must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiInvalidParams],
+          ).TestStep
+        ],
     ),
   ),
-
   TestDesc(
-    name: "NewPayloadV3 Before Cancun, Nil ExcessBlobGas, 0x00 BlobGasUsed, Nil Versioned Hashes, Nil Beacon Root",
-    about: """
+    name:
+      "NewPayloadV3 Before Cancun, Nil ExcessBlobGas, 0x00 BlobGasUsed, Nil Versioned Hashes, Nil Beacon Root",
+    about:
+      """
       Test sending NewPayloadV3 Before Cancun with:
       - nil ExcessBlobGas
       - 0x00 BlobGasUsed
@@ -752,25 +774,27 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: UpgradeNewPayloadVersion(
-            payloadCustomizer: CustomPayloadData(
-              blobGasUsed: Opt.some(0'u64),
+      testSequence:
+        @[
+          NewPayloads(
+            newPayloadCustomizer: UpgradeNewPayloadVersion(
+              payloadCustomizer: CustomPayloadData(blobGasUsed: Opt.some(0'u64)),
+              expectedError: engineApiInvalidParams,
             ),
-            expectedError: engineApiInvalidParams,
-          ),
-          expectationDescription: """
+            expectationDescription:
+              """
           NewPayloadV3 before Cancun with any nil field must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiInvalidParams],
+          ).TestStep
+        ],
     ),
   ),
-
   TestDesc(
-    name: "NewPayloadV3 Before Cancun, Nil Data Fields, Empty Array Versioned Hashes, Nil Beacon Root",
-    about: """
+    name:
+      "NewPayloadV3 Before Cancun, Nil Data Fields, Empty Array Versioned Hashes, Nil Beacon Root",
+    about:
+      """
         Test sending NewPayloadV3 Before Cancun with:
         - nil ExcessBlobGas
         - nil BlobGasUsed
@@ -781,27 +805,30 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: UpgradeNewPayloadVersion(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(newSeq[BlobID]()),
+      testSequence:
+        @[
+          NewPayloads(
+            newPayloadCustomizer: UpgradeNewPayloadVersion(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer:
+                  VersionedHashesCustomizer(blobs: Opt.some(newSeq[BlobID]()))
               ),
+              expectedError: engineApiInvalidParams,
             ),
-            expectedError: engineApiInvalidParams,
-          ),
-          expectationDescription: """
+            expectationDescription:
+              """
           NewPayloadV3 before Cancun with any nil field must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiInvalidParams],
+          ).TestStep
+        ],
     ),
   ),
-
   TestDesc(
-    name: "NewPayloadV3 Before Cancun, 0x00 Data Fields, Empty Array Versioned Hashes, Zero Beacon Root",
-    about: """
+    name:
+      "NewPayloadV3 Before Cancun, 0x00 Data Fields, Empty Array Versioned Hashes, Zero Beacon Root",
+    about:
+      """
       Test sending NewPayloadV3 Before Cancun with:
       - 0x00 ExcessBlobGas
       - 0x00 BlobGasUsed
@@ -812,30 +839,33 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 2,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: UpgradeNewPayloadVersion(
-            payloadCustomizer: CustomPayloadData(
-              excessBlobGas:    Opt.some(0'u64),
-              blobGasUsed:      Opt.some(0'u64),
-              parentBeaconRoot: Opt.some(common.Hash256()),
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(newSeq[BlobID]()),
+      testSequence:
+        @[
+          NewPayloads(
+            newPayloadCustomizer: UpgradeNewPayloadVersion(
+              payloadCustomizer: CustomPayloadData(
+                excessBlobGas: Opt.some(0'u64),
+                blobGasUsed: Opt.some(0'u64),
+                parentBeaconRoot: Opt.some(common.Hash256()),
+                versionedHashesCustomizer:
+                  VersionedHashesCustomizer(blobs: Opt.some(newSeq[BlobID]())),
               ),
+              expectedError: engineApiUnsupportedFork,
             ),
-            expectedError: engineApiUnsupportedFork,
-          ),
-          expectationDescription: """
+            expectationDescription:
+              """
           NewPayloadV3 before Cancun with no nil fields must return UNSUPPORTED_FORK_ERROR (code $1)
-          """ % [$engineApiUnsupportedFork],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiUnsupportedFork],
+          ).TestStep
+        ],
     ),
   ),
-
   TestDesc(
-    name: "NewPayloadV3 After Cancun, 0x00 Blob Fields, Empty Array Versioned Hashes, Nil Beacon Root",
-    about: """
+    name:
+      "NewPayloadV3 After Cancun, 0x00 Blob Fields, Empty Array Versioned Hashes, Nil Beacon Root",
+    about:
+      """
       Test sending NewPayloadV3 After Cancun with:
       - 0x00 ExcessBlobGas
       - nil BlobGasUsed
@@ -845,26 +875,28 @@ let cancunTestListA* = [
     spec: CancunSpec(
       mainFork: ForkCancun,
       forkHeight: 1,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              removeParentBeaconRoot: true,
+      testSequence:
+        @[
+          NewPayloads(
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(removeParentBeaconRoot: true),
+              expectedError: engineApiInvalidParams,
             ),
-            expectedError: engineApiInvalidParams,
-          ),
-          expectationDescription: """
+            expectationDescription:
+              """
           NewPayloadV3 after Cancun with nil parentBeaconBlockRoot must return INVALID_PARAMS_ERROR (code $1)
-          """ % [$engineApiInvalidParams],
-        ).TestStep,
-      ]
+          """ %
+              [$engineApiInvalidParams],
+          ).TestStep
+        ],
     ),
   ),
 
   # Fork time tests
   TestDesc(
     name: "ForkchoiceUpdatedV2 then ForkchoiceUpdatedV3 Valid Payload Building Requests",
-    about: """
+    about:
+      """
       Test requesting a Shanghai ForkchoiceUpdatedV2 payload followed by a Cancun ForkchoiceUpdatedV3 request.
       Verify that client correctly returns the Cancun payload.
       """,
@@ -874,68 +906,72 @@ let cancunTestListA* = [
       # We request two blocks from the client, first on shanghai and then on cancun, both with
       # the same parent.
       # Client must respond correctly to later request.
-      forkHeight:              1,
+      forkHeight: 1,
       blockTimestampIncrement: 2,
-      testSequence: @[
-        # First, we send a couple of blob transactions on genesis,
-        # with enough data gas cost to make sure they are included in the first block.
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          # This customizer only simulates requesting a Shanghai payload 1 second before cancun.
-          # CL Mock will still request the Cancun payload afterwards
-          fcUOnPayloadRequest: TimestampDeltaPayloadAttributesCustomizer(
-             removeBeaconRoot: true,
-             timestampDelta: -1,
+      testSequence:
+        @[
+          # First, we send a couple of blob transactions on genesis,
+          # with enough data gas cost to make sure they are included in the first block.
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            # This customizer only simulates requesting a Shanghai payload 1 second before cancun.
+            # CL Mock will still request the Cancun payload afterwards
+            fcUOnPayloadRequest: TimestampDeltaPayloadAttributesCustomizer(
+              removeBeaconRoot: true, timestampDelta: -1
+            ),
+            expectationDescription:
+              """
           ForkchoiceUpdatedV3 must construct transaction with blob payloads even if a ForkchoiceUpdatedV2 was previously requested
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
 
   # Test versioned hashes in Engine API NewPayloadV3
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Missing Hash",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is missing one of the hashes.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1)),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK - 1))
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+            expectationDescription:
+              """
           NewPayloadV3 with incorrect list of versioned hashes must return INVALID status
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Extra Hash",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is has an extra hash for a blob that is not in the payload.
       """,
@@ -944,301 +980,330 @@ let cancunTestListA* = [
       mainFork: ForkCancun,
       # TODO: It could be worth it to also test this with a blob that is in the
       # mempool but was not included in the payload.
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK+1)),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK + 1))
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+            expectationDescription:
+              """
           NewPayloadV3 with incorrect list of versioned hashes must return INVALID status
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Out of Order",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is out of order.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobListByIndex(BlobID(TARGET_BLOBS_PER_BLOCK-1), 0)),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs:
+                    Opt.some(getBlobListByIndex(BlobID(TARGET_BLOBS_PER_BLOCK - 1), 0))
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+            expectationDescription:
+              """
           NewPayloadV3 with incorrect list of versioned hashes must return INVALID status
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Repeated Hash",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       has a blob that is repeated in the array.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK, BlobID(TARGET_BLOBS_PER_BLOCK-1))),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(
+                    getBlobList(
+                      0, TARGET_BLOBS_PER_BLOCK, BlobID(TARGET_BLOBS_PER_BLOCK - 1)
+                    )
+                  )
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+            expectationDescription:
+              """
           NewPayloadV3 with incorrect list of versioned hashes must return INVALID status
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Incorrect Hash",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       has a blob hash that does not belong to any blob contained in the payload.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1, BlobID(TARGET_BLOBS_PER_BLOCK))),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(
+                    getBlobList(
+                      0, TARGET_BLOBS_PER_BLOCK - 1, BlobID(TARGET_BLOBS_PER_BLOCK)
+                    )
+                  )
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+            expectationDescription:
+              """
           NewPayloadV3 with incorrect hash in list of versioned hashes must return INVALID status
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Incorrect Version",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       has a single blob that has an incorrect version.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs:        Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK)),
-                hashVersions: @[VERSIONED_HASH_VERSION_KZG.byte, (VERSIONED_HASH_VERSION_KZG + 1).byte],
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK)),
+                  hashVersions:
+                    @[
+                      VERSIONED_HASH_VERSION_KZG.byte,
+                      (VERSIONED_HASH_VERSION_KZG + 1).byte,
+                    ],
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+            expectationDescription:
+              """
           NewPayloadV3 with incorrect version in list of versioned hashes must return INVALID status
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Nil Hashes",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is nil, even though the fork has already happened.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.none(seq[BlobID]),
-              ),
-            ),
-            expectedError: engineApiInvalidParams,
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer:
+                  VersionedHashesCustomizer(blobs: Opt.none(seq[BlobID]))
+              ),
+              expectedError: engineApiInvalidParams,
+            ),
+            expectationDescription:
+              """
           NewPayloadV3 after Cancun with nil VersionedHashes must return INVALID_PARAMS_ERROR (code -32602)
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Empty Hashes",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is empty, even though there are blobs in the payload.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(newSeq[BlobID]()),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-          expectationDescription: """
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer:
+                  VersionedHashesCustomizer(blobs: Opt.some(newSeq[BlobID]()))
+              ),
+              expectInvalidStatus: true,
+            ),
+            expectationDescription:
+              """
           NewPayloadV3 with incorrect list of versioned hashes must return INVALID status
           """,
-        ),
-      ]
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Non-Empty Hashes",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is contains hashes, even though there are no blobs in the payload.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(
-          expectedblobs: @[],
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(@[BlobID(0)]),
+      testSequence:
+        @[
+          NewPayloads(
+            expectedblobs: @[],
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer:
+                  VersionedHashesCustomizer(blobs: Opt.some(@[BlobID(0)]))
               ),
+              expectInvalidStatus: true,
             ),
-            expectInvalidStatus: true,
-          ),
-          expectationDescription: """
+            expectationDescription:
+              """
           NewPayloadV3 with incorrect list of versioned hashes must return INVALID status
           """,
-        ).TestStep,
-      ]
+          ).TestStep
+        ],
     ),
   ),
 
   # Test versioned hashes in Engine API NewPayloadV3 on syncing clients
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Missing Hash (Syncing)",
-    about: """
+    about:
+      """
         Tests VersionedHashes in Engine API NewPayloadV3 where the array
         is missing one of the hashes.
         """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
-
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1)),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-        ),
-      ]
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
+          ),
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK - 1))
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Extra Hash (Syncing)",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is has an extra hash for a blob that is not in the payload.
       """,
@@ -1247,309 +1312,334 @@ let cancunTestListA* = [
       mainFork: ForkCancun,
       # TODO: It could be worth it to also test this with a blob that is in the
       # mempool but was not included in the payload.
-      testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
-
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK+1)),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-        ),
-      ]
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
+          ),
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK + 1))
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Out of Order (Syncing)",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is out of order.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
-
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobListByIndex(BlobID(TARGET_BLOBS_PER_BLOCK-1), 0)),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-        ),
-      ]
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
+          ),
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs:
+                    Opt.some(getBlobListByIndex(BlobID(TARGET_BLOBS_PER_BLOCK - 1), 0))
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Repeated Hash (Syncing)",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       has a blob that is repeated in the array.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
-
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK, BlobID(TARGET_BLOBS_PER_BLOCK-1))),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-        ),
-      ]
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
+          ),
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(
+                    getBlobList(
+                      0, TARGET_BLOBS_PER_BLOCK, BlobID(TARGET_BLOBS_PER_BLOCK - 1)
+                    )
+                  )
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Incorrect Hash (Syncing)",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       has a blob that is repeated in the array.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-        testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
-
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK-1, BlobID(TARGET_BLOBS_PER_BLOCK))),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-        ),
-      ]
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
+          ),
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(
+                    getBlobList(
+                      0, TARGET_BLOBS_PER_BLOCK - 1, BlobID(TARGET_BLOBS_PER_BLOCK)
+                    )
+                  )
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Incorrect Version (Syncing)",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       has a single blob that has an incorrect version.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
-
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs:        Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK)),
-                hashVersions: @[VERSIONED_HASH_VERSION_KZG.byte, (VERSIONED_HASH_VERSION_KZG + 1).byte],
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-        ),
-      ]
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
+          ),
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer: VersionedHashesCustomizer(
+                  blobs: Opt.some(getBlobList(0, TARGET_BLOBS_PER_BLOCK)),
+                  hashVersions:
+                    @[
+                      VERSIONED_HASH_VERSION_KZG.byte,
+                      (VERSIONED_HASH_VERSION_KZG + 1).byte,
+                    ],
+                )
+              ),
+              expectInvalidStatus: true,
+            ),
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Nil Hashes (Syncing)",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is nil, even though the fork has already happened.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
-
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.none(seq[BlobID]),
-              ),
-            ),
-            expectedError: engineApiInvalidParams,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-        ),
-      ]
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
+          ),
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer:
+                  VersionedHashesCustomizer(blobs: Opt.none(seq[BlobID]))
+              ),
+              expectedError: engineApiInvalidParams,
+            ),
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Empty Hashes (Syncing)",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is empty, even though there are blobs in the payload.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        SendBlobTransactions(
-          transactionCount:              TARGET_BLOBS_PER_BLOCK,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        NewPayloads(
-          expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
-          expectedblobs:             getBlobList(0, TARGET_BLOBS_PER_BLOCK),
-        ),
-
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(newSeq[BlobID]()),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          SendBlobTransactions(
+            transactionCount: TARGET_BLOBS_PER_BLOCK,
+            blobTransactionMaxBlobGasCost: u256(1),
           ),
-        ),
-      ]
+          NewPayloads(
+            expectedIncludedBlobCount: TARGET_BLOBS_PER_BLOCK,
+            expectedblobs: getBlobList(0, TARGET_BLOBS_PER_BLOCK),
+          ),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
+          ),
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer:
+                  VersionedHashesCustomizer(blobs: Opt.some(newSeq[BlobID]()))
+              ),
+              expectInvalidStatus: true,
+            ),
+          ),
+        ],
     ),
   ),
-
   TestDesc(
     name: "NewPayloadV3 Versioned Hashes, Non-Empty Hashes (Syncing)",
-    about: """
+    about:
+      """
       Tests VersionedHashes in Engine API NewPayloadV3 where the array
       is contains hashes, even though there are no blobs in the payload.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(), # Send new payload so the parent is unknown to the secondary client
-        NewPayloads(
-          expectedblobs: @[],
-        ),
-        LaunchClients(
-          #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
-          skipAddingToCLMock:       true,
-          skipConnectingToBootnode: true, # So the client is in a perpetual syncing state
-        ),
-        SendModifiedLatestPayload(
-          clientID: 1,
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              versionedHashesCustomizer: VersionedHashesCustomizer(
-                blobs: Opt.some(@[BlobID(0)]),
-              ),
-            ),
-            expectInvalidStatus: true,
+      testSequence:
+        @[
+          NewPayloads(),
+            # Send new payload so the parent is unknown to the secondary client
+          NewPayloads(expectedblobs: @[]),
+          LaunchClients(
+            #engineStarter:            hive_rpc.HiveRPCEngineStarter{),
+            skipAddingToCLMock: true,
+            skipConnectingToBootnode: true,
+              # So the client is in a perpetual syncing state
           ),
-        ),
-      ]
+          SendModifiedLatestPayload(
+            clientID: 1,
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(
+                versionedHashesCustomizer:
+                  VersionedHashesCustomizer(blobs: Opt.some(@[BlobID(0)]))
+              ),
+              expectInvalidStatus: true,
+            ),
+          ),
+        ],
     ),
   ),
 
@@ -1558,76 +1648,73 @@ let cancunTestListA* = [
   # and can be executed using """pyspec""" simulator.
   TestDesc(
     name: "Incorrect blobGasUsed: Non-Zero on Zero Blobs",
-    about: """
+    about:
+      """
       Send a payload with zero blobs, but non-zero BlobGasUsed.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              blobGasUsed: Opt.some(1'u64),
-            ),
-            expectInvalidStatus: true,
-          ),
-        ).TestStep,
-      ]
+      testSequence:
+        @[
+          NewPayloads(
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer: CustomPayloadData(blobGasUsed: Opt.some(1'u64)),
+              expectInvalidStatus: true,
+            )
+          ).TestStep
+        ],
     ),
   ),
-
   TestDesc(
     name: "Incorrect blobGasUsed: GAS_PER_BLOB on Zero Blobs",
-    about: """
+    about:
+      """
       Send a payload with zero blobs, but non-zero BlobGasUsed.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-        NewPayloads(
-          newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
-            payloadCustomizer: CustomPayloadData(
-              blobGasUsed: Opt.some(GAS_PER_BLOB.uint64),
-            ),
-            expectInvalidStatus: true,
-          ),
-        ).TestStep,
-      ]
+      testSequence:
+        @[
+          NewPayloads(
+            newPayloadCustomizer: BaseNewPayloadVersionCustomizer(
+              payloadCustomizer:
+                CustomPayloadData(blobGasUsed: Opt.some(GAS_PER_BLOB.uint64)),
+              expectInvalidStatus: true,
+            )
+          ).TestStep
+        ],
     ),
   ),
 
   # DevP2P tests
   TestDesc(
     name: "Request Blob Pooled Transactions",
-    about: """
+    about:
+      """
       Requests blob pooled transactions and verify correct encoding.
       """,
     run: specExecute,
     spec: CancunSpec(
       mainFork: ForkCancun,
-      testSequence: @[
-      # Get past the genesis
-        NewPayloads(
-          payloadCount: 1,
-        ),
-        # Send multiple transactions with multiple blobs each
-        SendBlobTransactions(
-          transactionCount:              1,
-          blobTransactionMaxBlobGasCost: u256(1),
-        ),
-        DevP2PRequestPooledTransactionHash(
-          clientIndex:                 0,
-          transactionIndexes:          @[0],
-          waitForNewPooledTransaction: true,
-        ),
-      ]
+      testSequence:
+        @[
+          # Get past the genesis
+          NewPayloads(payloadCount: 1),
+          # Send multiple transactions with multiple blobs each
+          SendBlobTransactions(
+            transactionCount: 1, blobTransactionMaxBlobGasCost: u256(1)
+          ),
+          DevP2PRequestPooledTransactionHash(
+            clientIndex: 0, transactionIndexes: @[0], waitForNewPooledTransaction: true
+          ),
+        ],
     ),
   ),
 
-  # Need special rlp encoder
-  #[TestDescXXX(
+    # Need special rlp encoder
+    #[TestDescXXX(
     name: "NewPayloadV3 Before Cancun, 0x00 ExcessBlobGas, Nil BlobGasUsed, Nil Versioned Hashes, Nil Beacon Root",
     about: """
       Test sending NewPayloadV3 Before Cancun with:
@@ -1840,59 +1927,42 @@ proc makeCancunTest(): seq[EngineSpec] =
   for syncing in [false, true]:
     result.add InvalidPayloadAttributesTest(
       description: "Missing BeaconRoot",
-      mainFork   : ForkCancun,
-      syncing    : syncing,
-      customizer : BasePayloadAttributesCustomizer(
-        removeBeaconRoot: true,
-      )
+      mainFork: ForkCancun,
+      syncing: syncing,
+      customizer: BasePayloadAttributesCustomizer(removeBeaconRoot: true),
     )
 
-  const
-    payloadIdTests = [
-      PayloadAttributesParentBeaconRoot,
-      # TODO: Remove when withdrawals suite is refactored
-      PayloadAttributesAddWithdrawal,
-      PayloadAttributesModifyWithdrawalAmount,
-      PayloadAttributesModifyWithdrawalIndex,
-      PayloadAttributesModifyWithdrawalValidator,
-      PayloadAttributesModifyWithdrawalAddress,
-      PayloadAttributesRemoveWithdrawal,
-    ]
+  const payloadIdTests = [
+    PayloadAttributesParentBeaconRoot,
+    # TODO: Remove when withdrawals suite is refactored
+    PayloadAttributesAddWithdrawal,
+    PayloadAttributesModifyWithdrawalAmount,
+    PayloadAttributesModifyWithdrawalIndex,
+    PayloadAttributesModifyWithdrawalValidator,
+    PayloadAttributesModifyWithdrawalAddress,
+    PayloadAttributesRemoveWithdrawal,
+  ]
 
   # Unique Payload ID Tests
   for t in payloadIdTests:
-    result.add UniquePayloadIDTest(
-      mainFork: ForkCancun,
-      fieldModification: t,
-    )
+    result.add UniquePayloadIDTest(mainFork: ForkCancun, fieldModification: t)
 
   # Invalid Payload Tests
   const
     invalidFields = [
-      InvalidParentBeaconBlockRoot,
-      InvalidBlobGasUsed,
-      InvalidBlobCountGasUsed,
-      InvalidExcessBlobGas,
-      InvalidVersionedHashes,
-      InvalidVersionedHashesVersion,
-      IncompleteVersionedHashes,
-      ExtraVersionedHashes,
+      InvalidParentBeaconBlockRoot, InvalidBlobGasUsed, InvalidBlobCountGasUsed,
+      InvalidExcessBlobGas, InvalidVersionedHashes, InvalidVersionedHashesVersion,
+      IncompleteVersionedHashes, ExtraVersionedHashes,
     ]
 
     invalidDetectedOnSyncs = [
-      InvalidBlobGasUsed,
-      InvalidBlobCountGasUsed,
-      InvalidVersionedHashes,
-      InvalidVersionedHashesVersion,
-      IncompleteVersionedHashes,
-      ExtraVersionedHashes
+      InvalidBlobGasUsed, InvalidBlobCountGasUsed, InvalidVersionedHashes,
+      InvalidVersionedHashesVersion, IncompleteVersionedHashes, ExtraVersionedHashes,
     ]
 
     nilLatestValidHashes = [
-      InvalidVersionedHashes,
-      InvalidVersionedHashesVersion,
-      IncompleteVersionedHashes,
-      ExtraVersionedHashes
+      InvalidVersionedHashes, InvalidVersionedHashesVersion, IncompleteVersionedHashes,
+      ExtraVersionedHashes,
     ]
 
   for invalidField in invalidFields:
@@ -1904,37 +1974,33 @@ proc makeCancunTest(): seq[EngineSpec] =
         nilLatestValidHash = invalidField in nilLatestValidHashes
 
       result.add InvalidPayloadTestCase(
-        mainFork             : ForkCancun,
-        txType               : Opt.some(TxEIP4844),
-        invalidField         : invalidField,
-        syncing              : syncing,
+        mainFork: ForkCancun,
+        txType: Opt.some(TxEIP4844),
+        invalidField: invalidField,
+        syncing: syncing,
         invalidDetectedOnSync: invalidDetectedOnSync,
-        nilLatestValidHash   : nilLatestValidHash,
+        nilLatestValidHash: nilLatestValidHash,
       )
 
   # Invalid Transaction ChainID Tests
-  result.add InvalidTxChainIDTest(
-    mainFork: ForkCancun,
-    txType  : Opt.some(TxEIP4844),
-  )
+  result.add InvalidTxChainIDTest(mainFork: ForkCancun, txType: Opt.some(TxEIP4844))
 
   result.add PayloadBuildAfterInvalidPayloadTest(
     mainFork: ForkCancun,
-    txType  : Opt.some(TxEIP4844),
+    txType: Opt.some(TxEIP4844),
     invalidField: InvalidParentBeaconBlockRoot,
   )
 
   # Suggested Fee Recipient Tests (New Transaction Type)
   result.add SuggestedFeeRecipientTest(
     mainFork: ForkCancun,
-    txType  : Opt.some(TxEIP4844),
+    txType: Opt.some(TxEIP4844),
     transactionCount: 1, # Only one blob tx gets through due to blob gas limit
   )
 
   # Prev Randao Tests (New Transaction Type)
   result.add PrevRandaoTransactionTest(
-    mainFork: ForkCancun,
-    txType  : Opt.some(TxEIP4844),
+    mainFork: ForkCancun, txType: Opt.some(TxEIP4844)
   )
 
 proc getGenesisProc(cs: BaseSpec, param: NetworkParams) =
@@ -1947,10 +2013,6 @@ proc filCancunTests(): seq[TestDesc] =
   for x in list:
     var z = x
     z.getGenesisFn = getGenesisProc
-    result.add TestDesc(
-      name: x.getName(),
-      run: executeEngineSpec,
-      spec: z,
-    )
+    result.add TestDesc(name: x.getName(), run: executeEngineSpec, spec: z)
 
 let cancunTestList* = filCancunTests()

@@ -52,7 +52,7 @@ proc `<`(a, b: NibblesBuf): bool =
 
 # ------------------
 
-proc branchNibbleMin*(vtx: VertexRef; minInx: int8): int8 =
+proc branchNibbleMin*(vtx: VertexRef, minInx: int8): int8 =
   ## Find the least index for an argument branch `vtx` link with index
   ## greater or equal the argument `nibble`.
   if vtx.vType == Branch:
@@ -61,7 +61,7 @@ proc branchNibbleMin*(vtx: VertexRef; minInx: int8): int8 =
         return n
   -1
 
-proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
+proc branchNibbleMax*(vtx: VertexRef, maxInx: int8): int8 =
   ## Find the greatest index for an argument branch `vtx` link with index
   ## less or equal the argument `nibble`.
   if vtx.vType == Branch:
@@ -72,40 +72,41 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
 
 # ------------------
 
-proc toLeafTiePayload(hike: Hike): (LeafTie,LeafPayload) =
+proc toLeafTiePayload(hike: Hike): (LeafTie, LeafPayload) =
   ## Shortcut for iterators. This function will gloriously crash unless the
   ## `hike` argument is complete.
-  (LeafTie(root: hike.root, path: hike.to(NibblesBuf).pathToTag.value),
-   hike.legs[^1].wp.vtx.lData)
+  (
+    LeafTie(root: hike.root, path: hike.to(NibblesBuf).pathToTag.value),
+    hike.legs[^1].wp.vtx.lData,
+  )
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc complete(
-    hike: Hike;                         # Partially expanded chain of vertices
-    vid: VertexID;                      # Start ID
-    db: AristoDbRef;                    # Database layer
-    hikeLenMax: static[int];            # Beware of loops (if any)
-    doLeast: static[bool];              # Direction: *least* or *most*
-      ): Result[Hike,(VertexID,AristoError)] =
+    hike: Hike, # Partially expanded chain of vertices
+    vid: VertexID, # Start ID
+    db: AristoDbRef, # Database layer
+    hikeLenMax: static[int], # Beware of loops (if any)
+    doLeast: static[bool], # Direction: *least* or *most*
+): Result[Hike, (VertexID, AristoError)] =
   ## Extend `hike` using least or last vertex without recursion.
   if not vid.isValid:
-    return err((VertexID(0),NearbyVidInvalid))
+    return err((VertexID(0), NearbyVidInvalid))
   var
     vid = vid
     vtx = db.getVtx (hike.root, vid)
     uHike = Hike(root: hike.root, legs: hike.legs)
   if not vtx.isValid:
-    return err((vid,GetVtxNotFound))
+    return err((vid, GetVtxNotFound))
 
   while uHike.legs.len < hikeLenMax:
     var leg = Leg(wp: VidVtxPair(vid: vid, vtx: vtx), nibble: -1)
-    case vtx.vType:
+    case vtx.vType
     of Leaf:
       uHike.legs.add leg
       return ok(uHike) # done
-
     of Branch:
       when doLeast:
         leg.nibble = vtx.branchNibbleMin 0
@@ -117,26 +118,25 @@ proc complete(
         if vtx.isValid:
           uHike.legs.add leg
           continue
-      return err((leg.wp.vid,NearbyBranchError)) # Oops, no way
+      return err((leg.wp.vid, NearbyBranchError)) # Oops, no way
 
-  err((VertexID(0),NearbyNestingTooDeep))
-
+  err((VertexID(0), NearbyNestingTooDeep))
 
 proc zeroAdjust(
-    hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
-    doLeast: static[bool];              # Direction: *least* or *most*
-      ): Result[Hike,(VertexID,AristoError)] =
+    hike: Hike, # Partially expanded chain of vertices
+    db: AristoDbRef, # Database layer
+    doLeast: static[bool], # Direction: *least* or *most*
+): Result[Hike, (VertexID, AristoError)] =
   ## Adjust empty argument path to the first vertex entry to the right. Ths
   ## applies is the argument `hike` is before the first entry in the database.
   ## The result is a hike which is aligned with the first entry.
-  proc accept(p: Hike; pfx: NibblesBuf): bool =
+  proc accept(p: Hike, pfx: NibblesBuf): bool =
     when doLeast:
       p.tail <= pfx
     else:
       pfx <= p.tail
 
-  proc branchBorderNibble(w: VertexRef; n: int8): int8 =
+  proc branchBorderNibble(w: VertexRef, n: int8): int8 =
     when doLeast:
       w.branchNibbleMin n
     else:
@@ -155,13 +155,15 @@ proc zeroAdjust(
   if root.isValid:
     block fail:
       var pfx: NibblesBuf
-      case root.vType:
+      case root.vType
       of Branch:
         # Find first non-dangling link and assign it
         let nibbleID = block:
           when doLeast:
-            if hike.tail.len == 0: 0i8
-            else: hike.tail[0].int8
+            if hike.tail.len == 0:
+              0i8
+            else:
+              hike.tail[0].int8
           else:
             if hike.tail.len == 0:
               break fail
@@ -169,29 +171,27 @@ proc zeroAdjust(
         let n = root.branchBorderNibble nibbleID
         if n < 0:
           # Before or after the database range
-          return err((hike.root,NearbyBeyondRange))
+          return err((hike.root, NearbyBeyondRange))
         pfx = root.ePfx & NibblesBuf.nibble(n.byte)
-
       of Leaf:
         pfx = root.lPfx
         if not hike.accept pfx:
           # Before or after the database range
-          return err((hike.root,NearbyBeyondRange))
+          return err((hike.root, NearbyBeyondRange))
 
       var newHike = pfx.toHike(hike.root, db)
       if 0 < newHike.legs.len:
         return ok(newHike)
 
-  err((VertexID(0),NearbyEmptyHike))
-
+  err((VertexID(0), NearbyEmptyHike))
 
 proc finalise(
-    hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
-    moveRight: static[bool];            # Direction of next vertex
-      ): Result[Hike,(VertexID,AristoError)] =
+    hike: Hike, # Partially expanded chain of vertices
+    db: AristoDbRef, # Database layer
+    moveRight: static[bool], # Direction of next vertex
+): Result[Hike, (VertexID, AristoError)] =
   ## Handle some pathological cases after main processing failed
-  proc beyond(p: Hike; pfx: NibblesBuf): bool =
+  proc beyond(p: Hike, pfx: NibblesBuf): bool =
     when moveRight:
       pfx < p.tail
     else:
@@ -205,10 +205,10 @@ proc finalise(
 
   # Just for completeness (this case should have been handled, already)
   if hike.legs.len == 0:
-    return err((VertexID(0),NearbyEmptyHike))
+    return err((VertexID(0), NearbyEmptyHike))
 
   # Check whether the path is beyond the database range
-  if 0 < hike.tail.len:                 # nothing to compare against, otherwise
+  if 0 < hike.tail.len: # nothing to compare against, otherwise
     let top = hike.legs[^1]
 
     # Note that only a `Branch` vertices has a non-zero nibble
@@ -218,33 +218,32 @@ proc finalise(
         vid = top.wp.vtx.bVid[top.nibble]
         vtx = db.getVtx (hike.root, vid)
       if not vtx.isValid:
-        return err((vid,NearbyDanglingLink))
+        return err((vid, NearbyDanglingLink))
 
       var pfx: NibblesBuf
-      case vtx.vType:
+      case vtx.vType
       of Leaf:
         pfx = vtx.lPfx
       of Branch:
         pfx = vtx.ePfx & NibblesBuf.nibble(vtx.branchBorderNibble.byte)
       if hike.beyond pfx:
-        return err((vid,NearbyBeyondRange))
+        return err((vid, NearbyBeyondRange))
 
   # Pathological cases
   # * finalise right: nfffff.. for n < f or
   # * finalise left: n00000.. for 0 < n
   if hike.legs[0].wp.vtx.vType == Branch or
-     (1 < hike.legs.len and hike.legs[1].wp.vtx.vType == Branch):
-    return err((VertexID(0),NearbyFailed)) # no more vertices
+      (1 < hike.legs.len and hike.legs[1].wp.vtx.vType == Branch):
+    return err((VertexID(0), NearbyFailed)) # no more vertices
 
-  err((hike.legs[^1].wp.vid,NearbyUnexpectedVtx)) # error
-
+  err((hike.legs[^1].wp.vid, NearbyUnexpectedVtx)) # error
 
 proc nearbyNext(
-    hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
-    hikeLenMax: static[int];            # Beware of loops (if any)
-    moveRight: static[bool];            # Direction of next vertex
-      ): Result[Hike,(VertexID,AristoError)] =
+    hike: Hike, # Partially expanded chain of vertices
+    db: AristoDbRef, # Database layer
+    hikeLenMax: static[int], # Beware of loops (if any)
+    moveRight: static[bool], # Direction of next vertex
+): Result[Hike, (VertexID, AristoError)] =
   ## Unified implementation of `nearbyRight()` and `nearbyLeft()`.
   proc accept(nibble: int8): bool =
     ## Accept `nibble` unless on boundaty dependent on `moveRight`
@@ -253,20 +252,20 @@ proc nearbyNext(
     else:
       0 < nibble
 
-  proc accept(p: Hike; pfx: NibblesBuf): bool =
+  proc accept(p: Hike, pfx: NibblesBuf): bool =
     when moveRight:
       p.tail <= pfx
     else:
       pfx <= p.tail
 
-  proc branchNibbleNext(w: VertexRef; n: int8): int8 =
+  proc branchNibbleNext(w: VertexRef, n: int8): int8 =
     when moveRight:
       w.branchNibbleMin(n + 1)
     else:
       w.branchNibbleMax(n - 1)
 
   # Some easy cases
-  let hike = ? hike.zeroAdjust(db, doLeast=moveRight)
+  let hike = ?hike.zeroAdjust(db, doLeast = moveRight)
 
   # if hike.legs[^1].wp.vtx.vType == Extension:
   #   let vid = hike.legs[^1].wp.vtx.eVid
@@ -277,33 +276,32 @@ proc nearbyNext(
     start = true
   while 0 < uHike.legs.len:
     let top = uHike.legs[^1]
-    case top.wp.vtx.vType:
+    case top.wp.vtx.vType
     of Leaf:
       return ok(uHike)
     of Branch:
       if top.nibble < 0 or uHike.tail.len == 0:
-        return err((top.wp.vid,NearbyUnexpectedVtx))
+        return err((top.wp.vid, NearbyUnexpectedVtx))
 
-    var
-      step = top
+    var step = top
     let
       uHikeLen = uHike.legs.len # in case of backtracking
-      uHikeTail = uHike.tail    # in case of backtracking
+      uHikeTail = uHike.tail # in case of backtracking
 
     # Look ahead checking next vertex
     if start:
       let vid = top.wp.vtx.bVid[top.nibble]
       if not vid.isValid:
-        return err((top.wp.vid,NearbyDanglingLink)) # error
+        return err((top.wp.vid, NearbyDanglingLink)) # error
 
       let vtx = db.getVtx (hike.root, vid)
       if not vtx.isValid:
-        return err((vid,GetVtxNotFound)) # error
+        return err((vid, GetVtxNotFound)) # error
 
       case vtx.vType
       of Leaf:
         if uHike.accept vtx.lPfx:
-          return uHike.complete(vid, db, hikeLenMax, doLeast=moveRight)
+          return uHike.complete(vid, db, hikeLenMax, doLeast = moveRight)
       of Branch:
         let nibble = uHike.tail[0].int8
         if start and accept nibble:
@@ -315,8 +313,7 @@ proc nearbyNext(
     let n = step.wp.vtx.branchNibbleNext step.nibble
     if 0 <= n:
       uHike.legs[^1].nibble = n
-      return uHike.complete(
-        step.wp.vtx.bVid[n], db, hikeLenMax, doLeast=moveRight)
+      return uHike.complete(step.wp.vtx.bVid[n], db, hikeLenMax, doLeast = moveRight)
 
     if start:
       # Retry without look ahead
@@ -336,32 +333,32 @@ proc nearbyNext(
   hike.finalise(db, moveRight)
 
 proc nearbyNextLeafTie(
-    lty: LeafTie;                       # Some `Patricia Trie` path
-    db: AristoDbRef;                    # Database layer
-    hikeLenMax: static[int];            # Beware of loops (if any)
-    moveRight:static[bool];             # Direction of next vertex
-      ): Result[PathID,(VertexID,AristoError)] =
+    lty: LeafTie, # Some `Patricia Trie` path
+    db: AristoDbRef, # Database layer
+    hikeLenMax: static[int], # Beware of loops (if any)
+    moveRight: static[bool], # Direction of next vertex
+): Result[PathID, (VertexID, AristoError)] =
   ## Variant of `nearbyNext()`, convenience wrapper
-  let hike = ? lty.hikeUp(db).to(Hike).nearbyNext(db, hikeLenMax, moveRight)
+  let hike = ?lty.hikeUp(db).to(Hike).nearbyNext(db, hikeLenMax, moveRight)
 
   if 0 < hike.legs.len:
     if hike.legs[^1].wp.vtx.vType != Leaf:
-      return err((hike.legs[^1].wp.vid,NearbyLeafExpected))
+      return err((hike.legs[^1].wp.vid, NearbyLeafExpected))
     let rc = hike.legsTo(NibblesBuf).pathToTag
     if rc.isOk:
       return ok rc.value
-    return err((VertexID(0),rc.error))
+    return err((VertexID(0), rc.error))
 
-  err((VertexID(0),NearbyLeafExpected))
+  err((VertexID(0), NearbyLeafExpected))
 
 # ------------------------------------------------------------------------------
 # Public functions, moving and right boundary proof
 # ------------------------------------------------------------------------------
 
 proc right*(
-    hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
-      ): Result[Hike,(VertexID,AristoError)] =
+    hike: Hike, # Partially expanded chain of vertices
+    db: AristoDbRef, # Database layer
+): Result[Hike, (VertexID, AristoError)] =
   ## Extends the maximally extended argument vertices `hike` to the right (i.e.
   ## with non-decreasing path value). This function does not backtrack if
   ## there are dangling links in between. It will return an error in that case.
@@ -371,22 +368,20 @@ proc right*(
   ##
   ## This code is intended to be used for verifying a left-bound proof to
   ## verify that there is no leaf vertex *right* of a boundary path value.
-  hike.nearbyNext(db, 64, moveRight=true)
+  hike.nearbyNext(db, 64, moveRight = true)
 
 proc right*(
-    lty: LeafTie;                       # Some `Patricia Trie` path
-    db: AristoDbRef;                    # Database layer
-      ): Result[LeafTie,(VertexID,AristoError)] =
+    lty: LeafTie, # Some `Patricia Trie` path
+    db: AristoDbRef, # Database layer
+): Result[LeafTie, (VertexID, AristoError)] =
   ## Variant of `nearbyRight()` working with a `LeafTie` argument instead
   ## of a `Hike`.
-  ok LeafTie(
-    root: lty.root,
-    path: ? lty.nearbyNextLeafTie(db, 64, moveRight=true))
+  ok LeafTie(root: lty.root, path: ?lty.nearbyNextLeafTie(db, 64, moveRight = true))
 
 iterator rightPairs*(
-    db: AristoDbRef;                    # Database layer
-    start = low(LeafTie);               # Before or at first value
-      ): (LeafTie,LeafPayload) =
+    db: AristoDbRef, # Database layer
+    start = low(LeafTie), # Before or at first value
+): (LeafTie, LeafPayload) =
   ## Traverse the sub-trie implied by the argument `start` with increasing
   ## order.
   var
@@ -406,14 +401,14 @@ iterator rightPairs*(
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if topNibble < 15:
-          let newNibble = NibblesBuf.nibble(topNibble+1)
+          let newNibble = NibblesBuf.nibble(topNibble + 1)
           hike.tail = tail.slice(0, tail.len - 1) & newNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       if 1 < tail.len:
         let nxtNibble = tail[tail.len - 2]
         if nxtNibble < 15:
-          let dblNibble = NibblesBuf.fromBytes([((nxtNibble+1) shl 4) + 0])
+          let dblNibble = NibblesBuf.fromBytes([((nxtNibble + 1) shl 4) + 0])
           hike.tail = tail.slice(0, tail.len - 2) & dblNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
@@ -424,62 +419,60 @@ iterator rightPairs*(
     # End while
 
 iterator rightPairsAccount*(
-    db: AristoDbRef;                    # Database layer
-    start = low(PathID);                # Before or at first value
-      ): (PathID,AristoAccount) =
+    db: AristoDbRef, # Database layer
+    start = low(PathID), # Before or at first value
+): (PathID, AristoAccount) =
   ## Variant of `rightPairs()` for accounts tree
-  for (lty,pyl) in db.rightPairs LeafTie(root: VertexID(1), path: start):
+  for (lty, pyl) in db.rightPairs LeafTie(root: VertexID(1), path: start):
     yield (lty.path, pyl.account)
 
 iterator rightPairsGeneric*(
-    db: AristoDbRef;                    # Database layer
-    root: VertexID;                     # Generic root (different from VertexID)
-    start = low(PathID);                # Before or at first value
-      ): (PathID,Blob) =
+    db: AristoDbRef, # Database layer
+    root: VertexID, # Generic root (different from VertexID)
+    start = low(PathID), # Before or at first value
+): (PathID, Blob) =
   ## Variant of `rightPairs()` for a generic tree
   # Verify that `root` is neither from an accounts tree nor a strorage tree.
   if VertexID(1) < root and root.distinctBase < LEAST_FREE_VID:
-    for (lty,pyl) in db.rightPairs LeafTie(root: VertexID(1), path: start):
-        yield (lty.path, pyl.rawBlob)
+    for (lty, pyl) in db.rightPairs LeafTie(root: VertexID(1), path: start):
+      yield (lty.path, pyl.rawBlob)
 
 iterator rightPairsStorage*(
-    db: AristoDbRef;                    # Database layer
-    accPath: Hash256;           # Account the storage data belong to
-    start = low(PathID);                # Before or at first value
-      ): (PathID,UInt256) =
+    db: AristoDbRef, # Database layer
+    accPath: Hash256, # Account the storage data belong to
+    start = low(PathID), # Before or at first value
+): (PathID, UInt256) =
   ## Variant of `rightPairs()` for a storage tree
   block body:
     let stoID = db.fetchStorageID(accPath).valueOr:
       break body
     if stoID.isValid:
-      for (lty,pyl) in db.rightPairs LeafTie(root: stoID, path: start):
+      for (lty, pyl) in db.rightPairs LeafTie(root: stoID, path: start):
         yield (lty.path, pyl.stoData)
 
 # ----------------
 
 proc left*(
-    hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
-      ): Result[Hike,(VertexID,AristoError)] =
+    hike: Hike, # Partially expanded chain of vertices
+    db: AristoDbRef, # Database layer
+): Result[Hike, (VertexID, AristoError)] =
   ## Similar to `nearbyRight()`.
   ##
   ## This code is intended to be used for verifying a right-bound proof to
   ## verify that there is no leaf vertex *left* to a boundary path value.
-  hike.nearbyNext(db, 64, moveRight=false)
+  hike.nearbyNext(db, 64, moveRight = false)
 
 proc left*(
-    lty: LeafTie;                       # Some `Patricia Trie` path
-    db: AristoDbRef;                    # Database layer
-      ): Result[LeafTie,(VertexID,AristoError)] =
+    lty: LeafTie, # Some `Patricia Trie` path
+    db: AristoDbRef, # Database layer
+): Result[LeafTie, (VertexID, AristoError)] =
   ## Similar to `nearbyRight()` for `LeafTie` argument instead of a `Hike`.
-  ok LeafTie(
-    root: lty.root,
-    path: ? lty.nearbyNextLeafTie(db, 64, moveRight=false))
+  ok LeafTie(root: lty.root, path: ?lty.nearbyNextLeafTie(db, 64, moveRight = false))
 
 iterator leftPairs*(
-    db: AristoDbRef;                    # Database layer
-    start = high(LeafTie);              # Before or at first value
-      ): (LeafTie,LeafPayload) =
+    db: AristoDbRef, # Database layer
+    start = high(LeafTie), # Before or at first value
+): (LeafTie, LeafPayload) =
   ## Traverse the sub-trie implied by the argument `start` with decreasing
   ## order. It will stop at any error. In order to reproduce an error, one
   ## can run the function `left()` on the last returned `LiefTie` item with
@@ -508,7 +501,7 @@ iterator leftPairs*(
       if 1 < tail.len:
         let nxtNibble = tail[tail.len - 2]
         if 0 < nxtNibble:
-          let dblNibble = NibblesBuf.fromBytes([((nxtNibble-1) shl 4) + 15])
+          let dblNibble = NibblesBuf.fromBytes([((nxtNibble - 1) shl 4) + 15])
           hike.tail = tail.slice(0, tail.len - 2) & dblNibble
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
@@ -523,9 +516,9 @@ iterator leftPairs*(
 # ------------------------------------------------------------------------------
 
 proc rightMissing*(
-    hike: Hike;                         # Partially expanded chain of vertices
-    db: AristoDbRef;                    # Database layer
-      ): Result[bool,AristoError] =
+    hike: Hike, # Partially expanded chain of vertices
+    db: AristoDbRef, # Database layer
+): Result[bool, AristoError] =
   ## Returns `true` if the maximally extended argument vertex `hike` is the
   ## right most on the hexary trie database. It verifies that there is no more
   ## leaf entry to the right of the argument `hike`. This function is an

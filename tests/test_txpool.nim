@@ -49,7 +49,7 @@ var
   prng = prngSeed.initRand
 
   # To be set up in runTxLoader()
-  statCount: array[TxItemStatus,int] # per status bucket
+  statCount: array[TxItemStatus, int] # per status bucket
 
   txList: seq[TxItemRef]
   effGasTips: seq[GasPriceEx]
@@ -64,7 +64,7 @@ var
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc randStatusRatios: seq[int] =
+proc randStatusRatios(): seq[int] =
   for n in 1 .. statCount.len:
     let
       inx = (n mod statCount.len).TxItemStatus
@@ -74,19 +74,19 @@ proc randStatusRatios: seq[int] =
     else:
       result.add (statCount[prv] * 100 / statCount[inx]).int
 
-proc randStatus: TxItemStatus =
+proc randStatus(): TxItemStatus =
   result = prng.rand(TxItemStatus.high.ord).TxItemStatus
   statCount[result].inc
 
-template wrapException(info: string; action: untyped) =
+template wrapException(info: string, action: untyped) =
   try:
     action
   except CatchableError:
     raiseAssert info & " has problems: " & getCurrentExceptionMsg()
 
-proc addOrFlushGroupwise(xp: TxPoolRef;
-                         grpLen: int; seen: var seq[TxItemRef]; w: TxItemRef;
-                         noisy = true): bool =
+proc addOrFlushGroupwise(
+    xp: TxPoolRef, grpLen: int, seen: var seq[TxItemRef], w: TxItemRef, noisy = true
+): bool =
   # to be run as call back inside `itemsApply()`
   wrapException("addOrFlushGroupwise()"):
     seen.add w
@@ -98,7 +98,7 @@ proc addOrFlushGroupwise(xp: TxPoolRef;
       let xpLen = xp.nItems.total
       noisy.say "*** updateSeen: deleting ", seen.mapIt($it.itemID).join(" ")
       for item in seen:
-        doAssert xp.txDB.dispose(item,txInfoErrUnspecified)
+        doAssert xp.txDB.dispose(item, txInfoErrUnspecified)
       doAssert xpLen == seen.len + xp.nItems.total
       doAssert seen.len == xp.nItems.disposed
       seen.setLen(0)
@@ -150,7 +150,7 @@ proc runTxLoader() =
       #noisy.say "***",
       #   "Latest item: <", xp.txDB.byItemID.last.value.data.info, ">"
 
-      check xp.nItems.total == foldl(@[0]&statCount.toSeq, a+b)
+      check xp.nItems.total == foldl(@[0] & statCount.toSeq, a + b)
       #                        ^^^ sum up statCount[] values
 
       # make sure that PRNG did not go bonkers
@@ -175,7 +175,6 @@ proc runTxPoolTests(noisy = false) =
   let elapNoisy = false
 
   suite "TxPool: Play with pool functions and primitives":
-
     block:
       const groupLen = 13
       let veryNoisy = noisy and false
@@ -197,8 +196,7 @@ proc runTxPoolTests(noisy = false) =
         check seen.len == xq.nItems.total
         check seen.len < groupLen
 
-      test &"Load/reverse walk ID queue, " &
-          &"deleting in groups of at most {groupLen}":
+      test &"Load/reverse walk ID queue, " & &"deleting in groups of at most {groupLen}":
         var
           xq = bcCom.toTxPool(txList, noisy = noisy)
           seen: seq[TxItemRef]
@@ -218,11 +216,10 @@ proc runTxPoolTests(noisy = false) =
     block:
       var
         xq = TxPoolRef.new(bcCom)
-        testTxs: array[5,(TxItemRef,Transaction,Transaction)]
+        testTxs: array[5, (TxItemRef, Transaction, Transaction)]
 
       test "Superseding txs with sender and nonce variants":
-        var
-          testInx = 0
+        var testInx = 0
         let
           testBump = xq.priceBump
           lastBump = testBump - 1 # implies underpriced item
@@ -232,7 +229,7 @@ proc runTxPoolTests(noisy = false) =
           let
             item = txList[n]
             bump = if testInx < testTxs.high: testBump else: lastBump
-            rc = item.txModPair(testInx,bump.int)
+            rc = item.txModPair(testInx, bump.int)
           if not rc[0].isNil:
             testTxs[testInx] = rc
             testInx.inc
@@ -259,7 +256,7 @@ proc runTxPoolTests(noisy = false) =
         check xq.nItems.total == testTxs.len
         check xq.nItems.disposed == testTxs.len
 
-        if false:  # Temporarily disabled, see `supersede` in `tx_add.nim`
+        if false: # Temporarily disabled, see `supersede` in `tx_add.nim`
           # last update item was underpriced, so it must not have been
           # replaced
           var altLst = testTxs.toSeq.mapIt("alt " & it[0].info)
@@ -267,7 +264,6 @@ proc runTxPoolTests(noisy = false) =
           check altLst.sorted == xq.toItems.toSeq.mapIt(it.info).sorted
 
       test "Deleting tx => also delete higher nonces":
-
         let
           # From the data base, get the one before last item. This was
           # replaced earlier by the second transaction in the triple, i.e.
@@ -291,12 +287,14 @@ proc runTxPoolTests(noisy = false) =
       var
         gap: Time
         nItems: int
-        xq = bcCom.toTxPool(timeGap = gap,
-                           nGapItems = nItems,
-                           itList = txList,
-                           itemsPC = 35,       # arbitrary
-                           delayMSecs = 100,   # large enough to process
-                           noisy = noisy)
+        xq = bcCom.toTxPool(
+          timeGap = gap,
+          nGapItems = nItems,
+          itList = txList,
+          itemsPC = 35, # arbitrary
+          delayMSecs = 100, # large enough to process
+          noisy = noisy,
+        )
 
       # Set txs to pseudo random status. Note that this functon will cause
       # a violation of boundary conditions regarding nonces. So database
@@ -304,7 +302,6 @@ proc runTxPoolTests(noisy = false) =
       xq.setItemStatusFromInfo
 
       test &"Auto delete about {nItems} expired txs out of {xq.nItems.total}":
-
         # Make sure that the test did not collapse
         check 0 < nItems
         xq.lifeTime = getTime() - gap
@@ -352,14 +349,14 @@ proc runTxPoolTests(noisy = false) =
         fromNumItems = nAddrPendingItems
         fromBucketInfo = "pending"
         fromBucket = txItemPending
-        toBucketInfo =  "staged"
+        toBucketInfo = "staged"
         toBucket = txItemStaged
 
       # Set txs to pseudo random status
       xq.setItemStatusFromInfo
 
       # find address with max number of transactions
-      for (address,nonceList) in xq.txDB.incAccount:
+      for (address, nonceList) in xq.txDB.incAccount:
         if nAddrItems < nonceList.nItems:
           maxAddr = address
           nAddrItems = nonceList.nItems
@@ -385,15 +382,12 @@ proc runTxPoolTests(noisy = false) =
 
       let moveNumItems = fromNumItems div 2
 
-      test &"Reassign {moveNumItems} of {fromNumItems} items "&
-          &"from \"{fromBucketInfo}\" to \"{toBucketInfo}\"":
-
+      test &"Reassign {moveNumItems} of {fromNumItems} items " &
+        &"from \"{fromBucketInfo}\" to \"{toBucketInfo}\"":
         # requite mimimum => there is a status queue with at least 2 entries
         check 3 < nAddrItems
 
-        check nAddrPendingItems +
-                nAddrStagedItems +
-                nAddrPackedItems == nAddrItems
+        check nAddrPendingItems + nAddrStagedItems + nAddrPackedItems == nAddrItems
 
         check 0 < moveNumItems
         check 1 < fromNumItems
@@ -411,42 +405,40 @@ proc runTxPoolTests(noisy = false) =
         case fromBucket
         of txItemPending:
           check nAddrPendingItems - moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+            xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
           check nAddrStagedItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
-          check nAddrPackedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
+            xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
+          check nAddrPackedItems == xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
         of txItemStaged:
           check nAddrStagedItems - moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
+            xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
           check nAddrPackedItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
+            xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
           check nAddrPendingItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+            xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
         else:
           check nAddrPackedItems - moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
+            xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
           check nAddrPendingItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-          check nAddrStagedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
+            xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+          check nAddrStagedItems == xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
 
       # --------------------
 
       let expect = (
         xq.txDB.byStatus.eq(txItemPending).nItems,
         xq.txDB.byStatus.eq(txItemStaged).nItems,
-        xq.txDB.byStatus.eq(txItemPacked).nItems)
+        xq.txDB.byStatus.eq(txItemPacked).nItems,
+      )
 
       test &"Verify #items per bucket ({expect[0]},{expect[1]},{expect[2]})":
         let status = xq.nItems
-        check expect == (status.pending,status.staged,status.packed)
+        check expect == (status.pending, status.staged, status.packed)
 
       test "Recycling from waste basket":
-
         let
           basketPrefill = xq.nItems.disposed
-          numDisposed = min(50,txList.len)
+          numDisposed = min(50, txList.len)
 
           # make sure to work on a copy of the pivot item (to see changes)
           thisItem = xq.getItem(txList[^numDisposed].itemID).value.dup
@@ -483,8 +475,7 @@ proc runTxPackerTests(noisy = true) =
       ntNextFee = 0.GasPrice
 
     test "Calculate some non-trivial base fee":
-      var
-        feesList = SortedSet[GasPriceEx,bool].init()
+      var feesList = SortedSet[GasPriceEx, bool].init()
 
       # provide a sorted list of gas fees
       for item in txList:
@@ -524,9 +515,8 @@ proc runTxPackerTests(noisy = true) =
           staged = xq.nItems.staged
           packed = xq.nItems.packed
 
-        test &"Load txs with baseFee={ntBaseFee}, "&
-            &"buckets={pending}/{staged}/{packed}":
-
+        test &"Load txs with baseFee={ntBaseFee}, " &
+          &"buckets={pending}/{staged}/{packed}":
           check 0 < pending
           check 0 < staged
           check xq.nItems.total == txList.len
@@ -538,9 +528,8 @@ proc runTxPackerTests(noisy = true) =
           staged = xr.nItems.staged
           packed = xr.nItems.packed
 
-        test &"Re-org txs previous buckets setting baseFee={ntNextFee}, "&
-            &"buckets={pending}/{staged}/{packed}":
-
+        test &"Re-org txs previous buckets setting baseFee={ntNextFee}, " &
+          &"buckets={pending}/{staged}/{packed}":
           check 0 < pending
           check 0 < staged
           check xr.nItems.total == txList.len
@@ -562,9 +551,8 @@ proc runTxPackerTests(noisy = true) =
           packPrice = ((minGasPrice + maxGasPrice).uint64 div 3).GasPrice
           lowerPrice = minGasPrice + 1.GasPrice
 
-        test &"Packing txs, baseFee=0 minPrice={packPrice} "&
-            &"targetBlockSize={xq.trgGasLimit}":
-
+        test &"Packing txs, baseFee=0 minPrice={packPrice} " &
+          &"targetBlockSize={xq.trgGasLimit}":
           # verify that the test does not degenerate
           check 0 < minGasPrice
           check minGasPrice < maxGasPrice
@@ -589,7 +577,7 @@ proc runTxPackerTests(noisy = true) =
           # assemble block from `packed` bucket
           let
             items = xq.toItems(txItemPacked)
-            total = foldl(@[0.GasInt] & items.mapIt(it.tx.gasLimit), a+b)
+            total = foldl(@[0.GasInt] & items.mapIt(it.tx.gasLimit), a + b)
           check xq.gasTotals.packed == total
 
           noisy.say "***", "1st bLock size=", total, " stats=", xq.nItems.pp
@@ -600,7 +588,7 @@ proc runTxPackerTests(noisy = true) =
 
           let
             items0 = xq.toItems(txItemPacked)
-            saveState0 = foldl(@[0.GasInt] & items0.mapIt(it.tx.gasLimit), a+b)
+            saveState0 = foldl(@[0.GasInt] & items0.mapIt(it.tx.gasLimit), a + b)
           check 0 < xq.nItems.packed
 
           # re-pack bucket
@@ -610,7 +598,7 @@ proc runTxPackerTests(noisy = true) =
 
           let
             items1 = xq.toItems(txItemPacked)
-            saveState1 = foldl(@[0.GasInt] & items1.mapIt(it.tx.gasLimit), a+b)
+            saveState1 = foldl(@[0.GasInt] & items1.mapIt(it.tx.gasLimit), a + b)
           check items0 == items1
           check saveState0 == saveState1
 
@@ -640,7 +628,7 @@ proc runTxPackerTests(noisy = true) =
 
           let
             items = xq.toItems(txItemPacked)
-            newTotal = foldl(@[0.GasInt] & items.mapIt(it.tx.gasLimit), a+b)
+            newTotal = foldl(@[0.GasInt] & items.mapIt(it.tx.gasLimit), a + b)
             newStats = xq.nItems
             newItem = xq.toItems(txItemPacked)[^1]
 

@@ -39,22 +39,23 @@ type
     txItemStaged
     txItemPacked
 
-  TxItemRef* = ref object of RootObj ##\
+  TxItemRef* = ref object of RootObj
+    ##\
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
-    tx:        PooledTransaction     ## Transaction data
-    itemID:    Hash256               ## Transaction hash
-    timeStamp: Time                  ## Time when added
-    sender:    EthAddress            ## Sender account address
-    info:      string                ## Whatever
-    status:    TxItemStatus          ## Transaction status (setter available)
-    reject:    TxInfo                ## Reason for moving to waste basket
+    tx: PooledTransaction ## Transaction data
+    itemID: Hash256 ## Transaction hash
+    timeStamp: Time ## Time when added
+    sender: EthAddress ## Sender account address
+    info: string ## Whatever
+    status: TxItemStatus ## Transaction status (setter available)
+    reject: TxInfo ## Reason for moving to waste basket
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
 # ------------------------------------------------------------------------------
 
-proc utcTime: Time =
+proc utcTime(): Time =
   getTime().utc.toTime
 
 # ------------------------------------------------------------------------------
@@ -74,65 +75,79 @@ proc `<=`*(a, b: GasPriceEx): bool {.borrow.}
 proc `==`*(a, b: GasPriceEx): bool {.borrow.}
 proc `+`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
 proc `-`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
-proc `+=`*(a: var GasPriceEx; b: GasPriceEx) {.borrow.}
-proc `-=`*(a: var GasPriceEx; b: GasPriceEx) {.borrow.}
+proc `+=`*(a: var GasPriceEx, b: GasPriceEx) {.borrow.}
+proc `-=`*(a: var GasPriceEx, b: GasPriceEx) {.borrow.}
 
 # Multiplication/division of *price* and *commodity unit*
 
-proc `*`*(a: GasPrice; b: SomeUnsignedInt): GasPrice {.borrow.}
-proc `*`*(a: SomeUnsignedInt; b: GasPrice): GasPrice {.borrow.}
+proc `*`*(a: GasPrice, b: SomeUnsignedInt): GasPrice {.borrow.}
+proc `*`*(a: SomeUnsignedInt, b: GasPrice): GasPrice {.borrow.}
 
-proc `div`*(a: GasPrice; b: SomeUnsignedInt): GasPrice =
+proc `div`*(a: GasPrice, b: SomeUnsignedInt): GasPrice =
   (a.uint64 div b).GasPrice # beware of zero denominator
 
-proc `*`*(a: SomeInteger; b: GasPriceEx): GasPriceEx =
+proc `*`*(a: SomeInteger, b: GasPriceEx): GasPriceEx =
   (a * b.int64).GasPriceEx # beware of under/overflow
 
 # Mixed stuff, convenience ops
 
-proc `-`*(a: GasPrice; b: SomeUnsignedInt): GasPrice {.borrow.}
+proc `-`*(a: GasPrice, b: SomeUnsignedInt): GasPrice {.borrow.}
 
-proc `<`*(a: GasPriceEx; b: SomeSignedInt): bool =
+proc `<`*(a: GasPriceEx, b: SomeSignedInt): bool =
   a.int64 < b
 
-proc `<`*(a: GasPriceEx|SomeSignedInt; b: GasPrice): bool =
-  if a.int64 < 0: true else: a.GasPrice < b
+proc `<`*(a: GasPriceEx | SomeSignedInt, b: GasPrice): bool =
+  if a.int64 < 0:
+    true
+  else:
+    a.GasPrice < b
 
-proc `<=`*(a: SomeSignedInt; b: GasPriceEx): bool =
+proc `<=`*(a: SomeSignedInt, b: GasPriceEx): bool =
   a < b.int64
 
 # ------------------------------------------------------------------------------
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
+proc init*(item: TxItemRef, status: TxItemStatus, info: string) =
   ## Update item descriptor.
   item.info = info
   item.status = status
   item.timeStamp = utcTime()
   item.reject = txInfoOk
 
-proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash256;
-          status: TxItemStatus; info: string): Result[T,void] {.gcsafe,raises: [].} =
+proc new*(
+    T: type TxItemRef,
+    tx: PooledTransaction,
+    itemID: Hash256,
+    status: TxItemStatus,
+    info: string,
+): Result[T, void] {.gcsafe, raises: [].} =
   ## Create item descriptor.
   let rc = tx.tx.ecRecover
   if rc.isErr:
     return err()
-  ok(T(itemID:    itemID,
-       tx:        tx,
-       sender:    rc.value,
-       timeStamp: utcTime(),
-       info:      info,
-       status:    status))
+  ok(
+    T(
+      itemID: itemID,
+      tx: tx,
+      sender: rc.value,
+      timeStamp: utcTime(),
+      info: info,
+      status: status,
+    )
+  )
 
-proc new*(T: type TxItemRef; tx: PooledTransaction;
-          reject: TxInfo; status: TxItemStatus; info: string): T {.gcsafe,raises: [].} =
+proc new*(
+    T: type TxItemRef,
+    tx: PooledTransaction,
+    reject: TxInfo,
+    status: TxItemStatus,
+    info: string,
+): T {.gcsafe, raises: [].} =
   ## Create incomplete item descriptor, so meta-data can be stored (e.g.
   ## for holding in the waste basket to be investigated later.)
-  T(tx:        tx,
-    timeStamp: utcTime(),
-    info:      info,
-    status:    status)
+  T(tx: tx, timeStamp: utcTime(), info: info, status: status)
 
 # ------------------------------------------------------------------------------
 #  Public functions, Table ID helper
@@ -161,7 +176,7 @@ proc cost*(tx: Transaction): UInt256 =
 
 # core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
 # core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
-proc effectiveGasTip*(tx: Transaction; baseFee: GasInt): GasPriceEx =
+proc effectiveGasTip*(tx: Transaction, baseFee: GasInt): GasPriceEx =
   ## The effective miner gas tip for the globally argument `baseFee`. The
   ## result (which is a price per gas) might well be negative.
   if tx.txType < TxEip1559:
@@ -170,7 +185,7 @@ proc effectiveGasTip*(tx: Transaction; baseFee: GasInt): GasPriceEx =
     # London, EIP1559
     min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee).GasPriceEx
 
-proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
+proc effectiveGasTip*(tx: Transaction, baseFee: UInt256): GasPriceEx =
   ## Variant of `effectiveGasTip()`
   tx.effectiveGasTip(baseFee.truncate(GasInt))
 
@@ -187,7 +202,7 @@ proc dup*(item: TxItemRef): TxItemRef =
     sender: item.sender,
     info: item.info,
     status: item.status,
-    reject: item.reject
+    reject: item.reject,
   )
 
 proc info*(item: TxItemRef): string =
@@ -233,15 +248,15 @@ func rejectInfo*(item: TxItemRef): string =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `status=`*(item: TxItemRef; val: TxItemStatus) =
+proc `status=`*(item: TxItemRef, val: TxItemStatus) =
   ## Setter
   item.status = val
 
-proc `reject=`*(item: TxItemRef; val: TxInfo) =
+proc `reject=`*(item: TxItemRef, val: TxInfo) =
   ## Setter
   item.reject = val
 
-proc `info=`*(item: TxItemRef; val: string) =
+proc `info=`*(item: TxItemRef, val: string) =
   ## Setter
   item.info = val
 

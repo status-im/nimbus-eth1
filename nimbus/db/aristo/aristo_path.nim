@@ -10,11 +10,7 @@
 
 {.push raises: [].}
 
-import
-  std/sequtils,
-  eth/common,
-  results,
-  ./aristo_desc
+import std/sequtils, eth/common, results, ./aristo_desc
 
 # Info snippet (just a reminder to keep somewhere)
 #
@@ -30,7 +26,7 @@ import
 #
 # where the `ignored` part is typically expected a zero nibble.
 
-func pathPfxPad*(pfx: NibblesBuf; dblNibble: static[byte]): NibblesBuf
+func pathPfxPad*(pfx: NibblesBuf, dblNibble: static[byte]): NibblesBuf
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -51,29 +47,31 @@ func pathAsBlob*(tag: PathID): Blob =
     else:
       return key[0 .. (tag.length - 1) div 2]
 
-func pathToTag*(partPath: NibblesBuf): Result[PathID,AristoError] =
+func pathToTag*(partPath: NibblesBuf): Result[PathID, AristoError] =
   ## Convert the argument `partPath`  to a `PathID` type value.
   if partPath.len == 0:
     return ok VOID_PATH_ID
   if partPath.len <= 64:
     return ok PathID(
-      pfx:    UInt256.fromBytesBE partPath.pathPfxPad(0).getBytes(),
-      length: partPath.len.uint8)
+      pfx: UInt256.fromBytesBE partPath.pathPfxPad(0).getBytes(),
+      length: partPath.len.uint8,
+    )
   err(PathAtMost64Nibbles)
 
-func pathToTag*(partPath: openArray[byte]): Result[PathID,AristoError] =
+func pathToTag*(partPath: openArray[byte]): Result[PathID, AristoError] =
   ## Variant of `pathToTag()`
   if partPath.len == 0:
     return ok VOID_PATH_ID
   if partPath.len <= 32:
     return ok PathID(
-      pfx:    UInt256.fromBytesBE @partPath & 0u8.repeat(32-partPath.len),
-      length: 2 * partPath.len.uint8)
+      pfx: UInt256.fromBytesBE @partPath & 0u8.repeat(32 - partPath.len),
+      length: 2 * partPath.len.uint8,
+    )
   err(PathAtMost64Nibbles)
 
 # --------------------
 
-func pathPfxPad*(pfx: NibblesBuf; dblNibble: static[byte]): NibblesBuf =
+func pathPfxPad*(pfx: NibblesBuf, dblNibble: static[byte]): NibblesBuf =
   ## Extend (or cut) the argument nibbles sequence `pfx` for generating a
   ## `NibblesBuf` with exactly 64 nibbles, the equivalent of a path key.
   ##
@@ -90,7 +88,7 @@ func pathPfxPad*(pfx: NibblesBuf; dblNibble: static[byte]): NibblesBuf =
       result = result & NibblesBuf.nibble(dblNibble.byte)
   else:
     let nope = NibblesBuf()
-    result = pfx.slice(0,64) & nope # nope forces re-alignment
+    result = pfx.slice(0, 64) & nope # nope forces re-alignment
 
 # ------------------------------------------------------------------------------
 # End

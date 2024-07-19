@@ -6,7 +6,6 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-
 import
   std/[options, typetraits],
   unittest2,
@@ -16,7 +15,8 @@ import
   ../nimbus/beacon/web3_eth_conv,
   ./test_block_fixture
 
-let allLogs = deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995)
+let allLogs =
+  deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995)
 
 func w3Hash(x: string): Web3Hash =
   Web3Hash hexToByteArray[32](x)
@@ -42,19 +42,25 @@ proc filtersMain*() =
 
     test "Filter and BloomFilter for one address with one valid log":
       let address = Address.fromHex("0x0e0989b1f9b8a38983c2ba8053269ca62ec9b195")
-      let filteredLogs = filterLogs(allLogs, AddressOrList(kind: slkList, list: @[address]), @[])
+      let filteredLogs =
+        filterLogs(allLogs, AddressOrList(kind: slkList, list: @[address]), @[])
 
       check:
-        headerBloomFilter(blockHeader4514995, AddressOrList(kind: slkList, list:  @[address]), @[])
+        headerBloomFilter(
+          blockHeader4514995, AddressOrList(kind: slkList, list: @[address]), @[]
+        )
         len(filteredLogs) == 1
         filteredLogs[0].address == address
 
     test "Filter and BloomFilter for one address with multiple valid logs":
       let address = Address.fromHex("0x878d7ed5c194349f37b18688964e8db1eb0fcca1")
-      let filteredLogs = filterLogs(allLogs, AddressOrList(kind: slkSingle, single: address), @[])
+      let filteredLogs =
+        filterLogs(allLogs, AddressOrList(kind: slkSingle, single: address), @[])
 
       check:
-        headerBloomFilter(blockHeader4514995, AddressOrList(kind: slkList, list: @[address]), @[])
+        headerBloomFilter(
+          blockHeader4514995, AddressOrList(kind: slkList, list: @[address]), @[]
+        )
         len(filteredLogs) == 2
 
       for log in filteredLogs:
@@ -64,61 +70,68 @@ proc filtersMain*() =
     test "Filter and BloomFilter for multiple address with multiple valid logs":
       let address = Address.fromHex("0x878d7ed5c194349f37b18688964e8db1eb0fcca1")
       let address1 = Address.fromHex("0x0e0989b1f9b8a38983c2ba8053269ca62ec9b195")
-      let filteredLogs = filterLogs(allLogs, AddressOrList(kind: slkList, list: @[address, address1]), @[])
+      let filteredLogs = filterLogs(
+        allLogs, AddressOrList(kind: slkList, list: @[address, address1]), @[]
+      )
 
       check:
-        headerBloomFilter(blockHeader4514995, AddressOrList(kind: slkList, list: @[address, address1]), @[])
+        headerBloomFilter(
+          blockHeader4514995,
+          AddressOrList(kind: slkList, list: @[address, address1]),
+          @[],
+        )
         len(filteredLogs) == 3
 
     test "Filter topics, too many filters":
-      let filteredLogs =
-        filterLogs(
-          allLogs,
-          AddressOrList(kind: slkList, list: @[]),
-          @[
-            TopicOrList(kind: slkNull),
-            TopicOrList(kind: slkNull),
-            TopicOrList(kind: slkNull),
-            TopicOrList(kind: slkNull),
-            TopicOrList(kind: slkNull)
-          ]
-        )
+      let filteredLogs = filterLogs(
+        allLogs,
+        AddressOrList(kind: slkList, list: @[]),
+        @[
+          TopicOrList(kind: slkNull),
+          TopicOrList(kind: slkNull),
+          TopicOrList(kind: slkNull),
+          TopicOrList(kind: slkNull),
+          TopicOrList(kind: slkNull),
+        ],
+      )
 
       check:
         len(filteredLogs) == 0
 
     test "Filter topics, specific topic at first position":
-      let topic = w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic =
+        w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
 
-      let filteredLogs =
-        filterLogs(
-          allLogs,
-          AddressOrList(kind: slkList, list: @[]),
-          @[TopicOrList(kind: slkList, list: @[topic])]
-        )
+      let filteredLogs = filterLogs(
+        allLogs,
+        AddressOrList(kind: slkList, list: @[]),
+        @[TopicOrList(kind: slkList, list: @[topic])],
+      )
 
       check:
         len(filteredLogs) == 15
-
 
       for log in filteredLogs:
         check:
           log.topics[0] == topic
 
     test "Filter topics, specific topic at first position and second position":
-      let topic = w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-      let topic1 = w3Hash("0x000000000000000000000000919040a01a0adcef25ed6ecbc6ab2a86ca6d77df")
+      let topic =
+        w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic1 =
+        w3Hash("0x000000000000000000000000919040a01a0adcef25ed6ecbc6ab2a86ca6d77df")
 
-      let filteredLogs =
-        filterLogs(
-          allLogs,
-          AddressOrList(kind: slkList, list: @[]),
-          @[TopicOrList(kind: slkList, list: @[topic]), TopicOrList(kind: slkList, list: @[topic1])]
-        )
+      let filteredLogs = filterLogs(
+        allLogs,
+        AddressOrList(kind: slkList, list: @[]),
+        @[
+          TopicOrList(kind: slkList, list: @[topic]),
+          TopicOrList(kind: slkList, list: @[topic1]),
+        ],
+      )
 
       check:
         len(filteredLogs) == 1
-
 
       for log in filteredLogs:
         check:
@@ -126,19 +139,20 @@ proc filtersMain*() =
           log.topics[1] == topic1
 
     test "Filter topics, specific topic at first position and third position":
-      let topic = w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-      let topic1 = w3Hash("0x000000000000000000000000fdc183d01a793613736cd40a5a578f49add1772b")
+      let topic =
+        w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic1 =
+        w3Hash("0x000000000000000000000000fdc183d01a793613736cd40a5a578f49add1772b")
 
-      let filteredLogs =
-        filterLogs(
-          allLogs,
-          AddressOrList(kind: slkList, list: @[]),
-          @[
-            TopicOrList(kind: slkList, list: @[topic]),
-            TopicOrList(kind: slkNull),
-            TopicOrList(kind: slkList, list: @[topic1])
-          ]
-        )
+      let filteredLogs = filterLogs(
+        allLogs,
+        AddressOrList(kind: slkList, list: @[]),
+        @[
+          TopicOrList(kind: slkList, list: @[topic]),
+          TopicOrList(kind: slkNull),
+          TopicOrList(kind: slkList, list: @[topic1]),
+        ],
+      )
 
       check:
         len(filteredLogs) == 1
@@ -149,17 +163,16 @@ proc filtersMain*() =
           log.topics[2] == topic1
 
     test "Filter topics, or query at first position":
-      let topic = w3Hash("0x4a504a94899432a9846e1aa406dceb1bcfd538bb839071d49d1e5e23f5be30ef")
-      let topic1 = w3Hash("0x526441bb6c1aba3c9a4a6ca1d6545da9c2333c8c48343ef398eb858d72b79236")
+      let topic =
+        w3Hash("0x4a504a94899432a9846e1aa406dceb1bcfd538bb839071d49d1e5e23f5be30ef")
+      let topic1 =
+        w3Hash("0x526441bb6c1aba3c9a4a6ca1d6545da9c2333c8c48343ef398eb858d72b79236")
 
-      let filteredLogs =
-        filterLogs(
-          allLogs,
-          AddressOrList(kind: slkList, list: @[]),
-          @[
-            TopicOrList(kind: slkList, list: @[topic, topic1])
-          ]
-        )
+      let filteredLogs = filterLogs(
+        allLogs,
+        AddressOrList(kind: slkList, list: @[]),
+        @[TopicOrList(kind: slkList, list: @[topic, topic1])],
+      )
 
       check:
         len(filteredLogs) == 2
@@ -169,21 +182,24 @@ proc filtersMain*() =
           log.topics[0] == topic or log.topics[0] == topic1
 
     test "Filter topics, or query at first position and or query at second position":
-      let topic = w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-      let topic1 = w3Hash("0xa64da754fccf55aa65a1f0128a648633fade3884b236e879ee9f64c78df5d5d7")
+      let topic =
+        w3Hash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+      let topic1 =
+        w3Hash("0xa64da754fccf55aa65a1f0128a648633fade3884b236e879ee9f64c78df5d5d7")
 
-      let topic2 = w3Hash("0x000000000000000000000000e16c02eac87920033ac72fc55ee1df3151c75786")
-      let topic3 = w3Hash("0x000000000000000000000000b626a5facc4de1c813f5293ec3be31979f1d1c78")
+      let topic2 =
+        w3Hash("0x000000000000000000000000e16c02eac87920033ac72fc55ee1df3151c75786")
+      let topic3 =
+        w3Hash("0x000000000000000000000000b626a5facc4de1c813f5293ec3be31979f1d1c78")
 
-      let filteredLogs =
-        filterLogs(
-          allLogs,
-          AddressOrList(kind: slkNull),
-          @[
-            TopicOrList(kind: slkList, list: @[topic, topic1]),
-            TopicOrList(kind: slkList, list: @[topic2, topic3])
-          ]
-        )
+      let filteredLogs = filterLogs(
+        allLogs,
+        AddressOrList(kind: slkNull),
+        @[
+          TopicOrList(kind: slkList, list: @[topic, topic1]),
+          TopicOrList(kind: slkList, list: @[topic2, topic3]),
+        ],
+      )
 
       check:
         len(filteredLogs) == 2
@@ -196,7 +212,8 @@ proc filtersMain*() =
     # general propety based tests
     test "Specific address query should provide results only with given address":
       for log in allLogs:
-        let filtered = filterLogs(allLogs, AddressOrList(kind: slkSingle, single: log.address), @[])
+        let filtered =
+          filterLogs(allLogs, AddressOrList(kind: slkSingle, single: log.address), @[])
 
         check:
           len(filtered) > 0

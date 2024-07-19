@@ -23,9 +23,7 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-func mustBeGeneric(
-    root: VertexID;
-      ): Result[void,AristoError] =
+func mustBeGeneric(root: VertexID): Result[void, AristoError] =
   ## Verify that `root` is neither from an accounts tree nor a strorage tree.
   if not root.isValid:
     return err(FetchRootVidMissing)
@@ -35,12 +33,9 @@ func mustBeGeneric(
     return err(FetchStoRootNotAccepted)
   ok()
 
-
 proc retrieveLeaf(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[VertexRef,AristoError] =
+    db: AristoDbRef, root: VertexID, path: openArray[byte]
+): Result[VertexRef, AristoError] =
   if path.len == 0:
     return err(FetchPathInvalid)
 
@@ -56,9 +51,8 @@ proc retrieveLeaf(
   return err(FetchPathNotFound)
 
 proc retrieveAccountPayload(
-    db: AristoDbRef;
-    accPath: Hash256;
-      ): Result[LeafPayload,AristoError] =
+    db: AristoDbRef, accPath: Hash256
+): Result[LeafPayload, AristoError] =
   if (let leafVtx = db.layersGetAccLeaf(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
@@ -72,19 +66,16 @@ proc retrieveAccountPayload(
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
-  let
-    leafVtx = db.retrieveLeaf(VertexID(1), accPath.data).valueOr:
-      if error == FetchAccInaccessible:
-        return err(FetchPathNotFound)
-      return err(error)
+  let leafVtx = db.retrieveLeaf(VertexID(1), accPath.data).valueOr:
+    if error == FetchAccInaccessible:
+      return err(FetchPathNotFound)
+    return err(error)
 
   ok db.accLeaves.lruAppend(accKey, leafVtx, accLruSize).lData
 
 proc retrieveMerkleHash(
-    db: AristoDbRef;
-    root: VertexID;
-    updateOk: bool;
-      ): Result[Hash256,AristoError] =
+    db: AristoDbRef, root: VertexID, updateOk: bool
+): Result[Hash256, AristoError] =
   let key =
     if updateOk:
       db.computeKey((root, root)).valueOr:
@@ -99,12 +90,9 @@ proc retrieveMerkleHash(
       key
   ok key.to(Hash256)
 
-
 proc hasPayload(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
+    db: AristoDbRef, root: VertexID, path: openArray[byte]
+): Result[bool, AristoError] =
   let error = db.retrieveLeaf(root, path).errorOr:
     return ok(true)
 
@@ -112,10 +100,7 @@ proc hasPayload(
     return ok(false)
   err(error)
 
-proc hasAccountPayload(
-    db: AristoDbRef;
-    accPath: Hash256;
-      ): Result[bool,AristoError] =
+proc hasAccountPayload(db: AristoDbRef, accPath: Hash256): Result[bool, AristoError] =
   let error = db.retrieveAccountPayload(accPath).errorOr:
     return ok(true)
 
@@ -128,9 +113,9 @@ proc hasAccountPayload(
 # ------------------------------------------------------------------------------
 
 proc fetchAccountHike*(
-    db: AristoDbRef;                   # Database
-    accPath: Hash256;          # Implies a storage ID (if any)
-      ): Result[Hike,AristoError] =
+    db: AristoDbRef, # Database
+    accPath: Hash256, # Implies a storage ID (if any)
+): Result[Hike, AristoError] =
   ## Verify that the `accPath` argument properly referres to a storage root
   ## vertex ID. The function will reset the keys along the `accPath` for
   ## being modified.
@@ -146,14 +131,11 @@ proc fetchAccountHike*(
   let wp = hike.legs[^1].wp
   if wp.vtx.vType != Leaf:
     return err(FetchAccPathWithoutLeaf)
-  assert wp.vtx.lData.pType == AccountData            # debugging only
+  assert wp.vtx.lData.pType == AccountData # debugging only
 
   ok(move(hike))
 
-proc fetchStorageID*(
-    db: AristoDbRef;
-    accPath: Hash256;
-      ): Result[VertexID,AristoError] =
+proc fetchStorageID*(db: AristoDbRef, accPath: Hash256): Result[VertexID, AristoError] =
   ## Public helper function for retrieving a storage (vertex) ID for a
   ## given account.
   let
@@ -166,10 +148,8 @@ proc fetchStorageID*(
   ok stoID
 
 proc retrieveStoragePayload(
-    db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
-      ): Result[UInt256,AristoError] =
+    db: AristoDbRef, accPath: Hash256, stoPath: Hash256
+): Result[UInt256, AristoError] =
   let mixPath = AccountKey.mixUp(accPath, stoPath)
   if (let leafVtx = db.layersGetStoLeaf(mixPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
@@ -184,17 +164,14 @@ proc retrieveStoragePayload(
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
-  let
-    leafVtx = db.retrieveLeaf(? db.fetchStorageID(accPath), stoPath.data).valueOr:
-      return err(error)
+  let leafVtx = db.retrieveLeaf(?db.fetchStorageID(accPath), stoPath.data).valueOr:
+    return err(error)
 
   ok db.stoLeaves.lruAppend(mixKey, leafVtx, accLruSize).lData.stoData
 
 proc hasStoragePayload(
-    db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
-      ): Result[bool,AristoError] =
+    db: AristoDbRef, accPath: Hash256, stoPath: Hash256
+): Result[bool, AristoError] =
   let error = db.retrieveStoragePayload(accPath, stoPath).errorOr:
     return ok(true)
 
@@ -206,90 +183,71 @@ proc hasStoragePayload(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchLastSavedState*(
-    db: AristoDbRef;
-      ): Result[SavedState,AristoError] =
+proc fetchLastSavedState*(db: AristoDbRef): Result[SavedState, AristoError] =
   ## Wrapper around `getLstUbe()`. The function returns the state of the last
   ## saved state. This is a Merkle hash tag for vertex with ID 1 and a bespoke
   ## `uint64` identifier (may be interpreted as block number.)
   db.getLstUbe()
 
 proc fetchAccountRecord*(
-    db: AristoDbRef;
-    accPath: Hash256;
-      ): Result[AristoAccount,AristoError] =
+    db: AristoDbRef, accPath: Hash256
+): Result[AristoAccount, AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let pyl = ? db.retrieveAccountPayload(accPath)
-  assert pyl.pType == AccountData   # debugging only
+  let pyl = ?db.retrieveAccountPayload(accPath)
+  assert pyl.pType == AccountData # debugging only
 
   ok pyl.account
 
-proc fetchAccountState*(
-    db: AristoDbRef;
-    updateOk: bool;
-      ): Result[Hash256,AristoError] =
+proc fetchAccountState*(db: AristoDbRef, updateOk: bool): Result[Hash256, AristoError] =
   ## Fetch the Merkle hash of the account root.
   db.retrieveMerkleHash(VertexID(1), updateOk)
 
-proc hasPathAccount*(
-    db: AristoDbRef;
-    accPath: Hash256;
-      ): Result[bool,AristoError] =
+proc hasPathAccount*(db: AristoDbRef, accPath: Hash256): Result[bool, AristoError] =
   ## For an account record indexed by `accPath` query whether this record exists
   ## on the database.
   ##
   db.hasAccountPayload(accPath)
 
 proc fetchGenericData*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[Blob,AristoError] =
+    db: AristoDbRef, root: VertexID, path: openArray[byte]
+): Result[Blob, AristoError] =
   ## For a generic sub-tree starting at `root`, fetch the data record
   ## indexed by `path`.
   ##
-  ? root.mustBeGeneric()
-  let pyl = ? db.retrieveLeaf(root, path)
-  assert pyl.lData.pType == RawData   # debugging only
+  ?root.mustBeGeneric()
+  let pyl = ?db.retrieveLeaf(root, path)
+  assert pyl.lData.pType == RawData # debugging only
   ok pyl.lData.rawBlob
 
 proc fetchGenericState*(
-    db: AristoDbRef;
-    root: VertexID;
-    updateOk: bool;
-      ): Result[Hash256,AristoError] =
+    db: AristoDbRef, root: VertexID, updateOk: bool
+): Result[Hash256, AristoError] =
   ## Fetch the Merkle hash of the argument `root`.
   db.retrieveMerkleHash(root, updateOk)
 
 proc hasPathGeneric*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
+    db: AristoDbRef, root: VertexID, path: openArray[byte]
+): Result[bool, AristoError] =
   ## For a generic sub-tree starting at `root` and indexed by `path`, query
   ## whether this record exists on the database.
   ##
-  ? root.mustBeGeneric()
+  ?root.mustBeGeneric()
   db.hasPayload(root, path)
 
 proc fetchStorageData*(
-    db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
-      ): Result[UInt256,AristoError] =
+    db: AristoDbRef, accPath: Hash256, stoPath: Hash256
+): Result[UInt256, AristoError] =
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
   ##
-  let leafVtx = ? db.retrieveLeaf(? db.fetchStorageID accPath, stoPath.data)
-  assert leafVtx.lData.pType == StoData   # debugging only
+  let leafVtx = ?db.retrieveLeaf(?db.fetchStorageID accPath, stoPath.data)
+  assert leafVtx.lData.pType == StoData # debugging only
   ok leafVtx.lData.stoData
 
 proc fetchStorageState*(
-    db: AristoDbRef;
-    accPath: Hash256;
-    updateOk: bool;
-      ): Result[Hash256,AristoError] =
+    db: AristoDbRef, accPath: Hash256, updateOk: bool
+): Result[Hash256, AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
   let stoID = db.fetchStorageID(accPath).valueOr:
     if error == FetchPathNotFound:
@@ -298,19 +256,14 @@ proc fetchStorageState*(
   db.retrieveMerkleHash(stoID, updateOk)
 
 proc hasPathStorage*(
-    db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
-      ): Result[bool,AristoError] =
+    db: AristoDbRef, accPath: Hash256, stoPath: Hash256
+): Result[bool, AristoError] =
   ## For a storage tree related to account `accPath`, query whether the data
   ## record indexed by `path` exists on the database.
   ##
   db.hasStoragePayload(accPath, stoPath)
 
-proc hasStorageData*(
-    db: AristoDbRef;
-    accPath: Hash256;
-      ): Result[bool,AristoError] =
+proc hasStorageData*(db: AristoDbRef, accPath: Hash256): Result[bool, AristoError] =
   ## For a storage tree related to account `accPath`, query whether there
   ## is a non-empty data storage area at all.
   ##

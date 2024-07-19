@@ -8,12 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/strutils,
-  eth/common,
-  chronicles,
-  ./engine_spec,
-  ../helper
+import std/strutils, eth/common, chronicles, ./engine_spec, ../helper
 
 type
   PrevRandaoTransactionTest* = ref object of EngineSpec
@@ -50,37 +45,42 @@ method execute(cs: PrevRandaoTransactionTest, env: TestEnv): bool =
   if cs.blockCount > 0:
     shadow.blockCount = cs.blockCount
 
-  let pbRes = env.clMock.produceBlocks(shadow.blockCount, BlockProcessCallbacks(
-    onPayloadProducerSelected: proc(): bool =
-      let tc = BaseTx(
-        recipient:  Opt.some(prevRandaoContractAddr),
-        amount:     0.u256,
-        txType:     cs.txType,
-        gasLimit:   75000,
-      )
-      let tx = env.makeNextTx(tc)
-      let ok = env.sendTx(tx)
-      testCond ok:
-        fatal "Error trying to send transaction"
+  let pbRes = env.clMock.produceBlocks(
+    shadow.blockCount,
+    BlockProcessCallbacks(
+      onPayloadProducerSelected: proc(): bool =
+        let tc = BaseTx(
+          recipient: Opt.some(prevRandaoContractAddr),
+          amount: 0.u256,
+          txType: cs.txType,
+          gasLimit: 75000,
+        )
+        let tx = env.makeNextTx(tc)
+        let ok = env.sendTx(tx)
+        testCond ok:
+          fatal "Error trying to send transaction"
 
-      shadow.txs.add(tx)
-      inc shadow.currentTxIndex
-      return true
-    ,
-    onForkchoiceBroadcast: proc(): bool =
-      # Check the transaction tracing, which is client specific
-      let expectedPrevRandao = env.clMock.prevRandaoHistory[env.clMock.latestHeader.number+1]
-      let res = debugPrevRandaoTransaction(env.engine.client, shadow.txs[shadow.currentTxIndex-1], expectedPrevRandao)
-      testCond res.isOk:
-        fatal "Error during transaction tracing", msg=res.error
+        shadow.txs.add(tx)
+        inc shadow.currentTxIndex
+        return true,
+      onForkchoiceBroadcast: proc(): bool =
+        # Check the transaction tracing, which is client specific
+        let expectedPrevRandao =
+          env.clMock.prevRandaoHistory[env.clMock.latestHeader.number + 1]
+        let res = debugPrevRandaoTransaction(
+          env.engine.client, shadow.txs[shadow.currentTxIndex - 1], expectedPrevRandao
+        )
+        testCond res.isOk:
+          fatal "Error during transaction tracing", msg = res.error
 
-      return true
-  ))
+        return true,
+    ),
+  )
   testCond pbRes
 
-  for i in shadow.startBlockNumber..env.clMock.latestExecutedPayload.blockNumber.uint64:
+  for i in shadow.startBlockNumber .. env.clMock.latestExecutedPayload.blockNumber.uint64:
     if not checkPrevRandaoValue(env.engine.client, env.clMock.prevRandaoHistory[i], i):
-      fatal "wrong prev randao", index=i
+      fatal "wrong prev randao", index = i
       return false
 
   return true

@@ -57,7 +57,9 @@ func fromStackElem(elem: EvmStackElement, _: type EthAddress): EthAddress =
 template fromStackElem(elem: EvmStackElement, _: type Hash256): Hash256 =
   Hash256(data: elem.toBytesBE())
 
-template fromStackElem(elem: EvmStackElement, _: type EvmStackBytes32): EvmStackBytes32 =
+template fromStackElem(
+    elem: EvmStackElement, _: type EvmStackBytes32
+): EvmStackBytes32 =
   elem.toBytesBE()
 
 func pushAux[T](stack: var EvmStack, value: T): EvmResultVoid =
@@ -73,12 +75,14 @@ func ensurePop(stack: EvmStack, expected: int): EvmResultVoid =
   ok()
 
 func popAux(stack: var EvmStack, T: type): EvmResult[T] =
-  ? ensurePop(stack, 1)
+  ?ensurePop(stack, 1)
   result = ok(fromStackElem(stack.values[^1], T))
   stack.values.setLen(stack.values.len - 1)
 
-func internalPopTuple(stack: var EvmStack, T: type, tupleLen: static[int]): EvmResult[T] =
-  ? ensurePop(stack, tupleLen)
+func internalPopTuple(
+    stack: var EvmStack, T: type, tupleLen: static[int]
+): EvmResult[T] =
+  ?ensurePop(stack, tupleLen)
   var
     i = 0
     v: T
@@ -91,14 +95,16 @@ func internalPopTuple(stack: var EvmStack, T: type, tupleLen: static[int]): EvmR
 
 macro genTupleType(len: static[int], elemType: untyped): untyped =
   result = nnkTupleConstr.newNimNode()
-  for i in 0 ..< len: result.add(elemType)
+  for i in 0 ..< len:
+    result.add(elemType)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-func push*(stack: var EvmStack,
-           value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
+func push*(
+    stack: var EvmStack, value: EvmStackInts | UInt256 | EthAddress | Hash256
+): EvmResultVoid =
   pushAux(stack, value)
 
 func push*(stack: var EvmStack, value: openArray[byte]): EvmResultVoid =
@@ -108,12 +114,12 @@ func popInt*(stack: var EvmStack): EvmResult[UInt256] =
   popAux(stack, UInt256)
 
 func popSafeInt*(stack: var EvmStack): EvmResult[int] =
-  ? ensurePop(stack, 1)
+  ?ensurePop(stack, 1)
   result = ok(fromStackElem(stack.values[^1], UInt256).safeInt)
   stack.values.setLen(stack.values.len - 1)
 
 func popMemRef*(stack: var EvmStack): EvmResult[int] =
-  ? ensurePop(stack, 1)
+  ?ensurePop(stack, 1)
   result = ok(fromStackElem(stack.values[^1], UInt256).cleanMemRef)
   stack.values.setLen(stack.values.len - 1)
 
@@ -128,9 +134,7 @@ func popTopic*(stack: var EvmStack): EvmResult[EvmStackBytes32] =
   popAux(stack, EvmStackBytes32)
 
 func init*(_: type EvmStack): EvmStack =
-  EvmStack(
-    values: newSeqOfCap[EvmStackElement](128)
-  )
+  EvmStack(values: newSeqOfCap[EvmStackElement](128))
 
 func swap*(stack: var EvmStack, position: int): EvmResultVoid =
   ##  Perform a SWAP operation on the stack
@@ -159,19 +163,20 @@ func peekSafeInt*(stack: EvmStack): EvmResult[int] =
   ok(fromStackElem(stack.values[^1], UInt256).safeInt)
 
 func `[]`*(stack: EvmStack, i: BackwardsIndex, T: typedesc): EvmResult[T] =
-  ? ensurePop(stack, int(i))
+  ?ensurePop(stack, int(i))
   ok(fromStackElem(stack.values[i], T))
 
 func peekInt*(stack: EvmStack): EvmResult[UInt256] =
-  ? ensurePop(stack, 1)
+  ?ensurePop(stack, 1)
   ok(fromStackElem(stack.values[^1], UInt256))
 
 func peekAddress*(stack: EvmStack): EvmResult[EthAddress] =
-  ? ensurePop(stack, 1)
+  ?ensurePop(stack, 1)
   ok(fromStackElem(stack.values[^1], EthAddress))
 
-func top*(stack: EvmStack,
-          value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
+func top*(
+    stack: EvmStack, value: EvmStackInts | UInt256 | EthAddress | Hash256
+): EvmResultVoid =
   if stack.values.len == 0:
     return err(stackErr(StackInsufficient))
   toStackElem(value, stack.values[^1])
@@ -192,8 +197,7 @@ iterator pairs*(stack: EvmStack): (int, UInt256) =
 template lsCheck*(stack: EvmStack, expected: int): EvmResultVoid =
   ensurePop(stack, expected)
 
-func lsTop*(stack: EvmStack,
-            value: EvmStackInts | UInt256 | EthAddress | Hash256) =
+func lsTop*(stack: EvmStack, value: EvmStackInts | UInt256 | EthAddress | Hash256) =
   toStackElem(value, stack.values[^1])
 
 func lsTop*(stack: var EvmStack, value: openArray[byte]) =
@@ -254,4 +258,3 @@ template unaryAddress*(stack: EvmStack, unOp): EvmResultVoid =
     EvmResultVoid.ok()
   else:
     EvmResultVoid.err(stackErr(StackInsufficient))
-    

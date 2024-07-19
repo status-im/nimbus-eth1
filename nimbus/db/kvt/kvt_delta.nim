@@ -27,11 +27,10 @@ proc deltaPersistentOk*(db: KvtDbRef): bool =
   ## Check whether the balancer filter can be merged into the backend
   not db.backend.isNil and db.isCentre
 
-
 proc deltaPersistent*(
-    db: KvtDbRef;                      # Database
-    reCentreOk = false;
-      ): Result[void,KvtError] =
+    db: KvtDbRef, # Database
+    reCentreOk = false,
+): Result[void, KvtError] =
   ## Resolve (i.e. move) the backend filter into the physical backend database.
   ##
   ## This needs write permission on the backend DB for the argument `db`
@@ -56,15 +55,16 @@ proc deltaPersistent*(
   if db != parent:
     if not reCentreOk:
       return err(FilBackendRoMode)
-    ? db.reCentre()
+    ?db.reCentre()
   # Always re-centre to `parent` (in case `reCentreOk` was set)
-  defer: discard parent.reCentre()
+  defer:
+    discard parent.reCentre()
 
   # Update forked balancers here do that errors are detected early (if any.)
   if 0 < db.nForked:
     let rev = db.revFilter(db.balancer).valueOr:
       return err(error[1])
-    if 0  < rev.sTab.len: # Can an empty `rev` happen at all?
+    if 0 < rev.sTab.len: # Can an empty `rev` happen at all?
       var unsharedRevOk = true
       for w in db.forked:
         if not w.db.balancer.isValid:
@@ -73,13 +73,13 @@ proc deltaPersistent*(
         # not shared (i.e. only previously merged into the w.db.balancer.)
         # Note that it is trivially true for a single fork.
         let modLowerOk = w.isLast and unsharedRevOk
-        w.db.balancer = deltaMerge(
-          w.db.balancer, modUpperOk=false, rev, modLowerOk=modLowerOk)
+        w.db.balancer =
+          deltaMerge(w.db.balancer, modUpperOk = false, rev, modLowerOk = modLowerOk)
 
   # Store structural single trie entries
-  let writeBatch = ? be.putBegFn()
+  let writeBatch = ?be.putBegFn()
   be.putKvpFn(writeBatch, db.balancer.sTab.pairs.toSeq)
-  ? be.putEndFn writeBatch
+  ?be.putEndFn writeBatch
 
   # Done with balancer, all saved to backend
   db.balancer = LayerRef(nil)

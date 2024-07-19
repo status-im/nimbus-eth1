@@ -21,35 +21,35 @@ import
   strformat,
   ../../common/evmforks,
   ./op_codes,
-  ./op_handlers/[oph_defs,
-                 oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
-                 oph_memory, oph_push, oph_dup, oph_swap, oph_log,
-                 oph_create, oph_call, oph_sysops]
+  ./op_handlers/[
+    oph_defs, oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata, oph_memory,
+    oph_push, oph_dup, oph_swap, oph_log, oph_create, oph_call, oph_sysops,
+  ]
 
-const
-  allHandlersList = @[
+const allHandlersList =
+  @[
     (VmOpExecArithmetic, "Arithmetic"),
-    (VmOpExecHash,       "Hash"),
-    (VmOpExecEnvInfo,    "EnvInfo"),
-    (VmOpExecBlockData,  "BlockData"),
-    (VmOpExecMemory,     "Memory"),
-    (VmOpExecPush,       "Push"),
-    (VmOpExecPushZero,   "PushZero"),
-    (VmOpExecDup,        "Dup"),
-    (VmOpExecSwap,       "Swap"),
-    (VmOpExecLog,        "Log"),
-    (VmOpExecCreate,     "Create"),
-    (VmOpExecCall,       "Call"),
-    (VmOpExecSysOp,      "SysOp")]
+    (VmOpExecHash, "Hash"),
+    (VmOpExecEnvInfo, "EnvInfo"),
+    (VmOpExecBlockData, "BlockData"),
+    (VmOpExecMemory, "Memory"),
+    (VmOpExecPush, "Push"),
+    (VmOpExecPushZero, "PushZero"),
+    (VmOpExecDup, "Dup"),
+    (VmOpExecSwap, "Swap"),
+    (VmOpExecLog, "Log"),
+    (VmOpExecCreate, "Create"),
+    (VmOpExecCall, "Call"),
+    (VmOpExecSysOp, "SysOp"),
+  ]
 
 # ------------------------------------------------------------------------------
 # Helper
 # ------------------------------------------------------------------------------
 
-proc mkOpTable(selected: EVMFork): array[Op,VmOpExec] {.compileTime.} =
-
+proc mkOpTable(selected: EVMFork): array[Op, VmOpExec] {.compileTime.} =
   # Collect selected <fork> entries
-  for (subList,subName) in allHandlersList:
+  for (subList, subName) in allHandlersList:
     for w in subList:
       if selected notin w.forks:
         continue
@@ -57,7 +57,7 @@ proc mkOpTable(selected: EVMFork): array[Op,VmOpExec] {.compileTime.} =
       var prvInfo = result[w.opCode].info
       if prvInfo != "" or 0 < result[w.opCode].forks.card:
         echo &"*** {subName}: duplicate <{w.opCode}> entry: ",
-              &"\"{prvInfo}\" vs. \"{w.info}\""
+          &"\"{prvInfo}\" vs. \"{w.info}\""
         doAssert result[w.opCode].info == ""
         doAssert result[w.opCode].forks.card == 0
       result[w.opCode] = w
@@ -81,11 +81,11 @@ proc mkOpTable(selected: EVMFork): array[Op,VmOpExec] {.compileTime.} =
 #      rc[w] = w.mkOpTable
 #    rc
 
-type
-  vmOpHandlersRec* = tuple
-    name: string    ## Name (or ID) of op handler
-    info: string    ## Some op handler info
-    run:  VmOpFn    ## Executable handler
+type vmOpHandlersRec* =
+  tuple
+    name: string ## Name (or ID) of op handler
+    info: string ## Some op handler info
+    run: VmOpFn ## Executable handler
 
 const
   # Pack handler record.
@@ -113,7 +113,7 @@ const
         for op in Op:
           rc[fork][op].name = tab[op].name
           rc[fork][op].info = tab[op].info
-          rc[fork][op].run  = tab[op].exec
+          rc[fork][op].run = tab[op].exec
       rc
 
 # ------------------------------------------------------------------------------
@@ -121,16 +121,15 @@ const
 # ------------------------------------------------------------------------------
 
 when isMainModule and isChatty:
-
-  proc opHandlersRun(fork: EVMFork; op: Op; cpt: VmCpt) {.used.} =
+  proc opHandlersRun(fork: EVMFork, op: Op, cpt: VmCpt) {.used.} =
     ## Given a particular `fork` and an `op`-code, run the associated handler
     vmOpHandlers[fork][op].run(cpt)
 
-  proc opHandlersName(fork: EVMFork; op: Op): string {.used.} =
+  proc opHandlersName(fork: EVMFork, op: Op): string {.used.} =
     ## Get name (or ID) of op handler
     vmOpHandlers[fork][op].name
 
-  proc opHandlersInfo(fork: EVMFork; op: Op): string {.used.} =
+  proc opHandlersInfo(fork: EVMFork, op: Op): string {.used.} =
     ## Get some op handler info
     vmOpHandlers[fork][op].info
 

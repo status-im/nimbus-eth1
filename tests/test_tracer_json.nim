@@ -22,23 +22,23 @@ import
   ../nimbus/[tracer, evm/types],
   ../nimbus/common/common
 
-proc setErrorLevel {.used.} =
+proc setErrorLevel() {.used.} =
   when defined(chronicles_runtime_filtering) and loggingEnabled:
     setLogLevel(LogLevel.ERROR)
 
-proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
+proc preLoadAristoDb(cdb: CoreDbRef, jKvp: JsonNode, num: BlockNumber) =
   ## Hack for `Aristo` pre-lading using the `snap` protocol proof-loader
   var
     proof: seq[SnapProof] # for pre-loading MPT
-    predRoot: Hash256     # from predecessor header
-    txRoot: Hash256       # header with block number `num`
-    rcptRoot: Hash256     # ditto
+    predRoot: Hash256 # from predecessor header
+    txRoot: Hash256 # header with block number `num`
+    rcptRoot: Hash256 # ditto
   let
     adb = cdb.mpt
     kdb = cdb.kvt
 
   # Fill KVT and collect `proof` data
-  for (k,v) in jKvp.pairs:
+  for (k, v) in jKvp.pairs:
     let
       key = hexToSeqByte(k)
       val = hexToSeqByte(v.getStr())
@@ -54,7 +54,7 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
           if header.number == num:
             txRoot = header.txRoot
             rcptRoot = header.receiptsRoot
-          elif header.number == num-1:
+          elif header.number == num - 1:
             predRoot = header.stateRoot
         except RlpError:
           discard
@@ -75,7 +75,9 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   doAssert adb.mergeProof(proof).isOk
 
 # use tracerTestGen.nim to generate additional test data
-proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: CoreDbRef) =
+proc testFixtureImpl(
+    node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: CoreDbRef
+) =
   setErrorLevel()
 
   var
@@ -104,8 +106,8 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   for i in 0 ..< receipts.len:
     let receipt = receipts[i]
     let stateDiff = txTraces[i]["stateDiff"]
-    check receipt["root"].getStr().toLowerAscii() == stateDiff["afterRoot"].getStr().toLowerAscii()
-
+    check receipt["root"].getStr().toLowerAscii() ==
+      stateDiff["afterRoot"].getStr().toLowerAscii()
 
 proc testFixtureAristo(node: JsonNode, testStatusIMPL: var TestStatus) =
   node.testFixtureImpl(testStatusIMPL, newCoreDbRef AristoDbMemory)

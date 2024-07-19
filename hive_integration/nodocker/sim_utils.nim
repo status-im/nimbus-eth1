@@ -7,20 +7,15 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import
-  std/[tables, strutils, times],
-  ../../nimbus/utils/utils,
-  unittest2
+import std/[tables, strutils, times], ../../nimbus/utils/utils, unittest2
 
-export
-  tables, strutils, unittest2
+export tables, strutils, unittest2
 
-type
-  SimStat* = object
-    ok*: int
-    skipped*: int
-    failed*: int
-    failingCases*: seq[string]
+type SimStat* = object
+  ok*: int
+  skipped*: int
+  failed*: int
+  failingCases*: seq[string]
 
 proc inc*(stat: var SimStat, name: string, status: TestStatus) =
   echo name, ", ", status
@@ -38,7 +33,8 @@ proc `$`*(stat: SimStat): string =
     for c in stat.failingCases:
       result.add "    - $1 \n" % [c]
 
-  result.add "  - ok: $1, skipped: $2, failed: $3" % [$stat.ok, $stat.skipped, $stat.failed]
+  result.add "  - ok: $1, skipped: $2, failed: $3" %
+    [$stat.ok, $stat.skipped, $stat.failed]
 
 proc print*(stat: SimStat, dur: Duration, name: string) =
   var f = open(name & ".md", fmWrite)

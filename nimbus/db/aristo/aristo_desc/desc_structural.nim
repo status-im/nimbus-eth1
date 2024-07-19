@@ -14,11 +14,7 @@
 
 {.push raises: [].}
 
-import
-  std/[hashes, tables],
-  stint,
-  eth/common,
-  "."/[desc_error, desc_identifiers]
+import std/[hashes, tables], stint, eth/common, "."/[desc_error, desc_identifiers]
 
 export stint
 
@@ -26,8 +22,8 @@ type
   LeafTiePayload* = object
     ## Generalised key-value pair for a sub-trie. The main trie is the
     ## sub-trie with `root=VertexID(1)`.
-    leafTie*: LeafTie                ## Full `Patricia Trie` path root-to-leaf
-    payload*: LeafPayload             ## Leaf data payload (see below)
+    leafTie*: LeafTie ## Full `Patricia Trie` path root-to-leaf
+    payload*: LeafPayload ## Leaf data payload (see below)
 
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
@@ -37,15 +33,15 @@ type
   AristoAccount* = object
     ## Application relevant part of an Ethereum account. Note that the storage
     ## data/tree reference is not part of the account (see `LeafPayload` below.)
-    nonce*:     AccountNonce         ## Some `uint64` type
-    balance*:   UInt256
-    codeHash*:  Hash256
+    nonce*: AccountNonce ## Some `uint64` type
+    balance*: UInt256
+    codeHash*: Hash256
 
   PayloadType* = enum
     ## Type of leaf data.
-    RawData                          ## Generic data
-    AccountData                      ## `Aristo account` with vertex IDs links
-    StoData                          ## Slot storage data
+    RawData ## Generic data
+    AccountData ## `Aristo account` with vertex IDs links
+    StoData ## Slot storage data
 
   LeafPayload* = object
     ## The payload type depends on the sub-tree used. The `VertexID(1)` rooted
@@ -53,10 +49,10 @@ type
     ## while generic have RawData
     case pType*: PayloadType
     of RawData:
-      rawBlob*: Blob                 ## Opaque data, default value
+      rawBlob*: Blob ## Opaque data, default value
     of AccountData:
       account*: AristoAccount
-      stoID*: VertexID               ## Storage vertex ID (if any)
+      stoID*: VertexID ## Storage vertex ID (if any)
     of StoData:
       stoData*: UInt256
 
@@ -64,30 +60,28 @@ type
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     case vType*: VertexType
     of Leaf:
-      lPfx*: NibblesBuf              ## Portion of path segment
-      lData*: LeafPayload            ## Reference to data payload
+      lPfx*: NibblesBuf ## Portion of path segment
+      lData*: LeafPayload ## Reference to data payload
     of Branch:
-      ePfx*: NibblesBuf              ## Portion of path segment - if non-empty,
-                                     ## it's an extension node!
-      bVid*: array[16,VertexID]      ## Edge list with vertex IDs
+      ePfx*: NibblesBuf
+        ## Portion of path segment - if non-empty,
+        ## it's an extension node!
+      bVid*: array[16, VertexID] ## Edge list with vertex IDs
 
   NodeRef* = ref object of VertexRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
-    error*: AristoError              ## Used for error signalling in RLP decoder
-    key*: array[16,HashKey]          ## Merkle hash/es for vertices
+    error*: AristoError ## Used for error signalling in RLP decoder
+    key*: array[16, HashKey] ## Merkle hash/es for vertices
 
   # ----------------------
+  VidVtxPair* = object ## Handy helper structure
+    vid*: VertexID ## Table lookup vertex ID (if any)
+    vtx*: VertexRef ## Reference to vertex
 
-  VidVtxPair* = object
-    ## Handy helper structure
-    vid*: VertexID                    ## Table lookup vertex ID (if any)
-    vtx*: VertexRef                   ## Reference to vertex
-
-  SavedState* = object
-    ## Last saved state
-    key*: Hash256                    ## Some state hash (if any)
-    serial*: uint64                  ## Generic identifier from application
+  SavedState* = object ## Last saved state
+    key*: Hash256 ## Some state hash (if any)
+    serial*: uint64 ## Generic identifier from application
 
   LayerRef* = ref LayerObj
   LayerObj* = object
@@ -113,14 +107,14 @@ type
     ## tables. So a corresponding zero value or missing entry produces an
     ## inconsistent state that must be resolved.
     ##
-    sTab*: Table[RootedVertexID,VertexRef] ## Structural vertex table
-    kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
-    vTop*: VertexID                        ## Last used vertex ID
+    sTab*: Table[RootedVertexID, VertexRef] ## Structural vertex table
+    kMap*: Table[RootedVertexID, HashKey] ## Merkle hash key mapping
+    vTop*: VertexID ## Last used vertex ID
 
-    accLeaves*: Table[Hash256, VertexRef]  ## Account path -> VertexRef
-    stoLeaves*: Table[Hash256, VertexRef]  ## Storage path -> VertexRef
+    accLeaves*: Table[Hash256, VertexRef] ## Account path -> VertexRef
+    stoLeaves*: Table[Hash256, VertexRef] ## Storage path -> VertexRef
 
-    txUid*: uint                           ## Transaction identifier if positive
+    txUid*: uint ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
@@ -143,13 +137,12 @@ proc `==`*(a, b: LeafPayload): bool =
   if unsafeAddr(a) != unsafeAddr(b):
     if a.pType != b.pType:
       return false
-    case a.pType:
+    case a.pType
     of RawData:
       if a.rawBlob != b.rawBlob:
         return false
     of AccountData:
-      if a.account != b.account or
-         a.stoID != b.stoID:
+      if a.account != b.account or a.stoID != b.stoID:
         return false
     of StoData:
       if a.stoData != b.stoData:
@@ -165,7 +158,7 @@ proc `==`*(a, b: VertexRef): bool =
   if unsafeAddr(a[]) != unsafeAddr(b[]):
     if a.vType != b.vType:
       return false
-    case a.vType:
+    case a.vType
     of Leaf:
       if a.lPfx != b.lPfx or a.lData != b.lData:
         return false
@@ -178,9 +171,9 @@ proc `==`*(a, b: NodeRef): bool =
   ## Beware, potential deep comparison
   if a.VertexRef != b.VertexRef:
     return false
-  case a.vType:
+  case a.vType
   of Branch:
-    for n in 0..15:
+    for n in 0 .. 15:
       if a.bVid[n] != 0.VertexID or b.bVid[n] != 0.VertexID:
         if a.key[n] != b.key[n]:
           return false
@@ -194,21 +187,13 @@ proc `==`*(a, b: NodeRef): bool =
 
 func dup*(pld: LeafPayload): LeafPayload =
   ## Duplicate payload.
-  case pld.pType:
+  case pld.pType
   of RawData:
-    LeafPayload(
-      pType:    RawData,
-      rawBlob:  pld.rawBlob)
+    LeafPayload(pType: RawData, rawBlob: pld.rawBlob)
   of AccountData:
-    LeafPayload(
-      pType:   AccountData,
-      account: pld.account,
-      stoID:   pld.stoID)
+    LeafPayload(pType: AccountData, account: pld.account, stoID: pld.stoID)
   of StoData:
-    LeafPayload(
-      pType:   StoData,
-      stoData: pld.stoData
-    )
+    LeafPayload(pType: StoData, stoData: pld.stoData)
 
 func dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.
@@ -216,17 +201,11 @@ func dup*(vtx: VertexRef): VertexRef =
   if vtx.isNil:
     VertexRef(nil)
   else:
-    case vtx.vType:
+    case vtx.vType
     of Leaf:
-      VertexRef(
-        vType: Leaf,
-        lPfx:  vtx.lPfx,
-        lData: vtx.lData.dup)
+      VertexRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData.dup)
     of Branch:
-      VertexRef(
-        vType: Branch,
-        ePfx:  vtx.ePfx,
-        bVid:  vtx.bVid)
+      VertexRef(vType: Branch, ePfx: vtx.ePfx, bVid: vtx.bVid)
 
 func dup*(node: NodeRef): NodeRef =
   ## Duplicate node.
@@ -234,29 +213,19 @@ func dup*(node: NodeRef): NodeRef =
   if node.isNil:
     NodeRef(nil)
   else:
-    case node.vType:
+    case node.vType
     of Leaf:
-      NodeRef(
-        vType: Leaf,
-        lPfx:  node.lPfx,
-        lData: node.lData.dup,
-        key:   node.key)
+      NodeRef(vType: Leaf, lPfx: node.lPfx, lData: node.lData.dup, key: node.key)
     of Branch:
-      NodeRef(
-        vType: Branch,
-        ePfx:  node.ePfx,
-        bVid:  node.bVid,
-        key:   node.key)
+      NodeRef(vType: Branch, ePfx: node.ePfx, bVid: node.bVid, key: node.key)
 
 func dup*(wp: VidVtxPair): VidVtxPair =
   ## Safe copy of `wp` argument
-  VidVtxPair(
-    vid: wp.vid,
-    vtx: wp.vtx.dup)
+  VidVtxPair(vid: wp.vid, vtx: wp.vtx.dup)
 
 # ---------------
 
-func to*(node: NodeRef; T: type VertexRef): T =
+func to*(node: NodeRef, T: type VertexRef): T =
   ## Extract a copy of the `VertexRef` part from a `NodeRef`.
   node.VertexRef.dup
 

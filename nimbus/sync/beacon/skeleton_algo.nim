@@ -8,11 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import
-  ./skeleton_desc,
-  ./skeleton_utils,
-  ./skeleton_db,
-  ../../utils/utils
+import ./skeleton_desc, ./skeleton_utils, ./skeleton_db, ../../utils/utils
 
 {.push gcsafe, raises: [].}
 
@@ -23,7 +19,9 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc fastForwardHead(sk: SkeletonRef, last: Segment, target: uint64): Result[void, string] =
+proc fastForwardHead(
+    sk: SkeletonRef, last: Segment, target: uint64
+): Result[void, string] =
   # Try fast forwarding the chain head to the number
   let
     head = last.head
@@ -53,8 +51,7 @@ proc fastForwardHead(sk: SkeletonRef, last: Segment, target: uint64): Result[voi
     headBlockHash = headBlock.blockHash
 
   last.head = headBlock.u64
-  debug "lastchain head fast forwarded",
-    `from`=head, to=last.head, tail=last.tail
+  debug "lastchain head fast forwarded", `from` = head, to = last.head, tail = last.tail
   ok()
 
 proc backStep(sk: SkeletonRef): Result[uint64, string] =
@@ -70,7 +67,8 @@ proc backStep(sk: SkeletonRef): Result[uint64, string] =
     newTail = newTail + sk.conf.fillCanonicalBackStep
     maybeTailHeader = sk.getHeader(newTail, true).valueOr:
       return err(error)
-    if maybeTailHeader.isSome or newTail > sc.head: break
+    if maybeTailHeader.isSome or newTail > sc.head:
+      break
 
   if newTail > sc.head:
     newTail = sc.head
@@ -78,7 +76,7 @@ proc backStep(sk: SkeletonRef): Result[uint64, string] =
       return err(error)
 
   if maybeTailHeader.isSome and newTail > 0:
-    debug "Backstepped skeleton", head=sc.head, tail=newTail
+    debug "Backstepped skeleton", head = sc.head, tail = newTail
     let tailHeader = maybeTailHeader.get
     sk.last.tail = tailHeader.u64
     sk.last.next = tailHeader.parentHash
@@ -142,13 +140,13 @@ proc trySubChainsMerge*(sk: SkeletonRef): Result[bool, string] =
     # its head independent of matching or mismatching content
     if sc.tail >= sk.last.tail:
       # Fully overwritten, get rid of the subchain as a whole
-      debug "Previous subchain fully overwritten", sub=sc
+      debug "Previous subchain fully overwritten", sub = sc
       sk.removeSecond()
       edited = true
       continue
     else:
       # Partially overwritten, trim the head to the overwritten size
-      debug "Previous subchain partially overwritten", sub=sc
+      debug "Previous subchain partially overwritten", sub = sc
       sc.head = sk.last.tail - 1
       edited = true
 
@@ -163,7 +161,7 @@ proc trySubChainsMerge*(sk: SkeletonRef): Result[bool, string] =
       # only merge if we can integrate a big progress, as each merge leads
       # to disruption of the block fetcher to start a fresh
       if (sc.head - sc.tail) > sk.conf.subchainMergeMinimum:
-        debug "Previous subchain merged head", sub=sc
+        debug "Previous subchain merged head", sub = sc
         sk.last.tail = sc.tail
         sk.last.next = sc.next
         sk.removeSecond()
@@ -171,15 +169,17 @@ proc trySubChainsMerge*(sk: SkeletonRef): Result[bool, string] =
         # are invalid since we skipped ahead.
         merged = true
       else:
-        debug "Subchain ignored for merge", sub=sc
+        debug "Subchain ignored for merge", sub = sc
         sk.removeSecond()
       edited = true
 
-  if edited: sk.writeProgress()
+  if edited:
+    sk.writeProgress()
   ok(merged)
 
-proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
-                  Result[StatusAndNumber, string] =
+proc putBlocks*(
+    sk: SkeletonRef, headers: openArray[BlockHeader]
+): Result[StatusAndNumber, string] =
   ## Writes skeleton blocks to the db by number
   ## @returns number of blocks saved
   var
@@ -208,10 +208,10 @@ proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
     elif number == 0:
       let genesisHash = sk.genesisHash
       if headerHash == genesisHash:
-        return err("Skeleton pubBlocks with invalid genesis block " &
-          "number=" & $number &
-          ", hash=" & headerHash.short &
-          ", genesisHash=" & genesisHash.short)
+        return err(
+          "Skeleton pubBlocks with invalid genesis block " & "number=" & $number &
+            ", hash=" & headerHash.short & ", genesisHash=" & genesisHash.short
+        )
       continue
 
     # Extend subchain or create new segment if necessary
@@ -225,9 +225,7 @@ proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
       # Critical error, we expect new incoming blocks to extend the canonical
       # subchain which is the [0]'th
       debug "Blocks don't extend canonical subchain",
-        sub=sk.last,
-        number,
-        hash=headerHash.short
+        sub = sk.last, number, hash = headerHash.short
       return err("Blocks don't extend canonical subchain")
 
     merged = sk.trySubChainsMerge().valueOr:
@@ -238,7 +236,8 @@ proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
 
     # If its merged, we need to break as the new tail could be quite ahead
     # so we need to clear out and run the reverse block fetcher again
-    if merged: break
+    if merged:
+      break
 
   sk.writeProgress()
 
@@ -270,7 +269,8 @@ proc putBlocks*(sk: SkeletonRef, headers: openArray[BlockHeader]):
 
 # Inserts skeleton blocks into canonical chain and runs execution.
 proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
-  if sk.filling: return ok()
+  if sk.filling:
+    return ok()
   sk.filling = true
 
   var
@@ -285,14 +285,18 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
     maybeOldHead = Opt.some oldHead
 
     if subchain.tail > canonicalHead + 1:
-      return err("Canonical head should already be on or " &
-        "ahead subchain tail canonicalHead=" &
-        $canonicalHead & ", tail=" & $subchain.tail)
+      return err(
+        "Canonical head should already be on or " & "ahead subchain tail canonicalHead=" &
+          $canonicalHead & ", tail=" & $subchain.tail
+      )
 
-    let newHead = if subchain.tail > 0: subchain.tail - 1
-                  else: 0
+    let newHead =
+      if subchain.tail > 0:
+        subchain.tail - 1
+      else:
+        0
     debug "Resetting canonicalHead for fillCanonicalChain",
-      `from`=canonicalHead, to=newHead
+      `from` = canonicalHead, to = newHead
 
     canonicalHead = newHead
     sk.resetCanonicalHead(canonicalHead, oldHead.u64)
@@ -302,8 +306,7 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
   # This subchain is a reference to update the tail for
   # the very subchain we are filling the data for
 
-  debug "Starting canonical chain fill",
-    canonicalHead, subchainHead=subchain.head
+  debug "Starting canonical chain fill", canonicalHead, subchainHead = subchain.head
 
   while sk.filling and canonicalHead < subchain.head:
     # Get next block
@@ -331,7 +334,7 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
       if maybeHead.isSome:
         sk.com.notifyBadBlock(header, maybeHead.get)
 
-      debug "fillCanonicalChain putBlock", msg=res.error
+      debug "fillCanonicalChain putBlock", msg = res.error
       if maybeOldHead.isSome:
         let oldHead = maybeOldHead.get
         if oldHead.u64 >= number:
@@ -339,24 +342,24 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
           sk.insertBlock(oldHead, true).isOkOr:
             return err(error)
 
-    let numBlocksInserted = res.valueOr: 0
+    let numBlocksInserted = res.valueOr:
+      0
     if numBlocksInserted != 1:
       debug "Failed to put block from skeleton chain to canonical",
-        number=number,
-        hash=header.blockHashStr,
-        parentHash=header.parentHash.short
+        number = number,
+        hash = header.blockHashStr,
+        parentHash = header.parentHash.short
 
       # Lets log some parent by number and parent by hash, that may help to understand whats going on
       let parent {.used.} = sk.getHeader(number - 1).valueOr:
         return err(error)
-      debug "ParentByNumber", number=parent.numberStr, hash=parent.blockHashStr
+      debug "ParentByNumber", number = parent.numberStr, hash = parent.blockHashStr
 
       let parentWithHash {.used.} = sk.getHeader(header.parentHash).valueOr:
         return err(error)
 
       debug "parentByHash",
-        number=parentWithHash.numberStr,
-        hash=parentWithHash.blockHashStr
+        number = parentWithHash.numberStr, hash = parentWithHash.blockHashStr
 
       sk.backStep().isOkOr:
         return err(error)
@@ -370,19 +373,17 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
     sk.deleteHeaderAndBody(header)
     if sk.fillLogIndex >= 20:
       debug "Skeleton canonical chain fill status",
-        canonicalHead,
-        chainHead=sk.blockHeight,
-        subchainHead=subchain.head
+        canonicalHead, chainHead = sk.blockHeight, subchainHead = subchain.head
       sk.fillLogIndex = 0
 
   sk.filling = false
   debug "Successfully put blocks from skeleton chain to canonical",
-    start, `end`=canonicalHead,
-    skeletonHead=subchain.head
+    start, `end` = canonicalHead, skeletonHead = subchain.head
   ok()
 
-proc processNewHead*(sk: SkeletonRef, head: BlockHeader,
-                     force = false): Result[bool, string] =
+proc processNewHead*(
+    sk: SkeletonRef, head: BlockHeader, force = false
+): Result[bool, string] =
   ## processNewHead does the internal shuffling for a new head marker and either
   ## accepts and integrates it into the skeleton or requests a reorg. Upon reorg,
   ## the syncer will tear itself down and restart with a fresh head. It is simpler
@@ -398,37 +399,34 @@ proc processNewHead*(sk: SkeletonRef, head: BlockHeader,
 
   if number == 0:
     if headHash != genesisHash:
-      return err("Invalid genesis setHead announcement " &
-        "number=" & $number &
-        ", hash=" & headHash.short &
-        ", genesisHash=" & genesisHash.short
+      return err(
+        "Invalid genesis setHead announcement " & "number=" & $number & ", hash=" &
+          headHash.short & ", genesisHash=" & genesisHash.short
       )
     # genesis announcement
     return ok(false)
 
-
-  let last = if sk.isEmpty:
-               debug "Skeleton empty, comparing against genesis head=0 tail=0",
-                 newHead=number
-               # set the lastchain to genesis for comparison in
-               # following conditions
-               segment(0, 0, zeroBlockHash)
-             else:
-               sk.last
+  let last =
+    if sk.isEmpty:
+      debug "Skeleton empty, comparing against genesis head=0 tail=0", newHead = number
+      # set the lastchain to genesis for comparison in
+      # following conditions
+      segment(0, 0, zeroBlockHash)
+    else:
+      sk.last
 
   if last.tail > number:
     # Not a noop / double head announce, abort with a reorg
     if force:
       debug "Skeleton setHead before tail, resetting skeleton",
-        tail=last.tail, head=last.head, newHead=number
+        tail = last.tail, head = last.head, newHead = number
       last.head = number
       last.tail = number
       last.next = head.parentHash
     else:
       debug "Skeleton announcement before tail, will reset skeleton",
-        tail=last.tail, head=last.head, newHead=number
+        tail = last.tail, head = last.head, newHead = number
     return ok(true)
-
   elif last.head >= number:
     # Check if its duplicate announcement, if not trim the head and
     # let the match run after this if block
@@ -438,25 +436,21 @@ proc processNewHead*(sk: SkeletonRef, head: BlockHeader,
     let maybeDupHash = maybeDupBlock.blockHash
     if maybeDupBlock.isSome and maybeDupHash == headHash:
       debug "Skeleton duplicate announcement",
-        tail=last.tail, head=last.head, number, hash=headHash.short
+        tail = last.tail, head = last.head, number, hash = headHash.short
       return ok(false)
     else:
       # Since its not a dup block, so there is reorg in the chain or at least
       # in the head which we will let it get addressed after this if else block
       if force:
         debug "Skeleton differing announcement",
-          tail=last.tail,
-          head=last.head,
-          number=number,
-          expected=maybeDupHash.short,
-          actual=headHash.short
+          tail = last.tail,
+          head = last.head,
+          number = number,
+          expected = maybeDupHash.short,
+          actual = headHash.short
       else:
-        debug "Skeleton stale announcement",
-          tail=last.tail,
-          head=last.head,
-          number
+        debug "Skeleton stale announcement", tail = last.tail, head = last.head, number
       return ok(true)
-
   elif last.head + 1 < number:
     if force:
       sk.fastForwardHead(last, number - 1).isOkOr:
@@ -464,12 +458,10 @@ proc processNewHead*(sk: SkeletonRef, head: BlockHeader,
 
       # If its still less than number then its gapped head
       if last.head + 1 < number:
-        debug "Beacon chain gapped setHead",
-          head=last.head, newHead=number
+        debug "Beacon chain gapped setHead", head = last.head, newHead = number
         return ok(true)
     else:
-      debug "Beacon chain gapped announcement",
-        head=last.head, newHead=number
+      debug "Beacon chain gapped announcement", head = last.head, newHead = number
       return ok(true)
 
   let maybeParent = sk.getHeader(number - 1).valueOr:
@@ -479,9 +471,9 @@ proc processNewHead*(sk: SkeletonRef, head: BlockHeader,
   if maybeParent.isNone or parentHash != head.parentHash:
     if force:
       debug "Beacon chain forked",
-        ancestor=maybeParent.numberStr,
-        hash=maybeParent.blockHashStr,
-        want=head.parentHash.short
+        ancestor = maybeParent.numberStr,
+        hash = maybeParent.blockHashStr,
+        want = head.parentHash.short
     return ok(true)
 
   if force:

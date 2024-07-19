@@ -44,10 +44,9 @@ const
 type
   JwtSharedKey* = ##\
     ## Convenience type, needed quite often
-    distinct array[jwtMinSecretLen,byte]
+    distinct array[jwtMinSecretLen, byte]
 
-  JwtSharedKeyRaw =
-    array[jwtMinSecretLen,byte]
+  JwtSharedKeyRaw = array[jwtMinSecretLen, byte]
 
   JwtGenSecret* = ##\
     ## Random generator function producing a shared key. Typically, this\
@@ -55,15 +54,13 @@ type
     ## `HmacDrbgContext`.
     proc(): JwtSharedKey {.gcsafe, raises: [CatchableError].}
 
-  JwtExcept* = object of CatchableError
-    ## Catch and relay exception error
+  JwtExcept* = object of CatchableError ## Catch and relay exception error
 
   JwtError* = enum
     jwtKeyTooSmall = "JWT secret not at least 256 bits"
     jwtKeyEmptyFile = "no 0x-prefixed hex string found"
     jwtKeyFileCannotOpen = "couldn't open specified JWT secret file"
     jwtKeyInvalidHexString = "invalid JWT hex string"
-
     jwtTokenInvNumSegments = "token contains an invalid number of segments"
     jwtProtHeaderInvBase64 = "token protected header invalid base64 encoding"
     jwtProtHeaderInvJson = "token protected header invalid JSON data"
@@ -83,16 +80,15 @@ proc base64urlEncode(x: auto): string =
   # encoding quirks.
   base64.encode(x, safe = true).replace("=", "")
 
-proc base64urlDecode(data: string): string
-    {.gcsafe, raises: [CatchableError].} =
+proc base64urlDecode(data: string): string {.gcsafe, raises: [CatchableError].} =
   ## Decodes a JWT specific base64url, optionally encoding with stripped
   ## padding.
   let l = data.len mod 4
   if 0 < l:
-    return base64.decode(data & "=".repeat(4-l))
+    return base64.decode(data & "=".repeat(4 - l))
   base64.decode(data)
 
-proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
+proc verifyTokenHS256(token: string, key: JwtSharedKey): Result[void, JwtError] =
   let p = token.split('.')
   if p.len != 3:
     return err(jwtTokenInvNumSegments)
@@ -124,10 +120,7 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
   except CatchableError as e:
     discard e
     debug "JWT token decoding error",
-      protectedHeader = p[0],
-      payload = p[1],
-      msg = e.msg,
-      error
+      protectedHeader = p[0], payload = p[1], msg = e.msg, error
     return err(error)
 
   # github.com/ethereum/
@@ -140,12 +133,11 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
   # claims.
   let delta = getTime().toUnix - time
   if delta < -60 or 60 < delta:
-    debug "Iat timestamp problem, accepted |delta| <= 5",
-      delta
+    debug "Iat timestamp problem, accepted |delta| <= 5", delta
     return err(jwtTimeValidationError)
 
   let
-    keyArray = cast[array[jwtMinSecretLen,byte]](key)
+    keyArray = cast[array[jwtMinSecretLen, byte]](key)
     b64sig = base64urlEncode(sha256.hmac(keyArray, p[0] & "." & p[1]).data)
   if b64sig != p[2]:
     return err(jwtTokenValidationError)
@@ -156,7 +148,7 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fromHex*(key: var JwtSharedKey, src: string): Result[void,JwtError] =
+proc fromHex*(key: var JwtSharedKey, src: string): Result[void, JwtError] =
   ## Parse argument `src` from hex-string and fill it into the argument `key`.
   ## This function is supposed to read and convert data in constant-time
   ## fashion, guarding against side channel attacks.
@@ -180,15 +172,14 @@ proc jwtGenSecret*(rng: ref rand.HmacDrbgContext): JwtGenSecret =
   ##
   ## might do. Not that in most cases, this function is internally used,
   ## only.
-  result = proc: JwtSharedKey =
-    var data: array[jwtMinSecretLen,byte]
+  result = proc(): JwtSharedKey =
+    var data: array[jwtMinSecretLen, byte]
     rng[].generate(data)
     data.JwtSharedKey
 
 proc jwtSharedSecret*(
-    rndSecret: JwtGenSecret;
-    config: NimbusConf;
-      ): Result[JwtSharedKey, JwtError] =
+    rndSecret: JwtGenSecret, config: NimbusConf
+): Result[JwtSharedKey, JwtError] =
   ## Return a key for jwt authentication preferable from the argument file
   ## `config.jwtSecret` (which contains at least 32 bytes hex encoded random
   ## data.) Otherwise it creates a key and stores it in the `config.dataDir`.
@@ -226,8 +217,7 @@ proc jwtSharedSecret*(
     except IOError as e:
       # Allow continuing to run, though this is effectively fatal for a merge
       # client using authentication. This keeps it lower-risk initially.
-      warn "Could not write JWT secret to data directory",
-        jwtSecretPath
+      warn "Could not write JWT secret to data directory", jwtSecretPath
       discard e
     except CatchableError:
       return err(jwtCreationError)
@@ -246,8 +236,9 @@ proc jwtSharedSecret*(
   except ValueError:
     return err(jwtKeyInvalidHexString)
 
-proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
-                    Result[JwtSharedKey, JwtError] =
+proc jwtSharedSecret*(
+    rng: ref rand.HmacDrbgContext, config: NimbusConf
+): Result[JwtSharedKey, JwtError] =
   ## Variant of `jwtSharedSecret()` with explicit random generator argument.
   try:
     rng.jwtGenSecret.jwtSharedSecret(config)
@@ -255,20 +246,20 @@ proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
     return err(jwtCreationError)
 
 proc httpJwtAuth*(key: JwtSharedKey): RpcAuthHook =
-  proc handler(req: HttpRequestRef): Future[HttpResponseRef]
-         {.gcsafe, async: (raises: [CatchableError]).} =
+  proc handler(
+      req: HttpRequestRef
+  ): Future[HttpResponseRef] {.gcsafe, async: (raises: [CatchableError]).} =
     let auth = req.headers.getString("Authorization", "?")
-    if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
+    if auth.len < 9 or auth[0 .. 6].cmpIgnoreCase("Bearer ") != 0:
       return await req.respond(Http403, "Missing authorization token")
 
-    let rc = auth[7..^1].strip.verifyTokenHS256(key)
+    let rc = auth[7 ..^ 1].strip.verifyTokenHS256(key)
     if rc.isOk:
       return HttpResponseRef(nil)
 
-    debug "Could not authenticate",
-      error = rc.error
+    debug "Could not authenticate", error = rc.error
 
-    case rc.error:
+    case rc.error
     of jwtTokenValidationError, jwtMethodUnsupported:
       return await req.respond(Http401, "Unauthorized access")
     else:

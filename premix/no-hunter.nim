@@ -11,7 +11,9 @@
 import
   std/[json, tables, hashes],
   eth/trie/trie_defs,
-  stint, stew/byteutils, chronicles,
+  stint,
+  stew/byteutils,
+  chronicles,
   ../nimbus/[evm/state, evm/types],
   ../nimbus/utils/utils,
   ../nimbus/tracer,
@@ -20,8 +22,7 @@ import
   ../nimbus/common/common,
   "."/[configuration, downloader, parser, premixcore]
 
-const
-  emptyCodeHash = blankStringHash
+const emptyCodeHash = blankStringHash
 
 proc store(memoryDB: CoreDbRef, branch: JsonNode) =
   for p in branch:
@@ -37,9 +38,9 @@ proc parseU256(val: string): UInt256 =
 
 proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): CoreDbRef =
   var
-    accounts     = requestPostState(thisBlock)
-    memoryDB     = newCoreDbRef DefaultDbMemory
-    accountDB    = newAccountStateDB(memoryDB, parent.stateRoot)
+    accounts = requestPostState(thisBlock)
+    memoryDB = newCoreDbRef DefaultDbMemory
+    accountDB = newAccountStateDB(memoryDB, parent.stateRoot)
     parentNumber = %(parent.number.prefixHex)
 
   for address, account in accounts:
@@ -47,8 +48,8 @@ proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): CoreDbRef =
     let
       accountProof = account["accountProof"]
       storageProof = account["storageProof"]
-      address      = parseAddress(address)
-      acc          = parseAccount(account)
+      address = parseAddress(address)
+      acc = parseAccount(account)
 
     memoryDB.store(accountProof)
     accountDB.setAccount(address, acc)
@@ -70,14 +71,13 @@ proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): CoreDbRef =
 
   result = memoryDB
 
-type
-  HunterVMState = ref object of BaseVMState
-    headers: Table[BlockNumber, BlockHeader]
+type HunterVMState = ref object of BaseVMState
+  headers: Table[BlockNumber, BlockHeader]
 
 proc hash*(x: UInt256): Hash =
   result = hash(x.toBytesBE)
 
-proc new(T: type HunterVMState; parent, header: BlockHeader, com: CommonRef): T =
+proc new(T: type HunterVMState, parent, header: BlockHeader, com: CommonRef): T =
   new result
   result.init(parent, header, com)
   result.headers = Table[BlockNumber, BlockHeader]()
@@ -95,13 +95,13 @@ proc putAncestorsIntoDB(vmState: HunterVMState, db: CoreDbRef) =
   for header in vmState.headers.values:
     db.addBlockNumberToHashLookup(header)
 
-proc huntProblematicBlock(blockNumber: UInt256): Result[void,  string] =
+proc huntProblematicBlock(blockNumber: UInt256): Result[void, string] =
   let
     # prepare needed state from previous block
     parentNumber = blockNumber - 1
-    thisBlock    = requestBlock(blockNumber)
-    parentBlock  = requestBlock(parentNumber)
-    memoryDB     = prepareBlockEnv(parentBlock.header, thisBlock)
+    thisBlock = requestBlock(blockNumber)
+    parentBlock = requestBlock(parentNumber)
+    memoryDB = prepareBlockEnv(parentBlock.header, thisBlock)
 
     # try to execute current block
     com = CommonRef.new(memoryDB)
@@ -109,7 +109,8 @@ proc huntProblematicBlock(blockNumber: UInt256): Result[void,  string] =
   discard com.db.setHead(parentBlock.header, true)
 
   let transaction = memoryDB.beginTransaction()
-  defer: transaction.dispose()
+  defer:
+    transaction.dispose()
   let
     vmState = HunterVMState.new(parentBlock.header, thisBlock.header, com)
     validationResult = vmState.processBlock(thisBlock.header, thisBlock.body)

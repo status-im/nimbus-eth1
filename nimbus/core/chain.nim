@@ -8,11 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ./chain/[chain_desc, persist_blocks]
+import ./chain/[chain_desc, persist_blocks]
 
-export
-  chain_desc,
-  persist_blocks
+export chain_desc, persist_blocks
 
 # End

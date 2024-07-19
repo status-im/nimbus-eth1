@@ -24,11 +24,7 @@ else:
     browserLauncher = "xdg-open"
 
 proc getFileDir*(file: string): string =
-  var searchDirs = [
-    "." ,
-    "." / "build" ,
-    "." / "premix"
-  ]
+  var searchDirs = [".", "." / "build", "." / "premix"]
 
   for dir in searchDirs:
     if fileExists(dir / file):
@@ -54,4 +50,3 @@ proc launchPremix*(fileName: string, metaData: JsonNode) =
         echo "failed to launch default browser"
     else:
       echo "failed to execute the premix debugging tool"
-

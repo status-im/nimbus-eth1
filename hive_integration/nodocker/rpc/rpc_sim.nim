@@ -7,11 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import
-  std/[times],
-  chronos,
-  "."/[rpc_tests, test_env],
-  ../sim_utils
+import std/[times], chronos, "."/[rpc_tests, test_env], ../sim_utils
 
 proc runRpcTest() =
   var stat: SimStat
@@ -28,6 +24,5 @@ proc runRpcTest() =
 
   let elpd = getTime() - start
   print(stat, elpd, "rpc")
-
 
 runRpcTest()

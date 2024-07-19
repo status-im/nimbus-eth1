@@ -13,16 +13,13 @@
 ##
 {.push raises: [].}
 
-import
-  results,
-  ./aristo_tx/[tx_fork, tx_frame, tx_stow],
-  "."/[aristo_desc, aristo_get]
+import results, ./aristo_tx/[tx_fork, tx_frame, tx_stow], "."/[aristo_desc, aristo_get]
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-func txTop*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
+func txTop*(db: AristoDbRef): Result[AristoTxRef, AristoError] =
   ## Getter, returns top level transaction if there is any.
   db.txFrameTop()
 
@@ -43,15 +40,13 @@ func level*(db: AristoDbRef): int =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
+func to*(tx: AristoTxRef, T: type[AristoDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
   tx.db
 
-
 proc forkTx*(
-    db: AristoDbRef;
-    backLevel: int;                   # Backward location of transaction
-      ): Result[AristoDbRef,AristoError] =
+    db: AristoDbRef, backLevel: int, # Backward location of transaction
+): Result[AristoDbRef, AristoError] =
   ## Fork a new descriptor obtained from parts of the argument database
   ## as described by arguments `db` and `backLevel`.
   ##
@@ -95,24 +90,23 @@ proc forkTx*(
 
   # Plain fork, include `balancer`
   if backLevel == -1:
-    let xb = ? db.fork(noFilter=false)
+    let xb = ?db.fork(noFilter = false)
     discard xb.txFrameBegin()
     return ok(xb)
 
   # Plain fork, unfiltered backend
   if backLevel == -2:
-    let xb = ? db.fork(noFilter=true)
+    let xb = ?db.fork(noFilter = true)
     discard xb.txFrameBegin()
     return ok(xb)
 
   err(TxLevelUseless)
 
-
 proc findTx*(
-    db: AristoDbRef;
-    rvid: RootedVertexID;             # Pivot vertex (typically `VertexID(1)`)
-    key: HashKey;                     # Hash key of pivot vertex
-      ): Result[int,AristoError] =
+    db: AristoDbRef,
+    rvid: RootedVertexID, # Pivot vertex (typically `VertexID(1)`)
+    key: HashKey, # Hash key of pivot vertex
+): Result[int, AristoError] =
   ## Find the transaction where the vertex with ID `vid` exists and has the
   ## Merkle hash key `key`. If there is no transaction available, search in
   ## the filter and then in the backend.
@@ -128,8 +122,7 @@ proc findTx*(
   ## A successful return code might be used for the `forkTx()` call for
   ## creating a forked descriptor that provides the pair `(vid,key)`.
   ##
-  if not rvid.isValid or
-     not key.isValid:
+  if not rvid.isValid or not key.isValid:
     return err(TxArgsUseless)
 
   if db.txRef.isNil:
@@ -137,10 +130,9 @@ proc findTx*(
     let topKey = db.top.kMap.getOrVoid rvid
     if topKey == key:
       return ok(0)
-
   else:
     # Find `(vid,key)` on transaction layers
-    for (n,tx,layer,error) in db.txRef.txFrameWalk:
+    for (n, tx, layer, error) in db.txRef.txFrameWalk:
       if error != AristoError(0):
         return err(error)
       if layer.kMap.getOrVoid(rvid) == key:
@@ -159,7 +151,8 @@ proc findTx*(
 
   # Try `(vid,key)` on unfiltered backend
   block:
-    let beKey = db.getKeyUbe(rvid).valueOr: VOID_HASH_KEY
+    let beKey = db.getKeyUbe(rvid).valueOr:
+      VOID_HASH_KEY
     if beKey == key:
       return ok(-2)
 
@@ -169,7 +162,7 @@ proc findTx*(
 # Public functions: Transaction frame
 # ------------------------------------------------------------------------------
 
-proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
+proc txBegin*(db: AristoDbRef): Result[AristoTxRef, AristoError] =
   ## Starts a new transaction.
   ##
   ## Example:
@@ -183,8 +176,8 @@ proc txBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   db.txFrameBegin()
 
 proc rollback*(
-    tx: AristoTxRef;                  # Top transaction on database
-      ): Result[void,AristoError] =
+    tx: AristoTxRef, # Top transaction on database
+): Result[void, AristoError] =
   ## Given a *top level* handle, this function discards all database operations
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
@@ -192,8 +185,8 @@ proc rollback*(
   tx.txFrameRollback()
 
 proc commit*(
-    tx: AristoTxRef;                  # Top transaction on database
-      ): Result[void,AristoError] =
+    tx: AristoTxRef, # Top transaction on database
+): Result[void, AristoError] =
   ## Given a *top level* handle, this function accepts all database operations
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
@@ -201,9 +194,9 @@ proc commit*(
   tx.txFrameCommit()
 
 proc collapse*(
-    tx: AristoTxRef;                  # Top transaction on database
-    commit: bool;                     # Commit if `true`, otherwise roll back
-      ): Result[void,AristoError] =
+    tx: AristoTxRef, # Top transaction on database
+    commit: bool, # Commit if `true`, otherwise roll back
+): Result[void, AristoError] =
   ## Iterated application of `commit()` or `rollback()` performing the
   ## something similar to
   ## ::
@@ -219,9 +212,9 @@ proc collapse*(
 # ------------------------------------------------------------------------------
 
 proc persist*(
-    db: AristoDbRef;                  # Database
-    nxtSid = 0u64;                    # Next state ID (aka block number)
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database
+    nxtSid = 0u64, # Next state ID (aka block number)
+): Result[void, AristoError] =
   ## Persistently store data onto backend database. If the system is running
   ## without a database backend, the function returns immediately with an
   ## error. The same happens if there is a pending transaction.
@@ -237,11 +230,11 @@ proc persist*(
   ## next recovery journal record. If non-zero, this ID must be greater than
   ## all previous IDs (e.g. block number when stowing after block execution.)
   ##
-  db.txStow(nxtSid, persistent=true)
+  db.txStow(nxtSid, persistent = true)
 
 proc stow*(
-    db: AristoDbRef;                  # Database
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database
+): Result[void, AristoError] =
   ## This function is similar to `persist()` stopping short of performing the
   ## final step storing on the persistent database. It fails if there is a
   ## pending transaction.
@@ -250,7 +243,7 @@ proc stow*(
   ## backend stage area and leaves it there. This function can be seen as
   ## a sort of a bottom level transaction `commit()`.
   ##
-  db.txStow(nxtSid=0u64, persistent=false)
+  db.txStow(nxtSid = 0u64, persistent = false)
 
 # ------------------------------------------------------------------------------
 # End

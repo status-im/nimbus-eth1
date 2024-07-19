@@ -8,21 +8,20 @@
 
 {.push raises: [].}
 
-import
-  macros, strutils, stint, chronicles,
-  stew/byteutils, stew/ptrops,
-  ./host_types
+import macros, strutils, stint, chronicles, stew/byteutils, stew/ptrops, ./host_types
 
 # Set `true` or `false` to control host call tracing.
-const showTxCalls  = false
+const showTxCalls = false
 const showTxNested = true
 
-proc `$`(val: EvmcCallKind | EvmcStatusCode |
-         EvmcStorageStatus | EvmcAccessStatus): string =
+proc `$`(
+    val: EvmcCallKind | EvmcStatusCode | EvmcStorageStatus | EvmcAccessStatus
+): string =
   result = val.repr
   result.removePrefix("EVMC_")
 
-proc `$`(address: HostAddress): string = toHex(address)
+proc `$`(address: HostAddress): string =
+  toHex(address)
 
 # Don't use both types in the overload, as Nim <= 1.2.x gives "ambiguous call".
 #func `$`(n: HostKey | HostValue): string = toHex(n)
@@ -46,53 +45,49 @@ proc depthPrefix(host: TransactionHost): string =
 
 proc showEvmcMessage(msg: EvmcMessage): string =
   let kindStr =
-    if msg.flags == {}: $msg.kind
-    elif msg.flags == {EVMC_STATIC} and msg.kind == EVMC_CALL: "CALL_STATIC"
-    else: $msg.kind & " flags=" & $msg.flags
+    if msg.flags == {}:
+      $msg.kind
+    elif msg.flags == {EVMC_STATIC} and msg.kind == EVMC_CALL:
+      "CALL_STATIC"
+    else:
+      $msg.kind & " flags=" & $msg.flags
   var inputStr = "(" & $msg.input_size & ")"
   if msg.input_size > 0:
-    inputStr.add toHex(makeOpenArray(msg.input_data,
-                                     min(msg.input_size, 256).int))
+    inputStr.add toHex(makeOpenArray(msg.input_data, min(msg.input_size, 256).int))
     if msg.input_size > 256:
       inputStr.add "..."
-  result = "kind=" & $kindStr &
-    " depth=" & $msg.depth &
-    " gas=" & $msg.gas &
-    " value=" & $msg.value.fromEvmc &
-    " sender=" & $msg.sender.fromEvmc &
-    " recipient=" & $msg.recipient.fromEvmc &
-    " code_address=" & $msg.code_address.fromEvmc &
+  result =
+    "kind=" & $kindStr & " depth=" & $msg.depth & " gas=" & $msg.gas & " value=" &
+    $msg.value.fromEvmc & " sender=" & $msg.sender.fromEvmc & " recipient=" &
+    $msg.recipient.fromEvmc & " code_address=" & $msg.code_address.fromEvmc &
     " input_data=" & inputStr
   if msg.kind == EVMC_CREATE2:
     result.add " create2_salt=" & $msg.create2_salt.fromEvmc
 
 proc showEvmcResult(res: EvmcResult, withCreateAddress = true): string =
   if res.status_code != EVMC_SUCCESS and res.status_code != EVMC_REVERT and
-     res.gas_left == 0 and res.output_size == 0:
+      res.gas_left == 0 and res.output_size == 0:
     return "status=" & $res.status_code
 
   var outputStr = "(" & $res.output_size & ")"
   if res.output_size > 0:
-    outputStr.add toHex(makeOpenArray(res.output_data,
-                                      min(res.output_size, 256).int))
+    outputStr.add toHex(makeOpenArray(res.output_data, min(res.output_size, 256).int))
     if res.output_size > 256:
       outputStr.add "..."
 
-  result = "status=" & $res.status_code &
-    " gas_left=" & $res.gas_left &
-    " output_data=" & $outputStr
+  result =
+    "status=" & $res.status_code & " gas_left=" & $res.gas_left & " output_data=" &
+    $outputStr
   if withCreateAddress:
     result.add " create_address=" & $res.create_address.fromEvmc
 
 proc showEvmcTxContext(txc: EvmcTxContext): string =
-  return "tx_gas_price=" & $txc.tx_gas_price.fromEvmc &
-    " tx_origin=" & $txc.tx_origin.fromEvmc &
-    " block_coinbase=" & $txc.block_coinbase.fromEvmc &
-    " block_number=" & $txc.block_number &
-    " block_timestamp=" & $txc.block_timestamp &
-    " block_gas_limit=" & $txc.block_gas_limit &
-    " block_prev_randao=" & $txc.block_prev_randao.fromEvmc &
-    " chain_id=" & $txc.chain_id.fromEvmc &
+  return
+    "tx_gas_price=" & $txc.tx_gas_price.fromEvmc & " tx_origin=" &
+    $txc.tx_origin.fromEvmc & " block_coinbase=" & $txc.block_coinbase.fromEvmc &
+    " block_number=" & $txc.block_number & " block_timestamp=" & $txc.block_timestamp &
+    " block_gas_limit=" & $txc.block_gas_limit & " block_prev_randao=" &
+    $txc.block_prev_randao.fromEvmc & " chain_id=" & $txc.chain_id.fromEvmc &
     " block_base_fee=" & $txc.block_base_fee.fromEvmc
 
 proc showEvmcArgsExpr(fn: NimNode, callName: string): auto =
@@ -100,11 +95,11 @@ proc showEvmcArgsExpr(fn: NimNode, callName: string): auto =
   var types: seq[NimNode] = newSeq[NimNode]()
   for i in 1 ..< fn.params.len:
     let idents = fn.params[i]
-    for j in 0 ..< idents.len-2:
+    for j in 0 ..< idents.len - 2:
       args.add idents[j]
       types.add idents[^2]
   let hostExpr = args[0]
-  var msgExpr = quote do:
+  var msgExpr = quote:
     `depthPrefix`(`hostExpr`) & "evmc." & `callName` & ":"
   var skip = 0
   for i in 1 ..< args.len:
@@ -113,10 +108,10 @@ proc showEvmcArgsExpr(fn: NimNode, callName: string): auto =
     var arg = args[i]
     let argNameString = " " & $arg & "="
     if (types[i].repr == "ptr byte" or types[i].repr == "ptr HostTopic") and
-       (i < args.len-1 and types[i+1].repr == "HostSize"):
-      skip = i+1
-      arg = newPar(args[i], args[i+1])
-    msgExpr = quote do:
+        (i < args.len - 1 and types[i + 1].repr == "HostSize"):
+      skip = i + 1
+      arg = newPar(args[i], args[i + 1])
+    msgExpr = quote:
       `msgExpr` & `argNameString` & $(`arg`)
   return (msgExpr, args)
 
@@ -127,9 +122,10 @@ macro show*(fn: untyped): auto =
   let (msgExpr, args) = showEvmcArgsExpr(fn, $fn.name)
   let hostExpr = args[0]
   if fn.params[0].kind == nnkEmpty:
-    fn.body.insert 0, quote do:
-      if showTxNested or `hostExpr`.depth > 1:
-        echo `msgExpr`
+    fn.body.insert 0,
+      quote do:
+        if showTxNested or `hostExpr`.depth > 1:
+          echo `msgExpr`
   else:
     let innerFn = newProc(name = fn.name, body = fn.body)
     innerFn.params = fn.params.copy
@@ -152,13 +148,12 @@ macro show*(fn: untyped): auto =
 
 template showCallEntry*(host: TransactionHost, msg: EvmcMessage) =
   if showTxCalls and (showTxNested or host.depth > 0):
-    echo depthPrefix(host) & "evmc.call: " &
-      showEvmcMessage(msg)
+    echo depthPrefix(host) & "evmc.call: " & showEvmcMessage(msg)
     inc host.depth
 
-template showCallReturn*(host: TransactionHost, res: EvmcResult,
-                         forNestedCreate = false) =
+template showCallReturn*(
+    host: TransactionHost, res: EvmcResult, forNestedCreate = false
+) =
   if showTxCalls and (showTxNested or host.depth > 1):
-    echo depthPrefix(host) & "evmc.return -> " &
-      showEvmcResult(res, forNestedCreate)
+    echo depthPrefix(host) & "evmc.return -> " & showEvmcResult(res, forNestedCreate)
     dec host.depth

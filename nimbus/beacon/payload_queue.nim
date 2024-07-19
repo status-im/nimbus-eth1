@@ -7,10 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import
-  eth/common,
-  web3/engine_api_types,
-  web3/execution_types
+import eth/common, web3/engine_api_types, web3/execution_types
 
 const
   # maxTrackedPayloads is the maximum number of prepared payloads the execution
@@ -28,7 +25,7 @@ type
     used: bool
     data: T
 
-  SimpleQueue[M: static[int]; T] = object
+  SimpleQueue[M: static[int], T] = object
     list: array[M, QueueItem[T]]
 
   PayloadItem = object
@@ -45,14 +42,14 @@ type
     payloadQueue: SimpleQueue[MaxTrackedPayloads, PayloadItem]
     headerQueue: SimpleQueue[MaxTrackedHeaders, HeaderItem]
 
-{.push gcsafe, raises:[].}
+{.push gcsafe, raises: [].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 template shiftRight[M, T](x: var SimpleQueue[M, T]) =
-  x.list[1..^1] = x.list[0..^2]
+  x.list[1 ..^ 1] = x.list[0 ..^ 2]
 
 proc put[M, T](x: var SimpleQueue[M, T], val: T) =
   x.shiftRight()
@@ -67,44 +64,60 @@ iterator items[M, T](x: SimpleQueue[M, T]): T =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc put*(api: var PayloadQueue,
-          hash: common.Hash256, header: common.BlockHeader) =
+proc put*(api: var PayloadQueue, hash: common.Hash256, header: common.BlockHeader) =
   api.headerQueue.put(HeaderItem(hash: hash, header: header))
 
-proc put*(api: var PayloadQueue, id: PayloadID,
-          blockValue: UInt256, payload: ExecutionPayload,
-          blobsBundle: Opt[BlobsBundleV1]) =
-  api.payloadQueue.put(PayloadItem(id: id,
-    payload: payload, blockValue: blockValue, blobsBundle: blobsBundle))
+proc put*(
+    api: var PayloadQueue,
+    id: PayloadID,
+    blockValue: UInt256,
+    payload: ExecutionPayload,
+    blobsBundle: Opt[BlobsBundleV1],
+) =
+  api.payloadQueue.put(
+    PayloadItem(
+      id: id, payload: payload, blockValue: blockValue, blobsBundle: blobsBundle
+    )
+  )
 
-proc put*(api: var PayloadQueue, id: PayloadID,
-          blockValue: UInt256, payload: SomeExecutionPayload,
-          blobsBundle: Opt[BlobsBundleV1]) =
-  doAssert blobsBundle.isNone == (payload is
-    ExecutionPayloadV1 | ExecutionPayloadV2)
+proc put*(
+    api: var PayloadQueue,
+    id: PayloadID,
+    blockValue: UInt256,
+    payload: SomeExecutionPayload,
+    blobsBundle: Opt[BlobsBundleV1],
+) =
+  doAssert blobsBundle.isNone == (payload is ExecutionPayloadV1 | ExecutionPayloadV2)
   api.put(id, blockValue, payload.executionPayload, blobsBundle = blobsBundle)
 
-proc put*(api: var PayloadQueue, id: PayloadID,
-          blockValue: UInt256,
-          payload: ExecutionPayloadV1 | ExecutionPayloadV2) =
+proc put*(
+    api: var PayloadQueue,
+    id: PayloadID,
+    blockValue: UInt256,
+    payload: ExecutionPayloadV1 | ExecutionPayloadV2,
+) =
   api.put(id, blockValue, payload, blobsBundle = Opt.none(BlobsBundleV1))
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc get*(api: PayloadQueue, hash: common.Hash256,
-          header: var common.BlockHeader): bool =
+proc get*(
+    api: PayloadQueue, hash: common.Hash256, header: var common.BlockHeader
+): bool =
   for x in api.headerQueue:
     if x.hash == hash:
       header = x.header
       return true
   false
 
-proc get*(api: PayloadQueue, id: PayloadID,
-          blockValue: var UInt256,
-          payload: var ExecutionPayload,
-          blobsBundle: var Opt[BlobsBundleV1]): bool =
+proc get*(
+    api: PayloadQueue,
+    id: PayloadID,
+    blockValue: var UInt256,
+    payload: var ExecutionPayload,
+    blobsBundle: var Opt[BlobsBundleV1],
+): bool =
   for x in api.payloadQueue:
     if x.id == id:
       payload = x.payload
@@ -113,9 +126,12 @@ proc get*(api: PayloadQueue, id: PayloadID,
       return true
   false
 
-proc get*(api: PayloadQueue, id: PayloadID,
-          blockValue: var UInt256,
-          payload: var ExecutionPayloadV1): bool =
+proc get*(
+    api: PayloadQueue,
+    id: PayloadID,
+    blockValue: var UInt256,
+    payload: var ExecutionPayloadV1,
+): bool =
   var
     p: ExecutionPayload
     blobsBundleOpt: Opt[BlobsBundleV1]
@@ -126,9 +142,12 @@ proc get*(api: PayloadQueue, id: PayloadID,
     doAssert(blobsBundleOpt.isNone)
   return found
 
-proc get*(api: PayloadQueue, id: PayloadID,
-          blockValue: var UInt256,
-          payload: var ExecutionPayloadV2): bool =
+proc get*(
+    api: PayloadQueue,
+    id: PayloadID,
+    blockValue: var UInt256,
+    payload: var ExecutionPayloadV2,
+): bool =
   var
     p: ExecutionPayload
     blobsBundleOpt: Opt[BlobsBundleV1]
@@ -139,10 +158,13 @@ proc get*(api: PayloadQueue, id: PayloadID,
     doAssert(blobsBundleOpt.isNone)
   return found
 
-proc get*(api: PayloadQueue, id: PayloadID,
-          blockValue: var UInt256,
-          payload: var ExecutionPayloadV3,
-          blobsBundle: var BlobsBundleV1): bool =
+proc get*(
+    api: PayloadQueue,
+    id: PayloadID,
+    blockValue: var UInt256,
+    payload: var ExecutionPayloadV3,
+    blobsBundle: var BlobsBundleV1,
+): bool =
   var
     p: ExecutionPayload
     blobsBundleOpt: Opt[BlobsBundleV1]
@@ -154,9 +176,12 @@ proc get*(api: PayloadQueue, id: PayloadID,
     blobsBundle = blobsBundleOpt.unsafeGet
   return found
 
-proc get*(api: PayloadQueue, id: PayloadID,
-          blockValue: var UInt256,
-          payload: var ExecutionPayloadV1OrV2): bool =
+proc get*(
+    api: PayloadQueue,
+    id: PayloadID,
+    blockValue: var UInt256,
+    payload: var ExecutionPayloadV1OrV2,
+): bool =
   var
     p: ExecutionPayload
     blobsBundleOpt: Opt[BlobsBundleV1]

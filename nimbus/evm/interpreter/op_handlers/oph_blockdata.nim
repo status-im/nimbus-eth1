@@ -90,89 +90,90 @@ proc blobBaseFeeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x4a, Get the block's base fee.
   cpt.stack.push cpt.getBlobBaseFee
 
-
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-const
-  VmOpExecBlockData*: seq[VmOpExec] = @[
-
-    (opCode: Blockhash,       ## 0x40, Hash of some most recent complete block
-     forks: VmOpAllForks,
-     name: "blockhash",
-     info: "Get the hash of one of the 256 most recent complete blocks",
-     exec: blockhashOp),
-
-
-    (opCode: Coinbase,        ## 0x41, Beneficiary address
-     forks: VmOpAllForks,
-     name: "coinbase",
-     info: "Get the block's beneficiary address",
-     exec: coinBaseOp),
-
-
-    (opCode: Timestamp,       ## 0x42, Block timestamp.
-     forks: VmOpAllForks,
-     name: "timestamp",
-     info: "Get the block's timestamp",
-     exec: timestampOp),
-
-
-    (opCode: Number,          ## 0x43, Block number
-     forks: VmOpAllForks,
-     name: "blockNumber",
-     info: "Get the block's number",
-     exec: blocknumberOp),
-
-
-    (opCode: Difficulty,      ## 0x44, Block difficulty
-     forks: VmOpAllForks,
-     name: "difficulty",
-     info: "Get the block's difficulty",
-     exec: difficultyOp),
-
-
-    (opCode: GasLimit,        ## 0x45, Block gas limit
-     forks: VmOpAllForks,
-     name: "gasLimit",
-     info: "Get the block's gas limit",
-     exec: gasLimitOp),
-
-
-    (opCode: ChainIdOp,       ## 0x46, EIP-155 chain identifier
-     forks: VmOpIstanbulAndLater,
-     name: "chainId",
-     info: "Get current chain’s EIP-155 unique identifier",
-     exec: chainIdOp),
-
-
-    (opCode: SelfBalance,     ## 0x47, Contract balance.
-     forks: VmOpIstanbulAndLater,
-     name: "selfBalance",
-     info: "Get current contract's balance",
-     exec: selfBalanceOp),
-
-
-    (opCode: BaseFee,         ## 0x48, EIP-1559 Block base fee.
-     forks: VmOpLondonAndLater,
-     name: "baseFee",
-     info: "Get current block's EIP-1559 base fee",
-     exec: baseFeeOp),
-
-
-    (opCode: BlobHash,        ## 0x49, EIP-4844 Transaction versioned hash
-     forks: VmOpCancunAndLater,
-     name: "blobHash",
-     info: "Get current transaction's EIP-4844 versioned hash",
-     exec: blobHashOp),
-
-
-    (opCode: BlobBaseFee,     ## 0x4a, EIP-7516 Returns the current data-blob base-fee
-     forks: VmOpCancunAndLater,
-     name: "blobBaseFee",
-     info: "Returns the current data-blob base-fee",
-     exec: blobBaseFeeOp)]
+const VmOpExecBlockData*: seq[VmOpExec] =
+  @[
+    (
+      opCode: Blockhash, ## 0x40, Hash of some most recent complete block
+      forks: VmOpAllForks,
+      name: "blockhash",
+      info: "Get the hash of one of the 256 most recent complete blocks",
+      exec: blockhashOp,
+    ),
+    (
+      opCode: Coinbase, ## 0x41, Beneficiary address
+      forks: VmOpAllForks,
+      name: "coinbase",
+      info: "Get the block's beneficiary address",
+      exec: coinBaseOp,
+    ),
+    (
+      opCode: Timestamp, ## 0x42, Block timestamp.
+      forks: VmOpAllForks,
+      name: "timestamp",
+      info: "Get the block's timestamp",
+      exec: timestampOp,
+    ),
+    (
+      opCode: Number, ## 0x43, Block number
+      forks: VmOpAllForks,
+      name: "blockNumber",
+      info: "Get the block's number",
+      exec: blocknumberOp,
+    ),
+    (
+      opCode: Difficulty, ## 0x44, Block difficulty
+      forks: VmOpAllForks,
+      name: "difficulty",
+      info: "Get the block's difficulty",
+      exec: difficultyOp,
+    ),
+    (
+      opCode: GasLimit, ## 0x45, Block gas limit
+      forks: VmOpAllForks,
+      name: "gasLimit",
+      info: "Get the block's gas limit",
+      exec: gasLimitOp,
+    ),
+    (
+      opCode: ChainIdOp, ## 0x46, EIP-155 chain identifier
+      forks: VmOpIstanbulAndLater,
+      name: "chainId",
+      info: "Get current chain’s EIP-155 unique identifier",
+      exec: chainIdOp,
+    ),
+    (
+      opCode: SelfBalance, ## 0x47, Contract balance.
+      forks: VmOpIstanbulAndLater,
+      name: "selfBalance",
+      info: "Get current contract's balance",
+      exec: selfBalanceOp,
+    ),
+    (
+      opCode: BaseFee, ## 0x48, EIP-1559 Block base fee.
+      forks: VmOpLondonAndLater,
+      name: "baseFee",
+      info: "Get current block's EIP-1559 base fee",
+      exec: baseFeeOp,
+    ),
+    (
+      opCode: BlobHash, ## 0x49, EIP-4844 Transaction versioned hash
+      forks: VmOpCancunAndLater,
+      name: "blobHash",
+      info: "Get current transaction's EIP-4844 versioned hash",
+      exec: blobHashOp,
+    ),
+    (
+      opCode: BlobBaseFee, ## 0x4a, EIP-7516 Returns the current data-blob base-fee
+      forks: VmOpCancunAndLater,
+      name: "blobBaseFee",
+      info: "Returns the current data-blob base-fee",
+      exec: blobBaseFeeOp,
+    ),
+  ]
 
 # ------------------------------------------------------------------------------
 # End

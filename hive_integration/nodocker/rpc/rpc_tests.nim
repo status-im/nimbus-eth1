@@ -19,10 +19,9 @@ import
 
 export client
 
-type
-  TestSpec* = object
-    name*: string
-    run*: proc(t: TestEnv): Future[TestStatus]
+type TestSpec* = object
+  name*: string
+  run*: proc(t: TestEnv): Future[TestStatus]
 
 func eth(n: int): UInt256 {.compileTime.} =
   n.u256 * pow(10.u256, 18)
@@ -42,7 +41,7 @@ proc envTest(t: TestEnv): Future[TestStatus] {.async.} =
     "0161e041aad467a890839d5b08b138c1e6373072": "0x123450000000000000000",
     "87da6a8c6e9eff15d703fc2773e32f6af8dbe301": "0x123450000000000000000",
     "b97de4b8c857e4f6bc354f226dc3249aaee49209": "0x123450000000000000000",
-    "c5065c9eeebe6df2c2284d046bfc906501846c51": "0x123450000000000000000"
+    "c5065c9eeebe6df2c2284d046bfc906501846c51": "0x123450000000000000000",
   }
 
   for x in kv:
@@ -60,12 +59,11 @@ proc envTest(t: TestEnv): Future[TestStatus] {.async.} =
 proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
   let
     client = t.rpcClient
-    vault  = t.vault
-    sourceAddr  = await vault.createAccount(1.eth)
-    targetAddr  = await vault.createAccount(0.u256)
+    vault = t.vault
+    sourceAddr = await vault.createAccount(1.eth)
+    targetAddr = await vault.createAccount(0.u256)
 
-  var
-    sourceNonce = 0.AccountNonce
+  var sourceNonce = 0.AccountNonce
 
   # Get current balance
   let sourceAddressBalanceBefore = await client.balanceAt(sourceAddr)
@@ -82,15 +80,15 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
 
   # send 1234 wei to target account and verify balances and nonces are updated
   let
-    amount   = 1234.u256
+    amount = 1234.u256
     gasLimit = 50000.GasInt
 
   let tx = vault.signTx(sourceAddr, sourceNonce, targetAddr, amount, gasLimit, gasPrice)
   inc sourceNonce
 
   let txHash = rlpHash(tx)
-  echo "BalanceAt: send $1 wei from 0x$2 to 0x$3 in 0x$4" % [
-    $tx.tx.value, sourceAddr.toHex, targetAddr.toHex, txHash.data.toHex]
+  echo "BalanceAt: send $1 wei from 0x$2 to 0x$3 in 0x$4" %
+    [$tx.tx.value, sourceAddr.toHex, targetAddr.toHex, txHash.data.toHex]
 
   let ok = await client.sendTransaction(tx)
   if not ok:
@@ -117,16 +115,16 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
   let balanceTargetAccountAfter = await client.balanceAt(targetAddr)
 
   # expected balance is previous balance - tx amount - tx fee (gasUsed * gasPrice)
-  let exp =
-    sourceAddressBalanceBefore - amount - (gasUsed * tx.tx.gasPrice).u256
+  let exp = sourceAddressBalanceBefore - amount - (gasUsed * tx.tx.gasPrice).u256
 
   if exp != accountBalanceAfter:
-    echo "Expected sender account to have a balance of $1, got $2" % [$exp, $accountBalanceAfter]
+    echo "Expected sender account to have a balance of $1, got $2" %
+      [$exp, $accountBalanceAfter]
     return TestStatus.Failed
 
   if balanceTargetAccountAfter != amount:
-    echo "Expected new account to have a balance of $1, got $2" % [
-      $tx.tx.value, $balanceTargetAccountAfter]
+    echo "Expected new account to have a balance of $1, got $2" %
+      [$tx.tx.value, $balanceTargetAccountAfter]
     return TestStatus.Failed
 
   # ensure nonce is incremented by 1
@@ -140,12 +138,6 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
   result = TestStatus.OK
 
 const testList* = [
-  TestSpec(
-    name: "env is set up properly for subsequent tests",
-    run: envTest
-  ),
-  TestSpec(
-    name: "balance and nonce update correctly",
-    run: balanceAndNonceAtTest
-  )
+  TestSpec(name: "env is set up properly for subsequent tests", run: envTest),
+  TestSpec(name: "balance and nonce update correctly", run: balanceAndNonceAtTest),
 ]

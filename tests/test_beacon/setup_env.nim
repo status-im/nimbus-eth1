@@ -16,8 +16,7 @@ import
   ../../nimbus/common,
   ../../nimbus/sync/beacon/skeleton_desc
 
-const
-  genesisFile = "tests/customgenesis/post-merge.json"
+const genesisFile = "tests/customgenesis/post-merge.json"
 
 type
   Subchain* = object
@@ -25,55 +24,33 @@ type
     tail*: uint64
 
   TestEnv* = object
-    conf* : NimbusConf
+    conf*: NimbusConf
     chain*: ChainRef
 
   CCModify = proc(cc: NetworkParams)
 
 let
-  block49* = BlockHeader(
-    number: 49.BlockNumber
-  )
-  block49B* = BlockHeader(
-    number: 49.BlockNumber,
-    extraData: @['B'.byte]
-  )
-  block50* = BlockHeader(
-    number: 50.BlockNumber,
-    parentHash: block49.blockHash
-  )
+  block49* = BlockHeader(number: 49.BlockNumber)
+  block49B* = BlockHeader(number: 49.BlockNumber, extraData: @['B'.byte])
+  block50* = BlockHeader(number: 50.BlockNumber, parentHash: block49.blockHash)
   block50B* = BlockHeader(
-    number: 50.BlockNumber,
-    parentHash: block49.blockHash,
-    gasLimit: 999.GasInt,
+    number: 50.BlockNumber, parentHash: block49.blockHash, gasLimit: 999.GasInt
   )
-  block51* = BlockHeader(
-    number: 51.BlockNumber,
-    parentHash: block50.blockHash
-  )
+  block51* = BlockHeader(number: 51.BlockNumber, parentHash: block50.blockHash)
 
 proc setupEnv*(extraValidation: bool = false, ccm: CCModify = nil): TestEnv =
-  let
-    conf = makeConfig(@[
-      "--custom-network:" & genesisFile
-    ])
+  let conf = makeConfig(@["--custom-network:" & genesisFile])
 
   if ccm.isNil.not:
     ccm(conf.networkParams)
 
   let
-    com = CommonRef.new(
-      newCoreDbRef DefaultDbMemory,
-      conf.networkId,
-      conf.networkParams
-    )
+    com =
+      CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
     chain = newChain(com, extraValidation)
 
   com.initializeEmptyDb()
-  TestEnv(
-    conf : conf,
-    chain: chain,
-  )
+  TestEnv(conf: conf, chain: chain)
 
 func subchain*(head, tail: uint64): Subchain =
   Subchain(head: head, tail: tail)
@@ -81,18 +58,18 @@ func subchain*(head, tail: uint64): Subchain =
 func header*(bn: uint64, temp, parent: BlockHeader, diff: uint64): BlockHeader =
   BlockHeader(
     number: bn.BlockNumber,
-    parentHash : parent.blockHash,
-    difficulty : diff.u256,
-    timestamp  : parent.timestamp + 1,
-    gasLimit   : temp.gasLimit,
-    stateRoot  : temp.stateRoot,
-    txRoot     : temp.txRoot,
-    baseFeePerGas  : temp.baseFeePerGas,
-    receiptsRoot   : temp.receiptsRoot,
-    ommersHash     : temp.ommersHash,
+    parentHash: parent.blockHash,
+    difficulty: diff.u256,
+    timestamp: parent.timestamp + 1,
+    gasLimit: temp.gasLimit,
+    stateRoot: temp.stateRoot,
+    txRoot: temp.txRoot,
+    baseFeePerGas: temp.baseFeePerGas,
+    receiptsRoot: temp.receiptsRoot,
+    ommersHash: temp.ommersHash,
     withdrawalsRoot: temp.withdrawalsRoot,
-    blobGasUsed    : temp.blobGasUsed,
-    excessBlobGas  : temp.excessBlobGas,
+    blobGasUsed: temp.blobGasUsed,
+    excessBlobGas: temp.excessBlobGas,
     parentBeaconBlockRoot: temp.parentBeaconBlockRoot,
   )
 
@@ -100,22 +77,20 @@ func header*(com: CommonRef, bn: uint64, temp, parent: BlockHeader): BlockHeader
   result = header(bn, temp, parent, 0)
   result.difficulty = com.calcDifficulty(result.timestamp, parent)
 
-func header*(bn: uint64, temp, parent: BlockHeader,
-             diff: uint64, stateRoot: string): BlockHeader =
+func header*(
+    bn: uint64, temp, parent: BlockHeader, diff: uint64, stateRoot: string
+): BlockHeader =
   result = header(bn, temp, parent, diff)
   result.stateRoot = Hash256(data: hextoByteArray[32](stateRoot))
 
-func header*(com: CommonRef, bn: uint64, temp, parent: BlockHeader,
-             stateRoot: string): BlockHeader =
+func header*(
+    com: CommonRef, bn: uint64, temp, parent: BlockHeader, stateRoot: string
+): BlockHeader =
   result = com.header(bn, temp, parent)
   result.stateRoot = Hash256(data: hextoByteArray[32](stateRoot))
 
 func emptyBody*(): BlockBody =
-  BlockBody(
-    transactions: @[],
-    uncles: @[],
-    withdrawals: Opt.none(seq[Withdrawal]),
-  )
+  BlockBody(transactions: @[], uncles: @[], withdrawals: Opt.none(seq[Withdrawal]))
 
 template fillCanonical(skel, z, stat) =
   if z.status == stat and FillCanonical in z.status:

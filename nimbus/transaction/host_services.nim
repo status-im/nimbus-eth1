@@ -10,11 +10,15 @@
 
 import
   std/typetraits,
-  stint, chronicles,
-  eth/common/eth_types, ../db/ledger,
+  stint,
+  chronicles,
+  eth/common/eth_types,
+  ../db/ledger,
   ../common/[evmforks, common],
   ../evm/[state, internals],
-  ./host_types, ./host_trace, ./host_call_nested,
+  ./host_types,
+  ./host_trace,
+  ./host_call_nested,
   stew/saturation_arith
 
 import ../evm/computation except fromEvmc, toEvmc
@@ -54,12 +58,12 @@ proc setupTxContext(host: TransactionHost) =
   # values over much of the 256-bit range.
 
   let vmState = host.vmState
-  host.txContext.tx_gas_price     = vmState.txCtx.gasPrice.u256.toEvmc
-  host.txContext.tx_origin        = vmState.txCtx.origin.toEvmc
+  host.txContext.tx_gas_price = vmState.txCtx.gasPrice.u256.toEvmc
+  host.txContext.tx_origin = vmState.txCtx.origin.toEvmc
   # vmState.coinbase now unused
-  host.txContext.block_coinbase   = vmState.blockCtx.coinbase.toEvmc
+  host.txContext.block_coinbase = vmState.blockCtx.coinbase.toEvmc
   # vmState.number now unused
-  host.txContext.block_number     = int64.saturate(vmState.blockNumber)
+  host.txContext.block_number = int64.saturate(vmState.blockNumber)
   # vmState.timestamp now unused
 
   # TODO: do not use int64.saturate for timestamp for the moment
@@ -70,30 +74,30 @@ proc setupTxContext(host: TransactionHost) =
   # problematic test vectors:
   #  - BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4788_beacon_root/beacon_root_contract_timestamps.json
   #  - BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4788_beacon_root/beacon_root_equal_to_timestamp.json
-  host.txContext.block_timestamp  = cast[int64](vmState.blockCtx.timestamp)
+  host.txContext.block_timestamp = cast[int64](vmState.blockCtx.timestamp)
 
   # vmState.gasLimit now unused
-  host.txContext.block_gas_limit  = int64.saturate(vmState.blockCtx.gasLimit)
+  host.txContext.block_gas_limit = int64.saturate(vmState.blockCtx.gasLimit)
   # vmState.difficulty now unused
-  host.txContext.chain_id         = vmState.com.chainId.uint.u256.toEvmc
-  host.txContext.block_base_fee   = vmState.blockCtx.baseFeePerGas.get(0.u256).toEvmc
+  host.txContext.chain_id = vmState.com.chainId.uint.u256.toEvmc
+  host.txContext.block_base_fee = vmState.blockCtx.baseFeePerGas.get(0.u256).toEvmc
 
   if vmState.txCtx.versionedHashes.len > 0:
-    type
-      BlobHashPtr = typeof host.txContext.blob_hashes
-    host.txContext.blob_hashes = cast[BlobHashPtr](vmState.txCtx.versionedHashes[0].addr)
+    type BlobHashPtr = typeof host.txContext.blob_hashes
+    host.txContext.blob_hashes =
+      cast[BlobHashPtr](vmState.txCtx.versionedHashes[0].addr)
   else:
     host.txContext.blob_hashes = nil
 
-  host.txContext.blob_hashes_count= vmState.txCtx.versionedHashes.len.csize_t
-  host.txContext.blob_base_fee    = vmState.txCtx.blobBaseFee.toEvmc
+  host.txContext.blob_hashes_count = vmState.txCtx.versionedHashes.len.csize_t
+  host.txContext.blob_base_fee = vmState.txCtx.blobBaseFee.toEvmc
 
   # Most host functions do `flip256` in `evmc_host_glue`, but due to this
   # result being cached, it's better to do `flip256` when filling the cache.
-  host.txContext.tx_gas_price     = flip256(host.txContext.tx_gas_price)
-  host.txContext.chain_id         = flip256(host.txContext.chain_id)
-  host.txContext.block_base_fee   = flip256(host.txContext.block_base_fee)
-  host.txContext.blob_base_fee    = flip256(host.txContext.blob_base_fee)
+  host.txContext.tx_gas_price = flip256(host.txContext.tx_gas_price)
+  host.txContext.chain_id = flip256(host.txContext.chain_id)
+  host.txContext.block_base_fee = flip256(host.txContext.block_base_fee)
+  host.txContext.blob_base_fee = flip256(host.txContext.blob_base_fee)
 
   # EIP-4399
   # Transfer block randomness to difficulty OPCODE
@@ -122,11 +126,14 @@ proc accountExists(host: TransactionHost, address: HostAddress): bool {.show.} =
 # `selfDestruct`, if an EVM is only allowed to do these things to its own
 # contract account and the host always knows which account?
 
-proc getStorage(host: TransactionHost, address: HostAddress, key: HostKey): HostValue {.show.} =
+proc getStorage(
+    host: TransactionHost, address: HostAddress, key: HostKey
+): HostValue {.show.} =
   host.vmState.readOnlyStateDB.getStorage(address, key)
 
-proc setStorage(host: TransactionHost, address: HostAddress,
-                key: HostKey, newVal: HostValue): EvmcStorageStatus {.show.} =
+proc setStorage(
+    host: TransactionHost, address: HostAddress, key: HostKey, newVal: HostValue
+): EvmcStorageStatus {.show.} =
   let
     db = host.vmState.readOnlyStateDB
     currentVal = db.getStorage(address, key)
@@ -190,9 +197,13 @@ proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash {.show.}
   else:
     db.getCodeHash(address)
 
-proc copyCode(host: TransactionHost, address: HostAddress,
-              code_offset: HostSize, buffer_data: ptr byte,
-              buffer_size: HostSize): HostSize {.show.} =
+proc copyCode(
+    host: TransactionHost,
+    address: HostAddress,
+    code_offset: HostSize,
+    buffer_data: ptr byte,
+    buffer_size: HostSize,
+): HostSize {.show.} =
   # We must handle edge cases carefully to prevent overflows.  `len` is signed
   # type `int`, but `code_offset` and `buffer_size` are _unsigned_, and may
   # have large values (deliberately if attacked) that exceed the range of `int`.
@@ -255,9 +266,14 @@ proc getBlockHash(host: TransactionHost, number: HostBlockNumber): HostHash {.sh
   # TODO: Clean up the different messy block number types.
   host.vmState.getAncestorHash(number.BlockNumber)
 
-proc emitLog(host: TransactionHost, address: HostAddress,
-             data: ptr byte, data_size: HostSize,
-             topics: ptr HostTopic, topics_count: HostSize) {.show.} =
+proc emitLog(
+    host: TransactionHost,
+    address: HostAddress,
+    data: ptr byte,
+    data_size: HostSize,
+    topics: ptr HostTopic,
+    topics_count: HostSize,
+) {.show.} =
   var log: Log
   # Note, this assumes the EVM ensures `data_size` and `topics_count` cannot be
   # unreasonably large values.  Largest `topics_count` should be 4 according to
@@ -276,7 +292,9 @@ proc emitLog(host: TransactionHost, address: HostAddress,
   log.address = address
   host.vmState.stateDB.addLogEntry(log)
 
-proc accessAccount(host: TransactionHost, address: HostAddress): EvmcAccessStatus {.show.} =
+proc accessAccount(
+    host: TransactionHost, address: HostAddress
+): EvmcAccessStatus {.show.} =
   host.vmState.mutateStateDB:
     if not db.inAccessList(address):
       db.accessList(address)
@@ -284,8 +302,9 @@ proc accessAccount(host: TransactionHost, address: HostAddress): EvmcAccessStatu
     else:
       return EVMC_ACCESS_WARM
 
-proc accessStorage(host: TransactionHost, address: HostAddress,
-                   key: HostKey): EvmcAccessStatus {.show.} =
+proc accessStorage(
+    host: TransactionHost, address: HostAddress, key: HostKey
+): EvmcAccessStatus {.show.} =
   host.vmState.mutateStateDB:
     if not db.inAccessList(address, key):
       db.accessList(address, key)
@@ -293,12 +312,14 @@ proc accessStorage(host: TransactionHost, address: HostAddress,
     else:
       return EVMC_ACCESS_WARM
 
-proc getTransientStorage(host: TransactionHost,
-                         address: HostAddress, key: HostKey): HostValue {.show.} =
+proc getTransientStorage(
+    host: TransactionHost, address: HostAddress, key: HostKey
+): HostValue {.show.} =
   host.vmState.readOnlyStateDB.getTransientStorage(address, key)
 
-proc setTransientStorage(host: TransactionHost, address: HostAddress,
-                key: HostKey, newVal: HostValue) {.show.} =
+proc setTransientStorage(
+    host: TransactionHost, address: HostAddress, key: HostKey, newVal: HostValue
+) {.show.} =
   host.vmState.mutateStateDB:
     db.setTransientStorage(address, key, newVal)
 
@@ -308,5 +329,5 @@ when use_evmc_glue:
   include ./evmc_host_glue
 else:
   export
-    accountExists, getStorage, storage, getBalance, getCodeSize, getCodeHash,
-    copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog
+    accountExists, getStorage, storage, getBalance, getCodeSize, getCodeHash, copyCode,
+    selfDestruct, getTxContext, call, getBlockHash, emitLog

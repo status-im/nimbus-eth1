@@ -33,19 +33,22 @@ proc opName(n: int): string {.compileTime.} =
   "Dup" & $n
 
 proc fnInfo(n: int): string {.compileTime.} =
-  var blurb = case n
-              of 1: "first"
-              of 2: "second"
-              of 3: "third"
-              else: $n & "th"
+  var blurb =
+    case n
+    of 1:
+      "first"
+    of 2:
+      "second"
+    of 3:
+      "third"
+    else:
+      $n & "th"
   "Duplicate " & blurb & " item in the stack"
 
-
-template dupImpl(cpt: VmCpt; n: int): EvmResultVoid =
+template dupImpl(cpt: VmCpt, n: int): EvmResultVoid =
   cpt.stack.dup(n)
 
-const
-  inxRange = toSeq(1 .. 16)
+const inxRange = toSeq(1 .. 16)
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

@@ -31,7 +31,10 @@ func slt(x, y: UInt256): bool =
   type SignedWord = signedWordType(UInt256)
   let x_neg = cast[SignedWord](x.mostSignificantWord) < 0
   let y_neg = cast[SignedWord](y.mostSignificantWord) < 0
-  if x_neg xor y_neg: x_neg else: x < y
+  if x_neg xor y_neg:
+    x_neg
+  else:
+    x < y
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -86,7 +89,7 @@ proc smodOp(cpt: VmCpt): EvmResultVoid =
   ## 0x07, Signed modulo
   template smod256(top, lhs, rhs) =
     if rhs.isZero.not:
-      var sign: bool      
+      var sign: bool
       extractSign(rhs, sign)
       extractSign(lhs, sign)
       top = lhs mod rhs
@@ -97,15 +100,16 @@ proc smodOp(cpt: VmCpt): EvmResultVoid =
 proc addmodOp(cpt: VmCpt): EvmResultVoid =
   ## 0x08, Modulo addition
   ## Intermediate computations do not roll over at 2^256
-  ? cpt.stack.lsCheck(3)
+  ?cpt.stack.lsCheck(3)
   let
     lhs = cpt.stack.lsPeekInt(^1)
     rhs = cpt.stack.lsPeekInt(^2)
     modulus = cpt.stack.lsPeekInt(^3)
-    value = if modulus.isZero:
-              zero(UInt256)
-            else:
-              addmod(lhs, rhs, modulus)
+    value =
+      if modulus.isZero:
+        zero(UInt256)
+      else:
+        addmod(lhs, rhs, modulus)
 
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop value
@@ -114,15 +118,16 @@ proc addmodOp(cpt: VmCpt): EvmResultVoid =
 proc mulmodOp(cpt: VmCpt): EvmResultVoid =
   ## 0x09, Modulo multiplication
   ## Intermediate computations do not roll over at 2^256
-  ? cpt.stack.lsCheck(3)
+  ?cpt.stack.lsCheck(3)
   let
     lhs = cpt.stack.lsPeekInt(^1)
     rhs = cpt.stack.lsPeekInt(^2)
     modulus = cpt.stack.lsPeekInt(^3)
-    value = if modulus.isZero:
-              zero(UInt256)
-            else:
-              mulmod(lhs, rhs, modulus)
+    value =
+      if modulus.isZero:
+        zero(UInt256)
+      else:
+        mulmod(lhs, rhs, modulus)
 
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop value
@@ -131,9 +136,9 @@ proc mulmodOp(cpt: VmCpt): EvmResultVoid =
 proc expOp(cpt: VmCpt): EvmResultVoid =
   ## 0x0A, Exponentiation
   template exp256(top, base, exponent) =
-    ? cpt.opcodeGasCost(Exp,
-      cpt.gasCosts[Exp].d_handler(exponent),
-      reason = "EXP: exponent bytes")
+    ?cpt.opcodeGasCost(
+      Exp, cpt.gasCosts[Exp].d_handler(exponent), reason = "EXP: exponent bytes"
+    )
 
     if not base.isZero:
       top = base.pow(exponent)
@@ -153,7 +158,7 @@ proc signExtendOp(cpt: VmCpt): EvmResultVoid =
   template se256(top, bits, value) =
     const one = 1.u256
     if bits <= 31.u256:
-      let        
+      let
         testBit = bits.truncate(int) * 8 + 7
         bitPos = one shl testBit
         mask = bitPos - one
@@ -170,18 +175,21 @@ proc ltOp(cpt: VmCpt): EvmResultVoid =
   ## 0x10, Less-than comparison
   template lt256(lhs, rhs): auto =
     (lhs < rhs).uint.u256
+
   cpt.stack.binaryOp(lt256)
 
 proc gtOp(cpt: VmCpt): EvmResultVoid =
   ## 0x11, Greater-than comparison
   template gt256(lhs, rhs): auto =
     (lhs > rhs).uint.u256
+
   cpt.stack.binaryOp(gt256)
 
 proc sltOp(cpt: VmCpt): EvmResultVoid =
   ## 0x12, Signed less-than comparison
   template slt256(lhs, rhs): auto =
     slt(lhs, rhs).uint.u256
+
   cpt.stack.binaryOp(slt256)
 
 proc sgtOp(cpt: VmCpt): EvmResultVoid =
@@ -189,18 +197,21 @@ proc sgtOp(cpt: VmCpt): EvmResultVoid =
   # Arguments are swapped and SLT is used.
   template sgt256(lhs, rhs): auto =
     slt(rhs, lhs).uint.u256
+
   cpt.stack.binaryOp(sgt256)
 
 proc eqOp(cpt: VmCpt): EvmResultVoid =
   ## 0x14, Equality comparison
   template eq256(lhs, rhs): auto =
     (lhs == rhs).uint.u256
+
   cpt.stack.binaryOp(eq256)
 
 proc isZeroOp(cpt: VmCpt): EvmResultVoid =
   ## 0x15, Check if zero
   template zero256(value): auto =
     value.isZero.uint.u256
+
   cpt.stack.unaryOp(zero256)
 
 proc andOp(cpt: VmCpt): EvmResultVoid =
@@ -281,186 +292,188 @@ proc sarOp(cpt: VmCpt): EvmResultVoid =
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-const
-  VmOpExecArithmetic*: seq[VmOpExec] = @[
-
-    (opCode: Add,         ## 0x01, Addition
-     forks: VmOpAllForks,
-     name: "add",
-     info: "Addition operation",
-     exec: VmOpFn addOp),
-
-
-    (opCode: Mul,         ##  0x02, Multiplication
-     forks: VmOpAllForks,
-     name: "mul",
-     info: "Multiplication operation",
-     exec: mulOp),
-
-
-    (opCode: Sub,         ## 0x03, Subtraction
-     forks: VmOpAllForks,
-     name: "sub",
-     info: "Subtraction operation",
-     exec: subOp),
-
-
-    (opCode: Div,         ## 0x04, Division
-     forks: VmOpAllForks,
-     name: "divide",
-     info: "Integer division operation",
-     exec: divideOp),
-
-
-    (opCode: Sdiv,        ## 0x05, Signed division
-     forks: VmOpAllForks,
-     name: "sdiv",
-     info: "Signed integer division operation (truncated)",
-     exec: sdivOp),
-
-
-    (opCode: Mod,         ## 0x06, Modulo
-     forks: VmOpAllForks,
-     name: "modulo",
-     info: "Modulo remainder operation",
-     exec: moduloOp),
-
-
-    (opCode: Smod,        ## 0x07, Signed modulo
-     forks: VmOpAllForks,
-     name: "smod",
-     info: "Signed modulo remainder operation",
-     exec: smodOp),
-
-
-    (opCode: Addmod,      ## 0x08, Modulo addition, Intermediate
-                          ## computations do not roll over at 2^256
-     forks: VmOpAllForks,
-     name: "addmod",
-     info: "Modulo addition operation",
-     exec: addmodOp),
-
-
-    (opCode: Mulmod,      ## 0x09, Modulo multiplication, Intermediate
-                          ## computations do not roll over at 2^256
-     forks: VmOpAllForks,
-     name: "mulmod",
-     info: "Modulo multiplication operation",
-     exec: mulmodOp),
-
-
-    (opCode: Exp,         ## 0x0a, Exponentiation
-     forks: VmOpAllForks,
-     name: "exp",
-     info: "Exponentiation operation",
-     exec: expOp),
-
-
-    (opCode: SignExtend,  ## 0x0b, Extend 2's complemet length
-     forks: VmOpAllForks,
-     name: "signExtend",
-     info: "Extend length of two’s complement signed integer",
-     exec: signExtendOp),
-
-
-    (opCode: Lt,          ## 0x10, Less-than
-     forks: VmOpAllForks,
-     name: "lt",
-     info: "Less-than comparison",
-     exec: ltOp),
-
-
-    (opCode: Gt,          ## 0x11, Greater-than
-     forks: VmOpAllForks,
-     name: "gt",
-     info: "Greater-than comparison",
-     exec: gtOp),
-
-
-    (opCode: Slt,         ## 0x12, Signed less-than
-     forks: VmOpAllForks,
-     name: "slt",
-     info: "Signed less-than comparison",
-     exec: sltOp),
-
-
-    (opCode: Sgt,         ## 0x13, Signed greater-than
-     forks: VmOpAllForks,
-     name: "sgt",
-     info: "Signed greater-than comparison",
-     exec: sgtOp),
-
-
-    (opCode: Eq,          ## 0x14, Equality
-     forks: VmOpAllForks,
-     name: "eq",
-     info: "Equality comparison",
-     exec: eqOp),
-
-
-    (opCode: IsZero,      ## 0x15, Not operator
-     forks: VmOpAllForks,
-     name: "isZero",
-     info: "Simple not operator (Note: real Yellow Paper description)",
-     exec: isZeroOp),
-
-
-    (opCode: And,         ## 0x16, AND
-     forks: VmOpAllForks,
-     name: "andOp",
-     info: "Bitwise AND operation",
-     exec: andOp),
-
-
-    (opCode: Or,          ## 0x17, OR
-     forks: VmOpAllForks,
-     name: "orOp",
-     info: "Bitwise OR operation",
-     exec: orOp),
-
-
-    (opCode: Xor,         ## 0x18, XOR
-     forks: VmOpAllForks,
-     name: "xorOp",
-     info: "Bitwise XOR operation",
-     exec: xorOp),
-
-
-    (opCode: Not,         ## 0x19, NOT
-     forks: VmOpAllForks,
-     name: "notOp",
-     info: "Bitwise NOT operation",
-     exec: notOp),
-
-
-    (opCode: Byte,        ## 0x1a, Retrieve byte
-     forks: VmOpAllForks,
-     name: "byteOp",
-     info: "Retrieve single byte from word",
-     exec: byteOp),
-
+const VmOpExecArithmetic*: seq[VmOpExec] =
+  @[
+    (
+      opCode: Add, ## 0x01, Addition
+      forks: VmOpAllForks,
+      name: "add",
+      info: "Addition operation",
+      exec: VmOpFn addOp,
+    ),
+    (
+      opCode: Mul, ##  0x02, Multiplication
+      forks: VmOpAllForks,
+      name: "mul",
+      info: "Multiplication operation",
+      exec: mulOp,
+    ),
+    (
+      opCode: Sub, ## 0x03, Subtraction
+      forks: VmOpAllForks,
+      name: "sub",
+      info: "Subtraction operation",
+      exec: subOp,
+    ),
+    (
+      opCode: Div, ## 0x04, Division
+      forks: VmOpAllForks,
+      name: "divide",
+      info: "Integer division operation",
+      exec: divideOp,
+    ),
+    (
+      opCode: Sdiv, ## 0x05, Signed division
+      forks: VmOpAllForks,
+      name: "sdiv",
+      info: "Signed integer division operation (truncated)",
+      exec: sdivOp,
+    ),
+    (
+      opCode: Mod, ## 0x06, Modulo
+      forks: VmOpAllForks,
+      name: "modulo",
+      info: "Modulo remainder operation",
+      exec: moduloOp,
+    ),
+    (
+      opCode: Smod, ## 0x07, Signed modulo
+      forks: VmOpAllForks,
+      name: "smod",
+      info: "Signed modulo remainder operation",
+      exec: smodOp,
+    ),
+    (
+      opCode: Addmod, ## 0x08, Modulo addition, Intermediate
+        ## computations do not roll over at 2^256
+      forks: VmOpAllForks,
+      name: "addmod",
+      info: "Modulo addition operation",
+      exec: addmodOp,
+    ),
+    (
+      opCode: Mulmod, ## 0x09, Modulo multiplication, Intermediate
+        ## computations do not roll over at 2^256
+      forks: VmOpAllForks,
+      name: "mulmod",
+      info: "Modulo multiplication operation",
+      exec: mulmodOp,
+    ),
+    (
+      opCode: Exp, ## 0x0a, Exponentiation
+      forks: VmOpAllForks,
+      name: "exp",
+      info: "Exponentiation operation",
+      exec: expOp,
+    ),
+    (
+      opCode: SignExtend, ## 0x0b, Extend 2's complemet length
+      forks: VmOpAllForks,
+      name: "signExtend",
+      info: "Extend length of two’s complement signed integer",
+      exec: signExtendOp,
+    ),
+    (
+      opCode: Lt, ## 0x10, Less-than
+      forks: VmOpAllForks,
+      name: "lt",
+      info: "Less-than comparison",
+      exec: ltOp,
+    ),
+    (
+      opCode: Gt, ## 0x11, Greater-than
+      forks: VmOpAllForks,
+      name: "gt",
+      info: "Greater-than comparison",
+      exec: gtOp,
+    ),
+    (
+      opCode: Slt, ## 0x12, Signed less-than
+      forks: VmOpAllForks,
+      name: "slt",
+      info: "Signed less-than comparison",
+      exec: sltOp,
+    ),
+    (
+      opCode: Sgt, ## 0x13, Signed greater-than
+      forks: VmOpAllForks,
+      name: "sgt",
+      info: "Signed greater-than comparison",
+      exec: sgtOp,
+    ),
+    (
+      opCode: Eq, ## 0x14, Equality
+      forks: VmOpAllForks,
+      name: "eq",
+      info: "Equality comparison",
+      exec: eqOp,
+    ),
+    (
+      opCode: IsZero, ## 0x15, Not operator
+      forks: VmOpAllForks,
+      name: "isZero",
+      info: "Simple not operator (Note: real Yellow Paper description)",
+      exec: isZeroOp,
+    ),
+    (
+      opCode: And, ## 0x16, AND
+      forks: VmOpAllForks,
+      name: "andOp",
+      info: "Bitwise AND operation",
+      exec: andOp,
+    ),
+    (
+      opCode: Or, ## 0x17, OR
+      forks: VmOpAllForks,
+      name: "orOp",
+      info: "Bitwise OR operation",
+      exec: orOp,
+    ),
+    (
+      opCode: Xor, ## 0x18, XOR
+      forks: VmOpAllForks,
+      name: "xorOp",
+      info: "Bitwise XOR operation",
+      exec: xorOp,
+    ),
+    (
+      opCode: Not, ## 0x19, NOT
+      forks: VmOpAllForks,
+      name: "notOp",
+      info: "Bitwise NOT operation",
+      exec: notOp,
+    ),
+    (
+      opCode: Byte, ## 0x1a, Retrieve byte
+      forks: VmOpAllForks,
+      name: "byteOp",
+      info: "Retrieve single byte from word",
+      exec: byteOp,
+    ),
 
     # Constantinople's new opcodes
-
-    (opCode: Shl,         ## 0x1b, Shift left
-     forks: VmOpConstantinopleAndLater,
-     name: "shlOp",
-     info: "Shift left",
-     exec: shlOp),
-
-
-    (opCode: Shr,         ## 0x1c, Shift right logical
-     forks: VmOpConstantinopleAndLater,
-     name: "shrOp",
-     info: "Logical shift right",
-     exec: shrOp),
-
-
-    (opCode: Sar,         ## 0x1d, Shift right arithmetic
-     forks: VmOpConstantinopleAndLater,
-     name: "sarOp",
-     info: "Arithmetic shift right",
-     exec: sarOp)]
+    (
+      opCode: Shl, ## 0x1b, Shift left
+      forks: VmOpConstantinopleAndLater,
+      name: "shlOp",
+      info: "Shift left",
+      exec: shlOp,
+    ),
+    (
+      opCode: Shr, ## 0x1c, Shift right logical
+      forks: VmOpConstantinopleAndLater,
+      name: "shrOp",
+      info: "Logical shift right",
+      exec: shrOp,
+    ),
+    (
+      opCode: Sar, ## 0x1d, Shift right arithmetic
+      forks: VmOpConstantinopleAndLater,
+      name: "sarOp",
+      info: "Arithmetic shift right",
+      exec: sarOp,
+    ),
+  ]
 
 # ------------------------------------------------------------------------------
 # End

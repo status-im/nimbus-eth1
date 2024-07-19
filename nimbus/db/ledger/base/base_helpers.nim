@@ -8,9 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import
-  ../../core_db,
-  "."/[base_config, base_desc]
+import ../../core_db, "."/[base_config, base_desc]
 
 # ------------------------------------------------------------------------------
 # Public constructor helper
@@ -29,7 +27,7 @@ when LedgerEnableApiProfiling:
       db.ledgerHook = LedgerProfListRef.init()
     cast[LedgerProfListRef](db.ledgerHook)
 
-proc bless*(ldg: LedgerRef; db: CoreDbRef): LedgerRef =
+proc bless*(ldg: LedgerRef, db: CoreDbRef): LedgerRef =
   when LedgerEnableApiTracking:
     ldg.trackApi = db.trackLedgerApi
   when LedgerEnableApiProfiling:

@@ -29,8 +29,8 @@ proc dumpDebug(com: CommonRef, blockNumber: BlockNumber) =
     captureCom = com.clone(capture.recorder)
 
   let transaction = capture.recorder.ctx.newTransaction()
-  defer: transaction.dispose()
-
+  defer:
+    transaction.dispose()
 
   var
     parentNumber = blockNumber - 1
@@ -46,8 +46,8 @@ proc dumpDebug(com: CommonRef, blockNumber: BlockNumber) =
 
 proc main() {.used.} =
   let conf = getConfiguration()
-  let com = CommonRef.new(
-    newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()))
+  let com =
+    CommonRef.new(newCoreDbRef(DefaultDbPersistent, conf.dataDir, DbOptions.init()))
 
   if conf.head != 0'u64:
     dumpDebug(com, conf.head)

@@ -9,10 +9,7 @@
 # according to those terms.
 
 func vmName(): string =
-  when defined(evmc_enabled):
-    "evmc"
-  else:
-    "nimvm"
+  when defined(evmc_enabled): "evmc" else: "nimvm"
 
 const
   VmName* = vmName()

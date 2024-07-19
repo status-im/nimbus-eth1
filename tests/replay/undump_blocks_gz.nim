@@ -28,37 +28,33 @@ template say(args: varargs[untyped]) =
 # ------------------------------------------------------------------------------
 
 proc dumpBlocksBegin*(headers: openArray[BlockHeader]): string =
-  & "transaction #{headers[0].number} {headers.len}"
+  &"transaction #{headers[0].number} {headers.len}"
 
-proc dumpBlocksList*(header: BlockHeader; body: BlockBody): string =
-  & "block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
+proc dumpBlocksList*(header: BlockHeader, body: BlockBody): string =
+  &"block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
 
-proc dumpBlocksEnd*: string =
+proc dumpBlocksEnd*(): string =
   "commit"
 
-
-proc dumpBlocksEndNl*: string =
+proc dumpBlocksEndNl*(): string =
   dumpBlocksEnd() & "\n\n"
 
-proc dumpBlocksListNl*(header: BlockHeader; body: BlockBody): string =
+proc dumpBlocksListNl*(header: BlockHeader, body: BlockBody): string =
   dumpBlocksList(header, body) & "\n"
 
-proc dumpBlocksBeginNl*(db: CoreDbRef;
-                       headers: openArray[BlockHeader]): string =
+proc dumpBlocksBeginNl*(db: CoreDbRef, headers: openArray[BlockHeader]): string =
   if headers[0].number == 1'u64:
     let
       h0 = db.getBlockHeader(0'u64)
       b0 = db.getBlockBody(h0.blockHash)
-    result = "" &
-      dumpBlocksBegin(@[h0]) & "\n" &
-      dumpBlocksListNl(h0,b0) &
-      dumpBlocksEndNl()
+    result =
+      "" & dumpBlocksBegin(@[h0]) & "\n" & dumpBlocksListNl(h0, b0) & dumpBlocksEndNl()
 
   result &= dumpBlocksBegin(headers) & "\n"
 
-
-proc dumpBlocksNl*(db: CoreDbRef; headers: openArray[BlockHeader];
-                   bodies: openArray[BlockBody]): string =
+proc dumpBlocksNl*(
+    db: CoreDbRef, headers: openArray[BlockHeader], bodies: openArray[BlockBody]
+): string =
   ## Add this below the line `transaction.commit()` in the function
   ## `p2p/chain/persist_blocks.persistBlocksImpl()`:
   ## ::
@@ -73,10 +69,8 @@ proc dumpBlocksNl*(db: CoreDbRef; headers: openArray[BlockHeader];
   ##     doAssert dumpStream.open("./dump-stream.out", fmWrite)
   ##
   db.dumpBlocksBeginNl(headers) &
-    toSeq(countup(0, headers.len-1))
-      .mapIt(dumpBlocksListNl(headers[it], bodies[it]))
-      .join &
-    dumpBlocksEndNl()
+    toSeq(countup(0, headers.len - 1))
+    .mapIt(dumpBlocksListNl(headers[it], bodies[it])).join & dumpBlocksEndNl()
 
 # ------------------------------------------------------------------------------
 # Public undump
@@ -93,7 +87,7 @@ iterator undumpBlocksGz*(gzFile: string): seq[EthBlock] =
   if not gzFile.fileExists:
     raiseAssert &"No such file: \"{gzFile}\""
 
-  for lno,line in gzFile.gunzipLines:
+  for lno, line in gzFile.gunzipLines:
     if line.len == 0 or line[0] == '#':
       continue
     var flds = line.split
@@ -101,9 +95,7 @@ iterator undumpBlocksGz*(gzFile: string): seq[EthBlock] =
       case flds[0]
       of "transaction":
         let flds1Len = flds[1].len
-        if flds.len == 3 and
-           0 < flds1Len and flds[1][0] == '#' and
-           0 < flds[2].len:
+        if flds.len == 3 and 0 < flds1Len and flds[1][0] == '#' and 0 < flds[2].len:
           start = flds[1][1 ..< flds1Len].parseUInt
           top = start + flds[2].parseUInt
           current = start
@@ -114,15 +106,12 @@ iterator undumpBlocksGz*(gzFile: string): seq[EthBlock] =
           echo &"*** Ignoring line({lno}): {line}."
           waitFor = "transaction"
       of "block":
-        if flds.len == 3 and
-           0 < flds[1].len and
-           0 < flds[2].len and
-           start <= current and current < top:
+        if flds.len == 3 and 0 < flds[1].len and 0 < flds[2].len and start <= current and
+            current < top:
           var
             rlpHeader = flds[1].rlpFromHex
             rlpBody = flds[2].rlpFromHex
-          blockQ.add EthBlock.init(
-            rlpHeader.read(BlockHeader), rlpBody.read(BlockBody))
+          blockQ.add EthBlock.init(rlpHeader.read(BlockHeader), rlpBody.read(BlockBody))
           current.inc
           continue
         else:
@@ -147,10 +136,10 @@ iterator undumpBlocksGz*(gzs: seq[string]): seq[EthBlock] =
       yield w
 
 iterator undumpBlocksGz*(
-        gzFile: string;                          # Data dump file
-        least: uint64;                           # First block to extract
-        stopAfter = high(uint64);                # Last block to extract
-          ): seq[EthBlock] =
+    gzFile: string, # Data dump file
+    least: uint64, # First block to extract
+    stopAfter = high(uint64), # Last block to extract
+): seq[EthBlock] =
   ## Variant of `undumpBlocks()`
   for seqBlock in gzFile.undumpBlocksGz:
     let b = startAt(seqBlock, least)

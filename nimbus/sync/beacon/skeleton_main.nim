@@ -8,16 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import
-  ./skeleton_desc,
-  ./skeleton_utils,
-  ./skeleton_db,
-  ./skeleton_algo
+import ./skeleton_desc, ./skeleton_utils, ./skeleton_db, ./skeleton_algo
 
 export
-  skeleton_desc,
-  skeleton_algo.isLinked,
-  skeleton_algo.putBlocks,
+  skeleton_desc, skeleton_algo.isLinked, skeleton_algo.putBlocks,
   skeleton_algo.fillCanonicalChain
 
 {.push gcsafe, raises: [].}
@@ -32,23 +26,20 @@ logScope:
 proc new*(_: type SkeletonRef, chain: ChainRef): SkeletonRef =
   SkeletonRef(
     progress: Progress(),
-    pulled  : 0,
-    filling : false,
-    chain   : chain,
-    db      : chain.db,
-    started : getTime(),
-    logged  : getTime(),
-    conf    : SkeletonConfig(
-      fillCanonicalBackStep: 100,
-      subchainMergeMinimum : 1000,
-    ),
+    pulled: 0,
+    filling: false,
+    chain: chain,
+    db: chain.db,
+    started: getTime(),
+    logged: getTime(),
+    conf: SkeletonConfig(fillCanonicalBackStep: 100, subchainMergeMinimum: 1000),
   )
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc open*(sk: SkeletonRef): Result[void, string]  =
+proc open*(sk: SkeletonRef): Result[void, string] =
   if sk.chain.com.ttd.isNone and sk.chain.com.ttdPassed.not:
     return err("Cannot create skeleton as ttd and ttdPassed not set")
   sk.readProgress().isOkOr:
@@ -56,9 +47,9 @@ proc open*(sk: SkeletonRef): Result[void, string]  =
   sk.started = getTime()
   ok()
 
-proc setHead*(sk: SkeletonRef, head: BlockHeader,
-              force = true, init = false,
-              reorgthrow = false): Result[StatusAndReorg, string] =
+proc setHead*(
+    sk: SkeletonRef, head: BlockHeader, force = true, init = false, reorgthrow = false
+): Result[StatusAndReorg, string] =
   ## Announce and integrate a new head.
   ## @params head  - The block being attempted as a new head
   ## @params force - Flag to indicate if this is just a check of
@@ -72,13 +63,9 @@ proc setHead*(sk: SkeletonRef, head: BlockHeader,
   ## @returns True if the head (will) cause a reorg in the
   ##              canonical skeleton subchain
 
-  let
-    number = head.u64
+  let number = head.u64
 
-  debug "New skeleton head announced",
-    number,
-    hash=head.blockHashStr,
-    force
+  debug "New skeleton head announced", number, hash = head.blockHashStr, force
 
   let reorg = sk.processNewHead(head, force).valueOr:
     return err(error)
@@ -86,8 +73,11 @@ proc setHead*(sk: SkeletonRef, head: BlockHeader,
   if force and reorg:
     # It could just be a reorg at this head with previous tail preserved
     let
-      subchain = if sk.isEmpty: Segment(nil)
-                 else: sk.last
+      subchain =
+        if sk.isEmpty:
+          Segment(nil)
+        else:
+          sk.last
       maybeParent = sk.getHeader(number - 1).valueOr:
         return err(error)
       parentHash = maybeParent.blockHash
@@ -131,8 +121,9 @@ proc setHead*(sk: SkeletonRef, head: BlockHeader,
 
   ok(res)
 
-proc initSync*(sk: SkeletonRef, head: BlockHeader,
-               reorgthrow = false): Result[StatusAndReorg, string] =
+proc initSync*(
+    sk: SkeletonRef, head: BlockHeader, reorgthrow = false
+): Result[StatusAndReorg, string] =
   ## Setup the skeleton to init sync with head
   ## @params head - The block with which we want to init the skeleton head
   ## @params reorgthrow - If we would like the function to throw instead of
@@ -149,17 +140,18 @@ func bodyRange*(sk: SkeletonRef): Result[BodyRange, string] =
 
   if sk.progress.canonicalHeadReset:
     if subchain.tail > canonicalHead + 1:
-      return err("Canonical head should already be on or " &
-        "ahead subchain tail canonicalHead=" &
-        $canonicalHead & ", tail=" & $subchain.tail)
-    let newHead = if subchain.tail > 0: subchain.tail - 1
-                  else: 0
+      return err(
+        "Canonical head should already be on or " & "ahead subchain tail canonicalHead=" &
+          $canonicalHead & ", tail=" & $subchain.tail
+      )
+    let newHead =
+      if subchain.tail > 0:
+        subchain.tail - 1
+      else:
+        0
     canonicalHead = newHead
 
-  ok(BodyRange(
-    min: canonicalHead,
-    max: subchain.head,
-  ))
+  ok(BodyRange(min: canonicalHead, max: subchain.head))
 
 # ------------------------------------------------------------------------------
 # Getters and setters

@@ -13,9 +13,7 @@
 ##
 {.push raises: [].}
 
-import
-  results,
-  ".."/[aristo_desc, aristo_layers]
+import results, ".."/[aristo_desc, aristo_layers]
 
 func txFrameIsTop*(tx: AristoTxRef): bool
 
@@ -23,7 +21,7 @@ func txFrameIsTop*(tx: AristoTxRef): bool
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
+func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef, AristoError] =
   if not tx.txFrameIsTop():
     return err(TxNotTopTx)
   let db = tx.db
@@ -41,7 +39,7 @@ proc getTxUid(db: AristoDbRef): uint =
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-func txFrameTop*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
+func txFrameTop*(db: AristoDbRef): Result[AristoTxRef, AristoError] =
   ## Getter, returns top level transaction if there is any.
   if db.txRef.isNil:
     err(TxNoPendingTx)
@@ -66,7 +64,7 @@ func txFrameLevel*(db: AristoDbRef): int =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc txFrameBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
+proc txFrameBegin*(db: AristoDbRef): Result[AristoTxRef, AristoError] =
   ## Starts a new transaction.
   ##
   ## Example:
@@ -82,48 +80,41 @@ proc txFrameBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
 
   let vTop = db.top.vTop
   db.stack.add db.top
-  db.top = LayerRef(
-    vTop:  vTop,
-    txUid: db.getTxUid)
+  db.top = LayerRef(vTop: vTop, txUid: db.getTxUid)
 
-  db.txRef = AristoTxRef(
-    db:     db,
-    txUid:  db.top.txUid,
-    parent: db.txRef,
-    level:  db.stack.len)
+  db.txRef =
+    AristoTxRef(db: db, txUid: db.top.txUid, parent: db.txRef, level: db.stack.len)
 
   ok db.txRef
 
-
 proc txFrameRollback*(
-    tx: AristoTxRef;                  # Top transaction on database
-      ): Result[void,AristoError] =
+    tx: AristoTxRef, # Top transaction on database
+): Result[void, AristoError] =
   ## Given a *top level* handle, this function discards all database operations
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx()
+  let db = ?tx.getDbDescFromTopTx()
 
   # Roll back to previous layer.
   db.top = db.stack[^1]
-  db.stack.setLen(db.stack.len-1)
+  db.stack.setLen(db.stack.len - 1)
 
   db.txRef = db.txRef.parent
   ok()
 
-
 proc txFrameCommit*(
-    tx: AristoTxRef;                  # Top transaction on database
-      ): Result[void,AristoError] =
+    tx: AristoTxRef, # Top transaction on database
+): Result[void, AristoError] =
   ## Given a *top level* handle, this function accepts all database operations
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx()
+  let db = ?tx.getDbDescFromTopTx()
 
   # Pop layer from stack and merge database top layer onto it
   let merged = db.stack[^1]
-  db.stack.setLen(db.stack.len-1)
+  db.stack.setLen(db.stack.len - 1)
   if not db.top.isEmpty():
     # Only call `layersMergeOnto()` if layer is empty
     db.top.layersMergeOnto merged[]
@@ -136,11 +127,10 @@ proc txFrameCommit*(
     db.top.txUid = db.txRef.txUid
   ok()
 
-
 proc txFrameCollapse*(
-    tx: AristoTxRef;                  # Top transaction on database
-    commit: bool;                     # Commit if `true`, otherwise roll back
-      ): Result[void,AristoError] =
+    tx: AristoTxRef, # Top transaction on database
+    commit: bool, # Commit if `true`, otherwise roll back
+): Result[void, AristoError] =
   ## Iterated application of `commit()` or `rollback()` performing the
   ## something similar to
   ## ::
@@ -149,7 +139,7 @@ proc txFrameCollapse*(
   ##     if db.txTop.isErr: break
   ##     tx = db.txTop.value
   ##
-  let db = ? tx.getDbDescFromTopTx()
+  let db = ?tx.getDbDescFromTopTx()
 
   db.top.txUid = 0
   db.stack.setLen(0)
@@ -160,7 +150,7 @@ proc txFrameCollapse*(
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator txFrameWalk*(tx: AristoTxRef): (int,AristoTxRef,LayerRef,AristoError) =
+iterator txFrameWalk*(tx: AristoTxRef): (int, AristoTxRef, LayerRef, AristoError) =
   ## Walk down the transaction stack chain.
   let db = tx.db
   var tx = tx
@@ -169,25 +159,25 @@ iterator txFrameWalk*(tx: AristoTxRef): (int,AristoTxRef,LayerRef,AristoError) =
     # Start at top layer if tx refers to that
     if tx.level == db.stack.len:
       if tx.txUid != db.top.txUid:
-        yield (-1,tx,db.top,TxStackGarbled)
+        yield (-1, tx, db.top, TxStackGarbled)
         break body
 
       # Yield the top level
-      yield (0,tx,db.top,AristoError(0))
+      yield (0, tx, db.top, AristoError(0))
 
     # Walk down the transaction stack
-    for level in (tx.level-1).countDown(1):
+    for level in (tx.level - 1).countDown(1):
       tx = tx.parent
       if tx.isNil or tx.level != level:
-        yield (-1,tx,LayerRef(nil),TxStackGarbled)
+        yield (-1, tx, LayerRef(nil), TxStackGarbled)
         break body
 
       var layer = db.stack[level]
       if tx.txUid != layer.txUid:
-        yield (-1,tx,layer,TxStackGarbled)
+        yield (-1, tx, layer, TxStackGarbled)
         break body
 
-      yield (db.stack.len-level,tx,layer,AristoError(0))
+      yield (db.stack.len - level, tx, layer, AristoError(0))
 
 # ------------------------------------------------------------------------------
 # End

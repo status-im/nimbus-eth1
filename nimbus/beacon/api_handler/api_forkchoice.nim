@@ -17,66 +17,84 @@ import
   ./api_utils,
   chronicles
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises: [CatchableError].}
 
 template validateVersion(attr, com, apiVersion) =
   let
-    version   = attr.version
+    version = attr.version
     timestamp = ethTime attr.timestamp
 
   if apiVersion == Version.V3:
     if version != apiVersion:
-      raise invalidAttr("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
-      " but got PayloadAttributes" & $version)
+      raise invalidAttr(
+        "forkChoiceUpdatedV3 expect PayloadAttributesV3" & " but got PayloadAttributes" &
+          $version
+      )
     if not com.isCancunOrLater(timestamp):
-      raise unsupportedFork(
-        "forkchoiceUpdatedV3 get invalid payloadAttributes timestamp")
+      raise
+        unsupportedFork("forkchoiceUpdatedV3 get invalid payloadAttributes timestamp")
   else:
     if com.isCancunOrLater(timestamp):
       if version < Version.V3:
-        raise unsupportedFork("forkChoiceUpdated" & $apiVersion &
-          " doesn't support payloadAttributes" & $version)
+        raise unsupportedFork(
+          "forkChoiceUpdated" & $apiVersion & " doesn't support payloadAttributes" &
+            $version
+        )
       if version > Version.V3:
-        raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support PayloadAttributes" & $version)
+        raise invalidAttr(
+          "forkChoiceUpdated" & $apiVersion & " doesn't support PayloadAttributes" &
+            $version
+        )
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
-        raise invalidParams("forkChoiceUpdated" & $apiVersion &
-          " doesn't support payloadAttributesV1")
+        raise invalidParams(
+          "forkChoiceUpdated" & $apiVersion & " doesn't support payloadAttributesV1"
+        )
       if version > Version.V2:
-        raise invalidAttr("if timestamp is Shanghai or later," &
-          " payloadAttributes must be PayloadAttributesV2")
+        raise invalidAttr(
+          "if timestamp is Shanghai or later," &
+            " payloadAttributes must be PayloadAttributesV2"
+        )
     else:
       if version != Version.V1:
-        raise invalidParams("if timestamp is earlier than Shanghai," &
-          " payloadAttributes must be PayloadAttributesV1")
+        raise invalidParams(
+          "if timestamp is earlier than Shanghai," &
+            " payloadAttributes must be PayloadAttributesV1"
+        )
 
 template validateHeaderTimestamp(header, com, apiVersion) =
   # See fCUV3 specification No.2 bullet iii
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/cancun.md#specification-1
   if com.isCancunOrLater(header.timestamp):
     if apiVersion != Version.V3:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with timestamp >= Cancun")
+      raise invalidAttr(
+        "forkChoiceUpdated" & $apiVersion &
+          " doesn't support head block with timestamp >= Cancun"
+      )
   # See fCUV2 specification No.2 bullet 1
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
   elif com.isShanghaiOrLater(header.timestamp):
     if apiVersion != Version.V2:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with Shanghai timestamp")
+      raise invalidAttr(
+        "forkChoiceUpdated" & $apiVersion &
+          " doesn't support head block with Shanghai timestamp"
+      )
   else:
     if apiVersion != Version.V1:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with timestamp earlier than Shanghai")
+      raise invalidAttr(
+        "forkChoiceUpdated" & $apiVersion &
+          " doesn't support head block with timestamp earlier than Shanghai"
+      )
 
-proc forkchoiceUpdated*(ben: BeaconEngineRef,
-                        apiVersion: Version,
-                        update: ForkchoiceStateV1,
-                        attrsOpt: Opt[PayloadAttributes]):
-                             ForkchoiceUpdatedResponse =
+proc forkchoiceUpdated*(
+    ben: BeaconEngineRef,
+    apiVersion: Version,
+    update: ForkchoiceStateV1,
+    attrsOpt: Opt[PayloadAttributes],
+): ForkchoiceUpdatedResponse =
   let
-    com   = ben.com
-    db    = com.db
+    com = ben.com
+    db = com.db
     chain = ben.chain
     blockHash = ethHash update.headBlockHash
 
@@ -99,8 +117,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # the future to resolve from the `eth` network, but it's an unexpected case
     # that should be fixed, not papered over.
     if not ben.get(blockHash, header):
-      warn "Forkchoice requested unknown head",
-        hash = blockHash.short
+      warn "Forkchoice requested unknown head", hash = blockHash.short
       return simpleFCU(PayloadExecutionStatus.syncing)
 
     # Header advertised via a past newPayload request. Start syncing to it.
@@ -111,8 +128,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       # TODO: cancel downloader
 
     info "Forkchoice requested sync to new head",
-      number = header.number,
-      hash   = blockHash.short
+      number = header.number, hash = blockHash.short
 
     # Update sync header (if any)
     com.syncReqNewHead(header)
@@ -127,19 +143,21 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
   if apiVersion == Version.V1:
     let blockNumber = header.number
-    if header.difficulty > 0.u256 or blockNumber ==  0'u64:
+    if header.difficulty > 0.u256 or blockNumber == 0'u64:
       var
         td, ptd: DifficultyInt
         ttd = com.ttd.get(high(UInt256))
 
-      if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
+      if not db.getTd(blockHash, td) or
+          (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
         error "TDs unavailable for TTD check",
           number = blockNumber,
           hash = blockHash.short,
           td = td,
           parent = header.parentHash.short,
           ptd = ptd
-        return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
+        return
+          simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
 
       if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
         notice "Refusing beacon update to pre-merge",
@@ -158,8 +176,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   var canonHash: common.Hash256
   if db.getBlockHash(header.number, canonHash) and canonHash == blockHash:
     notice "Ignoring beacon update to old head",
-      blockHash=blockHash.short,
-      blockNumber=header.number
+      blockHash = blockHash.short, blockNumber = header.number
     return validFCU(Opt.none(PayloadID), blockHash)
 
   chain.setCanonical(header).isOkOr:
@@ -175,20 +192,18 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # TODO: If the finalized block is not in our canonical tree, somethings wrong
     var finalBlock: common.BlockHeader
     if not db.getBlockHeader(finalizedBlockHash, finalBlock):
-      warn "Final block not available in database",
-        hash=finalizedBlockHash.short
+      warn "Final block not available in database", hash = finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block header not available")
     var finalHash: common.Hash256
     if not db.getBlockHash(finalBlock.number, finalHash):
       warn "Final block not in canonical chain",
-        number=finalBlock.number,
-        hash=finalizedBlockHash.short
+        number = finalBlock.number, hash = finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block hash not available")
     if finalHash != finalizedBlockHash:
       warn "Final block not in canonical chain",
-        number=finalBlock.number,
-        expect=finalizedBlockHash.short,
-        get=finalHash.short
+        number = finalBlock.number,
+        expect = finalizedBlockHash.short,
+        get = finalHash.short
       raise invalidForkChoiceState("finalized block not canonical")
     db.finalizedHeaderHash(finalizedBlockHash)
 
@@ -196,19 +211,17 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   if safeBlockHash != common.Hash256():
     var safeBlock: common.BlockHeader
     if not db.getBlockHeader(safeBlockHash, safeBlock):
-      warn "Safe block not available in database",
-        hash = safeBlockHash.short
+      warn "Safe block not available in database", hash = safeBlockHash.short
       raise invalidForkChoiceState("safe head not available")
     var safeHash: common.Hash256
     if not db.getBlockHash(safeBlock.number, safeHash):
-      warn "Safe block hash not available in database",
-        hash = safeHash.short
+      warn "Safe block hash not available in database", hash = safeHash.short
       raise invalidForkChoiceState("safe block hash not available")
     if safeHash != safeBlockHash:
       warn "Safe block not in canonical chain",
-        blockNumber=safeBlock.number,
-        expect=safeBlockHash.short,
-        get=safeHash.short
+        blockNumber = safeBlock.number,
+        expect = safeBlockHash.short,
+        get = safeHash.short
       raise invalidForkChoiceState("safe head not canonical")
     db.safeHeaderHash(safeBlockHash)
 

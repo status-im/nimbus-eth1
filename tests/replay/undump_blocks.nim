@@ -8,20 +8,17 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/os,
-  eth/common,
-  "."/[undump_blocks_era1, undump_blocks_gz]
+import std/os, eth/common, "."/[undump_blocks_era1, undump_blocks_gz]
 
 # ------------------------------------------------------------------------------
 # Public undump
 # ------------------------------------------------------------------------------
 
 iterator undumpBlocks*(
-    file: string;
-    least = low(uint64);                     # First block to extract
-    stopAfter = high(uint64);                # Last block to extract
-      ): seq[EthBlock] =
+    file: string,
+    least = low(uint64), # First block to extract
+    stopAfter = high(uint64), # Last block to extract
+): seq[EthBlock] =
   if file.dirExists:
     for w in file.undumpBlocksEra1(least, stopAfter):
       yield w
@@ -31,14 +28,13 @@ iterator undumpBlocks*(
       for w in file.undumpBlocksGz(least, stopAfter):
         yield w
     else:
-      raiseAssert "Unsupported extension for \"" &
-        file & "\" (got \"" & ext & "\")"
+      raiseAssert "Unsupported extension for \"" & file & "\" (got \"" & ext & "\")"
 
 iterator undumpBlocks*(
-    files: seq[string];
-    least = low(uint64);                     # First block to extract
-    stopAfter = high(uint64);                # Last block to extract
-      ): seq[EthBlock] =
+    files: seq[string],
+    least = low(uint64), # First block to extract
+    stopAfter = high(uint64), # Last block to extract
+): seq[EthBlock] =
   for f in files:
     for w in f.undumpBlocks(least, stopAfter):
       yield w

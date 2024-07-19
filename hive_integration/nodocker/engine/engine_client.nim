@@ -11,7 +11,8 @@
 import
   std/[times, json, strutils],
   stew/byteutils,
-  eth/[common, common/eth_types, rlp], chronos,
+  eth/[common, common/eth_types, rlp],
+  chronos,
   json_rpc/[rpcclient, errors, jsonmarshal],
   ../../../nimbus/beacon/web3_eth_conv,
   ./types
@@ -23,9 +24,7 @@ import
   web3/engine_api,
   web3/eth_api
 
-export
-  execution_types,
-  rpcclient
+export execution_types, rpcclient
 
 type
   Hash256 = eth_types.Hash256
@@ -44,162 +43,185 @@ template wrapTrySimpleRes(body: untyped) =
     let res = waitFor body
     return ok(res)
 
-proc forkchoiceUpdatedV1*(client: RpcClient,
-      update: ForkchoiceStateV1,
-      payloadAttributes = Opt.none(PayloadAttributesV1)):
-        Result[ForkchoiceUpdatedResponse, string] =
+proc forkchoiceUpdatedV1*(
+    client: RpcClient,
+    update: ForkchoiceStateV1,
+    payloadAttributes = Opt.none(PayloadAttributesV1),
+): Result[ForkchoiceUpdatedResponse, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV1(update, payloadAttributes)
 
-proc forkchoiceUpdatedV2*(client: RpcClient,
-      update: ForkchoiceStateV1,
-      payloadAttributes = Opt.none(PayloadAttributes)):
-        Result[ForkchoiceUpdatedResponse, string] =
+proc forkchoiceUpdatedV2*(
+    client: RpcClient,
+    update: ForkchoiceStateV1,
+    payloadAttributes = Opt.none(PayloadAttributes),
+): Result[ForkchoiceUpdatedResponse, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV2(update, payloadAttributes)
 
-proc forkchoiceUpdatedV3*(client: RpcClient,
-      update: ForkchoiceStateV1,
-      payloadAttributes = Opt.none(PayloadAttributes)):
-        Result[ForkchoiceUpdatedResponse, string] =
+proc forkchoiceUpdatedV3*(
+    client: RpcClient,
+    update: ForkchoiceStateV1,
+    payloadAttributes = Opt.none(PayloadAttributes),
+): Result[ForkchoiceUpdatedResponse, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
 
-proc getPayloadV1*(client: RpcClient, payloadId: PayloadID): Result[ExecutionPayloadV1, string] =
+proc getPayloadV1*(
+    client: RpcClient, payloadId: PayloadID
+): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV1(payloadId)
 
-proc getPayloadV2*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV2Response, string] =
+proc getPayloadV2*(
+    client: RpcClient, payloadId: PayloadID
+): Result[GetPayloadV2Response, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV2(payloadId)
 
-proc getPayloadV3*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV3Response, string] =
+proc getPayloadV3*(
+    client: RpcClient, payloadId: PayloadID
+): Result[GetPayloadV3Response, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV3(payloadId)
 
-proc getPayloadV4*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV4Response, string] =
+proc getPayloadV4*(
+    client: RpcClient, payloadId: PayloadID
+): Result[GetPayloadV4Response, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV4(payloadId)
 
-proc getPayload*(client: RpcClient,
-                 payloadId: PayloadID,
-                 version: Version): Result[GetPayloadResponse, string] =
+proc getPayload*(
+    client: RpcClient, payloadId: PayloadID, version: Version
+): Result[GetPayloadResponse, string] =
   if version == Version.V4:
     let x = client.getPayloadV4(payloadId).valueOr:
       return err(error)
-    ok(GetPayloadResponse(
-      executionPayload: executionPayload(x.executionPayload),
-      blockValue: Opt.some(x.blockValue),
-      blobsBundle: Opt.some(x.blobsBundle),
-      shouldOverrideBuilder: Opt.some(x.shouldOverrideBuilder),
-    ))
+    ok(
+      GetPayloadResponse(
+        executionPayload: executionPayload(x.executionPayload),
+        blockValue: Opt.some(x.blockValue),
+        blobsBundle: Opt.some(x.blobsBundle),
+        shouldOverrideBuilder: Opt.some(x.shouldOverrideBuilder),
+      )
+    )
   elif version == Version.V3:
     let x = client.getPayloadV3(payloadId).valueOr:
       return err(error)
-    ok(GetPayloadResponse(
-      executionPayload: executionPayload(x.executionPayload),
-      blockValue: Opt.some(x.blockValue),
-      blobsBundle: Opt.some(x.blobsBundle),
-      shouldOverrideBuilder: Opt.some(x.shouldOverrideBuilder),
-    ))
+    ok(
+      GetPayloadResponse(
+        executionPayload: executionPayload(x.executionPayload),
+        blockValue: Opt.some(x.blockValue),
+        blobsBundle: Opt.some(x.blobsBundle),
+        shouldOverrideBuilder: Opt.some(x.shouldOverrideBuilder),
+      )
+    )
   elif version == Version.V2:
     let x = client.getPayloadV2(payloadId).valueOr:
       return err(error)
-    ok(GetPayloadResponse(
-      executionPayload: executionPayload(x.executionPayload),
-      blockValue: Opt.some(x.blockValue)
-    ))
+    ok(
+      GetPayloadResponse(
+        executionPayload: executionPayload(x.executionPayload),
+        blockValue: Opt.some(x.blockValue),
+      )
+    )
   else:
     let x = client.getPayloadV1(payloadId).valueOr:
       return err(error)
-    ok(GetPayloadResponse(
-      executionPayload: executionPayload(x),
-    ))
+    ok(GetPayloadResponse(executionPayload: executionPayload(x)))
 
-proc forkchoiceUpdated*(client: RpcClient,
-                        update: ForkchoiceStateV1,
-                        attr: PayloadAttributes):
-                          Result[ForkchoiceUpdatedResponse, string] =
+proc forkchoiceUpdated*(
+    client: RpcClient, update: ForkchoiceStateV1, attr: PayloadAttributes
+): Result[ForkchoiceUpdatedResponse, string] =
   case attr.version
-  of Version.V1: return client.forkchoiceUpdatedV1(update, Opt.some attr.V1)
-  of Version.V2: return client.forkchoiceUpdatedV2(update, Opt.some attr)
-  of Version.V3: return client.forkchoiceUpdatedV3(update, Opt.some attr)
-  of Version.V4: discard
+  of Version.V1:
+    return client.forkchoiceUpdatedV1(update, Opt.some attr.V1)
+  of Version.V2:
+    return client.forkchoiceUpdatedV2(update, Opt.some attr)
+  of Version.V3:
+    return client.forkchoiceUpdatedV3(update, Opt.some attr)
+  of Version.V4:
+    discard
 
-proc forkchoiceUpdated*(client: RpcClient,
-                        version: Version,
-                        update: ForkchoiceStateV1,
-                        attr = Opt.none(PayloadAttributes)):
-                          Result[ForkchoiceUpdatedResponse, string] =
+proc forkchoiceUpdated*(
+    client: RpcClient,
+    version: Version,
+    update: ForkchoiceStateV1,
+    attr = Opt.none(PayloadAttributes),
+): Result[ForkchoiceUpdatedResponse, string] =
   case version
-  of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
-  of Version.V2: return client.forkchoiceUpdatedV2(update, attr)
-  of Version.V3: return client.forkchoiceUpdatedV3(update, attr)
-  of Version.V4: discard
+  of Version.V1:
+    return client.forkchoiceUpdatedV1(update, attr.V1)
+  of Version.V2:
+    return client.forkchoiceUpdatedV2(update, attr)
+  of Version.V3:
+    return client.forkchoiceUpdatedV3(update, attr)
+  of Version.V4:
+    discard
 
-proc newPayloadV1*(client: RpcClient,
-      payload: ExecutionPayloadV1):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV1*(
+    client: RpcClient, payload: ExecutionPayloadV1
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV1(payload)
 
-proc newPayloadV2*(client: RpcClient,
-      payload: ExecutionPayloadV2):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV2*(
+    client: RpcClient, payload: ExecutionPayloadV2
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV2(payload)
 
-proc newPayloadV2*(client: RpcClient,
-      payload: ExecutionPayloadV1OrV2):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV2*(
+    client: RpcClient, payload: ExecutionPayloadV1OrV2
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV2(payload)
 
-proc newPayloadV3*(client: RpcClient,
-      payload: ExecutionPayloadV3,
-      versionedHashes: seq[VersionedHash],
-      parentBeaconBlockRoot: FixedBytes[32]
-      ):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV3*(
+    client: RpcClient,
+    payload: ExecutionPayloadV3,
+    versionedHashes: seq[VersionedHash],
+    parentBeaconBlockRoot: FixedBytes[32],
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
 
-proc newPayloadV4*(client: RpcClient,
-      payload: ExecutionPayloadV4,
-      versionedHashes: seq[VersionedHash],
-      parentBeaconBlockRoot: FixedBytes[32]
-      ):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV4*(
+    client: RpcClient,
+    payload: ExecutionPayloadV4,
+    versionedHashes: seq[VersionedHash],
+    parentBeaconBlockRoot: FixedBytes[32],
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes, parentBeaconBlockRoot)
 
-proc newPayloadV1*(client: RpcClient,
-      payload: ExecutionPayload):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV1*(
+    client: RpcClient, payload: ExecutionPayload
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV1(payload)
 
-proc newPayloadV2*(client: RpcClient,
-      payload: ExecutionPayload):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV2*(
+    client: RpcClient, payload: ExecutionPayload
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV2(payload)
 
-proc newPayloadV3*(client: RpcClient,
-      payload: ExecutionPayload,
-      versionedHashes: Opt[seq[VersionedHash]],
-      parentBeaconBlockRoot: Opt[FixedBytes[32]]
-      ):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV3*(
+    client: RpcClient,
+    payload: ExecutionPayload,
+    versionedHashes: Opt[seq[VersionedHash]],
+    parentBeaconBlockRoot: Opt[FixedBytes[32]],
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
 
-proc newPayloadV4*(client: RpcClient,
-      payload: ExecutionPayload,
-      versionedHashes: Opt[seq[VersionedHash]],
-      parentBeaconBlockRoot: Opt[FixedBytes[32]]
-      ):
-        Result[PayloadStatusV1, string] =
+proc newPayloadV4*(
+    client: RpcClient,
+    payload: ExecutionPayload,
+    versionedHashes: Opt[seq[VersionedHash]],
+    parentBeaconBlockRoot: Opt[FixedBytes[32]],
+): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes, parentBeaconBlockRoot)
 
@@ -209,62 +231,62 @@ proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
     for h in tx.versionedHashes:
       result.add w3Hash(h)
 
-proc newPayload*(client: RpcClient,
-                 payload: ExecutionPayload,
-                 beaconRoot = Opt.none(common.Hash256)): Result[PayloadStatusV1, string] =
+proc newPayload*(
+    client: RpcClient, payload: ExecutionPayload, beaconRoot = Opt.none(common.Hash256)
+): Result[PayloadStatusV1, string] =
   case payload.version
-  of Version.V1: return client.newPayloadV1(payload.V1)
-  of Version.V2: return client.newPayloadV2(payload.V2)
+  of Version.V1:
+    return client.newPayloadV1(payload.V1)
+  of Version.V2:
+    return client.newPayloadV2(payload.V2)
   of Version.V3:
     if beaconRoot.isNone:
       # fallback
       return client.newPayloadV2(payload.V2)
     let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV3(payload.V3,
-      versionedHashes,
-      w3Hash beaconRoot.get)
+    return client.newPayloadV3(payload.V3, versionedHashes, w3Hash beaconRoot.get)
   of Version.V4:
     let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV4(payload.V4,
-      versionedHashes,
-      w3Hash beaconRoot.get)
+    return client.newPayloadV4(payload.V4, versionedHashes, w3Hash beaconRoot.get)
 
-proc newPayload*(client: RpcClient,
-                 version: Version,
-                 payload: ExecutionPayload,
-                 beaconRoot = Opt.none(common.Hash256)): Result[PayloadStatusV1, string] =
+proc newPayload*(
+    client: RpcClient,
+    version: Version,
+    payload: ExecutionPayload,
+    beaconRoot = Opt.none(common.Hash256),
+): Result[PayloadStatusV1, string] =
   case version
-  of Version.V1: return client.newPayloadV1(payload)
-  of Version.V2: return client.newPayloadV2(payload)
+  of Version.V1:
+    return client.newPayloadV1(payload)
+  of Version.V2:
+    return client.newPayloadV2(payload)
   of Version.V3:
     let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV3(payload,
-      Opt.some(versionedHashes),
-      w3Hash beaconRoot)
+    return client.newPayloadV3(payload, Opt.some(versionedHashes), w3Hash beaconRoot)
   of Version.V4:
     let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV4(payload,
-      Opt.some(versionedHashes),
-      w3Hash beaconRoot)
+    return client.newPayloadV4(payload, Opt.some(versionedHashes), w3Hash beaconRoot)
 
-proc newPayload*(client: RpcClient,
-                 version: Version,
-                 payload: ExecutableData): Result[PayloadStatusV1, string] =
+proc newPayload*(
+    client: RpcClient, version: Version, payload: ExecutableData
+): Result[PayloadStatusV1, string] =
   case version
-  of Version.V1: return client.newPayloadV1(payload.basePayload)
-  of Version.V2: return client.newPayloadV2(payload.basePayload)
+  of Version.V1:
+    return client.newPayloadV1(payload.basePayload)
+  of Version.V2:
+    return client.newPayloadV2(payload.basePayload)
   of Version.V3:
-    return client.newPayloadV3(payload.basePayload,
-      w3Hashes payload.versionedHashes,
-      w3Hash payload.beaconRoot)
+    return client.newPayloadV3(
+      payload.basePayload, w3Hashes payload.versionedHashes, w3Hash payload.beaconRoot
+    )
   of Version.V4:
-    return client.newPayloadV4(payload.basePayload,
-      w3Hashes payload.versionedHashes,
-      w3Hash payload.beaconRoot)
+    return client.newPayloadV4(
+      payload.basePayload, w3Hashes payload.versionedHashes, w3Hash payload.beaconRoot
+    )
 
-proc exchangeCapabilities*(client: RpcClient,
-      methods: seq[string]):
-        Result[seq[string], string] =
+proc exchangeCapabilities*(
+    client: RpcClient, methods: seq[string]
+): Result[seq[string], string] =
   wrapTrySimpleRes:
     client.engine_exchangeCapabilities(methods)
 
@@ -300,50 +322,52 @@ proc maybeInt(n: Opt[Quantity]): Opt[int] =
 
 proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
   common.BlockHeader(
-    number         : common.BlockNumber bc.number,
-    parentHash     : ethHash bc.parentHash,
-    nonce          : toBlockNonce(bc.nonce),
-    ommersHash     : ethHash bc.sha3Uncles,
-    logsBloom      : BloomFilter bc.logsBloom,
-    txRoot         : ethHash bc.transactionsRoot,
-    stateRoot      : ethHash bc.stateRoot,
-    receiptsRoot   : ethHash bc.receiptsRoot,
-    coinbase       : ethAddr bc.miner,
-    difficulty     : bc.difficulty,
-    extraData      : bc.extraData.bytes,
-    mixHash        : ethHash bc.mixHash,
-    gasLimit       : bc.gasLimit.GasInt,
-    gasUsed        : bc.gasUsed.GasInt,
-    timestamp      : EthTime bc.timestamp,
-    baseFeePerGas  : bc.baseFeePerGas,
+    number: common.BlockNumber bc.number,
+    parentHash: ethHash bc.parentHash,
+    nonce: toBlockNonce(bc.nonce),
+    ommersHash: ethHash bc.sha3Uncles,
+    logsBloom: BloomFilter bc.logsBloom,
+    txRoot: ethHash bc.transactionsRoot,
+    stateRoot: ethHash bc.stateRoot,
+    receiptsRoot: ethHash bc.receiptsRoot,
+    coinbase: ethAddr bc.miner,
+    difficulty: bc.difficulty,
+    extraData: bc.extraData.bytes,
+    mixHash: ethHash bc.mixHash,
+    gasLimit: bc.gasLimit.GasInt,
+    gasUsed: bc.gasUsed.GasInt,
+    timestamp: EthTime bc.timestamp,
+    baseFeePerGas: bc.baseFeePerGas,
     withdrawalsRoot: ethHash bc.withdrawalsRoot,
-    blobGasUsed    : maybeU64(bc.blobGasUsed),
-    excessBlobGas  : maybeU64(bc.excessBlobGas),
+    blobGasUsed: maybeU64(bc.blobGasUsed),
+    excessBlobGas: maybeU64(bc.excessBlobGas),
     parentBeaconBlockRoot: ethHash bc.parentBeaconBlockRoot,
   )
 
 func vHashes(x: Opt[seq[Web3Hash]]): seq[common.Hash256] =
-  if x.isNone: return
-  else: ethHashes(x.get)
+  if x.isNone:
+    return
+  else:
+    ethHashes(x.get)
 
 proc toTransaction(tx: TransactionObject): Transaction =
   common.Transaction(
-    txType          : tx.`type`.get(0.Web3Quantity).TxType,
-    chainId         : tx.chainId.get(0.Web3Quantity).ChainId,
-    nonce           : tx.nonce.AccountNonce,
-    gasPrice        : tx.gasPrice.GasInt,
+    txType: tx.`type`.get(0.Web3Quantity).TxType,
+    chainId: tx.chainId.get(0.Web3Quantity).ChainId,
+    nonce: tx.nonce.AccountNonce,
+    gasPrice: tx.gasPrice.GasInt,
     maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
-    maxFeePerGas    : tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
-    gasLimit        : tx.gas.GasInt,
-    to              : ethAddr tx.to,
-    value           : tx.value,
-    payload         : tx.input,
-    accessList      : ethAccessList(tx.accessList),
+    maxFeePerGas: tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
+    gasLimit: tx.gas.GasInt,
+    to: ethAddr tx.to,
+    value: tx.value,
+    payload: tx.input,
+    accessList: ethAccessList(tx.accessList),
     maxFeePerBlobGas: tx.maxFeePerBlobGas.get(0.u256),
-    versionedHashes : vHashes(tx.blobVersionedHashes),
-    V               : tx.v.uint64,
-    R               : tx.r,
-    S               : tx.s,
+    versionedHashes: vHashes(tx.blobVersionedHashes),
+    V: tx.v.uint64,
+    R: tx.r,
+    S: tx.s,
   )
 
 proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
@@ -458,8 +482,9 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     versionedHashes: ethHashes tx.blobVersionedHashes,
   )
 
-proc waitForTTD*(client: RpcClient,
-      ttd: DifficultyInt): Future[(common.BlockHeader, bool)] {.async.} =
+proc waitForTTD*(
+    client: RpcClient, ttd: DifficultyInt
+): Future[(common.BlockHeader, bool)] {.async.} =
   let period = chronos.seconds(5)
   var loop = 0
   var emptyHeader: common.BlockHeader
@@ -480,7 +505,9 @@ proc blockNumber*(client: RpcClient): Result[uint64, string] =
     let res = waitFor client.eth_blockNumber()
     return ok(res.uint64)
 
-proc headerByNumber*(client: RpcClient, number: uint64): Result[common.BlockHeader, string] =
+proc headerByNumber*(
+    client: RpcClient, number: uint64
+): Result[common.BlockHeader, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber(blockId(number), false)
     if res.isNil:
@@ -497,7 +524,9 @@ proc headerByNumber*(client: RpcClient, number: uint64): Result[common.BlockHead
 #    output.withdrawals = toWithdrawals(res.withdrawals)
 #    return ok()
 
-proc headerByHash*(client: RpcClient, hash: Hash256): Result[common.BlockHeader, string] =
+proc headerByHash*(
+    client: RpcClient, hash: Hash256
+): Result[common.BlockHeader, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByHash(w3Hash hash, false)
     if res.isNil:
@@ -531,7 +560,8 @@ proc namedHeader*(client: RpcClient, name: string): Result[common.BlockHeader, s
     return ok(res.toBlockHeader)
 
 proc sendTransaction*(
-    client: RpcClient, tx: common.PooledTransaction): Result[void, string] =
+    client: RpcClient, tx: common.PooledTransaction
+): Result[void, string] =
   wrapTry:
     let encodedTx = rlp.encode(tx)
     let res = waitFor client.eth_sendRawTransaction(encodedTx)
@@ -546,7 +576,9 @@ proc balanceAt*(client: RpcClient, address: EthAddress): Result[UInt256, string]
     let res = waitFor client.eth_getBalance(w3Addr(address), blockId("latest"))
     return ok(res)
 
-proc balanceAt*(client: RpcClient, address: EthAddress, number: common.BlockNumber): Result[UInt256, string] =
+proc balanceAt*(
+    client: RpcClient, address: EthAddress, number: common.BlockNumber
+): Result[UInt256, string] =
   wrapTry:
     let res = waitFor client.eth_getBalance(w3Addr(address), blockId(number))
     return ok(res)
@@ -570,17 +602,23 @@ proc txByHash*(client: RpcClient, txHash: Hash256): Result[RPCTx, string] =
       return err("failed to get transaction: " & txHash.data.toHex)
     return ok(res.toRPCTx)
 
-proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256): Result[FixedBytes[32], string] =
+proc storageAt*(
+    client: RpcClient, address: EthAddress, slot: UInt256
+): Result[FixedBytes[32], string] =
   wrapTry:
     let res = waitFor client.eth_getStorageAt(w3Addr(address), slot, blockId("latest"))
     return ok(res)
 
-proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256, number: common.BlockNumber): Result[FixedBytes[32], string] =
+proc storageAt*(
+    client: RpcClient, address: EthAddress, slot: UInt256, number: common.BlockNumber
+): Result[FixedBytes[32], string] =
   wrapTry:
     let res = waitFor client.eth_getStorageAt(w3Addr(address), slot, blockId(number))
     return ok(res)
 
-proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash256): Future[Result[void, string]] {.async.} =
+proc verifyPoWProgress*(
+    client: RpcClient, lastBlockHash: Hash256
+): Future[Result[void, string]] {.async.} =
   let res = await client.eth_getBlockByHash(w3Hash lastBlockHash, false)
   if res.isNil:
     return err("cannot get block by hash " & lastBlockHash.data.toHex)
@@ -600,7 +638,10 @@ proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash256): Future[Resul
     let bc = res
     let diff = bc.difficulty
     if diff.isZero:
-      return err("Expected PoW chain to progress in PoW mode, but following block difficulty: " & $diff)
+      return err(
+        "Expected PoW chain to progress in PoW mode, but following block difficulty: " &
+          $diff
+      )
 
     if bc.number.u256 > number:
       return ok()
@@ -610,12 +651,11 @@ proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash256): Future[Resul
 
   return err("verify PoW Progress timeout")
 
-type
-  TraceOpts = object
-    disableStorage: bool
-    disableMemory: bool
-    disableState: bool
-    disableStateDiff: bool
+type TraceOpts = object
+  disableStorage: bool
+  disableMemory: bool
+  disableState: bool
+  disableStateDiff: bool
 
 TraceOpts.useDefaultSerializationIn JrpcConv
 
@@ -623,9 +663,8 @@ createRpcSigsFromNim(RpcClient):
   proc debug_traceTransaction(hash: TxHash, opts: TraceOpts): JsonNode
 
 proc debugPrevRandaoTransaction*(
-    client: RpcClient,
-    tx: PooledTransaction,
-    expectedPrevRandao: Hash256): Result[void, string] =
+    client: RpcClient, tx: PooledTransaction, expectedPrevRandao: Hash256
+): Result[void, string] =
   wrapTry:
     let hash = w3Hash tx.rlpHash
     # we only interested in stack, disable all other elems
@@ -633,7 +672,7 @@ proc debugPrevRandaoTransaction*(
       disableStorage: true,
       disableMemory: true,
       disableState: true,
-      disableStateDiff: true
+      disableStateDiff: true,
     )
 
     let res = waitFor client.debug_traceTransaction(hash, opts)
@@ -642,37 +681,49 @@ proc debugPrevRandaoTransaction*(
     var prevRandaoFound = false
     for i, x in structLogs.elems:
       let op = x["op"].getStr
-      if op != "DIFFICULTY": continue
+      if op != "DIFFICULTY":
+        continue
 
-      if i+1 >= structLogs.len:
+      if i + 1 >= structLogs.len:
         return err("No information after PREVRANDAO operation")
 
       prevRandaoFound = true
-      let stack = structLogs[i+1]["stack"]
+      let stack = structLogs[i + 1]["stack"]
       if stack.len < 1:
         return err("Invalid stack after PREVRANDAO operation")
 
       let stackHash = Hash256(data: hextoByteArray[32](stack[0].getStr))
       if stackHash != expectedPrevRandao:
-        return err("Invalid stack after PREVRANDAO operation $1 != $2" % [stackHash.data.toHex, expectedPrevRandao.data.toHex])
+        return err(
+          "Invalid stack after PREVRANDAO operation $1 != $2" %
+            [stackHash.data.toHex, expectedPrevRandao.data.toHex]
+        )
 
     if not prevRandaoFound:
       return err("PREVRANDAO opcode not found")
 
     return ok()
 
-template expectBalanceEqual*(res: Result[UInt256, string], account: EthAddress,
-                             expectedBalance: UInt256): auto =
+template expectBalanceEqual*(
+    res: Result[UInt256, string], account: EthAddress, expectedBalance: UInt256
+): auto =
   if res.isErr:
     return err(res.error)
   if res.get != expectedBalance:
-    return err("invalid wd balance at $1, expect $2, get $3" % [
-      account.toHex, $expectedBalance, $res.get])
+    return err(
+      "invalid wd balance at $1, expect $2, get $3" %
+        [account.toHex, $expectedBalance, $res.get]
+    )
 
-template expectStorageEqual*(res: Result[FixedBytes[32], string], account: EthAddress,
-                             expectedValue: FixedBytes[32]): auto =
+template expectStorageEqual*(
+    res: Result[FixedBytes[32], string],
+    account: EthAddress,
+    expectedValue: FixedBytes[32],
+): auto =
   if res.isErr:
     return err(res.error)
   if res.get != expectedValue:
-    return err("invalid wd storage at $1 is $2, expect $3" % [
-    account.toHex, $res.get, $expectedValue])
+    return err(
+      "invalid wd storage at $1 is $2, expect $3" %
+        [account.toHex, $res.get, $expectedValue]
+    )

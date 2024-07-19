@@ -12,39 +12,32 @@
 ## ======================================================
 ##
 
-import
-  std/[strutils, macros],
-  ./oph_defs,
-  ../../evm_errors
+import std/[strutils, macros], ./oph_defs, ../../evm_errors
 
-type
-  OphNumToTextFn* = proc(n: int): string
+type OphNumToTextFn* = proc(n: int): string
 
-const
-  recForkSet = "VmOpAllForks"
+const recForkSet = "VmOpAllForks"
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 proc asIdent(id, name: string): NimNode {.compileTime.} =
-  result = nnkExprColonExpr.newTree(
-             newIdentNode(id),
-             newIdentNode(name))
+  result = nnkExprColonExpr.newTree(newIdentNode(id), newIdentNode(name))
 
 proc asText(id, name: string): NimNode {.compileTime.} =
-  result = nnkExprColonExpr.newTree(
-             newIdentNode(id),
-             newLit(name))
+  result = nnkExprColonExpr.newTree(newIdentNode(id), newLit(name))
 
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
 
-macro genOphHandlers*(runHandler: static[OphNumToTextFn];
-                      itemInfo: static[OphNumToTextFn];
-                      inxList: static[openArray[int]];
-                      body: untyped): untyped =
+macro genOphHandlers*(
+    runHandler: static[OphNumToTextFn],
+    itemInfo: static[OphNumToTextFn],
+    inxList: static[openArray[int]],
+    body: untyped,
+): untyped =
   ## Generate the equivalent of
   ## ::
   ##  const <runHandler>: VmOpFn = proc(cpt: VmCpt) =
@@ -64,14 +57,15 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
     result.add quote do:
       proc `fnName`(cpt: VmCpt): EvmResultVoid =
         `comment`
-        `body`(cpt,`n`)
+        `body`(cpt, `n`)
 
-
-macro genOphList*(runHandler: static[OphNumToTextFn];
-                  handlerInfo: static[OphNumToTextFn];
-                  inxList: static[openArray[int]];
-                  varName: static[string];
-                  opCode: static[OphNumToTextFn]): untyped =
+macro genOphList*(
+    runHandler: static[OphNumToTextFn],
+    handlerInfo: static[OphNumToTextFn],
+    inxList: static[openArray[int]],
+    varName: static[string],
+    opCode: static[OphNumToTextFn],
+): untyped =
   ## Generate
   ## ::
   ##   const <varName>*: seq[VmOpExec] = @[ <records> ]
@@ -87,30 +81,26 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
   ##
   var records = nnkBracket.newTree()
   for n in inxList:
-    var handlerName = n.runHandler.multiReplace(("Op",""),("OP",""))
+    var handlerName = n.runHandler.multiReplace(("Op", ""), ("OP", ""))
     records.add nnkPar.newTree(
-                  "opCode".asIdent(n.opCode),
-                  "forks".asIdent(recForkSet),
-                  "name".asText(handlerName),
-                  "info".asText(n.handlerInfo),
-                  nnkExprColonExpr.newTree(
-                    newIdentNode("exec"),
-                    newIdentNode(n.runHandler)))
+      "opCode".asIdent(n.opCode),
+      "forks".asIdent(recForkSet),
+      "name".asText(handlerName),
+      "info".asText(n.handlerInfo),
+      nnkExprColonExpr.newTree(newIdentNode("exec"), newIdentNode(n.runHandler)),
+    )
 
   # => const <varName>*: seq[VmOpExec] = @[ <records> ]
   result = nnkStmtList.newTree(
-             nnkConstSection.newTree(
-               nnkConstDef.newTree(
-                 nnkPostfix.newTree(
-                   newIdentNode("*"),
-                   newIdentNode(varName)),
-                 nnkBracketExpr.newTree(
-                   newIdentNode("seq"),
-                   newIdentNode("VmOpExec")),
-                 nnkPrefix.newTree(
-                   newIdentNode("@"), records))))
+    nnkConstSection.newTree(
+      nnkConstDef.newTree(
+        nnkPostfix.newTree(newIdentNode("*"), newIdentNode(varName)),
+        nnkBracketExpr.newTree(newIdentNode("seq"), newIdentNode("VmOpExec")),
+        nnkPrefix.newTree(newIdentNode("@"), records),
+      )
+    )
+  )
 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-

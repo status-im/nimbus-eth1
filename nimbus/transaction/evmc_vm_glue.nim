@@ -10,17 +10,22 @@
 
 import
   stew/saturation_arith,
-  ./host_types, evmc/evmc,
+  ./host_types,
+  evmc/evmc,
   ".."/[evm/types, evm/computation, evm/state_transactions]
 
 proc evmcReleaseResult(result: var evmc_result) {.cdecl.} =
   dealloc(result.output_data)
 
-proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
-                 hostContext: evmc_host_context, rev: evmc_revision,
-                 msg: var evmc_message, code: ptr byte,
-                 code_size: csize_t): evmc_result
-    {.cdecl, raises: [].} =
+proc evmcExecute(
+    vm: ptr evmc_vm,
+    hostInterface: ptr evmc_host_interface,
+    hostContext: evmc_host_context,
+    rev: evmc_revision,
+    msg: var evmc_message,
+    code: ptr byte,
+    code_size: csize_t,
+): evmc_result {.cdecl, raises: [].} =
   # TODO: Obviously we are cheating here at the moment, knowing the caller type.
   # TODO: This lets the host read extra results needed for tests, but it
   # means the Nimbus EVM cannot be used by a non-Nimbus host, yet.
@@ -62,24 +67,28 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
     # Standard EVMC result, if a bit generic.
     status_code: c.evmcStatus,
     # Gas left is required to be zero when not `EVMC_SUCCESS` or `EVMC_REVERT`.
-    gas_left:    if result.status_code notin {EVMC_SUCCESS, EVMC_REVERT}: 0'i64
-                 else: int64.saturate(c.gasMeter.gasRemaining),
-    gas_refund:  if result.status_code == EVMC_SUCCESS: c.gasMeter.gasRefunded
-                 else: 0'i64,
+    gas_left:
+      if result.status_code notin {EVMC_SUCCESS, EVMC_REVERT}:
+        0'i64
+      else:
+        int64.saturate(c.gasMeter.gasRemaining),
+    gas_refund:
+      if result.status_code == EVMC_SUCCESS: c.gasMeter.gasRefunded else: 0'i64,
     output_data: output_data,
     output_size: output_size.csize_t,
-    release:     if output_data.isNil: nil
-                 else: evmcReleaseResult
-    # Nim defaults are fine for `create_address` and `padding`, zero bytes.
+    release: if output_data.isNil: nil else: evmcReleaseResult,
+      # Nim defaults are fine for `create_address` and `padding`, zero bytes.
   )
 
-const evmcName  = "Nimbus EVM"
+const evmcName = "Nimbus EVM"
 const evmcVersion = "0.0.1"
 
 proc evmcGetCapabilities(vm: ptr evmc_vm): evmc_capabilities {.cdecl.} =
   {EVMC_CAPABILITY_EVM1, EVMC_CAPABILITY_PRECOMPILES}
 
-proc evmcSetOption(vm: ptr evmc_vm, name, value: cstring): evmc_set_option_result {.cdecl.} =
+proc evmcSetOption(
+    vm: ptr evmc_vm, name, value: cstring
+): evmc_set_option_result {.cdecl.} =
   return EVMC_SET_OPTION_INVALID_NAME
 
 proc evmcDestroy(vm: ptr evmc_vm) {.cdecl.} =
@@ -90,13 +99,13 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, exportc.} =
   ## This is an exported C function.  EVMC specifies the function must
   ## have this name format when exported from a shared library.
   let vm = (ref evmc_vm)(
-    abi_version:      EVMC_ABI_VERSION,
-    name:             evmcName,
-    version:          evmcVersion,
-    destroy:          evmcDestroy,
-    execute:          evmcExecute,
+    abi_version: EVMC_ABI_VERSION,
+    name: evmcName,
+    version: evmcVersion,
+    destroy: evmcDestroy,
+    execute: evmcExecute,
     get_capabilities: evmcGetCapabilities,
-    set_option:       evmcSetOption
+    set_option: evmcSetOption,
   )
   # Keep an extra reference on this, until `evmcDestroy` is called.
   GC_ref(vm)
@@ -105,5 +114,9 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, exportc.} =
 # This code assumes fields, methods and types of ABI version 12, and must be
 # checked for compatibility if the `import evmc/evmc` major version is updated.
 when EVMC_ABI_VERSION != 12:
-  {.error: ("This code assumes EVMC_ABI_VERSION 12;" &
-            " update the code to use EVMC_ABI_VERSION " & $EVMC_ABI_VERSION).}
+  {.
+    error: (
+      "This code assumes EVMC_ABI_VERSION 12;" &
+      " update the code to use EVMC_ABI_VERSION " & $EVMC_ABI_VERSION
+    )
+  .}

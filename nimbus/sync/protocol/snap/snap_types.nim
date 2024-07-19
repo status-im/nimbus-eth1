@@ -10,12 +10,7 @@
 
 {.push raises: [].}
 
-import
-  std/[hashes, sequtils],
-  results,
-  chronicles,
-  eth/common,
-  ../../../constants
+import std/[hashes, sequtils], results, chronicles, eth/common, ../../../constants
 
 logScope:
   topics = "snap-wire"
@@ -48,14 +43,17 @@ type
 # Public `SnapProof` type helpers
 # ------------------------------------------------------------------------------
 
-proc to*(data: Blob; T: type SnapProof): T = data.T
-proc to*(node: SnapProof; T: type Blob): T = node.T
+proc to*(data: Blob, T: type SnapProof): T =
+  data.T
+
+proc to*(node: SnapProof, T: type Blob): T =
+  node.T
 
 proc hash*(sp: SnapProof): Hash =
   ## Mixin for Table/HashSet
   sp.to(Blob).hash
 
-proc `==`*(a,b: SnapProof): bool =
+proc `==`*(a, b: SnapProof): bool =
   ## Mixin for Table/HashSet
   a.to(Blob) == b.to(Blob)
 
@@ -71,11 +69,8 @@ proc `==`*(a,b: SnapProof): bool =
 # recognise or set these hashes in `Account` when serialising RLP for `snap`.
 
 proc snapRead*(
-    rlp: var Rlp;
-    T: type Account;
-    strict: static[bool] = false;
-      ): T
-      {.gcsafe, raises: [RlpError]} =
+    rlp: var Rlp, T: type Account, strict: static[bool] = false
+): T {.gcsafe, raises: [RlpError].} =
   ## RLP decoding for `Account`. The `snap` RLP representation of the account
   ## differs from standard `Account` RLP. Empty storage hash and empty code
   ## hash are each represented by an RLP zero-length string instead of the
@@ -91,8 +86,10 @@ proc snapRead*(
     result.storageRoot = rlp.read(typeof(result.storageRoot))
     when strict:
       if result.storageRoot == EMPTY_ROOT_HASH:
-        raise newException(RlpTypeMismatch,
-          "EMPTY_ROOT_HASH not encoded as empty string in Snap protocol")
+        raise newException(
+          RlpTypeMismatch,
+          "EMPTY_ROOT_HASH not encoded as empty string in Snap protocol",
+        )
   else:
     rlp.skipElem()
     result.storageRoot = EMPTY_ROOT_HASH
@@ -100,16 +97,14 @@ proc snapRead*(
     result.codeHash = rlp.read(typeof(result.codeHash))
     when strict:
       if result.codeHash == EMPTY_CODE_HASH:
-        raise newException(RlpTypeMismatch,
-          "EMPTY_SHA3 not encoded as empty string in Snap protocol")
+        raise newException(
+          RlpTypeMismatch, "EMPTY_SHA3 not encoded as empty string in Snap protocol"
+        )
   else:
     rlp.skipElem()
     result.codeHash = EMPTY_CODE_HASH
 
-proc snapAppend*(
-    writer: var RlpWriter;
-    account: Account;
-      ) =
+proc snapAppend*(writer: var RlpWriter, account: Account) =
   ## RLP encoding for `Account`. The snap RLP representation of the account
   ## differs from standard `Account` RLP. Empty storage hash and empty code
   ## hash are each represented by an RLP zero-length string instead of the
@@ -128,11 +123,7 @@ proc snapAppend*(
 
 # ---------------------
 
-proc snapRead*(
-    rlp: var Rlp;
-    T: type SnapProofNodes;
-      ): T
-      {.gcsafe, raises: [RlpError].} =
+proc snapRead*(rlp: var Rlp, T: type SnapProofNodes): T {.gcsafe, raises: [RlpError].} =
   ## RLP decoding for a wrapped `SnapProof` sequence. This extra wrapper is
   ## needed as the `SnapProof` items are `Blob` items at heart which is also
   ## the serialised destination data type.
@@ -142,7 +133,7 @@ proc snapRead*(
   elif rlp.isBlob:
     result.nodes.add rlp.rawData.toSeq.to(SnapProof)
 
-proc snapAppend*(writer: var RlpWriter; spn: SnapProofNodes) =
+proc snapAppend*(writer: var RlpWriter, spn: SnapProofNodes) =
   ## RLP encoding for a wrapped `SnapProof` sequence. This extra wrapper is
   ## needed as the `SnapProof` items are `Blob` items at heart which is also
   ## the serialised destination data type.
@@ -152,11 +143,7 @@ proc snapAppend*(writer: var RlpWriter; spn: SnapProofNodes) =
 
 # ---------------------
 
-proc snapRead*(
-    rlp: var Rlp;
-    T: type SnapTriePaths;
-      ): T
-      {.gcsafe, raises: [RlpError].} =
+proc snapRead*(rlp: var Rlp, T: type SnapTriePaths): T {.gcsafe, raises: [RlpError].} =
   ## RLP decoding
   if not rlp.isList:
     raise newException(RlpTypeMismatch, "List expected")
@@ -168,7 +155,7 @@ proc snapRead*(
     else:
       result.slotPaths.add rlp.read(Blob)
 
-proc snapAppend*(writer: var RlpWriter; stn: SnapTriePaths) =
+proc snapAppend*(writer: var RlpWriter, stn: SnapTriePaths) =
   ## RLP encoding
   writer.startList(1 + stn.slotPaths.len)
   writer.append(stn.accPath)
@@ -183,41 +170,35 @@ proc notImplemented(name: string) =
   debug "Method not implemented", meth = name
 
 method getAccountRange*(
-    ctx: SnapWireBase;
-    root: Hash256;
-    origin: openArray[byte];
-    limit: openArray[byte];
-    replySizeMax: uint64;
-      ): Result[(seq[SnapAccount], SnapProofNodes), string]
-      {.base, gcsafe.} =
+    ctx: SnapWireBase,
+    root: Hash256,
+    origin: openArray[byte],
+    limit: openArray[byte],
+    replySizeMax: uint64,
+): Result[(seq[SnapAccount], SnapProofNodes), string] {.base, gcsafe.} =
   notImplemented("getAccountRange")
 
 method getStorageRanges*(
-    ctx: SnapWireBase;
-    root: Hash256;
-    accounts: openArray[Hash256];
-    origin: openArray[byte];
-    limit: openArray[byte];
-    replySizeMax: uint64;
-      ): Result[(seq[seq[SnapStorage]], SnapProofNodes), string]
-      {.base, gcsafe.} =
+    ctx: SnapWireBase,
+    root: Hash256,
+    accounts: openArray[Hash256],
+    origin: openArray[byte],
+    limit: openArray[byte],
+    replySizeMax: uint64,
+): Result[(seq[seq[SnapStorage]], SnapProofNodes), string] {.base, gcsafe.} =
   notImplemented("getStorageRanges")
 
 method getByteCodes*(
-    ctx: SnapWireBase;
-    nodes: openArray[Hash256];
-    replySizeMax: uint64;
-      ): Result[seq[Blob], string]
-      {.base, gcsafe.} =
+    ctx: SnapWireBase, nodes: openArray[Hash256], replySizeMax: uint64
+): Result[seq[Blob], string] {.base, gcsafe.} =
   notImplemented("getByteCodes")
 
 method getTrieNodes*(
-    ctx: SnapWireBase;
-    root: Hash256;
-    pathGroups: openArray[SnapTriePaths];
-    replySizeMax: uint64;
-      ): Result[seq[Blob], string]
-      {.base, gcsafe.} =
+    ctx: SnapWireBase,
+    root: Hash256,
+    pathGroups: openArray[SnapTriePaths],
+    replySizeMax: uint64,
+): Result[seq[Blob], string] {.base, gcsafe.} =
   notImplemented("getTrieNodes")
 
 # ------------------------------------------------------------------------------

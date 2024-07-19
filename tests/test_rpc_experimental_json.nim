@@ -16,8 +16,7 @@ import
   ../nimbus/db/[ledger, core_db],
   ./rpc/experimental_rpc_client
 
-type
-  Hash256 = eth_types.Hash256
+type Hash256 = eth_types.Hash256
 
 func ethAddr*(x: Address): EthAddress =
   EthAddress x
@@ -25,13 +24,15 @@ func ethAddr*(x: Address): EthAddress =
 template toHash256(hash: untyped): Hash256 =
   fromHex(Hash256, hash.toHex())
 
-proc importBlockData(node: JsonNode): (CommonRef, Hash256, Hash256, UInt256) {. raises: [Exception].} =
+proc importBlockData(
+    node: JsonNode
+): (CommonRef, Hash256, Hash256, UInt256) {.raises: [Exception].} =
   var
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
-    memoryDB    = newCoreDbRef DefaultDbMemory
-    config      = chainConfigForNetwork(MainNet)
-    com         = CommonRef.new(memoryDB, config)
-    state       = node["state"]
+    memoryDB = newCoreDbRef DefaultDbMemory
+    config = chainConfigForNetwork(MainNet)
+    com = CommonRef.new(memoryDB, config)
+    state = node["state"]
 
   for k, v in state:
     let key = hexToSeqByte(k)
@@ -55,10 +56,9 @@ proc checkAndValidateProofs(
     db: CoreDbRef,
     parentStateRoot: KeccakHash,
     expectedStateRoot: KeccakHash,
-    proofs: seq[ProofResponse]) =
-
-  let
-    stateDB = LedgerRef.init(db, parentStateRoot)
+    proofs: seq[ProofResponse],
+) =
+  let stateDB = LedgerRef.init(db, parentStateRoot)
 
   check:
     proofs.len() > 0
@@ -105,64 +105,30 @@ proc checkAndValidateProofs(
 
   check stateDB.rootHash == expectedStateRoot
 
-proc importBlockDataFromFile(file: string): (CommonRef, Hash256, Hash256, UInt256) {. raises: [].} =
+proc importBlockDataFromFile(
+    file: string
+): (CommonRef, Hash256, Hash256, UInt256) {.raises: [].} =
   try:
-    let
-      fileJson = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / file)
+    let fileJson = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / file)
     return importBlockData(fileJson)
   except Exception as ex:
     doAssert false, ex.msg
 
 proc rpcExperimentalJsonMain*() =
-
   suite "rpc experimental json tests":
-
     let importFiles = [
-      "block97.json",
-      "block98.json",
-      "block46147.json",
-      "block46400.json",
-      "block46402.json",
-      "block47205.json",
-      "block47216.json",
-      "block48712.json",
-      "block48915.json",
-      "block49018.json",
-      "block49439.json",
-      "block49891.json",
-      "block50111.json",
-      "block78458.json",
-      "block81383.json",
-      "block81666.json",
-      "block85858.json",
-      "block146675.json",
-      "block116524.json",
-      "block196647.json",
-      "block226147.json",
-      "block226522.json",
-      "block231501.json",
-      "block243826.json",
-      "block248032.json",
-      "block299804.json",
-      "block420301.json",
-      "block512335.json",
-      "block652148.json",
-      "block668910.json",
-      "block1017395.json",
-      "block1149150.json",
-      "block1155095.json",
-      "block1317742.json",
-      "block1352922.json",
-      "block1368834.json",
-      "block1417555.json",
-      "block1431916.json",
-      "block1487668.json",
-      "block1920000.json",
-      "block1927662.json",
-      "block2463413.json",
-      "block2675000.json",
-      "block2675002.json",
-      "block4370000.json"
+      "block97.json", "block98.json", "block46147.json", "block46400.json",
+      "block46402.json", "block47205.json", "block47216.json", "block48712.json",
+      "block48915.json", "block49018.json", "block49439.json", "block49891.json",
+      "block50111.json", "block78458.json", "block81383.json", "block81666.json",
+      "block85858.json", "block146675.json", "block116524.json", "block196647.json",
+      "block226147.json", "block226522.json", "block231501.json", "block243826.json",
+      "block248032.json", "block299804.json", "block420301.json", "block512335.json",
+      "block652148.json", "block668910.json", "block1017395.json", "block1149150.json",
+      "block1155095.json", "block1317742.json", "block1352922.json",
+      "block1368834.json", "block1417555.json", "block1431916.json",
+      "block1487668.json", "block1920000.json", "block1927662.json",
+      "block2463413.json", "block2675000.json", "block2675002.json", "block4370000.json",
     ]
 
     let
@@ -177,7 +143,6 @@ proc rpcExperimentalJsonMain*() =
 
     rpcServer.start()
     waitFor client.connect(RPC_HOST, rpcServer.localAddress[0].port, secure = false)
-
 
     test "exp_getProofsByBlockNumber - latest block pre-execution state":
       for file in importFiles:

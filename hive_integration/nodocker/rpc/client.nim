@@ -9,7 +9,8 @@
 
 import
   eth/[common, rlp],
-  chronos, stint,
+  chronos,
+  stint,
   json_rpc/[rpcclient],
   ../../../nimbus/transaction,
   ../../../nimbus/utils/utils,
@@ -19,10 +20,11 @@ import
 export eth_api
 
 proc sendTransaction*(
-    client: RpcClient, tx: PooledTransaction): Future[bool] {.async.} =
-  let data   = rlp.encode(tx)
+    client: RpcClient, tx: PooledTransaction
+): Future[bool] {.async.} =
+  let data = rlp.encode(tx)
   let txHash = keccakHash(data)
-  let hex    = await client.eth_sendRawTransaction(data)
+  let hex = await client.eth_sendRawTransaction(data)
   let decodedHash = ethHash(hex)
   result = decodedHash == txHash
 
@@ -30,7 +32,9 @@ proc blockNumber*(client: RpcClient): Future[uint64] {.async.} =
   let hex = await client.eth_blockNumber()
   result = hex.uint64
 
-proc balanceAt*(client: RpcClient, address: EthAddress, number: uint64): Future[UInt256] {.async.} =
+proc balanceAt*(
+    client: RpcClient, address: EthAddress, number: uint64
+): Future[UInt256] {.async.} =
   let hex = await client.eth_getBalance(w3Addr(address), blockId(number))
   result = hex
 
@@ -50,29 +54,29 @@ func toTopics(list: openArray[Web3Hash]): seq[common.Topic] =
 func toLogs(list: openArray[LogObject]): seq[Log] =
   result = newSeqOfCap[Log](list.len)
   for x in list:
-    result.add Log(
-      address: ethAddr x.address,
-      data: x.data,
-      topics: toTopics(x.topics)
-    )
+    result.add Log(address: ethAddr x.address, data: x.data, topics: toTopics(x.topics))
 
-proc txReceipt*(client: RpcClient, txHash: common.Hash256): Future[Option[Receipt]] {.async.} =
+proc txReceipt*(
+    client: RpcClient, txHash: common.Hash256
+): Future[Option[Receipt]] {.async.} =
   let rc = await client.eth_getTransactionReceipt(w3Hash txHash)
   if rc.isNil:
     return none(Receipt)
 
   let rec = Receipt(
     receiptType: LegacyReceipt,
-    isHash     : rc.root.isSome,
-    status     : rc.status.isSome,
-    hash       : ethHash rc.root.get(w3Hash()),
+    isHash: rc.root.isSome,
+    status: rc.status.isSome,
+    hash: ethHash rc.root.get(w3Hash()),
     cumulativeGasUsed: rc.cumulativeGasUsed.GasInt,
-    logsBloom  : BloomFilter(rc.logsBloom),
-    logs       : toLogs(rc.logs)
+    logsBloom: BloomFilter(rc.logsBloom),
+    logs: toLogs(rc.logs),
   )
   result = some(rec)
 
-proc gasUsed*(client: RpcClient, txHash: common.Hash256): Future[Option[GasInt]] {.async.} =
+proc gasUsed*(
+    client: RpcClient, txHash: common.Hash256
+): Future[Option[GasInt]] {.async.} =
   let rc = await client.eth_getTransactionReceipt(w3Hash txHash)
   if rc.isNil:
     return none(GasInt)

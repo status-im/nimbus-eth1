@@ -8,20 +8,16 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import
-  std/tables,
-  eth/common,
-  results,
-  ".."/[kvt_desc, kvt_utils]
+import std/tables, eth/common, results, ".."/[kvt_desc, kvt_utils]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc revFilter*(
-    db: KvtDbRef;                      # Database
-    filter: LayerRef;                  # Filter to revert
-      ): Result[LayerRef,(Blob,KvtError)] =
+    db: KvtDbRef, # Database
+    filter: LayerRef, # Filter to revert
+): Result[LayerRef, (Blob, KvtError)] =
   ## Assemble reverse filter for the `filter` argument, i.e. changes to the
   ## backend that reverse the effect of applying the this read-only filter.
   ##
@@ -38,7 +34,7 @@ proc revFilter*(
     elif rc.error == GetNotFound:
       rev.sTab[key] = EmptyBlob
     else:
-      return err((key,rc.error))
+      return err((key, rc.error))
 
   ok(rev)
 

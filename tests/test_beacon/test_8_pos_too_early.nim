@@ -37,10 +37,14 @@ proc test8*() =
 
     let
       genesis = env.chain.com.genesisHeader
-      block1 = env.chain.com.header(1, genesis, genesis,
-        "6BD9564DD3F4028E3E56F62F1BE52EC8F893CC4FD7DB75DB6A1DC3EB2858998C")
-      block2 = env.chain.com.header(2, block1, block1,
-        "32DAA84E151F4C8C6BD4D9ADA4392488FFAFD42ACDE1E9C662B3268C911A5CCC")
+      block1 = env.chain.com.header(
+        1, genesis, genesis,
+        "6BD9564DD3F4028E3E56F62F1BE52EC8F893CC4FD7DB75DB6A1DC3EB2858998C",
+      )
+      block2 = env.chain.com.header(
+        2, block1, block1,
+        "32DAA84E151F4C8C6BD4D9ADA4392488FFAFD42ACDE1E9C662B3268C911A5CCC",
+      )
       block2PoS = header(2, block1, block1, 0)
       block3 = header(3, block2, block2, 0)
       emptyBody = emptyBody()

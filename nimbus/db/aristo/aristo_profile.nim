@@ -10,9 +10,7 @@
 
 {.push raises: [].}
 
-import
-  std/[algorithm, math, sequtils, strformat, strutils, tables, times],
-  eth/common
+import std/[algorithm, math, sequtils, strformat, strutils, tables, times], eth/common
 
 type
   AristoDbProfData* = tuple[sum: float, sqSum: float, count: int, masked: bool]
@@ -23,16 +21,18 @@ type
     ##
     list*: seq[AristoDbProfData]
 
-  AristoDbProfEla* = seq[(Duration,seq[uint])]
-  AristoDbProfMean* = seq[(Duration,seq[uint])]
-  AristoDbProfCount* = seq[(int,seq[uint])]
-  AristoDbProfStats* = tuple
-    count:    int
-    total:    Duration
-    mean:     Duration
-    stdDev:   Duration
-    devRatio: float
-    masked:   bool
+  AristoDbProfEla* = seq[(Duration, seq[uint])]
+  AristoDbProfMean* = seq[(Duration, seq[uint])]
+  AristoDbProfCount* = seq[(int, seq[uint])]
+  AristoDbProfStats* =
+    tuple[
+      count: int,
+      total: Duration,
+      mean: Duration,
+      stdDev: Duration,
+      devRatio: float,
+      masked: bool,
+    ]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -47,10 +47,10 @@ func toFloat(ela: Duration): float =
   ## Convert the argument `ela` to a floating point seconds result.
   let
     elaS = ela.inSeconds
-    elaNs = (ela - initDuration(seconds=elaS)).inNanoSeconds
+    elaNs = (ela - initDuration(seconds = elaS)).inNanoSeconds
   elaS.float + elaNs.float / 1_000_000_000
 
-proc updateTotal(t: AristoDbProfListRef; fnInx: uint) =
+proc updateTotal(t: AristoDbProfListRef, fnInx: uint) =
   ## Summary update helper
   if fnInx == 0:
     t.list[0].reset
@@ -116,74 +116,67 @@ func toStr*(elapsed: Duration): string =
   except ValueError:
     result = $elapsed
 
-proc update*(t: AristoDbProfListRef; inx: uint; ela: Duration) =
+proc update*(t: AristoDbProfListRef, inx: uint, ela: Duration) =
   ## Register time `ela` spent while executing function `fn`
   let s = ela.toFloat
   t.list[inx].sum += s
   t.list[inx].sqSum += s * s
   t.list[inx].count.inc
 
-
 proc byElapsed*(t: AristoDbProfListRef): AristoDbProfEla =
   ## Collate `CoreDb` function symbols by elapsed times, sorted with largest
   ## `Duration` first. Zero `Duration` entries are discarded.
-  var u: Table[Duration,seq[uint]]
+  var u: Table[Duration, seq[uint]]
   for inx in 0u ..< t.list.len.uint:
     t.updateTotal inx
-    let (secs,_,count,_) = t.list[inx]
+    let (secs, _, count, _) = t.list[inx]
     if 0 < count:
       let ela = secs.toDuration
-      u.withValue(ela,val):
-         val[].add inx
+      u.withValue(ela, val):
+        val[].add inx
       do:
         u[ela] = @[inx]
   result.add (t.list[0u].sum.toDuration, @[0u])
   for ela in u.keys.toSeq.sorted Descending:
-    u.withValue(ela,val):
+    u.withValue(ela, val):
       result.add (ela, val[])
-
 
 proc byMean*(t: AristoDbProfListRef): AristoDbProfMean =
   ## Collate `CoreDb` function symbols by elapsed mean times, sorted with
   ## largest `Duration` first. Zero `Duration` entries are discarded.
-  var u: Table[Duration,seq[uint]]
+  var u: Table[Duration, seq[uint]]
   for inx in 0u ..< t.list.len.uint:
     t.updateTotal inx
-    let (secs,_,count,_) = t.list[inx]
+    let (secs, _, count, _) = t.list[inx]
     if 0 < count:
       let ela = (secs / count.float).toDuration
-      u.withValue(ela,val):
-         val[].add inx
+      u.withValue(ela, val):
+        val[].add inx
       do:
         u[ela] = @[inx]
   result.add ((t.list[0u].sum / t.list[0u].count.float).toDuration, @[0u])
   for mean in u.keys.toSeq.sorted Descending:
-    u.withValue(mean,val):
+    u.withValue(mean, val):
       result.add (mean, val[])
-
 
 proc byVisits*(t: AristoDbProfListRef): AristoDbProfCount =
   ## Collate  `CoreDb` function symbols by number of visits, sorted with
   ## largest number first.
-  var u: Table[int,seq[uint]]
+  var u: Table[int, seq[uint]]
   for fnInx in 0 ..< t.list.len:
     t.updateTotal fnInx.uint
-    let (_,_,count,_) = t.list[fnInx]
+    let (_, _, count, _) = t.list[fnInx]
     if 0 < count:
-      u.withValue(count,val):
+      u.withValue(count, val):
         val[].add fnInx.uint
       do:
         u[count] = @[fnInx.uint]
   result.add (t.list[0u].count, @[0u])
   for count in u.keys.toSeq.sorted Descending:
-    u.withValue(count,val):
+    u.withValue(count, val):
       result.add (count, val[])
 
-
-func stats*(
-    t: AristoDbProfListRef;
-    inx: uint;
-      ): AristoDbProfStats =
+func stats*(t: AristoDbProfListRef, inx: uint): AristoDbProfStats =
   ## Print mean and strandard deviation of timing
   let data = t.list[inx]
   result.count = data.count
@@ -196,7 +189,7 @@ func stats*(
 
       # Mathematically, `meanSq <= sqMean` but there might be rounding errors
       # if `meanSq` and `sqMean` are approximately the same.
-      sigma = sqMean - min(meanSq,sqMean)
+      sigma = sqMean - min(meanSq, sqMean)
       stdDev = sigma.sqrt
 
     result.total = data.sum.toDuration

@@ -31,18 +31,17 @@ import
   "."/[aristo_desc, aristo_hike, aristo_layers, aristo_vid],
   ./aristo_merge/merge_payload_helper
 
-const
-  MergeNoAction = {MergeLeafPathCachedAlready, MergeLeafPathOnBackendAlready}
+const MergeNoAction = {MergeLeafPathCachedAlready, MergeLeafPathOnBackendAlready}
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc mergeAccountRecord*(
-    db: AristoDbRef;                   # Database, top layer
-    accPath: Hash256;          # Even nibbled byte path
-    accRec: AristoAccount;             # Account data
-      ): Result[bool,AristoError] =
+    db: AristoDbRef, # Database, top layer
+    accPath: Hash256, # Even nibbled byte path
+    accRec: AristoAccount, # Account data
+): Result[bool, AristoError] =
   ## Merge the  key-value-pair argument `(accKey,accRec)` as an account
   ## ledger value, i.e. the the sub-tree starting at `VertexID(1)`.
   ##
@@ -51,7 +50,7 @@ proc mergeAccountRecord*(
   ## otherwise.
   ##
   let
-    pyl =  LeafPayload(pType: AccountData, account: accRec)
+    pyl = LeafPayload(pType: AccountData, account: accRec)
     rc = db.mergePayloadImpl(VertexID(1), accPath.data, pyl)
   if rc.isOk:
     db.layersPutAccLeaf(accPath, rc.value)
@@ -61,13 +60,12 @@ proc mergeAccountRecord*(
   else:
     err(rc.error)
 
-
 proc mergeGenericData*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # MPT state root
-    path: openArray[byte];             # Leaf item to add to the database
-    data: openArray[byte];             # Raw data payload value
-      ): Result[bool,AristoError] =
+    db: AristoDbRef, # Database, top layer
+    root: VertexID, # MPT state root
+    path: openArray[byte], # Leaf item to add to the database
+    data: openArray[byte], # Raw data payload value
+): Result[bool, AristoError] =
   ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
   ## `root` greater than `VertexID(1)` and smaller than `LEAST_FREE_VID`.
   ##
@@ -93,13 +91,12 @@ proc mergeGenericData*(
   else:
     err(rc.error)
 
-
 proc mergeStorageData*(
-    db: AristoDbRef;                   # Database, top layer
-    accPath: Hash256;          # Needed for accounts payload
-    stoPath: Hash256;          # Storage data path (aka key)
-    stoData: UInt256;          # Storage data payload value
-      ): Result[void,AristoError] =
+    db: AristoDbRef, # Database, top layer
+    accPath: Hash256, # Needed for accounts payload
+    stoPath: Hash256, # Storage data path (aka key)
+    stoData: UInt256, # Storage data payload value
+): Result[void, AristoError] =
   ## Store the `stoData` data argument on the storage area addressed by
   ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
   ## and `stoPath`  is the slot path of the corresponding storage area.
@@ -127,7 +124,11 @@ proc mergeStorageData*(
         stoID = vtx.lData.stoID
 
         # Provide new storage ID when needed
-        useID = if stoID.isValid: stoID else: db.vidFetch()
+        useID =
+          if stoID.isValid:
+            stoID
+          else:
+            db.vidFetch()
 
         # Call merge
         pyl = LeafPayload(pType: StoData, stoData: stoData)
@@ -147,9 +148,8 @@ proc mergeStorageData*(
           db.layersPutVtx((VertexID(1), touched[pos - 1]), leaf)
 
         return ok()
-
       elif rc.error in MergeNoAction:
-        assert stoID.isValid         # debugging only
+        assert stoID.isValid # debugging only
         return ok()
 
       return err(rc.error)

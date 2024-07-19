@@ -6,11 +6,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/sets,
-  stint, evmc/evmc,
-  eth/common/eth_types,
-  ../evm/[code_bytes, types]
+import std/sets, stint, evmc/evmc, eth/common/eth_types, ../evm/[code_bytes, types]
 
 # Object `TransactionHost` represents "EVMC host" to the EVM.  "Host services"
 # manage account state outside EVM such as balance transfers, storage, logs and
@@ -35,36 +31,36 @@ import
 # and delegated to glue code.
 
 type
-  HostAddress*       = EthAddress        # Mapped to/from evmc_address.
-  HostKey*           = UInt256           # Mapped to/from evmc_bytes32.
-  HostValue*         = UInt256           # Mapped to/from evmc_bytes32.
-  HostBalance*       = UInt256           # Mapped to/from evmc_uint256be.
-  HostSize*          = uint              # Mapped to/from csize_t - unsigned!
-  HostHash*          = Hash256           # Mapped to/from evmc_bytes32.
-  HostTopic*         = Topic             # Mapped to/from evmc_bytes32.
-  HostBlockNumber*   = BlockNumber       # Mapped to/from int64.
-  HostGasInt*        = GasInt            # Mapped to/from int64.
-  HostGasPrice*      = GasInt            # Mapped to/from evmc_uint256be.
+  HostAddress* = EthAddress # Mapped to/from evmc_address.
+  HostKey* = UInt256 # Mapped to/from evmc_bytes32.
+  HostValue* = UInt256 # Mapped to/from evmc_bytes32.
+  HostBalance* = UInt256 # Mapped to/from evmc_uint256be.
+  HostSize* = uint # Mapped to/from csize_t - unsigned!
+  HostHash* = Hash256 # Mapped to/from evmc_bytes32.
+  HostTopic* = Topic # Mapped to/from evmc_bytes32.
+  HostBlockNumber* = BlockNumber # Mapped to/from int64.
+  HostGasInt* = GasInt # Mapped to/from int64.
+  HostGasPrice* = GasInt # Mapped to/from evmc_uint256be.
 
-  EvmcStatusCode*    = evmc_status_code
-  EvmcCallKind*      = evmc_call_kind
+  EvmcStatusCode* = evmc_status_code
+  EvmcCallKind* = evmc_call_kind
   EvmcStorageStatus* = evmc_storage_status
-  EvmcAccessStatus*  = evmc_access_status
-  EvmcTxContext*     = evmc_tx_context
-  EvmcMessage*       = evmc_message
-  EvmcResult*        = evmc_result
+  EvmcAccessStatus* = evmc_access_status
+  EvmcTxContext* = evmc_tx_context
+  EvmcMessage* = evmc_message
+  EvmcResult* = evmc_result
 
   TransactionHost* = ref object
-    vmState*:         BaseVMState
-    computation*:     Computation
-    msg*:             EvmcMessage
-    input*:           seq[byte]
-    code*:            CodeBytesRef
+    vmState*: BaseVMState
+    computation*: Computation
+    msg*: EvmcMessage
+    input*: seq[byte]
+    code*: CodeBytesRef
     cachedTxContext*: bool
-    txContext*:       EvmcTxContext
-    depth*:           int
+    txContext*: EvmcTxContext
+    depth*: int
     saveComputation*: seq[Computation]
-    hostInterface*:   ptr evmc_host_interface
+    hostInterface*: ptr evmc_host_interface
 
 # These versions of `toEvmc` and `fromEvmc` don't flip big/little-endian like
 # the older functions in `evmc_helpers`.  New code only flips with _explicit_
@@ -98,5 +94,5 @@ template isZero*(n: evmc_bytes32): bool =
 # values, even though alias `EnumStatusCode` is already exported.  Exporting
 # `evmc_flags` won't export the flags, `evmc_flag_bit_shifts` must be used.
 export
-  evmc_status_code, evmc_call_kind,
-  evmc_flag_bit_shifts, evmc_storage_status, evmc_access_status
+  evmc_status_code, evmc_call_kind, evmc_flag_bit_shifts, evmc_storage_status,
+  evmc_access_status

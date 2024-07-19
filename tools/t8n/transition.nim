@@ -11,7 +11,8 @@
 import
   std/[json, strutils, tables, os, streams],
   eth/[rlp, trie, eip1559],
-  stint, results,
+  stint,
+  results,
   "."/[config, types, helpers],
   ../common/state_clearing,
   ../../nimbus/[evm/types, evm/state, transaction],
@@ -56,10 +57,11 @@ proc dispatch(dis: var Dispatch, baseDir, fName, name: string, obj: JsonNode) =
     discard
   else:
     # save to file
-    let path = if baseDir.len > 0:
-                 baseDir / fName
-               else:
-                 fName
+    let path =
+      if baseDir.len > 0:
+        baseDir / fName
+      else:
+        fName
     writeFile(path, obj.pretty)
 
 proc dispatchOutput(ctx: var TransContext, conf: T8NConf, res: ExecOutput) =
@@ -90,17 +92,17 @@ proc calcWithdrawalsRoot(w: Opt[seq[Withdrawal]]): Opt[Hash256] =
 
 proc envToHeader(env: EnvStruct): BlockHeader =
   BlockHeader(
-    coinbase   : env.currentCoinbase,
-    difficulty : env.currentDifficulty.get(0.u256),
-    mixHash    : env.currentRandom.get(Hash256()),
-    number     : env.currentNumber,
-    gasLimit   : env.currentGasLimit,
-    timestamp  : env.currentTimestamp,
-    stateRoot  : emptyRlpHash,
-    baseFeePerGas  : env.currentBaseFee,
+    coinbase: env.currentCoinbase,
+    difficulty: env.currentDifficulty.get(0.u256),
+    mixHash: env.currentRandom.get(Hash256()),
+    number: env.currentNumber,
+    gasLimit: env.currentGasLimit,
+    timestamp: env.currentTimestamp,
+    stateRoot: emptyRlpHash,
+    baseFeePerGas: env.currentBaseFee,
     withdrawalsRoot: env.withdrawals.calcWithdrawalsRoot(),
-    blobGasUsed    : env.currentBlobGasUsed,
-    excessBlobGas  : env.currentExcessBlobGas,
+    blobGasUsed: env.currentBlobGasUsed,
+    excessBlobGas: env.currentExcessBlobGas,
   )
 
 proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
@@ -108,7 +110,7 @@ proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
     var acc = GenesisAccount(
       code: db.getCode(accAddr).bytes(),
       balance: db.getBalance(accAddr),
-      nonce: db.getNonce(accAddr)
+      nonce: db.getNonce(accAddr),
     )
 
     for k, v in db.storage(accAddr):
@@ -119,16 +121,17 @@ proc genAddress(tx: Transaction, sender: EthAddress): EthAddress =
   if tx.to.isNone:
     result = generateAddress(sender, tx.nonce)
 
-proc toTxReceipt(rec: Receipt,
-                 tx: Transaction,
-                 sender: EthAddress,
-                 txIndex: int,
-                 gasUsed: GasInt): TxReceipt =
-
+proc toTxReceipt(
+    rec: Receipt, tx: Transaction, sender: EthAddress, txIndex: int, gasUsed: GasInt
+): TxReceipt =
   let contractAddress = genAddress(tx, sender)
   TxReceipt(
     txType: tx.txType,
-    root: if rec.isHash: rec.hash else: Hash256(),
+    root:
+      if rec.isHash:
+        rec.hash
+      else:
+        Hash256(),
     status: rec.status,
     cumulativeGasUsed: rec.cumulativeGasUsed,
     logsBloom: rec.logsBloom,
@@ -137,7 +140,7 @@ proc toTxReceipt(rec: Receipt,
     contractAddress: contractAddress,
     gasUsed: gasUsed,
     blockHash: Hash256(),
-    transactionIndex: txIndex
+    transactionIndex: txIndex,
   )
 
 proc calcLogsHash(receipts: openArray[Receipt]): Hash256 =
@@ -146,15 +149,12 @@ proc calcLogsHash(receipts: openArray[Receipt]): Hash256 =
     logs.add rec.logs
   rlpHash(logs)
 
-proc defaultTraceStreamFilename(conf: T8NConf,
-                                txIndex: int,
-                                txHash: Hash256): (string, string) =
+proc defaultTraceStreamFilename(
+    conf: T8NConf, txIndex: int, txHash: Hash256
+): (string, string) =
   let
     txHash = "0x" & toLowerAscii($txHash)
-    baseDir = if conf.outputBaseDir.len > 0:
-                conf.outputBaseDir
-              else:
-                "."
+    baseDir = if conf.outputBaseDir.len > 0: conf.outputBaseDir else: "."
     fName = "$1/trace-$2-$3.jsonl" % [baseDir, $txIndex, txHash]
   (baseDir, fName)
 
@@ -173,26 +173,27 @@ proc traceToFileStream(path: string, txIndex: int): Stream =
 
 proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMState) =
   var tracerFlags = {
-    TracerFlags.DisableMemory,
-    TracerFlags.DisableStorage,
-    TracerFlags.DisableState,
-    TracerFlags.DisableStateDiff,
-    TracerFlags.DisableReturnData
+    TracerFlags.DisableMemory, TracerFlags.DisableStorage, TracerFlags.DisableState,
+    TracerFlags.DisableStateDiff, TracerFlags.DisableReturnData,
   }
 
-  if conf.traceMemory: tracerFlags.excl TracerFlags.DisableMemory
-  if conf.traceNostack: tracerFlags.incl TracerFlags.DisableStack
-  if conf.traceReturnData: tracerFlags.excl TracerFlags.DisableReturnData
+  if conf.traceMemory:
+    tracerFlags.excl TracerFlags.DisableMemory
+  if conf.traceNostack:
+    tracerFlags.incl TracerFlags.DisableStack
+  if conf.traceReturnData:
+    tracerFlags.excl TracerFlags.DisableReturnData
 
   let traceMode = conf.traceEnabled.get
-  let stream = if traceMode == "stdout":
-                 newFileStream(stdout)
-               elif traceMode == "stderr":
-                 newFileStream(stderr)
-               elif traceMode.len > 0:
-                 traceToFileStream(traceMode, txIndex)
-               else:
-                 defaultTraceStream(conf, txIndex, txHash)
+  let stream =
+    if traceMode == "stdout":
+      newFileStream(stdout)
+    elif traceMode == "stderr":
+      newFileStream(stderr)
+    elif traceMode.len > 0:
+      traceToFileStream(traceMode, txIndex)
+    else:
+      defaultTraceStream(conf, txIndex, txHash)
 
   if stream.isNil:
     let traceLoc =
@@ -209,12 +210,13 @@ proc closeTrace(vmState: BaseVMState) =
   if tracer.isNil.not:
     tracer.close()
 
-proc exec(ctx: var TransContext,
-          vmState: BaseVMState,
-          stateReward: Option[UInt256],
-          header: BlockHeader,
-          conf: T8NConf): ExecOutput =
-
+proc exec(
+    ctx: var TransContext,
+    vmState: BaseVMState,
+    stateReward: Option[UInt256],
+    header: BlockHeader,
+    conf: T8NConf,
+): ExecOutput =
   let txList = ctx.parseTxs(vmState.com.chainId)
 
   var
@@ -222,8 +224,7 @@ proc exec(ctx: var TransContext,
     rejected = newSeq[RejectedTx]()
     includedTx = newSeq[Transaction]()
 
-  if vmState.com.daoForkSupport and
-     vmState.com.daoForkBlock.get == vmState.blockNumber:
+  if vmState.com.daoForkSupport and vmState.com.daoForkBlock.get == vmState.blockNumber:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
@@ -236,19 +237,13 @@ proc exec(ctx: var TransContext,
 
   for txIndex, txRes in txList:
     if txRes.isErr:
-      rejected.add RejectedTx(
-        index: txIndex,
-        error: txRes.error
-      )
+      rejected.add RejectedTx(index: txIndex, error: txRes.error)
       continue
 
     let tx = txRes.get
     var sender: EthAddress
     if not tx.getSender(sender):
-      rejected.add RejectedTx(
-        index: txIndex,
-        error: "Could not get sender"
-      )
+      rejected.add RejectedTx(index: txIndex, error: "Could not get sender")
       continue
 
     if conf.traceEnabled.isSome:
@@ -260,18 +255,13 @@ proc exec(ctx: var TransContext,
       closeTrace(vmState)
 
     if rc.isErr:
-      rejected.add RejectedTx(
-        index: txIndex,
-        error: rc.error
-      )
+      rejected.add RejectedTx(index: txIndex, error: rc.error)
       continue
 
     let gasUsed = rc.get()
     let rec = vmState.makeReceipt(tx.txType)
     vmState.receipts.add rec
-    receipts.add toTxReceipt(
-      rec, tx, sender, txIndex, gasUsed
-    )
+    receipts.add toTxReceipt(rec, tx, sender, txIndex, gasUsed)
     includedTx.add tx
 
   # Add mining reward? (-1 means rewards are disabled)
@@ -304,19 +294,19 @@ proc exec(ctx: var TransContext,
   let stateDB = vmState.stateDB
   stateDB.postState(result.alloc)
   result.result = ExecutionResult(
-    stateRoot   : stateDB.rootHash,
-    txRoot      : includedTx.calcTxRoot,
+    stateRoot: stateDB.rootHash,
+    txRoot: includedTx.calcTxRoot,
     receiptsRoot: calcReceiptsRoot(vmState.receipts),
-    logsHash    : calcLogsHash(vmState.receipts),
-    logsBloom   : createBloom(vmState.receipts),
-    receipts    : system.move(receipts),
-    rejected    : system.move(rejected),
+    logsHash: calcLogsHash(vmState.receipts),
+    logsBloom: createBloom(vmState.receipts),
+    receipts: system.move(receipts),
+    rejected: system.move(rejected),
     # geth using both vmContext.Difficulty and vmContext.Random
     # therefore we cannot use vmState.difficulty
     currentDifficulty: ctx.env.currentDifficulty,
-    gasUsed          : vmState.cumulativeGasUsed,
-    currentBaseFee   : ctx.env.currentBaseFee,
-    withdrawalsRoot  : header.withdrawalsRoot
+    gasUsed: vmState.cumulativeGasUsed,
+    currentBaseFee: ctx.env.currentBaseFee,
+    withdrawalsRoot: header.withdrawalsRoot,
   )
 
   if vmState.com.isCancunOrLater(ctx.env.currentTimestamp):
@@ -348,20 +338,21 @@ proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
     for slot, value in acc.storage:
       stateDB.setStorage(accAddr, slot, value)
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
+method getAncestorHash(vmState: TestVMState, blockNumber: BlockNumber): Hash256 =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
   var h = Hash256()
   if vmState.blockHashes.len == 0:
-    vmState.hashError = "getAncestorHash(" &
-      $blockNumber & ") invoked, no blockhashes provided"
+    vmState.hashError =
+      "getAncestorHash(" & $blockNumber & ") invoked, no blockhashes provided"
     return h
 
-  vmState.blockHashes.withValue(blockNumber, val) do:
+  vmState.blockHashes.withValue(blockNumber, val):
     h = val[]
   do:
-    vmState.hashError = "getAncestorHash(" &
-      $blockNumber & ") invoked, blockhash for that block not provided"
+    vmState.hashError =
+      "getAncestorHash(" & $blockNumber &
+      ") invoked, blockhash for that block not provided"
 
   return h
 
@@ -373,17 +364,18 @@ proc parseChainConfig(network: string): ChainConfig =
 
 proc calcBaseFee(env: EnvStruct): UInt256 =
   if env.parentGasUsed.isNone:
-    raise newError(ErrorConfig,
-      "'parentBaseFee' exists but missing 'parentGasUsed' in env section")
+    raise newError(
+      ErrorConfig, "'parentBaseFee' exists but missing 'parentGasUsed' in env section"
+    )
 
   if env.parentGasLimit.isNone:
-    raise newError(ErrorConfig,
-      "'parentBaseFee' exists but missing 'parentGasLimit' in env section")
+    raise newError(
+      ErrorConfig, "'parentBaseFee' exists but missing 'parentGasLimit' in env section"
+    )
 
   calcEip1599BaseFee(
-    env.parentGasLimit.get,
-    env.parentGasUsed.get,
-    env.parentBaseFee.get)
+    env.parentGasLimit.get, env.parentGasUsed.get, env.parentBaseFee.get
+  )
 
 proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
   wrapException:
@@ -398,9 +390,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     # We need to load three things: alloc, env and transactions.
     # May be either in stdin input or in files.
 
-    if conf.inputAlloc == stdinSelector or
-       conf.inputEnv == stdinSelector or
-       conf.inputTxs == stdinSelector:
+    if conf.inputAlloc == stdinSelector or conf.inputEnv == stdinSelector or
+        conf.inputTxs == stdinSelector:
       ctx.parseInputFromStdin()
 
     if conf.inputAlloc != stdinSelector and conf.inputAlloc.len > 0:
@@ -414,15 +405,16 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputTxs != stdinSelector and conf.inputTxs.len > 0:
       if conf.inputTxs.endsWith(".rlp"):
         let data = readFile(conf.inputTxs)
-        ctx.parseTxsRlp(data.strip(chars={'"'}))
+        ctx.parseTxsRlp(data.strip(chars = {'"'}))
       else:
         let n = json.parseFile(conf.inputTxs)
         ctx.parseTxs(n)
 
-    let uncleHash = if ctx.env.parentUncleHash == Hash256():
-                      EMPTY_UNCLE_HASH
-                    else:
-                      ctx.env.parentUncleHash
+    let uncleHash =
+      if ctx.env.parentUncleHash == Hash256():
+        EMPTY_UNCLE_HASH
+      else:
+        ctx.env.parentUncleHash
 
     let parent = BlockHeader(
       stateRoot: emptyRlpHash,
@@ -442,14 +434,21 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       elif ctx.env.parentBaseFee.isSome:
         ctx.env.currentBaseFee = Opt.some(calcBaseFee(ctx.env))
       else:
-        raise newError(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section")
+        raise newError(
+          ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section"
+        )
 
     if com.isShanghaiOrLater(ctx.env.currentTimestamp) and ctx.env.withdrawals.isNone:
-      raise newError(ErrorConfig, "Shanghai config but missing 'withdrawals' in env section")
+      raise newError(
+        ErrorConfig, "Shanghai config but missing 'withdrawals' in env section"
+      )
 
     if com.isCancunOrLater(ctx.env.currentTimestamp):
       if ctx.env.parentBeaconBlockRoot.isNone:
-        raise newError(ErrorConfig, "Cancun config but missing 'parentBeaconBlockRoot' in env section")
+        raise newError(
+          ErrorConfig,
+          "Cancun config but missing 'parentBeaconBlockRoot' in env section",
+        )
 
       let res = loadKzgTrustedSetup()
       if res.isErr:
@@ -458,30 +457,41 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # un-set it if it has been set too early
       ctx.env.parentBeaconBlockRoot = Opt.none(Hash256)
 
-    let isMerged = config.terminalTotalDifficulty.isSome and
-                   config.terminalTotalDifficulty.value == 0.u256
+    let isMerged =
+      config.terminalTotalDifficulty.isSome and
+      config.terminalTotalDifficulty.value == 0.u256
     if isMerged:
       if ctx.env.currentRandom.isNone:
-        raise newError(ErrorConfig, "post-merge requires currentRandom to be defined in env")
+        raise newError(
+          ErrorConfig, "post-merge requires currentRandom to be defined in env"
+        )
 
       if ctx.env.currentDifficulty.isSome and ctx.env.currentDifficulty.get() != 0:
-        raise newError(ErrorConfig, "post-merge difficulty must be zero (or omitted) in env")
+        raise newError(
+          ErrorConfig, "post-merge difficulty must be zero (or omitted) in env"
+        )
       ctx.env.currentDifficulty = Opt.none(DifficultyInt)
-
     elif ctx.env.currentDifficulty.isNone:
       if ctx.env.parentDifficulty.isNone:
-        raise newError(ErrorConfig, "currentDifficulty was not provided, and cannot be calculated due to missing parentDifficulty")
+        raise newError(
+          ErrorConfig,
+          "currentDifficulty was not provided, and cannot be calculated due to missing parentDifficulty",
+        )
 
       if ctx.env.currentNumber == 0.BlockNumber:
-        raise newError(ErrorConfig, "currentDifficulty needs to be provided for block number 0")
+        raise newError(
+          ErrorConfig, "currentDifficulty needs to be provided for block number 0"
+        )
 
       if ctx.env.currentTimestamp <= ctx.env.parentTimestamp:
-        raise newError(ErrorConfig,
+        raise newError(
+          ErrorConfig,
           "currentDifficulty cannot be calculated -- currentTime ($1) needs to be after parent time ($2)" %
-            [$ctx.env.currentTimestamp, $ctx.env.parentTimestamp])
+            [$ctx.env.currentTimestamp, $ctx.env.parentTimestamp],
+        )
 
-      ctx.env.currentDifficulty = Opt.some(calcDifficulty(com,
-        ctx.env.currentTimestamp, parent))
+      ctx.env.currentDifficulty =
+        Opt.some(calcDifficulty(com, ctx.env.currentTimestamp, parent))
 
     # Calculate the excessBlobGas
     if ctx.env.currentExcessBlobGas.isNone:
@@ -490,18 +500,11 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
         ctx.env.currentExcessBlobGas = Opt.some calcExcessBlobGas(parent)
 
-    let header  = envToHeader(ctx.env)
+    let header = envToHeader(ctx.env)
 
-    let vmState = TestVMState(
-      blockHashes: ctx.env.blockHashes,
-      hashError: ""
-    )
+    let vmState = TestVMState(blockHashes: ctx.env.blockHashes, hashError: "")
 
-    vmState.init(
-      parent      = parent,
-      header      = header,
-      com         = com
-    )
+    vmState.init(parent = parent, header = header, com = com)
 
     vmState.mutateStateDB:
       db.setupAlloc(ctx.alloc)

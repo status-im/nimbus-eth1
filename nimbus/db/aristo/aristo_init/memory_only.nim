@@ -13,44 +13,33 @@
 ##
 {.push raises: [].}
 
-import
-  ../aristo_desc,
-  ../aristo_desc/desc_backend,
-  "."/[init_common, memory_db]
+import ../aristo_desc, ../aristo_desc/desc_backend, "."/[init_common, memory_db]
 
 type
   VoidBackendRef* = ref object of TypedBackendRef
     ## Dummy descriptor type, used as `nil` reference
 
-  MemOnlyBackend* = VoidBackendRef|MemBackendRef
+  MemOnlyBackend* = VoidBackendRef | MemBackendRef
 
-export
-  BackendType,
-  GuestDbRef,
-  MemBackendRef
+export BackendType, GuestDbRef, MemBackendRef
 
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc kind*(
-    be: BackendRef;
-      ): BackendType =
+proc kind*(be: BackendRef): BackendType =
   ## Retrieves the backend type symbol for a `be` backend database argument
   ## where `BackendVoid` is returned for the`nil` backend.
-  if be.isNil:
-    BackendVoid
-  else:
-    be.TypedBackendRef.beKind
+  if be.isNil: BackendVoid else: be.TypedBackendRef.beKind
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
 proc init*(
-    T: type AristoDbRef;                      # Target type
-    B: type MemBackendRef;                    # Backend type
-      ): T =
+    T: type AristoDbRef, # Target type
+    B: type MemBackendRef, # Backend type
+): T =
   ## Memory backend constructor.
   ##
   ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
@@ -62,9 +51,9 @@ proc init*(
     AristoDbRef(top: LayerRef.init(), backend: memoryBackend())
 
 proc init*(
-    T: type AristoDbRef;                      # Target type
-    B: type MemOnlyBackend;                   # Backend type
-      ): T =
+    T: type AristoDbRef, # Target type
+    B: type MemOnlyBackend, # Backend type
+): T =
   ## Memory backend constructor.
   ##
   ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
@@ -74,18 +63,16 @@ proc init*(
   ##
   when B is VoidBackendRef:
     AristoDbRef(top: LayerRef.init())
-
   elif B is MemBackendRef:
     AristoDbRef(top: LayerRef.init(), backend: memoryBackend())
 
 proc init*(
-    T: type AristoDbRef;                      # Target type
-      ): T =
+    T: type AristoDbRef, # Target type
+): T =
   ## Shortcut for `AristoDbRef.init(VoidBackendRef)`
   AristoDbRef.init VoidBackendRef
 
-
-proc finish*(db: AristoDbRef; eradicate = false) =
+proc finish*(db: AristoDbRef, eradicate = false) =
   ## Backend destructor. The argument `eradicate` indicates that a full
   ## database deletion is requested. If set `false` the outcome might differ
   ## depending on the type of backend (e.g. the `BackendMemory` backend will

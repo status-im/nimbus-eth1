@@ -24,7 +24,8 @@ proc configurationMain*() =
       genesisFile = jsonDir / "calaveras.json"
       noGenesis = jsonDir / "nogenesis.json"
       noConfig = jsonDir / "noconfig.json"
-      bootNode = "enode://a24ac7c5484ef4ed0c5eb2d36620ba4e4aa13b8c84684e1b4aab0cebea2ae45cb4d375b77eab56516d34bfbd3c1a833fc51296ff084b770b94fb9028c4d25ccf@52.169.42.101:30303"
+      bootNode =
+        "enode://a24ac7c5484ef4ed0c5eb2d36620ba4e4aa13b8c84684e1b4aab0cebea2ae45cb4d375b77eab56516d34bfbd3c1a833fc51296ff084b770b94fb9028c4d25ccf@52.169.42.101:30303"
 
     test "data-dir and key-store":
       let conf = makeTestConfig()
@@ -97,60 +98,60 @@ proc configurationMain*() =
     test "rpc-api":
       let conf = makeTestConfig()
       let flags = conf.getRpcFlags()
-      check { RpcFlag.Eth } == flags
+      check {RpcFlag.Eth} == flags
 
       let aa = makeConfig(@["--rpc-api:eth"])
       let ax = aa.getRpcFlags()
-      check { RpcFlag.Eth } == ax
+      check {RpcFlag.Eth} == ax
 
       let bb = makeConfig(@["--rpc-api:eth", "--rpc-api:debug"])
       let bx = bb.getRpcFlags()
-      check { RpcFlag.Eth, RpcFlag.Debug } == bx
+      check {RpcFlag.Eth, RpcFlag.Debug} == bx
 
       let cc = makeConfig(@["--rpc-api:eth,debug"])
       let cx = cc.getRpcFlags()
-      check { RpcFlag.Eth, RpcFlag.Debug } == cx
+      check {RpcFlag.Eth, RpcFlag.Debug} == cx
 
       let dd = makeConfig(@["--rpc-api:eth", "--rpc-api:exp"])
       let dx = dd.getRpcFlags()
-      check { RpcFlag.Eth, RpcFlag.Exp } == dx
+      check {RpcFlag.Eth, RpcFlag.Exp} == dx
 
       let ee = makeConfig(@["--rpc-api:eth,exp"])
       let ex = ee.getRpcFlags()
-      check { RpcFlag.Eth, RpcFlag.Exp } == ex
+      check {RpcFlag.Eth, RpcFlag.Exp} == ex
 
       let ff = makeConfig(@["--rpc-api:eth,debug,exp"])
       let fx = ff.getRpcFlags()
-      check { RpcFlag.Eth, RpcFlag.Debug, RpcFlag.Exp } == fx
+      check {RpcFlag.Eth, RpcFlag.Debug, RpcFlag.Exp} == fx
 
     test "ws-api":
       let conf = makeTestConfig()
       let flags = conf.getWsFlags()
-      check { RpcFlag.Eth } == flags
+      check {RpcFlag.Eth} == flags
 
       let aa = makeConfig(@["--ws-api:eth"])
       let ax = aa.getWsFlags()
-      check { RpcFlag.Eth } == ax
+      check {RpcFlag.Eth} == ax
 
       let bb = makeConfig(@["--ws-api:eth", "--ws-api:debug"])
       let bx = bb.getWsFlags()
-      check { RpcFlag.Eth, RpcFlag.Debug } == bx
+      check {RpcFlag.Eth, RpcFlag.Debug} == bx
 
       let cc = makeConfig(@["--ws-api:eth,debug"])
       let cx = cc.getWsFlags()
-      check { RpcFlag.Eth, RpcFlag.Debug } == cx
+      check {RpcFlag.Eth, RpcFlag.Debug} == cx
 
       let dd = makeConfig(@["--ws-api:eth", "--ws-api:exp"])
       let dx = dd.getWsFlags()
-      check { RpcFlag.Eth, RpcFlag.Exp } == dx
+      check {RpcFlag.Eth, RpcFlag.Exp} == dx
 
       let ee = makeConfig(@["--ws-api:eth,exp"])
       let ex = ee.getWsFlags()
-      check { RpcFlag.Eth, RpcFlag.Exp } == ex
+      check {RpcFlag.Eth, RpcFlag.Exp} == ex
 
       let ff = makeConfig(@["--ws-api:eth,exp,debug"])
       let fx = ff.getWsFlags()
-      check { RpcFlag.Eth, RpcFlag.Debug, RpcFlag.Exp } == fx
+      check {RpcFlag.Eth, RpcFlag.Debug, RpcFlag.Exp} == fx
 
     test "protocols":
       let conf = makeTestConfig()
@@ -198,8 +199,7 @@ proc configurationMain*() =
       check cc.getStaticPeers().len == 2
 
     test "chainId of custom-network is oneof std network":
-      const
-        chainid1 = "tests" / "customgenesis" / "chainid1.json"
+      const chainid1 = "tests" / "customgenesis" / "chainid1.json"
 
       let conf = makeConfig(@["--custom-network:" & chainid1])
       check conf.networkId == 1.NetworkId
@@ -207,7 +207,8 @@ proc configurationMain*() =
       check conf.getBootNodes().len == 0
 
     test "json-rpc enabled when json-engine api enabled and share same port":
-      let conf = makeConfig(@["--engine-api", "--engine-api-port:8545", "--http-port:8545"])
+      let conf =
+        makeConfig(@["--engine-api", "--engine-api-port:8545", "--http-port:8545"])
       check:
         conf.engineApiEnabled == true
         conf.rpcEnabled == false
@@ -219,7 +220,9 @@ proc configurationMain*() =
         conf.shareServerWithEngineApi
 
     test "ws-rpc enabled when ws-engine api enabled and share same port":
-      let conf = makeConfig(@["--ws", "--engine-api-ws", "--engine-api-port:8546", "--http-port:8546"])
+      let conf = makeConfig(
+        @["--ws", "--engine-api-ws", "--engine-api-port:8546", "--http-port:8546"]
+      )
       check:
         conf.engineApiWsEnabled
         conf.wsEnabled
@@ -231,7 +234,9 @@ proc configurationMain*() =
         conf.shareServerWithEngineApi
 
     test "json-rpc stay enabled when json-engine api enabled and using different port":
-      let conf = makeConfig(@["--rpc", "--engine-api", "--engine-api-port:8550", "--http-port:8545"])
+      let conf = makeConfig(
+        @["--rpc", "--engine-api", "--engine-api-port:8550", "--http-port:8545"]
+      )
       check:
         conf.engineApiEnabled
         conf.rpcEnabled
@@ -243,7 +248,9 @@ proc configurationMain*() =
         conf.shareServerWithEngineApi == false
 
     test "ws-rpc stay enabled when ws-engine api enabled and using different port":
-      let conf = makeConfig(@["--ws", "--engine-api-ws", "--engine-api-port:8551", "--http-port:8546"])
+      let conf = makeConfig(
+        @["--ws", "--engine-api-ws", "--engine-api-port:8551", "--http-port:8546"]
+      )
       check:
         conf.engineApiWsEnabled
         conf.wsEnabled
@@ -274,16 +281,24 @@ proc configurationMain*() =
       check rc.isOk
 
     test "net-key hex without 0x prefix":
-      let conf = makeConfig(@["--net-key:9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"])
-      check conf.netKey == "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
+      let conf = makeConfig(
+        @["--net-key:9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"]
+      )
+      check conf.netKey ==
+        "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
       let rc = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
       check rc.isOk
       let pkhex = rc.get.seckey.toRaw.to0xHex
       check pkhex == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
 
     test "net-key hex with 0x prefix":
-      let conf = makeConfig(@["--net-key:0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"])
-      check conf.netKey == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
+      let conf = makeConfig(
+        @[
+          "--net-key:0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
+        ]
+      )
+      check conf.netKey ==
+        "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
       let rc = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
       check rc.isOk
       let pkhex = rc.get.seckey.toRaw.to0xHex

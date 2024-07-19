@@ -19,61 +19,65 @@ import
   ../rpc/params,
   ./call_common
 
-export
-  call_common
+export call_common
 
-proc rpcCallEvm*(args: TransactionArgs,
-                 header: common.BlockHeader,
-                 com: CommonRef): EvmResult[CallResult] =
+proc rpcCallEvm*(
+    args: TransactionArgs, header: common.BlockHeader, com: CommonRef
+): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let topHeader = common.BlockHeader(
     parentHash: header.blockHash,
-    timestamp:  EthTime.now(),
-    gasLimit:   0.GasInt,              ## ???
+    timestamp: EthTime.now(),
+    gasLimit: 0.GasInt, ## ???
     baseFeePerGas: Opt.none UInt256, ## ???
   )
-  let vmState = ? BaseVMState.new(topHeader, com)
-  let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
+  let vmState = ?BaseVMState.new(topHeader, com)
+  let params = ?toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
 
   var dbTx = com.db.ctx.newTransaction()
-  defer: dbTx.dispose() # always dispose state changes
+  defer:
+    dbTx.dispose() # always dispose state changes
 
   ok(runComputation(params, CallResult))
 
-proc rpcCallEvm*(args: TransactionArgs,
-                 header: common.BlockHeader,
-                 com: CommonRef,
-                 vmState: BaseVMState): EvmResult[CallResult] =
+proc rpcCallEvm*(
+    args: TransactionArgs,
+    header: common.BlockHeader,
+    com: CommonRef,
+    vmState: BaseVMState,
+): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
-  let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
+  let params = ?toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
 
   var dbTx = com.db.ctx.newTransaction()
-  defer: dbTx.dispose() # always dispose state changes
+  defer:
+    dbTx.dispose() # always dispose state changes
 
   ok(runComputation(params, CallResult))
 
-proc rpcEstimateGas*(args: TransactionArgs,
-                     header: common.BlockHeader,
-                     com: CommonRef, gasCap: GasInt): EvmResult[GasInt] =
+proc rpcEstimateGas*(
+    args: TransactionArgs, header: common.BlockHeader, com: CommonRef, gasCap: GasInt
+): EvmResult[GasInt] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = common.BlockHeader(
     parentHash: header.blockHash,
-    timestamp:  EthTime.now(),
-    gasLimit:   0.GasInt,              ## ???
-    baseFeePerGas: Opt.none UInt256,   ## ???
+    timestamp: EthTime.now(),
+    gasLimit: 0.GasInt, ## ???
+    baseFeePerGas: Opt.none UInt256, ## ???
   )
-  let vmState = ? BaseVMState.new(topHeader, com)
-  let fork    = vmState.fork
-  let txGas   = GasInt gasFees[fork][GasTransaction] # txGas always 21000, use constants?
-  var params  = ? toCallParams(vmState, args, gasCap, header.baseFeePerGas)
+  let vmState = ?BaseVMState.new(topHeader, com)
+  let fork = vmState.fork
+  let txGas = GasInt gasFees[fork][GasTransaction] # txGas always 21000, use constants?
+  var params = ?toCallParams(vmState, args, gasCap, header.baseFeePerGas)
 
   var
-    lo : GasInt = txGas - 1
-    hi : GasInt = GasInt args.gas.get(0.Quantity)
+    lo: GasInt = txGas - 1
+    hi: GasInt = GasInt args.gas.get(0.Quantity)
     cap: GasInt
 
   var dbTx = com.db.ctx.newTransaction()
-  defer: dbTx.dispose() # always dispose state changes
+  defer:
+    dbTx.dispose() # always dispose state changes
 
   # Determine the highest gas limit can be used during the estimation.
   if hi < txGas:
@@ -83,7 +87,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
   # Normalize the max fee per gas the call is willing to spend.
   var feeCap = GasInt args.gasPrice.get(0.Quantity)
   if args.gasPrice.isSome and
-    (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
+      (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err(evmErr(EvmInvalidParam))
   elif args.maxFeePerGas.isSome:
     feeCap = GasInt args.maxFeePerGas.get
@@ -105,13 +109,17 @@ proc rpcEstimateGas*(args: TransactionArgs,
     # If the allowance is larger than maximum GasInt, skip checking
     if allowance < high(GasInt).u256 and hi > allowance.truncate(GasInt):
       let transfer = args.value.get(0.u256)
-      warn "Gas estimation capped by limited funds", original=hi, balance,
-        sent=transfer, maxFeePerGas=feeCap, fundable=allowance
+      warn "Gas estimation capped by limited funds",
+        original = hi,
+        balance,
+        sent = transfer,
+        maxFeePerGas = feeCap,
+        fundable = allowance
       hi = allowance.truncate(GasInt)
 
   # Recap the highest gas allowance with specified gasCap.
   if gasCap != 0 and hi > gasCap:
-    warn "Caller gas above allowance, capping", requested=hi, cap=gasCap
+    warn "Caller gas above allowance, capping", requested = hi, cap = gasCap
     hi = gasCap
 
   cap = hi
@@ -129,9 +137,9 @@ proc rpcEstimateGas*(args: TransactionArgs,
     ok(res.len > 0)
 
   # Execute the binary search and hone in on an executable gas limit
-  while lo+1 < hi:
+  while lo + 1 < hi:
     let mid = (hi + lo) div 2
-    let failed = ? executable(mid)
+    let failed = ?executable(mid)
     if failed:
       lo = mid
     else:
@@ -139,7 +147,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   # Reject the transaction as invalid if it still fails at the highest allowance
   if hi == cap:
-    let failed = ? executable(hi)
+    let failed = ?executable(hi)
     if failed:
       # TODO: provide more descriptive EVM error beside out of gas
       # e.g. revert and other EVM errors
@@ -147,18 +155,20 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   ok(hi)
 
-proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState): CallParams =
+proc callParamsForTx(
+    tx: Transaction, sender: EthAddress, vmState: BaseVMState
+): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
-    vmState:      vmState,
-    gasPrice:     tx.gasPrice,
-    gasLimit:     tx.gasLimit,
-    sender:       sender,
-    to:           tx.destination,
-    isCreate:     tx.contractCreation,
-    value:        tx.value,
-    input:        tx.payload
+    vmState: vmState,
+    gasPrice: tx.gasPrice,
+    gasLimit: tx.gasLimit,
+    sender: sender,
+    to: tx.destination,
+    isCreate: tx.contractCreation,
+    value: tx.value,
+    input: tx.payload,
   )
   if tx.txType > TxLegacy:
     result.accessList = tx.accessList
@@ -166,19 +176,20 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState):
   if tx.txType >= TxEip4844:
     result.versionedHashes = tx.versionedHashes
 
-proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState): CallParams =
+proc callParamsForTest(
+    tx: Transaction, sender: EthAddress, vmState: BaseVMState
+): CallParams =
   result = CallParams(
-    vmState:      vmState,
-    gasPrice:     tx.gasPrice,
-    gasLimit:     tx.gasLimit,
-    sender:       sender,
-    to:           tx.destination,
-    isCreate:     tx.contractCreation,
-    value:        tx.value,
-    input:        tx.payload,
-
-    noIntrinsic:  true, # Don't charge intrinsic gas.
-    noRefund:     true, # Don't apply gas refund/burn rule.
+    vmState: vmState,
+    gasPrice: tx.gasPrice,
+    gasLimit: tx.gasLimit,
+    sender: sender,
+    to: tx.destination,
+    isCreate: tx.contractCreation,
+    value: tx.value,
+    input: tx.payload,
+    noIntrinsic: true, # Don't charge intrinsic gas.
+    noRefund: true, # Don't apply gas refund/burn rule.
   )
   if tx.txType > TxLegacy:
     result.accessList = tx.accessList
@@ -186,15 +197,12 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
   if tx.txType >= TxEip4844:
     result.versionedHashes = tx.versionedHashes
 
-proc txCallEvm*(tx: Transaction,
-                sender: EthAddress,
-                vmState: BaseVMState): GasInt =
-  let
-    call = callParamsForTx(tx, sender, vmState)
+proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState): GasInt =
+  let call = callParamsForTx(tx, sender, vmState)
   runComputation(call, GasInt)
 
-proc testCallEvm*(tx: Transaction,
-                  sender: EthAddress,
-                  vmState: BaseVMState): CallResult =
+proc testCallEvm*(
+    tx: Transaction, sender: EthAddress, vmState: BaseVMState
+): CallResult =
   let call = callParamsForTest(tx, sender, vmState)
   runComputation(call, CallResult)

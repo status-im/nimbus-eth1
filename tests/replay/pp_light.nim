@@ -19,14 +19,13 @@ import
   stew/byteutils,
   ../../nimbus/constants
 
-export
-  sequtils, strformat, strutils
+export sequtils, strformat, strutils
 
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
 
-func reGroup(q: openArray[int]; itemsPerSegment = 16): seq[seq[int]] =
+func reGroup(q: openArray[int], itemsPerSegment = 16): seq[seq[int]] =
   var top = 0
   while top < q.len:
     let w = top
@@ -74,14 +73,22 @@ func ppMins*(elapsed: Duration): string =
   result &= "m"
 
 func toKMG*[T](s: T): string =
-  func subst(s: var string; tag, new: string): bool =
+  func subst(s: var string, tag, new: string): bool =
     if tag.len < s.len and s[s.len - tag.len ..< s.len] == tag:
       s = s[0 ..< s.len - tag.len] & new
       return true
   result = $s
-  for w in [("000", "K"),("000K","M"),("000M","G"),("000G","T"),
-            ("000T","P"),("000P","E"),("000E","Z"),("000Z","Y")]:
-    if not result.subst(w[0],w[1]):
+  for w in [
+    ("000", "K"),
+    ("000K", "M"),
+    ("000M", "G"),
+    ("000G", "T"),
+    ("000T", "P"),
+    ("000P", "E"),
+    ("000E", "Z"),
+    ("000Z", "Y"),
+  ]:
+    if not result.subst(w[0], w[1]):
       return
 
 func pp*(elapsed: Duration): string =
@@ -103,24 +110,23 @@ func pp*(elapsed: Duration): string =
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
-func pp*(s: string; hex = false): string =
+func pp*(s: string, hex = false): string =
   if hex:
     let n = (s.len + 1) div 2
-    (if s.len < 20: s else: s[0 .. 5] & ".." & s[s.len-8 .. s.len-1]) &
-      "[" & (if 0 < n: "#" & $n else: "") & "]"
+    (if s.len < 20: s else: s[0 .. 5] & ".." & s[s.len - 8 .. s.len - 1]) & "[" &
+      (if 0 < n: "#" & $n else: "") & "]"
   elif s.len <= 30:
     s
   else:
-    (if (s.len and 1) == 0: s[0 ..< 8] else: "0" & s[0 ..< 7]) &
-      "..(" & $s.len & ").." & s[s.len-16 ..< s.len]
+    (if (s.len and 1) == 0: s[0 ..< 8] else: "0" & s[0 ..< 7]) & "..(" & $s.len & ").." &
+      s[s.len - 16 ..< s.len]
 
-func pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
+func pp*(q: openArray[int], itemsPerLine: int, lineSep: string): string =
   doAssert q == q.reGroup(itemsPerLine).concat
-  q.reGroup(itemsPerLine)
-   .mapIt(it.mapIt(&"0x{it:02x}").join(", "))
-   .join("," & lineSep)
 
-func pp*(a: MDigest[256]; collapse = true): string =
+  q.reGroup(itemsPerLine).mapIt(it.mapIt(&"0x{it:02x}").join(", ")).join("," & lineSep)
+
+func pp*(a: MDigest[256], collapse = true): string =
   if not collapse:
     a.data.toHex
   elif a == ZERO_HASH256:
@@ -134,18 +140,19 @@ func pp*(a: MDigest[256]; collapse = true): string =
   elif a == ZERO_HASH256:
     "ZERO_HASH256"
   else:
-    "£" & a.data.toHex.join[0..6] & ".." & a.data.toHex.join[56..63]
+    "£" & a.data.toHex.join[0 .. 6] & ".." & a.data.toHex.join[56 .. 63]
 
-func pp*(a: openArray[MDigest[256]]; collapse = true): string =
+func pp*(a: openArray[MDigest[256]], collapse = true): string =
   "@[" & a.toSeq.mapIt(it.pp).join(" ") & "]"
 
-func pp*(q: openArray[int]; itemsPerLine: int; indent: int): string =
-  q.pp(itemsPerLine = itemsPerLine, lineSep = "\n" & " ".repeat(max(1,indent)))
+func pp*(q: openArray[int], itemsPerLine: int, indent: int): string =
+  q.pp(itemsPerLine = itemsPerLine, lineSep = "\n" & " ".repeat(max(1, indent)))
 
-func pp*(q: openArray[byte]; noHash = false): string =
+func pp*(q: openArray[byte], noHash = false): string =
   if q.len == 32 and not noHash:
-    var a: array[32,byte]
-    for n in 0..31: a[n] = q[n]
+    var a: array[32, byte]
+    for n in 0 .. 31:
+      a[n] = q[n]
     MDigest[256](data: a).pp
   else:
     q.toHex.pp(hex = true)
@@ -154,7 +161,7 @@ func pp*(q: openArray[byte]; noHash = false): string =
 # Elapsed time pretty printer
 # ------------------------------------------------------------------------------
 
-template showElapsed*(noisy: bool; info: string; code: untyped) =
+template showElapsed*(noisy: bool, info: string, code: untyped) =
   block:
     let seStartTrackling = getTime()
     block:
@@ -166,11 +173,7 @@ template showElapsed*(noisy: bool; info: string; code: untyped) =
       else:
         echo "*** ", info, &": {elpd.ppMs:>4}"
 
-template showElapsed*(
-    noisy: bool;
-    info: string;
-    elapsed: Duration;
-    code: untyped) =
+template showElapsed*(noisy: bool, info: string, elapsed: Duration, code: untyped) =
   block:
     let seStartTrackling = getTime()
     block:
@@ -185,11 +188,8 @@ template showElapsed*(
           echo "*** ", info, &": {elpd.ppMs:>4}"
 
 template profileSection*(
-    noisy: bool;
-    info: string;
-    state: var (Duration, int);
-    suspend: bool;
-    code: untyped) =
+    noisy: bool, info: string, state: var (Duration, int), suspend: bool, code: untyped
+) =
   block:
     let psStartProfiling = getTime()
     block:
@@ -202,23 +202,21 @@ template profileSection*(
       state[1].inc
 
 template profileSection*(
-    noisy: bool;
-    info: string;
-    state: var (Duration, int);
-    code: untyped) =
-  noisy.profileSection(info, state, suspend=false):
+    noisy: bool, info: string, state: var (Duration, int), code: untyped
+) =
+  noisy.profileSection(info, state, suspend = false):
     code
 
-template catchException*(info: string; trace: bool; code: untyped) =
+template catchException*(info: string, trace: bool, code: untyped) =
   block:
     try:
       code
     except CatchableError as e:
       if trace:
         echo "*** ", info, ": exception ", e.name, "(", e.msg, ")"
-        echo "    ", e.getStackTrace.strip.replace("\n","\n    ")
+        echo "    ", e.getStackTrace.strip.replace("\n", "\n    ")
 
-template catchException*(info: string; code: untyped) =
+template catchException*(info: string, code: untyped) =
   catchException(info, false, code)
 
 # ------------------------------------------------------------------------------

@@ -8,14 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/[tables, json],
-  eth/common,
-  ../../nimbus/common/chain_config,
-  ../common/types
+import std/[tables, json], eth/common, ../../nimbus/common/chain_config, ../common/types
 
-export
-  types
+export types
 
 type
   T8NExitCode* = distinct int
@@ -59,7 +54,8 @@ type
     case txsType*: TxsType
     of TxsRlp: r*: Rlp
     of TxsJson: n*: JsonNode
-    else: discard
+    else:
+      discard
 
   TransContext* = object
     alloc*: GenesisAlloc
@@ -101,13 +97,13 @@ type
     currentExcessBlobGas*: Opt[uint64]
 
 const
-  ErrorEVM*              = 2.T8NExitCode
-  ErrorConfig*           = 3.T8NExitCode
+  ErrorEVM* = 2.T8NExitCode
+  ErrorConfig* = 3.T8NExitCode
   ErrorMissingBlockhash* = 4.T8NExitCode
 
   ErrorJson* = 10.T8NExitCode
-  ErrorIO*   = 11.T8NExitCode
-  ErrorRlp*  = 12.T8NExitCode
+  ErrorIO* = 11.T8NExitCode
+  ErrorRlp* = 12.T8NExitCode
 
 proc newError*(code: T8NExitCode, msg: string): ref T8NError =
   (ref T8NError)(exitCode: code, msg: msg)

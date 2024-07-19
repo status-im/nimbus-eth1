@@ -21,17 +21,24 @@ import
   ../../../../nimbus/beacon/payload_conv,
   web3/execution_types
 
-type
-  EngineAPIVersionResolver* = ref object of RootRef
-    com: CommonRef
+type EngineAPIVersionResolver* = ref object of RootRef
+  com: CommonRef
 
-method setEngineAPIVersionResolver*(cust: EngineAPIVersionResolver, v: CommonRef) {.base, gcsafe.} =
+method setEngineAPIVersionResolver*(
+    cust: EngineAPIVersionResolver, v: CommonRef
+) {.base, gcsafe.} =
   cust.com = v
 
-method forkchoiceUpdatedVersion*(cust: EngineAPIVersionResolver,
-  headTimestamp: uint64, payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64)): Version {.base, gcsafe.} =
-  let ts = if payloadAttributesTimestamp.isNone: headTimestamp.EthTime
-           else: payloadAttributesTimestamp.get().EthTime
+method forkchoiceUpdatedVersion*(
+    cust: EngineAPIVersionResolver,
+    headTimestamp: uint64,
+    payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64),
+): Version {.base, gcsafe.} =
+  let ts =
+    if payloadAttributesTimestamp.isNone:
+      headTimestamp.EthTime
+    else:
+      payloadAttributesTimestamp.get().EthTime
   if cust.com.isCancunOrLater(ts):
     Version.V3
   elif cust.com.isShanghaiOrLater(ts):
@@ -39,7 +46,9 @@ method forkchoiceUpdatedVersion*(cust: EngineAPIVersionResolver,
   else:
     Version.V1
 
-method newPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Version {.base, gcsafe.} =
+method newPayloadVersion*(
+    cust: EngineAPIVersionResolver, timestamp: uint64
+): Version {.base, gcsafe.} =
   let ts = timestamp.EthTime
   if cust.com.isCancunOrLater(ts):
     Version.V3
@@ -48,7 +57,9 @@ method newPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Ve
   else:
     Version.V1
 
-method getPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Version {.base, gcsafe.} =
+method getPayloadVersion*(
+    cust: EngineAPIVersionResolver, timestamp: uint64
+): Version {.base, gcsafe.} =
   let ts = timestamp.EthTime
   if cust.com.isCancunOrLater(ts):
     Version.V3
@@ -57,23 +68,23 @@ method getPayloadVersion*(cust: EngineAPIVersionResolver, timestamp: uint64): Ve
   else:
     Version.V1
 
-type
-  GetPayloadCustomizer* = ref object of EngineAPIVersionResolver
+type GetPayloadCustomizer* = ref object of EngineAPIVersionResolver
 
-method getPayloadID*(cust: GetPayloadCustomizer,
-         basePayloadID: PayloadID): PayloadID {.base, gcsafe.} =
+method getPayloadID*(
+    cust: GetPayloadCustomizer, basePayloadID: PayloadID
+): PayloadID {.base, gcsafe.} =
   doAssert(false, "getPayloadID unimplemented")
 
 method getExpectedError*(cust: GetPayloadCustomizer): int {.base, gcsafe.} =
   doAssert(false, "getExpectedError unimplemented")
 
-type
-  BaseGetPayloadCustomizer* = ref object of GetPayloadCustomizer
-    customPayloadID*: Opt[PayloadID]
-    expectedError*  : int
+type BaseGetPayloadCustomizer* = ref object of GetPayloadCustomizer
+  customPayloadID*: Opt[PayloadID]
+  expectedError*: int
 
-method getPayloadID(cust: BaseGetPayloadCustomizer,
-         basePayloadID: PayloadID): PayloadID =
+method getPayloadID(
+    cust: BaseGetPayloadCustomizer, basePayloadID: PayloadID
+): PayloadID =
   if cust.customPayloadID.isSome:
     return cust.customPayloadID.get
   return basePayloadID
@@ -81,44 +92,44 @@ method getPayloadID(cust: BaseGetPayloadCustomizer,
 method getExpectedError(cust: BaseGetPayloadCustomizer): int =
   cust.expectedError
 
-type
-  UpgradeGetPayloadVersion* = ref object of BaseGetPayloadCustomizer
+type UpgradeGetPayloadVersion* = ref object of BaseGetPayloadCustomizer
 
 method getPayloadVersion(cust: UpgradeGetPayloadVersion, timestamp: uint64): Version =
   let version = procCall getPayloadVersion(cust.GetPayloadCustomizer, timestamp)
   doAssert(version != Version.high, "cannot upgrade version " & $Version.high)
   version.succ
 
-type
-  DowngradeGetPayloadVersion* = ref object of BaseGetPayloadCustomizer
+type DowngradeGetPayloadVersion* = ref object of BaseGetPayloadCustomizer
 
 method getPayloadVersion(cust: DowngradeGetPayloadVersion, timestamp: uint64): Version =
   let version = procCall getPayloadVersion(cust.GetPayloadCustomizer, timestamp)
   doAssert(version != Version.V1, "cannot downgrade version 1")
   version.pred
 
-type
-  PayloadAttributesCustomizer* = ref object of BaseGetPayloadCustomizer
+type PayloadAttributesCustomizer* = ref object of BaseGetPayloadCustomizer
 
-method getPayloadAttributes*(cust: PayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes {.base, gcsafe.} =
+method getPayloadAttributes*(
+    cust: PayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes
+): PayloadAttributes {.base, gcsafe.} =
   doAssert(false, "getPayloadAttributes unimplemented")
 
-type
-  BasePayloadAttributesCustomizer* = ref object of PayloadAttributesCustomizer
-    timestamp*             : Opt[uint64]
-    prevRandao*            : Opt[common.Hash256]
-    suggestedFeeRecipient* : Opt[common.EthAddress]
-    withdrawals*           : Opt[seq[Withdrawal]]
-    removeWithdrawals*     : bool
-    beaconRoot*            : Opt[common.Hash256]
-    removeBeaconRoot*      : bool
+type BasePayloadAttributesCustomizer* = ref object of PayloadAttributesCustomizer
+  timestamp*: Opt[uint64]
+  prevRandao*: Opt[common.Hash256]
+  suggestedFeeRecipient*: Opt[common.EthAddress]
+  withdrawals*: Opt[seq[Withdrawal]]
+  removeWithdrawals*: bool
+  beaconRoot*: Opt[common.Hash256]
+  removeBeaconRoot*: bool
 
-method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes =
+method getPayloadAttributes(
+    cust: BasePayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes
+): PayloadAttributes =
   var customPayloadAttributes = PayloadAttributes(
-    timestamp:             basePayloadAttributes.timestamp,
-    prevRandao:            basePayloadAttributes.prevRandao,
+    timestamp: basePayloadAttributes.timestamp,
+    prevRandao: basePayloadAttributes.prevRandao,
     suggestedFeeRecipient: basePayloadAttributes.suggestedFeeRecipient,
-    withdrawals:           basePayloadAttributes.withdrawals,
+    withdrawals: basePayloadAttributes.withdrawals,
     parentBeaconBlockRoot: basePayloadAttributes.parentBeaconBlockRoot,
   )
 
@@ -129,7 +140,8 @@ method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAt
     customPayloadAttributes.prevRandao = w3Hash cust.prevRandao.get
 
   if cust.suggestedFeeRecipient.isSome:
-    customPayloadAttributes.suggestedFeeRecipient = w3Addr cust.suggestedFeeRecipient.get
+    customPayloadAttributes.suggestedFeeRecipient =
+      w3Addr cust.suggestedFeeRecipient.get
 
   if cust.removeWithdrawals:
     customPayloadAttributes.withdrawals = Opt.none(seq[WithdrawalV1])
@@ -143,68 +155,88 @@ method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAt
 
   return customPayloadAttributes
 
-type
-  ForkchoiceUpdatedCustomizer* = ref object of BasePayloadAttributesCustomizer
+type ForkchoiceUpdatedCustomizer* = ref object of BasePayloadAttributesCustomizer
 
-method getForkchoiceState*(cust: ForkchoiceUpdatedCustomizer,
-  baseForkchoiceUpdate: ForkchoiceStateV1): ForkchoiceStateV1 {.base, gcsafe.} =
+method getForkchoiceState*(
+    cust: ForkchoiceUpdatedCustomizer, baseForkchoiceUpdate: ForkchoiceStateV1
+): ForkchoiceStateV1 {.base, gcsafe.} =
   doAssert(false, "getForkchoiceState unimplemented")
 
-method getExpectInvalidStatus*(cust: ForkchoiceUpdatedCustomizer): bool {.base, gcsafe.} =
+method getExpectInvalidStatus*(
+    cust: ForkchoiceUpdatedCustomizer
+): bool {.base, gcsafe.} =
   doAssert(false, "getExpectInvalidStatus unimplemented")
 
 # Customizer that makes no modifications to the forkchoice directive call.
 # Used as base to other customizers.
-type
-  BaseForkchoiceUpdatedCustomizer* = ref object of ForkchoiceUpdatedCustomizer
-    expectInvalidStatus*: bool
+type BaseForkchoiceUpdatedCustomizer* = ref object of ForkchoiceUpdatedCustomizer
+  expectInvalidStatus*: bool
 
-method getPayloadAttributes(cust: BaseForkchoiceUpdatedCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes =
-  var customPayloadAttributes = procCall getPayloadAttributes(cust.BasePayloadAttributesCustomizer, basePayloadAttributes)
+method getPayloadAttributes(
+    cust: BaseForkchoiceUpdatedCustomizer, basePayloadAttributes: PayloadAttributes
+): PayloadAttributes =
+  var customPayloadAttributes = procCall getPayloadAttributes(
+    cust.BasePayloadAttributesCustomizer, basePayloadAttributes
+  )
   return customPayloadAttributes
 
-method getForkchoiceState(cust: BaseForkchoiceUpdatedCustomizer, baseForkchoiceUpdate: ForkchoiceStateV1): ForkchoiceStateV1 =
+method getForkchoiceState(
+    cust: BaseForkchoiceUpdatedCustomizer, baseForkchoiceUpdate: ForkchoiceStateV1
+): ForkchoiceStateV1 =
   return baseForkchoiceUpdate
 
 method getExpectInvalidStatus(cust: BaseForkchoiceUpdatedCustomizer): bool =
   return cust.expectInvalidStatus
 
 # Customizer that upgrades the version of the forkchoice directive call to the next version.
-type
-  UpgradeForkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
+type UpgradeForkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
 
-method forkchoiceUpdatedVersion(cust: UpgradeForkchoiceUpdatedVersion, headTimestamp:
-                                uint64, payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64)): Version =
-  let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
+method forkchoiceUpdatedVersion(
+    cust: UpgradeForkchoiceUpdatedVersion,
+    headTimestamp: uint64,
+    payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64),
+): Version =
+  let version = procCall forkchoiceUpdatedVersion(
+    EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp
+  )
   doAssert(version != Version.high, "cannot upgrade version " & $Version.high)
   version.succ
 
 # Customizer that downgrades the version of the forkchoice directive call to the previous version.
-type
-  DowngradeForkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
+type DowngradeForkchoiceUpdatedVersion* = ref object of BaseForkchoiceUpdatedCustomizer
 
-method forkchoiceUpdatedVersion(cust: DowngradeForkchoiceUpdatedVersion, headTimestamp: uint64,
-                                payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64)): Version =
-  let version = procCall forkchoiceUpdatedVersion(EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp)
+method forkchoiceUpdatedVersion(
+    cust: DowngradeForkchoiceUpdatedVersion,
+    headTimestamp: uint64,
+    payloadAttributesTimestamp: Opt[uint64] = Opt.none(uint64),
+): Version =
+  let version = procCall forkchoiceUpdatedVersion(
+    EngineAPIVersionResolver(cust), headTimestamp, payloadAttributesTimestamp
+  )
   doAssert(version != Version.V1, "cannot downgrade version 1")
   version.pred
 
-type
-  TimestampDeltaPayloadAttributesCustomizer* = ref object of BaseForkchoiceUpdatedCustomizer
-    timestampDelta*: int
+type TimestampDeltaPayloadAttributesCustomizer* = ref object of BaseForkchoiceUpdatedCustomizer
+  timestampDelta*: int
 
-method getPayloadAttributes(cust: TimestampDeltaPayloadAttributesCustomizer, basePayloadAttributes: PayloadAttributes): PayloadAttributes =
-  var customPayloadAttributes = procCall getPayloadAttributes(cust.BasePayloadAttributesCustomizer, basePayloadAttributes)
-  customPayloadAttributes.timestamp = w3Qty(customPayloadAttributes.timestamp, cust.timestampDelta)
+method getPayloadAttributes(
+    cust: TimestampDeltaPayloadAttributesCustomizer,
+    basePayloadAttributes: PayloadAttributes,
+): PayloadAttributes =
+  var customPayloadAttributes = procCall getPayloadAttributes(
+    cust.BasePayloadAttributesCustomizer, basePayloadAttributes
+  )
+  customPayloadAttributes.timestamp =
+    w3Qty(customPayloadAttributes.timestamp, cust.timestampDelta)
   return customPayloadAttributes
 
-type
-  VersionedHashesCustomizer* = ref object of RootRef
-    blobs*: Opt[seq[BlobID]]
-    hashVersions*: seq[byte]
+type VersionedHashesCustomizer* = ref object of RootRef
+  blobs*: Opt[seq[BlobID]]
+  hashVersions*: seq[byte]
 
-method getVersionedHashes*(cust: VersionedHashesCustomizer,
-                           baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] {.base, gcsafe.} =
+method getVersionedHashes*(
+    cust: VersionedHashesCustomizer, baseVersionedHashes: openArray[common.Hash256]
+): Opt[seq[common.Hash256]] {.base, gcsafe.} =
   if cust.blobs.isNone:
     return Opt.none(seq[common.Hash256])
 
@@ -228,12 +260,14 @@ method description*(cust: VersionedHashesCustomizer): string {.base, gcsafe.} =
     result.add " with versions "
     result.add cust.hashVersions.toHex
 
-type
-  IncreaseVersionVersionedHashes* = ref object of VersionedHashesCustomizer
+type IncreaseVersionVersionedHashes* = ref object of VersionedHashesCustomizer
 
-method getVersionedHashes(cust: IncreaseVersionVersionedHashes,
-                          baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] =
-  doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
+method getVersionedHashes(
+    cust: IncreaseVersionVersionedHashes, baseVersionedHashes: openArray[common.Hash256]
+): Opt[seq[common.Hash256]] =
+  doAssert(
+    baseVersionedHashes.len > 0, "no versioned hashes available for modification"
+  )
 
   var v = newSeq[common.Hash256](baseVersionedHashes.len)
   for i, h in baseVersionedHashes:
@@ -241,38 +275,42 @@ method getVersionedHashes(cust: IncreaseVersionVersionedHashes,
     v[i].data[0] = v[i].data[0] + 1
   Opt.some(v)
 
-type
-  CorruptVersionedHashes* = ref object of VersionedHashesCustomizer
+type CorruptVersionedHashes* = ref object of VersionedHashesCustomizer
 
-method getVersionedHashes(cust: CorruptVersionedHashes,
-                          baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] =
-  doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
+method getVersionedHashes(
+    cust: CorruptVersionedHashes, baseVersionedHashes: openArray[common.Hash256]
+): Opt[seq[common.Hash256]] =
+  doAssert(
+    baseVersionedHashes.len > 0, "no versioned hashes available for modification"
+  )
 
   var v = newSeq[common.Hash256](baseVersionedHashes.len)
   for i, h in baseVersionedHashes:
     v[i] = h
-    v[i].data[h.data.len-1] = v[i].data[h.data.len-1] + 1
+    v[i].data[h.data.len - 1] = v[i].data[h.data.len - 1] + 1
   Opt.some(v)
 
-type
-  RemoveVersionedHash* = ref object of VersionedHashesCustomizer
+type RemoveVersionedHash* = ref object of VersionedHashesCustomizer
 
-method getVersionedHashes(cust: RemoveVersionedHash,
-                          baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] =
-  doAssert(baseVersionedHashes.len > 0, "no versioned hashes available for modification")
+method getVersionedHashes(
+    cust: RemoveVersionedHash, baseVersionedHashes: openArray[common.Hash256]
+): Opt[seq[common.Hash256]] =
+  doAssert(
+    baseVersionedHashes.len > 0, "no versioned hashes available for modification"
+  )
 
   var v = newSeq[common.Hash256](baseVersionedHashes.len - 1)
   for i, h in baseVersionedHashes:
-    if i < baseVersionedHashes.len-1:
+    if i < baseVersionedHashes.len - 1:
       v[i] = h
-      v[i].data[h.data.len-1] = v[i].data[h.data.len-1] + 1
+      v[i].data[h.data.len - 1] = v[i].data[h.data.len - 1] + 1
   Opt.some(v)
 
-type
-  ExtraVersionedHash* = ref object of VersionedHashesCustomizer
+type ExtraVersionedHash* = ref object of VersionedHashesCustomizer
 
-method getVersionedHashes(cust: ExtraVersionedHash,
-                          baseVersionedHashes: openArray[common.Hash256]): Opt[seq[common.Hash256]] =
+method getVersionedHashes(
+    cust: ExtraVersionedHash, baseVersionedHashes: openArray[common.Hash256]
+): Opt[seq[common.Hash256]] =
   var v = newSeq[common.Hash256](baseVersionedHashes.len + 1)
   for i, h in baseVersionedHashes:
     v[i] = h
@@ -282,51 +320,52 @@ method getVersionedHashes(cust: ExtraVersionedHash,
   v[^1] = extraHash
   Opt.some(v)
 
-type
-  PayloadCustomizer* = ref object of EngineAPIVersionResolver
+type PayloadCustomizer* = ref object of EngineAPIVersionResolver
 
-method customizePayload*(cust: PayloadCustomizer, data: ExecutableData): ExecutableData {.base, gcsafe.} =
+method customizePayload*(
+    cust: PayloadCustomizer, data: ExecutableData
+): ExecutableData {.base, gcsafe.} =
   doAssert(false, "customizePayload unimplemented")
 
-method getTimestamp(cust: PayloadCustomizer, basePayload: ExecutionPayload): uint64 {.base, gcsafe.} =
+method getTimestamp(
+    cust: PayloadCustomizer, basePayload: ExecutionPayload
+): uint64 {.base, gcsafe.} =
   doAssert(false, "getTimestamp unimplemented")
 
-type
-  NewPayloadCustomizer* = ref object of PayloadCustomizer
-    expectedError*      : int
-    expectInvalidStatus*: bool
+type NewPayloadCustomizer* = ref object of PayloadCustomizer
+  expectedError*: int
+  expectInvalidStatus*: bool
 
 method getExpectedError*(cust: NewPayloadCustomizer): int {.base, gcsafe.} =
   cust.expectedError
 
-method getExpectInvalidStatus*(cust: NewPayloadCustomizer): bool {.base, gcsafe.}=
+method getExpectInvalidStatus*(cust: NewPayloadCustomizer): bool {.base, gcsafe.} =
   cust.expectInvalidStatus
 
-type
-  CustomPayloadData* = object
-    parentHash*               : Opt[common.Hash256]
-    feeRecipient*             : Opt[common.EthAddress]
-    stateRoot*                : Opt[common.Hash256]
-    receiptsRoot*             : Opt[common.Hash256]
-    logsBloom*                : Opt[BloomFilter]
-    prevRandao*               : Opt[common.Hash256]
-    number*                   : Opt[uint64]
-    gasLimit*                 : Opt[GasInt]
-    gasUsed*                  : Opt[GasInt]
-    timestamp*                : Opt[uint64]
-    extraData*                : Opt[common.Blob]
-    baseFeePerGas*            : Opt[UInt256]
-    blockHash*                : Opt[common.Hash256]
-    transactions*             : Opt[seq[Transaction]]
-    withdrawals*              : Opt[seq[Withdrawal]]
-    removeWithdrawals*        : bool
-    blobGasUsed*              : Opt[uint64]
-    removeBlobGasUsed*        : bool
-    excessBlobGas*            : Opt[uint64]
-    removeExcessBlobGas*      : bool
-    parentBeaconRoot*         : Opt[common.Hash256]
-    removeParentBeaconRoot*   : bool
-    versionedHashesCustomizer*: VersionedHashesCustomizer
+type CustomPayloadData* = object
+  parentHash*: Opt[common.Hash256]
+  feeRecipient*: Opt[common.EthAddress]
+  stateRoot*: Opt[common.Hash256]
+  receiptsRoot*: Opt[common.Hash256]
+  logsBloom*: Opt[BloomFilter]
+  prevRandao*: Opt[common.Hash256]
+  number*: Opt[uint64]
+  gasLimit*: Opt[GasInt]
+  gasUsed*: Opt[GasInt]
+  timestamp*: Opt[uint64]
+  extraData*: Opt[common.Blob]
+  baseFeePerGas*: Opt[UInt256]
+  blockHash*: Opt[common.Hash256]
+  transactions*: Opt[seq[Transaction]]
+  withdrawals*: Opt[seq[Withdrawal]]
+  removeWithdrawals*: bool
+  blobGasUsed*: Opt[uint64]
+  removeBlobGasUsed*: bool
+  excessBlobGas*: Opt[uint64]
+  removeExcessBlobGas*: bool
+  parentBeaconRoot*: Opt[common.Hash256]
+  removeParentBeaconRoot*: bool
+  versionedHashesCustomizer*: VersionedHashesCustomizer
 
 func getTimestamp*(cust: CustomPayloadData, basePayload: ExecutionPayload): uint64 =
   if cust.timestamp.isSome:
@@ -335,7 +374,9 @@ func getTimestamp*(cust: CustomPayloadData, basePayload: ExecutionPayload): uint
 
 # Construct a customized payload by taking an existing payload as base and mixing it CustomPayloadData
 # blockHash is calculated automatically.
-proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): ExecutableData {.gcsafe.} =
+proc customizePayload*(
+    cust: CustomPayloadData, data: ExecutableData
+): ExecutableData {.gcsafe.} =
   var customHeader = blockHeader(data.basePayload, beaconRoot = data.beaconRoot)
   if cust.transactions.isSome:
     customHeader.txRoot = calcTxRoot(cust.transactions.get)
@@ -405,6 +446,7 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
         cust.transactions.get
       else:
         ethTxs data.basePayload.transactions
+    ,
   )
 
   if cust.removeWithdrawals:
@@ -415,28 +457,29 @@ proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): Executabl
     blk.withdrawals = ethWithdrawals data.basePayload.withdrawals
 
   result = ExecutableData(
-    basePayload    : executionPayload(blk),
-    beaconRoot     : blk.header.parentBeaconBlockRoot,
-    attr           : data.attr,
+    basePayload: executionPayload(blk),
+    beaconRoot: blk.header.parentBeaconBlockRoot,
+    attr: data.attr,
     versionedHashes: data.versionedHashes,
   )
 
   if cust.versionedHashesCustomizer.isNil.not:
     doAssert(data.versionedHashes.isSome)
-    result.versionedHashes = cust.versionedHashesCustomizer.getVersionedHashes(data.versionedHashes.get)
+    result.versionedHashes =
+      cust.versionedHashesCustomizer.getVersionedHashes(data.versionedHashes.get)
 
 # Base new payload directive call cust.
 # Used as base to other customizers.
-type
-  BaseNewPayloadVersionCustomizer* = ref object of NewPayloadCustomizer
-    payloadCustomizer*  : CustomPayloadData
+type BaseNewPayloadVersionCustomizer* = ref object of NewPayloadCustomizer
+  payloadCustomizer*: CustomPayloadData
 
-method customizePayload(cust: BaseNewPayloadVersionCustomizer, data: ExecutableData): ExecutableData =
+method customizePayload(
+    cust: BaseNewPayloadVersionCustomizer, data: ExecutableData
+): ExecutableData =
   cust.payloadCustomizer.customizePayload(data)
 
 # Customizer that upgrades the version of the payload to the next version.
-type
-  UpgradeNewPayloadVersion* = ref object of BaseNewPayloadVersionCustomizer
+type UpgradeNewPayloadVersion* = ref object of BaseNewPayloadVersionCustomizer
 
 method newPayloadVersion(cust: UpgradeNewPayloadVersion, timestamp: uint64): Version =
   let version = procCall newPayloadVersion(EngineAPIVersionResolver(cust), timestamp)
@@ -444,18 +487,17 @@ method newPayloadVersion(cust: UpgradeNewPayloadVersion, timestamp: uint64): Ver
   version.succ
 
 # Customizer that downgrades the version of the payload to the previous version.
-type
-  DowngradeNewPayloadVersion* = ref object of BaseNewPayloadVersionCustomizer
+type DowngradeNewPayloadVersion* = ref object of BaseNewPayloadVersionCustomizer
 
 method newPayloadVersion(cust: DowngradeNewPayloadVersion, timestamp: uint64): Version =
   let version = procCall newPayloadVersion(EngineAPIVersionResolver(cust), timestamp)
   doAssert(version != Version.V1, "cannot downgrade version 1")
   version.pred
 
-proc customizePayloadTransactions*(data: ExecutableData, customTransactions: openArray[Transaction]): ExecutableData =
-  let cpd = CustomPayloadData(
-    transactions: Opt.some(@customTransactions),
-  )
+proc customizePayloadTransactions*(
+    data: ExecutableData, customTransactions: openArray[Transaction]
+): ExecutableData =
+  let cpd = CustomPayloadData(transactions: Opt.some(@customTransactions))
   customizePayload(cpd, data)
 
 proc `$`*(cust: CustomPayloadData): string =
@@ -505,33 +547,32 @@ proc `$`*(cust: CustomPayloadData): string =
 
   fieldList.join(", ")
 
-type
-  InvalidPayloadBlockField* = enum
-    InvalidParentHash
-    InvalidStateRoot
-    InvalidReceiptsRoot
-    InvalidNumber
-    InvalidGasLimit
-    InvalidGasUsed
-    InvalidTimestamp
-    InvalidPrevRandao
-    RemoveTransaction
-    InvalidTransactionSignature
-    InvalidTransactionNonce
-    InvalidTransactionGas
-    InvalidTransactionGasPrice
-    InvalidTransactionValue
-    InvalidTransactionGasTipPrice
-    InvalidTransactionChainID
-    InvalidParentBeaconBlockRoot
-    InvalidExcessBlobGas
-    InvalidBlobGasUsed
-    InvalidBlobCountGasUsed
-    InvalidVersionedHashesVersion
-    InvalidVersionedHashes
-    IncompleteVersionedHashes
-    ExtraVersionedHashes
-    InvalidWithdrawals
+type InvalidPayloadBlockField* = enum
+  InvalidParentHash
+  InvalidStateRoot
+  InvalidReceiptsRoot
+  InvalidNumber
+  InvalidGasLimit
+  InvalidGasUsed
+  InvalidTimestamp
+  InvalidPrevRandao
+  RemoveTransaction
+  InvalidTransactionSignature
+  InvalidTransactionNonce
+  InvalidTransactionGas
+  InvalidTransactionGasPrice
+  InvalidTransactionValue
+  InvalidTransactionGasTipPrice
+  InvalidTransactionChainID
+  InvalidParentBeaconBlockRoot
+  InvalidExcessBlobGas
+  InvalidBlobGasUsed
+  InvalidBlobCountGasUsed
+  InvalidVersionedHashesVersion
+  InvalidVersionedHashes
+  IncompleteVersionedHashes
+  ExtraVersionedHashes
+  InvalidWithdrawals
 
 func scramble(data: Web3Hash): Opt[common.Hash256] =
   var h = ethHash data
@@ -545,112 +586,98 @@ func scramble(data: common.Hash256): Opt[common.Hash256] =
 
 # This function generates an invalid payload by taking a base payload and modifying the specified field such that it ends up being invalid.
 # One small consideration is that the payload needs to contain transactions and specially transactions using the PREVRANDAO opcode for all the fields to be compatible with this function.
-proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadField: InvalidPayloadBlockField): ExecutableData =
+proc generateInvalidPayload*(
+    sender: TxSender, data: ExecutableData, payloadField: InvalidPayloadBlockField
+): ExecutableData =
   var customPayloadMod: CustomPayloadData
   let basePayload = data.basePayload
 
   case payloadField
   of InvalidParentHash:
-    customPayloadMod = CustomPayloadData(
-      parentHash: scramble(basePayload.parentHash),
-    )
+    customPayloadMod = CustomPayloadData(parentHash: scramble(basePayload.parentHash))
   of InvalidStateRoot:
-    customPayloadMod = CustomPayloadData(
-      stateRoot: scramble(basePayload.stateRoot),
-    )
+    customPayloadMod = CustomPayloadData(stateRoot: scramble(basePayload.stateRoot))
   of InvalidReceiptsRoot:
-    customPayloadMod = CustomPayloadData(
-      receiptsRoot: scramble(basePayload.receiptsRoot),
-    )
+    customPayloadMod =
+      CustomPayloadData(receiptsRoot: scramble(basePayload.receiptsRoot))
   of InvalidNumber:
     let modNumber = basePayload.blockNumber.uint64 - 1
-    customPayloadMod = CustomPayloadData(
-      number: Opt.some(modNumber),
-    )
+    customPayloadMod = CustomPayloadData(number: Opt.some(modNumber))
   of InvalidGasLimit:
     let modGasLimit = basePayload.gasLimit.GasInt * 2
-    customPayloadMod = CustomPayloadData(
-      gasLimit: Opt.some(modGasLimit),
-    )
+    customPayloadMod = CustomPayloadData(gasLimit: Opt.some(modGasLimit))
   of InvalidGasUsed:
     let modGasUsed = basePayload.gasUsed.GasInt - 1
-    customPayloadMod = CustomPayloadData(
-      gasUsed: Opt.some(modGasUsed),
-    )
+    customPayloadMod = CustomPayloadData(gasUsed: Opt.some(modGasUsed))
   of InvalidTimestamp:
     let modTimestamp = basePayload.timestamp.uint64 - 1
-    customPayloadMod = CustomPayloadData(
-      timestamp: Opt.some(modTimestamp),
-    )
+    customPayloadMod = CustomPayloadData(timestamp: Opt.some(modTimestamp))
   of InvalidPrevRandao:
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.
     let randomHash = common.Hash256.randomBytes()
-    customPayloadMod = CustomPayloadData(
-      prevRandao: Opt.some(randomHash),
-    )
+    customPayloadMod = CustomPayloadData(prevRandao: Opt.some(randomHash))
   of InvalidParentBeaconBlockRoot:
-    doAssert(data.beaconRoot.isSome,
-      "no parent beacon block root available for modification")
-    customPayloadMod = CustomPayloadData(
-      parentBeaconRoot: scramble(data.beaconRoot.get),
+    doAssert(
+      data.beaconRoot.isSome, "no parent beacon block root available for modification"
     )
+    customPayloadMod =
+      CustomPayloadData(parentBeaconRoot: scramble(data.beaconRoot.get))
   of InvalidBlobGasUsed:
-    doAssert(basePayload.blobGasUsed.isSome, "no blob gas used available for modification")
+    doAssert(
+      basePayload.blobGasUsed.isSome, "no blob gas used available for modification"
+    )
     let modBlobGasUsed = basePayload.blobGasUsed.get.uint64 + 1
-    customPayloadMod = CustomPayloadData(
-      blobGasUsed: Opt.some(modBlobGasUsed),
-    )
+    customPayloadMod = CustomPayloadData(blobGasUsed: Opt.some(modBlobGasUsed))
   of InvalidBlobCountGasUsed:
-    doAssert(basePayload.blobGasUsed.isSome, "no blob gas used available for modification")
+    doAssert(
+      basePayload.blobGasUsed.isSome, "no blob gas used available for modification"
+    )
     let modBlobGasUsed = basePayload.blobGasUsed.get.uint64 + GAS_PER_BLOB
-    customPayloadMod = CustomPayloadData(
-      blobGasUsed: Opt.some(modBlobGasUsed),
-    )
+    customPayloadMod = CustomPayloadData(blobGasUsed: Opt.some(modBlobGasUsed))
   of InvalidExcessBlobGas:
-    doAssert(basePayload.excessBlobGas.isSome, "no excess blob gas available for modification")
+    doAssert(
+      basePayload.excessBlobGas.isSome, "no excess blob gas available for modification"
+    )
     let modExcessBlobGas = basePayload.excessBlobGas.get.uint64 + 1
-    customPayloadMod = CustomPayloadData(
-      excessBlobGas: Opt.some(modExcessBlobGas),
-    )
+    customPayloadMod = CustomPayloadData(excessBlobGas: Opt.some(modExcessBlobGas))
   of InvalidVersionedHashesVersion:
-    doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
-    customPayloadMod = CustomPayloadData(
-      versionedHashesCustomizer: IncreaseVersionVersionedHashes(),
+    doAssert(
+      data.versionedHashes.isSome, "no versioned hashes available for modification"
     )
+    customPayloadMod =
+      CustomPayloadData(versionedHashesCustomizer: IncreaseVersionVersionedHashes())
   of InvalidVersionedHashes:
-    doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
-    customPayloadMod = CustomPayloadData(
-      versionedHashesCustomizer: CorruptVersionedHashes(),
+    doAssert(
+      data.versionedHashes.isSome, "no versioned hashes available for modification"
     )
+    customPayloadMod =
+      CustomPayloadData(versionedHashesCustomizer: CorruptVersionedHashes())
   of IncompleteVersionedHashes:
-    doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
-    customPayloadMod = CustomPayloadData(
-      versionedHashesCustomizer: RemoveVersionedHash(),
+    doAssert(
+      data.versionedHashes.isSome, "no versioned hashes available for modification"
     )
+    customPayloadMod =
+      CustomPayloadData(versionedHashesCustomizer: RemoveVersionedHash())
   of ExtraVersionedHashes:
-    doAssert(data.versionedHashes.isSome, "no versioned hashes available for modification")
-    customPayloadMod = CustomPayloadData(
-      versionedHashesCustomizer: ExtraVersionedHash(),
+    doAssert(
+      data.versionedHashes.isSome, "no versioned hashes available for modification"
     )
+    customPayloadMod =
+      CustomPayloadData(versionedHashesCustomizer: ExtraVersionedHash())
   of InvalidWithdrawals:
     # These options are not supported yet.
     # TODO: Implement
     doAssert(false, "invalid payload field not supported yet: " & $payloadField)
   of RemoveTransaction:
     let emptyTxs = newSeq[Transaction]()
-    customPayloadMod = CustomPayloadData(
-      transactions: Opt.some(emptyTxs),
+    customPayloadMod = CustomPayloadData(transactions: Opt.some(emptyTxs))
+  of InvalidTransactionSignature, InvalidTransactionNonce, InvalidTransactionGas,
+      InvalidTransactionGasPrice, InvalidTransactionGasTipPrice,
+      InvalidTransactionValue, InvalidTransactionChainID:
+    doAssert(
+      basePayload.transactions.len > 0, "no transactions available for modification"
     )
-  of InvalidTransactionSignature,
-    InvalidTransactionNonce,
-    InvalidTransactionGas,
-    InvalidTransactionGasPrice,
-    InvalidTransactionGasTipPrice,
-    InvalidTransactionValue,
-    InvalidTransactionChainID:
-
-    doAssert(basePayload.transactions.len > 0, "no transactions available for modification")
     let baseTx = rlp.decode(distinctBase basePayload.transactions[0], Transaction)
     var custTx: CustomTransactionData
 
@@ -671,13 +698,12 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
       custTx.value = Opt.some(UInt256.fromHex("0x123450000000000000001"))
     of InvalidTransactionChainID:
       custTx.chainId = Opt.some(ChainId(baseTx.chainId.uint64 + 1))
-    else: discard
+    else:
+      discard
 
     let acc = sender.getNextAccount()
     let modifiedTx = sender.customizeTransaction(acc, baseTx, custTx)
-    customPayloadMod = CustomPayloadData(
-      transactions: Opt.some(@[modifiedTx]),
-    )
+    customPayloadMod = CustomPayloadData(transactions: Opt.some(@[modifiedTx]))
 
   customPayloadMod.customizePayload(data)
 

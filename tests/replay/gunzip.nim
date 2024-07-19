@@ -8,36 +8,32 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  std/strutils,
-  results,
-  zlib
+import std/strutils, results, zlib
 
 const
   lineBufStrLen = 512
   outBufSize = 2048
 
-type
-  GUnzip = object
-    mz: ZStream
+type GUnzip = object
+  mz: ZStream
 
-    # fields used in explode()
-    inCache: string
-    inCount: uint
-    outBuf: array[outBufSize,char]
-    outCount: uint
-    outDoneOK: bool
+  # fields used in explode()
+  inCache: string
+  inCount: uint
+  outBuf: array[outBufSize, char]
+  outCount: uint
+  outDoneOK: bool
 
-    # fields used by nextChunk()
-    gzIn: File
-    gzOpenOK: bool
-    gzMax: int64
-    gzCount: int64
-    gzName: string
+  # fields used by nextChunk()
+  gzIn: File
+  gzOpenOK: bool
+  gzMax: int64
+  gzCount: int64
+  gzName: string
 
-    # fields used by nextLine()
-    lnList: seq[string]
-    lnInx: int
+  # fields used by nextLine()
+  lnList: seq[string]
+  lnInx: int
 
 {.push raises: [].}
 
@@ -45,14 +41,15 @@ type
 # Private deflate helpers:
 # ------------------------------------------------------------------------------
 
-proc explode(state: var GUnzip; data: openArray[char];
-             start, dataLen: int): Result[string,ZError] =
+proc explode(
+    state: var GUnzip, data: openArray[char], start, dataLen: int
+): Result[string, ZError] =
   var
     inBuf = state.inCache & data[start ..< start + dataLen].join
     outData = ""
     rc: ZError
 
-  state.mz.next_in  = cast[ptr uint8](inBuf[0].addr)
+  state.mz.next_in = cast[ptr uint8](inBuf[0].addr)
   state.mz.total_in = 0
   state.mz.avail_in = inBuf.len.cuint
 
@@ -74,16 +71,15 @@ proc explode(state: var GUnzip; data: openArray[char];
 
     # Append processed data
     if 0 < state.mz.total_out:
-      outData &= toOpenArray(state.outBuf, 0, state.mz.total_out-1).join
+      outData &= toOpenArray(state.outBuf, 0, state.mz.total_out - 1).join
       state.outCount += state.mz.total_out.uint
 
     # Stop unless state change
-    if state.mz.avail_in == availIn and
-       state.mz.avail_out == state.outBuf.len.cuint:
+    if state.mz.avail_in == availIn and state.mz.avail_out == state.outBuf.len.cuint:
       break
 
   # Cache left-over for next gzExplode() session
-  state.inCount +=  state.mz.total_in.uint
+  state.inCount += state.mz.total_in.uint
   state.inCache =
     if state.mz.total_in.int < inBuf.len - 1:
       inBuf[state.mz.total_in.int ..< inBuf.len]
@@ -100,8 +96,9 @@ proc explode(state: var GUnzip; data: openArray[char];
 # Public
 # ------------------------------------------------------------------------------
 
-proc open*(state: var GUnzip; fileName: string):
-                      Result[void,ZError] {.gcsafe, raises: [IOError].} =
+proc open*(
+    state: var GUnzip, fileName: string
+): Result[void, ZError] {.gcsafe, raises: [IOError].} =
   ## Open gzipped file with path `fileName` and prepare for deflating and
   ## extraction.
 
@@ -119,15 +116,17 @@ proc open*(state: var GUnzip; fileName: string):
   state.gzIn = fileName.open(fmRead)
   state.gzOpenOK = true
   state.gzMax = state.gzIn.getFileSize
-  state.gzCount = state.gzIn.readChars(toOpenArray(strBuf, 0, strBuf.len-1))
+  state.gzCount = state.gzIn.readChars(toOpenArray(strBuf, 0, strBuf.len - 1))
 
   # Parse GZIP header (RFC 1952)
   doAssert 18 < state.gzCount
-  doAssert (strBuf[0].ord == 0x1f and     # magic number
-            strBuf[1].ord == 0x8b and     # magic number
-            strBuf[2].ord == 0x08)        # deflate
-  doAssert (strBuf[3].ord and 0xf7) == 0  # unsupported flags
-  if (strBuf[3].ord and 8) == 8:          # FNAME
+  doAssert (
+    strBuf[0].ord == 0x1f and # magic number
+    strBuf[1].ord == 0x8b and # magic number
+    strBuf[2].ord == 0x08
+  ) # deflate
+  doAssert (strBuf[3].ord and 0xf7) == 0 # unsupported flags
+  if (strBuf[3].ord and 8) == 8: # FNAME
     let endPos = strBuf.find(0.chr, start)
     state.gzName = strBuf[start ..< endPos]
     start = endPos + 1
@@ -141,23 +140,22 @@ proc open*(state: var GUnzip; fileName: string):
   state.inCache = strBuf[start ..< state.gzCount]
   return ok()
 
-
 proc close*(state: var GUnzip) =
   ## Close any open files and free resources
   if state.gzOpenOK:
     state.gzIn.close
     state.reset
 
-
-proc nextChunk*(state: var GUnzip):
-                Result[string,ZError] {.gcsafe, raises: [IOError].} =
+proc nextChunk*(
+    state: var GUnzip
+): Result[string, ZError] {.gcsafe, raises: [IOError].} =
   ## Fetch next unzipped data chunk, return and empty string if input
   ## is exhausted.
   var strBuf = 4096.newString
   result = ok("")
 
   while state.gzCount < state.gzMax:
-    var strLen = state.gzIn.readChars(toOpenArray(strBuf, 0, strBuf.len-1))
+    var strLen = state.gzIn.readChars(toOpenArray(strBuf, 0, strBuf.len - 1))
     if state.gzMax < state.gzCount + strLen:
       strLen = (state.gzMax - state.gzCount).int
     state.gzCount += strLen
@@ -169,15 +167,14 @@ proc nextChunk*(state: var GUnzip):
     if result.value != "":
       return
 
-
 proc nextChunkOk*(state: var GUnzip): bool =
   ## True if there is another chunk of data so that `nextChunk()` might
   ## fetch another non-empty unzipped data chunk.
   state.gzCount < state.gzMax
 
-
-proc nextLine*(state: var GUnzip):
-             Result[string,ZError] {.gcsafe, raises: [IOError].} =
+proc nextLine*(
+    state: var GUnzip
+): Result[string, ZError] {.gcsafe, raises: [IOError].} =
   ## Assume that the `state` argument descriptor referes to a gzipped text
   ## file with lines separated by a newline character. Then fetch the next
   ## unzipped line and return it.
@@ -190,10 +187,8 @@ proc nextLine*(state: var GUnzip):
   if state.lnInx + 1 < state.lnList.len:
     result = ok(state.lnList[state.lnInx])
     state.lnInx += 1
-
   elif not state.nextChunkOk:
     result = err(Z_STREAM_END)
-
   else:
     # Need to refill, concatenate old last item with new first
     if state.lnInx + 1 == state.lnList.len:
@@ -215,14 +210,11 @@ proc nextLine*(state: var GUnzip):
     result = ok(state.lnList[0])
     state.lnInx = 1
 
-
 proc nextLineOk*(state: var GUnzip): bool =
   ## True if there is another unzipped line available with `nextLine()`.
   state.nextChunkOk or state.lnInx + 1 < state.lnList.len
 
-
-iterator gunzipLines*(state: var GUnzip):
-                            (int,string) {.gcsafe, raises: [IOError].} =
+iterator gunzipLines*(state: var GUnzip): (int, string) {.gcsafe, raises: [IOError].} =
   ## Iterate over all lines of gzipped text file `fileName` and return
   ## the pair `(line-number,line-text)`
   var lno = 0
@@ -231,16 +223,15 @@ iterator gunzipLines*(state: var GUnzip):
     if rc.isErr:
       break
     lno.inc
-    yield (lno,rc.value)
+    yield (lno, rc.value)
 
-
-iterator gunzipLines*(fileName: string):
-                            (int,string) {.gcsafe, raises: [IOError].} =
+iterator gunzipLines*(fileName: string): (int, string) {.gcsafe, raises: [IOError].} =
   ## Open a gzipped text file, iterate over its lines (using the other
   ## version of `gunzipLines()`) and close it.
   var state: GUnzip
   doAssert state.open(fileName).isOk
-  defer: state.close
+  defer:
+    state.close
 
   for w in state.gunzipLines:
     yield w

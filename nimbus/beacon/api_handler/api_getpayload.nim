@@ -16,13 +16,12 @@ import
   ./api_utils,
   chronicles
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises: [CatchableError].}
 
-proc getPayload*(ben: BeaconEngineRef,
-                 expectedVersion: Version,
-                 id: PayloadID): GetPayloadV2Response =
-  trace "Engine API request received",
-    meth = "GetPayload", id
+proc getPayload*(
+    ben: BeaconEngineRef, expectedVersion: Version, id: PayloadID
+): GetPayloadV2Response =
+  trace "Engine API request received", meth = "GetPayload", id
 
   var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
@@ -32,21 +31,19 @@ proc getPayload*(ben: BeaconEngineRef,
 
   let version = payloadGeneric.version
   if version > expectedVersion:
-    raise unsupportedFork("getPayload" & $expectedVersion &
-      " expect ExecutionPayload" & $expectedVersion &
-      " but get ExecutionPayload" & $version)
+    raise unsupportedFork(
+      "getPayload" & $expectedVersion & " expect ExecutionPayload" & $expectedVersion &
+        " but get ExecutionPayload" & $version
+    )
   if blobsBundle.isSome:
-    raise unsupportedFork("getPayload" & $expectedVersion &
-      " contains unsupported BlobsBundleV1")
+    raise unsupportedFork(
+      "getPayload" & $expectedVersion & " contains unsupported BlobsBundleV1"
+    )
 
-  GetPayloadV2Response(
-    executionPayload: payloadGeneric.V1V2,
-    blockValue: blockValue
-  )
+  GetPayloadV2Response(executionPayload: payloadGeneric.V1V2, blockValue: blockValue)
 
 proc getPayloadV3*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV3Response =
-  trace "Engine API request received",
-    meth = "GetPayload", id
+  trace "Engine API request received", meth = "GetPayload", id
 
   var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
@@ -56,7 +53,9 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV3Response =
 
   let version = payloadGeneric.version
   if version != Version.V3:
-    raise unsupportedFork("getPayloadV3 expect ExecutionPayloadV3 but get ExecutionPayload" & $version)
+    raise unsupportedFork(
+      "getPayloadV3 expect ExecutionPayloadV3 but get ExecutionPayload" & $version
+    )
   if blobsBundle.isNone:
     raise unsupportedFork("getPayloadV3 is missing BlobsBundleV1")
 
@@ -69,12 +68,11 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV3Response =
     executionPayload: payload,
     blockValue: blockValue,
     blobsBundle: blobsBundle.get,
-    shouldOverrideBuilder: false
+    shouldOverrideBuilder: false,
   )
 
 proc getPayloadV4*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV4Response =
-  trace "Engine API request received",
-    meth = "GetPayload", id
+  trace "Engine API request received", meth = "GetPayload", id
 
   var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
@@ -84,7 +82,9 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV4Response =
 
   let version = payloadGeneric.version
   if version != Version.V4:
-    raise unsupportedFork("getPayloadV4 expect ExecutionPayloadV4 but get ExecutionPayload" & $version)
+    raise unsupportedFork(
+      "getPayloadV4 expect ExecutionPayloadV4 but get ExecutionPayload" & $version
+    )
   if blobsBundle.isNone:
     raise unsupportedFork("getPayloadV4 is missing BlobsBundleV1")
 
@@ -97,5 +97,5 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV4Response =
     executionPayload: payload,
     blockValue: blockValue,
     blobsBundle: blobsBundle.get,
-    shouldOverrideBuilder: false
+    shouldOverrideBuilder: false,
   )

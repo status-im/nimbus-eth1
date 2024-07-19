@@ -6,8 +6,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./constants, ./errors, eth/[common, keys], ./utils/utils,
-  common/evmforks, ./evm/internals
+  ./constants,
+  ./errors,
+  eth/[common, keys],
+  ./utils/utils,
+  common/evmforks,
+  ./evm/internals
 
 import eth/common/transaction as common_transaction
 export common_transaction, errors
@@ -15,7 +19,7 @@ export common_transaction, errors
 proc toWordSize(size: GasInt): GasInt =
   # Round input to the nearest bigger multiple of 32
   # tx validation will ensure the value is not too big
-  if size > GasInt.high-31:
+  if size > GasInt.high - 31:
     return (GasInt.high shr 5) + 1
 
   (size + 31) shr 5
@@ -50,8 +54,8 @@ proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
 
 proc getSignature*(tx: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
-  bytes[0..31] = tx.R.toBytesBE()
-  bytes[32..63] = tx.S.toBytesBE()
+  bytes[0 .. 31] = tx.R.toBytesBE()
+  bytes[32 .. 63] = tx.S.toBytesBE()
 
   if tx.txType == TxLegacy:
     var v = tx.V
@@ -88,7 +92,8 @@ proc getSender*(tx: Transaction, output: var EthAddress): bool =
 proc getSender*(tx: Transaction): EthAddress =
   ## Raises error on failure to recover public key
   if not tx.getSender(result):
-    raise newException(ValidationError, "Could not derive sender address from transaction")
+    raise
+      newException(ValidationError, "Could not derive sender address from transaction")
 
 proc getRecipient*(tx: Transaction, sender: EthAddress): EthAddress =
   if tx.contractCreation:
@@ -135,15 +140,12 @@ proc validateTxEip4844(tx: Transaction) =
   isValid = isValid and tx.accessList.len <= MAX_ACCESS_LIST_SIZE
 
   for acl in tx.accessList:
-    isValid = isValid and
-      (acl.storageKeys.len <= MAX_ACCESS_LIST_STORAGE_KEYS)
+    isValid = isValid and (acl.storageKeys.len <= MAX_ACCESS_LIST_STORAGE_KEYS)
 
-  isValid = isValid and
-    tx.versionedHashes.len <= MAX_BLOBS_PER_BLOCK
+  isValid = isValid and tx.versionedHashes.len <= MAX_BLOBS_PER_BLOCK
 
   for bv in tx.versionedHashes:
-    isValid = isValid and
-      bv.data[0] == VERSIONED_HASH_VERSION_KZG
+    isValid = isValid and bv.data[0] == VERSIONED_HASH_VERSION_KZG
 
   if not isValid:
     raise newException(ValidationError, "Invalid EIP-4844 transaction")
@@ -153,13 +155,15 @@ proc validate*(tx: Transaction, fork: EVMFork) =
   if tx.intrinsicGas(fork) > tx.gasLimit:
     raise newException(ValidationError, "Insufficient gas")
 
-  if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
+  if fork >= FkShanghai and tx.contractCreation and
+      tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
     raise newException(ValidationError, "Initcode size exceeds max")
 
   # check signature validity
   var sender: EthAddress
   if not tx.getSender(sender):
-    raise newException(ValidationError, "Invalid signature or failed message verification")
+    raise
+      newException(ValidationError, "Invalid signature or failed message verification")
 
   case tx.txType
   of TxLegacy:
@@ -169,7 +173,9 @@ proc validate*(tx: Transaction, fork: EVMFork) =
   of TxEip2930, TxEip1559:
     validateTxEip2930(tx)
 
-proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId, eip155: bool): Transaction =
+proc signTransaction*(
+    tx: Transaction, privateKey: PrivateKey, chainId: ChainId, eip155: bool
+): Transaction =
   result = tx
   if eip155:
     # trigger rlpEncodeEIP155 in nim-eth
@@ -188,8 +194,8 @@ proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId,
   else:
     result.V = sig[64].uint64
 
-  result.R = UInt256.fromBytesBE(sig[0..31])
-  result.S = UInt256.fromBytesBE(sig[32..63])
+  result.R = UInt256.fromBytesBE(sig[0 .. 31])
+  result.S = UInt256.fromBytesBE(sig[32 .. 63])
 
 # deriveChainId derives the chain id from the given v parameter
 func deriveChainId*(v: uint64, chainId: ChainId): ChainId =
@@ -204,8 +210,7 @@ func validateChainId*(tx: Transaction, chainId: ChainId): bool =
   else:
     chainId.uint64 == tx.chainId.uint64
 
-func eip1559TxNormalization*(tx: Transaction;
-                             baseFeePerGas: GasInt): Transaction =
+func eip1559TxNormalization*(tx: Transaction, baseFeePerGas: GasInt): Transaction =
   ## This function adjusts a legacy transaction to EIP-1559 standard. This
   ## is needed particularly when using the `validateTransaction()` utility
   ## with legacy transactions.
@@ -214,10 +219,11 @@ func eip1559TxNormalization*(tx: Transaction;
     result.maxPriorityFeePerGas = tx.gasPrice
     result.maxFeePerGas = tx.gasPrice
   else:
-    result.gasPrice = baseFeePerGas +
+    result.gasPrice =
+      baseFeePerGas +
       min(result.maxPriorityFeePerGas, result.maxFeePerGas - baseFeePerGas)
 
-func effectiveGasTip*(tx: Transaction; baseFeePerGas: Opt[UInt256]): GasInt =
+func effectiveGasTip*(tx: Transaction, baseFeePerGas: Opt[UInt256]): GasInt =
   var
     maxPriorityFeePerGas = tx.maxPriorityFeePerGas
     maxFeePerGas = tx.maxFeePerGas

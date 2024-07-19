@@ -16,8 +16,7 @@ import
   ../nimbus/[errors, transaction],
   ../nimbus/utils/utils
 
-const
-  FIXTURE_FORK_SKIPS = ["_info", "rlp", "Constantinople"]
+const FIXTURE_FORK_SKIPS = ["_info", "rlp", "Constantinople"]
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -31,7 +30,12 @@ when isMainModule:
 proc txHash(tx: Transaction): string =
   toLowerAscii($keccakHash(rlp.encode(tx)))
 
-proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testStatusIMPL: var TestStatus) =
+proc testTxByFork(
+    tx: Transaction,
+    forkData: JsonNode,
+    forkName: string,
+    testStatusIMPL: var TestStatus,
+) =
   try:
     tx.validate(nameToFork[forkName])
   except ValidationError:
@@ -47,19 +51,19 @@ func noHash(fixture: JsonNode): bool =
   result = true
   for forkName, forkData in fixture:
     if forkName notin FIXTURE_FORK_SKIPS:
-      if forkData.len == 0: return
-      if "hash" in forkData: return false
+      if forkData.len == 0:
+        return
+      if "hash" in forkData:
+        return false
 
 # nimbus rlp cannot allow type mismatch
 # e.g. uint256 value put into int64
 # so we skip noHash check. this behavior
 # is different compared to py-evm
 const SKIP_TITLES = [
-  "TransactionWithGasLimitxPriceOverflow",
-  "TransactionWithHighNonce256",
-  "TransactionWithHighGasPrice",
-  "V_equals38"
-  ]
+  "TransactionWithGasLimitxPriceOverflow", "TransactionWithHighNonce256",
+  "TransactionWithHighGasPrice", "V_equals38",
+]
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   var

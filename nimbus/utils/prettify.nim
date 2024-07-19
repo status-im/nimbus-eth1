@@ -11,8 +11,7 @@
 
 ## Some logging helper moved here in absence of a known better place.
 
-import
-  std/[math, strutils]
+import std/[math, strutils]
 
 {.push raises: [].}
 
@@ -21,16 +20,17 @@ proc toSI*(num: SomeUnsignedInt): string =
   const
     siUnits = [
       #                   <limit>                 <multiplier>   <symbol>
-      (                   100_000u64,                     1000f64, 'k'),
-      (               100_000_000u64,                 1000_000f64, 'm'),
-      (           100_000_000_000u64,             1000_000_000f64, 'g'),
-      (       100_000_000_000_000u64,         1000_000_000_000f64, 't'),
-      (   100_000_000_000_000_000u64,     1000_000_000_000_000f64, 'p'),
-      (10_000_000_000_000_000_000u64, 1000_000_000_000_000_000f64, 'e')]
+      (100_000u64, 1000f64, 'k'),
+      (100_000_000u64, 1000_000f64, 'm'),
+      (100_000_000_000u64, 1000_000_000f64, 'g'),
+      (100_000_000_000_000u64, 1000_000_000_000f64, 't'),
+      (100_000_000_000_000_000u64, 1000_000_000_000_000f64, 'p'),
+      (10_000_000_000_000_000_000u64, 1000_000_000_000_000_000f64, 'e'),
+    ]
 
     lastUnit =
       #           <no-limit-here>                 <multiplier>   <symbol>
-      (                           1000_000_000_000_000_000_000f64, 'z')
+      (1000_000_000_000_000_000_000f64, 'z')
 
   if num < 1000:
     return $num
@@ -48,10 +48,8 @@ proc toSI*(num: SomeUnsignedInt): string =
   result.insert(".", result.len - 3)
 
 proc toPC*(
-    num: float;
-    digitsAfterDot: static[int] = 2;
-    rounding: static[float] = 5.0
-      ): string =
+    num: float, digitsAfterDot: static[int] = 2, rounding: static[float] = 5.0
+): string =
   ## Convert argument number `num` to percent string with decimal precision
   ## stated as argument `digitsAfterDot`. Standard rounding is enabled by
   ## default adjusting the first invisible digit, set `rounding = 0` to disable.

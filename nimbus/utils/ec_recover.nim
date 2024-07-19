@@ -24,38 +24,36 @@ import
   results,
   stint
 
-export
-  utils_defs, results
+export utils_defs, results
 
 {.push raises: [].}
 
-const
-  INMEMORY_SIGNATURES* = ##\
-    ## Default number of recent block signatures to keep in memory
-    4096
+const INMEMORY_SIGNATURES* = ##\
+  ## Default number of recent block signatures to keep in memory
+  4096
 
 type
   EcKey* = ##\
     ## Internal key used for the LRU cache (derived from Hash256).
-    array[32,byte]
+    array[32, byte]
 
   EcAddrResult* = ##\
     ## Typical `EthAddress` result as returned by `ecRecover()` functions.
-    Result[EthAddress,UtilsError]
+    Result[EthAddress, UtilsError]
 
   EcRecover* = object
     size: uint
-    q: KeyedQueue[EcKey,EthAddress]
+    q: KeyedQueue[EcKey, EthAddress]
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError] =
+proc vrsSerialised(tx: Transaction): Result[array[65, byte], UtilsError] =
   ## Parts copied from `transaction.getSignature`.
-  var data: array[65,byte]
-  data[0..31] = tx.R.toBytesBE
-  data[32..63] = tx.S.toBytesBE
+  var data: array[65, byte]
+  data[0 .. 31] = tx.R.toBytesBE
+  data[32 .. 63] = tx.S.toBytesBE
 
   if tx.txType != TxLegacy:
     data[64] = tx.V.byte
@@ -64,7 +62,7 @@ proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError] =
   elif tx.V == 27 or tx.V == 28:
     data[64] = byte(tx.V - 27)
   else:
-    return err((errSigPrefixError,"")) # legacy error
+    return err((errSigPrefixError, "")) # legacy error
 
   ok(data)
 
@@ -81,25 +79,23 @@ proc hashPreSealed(header: BlockHeader): Hash256 =
   ## Returns the hash of a block prior to it being sealed.
   keccakHash header.encodePreSealed
 
-
-proc recoverImpl(rawSig: openArray[byte]; msg: Hash256): EcAddrResult =
+proc recoverImpl(rawSig: openArray[byte], msg: Hash256): EcAddrResult =
   ## Extract account address from the last 65 bytes of the `extraData` argument
   ## (which is typically the bock header field with the same name.) The second
   ## argument `hash` is used to extract the intermediate public key. Typically,
   ## this would be the hash of the block header without the last 65 bytes of
   ## the `extraData` field reserved for the signature.
   if rawSig.len < EXTRA_SEAL:
-    return err((errMissingSignature,""))
+    return err((errMissingSignature, ""))
 
-  let sig = Signature.fromRaw(
-    rawSig.toOpenArray(rawSig.len - EXTRA_SEAL, rawSig.high))
+  let sig = Signature.fromRaw(rawSig.toOpenArray(rawSig.len - EXTRA_SEAL, rawSig.high))
   if sig.isErr:
-    return err((errSkSigResult,$sig.error))
+    return err((errSkSigResult, $sig.error))
 
   # Recover the public key from signature and seal hash
   let pubKey = recover(sig.value, SkMessage(msg.data))
   if pubKey.isErr:
-    return err((errSkPubKeyResult,$pubKey.error))
+    return err((errSkPubKeyResult, $pubKey.error))
 
   # Convert public key to address.
   ok(pubKey.value.toCanonicalAddress)
@@ -133,13 +129,12 @@ proc ecRecover*(tx: Transaction): EcAddrResult =
 # Public constructor for caching ecRecover version
 # ------------------------------------------------------------------------------
 
-proc init*(er: var EcRecover; cacheSize = INMEMORY_SIGNATURES; initSize = 10) =
+proc init*(er: var EcRecover, cacheSize = INMEMORY_SIGNATURES, initSize = 10) =
   ## Inialise recover cache
   er.size = cacheSize.uint
   er.q.init(initSize)
 
-proc init*(T: type EcRecover;
-           cacheSize = INMEMORY_SIGNATURES; initSize = 10): T =
+proc init*(T: type EcRecover, cacheSize = INMEMORY_SIGNATURES, initSize = 10): T =
   ## Inialise recover cache
   result.init(cacheSize, initSize)
 
@@ -155,7 +150,7 @@ proc len*(er: var EcRecover): int =
 # Public functions: caching ecRecover version
 # ------------------------------------------------------------------------------
 
-proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult =
+proc ecRecover*(er: var EcRecover, header: var BlockHeader): EcAddrResult =
   ## Extract account address from `extraData` field (last 65 bytes) of the
   ## argument header. The result is kept in a LRU cache to re-purposed for
   ## improved result delivery avoiding calculations.
@@ -170,24 +165,24 @@ proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult =
       return ok(er.q.lruAppend(key, rc.value, er.size.int))
     err(rc.error)
 
-proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult =
+proc ecRecover*(er: var EcRecover, header: BlockHeader): EcAddrResult =
   ## Variant of `ecRecover()` for call-by-value header
   var hdr = header
   er.ecRecover(hdr)
 
-proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult =
+proc ecRecover*(er: var EcRecover, hash: Hash256): EcAddrResult =
   ## Variant of `ecRecover()` for hash only. Will only succeed it the
   ## argument hash is uk the LRU queue.
   let rc = er.q.lruFetch(hash.data)
   if rc.isOk:
     return ok(rc.value)
-  err((errItemNotFound,""))
+  err((errItemNotFound, ""))
 
 # ------------------------------------------------------------------------------
 # Debugging
 # ------------------------------------------------------------------------------
 
-iterator keyItemPairs*(er: var EcRecover): (EcKey,EthAddress) =
+iterator keyItemPairs*(er: var EcRecover): (EcKey, EthAddress) =
   var rc = er.q.first
   while rc.isOk:
     yield (rc.value.key, rc.value.data)
