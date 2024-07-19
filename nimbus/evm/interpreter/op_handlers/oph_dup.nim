@@ -41,8 +41,8 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Duplicate " & blurb & " item in the stack"
 
 
-template dupImpl(k: var VmCtx; n: int): EvmResultVoid =
-  k.cpt.stack.dup(n)
+template dupImpl(cpt: VmCpt; n: int): EvmResultVoid =
+  cpt.stack.dup(n)
 
 const
   inxRange = toSeq(1 .. 16)

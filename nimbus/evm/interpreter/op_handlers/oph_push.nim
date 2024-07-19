@@ -40,8 +40,8 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Push " & blurb & " on the stack"
 
 
-template pushImpl(k: var VmCtx; n: static int): EvmResultVoid =
-  k.cpt.stack.push k.cpt.code.readVmWord(n)
+template pushImpl(cpt: VmCpt; n: static int): EvmResultVoid =
+  cpt.stack.push cpt.code.readVmWord(n)
 
 const
   inxRange = toSeq(1 .. 32)
@@ -65,9 +65,9 @@ genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName
 # about which opcodes are for which forks, but that seems uglier than
 # just adding Push0 here as a special case.)
 
-proc push0Op(k: var VmCtx): EvmResultVoid =
+proc push0Op(cpt: VmCpt): EvmResultVoid =
   ## 0x5f, push 0 onto the stack
-  k.cpt.stack.push(0)
+  cpt.stack.push(0)
 
 const
   VmOpExecPushZero*: seq[VmOpExec] = @[

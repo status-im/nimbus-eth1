@@ -36,42 +36,42 @@ export
 # Helpers
 # ------------------------------------------------------------------------------
 
-template handleStopDirective(k: var VmCtx) =
+template handleStopDirective(cpt: VmCpt) =
   #trace "op: Stop"
-  if not k.cpt.code.atEnd() and k.cpt.tracingEnabled:
+  if not cpt.code.atEnd() and cpt.tracingEnabled:
     # we only trace `REAL STOP` and ignore `FAKE STOP`
-    k.cpt.opIndex = k.cpt.traceOpCodeStarted(Stop)
-    k.cpt.traceOpCodeEnded(Stop, k.cpt.opIndex)
+    cpt.opIndex = cpt.traceOpCodeStarted(Stop)
+    cpt.traceOpCodeEnded(Stop, cpt.opIndex)
 
 
-template handleFixedGasCostsDirective(fork: EVMFork; op: Op; k: var VmCtx) =
-  if k.cpt.tracingEnabled:
-    k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
+template handleFixedGasCostsDirective(fork: EVMFork; op: Op; cpt: VmCpt) =
+  if cpt.tracingEnabled:
+    cpt.opIndex = cpt.traceOpCodeStarted(op)
 
-  ? k.cpt.opcodeGasCost(op, k.cpt.gasCosts[op].cost, reason = $op)
-  ? vmOpHandlers[fork][op].run(k)
-
-  # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
-  if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
-    k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
-
-
-template handleOtherDirective(fork: EVMFork; op: Op; k: var VmCtx) =
-  if k.cpt.tracingEnabled:
-    k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
-
-  ? vmOpHandlers[fork][op].run(k)
+  ? cpt.opcodeGasCost(op, cpt.gasCosts[op].cost, reason = $op)
+  ? vmOpHandlers[fork][op].run(cpt)
 
   # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
-  if k.cpt.tracingEnabled and k.cpt.continuation.isNil:
-    k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
+  if cpt.tracingEnabled and cpt.continuation.isNil:
+    cpt.traceOpCodeEnded(op, cpt.opIndex)
+
+
+template handleOtherDirective(fork: EVMFork; op: Op; cpt: VmCpt) =
+  if cpt.tracingEnabled:
+    cpt.opIndex = cpt.traceOpCodeStarted(op)
+
+  ? vmOpHandlers[fork][op].run(cpt)
+
+  # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
+  if cpt.tracingEnabled and cpt.continuation.isNil:
+    cpt.traceOpCodeEnded(op, cpt.opIndex)
 
 # ------------------------------------------------------------------------------
 # Private, big nasty doubly nested case matrix generator
 # ------------------------------------------------------------------------------
 
 # reminiscent of Mamy's opTableToCaseStmt() from original VM
-proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
+proc toCaseStmt(forkArg, opArg, cpt: NimNode): NimNode =
 
   # Outer case/switch => Op
   let branchOnOp = quote do: `opArg`
@@ -89,13 +89,13 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
       let branchStmt = block:
         if op == Stop:
           quote do:
-            handleStopDirective(`k`)
+            handleStopDirective(`cpt`)
         elif gcTable[op] == GckFixed:
           quote do:
-            handleFixedGasCostsDirective(`asFork`,`asOp`,`k`)
+            handleFixedGasCostsDirective(`asFork`,`asOp`,`cpt`)
         else:
           quote do:
-            handleOtherDirective(`asFork`,`asOp`,`k`)
+            handleOtherDirective(`asFork`,`asOp`,`cpt`)
 
       forkCaseSubExpr.add nnkOfBranch.newTree(asFork, branchStmt)
 
@@ -112,7 +112,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
         # break no matter what).
         quote do:
           `forkCaseSubExpr`
-          if not `k`.cpt.continuation.isNil:
+          if not `cpt`.continuation.isNil:
             break
 
     result.add nnkOfBranch.newTree(asOp, branchStmt)
@@ -124,26 +124,26 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
 # Public macros/functions
 # ------------------------------------------------------------------------------
 
-macro genOptimisedDispatcher*(fork: EVMFork; op: Op; k: VmCtx): untyped =
-  result = fork.toCaseStmt(op, k)
+macro genOptimisedDispatcher*(fork: EVMFork; op: Op; cpt: VmCpt): untyped =
+  result = fork.toCaseStmt(op, cpt)
 
 
-template genLowMemDispatcher*(fork: EVMFork; op: Op; k: VmCtx) =
+template genLowMemDispatcher*(fork: EVMFork; op: Op; cpt: VmCpt) =
   if op == Stop:
-    handleStopDirective(k)
+    handleStopDirective(cpt)
     break
 
   if BaseGasCosts[op].kind == GckFixed:
-    handleFixedGasCostsDirective(fork, op, k)
+    handleFixedGasCostsDirective(fork, op, cpt)
   else:
-    handleOtherDirective(fork, op, k)
+    handleOtherDirective(fork, op, cpt)
 
-  case c.instr
+  case cpt.instr
   of Return, Revert, SelfDestruct:
     break
   else:
     # FIXME-manyOpcodesNowRequireContinuations
-    if not k.cpt.continuation.isNil:
+    if not cpt.continuation.isNil:
       break
 
 # ------------------------------------------------------------------------------
@@ -154,10 +154,9 @@ when isMainModule and isChatty:
 
   import ../types
 
-  proc optimised(c: Computation, fork: EVMFork): EvmResultVoid {.compileTime.} =
-    var desc: VmCtx
+  proc optimised(cpt: VmCpt, fork: EVMFork): EvmResultVoid {.compileTime.} =
     while true:
-      genOptimisedDispatcher(fork, desc.cpt.instr, desc)
+      genOptimisedDispatcher(fork, cpt.instr, desc)
 
 # ------------------------------------------------------------------------------
 # End

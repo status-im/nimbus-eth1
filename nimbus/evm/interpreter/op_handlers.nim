@@ -122,9 +122,9 @@ const
 
 when isMainModule and isChatty:
 
-  proc opHandlersRun(fork: EVMFork; op: Op; d: var VmCtx) {.used.} =
+  proc opHandlersRun(fork: EVMFork; op: Op; cpt: VmCpt) {.used.} =
     ## Given a particular `fork` and an `op`-code, run the associated handler
-    vmOpHandlers[fork][op].run(d)
+    vmOpHandlers[fork][op].run(cpt)
 
   proc opHandlersName(fork: EVMFork; op: Op): string {.used.} =
     ## Get name (or ID) of op handler

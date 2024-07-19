@@ -213,14 +213,12 @@ else:
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc callOp(k: var VmCtx): EvmResultVoid =
+proc callOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf1, Message-Call into an account
-  let cpt = k.cpt
-
   if EVMC_STATIC in cpt.msg.flags:
-      let val = ? cpt.stack[^3, UInt256]
-      if val > 0.u256:
-        return err(opErr(StaticContext))
+    let val = ? cpt.stack[^3, UInt256]
+    if val > 0.u256:
+      return err(opErr(StaticContext))
 
   let
     p = ? cpt.callParams
@@ -292,10 +290,9 @@ proc callOp(k: var VmCtx): EvmResultVoid =
 
 # ---------------------
 
-proc callCodeOp(k: var VmCtx): EvmResultVoid =
+proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf2, Message-call into this account with an alternative account's code.
   let
-    cpt = k.cpt
     p = ? cpt.callCodeParams
     (gasCost, childGasLimit) = ? cpt.gasCosts[CallCode].c_handler(
       p.value,
@@ -365,11 +362,10 @@ proc callCodeOp(k: var VmCtx): EvmResultVoid =
 
 # ---------------------
 
-proc delegateCallOp(k: var VmCtx): EvmResultVoid =
+proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf4, Message-call into this account with an alternative account's
   ##       code, but persisting the current values for sender and value.
   let
-    cpt = k.cpt
     p = ? cpt.delegateCallParams
     (gasCost, childGasLimit) = ? cpt.gasCosts[DelegateCall].c_handler(
       p.value,
@@ -433,11 +429,10 @@ proc delegateCallOp(k: var VmCtx): EvmResultVoid =
 
 # ---------------------
 
-proc staticCallOp(k: var VmCtx): EvmResultVoid =
+proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   ## 0xfa, Static message-call into an account.
 
   let
-    cpt = k.cpt
     p = ? cpt.staticCallParams
     (gasCost, childGasLimit) = ? cpt.gasCosts[StaticCall].c_handler(
       p.value,
