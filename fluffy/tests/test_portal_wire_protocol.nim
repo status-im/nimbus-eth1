@@ -190,6 +190,25 @@ procSuite "Portal Wire Protocol Tests":
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
 
+  asyncTest "Offer/Accept/Stream - too large content item":
+    let
+      (proto1, proto2) = defaultTestSetup(rng)
+      contentKV = ContentKV(
+        contentKey: ContentKeyByteList(@[byte 1]),
+        content: repeat(byte 0xA0, 2 * 1024 * 1024 + 1), # 1 byte more than max
+      )
+      content: seq[ContentKV] = @[contentKV]
+
+    let res = await proto1.offer(proto2.baseProtocol.localNode, content)
+    check res.isErr()
+
+    let (_, _, contentItems) = await proto2.stream.contentQueue.popFirst()
+
+    check contentItems.len() == 0
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
   asyncTest "Correctly mark node as seen after request":
     let (proto1, proto2) = defaultTestSetup(rng)
 

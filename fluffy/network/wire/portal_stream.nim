@@ -35,6 +35,11 @@ const
   talkReqOverhead = getTalkReqOverhead(utpProtocolId)
   utpHeaderOverhead = 20
   maxUtpPayloadSize = maxDiscv5PacketSize - talkReqOverhead - utpHeaderOverhead
+  maxContentItemSize = 2 * 1024 * 1024
+    # 2MB, a general content size maxium to avoid endlessly long invalid data to
+    # be read. Could be set to content specific limits, but these are:
+    # a. tricky to access here
+    # b. currently set very conservatively high
 
 type
   ContentRequest = object
@@ -191,14 +196,15 @@ proc readVarint(
 proc readContentItem(
     socket: UtpSocket[NodeAddress]
 ): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
-  let len = await socket.readVarint()
+  let len = (await socket.readVarint()).valueOr:
+    return err()
 
-  if len.isOk():
-    let contentItem = await socket.read(len.get())
-    if contentItem.len() == len.get().int:
-      return ok(contentItem)
-    else:
-      return err()
+  if len > maxContentItemSize:
+    return err()
+
+  let contentItem = await socket.read(len)
+  if contentItem.len() == len.int:
+    return ok(contentItem)
   else:
     return err()
 
