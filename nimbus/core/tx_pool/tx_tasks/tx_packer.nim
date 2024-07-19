@@ -15,14 +15,13 @@
 {.push raises: [].}
 
 import
-  chronicles,
   eth/[keys, rlp],
   stew/sorted_set,
   ../../../db/[ledger, core_db],
   ../../../common/common,
   ../../../utils/utils,
   ../../../constants,
-  "../.."/[dao, executor, validate, casper],
+  "../.."/[executor, validate, casper],
   ../../../transaction/call_evm,
   ../../../transaction,
   ../../../evm/state,
@@ -31,14 +30,10 @@ import
   "."/[tx_bucket, tx_classify]
 
 type
-  TxPackerError* = object of CatchableError
-    ## Catch and relay exception error
-
   TxPackerStateRef = ref object
     xp: TxPoolRef
     tr: CoreDbMptRef
     cleanState: bool
-    balance: UInt256
     numBlobPerBlock: int
 
 const
@@ -46,24 +41,9 @@ const
     ## Number of slots to extend the `receipts[]` at the same time.
     20
 
-logScope:
-  topics = "tx-pool packer"
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-when false:
-  template safeExecutor(info: string; code: untyped) =
-    try:
-      code
-    except CatchableError as e:
-      raise (ref CatchableError)(msg: e.msg)
-    except Defect as e:
-      raise (ref Defect)(msg: e.msg)
-    except:
-      let e = getCurrentException()
-      raise newException(TxPackerError, info & "(): " & $e.name & " -- " & e.msg)
 
 proc persist(pst: TxPackerStateRef)
     {.gcsafe,raises: [].} =
@@ -130,7 +110,7 @@ proc runTxCommit(pst: TxPackerStateRef; item: TxItemRef; gasBurned: GasInt)
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
   # Update txRoot
-  pst.tr.merge(rlp.encode(inx), rlp.encode(item.tx)).isOkOr:
+  pst.tr.merge(rlp.encode(inx.uint64), rlp.encode(item.tx)).isOkOr:
     raiseAssert "runTxCommit(): merge failed, " & $$error
 
   # Add the item to the `packed` bucket. This implicitely increases the
@@ -150,11 +130,6 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
   # reset blockValue before adding any tx
   xp.blockValue = 0.u256
 
-  if xp.chain.com.daoForkSupport and
-     xp.chain.com.daoForkBlock.get == xp.chain.head.number + 1:
-    xp.chain.vmState.mutateStateDB:
-      db.applyDAOHardFork()
-
   # EIP-4788
   if xp.chain.nextFork >= FkCancun:
     let beaconRoot = xp.chain.com.pos.parentBeaconBlockRoot
@@ -164,7 +139,6 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPackerStateRef, string]
   let packer = TxPackerStateRef( # return value
     xp: xp,
     tr: AristoDbMemory.newCoreDbRef().ctx.getGeneric(clearData=true),
-    balance: xp.chain.vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient),
     numBlobPerBlock: 0,
   )
   ok(packer)
@@ -246,23 +220,12 @@ proc vmExecCommit(pst: TxPackerStateRef)
   let nItems = xp.txDB.byStatus.eq(txItemPacked).nItems
   vmState.receipts.setLen(nItems)
 
-  xp.chain.receipts = vmState.receipts
+  xp.chain.receiptsRoot = vmState.receipts.calcReceiptsRoot
+  xp.chain.logsBloom = vmState.receipts.createBloom
   xp.chain.txRoot = pst.tr.state(updateOk=true).valueOr:
     raiseAssert "vmExecCommit(): state() failed " & $$error
   xp.chain.stateRoot = vmState.stateDB.rootHash
 
-  if xp.chain.nextFork >= FkCancun:
-    # EIP-4844
-    xp.chain.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
-    xp.chain.blobGasUsed = Opt.some(vmState.blobGasUsed)
-
-  proc balanceDelta: UInt256 =
-    let postBalance = vmState.readOnlyStateDB.getBalance(xp.chain.feeRecipient)
-    if pst.balance < postBalance:
-      return postBalance - pst.balance
-
-  xp.chain.profit = balanceDelta()
-  xp.chain.reward = balanceDelta()
 
 # ------------------------------------------------------------------------------
 # Public functions

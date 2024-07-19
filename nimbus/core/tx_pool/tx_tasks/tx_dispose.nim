@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,6 @@
 import
   std/[times],
   ../tx_desc,
-  ../tx_gauge,
   ../tx_info,
   ../tx_item,
   ../tx_tabs,
@@ -50,7 +49,6 @@ proc deleteOtherNonces(xp: TxPoolRef; item: TxItemRef; newerThan: Time): bool
       # only delete non-expired items
       if newerThan < other.timeStamp:
         discard xp.txDB.dispose(other, txInfoErrTxExpiredImplied)
-        impliedEvictionMeter.inc
         result = true
 
 # ------------------------------------------------------------------------------
@@ -82,7 +80,6 @@ proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [KeyError].} =
 
     # Note: it is ok to delete the current item
     discard xp.txDB.dispose(item, txInfoErrTxExpired)
-    evictionMeter.inc
 
     # Also delete all non-expired items with higher nonces.
     if xp.deleteOtherNonces(item, deadLine):

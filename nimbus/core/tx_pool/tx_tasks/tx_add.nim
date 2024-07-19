@@ -15,7 +15,6 @@
 import
   std/[tables],
   ../tx_desc,
-  ../tx_gauge,
   ../tx_info,
   ../tx_item,
   ../tx_tabs,
@@ -137,7 +136,6 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
     block:
       let rc = xp.txDB.insert(item)
       if rc.isOk:
-        validTxMeter(1)
         return item.status == txItemStaged
       vetted = rc.error
 
@@ -145,22 +143,11 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
     if vetted == txInfoErrSenderNonceIndex:
       let rc = xp.supersede(item)
       if rc.isOk:
-        validTxMeter(1)
         return
       vetted = rc.error
 
   # Error processing => store in waste basket
   xp.txDB.reject(item, vetted)
-
-  # update gauge
-  case vetted:
-  of txInfoErrAlreadyKnown:
-    knownTxMeter(1)
-  of txInfoErrInvalidSender:
-    invalidTxMeter(1)
-  else:
-    unspecifiedErrorMeter(1)
-
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
@@ -195,7 +182,6 @@ proc addTxs*(xp: TxPoolRef;
         # move item to waste basket
         reason = txInfoErrInvalidBlob
         xp.txDB.reject(tx, reason, txItemPending, res.error)
-        invalidTxMeter(1)
         continue
 
     # Create tx item wrapper, preferably recovered from waste basket
@@ -214,15 +200,6 @@ proc addTxs*(xp: TxPoolRef;
 
     # move item to waste basket
     xp.txDB.reject(tx, reason, txItemPending, info)
-
-    # update gauge
-    case reason:
-    of txInfoErrAlreadyKnown:
-      knownTxMeter(1)
-    of txInfoErrInvalidSender:
-      invalidTxMeter(1)
-    else:
-      unspecifiedErrorMeter(1)
 
   # Add sorted transaction items
   for itemList in accTab.mvalues:

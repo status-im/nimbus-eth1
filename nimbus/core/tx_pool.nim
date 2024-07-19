@@ -598,7 +598,7 @@ func com*(xp: TxPoolRef): CommonRef =
   ## Getter
   xp.chain.com
 
-func baseFee*(xp: TxPoolRef): GasPrice =
+func baseFee*(xp: TxPoolRef): GasInt =
   ## Getter, this parameter modifies/determines the expected gain when packing
   xp.chain.baseFee
 
@@ -669,11 +669,6 @@ proc assembleBlock*(
     blk: blk,
     blobsBundle: blobsBundleOpt)
 
-func gasCumulative*(xp: TxPoolRef): GasInt =
-  ## Getter, retrieves the gas that will be burned in the block after
-  ## retrieving it via `ethBlock`.
-  xp.chain.gasUsed
-
 func gasTotals*(xp: TxPoolRef): TxTabsGasTotals =
   ## Getter, retrieves the current gas limit totals per bucket.
   xp.txDB.gasTotals
@@ -716,22 +711,11 @@ func nItems*(xp: TxPoolRef): TxTabsItemsCount =
   ## some totals.
   xp.txDB.nItems
 
-func profitability*(xp: TxPoolRef): GasPrice =
-  ## Getter, a calculation of the average *price* per gas to be rewarded after
-  ## packing the last block (see `ethBlock`). This *price* is only based on
-  ## execution transaction in the VM without *PoW* specific rewards. The net
-  ## profit (as opposed to the *PoW/PoA* specifc *reward*) can be calculated
-  ## as `gasCumulative * profitability`.
-  if 0 < xp.chain.gasUsed:
-    (xp.chain.profit div xp.chain.gasUsed.u256).truncate(uint64).GasPrice
-  else:
-    0.GasPrice
-
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-func `baseFee=`*(xp: TxPoolRef; val: GasPrice) {.raises: [KeyError].} =
+func `baseFee=`*(xp: TxPoolRef; val: GasInt) {.raises: [KeyError].} =
   ## Setter, sets `baseFee` explicitely witout triggering a packer update.
   ## Stil a database update might take place when updating account ranks.
   ##
@@ -739,7 +723,6 @@ func `baseFee=`*(xp: TxPoolRef; val: GasPrice) {.raises: [KeyError].} =
   ## update would be employed to do the job figuring out the proper value
   ## for the `baseFee`.
   xp.txDB.baseFee = val
-  xp.chain.baseFee = val
 
 func `flags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Setter, strategy symbols for how to process items and buckets.
