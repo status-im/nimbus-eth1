@@ -21,18 +21,15 @@ const COL_FAMILY_NAMES =
 type
   AccountsBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
-    tx: TransactionRef
-    updatedCache: TrieDatabaseRef
+    tx: TransactionRef #updatedCache: TrieDatabaseRef
 
   StorageBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
-    tx: TransactionRef
-    updatedCache: TrieDatabaseRef
+    tx: TransactionRef #updatedCache: TrieDatabaseRef
 
   BytecodeBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
-    tx: TransactionRef
-    updatedCache: TrieDatabaseRef
+    tx: TransactionRef #updatedCache: TrieDatabaseRef
 
   DatabaseBackendRef = AccountsBackendRef | StorageBackendRef | BytecodeBackendRef
 
@@ -92,7 +89,7 @@ proc put(
     dbBackend: DatabaseBackendRef, key, val: openArray[byte]
 ) {.gcsafe, raises: [].} =
   doAssert dbBackend.tx.put(key, val, dbBackend.cfHandle).isOk()
-  dbBackend.updatedCache.put(key, val)
+  # dbBackend.updatedCache.put(key, val)
 
 proc get(
     dbBackend: DatabaseBackendRef, key: openArray[byte]
@@ -120,14 +117,14 @@ proc getStorageBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
 proc getBytecodeBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   trieDB(db.bytecodeBackend)
 
-proc getAccountsUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
-  db.accountsBackend.updatedCache
+# proc getAccountsUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+#   db.accountsBackend.updatedCache
 
-proc getStorageUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
-  db.storageBackend.updatedCache
+# proc getStorageUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+#   db.storageBackend.updatedCache
 
-proc getBytecodeUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
-  db.bytecodeBackend.updatedCache
+# proc getBytecodeUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+#   db.bytecodeBackend.updatedCache
 
 proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   if not db.pendingTransaction.isNil():
@@ -139,9 +136,9 @@ proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   db.storageBackend.tx = tx
   db.bytecodeBackend.tx = tx
 
-  db.accountsBackend.updatedCache = newMemoryDB()
-  db.storageBackend.updatedCache = newMemoryDB()
-  db.bytecodeBackend.updatedCache = newMemoryDB()
+  # db.accountsBackend.updatedCache = newMemoryDB()
+  # db.storageBackend.updatedCache = newMemoryDB()
+  # db.bytecodeBackend.updatedCache = newMemoryDB()
 
   ok()
 

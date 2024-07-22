@@ -20,7 +20,7 @@ import
   ../../common/common_utils,
   ../../rpc/rpc_calls/rpc_trace_calls,
   ../../network/state/state_content,
-  ./state_bridge/[database, state_diff, world_state_helper, offers_builder],
+  ./state_bridge/[database, state_diff, world_state_helper],
   ./[portal_bridge_conf, portal_bridge_common]
 
 type BlockDataRef = ref object
@@ -48,7 +48,7 @@ proc runBackfillCollectBlockDataLoop(
   var currentBlockNumber = startBlockNumber
 
   while true:
-    if currentBlockNumber mod 10000 == 0:
+    if currentBlockNumber mod 100000 == 0:
       info "Collecting block data for block number: ", blockNumber = currentBlockNumber
 
     let
@@ -100,7 +100,7 @@ proc runBackfillCollectBlockDataLoop(
 
 proc runBackfillBuildBlockOffersLoop(
     blockDataQueue: AsyncQueue[BlockDataRef],
-    blockOffersQueue: AsyncQueue[BlockOffersRef],
+    #blockOffersQueue: AsyncQueue[BlockOffersRef],
     stateDir: string,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill build block offers loop"
@@ -125,24 +125,24 @@ proc runBackfillBuildBlockOffersLoop(
       "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
     )
 
-    var builder = OffersBuilderRef.init(ws, genesisBlockHash)
-    builder.buildBlockOffers()
+    # var builder = OffersBuilderRef.init(ws, genesisBlockHash)
+    # builder.buildBlockOffers()
 
-    await blockOffersQueue.addLast(
-      BlockOffersRef(
-        blockNumber: 0.uint64,
-        accountTrieOffers: builder.getAccountTrieOffers(),
-        contractTrieOffers: builder.getContractTrieOffers(),
-        contractCodeOffers: builder.getContractCodeOffers(),
-      )
-    )
+    # await blockOffersQueue.addLast(
+    #   BlockOffersRef(
+    #     blockNumber: 0.uint64,
+    #     accountTrieOffers: builder.getAccountTrieOffers(),
+    #     contractTrieOffers: builder.getContractTrieOffers(),
+    #     contractCodeOffers: builder.getContractCodeOffers(),
+    #   )
+    # )
 
     ws
 
   while true:
     let blockData = await blockDataQueue.popFirst()
 
-    if blockData.blockNumber mod 10000 == 0:
+    if blockData.blockNumber mod 100000 == 0:
       info "Building state for block number: ", blockNumber = blockData.blockNumber
 
     # For now all WorldStateRef functions need to be inside a transaction
@@ -165,30 +165,30 @@ proc runBackfillBuildBlockOffersLoop(
       trace "State diffs successfully applied to block number:",
         blockNumber = blockData.blockNumber
 
-      var builder = OffersBuilderRef.init(
-        worldState, KeccakHash.fromBytes(blockData.blockObject.hash.bytes())
-      )
-      builder.buildBlockOffers()
+      # var builder = OffersBuilderRef.init(
+      #   worldState, KeccakHash.fromBytes(blockData.blockObject.hash.bytes())
+      # )
+      # builder.buildBlockOffers()
 
-      await blockOffersQueue.addLast(
-        BlockOffersRef(
-          blockNumber: blockData.blockNumber,
-          accountTrieOffers: builder.getAccountTrieOffers(),
-          contractTrieOffers: builder.getContractTrieOffers(),
-          contractCodeOffers: builder.getContractCodeOffers(),
-        )
-      )
+      # await blockOffersQueue.addLast(
+      #   BlockOffersRef(
+      #     blockNumber: blockData.blockNumber,
+      #     accountTrieOffers: builder.getAccountTrieOffers(),
+      #     contractTrieOffers: builder.getContractTrieOffers(),
+      #     contractCodeOffers: builder.getContractCodeOffers(),
+      #   )
+      # )
 
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockDataRef],
-    blockOffersQueue: AsyncQueue[BlockOffersRef],
+      #blockOffersQueue: AsyncQueue[BlockOffersRef],
 ) {.async: (raises: [CancelledError]).} =
   debug "Starting state backfill metrics loop"
 
   while true:
     await sleepAsync(10.seconds)
     info "Block data queue length: ", blockDataQueueLen = blockDataQueue.len()
-    info "Block offers queue length: ", blockOffersQueueLen = blockOffersQueue.len()
+    # info "Block offers queue length: ", blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
   let
@@ -215,19 +215,16 @@ proc runState*(config: PortalBridgeConf) =
 
     info "Starting state backfill from block number: ", startBlockNumber
 
-    let
-      blockDataQueue = newAsyncQueue[BlockDataRef](bufferSize)
-      blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
+    let blockDataQueue = newAsyncQueue[BlockDataRef](bufferSize)
+    #  blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
     asyncSpawn runBackfillCollectBlockDataLoop(
       blockDataQueue, web3Client, startBlockNumber
     )
 
-    asyncSpawn runBackfillBuildBlockOffersLoop(
-      blockDataQueue, blockOffersQueue, config.stateDir.string
-    )
+    asyncSpawn runBackfillBuildBlockOffersLoop(blockDataQueue, config.stateDir.string)
 
-    asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)
+    asyncSpawn runBackfillMetricsLoop(blockDataQueue)
 
   while true:
     poll()
