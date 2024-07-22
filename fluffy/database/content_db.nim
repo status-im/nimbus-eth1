@@ -251,8 +251,7 @@ proc size*(db: ContentDB): int64 =
   var size: int64 = 0
   discard (
     db.sizeStmt.exec do(res: int64):
-      size = res
-  ).expectDb()
+      size = res).expectDb()
   return size
 
 proc unusedSize(db: ContentDB): int64 =
@@ -261,8 +260,7 @@ proc unusedSize(db: ContentDB): int64 =
   var size: int64 = 0
   discard (
     db.unusedSizeStmt.exec do(res: int64):
-      size = res
-  ).expectDb()
+      size = res).expectDb()
   return size
 
 proc usedSize*(db: ContentDB): int64 =
@@ -275,16 +273,14 @@ proc contentSize*(db: ContentDB): int64 =
   var size: int64 = 0
   discard (
     db.contentSizeStmt.exec do(res: int64):
-      size = res
-  ).expectDb()
+      size = res).expectDb()
   return size
 
 proc contentCount*(db: ContentDB): int64 =
   var count: int64 = 0
   discard (
     db.contentCountStmt.exec do(res: int64):
-      count = res
-  ).expectDb()
+      count = res).expectDb()
   return count
 
 ## Pruning related calls
@@ -295,8 +291,7 @@ proc getLargestDistance*(db: ContentDB, localId: UInt256): UInt256 =
     db.largestDistanceStmt.exec(
       localId.toBytesBE(),
       proc(res: array[32, byte]) =
-        distanceBytes = res
-      ,
+        distanceBytes = res,
     )
   ).expectDb()
 
