@@ -18,7 +18,7 @@ import
   std/[hashes, tables],
   stint,
   eth/common,
-  "."/[desc_error, desc_identifiers]
+  ./desc_identifiers
 
 export stint
 
@@ -74,7 +74,6 @@ type
   NodeRef* = ref object of VertexRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
-    error*: AristoError              ## Used for error signalling in RLP decoder
     key*: array[16,HashKey]          ## Merkle hash/es for vertices
 
   # ----------------------
