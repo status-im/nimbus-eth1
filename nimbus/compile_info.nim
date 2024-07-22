@@ -8,6 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+import
+  ./db/core_db/base/base_config,
+  ./db/ledger/base/base_config
+
 func vmName(): string =
   when defined(evmc_enabled):
     "evmc"
@@ -23,6 +27,10 @@ const
       rc &= ", chunked-rlpx"
     when defined(boehmgc):
       rc &= ", boehm/gc"
+    when 0 < coreDbBaseConfigExtras.len:
+       rc &= ", " & coreDbBaseConfigExtras
+    when 0 < ledgerBaseConfigExtras.len:
+       rc &= ", " & ledgerBaseConfigExtras
     rc &= " enabled"
     rc
 
