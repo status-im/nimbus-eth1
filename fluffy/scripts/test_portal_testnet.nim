@@ -289,11 +289,9 @@ procSuite "Portal testnet tests":
               return res
             except CatchableError as exc:
               await client.close()
-              raise exc
-          ,
+              raise exc,
           proc(mc: Opt[BlockObject]): bool =
-            return mc.isSome()
-          ,
+            return mc.isSome(),
           "Did not receive expected Block with hash " & hash.data.toHex(),
           i,
         )
@@ -315,11 +313,9 @@ procSuite "Portal testnet tests":
               return res
             except CatchableError as exc:
               await client.close()
-              raise exc
-          ,
+              raise exc,
           proc(mc: seq[LogObject]): bool =
-            return true
-          ,
+            return true,
           "",
           i,
         )
