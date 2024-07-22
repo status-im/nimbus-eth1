@@ -129,7 +129,7 @@ proc hasAccountPayload(
 
 proc fetchAccountHike*(
     db: AristoDbRef;                   # Database
-    accPath: Hash256;          # Implies a storage ID (if any)
+    accPath: Hash256;                  # Implies a storage ID (if any)
       ): Result[Hike,AristoError] =
   ## Verify that the `accPath` argument properly referres to a storage root
   ## vertex ID. The function will reset the keys along the `accPath` for
