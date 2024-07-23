@@ -11,6 +11,9 @@ import
   chronicles,
   stew/byteutils,
   stint,
+  json_serialization,
+  json_rpc/rpcclient,
+  web3/[eth_api, eth_api_types],
   eth/common/[eth_types, eth_types_rlp],
   ../../../rpc/rpc_calls/rpc_trace_calls,
   ../portal_bridge_common
@@ -98,15 +101,46 @@ proc toStateDiffs(
 
   stateDiffs
 
+# proc getBlocksByNumber*(
+#     client: RpcClient, startBlock: uint64, batchSize: int
+# ): Future[Result[seq[BlockObject], string]] {.async: (raises: []).} =
+#   let blck =
+#     try:
+#       let batch = client.prepareBatch()
+
+#       for i in 0 ..< batchSize:
+#         batch.eth_getBlockByNumber(blockId(startBlock + uint64(i)), false)
+
+#       let res = (await batch.send()).get()
+
+#       var blockObjs = newSeqOfCap[BlockObject](batchSize)
+#       for i in 0 ..< batchSize:
+#         blockObjs.add(Json.decode(res[i].result.string, BlockObject))
+
+#       blockObjs
+#     except CatchableError as e:
+#       return err("EL JSON-RPC eth_getBlockByNumber failed: " & e.msg)
+
+#   return ok(blck)
+
 proc getStateDiffsByBlockNumber*(
-    client: RpcClient, blockId: BlockIdentifier
-): Future[Result[seq[StateDiffRef], string]] {.async: (raises: []).} =
+    client: RpcClient, startBlock: uint64, batchSize: int
+): Future[Result[seq[seq[StateDiffRef]], string]] {.async: (raises: []).} =
   const traceOpts = @["stateDiff"]
 
   try:
-    let blockTraceJson = await client.trace_replayBlockTransactions(blockId, traceOpts)
-    if blockTraceJson.isNil:
-      return err("EL failed to provide requested state diff")
-    ok(blockTraceJson.toStateDiffs())
+    let batch = client.prepareBatch()
+
+    for i in 0 ..< batchSize:
+      batch.trace_replayBlockTransactions(blockId(startBlock + uint64(i)), traceOpts)
+
+    let res = (await batch.send()).get()
+
+    var stateDiffsObjs = newSeqOfCap[seq[StateDiffRef]](batchSize)
+
+    for i in 0 ..< batchSize:
+      stateDiffsObjs.add(Json.decode(res[i].result.string, JsonNode).toStateDiffs())
+
+    ok(stateDiffsObjs)
   except CatchableError as e:
     return err("EL JSON-RPC trace_replayBlockTransactions failed: " & e.msg)

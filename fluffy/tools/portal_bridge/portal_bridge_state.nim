@@ -46,57 +46,61 @@ proc runBackfillCollectBlockDataLoop(
     warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
 
   var currentBlockNumber = startBlockNumber
+  let batchSize = 1000
 
   while true:
-    if currentBlockNumber mod 100000 == 0:
+    if currentBlockNumber mod 10000 == 0:
       info "Collecting block data for block number: ", blockNumber = currentBlockNumber
 
     let
       blockId = blockId(currentBlockNumber)
-      blockRequest = web3Client.getBlockByNumber(blockId, false)
-      stateDiffsRequest = web3Client.getStateDiffsByBlockNumber(blockId)
-
-      blockObject = (await blockRequest).valueOr:
-        error "Failed to get block", error
+      blockObjects = (await web3Client.getBlocksByNumber(currentBlockNumber, batchSize)).valueOr:
+        error "Failed to get blocks", error
+        await sleepAsync(1.seconds)
+        continue
+      stateDiffs = (
+        await web3Client.getStateDiffsByBlockNumber(currentBlockNumber, batchSize)
+      ).valueOr:
+        error "Failed to get state diffs", error
         await sleepAsync(1.seconds)
         continue
 
-    var uncleBlockRequests: seq[Future[Result[BlockObject, string]]]
-    for i in 0 .. blockObject.uncles.high:
-      uncleBlockRequests.add(
-        web3Client.getUncleByBlockNumberAndIndex(blockId, i.Quantity)
-      )
+    for j in 0 ..< batchSize:
+      let blockObject = blockObjects[j]
 
-    let stateDiffs = (await stateDiffsRequest).valueOr:
-      error "Failed to get state diffs", error
-      await sleepAsync(1.seconds)
-      continue
+      var uncleBlockRequests: seq[Future[Result[BlockObject, string]]]
+      for i in 0 .. blockObject.uncles.high:
+        uncleBlockRequests.add(
+          web3Client.getUncleByBlockNumberAndIndex(
+            blockId(currentBlockNumber + j.uint64), i.Quantity
+          )
+        )
 
-    var uncleBlocks: seq[BlockObject]
-    for uncleBlockRequest in uncleBlockRequests:
-      try:
-        let uncleBlock = (await uncleBlockRequest).valueOr:
-          error "Failed to get uncle blocks", error
-          await sleepAsync(1.seconds)
+      var uncleBlocks: seq[BlockObject]
+      for uncleBlockRequest in uncleBlockRequests:
+        try:
+          let uncleBlock = (await uncleBlockRequest).valueOr:
+            error "Failed to get uncle blocks", error
+            await sleepAsync(1.seconds)
+            break
+          uncleBlocks.add(uncleBlock)
+        except CatchableError as e:
+          error "Failed to get uncleBlockRequest", error = e.msg
           break
-        uncleBlocks.add(uncleBlock)
-      except CatchableError as e:
-        error "Failed to get uncleBlockRequest", error = e.msg
-        break
 
-    if uncleBlocks.len() < uncleBlockRequests.len():
-      continue
+      if uncleBlocks.len() < uncleBlockRequests.len():
+        continue
 
-    await blockDataQueue.addLast(
-      BlockDataRef(
-        blockNumber: currentBlockNumber,
-        blockObject: blockObject,
-        stateDiffs: stateDiffs,
-        uncleBlocks: uncleBlocks,
+      await blockDataQueue.addLast(
+        BlockDataRef(
+          blockNumber: currentBlockNumber + j.uint64,
+          blockObject: blockObject,
+          stateDiffs: stateDiffs[j],
+          uncleBlocks: uncleBlocks,
+        )
       )
-    )
 
-    inc currentBlockNumber
+    currentBlockNumber += batchSize.uint64
 
 proc runBackfillBuildBlockOffersLoop(
     blockDataQueue: AsyncQueue[BlockDataRef],
@@ -142,15 +146,15 @@ proc runBackfillBuildBlockOffersLoop(
   while true:
     let blockData = await blockDataQueue.popFirst()
 
-    if blockData.blockNumber mod 100000 == 0:
+    if blockData.blockNumber mod 10000 == 0:
       info "Building state for block number: ", blockNumber = blockData.blockNumber
 
     # For now all WorldStateRef functions need to be inside a transaction
     # because the DatabaseRef currently only supports reading and writing to/from
     # a single active transaction.
     db.withTransaction:
-      defer:
-        worldState.clearPreimages()
+      # defer:
+      #   worldState.clearPreimages()
 
       for stateDiff in blockData.stateDiffs:
         worldState.applyStateDiff(stateDiff)
