@@ -85,23 +85,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
-  let portalNetwork =
-    if config.portalNetworkDeprecated.isNone():
-      config.network
-    else:
-      warn "DEPRECATED: The --portal-network flag will be removed in the future, " &
-        "please use the drop in replacement --network flag instead"
-      config.portalNetworkDeprecated.get()
-
-  let portalSubnetworks =
-    if config.networksDeprecated == {}:
-      config.portalSubnetworks
-    else:
-      warn "DEPRECATED: The --networks flag will be removed in the future, " &
-        "please use the drop in replacement --portal-subnetworks flag instead"
-      config.networksDeprecated
-
-  case portalNetwork
+  case config.network
   of PortalNetwork.none:
     discard # don't connect to any network bootstrap nodes
   of PortalNetwork.mainnet:
@@ -142,7 +126,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   ## Force pruning - optional
   if config.forcePrune:
     let db = ContentDB.new(
-      config.dataDir / portalNetwork.getDbDirectory() / "contentdb_" &
+      config.dataDir / config.network.getDbDirectory() / "contentdb_" &
         d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacityMB * 1_000_000,
       manualCheckpoint = true,
@@ -189,10 +173,10 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     )
 
     node = PortalNode.new(
-      portalNetwork,
+      config.network,
       portalNodeConfig,
       d,
-      portalSubnetworks,
+      config.portalSubnetworks,
       bootstrapRecords = bootstrapRecords,
       rng = rng,
     )
