@@ -87,13 +87,12 @@ else:
 # ------------------------------------------------------------------------------
 
 
-proc createOp(k: var VmCtx): EvmResultVoid =
+proc createOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf0, Create a new account with associated code
-  ? checkInStaticContext(k.cpt)
-  ? k.cpt.stack.lsCheck(3)
+  ? cpt.checkInStaticContext()
+  ? cpt.stack.lsCheck(3)
 
   let
-    cpt       = k.cpt
     endowment = cpt.stack.lsPeekInt(^1)
     memPos    = cpt.stack.lsPeekSafeInt(^2)
     memLen    = cpt.stack.lsPeekSafeInt(^3)
@@ -167,13 +166,12 @@ proc createOp(k: var VmCtx): EvmResultVoid =
 
 # ---------------------
 
-proc create2Op(k: var VmCtx): EvmResultVoid =
+proc create2Op(cpt: VmCpt): EvmResultVoid =
   ## 0xf5, Behaves identically to CREATE, except using keccak256
-  ? checkInStaticContext(k.cpt)
-  ? k.cpt.stack.lsCheck(4)
+  ? cpt.checkInStaticContext()
+  ? cpt.stack.lsCheck(4)
 
   let
-    cpt       = k.cpt
     endowment = cpt.stack.lsPeekInt(^1)
     memPos    = cpt.stack.lsPeekSafeInt(^2)
     memLen    = cpt.stack.lsPeekSafeInt(^3)

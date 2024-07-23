@@ -30,66 +30,65 @@ when not defined(evmc_enabled):
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc blockhashOp (k: var VmCtx): EvmResultVoid =
+proc blockhashOp(cpt: VmCpt): EvmResultVoid =
   ## 0x40, Get the hash of one of the 256 most recent complete blocks.
   template block256(top, number, conv) =
     if number > high(BlockNumber).u256:
       top = zero(UInt256)
     else:
-      conv(k.cpt.getBlockHash(number.truncate(BlockNumber)), top)
+      conv(cpt.getBlockHash(number.truncate(BlockNumber)), top)
 
-  k.cpt.stack.unaryWithTop(block256)
+  cpt.stack.unaryWithTop(block256)
 
-proc coinBaseOp (k: var VmCtx): EvmResultVoid =
+proc coinBaseOp(cpt: VmCpt): EvmResultVoid =
   ## 0x41, Get the block's beneficiary address.
-  k.cpt.stack.push k.cpt.getCoinbase
+  cpt.stack.push cpt.getCoinbase
 
-proc timestampOp (k: var VmCtx): EvmResultVoid =
+proc timestampOp(cpt: VmCpt): EvmResultVoid =
   ## 0x42, Get the block's timestamp.
-  k.cpt.stack.push k.cpt.getTimestamp
+  cpt.stack.push cpt.getTimestamp
 
-proc blocknumberOp (k: var VmCtx): EvmResultVoid =
+proc blocknumberOp(cpt: VmCpt): EvmResultVoid =
   ## 0x43, Get the block's number.
-  k.cpt.stack.push k.cpt.getBlockNumber
+  cpt.stack.push cpt.getBlockNumber
 
-proc difficultyOp (k: var VmCtx): EvmResultVoid =
+proc difficultyOp(cpt: VmCpt): EvmResultVoid =
   ## 0x44, Get the block's difficulty
-  k.cpt.stack.push k.cpt.getDifficulty
+  cpt.stack.push cpt.getDifficulty
 
-proc gasLimitOp (k: var VmCtx): EvmResultVoid =
+proc gasLimitOp(cpt: VmCpt): EvmResultVoid =
   ## 0x45, Get the block's gas limit
-  k.cpt.stack.push k.cpt.getGasLimit
+  cpt.stack.push cpt.getGasLimit
 
-proc chainIdOp (k: var VmCtx): EvmResultVoid =
+proc chainIdOp(cpt: VmCpt): EvmResultVoid =
   ## 0x46, Get current chain’s EIP-155 unique identifier.
-  k.cpt.stack.push k.cpt.getChainId
+  cpt.stack.push cpt.getChainId
 
-proc selfBalanceOp (k: var VmCtx): EvmResultVoid =
+proc selfBalanceOp(cpt: VmCpt): EvmResultVoid =
   ## 0x47, Get current contract's balance.
-  let cpt = k.cpt
   cpt.stack.push cpt.getBalance(cpt.msg.contractAddress)
 
-proc baseFeeOp (k: var VmCtx): EvmResultVoid =
+proc baseFeeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x48, Get the block's base fee.
-  k.cpt.stack.push k.cpt.getBaseFee
+  cpt.stack.push cpt.getBaseFee
 
-proc blobHashOp (k: var VmCtx): EvmResultVoid =
+proc blobHashOp(cpt: VmCpt): EvmResultVoid =
   ## 0x49, Get current transaction's EIP-4844 versioned hash.
   template blob256(top, number, conv) =
     let
       index = number.safeInt
-      len = k.cpt.getVersionedHashesLen
+      len = cpt.getVersionedHashesLen
 
     if index < len:
-      conv(k.cpt.getVersionedHash(index), top)
+      conv(cpt.getVersionedHash(index), top)
     else:
       top = zero(UInt256)
 
-  k.cpt.stack.unaryWithTop(blob256)
+  cpt.stack.unaryWithTop(blob256)
 
-proc blobBaseFeeOp (k: var VmCtx): EvmResultVoid =
+proc blobBaseFeeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x4a, Get the block's base fee.
-  k.cpt.stack.push k.cpt.getBlobBaseFee
+  cpt.stack.push cpt.getBlobBaseFee
 
 
 # ------------------------------------------------------------------------------

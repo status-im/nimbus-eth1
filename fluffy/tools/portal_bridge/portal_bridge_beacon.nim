@@ -21,7 +21,9 @@ import
   ../eth_data_exporter/cl_data_exporter,
   ./[portal_bridge_conf, portal_bridge_common]
 
-const restRequestsTimeout = 30.seconds
+const
+  largeRequestsTimeout = 120.seconds # For downloading large items such as states.
+  restRequestsTimeout = 30.seconds
 
 # TODO: From nimbus_binary_common, but we don't want to import that.
 proc sleepAsync(t: TimeDiff): Future[void] =
@@ -228,6 +230,52 @@ proc gossipLCOptimisticUpdate(
     else:
       return err("No LC updates pre Altair")
 
+proc gossipHistoricalSummaries(
+    restClient: RestClientRef,
+    portalRpcClient: RpcClient,
+    cfg: RuntimeConfig,
+    forkDigests: ref ForkDigests,
+): Future[Result[void, string]] {.async.} =
+  let state =
+    try:
+      notice "Downloading beacon state"
+      awaitWithTimeout(
+        restClient.getStateV2(StateIdent.init(StateIdentType.Finalized), cfg),
+        largeRequestsTimeout,
+      ):
+        return err("Attempt to download beacon state timed out")
+    except CatchableError as exc:
+      return err("Unable to download beacon state: " & exc.msg)
+
+  if state == nil:
+    return err("No beacon state found")
+
+  withState(state[]):
+    when consensusFork >= ConsensusFork.Capella:
+      let
+        historical_summaries = forkyState.data.historical_summaries
+        proof = ?buildProof(state[])
+        epoch = forkyState.data.slot.epoch()
+        forkDigest = forkDigestAtEpoch(forkDigests[], epoch, cfg)
+        summariesWithProof = HistoricalSummariesWithProof(
+          epoch: epoch, historical_summaries: historical_summaries, proof: proof
+        )
+
+        contentKey = encode(historicalSummariesContentKey(epoch.uint64))
+        content = encodeSsz(summariesWithProof, forkDigest)
+
+      try:
+        let peers = await portalRpcClient.portal_beaconRandomGossip(
+          contentKey.asSeq().toHex(), content.toHex()
+        )
+        info "Beacon historical_summaries gossiped", peers, epoch
+
+        return ok()
+      except CatchableError as e:
+        return err("JSON-RPC error: " & $e.msg)
+    else:
+      return err("No historical_summaries pre Capella")
+
 proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
   notice "Launching Fluffy beacon chain bridge", cmdParams = commandLineParams()
 
@@ -347,6 +395,12 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
             warn "Error gossiping LC finality update", error = res.error
           else:
             lastFinalityUpdateEpoch = epoch(res.get())
+
+          let res2 = await gossipHistoricalSummaries(
+            restClient, portalRpcClient, cfg, forkDigests
+          )
+          if res2.isErr():
+            warn "Error gossiping historical summaries", error = res.error
 
         if wallPeriod > lastUpdatePeriod and wallSlot > start_slot(wallEpoch):
           # TODO: Need to delay timing here also with one slot?

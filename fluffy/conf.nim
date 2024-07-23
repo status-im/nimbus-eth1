@@ -83,15 +83,6 @@ type
       name: "listen-address"
     .}: IpAddress
 
-    portalNetworkDeprecated* {.
-      hidden,
-      desc:
-        "DEPRECATED: The --portal-network flag will be removed in the future, " &
-        "please use the drop in replacement --network flag instead",
-      defaultValue: none(PortalNetwork),
-      name: "portal-network"
-    .}: Option[PortalNetwork]
-
     network* {.
       desc:
         "Select which Portal network to join. This will set the " &
@@ -99,15 +90,6 @@ type
       defaultValue: PortalNetwork.mainnet,
       name: "network"
     .}: PortalNetwork
-
-    networksDeprecated* {.
-      hidden,
-      desc:
-        "DEPRECATED: The --networks flag will be removed in the future, " &
-        "please use the drop in replacement --portal-subnetworks flag instead",
-      defaultValue: {},
-      name: "networks"
-    .}: set[PortalSubnetwork]
 
     portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",

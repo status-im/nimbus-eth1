@@ -27,7 +27,7 @@ Build & run the `portal_bridge`:
 ```bash
 make portal_bridge
 
-WEB3_URL="http://127.0.0.1:8546" # Replace with your provider.
+WEB3_URL="http://127.0.0.1:8548" # Replace with your provider.
 ./build/portal_bridge history --web3-url:${WEB3_URL}
 ```
 
@@ -41,7 +41,7 @@ network.
 
 E.g. run latest + backfill with audit mode:
 ```bash
-WEB3_URL="http://127.0.0.1:8546" # Replace with your provider.
+WEB3_URL="http://127.0.0.1:8548" # Replace with your provider.
 ./build/portal_bridge history --latest:true --backfill:true --audit:true --era1-dir:/somedir/era1/ --web3-url:${WEB3_URL}
 ```
 

@@ -25,7 +25,7 @@ func nLayersKeys*(db: KvtDbRef): int =
   ## bound for the number of effective key/value mappings held on the cache
   ## layers as there might be duplicate entries for the same key on different
   ## layers.
-  db.stack.mapIt(it.delta.sTab.len).foldl(a + b, db.top.delta.sTab.len)
+  db.stack.mapIt(it.sTab.len).foldl(a + b, db.top.sTab.len)
 
 # ------------------------------------------------------------------------------
 # Public functions: get function
@@ -37,11 +37,11 @@ func layersLen*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[int] =
   when key isnot seq[byte]:
     let key = @key
 
-  db.top.delta.sTab.withValue(key, item):
+  db.top.sTab.withValue(key, item):
     return Opt.some(item[].len())
 
   for w in db.rstack:
-    w.delta.sTab.withValue(key, item):
+    w.sTab.withValue(key, item):
       return Opt.some(item[].len())
 
   Opt.none(int)
@@ -58,11 +58,11 @@ func layersGet*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[Blob] =
   when key isnot seq[byte]:
     let key = @key
 
-  db.top.delta.sTab.withValue(key, item):
+  db.top.sTab.withValue(key, item):
     return Opt.some(item[])
 
   for w in db.rstack:
-    w.delta.sTab.withValue(key, item):
+    w.sTab.withValue(key, item):
       return Opt.some(item[])
 
   Opt.none(Blob)
@@ -73,7 +73,7 @@ func layersGet*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[Blob] =
 
 func layersPut*(db: KvtDbRef; key: openArray[byte]; data: openArray[byte]) =
   ## Store a (potentally empty) value on the top layer
-  db.top.delta.sTab[@key] = @data
+  db.top.sTab[@key] = @data
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -87,12 +87,12 @@ func layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
                else:                     db.stack[0 .. level]
 
   # Set up initial layer (bottom layer)
-  result = LayerRef(delta: LayerDeltaRef(sTab: layers[0].delta.sTab))
+  result = LayerRef(sTab: layers[0].sTab)
 
   # Consecutively merge other layers on top
   for n in 1 ..< layers.len:
-    for (key,val) in layers[n].delta.sTab.pairs:
-      result.delta.sTab[key] = val
+    for (key,val) in layers[n].sTab.pairs:
+      result.sTab[key] = val
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -109,12 +109,12 @@ iterator layersWalk*(
   ## the one with a zero vertex which are othewise skipped by the iterator.
   ## The `seen` argument must not be modified while the iterator is active.
   ##
-  for (key,val) in db.top.delta.sTab.pairs:
+  for (key,val) in db.top.sTab.pairs:
     yield (key,val)
     seen.incl key
 
   for w in db.rstack:
-    for (key,val) in w.delta.sTab.pairs:
+    for (key,val) in w.sTab.pairs:
       if key notin seen:
         yield (key,val)
         seen.incl key

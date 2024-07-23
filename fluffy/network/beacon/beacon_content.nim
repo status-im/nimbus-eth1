@@ -7,6 +7,7 @@
 
 {.push raises: [].}
 
-import ./content/content_keys, ./content/content_values
+import
+  ./content/content_keys, ./content/content_values, ./beacon_chain_historical_summaries
 
-export content_keys, content_values
+export content_keys, content_values, beacon_chain_historical_summaries

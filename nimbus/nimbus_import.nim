@@ -220,26 +220,36 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         warn "Could not write csv", err = exc.msg
     blocks.setLen(0)
 
+  # Finds the slot number to resume the import process
+  # First it sets the initial lower bound to `firstSlotAfterMerge` + number of blocks after Era1
+  # Then it iterates over the slots to find the current slot number, along with reducing the
+  # search space by calculating the difference between the `blockNumber` and the `block_number` from the executionPayload
+  # of the slot, then adding the difference to the importedSlot. This pushes the lower bound more, 
+  # making the search way smaller
   template updateLastImportedSlot(
       era: EraDB,
       historical_roots: openArray[Eth2Digest],
       historical_summaries: openArray[HistoricalSummary],
   ) =
     if blockNumber > 1:
-      importedSlot = blockNumber
+      # Setting the initial lower bound 
+      importedSlot = (blockNumber - lastEra1Block) + firstSlotAfterMerge
       notice "Finding slot number after resuming import", importedSlot
-      var parentHash: common.Hash256
-      let currentHash = com.db.getHeadBlockHash()
-      while currentHash != parentHash:
+
+      # BlockNumber based slot finding
+      var clNum = 0'u64
+
+      while clNum < blockNumber:
         let clBlock = getBlockFromEra(
           era, historical_roots, historical_summaries, Slot(importedSlot), clConfig.cfg
-        )
-        if clBlock.isSome:
-          let ethBlock = getEth1Block(clBlock.get())
-          parentHash = ethBlock.header.parentHash
+        ).valueOr:
+          importedSlot += 1
+          continue
 
-        importedSlot += 1
-      importedSlot -= 1
+        clNum = getEth1BlockNumber(clBlock)
+        # decreasing the lower bound with each iteration
+        importedSlot += blockNumber - clNum
+
       notice "Found the slot to start with", importedSlot
 
   if isDir(conf.era1Dir.string) or isDir(conf.eraDir.string):

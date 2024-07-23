@@ -27,8 +27,7 @@ suite "History Content Encodings":
       headerFile =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
       accumulatorFile =
-        "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
-        # TODO: rename
+        "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-record-00122.ssz"
       headersWithProofFile =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/1000001-1000010.json"
 

@@ -11,72 +11,70 @@
 import
   std/tables,
   eth/common,
-  results,
-  ".."/[aristo_desc, aristo_get]
+  ".."/[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc deltaMerge*(
-    db: AristoDbRef;
-    upper: LayerDeltaRef;                      # new filter, `nil` is ok
-    lower: LayerDeltaRef;                      # Trg filter, `nil` is ok
-      ): Result[LayerDeltaRef,(VertexID,AristoError)] =
+    upper: LayerRef;                   # Think of `top`, `nil` is ok
+    modUpperOk: bool;                  # May re-use/modify `upper`
+    lower: LayerRef;                   # Think of `balancer`, `nil` is ok
+    modLowerOk: bool;                  # May re-use/modify `lower`
+      ): LayerRef =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
   ## Note that the namimg `upper` and `lower` indicate that the filters are
-  ## stacked and the database access is `upper -> lower -> backend` whereas
-  ## the `src/trg` matching logic goes the other way round.
+  ## stacked and the database access is `upper -> lower -> backend`.
   ##
-  # Degenerate case: `upper` is void
   if lower.isNil:
-    if upper.isNil:
-      # Even more degenerate case when both filters are void
-      return ok LayerDeltaRef(nil)
-    return ok(upper)
+    # Degenerate case: `upper` is void
+    result = upper
 
-  # Degenerate case: `upper` is non-trivial and `lower` is void
-  if upper.isNil:
-    return ok(lower)
+  elif upper.isNil:
+    # Degenerate case: `lower` is void
+    result = lower
 
-  # There is no need to deep copy table vertices as they will not be modified.
-  let newFilter = LayerDeltaRef(
-    sTab: lower.sTab,
-    kMap: lower.kMap,
-    vTop: upper.vTop)
+  elif modLowerOk:
+    # Can modify `lower` which is the prefered action mode but applies only
+    # in cases where the `lower` argument is not shared.
+    lower.vTop = upper.vTop
+    layersMergeOnto(upper, lower[])
+    result = lower
 
-  for (rvid,vtx) in upper.sTab.pairs:
-    if vtx.isValid or not newFilter.sTab.hasKey rvid:
-      newFilter.sTab[rvid] = vtx
-    elif newFilter.sTab.getOrVoid(rvid).isValid:
-      let rc = db.getVtxUbe rvid
-      if rc.isOk:
-        newFilter.sTab[rvid] = vtx # VertexRef(nil)
-      elif rc.error == GetVtxNotFound:
-        newFilter.sTab.del rvid
-      else:
-        return err((rvid.vid,rc.error))
+  elif not modUpperOk:
+    # Cannot modify any argument layers.
+    result = LayerRef(
+      sTab:      lower.sTab, # shallow copy (entries will not be modified)
+      kMap:      lower.kMap,
+      accLeaves: lower.accLeaves,
+      stoLeaves: lower.stoLeaves,
+      vTop:      upper.vTop)
+    layersMergeOnto(upper, result[])
 
-  for (rvid,key) in upper.kMap.pairs:
-    if key.isValid or not newFilter.kMap.hasKey rvid:
-      newFilter.kMap[rvid] = key
-    elif newFilter.kMap.getOrVoid(rvid).isValid:
-      let rc = db.getKeyUbe rvid
-      if rc.isOk:
-        newFilter.kMap[rvid] = key
-      elif rc.error == GetKeyNotFound:
-        newFilter.kMap.del rvid
-      else:
-        return err((rvid.vid,rc.error))
+  else:
+    # Otherwise avoid copying some tables by modifyinh `upper`. This is not
+    # completely free as the merge direction changes to merging the `lower`
+    # layer up into the higher prioritised `upper` layer (note that the `lower`
+    # argument filter is read-only.) Here again, the `upper` argument must not
+    # be a shared layer/filter.
+    for (rvid,vtx) in lower.sTab.pairs:
+      if not upper.sTab.hasKey(rvid):
+        upper.sTab[rvid] = vtx
 
-  for (accPath,leafVtx) in upper.accLeaves.pairs:
-    newFilter.accLeaves[accPath] = leafVtx
+    for (rvid,key) in lower.kMap.pairs:
+      if not upper.kMap.hasKey(rvid):
+        upper.kMap[rvid] = key
 
-  for (mixPath,leafVtx) in upper.stoLeaves.pairs:
-    newFilter.stoLeaves[mixPath] = leafVtx
+    for (accPath,leafVtx) in lower.accLeaves.pairs:
+      if not upper.accLeaves.hasKey(accPath):
+        upper.accLeaves[accPath] = leafVtx
 
-  ok newFilter
+    for (mixPath,leafVtx) in lower.stoLeaves.pairs:
+      if not upper.stoLeaves.hasKey(mixPath):
+        upper.stoLeaves[mixPath] = leafVtx
+    result = upper
 
 # ------------------------------------------------------------------------------
 # End

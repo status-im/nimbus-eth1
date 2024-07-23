@@ -250,7 +250,7 @@ proc reject*(xp: TxTabsRef; tx: PooledTransaction;
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc baseFee*(xp: TxTabsRef): GasPrice =
+proc baseFee*(xp: TxTabsRef): GasInt =
   ## Getter
   xp.bySender.baseFee
 
@@ -270,7 +270,7 @@ proc remote*(lc: TxTabsLocality): seq[EthAddress] =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `baseFee=`*(xp: TxTabsRef; val: GasPrice)
+proc `baseFee=`*(xp: TxTabsRef; val: GasInt)
     {.gcsafe,raises: [KeyError].} =
   ## Setter, update may cause database re-org
   if xp.bySender.baseFee != val:

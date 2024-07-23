@@ -37,11 +37,10 @@ when not defined(evmc_enabled):
 # Private
 # ------------------------------------------------------------------------------
 
-proc returnOp(k: var VmCtx): EvmResultVoid =
+proc returnOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf3, Halt execution returning output data.
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt = k.cpt
     pos = cpt.stack.lsPeekMemRef(^1)
     len = cpt.stack.lsPeekMemRef(^2)
   cpt.stack.lsShrink(2)
@@ -55,12 +54,11 @@ proc returnOp(k: var VmCtx): EvmResultVoid =
   ok()
 
 
-proc revertOp(k: var VmCtx): EvmResultVoid =
+proc revertOp(cpt: VmCpt): EvmResultVoid =
   ## 0xfd, Halt execution reverting state changes but returning data
   ##       and remaining gas.
-  ? k.cpt.stack.lsCheck(2)
+  ? cpt.stack.lsCheck(2)
   let
-    cpt = k.cpt
     pos = cpt.stack.lsPeekMemRef(^1)
     len = cpt.stack.lsPeekMemRef(^2)
   cpt.stack.lsShrink(2)
@@ -75,29 +73,24 @@ proc revertOp(k: var VmCtx): EvmResultVoid =
   cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
   ok()
 
-proc invalidOp(k: var VmCtx): EvmResultVoid =
+proc invalidOp(cpt: VmCpt): EvmResultVoid =
   err(opErr(InvalidInstruction))
 
 # -----------
 
-proc selfDestructOp(k: var VmCtx): EvmResultVoid =
+proc selfDestructOp(cpt: VmCpt): EvmResultVoid =
   ## 0xff, Halt execution and register account for later deletion.
-  let
-    cpt = k.cpt
-    beneficiary = ? cpt.stack.popAddress()
+  let beneficiary = ? cpt.stack.popAddress()
 
   when defined(evmc_enabled):
-    block:
-      cpt.selfDestruct(beneficiary)
+    cpt.selfDestruct(beneficiary)
   else:
-    block:
-      cpt.selfDestruct(beneficiary)
+    cpt.selfDestruct(beneficiary)
   ok()
 
-proc selfDestructEIP150Op(k: var VmCtx): EvmResultVoid =
+proc selfDestructEIP150Op(cpt: VmCpt): EvmResultVoid =
   ## selfDestructEip150 (auto generated comment)
   let
-    cpt = k.cpt
     beneficiary = ? cpt.stack.popAddress()
     condition = not cpt.accountExists(beneficiary)
     gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
@@ -107,27 +100,25 @@ proc selfDestructEIP150Op(k: var VmCtx): EvmResultVoid =
   cpt.selfDestruct(beneficiary)
   ok()
 
-proc selfDestructEIP161Op(k: var VmCtx): EvmResultVoid =
+proc selfDestructEIP161Op(cpt: VmCpt): EvmResultVoid =
   ## selfDestructEip161 (auto generated comment)
-  let cpt = k.cpt
-  ? checkInStaticContext(cpt)
+  ? cpt.checkInStaticContext()
 
   let
     beneficiary = ? cpt.stack.popAddress()
-    isDead = not cpt.accountExists(beneficiary)
-    balance = cpt.getBalance(cpt.msg.contractAddress)
-    condition = isDead and not balance.isZero
-    gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
+    isDead      = not cpt.accountExists(beneficiary)
+    balance     = cpt.getBalance(cpt.msg.contractAddress)
+    condition   = isDead and not balance.isZero
+    gasCost     = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
   ? cpt.opcodeGasCost(SelfDestruct,
     gasCost, reason = "SELFDESTRUCT EIP161")
   cpt.selfDestruct(beneficiary)
   ok()
 
-proc selfDestructEIP2929Op(k: var VmCtx): EvmResultVoid =
+proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
   ## selfDestructEIP2929 (auto generated comment)
-  let cpt = k.cpt
-  ? checkInStaticContext(cpt)
+  ? cpt.checkInStaticContext()
 
   let
     beneficiary = ? cpt.stack.popAddress()

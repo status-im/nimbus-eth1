@@ -98,8 +98,8 @@ const
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc wrapperFn(k: var VmCtx; n: static int): EvmResultVoid =
-  logImpl(k.cpt, logOpArg[n], n)
+proc wrapperFn(cpt: VmCpt; n: static int): EvmResultVoid =
+  cpt.logImpl(logOpArg[n], n)
 
 genOphHandlers fnName, fnInfo, inxRange, wrapperFn
 

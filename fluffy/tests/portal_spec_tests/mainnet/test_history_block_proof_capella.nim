@@ -55,23 +55,21 @@ suite "History Block Proofs - Capella":
       historicalSummaries = readHistoricalSummaries(historicalSummaries_path).valueOr:
         raiseAssert "Cannot read historical summaries: " & error
 
-    # TODO: reactivate when test vectors PR gets merged
-    skip()
-    # for kind, path in walkDir(testsPath):
-    #   if kind == pcFile and path.splitFile.ext == ".yaml":
-    #     let
-    #       testProof = YamlTestProof.loadFromYaml(path).valueOr:
-    #         raiseAssert "Cannot read test vector: " & error
+    for kind, path in walkDir(testsPath):
+      if kind == pcFile and path.splitFile.ext == ".yaml":
+        let
+          testProof = YamlTestProof.loadFromYaml(path).valueOr:
+            raiseAssert "Cannot read test vector: " & error
 
-    #       blockHash = BlockHash.fromHex(testProof.execution_block_header)
-    #       blockProof = BeaconChainBlockProof(
-    #         beaconBlockProof: array[11, Digest].fromHex(testProof.beacon_block_proof),
-    #         beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
-    #         historicalSummariesProof:
-    #           array[13, Digest].fromHex(testProof.historical_summaries_proof),
-    #         slot: Slot(testProof.slot),
-    #       )
+          blockHash = BlockHash.fromHex(testProof.execution_block_header)
+          blockProof = BeaconChainBlockProof(
+            beaconBlockProof: array[11, Digest].fromHex(testProof.beacon_block_proof),
+            beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
+            historicalSummariesProof:
+              array[13, Digest].fromHex(testProof.historical_summaries_proof),
+            slot: Slot(testProof.slot),
+          )
 
-    #     check verifyProof(
-    #       historicalSummaries, blockProof, blockHash, networkData.metadata.cfg
-    #     )
+        check verifyProof(
+          historicalSummaries, blockProof, blockHash, networkData.metadata.cfg
+        )

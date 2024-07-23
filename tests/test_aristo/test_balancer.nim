@@ -149,7 +149,7 @@ proc cleanUp(dx: var DbTriplet) =
 
 # ----------------------
 
-proc isDbEq(a, b: LayerDeltaRef; db: AristoDbRef; noisy = true): bool =
+proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
   ## Verify that argument filter `a` has the same effect on the
   ## physical/unfiltered backend of `db` as argument filter `b`.
   if a.isNil:
@@ -255,8 +255,8 @@ proc testBalancer*(
     # Resulting clause (11) filters from `aristo/README.md` example
     # which will be used in the second part of the tests
     var
-      c11Filter1 = LayerDeltaRef(nil)
-      c11Filter3 = LayerDeltaRef(nil)
+      c11Filter1 = LayerRef(nil)
+      c11Filter3 = LayerRef(nil)
 
     # Work through clauses (8)..(11) from `aristo/README.md` example
     block:
@@ -278,14 +278,14 @@ proc testBalancer*(
       block:
         let rc = db1.persist()
         xCheckRc rc.error == 0
-      xCheck db1.balancer == LayerDeltaRef(nil)
+      xCheck db1.balancer == LayerRef(nil)
       xCheck db2.balancer == db3.balancer
 
       block:
         let rc = db2.stow() # non-persistent
         xCheckRc rc.error == 0:
           noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
-      xCheck db1.balancer == LayerDeltaRef(nil)
+      xCheck db1.balancer == LayerRef(nil)
       xCheck db2.balancer != db3.balancer
 
       # Clause (11) from `aristo/README.md` example
@@ -293,7 +293,7 @@ proc testBalancer*(
       block:
         let rc = db2.persist()
         xCheckRc rc.error == 0
-      xCheck db2.balancer == LayerDeltaRef(nil)
+      xCheck db2.balancer == LayerRef(nil)
 
       # Check/verify backends
       block:
@@ -326,7 +326,7 @@ proc testBalancer*(
       block:
         let rc = db2.persist()
         xCheckRc rc.error == 0
-      xCheck db2.balancer == LayerDeltaRef(nil)
+      xCheck db2.balancer == LayerRef(nil)
       xCheck db1.balancer == db3.balancer
 
       # Clause (13) from `aristo/README.md` example

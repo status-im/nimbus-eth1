@@ -16,9 +16,9 @@ import
   std/tables,
   eth/common,
   results,
-  ./aristo_desc,
+  "."/[aristo_desc, aristo_layers],
   ./aristo_desc/desc_backend,
-  ./aristo_delta/delta_siblings
+  ./aristo_delta/[delta_merge, delta_reverse]
 
 # ------------------------------------------------------------------------------
 # Public functions, save to backend
@@ -34,17 +34,16 @@ proc deltaPersistent*(
     nxtFid = 0u64;                     # Next filter ID (if any)
     reCentreOk = false;
       ): Result[void,AristoError] =
-  ## Resolve (i.e. move) the backend filter into the physical backend database.
+  ## Resolve (i.e. move) the balancer into the physical backend database.
   ##
-  ## This needs write permission on the backend DB for the argument `db`
-  ## descriptor (see the function `aristo_desc.isCentre()`.) With the argument
-  ## flag `reCentreOk` passed `true`, write permission will be temporarily
+  ## This needs write permission on the backend DB for the descriptor argument
+  ## `db` (see the function `aristo_desc.isCentre()`.) If the argument flag
+  ## `reCentreOk` is passed `true`, write permission will be temporarily
   ## acquired when needed.
   ##
-  ## When merging the current backend filter, its reverse will be is stored as
-  ## back log on the filter fifos (so the current state can be retrieved.)
-  ## Also, other non-centre descriptors are updated so there is no visible
-  ## database change for these descriptors.
+  ## When merging the current backend filter, its reverse will be is stored
+  ## on other non-centre descriptors so there is no visible database change
+  ## for these.
   ##
   let be = db.backend
   if be.isNil:
@@ -64,9 +63,21 @@ proc deltaPersistent*(
   # Always re-centre to `parent` (in case `reCentreOk` was set)
   defer: discard parent.reCentre()
 
-  # Initialise peer filter balancer.
-  let updateSiblings = ? UpdateSiblingsRef.init db
-  defer: updateSiblings.rollback()
+  # Update forked balancers here do that errors are detected early (if any.)
+  if 0 < db.nForked:
+    let rev = db.revFilter(db.balancer).valueOr:
+      return err(error[1])
+    if not rev.isEmpty: # Can an empty `rev` happen at all?
+      var unsharedRevOk = true
+      for w in db.forked:
+        if not w.db.balancer.isValid:
+          unsharedRevOk = false
+        # The `rev` filter can be modified if one can make sure that it is
+        # not shared (i.e. only previously merged into the w.db.balancer.)
+        # Note that it is trivially true for a single fork.
+        let modLowerOk = w.isLast and unsharedRevOk
+        w.db.balancer = deltaMerge(
+          w.db.balancer, modUpperOk=false, rev, modLowerOk=modLowerOk)
 
   let lSst = SavedState(
     key:  EMPTY_ROOT_HASH,                       # placeholder for more
@@ -93,8 +104,9 @@ proc deltaPersistent*(
     if not db.stoLeaves.lruUpdate(mixKey, vtx):
       discard db.stoLeaves.lruAppend(mixKey, vtx, accLruSize)
 
-  # Update dudes and this descriptor
-  ? updateSiblings.update().commit()
+  # Done with balancer, all saved to backend
+  db.balancer = LayerRef(nil)
+
   ok()
 
 # ------------------------------------------------------------------------------

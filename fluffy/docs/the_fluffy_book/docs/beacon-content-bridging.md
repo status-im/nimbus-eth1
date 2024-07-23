@@ -14,7 +14,8 @@ make portal_bridge
 
 TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace with trusted block root.
 # --rest-url = access to beacon node API, default http://127.0.0.1:5052
-./build/portal_bridge beacon --trusted-block-root:${TRUSTED_BLOCK_ROOT} --rest-url:http://127.0.0.1:5052
+# --portal-rpc=url = access to the Portal node API, default http://127.0.0.1:8545
+./build/portal_bridge beacon --trusted-block-root:${TRUSTED_BLOCK_ROOT} --rest-url:http://127.0.0.1:5052 --portal-rpc-url:http://127.0.0.1:8545
 ```
 
 The `portal_bridge` will connect to Fluffy node over the JSON-RPC

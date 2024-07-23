@@ -15,14 +15,13 @@ import
   eth/common,
   "../.."/[constants, errors],
   ".."/[kvt, aristo],
+  ./backend/aristo_db,
   ./base/[api_tracking, base_config, base_desc, base_helpers]
 
 export
   CoreDbAccRef,
   CoreDbAccount,
   CoreDbApiError,
-  #CoreDbCaptFlags,
-  #CoreDbCaptRef,
   CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbError,
@@ -34,7 +33,6 @@ export
   CoreDbType
 
 when CoreDbEnableApiTracking:
-  {.warning: "*** Provided API logging for CoreDB (disabled by default)".}
   import
     chronicles
   logScope:
@@ -42,16 +40,18 @@ when CoreDbEnableApiTracking:
   const
     logTxt = "API"
 
-
 when CoreDbEnableProfiling:
-  {.warning: "*** Enabled profiling for CoreDB (also tracer API available)".}
   export
     CoreDbFnInx,
     CoreDbProfListRef
 
-
-when CoreDbEnableApiJumpTable:
-  discard
+when CoreDbEnableCaptJournal and false:
+  import
+    ./backend/aristo_trace
+  type
+    CoreDbCaptRef* = distinct TraceLogInstRef
+  func `$`(p: CoreDbCaptRef): string =
+    if p.distinctBase.isNil: "<nil>" else: "<capt>"
 else:
   import
     ../aristo/[
@@ -714,7 +714,7 @@ proc dispose*(tx: CoreDbTxRef) =
 # Public tracer methods
 # ------------------------------------------------------------------------------
 
-when false: # currently disabled
+when CoreDbEnableCaptJournal and false: # currently disabled
   proc newCapture*(
       db: CoreDbRef;
         ): CoreDbRc[CoreDbCaptRef] =

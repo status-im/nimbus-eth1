@@ -16,6 +16,7 @@
 import
   std/tables,
   results,
+  ../kvt_delta/delta_merge,
   ".."/[kvt_desc, kvt_delta]
 
 # ------------------------------------------------------------------------------
@@ -31,10 +32,8 @@ proc txStowOk*(
     return err(TxPendingTx)
   if 0 < db.stack.len:
     return err(TxStackGarbled)
-
-  if persistent and not db.deltaUpdateOk():
+  if persistent and not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
-
   ok()
 
 proc txStow*(
@@ -49,13 +48,20 @@ proc txStow*(
   ##
   ? db.txStowOk persistent
 
-  if 0 < db.top.delta.sTab.len:
-    db.deltaMerge db.top.delta
-    db.top.delta = LayerDeltaRef()
+  if 0 < db.top.sTab.len:
+    # Note that `deltaMerge()` will return the `db.top` argument if the
+    # `db.balancer` is `nil`. Also, the `db.balancer` is read-only. In the
+    # case that there are no forked peers one can ignore that restriction as
+    # no balancer is shared.
+    db.balancer = deltaMerge(
+      db.top, modUpperOk = true, db.balancer, modLowerOk = db.nForked()==0)
+
+    # New empty top layer
+    db.top = LayerRef()
 
   if persistent:
     # Move `balancer` data into persistent tables
-    ? db.deltaUpdate()
+    ? db.deltaPersistent()
 
   ok()
 

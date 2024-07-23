@@ -74,7 +74,7 @@ type
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
     stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    balancer*: LayerDeltaRef          ## Baland out concurrent backend access
+    balancer*: LayerRef               ## Balance out concurrent backend access
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: AristoTxRef               ## Latest active transaction
@@ -152,8 +152,8 @@ func isValid*(nd: NodeRef): bool =
 func isValid*(pid: PathID): bool =
   pid != VOID_PATH_ID
 
-func isValid*(filter: LayerDeltaRef): bool =
-  filter != LayerDeltaRef(nil)
+func isValid*(layer: LayerRef): bool =
+  layer != LayerRef(nil)
 
 func isValid*(root: Hash256): bool =
   root != EMPTY_ROOT_HASH
@@ -250,11 +250,11 @@ proc fork*(
   if not noTopLayer:
     clone.top = LayerRef.init()
     if not db.balancer.isNil:
-      clone.top.delta.vTop = db.balancer.vTop
+      clone.top.vTop = db.balancer.vTop
     else:
       let rc = clone.backend.getTuvFn()
       if rc.isOk:
-        clone.top.delta.vTop = rc.value
+        clone.top.vTop = rc.value
       elif rc.error != GetTuvNotFound:
         return err(rc.error)
 
@@ -263,13 +263,19 @@ proc fork*(
 
   ok clone
 
-iterator forked*(db: AristoDbRef): AristoDbRef =
+iterator forked*(db: AristoDbRef): tuple[db: AristoDbRef, isLast: bool] =
   ## Interate over all non centre descriptors (see comments on `reCentre()`
   ## for details.)
+  ##
+  ## The second `isLast` yielded loop entry is `true` if the yielded tuple
+  ## is the last entry in the list.
+  ##
   if not db.dudes.isNil:
-    for dude in db.getCentre.dudes.peers.items:
+    var nLeft = db.dudes.peers.len
+    for dude in db.dudes.peers.items:
       if dude != db.dudes.centre:
-        yield dude
+        nLeft.dec
+        yield (dude, nLeft == 1)
 
 func nForked*(db: AristoDbRef): int =
   ## Returns the number of non centre descriptors (see comments on `reCentre()`
@@ -313,12 +319,12 @@ iterator rstack*(db: AristoDbRef): LayerRef =
   for i in 0..<db.stack.len:
     yield db.stack[db.stack.len - i - 1]
 
-proc deltaAtLevel*(db: AristoDbRef, level: int): LayerDeltaRef =
+proc deltaAtLevel*(db: AristoDbRef, level: int): LayerRef =
   if level == 0:
-    db.top.delta
+    db.top
   elif level > 0:
     doAssert level <= db.stack.len
-    db.stack[^level].delta
+    db.stack[^level]
   elif level == -1:
     doAssert db.balancer != nil
     db.balancer

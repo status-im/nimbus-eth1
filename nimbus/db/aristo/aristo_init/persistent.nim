@@ -51,8 +51,7 @@ proc newAristoRdbDbRef(
         return err(rc.error)
       rc.value
   ok((AristoDbRef(
-    top: LayerRef(
-      delta: LayerDeltaRef(vTop: vTop)),
+    top: LayerRef(vTop: vTop),
     backend: be), oCfs))
 
 # ------------------------------------------------------------------------------

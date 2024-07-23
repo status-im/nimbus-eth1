@@ -304,7 +304,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --log-level="${LOG_LEVEL}" \
     --udp-port=$(( BASE_PORT + NUM_NODE )) \
     --data-dir="${NODE_DATA_DIR}" \
-    --portal-network="none" \
+    --network="none" \
     ${BOOTSTRAP_ARG} \
     --rpc \
     --rpc-address="127.0.0.1" \
@@ -315,7 +315,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --table-ip-limit=1024 \
     --bucket-ip-limit=24 \
     --bits-per-hop=1 \
-    --networks:beacon,history,state \
+    --portal-subnetworks:beacon,history,state \
     ${TRUSTED_BLOCK_ROOT_ARG} \
     ${RADIUS_ARG} \
     ${EXTRA_ARGS} \
@@ -334,8 +334,7 @@ if [[ "$PORTAL_BRIDGE" == "1" ]]; then
   echo "Starting portal bridge for beacon network."
   ./build/portal_bridge beacon \
     --rest-url="${REST_URL}" \
-    --rpc-address="127.0.0.1" \
-    --rpc-port="${BASE_RPC_PORT}" \
+    --portal-rpc-url="http://127.0.0.1:${BASE_RPC_PORT}"
     --backfill-amount=128 \
     ${TRUSTED_BLOCK_ROOT_ARG} \
     > "${DATA_DIR}/log_portal_bridge.txt" 2>&1 &

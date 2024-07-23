@@ -161,18 +161,18 @@ proc cost*(tx: Transaction): UInt256 =
 
 # core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
 # core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
-proc effectiveGasTip*(tx: Transaction; baseFee: GasPrice): GasPriceEx =
+proc effectiveGasTip*(tx: Transaction; baseFee: GasInt): GasPriceEx =
   ## The effective miner gas tip for the globally argument `baseFee`. The
   ## result (which is a price per gas) might well be negative.
   if tx.txType < TxEip1559:
-    (tx.gasPrice - baseFee.GasInt).GasPriceEx
+    (tx.gasPrice - baseFee).GasPriceEx
   else:
     # London, EIP1559
-    min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee.GasInt).GasPriceEx
+    min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee).GasPriceEx
 
 proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
   ## Variant of `effectiveGasTip()`
-  tx.effectiveGasTip(baseFee.truncate(uint64).GasPrice)
+  tx.effectiveGasTip(baseFee.truncate(GasInt))
 
 # ------------------------------------------------------------------------------
 # Public functions, item getters

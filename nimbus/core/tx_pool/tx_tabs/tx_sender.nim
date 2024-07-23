@@ -41,7 +41,7 @@ type
     ## Per address table This is table provided as a keyed queue so deletion\
     ## while traversing is supported and predictable.
     size: int             ## Total number of items
-    baseFee: GasPrice     ## For aggregating `effectiveGasTip` => `gasTipSum`
+    baseFee: GasInt     ## For aggregating `effectiveGasTip` => `gasTipSum`
     addrList: KeyedQueue[EthAddress,TxSenderSchedRef]
 
   TxSenderSchedule* = enum ##\
@@ -120,11 +120,11 @@ proc getRank(schedData: TxSenderSchedRef): int64 =
 
   profit.int64
 
-proc maxProfit(item: TxItemRef; baseFee: GasPrice): float64 =
+proc maxProfit(item: TxItemRef; baseFee: GasInt): float64 =
   ## Profit calculator
   item.tx.gasLimit.float64 * item.tx.effectiveGasTip(baseFee).float64 + item.tx.getTotalBlobGas.float64
 
-proc recalcProfit(nonceData: TxSenderNonceRef; baseFee: GasPrice) =
+proc recalcProfit(nonceData: TxSenderNonceRef; baseFee: GasInt) =
   ## Re-calculate profit value depending on `baseFee`
   nonceData.profit = 0.0
   var rc = nonceData.nonceList.ge(AccountNonce.low)
@@ -367,7 +367,7 @@ proc verify*(gt: var TxSenderTab): Result[void,TxInfo]
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc baseFee*(gt: var TxSenderTab): GasPrice =
+proc baseFee*(gt: var TxSenderTab): GasInt =
   ## Getter
   gt.baseFee
 
@@ -375,7 +375,7 @@ proc baseFee*(gt: var TxSenderTab): GasPrice =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `baseFee=`*(gt: var TxSenderTab; val: GasPrice) =
+proc `baseFee=`*(gt: var TxSenderTab; val: GasInt) =
   ## Setter. When invoked, there is *always* a re-calculation of the profit
   ## values stored with the sender address.
   gt.baseFee = val

@@ -107,7 +107,7 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Ensure that the user was willing to at least pay the base fee
   ## And to at least pay the current data gasprice
   if item.tx.txType >= TxEip1559:
-    if item.tx.maxFeePerGas.GasPriceEx < xp.chain.baseFee:
+    if item.tx.maxFeePerGas < xp.chain.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFeePerGas,
         baseFee = xp.chain.baseFee

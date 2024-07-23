@@ -23,23 +23,12 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc deltaMerge*(
-    db: KvtDbRef;                      # Database
-    delta: LayerDeltaRef;             # Filter to apply to database
-      ) =
-  ## Merge the argument `delta` into the balancer filter layer. Note that
-  ## this function has no control of the filter source. Having merged the
-  ## argument `delta`, all the `top` and `stack` layers should be cleared.
-  ##
-  db.merge(delta, db.balancer)
-
-
-proc deltaUpdateOk*(db: KvtDbRef): bool =
+proc deltaPersistentOk*(db: KvtDbRef): bool =
   ## Check whether the balancer filter can be merged into the backend
   not db.backend.isNil and db.isCentre
 
 
-proc deltaUpdate*(
+proc deltaPersistent*(
     db: KvtDbRef;                      # Database
     reCentreOk = false;
       ): Result[void,KvtError] =
@@ -71,17 +60,30 @@ proc deltaUpdate*(
   # Always re-centre to `parent` (in case `reCentreOk` was set)
   defer: discard parent.reCentre()
 
+  # Update forked balancers here do that errors are detected early (if any.)
+  if 0 < db.nForked:
+    let rev = db.revFilter(db.balancer).valueOr:
+      return err(error[1])
+    if 0  < rev.sTab.len: # Can an empty `rev` happen at all?
+      var unsharedRevOk = true
+      for w in db.forked:
+        if not w.db.balancer.isValid:
+          unsharedRevOk = false
+        # The `rev` filter can be modified if one can make sure that it is
+        # not shared (i.e. only previously merged into the w.db.balancer.)
+        # Note that it is trivially true for a single fork.
+        let modLowerOk = w.isLast and unsharedRevOk
+        w.db.balancer = deltaMerge(
+          w.db.balancer, modUpperOk=false, rev, modLowerOk=modLowerOk)
+
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
   be.putKvpFn(writeBatch, db.balancer.sTab.pairs.toSeq)
   ? be.putEndFn writeBatch
 
-  # Update peer filter balance.
-  let rev = db.deltaReverse db.balancer
-  for w in db.forked:
-    db.merge(rev, w.balancer)
+  # Done with balancer, all saved to backend
+  db.balancer = LayerRef(nil)
 
-  db.balancer = LayerDeltaRef(nil)
   ok()
 
 # ------------------------------------------------------------------------------

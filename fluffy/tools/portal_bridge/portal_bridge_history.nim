@@ -8,6 +8,7 @@
 {.push raises: [].}
 
 import
+  std/os,
   chronos,
   chronicles,
   web3/[eth_api, eth_api_types],
@@ -341,7 +342,7 @@ proc runBackfillLoop(
       # Grab a random era1 to backfill
       era = rng[].rand(int(era(network_metadata.mergeBlockNumber - 1)))
       root = accumulator.historicalEpochs[era]
-      eraFile = era1FileName("mainnet", Era1(era), Digest(data: root))
+      eraFile = era1Dir / era1FileName("mainnet", Era1(era), Digest(data: root))
 
     # Note:
     # There are two design options here:

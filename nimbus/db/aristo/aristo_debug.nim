@@ -291,8 +291,8 @@ proc ppXMap*(
       result.setLen(result.len - 1)
   result &= "}"
 
-proc ppFilter(
-    fl: LayerDeltaRef;
+proc ppBalancer(
+    fl: LayerRef;
     db: AristoDbRef;
     indent: int;
       ): string =
@@ -398,18 +398,18 @@ proc ppLayer(
     if 2 < nOKs:
       result &= "<layer>".doPrefix(false)
     if vTopOk:
-      result &= "".doPrefix(true) & "vTop=" & layer.delta.vTop.ppVid
+      result &= "".doPrefix(true) & "vTop=" & layer.vTop.ppVid
     if sTabOk:
       let
-        tLen = layer.delta.sTab.len
+        tLen = layer.sTab.len
         info = "sTab(" & $tLen & ")"
-      result &= info.doPrefix(0 < tLen) & layer.delta.sTab.ppSTab(db,indent+2)
+      result &= info.doPrefix(0 < tLen) & layer.sTab.ppSTab(db,indent+2)
     if kMapOk:
       let
-        tLen = layer.delta.kMap.len
+        tLen = layer.kMap.len
         info = "kMap(" & $tLen & ")"
       result &= info.doPrefix(0 < tLen)
-      result &= db.ppXMap(layer.delta.kMap, indent+2)
+      result &= db.ppXMap(layer.kMap, indent+2)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -528,53 +528,17 @@ proc pp*(
     layer: LayerRef;
     db: AristoDbRef;
     indent = 4;
+    balancerOk = false;
+    sTabOk = true,
+    kMapOk = true,
+    other = true,
       ): string =
-  layer.ppLayer(
-    db, vTopOk=true, sTabOk=true, kMapOk=true)
-
-proc pp*(
-    layer: LayerRef;
-    db: AristoDbRef;
-    xTabOk: bool;
-    indent = 4;
-      ): string =
-  layer.ppLayer(
-    db, vTopOk=true, sTabOk=xTabOk, kMapOk=true)
-
-proc pp*(
-    layer: LayerRef;
-    db: AristoDbRef;
-    xTabOk: bool;
-    kMapOk: bool;
-    other = false;
-    indent = 4;
-      ): string =
-  layer.ppLayer(
-    db, vTopOk=other, sTabOk=xTabOk, kMapOk=kMapOk)
-
-
-proc pp*(
-    db: AristoDbRef;
-    xTabOk: bool;
-    indent = 4;
-      ): string =
-  db.layersCc.pp(db, xTabOk=xTabOk, indent=indent)
-
-proc pp*(
-    db: AristoDbRef;
-    xTabOk: bool;
-    kMapOk: bool;
-    other = false;
-    indent = 4;
-      ): string =
-  db.layersCc.pp(db, xTabOk=xTabOk, kMapOk=kMapOk, other=other, indent=indent)
-
-proc pp*(
-    filter: LayerDeltaRef;
-    db = AristoDbRef(nil);
-    indent = 4;
-      ): string =
-  filter.ppFilter(db.orDefault(), indent)
+  if balancerOk:
+    layer.ppLayer(
+      db.orDefault(), vTopOk=other, sTabOk=sTabOk, kMapOk=kMapOk)
+  else:
+    layer.ppLayer(
+      db.orDefault(), vTopOk=other, sTabOk=sTabOk, kMapOk=kMapOk)
 
 proc pp*(
   be: BackendRef;
@@ -582,7 +546,7 @@ proc pp*(
   limit = 100;
   indent = 4;
     ): string =
-  result = db.balancer.ppFilter(db, indent+1) & indent.toPfx
+  result = db.balancer.ppBalancer(db, indent+1) & indent.toPfx
   case be.kind:
   of BackendMemory:
     result &= be.MemBackendRef.ppBe(db, limit, indent+1)
@@ -599,11 +563,12 @@ proc pp*(
     topOk = true;
     stackOk = true;
     kMapOk = true;
+    sTabOk = true;
     limit = 100;
       ): string =
   if topOk:
     result = db.layersCc.pp(
-      db, xTabOk=true, kMapOk=kMapOk, other=true, indent=indent)
+      db, sTabOk=sTabOk, kMapOk=kMapOk, other=true, indent=indent)
   let stackOnlyOk = stackOk and not (topOk or balancerOk or backendOk)
   if not stackOnlyOk:
     result &= indent.toPfx & "level=" & $db.stack.len
@@ -614,15 +579,15 @@ proc pp*(
       let
         m = layers.len - n - 1
         l = db.layersCc m
-        a = w.delta.kMap.values.toSeq.filterIt(not it.isValid).len
-        c = l.delta.kMap.values.toSeq.filterIt(not it.isValid).len
-      result &= "(" & $(w.delta.kMap.len - a) & "," & $a & ")"
-      lStr &= " " & $m & "=(" & $(l.delta.kMap.len - c) & "," & $c & ")"
+        a = w.kMap.values.toSeq.filterIt(not it.isValid).len
+        c = l.kMap.values.toSeq.filterIt(not it.isValid).len
+      result &= "(" & $(w.kMap.len - a) & "," & $a & ")"
+      lStr &= " " & $m & "=(" & $(l.kMap.len - c) & "," & $c & ")"
     result &= " =>" & lStr
   if backendOk:
     result &= indent.toPfx & db.backend.pp(db, limit=limit, indent)
   elif balancerOk:
-    result &= indent.toPfx & db.balancer.ppFilter(db, indent+1)
+    result &= indent.toPfx & db.balancer.ppBalancer(db, indent+1)
 
 proc pp*(sdb: MerkleSignRef; indent = 4): string =
   result = "" &

@@ -17,6 +17,8 @@ import
 # ------------------------------------------------------------------------------
 
 when LedgerEnableApiProfiling:
+  import api_tracking
+
   proc ldgProfData*(db: CoreDbRef): LedgerProfListRef =
     ## Return profiling data table (only available in profiling mode). If
     ## available (i.e. non-nil), result data can be organised by the functions
