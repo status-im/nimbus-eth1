@@ -490,7 +490,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       muirGlacierBlock:    Opt.some(0.BlockNumber),
       berlinBlock:         Opt.some(0.BlockNumber),
       londonBlock:         Opt.some(0.BlockNumber),
-      mergeForkBlock:      Opt.some(1735371.BlockNumber),
+      mergeForkBlock:      Opt.some(1450407.BlockNumber),
       terminalTotalDifficulty: Opt.some(sepoliaTTD),
       shanghaiTime:        Opt.some(1_677_557_088.EthTime),
       cancunTime:          Opt.some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
