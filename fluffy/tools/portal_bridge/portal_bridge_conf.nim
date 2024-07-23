@@ -65,8 +65,11 @@ type
       name: "log-format"
     .}: StdoutLogKind
 
-    portalRpcUrl* {.desc: "Portal node JSON-RPC API URL", name: "portal-rpc-url".}:
-      JsonRpcUrl
+    portalRpcUrl* {.
+      desc: "Portal node JSON-RPC API URL",
+      defaultValue: JsonRpcUrl(kind: HttpUrl, value: "http://127.0.0.1:8545"),
+      name: "portal-rpc-url"
+    .}: JsonRpcUrl
 
     case cmd* {.command, desc: "".}: PortalBridgeCmd
     of PortalBridgeCmd.beacon:
