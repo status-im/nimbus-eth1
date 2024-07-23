@@ -247,8 +247,7 @@ procSuite "Portal testnet tests":
       headerFile =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers/1000001-1000010.e2s"
       accumulatorFile =
-        "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-accumulator-00122.ssz"
-        # TODO: rename
+        "./vendor/portal-spec-tests/tests/mainnet/history/accumulator/epoch-record-00122.ssz"
       blockDataFile = "./fluffy/tests/blocks/mainnet_blocks_1000001_1000010.json"
 
     let
