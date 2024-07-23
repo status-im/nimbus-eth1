@@ -27,5 +27,5 @@ any of the running nodes their ENR.
 E.g. to manually add a Fluffy node to the local testnet run:
 
 ```bash
-./build/fluffy --rpc --portal-network:none --udp-port:9010 --nat:extip:127.0.0.1 --bootstrap-node:`cat ./local_testnet_data/node0/fluffy_node.enr`
+./build/fluffy --rpc --network:none --udp-port:9010 --nat:extip:127.0.0.1 --bootstrap-node:`cat ./local_testnet_data/node0/fluffy_node.enr`
 ```
