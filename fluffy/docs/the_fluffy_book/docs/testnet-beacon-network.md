@@ -44,5 +44,5 @@ make portal_bridge
 
 # --rpc-port 10000 = default node0
 # --rest-url = access to beacon node API, default http://127.0.0.1:5052
-./build/portal_bridge beacon --trusted-block-root:${TRUSTED_BLOCK_ROOT} --rest-url:http://127.0.0.1:5052 --backfill-amount:128 --rpc-port:10000
+./build/portal_bridge beacon --trusted-block-root:${TRUSTED_BLOCK_ROOT} --rest-url:http://127.0.0.1:5052 --backfill-amount:128 --portal-rpc-url:http://127.0.0.1:10000
 ```
