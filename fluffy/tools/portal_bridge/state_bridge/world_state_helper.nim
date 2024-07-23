@@ -75,8 +75,8 @@ proc applyStateDiff*(worldState: WorldStateRef, stateDiff: StateDiffRef) =
 
 proc applyBlockRewards*(
     worldState: WorldStateRef,
-    minerData: tuple[miner: EthAddress, number: uint64],
-    uncleMinersData: openArray[tuple[miner: EthAddress, number: uint64]],
+    minerData: tuple[miner: EthAddress, blockNumber: uint64],
+    uncleMinersData: openArray[tuple[miner: EthAddress, blockNumber: uint64]],
 ) =
   const baseReward = u256(5) * pow(u256(10), 18)
 
@@ -95,7 +95,7 @@ proc applyBlockRewards*(
     let
       uncleMinerAddress = EthAddress(uncleMinerData.miner)
       uncleReward =
-        (u256(8 + uncleMinerData.number - minerData.number) * baseReward) shr 3
+        (u256(8 + uncleMinerData.blockNumber - minerData.blockNumber) * baseReward) shr 3
     var accState = worldState.getAccount(uncleMinerAddress)
     accState.addBalance(uncleReward)
     worldState.setAccount(uncleMinerAddress, accState)

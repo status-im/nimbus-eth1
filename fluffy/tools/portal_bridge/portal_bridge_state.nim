@@ -25,9 +25,11 @@ import
 
 type BlockDataRef = ref object
   blockNumber: uint64
-  blockObject: BlockObject
+  blockHash: KeccakHash
+  miner: EthAddress
+  uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
+  stateRoot: KeccakHash
   stateDiffs: seq[StateDiffRef]
-  uncleBlocks: seq[BlockObject]
 
 type BlockOffersRef = ref object
   blockNumber: uint64
@@ -90,9 +92,11 @@ proc runBackfillCollectBlockDataLoop(
     await blockDataQueue.addLast(
       BlockDataRef(
         blockNumber: currentBlockNumber,
-        blockObject: blockObject,
+        blockHash: KeccakHash.fromBytes(blockObject.hash.bytes()),
+        stateRoot: KeccakHash.fromBytes(blockObject.stateRoot.bytes()),
+        miner: blockObject.miner.EthAddress,
+        uncles: uncleBlocks.mapIt((it.miner.EthAddress, it.number.uint64)),
         stateDiffs: stateDiffs,
-        uncleBlocks: uncleBlocks,
       )
     )
 
@@ -154,30 +158,28 @@ proc runBackfillBuildBlockOffersLoop(
 
       for stateDiff in blockData.stateDiffs:
         worldState.applyStateDiff(stateDiff)
-      let
-        minerData =
-          (EthAddress(blockData.blockObject.miner), blockData.blockObject.number.uint64)
-        uncleMinersData =
-          blockData.uncleBlocks.mapIt((EthAddress(it.miner), it.number.uint64))
-      worldState.applyBlockRewards(minerData, uncleMinersData)
 
-      doAssert(blockData.blockObject.stateRoot.bytes() == worldState.stateRoot.data)
+      worldState.applyBlockRewards(
+        (blockData.miner, blockData.blockNumber), blockData.uncles
+      )
+
+      doAssert(blockData.stateRoot == worldState.stateRoot)
       trace "State diffs successfully applied to block number:",
         blockNumber = blockData.blockNumber
 
-      var builder = OffersBuilderRef.init(
-        worldState, KeccakHash.fromBytes(blockData.blockObject.hash.bytes())
-      )
-      builder.buildBlockOffers()
+      # var builder = OffersBuilderRef.init(
+      #   worldState, KeccakHash.fromBytes(blockData.blockHash.bytes())
+      # )
+      # builder.buildBlockOffers()
 
-      await blockOffersQueue.addLast(
-        BlockOffersRef(
-          blockNumber: blockData.blockNumber,
-          accountTrieOffers: builder.getAccountTrieOffers(),
-          contractTrieOffers: builder.getContractTrieOffers(),
-          contractCodeOffers: builder.getContractCodeOffers(),
-        )
-      )
+      # await blockOffersQueue.addLast(
+      #   BlockOffersRef(
+      #     blockNumber: blockData.blockNumber,
+      #     accountTrieOffers: builder.getAccountTrieOffers(),
+      #     contractTrieOffers: builder.getContractTrieOffers(),
+      #     contractCodeOffers: builder.getContractCodeOffers(),
+      #   )
+      # )
 
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockDataRef],
