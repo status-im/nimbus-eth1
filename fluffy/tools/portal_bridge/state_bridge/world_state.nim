@@ -174,12 +174,3 @@ iterator updatedStorageProofs*(
 
 proc getUpdatedBytecode*(state: WorldStateRef, address: EthAddress): seq[byte] =
   state.db.getBytecodeUpdatedCache().get(toAccountKey(address).data)
-
-# Returns the updated bytecode for all accounts from the last transaction
-# iterator updatedBytecode*(state: WorldStateRef): (EthAddress, seq[byte]) =
-#   let updatedCache = state.db.getBytecodeUpdatedCache()
-#   for key, value in updatedCache.pairsInMemoryDB():
-#     if key == emptyRlpHash.data:
-#       continue # skip the empty node created on initialization
-#     let address = state.getAccountPreImage(KeccakHash.fromBytes(key))
-#     yield (address, value)

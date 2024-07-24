@@ -129,6 +129,26 @@ proc getStorageUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
 proc getBytecodeUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   db.bytecodeBackend.updatedCache
 
+proc put*(db: DatabaseRef, key, val: openArray[byte]) =
+  let tx = db.rocksDb.beginTransaction()
+  defer:
+    tx.close()
+
+  # using default column family
+  doAssert tx.put(key, val).isOk()
+  doAssert tx.commit().isOk()
+
+proc get*(db: DatabaseRef, key: openArray[byte]): seq[byte] =
+  let tx = db.rocksDb.beginTransaction()
+  defer:
+    tx.close()
+
+  # using default column family
+  if tx.get(key, onData).get():
+    tx.get(key).get()
+  else:
+    @[]
+
 proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   if not db.pendingTransaction.isNil():
     return err("DatabaseRef: Pending transaction already in progress")

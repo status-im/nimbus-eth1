@@ -32,11 +32,12 @@ proc applyGenesisAccounts*(worldState: WorldStateRef, alloc: GenesisAlloc) =
     worldState.setAccount(address, accState)
 
 proc applyStateDiff*(worldState: WorldStateRef, stateDiff: StateDiffRef) =
-  for address, balanceDiff in stateDiff.balances:
+  for i in 0 ..< stateDiff.balances.len():
     let
-      nonceDiff = stateDiff.nonces.getOrDefault(address)
-      codeDiff = stateDiff.code.getOrDefault(address)
-      storageDiff = stateDiff.storage.getOrDefault(address)
+      (address, balanceDiff) = stateDiff.balances[i]
+      (_, nonceDiff) = stateDiff.nonces[i]
+      (_, codeDiff) = stateDiff.code[i]
+      (_, storageDiff) = stateDiff.storage[i]
 
     var
       deleteAccount = false
@@ -59,7 +60,7 @@ proc applyStateDiff*(worldState: WorldStateRef, stateDiff: StateDiffRef) =
     elif codeDiff.kind == delete:
       doAssert deleteAccount == true
 
-    for slotKey, slotDiff in storageDiff:
+    for (slotKey, slotDiff) in storageDiff:
       if slotDiff.kind == create or slotDiff.kind == update:
         if slotDiff.after == 0:
           accState.deleteStorage(slotKey)

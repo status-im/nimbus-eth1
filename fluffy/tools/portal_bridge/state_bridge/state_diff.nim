@@ -30,11 +30,11 @@ type
     before*: StateValue
     after*: StateValue
 
-  StateDiffRef* = ref object
-    balances*: Table[EthAddress, StateValueDiff[UInt256]]
-    nonces*: Table[EthAddress, StateValueDiff[AccountNonce]]
-    storage*: Table[EthAddress, Table[UInt256, StateValueDiff[UInt256]]]
-    code*: Table[EthAddress, StateValueDiff[Code]]
+  StateDiffRef* = object
+    balances*: seq[(EthAddress, StateValueDiff[UInt256])]
+    nonces*: seq[(EthAddress, StateValueDiff[AccountNonce])]
+    storage*: seq[(EthAddress, seq[(UInt256, StateValueDiff[UInt256])])]
+    code*: seq[(EthAddress, StateValueDiff[Code])]
 
 proc toStateValue(T: type UInt256, hex: string): T {.raises: [ValueError].} =
   UInt256.fromHex(hex)
@@ -69,23 +69,23 @@ proc toStateValueDiff(
     doAssert false # unreachable
 
 proc toStateDiff(stateDiffJson: JsonNode): StateDiffRef {.raises: [ValueError].} =
-  let stateDiff = StateDiffRef()
+  var stateDiff = StateDiffRef()
 
   for addrJson, accJson in stateDiffJson.pairs:
     let address = EthAddress.fromHex(addrJson)
 
-    stateDiff.balances[address] = toStateValueDiff(accJson["balance"], UInt256)
-    stateDiff.nonces[address] = toStateValueDiff(accJson["nonce"], AccountNonce)
-    stateDiff.code[address] = toStateValueDiff(accJson["code"], Code)
+    stateDiff.balances.add((address, toStateValueDiff(accJson["balance"], UInt256)))
+    stateDiff.nonces.add((address, toStateValueDiff(accJson["nonce"], AccountNonce)))
+    stateDiff.code.add((address, toStateValueDiff(accJson["code"], Code)))
 
     let storageDiff = accJson["storage"]
-    var accountStorage: Table[UInt256, StateValueDiff[UInt256]]
+    var accountStorage: seq[(UInt256, StateValueDiff[UInt256])]
 
     for slotKeyJson, slotValueJson in storageDiff.pairs:
       let slotKey = UInt256.fromHex(slotKeyJson)
-      accountStorage[slotKey] = toStateValueDiff(slotValueJson, UInt256)
+      accountStorage.add((slotKey, toStateValueDiff(slotValueJson, UInt256)))
 
-    stateDiff.storage[address] = ensureMove(accountStorage)
+    stateDiff.storage.add((address, ensureMove(accountStorage)))
 
   stateDiff
 

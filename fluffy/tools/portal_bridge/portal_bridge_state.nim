@@ -12,7 +12,6 @@ import
   chronicles,
   chronos,
   stint,
-  # stew/byteutils,
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[eth_types, eth_types_rlp],
@@ -23,7 +22,7 @@ import
   ./state_bridge/[database, state_diff, world_state_helper, offers_builder],
   ./[portal_bridge_conf, portal_bridge_common]
 
-type BlockDataRef = ref object
+type BlockData = object
   blockNumber: uint64
   blockHash: KeccakHash
   miner: EthAddress
@@ -37,60 +36,59 @@ type BlockOffersRef = ref object
   contractTrieOffers: seq[(ContractTrieNodeKey, ContractTrieNodeOffer)]
   contractCodeOffers: seq[(ContractCodeKey, ContractCodeOffer)]
 
+proc getBlockData(db: DatabaseRef, blockNumber: uint64): Opt[BlockData] =
+  try:
+    let blockDataBytes = db.get(rlp.encode(blockNumber))
+    if blockDataBytes.len() == 0:
+      return Opt.none(BlockData)
+
+    Opt.some(rlp.decode(blockDataBytes, BlockData))
+  except RlpError as e:
+    raiseAssert(e.msg) # Should never happen
+
+proc putBlockData(db: DatabaseRef, blockNumber: uint64, blockData: BlockData) =
+  try:
+    db.put(rlp.encode(blockNumber), rlp.encode(blockData))
+  except RlpError as e:
+    raiseAssert(e.msg) # Should never happen
+
 proc runBackfillCollectBlockDataLoop(
-    blockDataQueue: AsyncQueue[BlockDataRef],
+    db: DatabaseRef,
+    blockDataQueue: AsyncQueue[BlockData],
     web3Client: RpcClient,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill collect block data loop"
-
-  if web3Client of RpcHttpClient:
-    warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
-
   var currentBlockNumber = startBlockNumber
 
   while true:
     if currentBlockNumber mod 10000 == 0:
       info "Collecting block data for block number: ", blockNumber = currentBlockNumber
 
-    let
-      blockId = blockId(currentBlockNumber)
-      blockRequest = web3Client.getBlockByNumber(blockId, false)
-      stateDiffsRequest = web3Client.getStateDiffsByBlockNumber(blockId)
-
-      blockObject = (await blockRequest).valueOr:
-        error "Failed to get block", error
-        await sleepAsync(1.seconds)
-        continue
-
-    var uncleBlockRequests: seq[Future[Result[BlockObject, string]]]
-    for i in 0 .. blockObject.uncles.high:
-      uncleBlockRequests.add(
-        web3Client.getUncleByBlockNumberAndIndex(blockId, i.Quantity)
-      )
-
-    let stateDiffs = (await stateDiffsRequest).valueOr:
-      error "Failed to get state diffs", error
-      await sleepAsync(1.seconds)
-      continue
-
-    var uncleBlocks: seq[BlockObject]
-    for uncleBlockRequest in uncleBlockRequests:
-      try:
-        let uncleBlock = (await uncleBlockRequest).valueOr:
-          error "Failed to get uncle blocks", error
+    let blockData = db.getBlockData(currentBlockNumber).valueOr:
+      # block data doesn't exist in db so we fetch it via RPC
+      let
+        blockId = blockId(currentBlockNumber)
+        blockObject = (await web3Client.getBlockByNumber(blockId, false)).valueOr:
+          error "Failed to get block", error
           await sleepAsync(1.seconds)
-          break
+          continue
+        stateDiffs = (await web3Client.getStateDiffsByBlockNumber(blockId)).valueOr:
+          error "Failed to get state diffs", error
+          await sleepAsync(1.seconds)
+          continue
+
+      var uncleBlocks: seq[BlockObject]
+      for i in 0 .. blockObject.uncles.high:
+        let uncleBlock = (
+          await web3Client.getUncleByBlockNumberAndIndex(blockId, i.Quantity)
+        ).valueOr:
+          error "Failed to get uncle block", error
+          await sleepAsync(1.seconds)
+          continue
         uncleBlocks.add(uncleBlock)
-      except CatchableError as e:
-        error "Failed to get uncleBlockRequest", error = e.msg
-        break
 
-    if uncleBlocks.len() < uncleBlockRequests.len():
-      continue
-
-    await blockDataQueue.addLast(
-      BlockDataRef(
+      let blockData = BlockData(
         blockNumber: currentBlockNumber,
         blockHash: KeccakHash.fromBytes(blockObject.hash.bytes()),
         stateRoot: KeccakHash.fromBytes(blockObject.stateRoot.bytes()),
@@ -98,49 +96,56 @@ proc runBackfillCollectBlockDataLoop(
         uncles: uncleBlocks.mapIt((it.miner.EthAddress, it.number.uint64)),
         stateDiffs: stateDiffs,
       )
-    )
+      db.putBlockData(currentBlockNumber, blockData)
+      blockData
 
+    await blockDataQueue.addLast(blockData)
     inc currentBlockNumber
 
 proc runBackfillBuildBlockOffersLoop(
-    blockDataQueue: AsyncQueue[BlockDataRef],
+    db: DatabaseRef,
+    blockDataQueue: AsyncQueue[BlockData],
     blockOffersQueue: AsyncQueue[BlockOffersRef],
-    stateDir: string,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill build block offers loop"
 
-  let db = DatabaseRef.init(stateDir).get()
-  defer:
-    db.close()
-
   let worldState = db.withTransaction:
-    let
-      # Requires an active transaction because it writes an emptyRlp node
-      # to the accounts HexaryTrie on initialization
-      ws = WorldStateRef.init(db)
-      genesisAccounts =
+    # Requires an active transaction because it writes an emptyRlp node
+    # to the accounts HexaryTrie on initialization
+    let ws = WorldStateRef.init(db)
+
+    # wait for the first block data to be put on the queue
+    # so that we can access the first block once available
+    while blockDataQueue.empty():
+      await sleepAsync(100.milliseconds)
+    # peek but don't remove it so that it can be processed later
+    let firstBlock = blockDataQueue[0]
+
+    # Only apply genesis accounts if starting from block 1
+    if firstBlock.blockNumber == 1:
+      info "Building state for genesis"
+
+      let genesisAccounts =
         try:
           genesisBlockForNetwork(MainNet).alloc
         except CatchableError as e:
           raiseAssert(e.msg) # Should never happen
-    ws.applyGenesisAccounts(genesisAccounts)
+      ws.applyGenesisAccounts(genesisAccounts)
 
-    let genesisBlockHash = KeccakHash.fromHex(
-      "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
-    )
-
-    var builder = OffersBuilderRef.init(ws, genesisBlockHash)
-    builder.buildBlockOffers()
-
-    await blockOffersQueue.addLast(
-      BlockOffersRef(
-        blockNumber: 0.uint64,
-        accountTrieOffers: builder.getAccountTrieOffers(),
-        contractTrieOffers: builder.getContractTrieOffers(),
-        contractCodeOffers: builder.getContractCodeOffers(),
+      let genesisBlockHash = KeccakHash.fromHex(
+        "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
       )
-    )
+      var builder = OffersBuilderRef.init(ws, genesisBlockHash)
+      builder.buildBlockOffers()
 
+      await blockOffersQueue.addLast(
+        BlockOffersRef(
+          blockNumber: 0.uint64,
+          accountTrieOffers: builder.getAccountTrieOffers(),
+          contractTrieOffers: builder.getContractTrieOffers(),
+          contractCodeOffers: builder.getContractCodeOffers(),
+        )
+      )
     ws
 
   while true:
@@ -153,8 +158,8 @@ proc runBackfillBuildBlockOffersLoop(
     # because the DatabaseRef currently only supports reading and writing to/from
     # a single active transaction.
     db.withTransaction:
-      defer:
-        worldState.clearPreimages()
+      # defer:
+      #   worldState.clearPreimages()
 
       for stateDiff in blockData.stateDiffs:
         worldState.applyStateDiff(stateDiff)
@@ -182,8 +187,7 @@ proc runBackfillBuildBlockOffersLoop(
       # )
 
 proc runBackfillMetricsLoop(
-    blockDataQueue: AsyncQueue[BlockDataRef],
-    blockOffersQueue: AsyncQueue[BlockOffersRef],
+    blockDataQueue: AsyncQueue[BlockData], blockOffersQueue: AsyncQueue[BlockOffersRef]
 ) {.async: (raises: [CancelledError]).} =
   debug "Starting state backfill metrics loop"
 
@@ -196,6 +200,12 @@ proc runState*(config: PortalBridgeConf) =
   let
     #portalClient = newRpcClientConnect(config.portalRpcUrl)
     web3Client = newRpcClientConnect(config.web3UrlState)
+    db = DatabaseRef.init(config.stateDir.string).get()
+  defer:
+    db.close()
+
+  if web3Client of RpcHttpClient:
+    warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
 
   # TODO:
   # Here we'd want to implement initially a loop that backfills the state
@@ -215,20 +225,16 @@ proc runState*(config: PortalBridgeConf) =
         # This will become a parameter in the config once we can support it
       bufferSize = 1000 # Should we make this configurable?
 
-    info "Starting state backfill from block number: ", startBlockNumber
-
     let
-      blockDataQueue = newAsyncQueue[BlockDataRef](bufferSize)
+      blockDataQueue = newAsyncQueue[BlockData](bufferSize)
       blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
+    info "Starting state backfill from block number: ", startBlockNumber
+
     asyncSpawn runBackfillCollectBlockDataLoop(
-      blockDataQueue, web3Client, startBlockNumber
+      db, blockDataQueue, web3Client, startBlockNumber
     )
-
-    asyncSpawn runBackfillBuildBlockOffersLoop(
-      blockDataQueue, blockOffersQueue, config.stateDir.string
-    )
-
+    asyncSpawn runBackfillBuildBlockOffersLoop(db, blockDataQueue, blockOffersQueue)
     asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)
 
   while true:
