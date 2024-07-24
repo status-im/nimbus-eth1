@@ -1,4 +1,4 @@
-FROM debian:stable-slim as build
+FROM debian:stable-slim AS build
 
 ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
 ENV NPROC=2
@@ -23,5 +23,10 @@ RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nim
   make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" fluffy && \
   mv build/fluffy /usr/local/bin/fluffy
 
-FROM debian:stable-slim as app
+# --------------------------------- #
+# Starting new image to reduce size #
+# --------------------------------- #
+FROM debian:stable-slim AS deploy
 COPY --from=build /usr/local/bin/fluffy /usr/local/bin/fluffy
+
+ENTRYPOINT ["/usr/local/bin/fluffy"]
