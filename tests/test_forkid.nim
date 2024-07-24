@@ -49,14 +49,14 @@ const
   ]
 
   SepoliaNetIDs = [
-    (number: 0'u64,       time: 0'u64, id: (crc: 0xfe3366e7'u32, next: 1735371'u64)),             # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin and first London block
-    (number: 1735370'u64, time: 0'u64, id: (crc: 0xfe3366e7'u32, next: 1735371'u64)),             # Last London block
-    (number: 1735371'u64, time: 0'u64, id: (crc: 0xb96cbd13'u32, next: 1677557088'u64)),          # First MergeNetsplit block
-    (number: 1735372'u64, time: 1677557087'u64, id: (crc: 0xb96cbd13'u32, next: 1677557088'u64)), # Last MergeNetsplit block
-    (number: 1735372'u64, time: 1677557088'u64, id: (crc: 0xf7f9bc08'u32, next: 1706655072'u64)), # First Shanghai block
-    (number: 1735372'u64, time: 1706655071'u64, id: (crc: 0xf7f9bc08'u32, next: 1706655072'u64)), # Last Shanghai block
-    (number: 1735372'u64, time: 1706655072'u64, id: (crc: 0x88cf81d9'u32, next: 0'u64)),          # First Cancun block
-    (number: 1735372'u64, time: 2706655072'u64, id: (crc: 0x88cf81d9'u32, next: 0'u64)),          # Future Cancun block
+    (number: 0'u64,       time: 0'u64, id: (crc: 0xfe3366e7'u32, next: 1450409'u64)),             # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin and first London block
+    (number: 1450408'u64, time: 0'u64, id: (crc: 0xfe3366e7'u32, next: 1450409'u64)),             # Last London block
+    (number: 1450409'u64, time: 0'u64, id: (crc: 0x4a85c09c'u32, next: 1677557088'u64)),          # First MergeNetsplit block
+    (number: 1450410'u64, time: 1677557087'u64, id: (crc: 0x4a85c09c'u32, next: 1677557088'u64)), # Last MergeNetsplit block
+    (number: 1450410'u64, time: 1677557088'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # First Shanghai block
+    (number: 1450410'u64, time: 1706655071'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # Last Shanghai block
+    (number: 1450410'u64, time: 1706655072'u64, id: (crc: 0xa6260961'u32, next: 0'u64)),          # First Cancun block
+    (number: 1450410'u64, time: 2706655072'u64, id: (crc: 0xa6260961'u32, next: 0'u64)),          # Future Cancun block
   ]
 
   HoleskyNetIDs = [
