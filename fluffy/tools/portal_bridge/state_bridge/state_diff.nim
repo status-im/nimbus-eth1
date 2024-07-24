@@ -30,11 +30,16 @@ type
     before*: StateValue
     after*: StateValue
 
-  StateDiffRef* = object
-    balances*: seq[(EthAddress, StateValueDiff[UInt256])]
-    nonces*: seq[(EthAddress, StateValueDiff[AccountNonce])]
-    storage*: seq[(EthAddress, seq[(UInt256, StateValueDiff[UInt256])])]
-    code*: seq[(EthAddress, StateValueDiff[Code])]
+  SlotDiff* = tuple[slotKey: UInt256, slotValueDiff: StateValueDiff[UInt256]]
+
+  AccountDiff* = object
+    address*: EthAddress
+    balanceDiff*: StateValueDiff[UInt256]
+    nonceDiff*: StateValueDiff[AccountNonce]
+    storageDiff*: seq[SlotDiff]
+    codeDiff*: StateValueDiff[Code]
+
+  TransactionDiff* = seq[AccountDiff]
 
 proc toStateValue(T: type UInt256, hex: string): T {.raises: [ValueError].} =
   UInt256.fromHex(hex)
@@ -68,45 +73,49 @@ proc toStateValueDiff(
   else:
     doAssert false # unreachable
 
-proc toStateDiff(stateDiffJson: JsonNode): StateDiffRef {.raises: [ValueError].} =
-  var stateDiff = StateDiffRef()
+proc toTransactionDiff(
+    stateDiffJson: JsonNode
+): TransactionDiff {.raises: [ValueError].} =
+  var txDiff = newSeqOfCap[AccountDiff](stateDiffJson.len())
 
-  for addrJson, accJson in stateDiffJson.pairs:
-    let address = EthAddress.fromHex(addrJson)
+  for addrJson, accJson in stateDiffJson:
+    let storageDiffJson = accJson["storage"]
+    var storageDiff = newSeqOfCap[SlotDiff](storageDiffJson.len())
 
-    stateDiff.balances.add((address, toStateValueDiff(accJson["balance"], UInt256)))
-    stateDiff.nonces.add((address, toStateValueDiff(accJson["nonce"], AccountNonce)))
-    stateDiff.code.add((address, toStateValueDiff(accJson["code"], Code)))
+    for slotKeyJson, slotValueJson in storageDiffJson:
+      storageDiff.add(
+        (UInt256.fromHex(slotKeyJson), toStateValueDiff(slotValueJson, UInt256))
+      )
 
-    let storageDiff = accJson["storage"]
-    var accountStorage: seq[(UInt256, StateValueDiff[UInt256])]
+    let accountDiff = AccountDiff(
+      address: EthAddress.fromHex(addrJson),
+      balanceDiff: toStateValueDiff(accJson["balance"], UInt256),
+      nonceDiff: toStateValueDiff(accJson["nonce"], AccountNonce),
+      storageDiff: storageDiff,
+      codeDiff: toStateValueDiff(accJson["code"], Code),
+    )
+    txDiff.add(accountDiff)
 
-    for slotKeyJson, slotValueJson in storageDiff.pairs:
-      let slotKey = UInt256.fromHex(slotKeyJson)
-      accountStorage.add((slotKey, toStateValueDiff(slotValueJson, UInt256)))
+  txDiff
 
-    stateDiff.storage.add((address, ensureMove(accountStorage)))
-
-  stateDiff
-
-proc toStateDiffs(
+proc toTransactionDiffs(
     blockTraceJson: JsonNode
-): seq[StateDiffRef] {.raises: [ValueError].} =
-  var stateDiffs = newSeqOfCap[StateDiffRef](blockTraceJson.len())
+): seq[TransactionDiff] {.raises: [ValueError].} =
+  var txDiffs = newSeqOfCap[TransactionDiff](blockTraceJson.len())
   for blockTrace in blockTraceJson:
-    stateDiffs.add(blockTrace["stateDiff"].toStateDiff())
+    txDiffs.add(blockTrace["stateDiff"].toTransactionDiff())
 
-  stateDiffs
+  txDiffs
 
 proc getStateDiffsByBlockNumber*(
     client: RpcClient, blockId: BlockIdentifier
-): Future[Result[seq[StateDiffRef], string]] {.async: (raises: []).} =
+): Future[Result[seq[TransactionDiff], string]] {.async: (raises: []).} =
   const traceOpts = @["stateDiff"]
 
   try:
     let blockTraceJson = await client.trace_replayBlockTransactions(blockId, traceOpts)
     if blockTraceJson.isNil:
       return err("EL failed to provide requested state diff")
-    ok(blockTraceJson.toStateDiffs())
+    ok(blockTraceJson.toTransactionDiffs())
   except CatchableError as e:
     return err("EL JSON-RPC trace_replayBlockTransactions failed: " & e.msg)

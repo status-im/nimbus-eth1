@@ -28,7 +28,7 @@ type BlockData = object
   miner: EthAddress
   uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
   stateRoot: KeccakHash
-  stateDiffs: seq[StateDiffRef]
+  stateDiffs: seq[TransactionDiff]
 
 type BlockOffersRef = ref object
   blockNumber: uint64
