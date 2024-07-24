@@ -72,7 +72,7 @@ func fromPortalBlockBody*(
     ok(
       BlockBody(
         transactions: transactions,
-        uncles: @[], # Uncles must be empty: TODO where validation?
+        uncles: @[], # Uncles must be empty, this is verified in `validateBlockBody`
         withdrawals: Opt.some(withdrawals),
       )
     )
@@ -85,7 +85,6 @@ func fromPortalBlockBodyOrRaise*(
   ## Get the EL BlockBody from one of the SSZ-decoded Portal BlockBody types.
   ## Will raise Assertion in case of invalid RLP encodings. Only use of data
   ## has been validated before!
-  # TODO: Using ValueOr here gives compile error
   let res = BlockBody.fromPortalBlockBody(body)
   if res.isOk():
     res.get()
@@ -149,11 +148,6 @@ func encode*(blockBody: BlockBody): seq[byte] =
   else:
     SSZ.encode(PortalBlockBodyLegacy.fromBlockBody(blockBody))
 
-func encode*(blockBody: BlockBody, T: type PortalBlockBodyShanghai): seq[byte] =
-  let portalBlockBody = PortalBlockBodyShanghai.fromBlockBody(blockBody)
-
-  SSZ.encode(portalBlockBody)
-
 func encode*(receipts: seq[Receipt]): seq[byte] =
   let portalReceipts = PortalReceipts.fromReceipts(receipts)
 
@@ -168,9 +162,9 @@ proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
   for i, item in items:
     try:
       tr.put(rlp.encode(i.uint), item.asSeq())
-    except CatchableError as e:
-      # tr.put now is a generic interface to whatever underlying db
-      # and it can raise exception if the backend db is something like aristo
+    except RlpError as e:
+      # RlpError should not occur
+      # TODO: trace down why it might raise this
       raiseAssert(e.msg)
 
   return tr.rootHash
@@ -310,7 +304,8 @@ proc validateReceipts*(
 proc validateReceiptsBytes*(
     bytes: openArray[byte], receiptsRoot: KeccakHash
 ): Result[seq[Receipt], string] =
-  ## Fully decode the SSZ Block Body and validate it against the header.
+  ## Fully decode the SSZ encoded receipts and validate it against the header's
+  ## receipts root.
   let receipts = ?decodeSsz(bytes, PortalReceipts)
 
   ?validateReceipts(receipts, receiptsRoot)
