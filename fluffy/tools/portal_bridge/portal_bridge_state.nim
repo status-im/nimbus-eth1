@@ -191,6 +191,10 @@ proc runBackfillBuildBlockOffersLoop(
         (blockData.miner, blockData.blockNumber), blockData.uncles
       )
 
+      if blockData.blockNumber == 1_920_000:
+        info "Applying state updates for DAO hard fork"
+        worldState.applyDAOHardFork()
+
       doAssert(
         blockData.stateRoot == worldState.stateRoot,
         "State root mismatch at block number: " & $blockData.blockNumber,
@@ -249,27 +253,27 @@ proc runState*(config: PortalBridgeConf) =
   # inside the bridge, and getting the blocks from era1 files.
 
   if config.backfillState:
-    const bufferSize = 1000 # Should we make this configurable?
-
-    let
-      blockDataQueue = newAsyncQueue[BlockData](bufferSize)
-      blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
-
-    if config.startBlockNumber < 1:
-      warn "Start block should be greater than 0"
-      quit QuitFailure
-
-    let lastPersistedBlockNumber = db.getLastPersistedBlockNumber().valueOr:
-      info "No last persisted block found in the database so starting from block 1"
-      1.uint64
-
-    if config.startBlockNumber > lastPersistedBlockNumber:
-      warn "Start block must be less than or equal to the last persisted block: ",
-        lastPersistedBlockNumber
-      quit QuitFailure
+    let maybeLastPersistedBlock = db.getLastPersistedBlockNumber()
+    if maybeLastPersistedBlock.isSome():
+      info "Last persisted block found in the database: ",
+        lastPersistedBlock = maybeLastPersistedBlock.get()
+      if config.startBlockNumber < 1 or
+          config.startBlockNumber > maybeLastPersistedBlock.get():
+        warn "Start block must be set to a value between 1 and the last persisted block"
+        quit QuitFailure
+    else:
+      info "No last persisted block found in the database"
+      if config.startBlockNumber != 1:
+        warn "Start block must be set to 1"
+        quit QuitFailure
 
     info "Starting state backfill from block number: ",
       startBlockNumber = config.startBlockNumber
+
+    const bufferSize = 1000 # Should we make this configurable?
+    let
+      blockDataQueue = newAsyncQueue[BlockData](bufferSize)
+      blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
     asyncSpawn runBackfillCollectBlockDataLoop(
       db, blockDataQueue, web3Client, config.startBlockNumber

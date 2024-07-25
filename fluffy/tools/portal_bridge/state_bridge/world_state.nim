@@ -25,6 +25,12 @@ type AccountState* = ref object
 proc init(T: type AccountState, account = newAccount()): T {.inline.} =
   T(account: account, codeUpdated: false)
 
+proc getBalance*(accState: AccountState): UInt256 {.inline.} =
+  accState.account.balance
+
+proc getNonce*(accState: AccountState): AccountNonce {.inline.} =
+  accState.account.nonce
+
 proc setBalance*(accState: var AccountState, balance: UInt256) {.inline.} =
   accState.account.balance = balance
 
