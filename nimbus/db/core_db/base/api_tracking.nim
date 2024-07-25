@@ -105,10 +105,6 @@ func oaToStr(w: openArray[byte]): string =
 func toStr(w: Hash256): string =
   if w == EMPTY_ROOT_HASH: "EMPTY_ROOT_HASH" else: w.data.oaToStr
 
-func toLenStr(w: Blob): string =
-  if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
-  else: "Blob[" & $w.len & "]"
-
 func toStr(ela: Duration): string =
   aristo_profile.toStr(ela)
 

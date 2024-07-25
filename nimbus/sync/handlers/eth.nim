@@ -65,14 +65,9 @@ type
     newBlockHandler: NewBlockHandlerPair
     newBlockHashesHandler: NewBlockHashesHandlerPair
 
-  ReconnectRef = ref object
-    pool: PeerPool
-    node: Node
-
 const
   NUM_PEERS_REBROADCAST_QUOTIENT = 4
   POOLED_STORAGE_TIME_LIMIT = initDuration(minutes = 20)
-  PEER_LONG_BANTIME = chronos.minutes(150)
 
 # ------------------------------------------------------------------------------
 # Private functions: helper functions
@@ -83,10 +78,6 @@ proc notEnabled(name: string) {.used.} =
 
 proc notImplemented(name: string) {.used.} =
   debug "Wire handler method not implemented", meth = name
-
-proc inPool(ctx: EthWireRef, txHash: Hash256): bool =
-  let res = ctx.txPool.getItem(txHash)
-  res.isOk
 
 proc successorHeader(db: CoreDbRef,
                      h: BlockHeader,
@@ -124,43 +115,6 @@ proc getPeers(ctx: EthWireRef, thisPeer: Peer): seq[Peer] =
   for peer in peers(ctx.peerPool):
     if peer != thisPeer:
       result.add peer
-
-proc banExpiredReconnect(arg: pointer) =
-  # Reconnect to peer after ban period if pool is empty
-  try:
-
-    let reconnect = cast[ReconnectRef](arg)
-    if reconnect.pool.len > 0:
-      return
-
-    asyncSpawn reconnect.pool.connectToNode(reconnect.node)
-
-  except TransportError:
-    debug "Transport got closed during banExpiredReconnect"
-  except CatchableError as e:
-    debug "Exception in banExpiredReconnect", exc = e.name, err = e.msg
-
-proc banPeer(pool: PeerPool, peer: Peer, banTime: chronos.Duration) {.async.} =
-  try:
-
-    await peer.disconnect(SubprotocolReason)
-
-    let expired = Moment.fromNow(banTime)
-    let reconnect = ReconnectRef(
-      pool: pool,
-      node: peer.remote
-    )
-
-    discard setTimer(
-      expired,
-      banExpiredReconnect,
-      cast[pointer](reconnect)
-    )
-
-  except TransportError:
-    debug "Transport got closed during banPeer"
-  except CatchableError as e:
-    debug "Exception in banPeer", exc = e.name, err = e.msg
 
 proc cleanupKnownByPeer(ctx: EthWireRef) =
   let now = getTime()

@@ -18,10 +18,6 @@ type
     txInfoOk =
       (0, "no error")
 
-    txInfoPackedBlockIncluded = ##\
-      ## The transaction was disposed after packing into block
-      "not needed anymore"
-
     txInfoSenderNonceSuperseded = ##\
       ## Tx superseded by another one with same <sender,nonce> index
       "Sender/nonce index superseded"
@@ -66,39 +62,7 @@ type
       ## <sender,nonce> index for transaction exists, already.
       "Sender/nonce index error"
 
-    txInfoErrTxPoolOverflow = ##\
-      ## The transaction pool is full and can't accpet another remote
-      ## transaction.
-      "txpool is full"
-
     # ------ Transaction format/parsing problems -------------------------------
-
-    txInfoErrOversizedData = ##\
-      ## The input data of a transaction is greater than some meaningful
-      ## limit a user might use. This is not a consensus error making the
-      ## transaction invalid, rather a DOS protection.
-      "Oversized tx data"
-
-    txInfoErrNegativeValue = ##\
-      ## A sanity error to ensure no one is able to specify a transaction
-      ## with a negative value.
-      "Negative value in tx"
-
-    txInfoErrUnexpectedProtection = ##\
-      ## Transaction type does not supported EIP-1559 protected signature
-      "Unsupported EIP-1559 signature protection"
-
-    txInfoErrInvalidTxType = ##\
-      ## Transaction type not valid in this context
-      "Unsupported tx type"
-
-    txInfoErrTxTypeNotSupported = ##\
-      ## Transaction type not supported
-      "Unsupported transaction type"
-
-    txInfoErrEmptyTypedTx = ##\
-      ## Typed transaction, missing data
-      "Empty typed transaction bytes"
 
     txInfoErrBasicValidatorFailed = ##\
       ## Running basic validator failed on current transaction
@@ -114,30 +78,13 @@ type
       ## The transaction contains an invalid signature.
       "invalid sender"
 
-    txInfoErrInvalidSig = ##\
-      ## invalid transaction v, r, s values
-      "Invalid transaction signature"
-
     # ------ Gas fee and selection problems ------------------------------------
 
-    txInfoErrUnderpriced = ##\
-      ## A transaction's gas price is below the minimum configured for the
-      ## transaction pool.
-      "Tx underpriced"
 
     txInfoErrReplaceUnderpriced = ##\
       ## A transaction is attempted to be replaced with a different one
       ## without the required price bump.
       "Replacement tx underpriced"
-
-    txInfoErrGasLimit = ##\
-      ## A transaction's requested gas limit exceeds the maximum allowance
-      ## of the current block.
-      "Tx exceeds block gasLimit"
-
-    txInfoErrGasFeeCapTooLow = ##\
-      ## Gase fee cap less than base fee
-      "Tx has feeCap < baseFee"
 
     # ------- operational events related to transactions -----------------------
 
@@ -149,19 +96,6 @@ type
      ## Implied disposal for greater nonces for the same sender when the base
      ## tx was removed.
      "Tx expired implied"
-
-    txInfoTxStashed = ##\
-      ## A transaction was item was created and stored in the disposal bin
-      ## to be recycled and processed later.
-      "Tx stashed"
-
-    txInfoTxErrorRemoteExpected = ##\
-      ## The sender account of a transaction was expected non-local.
-      "Tx non-local expected"
-
-    txInfoTxErrorLocalExpected = ##\
-      ## The sender account of a transaction was expected local.
-      "Tx local expected"
 
     # ------- update/move block chain head -------------------------------------
 
@@ -192,7 +126,6 @@ type
     # ---------- debugging error codes as used in verifier functions -----------
 
     # failed verifier codes
-    txInfoVfyLeafQueue             ## Corrupted leaf item queue
 
     txInfoVfyItemIdList            ## Corrupted ID queue/fifo structure
     txInfoVfyRejectsList           ## Corrupted waste basket structure
@@ -200,12 +133,9 @@ type
 
     txInfoVfySenderRbTree          ## Corrupted sender list structure
     txInfoVfySenderLeafEmpty       ## Empty sender list leaf record
-    txInfoVfySenderLeafQueue       ## Corrupted sender leaf queue
     txInfoVfySenderTotal           ## Wrong number of leaves
-    txInfoVfySenderGasLimits       ## Wrong gas accu values
     txInfoVfySenderProfits         ## Profits calculation error
 
-    txInfoVfyStatusRbTree          ## Corrupted status list structure
     txInfoVfyStatusTotal           ## Wrong number of leaves
     txInfoVfyStatusGasLimits       ## Wrong gas accu values
     txInfoVfyStatusSenderList      ## Corrupted status-sender sub-list
@@ -220,9 +150,5 @@ type
     txInfoVfyRankReverseMismatch   ## Ranks differ with revers lookup
     txInfoVfyRankDuplicateAddr     ## Same address with different ranks
     txInfoVfyRankTotal             ## Wrong number of leaves (i.e. adresses)
-
-    # codes provided for other modules
-    txInfoVfyJobQueue              ## Corrupted jobs queue/fifo structure
-    txInfoVfyJobEvent              ## Event table sync error
 
 # End

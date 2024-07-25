@@ -15,7 +15,6 @@ import
   eth/common,
   "../.."/[constants, errors],
   ".."/[kvt, aristo],
-  ./backend/aristo_db,
   ./base/[api_tracking, base_config, base_desc, base_helpers]
 
 export
