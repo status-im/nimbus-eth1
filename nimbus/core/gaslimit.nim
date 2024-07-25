@@ -32,11 +32,7 @@ proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void,string] =
   let upperLimit = limit div GAS_LIMIT_ADJUSTMENT_FACTOR
 
   if diff >= upperLimit:
-    try:
-      return err(&"invalid gas limit: have {header.gasLimit}, want {limit} +-= {upperLimit-1}")
-    except ValueError:
-      # TODO deprecate-strformat
-      raiseAssert "strformat cannot fail"
+    return err(&"invalid gas limit: have {header.gasLimit}, want {limit} +-= {upperLimit-1}")
   if header.gasLimit < GAS_LIMIT_MINIMUM:
     return err("invalid gas limit below 5000")
   ok()
@@ -77,14 +73,10 @@ proc verifyEip1559Header(com: CommonRef;
   # Verify the baseFee is correct based on the parent header.
   var expectedBaseFee = com.calcEip1599BaseFee(parent)
   if headerBaseFee != expectedBaseFee:
-    try:
-      return err(&"invalid baseFee: have {expectedBaseFee}, "&
-                 &"want {header.baseFeePerGas}, " &
-                 &"parent.baseFee {parent.baseFeePerGas}, "&
-                 &"parent.gasUsed {parent.gasUsed}")
-    except ValueError:
-      # TODO deprecate-strformat
-      raiseAssert "strformat cannot fail"
+    return err(&"invalid baseFee: have {expectedBaseFee}, "&
+                &"want {header.baseFeePerGas}, " &
+                &"parent.baseFee {parent.baseFeePerGas}, "&
+                &"parent.gasUsed {parent.gasUsed}")
 
   return ok()
 

@@ -13,7 +13,7 @@
 ##
 
 import
-  std/[sequtils, tables],
+  std/tables,
   results,
   ./kvt_desc,
   ./kvt_desc/desc_backend,
@@ -78,7 +78,8 @@ proc deltaPersistent*(
 
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
-  be.putKvpFn(writeBatch, db.balancer.sTab.pairs.toSeq)
+  for k,v in db.balancer.sTab:
+    be.putKvpFn(writeBatch, k, v)
   ? be.putEndFn writeBatch
 
   # Done with balancer, all saved to backend

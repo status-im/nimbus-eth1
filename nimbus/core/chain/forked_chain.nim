@@ -357,12 +357,9 @@ proc setHead(c: ForkedChainRef,
              headHash: Hash256,
              number: BlockNumber) =
   # TODO: db.setHead should not read from db anymore
-  # and raise RlpError, all canonical chain marking
+  # all canonical chain marking
   # should be done from here.
-  try:
-    discard c.db.setHead(headHash)
-  except RlpError as exc:
-    raiseAssert(exc.msg)
+  discard c.db.setHead(headHash)
 
   # update global syncHighest
   c.com.syncHighest = number

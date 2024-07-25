@@ -119,14 +119,14 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
 
 proc putKvpFn(db: RdbBackendRef): PutKvpFn =
   result =
-    proc(hdl: PutHdlRef; kvps: openArray[(Blob,Blob)]) =
+    proc(hdl: PutHdlRef; k, v: openArray[byte]) =
       let hdl = hdl.getSession db
       if hdl.error == KvtError(0):
 
         # Collect batch session arguments
-        db.rdb.put(kvps).isOkOr:
-          hdl.error = error[1]
-          hdl.info = error[2]
+        db.rdb.put(k, v).isOkOr:
+          hdl.error = error[0]
+          hdl.info = error[1]
           return
 
 

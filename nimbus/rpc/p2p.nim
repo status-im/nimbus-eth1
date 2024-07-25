@@ -519,7 +519,7 @@ proc setupEthRpc*(
       hash: Hash256,
       header: BlockHeader,
       opts: FilterOptions): seq[FilterLog]
-        {.gcsafe, raises: [RlpError,ValueError].} =
+        {.gcsafe, raises: [RlpError,BlockNotFound].} =
     if headerBloomFilter(header, opts.address, opts.topics):
       let blockBody = chain.getBlockBody(hash)
       let receipts = chain.getReceipts(header.receiptsRoot)
@@ -538,7 +538,7 @@ proc setupEthRpc*(
       start: common.BlockNumber,
       finish: common.BlockNumber,
       opts: FilterOptions): seq[FilterLog]
-        {.gcsafe, raises: [RlpError,ValueError].} =
+        {.gcsafe, raises: [RlpError,BlockNotFound].} =
     var logs = newSeq[FilterLog]()
     var i = start
     while i <= finish:

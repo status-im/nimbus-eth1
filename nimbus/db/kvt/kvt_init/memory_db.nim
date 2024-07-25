@@ -101,14 +101,13 @@ proc putBegFn(db: MemBackendRef): PutBegFn =
 
 proc putKvpFn(db: MemBackendRef): PutKvpFn =
   result =
-    proc(hdl: PutHdlRef; kvps: openArray[(Blob,Blob)]) =
+    proc(hdl: PutHdlRef; k, v: openArray[byte]) =
       let hdl = hdl.getSession db
       if hdl.error == KvtError(0):
-        for (k,v) in kvps:
-          if k.isValid:
-            hdl.tab[k] = v
-          else:
-            hdl.error = KeyInvalid
+        if k.len > 0:
+          hdl.tab[@k] = @v
+        else:
+          hdl.tab.del @k
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
   result =

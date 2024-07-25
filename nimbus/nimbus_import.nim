@@ -224,7 +224,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   # First it sets the initial lower bound to `firstSlotAfterMerge` + number of blocks after Era1
   # Then it iterates over the slots to find the current slot number, along with reducing the
   # search space by calculating the difference between the `blockNumber` and the `block_number` from the executionPayload
-  # of the slot, then adding the difference to the importedSlot. This pushes the lower bound more, 
+  # of the slot, then adding the difference to the importedSlot. This pushes the lower bound more,
   # making the search way smaller
   template updateLastImportedSlot(
       era: EraDB,
@@ -232,7 +232,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       historical_summaries: openArray[HistoricalSummary],
   ) =
     if blockNumber > 1:
-      # Setting the initial lower bound 
+      # Setting the initial lower bound
       importedSlot = (blockNumber - lastEra1Block) + firstSlotAfterMerge
       notice "Finding slot number after resuming import", importedSlot
 
@@ -240,13 +240,13 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       var clNum = 0'u64
 
       while clNum < blockNumber:
-        let clBlock = getBlockFromEra(
+        let blk = getEthBlockFromEra(
           era, historical_roots, historical_summaries, Slot(importedSlot), clConfig.cfg
         ).valueOr:
           importedSlot += 1
           continue
 
-        clNum = getEth1BlockNumber(clBlock)
+        clNum = blk.header.number
         # decreasing the lower bound with each iteration
         importedSlot += blockNumber - clNum
 
@@ -273,7 +273,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           break
 
         imported += 1
-        blocks.add move(blk)
+        blocks.add blk
 
         if blocks.lenu64 mod conf.chunkSize == 0:
           process()
@@ -304,7 +304,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         importedSlot = firstSlotAfterMerge
 
       while running and imported < conf.maxBlocks and importedSlot < endSlot:
-        let clblock = getBlockFromEra(
+        var blk = getEthBlockFromEra(
           eraDB,
           historical_roots.asSeq(),
           historical_summaries.asSeq(),
@@ -314,7 +314,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           importedSlot += 1
           continue
 
-        blocks.add getEth1Block(clblock)
+        blocks.add blk
         imported += 1
 
         importedSlot += 1

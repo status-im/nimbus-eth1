@@ -68,21 +68,20 @@ proc commit*(rdb: var RdbInst): Result[void,(KvtError,string)] =
 
 proc put*(
     rdb: RdbInst;
-    data: openArray[(Blob,Blob)];
-      ): Result[void,(Blob,KvtError,string)] =
-  for (key,val) in data:
-    if val.len == 0:
-      rdb.session.delete(key, rdb.store[KvtGeneric].handle()).isOkOr:
-        const errSym = RdbBeDriverDelError
-        when extraTraceMessages:
-          trace logTxt "del", key, error=errSym, info=error
-        return err((key,errSym,error))
-    else:
-      rdb.session.put(key, val, rdb.store[KvtGeneric].handle()).isOkOr:
-        const errSym = RdbBeDriverPutError
-        when extraTraceMessages:
-          trace logTxt "put", key, error=errSym, info=error
-        return err((key,errSym,error))
+    key, val: openArray[byte];
+      ): Result[void,(KvtError,string)] =
+  if val.len == 0:
+    rdb.session.delete(key, rdb.store[KvtGeneric].handle()).isOkOr:
+      const errSym = RdbBeDriverDelError
+      when extraTraceMessages:
+        trace logTxt "del", key, error=errSym, info=error
+      return err((errSym,error))
+  else:
+    rdb.session.put(key, val, rdb.store[KvtGeneric].handle()).isOkOr:
+      const errSym = RdbBeDriverPutError
+      when extraTraceMessages:
+        trace logTxt "put", key, error=errSym, info=error
+      return err((errSym,error))
   ok()
 
 # ------------------------------------------------------------------------------
