@@ -184,5 +184,5 @@ proc start*(n: PortalNode) =
   if n.stateNetwork.isSome():
     n.stateNetwork.value.start()
 
-    if n.beaconLightClient.isSome():
-      n.beaconLightClient.value.start()
+  if n.beaconLightClient.isSome():
+    n.beaconLightClient.value.start()
