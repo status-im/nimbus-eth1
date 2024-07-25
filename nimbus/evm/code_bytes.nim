@@ -64,7 +64,7 @@ func isValidOpcode*(c: CodeBytesRef, position: int): bool =
       var opcode = Op(c.bytes[i])
       if opcode >= Op.Push1 and opcode <= Op.Push32:
         var leftBound = (i + 1)
-        var rightBound = leftBound + (opcode.int - 95)
+        var rightBound = min(leftBound + (opcode.int - 95), c.bytes.len)
         for z in leftBound ..< rightBound:
           let (bpos, bbit) = bitpos(z)
           c.invalidPositions[bpos] = c.invalidPositions[bpos] or bbit
