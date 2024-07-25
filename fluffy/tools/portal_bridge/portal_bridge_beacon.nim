@@ -140,7 +140,7 @@ proc gossipLCFinalityUpdate(
     portalRpcClient: RpcClient,
     cfg: RuntimeConfig,
     forkDigests: ref ForkDigests,
-): Future[Result[Slot, string]] {.async.} =
+): Future[Result[(Slot, Eth2Digest), string]] {.async.} =
   var update =
     try:
       info "Downloading LC finality update"
@@ -155,6 +155,7 @@ proc gossipLCFinalityUpdate(
     when lcDataFork > LightClientDataFork.None:
       let
         finalizedSlot = forkyObject.finalized_header.beacon.slot
+        blockRoot = hash_tree_root(forkyObject.finalized_header.beacon)
         contentKey = encode(finalityUpdateContentKey(finalizedSlot.uint64))
         forkDigest = forkDigestAtEpoch(
           forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
@@ -176,7 +177,7 @@ proc gossipLCFinalityUpdate(
 
       let res = await GossipRpcAndClose()
       if res.isOk():
-        return ok(finalizedSlot)
+        return ok((finalizedSlot, blockRoot))
       else:
         return err(res.error)
     else:
@@ -394,7 +395,14 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
           if res.isErr():
             warn "Error gossiping LC finality update", error = res.error
           else:
-            lastFinalityUpdateEpoch = epoch(res.get())
+            let (slot, blockRoot) = res.value()
+            lastFinalityUpdateEpoch = epoch(slot)
+            let res = await gossipLCBootstrapUpdate(
+              restClient, portalRpcClient, blockRoot, cfg, forkDigests
+            )
+
+            if res.isErr():
+              warn "Error gossiping LC bootstrap", error = res.error
 
           let res2 = await gossipHistoricalSummaries(
             restClient, portalRpcClient, cfg, forkDigests

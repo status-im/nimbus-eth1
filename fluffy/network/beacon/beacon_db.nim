@@ -40,7 +40,7 @@ type
     kv: KvStoreRef
     bestUpdates: BestLightClientUpdateStore
     forkDigests: ForkDigests
-    cfg: RuntimeConfig
+    cfg*: RuntimeConfig
     finalityUpdateCache: Opt[LightClientFinalityUpdateCache]
     optimisticUpdateCache: Opt[LightClientOptimisticUpdateCache]
 
