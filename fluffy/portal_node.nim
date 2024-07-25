@@ -107,6 +107,7 @@ proc new*(
             beaconDb,
             streamManager,
             networkData.forks,
+            config.trustedBlockRoot,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
           )
