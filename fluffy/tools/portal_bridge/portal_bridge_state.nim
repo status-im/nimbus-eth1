@@ -72,13 +72,15 @@ proc runBackfillCollectBlockDataLoop(
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill collect block data loop"
-  var currentBlockNumber = startBlockNumber
 
   let parentBlock = (
-    await web3Client.getBlockByNumber(blockId(currentBlockNumber - 1.uint64), false)
+    await web3Client.getBlockByNumber(blockId(startBlockNumber - 1.uint64), false)
   ).valueOr:
     raiseAssert("Failed to get parent block")
-  var parentStateRoot = parentBlock.stateRoot
+
+  var
+    parentStateRoot = parentBlock.stateRoot
+    currentBlockNumber = startBlockNumber
 
   while true:
     if currentBlockNumber mod 10000 == 0:
@@ -179,12 +181,9 @@ proc runBackfillBuildBlockOffersLoop(
       info "Building state for block number: ", blockNumber = blockData.blockNumber
 
     # For now all WorldStateRef functions need to be inside a transaction
-    # because the DatabaseRef currently only supports reading and writing to/from
-    # a single active transaction.
+    # because the DatabaseRef backends currently only supports reading and
+    # writing to/from a single active transaction.
     db.withTransaction:
-      # defer:
-      #   worldState.clearPreimages()
-
       for stateDiff in blockData.stateDiffs:
         worldState.applyStateDiff(stateDiff)
 
@@ -199,10 +198,8 @@ proc runBackfillBuildBlockOffersLoop(
       trace "State diffs successfully applied to block number:",
         blockNumber = blockData.blockNumber
 
-      # var builder = OffersBuilderRef.init(
-      #   worldState, KeccakHash.fromBytes(blockData.blockHash.bytes())
-      # )
-      # builder.buildBlockOffers()
+      var builder = OffersBuilderRef.init(worldState, blockData.blockHash)
+      builder.buildBlockOffers()
 
       # await blockOffersQueue.addLast(
       #   BlockOffersRef(

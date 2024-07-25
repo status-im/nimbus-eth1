@@ -55,18 +55,17 @@ type
 
   WorldStateRef* = ref object
     db: DatabaseRef
-    accountPreimages: TableRef[AddressHash, EthAddress]
     accountsTrie: HexaryTrie
     storageTries: TableRef[AddressHash, HexaryTrie]
     storageDb: TrieDatabaseRef
     bytecodeDb: TrieDatabaseRef # maps AddressHash -> seq[byte]
+    preimagesDb: TrieDatabaseRef # maps AddressHash -> EthAddress
 
 proc init*(
     T: type WorldStateRef, db: DatabaseRef, accountsTrieRoot: KeccakHash = emptyRlpHash
 ): T =
   WorldStateRef(
     db: db,
-    accountPreimages: newTable[AddressHash, EthAddress](),
     accountsTrie:
       if accountsTrieRoot == emptyRlpHash:
         initHexaryTrie(db.getAccountsBackend(), isPruning = false)
@@ -75,6 +74,7 @@ proc init*(
     storageTries: newTable[AddressHash, HexaryTrie](),
     storageDb: db.getStorageBackend(),
     bytecodeDb: db.getBytecodeBackend(),
+    preimagesDb: db.getPreimagesBackend(),
   )
 
 proc stateRoot*(state: WorldStateRef): KeccakHash {.inline.} =
@@ -86,13 +86,25 @@ proc toAccountKey*(address: EthAddress): AddressHash {.inline.} =
 proc toStorageKey*(slotKey: UInt256): SlotKeyHash {.inline.} =
   keccakHash(toBytesBE(slotKey))
 
-proc getAccountPreImage*(state: WorldStateRef, accountKey: AddressHash): EthAddress =
-  doAssert(state.accountPreimages.contains(accountKey))
-  state.accountPreimages.getOrDefault(accountKey)
+proc getAccountPreimage(state: WorldStateRef, accountKey: AddressHash): EthAddress =
+  doAssert(
+    state.preimagesDb.contains(rlp.encode(accountKey)),
+    "No account preimage with address hash: " & $accountKey,
+  )
+  let addressBytes = state.preimagesDb.get(rlp.encode(accountKey))
+
+  try:
+    rlp.decode(addressBytes, EthAddress)
+  except RlpError as e:
+    raiseAssert(e.msg) # Should never happen
+
+proc setAccountPreimage(
+    state: WorldStateRef, accountKey: AddressHash, address: EthAddress
+) =
+  state.preimagesDb.put(rlp.encode(accountKey), rlp.encode(address))
 
 proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
   let accountKey = toAccountKey(address)
-  state.accountPreimages[accountKey] = address
 
   try:
     if state.accountsTrie.contains(accountKey.data):
@@ -105,7 +117,7 @@ proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
 
 proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountState) =
   let accountKey = toAccountKey(address)
-  state.accountPreimages[accountKey] = address
+  state.setAccountPreimage(accountKey, address)
 
   try:
     if not state.storageTries.contains(accountKey):
@@ -139,7 +151,6 @@ proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountSta
 
 proc deleteAccount*(state: WorldStateRef, address: EthAddress) =
   let accountKey = toAccountKey(address)
-  state.accountPreimages[accountKey] = address
 
   try:
     state.accountsTrie.del(accountKey.data)
@@ -147,10 +158,6 @@ proc deleteAccount*(state: WorldStateRef, address: EthAddress) =
     state.bytecodeDb.del(accountKey.data)
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
-
-proc clearPreimages*(state: WorldStateRef) {.inline.} =
-  discard # TODO: fix this
-  #state.accountPreimages.clear()
 
 # Returns the account proofs for all the updated accounts from the last transaction
 iterator updatedAccountProofs*(state: WorldStateRef): (EthAddress, seq[seq[byte]]) =
@@ -162,7 +169,7 @@ iterator updatedAccountProofs*(state: WorldStateRef): (EthAddress, seq[seq[byte]
     for key in trie.keys():
       if key.len() == 0:
         continue # skip the empty node created on initialization
-      let address = state.getAccountPreImage(KeccakHash.fromBytes(key))
+      let address = state.getAccountPreimage(KeccakHash.fromBytes(key))
       yield (address, trie.getBranch(key))
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
