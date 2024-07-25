@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables],
+  std/[tables],
   ./tx_info,
   ./tx_item,
   ./tx_tabs/[tx_sender, tx_rank, tx_status],
@@ -36,23 +36,12 @@ type
   TxTabsGasTotals* = tuple
     pending, staged, packed: GasInt ## sum => total
 
-  TxTabsLocality* = object ##\
-    ## Return value for `locality()` function
-    local: seq[EthAddress] ##\
-      ## List of local accounts, higest rank first
-
-    remote: seq[EthAddress] ##\
-      ## List of non-local accounts, higest rank first
-
   TxTabsRef* = ref object ##\
     ## Base descriptor
     maxRejects: int ##\
       ## Maximal number of items in waste basket
 
     # ----- primary tables ------
-
-    byLocal*: Table[EthAddress,bool] ##\
-      ## List of local accounts (currently idle/unused)
 
     byRejects*: KeyedQueue[Hash256,TxItemRef] ##\
       ## Rejects queue and waste basket, queued by disposal event
@@ -124,7 +113,6 @@ proc new*(T: type TxTabsRef): T {.gcsafe,raises: [].} =
   new result
   result.maxRejects = txTabMaxRejects
 
-  # result.byLocal -- Table, no need to init
   # result.byItemID -- KeyedQueue, no need to init
   # result.byRejects -- KeyedQueue, no need to init
 
@@ -258,14 +246,6 @@ proc maxRejects*(xp: TxTabsRef): int =
   ## Getter
   xp.maxRejects
 
-proc local*(lc: TxTabsLocality): seq[EthAddress] =
-  ## Getter
-  lc.local
-
-proc remote*(lc: TxTabsLocality): seq[EthAddress] =
-  ## Getter
-  lc.remote
-
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -308,43 +288,6 @@ proc gasTotals*(xp: TxTabsRef): TxTabsGasTotals =
   result.pending = xp.byStatus.eq(txItemPending).gasLimits
   result.staged = xp.byStatus.eq(txItemStaged).gasLimits
   result.packed = xp.byStatus.eq(txItemPacked).gasLimits
-
-# ------------------------------------------------------------------------------
-# Public functions: local/remote sender accounts
-# ------------------------------------------------------------------------------
-
-proc isLocal*(xp: TxTabsRef; sender: EthAddress): bool =
-  ## Returns `true` if account address is local
-  xp.byLocal.hasKey(sender)
-
-proc locals*(xp: TxTabsRef): seq[EthAddress] =
-  ## Returns  an unsorted list of addresses tagged *local*
-  toSeq(xp.byLocal.keys)
-
-proc locality*(xp: TxTabsRef): TxTabsLocality =
-  ## Returns a pair of sorted lists of account addresses,
-  ## highest address rank first
-  var rcRank = xp.byRank.le(TxRank.high)
-  while rcRank.isOk:
-    let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
-    for account in addrList.keys:
-      if xp.byLocal.hasKey(account):
-        result.local.add account
-      else:
-        result.remote.add account
-    rcRank = xp.byRank.lt(rank)
-
-proc setLocal*(xp: TxTabsRef; sender: EthAddress) =
-  ## Tag `sender` address argument *local*
-  xp.byLocal[sender] = true
-
-proc resLocal*(xp: TxTabsRef; sender: EthAddress) =
-  ## Untag *local* `sender` address argument.
-  xp.byLocal.del(sender)
-
-proc flushLocals*(xp: TxTabsRef) =
-  ## Untag all *local* addresses on the system.
-  xp.byLocal.clear
 
 # ------------------------------------------------------------------------------
 # Public iterators, `TxRank` > `(EthAddress,TxStatusNonceRef)`
@@ -397,16 +340,10 @@ iterator packingOrderAccounts*(xp: TxTabsRef; bucket: TxItemStatus):
         (EthAddress,TxStatusNonceRef)
     {.gcsafe,raises: [KeyError].} =
   ## Loop over accounts from a particular bucket ordered by
-  ## + local ranks, higest one first
-  ## + remote ranks, higest one first
   ## For the `txItemStaged` bucket, this iterator defines the packing order
   ## for transactions (important when calculationg the *txRoot*.)
   for (account,nonceList) in xp.decAccount(bucket):
-    if xp.isLocal(account):
-      yield (account,nonceList)
-  for (account,nonceList) in xp.decAccount(bucket):
-    if not xp.isLocal(account):
-      yield (account,nonceList)
+    yield (account,nonceList)
 
 # ------------------------------------------------------------------------------
 # Public iterators, `TxRank` > `(EthAddress,TxSenderNonceRef)`

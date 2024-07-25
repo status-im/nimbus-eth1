@@ -431,8 +431,7 @@ import
     tx_bucket,
     tx_head,
     tx_dispose,
-    tx_packer,
-    tx_recover],
+    tx_packer],
   chronicles,
   eth/keys,
   stew/keyed_queue,
@@ -459,9 +458,7 @@ export
   tx_item.sender,
   tx_item.status,
   tx_item.timeStamp,
-  tx_item.tx,
-  tx_tabs.local,
-  tx_tabs.remote
+  tx_item.tx
 
 {.push raises: [].}
 
@@ -799,100 +796,6 @@ func disposeAll*(xp: TxPoolRef) {.raises: [CatchableError].} =
 # ------------------------------------------------------------------------------
 # Public functions, local/remote accounts
 # ------------------------------------------------------------------------------
-
-func isLocal*(xp: TxPoolRef; account: EthAddress): bool =
-  ## This function returns `true` if argument `account` is tagged local.
-  xp.txDB.isLocal(account)
-
-func setLocal*(xp: TxPoolRef; account: EthAddress) =
-  ## Tag argument `account` local which means that the transactions from this
-  ## account -- together with all other local accounts -- will be considered
-  ## first for packing.
-  xp.txDB.setLocal(account)
-
-func resLocal*(xp: TxPoolRef; account: EthAddress) =
-  ## Untag argument `account` as local which means that the transactions from
-  ## this account -- together with all other untagged accounts -- will be
-  ## considered for packing after the locally tagged accounts.
-  xp.txDB.resLocal(account)
-
-func flushLocals*(xp: TxPoolRef) =
-  ## Untag all *local* addresses on the system.
-  xp.txDB.flushLocals
-
-func accountRanks*(xp: TxPoolRef): TxTabsLocality =
-  ## Returns two lists, one for local and the other for non-local accounts.
-  ## Any of these lists is sorted by the highest rank first. This sorting
-  ## means that the order may be out-dated after adding transactions.
-  xp.txDB.locality
-
-proc addRemote*(xp: TxPoolRef;
-                tx: PooledTransaction; force = false): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
-  ## Adds the argument transaction `tx` to the buckets database.
-  ##
-  ## If the argument `force` is set `false` and the sender account of the
-  ## argument transaction is tagged local, this function returns with an error.
-  ## If the argument `force` is set `true`, the sender account will be untagged,
-  ## i.e. made non-local.
-  ##
-  ## Note: This function is rather inefficient if there are more than one
-  ## txs to be added for a known account. The preferable way to do this
-  ## would be to use a combination of `xp.add()` and `xp.resLocal()` in any
-  ## order.
-  # Create or recover new item. This will wrap the argument `tx` and cache
-  # the sender account and other derived data accessible.
-  let rc = xp.recoverItem(
-    tx, txItemPending, "remote tx peek", acceptExisting = true)
-  if rc.isErr:
-    return err(rc.error)
-
-  # Temporarily stash the item in the rubbish bin to be recovered, later
-  let sender = rc.value.sender
-  discard xp.txDB.dispose(rc.value, txInfoTxStashed)
-
-  # Verify local/remote account
-  if force:
-    xp.txDB.resLocal(sender)
-  elif xp.txDB.isLocal(sender):
-    return err(txInfoTxErrorRemoteExpected)
-
-  xp.add(tx, "remote tx")
-  ok()
-
-proc addLocal*(xp: TxPoolRef;
-               tx: PooledTransaction; force = false): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
-  ## Adds the argument transaction `tx` to the buckets database.
-  ##
-  ## If the argument `force` is set `false` and the sender account of the
-  ## argument transaction is _not_ tagged local, this function returns with
-  ## an error. If the argument `force` is set `true`, the sender account will
-  ## be tagged local.
-  ##
-  ## Note: This function is rather inefficient if there are more than one
-  ## txs to be added for a known account. The preferable way to do this
-  ## would be to use a combination of `xp.add()` and `xp.setLocal()` in any
-  ## order.
-  # Create or recover new item. This will wrap the argument `tx` and cache
-  # the sender account and other derived data accessible.
-  let rc = xp.recoverItem(
-    tx, txItemPending, "local tx peek", acceptExisting = true)
-  if rc.isErr:
-    return err(rc.error)
-
-  # Temporarily stash the item in the rubbish bin to be recovered, later
-  let sender = rc.value.sender
-  discard xp.txDB.dispose(rc.value, txInfoTxStashed)
-
-  # Verify local/remote account
-  if force:
-    xp.txDB.setLocal(sender)
-  elif not xp.txDB.isLocal(sender):
-    return err(txInfoTxErrorLocalExpected)
-
-  xp.add(tx, "local tx")
-  ok()
 
 func inPoolAndOk*(xp: TxPoolRef; txHash: Hash256): bool =
   let res = xp.getItem(txHash)

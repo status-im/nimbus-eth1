@@ -311,11 +311,7 @@ proc runLedgerTransactionTests(noisy = true) =
         for _ in 0..<NumTransactions:
           let recipient = initAddr(recipientSeed)
           let tx = env.makeTx(recipient, 1.u256)
-          let res = env.xp.addLocal(PooledTransaction(tx: tx), force = true)
-          check res.isOk
-          if res.isErr:
-            debugEcho res.error
-            return
+          env.xp.add(PooledTransaction(tx: tx))
 
           inc recipientSeed
 

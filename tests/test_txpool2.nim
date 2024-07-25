@@ -140,12 +140,8 @@ proc runTxPoolPosTest() =
     blk: EthBlock
 
   suite "Test TxPool with PoS block":
-    test "TxPool addLocal":
-      let res = xp.addLocal(PooledTransaction(tx: tx), force = true)
-      check res.isOk
-      if res.isErr:
-        debugEcho res.error
-        return
+    test "TxPool add":
+      xp.add(PooledTransaction(tx: tx))
 
     test "TxPool jobCommit":
       check xp.nItems.total == 1
@@ -200,16 +196,9 @@ proc runTxPoolBlobhashTest() =
     blk: EthBlock
 
   suite "Test TxPool with blobhash block":
-    test "TxPool addLocal":
-      let res = xp.addLocal(PooledTransaction(tx: tx1), force = true)
-      check res.isOk
-      if res.isErr:
-        debugEcho res.error
-        return
-      let res2 = xp.addLocal(PooledTransaction(tx: tx2), force = true)
-      check res2.isOk
-
     test "TxPool jobCommit":
+      xp.add(PooledTransaction(tx: tx1))
+      xp.add(PooledTransaction(tx: tx2))
       check xp.nItems.total == 2
 
     test "TxPool ethBlock":
@@ -256,11 +245,7 @@ proc runTxPoolBlobhashTest() =
         xp = env.xp
 
       check xp.smartHead(blk.header)
-      let res = xp.addLocal(PooledTransaction(tx: tx4), force = true)
-      check res.isOk
-      if res.isErr:
-        debugEcho res.error
-        return
+      xp.add(PooledTransaction(tx: tx4))
 
       check inPoolAndOk(xp, rlpHash(tx4)) == false
 
@@ -288,8 +273,6 @@ proc runTxHeadDelta(noisy = true) =
 
           for tn in 0..<txPerblock:
             let tx = env.makeTx(recipient, amount)
-            # Instead of `add()`, the functions `addRemote()` or `addLocal()`
-            # also would do.
             xp.add(PooledTransaction(tx: tx))
 
           noisy.say "***", "txDB",
@@ -350,8 +333,8 @@ proc runGetBlockBodyTest() =
         tx1 = env.makeTx(recipient, 1.u256)
         tx2 = env.makeTx(recipient, 2.u256)
 
-      check env.xp.addLocal(PooledTransaction(tx: tx1), true).isOk
-      check env.xp.addLocal(PooledTransaction(tx: tx2), true).isOk
+      env.xp.add(PooledTransaction(tx: tx1))
+      env.xp.add(PooledTransaction(tx: tx2))
 
       env.com.pos.prevRandao = prevRandao
       env.com.pos.feeRecipient = feeRecipient
@@ -374,9 +357,9 @@ proc runGetBlockBodyTest() =
         tx2 = env.makeTx(recipient, 4.u256)
         tx3 = env.makeTx(recipient, 5.u256)
 
-      check env.xp.addLocal(PooledTransaction(tx: tx1), true).isOk
-      check env.xp.addLocal(PooledTransaction(tx: tx2), true).isOk
-      check env.xp.addLocal(PooledTransaction(tx: tx3), true).isOk
+      env.xp.add(PooledTransaction(tx: tx1))
+      env.xp.add(PooledTransaction(tx: tx2))
+      env.xp.add(PooledTransaction(tx: tx3))
 
       env.com.pos.prevRandao = prevRandao
       env.com.pos.feeRecipient = feeRecipient

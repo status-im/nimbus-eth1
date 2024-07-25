@@ -149,10 +149,6 @@ proc addTx*(xp: TxPoolRef; item: TxItemRef): bool
   # Error processing => store in waste basket
   xp.txDB.reject(item, vetted)
 
-# core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
-# core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
-# core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-# core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTxs*(xp: TxPoolRef;
              txs: openArray[PooledTransaction]; info = ""): TxAddStats
