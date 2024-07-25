@@ -67,9 +67,8 @@ proc toBytes(x: string): seq[byte] =
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
   keccakHash(toBytes($blockNumber))
 
-proc verifyResult(ctx: var StateContext, vmState: BaseVMState) =
-  ctx.error = ""
-  let obtainedHash = vmState.readOnlyStateDB.rootHash
+proc verifyResult(ctx: var StateContext, vmState: BaseVMState, obtainedHash: Hash256) =
+  ctx.error = ""  
   if obtainedHash != ctx.expectedHash:
     ctx.error = "post state root mismatch: got $1, want $2" %
       [($obtainedHash).toLowerAscii, $ctx.expectedHash]
@@ -99,31 +98,9 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
   stdout.write(n.pretty)
   stdout.write("\n")
 
-when false:
-  proc dumpAccounts(db: LedgerRef): Table[EthAddress, DumpAccount] =
-    for accAddr in db.addresses():
-      let acc = DumpAccount(
-        balance : db.getBalance(accAddr),
-        nonce   : db.getNonce(accAddr),
-        root    : db.getStorageRoot(accAddr),
-        codeHash: db.getCodeHash(accAddr),
-        code    : db.getCode(accAddr),
-        key     : keccakHash(accAddr)
-      )
-      for k, v in db.storage(accAddr):
-        acc.storage[k] = v
-      result[accAddr] = acc
-
-
-  proc dumpState(vmState: BaseVMState): StateDump =
-    StateDump(
-      root: vmState.readOnlyStateDB.rootHash,
-      accounts: dumpAccounts(vmState.stateDB)
-    )
-
-proc writeRootHashToStderr(vmState: BaseVMState) =
+proc writeRootHashToStderr(stateRoot: Hash256) =
   let stateRoot = %{
-    "stateRoot": %(vmState.readOnlyStateDB.rootHash)
+    "stateRoot": %(stateRoot)
   }
   stderr.writeLine($stateRoot)
 
@@ -159,18 +136,19 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     db.persist(clearEmptyAccount = false) # settle accounts storage
 
   defer:
-    ctx.verifyResult(vmState)
+    let stateRoot = vmState.readOnlyStateDB.rootHash
+    ctx.verifyResult(vmState, stateRoot)
     result = StateResult(
       name : ctx.name,
       pass : ctx.error.len == 0,
-      root : vmState.readOnlyStateDB.rootHash,
+      root : stateRoot,
       fork : ctx.forkStr,
       error: ctx.error
     )
     if conf.dumpEnabled:
       result.state = dumpState(vmState.stateDB)
     if conf.jsonEnabled:
-      writeRootHashToStderr(vmState)
+      writeRootHashToStderr(stateRoot)
 
   try:
     let rc = vmState.processTransaction(
