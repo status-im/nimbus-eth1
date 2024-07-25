@@ -38,20 +38,32 @@ type BlockOffersRef = ref object
   contractCodeOffers: seq[(ContractCodeKey, ContractCodeOffer)]
 
 proc getBlockData(db: DatabaseRef, blockNumber: uint64): Opt[BlockData] =
-  try:
-    let blockDataBytes = db.get(rlp.encode(blockNumber))
-    if blockDataBytes.len() == 0:
-      return Opt.none(BlockData)
+  let blockDataBytes = db.get(rlp.encode(blockNumber))
+  if blockDataBytes.len() == 0:
+    return Opt.none(BlockData)
 
+  try:
     Opt.some(rlp.decode(blockDataBytes, BlockData))
   except RlpError as e:
     raiseAssert(e.msg) # Should never happen
 
-proc putBlockData(db: DatabaseRef, blockNumber: uint64, blockData: BlockData) =
+proc putBlockData(
+    db: DatabaseRef, blockNumber: uint64, blockData: BlockData
+) {.inline.} =
+  db.put(rlp.encode(blockNumber), rlp.encode(blockData))
+
+proc getLastPersistedBlockNumber(db: DatabaseRef): Opt[uint64] =
+  let blockNumberBytes = db.get(rlp.encode("lastPersistedBlockNumber"))
+  if blockNumberBytes.len() == 0:
+    return Opt.none(uint64)
+
   try:
-    db.put(rlp.encode(blockNumber), rlp.encode(blockData))
+    Opt.some(rlp.decode(blockNumberBytes, uint64))
   except RlpError as e:
     raiseAssert(e.msg) # Should never happen
+
+proc putLastPersistedBlockNumber(db: DatabaseRef, blockNumber: uint64) {.inline.} =
+  db.put(rlp.encode("lastPersistedBlockNumber"), rlp.encode(blockNumber))
 
 proc runBackfillCollectBlockDataLoop(
     db: DatabaseRef,
@@ -201,6 +213,11 @@ proc runBackfillBuildBlockOffersLoop(
       #   )
       # )
 
+    # After commit of the above db transaction which stores the updated account state
+    # then we store the last persisted block number in the database so that we can use it
+    # to enable restarting from this block if needed
+    db.putLastPersistedBlockNumber(blockData.blockNumber)
+
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockData], blockOffersQueue: AsyncQueue[BlockOffersRef]
 ) {.async: (raises: [CancelledError]).} =
@@ -242,10 +259,17 @@ proc runState*(config: PortalBridgeConf) =
       blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
     if config.startBlockNumber < 1:
-      warn "Start block number should be greater than 0"
+      warn "Start block should be greater than 0"
       quit QuitFailure
 
-    # TODO: check that the state exists in the db for the given start block
+    let lastPersistedBlockNumber = db.getLastPersistedBlockNumber().valueOr:
+      info "No last persisted block found in the database so starting from block 1"
+      1.uint64
+
+    if config.startBlockNumber > lastPersistedBlockNumber:
+      warn "Start block must be less than or equal to the last persisted block: ",
+        lastPersistedBlockNumber
+      quit QuitFailure
 
     info "Starting state backfill from block number: ",
       startBlockNumber = config.startBlockNumber
