@@ -27,6 +27,7 @@ type BlockData = object
   blockHash: KeccakHash
   miner: EthAddress
   uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
+  parentStateRoot: KeccakHash
   stateRoot: KeccakHash
   stateDiffs: seq[TransactionDiff]
 
@@ -61,6 +62,12 @@ proc runBackfillCollectBlockDataLoop(
   info "Starting state backfill collect block data loop"
   var currentBlockNumber = startBlockNumber
 
+  let parentBlock = (
+    await web3Client.getBlockByNumber(blockId(currentBlockNumber - 1.uint64), false)
+  ).valueOr:
+    raiseAssert("Failed to get parent block")
+  var parentStateRoot = parentBlock.stateRoot
+
   while true:
     if currentBlockNumber mod 10000 == 0:
       info "Collecting block data for block number: ", blockNumber = currentBlockNumber
@@ -91,12 +98,15 @@ proc runBackfillCollectBlockDataLoop(
       let blockData = BlockData(
         blockNumber: currentBlockNumber,
         blockHash: KeccakHash.fromBytes(blockObject.hash.bytes()),
-        stateRoot: KeccakHash.fromBytes(blockObject.stateRoot.bytes()),
         miner: blockObject.miner.EthAddress,
         uncles: uncleBlocks.mapIt((it.miner.EthAddress, it.number.uint64)),
+        parentStateRoot: KeccakHash.fromBytes(parentStateRoot.bytes()),
+        stateRoot: KeccakHash.fromBytes(blockObject.stateRoot.bytes()),
         stateDiffs: stateDiffs,
       )
       db.putBlockData(currentBlockNumber, blockData)
+
+      parentStateRoot = blockObject.stateRoot
       blockData
 
     await blockDataQueue.addLast(blockData)
@@ -109,27 +119,27 @@ proc runBackfillBuildBlockOffersLoop(
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill build block offers loop"
 
-  let worldState = db.withTransaction:
-    # Requires an active transaction because it writes an emptyRlp node
-    # to the accounts HexaryTrie on initialization
-    let ws = WorldStateRef.init(db)
+  # wait for the first block data to be put on the queue
+  # so that we can access the first block once available
+  while blockDataQueue.empty():
+    await sleepAsync(100.milliseconds)
+  # peek but don't remove it so that it can be processed later
+  let firstBlock = blockDataQueue[0]
 
-    # wait for the first block data to be put on the queue
-    # so that we can access the first block once available
-    while blockDataQueue.empty():
-      await sleepAsync(100.milliseconds)
-    # peek but don't remove it so that it can be processed later
-    let firstBlock = blockDataQueue[0]
+  # Only apply genesis accounts if starting from block 1
+  if firstBlock.blockNumber == 1:
+    info "Building state for genesis"
 
-    # Only apply genesis accounts if starting from block 1
-    if firstBlock.blockNumber == 1:
-      info "Building state for genesis"
-
-      let genesisAccounts =
-        try:
-          genesisBlockForNetwork(MainNet).alloc
-        except CatchableError as e:
-          raiseAssert(e.msg) # Should never happen
+    db.withTransaction:
+      # Requires an active transaction because it writes an emptyRlp node
+      # to the accounts HexaryTrie on initialization
+      let
+        ws = WorldStateRef.init(db)
+        genesisAccounts =
+          try:
+            genesisBlockForNetwork(MainNet).alloc
+          except CatchableError as e:
+            raiseAssert(e.msg) # Should never happen
       ws.applyGenesisAccounts(genesisAccounts)
 
       let genesisBlockHash = KeccakHash.fromHex(
@@ -146,7 +156,9 @@ proc runBackfillBuildBlockOffersLoop(
           contractCodeOffers: builder.getContractCodeOffers(),
         )
       )
-    ws
+
+  # Load the world state using the parent state root
+  let worldState = WorldStateRef.init(db, firstBlock.parentStateRoot)
 
   while true:
     let blockData = await blockDataQueue.popFirst()
@@ -168,7 +180,10 @@ proc runBackfillBuildBlockOffersLoop(
         (blockData.miner, blockData.blockNumber), blockData.uncles
       )
 
-      doAssert(blockData.stateRoot == worldState.stateRoot)
+      doAssert(
+        blockData.stateRoot == worldState.stateRoot,
+        "State root mismatch at block number: " & $blockData.blockNumber,
+      )
       trace "State diffs successfully applied to block number:",
         blockNumber = blockData.blockNumber
 
@@ -220,19 +235,23 @@ proc runState*(config: PortalBridgeConf) =
   # inside the bridge, and getting the blocks from era1 files.
 
   if config.backfillState:
-    const
-      startBlockNumber = 1
-        # This will become a parameter in the config once we can support it
-      bufferSize = 1000 # Should we make this configurable?
+    const bufferSize = 1000 # Should we make this configurable?
 
     let
       blockDataQueue = newAsyncQueue[BlockData](bufferSize)
       blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
-    info "Starting state backfill from block number: ", startBlockNumber
+    if config.startBlockNumber < 1:
+      warn "Start block number should be greater than 0"
+      quit QuitFailure
+
+    # TODO: check that the state exists in the db for the given start block
+
+    info "Starting state backfill from block number: ",
+      startBlockNumber = config.startBlockNumber
 
     asyncSpawn runBackfillCollectBlockDataLoop(
-      db, blockDataQueue, web3Client, startBlockNumber
+      db, blockDataQueue, web3Client, config.startBlockNumber
     )
     asyncSpawn runBackfillBuildBlockOffersLoop(db, blockDataQueue, blockOffersQueue)
     asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)

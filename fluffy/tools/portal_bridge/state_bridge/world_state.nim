@@ -22,22 +22,24 @@ type AccountState* = ref object
   code: seq[byte]
   codeUpdated: bool
 
-proc init(T: type AccountState, account = newAccount()): T =
+proc init(T: type AccountState, account = newAccount()): T {.inline.} =
   T(account: account, codeUpdated: false)
 
-proc setBalance*(accState: var AccountState, balance: UInt256) =
+proc setBalance*(accState: var AccountState, balance: UInt256) {.inline.} =
   accState.account.balance = balance
 
-proc addBalance*(accState: var AccountState, balance: UInt256) =
+proc addBalance*(accState: var AccountState, balance: UInt256) {.inline.} =
   accState.account.balance += balance
 
-proc setNonce*(accState: var AccountState, nonce: AccountNonce) =
+proc setNonce*(accState: var AccountState, nonce: AccountNonce) {.inline.} =
   accState.account.nonce = nonce
 
-proc setStorage*(accState: var AccountState, slotKey: UInt256, slotValue: UInt256) =
+proc setStorage*(
+    accState: var AccountState, slotKey: UInt256, slotValue: UInt256
+) {.inline.} =
   accState.storageUpdates[slotKey] = slotValue
 
-proc deleteStorage*(accState: var AccountState, slotKey: UInt256) =
+proc deleteStorage*(accState: var AccountState, slotKey: UInt256) {.inline.} =
   # setting to zero has the effect of deleting the slot
   accState.setStorage(slotKey, 0.u256)
 
@@ -59,23 +61,29 @@ type
     storageDb: TrieDatabaseRef
     bytecodeDb: TrieDatabaseRef # maps AddressHash -> seq[byte]
 
-proc init*(T: type WorldStateRef, db: DatabaseRef): T =
+proc init*(
+    T: type WorldStateRef, db: DatabaseRef, accountsTrieRoot: KeccakHash = emptyRlpHash
+): T =
   WorldStateRef(
     db: db,
     accountPreimages: newTable[AddressHash, EthAddress](),
-    accountsTrie: initHexaryTrie(db.getAccountsBackend(), isPruning = false),
+    accountsTrie:
+      if accountsTrieRoot == emptyRlpHash:
+        initHexaryTrie(db.getAccountsBackend(), isPruning = false)
+      else:
+        initHexaryTrie(db.getAccountsBackend(), accountsTrieRoot, isPruning = false),
     storageTries: newTable[AddressHash, HexaryTrie](),
     storageDb: db.getStorageBackend(),
     bytecodeDb: db.getBytecodeBackend(),
   )
 
-template stateRoot*(state: WorldStateRef): KeccakHash =
+proc stateRoot*(state: WorldStateRef): KeccakHash {.inline.} =
   state.accountsTrie.rootHash()
 
-template toAccountKey*(address: EthAddress): AddressHash =
+proc toAccountKey*(address: EthAddress): AddressHash {.inline.} =
   keccakHash(address)
 
-template toStorageKey*(slotKey: UInt256): SlotKeyHash =
+proc toStorageKey*(slotKey: UInt256): SlotKeyHash {.inline.} =
   keccakHash(toBytesBE(slotKey))
 
 proc getAccountPreImage*(state: WorldStateRef, accountKey: AddressHash): EthAddress =
@@ -101,8 +109,13 @@ proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountSta
 
   try:
     if not state.storageTries.contains(accountKey):
-      state.storageTries[accountKey] =
-        initHexaryTrie(state.storageDb, isPruning = false)
+      if accState.account.storageRoot == EMPTY_ROOT_HASH:
+        state.storageTries[accountKey] =
+          initHexaryTrie(state.storageDb, isPruning = false)
+      else:
+        state.storageTries[accountKey] = initHexaryTrie(
+          state.storageDb, accState.account.storageRoot, isPruning = false
+        )
 
     var storageTrie = state.storageTries.getOrDefault(accountKey)
     for k, v in accState.storageUpdates:
@@ -135,7 +148,7 @@ proc deleteAccount*(state: WorldStateRef, address: EthAddress) =
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
-proc clearPreimages*(state: WorldStateRef) =
+proc clearPreimages*(state: WorldStateRef) {.inline.} =
   discard # TODO: fix this
   #state.accountPreimages.clear()
 
@@ -172,5 +185,7 @@ iterator updatedStorageProofs*(
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
-proc getUpdatedBytecode*(state: WorldStateRef, address: EthAddress): seq[byte] =
+proc getUpdatedBytecode*(
+    state: WorldStateRef, address: EthAddress
+): seq[byte] {.inline.} =
   state.db.getBytecodeUpdatedCache().get(toAccountKey(address).data)
