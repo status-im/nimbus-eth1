@@ -294,6 +294,16 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
       backfillAmount: uint64,
       trustedBlockRoot: Option[TrustedDigest],
   ) {.async.} =
+    # TODO:
+    # It can get tricky when we need to bootstrap the beacon network with
+    # a portal_bridge:
+    # - Either a very recent bootstrap needs to be taken so that no updates are
+    # required for the nodes to sync.
+    # - Or the bridge needs to be tuned together with the selected bootstrap to
+    # provide the right amount of backfill updates.
+    # - Or the above point could get automatically implemented here based on the
+    # provided trusted-block-root
+
     # Bootstrap backfill, currently just one bootstrap selected by
     # trusted-block-root, could become a selected list, or some other way.
     if trustedBlockRoot.isSome():
@@ -305,6 +315,10 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
         warn "Error gossiping LC bootstrap", error = res.error
 
       await portalRpcClient.close()
+
+    # Add some seconds delay to allow the bootstrap to be gossiped around.
+    # Without the bootstrap, following updates will not get accepted.
+    await sleepAsync(5.seconds)
 
     # Updates backfill, selected by backfillAmount
     # Might want to alter this to default backfill to the

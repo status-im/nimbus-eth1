@@ -225,9 +225,23 @@ proc new*(
     trustedBlockRoot: trustedBlockRoot,
   )
 
+proc lightClientVerifier(
+    processor: ref LightClientProcessor, obj: SomeForkedLightClientObject
+): Future[Result[void, VerifierError]] {.async: (raises: [CancelledError], raw: true).} =
+  let resfut = Future[Result[void, VerifierError]].Raising([CancelledError]).init(
+      "lightClientVerifier"
+    )
+  processor[].addObject(MsgSource.gossip, obj, resfut)
+  resfut
+
+proc updateVerifier*(
+    processor: ref LightClientProcessor, obj: ForkedLightClientUpdate
+): auto =
+  processor.lightClientVerifier(obj)
+
 proc validateContent(
     n: BeaconNetwork, content: seq[byte], contentKey: ContentKeyByteList
-): Result[void, string] =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let key = contentKey.decode().valueOr:
     return err("Error decoding content key")
 
@@ -277,15 +291,23 @@ proc validateContent(
       else:
         err("No LC data before Altair")
   of lightClientUpdate:
-    let decodingResult = decodeLightClientUpdatesByRange(n.forkDigests, content)
-    if decodingResult.isOk:
-      # TODO:
-      # Currently only verifying if the content can be decoded.
-      # Eventually only new updates that can be verified because the local
-      # node is synced should be accepted.
-      ok()
-    else:
-      err("Error decoding content: " & decodingResult.error)
+    let updates = decodeLightClientUpdatesByRange(n.forkDigests, content).valueOr:
+      return err("Error decoding content: " & error)
+
+    # Only new updates can be verified as they get applied by the LC processor,
+    # so verification works only by being part of the sync process.
+    # This means that no backfill is possible, for that we need updates that
+    # get provided with a proof against historical_summaries, see also:
+    # https://github.com/ethereum/portal-network-specs/issues/305
+    # It is however a little more tricky, even updates that we do not have
+    # applied yet may fail here if the list of updates does not contain first
+    # the next update that is required currently for the sync.
+    for update in updates:
+      let res = await n.processor.updateVerifier(update)
+      if res.isErr():
+        return err("Error verifying LC updates: " & $res.error)
+
+    ok()
   of lightClientFinalityUpdate:
     let update = decodeLightClientFinalityUpdateForked(n.forkDigests, content).valueOr:
       return err("Error decoding content: " & error)
@@ -317,7 +339,7 @@ proc validateContent(
   for i, contentItem in contentItems:
     let
       contentKey = contentKeys[i]
-      validation = n.validateContent(contentItem, contentKey)
+      validation = await n.validateContent(contentItem, contentKey)
     if validation.isOk():
       let contentIdOpt = n.portalProtocol.toContentId(contentKey)
       if contentIdOpt.isNone():
