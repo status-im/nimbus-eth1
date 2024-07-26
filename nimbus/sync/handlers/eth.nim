@@ -405,19 +405,16 @@ method getBlockBodies*(ctx: EthWireRef,
                        hashes: openArray[Hash256]):
                         Result[seq[BlockBody], string]
     {.gcsafe.} =
-  try:
-    let db = ctx.db
-    var body: BlockBody
-    var list: seq[BlockBody]
-    for blockHash in hashes:
-      if db.getBlockBody(blockHash, body):
-        list.add body
-      else:
-        list.add BlockBody()
-        trace "handlers.getBlockBodies: blockBody not found", blockHash
-    return ok(list)
-  except RlpError as exc:
-    return err(exc.msg)
+  let db = ctx.db
+  var body: BlockBody
+  var list: seq[BlockBody]
+  for blockHash in hashes:
+    if db.getBlockBody(blockHash, body):
+      list.add body
+    else:
+      list.add BlockBody()
+      trace "handlers.getBlockBodies: blockBody not found", blockHash
+  return ok(list)
 
 method getBlockHeaders*(ctx: EthWireRef,
                         req: BlocksRequest):

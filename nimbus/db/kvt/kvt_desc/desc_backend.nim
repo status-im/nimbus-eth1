@@ -40,7 +40,7 @@ type
       ## Generic transaction initialisation function
 
   PutKvpFn* =
-    proc(hdl: PutHdlRef; kvps: openArray[(Blob,Blob)]) {.gcsafe, raises: [].}
+    proc(hdl: PutHdlRef; k, v: openArray[byte]) {.gcsafe, raises: [].}
       ## Generic backend database bulk storage function.
 
   PutEndFn* =

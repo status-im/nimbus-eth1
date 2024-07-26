@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/strutils,
+  std/strformat,
   results,
   ../../common/common,
   ../../db/ledger,
@@ -48,12 +48,8 @@ proc commitOrRollbackDependingOnGasUsed(
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   if header.gasLimit < vmState.cumulativeGasUsed + gasBurned:
-    try:
-      vmState.stateDB.rollback(accTx)
-      return err("invalid tx: block header gasLimit reached. gasLimit=$1, gasUsed=$2, addition=$3" % [
-        $header.gasLimit, $vmState.cumulativeGasUsed, $gasBurned])
-    except ValueError as ex:
-      return err(ex.msg)
+    vmState.stateDB.rollback(accTx)
+    return err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasBurned}")
   else:
     # Accept transaction and collect mining fee.
     vmState.stateDB.commit(accTx)
