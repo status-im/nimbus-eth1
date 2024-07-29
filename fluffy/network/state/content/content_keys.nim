@@ -62,6 +62,8 @@ type
     of contractCode:
       contractCodeKey*: ContractCodeKey
 
+  ContentKeyType* = AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey
+
 func init*(T: type AccountTrieNodeKey, path: Nibbles, nodeHash: NodeHash): T =
   AccountTrieNodeKey(path: path, nodeHash: nodeHash)
 

@@ -8,14 +8,17 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sugar], eth/common, ../../../network/state/state_content, ./world_state
+  std/[sequtils, sugar],
+  eth/common,
+  ../../../network/state/[state_content, state_utils, state_gossip],
+  ./world_state
 
-type OffersBuilderRef* = object
+type OffersBuilderRef* = ref object
   worldState: WorldStateRef
   blockHash: BlockHash
-  accountTrieOffers: seq[(AccountTrieNodeKey, AccountTrieNodeOffer)]
-  contractTrieOffers: seq[(ContractTrieNodeKey, ContractTrieNodeOffer)]
-  contractCodeOffers: seq[(ContractCodeKey, ContractCodeOffer)]
+  accountTrieOffers: seq[AccountTrieOfferWithKey]
+  contractTrieOffers: seq[ContractTrieOfferWithKey]
+  contractCodeOffers: seq[ContractCodeOfferWithKey]
 
 proc init*(
     T: type OffersBuilderRef, worldState: WorldStateRef, blockHash: BlockHash
@@ -28,12 +31,17 @@ proc toTrieProof(proof: seq[seq[byte]]): TrieProof =
 proc buildAccountTrieNodeOffer(
     builder: var OffersBuilderRef, address: EthAddress, proof: TrieProof
 ) =
-  let
-    path = Nibbles.init(worldState.toAccountKey(address).data, isEven = true)
-    offerKey = AccountTrieNodeKey.init(path, keccakHash(proof[^1].asSeq()))
-    offerValue = AccountTrieNodeOffer.init(proof, builder.blockHash)
+  try:
+    let
+      path = removeLeafKeyEndNibbles(
+        Nibbles.init(worldState.toAccountKey(address).data, isEven = true), proof[^1]
+      )
+      offerKey = AccountTrieNodeKey.init(path, keccakHash(proof[^1].asSeq()))
+      offerValue = AccountTrieNodeOffer.init(proof, builder.blockHash)
 
-  builder.accountTrieOffers.add((offerKey, offerValue))
+    builder.accountTrieOffers.add(offerValue.withKey(offerKey))
+  except RlpError as e:
+    raiseAssert(e.msg) # Should never happen
 
 proc buildContractTrieNodeOffer(
     builder: var OffersBuilderRef,
@@ -49,7 +57,7 @@ proc buildContractTrieNodeOffer(
     offerValue =
       ContractTrieNodeOffer.init(storageProof, accountProof, builder.blockHash)
 
-  builder.contractTrieOffers.add((offerKey, offerValue))
+  builder.contractTrieOffers.add(offerValue.withKey(offerKey))
 
 proc buildContractCodeOffer(
     builder: var OffersBuilderRef,
@@ -62,7 +70,7 @@ proc buildContractCodeOffer(
     offerValue =
       ContractCodeOffer.init(Bytecode.init(code), accountProof, builder.blockHash)
 
-  builder.contractCodeOffers.add((offerKey, offerValue))
+  builder.contractCodeOffers.add(offerValue.withKey(offerKey))
 
 proc buildBlockOffers*(builder: var OffersBuilderRef) =
   for address, proof in builder.worldState.updatedAccountProofs():
@@ -77,17 +85,11 @@ proc buildBlockOffers*(builder: var OffersBuilderRef) =
     if code.len() > 0:
       builder.buildContractCodeOffer(address, code, accountProof)
 
-proc getAccountTrieOffers*(
-    builder: OffersBuilderRef
-): seq[(AccountTrieNodeKey, AccountTrieNodeOffer)] =
+proc getAccountTrieOffers*(builder: OffersBuilderRef): seq[AccountTrieOfferWithKey] =
   builder.accountTrieOffers
 
-proc getContractTrieOffers*(
-    builder: OffersBuilderRef
-): seq[(ContractTrieNodeKey, ContractTrieNodeOffer)] =
+proc getContractTrieOffers*(builder: OffersBuilderRef): seq[ContractTrieOfferWithKey] =
   builder.contractTrieOffers
 
-proc getContractCodeOffers*(
-    builder: OffersBuilderRef
-): seq[(ContractCodeKey, ContractCodeOffer)] =
+proc getContractCodeOffers*(builder: OffersBuilderRef): seq[ContractCodeOfferWithKey] =
   builder.contractCodeOffers

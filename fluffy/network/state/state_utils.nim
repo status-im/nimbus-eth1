@@ -70,6 +70,20 @@ func toSlot*(storageProof: TrieProof): Result[UInt256, string] {.inline.} =
 
   rlpDecodeContractTrieNode(storageProof[^1])
 
+func removeLeafKeyEndNibbles*(
+    nibbles: Nibbles, leafNode: TrieNode
+): Nibbles {.raises: RlpError.} =
+  let nodeRlp = rlpFromBytes(leafNode.asSeq())
+  doAssert(nodeRlp.listLen() == 2)
+  let (_, isLeaf, prefix) = decodePrefix(nodeRlp.listElem(0))
+  doAssert(isLeaf)
+
+  let leafPrefix = prefix.unpackNibbles()
+  var unpackedNibbles = nibbles.unpackNibbles()
+  doAssert(unpackedNibbles[^leafPrefix.len() .. ^1] == leafPrefix)
+
+  unpackedNibbles.dropN(leafPrefix.len()).packNibbles()
+
 func toPath*(hash: KeccakHash): Nibbles {.inline.} =
   Nibbles.init(hash.data, isEven = true)
 

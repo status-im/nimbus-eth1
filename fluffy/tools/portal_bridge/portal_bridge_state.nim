@@ -12,13 +12,15 @@ import
   chronicles,
   chronos,
   stint,
+  stew/byteutils,
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[eth_types, eth_types_rlp],
   ../../../nimbus/common/chain_config,
   ../../common/common_utils,
   ../../rpc/rpc_calls/rpc_trace_calls,
-  ../../network/state/state_content,
+  ../../rpc/portal_rpc_client,
+  ../../network/state/[state_content, state_gossip],
   ./state_bridge/[database, state_diff, world_state_helper, offers_builder],
   ./[portal_bridge_conf, portal_bridge_common]
 
@@ -33,9 +35,9 @@ type BlockData = object
 
 type BlockOffersRef = ref object
   blockNumber: uint64
-  accountTrieOffers: seq[(AccountTrieNodeKey, AccountTrieNodeOffer)]
-  contractTrieOffers: seq[(ContractTrieNodeKey, ContractTrieNodeOffer)]
-  contractCodeOffers: seq[(ContractCodeKey, ContractCodeOffer)]
+  accountTrieOffers: seq[AccountTrieOfferWithKey]
+  contractTrieOffers: seq[ContractTrieOfferWithKey]
+  contractCodeOffers: seq[ContractCodeOfferWithKey]
 
 proc getBlockData(db: DatabaseRef, blockNumber: uint64): Opt[BlockData] =
   let blockDataBytes = db.get(rlp.encode(blockNumber))
@@ -176,6 +178,9 @@ proc runBackfillBuildBlockOffersLoop(
 
   while true:
     let blockData = await blockDataQueue.popFirst()
+    if blockData.blockNumber == 2.uint64:
+      # exit
+      break
 
     if blockData.blockNumber mod 10000 == 0:
       info "Building state for block number: ", blockNumber = blockData.blockNumber
@@ -196,33 +201,88 @@ proc runBackfillBuildBlockOffersLoop(
         worldState.applyDAOHardFork()
 
       doAssert(
-        blockData.stateRoot == worldState.stateRoot,
+        worldState.stateRoot == blockData.stateRoot,
         "State root mismatch at block number: " & $blockData.blockNumber,
       )
       trace "State diffs successfully applied to block number:",
         blockNumber = blockData.blockNumber
 
+      # worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
+
       var builder = OffersBuilderRef.init(worldState, blockData.blockHash)
       builder.buildBlockOffers()
 
-      # await blockOffersQueue.addLast(
-      #   BlockOffersRef(
-      #     blockNumber: blockData.blockNumber,
-      #     accountTrieOffers: builder.getAccountTrieOffers(),
-      #     contractTrieOffers: builder.getContractTrieOffers(),
-      #     contractCodeOffers: builder.getContractCodeOffers(),
-      #   )
-      # )
+      await blockOffersQueue.addLast(
+        BlockOffersRef(
+          blockNumber: blockData.blockNumber,
+          accountTrieOffers: builder.getAccountTrieOffers(),
+          contractTrieOffers: builder.getContractTrieOffers(),
+          contractCodeOffers: builder.getContractCodeOffers(),
+        )
+      )
 
     # After commit of the above db transaction which stores the updated account state
     # then we store the last persisted block number in the database so that we can use it
     # to enable restarting from this block if needed
     db.putLastPersistedBlockNumber(blockData.blockNumber)
 
+type AccountTrieOfferWithKey* =
+  tuple[key: AccountTrieNodeKey, offer: AccountTrieNodeOffer]
+
+type ContractTrieOfferWithKey* =
+  tuple[key: ContractTrieNodeKey, offer: ContractTrieNodeOffer]
+
+type ContractCodeOfferWithKey* = tuple[key: ContractCodeKey, offer: ContractCodeOffer]
+
+proc gossipOffer(
+    portalClient: RpcClient,
+    offerWithKey:
+      AccountTrieOfferWithKey | ContractTrieOfferWithKey | ContractCodeOfferWithKey,
+) {.async: (raises: [CancelledError]).} =
+  let
+    keyBytes = offerWithKey.key.toContentKey().encode().asSeq()
+    offerBytes = offerWithKey.offer.encode()
+  try:
+    let numPeers =
+      await portalClient.portal_stateGossip(keyBytes.to0xHex(), offerBytes.to0xHex())
+    debug "Gossiping offer to peers: ", offerKey = keyBytes.to0xHex(), numPeers
+  except CatchableError as e:
+    raiseAssert(e.msg) # Should never happen
+
+proc recursiveGossipOffer(
+    portalClient: RpcClient,
+    offerWithKey: AccountTrieOfferWithKey | ContractTrieOfferWithKey,
+) {.async: (raises: [CancelledError]).} =
+  await portalClient.gossipOffer(offerWithKey)
+
+  # root node, recursive gossip is finished
+  if offerWithKey.key.path.unpackNibbles().len() == 0:
+    return
+
+  # continue the recursive gossip by sharing the parent offer with peers
+  await portalClient.recursiveGossipOffer(offerWithKey.getParent())
+
+proc runBackfillGossipBlockOffersLoop(
+    blockOffersQueue: AsyncQueue[BlockOffersRef], portalClient: RpcClient
+) {.async: (raises: [CancelledError]).} =
+  info "Starting state backfill gossip block offers loop"
+
+  while true:
+    let blockOffers = await blockOffersQueue.popFirst()
+
+    for offerWithKey in blockOffers.accountTrieOffers:
+      await portalClient.recursiveGossipOffer(offerWithKey)
+
+    for offerWithKey in blockOffers.contractTrieOffers:
+      await portalClient.recursiveGossipOffer(offerWithKey)
+
+    for offerWithKey in blockOffers.contractCodeOffers:
+      await portalClient.gossipOffer(offerWithKey)
+
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockData], blockOffersQueue: AsyncQueue[BlockOffersRef]
 ) {.async: (raises: [CancelledError]).} =
-  debug "Starting state backfill metrics loop"
+  info "Starting state backfill metrics loop"
 
   while true:
     await sleepAsync(10.seconds)
@@ -231,7 +291,7 @@ proc runBackfillMetricsLoop(
 
 proc runState*(config: PortalBridgeConf) =
   let
-    #portalClient = newRpcClientConnect(config.portalRpcUrl)
+    portalClient = newRpcClientConnect(config.portalRpcUrl)
     web3Client = newRpcClientConnect(config.web3UrlState)
     db = DatabaseRef.init(config.stateDir.string).get()
   defer:
@@ -279,6 +339,7 @@ proc runState*(config: PortalBridgeConf) =
       db, blockDataQueue, web3Client, config.startBlockNumber
     )
     asyncSpawn runBackfillBuildBlockOffersLoop(db, blockDataQueue, blockOffersQueue)
+    asyncSpawn runBackfillGossipBlockOffersLoop(blockOffersQueue, portalClient)
     asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)
 
   while true:
