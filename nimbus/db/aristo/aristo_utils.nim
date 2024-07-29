@@ -98,6 +98,20 @@ iterator subVids*(vtx: VertexRef): VertexID =
       if vid.isValid:
         yield vid
 
+iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
+  ## Simolar to `subVids()` but for nodes
+  case node.vType:
+  of Leaf:
+    if node.lData.pType == AccountData:
+      let vid = node.lData.stoID
+      if node.isValid:
+        yield (vid,node.key[0])
+  of Branch:
+    for n in 0 .. 15:
+      let vid = node.bVid[n]
+      if vid.isValid:
+        yield (vid,node.key[n])
+
 # ---------------------
 
 proc updateAccountForHasher*(

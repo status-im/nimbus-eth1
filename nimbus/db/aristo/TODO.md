@@ -3,8 +3,14 @@
   remember the follow up vertices which can travel through the tx-layers
   to be picked up by the backend store.
 
-* Note that the *proof-mode* code was removed with PR #2445. An idea for a
-  re-implementation would be to pre-load vertices and keep the perimeter
-  hashes of the pre-loaded vertices externally in a vid-hash table. That way,
-  the vid hashes can be verified should they appear in the partial MPT at a
-  later stage.
+* Some comletions migh be needed for the `aristo_part` module which is a
+  re-implementation of the module supporting *proof-mode*/partial trees.
+  + Complete `partMergeStorageData()`. This function might not be needed at
+    all unless *snap-sync* is really revived.
+  + For *snap-sync*, write a `proof` function verifying whether the partial
+    tree is correct relative to the `PartStateRef` descriptor.
+  + One might need to re-visit the `removeCompletedNodes()` module when using
+    *snap-sync* proof features. The algorithm used here assumes that the list
+	of proof nodes is rather small. Also, a right boundary leaf node is
+	typically cleared. This needs to be re-checked when writing the `proof`
+	function mentioned above.
