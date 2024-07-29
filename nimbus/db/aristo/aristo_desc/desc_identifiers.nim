@@ -329,6 +329,11 @@ func to*(n: UInt256; T: type PathID): T =
   ## Representation of a scalar as `PathID` (preserving full information)
   T(pfx: n, length: 64)
 
+func to*(a: PathID; T: type UInt256): T =
+  if not a.pfx.isZero:
+    assert a.length < 64 # debugging only
+    result = a.pfx shr (4 * (64 -  a.length))
+
 # ------------------------------------------------------------------------------
 # Public helpers: Miscellaneous mappings
 # ------------------------------------------------------------------------------

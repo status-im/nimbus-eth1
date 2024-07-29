@@ -14,3 +14,5 @@
 	of proof nodes is rather small. Also, a right boundary leaf node is
 	typically cleared. This needs to be re-checked when writing the `proof`
 	function mentioned above.
+
+* `aristo_nearby` also qualifies for a re-write, now
