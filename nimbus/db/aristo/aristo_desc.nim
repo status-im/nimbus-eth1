@@ -51,16 +51,16 @@ type
 
   MerkleSignRef* = ref object
     ## Simple Merkle signature calculatior for key-value lists
-    root*: VertexID
+    root*: VertexID                   ## Not accounts tree, e.g. `VertexID(2)`
     db*: AristoDbRef
     count*: uint
     error*: AristoError
     errKey*: Blob
 
   DudesRef = ref object
-    ## List of peers accessing the same database. This list is layzily
-    ## allocated and might be kept with a single entry, i.e. so that
-    ## `{centre} == peers`.
+    ## List of peers accessing the same database. This list is layzily allocated
+    ## and might be kept with a single entry, i.e. so that `{centre} == peers`.
+    ##
     centre: AristoDbRef               ## Link to peer with write permission
     peers: HashSet[AristoDbRef]       ## List of all peers
 
@@ -81,9 +81,6 @@ type
     txUidGen*: uint                   ## Tx-relative unique number generator
     dudes: DudesRef                   ## Related DB descriptors
 
-    # Debugging data below, might go away in future
-    xMap*: Table[HashKey,HashSet[RootedVertexID]] ## For pretty printing/debugging
-
     accLeaves*: KeyedQueue[AccountKey, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
@@ -96,8 +93,8 @@ type
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
-  AristoDbAction* = proc(db: AristoDbRef) {.gcsafe, raises: [].}
-    ## Generic call back function/closure.
+    # Debugging data below, might go away in future
+    xMap*: Table[HashKey,RootedVertexID] ## For pretty printing/debugging
 
 # ------------------------------------------------------------------------------
 # Public helpers

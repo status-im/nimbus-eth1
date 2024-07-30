@@ -953,5 +953,14 @@ proc opMemoryMain*() =
       success: false
       fork: Cancun
 
+    assembler:
+      title: "Code bytes: invalidPositions out of bound crash issue #2522"
+      code:
+        Push1  "0x01"    # 0: ok to jump
+        Push1  "0x06"    # 2: jump to pc 6
+        JumpI            # 4
+        "0x695b00"       # 5: PUSH10 First byte is jumpDestOp but operand is too short
+      success: false
+
 when isMainModule:
   opMemoryMain()

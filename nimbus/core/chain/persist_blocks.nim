@@ -201,10 +201,7 @@ proc persistBlocksImpl(
     let n = fromBlock div CleanUpEpoch
     if 0 < n and n < (toBlock div CleanUpEpoch):
       # Starts at around `2 * CleanUpEpoch`
-      try:
-        c.db.purgeOlderBlocksFromHistory(fromBlock - CleanUpEpoch)
-      except CatchableError as exc:
-        warn "Could not clean up old blocks from history", err = exc.msg
+      c.db.purgeOlderBlocksFromHistory(fromBlock - CleanUpEpoch)
 
   ok((blks, txs, gas))
 
@@ -222,31 +219,22 @@ proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
   if header.parentHash == Hash256():
-    try:
-      if not c.db.setHead(header.blockHash):
-        return err("setHead failed")
-    except RlpError as exc:
-      # TODO fix exception+bool error return
-      return err(exc.msg)
+    if not c.db.setHead(header):
+      return err("setHead failed")
     return ok()
 
   var body: BlockBody
-  try:
-    if not c.db.getBlockBody(header, body):
-      debug "Failed to get BlockBody", hash = header.blockHash
-      return err("Could not get block body")
-  except RlpError as exc:
-    return err(exc.msg)
+  if not c.db.getBlockBody(header, body):
+    debug "Failed to get BlockBody", hash = header.blockHash
+    return err("Could not get block body")
 
   discard
     ?c.persistBlocksImpl(
       [EthBlock.init(header, move(body))], {NoPersistHeader, NoPersistTransactions}
     )
 
-  try:
-    discard c.db.setHead(header.blockHash)
-  except RlpError as exc:
-    return err(exc.msg)
+  if not c.db.setHead(header):
+    return err("setHead failed")
   ok()
 
 proc setCanonical*(c: ChainRef, blockHash: Hash256): Result[void, string] =

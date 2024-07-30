@@ -47,7 +47,7 @@ logScope:
 
 # use it as a stack/lifo as the ordering is reversed
 proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
-    {.gcsafe,raises: [CatchableError].} =
+    {.raises: [BlockNotFound].} =
   let db = xp.chain.com.db
   for tx in db.getBlockBody(blockHash).transactions:
     if tx.versionedHashes.len > 0:
@@ -59,7 +59,7 @@ proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     kq.addTxs[tx.itemID] = PooledTransaction(tx: tx)
 
 proc remove(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [BlockNotFound].} =
   let db = xp.chain.com.db
   for tx in db.getBlockBody(blockHash).transactions:
     kq.remTxs[tx.itemID] = true

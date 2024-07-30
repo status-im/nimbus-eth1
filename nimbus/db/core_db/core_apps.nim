@@ -241,8 +241,7 @@ proc markCanonicalChain(
     db: CoreDbRef;
     header: BlockHeader;
     headerHash: Hash256;
-      ): bool
-      {.gcsafe, raises: [RlpError].} =
+      ): bool =
   ## mark this chain as canonical by adding block number to hash lookup
   ## down to forking point
   var
@@ -266,6 +265,13 @@ proc markCanonicalChain(
   if not db.getBlockHeader(currHeader.parentHash, currHeader):
     return false
 
+  template rlpDecodeOrZero(data: openArray[byte]): Hash256 =
+    try:
+      rlp.decode(data, Hash256)
+    except RlpError as exc:
+      warn logTxt "markCanonicalChain()", key, action="put()", error=exc.msg
+      Hash256()
+
   while currHash != Hash256():
     let key = blockNumberToHashKey(currHeader.number)
     let data = kvt.getOrEmpty(key.toOpenArray).valueOr:
@@ -275,7 +281,7 @@ proc markCanonicalChain(
       # not marked, mark it
       kvt.put(key.toOpenArray, rlp.encode(currHash)).isOkOr:
         warn logTxt "markCanonicalChain()", key, action="put()", error=($$error)
-    elif rlp.decode(data, Hash256) != currHash:
+    elif rlpDecodeOrZero(data) != currHash:
       # replace prev chain
       kvt.put(key.toOpenArray, rlp.encode(currHash)).isOkOr:
         warn logTxt "markCanonicalChain()", key, action="put()", error=($$error)
@@ -653,22 +659,22 @@ proc getBlockBody*(
     db: CoreDbRef;
     header: BlockHeader;
     output: var BlockBody;
-      ): bool
-      {.gcsafe, raises: [RlpError].} =
-  output.transactions = db.getTransactions(header.txRoot)
-  output.uncles = db.getUncles(header.ommersHash)
+      ): bool =
+  try:
+    output.transactions = db.getTransactions(header.txRoot)
+    output.uncles = db.getUncles(header.ommersHash)
 
-  if header.withdrawalsRoot.isSome:
-    output.withdrawals = Opt.some(db.getWithdrawals(header.withdrawalsRoot.get))
-
-  true
+    if header.withdrawalsRoot.isSome:
+      output.withdrawals = Opt.some(db.getWithdrawals(header.withdrawalsRoot.get))
+    true
+  except RlpError:
+    false
 
 proc getBlockBody*(
     db: CoreDbRef;
     blockHash: Hash256;
     output: var BlockBody;
-      ): bool
-      {.gcsafe, raises: [RlpError].} =
+      ): bool =
   var header: BlockHeader
   if db.getBlockHeader(blockHash, header):
     return db.getBlockBody(header, output)
@@ -677,15 +683,15 @@ proc getBlockBody*(
     db: CoreDbRef;
     hash: Hash256;
       ): BlockBody
-      {.gcsafe, raises: [RlpError,ValueError].} =
+      {.gcsafe, raises: [BlockNotFound].} =
   if not db.getBlockBody(hash, result):
-    raise newException(ValueError, "Error when retrieving block body")
+    raise newException(BlockNotFound, "Error when retrieving block body")
 
 proc getEthBlock*(
     db: CoreDbRef;
     hash: Hash256;
       ): EthBlock
-      {.gcsafe, raises: [BlockNotFound, RlpError,ValueError].} =
+      {.gcsafe, raises: [BlockNotFound].} =
   var
     header = db.getBlockHeader(hash)
     blockBody = db.getBlockBody(hash)
@@ -695,7 +701,7 @@ proc getEthBlock*(
     db: CoreDbRef;
     blockNumber: BlockNumber;
       ): EthBlock
-      {.gcsafe, raises: [BlockNotFound, RlpError,ValueError].} =
+      {.gcsafe, raises: [BlockNotFound].} =
   var
     header = db.getBlockHeader(blockNumber)
     headerHash = header.blockHash
@@ -706,7 +712,7 @@ proc getUncleHashes*(
     db: CoreDbRef;
     blockHashes: openArray[Hash256];
       ): seq[Hash256]
-      {.gcsafe, raises: [RlpError,ValueError].} =
+      {.gcsafe, raises: [BlockNotFound].} =
   for blockHash in blockHashes:
     result &= db.getBlockBody(blockHash).uncles.mapIt(it.rlpHash)
 
@@ -749,8 +755,7 @@ proc headerExists*(db: CoreDbRef; blockHash: Hash256): bool =
 proc setHead*(
     db: CoreDbRef;
     blockHash: Hash256;
-      ): bool
-      {.gcsafe, raises: [RlpError].} =
+      ): bool =
   var header: BlockHeader
   if not db.getBlockHeader(blockHash, header):
     return false
@@ -767,8 +772,7 @@ proc setHead*(
     db: CoreDbRef;
     header: BlockHeader;
     writeHeader = false;
-      ): bool
-      {.gcsafe, raises: [RlpError].} =
+      ): bool =
   var headerHash = rlpHash(header)
   let kvt = db.ctx.getKvt()
   if writeHeader:

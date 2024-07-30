@@ -104,7 +104,7 @@ proc getVtxRc*(
   ##
   block body:
     # If the vertex marked is to be deleted on the backend, a `VertexRef(nil)`
-    # entry is kept in the local table in which case it isis returned as the
+    # entry is kept in the local table in which case it is returned as the
     # error symbol `GetVtxNotFound`.
     let vtx = db.layersGetVtx(rvid).valueOr:
       break body

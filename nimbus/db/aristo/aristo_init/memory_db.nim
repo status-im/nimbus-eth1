@@ -68,9 +68,6 @@ when extraTraceMessages:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "MemoryDB/" & info
-
 proc newSession(db: MemBackendRef): MemPutHdlRef =
   new result
   result.TypedPutHdlRef.beginSession db

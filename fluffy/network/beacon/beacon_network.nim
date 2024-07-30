@@ -16,7 +16,7 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/gossip_processing/light_client_processor,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[beacon_content, beacon_db, beacon_chain_historical_summaries]
+  "."/[beacon_content, beacon_db, beacon_validation, beacon_chain_historical_summaries]
 
 export beacon_content, beacon_db
 
@@ -29,6 +29,7 @@ type BeaconNetwork* = ref object
   processor*: ref LightClientProcessor
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   forkDigests*: ForkDigests
+  trustedBlockRoot: Opt[Eth2Digest]
   processContentLoop: Future[void]
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
@@ -71,9 +72,9 @@ proc getContent(
   if contentRes.isNone():
     warn "Failed fetching content from the beacon chain network",
       contentKey = contentKeyEncoded
-    return Opt.none(seq[byte])
+    Opt.none(seq[byte])
   else:
-    return Opt.some(contentRes.value().content)
+    Opt.some(contentRes.value().content)
 
 proc getLightClientBootstrap*(
     n: BeaconNetwork, trustedRoot: Digest
@@ -113,11 +114,11 @@ proc getLightClientUpdatesByRange*(
     decodingResult = decodeLightClientUpdatesByRange(n.forkDigests, updates)
 
   if decodingResult.isErr():
-    return Opt.none(ForkedLightClientUpdateList)
+    Opt.none(ForkedLightClientUpdateList)
   else:
     # TODO Not doing validation for now, as probably it should be done by layer
     # above
-    return Opt.some(decodingResult.value())
+    Opt.some(decodingResult.value())
 
 proc getLightClientFinalityUpdate*(
     n: BeaconNetwork, finalizedSlot: uint64
@@ -159,9 +160,9 @@ proc getLightClientOptimisticUpdate*(
       decodeLightClientOptimisticUpdateForked(n.forkDigests, optimisticUpdate)
 
   if decodingResult.isErr():
-    return Opt.none(ForkedLightClientOptimisticUpdate)
+    Opt.none(ForkedLightClientOptimisticUpdate)
   else:
-    return Opt.some(decodingResult.value())
+    Opt.some(decodingResult.value())
 
 proc getHistoricalSummaries*(
     n: BeaconNetwork, epoch: uint64
@@ -175,9 +176,9 @@ proc getHistoricalSummaries*(
       return Opt.none(HistoricalSummaries)
 
   if n.validateHistoricalSummaries(summariesWithProof).isOk():
-    return Opt.some(summariesWithProof.historical_summaries)
+    Opt.some(summariesWithProof.historical_summaries)
   else:
-    return Opt.none(HistoricalSummaries)
+    Opt.none(HistoricalSummaries)
 
 proc new*(
     T: type BeaconNetwork,
@@ -186,6 +187,7 @@ proc new*(
     beaconDb: BeaconDb,
     streamManager: StreamManager,
     forkDigests: ForkDigests,
+    trustedBlockRoot: Opt[Eth2Digest],
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
 ): T =
@@ -220,11 +222,26 @@ proc new*(
     beaconDb: beaconDb,
     contentQueue: contentQueue,
     forkDigests: forkDigests,
+    trustedBlockRoot: trustedBlockRoot,
   )
+
+proc lightClientVerifier(
+    processor: ref LightClientProcessor, obj: SomeForkedLightClientObject
+): Future[Result[void, VerifierError]] {.async: (raises: [CancelledError], raw: true).} =
+  let resfut = Future[Result[void, VerifierError]].Raising([CancelledError]).init(
+      "lightClientVerifier"
+    )
+  processor[].addObject(MsgSource.gossip, obj, resfut)
+  resfut
+
+proc updateVerifier*(
+    processor: ref LightClientProcessor, obj: ForkedLightClientUpdate
+): auto =
+  processor.lightClientVerifier(obj)
 
 proc validateContent(
     n: BeaconNetwork, content: seq[byte], contentKey: ContentKeyByteList
-): Result[void, string] =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let key = contentKey.decode().valueOr:
     return err("Error decoding content key")
 
@@ -232,32 +249,65 @@ proc validateContent(
   of unused:
     raiseAssert "Should not be used and fail at decoding"
   of lightClientBootstrap:
-    let decodingResult = decodeLightClientBootstrapForked(n.forkDigests, content)
-    if decodingResult.isOk:
-      # TODO:
-      # Currently only verifying if the content can be decoded.
-      # Later on we need to either provide a list of acceptable bootstraps (not
-      # really scalable and requires quite some configuration) or find some
-      # way to proof these.
-      # They could be proven at moment of creation by checking finality update
-      # its finalized_header. And verifying the current_sync_committee with the
-      # header state root and current_sync_committee_branch?
-      # Perhaps can be expanded to being able to verify back fill by storing
-      # also the past beacon headers (This is sorta stored in a proof format
-      # for history network also)
-      ok()
-    else:
-      err("Error decoding content: " & decodingResult.error)
+    let bootstrap = decodeLightClientBootstrapForked(n.forkDigests, content).valueOr:
+      return err("Error decoding bootstrap: " & error)
+
+    withForkyBootstrap(bootstrap):
+      when lcDataFork > LightClientDataFork.None:
+        # Try getting last finality update from db. If the node is LC synced
+        # this data should be there. Then check is done to see if the headers
+        # are the same.
+        # Note that this will only work for newly created LC bootstraps. If
+        # backfill of bootstraps is to be supported, they need to be provided
+        # with a proof against historical summaries.
+        # See also:
+        # https://github.com/ethereum/portal-network-specs/issues/296
+        let finalityUpdate = n.beaconDb.getLastFinalityUpdate()
+        if finalityUpdate.isOk():
+          withForkyFinalityUpdate(finalityUpdate.value):
+            when lcDataFork > LightClientDataFork.None:
+              if forkyFinalityUpdate.finalized_header.beacon !=
+                  forkyBootstrap.header.beacon:
+                return err("Bootstrap header does not match recent finalized header")
+
+              if forkyBootstrap.isValidBootstrap(n.beaconDb.cfg):
+                ok()
+              else:
+                err("Error validating LC bootstrap")
+            else:
+              err("No LC data before Altair")
+        elif n.trustedBlockRoot.isSome():
+          # If not yet synced, try trusted block root
+          let blockRoot = hash_tree_root(forkyBootstrap.header.beacon)
+          if blockRoot != n.trustedBlockRoot.get():
+            return err("Bootstrap header does not match trusted block root")
+
+          if forkyBootstrap.isValidBootstrap(n.beaconDb.cfg):
+            ok()
+          else:
+            err("Error validating LC bootstrap")
+        else:
+          err("Cannot validate LC bootstrap")
+      else:
+        err("No LC data before Altair")
   of lightClientUpdate:
-    let decodingResult = decodeLightClientUpdatesByRange(n.forkDigests, content)
-    if decodingResult.isOk:
-      # TODO:
-      # Currently only verifying if the content can be decoded.
-      # Eventually only new updates that can be verified because the local
-      # node is synced should be accepted.
-      ok()
-    else:
-      err("Error decoding content: " & decodingResult.error)
+    let updates = decodeLightClientUpdatesByRange(n.forkDigests, content).valueOr:
+      return err("Error decoding content: " & error)
+
+    # Only new updates can be verified as they get applied by the LC processor,
+    # so verification works only by being part of the sync process.
+    # This means that no backfill is possible, for that we need updates that
+    # get provided with a proof against historical_summaries, see also:
+    # https://github.com/ethereum/portal-network-specs/issues/305
+    # It is however a little more tricky, even updates that we do not have
+    # applied yet may fail here if the list of updates does not contain first
+    # the next update that is required currently for the sync.
+    for update in updates:
+      let res = await n.processor.updateVerifier(update)
+      if res.isErr():
+        return err("Error verifying LC updates: " & $res.error)
+
+    ok()
   of lightClientFinalityUpdate:
     let update = decodeLightClientFinalityUpdateForked(n.forkDigests, content).valueOr:
       return err("Error decoding content: " & error)
@@ -289,7 +339,7 @@ proc validateContent(
   for i, contentItem in contentItems:
     let
       contentKey = contentKeys[i]
-      validation = n.validateContent(contentItem, contentKey)
+      validation = await n.validateContent(contentItem, contentKey)
     if validation.isOk():
       let contentIdOpt = n.portalProtocol.toContentId(contentKey)
       if contentIdOpt.isNone():

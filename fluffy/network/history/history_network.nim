@@ -24,29 +24,6 @@ logScope:
 
 export accumulator
 
-# This looks like it makes no sense, because it makes no sense. It's a
-# workaround for what seems to be a compiler bug; see here:
-#
-# https://github.com/status-im/nimbus-eth1/pull/1465
-#
-# Without this, the call `error` on a `Result` might give a compiler error for
-# the `Result[BlockHeader, string]` or `Result[seq[BlockHeader], string]` types.
-# The error is due to the `$` for `BlockHeader causing side effects, which
-# appears to be due to the timestamp field, which is of `times.Time` type. Its
-# `$` from the times module has side effects (Yes, silly times). In (my) theory
-# this `$` should not leak here, but it seems to do. To workaround this we
-# introduce this additional `$` call, which appears to work.
-#
-# Note that this also fixes the same error in another module, even when not
-# specifically exporting (no asterisk) the call.
-#
-# If you think this is unnecessary, feel free to try deleting it; if all the
-# tests still pass after deleting it, feel free to leave it out. In the
-# meantime, please just ignore it and go on with your life.
-#
-proc `$`(x: BlockHeader): string =
-  $x
-
 type
   HistoryNetwork* = ref object
     portalProtocol*: PortalProtocol
@@ -95,7 +72,7 @@ func fromPortalBlockBody*(
     ok(
       BlockBody(
         transactions: transactions,
-        uncles: @[], # Uncles must be empty: TODO where validation?
+        uncles: @[], # Uncles must be empty, this is verified in `validateBlockBody`
         withdrawals: Opt.some(withdrawals),
       )
     )
@@ -108,7 +85,6 @@ func fromPortalBlockBodyOrRaise*(
   ## Get the EL BlockBody from one of the SSZ-decoded Portal BlockBody types.
   ## Will raise Assertion in case of invalid RLP encodings. Only use of data
   ## has been validated before!
-  # TODO: Using ValueOr here gives compile error
   let res = BlockBody.fromPortalBlockBody(body)
   if res.isOk():
     res.get()
@@ -172,11 +148,6 @@ func encode*(blockBody: BlockBody): seq[byte] =
   else:
     SSZ.encode(PortalBlockBodyLegacy.fromBlockBody(blockBody))
 
-func encode*(blockBody: BlockBody, T: type PortalBlockBodyShanghai): seq[byte] =
-  let portalBlockBody = PortalBlockBodyShanghai.fromBlockBody(blockBody)
-
-  SSZ.encode(portalBlockBody)
-
 func encode*(receipts: seq[Receipt]): seq[byte] =
   let portalReceipts = PortalReceipts.fromReceipts(receipts)
 
@@ -191,9 +162,9 @@ proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
   for i, item in items:
     try:
       tr.put(rlp.encode(i.uint), item.asSeq())
-    except CatchableError as e:
-      # tr.put now is a generic interface to whatever underlying db
-      # and it can raise exception if the backend db is something like aristo
+    except RlpError as e:
+      # RlpError should not occur
+      # TODO: trace down why it might raise this
       raiseAssert(e.msg)
 
   return tr.rootHash
@@ -333,7 +304,8 @@ proc validateReceipts*(
 proc validateReceiptsBytes*(
     bytes: openArray[byte], receiptsRoot: KeccakHash
 ): Result[seq[Receipt], string] =
-  ## Fully decode the SSZ Block Body and validate it against the header.
+  ## Fully decode the SSZ encoded receipts and validate it against the header's
+  ## receipts root.
   let receipts = ?decodeSsz(bytes, PortalReceipts)
 
   ?validateReceipts(receipts, receiptsRoot)

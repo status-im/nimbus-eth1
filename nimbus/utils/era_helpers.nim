@@ -95,23 +95,6 @@ proc loadHistoricalRootsFromEra*(
         )
       )
 
-proc getBlockFromEra*(
-    db: EraDB,
-    historical_roots: openArray[Eth2Digest],
-    historical_summaries: openArray[HistoricalSummary],
-    slot: Slot,
-    cfg: RuntimeConfig,
-): Opt[ForkedTrustedSignedBeaconBlock] =
-  let fork = cfg.consensusForkAtEpoch(slot.epoch)
-  result.ok(ForkedTrustedSignedBeaconBlock(kind: fork))
-  withBlck(result.get()):
-    type T = type(forkyBlck)
-    forkyBlck = db.getBlock(
-      historical_roots, historical_summaries, slot, Opt[Eth2Digest].err(), T
-    ).valueOr:
-      result.err()
-      return
-
 proc getTxs*(txs: seq[bellatrix.Transaction]): seq[common.Transaction] =
   var transactions = newSeqOfCap[common.Transaction](txs.len)
   for tx in txs:
@@ -134,17 +117,7 @@ proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[common.Withdrawal] =
     )
   return withdrawals
 
-# This is a helper function to get the eth1 block number 
-# from a beacon block in slot finding process
-proc getEth1BlockNumber*(blck: ForkedTrustedSignedBeaconBlock): uint64 =
-  ## Get the eth1 block number from a beacon block.
-  ## This does not check for pre/post merge, despite having only 
-  ## post merge meaning
-  withBlck(blck):
-    when consensusFork >= ConsensusFork.Bellatrix:
-      return forkyBlck.message.body.execution_payload.block_number
-
-proc getEth1Block*(blck: ForkedTrustedSignedBeaconBlock): EthBlock =
+proc getEthBlock*(blck: ForkedTrustedSignedBeaconBlock): Opt[EthBlock] =
   ## Convert a beacon block to an eth1 block.
   withBlck(blck):
     when consensusFork >= ConsensusFork.Bellatrix:
@@ -199,6 +172,23 @@ proc getEth1Block*(blck: ForkedTrustedSignedBeaconBlock): EthBlock =
         excessBlobGas: excessBlobGas,
         parentBeaconBlockRoot: parentBeaconBlockRoot,
       )
-      return EthBlock(
+      return Opt.some EthBlock(
         header: header, transactions: txs, uncles: @[], withdrawals: ethWithdrawals
       )
+
+proc getEthBlockFromEra*(
+    db: EraDB,
+    historical_roots: openArray[Eth2Digest],
+    historical_summaries: openArray[HistoricalSummary],
+    slot: Slot,
+    cfg: RuntimeConfig,
+): Opt[EthBlock] =
+  let fork = cfg.consensusForkAtEpoch(slot.epoch)
+  var tmp = ForkedTrustedSignedBeaconBlock(kind: fork)
+  withBlck(tmp):
+    type T = type(forkyBlck)
+    forkyBlck = db.getBlock(
+      historical_roots, historical_summaries, slot, Opt[Eth2Digest].err(), T
+    ).valueOr:
+      return Opt.none(EthBlock)
+  getEthBlock(tmp)

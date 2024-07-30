@@ -40,7 +40,7 @@ type
     kv: KvStoreRef
     bestUpdates: BestLightClientUpdateStore
     forkDigests: ForkDigests
-    cfg: RuntimeConfig
+    cfg*: RuntimeConfig
     finalityUpdateCache: Opt[LightClientFinalityUpdateCache]
     optimisticUpdateCache: Opt[LightClientOptimisticUpdateCache]
 
@@ -314,6 +314,12 @@ proc createGetHandler*(db: BeaconDb): DbGetHandler =
         if len(updates) == 0:
           Opt.none(seq[byte])
         else:
+          # Note that this might not return all of the requested updates.
+          # This might seem faulty/tricky as it is also used in handleOffer to
+          # check if an offer should be accepted.
+          # But it is actually fine as this will occur only when the node is
+          # synced and it would not be able to verify the older updates in the
+          # range anyhow.
           Opt.some(SSZ.encode(updates))
       of lightClientFinalityUpdate:
         # TODO:
