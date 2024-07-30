@@ -61,20 +61,6 @@ type
 func asNibbles*(key: openArray[byte], isEven = true): Nibbles =
   Nibbles.init(key, isEven)
 
-func removeLeafKeyEndNibbles*(
-    nibbles: Nibbles, leafNode: TrieNode
-): Nibbles {.raises: [RlpError].} =
-  let nodeRlp = rlpFromBytes(leafNode.asSeq())
-  doAssert(nodeRlp.listLen() == 2)
-  let (_, isLeaf, prefix) = decodePrefix(nodeRlp.listElem(0))
-  doAssert(isLeaf)
-
-  let leafPrefix = prefix.unpackNibbles()
-  var unpackedNibbles = nibbles.unpackNibbles()
-  doAssert(unpackedNibbles[^leafPrefix.len() .. ^1] == leafPrefix)
-
-  unpackedNibbles.dropN(leafPrefix.len()).packNibbles()
-
 func asTrieProof*(branch: openArray[seq[byte]]): TrieProof =
   TrieProof.init(branch.map(node => TrieNode.init(node)))
 

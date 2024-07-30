@@ -9,9 +9,9 @@
 
 import
   stint,
-  eth/[common, trie, trie/db],
+  eth/[common, trie, trie/db, trie/trie_defs],
   eth/common/[eth_types, eth_types_rlp],
-  ../../../common/common_types,
+  ../../../common/[common_types, common_utils],
   ./database
 
 # Account State definition
@@ -22,22 +22,30 @@ type AccountState* = ref object
   code: seq[byte]
   codeUpdated: bool
 
-proc init(T: type AccountState, account = newAccount()): T =
+proc init(T: type AccountState, account = newAccount()): T {.inline.} =
   T(account: account, codeUpdated: false)
 
-proc setBalance*(accState: var AccountState, balance: UInt256) =
+proc getBalance*(accState: AccountState): UInt256 {.inline.} =
+  accState.account.balance
+
+proc getNonce*(accState: AccountState): AccountNonce {.inline.} =
+  accState.account.nonce
+
+proc setBalance*(accState: var AccountState, balance: UInt256) {.inline.} =
   accState.account.balance = balance
 
-proc addBalance*(accState: var AccountState, balance: UInt256) =
+proc addBalance*(accState: var AccountState, balance: UInt256) {.inline.} =
   accState.account.balance += balance
 
-proc setNonce*(accState: var AccountState, nonce: AccountNonce) =
+proc setNonce*(accState: var AccountState, nonce: AccountNonce) {.inline.} =
   accState.account.nonce = nonce
 
-proc setStorage*(accState: var AccountState, slotKey: UInt256, slotValue: UInt256) =
+proc setStorage*(
+    accState: var AccountState, slotKey: UInt256, slotValue: UInt256
+) {.inline.} =
   accState.storageUpdates[slotKey] = slotValue
 
-proc deleteStorage*(accState: var AccountState, slotKey: UInt256) =
+proc deleteStorage*(accState: var AccountState, slotKey: UInt256) {.inline.} =
   # setting to zero has the effect of deleting the slot
   accState.setStorage(slotKey, 0.u256)
 
@@ -48,31 +56,58 @@ proc setCode*(accState: var AccountState, code: seq[byte]) =
 # World State definition
 
 type
-  AccountHash = KeccakHash
-  SlotKeyHash = KeccakHash
+  AddressHash* = KeccakHash
+  SlotKeyHash* = KeccakHash
 
   WorldStateRef* = ref object
+    db: DatabaseRef
     accountsTrie: HexaryTrie
-    storageTries: TableRef[AccountHash, HexaryTrie]
+    storageTries: TableRef[AddressHash, HexaryTrie]
     storageDb: TrieDatabaseRef
-    bytecodeDb: TrieDatabaseRef # maps AccountHash -> seq[byte]
+    bytecodeDb: TrieDatabaseRef # maps AddressHash -> seq[byte]
+    preimagesDb: TrieDatabaseRef # maps AddressHash -> EthAddress
 
-proc init*(T: type WorldStateRef, db: DatabaseRef): T =
+proc init*(
+    T: type WorldStateRef, db: DatabaseRef, accountsTrieRoot: KeccakHash = emptyRlpHash
+): T =
   WorldStateRef(
-    accountsTrie: initHexaryTrie(db.getAccountsBackend(), isPruning = false),
-    storageTries: newTable[AccountHash, HexaryTrie](),
+    db: db,
+    accountsTrie:
+      if accountsTrieRoot == emptyRlpHash:
+        initHexaryTrie(db.getAccountsBackend(), isPruning = false)
+      else:
+        initHexaryTrie(db.getAccountsBackend(), accountsTrieRoot, isPruning = false),
+    storageTries: newTable[AddressHash, HexaryTrie](),
     storageDb: db.getStorageBackend(),
     bytecodeDb: db.getBytecodeBackend(),
+    preimagesDb: db.getPreimagesBackend(),
   )
 
-template stateRoot*(state: WorldStateRef): KeccakHash =
+proc stateRoot*(state: WorldStateRef): KeccakHash {.inline.} =
   state.accountsTrie.rootHash()
 
-template toAccountKey(address: EthAddress): AccountHash =
+proc toAccountKey*(address: EthAddress): AddressHash {.inline.} =
   keccakHash(address)
 
-template toStorageKey(slotKey: UInt256): SlotKeyHash =
+proc toStorageKey*(slotKey: UInt256): SlotKeyHash {.inline.} =
   keccakHash(toBytesBE(slotKey))
+
+proc getAccountPreimage(state: WorldStateRef, accountKey: AddressHash): EthAddress =
+  doAssert(
+    state.preimagesDb.contains(rlp.encode(accountKey)),
+    "No account preimage with address hash: " & $accountKey,
+  )
+  let addressBytes = state.preimagesDb.get(rlp.encode(accountKey))
+
+  try:
+    rlp.decode(addressBytes, EthAddress)
+  except RlpError as e:
+    raiseAssert(e.msg) # Should never happen
+
+proc setAccountPreimage(
+    state: WorldStateRef, accountKey: AddressHash, address: EthAddress
+) =
+  state.preimagesDb.put(rlp.encode(accountKey), rlp.encode(address))
 
 proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
   let accountKey = toAccountKey(address)
@@ -88,11 +123,17 @@ proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
 
 proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountState) =
   let accountKey = toAccountKey(address)
+  state.setAccountPreimage(accountKey, address)
 
   try:
     if not state.storageTries.contains(accountKey):
-      state.storageTries[accountKey] =
-        initHexaryTrie(state.storageDb, isPruning = false)
+      if accState.account.storageRoot == EMPTY_ROOT_HASH:
+        state.storageTries[accountKey] =
+          initHexaryTrie(state.storageDb, isPruning = false)
+      else:
+        state.storageTries[accountKey] = initHexaryTrie(
+          state.storageDb, accState.account.storageRoot, isPruning = false
+        )
 
     var storageTrie = state.storageTries.getOrDefault(accountKey)
     for k, v in accState.storageUpdates:
@@ -123,3 +164,41 @@ proc deleteAccount*(state: WorldStateRef, address: EthAddress) =
     state.bytecodeDb.del(accountKey.data)
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
+
+# Returns the account proofs for all the updated accounts from the last transaction
+iterator updatedAccountProofs*(state: WorldStateRef): (EthAddress, seq[seq[byte]]) =
+  let trie = initHexaryTrie(
+    state.db.getAccountsUpdatedCache(), state.stateRoot(), isPruning = false
+  )
+
+  try:
+    for key in trie.keys():
+      if key.len() == 0:
+        continue # skip the empty node created on initialization
+      let address = state.getAccountPreimage(KeccakHash.fromBytes(key))
+      yield (address, trie.getBranch(key))
+  except RlpError as e:
+    raiseAssert(e.msg) # should never happen unless the database is corrupted
+
+# Returns the storage proofs for the updated slots for the given account from the last transaction
+iterator updatedStorageProofs*(
+    state: WorldStateRef, address: EthAddress
+): (SlotKeyHash, seq[seq[byte]]) =
+  let accState = state.getAccount(address)
+
+  let trie = initHexaryTrie(
+    state.db.getStorageUpdatedCache(), accState.account.storageRoot, isPruning = false
+  )
+
+  try:
+    for key in trie.keys():
+      if key.len() == 0:
+        continue # skip the empty node created on initialization
+      yield (KeccakHash.fromBytes(key), trie.getBranch(key))
+  except RlpError as e:
+    raiseAssert(e.msg) # should never happen unless the database is corrupted
+
+proc getUpdatedBytecode*(
+    state: WorldStateRef, address: EthAddress
+): seq[byte] {.inline.} =
+  state.db.getBytecodeUpdatedCache().get(toAccountKey(address).data)

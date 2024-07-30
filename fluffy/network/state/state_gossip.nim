@@ -29,17 +29,12 @@ type AccountTrieOfferWithKey* =
 type ContractTrieOfferWithKey* =
   tuple[key: ContractTrieNodeKey, offer: ContractTrieNodeOffer]
 
+type ContractCodeOfferWithKey* = tuple[key: ContractCodeKey, offer: ContractCodeOffer]
+
 func withPath(proof: TrieProof, path: Nibbles): ProofWithPath =
   (path: path, proof: proof)
 
-func withKey*(
-    offer: AccountTrieNodeOffer, key: AccountTrieNodeKey
-): AccountTrieOfferWithKey =
-  (key: key, offer: offer)
-
-func withKey*(
-    offer: ContractTrieNodeOffer, key: ContractTrieNodeKey
-): ContractTrieOfferWithKey =
+func withKey*(offer: ContentOfferType, key: ContentKeyType): auto =
   (key: key, offer: offer)
 
 func getParent(p: ProofWithPath): ProofWithPath =

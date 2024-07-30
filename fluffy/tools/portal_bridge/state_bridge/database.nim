@@ -14,27 +14,36 @@ export results, db
 const COL_FAMILY_NAME_ACCOUNTS = "A"
 const COL_FAMILY_NAME_STORAGE = "S"
 const COL_FAMILY_NAME_BYTECODE = "B"
+const COL_FAMILY_NAME_PREIMAGES = "P"
 
-const COL_FAMILY_NAMES =
-  [COL_FAMILY_NAME_ACCOUNTS, COL_FAMILY_NAME_STORAGE, COL_FAMILY_NAME_BYTECODE]
+const COL_FAMILY_NAMES = [
+  COL_FAMILY_NAME_ACCOUNTS, COL_FAMILY_NAME_STORAGE, COL_FAMILY_NAME_BYTECODE,
+  COL_FAMILY_NAME_PREIMAGES,
+]
 
 type
   AccountsBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
-    updatedCache: TableRef[seq[byte], seq[byte]]
+    updatedCache: TrieDatabaseRef
 
   StorageBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
-    updatedCache: TableRef[seq[byte], seq[byte]]
+    updatedCache: TrieDatabaseRef
 
   BytecodeBackendRef = ref object of RootObj
     cfHandle: ColFamilyHandleRef
     tx: TransactionRef
-    updatedCache: TableRef[seq[byte], seq[byte]]
+    updatedCache: TrieDatabaseRef
 
-  DatabaseBackendRef = AccountsBackendRef | StorageBackendRef | BytecodeBackendRef
+  PreimagesBackendRef = ref object of RootObj
+    cfHandle: ColFamilyHandleRef
+    tx: TransactionRef
+    updatedCache: TrieDatabaseRef
+
+  DatabaseBackendRef =
+    AccountsBackendRef | StorageBackendRef | BytecodeBackendRef | PreimagesBackendRef
 
   DatabaseRef* = ref object
     rocksDb: OptimisticTxDbRef
@@ -42,6 +51,7 @@ type
     accountsBackend: AccountsBackendRef
     storageBackend: StorageBackendRef
     bytecodeBackend: BytecodeBackendRef
+    preimagesBackend: PreimagesBackendRef
 
 proc init*(T: type DatabaseRef, baseDir: string): Result[T, string] =
   let dbPath = baseDir / "db"
@@ -69,6 +79,9 @@ proc init*(T: type DatabaseRef, baseDir: string): Result[T, string] =
     bytecodeBackend = BytecodeBackendRef(
       cfHandle: db.getColFamilyHandle(COL_FAMILY_NAME_BYTECODE).get()
     )
+    preimagesBackend = PreimagesBackendRef(
+      cfHandle: db.getColFamilyHandle(COL_FAMILY_NAME_PREIMAGES).get()
+    )
 
   ok(
     T(
@@ -77,6 +90,7 @@ proc init*(T: type DatabaseRef, baseDir: string): Result[T, string] =
       accountsBackend: accountsBackend,
       storageBackend: storageBackend,
       bytecodeBackend: bytecodeBackend,
+      preimagesBackend: preimagesBackend,
     )
   )
 
@@ -92,7 +106,8 @@ proc put(
     dbBackend: DatabaseBackendRef, key, val: openArray[byte]
 ) {.gcsafe, raises: [].} =
   doAssert dbBackend.tx.put(key, val, dbBackend.cfHandle).isOk()
-  dbBackend.updatedCache[@key] = @val
+  if not dbBackend.updatedCache.isNil():
+    dbBackend.updatedCache.put(key, val)
 
 proc get(
     dbBackend: DatabaseBackendRef, key: openArray[byte]
@@ -111,14 +126,46 @@ proc del(
   else:
     false
 
-proc getAccountsBackend*(db: DatabaseRef): TrieDatabaseRef =
+proc getAccountsBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   trieDB(db.accountsBackend)
 
-proc getStorageBackend*(db: DatabaseRef): TrieDatabaseRef =
+proc getStorageBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   trieDB(db.storageBackend)
 
-proc getBytecodeBackend*(db: DatabaseRef): TrieDatabaseRef =
+proc getBytecodeBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   trieDB(db.bytecodeBackend)
+
+proc getPreimagesBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+  trieDB(db.preimagesBackend)
+
+proc getAccountsUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+  db.accountsBackend.updatedCache
+
+proc getStorageUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+  db.storageBackend.updatedCache
+
+proc getBytecodeUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
+  db.bytecodeBackend.updatedCache
+
+proc put*(db: DatabaseRef, key, val: openArray[byte]) =
+  let tx = db.rocksDb.beginTransaction()
+  defer:
+    tx.close()
+
+  # using default column family
+  doAssert tx.put(key, val).isOk()
+  doAssert tx.commit().isOk()
+
+proc get*(db: DatabaseRef, key: openArray[byte]): seq[byte] =
+  let tx = db.rocksDb.beginTransaction()
+  defer:
+    tx.close()
+
+  # using default column family
+  if tx.get(key, onData).get():
+    tx.get(key).get()
+  else:
+    @[]
 
 proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   if not db.pendingTransaction.isNil():
@@ -129,10 +176,12 @@ proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   db.accountsBackend.tx = tx
   db.storageBackend.tx = tx
   db.bytecodeBackend.tx = tx
+  db.preimagesBackend.tx = tx
 
-  db.accountsBackend.updatedCache = newTable[seq[byte], seq[byte]]()
-  db.storageBackend.updatedCache = newTable[seq[byte], seq[byte]]()
-  db.bytecodeBackend.updatedCache = newTable[seq[byte], seq[byte]]()
+  db.accountsBackend.updatedCache = newMemoryDB()
+  db.storageBackend.updatedCache = newMemoryDB()
+  db.bytecodeBackend.updatedCache = newMemoryDB()
+  db.preimagesBackend.updatedCache = nil # not used
 
   ok()
 
@@ -164,15 +213,6 @@ template withTransaction*(db: DatabaseRef, body: untyped): auto =
     body
   finally:
     db.commitTransaction().expect("Transaction should be commited")
-
-template accountsBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
-  db.accountsBackend.updatedCache
-
-template storageBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
-  db.storageBackend.updatedCache
-
-template bytecodeBackendUpdatedCache*(db: DatabaseRef): TableRef[seq[byte], seq[byte]] =
-  db.bytecodeBackend.updatedCache
 
 proc close*(db: DatabaseRef) =
   if not db.pendingTransaction.isNil():

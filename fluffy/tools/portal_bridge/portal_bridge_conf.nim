@@ -141,10 +141,10 @@ type
         name: "state-dir"
       .}: InputDir
 
-      # TODO: support starting from a specific block. Currently this is not possible using the existing HexaryTrie library.
-      # startBlockNumber* {.
-      #   desc: "The block number to start from", defaultValue: 1, name: "start-block"
-      # .}: uint64
+      startBlockNumber* {.
+        desc: "The block number to start from", defaultValue: 1, name: "start-block"
+      .}: uint64
+
       verifyState* {.
         desc: "Verify the fetched state before gossiping it into the network",
         defaultValue: true,

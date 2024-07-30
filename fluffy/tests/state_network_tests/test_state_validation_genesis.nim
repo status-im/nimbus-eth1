@@ -13,7 +13,7 @@ import
   results,
   eth/[common, trie, trie/trie_defs],
   ../../../nimbus/common/chain_config,
-  ../../network/state/[state_content, state_validation],
+  ../../network/state/[state_content, state_validation, state_utils],
   ./state_test_helpers
 
 template checkValidProofsForExistingLeafs(
