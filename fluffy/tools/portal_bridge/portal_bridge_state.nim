@@ -178,9 +178,6 @@ proc runBackfillBuildBlockOffersLoop(
 
   while true:
     let blockData = await blockDataQueue.popFirst()
-    if blockData.blockNumber == 2.uint64:
-      # exit
-      break
 
     if blockData.blockNumber mod 10000 == 0:
       info "Building state for block number: ", blockNumber = blockData.blockNumber
@@ -225,14 +222,6 @@ proc runBackfillBuildBlockOffersLoop(
     # then we store the last persisted block number in the database so that we can use it
     # to enable restarting from this block if needed
     db.putLastPersistedBlockNumber(blockData.blockNumber)
-
-type AccountTrieOfferWithKey* =
-  tuple[key: AccountTrieNodeKey, offer: AccountTrieNodeOffer]
-
-type ContractTrieOfferWithKey* =
-  tuple[key: ContractTrieNodeKey, offer: ContractTrieNodeOffer]
-
-type ContractCodeOfferWithKey* = tuple[key: ContractCodeKey, offer: ContractCodeOffer]
 
 proc gossipOffer(
     portalClient: RpcClient,
