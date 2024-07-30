@@ -15,9 +15,9 @@ import results, eth/common/eth_types, ssz_serialization, ../../../common/common_
 export ssz_serialization, common_types, hash, results
 
 const
-  MAX_TRIE_NODE_LEN = 1024
-  MAX_TRIE_PROOF_LEN = 65
-  MAX_BYTECODE_LEN = 32768
+  MAX_TRIE_NODE_LEN* = 1024
+  MAX_TRIE_PROOF_LEN* = 65
+  MAX_BYTECODE_LEN* = 32768
 
 type
   TrieNode* = List[byte, MAX_TRIE_NODE_LEN]
