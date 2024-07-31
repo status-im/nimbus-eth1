@@ -28,23 +28,6 @@ type
   TxPoolFlags* = enum ##\
     ## Processing strategy selector symbols
 
-    stageItems1559MinFee ##\
-      ## Stage tx items with `tx.maxFee` at least `minFeePrice`. Other items
-      ## are left or set pending. This symbol affects post-London tx items,
-      ## only.
-
-    stageItems1559MinTip ##\
-      ## Stage tx items with `tx.effectiveGasTip(baseFee)` at least
-      ## `minTipPrice`. Other items are considered underpriced and left
-      ## or set pending. This symbol affects post-London tx items, only.
-
-    stageItemsPlMinPrice ##\
-      ## Stage tx items with `tx.gasPrice` at least `minPreLondonGasPrice`.
-      ## Other items are considered underpriced and left or set pending.
-      ## This symbol affects pre-London tx items, only.
-
-    # -----------
-
     packItemsMaxGasLimit ##\
       ## It set, the *packer* will execute and collect additional items from
       ## the `staged` bucket while accumulating `gasUsed` as long as
@@ -78,9 +61,6 @@ type
       ## at least `lifeTime` ago.
 
   TxPoolParam* = tuple          ## Getter/setter accessible parameters
-    minFeePrice: GasPrice       ## Gas price enforced by the pool, `gasFeeCap`
-    minTipPrice: GasPrice       ## Desired tip-per-tx target, `effectiveGasTip`
-    minPlGasPrice: GasPrice     ## Desired pre-London min `gasPrice`
     dirtyBuckets: bool          ## Buckets need to be updated
     doubleCheck: seq[TxItemRef] ## Check items after moving block chain head
     flags: set[TxPoolFlags]     ## Processing strategy symbols
@@ -111,12 +91,7 @@ const
     ## core/tx_pool.go(177) of the geth implementation.
     10u
 
-  txMinFeePrice = 1.GasPrice
-  txMinTipPrice = 1.GasPrice
-  txPoolFlags = {stageItems1559MinTip,
-                  stageItems1559MinFee,
-                  stageItemsPlMinPrice,
-                  packItemsTryHarder,
+  txPoolFlags = {packItemsTryHarder,
                   autoUpdateBucketsDB,
                   autoZombifyUnpacked}
 
@@ -136,8 +111,6 @@ proc init*(xp: TxPoolRef; com: CommonRef)
   xp.priceBump = txPriceBump
 
   xp.param.reset
-  xp.param.minFeePrice = txMinFeePrice
-  xp.param.minTipPrice = txMinTipPrice
   xp.param.flags = txPoolFlags
 
 # ------------------------------------------------------------------------------
@@ -160,18 +133,6 @@ func pDirtyBuckets*(xp: TxPoolRef): bool =
 func pDoubleCheck*(xp: TxPoolRef): seq[TxItemRef] =
   ## Getter, cached block chain head was moved back
   xp.param.doubleCheck
-
-func pMinFeePrice*(xp: TxPoolRef): GasPrice =
-  ## Getter
-  xp.param.minFeePrice
-
-func pMinTipPrice*(xp: TxPoolRef): GasPrice =
-  ## Getter
-  xp.param.minTipPrice
-
-func pMinPlGasPrice*(xp: TxPoolRef): GasPrice =
-  ## Getter
-  xp.param.minPlGasPrice
 
 func startDate*(xp: TxPoolRef): Time =
   ## Getter
@@ -200,18 +161,6 @@ func pDoubleCheckFlush*(xp: TxPoolRef) =
 func `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.flags = val
-
-func `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
-  ## Setter
-  xp.param.minFeePrice = val
-
-func `pMinTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
-  ## Setter
-  xp.param.minTipPrice = val
-
-func `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
-  ## Setter
-  xp.param.minPlGasPrice = val
 
 # ------------------------------------------------------------------------------
 # Public functions, heplers (debugging only)
