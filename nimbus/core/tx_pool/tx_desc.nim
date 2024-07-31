@@ -25,9 +25,6 @@ import
 {.push raises: [].}
 
 type
-  TxPoolCallBackRecursion* = object of Defect
-    ## Attempt to recurse a call back function
-
   TxPoolFlags* = enum ##\
     ## Processing strategy selector symbols
 
