@@ -25,7 +25,7 @@ import
   chronicles,
   eth/keys
 
-import ../../../transaction except GasPrice, GasPriceEx  # already in tx_item
+import ../../../transaction
 
 {.push raises: [].}
 
@@ -148,21 +148,21 @@ proc txPreLondonAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
   ## For legacy transactions check whether minimum gas price and tip are
   ## high enough. These checks are optional.
   if item.tx.txType < TxEip1559:
-    if item.tx.gasPrice.GasPriceEx < 0:
+    if item.tx.gasPrice < 0:
       return false
 
     # Fall back transaction selector scheme
-    if item.tx.effectiveGasTip(xp.chain.baseFee) < 1.GasPrice:
+    if item.tx.effectiveGasTip(xp.chain.baseFee) < 1.GasInt:
       return false
   true
 
 proc txPostLondonAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef): bool =
   ## Helper for `classifyTxPacked()`
   if item.tx.txType >= TxEip1559:
-    if item.tx.effectiveGasTip(xp.chain.baseFee) < 1.GasPrice:
+    if item.tx.effectiveGasTip(xp.chain.baseFee) < 1.GasInt:
       return false
 
-    if item.tx.maxFeePerGas.GasPriceEx < 1.GasPrice:
+    if item.tx.maxFeePerGas < 1.GasInt:
       return false
   true
 
@@ -191,7 +191,7 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   if not xp.txNonceActive(item):
     return false
 
-  if item.tx.effectiveGasTip(xp.chain.baseFee) <= 0.GasPriceEx:
+  if item.tx.effectiveGasTip(xp.chain.baseFee) <= 0.GasInt:
     return false
 
   if not xp.txGasCovered(item):

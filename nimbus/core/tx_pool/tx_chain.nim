@@ -75,7 +75,7 @@ proc gasLimitsGet(com: CommonRef; parent: BlockHeader): GasInt =
       parent.gasLimit,
       gasFloor = DEFAULT_GAS_LIMIT,
       gasCeil = DEFAULT_GAS_LIMIT)
-      
+
 func prepareHeader(dh: TxChainRef) =
   dh.com.pos.prepare(dh.prepHeader)
 

@@ -22,7 +22,6 @@ import
   results,
   ../../eip4844
 
-
 type
   TxSenderNonceRef* = ref object ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction\
@@ -534,7 +533,7 @@ proc maxProfit*(nonceData: TxSenderNonceRef): float64 =
 
 proc maxProfit*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]):
               float64 =
-  ## Variant of `profit()`, returns `GasPriceEx.low` if `rc.isErr`
+  ## Variant of `profit()`
   ## evaluates `true`.
   if rc.isOk:
     return rc.value.data.profit
