@@ -52,7 +52,7 @@ var
   statCount: array[TxItemStatus,int] # per status bucket
 
   txList: seq[TxItemRef]
-  effGasTips: seq[GasPriceEx]
+  effGasTips: seq[GasPrice]
 
   # Running block chain
   bcCom: CommonRef
@@ -484,16 +484,16 @@ proc runTxPackerTests(noisy = true) =
 
     test "Calculate some non-trivial base fee":
       var
-        feesList = SortedSet[GasPriceEx,bool].init()
+        feesList = SortedSet[GasPrice,bool].init()
 
       # provide a sorted list of gas fees
       for item in txList:
         discard feesList.insert(item.tx.effectiveGasTip(0.GasPrice))
 
       let
-        minKey = max(0, feesList.ge(GasPriceEx.low).value.key.int64)
-        lowKey = feesList.gt(minKey.GasPriceEx).value.key.uint64
-        highKey = feesList.le(GasPriceEx.high).value.key.uint64
+        minKey = max(0, feesList.ge(GasPrice.low).value.key.int64)
+        lowKey = feesList.gt(minKey.GasPrice).value.key.uint64
+        highKey = feesList.le(GasPrice.high).value.key.uint64
         keyRange = highKey - lowKey
         keyStep = max(1u64, keyRange div 500_000)
 
@@ -505,7 +505,7 @@ proc runTxPackerTests(noisy = true) =
       # the following might throw an exception if the table is de-generated
       var nextKey = ntBaseFee
       for _ in [1, 2, 3]:
-        let rcNextKey = feesList.gt(nextKey.GasPriceEx)
+        let rcNextKey = feesList.gt(nextKey.GasPrice)
         check rcNextKey.isOk
         nextKey = rcNextKey.value.key.uint64.GasPrice
 

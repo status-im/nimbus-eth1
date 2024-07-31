@@ -16,6 +16,7 @@ import
   std/[hashes, times],
   ../../utils/ec_recover,
   ../../utils/utils,
+  ../../transaction,
   ./tx_info,
   eth/[common, keys],
   results
@@ -23,16 +24,6 @@ import
 {.push raises: [].}
 
 type
-  GasPrice* = ##|
-    ## Handy definition distinct from `GasInt` which is a commodity unit while
-    ## the `GasPrice` is the commodity valuation per unit of gas, similar to a
-    ## kind of currency.
-    distinct uint64
-
-  GasPriceEx* = ##\
-    ## Similar to `GasPrice` but is allowed to be negative.
-    distinct int64
-
   TxItemStatus* = enum ##\
     ## Current status of a transaction as seen by the pool.
     txItemPending = 0
@@ -56,50 +47,6 @@ type
 
 proc utcTime: Time =
   getTime().utc.toTime
-
-# ------------------------------------------------------------------------------
-# Public helpers supporting distinct types
-# ------------------------------------------------------------------------------
-
-proc `$`*(a: GasPrice): string {.borrow.}
-proc `<`*(a, b: GasPrice): bool {.borrow.}
-proc `<=`*(a, b: GasPrice): bool {.borrow.}
-proc `==`*(a, b: GasPrice): bool {.borrow.}
-proc `+`*(a, b: GasPrice): GasPrice {.borrow.}
-proc `-`*(a, b: GasPrice): GasPrice {.borrow.}
-
-proc `$`*(a: GasPriceEx): string {.borrow.}
-proc `<`*(a, b: GasPriceEx): bool {.borrow.}
-proc `<=`*(a, b: GasPriceEx): bool {.borrow.}
-proc `==`*(a, b: GasPriceEx): bool {.borrow.}
-proc `+`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
-proc `-`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
-proc `+=`*(a: var GasPriceEx; b: GasPriceEx) {.borrow.}
-proc `-=`*(a: var GasPriceEx; b: GasPriceEx) {.borrow.}
-
-# Multiplication/division of *price* and *commodity unit*
-
-proc `*`*(a: GasPrice; b: SomeUnsignedInt): GasPrice {.borrow.}
-proc `*`*(a: SomeUnsignedInt; b: GasPrice): GasPrice {.borrow.}
-
-proc `div`*(a: GasPrice; b: SomeUnsignedInt): GasPrice =
-  (a.uint64 div b).GasPrice # beware of zero denominator
-
-proc `*`*(a: SomeInteger; b: GasPriceEx): GasPriceEx =
-  (a * b.int64).GasPriceEx # beware of under/overflow
-
-# Mixed stuff, convenience ops
-
-proc `-`*(a: GasPrice; b: SomeUnsignedInt): GasPrice {.borrow.}
-
-proc `<`*(a: GasPriceEx; b: SomeSignedInt): bool =
-  a.int64 < b
-
-proc `<`*(a: GasPriceEx|SomeSignedInt; b: GasPrice): bool =
-  if a.int64 < 0: true else: a.GasPrice < b
-
-proc `<=`*(a: SomeSignedInt; b: GasPriceEx): bool =
-  a < b.int64
 
 # ------------------------------------------------------------------------------
 # Public functions, Constructor
@@ -159,20 +106,8 @@ proc cost*(tx: Transaction): UInt256 =
   ## Getter (go/ref compat): gas * gasPrice + value.
   (tx.gasPrice * tx.gasLimit).u256 + tx.value
 
-# core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
-# core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
-proc effectiveGasTip*(tx: Transaction; baseFee: GasInt): GasPriceEx =
-  ## The effective miner gas tip for the globally argument `baseFee`. The
-  ## result (which is a price per gas) might well be negative.
-  if tx.txType < TxEip1559:
-    (tx.gasPrice - baseFee).GasPriceEx
-  else:
-    # London, EIP1559
-    min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee).GasPriceEx
-
-proc effectiveGasTip*(tx: Transaction; baseFee: UInt256): GasPriceEx =
-  ## Variant of `effectiveGasTip()`
-  tx.effectiveGasTip(baseFee.truncate(GasInt))
+func effectiveGasTip*(tx: Transaction; baseFee: GasInt): GasInt =
+  effectiveGasTip(tx, Opt.some(baseFee.u256))
 
 # ------------------------------------------------------------------------------
 # Public functions, item getters

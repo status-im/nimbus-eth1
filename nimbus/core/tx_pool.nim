@@ -288,20 +288,6 @@
 ##   The `flags` parameter holds a set of strategy symbols for how to process
 ##   items and buckets.
 ##
-##   *stageItems1559MinFee*
-##     Stage tx items with `tx.maxFee` at least `minFeePrice`. Other items are
-##     left or set pending. This symbol affects post-London tx items, only.
-##
-##   *stageItems1559MinTip*
-##     Stage tx items with `tx.effectiveGasTip(baseFee)` at least
-##     `minTipPrice`. Other items are considered underpriced and left or set
-##     pending. This symbol affects post-London tx items, only.
-##
-##   *stageItemsPlMinPrice*
-##     Stage tx items with `tx.gasPrice` at least `minPreLondonGasPrice`.
-##     Other items are considered underpriced and left or set pending. This
-##     symbol affects pre-London tx items, only.
-##
 ##   *packItemsMaxGasLimit*
 ##     It set, the *packer* will execute and collect additional items from
 ##     the `staged` bucket while accumulating `gasUsed` as long as
@@ -350,11 +336,6 @@
 ## minFeePrice
 ##   Applies no EIP-1559 txs only. Txs are packed if `maxFee` is at least
 ##   that value.
-##
-## minTipPrice
-##   For EIP-1559, txs are packed if the expected tip (see `estimatedGasTip()`)
-##   is at least that value. In compatibility mode for legacy txs, this
-##   degenerates to `gasPrice - baseFee`.
 ##
 ## minPreLondonGasPrice
 ##   For pre-London or legacy txs, this parameter has precedence over
@@ -449,9 +430,6 @@ export
   results,
   tx_desc.startDate,
   tx_info,
-  tx_item.GasPrice,
-  tx_item.`<=`,
-  tx_item.`<`,
   tx_item.effectiveGasTip,
   tx_item.info,
   tx_item.itemID,
@@ -680,25 +658,6 @@ func head*(xp: TxPoolRef): BlockHeader =
   ## middle of a mining update.)
   xp.chain.head
 
-# core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-func minFeePrice*(xp: TxPoolRef): GasPrice =
-  ## Getter, retrieves minimum for the current gas fee enforced by the
-  ## transaction pool for txs to be packed. This is an EIP-1559 only
-  ## parameter (see `stage1559MinFee` strategy.)
-  xp.pMinFeePrice
-
-func minPreLondonGasPrice*(xp: TxPoolRef): GasPrice =
-  ## Getter. retrieves, the current gas price enforced by the transaction
-  ## pool. This is a pre-London parameter (see `packedPlMinPrice` strategy.)
-  xp.pMinPlGasPrice
-
-func minTipPrice*(xp: TxPoolRef): GasPrice =
-  ## Getter, retrieves minimum for the current gas tip (or priority fee)
-  ## enforced by the transaction pool. This is an EIP-1559 parameter but it
-  ## comes with a fall back interpretation (see `stage1559MinTip` strategy.)
-  ## for legacy transactions.
-  xp.pMinTipPrice
-
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
 # core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
@@ -729,30 +688,6 @@ func `maxRejects=`*(xp: TxPoolRef; val: int) =
   ## Setter, the size of the waste basket. This setting becomes effective with
   ## the next move of an item into the waste basket.
   xp.txDB.maxRejects = val
-
-# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-func `minFeePrice=`*(xp: TxPoolRef; val: GasPrice) =
-  ## Setter for `minFeePrice`.  If there was a value change, this function
-  ## implies `triggerReorg()`.
-  if xp.pMinFeePrice != val:
-    xp.pMinFeePrice = val
-    xp.pDirtyBuckets = true
-
-# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-func `minPreLondonGasPrice=`*(xp: TxPoolRef; val: GasPrice) =
-  ## Setter for `minPlGasPrice`. If there was a value change, this function
-  ## implies `triggerReorg()`.
-  if xp.pMinPlGasPrice != val:
-    xp.pMinPlGasPrice = val
-    xp.pDirtyBuckets = true
-
-# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-func `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) =
-  ## Setter for `minTipPrice`. If there was a value change, this function
-  ## implies `triggerReorg()`.
-  if xp.pMinTipPrice != val:
-    xp.pMinTipPrice = val
-    xp.pDirtyBuckets = true
 
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
