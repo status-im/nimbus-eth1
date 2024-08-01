@@ -128,7 +128,7 @@ proc pp*(
   let
     pfx0 = indent.toPfx()
     pfx1 = indent.toPfx(1)
-
+    pfx2 = indent.toPfx(2)
   var pfx = ""
   if dbOk:
     result &= pfx & "<db>" & pfx1 & ps.db.pp(
@@ -147,9 +147,10 @@ proc pp*(
     if 0 < len:
       var qfx = ""
       result &= pfx1 & "{"
-      for (vid,vLst) in ps.core.pairs:
+      for vid in ps.core.keys.toSeq.sorted:
+        let vLst = ps.core.getOrDefault vid
         result &= qfx & "(" & vid.pp & ":" & vLst.pp(ps) & ")"
-        qfx = pfx1
+        qfx = pfx2
       result &= "}"
     pfx = pfx0
   if byKeyOk:

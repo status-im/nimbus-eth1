@@ -152,8 +152,10 @@ type
 
 
     # Part/proof node errors
+    PartArgNotInCore
     PartArgNotGenericRoot
     PartArgRootAlreadyUsed
+    PartArgRootAlreadyOnDatabase
     PartChkChangedKeyNotInKeyTab
     PartChkChangedVtxMissing
     PartChkCoreKeyLookupFailed
@@ -188,7 +190,6 @@ type
     PartRlpPayloadException
     PartRootKeysDontMatch
     PartRootVidsDontMatch
-    PartRootAlreadyOnDatabase
     PartVtxSlotWasModified
     PartVtxSlotWasNotModified
 

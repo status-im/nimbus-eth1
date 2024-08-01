@@ -159,6 +159,16 @@ proc partPut*(
   ok()
 
 
+proc partGetSubTree*(ps: PartStateRef; rootHash: Hash256): VertexID =
+  ## For the argument `roothash` retrieve the root vertex ID of a particular
+  ## sub tree from the partial state descriptor argument `ps`. The function
+  ## returns `VertexID(0)` if there is no match.
+  ##
+  for vid in ps.core.keys:
+    if ps[vid].to(Hash256) == rootHash:
+      return vid
+
+
 proc partReRoot*(
     ps: PartStateRef;
     frRoot: VertexID;
@@ -166,9 +176,11 @@ proc partReRoot*(
       ): Result[void,AristoError] =
   ## Realign a generic root vertex (i.e `$2`..`$(LEAST_FREE_VID-1)`) for a
   ## `proof` state to a new root vertex.
-  if frRoot notin ps.core or frRoot == toRoot:
+  if frRoot == toRoot:
     return ok() # nothing to do
 
+  if frRoot notin ps.core:
+    return err(PartArgNotInCore)
   if frRoot < VertexID(2) or LEAST_FREE_VID <= frRoot.ord or
      toRoot < VertexID(2) or LEAST_FREE_VID <= toRoot.ord:
     return err(PartArgNotGenericRoot)
@@ -176,7 +188,7 @@ proc partReRoot*(
   if toRoot in ps.core:
     return err(PartArgRootAlreadyUsed)
   if ps.db.getVtx((toRoot,toRoot)).isValid:
-    return err(PartRootAlreadyOnDatabase)
+    return err(PartArgRootAlreadyOnDatabase)
 
   # Migrate
   for key in ps.byKey.keys:

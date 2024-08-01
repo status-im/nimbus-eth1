@@ -50,20 +50,21 @@ type
 
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"
-    BaseNewCaptureFn    = "newCapture"
-    BaseNewCtxFromTxFn  = "ctxFromTx"
+    BasePushCaptureFn   = "pushCapture"
     BaseNewTxFn         = "newTransaction"
     BasePersistentFn    = "persistent"
     BaseStateBlockNumberFn = "stateBlockNumber"
-    BaseSwapCtxFn       = "swapCtx"
 
-    CptLogDbFn          = "cpt/logDb"
-    CptRecorderFn       = "cpt/recorder"
-    CptForgetFn         = "cpt/forget"
+    CptKvtLogFn         = "kvtLog"
+    CptLevelFn          = "level"
+    CptPopFn            = "pop"
+    CptStopCaptureFn    = "stopCapture"
 
     CtxForgetFn         = "ctx/forget"
     CtxGetAccountsFn    = "getAccounts"
     CtxGetGenericFn     = "getGeneric"
+    CtxNewCtxByKeyFn    = "newCtxByKey"
+    CtxSwapCtxFn        = "swapCtx"
 
     KvtDelFn            = "del"
     KvtGetFn            = "get"

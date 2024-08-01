@@ -15,6 +15,7 @@ import
   eth/common,
   "../.."/[constants, errors],
   ".."/[kvt, aristo],
+  ./backend/aristo_db,
   ./base/[api_tracking, base_config, base_desc, base_helpers]
 
 export
@@ -44,7 +45,7 @@ when CoreDbEnableProfiling:
     CoreDbFnInx,
     CoreDbProfListRef
 
-when CoreDbEnableCaptJournal and false:
+when CoreDbEnableCaptJournal:
   import
     ./backend/aristo_trace
   type
@@ -69,33 +70,69 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   ##
   db.defCtx
 
-proc swapCtx*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
-  ## Activate argument context `ctx` as default and return the previously
-  ## active context. This function goes typically together with `forget()`. A
-  ## valid scenario might look like
-  ## ::
-  ##   proc doSomething(db: CoreDbRef; ctx: CoreDbCtxRef) =
-  ##     let saved = db.swapCtx ctx
-  ##     defer: db.swapCtx(saved).forget()
+proc newCtxByKey*(ctx: CoreDbCtxRef; root: Hash256): CoreDbRc[CoreDbCtxRef] =
+  ## Create new context derived from a matching transaction of the currently
+  ## active context. If successful, the resulting context has the following
+  ## properties:
+  ##
+  ## * Transaction level is 1
+  ## * The state of the accounts column is equal to the argument `root`
+  ##
+  ## If successful, the resulting descriptor **must** be manually released
+  ## with `forget()` when it is not used, anymore.
+  ##
+  ## Note:
+  ##   The underlying `Aristo` backend uses lazy hashing so this function
+  ##   might fail simply because there is no computed state when nesting
+  ##   the next transaction. If the previous transaction needs to be found,
+  ##   then it must called like this:
+  ##   ::
+  ##     let db = ..                             # Instantiate CoreDb handle
   ##     ...
+  ##     discard db.ctx.getAccounts.state()      # Compute state hash
+  ##     db.ctx.newTransaction()                 # Enter new transaction
+  ##
+  ##   However, remember that unused hash computations are contle relative
+  ##   to processing time.
+  ##
+  ctx.setTrackNewApi CtxNewCtxByKeyFn
+  result = ctx.newCtxByKey(root, $api)
+  ctx.ifTrackNewApi: debug logTxt, api, elapsed, root=($$root),  result
+
+proc swapCtx*(ctx: CoreDbCtxRef; db: CoreDbRef): CoreDbCtxRef =
+  ## Activate argument context `ctx` as default and return the previously
+  ## active context. This function goes typically together with `forget()`.
+  ## A valid scenario might look like
+  ## ::
+  ##   let db = ..                             # Instantiate CoreDb handle
+  ##   ...
+  ##   let ctx = newCtxByKey(..).expect "ctx"  # Create new context
+  ##   let saved = db.swapCtx ctx              # Swap context dandles
+  ##   defer: db.swapCtx(saved).forget()       # Restore
+  ##   ...
   ##
   doAssert not ctx.isNil
-  db.setTrackNewApi BaseSwapCtxFn
+  assert db.defCtx != ctx # debugging only
+  db.setTrackNewApi CtxSwapCtxFn
+
+  # Swap default context with argument `ctx`
   result = db.defCtx
+  db.defCtx = ctx
 
   # Set read-write access and install
   CoreDbAccRef(ctx).call(reCentre, db.ctx.mpt).isOkOr:
     raiseAssert $api & " failed: " & $error
   CoreDbKvtRef(ctx).call(reCentre, db.ctx.kvt).isOkOr:
     raiseAssert $api & " failed: " & $error
-  db.defCtx = ctx
+  doAssert db.defCtx != result
   db.ifTrackNewApi: debug logTxt, api, elapsed
 
 proc forget*(ctx: CoreDbCtxRef) =
   ## Dispose `ctx` argument context and related columns created with this
-  ## context. This function fails if `ctx` is the default context.
+  ## context. This function throws an exception `ctx` is the default context.
   ##
   ctx.setTrackNewApi CtxForgetFn
+  doAssert ctx !=  ctx.parent.defCtx
   CoreDbAccRef(ctx).call(forget, ctx.mpt).isOkOr:
     raiseAssert $api & ": " & $error
   CoreDbKvtRef(ctx).call(forget, ctx.kvt).isOkOr:
@@ -713,66 +750,54 @@ proc dispose*(tx: CoreDbTxRef) =
 # Public tracer methods
 # ------------------------------------------------------------------------------
 
-when CoreDbEnableCaptJournal and false: # currently disabled
-  proc newCapture*(
-      db: CoreDbRef;
-        ): CoreDbRc[CoreDbCaptRef] =
-    ## Trace constructor providing an overlay on top of the argument database
-    ## `db`. This overlay provides a replacement database handle that can be
-    ## retrieved via `db.recorder()` (which can in turn be ovelayed.) While
-    ## running the overlay stores data in a log-table which can be retrieved
-    ## via `db.logDb()`.
+when CoreDbEnableCaptJournal:
+  proc pushCapture*(db: CoreDbRef): CoreDbCaptRef =
+    ## ..
     ##
-    ## Caveat:
-    ##   The original database argument `db` should not be used while the tracer
-    ##   is active (i.e. exists as overlay). The behaviour for this situation
-    ##   is undefined and depends on the backend implementation of the tracer.
-    ##
-    db.setTrackNewApi BaseNewCaptureFn
-    result = db.methods.newCaptureFn flags
+    db.setTrackNewApi BasePushCaptureFn
+    if db.tracerHook.isNil:
+      db.tracerHook = TraceRecorderRef.init(db)
+    else:
+      TraceRecorderRef(db.tracerHook).push()
+    result = TraceRecorderRef(db.tracerHook).topInst().CoreDbCaptRef
     db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
-  proc recorder*(cpt: CoreDbCaptRef): CoreDbRef =
-    ## Getter, returns a tracer replacement handle to be used as new database.
-    ## It records every action like fetch, store, hasKey, hasPath and delete.
-    ## This descriptor can be superseded by a new overlay tracer (using
-    ## `newCapture()`, again.)
+  proc level*(cpt: CoreDbCaptRef): int =
+    ## Getter, returns the positive number of stacked instances.
     ##
-    ## Caveat:
-    ##   Unless the desriptor `cpt` referes to the top level overlay tracer, the
-    ##   result is undefined and depends on the backend implementation of the
-    ##   tracer.
-    ##
-    cpt.setTrackNewApi CptRecorderFn
-    result = cpt.methods.recorderFn()
-    cpt.ifTrackNewApi: debug logTxt, api, elapsed
+    let log = cpt.distinctBase
+    log.db.setTrackNewApi CptLevelFn
+    result = log.level()
+    log.db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
-  proc logDb*(cp: CoreDbCaptRef): TableRef[Blob,Blob] =
-    ## Getter, returns the logger table for the overlay tracer database.
+  proc kvtLog*(cpt: CoreDbCaptRef): seq[(Blob,Blob)] =
+    ## Getter, returns the `Kvt` logger list for the argument instance.
     ##
-    ## Caveat:
-    ##   Unless the desriptor `cpt` referes to the top level overlay tracer, the
-    ##   result is undefined and depends on the backend implementation of the
-    ##   tracer.
-    ##
-    cp.setTrackNewApi CptLogDbFn
-    result = cp.methods.logDbFn()
-    cp.ifTrackNewApi: debug logTxt, api, elapsed
+    let log = cpt.distinctBase
+    log.db.setTrackNewApi CptKvtLogFn
+    result = log.kvtLogBlobs()
+    log.db.ifTrackNewApi: debug logTxt, api, elapsed
 
-  proc flags*(cp: CoreDbCaptRef):set[CoreDbCaptFlags] =
-    ## Getter
-    ##
-    cp.setTrackNewApi CptFlagsFn
-    result = cp.methods.getFlagsFn()
-    cp.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-  proc forget*(cp: CoreDbCaptRef) =
+  proc pop*(cpt: CoreDbCaptRef) =
     ## Explicitely stop recording the current tracer instance and reset to
     ## previous level.
     ##
-    cp.setTrackNewApi CptForgetFn
-    cp.methods.forgetFn()
-    cp.ifTrackNewApi: debug logTxt, api, elapsed
+    let db = cpt.distinctBase.db
+    db.setTrackNewApi CptPopFn
+    if not cpt.distinctBase.pop():
+      TraceRecorderRef(db.tracerHook).restore()
+      db.tracerHook = TraceRecorderRef(nil)
+    db.ifTrackNewApi: debug logTxt, api, elapsed, cpt
+
+  proc stopCapture*(db: CoreDbRef) =
+    ## Discard capture instances. This function is equivalent to `pop()`-ing
+    ## all instances.
+    ##
+    db.setTrackNewApi CptStopCaptureFn
+    if not db.tracerHook.isNil:
+      TraceRecorderRef(db.tracerHook).restore()
+      db.tracerHook = TraceRecorderRef(nil)
+    db.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

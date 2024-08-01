@@ -559,7 +559,7 @@ proc pp*(
       ): string =
   sTab.ppXTab(db.orDefault)
 
-proc pp*(root: VertexID, leg: Leg; db = AristoDbRef(nil)): string =
+proc pp*(leg: Leg; root: VertexID; db = AristoDbRef(nil)): string =
   let db = db.orDefault()
   result = "(" & leg.wp.vid.ppVid & ","
   block:
@@ -583,7 +583,7 @@ proc pp*(hike: Hike; db = AristoDbRef(nil); indent = 4): string =
   else:
     if hike.legs[0].wp.vid != hike.root:
       result &= "(" & hike.root.ppVid & ")" & pfx
-    result &= hike.legs.mapIt(pp(hike.root, it, db)).join(pfx)
+    result &= hike.legs.mapIt(it.pp(hike.root, db)).join(pfx)
   result &= pfx & "(" & hike.tail.ppPathPfx & ")"
   result &= "]"
 

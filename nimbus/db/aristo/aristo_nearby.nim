@@ -151,11 +151,11 @@ proc zeroAdjust(
   if 0 < hike.legs.len:
     return ok(hike)
 
-  let root = db.getVtx (hike.root, hike.root)
-  if root.isValid:
+  let rootVtx = db.getVtx (hike.root, hike.root)
+  if rootVtx.isValid:
     block fail:
       var pfx: NibblesBuf
-      case root.vType:
+      case rootVtx.vType:
       of Branch:
         # Find first non-dangling link and assign it
         let nibbleID = block:
@@ -166,17 +166,27 @@ proc zeroAdjust(
             if hike.tail.len == 0:
               break fail
             hike.tail[0].int8
-        let n = root.branchBorderNibble nibbleID
+        let n = rootVtx.branchBorderNibble nibbleID
         if n < 0:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
-        pfx = root.ePfx & NibblesBuf.nibble(n.byte)
+        pfx = rootVtx.ePfx & NibblesBuf.nibble(n.byte)
 
       of Leaf:
-        pfx = root.lPfx
+        pfx = rootVtx.lPfx
         if not hike.accept pfx:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
+
+        # Pathological case: matching `rootVtx` which is a leaf
+        if hike.legs.len == 0 and hike.tail.len == 0:
+          return ok(Hike(
+            root:     hike.root,
+            legs:     @[Leg(
+              nibble: -1,
+              wp:     VidVtxPair(
+                vid:  hike.root,
+                vtx:  rootVtx))]))
 
       var newHike = pfx.toHike(hike.root, db)
       if 0 < newHike.legs.len:
@@ -267,10 +277,6 @@ proc nearbyNext(
 
   # Some easy cases
   let hike = ? hike.zeroAdjust(db, doLeast=moveRight)
-
-  # if hike.legs[^1].wp.vtx.vType == Extension:
-  #   let vid = hike.legs[^1].wp.vtx.eVid
-  #   return hike.complete(vid, db, hikeLenMax, doLeast=moveRight)
 
   var
     uHike = hike
