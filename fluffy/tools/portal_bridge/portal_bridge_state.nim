@@ -269,24 +269,26 @@ proc runBackfillGossipBlockOffersLoop(
     for offerWithKey in blockOffers.contractCodeOffers:
       offersMap.collectOffer(offerWithKey)
 
-    let batch = portalClient.prepareBatch()
+    let gossipBatch = portalClient.prepareBatch()
     for k, v in offersMap:
-      batch.portal_stateGossip(k.to0xHex(), v.to0xHex())
-    let responses = (await batch.send()).valueOr:
-      error "Failed to send offer batch", error
+      gossipBatch.portal_stateGossip(k.to0xHex(), v.to0xHex())
+    let gossipResponses = (await gossipBatch.send()).valueOr:
+      error "Failed to send portal_stateGossip batch", error
       await sleepAsync(1.seconds)
-      continue #Future[Result[seq[RpcBatchResponse], string]]
+      continue
 
     var retryGossip = false
-    for r in responses:
+    for r in gossipResponses:
       if r.error.isSome:
         error "Failed to gossip offer to peers: ", error = r.error.get
         retryGossip = true
+        break
       try:
         let numPeers = Json.decode(r.result.string, int)
         if numPeers == 0:
           warn "Offer gossipped to no peers: ", numPeers
           retryGossip = true
+          break
       except SerializationError as e:
         raiseAssert(e.msg) # Should never happen
 
@@ -294,9 +296,36 @@ proc runBackfillGossipBlockOffersLoop(
       await sleepAsync(1.seconds)
       continue
 
-    # TODO: create a batch of look ups, make this part configurable, if any lookups fail the continue
+    # TODO: make this configurable
+    await sleepAsync(100.milliseconds) # wait for the peers to be updated
+    let findBatch = portalClient.prepareBatch()
+    for k, _ in offersMap:
+      findBatch.portal_stateRecursiveFindContent(k.to0xHex())
+    let findResponses = (await findBatch.send()).valueOr:
+      error "Failed to send portal_stateRecursiveFindContent batch", error
+      await sleepAsync(1.seconds)
+      continue
+
+    for r in findResponses:
+      if r.error.isSome:
+        warn "Failed to find contentValue: ", error = r.error.get
+        retryGossip = true
+        break
+      try:
+        let contentInfo = Json.decode(r.result.string, ContentInfo)
+        if contentInfo.content.len() == 0:
+          error "Found empty contentValue: ", contentValue = contentInfo.content
+          retryGossip = true
+          break
+      except SerializationError as e:
+        raiseAssert(e.msg) # Should never happen
+
+    if retryGossip:
+      await sleepAsync(1.seconds)
+      continue
+
     info "Finished gossiping offers for block number: ",
-      blockNumber = blockOffers.blockNumber
+      blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
 
     blockOffers = await blockOffersQueue.popFirst()
 
