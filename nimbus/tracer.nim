@@ -8,39 +8,93 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-# TODO: CoreDb module needs to be updated
+{.push raises: [].}
 
 import
   std/[strutils, json],
-  ./common/common,
-  ./db/[core_db, ledger],
-  ./utils/utils,
-  ./evm/tracer/legacy_tracer,
-  ./constants,
-  ./transaction,
-  ./core/executor,
-  ./evm/[state, types],
   nimcrypto/utils as ncrutils,
-  web3/conversions, ./launcher,
   results,
-  ./beacon/web3_eth_conv
+  web3/conversions,
+  ./beacon/web3_eth_conv,
+  ./common/common,
+  ./constants,
+  ./core/executor,
+  ./db/[core_db, ledger],
+  ./evm/[code_bytes, state, types],
+  ./evm/tracer/legacy_tracer,
+  ./launcher,
+  ./transaction,
+  ./utils/utils
 
-proc getParentHeader(self: CoreDbRef, header: BlockHeader): BlockHeader =
-  self.getBlockHeader(header.parentHash)
+when not CoreDbEnableCaptJournal:
+  {.error: "Compiler flag missing for tracer, try -d:dbjapi_enabled".}
 
 type
-  SaveCtxEnv = object
-    db: CoreDbRef
-    ctx: CoreDbCtxRef
+  CaptCtxRef = ref object
+    db: CoreDbRef               # not `nil`
+    root: common.Hash256
+    ctx: CoreDbCtxRef           # not `nil`
+    cpt: CoreDbCaptRef          # not `nil`
+    restore: CoreDbCtxRef       # `nil` unless `ctx` activated
 
-proc newCtx(com: CommonRef; root: eth_types.Hash256): SaveCtxEnv =
-  let ctx = com.db.ctxFromTx(root).valueOr:
-    raiseAssert "setParentCtx: " & $$error
-  SaveCtxEnv(db: com.db, ctx: ctx)
+const
+  senderName = "sender"
+  recipientName = "recipient"
+  minerName = "miner"
+  uncleName = "uncle"
+  internalTxName = "internalTx"
 
-proc setCtx(saveCtx: SaveCtxEnv): SaveCtxEnv =
-  SaveCtxEnv(db: saveCtx.db, ctx: saveCtx.db.swapCtx saveCtx.ctx)
+proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) {.gcsafe.}
+proc toJson*(receipts: seq[Receipt]): JsonNode {.gcsafe.}
 
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+template safeTracer(info: string; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    raiseAssert info & " name=" & $e.name & " msg=" & e.msg
+
+# -------------------
+ 
+proc init(
+    T: type CaptCtxRef;
+    com: CommonRef;
+    root: common.Hash256;
+      ): T
+      {.raises: [CatchableError].} =
+  let ctx = block:
+    let rc = com.db.ctx.newCtxByKey(root)
+    if rc.isErr:
+      raiseAssert "newCptCtx: " & $$rc.error
+    rc.value
+  T(db: com.db, root: root, cpt: com.db.pushCapture(), ctx: ctx)
+
+proc init(
+    T: type CaptCtxRef;
+    com: CommonRef;
+    topHeader: BlockHeader;
+      ): T
+      {.raises: [CatchableError].} =
+  T.init(com, com.db.getBlockHeader(topHeader.parentHash).stateRoot)
+
+proc activate(cc: CaptCtxRef): CaptCtxRef {.discardable.} =
+  ## Install/activate new context `cc.ctx`, old one in `cc.restore`
+  doAssert not cc.isNil
+  doAssert cc.restore.isNil # otherwise activated, already
+  cc.restore = cc.ctx.swapCtx cc.db
+  cc
+
+proc release(cc: CaptCtxRef) =
+  if not cc.restore.isNil:             # switch to original context (if any)
+    let ctx = cc.restore.swapCtx(cc.db)
+    doAssert ctx == cc.ctx
+  cc.ctx.forget()                      # dispose
+  cc.cpt.pop()                         # discard top layer of actions tracer
+
+# -------------------
 
 proc `%`(x: openArray[byte]): JsonNode =
   result = %toHex(x, false)
@@ -57,17 +111,25 @@ proc toJson(receipt: Receipt): JsonNode =
   else:
     result["status"] = %receipt.status
 
-proc dumpReceipts*(chainDB: CoreDbRef, header: BlockHeader): JsonNode =
+proc dumpReceiptsImpl(
+    chainDB: CoreDbRef;
+    header: BlockHeader;
+      ): JsonNode
+      {.raises: [CatchableError].} =
   result = newJArray()
   for receipt in chainDB.getReceipts(header.receiptsRoot):
     result.add receipt.toJson
 
-proc toJson*(receipts: seq[Receipt]): JsonNode =
-  result = newJArray()
-  for receipt in receipts:
-    result.add receipt.toJson
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
-proc captureAccount(n: JsonNode, db: LedgerRef, address: EthAddress, name: string) =
+proc captureAccount(
+    n: JsonNode;
+    db: LedgerRef;
+    address: EthAddress;
+    name: string;
+      ) =
   var jaccount = newJObject()
   jaccount["name"] = %name
   jaccount["address"] = %("0x" & $address)
@@ -82,7 +144,7 @@ proc captureAccount(n: JsonNode, db: LedgerRef, address: EthAddress, name: strin
 
   let code = db.getCode(address)
   jaccount["codeHash"] = %("0x" & ($codeHash).toLowerAscii)
-  jaccount["code"] = %("0x" & toHex(code, true))
+  jaccount["code"] = %("0x" & code.bytes.toHex(true))
   jaccount["storageRoot"] = %("0x" & ($storageRoot).toLowerAscii)
 
   var storage = newJObject()
@@ -92,48 +154,26 @@ proc captureAccount(n: JsonNode, db: LedgerRef, address: EthAddress, name: strin
 
   n.add jaccount
 
-proc dumpMemoryDB*(node: JsonNode, db: CoreDbRef) =
-  var n = newJObject()
-  for k, v in db.ctx.getKvt():
-    n[k.toHex(false)] = %v
-  node["state"] = n
 
-proc dumpMemoryDB*(node: JsonNode, kvt: TableRef[common.Blob, common.Blob]) =
-  var n = newJObject()
-  for k, v in kvt:
-    n[k.toHex(false)] = %v
-  node["state"] = n
+proc traceTransactionImpl(
+    com: CommonRef;
+    header: BlockHeader;
+    transactions: openArray[Transaction];
+    txIndex: uint64;
+    tracerFlags: set[TracerFlags] = {};
+      ): JsonNode
+      {.raises: [CatchableError].}=
+  if header.txRoot == EMPTY_ROOT_HASH:
+    return newJNull()
 
-proc dumpMemoryDB*(node: JsonNode, capture: CoreDbCaptRef) =
-  node.dumpMemoryDB capture.logDb
-
-const
-  senderName = "sender"
-  recipientName = "recipient"
-  minerName = "miner"
-  uncleName = "uncle"
-  internalTxName = "internalTx"
-
-proc traceTransaction*(com: CommonRef, header: BlockHeader,
-                       transactions: openArray[Transaction], txIndex: uint64,
-                       tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    # we add a memory layer between backend/lower layer db
-    # and capture state db snapshot during transaction execution
-    capture = com.db.newCapture.value
     tracerInst = newLegacyTracer(tracerFlags)
-    captureCom = com.clone(capture.recorder)
-
-    saveCtx = setCtx com.newCtx(com.db.getParentHeader(header).stateRoot)
-    vmState = BaseVMState.new(header, captureCom).valueOr:
-                return newJNull()
+    cc = activate CaptCtxRef.init(com, header)
+    vmState = BaseVMState.new(header, com).valueOr: return newJNull()
     stateDb = vmState.stateDB
 
-  defer:
-    saveCtx.setCtx().ctx.forget()
-    capture.forget()
+  defer: cc.release()
 
-  if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(transactions.calcTxRoot == header.txRoot)
   doAssert(transactions.len != 0)
 
@@ -142,8 +182,7 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
     before = newJArray()
     after = newJArray()
     stateDiff = %{"before": before, "after": after}
-    beforeRoot: common.Hash256
-    beforeCtx: SaveCtxEnv
+    stateCtx = CaptCtxRef(nil)
 
   let
     miner = vmState.coinbase()
@@ -159,13 +198,14 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
       before.captureAccount(stateDb, miner, minerName)
       stateDb.persist()
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
-      beforeRoot = stateDb.rootHash
-      beforeCtx = com.newCtx beforeRoot
+      discard com.db.ctx.getAccounts.state(updateOk=true) # lazy hashing!
+      stateCtx = CaptCtxRef.init(com, stateDb.rootHash)
 
     let rc = vmState.processTransaction(tx, sender, header)
     gasUsed = if rc.isOk: rc.value else: 0
 
     if idx.uint64 == txIndex:
+      discard com.db.ctx.getAccounts.state(updateOk=true) # lazy hashing!
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, miner, minerName)
@@ -176,13 +216,12 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
 
   # internal transactions:
   let
-    saveCtxBefore = setCtx beforeCtx
-    stateBefore = LedgerRef.init(capture.recorder, beforeRoot)
-  defer:
-    saveCtxBefore.setCtx().ctx.forget()
+    cx = activate stateCtx
+    ldgBefore = LedgerRef.init(com.db, cx.root)
+  defer: cx.release()
 
   for idx, acc in tracedAccountsPairs(tracerInst):
-    before.captureAccount(stateBefore, acc, internalTxName & $idx)
+    before.captureAccount(ldgBefore, acc, internalTxName & $idx)
 
   for idx, acc in tracedAccountsPairs(tracerInst):
     after.captureAccount(stateDb, acc, internalTxName & $idx)
@@ -195,30 +234,34 @@ proc traceTransaction*(com: CommonRef, header: BlockHeader,
 
   # now we dump captured state db
   if TracerFlags.DisableState notin tracerFlags:
-    result.dumpMemoryDB(capture)
+    result.dumpMemoryDB(cx.cpt)
 
-proc dumpBlockState*(com: CommonRef, blk: EthBlock, dumpState = false): JsonNode =
+
+proc dumpBlockStateImpl(
+    com: CommonRef;
+    blk: EthBlock;
+    dumpState = false;
+      ): JsonNode
+      {.raises: [CatchableError].} =
   template header: BlockHeader = blk.header
+
   let
-    parent = com.db.getParentHeader(header)
-    capture = com.db.newCapture.value
-    captureCom = com.clone(capture.recorder)
-    # we only need a stack dump when scanning for internal transaction address
+    cc = activate CaptCtxRef.init(com, header)
+    parent = com.db.getBlockHeader(header.parentHash)
+
+    # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
     tracerInst = newLegacyTracer(captureFlags)
-
-    saveCtx = setCtx com.newCtx(parent.stateRoot)
-    vmState = BaseVMState.new(header, captureCom, tracerInst).valueOr:
-                return newJNull()
+    vmState = BaseVMState.new(header, com, tracerInst).valueOr:
+      return newJNull()
     miner = vmState.coinbase()
-  defer:
-    saveCtx.setCtx().ctx.forget()
-    capture.forget()
+
+  defer: cc.release()
 
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = LedgerRef.init(capture.recorder, parent.stateRoot)
+    stateBefore = LedgerRef.init(com.db, parent.stateRoot)
 
   for idx, tx in blk.transactions:
     let sender = tx.getSender
@@ -259,22 +302,24 @@ proc dumpBlockState*(com: CommonRef, blk: EthBlock, dumpState = false): JsonNode
   result = %{"before": before, "after": after}
 
   if dumpState:
-    result.dumpMemoryDB(capture)
+    result.dumpMemoryDB(cc.cpt)
 
-proc traceBlock*(com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = {}): JsonNode =
+
+proc traceBlockImpl(
+    com: CommonRef;
+    blk: EthBlock;
+    tracerFlags: set[TracerFlags] = {};
+      ): JsonNode
+      {.raises: [CatchableError].} =
   template header: BlockHeader = blk.header
+
   let
-    capture = com.db.newCapture.value
-    captureCom = com.clone(capture.recorder)
+    cc = activate CaptCtxRef.init(com, header)
     tracerInst = newLegacyTracer(tracerFlags)
+    vmState = BaseVMState.new(header, com, tracerInst).valueOr:
+      return newJNull()
 
-    saveCtx = setCtx com.newCtx(com.db.getParentHeader(header).stateRoot)
-    vmState = BaseVMState.new(header, captureCom, tracerInst).valueOr:
-                return newJNull()
-
-  defer:
-    saveCtx.setCtx().ctx.forget()
-    capture.forget()
+  defer: cc.release()
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(blk.transactions.calcTxRoot == header.txRoot)
@@ -293,24 +338,33 @@ proc traceBlock*(com: CommonRef, blk: EthBlock, tracerFlags: set[TracerFlags] = 
   result["gas"] = %gasUsed
 
   if TracerFlags.DisableState notin tracerFlags:
-    result.dumpMemoryDB(capture)
+    result.dumpMemoryDB(cc.cpt)
 
-proc traceTransactions*(com: CommonRef, header: BlockHeader, transactions: openArray[Transaction]): JsonNode =
+proc traceTransactionsImpl(
+    com: CommonRef;
+    header: BlockHeader;
+    transactions: openArray[Transaction];
+      ): JsonNode
+      {.raises: [CatchableError].} =
   result = newJArray()
   for i in 0 ..< transactions.len:
-    result.add traceTransaction(com, header, transactions, i.uint64, {DisableState})
+    result.add traceTransactionImpl(
+      com, header, transactions, i.uint64, {DisableState})
 
 
-proc dumpDebuggingMetaData*(vmState: BaseVMState, blk: EthBlock, launchDebugger = true) =
+proc dumpDebuggingMetaDataImpl(
+    vmState: BaseVMState;
+    blk: EthBlock;
+    launchDebugger = true;
+      ) {.raises: [CatchableError].} =
   template header: BlockHeader = blk.header
+
   let
-    com = vmState.com
+    cc = activate CaptCtxRef.init(vmState.com, header)
     blockNumber = header.number
-    capture = com.db.newCapture.value
-    captureCom = com.clone(capture.recorder)
     bloom = createBloom(vmState.receipts)
-  defer:
-    capture.forget()
+
+  defer: cc.release()
 
   let blockSummary = %{
     "receiptsRoot": %("0x" & toHex(calcReceiptsRoot(vmState.receipts).data)),
@@ -320,17 +374,82 @@ proc dumpDebuggingMetaData*(vmState: BaseVMState, blk: EthBlock, launchDebugger 
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,
-    "txTraces": traceTransactions(captureCom, header, blk.transactions),
-    "stateDump": dumpBlockState(captureCom, blk),
-    "blockTrace": traceBlock(captureCom, blk, {DisableState}),
+    "txTraces": traceTransactionsImpl(vmState.com, header, blk.transactions),
+    "stateDump": dumpBlockStateImpl(vmState.com, blk),
+    "blockTrace": traceBlockImpl(vmState.com, blk, {DisableState}),
     "receipts": toJson(vmState.receipts),
     "block": blockSummary
   }
 
-  metaData.dumpMemoryDB(capture)
+  metaData.dumpMemoryDB(cc.cpt)
 
   let jsonFileName = "debug" & $blockNumber & ".json"
   if launchDebugger:
     launchPremix(jsonFileName, metaData)
   else:
     writeFile(jsonFileName, metaData.pretty())
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc traceBlock*(
+    com: CommonRef;
+    blk: EthBlock;
+    tracerFlags: set[TracerFlags] = {};
+      ): JsonNode =
+  "traceBlock".safeTracer:
+    result = com.traceBlockImpl(blk, tracerFlags)
+
+proc toJson*(receipts: seq[Receipt]): JsonNode =
+  result = newJArray()
+  for receipt in receipts:
+    result.add receipt.toJson
+
+proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) =
+  var n = newJObject()
+  for (k,v) in cpt.kvtLog:
+    n[k.toHex(false)] = %v
+  node["state"] = n
+
+proc dumpReceipts*(chainDB: CoreDbRef, header: BlockHeader): JsonNode =
+  "dumpReceipts".safeTracer:
+    result = chainDB.dumpReceiptsImpl header
+
+proc traceTransaction*(
+    com: CommonRef;
+    header: BlockHeader;
+    txs: openArray[Transaction];
+    txIndex: uint64;
+    tracerFlags: set[TracerFlags] = {};
+      ): JsonNode =
+  "traceTransaction".safeTracer:
+      result = com.traceTransactionImpl(header, txs, txIndex,tracerFlags)
+
+proc dumpBlockState*(
+    com: CommonRef;
+    blk: EthBlock;
+    dumpState = false;
+      ): JsonNode =
+  "dumpBlockState".safeTracer:
+    result = com.dumpBlockStateImpl(blk, dumpState)
+
+proc traceTransactions*(
+    com: CommonRef;
+    header: BlockHeader;
+    transactions: openArray[Transaction];
+      ): JsonNode =
+  "traceTransactions".safeTracer:
+    result = com.traceTransactionsImpl(header, transactions)
+
+proc dumpDebuggingMetaData*(
+    vmState: BaseVMState;
+    blk: EthBlock;
+    launchDebugger = true;
+      ) =
+  "dumpDebuggingMetaData".safeTracer:
+    vmState.dumpDebuggingMetaDataImpl(blk, launchDebugger)
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------
