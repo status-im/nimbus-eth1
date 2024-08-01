@@ -12,6 +12,7 @@ import
   chronicles,
   chronos,
   stint,
+  json_serialization,
   stew/byteutils,
   web3/[eth_api, eth_api_types],
   results,
@@ -65,7 +66,9 @@ proc getLastPersistedBlockNumber(db: DatabaseRef): Opt[uint64] =
     raiseAssert(e.msg) # Should never happen
 
 proc putLastPersistedBlockNumber(db: DatabaseRef, blockNumber: uint64) {.inline.} =
-  db.put(rlp.encode("lastPersistedBlockNumber"), rlp.encode(blockNumber))
+  # Only update the last persisted block number if it's greater than the current one
+  if blockNumber > db.getLastPersistedBlockNumber().valueOr(0):
+    db.put(rlp.encode("lastPersistedBlockNumber"), rlp.encode(blockNumber))
 
 proc runBackfillCollectBlockDataLoop(
     db: DatabaseRef,
@@ -204,7 +207,8 @@ proc runBackfillBuildBlockOffersLoop(
       trace "State diffs successfully applied to block number:",
         blockNumber = blockData.blockNumber
 
-      # worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
+      # TODO: make this configurable or remove
+      worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
 
       var builder = OffersBuilderRef.init(worldState, blockData.blockHash)
       builder.buildBlockOffers()
@@ -223,50 +227,78 @@ proc runBackfillBuildBlockOffersLoop(
     # to enable restarting from this block if needed
     db.putLastPersistedBlockNumber(blockData.blockNumber)
 
-proc gossipOffer(
-    portalClient: RpcClient,
+proc collectOffer(
+    offersMap: TableRef[seq[byte], seq[byte]],
     offerWithKey:
       AccountTrieOfferWithKey | ContractTrieOfferWithKey | ContractCodeOfferWithKey,
-) {.async: (raises: [CancelledError]).} =
+) =
   let
     keyBytes = offerWithKey.key.toContentKey().encode().asSeq()
     offerBytes = offerWithKey.offer.encode()
-  try:
-    let numPeers =
-      await portalClient.portal_stateGossip(keyBytes.to0xHex(), offerBytes.to0xHex())
-    debug "Gossiping offer to peers: ", offerKey = keyBytes.to0xHex(), numPeers
-  except CatchableError as e:
-    raiseAssert(e.msg) # Should never happen
+  offersMap[keyBytes] = offerBytes
 
-proc recursiveGossipOffer(
-    portalClient: RpcClient,
+proc recursiveCollectOffer(
+    offersMap: TableRef[seq[byte], seq[byte]],
     offerWithKey: AccountTrieOfferWithKey | ContractTrieOfferWithKey,
-) {.async: (raises: [CancelledError]).} =
-  await portalClient.gossipOffer(offerWithKey)
+) =
+  offersMap.collectOffer(offerWithKey)
 
-  # root node, recursive gossip is finished
+  # root node, recursive collect is finished
   if offerWithKey.key.path.unpackNibbles().len() == 0:
     return
 
-  # continue the recursive gossip by sharing the parent offer with peers
-  await portalClient.recursiveGossipOffer(offerWithKey.getParent())
+  # continue the recursive collect
+  offersMap.recursiveCollectOffer(offerWithKey.getParent())
 
 proc runBackfillGossipBlockOffersLoop(
     blockOffersQueue: AsyncQueue[BlockOffersRef], portalClient: RpcClient
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill gossip block offers loop"
 
+  var blockOffers = await blockOffersQueue.popFirst()
+
   while true:
-    let blockOffers = await blockOffersQueue.popFirst()
+    # A table of offer key, value pairs is used to filter out duplicates so
+    # that we don't gossip the same offer multiple times.
+    let offersMap = newTable[seq[byte], seq[byte]]()
 
     for offerWithKey in blockOffers.accountTrieOffers:
-      await portalClient.recursiveGossipOffer(offerWithKey)
-
+      offersMap.recursiveCollectOffer(offerWithKey)
     for offerWithKey in blockOffers.contractTrieOffers:
-      await portalClient.recursiveGossipOffer(offerWithKey)
-
+      offersMap.recursiveCollectOffer(offerWithKey)
     for offerWithKey in blockOffers.contractCodeOffers:
-      await portalClient.gossipOffer(offerWithKey)
+      offersMap.collectOffer(offerWithKey)
+
+    let batch = portalClient.prepareBatch()
+    for k, v in offersMap:
+      batch.portal_stateGossip(k.to0xHex(), v.to0xHex())
+    let responses = (await batch.send()).valueOr:
+      error "Failed to send offer batch", error
+      await sleepAsync(1.seconds)
+      continue #Future[Result[seq[RpcBatchResponse], string]]
+
+    var retryGossip = false
+    for r in responses:
+      if r.error.isSome:
+        error "Failed to gossip offer to peers: ", error = r.error.get
+        retryGossip = true
+      try:
+        let numPeers = Json.decode(r.result.string, int)
+        if numPeers == 0:
+          warn "Offer gossipped to no peers: ", numPeers
+          retryGossip = true
+      except SerializationError as e:
+        raiseAssert(e.msg) # Should never happen
+
+    if retryGossip:
+      await sleepAsync(1.seconds)
+      continue
+
+    # TODO: create a batch of look ups, make this part configurable, if any lookups fail the continue
+    info "Finished gossiping offers for block number: ",
+      blockNumber = blockOffers.blockNumber
+
+    blockOffers = await blockOffersQueue.popFirst()
 
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockData], blockOffersQueue: AsyncQueue[BlockOffersRef]
