@@ -207,7 +207,7 @@ proc runBackfillBuildBlockOffersLoop(
       trace "State diffs successfully applied to block number:",
         blockNumber = blockData.blockNumber
 
-      # TODO: make this configurable or remove
+      # TODO: make this configurable
       worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
 
       var builder = OffersBuilderRef.init(worldState, blockData.blockHash)
@@ -251,7 +251,7 @@ proc recursiveCollectOffer(
   offersMap.recursiveCollectOffer(offerWithKey.getParent())
 
 proc runBackfillGossipBlockOffersLoop(
-    blockOffersQueue: AsyncQueue[BlockOffersRef], portalClient: RpcClient
+    blockOffersQueue: AsyncQueue[BlockOffersRef], portalClient: RpcClient, workerId: int
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill gossip block offers loop"
 
@@ -308,7 +308,8 @@ proc runBackfillGossipBlockOffersLoop(
 
     for r in findResponses:
       if r.error.isSome:
-        warn "Failed to find contentValue: ", error = r.error.get
+        warn "Failed to find contentValue, retrying gossip: ",
+          workerId, error = r.error.get
         retryGossip = true
         break
       try:
@@ -324,8 +325,9 @@ proc runBackfillGossipBlockOffersLoop(
       await sleepAsync(1.seconds)
       continue
 
-    info "Finished gossiping offers for block number: ",
-      blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
+    if blockOffers.blockNumber mod 1000 == 0:
+      info "Finished gossiping offers for block number: ",
+        workerId, blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
 
     blockOffers = await blockOffersQueue.popFirst()
 
@@ -380,7 +382,9 @@ proc runState*(config: PortalBridgeConf) =
     info "Starting state backfill from block number: ",
       startBlockNumber = config.startBlockNumber
 
-    const bufferSize = 1000 # Should we make this configurable?
+    const
+      gossipOffersWorkerCount = 5 # TODO: make this configurable
+      bufferSize = 1000 # TODO: make this configurable
     let
       blockDataQueue = newAsyncQueue[BlockData](bufferSize)
       blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
@@ -389,7 +393,12 @@ proc runState*(config: PortalBridgeConf) =
       db, blockDataQueue, web3Client, config.startBlockNumber
     )
     asyncSpawn runBackfillBuildBlockOffersLoop(db, blockDataQueue, blockOffersQueue)
-    asyncSpawn runBackfillGossipBlockOffersLoop(blockOffersQueue, portalClient)
+
+    for workerId in 1 .. gossipOffersWorkerCount:
+      asyncSpawn runBackfillGossipBlockOffersLoop(
+        blockOffersQueue, portalClient, workerId
+      )
+
     asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)
 
   while true:
