@@ -49,28 +49,9 @@ proc kind*(
 
 proc init*(
     T: type AristoDbRef;                      # Target type
-    B: type MemBackendRef;                    # Backend type
-      ): T =
-  ## Memory backend constructor.
-  ##
-  ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
-  ## database will not provide filter history management. Providing a different
-  ## scheduler layout shoud be used with care as table access with different
-  ## layouts might render the filter history data unmanageable.
-  ##
-  when B is MemBackendRef:
-    AristoDbRef(top: LayerRef.init(), backend: memoryBackend())
-
-proc init*(
-    T: type AristoDbRef;                      # Target type
     B: type MemOnlyBackend;                   # Backend type
       ): T =
   ## Memory backend constructor.
-  ##
-  ## If the `qidLayout` argument is set `QidLayoutRef(nil)`, the a backend
-  ## database will not provide filter history management. Providing a different
-  ## scheduler layout shoud be used with care as table access with different
-  ## layouts might render the filter history data unmanageable.
   ##
   when B is VoidBackendRef:
     AristoDbRef(top: LayerRef.init())
