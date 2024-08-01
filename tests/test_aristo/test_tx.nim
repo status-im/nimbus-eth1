@@ -26,7 +26,6 @@ import
     aristo_get,
     aristo_hike,
     aristo_init/persistent,
-    aristo_layers,
     aristo_nearby,
     aristo_part,
     aristo_part/part_debug,
@@ -42,9 +41,6 @@ type
     ## (<sample-name> & "#" <instance>, (<vertex-id>,<error-symbol>))
 
 const
-  MaxFilterBulk = 150_000
-    ## Policy settig for `pack()`
-
   testRootVid = VertexID(2)
     ## Need to reconfigure for the test, root ID 1 cannot be deleted as a trie
 
@@ -121,26 +117,7 @@ proc innerCleanUp(db: var AristoDbRef): bool {.discardable.}  =
     db = AristoDbRef(nil)
   true
 
-proc innerCleanUp(ps: var PartStateRef): bool {.discardable.}  =
-  if not ps.isNil:
-    if not ps.db.innerCleanUp():
-      return false
-    ps = PartStateRef(nil)
-  true
-
-proc schedStow(
-    db: AristoDbRef;                  # Database
-      ): Result[void,AristoError] =
-  ## Scheduled storage
-  let
-    layersMeter = db.nLayersVtx() + db.nLayersKey()
-    filterMeter = if db.balancer.isNil: 0
-                  else: db.balancer.sTab.len + db.balancer.kMap.len
-    persistent = MaxFilterBulk < max(layersMeter, filterMeter)
-  if persistent:
-    db.persist()
-  else:
-    db.stow()
+# --------------------------------
 
 proc saveToBackend(
     tx: var AristoTxRef;
@@ -191,52 +168,6 @@ proc saveToBackend(
     let rc = db.checkBE()
     xCheckRc rc.error == (0,0):
       noisy.say "***", "saveToBackend (8)", " debugID=", debugID
-
-  # Update layers to original level
-  tx = db.txBegin().value.to(AristoDbRef).txBegin().value
-
-  true
-
-proc saveToBackendWithOops(
-    tx: var AristoTxRef;
-    noisy: bool;
-    debugID: int;
-    oops: (int,AristoError);
-      ): bool =
-  var db = tx.to(AristoDbRef)
-
-  # Verify context: nesting level must be 2 (i.e. two transactions)
-  xCheck tx.level == 2
-
-  # Commit and hashify the current layer
-  block:
-    let rc = tx.commit()
-    xCheckRc rc.error == 0
-
-  block:
-    let rc = db.txTop()
-    xCheckRc rc.error == 0
-    tx = rc.value
-
-  # Verify context: nesting level must be 1 (i.e. one transaction)
-  xCheck tx.level == 1
-
-  # Commit and save to backend
-  block:
-    let rc = tx.commit()
-    xCheckRc rc.error == 0
-
-  block:
-    let rc = db.txTop()
-    xCheckErr rc.value.level < 0 # force error
-
-  block:
-    let rc = db.schedStow()
-    xCheckRc rc.error == 0:
-      noisy.say "***", "saveToBackendWithOops(8)",
-        " debugID=", debugID,
-        "\n    db\n    ", db.pp(backendOk=true),
-        ""
 
   # Update layers to original level
   tx = db.txBegin().value.to(AristoDbRef).txBegin().value
@@ -497,114 +428,6 @@ proc testTxMergeAndDeleteSubTree*(
           ""
     when true and false:
       noisy.say "***", "del(9) n=", n, "/", list.len, " nLeafs=", kvpLeafs.len
-
-  true
-
-
-proc testTxMergeProofAndKvpList*(
-    noisy: bool;
-    list: openArray[ProofTrieData];
-    rdbPath: string;                         # Rocks DB storage directory
-    resetDb = false;
-    idPfx = "";
-    oops: KnownHasherFailure = @[];
-      ): bool =
-  let
-    oopsTab = oops.toTable
-  var
-    ps = PartStateRef(nil)
-    tx = AristoTxRef(nil)
-    rootKey: Hash256
-    count = 0
-  defer:
-    if not ps.isNil:
-      ps.db.finish(eradicate=true)
-
-  for n,w in list:
-
-    # Start new database upon request
-    if resetDb or w.root != rootKey or w.proof.len == 0:
-      ps.innerCleanUp()
-      let db = block:
-        # New DB with disabled filter slots management
-        if 0 < rdbPath.len:
-          let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
-          let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
-          xCheckRc rc.error == 0
-          rc.value()[0]
-        else:
-          AristoDbRef.init(MemBackendRef)
-      ps = PartStateRef.init(db)
-
-      # Start transaction (double frame for testing)
-      tx = ps.db.txBegin().value.to(AristoDbRef).txBegin().value
-      xCheck tx.isTop()
-
-      # Update root
-      rootKey = w.root
-      count = 0
-    count.inc
-
-    let
-      db = ps.db
-      testId = idPfx & "#" & $w.id & "." & $n
-      runID = n
-      sTabLen = db.nLayersVtx()
-      leafs = w.kvpLst.mapRootVid testRootVid # merge into main trie
-
-    if 0 < w.proof.len:
-      let rc = ps.partPut(w.proof, ForceGenericPayload)
-      xCheckRc rc.error == 0:
-        noisy.say "***", "testTxMergeProofAndKvpList (5)",
-          " <", n, "/", list.len-1, ">",
-          " runID=", runID,
-          " nGroup=", count,
-          " error=", rc.error,
-          " nProof=", w.proof.len,
-          "\n    ps\n    \n", ps.pp(),
-          ""
-    block:
-      let rc = ps.check()
-      xCheckRc rc.error == (0,0)
-
-    when true and false:
-      noisy.say "***", "testTxMergeProofAndKvpList (6)",
-        " <", n, "/", list.len-1, ">",
-        " runID=", runID,
-        " nGroup=", count,
-        " nProof=", w.proof.len,
-        #"\n    ps\n    \n", ps.pp(),
-        ""
-
-    for ltp in leafs:
-      block:
-        let rc = ps.partMergeGenericData(
-          ltp.leafTie.root, @(ltp.leafTie.path), ltp.payload.rawBlob)
-        xCheckRc rc.error == 0
-      block:
-        let rc = ps.check()
-        xCheckRc rc.error == (0,0)
-
-    when true and false:
-      noisy.say "***", "testTxMergeProofAndKvpList (7)",
-        " <", n, "/", list.len-1, ">",
-        " runID=", runID,
-        " nGroup=", count,
-        " nProof=", w.proof.len,
-        #"\n    ps\n    \n", ps.pp(),
-        ""
-
-    block:
-      let
-        oops = oopsTab.getOrDefault(testId,(0,AristoError(0)))
-        saveBeOk = tx.saveToBackendWithOops(noisy=noisy, debugID=runID, oops)
-      xCheck saveBeOk
-
-    when true and false:
-      noisy.say "***", "testTxMergeProofAndKvpList (9)",
-        " <", n, "/", list.len-1, ">",
-        " runID=", runID,
-        " nGroup=", count, " merged=", merged
 
   true
 

@@ -13,9 +13,8 @@ import
   eth/common,
   stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_hike, aristo_merge],
-  ../../nimbus/db/kvstore_rocksdb,
-  ../../nimbus/sync/protocol/snap/snap_types,
+    aristo_debug, aristo_desc, aristo_hike, aristo_layers, aristo_merge,
+    aristo_tx],
   ../replay/[pp, undump_accounts, undump_storages],
   ./test_samples_xx
 
@@ -28,6 +27,10 @@ type
     id*: int
     proof*: seq[Blob]
     kvpLst*: seq[LeafTiePayload]
+
+const
+  MaxFilterBulk = 150_000
+    ## Policy setting for `schedStow()`
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -201,6 +204,22 @@ func mapRootVid*(
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc schedStow*(
+    db: AristoDbRef;                  # Database
+      ): Result[void,AristoError] =
+  ## Context based scheduled persistent/non-persistent storage.
+  let
+    layersMeter = db.nLayersVtx() + db.nLayersKey()
+    filterMeter = if db.balancer.isNil: 0
+                  else: db.balancer.sTab.len + db.balancer.kMap.len
+    persistent = MaxFilterBulk < max(layersMeter, filterMeter)
+  if persistent:
+    db.persist()
+  else:
+    db.stow()
+
+# ------------------
+    
 proc mergeGenericData*(
     db: AristoDbRef;                   # Database, top layer
     leaf: LeafTiePayload;              # Leaf item to add to the database
