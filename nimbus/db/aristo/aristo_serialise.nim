@@ -104,7 +104,7 @@ proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
     wr.append w.node.lPfx.toHexPrefix(isleaf = true)
     wr.append w.node.lData.serialise(getKey0).value
 
-  result.add (@(w.key.data), wr.finish())
+    result.add (@(w.key.data), wr.finish())
 
 proc digestTo*(node: NodeRef; T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key. Note
