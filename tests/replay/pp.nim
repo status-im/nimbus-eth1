@@ -66,7 +66,7 @@ func pp*(h: BlockHeader; sep = " "): string =
     &"receiptsRoot={h.receiptsRoot.pp}{sep}" &
     &"stateRoot={h.stateRoot.pp}{sep}" &
     &"baseFee={h.baseFeePerGas}{sep}" &
-    &"withdrawalsRoot={h.withdrawalsRoot.get(EMPTY_ROOT_HASH)}{sep}" &
+    &"withdrawalsRoot={h.withdrawalsRoot.get(EMPTY_ROOT_HASH).pp}{sep}" &
     &"blobGasUsed={h.blobGasUsed.get(0'u64)}{sep}" &
     &"excessBlobGas={h.excessBlobGas.get(0'u64)}"
 
