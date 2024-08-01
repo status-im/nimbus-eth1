@@ -164,7 +164,7 @@ proc runBackfillBuildBlockOffersLoop(
       let genesisBlockHash = KeccakHash.fromHex(
         "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
       )
-      var builder = OffersBuilderRef.init(ws, genesisBlockHash)
+      var builder = OffersBuilder.init(ws, genesisBlockHash)
       builder.buildBlockOffers()
 
       await blockOffersQueue.addLast(
@@ -208,9 +208,9 @@ proc runBackfillBuildBlockOffersLoop(
         blockNumber = blockData.blockNumber
 
       # TODO: make this configurable
-      worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
+      #worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
 
-      var builder = OffersBuilderRef.init(worldState, blockData.blockHash)
+      var builder = OffersBuilder.init(worldState, blockData.blockHash)
       builder.buildBlockOffers()
 
       await blockOffersQueue.addLast(
@@ -231,11 +231,9 @@ proc collectOffer(
     offersMap: TableRef[seq[byte], seq[byte]],
     offerWithKey:
       AccountTrieOfferWithKey | ContractTrieOfferWithKey | ContractCodeOfferWithKey,
-) =
-  let
-    keyBytes = offerWithKey.key.toContentKey().encode().asSeq()
-    offerBytes = offerWithKey.offer.encode()
-  offersMap[keyBytes] = offerBytes
+) {.inline.} =
+  let keyBytes = offerWithKey.key.toContentKey().encode().asSeq()
+  offersMap[keyBytes] = offerWithKey.offer.encode()
 
 proc recursiveCollectOffer(
     offersMap: TableRef[seq[byte], seq[byte]],
@@ -338,8 +336,12 @@ proc runBackfillMetricsLoop(
 
   while true:
     await sleepAsync(10.seconds)
-    info "Block data queue length: ", blockDataQueueLen = blockDataQueue.len()
-    info "Block offers queue length: ", blockOffersQueueLen = blockOffersQueue.len()
+    info "Block data queue metrics: ",
+      currentBlockNumber = blockDataQueue[0].blockNumber,
+      blockDataQueueLen = blockDataQueue.len()
+    info "Block offers queue metrics: ",
+      currentBlockNumber = blockOffersQueue[0].blockNumber,
+      blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
   let
@@ -383,7 +385,7 @@ proc runState*(config: PortalBridgeConf) =
       startBlockNumber = config.startBlockNumber
 
     const
-      gossipOffersWorkerCount = 5 # TODO: make this configurable
+      gossipOffersWorkerCount = 1 # TODO: make this configurable
       bufferSize = 1000 # TODO: make this configurable
     let
       blockDataQueue = newAsyncQueue[BlockData](bufferSize)

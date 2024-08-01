@@ -13,23 +13,21 @@ import
   ../../../network/state/[state_content, state_utils, state_gossip],
   ./world_state
 
-type OffersBuilderRef* = ref object
+type OffersBuilder* = object
   worldState: WorldStateRef
   blockHash: BlockHash
   accountTrieOffers: seq[AccountTrieOfferWithKey]
   contractTrieOffers: seq[ContractTrieOfferWithKey]
   contractCodeOffers: seq[ContractCodeOfferWithKey]
 
-proc init*(
-    T: type OffersBuilderRef, worldState: WorldStateRef, blockHash: BlockHash
-): T =
+proc init*(T: type OffersBuilder, worldState: WorldStateRef, blockHash: BlockHash): T =
   T(worldState: worldState, blockHash: blockHash)
 
 proc toTrieProof(proof: seq[seq[byte]]): TrieProof =
   TrieProof.init(proof.map((node) => TrieNode.init(node)))
 
 proc buildAccountTrieNodeOffer(
-    builder: var OffersBuilderRef, address: EthAddress, proof: TrieProof
+    builder: var OffersBuilder, address: EthAddress, proof: TrieProof
 ) =
   try:
     let
@@ -44,7 +42,7 @@ proc buildAccountTrieNodeOffer(
     raiseAssert(e.msg) # Should never happen
 
 proc buildContractTrieNodeOffer(
-    builder: var OffersBuilderRef,
+    builder: var OffersBuilder,
     address: EthAddress,
     slotHash: SlotKeyHash,
     storageProof: TrieProof,
@@ -60,7 +58,7 @@ proc buildContractTrieNodeOffer(
   builder.contractTrieOffers.add(offerValue.withKey(offerKey))
 
 proc buildContractCodeOffer(
-    builder: var OffersBuilderRef,
+    builder: var OffersBuilder,
     address: EthAddress,
     code: seq[byte],
     accountProof: TrieProof,
@@ -73,7 +71,7 @@ proc buildContractCodeOffer(
 
   builder.contractCodeOffers.add(offerValue.withKey(offerKey))
 
-proc buildBlockOffers*(builder: var OffersBuilderRef) =
+proc buildBlockOffers*(builder: var OffersBuilder) =
   for address, proof in builder.worldState.updatedAccountProofs():
     let accountProof = toTrieProof(proof)
     builder.buildAccountTrieNodeOffer(address, accountProof)
@@ -86,11 +84,15 @@ proc buildBlockOffers*(builder: var OffersBuilderRef) =
     if code.len() > 0:
       builder.buildContractCodeOffer(address, code, accountProof)
 
-proc getAccountTrieOffers*(builder: OffersBuilderRef): seq[AccountTrieOfferWithKey] =
+proc getAccountTrieOffers*(builder: OffersBuilder): lent seq[AccountTrieOfferWithKey] =
   builder.accountTrieOffers
 
-proc getContractTrieOffers*(builder: OffersBuilderRef): seq[ContractTrieOfferWithKey] =
+proc getContractTrieOffers*(
+    builder: OffersBuilder
+): lent seq[ContractTrieOfferWithKey] =
   builder.contractTrieOffers
 
-proc getContractCodeOffers*(builder: OffersBuilderRef): seq[ContractCodeOfferWithKey] =
+proc getContractCodeOffers*(
+    builder: OffersBuilder
+): lent seq[ContractCodeOfferWithKey] =
   builder.contractCodeOffers
