@@ -20,6 +20,7 @@ import
   ./replay/[pp, undump_accounts, undump_storages],
   ./test_aristo/test_blobify,
   ./test_aristo/test_merge_proof,
+  ./test_aristo/test_portal_proof,
   ./test_aristo/test_short_keys,
   ./test_aristo/[test_balancer, test_helpers, test_samples_xx, test_tx]
 
