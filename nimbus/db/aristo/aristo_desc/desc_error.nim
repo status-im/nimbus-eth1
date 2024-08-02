@@ -156,6 +156,9 @@ type
     PartArgNotGenericRoot
     PartArgRootAlreadyUsed
     PartArgRootAlreadyOnDatabase
+    PartBrBranchPathMismatch
+    PartBrLeafPathMismatch
+    PartBrNodeConvError
     PartChkChangedKeyNotInKeyTab
     PartChkChangedVtxMissing
     PartChkCoreKeyLookupFailed
