@@ -31,7 +31,7 @@ proc chainRlpNodes*(
     key = ? db.computeKey rvid
     (vtx,_) = ? db.getVtxRc rvid
     node = vtx.toNode(rvid.root, db).valueOr:
-      return err(PartBrNodeConvError)
+      return err(PartChnNodeConvError)
 
   # Save rpl encoded node(s)
   chain &= (key,node).to(seq[(Blob,Blob)]).mapIt(it[1])
@@ -40,13 +40,13 @@ proc chainRlpNodes*(
   case vtx.vType:
   of Leaf:
     if path != vtx.lPfx:
-      err(PartBrLeafPathMismatch)
+      err(PartChnLeafPathMismatch)
     else:
       ok()
 
   of Branch:
     if path.len == 0:
-      err(PartBrBranchPathMismatch)
+      err(PartChnBranchPathMismatch)
     else:
       # Recursion!
       db.chainRlpNodes((rvid.root,vtx.bVid[path[0]]), path.slice(1), chain)

@@ -152,13 +152,10 @@ type
 
 
     # Part/proof node errors
-    PartArgNotInCore
     PartArgNotGenericRoot
-    PartArgRootAlreadyUsed
+    PartArgNotInCore
     PartArgRootAlreadyOnDatabase
-    PartBrBranchPathMismatch
-    PartBrLeafPathMismatch
-    PartBrNodeConvError
+    PartArgRootAlreadyUsed
     PartChkChangedKeyNotInKeyTab
     PartChkChangedVtxMissing
     PartChkCoreKeyLookupFailed
@@ -172,6 +169,9 @@ type
     PartChkVidKeyTabLengthsDiffer
     PartChkVidTabCoreRootMissing
     PartChkVidTabVidMissing
+    PartChnBranchPathMismatch
+    PartChnLeafPathMismatch
+    PartChnNodeConvError
     PartCtxNotAvailable
     PartCtxStaleDescriptor
     PartExtVtxExistsAlready
