@@ -56,6 +56,52 @@ proc chainRlpNodes*(
       # Recursion!
       db.chainRlpNodes((rvid.root,vtx.bVid[nibble]), rest, chain)
 
+
+proc trackRlpNodes*(
+    chain: openArray[Blob];
+    topKey: HashKey;
+    path: NibblesBuf;
+    start = false;
+     ): Result[Blob,AristoError]
+     {.gcsafe, raises: [RlpError]} =
+  ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
+  if path.len == 0:
+    return err(PartTrkEmptyPath)
+
+  # Verify key against rlp-node
+  let digest = chain[0].digestTo(HashKey)
+  if start:
+    if topKey.to(Hash256) != digest.to(Hash256):
+      return err(PartTrkFollowUpKeyMismatch)
+  else:
+    if topKey != digest:
+      return err(PartTrkFollowUpKeyMismatch)
+
+  var
+    node = rlpFromBytes chain[0]
+    nChewOff = 0
+    link: Blob
+
+  # Decode rlp-node and prepare for recursion
+  case node.listLen
+  of 2:
+    let (isLeaf, segm) = NibblesBuf.fromHexPrefix node.listElem(0).toBytes
+    nChewOff = sharedPrefixLen(path, segm)
+    link = node.listElem(1).toBytes # link or payload
+    if isLeaf:
+      if nChewOff == path.len:
+        return ok(link)
+      return err(PartTrkLeafPfxMismatch)
+  of 17:
+    nChewOff = 1
+    link = node.listElem(path[0].int).toBytes
+  else:
+    return err(PartTrkGarbledNode)
+
+  let nextKey = HashKey.fromBytes(link).valueOr:
+    return err(PartTrkLinkExpected)
+  chain.toOpenArray(1,chain.len-1).trackRlpNodes(nextKey, path.slice nChewOff)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

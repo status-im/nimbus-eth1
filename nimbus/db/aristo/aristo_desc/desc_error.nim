@@ -194,6 +194,13 @@ type
     PartRlpPayloadException
     PartRootKeysDontMatch
     PartRootVidsDontMatch
+    PartTrkEmptyPath
+    PartTrkFollowUpKeyMismatch
+    PartTrkGarbledNode
+    PartTrkLeafPfxMismatch
+    PartTrkLinkExpected
+    PartTrkPayloadMismatch
+    PartTrkRlpError
     PartVtxSlotWasModified
     PartVtxSlotWasNotModified
 

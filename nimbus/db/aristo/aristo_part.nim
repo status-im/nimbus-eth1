@@ -106,6 +106,46 @@ proc partStorageTwig*(
   let vid = ? db.fetchStorageID accPath
   db.partGenericTwig(vid, NibblesBuf.fromBytes stoPath.data)
 
+# ----------
+
+proc partUntwig*(
+    chain: openArray[Blob];
+    root: Hash256;
+    path: openArray[byte];
+      ): Result[Blob,AristoError] =
+  try:
+    let nibbles = NibblesBuf.fromBytes path
+    return chain.trackRlpNodes(root.to(HashKey), nibbles, start=true)
+  except RlpError as e:
+    return err(PartTrkRlpError)
+
+proc partUntwig*(
+    chain: openArray[Blob];
+    root: Hash256;
+    path: Hash256;
+      ): Result[Blob,AristoError] =
+  chain.partUntwig(root, path.data)
+
+
+proc partUntwigOk*(
+    chain: openArray[Blob];
+    root: Hash256;
+    path: openArray[byte];
+    payload: openArray[byte];
+      ): Result[void,AristoError] =
+  if payload == ? chain.partUntwig(root, path):
+    ok()
+  else:
+    err(PartTrkPayloadMismatch)
+
+proc partUntwigOk*(
+    chain: openArray[Blob];
+    root: Hash256;
+    path: Hash256;
+    payload: openArray[byte];
+      ): Result[void,AristoError] =
+  chain.partUntwigOk(root, path.data, payload)
+
 # ----------------
 
 proc partPut*(
