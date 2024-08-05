@@ -34,7 +34,7 @@ proc chainRlpNodes*(
       return err(PartChnNodeConvError)
 
   # Save rpl encoded node(s)
-  chain &= (key,node).to(seq[(Blob,Blob)]).mapIt(it[1])
+  chain &= node.to(seq[Blob])
 
   # Follow up child node
   case vtx.vType:

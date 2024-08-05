@@ -67,44 +67,49 @@ func append*(w: var RlpWriter; key: HashKey) =
 
 # ---------------------
 
-proc to*(w: tuple[key: HashKey, node: NodeRef]; T: type seq[(Blob,Blob)]): T =
-  ## Convert the argument pait `w` to a single or a double pair of
-  ## `(<key>,<rlp-encoded-node>)` tuples. Only in case of a combined extension
-  ## and branch vertex argument, there are is a double pair result.
-  var wr = initRlpWriter()
-  case w.node.vType:
+proc to*(node: NodeRef; T: type seq[Blob]): T =
+  ## Convert the argument pait `w` to a single or a double item list item of
+  ## `<rlp-encoded-node>` type entries. Only in case of a combined extension
+  ## and branch vertex argument, there will be a double item list result.
+  ##
+  case node.vType:
   of Branch:
     # Do branch node
+    var wr = initRlpWriter()
     wr.startList(17)
     for n in 0..15:
-      wr.append w.node.key[n]
+      wr.append node.key[n]
     wr.append EmptyBlob
+    let brData = wr.finish()
 
-    if 0 < w.node.ePfx.len:
-      # Do for embedded extension node
-      let brHash = wr.finish().digestTo(HashKey)
-      result.add (@(brHash.data), wr.finish())
+    if 0 < node.ePfx.len:
+      # Prefix branch by embedded extension node
+      let brHash = brData.digestTo(HashKey)
 
-      wr = initRlpWriter()
-      wr.startList(2)
-      wr.append w.node.ePfx.toHexPrefix(isleaf = false)
-      wr.append brHash
+      var wrx = initRlpWriter()
+      wrx.startList(2)
+      wrx.append node.ePfx.toHexPrefix(isleaf = false)
+      wrx.append brHash
+
+      result.add wrx.finish()
+      result.add brData
     else:
       # Do for pure branch node
-      result.add (@(w.key.data), wr.finish())
+      result.add brData
 
   of Leaf:
     proc getKey0(
         vid: VertexID;
           ): Result[HashKey,AristoError]
           {.gcsafe, raises: [].} =
-      ok(w.node.key[0]) # always succeeds
+      ok(node.key[0]) # always succeeds
 
+    var wr = initRlpWriter()
     wr.startList(2)
-    wr.append w.node.lPfx.toHexPrefix(isleaf = true)
-    wr.append w.node.lData.serialise(getKey0).value
+    wr.append node.lPfx.toHexPrefix(isleaf = true)
+    wr.append node.lData.serialise(getKey0).value
 
-    result.add (@(w.key.data), wr.finish())
+    result.add (wr.finish())
 
 proc digestTo*(node: NodeRef; T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key. Note
@@ -122,7 +127,7 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
     # Do for embedded extension node
     if 0 < node.ePfx.len:
       let brHash = wr.finish().digestTo(HashKey)
-      wr= initRlpWriter()
+      wr = initRlpWriter()
       wr.startList(2)
       wr.append node.ePfx.toHexPrefix(isleaf = false)
       wr.append brHash
