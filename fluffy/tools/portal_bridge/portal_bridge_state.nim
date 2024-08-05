@@ -251,7 +251,7 @@ proc recursiveCollectOffer(
 proc runBackfillGossipBlockOffersLoop(
     blockOffersQueue: AsyncQueue[BlockOffersRef], portalClient: RpcClient, workerId: int
 ) {.async: (raises: [CancelledError]).} =
-  info "Starting state backfill gossip block offers loop"
+  info "Starting state backfill gossip block offers loop", workerId
 
   var blockOffers = await blockOffersQueue.popFirst()
 
@@ -267,60 +267,45 @@ proc runBackfillGossipBlockOffersLoop(
     for offerWithKey in blockOffers.contractCodeOffers:
       offersMap.collectOffer(offerWithKey)
 
-    let gossipBatch = portalClient.prepareBatch()
-    for k, v in offersMap:
-      gossipBatch.portal_stateGossip(k.to0xHex(), v.to0xHex())
-    let gossipResponses = (await gossipBatch.send()).valueOr:
-      error "Failed to send portal_stateGossip batch", error
-      await sleepAsync(1.seconds)
-      continue
-
     var retryGossip = false
-    for r in gossipResponses:
-      if r.error.isSome:
-        error "Failed to gossip offer to peers: ", error = r.error.get
-        retryGossip = true
-        break
+    for k, v in offersMap:
       try:
-        let numPeers = Json.decode(r.result.string, int)
+        let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
         if numPeers == 0:
-          warn "Offer gossipped to no peers: ", numPeers
+          warn "Offer gossipped to no peers", workerId
           retryGossip = true
           break
-      except SerializationError as e:
-        raiseAssert(e.msg) # Should never happen
+      except CatchableError as e:
+        error "Failed to gossip offer to peers", workerId
+        retryGossip = true
+        break
 
     if retryGossip:
       await sleepAsync(1.seconds)
+      warn "Retrying state gossip for block number: ",
+        blockNumber = blockOffers.blockNumber, workerId
       continue
 
     # TODO: make this configurable
     await sleepAsync(100.milliseconds) # wait for the peers to be updated
-    let findBatch = portalClient.prepareBatch()
-    for k, _ in offersMap:
-      findBatch.portal_stateRecursiveFindContent(k.to0xHex())
-    let findResponses = (await findBatch.send()).valueOr:
-      error "Failed to send portal_stateRecursiveFindContent batch", error
-      await sleepAsync(1.seconds)
-      continue
 
-    for r in findResponses:
-      if r.error.isSome:
-        warn "Failed to find contentValue, retrying gossip: ",
-          workerId, error = r.error.get
-        retryGossip = true
-        break
+    for k, _ in offersMap:
       try:
-        let contentInfo = Json.decode(r.result.string, ContentInfo)
+        let contentInfo =
+          await portalClient.portal_stateRecursiveFindContent(k.to0xHex())
         if contentInfo.content.len() == 0:
-          error "Found empty contentValue: ", contentValue = contentInfo.content
+          error "Found empty contentValue", workerId
           retryGossip = true
           break
-      except SerializationError as e:
-        raiseAssert(e.msg) # Should never happen
+      except CatchableError as e:
+        error "Failed to find content with key: ", contentKey = k, workerId
+        retryGossip = true
+        break
 
     if retryGossip:
       await sleepAsync(1.seconds)
+      warn "Retrying state gossip for block number: ",
+        blockNumber = blockOffers.blockNumber
       continue
 
     if blockOffers.blockNumber mod 1000 == 0:
@@ -337,10 +322,10 @@ proc runBackfillMetricsLoop(
   while true:
     await sleepAsync(10.seconds)
     info "Block data queue metrics: ",
-      currentBlockNumber = blockDataQueue[0].blockNumber,
+      nextBlockNumber = blockDataQueue[0].blockNumber,
       blockDataQueueLen = blockDataQueue.len()
     info "Block offers queue metrics: ",
-      currentBlockNumber = blockOffersQueue[0].blockNumber,
+      nextBlockNumber = blockOffersQueue[0].blockNumber,
       blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
