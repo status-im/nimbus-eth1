@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
   eth/common,
   results,
   ".."/[aristo_desc, aristo_get, aristo_utils, aristo_compute, aristo_serialise]
@@ -45,11 +44,17 @@ proc chainRlpNodes*(
       ok()
 
   of Branch:
-    if path.len == 0:
-      err(PartChnBranchPathMismatch)
+    let nChewOff = sharedPrefixLen(vtx.ePfx, path)
+    if nChewOff != vtx.ePfx.len:
+      err(PartChnExtPfxMismatch)
+    elif path.len == nChewOff:
+      err(PartChnBranchPathExhausted)
     else:
+      let
+        nibble = path[nChewOff]
+        rest = path.slice(nChewOff+1)
       # Recursion!
-      db.chainRlpNodes((rvid.root,vtx.bVid[path[0]]), path.slice(1), chain)
+      db.chainRlpNodes((rvid.root,vtx.bVid[nibble]), rest, chain)
 
 # ------------------------------------------------------------------------------
 # End

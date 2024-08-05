@@ -169,7 +169,8 @@ type
     PartChkVidKeyTabLengthsDiffer
     PartChkVidTabCoreRootMissing
     PartChkVidTabVidMissing
-    PartChnBranchPathMismatch
+    PartChnBranchPathExhausted
+    PartChnExtPfxMismatch
     PartChnLeafPathMismatch
     PartChnNodeConvError
     PartCtxNotAvailable

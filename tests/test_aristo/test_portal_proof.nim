@@ -18,7 +18,8 @@ import
   unittest2,
   ../test_helpers,
   ../../nimbus/db/aristo,
-  ../../nimbus/db/aristo/[aristo_desc, aristo_hike, aristo_layers, aristo_part],
+  ../../nimbus/db/aristo/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
+                          aristo_part],
   ../../nimbus/db/aristo/aristo_part/part_debug
 
 type
@@ -49,7 +50,7 @@ proc createPartDb(ps: PartStateRef; data: seq[Blob]; info: static[string]) =
 
 proc preLoadAristoDb(jKvp: JsonNode): PartStateRef =
   const info = "preLoadAristoDb"
-  let  ps = PartStateRef.init AristoDbRef.init()
+  let ps = PartStateRef.init AristoDbRef.init()
 
   # Collect rlp-encodede node blobs
   var proof: seq[Blob]
@@ -79,6 +80,49 @@ proc collectAddresses(node: JsonNode, collect: var HashSet[EthAddress]) =
         v.collectAddresses collect
     else:
       discard
+
+
+proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): Blob =
+  ## Modified function `aristo_serialise.serialise()`.
+  ##
+  const info = "payloadAsBlob"
+  case pyl.pType:
+  of RawData:
+    pyl.rawBlob
+  of AccountData:
+    let
+      vid = pyl.stoID
+      key = block:
+        if vid.isValid:
+          let rc = ps.db.getKeyRc (VertexID(1),vid)
+          if rc.isErr:
+            raiseAssert info & ": getKey => " & $rc.error
+          rc.value[0]
+        else:
+          VOID_HASH_KEY
+
+    rlp.encode Account(
+      nonce:       pyl.account.nonce,
+      balance:     pyl.account.balance,
+      storageRoot: key.to(Hash256),
+      codeHash:    pyl.account.codeHash)
+  of StoData:
+    rlp.encode pyl.stoData
+
+
+func asExtension(b: Blob; path: Hash256): Blob =
+  var node = rlpFromBytes b
+  if node.listLen == 17:
+    let nibble = NibblesBuf.fromBytes(path.data)[0]
+    var wr = initRlpWriter()
+
+    wr.startList(2)
+    wr.append NibblesBuf.fromBytes(@[nibble]).slice(1).toHexPrefix(isleaf=false)
+    wr.append node.listElem(nibble.int).toBytes
+    wr.finish()
+
+  else:
+    b
 
 # ------------------------------------------------------------------------------
 # Private test functions
@@ -117,22 +161,50 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
   # Verify proof chains
   for (path,proof) in sample.pairs:
     if proof.error == AristoError 0:
+      let
+        rVid = proof.hike.root
+        pyl = proof.hike.legs[^1].wp.vtx.lData.payloadAsBlob(ps)
 
-      # Create another partial database from tree
-      let pq = PartStateRef.init AristoDbRef.init()
-      pq.createPartDb(proof.chain, info)
+      block:
+        # Use these root and chain
+        let chain = proof.chain
 
-      # Create the same proof again which must result into the same as before
-      let rc = pq.db.partAccountTwig path
-      check rc.isOk
-      if rc.isOk:
-        check rc.value == proof.chain
+        # Create another partial database from tree
+        let pq = PartStateRef.init AristoDbRef.init()
+        pq.createPartDb(chain, info)
+
+        # Create the same proof again which must result into the same as before
+        block:
+          let rc = pq.db.partAccountTwig path
+          check rc.isOk
+          if rc.isOk:
+            check rc.value == proof.chain
+
+      # Extension nodes are rare, so there is one created, inserted and the
+      # previous test repeated.
+      block:
+        let
+          ext = proof.chain[0].asExtension(path)
+          tail = @(proof.chain.toOpenArray(1,proof.chain.len-1))
+          chain = @[ext] & tail
+
+        # Create a third partial database from modified proof
+        let pq = PartStateRef.init AristoDbRef.init()
+        pq.createPartDb(chain, info)
+
+        # Re-create proof again
+        block:
+          let rc = pq.db.partAccountTwig path
+          check rc.isOk
+          if rc.isOk:
+            check rc.value == chain
 
 # ------------------------------------------------------------------------------
 # Test
 # ------------------------------------------------------------------------------
 
-suite "Creating portal proof twigs for Aristo DB":
+suite "Encoding & verification of portal proof twigs for Aristo DB":
+  # Piggyback on tracer test suite environment
   jsonTest("TracerTests", testCreatePortalProof)
 
 # ------------------------------------------------------------------------------
