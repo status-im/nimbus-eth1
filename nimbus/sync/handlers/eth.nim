@@ -345,7 +345,8 @@ method getPooledTxs*(ctx: EthWireRef,
         trace "handlers.getPooledTxs: tx not found", txHash
     ok(list)
   else:
-    err("txpool disabled")
+    var list: seq[PooledTransaction]
+    ok(list)
 
 method getBlockBodies*(ctx: EthWireRef,
                        hashes: openArray[Hash256]):
@@ -438,7 +439,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
     except CatchableError as exc:
       return err(exc.msg)
   else:
-    err("txpool disabled")
+    ok()
 
 method handleAnnouncedTxsHashes*(
       ctx: EthWireRef;
