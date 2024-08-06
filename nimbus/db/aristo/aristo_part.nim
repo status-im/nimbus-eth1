@@ -113,6 +113,7 @@ proc partUntwig*(
     root: Hash256;
     path: openArray[byte];
       ): Result[Blob,AristoError] =
+  ## Verify the chain of rlp-encoded nodes and return the payload.
   try:
     let nibbles = NibblesBuf.fromBytes path
     return chain.trackRlpNodes(root.to(HashKey), nibbles, start=true)
@@ -124,6 +125,7 @@ proc partUntwig*(
     root: Hash256;
     path: Hash256;
       ): Result[Blob,AristoError] =
+  ## Veriant of `partUntwig()`.
   chain.partUntwig(root, path.data)
 
 
@@ -133,6 +135,11 @@ proc partUntwigOk*(
     path: openArray[byte];
     payload: openArray[byte];
       ): Result[void,AristoError] =
+  ## Verify the chain of rlp-encoded nodes and return the payload.
+  ##
+  ## Note: This function provides a functionality comparable to the
+  ## `isValidBranch()` function from `hexary.nim`
+  ##
   if payload == ? chain.partUntwig(root, path):
     ok()
   else:
@@ -144,6 +151,7 @@ proc partUntwigOk*(
     path: Hash256;
     payload: openArray[byte];
       ): Result[void,AristoError] =
+  ## Veriant of `partUntwigOk()`.
   chain.partUntwigOk(root, path.data, payload)
 
 # ----------------
