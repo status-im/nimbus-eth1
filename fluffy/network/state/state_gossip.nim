@@ -97,7 +97,7 @@ proc gossipOffer*(
   let req1Peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
-  info "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
+  debug "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
 
 proc gossipOffer*(
     p: PortalProtocol,
@@ -110,7 +110,7 @@ proc gossipOffer*(
   let req1Peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
-  info "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
+  debug "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
 
 proc gossipOffer*(
     p: PortalProtocol,
@@ -123,7 +123,7 @@ proc gossipOffer*(
   let peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
-  info "Offered content gossipped successfully with peers", keyBytes, peers
+  debug "Offered content gossipped successfully with peers", keyBytes, peers
 
 # Currently only used for testing to gossip an entire account trie proof
 # This may also be useful for the state network bridge

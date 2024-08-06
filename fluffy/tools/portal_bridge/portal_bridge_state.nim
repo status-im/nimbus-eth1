@@ -12,6 +12,7 @@ import
   chronicles,
   chronos,
   stint,
+  json_serialization,
   stew/byteutils,
   web3/[eth_api, eth_api_types],
   results,
@@ -65,7 +66,9 @@ proc getLastPersistedBlockNumber(db: DatabaseRef): Opt[uint64] =
     raiseAssert(e.msg) # Should never happen
 
 proc putLastPersistedBlockNumber(db: DatabaseRef, blockNumber: uint64) {.inline.} =
-  db.put(rlp.encode("lastPersistedBlockNumber"), rlp.encode(blockNumber))
+  # Only update the last persisted block number if it's greater than the current one
+  if blockNumber > db.getLastPersistedBlockNumber().valueOr(0):
+    db.put(rlp.encode("lastPersistedBlockNumber"), rlp.encode(blockNumber))
 
 proc runBackfillCollectBlockDataLoop(
     db: DatabaseRef,
@@ -132,6 +135,8 @@ proc runBackfillBuildBlockOffersLoop(
     db: DatabaseRef,
     blockDataQueue: AsyncQueue[BlockData],
     blockOffersQueue: AsyncQueue[BlockOffersRef],
+    verifyStateProofs: bool,
+    gossipGenesis: bool,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill build block offers loop"
 
@@ -158,20 +163,21 @@ proc runBackfillBuildBlockOffersLoop(
             raiseAssert(e.msg) # Should never happen
       ws.applyGenesisAccounts(genesisAccounts)
 
-      let genesisBlockHash = KeccakHash.fromHex(
-        "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
-      )
-      var builder = OffersBuilderRef.init(ws, genesisBlockHash)
-      builder.buildBlockOffers()
-
-      await blockOffersQueue.addLast(
-        BlockOffersRef(
-          blockNumber: 0.uint64,
-          accountTrieOffers: builder.getAccountTrieOffers(),
-          contractTrieOffers: builder.getContractTrieOffers(),
-          contractCodeOffers: builder.getContractCodeOffers(),
+      if gossipGenesis:
+        let genesisBlockHash = KeccakHash.fromHex(
+          "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
         )
-      )
+        var builder = OffersBuilder.init(ws, genesisBlockHash)
+        builder.buildBlockOffers()
+
+        await blockOffersQueue.addLast(
+          BlockOffersRef(
+            blockNumber: 0.uint64,
+            accountTrieOffers: builder.getAccountTrieOffers(),
+            contractTrieOffers: builder.getContractTrieOffers(),
+            contractCodeOffers: builder.getContractCodeOffers(),
+          )
+        )
 
   # Load the world state using the parent state root
   let worldState = WorldStateRef.init(db, firstBlock.parentStateRoot)
@@ -204,9 +210,10 @@ proc runBackfillBuildBlockOffersLoop(
       trace "State diffs successfully applied to block number:",
         blockNumber = blockData.blockNumber
 
-      # worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
+      if verifyStateProofs:
+        worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
 
-      var builder = OffersBuilderRef.init(worldState, blockData.blockHash)
+      var builder = OffersBuilder.init(worldState, blockData.blockHash)
       builder.buildBlockOffers()
 
       await blockOffersQueue.addLast(
@@ -223,50 +230,95 @@ proc runBackfillBuildBlockOffersLoop(
     # to enable restarting from this block if needed
     db.putLastPersistedBlockNumber(blockData.blockNumber)
 
-proc gossipOffer(
-    portalClient: RpcClient,
+proc collectOffer(
+    offersMap: TableRef[seq[byte], seq[byte]],
     offerWithKey:
       AccountTrieOfferWithKey | ContractTrieOfferWithKey | ContractCodeOfferWithKey,
-) {.async: (raises: [CancelledError]).} =
-  let
-    keyBytes = offerWithKey.key.toContentKey().encode().asSeq()
-    offerBytes = offerWithKey.offer.encode()
-  try:
-    let numPeers =
-      await portalClient.portal_stateGossip(keyBytes.to0xHex(), offerBytes.to0xHex())
-    debug "Gossiping offer to peers: ", offerKey = keyBytes.to0xHex(), numPeers
-  except CatchableError as e:
-    raiseAssert(e.msg) # Should never happen
+) {.inline.} =
+  let keyBytes = offerWithKey.key.toContentKey().encode().asSeq()
+  offersMap[keyBytes] = offerWithKey.offer.encode()
 
-proc recursiveGossipOffer(
-    portalClient: RpcClient,
+proc recursiveCollectOffer(
+    offersMap: TableRef[seq[byte], seq[byte]],
     offerWithKey: AccountTrieOfferWithKey | ContractTrieOfferWithKey,
-) {.async: (raises: [CancelledError]).} =
-  await portalClient.gossipOffer(offerWithKey)
+) =
+  offersMap.collectOffer(offerWithKey)
 
-  # root node, recursive gossip is finished
+  # root node, recursive collect is finished
   if offerWithKey.key.path.unpackNibbles().len() == 0:
     return
 
-  # continue the recursive gossip by sharing the parent offer with peers
-  await portalClient.recursiveGossipOffer(offerWithKey.getParent())
+  # continue the recursive collect
+  offersMap.recursiveCollectOffer(offerWithKey.getParent())
 
 proc runBackfillGossipBlockOffersLoop(
-    blockOffersQueue: AsyncQueue[BlockOffersRef], portalClient: RpcClient
+    blockOffersQueue: AsyncQueue[BlockOffersRef],
+    portalClient: RpcClient,
+    verifyGossip: bool,
+    workerId: int,
 ) {.async: (raises: [CancelledError]).} =
-  info "Starting state backfill gossip block offers loop"
+  info "Starting state backfill gossip block offers loop", workerId
+
+  var blockOffers = await blockOffersQueue.popFirst()
 
   while true:
-    let blockOffers = await blockOffersQueue.popFirst()
+    # A table of offer key, value pairs is used to filter out duplicates so
+    # that we don't gossip the same offer multiple times.
+    let offersMap = newTable[seq[byte], seq[byte]]()
 
     for offerWithKey in blockOffers.accountTrieOffers:
-      await portalClient.recursiveGossipOffer(offerWithKey)
-
+      offersMap.recursiveCollectOffer(offerWithKey)
     for offerWithKey in blockOffers.contractTrieOffers:
-      await portalClient.recursiveGossipOffer(offerWithKey)
-
+      offersMap.recursiveCollectOffer(offerWithKey)
     for offerWithKey in blockOffers.contractCodeOffers:
-      await portalClient.gossipOffer(offerWithKey)
+      offersMap.collectOffer(offerWithKey)
+
+    var retryGossip = false
+    for k, v in offersMap:
+      try:
+        let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
+        if numPeers == 0:
+          warn "Offer gossipped to no peers", workerId
+          retryGossip = true
+          break
+      except CatchableError as e:
+        error "Failed to gossip offer to peers", error = e.msg, workerId
+        retryGossip = true
+        break
+
+    if retryGossip:
+      await sleepAsync(1.seconds)
+      warn "Retrying state gossip for block number: ",
+        blockNumber = blockOffers.blockNumber, workerId
+      continue
+
+    if verifyGossip:
+      #await sleepAsync(100.milliseconds) # wait for the peers to be updated
+      for k, _ in offersMap:
+        try:
+          let contentInfo =
+            await portalClient.portal_stateRecursiveFindContent(k.to0xHex())
+          if contentInfo.content.len() == 0:
+            error "Found empty contentValue", workerId
+            retryGossip = true
+            break
+        except CatchableError as e:
+          error "Failed to find content with key: ",
+            contentKey = k, error = e.msg, workerId
+          retryGossip = true
+          break
+
+      if retryGossip:
+        await sleepAsync(1.seconds)
+        warn "Retrying state gossip for block number: ",
+          blockNumber = blockOffers.blockNumber
+        continue
+
+    if blockOffers.blockNumber mod 1000 == 0:
+      info "Finished gossiping offers for block number: ",
+        workerId, blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
+
+    blockOffers = await blockOffersQueue.popFirst()
 
 proc runBackfillMetricsLoop(
     blockDataQueue: AsyncQueue[BlockData], blockOffersQueue: AsyncQueue[BlockOffersRef]
@@ -275,8 +327,12 @@ proc runBackfillMetricsLoop(
 
   while true:
     await sleepAsync(10.seconds)
-    info "Block data queue length: ", blockDataQueueLen = blockDataQueue.len()
-    info "Block offers queue length: ", blockOffersQueueLen = blockOffersQueue.len()
+    info "Block data queue metrics: ",
+      nextBlockNumber = blockDataQueue[0].blockNumber,
+      blockDataQueueLen = blockDataQueue.len()
+    info "Block offers queue metrics: ",
+      nextBlockNumber = blockOffersQueue[0].blockNumber,
+      blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
   let
@@ -289,47 +345,41 @@ proc runState*(config: PortalBridgeConf) =
   if web3Client of RpcHttpClient:
     warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
 
-  # TODO:
-  # Here we'd want to implement initially a loop that backfills the state
-  # content. Secondly, a loop that follows the head and injects the latest
-  # state changes too.
-  #
-  # The first step would probably be the easier one to start with, as one
-  # can start from genesis state.
-  # It could be implemented by using the `exp_getProofsByBlockNumber` JSON-RPC
-  # method from nimbus-eth1.
-  # It could also be implemented by having the whole state execution happening
-  # inside the bridge, and getting the blocks from era1 files.
+  let maybeLastPersistedBlock = db.getLastPersistedBlockNumber()
+  if maybeLastPersistedBlock.isSome():
+    info "Last persisted block found in the database: ",
+      lastPersistedBlock = maybeLastPersistedBlock.get()
+    if config.startBlockNumber < 1 or
+        config.startBlockNumber > maybeLastPersistedBlock.get():
+      warn "Start block must be set to a value between 1 and the last persisted block"
+      quit QuitFailure
+  else:
+    info "No last persisted block found in the database"
+    if config.startBlockNumber != 1:
+      warn "Start block must be set to 1"
+      quit QuitFailure
 
-  if config.backfillState:
-    let maybeLastPersistedBlock = db.getLastPersistedBlockNumber()
-    if maybeLastPersistedBlock.isSome():
-      info "Last persisted block found in the database: ",
-        lastPersistedBlock = maybeLastPersistedBlock.get()
-      if config.startBlockNumber < 1 or
-          config.startBlockNumber > maybeLastPersistedBlock.get():
-        warn "Start block must be set to a value between 1 and the last persisted block"
-        quit QuitFailure
-    else:
-      info "No last persisted block found in the database"
-      if config.startBlockNumber != 1:
-        warn "Start block must be set to 1"
-        quit QuitFailure
+  info "Starting state backfill from block number: ",
+    startBlockNumber = config.startBlockNumber
 
-    info "Starting state backfill from block number: ",
-      startBlockNumber = config.startBlockNumber
+  let
+    bufferSize = 1000
+    blockDataQueue = newAsyncQueue[BlockData](bufferSize)
+    blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
-    const bufferSize = 1000 # Should we make this configurable?
-    let
-      blockDataQueue = newAsyncQueue[BlockData](bufferSize)
-      blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
+  asyncSpawn runBackfillCollectBlockDataLoop(
+    db, blockDataQueue, web3Client, config.startBlockNumber
+  )
+  asyncSpawn runBackfillBuildBlockOffersLoop(
+    db, blockDataQueue, blockOffersQueue, config.verifyStateProofs, config.gossipGenesis
+  )
 
-    asyncSpawn runBackfillCollectBlockDataLoop(
-      db, blockDataQueue, web3Client, config.startBlockNumber
+  for workerId in 1 .. config.gossipWorkersCount.int:
+    asyncSpawn runBackfillGossipBlockOffersLoop(
+      blockOffersQueue, portalClient, config.verifyGossip, workerId
     )
-    asyncSpawn runBackfillBuildBlockOffersLoop(db, blockDataQueue, blockOffersQueue)
-    asyncSpawn runBackfillGossipBlockOffersLoop(blockOffersQueue, portalClient)
-    asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)
+
+  asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)
 
   while true:
     poll()

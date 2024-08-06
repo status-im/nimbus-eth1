@@ -202,3 +202,51 @@ proc getUpdatedBytecode*(
     state: WorldStateRef, address: EthAddress
 ): seq[byte] {.inline.} =
   state.db.getBytecodeUpdatedCache().get(toAccountKey(address).data)
+
+# Slow: Used for testing only
+proc verifyProofs*(
+    state: WorldStateRef, preStateRoot: KeccakHash, expectedStateRoot: KeccakHash
+) =
+  try:
+    let trie =
+      initHexaryTrie(state.db.getAccountsBackend(), preStateRoot, isPruning = false)
+
+    var memDb = newMemoryDB()
+    for k, v in trie.replicate():
+      memDb.put(k, v)
+
+    for address, proof in state.updatedAccountProofs():
+      doAssert isValidBranch(
+        proof,
+        expectedStateRoot,
+        @(toAccountKey(address).data),
+        rlpFromBytes(proof[^1]).listElem(1).toBytes(), # pull the value out of the proof
+      )
+      for p in proof:
+        memDb.put(keccakHash(p).data, p)
+
+    let memTrie = initHexaryTrie(memDb, expectedStateRoot, isPruning = false)
+    doAssert(memTrie.rootHash() == expectedStateRoot)
+
+    for address, proof in state.updatedAccountProofs():
+      let
+        accountBytes = memTrie.get(toAccountKey(address).data)
+        account = rlp.decode(accountBytes, Account)
+      doAssert(accountBytes.len() > 0)
+      doAssert(accountBytes == rlpFromBytes(proof[^1]).listElem(1).toBytes())
+        # pull the value out of the proof
+
+      for slotHash, sProof in state.updatedStorageProofs(address):
+        doAssert isValidBranch(
+          sProof,
+          account.storageRoot,
+          @(slotHash.data),
+          rlpFromBytes(sProof[^1]).listElem(1).toBytes(),
+            # pull the value out of the proof
+        )
+
+      let updatedCode = state.getUpdatedBytecode(address)
+      if updatedCode.len() > 0:
+        doAssert(account.codeHash == keccakHash(updatedCode))
+  except RlpError as e:
+    raiseAssert(e.msg) # Should never happen

@@ -173,7 +173,7 @@ proc processOffer*(
   n.portalProtocol.storeContent(
     contentKeyBytes, contentId, contentValue.toRetrievalValue().encode()
   )
-  info "Offered content validated successfully", contentKeyBytes
+  debug "Offered content validated successfully", contentKeyBytes
 
   await gossipOffer(
     n.portalProtocol, maybeSrcNodeId, contentKeyBytes, contentValueBytes, contentKey,
