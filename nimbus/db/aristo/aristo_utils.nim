@@ -61,7 +61,7 @@ proc toNode*(
     if vtx.lData.pType == AccountData:
       let vid = vtx.lData.stoID
       if vid.isValid:
-        let key = db.getKey (root, vid)
+        let key = db.getKey (vid, vid)
         if not key.isValid:
           return err(@[vid])
         node.key[0] = key
