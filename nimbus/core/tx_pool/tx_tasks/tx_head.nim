@@ -16,7 +16,6 @@
 import
   std/[tables],
   ../../../common/common,
-  ../tx_chain,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
@@ -48,7 +47,7 @@ logScope:
 # use it as a stack/lifo as the ordering is reversed
 proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.raises: [BlockNotFound].} =
-  let db = xp.chain.com.db
+  let db = xp.vmState.com.db
   for tx in db.getBlockBody(blockHash).transactions:
     if tx.versionedHashes.len > 0:
       # EIP-4844 blobs are not persisted and cannot be re-broadcasted.
@@ -60,7 +59,7 @@ proc insert(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
 
 proc remove(xp: TxPoolRef; kq: TxHeadDiffRef; blockHash: Hash256)
     {.gcsafe,raises: [BlockNotFound].} =
-  let db = xp.chain.com.db
+  let db = xp.vmState.com.db
   for tx in db.getBlockBody(blockHash).transactions:
     kq.remTxs[tx.itemID] = true
 
@@ -123,10 +122,10 @@ proc headDiff*(xp: TxPoolRef;
   ## of txs to be removed is *DEL - ADD*.
   ##
   let
-    curHead = xp.chain.head
+    curHead = xp.head
     curHash = curHead.blockHash
     newHash = newHead.blockHash
-    db      = xp.chain.com.db
+    db      = xp.vmState.com.db
 
   var ignHeader: BlockHeader
   if not db.getBlockHeader(newHash, ignHeader):

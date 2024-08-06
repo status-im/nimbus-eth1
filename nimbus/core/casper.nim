@@ -17,18 +17,6 @@ type
     withdrawals : seq[Withdrawal] ## EIP-4895
     beaconRoot  : Hash256 ## EIP-4788
 
-proc prepare*(ctx: CasperRef, header: var BlockHeader) =
-  header.coinbase   = ctx.feeRecipient
-  header.timestamp  = ctx.timestamp
-  header.prevRandao = ctx.prevRandao
-  header.difficulty = DifficultyInt.zero
-
-proc prepareForSeal*(ctx: CasperRef, header: var BlockHeader) {.gcsafe, raises:[].} =
-  header.nonce      = default(BlockNonce)
-  header.extraData  = @[] # TODO: probably this should be configurable by user?
-  # this repetition, assigning prevRandao is because how txpool works
-  header.prevRandao = ctx.prevRandao
-
 # ------------------------------------------------------------------------------
 # Getters
 # ------------------------------------------------------------------------------

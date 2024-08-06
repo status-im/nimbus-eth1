@@ -14,8 +14,15 @@
 
 import
   std/[times],
+  eth/eip1559,
   ../../common/common,
-  ./tx_chain,
+  ../../evm/state,
+  ../../evm/types,
+  ../../db/ledger,
+  ../../constants,
+  ../pow/header,
+  ../eip4844,
+  ../casper,
   ./tx_item,
   ./tx_tabs,
   ./tx_tabs/tx_sender
@@ -26,36 +33,12 @@ type
   TxPoolFlags* = enum ##\
     ## Processing strategy selector symbols
 
-    packItemsMaxGasLimit ##\
-      ## It set, the *packer* will execute and collect additional items from
-      ## the `staged` bucket while accumulating `gasUsed` as long as
-      ## `maxGasLimit` is not exceeded. If `packItemsTryHarder` flag is also
-      ## set, the *packer* will not stop until at least `hwmGasLimit` is
-      ## reached.
-      ##
-      ## Otherwise the *packer* will accumulate up until `trgGasLimit` is
-      ## not exceeded, and not stop until at least `lwmGasLimit` is reached
-      ## in case `packItemsTryHarder` is also set,
-
-    packItemsTryHarder ##\
-      ## It set, the *packer* will *not* stop accumulaing transactions up until
-      ## the `lwmGasLimit` or `hwmGasLimit` is reached, depending on whether
-      ## the `packItemsMaxGasLimit` is set. Otherwise, accumulating stops
-      ## immediately before the next transaction exceeds `trgGasLimit`, or
-      ## `maxGasLimit` depending on `packItemsMaxGasLimit`.
-
-    # -----------
-
     autoUpdateBucketsDB ##\
       ## Automatically update the state buckets after running batch jobs if
       ## the `dirtyBuckets` flag is also set.
 
     autoZombifyUnpacked ##\
       ## Automatically dispose *pending* or *staged* txs that were queued
-      ## at least `lifeTime` ago.
-
-    autoZombifyPacked ##\
-      ## Automatically dispose *packed* txs that were queued
       ## at least `lifeTime` ago.
 
   TxPoolParam* = tuple          ## Getter/setter accessible parameters
@@ -66,15 +49,14 @@ type
   TxPoolRef* = ref object of RootObj ##\
     ## Transaction pool descriptor
     startDate: Time             ## Start date (read-only)
+    param: TxPoolParam          ## Getter/Setter parameters
 
-    chain: TxChainRef           ## block chain state
+    vmState: BaseVMState
     txDB: TxTabsRef             ## Transaction lists & tables
 
     lifeTime*: times.Duration   ## Maximum life time of a tx in the system
     priceBump*: uint            ## Min precentage price when superseding
     blockValue*: UInt256        ## Sum of reward received by feeRecipient
-
-    param: TxPoolParam          ## Getter/Setter parameters
 
 const
   txItemLifeTime = ##\
@@ -89,9 +71,69 @@ const
     ## core/tx_pool.go(177) of the geth implementation.
     10u
 
-  txPoolFlags = {packItemsTryHarder,
-                  autoUpdateBucketsDB,
+  txPoolFlags = {autoUpdateBucketsDB,
                   autoZombifyUnpacked}
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc baseFeeGet(com: CommonRef; parent: BlockHeader): Opt[UInt256] =
+  ## Calculates the `baseFee` of the head assuming this is the parent of a
+  ## new block header to generate.
+
+  # Note that the baseFee is calculated for the next header
+  if not com.isLondonOrLater(parent.number+1):
+    return Opt.none(UInt256)
+
+  # If the new block is the first EIP-1559 block, return initial base fee.
+  if not com.isLondonOrLater(parent.number):
+    return Opt.some(EIP1559_INITIAL_BASE_FEE)
+
+  Opt.some calcEip1599BaseFee(
+    parent.gasLimit,
+    parent.gasUsed,
+    parent.baseFeePerGas.get(0.u256))
+
+proc gasLimitsGet(com: CommonRef; parent: BlockHeader): GasInt =
+  if com.isLondonOrLater(parent.number+1):
+    var parentGasLimit = parent.gasLimit
+    if not com.isLondonOrLater(parent.number):
+      # Bump by 2x
+      parentGasLimit = parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
+    calcGasLimit1559(parentGasLimit, desiredLimit = DEFAULT_GAS_LIMIT)
+  else:
+    computeGasLimit(
+      parent.gasUsed,
+      parent.gasLimit,
+      gasFloor = DEFAULT_GAS_LIMIT,
+      gasCeil = DEFAULT_GAS_LIMIT)
+
+proc setupVMState(com: CommonRef; parent: BlockHeader): BaseVMState =
+  # do hardfork transition before
+  # BaseVMState querying any hardfork/consensus from CommonRef
+
+  let pos = com.pos
+  com.hardForkTransition(
+    parent.blockHash, parent.number+1, Opt.some(pos.timestamp))
+
+  let blockCtx = BlockContext(
+    timestamp    : pos.timestamp,
+    gasLimit     : gasLimitsGet(com, parent),
+    baseFeePerGas: baseFeeGet(com, parent),
+    prevRandao   : pos.prevRandao,
+    difficulty   : UInt256.zero(),
+    coinbase     : pos.feeRecipient,
+    excessBlobGas: calcExcessBlobGas(parent),
+  )
+
+  BaseVMState.new(
+    parent   = parent,
+    blockCtx = blockCtx,
+    com      = com)
+
+proc update(xp: TxPoolRef; parent: BlockHeader) =
+  xp.vmState = setupVMState(xp.vmState.com, parent)
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -102,7 +144,7 @@ proc init*(xp: TxPoolRef; com: CommonRef)
   ## Constructor, returns new tx-pool descriptor.
   xp.startDate = getTime().utc.toTime
 
-  xp.chain = TxChainRef.new(com)
+  xp.vmState = setupVMState(com, com.db.getCanonicalHead)
   xp.txDB = TxTabsRef.new
 
   xp.lifeTime = txItemLifeTime
@@ -112,12 +154,16 @@ proc init*(xp: TxPoolRef; com: CommonRef)
   xp.param.flags = txPoolFlags
 
 # ------------------------------------------------------------------------------
-# Public functions, getters
+# Public functions
 # ------------------------------------------------------------------------------
 
-func chain*(xp: TxPoolRef): TxChainRef =
-  ## Getter, block chain DB
-  xp.chain
+proc clearAccounts*(xp: TxPoolRef) =
+  ## Reset transaction environment, e.g. before packing a new block
+  xp.update(xp.vmState.parent)
+
+# ------------------------------------------------------------------------------
+# Public functions, getters
+# ------------------------------------------------------------------------------
 
 func pFlags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Returns the set of algorithm strategy symbols for labelling items
@@ -140,6 +186,47 @@ func txDB*(xp: TxPoolRef): TxTabsRef =
   ## Getter, pool database
   xp.txDB
 
+func baseFee*(xp: TxPoolRef): GasInt =
+  ## Getter, baseFee for the next bock header. This value is auto-generated
+  ## when a new insertion point is set via `head=`.
+  if xp.vmState.blockCtx.baseFeePerGas.isSome:
+    xp.vmState.blockCtx.baseFeePerGas.get.truncate(GasInt)
+  else:
+    0.GasInt
+
+func vmState*(xp: TxPoolRef): BaseVMState =
+  xp.vmState
+
+func nextFork*(xp: TxPoolRef): EVMFork =
+  xp.vmState.fork
+
+func gasLimit*(xp: TxPoolRef): GasInt =
+  xp.vmState.blockCtx.gasLimit
+
+func excessBlobGas*(xp: TxPoolRef): GasInt =
+  xp.vmState.blockCtx.excessBlobGas
+
+proc getBalance*(xp: TxPoolRef; account: EthAddress): UInt256 =
+  ## Wrapper around `vmState.readOnlyStateDB.getBalance()` for a `vmState`
+  ## descriptor positioned at the `dh.head`. This might differ from the
+  ## `dh.vmState.readOnlyStateDB.getBalance()` which returnes the current
+  ## balance relative to what has been accumulated by the current packing
+  ## procedure.
+  xp.vmState.stateDB.getBalance(account)
+
+proc getNonce*(xp: TxPoolRef; account: EthAddress): AccountNonce =
+  ## Wrapper around `vmState.readOnlyStateDB.getNonce()` for a `vmState`
+  ## descriptor positioned at the `dh.head`. This might differ from the
+  ## `dh.vmState.readOnlyStateDB.getNonce()` which returnes the current balance
+  ## relative to what has been accumulated by the current packing procedure.
+  xp.vmState.stateDB.getNonce(account)
+
+func head*(xp: TxPoolRef): BlockHeader =
+  ## Getter, cached block chain insertion point. Typocally, this should be the
+  ## the same header as retrieved by the `getCanonicalHead()` (unless in the
+  ## middle of a mining update.)
+  xp.vmState.parent
+
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -159,6 +246,12 @@ func pDoubleCheckFlush*(xp: TxPoolRef) =
 func `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.flags = val
+
+proc `head=`*(xp: TxPoolRef; val: BlockHeader)
+    {.gcsafe,raises: [].} =
+  ## Setter, updates descriptor. This setter re-positions the `vmState` and
+  ## account caches to a new insertion point on the block chain database.
+  xp.update(val)
 
 # ------------------------------------------------------------------------------
 # End

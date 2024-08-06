@@ -14,11 +14,8 @@
 
 import
   ../../../common/common,
-  ../../../evm/state,
-  ../../../evm/types,
   ../../validate,
   ../../eip4844,
-  ../tx_chain,
   ../tx_desc,
   ../tx_item,
   ../tx_tabs,
@@ -39,7 +36,7 @@ logScope:
 proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool =
   let res = validateTxBasic(
     item.tx,
-    xp.chain.nextFork,
+    xp.nextFork,
     # A new transaction of the next fork may be
     # coming before the fork activated
     validateFork = false
@@ -55,7 +52,7 @@ proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool
   ## sender) starting at the account nonce.
 
   # get the next applicable nonce as registered on the account database
-  let accountNonce = xp.chain.getNonce(item.sender)
+  let accountNonce = xp.getNonce(item.sender)
 
   if item.tx.nonce < accountNonce:
     debug "invalid tx: account nonce too small",
@@ -95,7 +92,7 @@ proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool
 proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether the max gas consumption is within the gas limit (aka block
   ## size).
-  let trgLimit = xp.chain.gasLimit
+  let trgLimit = xp.gasLimit
   if trgLimit < item.tx.gasLimit:
     debug "invalid tx: gasLimit exceeded",
       maxLimit = trgLimit,
@@ -107,15 +104,15 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   ## Ensure that the user was willing to at least pay the base fee
   ## And to at least pay the current data gasprice
   if item.tx.txType >= TxEip1559:
-    if item.tx.maxFeePerGas < xp.chain.baseFee:
+    if item.tx.maxFeePerGas < xp.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFeePerGas,
-        baseFee = xp.chain.baseFee
+        baseFee = xp.baseFee
       return false
 
   if item.tx.txType >= TxEip4844:
     let
-      excessBlobGas = xp.chain.excessBlobGas
+      excessBlobGas = xp.excessBlobGas
       blobGasPrice = getBlobBaseFee(excessBlobGas)
     if item.tx.maxFeePerBlobGas < blobGasPrice:
       debug "invalid tx: maxFeePerBlobGas smaller than blobGasPrice",
@@ -127,7 +124,7 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
 proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether the worst case expense is covered by the price budget,
   let
-    balance = xp.chain.getBalance(item.sender)
+    balance = xp.getBalance(item.sender)
     gasCost = item.tx.gasCost
   if balance < gasCost:
     debug "invalid tx: not enough cash for gas",
@@ -152,14 +149,14 @@ proc txPreLondonAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool =
       return false
 
     # Fall back transaction selector scheme
-    if item.tx.effectiveGasTip(xp.chain.baseFee) < 1.GasInt:
+    if item.tx.effectiveGasTip(xp.baseFee) < 1.GasInt:
       return false
   true
 
 proc txPostLondonAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef): bool =
   ## Helper for `classifyTxPacked()`
   if item.tx.txType >= TxEip1559:
-    if item.tx.effectiveGasTip(xp.chain.baseFee) < 1.GasInt:
+    if item.tx.effectiveGasTip(xp.baseFee) < 1.GasInt:
       return false
 
     if item.tx.maxFeePerGas < 1.GasInt:
@@ -191,7 +188,7 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
   if not xp.txNonceActive(item):
     return false
 
-  if item.tx.effectiveGasTip(xp.chain.baseFee) <= 0.GasInt:
+  if item.tx.effectiveGasTip(xp.baseFee) <= 0.GasInt:
     return false
 
   if not xp.txGasCovered(item):
@@ -210,42 +207,6 @@ proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool
     return false
 
   true
-
-
-proc classifyValidatePacked*(xp: TxPoolRef;
-                             vmState: BaseVMState; item: TxItemRef): bool =
-  ## Verify the argument `item` against the accounts database. This function
-  ## is a wrapper around the `verifyTransaction()` call to be used in a similar
-  ## fashion as in `asyncProcessTransactionImpl()`.
-  let
-    roDB = vmState.readOnlyStateDB
-    baseFee = xp.chain.baseFee.uint64.u256
-    fork = xp.chain.nextFork
-    gasLimit = xp.chain.gasLimit
-    tx = item.tx.eip1559TxNormalization(xp.chain.baseFee)
-    excessBlobGas = calcExcessBlobGas(vmState.parent)
-
-  roDB.validateTransaction(
-    tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
-
-proc classifyPacked*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
-  ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
-  ## in the VM.) This function checks whether the sum of the arguments
-  ## `gasBurned` and `moreGasBurned` is within acceptable constraints.
-  let totalGasUsed = gasBurned + moreBurned
-  totalGasUsed < xp.chain.gasLimit
-
-proc classifyPackedNext*(xp: TxPoolRef; gasBurned, moreBurned: GasInt): bool =
-  ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
-  ## in the VM.) This function returns `true` if the packing level is still
-  ## low enough to proceed trying to accumulate more items.
-  ##
-  ## This function is typically called as a follow up after a `false` return of
-  ## `classifyPack()`.
-  if packItemsTryHarder notin xp.pFlags:
-    xp.classifyPacked(gasBurned, moreBurned)
-  else:
-    gasBurned < xp.chain.gasLimit
 
 # ------------------------------------------------------------------------------
 # Public functionss

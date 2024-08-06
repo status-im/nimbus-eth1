@@ -15,7 +15,6 @@
 import
   std/[tables],
   ../../../constants,
-  ../tx_chain,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
@@ -166,7 +165,7 @@ proc bucketFlushPacked*(xp: TxPoolRef)
       discard xp.txDB.reassign(item,txItemStaged)
 
   # Reset bucket status info
-  xp.chain.clearAccounts
+  xp.clearAccounts
 
 # ------------------------------------------------------------------------------
 # End
