@@ -48,14 +48,19 @@ proc buildContractTrieNodeOffer(
     storageProof: TrieProof,
     accountProof: TrieProof,
 ) =
-  let
-    path = Nibbles.init(slotHash.data, isEven = true)
-    offerKey =
-      ContractTrieNodeKey.init(address, path, keccakHash(storageProof[^1].asSeq()))
-    offerValue =
-      ContractTrieNodeOffer.init(storageProof, accountProof, builder.blockHash)
+  try:
+    let
+      path = removeLeafKeyEndNibbles(
+        Nibbles.init(slotHash.data, isEven = true), storageProof[^1]
+      )
+      offerKey =
+        ContractTrieNodeKey.init(address, path, keccakHash(storageProof[^1].asSeq()))
+      offerValue =
+        ContractTrieNodeOffer.init(storageProof, accountProof, builder.blockHash)
 
-  builder.contractTrieOffers.add(offerValue.withKey(offerKey))
+    builder.contractTrieOffers.add(offerValue.withKey(offerKey))
+  except RlpError as e:
+    raiseAssert(e.msg) # Should never happen
 
 proc buildContractCodeOffer(
     builder: var OffersBuilder,
