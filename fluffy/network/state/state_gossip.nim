@@ -60,7 +60,9 @@ func getParent(p: ProofWithPath): ProofWithPath =
     # leaf or extension node so we need to remove one or more nibbles
     let (_, _, prefixNibbles) = decodePrefix(parentEndNode.listElem(0))
 
-    parentProof.withPath(unpackedNibbles.dropN(prefixNibbles.len()).packNibbles())
+    parentProof.withPath(
+      unpackedNibbles.dropN(prefixNibbles.unpackNibbles().len()).packNibbles()
+    )
   except RlpError as e:
     raiseAssert(e.msg)
 
