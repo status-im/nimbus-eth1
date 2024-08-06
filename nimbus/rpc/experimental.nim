@@ -35,7 +35,7 @@ proc getMultiKeys*(
     com: CommonRef,
     blockHeader: BlockHeader,
     statePostExecution: bool): MultiKeysRef
-    {.raises: [RlpError, BlockNotFound, ValueError].} =
+    {.raises: [BlockNotFound, ValueError].} =
 
   let
     chainDB = com.db

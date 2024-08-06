@@ -145,17 +145,31 @@ type
         desc: "The block number to start from", defaultValue: 1, name: "start-block"
       .}: uint64
 
-      verifyState* {.
-        desc: "Verify the fetched state before gossiping it into the network",
-        defaultValue: true,
-        name: "verify-state"
+      verifyStateProofs* {.
+        desc: "Verify state proofs before gossiping them into the portal network",
+        defaultValue: false,
+        name: "verify-state-proofs"
       .}: bool
 
-      backfillState* {.
-        desc: "Backfill pre-merge state data into the network",
+      gossipGenesis* {.
+        desc: "Enable gossip of the genesis state into the portal network",
         defaultValue: true,
-        name: "backfill"
+        name: "gossip-genesis"
       .}: bool
+
+      verifyGossip* {.
+        desc:
+          "Enable verifying that the state was successfully gossipped by fetching it from the network",
+        defaultValue: false,
+        name: "verify-gossip"
+      .}: bool
+
+      gossipWorkersCount* {.
+        desc:
+          "The number of workers to use for gossiping the state into the portal network",
+        defaultValue: 2,
+        name: "gossip-workers"
+      .}: uint
 
 func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)
