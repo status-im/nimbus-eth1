@@ -16,7 +16,6 @@
 
 import
   std/[tables],
-  ../tx_info,
   eth/common,
   stew/[sorted_set],
   results
@@ -110,36 +109,6 @@ proc delete*(rt: var TxRankTab; sender: EthAddress): bool
 
     rt.addrTab.del(sender)
     return true
-
-
-proc verify*(rt: var TxRankTab): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
-
-  var
-    seen: Table[EthAddress,TxRank]
-    rc = rt.rankList.ge(TxRank.low)
-
-  while rc.isOk:
-    let (key, addrTab) = (rc.value.key, rc.value.data)
-    rc = rt.rankList.gt(key)
-
-    for (sender,rank) in addrTab.pairs:
-      if key != rank:
-        return err(txInfoVfyRankAddrMismatch)
-
-      if not rt.addrTab.hasKey(sender):
-        return err(txInfoVfyRankReverseLookup)
-      if rank != rt.addrTab[sender]:
-        return err(txInfoVfyRankReverseMismatch)
-
-      if seen.hasKey(sender):
-        return err(txInfoVfyRankDuplicateAddr)
-      seen[sender] = rank
-
-  if seen.len != rt.addrTab.len:
-    return err(txInfoVfyReverseZombies)
-
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions: `TxRank` > `EthAddress`

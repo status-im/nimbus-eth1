@@ -13,10 +13,9 @@
 ##
 
 import
-  ../tx_info,
   ../tx_item,
   eth/common,
-  stew/[keyed_queue, keyed_queue/kq_debug, sorted_set],
+  stew/[keyed_queue, sorted_set],
   results
 
 {.push raises: [].}
@@ -30,7 +29,6 @@ type
     ## Per address table. This table is provided as a keyed queue so deletion\
     ## while traversing is supported and predictable.
     size: int                           ## Total number of items
-    gasLimits: GasInt                   ## Accumulated gas limits
     addrList: KeyedQueue[EthAddress,TxStatusNonceRef]
 
   TxStatusTab* = object ##\
@@ -121,7 +119,6 @@ proc insert*(sq: var TxStatusTab; item: TxItemRef): bool
     let inx = rc.value
     sq.size.inc
     inx.addrData.size.inc
-    inx.addrData.gasLimits += item.tx.gasLimit
     return true
 
 
@@ -133,7 +130,6 @@ proc delete*(sq: var TxStatusTab; item: TxItemRef): bool
 
     sq.size.dec
     inx.addrData.size.dec
-    inx.addrData.gasLimits -= item.tx.gasLimit
 
     discard inx.nonceData.nonceList.delete(item.tx.nonce)
     if inx.nonceData.nonceList.len == 0:
@@ -143,53 +139,6 @@ proc delete*(sq: var TxStatusTab; item: TxItemRef): bool
       sq.statusList[item.status] = nil
 
     return true
-
-
-proc verify*(sq: var TxStatusTab): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
-  ## walk `TxItemStatus` > `EthAddress` > `AccountNonce`
-
-  var totalCount = 0
-  for status in TxItemStatus:
-    let addrData = sq.statusList[status]
-    if not addrData.isNil:
-
-      block:
-        let rc = addrData.addrList.verify
-        if rc.isErr:
-          return err(txInfoVfyStatusSenderList)
-      var
-        addrCount = 0
-        gasLimits = 0.GasInt
-      for p in addrData.addrList.nextPairs:
-        # let (addrKey, nonceData) = (p.key, p.data) -- notused
-        let nonceData = p.data
-
-        block:
-          let rc = nonceData.nonceList.verify
-          if rc.isErr:
-            return err(txInfoVfyStatusNonceList)
-
-        var rcNonce = nonceData.nonceList.ge(AccountNonce.low)
-        while rcNonce.isOk:
-          let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
-          rcNonce = nonceData.nonceList.gt(nonceKey)
-
-          gasLimits += item.tx.gasLimit
-          addrCount.inc
-
-      if addrCount != addrData.size:
-        return err(txInfoVfyStatusTotal)
-      if gasLimits != addrData.gasLimits:
-        return err(txInfoVfyStatusGasLimits)
-
-      totalCount += addrCount
-
-  # end while
-  if totalCount != sq.size:
-    return err(txInfoVfyStatusTotal)
-
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public  array ops -- `TxItemStatus` (level 0)
@@ -221,17 +170,6 @@ proc nItems*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): int =
   if rc.isOk:
     return rc.value.data.nItems
   0
-
-
-proc gasLimits*(addrData: TxStatusSenderRef): GasInt =
-  ## Getter, accumulated `gasLimit` values
-  addrData.gasLimits
-
-proc gasLimits*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): GasInt =
-  if rc.isOk:
-    return rc.value.data.gasLimits
-  0
-
 
 proc eq*(addrData: TxStatusSenderRef; sender: EthAddress):
        SortedSetResult[EthAddress,TxStatusNonceRef]
@@ -295,28 +233,6 @@ proc gt*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
   if rc.isOk:
     return rc.value.data.gt(nonce)
-  err(rc.error)
-
-
-proc le*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
-  nonceData.nonceList.le(nonce)
-
-proc le*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
-  if rc.isOk:
-    return rc.value.data.le(nonce)
-  err(rc.error)
-
-
-proc lt*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
-  nonceData.nonceList.lt(nonce)
-
-proc lt*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
-       SortedSetResult[AccountNonce,TxItemRef] =
-  if rc.isOk:
-    return rc.value.data.lt(nonce)
   err(rc.error)
 
 # ------------------------------------------------------------------------------
