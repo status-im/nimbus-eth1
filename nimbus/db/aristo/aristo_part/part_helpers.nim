@@ -22,74 +22,74 @@ import
 # ------------------------------------------------------------------------------
 
 proc read(rlp: var Rlp; T: type PrfNode): T {.gcsafe, raises: [RlpError].} =
-    ## Mixin for RLP reader. The decoder with error return code in a `Leaf`
-    ## node if needed.
-    ##
-    func readError(error: AristoError): PrfNode =
-      ## Prettify return code expression
-      PrfNode(vType: Leaf, prfType: isError, error: error)
+  ## Mixin for RLP reader. The decoder with error return code in a `Leaf`
+  ## node if needed.
+  ##
+  func readError(error: AristoError): PrfNode =
+    ## Prettify return code expression
+    PrfNode(vType: Leaf, prfType: isError, error: error)
 
-    if not rlp.isList:
-      # Otherwise `rlp.items` would raise a `Defect`
-      return readError(PartRlp2Or17ListEntries)
+  if not rlp.isList:
+    # Otherwise `rlp.items` would raise a `Defect`
+    return readError(PartRlp2Or17ListEntries)
 
-    var
-      blobs = newSeq[Blob](2)         # temporary, cache
-      links: array[16,HashKey]        # reconstruct branch node
-      top = 0                         # count entries and positions
+  var
+    blobs = newSeq[Blob](2)         # temporary, cache
+    links: array[16,HashKey]        # reconstruct branch node
+    top = 0                         # count entries and positions
 
-    # Collect lists of either 2 or 17 blob entries.
-    for w in rlp.items:
-      case top
-      of 0, 1:
-        if not w.isBlob:
-          return readError(PartRlpBlobExpected)
-        blobs[top] = rlp.read(Blob)
-      of 2 .. 15:
-        let blob = rlp.read(Blob)
-        links[top] = HashKey.fromBytes(blob).valueOr:
-          return readError(PartRlpBranchHashKeyExpected)
-      of 16:
-        if not w.isBlob or 0 < rlp.read(Blob).len:
-          return readError(PartRlpEmptyBlobExpected)
-      else:
-        return readError(PartRlp2Or17ListEntries)
-      top.inc
-
-    # Verify extension data
+  # Collect lists of either 2 or 17 blob entries.
+  for w in rlp.items:
     case top
-    of 2:
-      if blobs[0].len == 0:
-        return readError(PartRlpNonEmptyBlobExpected)
-      let (isLeaf, pathSegment) = NibblesBuf.fromHexPrefix blobs[0]
-      if isLeaf:
-        return PrfNode(
-          vType:     Leaf,
-          prfType:   ignore,
-          lPfx:      pathSegment,
-          lData:     LeafPayload(
-            pType:   RawData,
-            rawBlob: blobs[1]))
-      else:
-        var node = PrfNode(
-          vType:   Branch,
-          prfType: isExtension,
-          ePfx:    pathSegment)
-        node.key[0] = HashKey.fromBytes(blobs[1]).valueOr:
-          return readError(PartRlpExtHashKeyExpected)
-        return node
-    of 17:
-      for n in [0,1]:
-        links[n] = HashKey.fromBytes(blobs[n]).valueOr:
-          return readError(PartRlpBranchHashKeyExpected)
-      return PrfNode(
-        vType:   Branch,
-        prfType: ignore,
-        key:     links)
+    of 0, 1:
+      if not w.isBlob:
+        return readError(PartRlpBlobExpected)
+      blobs[top] = rlp.read(Blob)
+    of 2 .. 15:
+      let blob = rlp.read(Blob)
+      links[top] = HashKey.fromBytes(blob).valueOr:
+        return readError(PartRlpBranchHashKeyExpected)
+    of 16:
+      if not w.isBlob or 0 < rlp.read(Blob).len:
+        return readError(PartRlpEmptyBlobExpected)
     else:
-      discard
+      return readError(PartRlp2Or17ListEntries)
+    top.inc
 
-    readError(PartRlp2Or17ListEntries)
+  # Verify extension data
+  case top
+  of 2:
+    if blobs[0].len == 0:
+      return readError(PartRlpNonEmptyBlobExpected)
+    let (isLeaf, pathSegment) = NibblesBuf.fromHexPrefix blobs[0]
+    if isLeaf:
+      return PrfNode(
+        vType:     Leaf,
+        prfType:   ignore,
+        lPfx:      pathSegment,
+        lData:     LeafPayload(
+          pType:   RawData,
+          rawBlob: blobs[1]))
+    else:
+      var node = PrfNode(
+        vType:   Branch,
+        prfType: isExtension,
+        ePfx:    pathSegment)
+      node.key[0] = HashKey.fromBytes(blobs[1]).valueOr:
+        return readError(PartRlpExtHashKeyExpected)
+      return node
+  of 17:
+    for n in [0,1]:
+      links[n] = HashKey.fromBytes(blobs[n]).valueOr:
+        return readError(PartRlpBranchHashKeyExpected)
+    return PrfNode(
+      vType:   Branch,
+      prfType: ignore,
+      key:     links)
+  else:
+    discard
+
+  readError(PartRlp2Or17ListEntries)
 
 proc read(rlp: var Rlp; T: type PrfPayload): T {.gcsafe, raises: [RlpError].} =
   ## Mixin for RLP reader decoding `Account` or storage slot payload.

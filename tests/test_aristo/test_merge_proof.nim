@@ -16,10 +16,8 @@ import
   ../../nimbus/db/core_db/backend/aristo_rocksdb,
   ../../nimbus/db/aristo/[
     aristo_check,
-    #aristo_debug,
     aristo_desc,
     aristo_init/persistent,
-    aristo_layers,
     aristo_part,
     aristo_part/part_debug,
     aristo_tx],
