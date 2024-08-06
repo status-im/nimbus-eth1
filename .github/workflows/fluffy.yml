@@ -80,6 +80,8 @@ jobs:
 
       - name: run test app with simulator
         run: |
+          : find / -name docker-compose -printf "%h\n%f\n%m\n\n" 2>/dev/null
+          PATH=$PATH$(find /usr/libexec/docker -name docker-compose -printf ":%h")
           SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=10 --rate_to_server=10" docker-compose -f fluffy/tools/utp_testing/docker/docker-compose.yml up -d
 
       - name: wait 5 seconds for containers to start
@@ -98,7 +100,9 @@ jobs:
 
       - name: Stop containers
         if: always()
-        run: docker-compose -f fluffy/tools/utp_testing/docker/docker-compose.yml down
+        run: |
+          PATH=$PATH$(find /usr/libexec/docker -name docker-compose -printf ":%h")
+          docker-compose -f fluffy/tools/utp_testing/docker/docker-compose.yml down
 
   build:
     strategy:
