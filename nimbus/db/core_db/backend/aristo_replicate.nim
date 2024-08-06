@@ -65,7 +65,10 @@ iterator aristoReplicate[T](
   let p = mpt.call(forkTx, mpt.mpt, 0).valueOrApiError "aristoReplicate()"
   defer: discard mpt.call(forget, p)
   for (rVid,key,vtx,node) in T.replicate(p):
-    for (k,v) in (key,node).to(seq[(Blob,Blob)]):
-      yield (k, v)
+    let w = node.to(seq[Blob])
+    yield (@(key.data),w[0])
+    if 1 < w.len:
+      # Was an extension merged into a branch
+      yield (@(w[1].digestTo(HashKey).data),w[1])
 
 # End

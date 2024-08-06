@@ -17,9 +17,10 @@ import
   std/[sets, sequtils],
   eth/common,
   results,
-  "."/[aristo_desc, aristo_get, aristo_merge, aristo_layers, aristo_utils],
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_merge, aristo_layers,
+       aristo_utils],
   #./aristo_part/part_debug,
-  ./aristo_part/[part_ctx, part_desc, part_helpers]
+  ./aristo_part/[part_chain_rlp, part_ctx, part_desc, part_helpers]
 
 export
   PartStateCtx,
@@ -35,21 +36,117 @@ proc roots*(ps: PartStateRef): seq[VertexID] =
   ## Getter: list of root vertex IDs from `ps`.
   ps.core.keys.toSeq
 
-iterator perimeter*(ps: PartStateRef; root: VertexID): VertexID =
+iterator perimeter*(
+    ps: PartStateRef;
+    root: VertexID;
+      ): (RootedVertexID, HashKey) =
   ## Retrieve the list of dangling vertex IDs relative to `ps`.
   ps.core.withValue(root,keys):
     for (key,rvid) in ps.byKey.pairs:
       if rvid.root == root and key notin keys[] and key notin ps.changed:
-        yield rvid.vid
+        yield (rvid,key)
 
-iterator vkPairs*(ps: PartStateRef): (RootedVertexID,HashKey) =
+iterator updated*(
+    ps: PartStateRef;
+    root: VertexID;
+      ): (RootedVertexID, HashKey) =
+  ## Retrieve the list of changed vertex IDs relative to `ps`. These vertices
+  ## IDs are not considered on the perimeter, anymore.
+  for key in ps.changed:
+    let rvid = ps[key]
+    if rvid.root == root:
+      yield (rvid,key)
+
+iterator vkPairs*(ps: PartStateRef): (RootedVertexID, HashKey) =
   ## Retrieve the list of cached `(key,vertex-ID)` pairs.
-  for (k,v) in ps.byKey.pairs:
-    yield (v,k)
+  for (key, rvid) in ps.byKey.pairs:
+    yield (rvid, key)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc partGenericTwig*(
+    db: AristoDbRef;
+    root: VertexID;
+    path: NibblesBuf;
+      ): Result[seq[Blob], AristoError] =
+  ## This function returns a chain of rlp-encoded nodes along the argument
+  ## path `(root,path)`.
+  ##
+  var chain: seq[Blob]
+  ? db.chainRlpNodes((root,root), path, chain)
+  ok chain
+
+proc partGenericTwig*(
+    db: AristoDbRef;
+    root: VertexID;
+    path: openArray[byte];
+      ): Result[seq[Blob], AristoError] =
+  ## Variant of `partGenericTwig()`.
+  ##
+  ## Note: This function provides a functionality comparable to the
+  ## `getBranch()` function from `hexary.nim`
+  ##
+  db.partGenericTwig(root, NibblesBuf.fromBytes path)
+
+proc partAccountTwig*(
+    db: AristoDbRef;
+    accPath: Hash256;
+      ): Result[seq[Blob], AristoError] =
+  ## Variant of `partGetBranch()`.
+  db.partGenericTwig(VertexID(1), NibblesBuf.fromBytes accPath.data)
+
+proc partStorageTwig*(
+    db: AristoDbRef;
+    accPath: Hash256;
+    stoPath: Hash256;
+      ): Result[seq[Blob], AristoError] =
+  ## Variant of `partGetBranch()`.
+  let vid = ? db.fetchStorageID accPath
+  db.partGenericTwig(vid, NibblesBuf.fromBytes stoPath.data)
+
+# ----------
+
+proc partUntwig*(
+    chain: openArray[Blob];
+    root: Hash256;
+    path: openArray[byte];
+      ): Result[Blob,AristoError] =
+  try:
+    let nibbles = NibblesBuf.fromBytes path
+    return chain.trackRlpNodes(root.to(HashKey), nibbles, start=true)
+  except RlpError as e:
+    return err(PartTrkRlpError)
+
+proc partUntwig*(
+    chain: openArray[Blob];
+    root: Hash256;
+    path: Hash256;
+      ): Result[Blob,AristoError] =
+  chain.partUntwig(root, path.data)
+
+
+proc partUntwigOk*(
+    chain: openArray[Blob];
+    root: Hash256;
+    path: openArray[byte];
+    payload: openArray[byte];
+      ): Result[void,AristoError] =
+  if payload == ? chain.partUntwig(root, path):
+    ok()
+  else:
+    err(PartTrkPayloadMismatch)
+
+proc partUntwigOk*(
+    chain: openArray[Blob];
+    root: Hash256;
+    path: Hash256;
+    payload: openArray[byte];
+      ): Result[void,AristoError] =
+  chain.partUntwigOk(root, path.data, payload)
+
+# ----------------
 
 proc partPut*(
     ps: PartStateRef;                         # Partial database descriptor
@@ -66,6 +163,11 @@ proc partPut*(
 
   # Check wether the chain has an accounts leaf node
   ? ps.updateAccountsTree(nodes, bl, mode)
+
+  when false: # or true:
+    echo ">>> partPut",
+      "\n    chains\n    ", bl.chains.pp(ps),
+      ""
 
   # Assign vertex IDs. If possible, use IDs from `state` lookup
   var seen: HashSet[HashKey]

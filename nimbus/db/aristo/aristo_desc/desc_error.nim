@@ -152,10 +152,10 @@ type
 
 
     # Part/proof node errors
-    PartArgNotInCore
     PartArgNotGenericRoot
-    PartArgRootAlreadyUsed
+    PartArgNotInCore
     PartArgRootAlreadyOnDatabase
+    PartArgRootAlreadyUsed
     PartChkChangedKeyNotInKeyTab
     PartChkChangedVtxMissing
     PartChkCoreKeyLookupFailed
@@ -169,6 +169,10 @@ type
     PartChkVidKeyTabLengthsDiffer
     PartChkVidTabCoreRootMissing
     PartChkVidTabVidMissing
+    PartChnBranchPathExhausted
+    PartChnExtPfxMismatch
+    PartChnLeafPathMismatch
+    PartChnNodeConvError
     PartCtxNotAvailable
     PartCtxStaleDescriptor
     PartExtVtxExistsAlready
@@ -190,6 +194,13 @@ type
     PartRlpPayloadException
     PartRootKeysDontMatch
     PartRootVidsDontMatch
+    PartTrkEmptyPath
+    PartTrkFollowUpKeyMismatch
+    PartTrkGarbledNode
+    PartTrkLeafPfxMismatch
+    PartTrkLinkExpected
+    PartTrkPayloadMismatch
+    PartTrkRlpError
     PartVtxSlotWasModified
     PartVtxSlotWasNotModified
 

@@ -112,6 +112,7 @@ proc `[]`*(ps: PartStateRef; key: HashKey): RootedVertexID =
 proc `[]`*(ps: PartStateRef; vid: VertexID): HashKey =
   ps.byVid.withValue(vid,key):
     return key[]
+  VOID_HASH_KEY
 
 
 proc del*(ps: PartStateRef; key: HashKey) =
