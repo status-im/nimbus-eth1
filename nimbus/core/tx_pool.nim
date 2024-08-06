@@ -425,7 +425,6 @@ export
   TxItemStatus,
   TxPoolFlags,
   TxPoolRef,
-  TxTabsGasTotals,
   TxTabsItemsCount,
   results,
   tx_desc.startDate,
@@ -643,10 +642,6 @@ proc assembleBlock*(
   ok EthBlockAndBlobsBundle(
     blk: blk,
     blobsBundle: blobsBundleOpt)
-
-func gasTotals*(xp: TxPoolRef): TxTabsGasTotals =
-  ## Getter, retrieves the current gas limit totals per bucket.
-  xp.txDB.gasTotals
 
 func flags*(xp: TxPoolRef): set[TxPoolFlags] =
   ## Getter, retrieves strategy symbols for how to process items and buckets.

@@ -20,21 +20,18 @@ import
   ./tx_item,
   ./tx_tabs/[tx_sender, tx_rank, tx_status],
   eth/[common, keys],
-  stew/[keyed_queue, keyed_queue/kq_debug, sorted_set],
+  stew/[keyed_queue, sorted_set],
   results
 
 export
   # bySender/byStatus index operations
-  sub, eq, ge, gt, le, len, lt, nItems, gasLimits
+  sub, eq, ge, gt, le, len, lt, nItems
 
 type
   TxTabsItemsCount* = tuple
     pending, staged, packed: int ## sum => total
     total: int                   ## excluding rejects
     disposed: int                ## waste basket
-
-  TxTabsGasTotals* = tuple
-    pending, staged, packed: GasInt ## sum => total
 
   TxTabsRef* = ref object ##\
     ## Base descriptor
@@ -284,11 +281,6 @@ proc nItems*(xp: TxTabsRef): TxTabsItemsCount =
   result.total =  xp.byItemID.len
   result.disposed = xp.byRejects.len
 
-proc gasTotals*(xp: TxTabsRef): TxTabsGasTotals =
-  result.pending = xp.byStatus.eq(txItemPending).gasLimits
-  result.staged = xp.byStatus.eq(txItemStaged).gasLimits
-  result.packed = xp.byStatus.eq(txItemPacked).gasLimits
-
 # ------------------------------------------------------------------------------
 # Public iterators, `TxRank` > `(EthAddress,TxStatusNonceRef)`
 # ------------------------------------------------------------------------------
@@ -345,41 +337,6 @@ iterator packingOrderAccounts*(xp: TxTabsRef; bucket: TxItemStatus):
   for (account,nonceList) in xp.decAccount(bucket):
     yield (account,nonceList)
 
-# ------------------------------------------------------------------------------
-# Public iterators, `TxRank` > `(EthAddress,TxSenderNonceRef)`
-# ------------------------------------------------------------------------------
-
-iterator incAccount*(xp: TxTabsRef;
-                     fromRank = TxRank.low): (EthAddress,TxSenderNonceRef)
-        {.gcsafe,raises: [KeyError].} =
-  ## Variant of `incAccount()` without bucket restriction.
-  var rcRank = xp.byRank.ge(fromRank)
-  while rcRank.isOk:
-    let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
-
-    # Try all sender adresses found
-    for account in addrList.keys:
-      yield (account, xp.bySender.eq(account).sub.value.data)
-
-    # Get next ranked address list (top down index walk)
-    rcRank = xp.byRank.gt(rank) # potenially modified database
-
-
-iterator decAccount*(xp: TxTabsRef;
-                     fromRank = TxRank.high): (EthAddress,TxSenderNonceRef)
-        {.gcsafe,raises: [KeyError].} =
-  ## Variant of `decAccount()` without bucket restriction.
-  var rcRank = xp.byRank.le(fromRank)
-  while rcRank.isOk:
-    let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
-
-    # Try all sender adresses found
-    for account in addrList.keys:
-      yield (account, xp.bySender.eq(account).sub.value.data)
-
-    # Get next ranked address list (top down index walk)
-    rcRank = xp.byRank.lt(rank) # potenially modified database
-
 # -----------------------------------------------------------------------------
 # Public second stage iterators: nonce-ordered item lists.
 # -----------------------------------------------------------------------------
@@ -403,84 +360,6 @@ iterator incNonce*(nonceList: TxStatusNonceRef;
     let (nonce, item) = (rc.value.key, rc.value.data)
     yield item
     rc = nonceList.gt(nonce) # potenially modified database
-
-#[
-# There is currently no use for nonce count down traversal
-
-iterator decNonce*(nonceList: TxSenderNonceRef;
-                   nonceFrom = AccountNonce.high): TxItemRef
-    {.gcsafe, raises: [KeyError].} =
-  ## Similar to `incNonce()` but visiting items in reverse order.
-  var rc = nonceList.le(nonceFrom)
-  while rc.isOk:
-    let (nonce, item) = (rc.value.key, rc.value.data)
-    yield item
-    rc = nonceList.lt(nonce) # potenially modified database
-
-
-iterator decNonce*(nonceList: TxStatusNonceRef;
-                   nonceFrom = AccountNonce.high): TxItemRef =
-  ## Variant of `decNonce()` for the `TxStatusNonceRef` list.
-  var rc = nonceList.le(nonceFrom)
-  while rc.isOk:
-    let (nonce, item) = (rc.value.key, rc.value.data)
-    yield item
-    rc = nonceList.lt(nonce) # potenially modified database
-]#
-
-# ------------------------------------------------------------------------------
-# Public functions, debugging
-# ------------------------------------------------------------------------------
-
-proc verify*(xp: TxTabsRef): Result[void,TxInfo]
-    {.gcsafe, raises: [CatchableError].} =
-  ## Verify descriptor and subsequent data structures.
-  block:
-    let rc = xp.bySender.verify
-    if rc.isErr:
-      return rc
-  block:
-    let rc = xp.byItemID.verify
-    if rc.isErr:
-      return err(txInfoVfyItemIdList)
-  block:
-    let rc = xp.byRejects.verify
-    if rc.isErr:
-      return err(txInfoVfyRejectsList)
-  block:
-    let rc = xp.byStatus.verify
-    if rc.isErr:
-      return rc
-  block:
-    let rc = xp.byRank.verify
-    if rc.isErr:
-      return rc
-
-  for status in TxItemStatus:
-    var
-      statusCount = 0
-      statusAllGas = 0.GasInt
-    for (account,nonceList) in xp.incAccount(status):
-      let bySenderStatusList = xp.bySender.eq(account).eq(status)
-      statusAllGas += bySenderStatusList.gasLimits
-      statusCount += bySenderStatusList.nItems
-      if bySenderStatusList.nItems != nonceList.nItems:
-        return err(txInfoVfyStatusSenderTotal)
-
-    if xp.byStatus.eq(status).nItems != statusCount:
-      return err(txInfoVfyStatusSenderTotal)
-    if xp.byStatus.eq(status).gasLimits != statusAllGas:
-      return err(txInfoVfyStatusSenderGasLimits)
-
-  if xp.byItemID.len != xp.bySender.nItems:
-     return err(txInfoVfySenderTotal)
-
-  if xp.byItemID.len != xp.byStatus.nItems:
-     return err(txInfoVfyStatusTotal)
-
-  if xp.bySender.len != xp.byRank.nItems:
-     return err(txInfoVfyRankTotal)
-  ok()
 
 # ------------------------------------------------------------------------------
 # End

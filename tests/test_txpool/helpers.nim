@@ -28,7 +28,6 @@ export
   tx_chain.vmState,
   tx_desc.chain,
   tx_desc.txDB,
-  tx_desc.verify,
   tx_packer.packerVmExec,
   tx_recover.recoverItem,
   tx_tabs.TxTabsRef,
@@ -36,7 +35,6 @@ export
   tx_tabs.dispose,
   tx_tabs.eq,
   tx_tabs.flushRejects,
-  tx_tabs.gasLimits,
   tx_tabs.ge,
   tx_tabs.gt,
   tx_tabs.incAccount,
@@ -47,7 +45,6 @@ export
   tx_tabs.nItems,
   tx_tabs.reassign,
   tx_tabs.reject,
-  tx_tabs.verify,
   undumpBlocksGz
 
 const
@@ -164,9 +161,6 @@ proc pp*(txs: openArray[Transaction]; pfxLen: int): string =
 
 proc pp*(w: TxTabsItemsCount): string =
   &"{w.pending}/{w.staged}/{w.packed}:{w.total}/{w.disposed}"
-
-proc pp*(w: TxTabsGasTotals): string =
-  &"{w.pending}/{w.staged}/{w.packed}"
 
 # ------------------------------------------------------------------------------
 # Public functions, other

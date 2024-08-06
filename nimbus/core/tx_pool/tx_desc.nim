@@ -16,11 +16,9 @@ import
   std/[times],
   ../../common/common,
   ./tx_chain,
-  ./tx_info,
   ./tx_item,
   ./tx_tabs,
-  ./tx_tabs/tx_sender, # for verify()
-  eth/keys
+  ./tx_tabs/tx_sender
 
 {.push raises: [].}
 
@@ -161,53 +159,6 @@ func pDoubleCheckFlush*(xp: TxPoolRef) =
 func `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.flags = val
-
-# ------------------------------------------------------------------------------
-# Public functions, heplers (debugging only)
-# ------------------------------------------------------------------------------
-
-proc verify*(xp: TxPoolRef): Result[void,TxInfo]
-    {.gcsafe, raises: [CatchableError].} =
-  ## Verify descriptor and subsequent data structures.
-
-  block:
-    let rc = xp.txDB.verify
-    if rc.isErr:
-      return rc
-
-  # verify consecutive nonces per sender
-  var
-    initOk = false
-    lastSender: EthAddress
-    lastNonce: AccountNonce
-    lastSublist: TxSenderSchedRef
-
-  for (_,nonceList) in xp.txDB.incAccount:
-    for item in nonceList.incNonce:
-      if not initOk or lastSender != item.sender:
-        initOk = true
-        lastSender = item.sender
-        lastNonce = item.tx.nonce
-        lastSublist = xp.txDB.bySender.eq(item.sender).value.data
-      elif lastNonce + 1 == item.tx.nonce:
-        lastNonce = item.tx.nonce
-      else:
-        return err(txInfoVfyNonceChain)
-
-      # verify bucket boundary conditions
-      case item.status:
-      of txItemPending:
-        discard
-      of txItemStaged:
-        if lastSublist.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
-          return err(txInfoVfyNonceChain)
-      of txItemPacked:
-        if lastSublist.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
-          return err(txInfoVfyNonceChain)
-        if lastSublist.eq(txItemStaged).eq(item.tx.nonce - 1).isOk:
-          return err(txInfoVfyNonceChain)
-
-  ok()
 
 # ------------------------------------------------------------------------------
 # End

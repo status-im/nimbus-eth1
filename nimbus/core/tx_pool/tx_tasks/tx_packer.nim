@@ -62,7 +62,7 @@ proc runTx(pst: TxPackerStateRef; item: TxItemRef): GasInt =
   ## `gasUsed` after executing the transaction.
   let
     baseFee = pst.xp.chain.baseFee
-    tx = item.tx.eip1559TxNormalization(baseFee.GasInt)
+    tx = item.tx.eip1559TxNormalization(baseFee)
 
   let gasUsed = tx.txCallEvm(item.sender, pst.xp.chain.vmState)
   pst.cleanState = false
