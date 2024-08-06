@@ -79,7 +79,7 @@ func getParent*(offerWithKey: ContractTrieOfferWithKey): ContractTrieOfferWithKe
     (key, offer) = offerWithKey
     parent = offer.storageProof.withPath(key.path).getParent()
     parentKey = ContractTrieNodeKey.init(
-      key.address, parent.path, keccakHash(parent.proof[^1].asSeq())
+      key.addressHash, parent.path, keccakHash(parent.proof[^1].asSeq())
     )
     parentOffer =
       ContractTrieNodeOffer.init(parent.proof, offer.accountProof, offer.blockHash)

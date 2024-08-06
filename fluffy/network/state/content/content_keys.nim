@@ -23,7 +23,7 @@ export ssz_serialization, common_types, hash, results
 type
   NodeHash* = KeccakHash
   CodeHash* = KeccakHash
-  Address* = EthAddress
+  AddressHash* = KeccakHash
 
   ContentType* = enum
     # Note: Need to add this unused value as a case object with an enum without
@@ -43,12 +43,12 @@ type
     nodeHash*: NodeHash
 
   ContractTrieNodeKey* = object
-    address*: Address
+    addressHash*: AddressHash
     path*: Nibbles
     nodeHash*: NodeHash
 
   ContractCodeKey* = object
-    address*: Address
+    addressHash*: AddressHash
     codeHash*: CodeHash
 
   ContentKey* = object
@@ -68,12 +68,15 @@ func init*(T: type AccountTrieNodeKey, path: Nibbles, nodeHash: NodeHash): T =
   AccountTrieNodeKey(path: path, nodeHash: nodeHash)
 
 func init*(
-    T: type ContractTrieNodeKey, address: Address, path: Nibbles, nodeHash: NodeHash
+    T: type ContractTrieNodeKey,
+    addressHash: AddressHash,
+    path: Nibbles,
+    nodeHash: NodeHash,
 ): T =
-  ContractTrieNodeKey(address: address, path: path, nodeHash: nodeHash)
+  ContractTrieNodeKey(addressHash: addressHash, path: path, nodeHash: nodeHash)
 
-func init*(T: type ContractCodeKey, address: Address, codeHash: CodeHash): T =
-  ContractCodeKey(address: address, codeHash: codeHash)
+func init*(T: type ContractCodeKey, addressHash: AddressHash, codeHash: CodeHash): T =
+  ContractCodeKey(addressHash: addressHash, codeHash: codeHash)
 
 func toContentKey*(key: AccountTrieNodeKey): ContentKey =
   ContentKey(contentType: accountTrieNode, accountTrieNodeKey: key)
