@@ -19,17 +19,6 @@ import
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `eth`
 # ------------------------------------------------------------------------------
-
-proc setEthHandlerNewBlocksAndHashes*(
-    node: EthereumNode;
-    blockHandler: NewBlockHandler;
-    hashesHandler: NewBlockHashesHandler;
-    arg: pointer;
-      ) {.gcsafe, raises: [].} =
-  let w = EthWireRef(node.protocolState protocol.eth)
-  w.setNewBlockHandler(blockHandler, arg)
-  w.setNewBlockHashesHandler(hashesHandler, arg)
-
 proc addEthHandlerCapability*(
     node: EthereumNode;
     peerPool: PeerPool;

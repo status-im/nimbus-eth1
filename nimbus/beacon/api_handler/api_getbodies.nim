@@ -23,7 +23,7 @@ const
 
 proc getPayloadBodyByHeader(db: CoreDbRef,
         header: common.BlockHeader,
-        output: var seq[Opt[ExecutionPayloadBodyV1]]) =
+        output: var seq[Opt[ExecutionPayloadBodyV1]]) {.gcsafe, raises:[].} =
 
   var body: common.BlockBody
   if not db.getBlockBody(header, body):
