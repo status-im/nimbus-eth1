@@ -94,7 +94,7 @@ proc partAccountTwig*(
     db: AristoDbRef;
     accPath: Hash256;
       ): Result[seq[Blob], AristoError] =
-  ## Variant of `partGetBranch()`.
+  ## Variant of `partGenericTwig()`.
   db.partGenericTwig(VertexID(1), NibblesBuf.fromBytes accPath.data)
 
 proc partStorageTwig*(
@@ -102,13 +102,13 @@ proc partStorageTwig*(
     accPath: Hash256;
     stoPath: Hash256;
       ): Result[seq[Blob], AristoError] =
-  ## Variant of `partGetBranch()`.
+  ## Variant of `partGenericTwig()`.
   let vid = ? db.fetchStorageID accPath
   db.partGenericTwig(vid, NibblesBuf.fromBytes stoPath.data)
 
 # ----------
 
-proc partUntwig*(
+proc partUntwigGeneric*(
     chain: openArray[Blob];
     root: Hash256;
     path: openArray[byte];
@@ -120,39 +120,40 @@ proc partUntwig*(
   except RlpError as e:
     return err(PartTrkRlpError)
 
-proc partUntwig*(
+proc partUntwigPath*(
     chain: openArray[Blob];
     root: Hash256;
     path: Hash256;
       ): Result[Blob,AristoError] =
-  ## Veriant of `partUntwig()`.
-  chain.partUntwig(root, path.data)
+  ## Variant of `partUntwigGeneric()`.
+  chain.partUntwigGeneric(root, path.data)
 
 
-proc partUntwigOk*(
+proc partUntwigGenericOk*(
     chain: openArray[Blob];
     root: Hash256;
     path: openArray[byte];
     payload: openArray[byte];
       ): Result[void,AristoError] =
-  ## Verify the chain of rlp-encoded nodes and return the payload.
+  ## Verify the argument `chain` of rlp-encoded nodes against the `path`
+  ## and `payload` arguments.
   ##
   ## Note: This function provides a functionality comparable to the
-  ## `isValidBranch()` function from `hexary.nim`
+  ## `isValidBranch()` function from `hexary.nim`.
   ##
-  if payload == ? chain.partUntwig(root, path):
+  if payload == ? chain.partUntwigGeneric(root, path):
     ok()
   else:
     err(PartTrkPayloadMismatch)
 
-proc partUntwigOk*(
+proc partUntwigPathOk*(
     chain: openArray[Blob];
     root: Hash256;
     path: Hash256;
     payload: openArray[byte];
       ): Result[void,AristoError] =
-  ## Veriant of `partUntwigOk()`.
-  chain.partUntwigOk(root, path.data, payload)
+  ## Variant of `partUntwigGenericOk()`.
+  chain.partUntwigGenericOk(root, path.data, payload)
 
 # ----------------
 
