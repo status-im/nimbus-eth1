@@ -136,12 +136,12 @@ proc recursiveGossipOffer*(
     offerBytes: seq[byte],
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
-) {.async: (raises: [CancelledError]).} =
+): Future[ContentKeyByteList] {.async: (raises: [CancelledError]).} =
   await gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
-    return
+    return keyBytes
 
   # continue the recursive gossip by sharing the parent offer with peers
   let
@@ -161,12 +161,12 @@ proc recursiveGossipOffer*(
     offerBytes: seq[byte],
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
-) {.async: (raises: [CancelledError]).} =
+): Future[ContentKeyByteList] {.async: (raises: [CancelledError]).} =
   await gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
-    return
+    return keyBytes
 
   # continue the recursive gossip by sharing the parent offer with peers
   let

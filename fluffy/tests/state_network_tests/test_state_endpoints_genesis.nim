@@ -43,8 +43,8 @@ suite "State Endpoints - Genesis JSON Files":
         let
           proof = accountState.generateAccountProof(address)
           leafNode = proof[^1]
-          addressHash = keccakHash(address).data
-          path = removeLeafKeyEndNibbles(Nibbles.init(addressHash, true), leafNode)
+          addressHash = keccakHash(address)
+          path = removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), leafNode)
           key = AccountTrieNodeKey.init(path, keccakHash(leafNode.asSeq()))
           offer = AccountTrieNodeOffer(proof: proof)
 
@@ -94,8 +94,9 @@ suite "State Endpoints - Genesis JSON Files":
           block:
             # store the code
             let
-              key =
-                ContractCodeKey(address: address, codeHash: keccakHash(account.code))
+              key = ContractCodeKey(
+                addressHash: addressHash, codeHash: keccakHash(account.code)
+              )
               value = ContractCodeRetrieval(code: Bytecode.init(account.code))
 
             let contentKey = key.toContentKey().encode()
@@ -121,7 +122,9 @@ suite "State Endpoints - Genesis JSON Files":
                 Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), leafNode
               )
               key = ContractTrieNodeKey(
-                address: address, path: path, nodeHash: keccakHash(leafNode.asSeq())
+                addressHash: addressHash,
+                path: path,
+                nodeHash: keccakHash(leafNode.asSeq()),
               )
               offer =
                 ContractTrieNodeOffer(storageProof: storageProof, accountProof: proof)

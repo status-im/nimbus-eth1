@@ -27,10 +27,10 @@ procSuite "State Endpoints":
   let rng = newRng()
 
   asyncTest "Gossip then query getBalance and getTransactionCount":
-    const file = testVectorDir / "recursive_gossip.yaml"
+    const file = testVectorDir / "account_trie_node.yaml"
 
     let
-      testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
+      testCase = YamlTrieNodeKVs.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
       stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
       stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
@@ -45,16 +45,17 @@ procSuite "State Endpoints":
       (await stateNode2.portalProtocol().ping(stateNode1.localNode())).isOk()
 
     for i, testData in testCase:
-      if i == 1:
+      if i != 0 and i != 3:
+        # only using the leaf nodes from the test data
         continue
 
       let
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        leafData = testData.recursive_gossip[0]
+        leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
-        contentValueBytes = leafData.content_value.hexToSeqByte()
+        contentValueBytes = leafData.content_value_offer.hexToSeqByte()
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
 
       # set valid state root
@@ -62,7 +63,7 @@ procSuite "State Endpoints":
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
-      await stateNode1.portalProtocol.recursiveGossipOffer(
+      let rootKeyBytes = await stateNode1.portalProtocol.recursiveGossipOffer(
         Opt.none(NodeId),
         contentKeyBytes,
         contentValueBytes,
@@ -70,16 +71,14 @@ procSuite "State Endpoints":
         contentValue,
       )
 
-      # wait for recursive gossip to complete
-      for node in testData.recursive_gossip:
-        let keyBytes = node.content_key.hexToSeqByte().ContentKeyByteList
-        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
+      await stateNode1.waitUntilContentAvailable(toContentId(rootKeyBytes))
+      await stateNode2.waitUntilContentAvailable(toContentId(rootKeyBytes))
 
       let
         address =
           if i == 0:
             EthAddress.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-          elif i == 2:
+          elif i == 3:
             EthAddress.fromHex("0x1584a2c066b7a455dbd6ae2807a7334e83c35fa5")
           else:
             raiseAssert("Invalid test case")
@@ -93,7 +92,7 @@ procSuite "State Endpoints":
           nonceRes = await stateNode1.stateNetwork.getTransactionCount(
             contentValue.blockHash, address
           )
-
+        echo balanceRes
         check:
           balanceRes.isOk()
           balanceRes.get() == expectedAccount.balance
@@ -134,11 +133,14 @@ procSuite "State Endpoints":
 
   asyncTest "Gossip then query getStorageAt and getCode":
     const
-      file = testVectorDir / "recursive_gossip.yaml"
+      accountTrieFile = testVectorDir / "account_trie_node.yaml"
+      contractTrieFile = testVectorDir / "contract_storage_trie_node.yaml"
       bytecodeFile = testVectorDir / "contract_bytecode.yaml"
 
     let
-      testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
+      accountTrieTestCase = YamlTrieNodeKVs.loadFromYaml(accountTrieFile).valueOr:
+        raiseAssert "Cannot read test vector: " & error
+      contractTrieTestCase = YamlTrieNodeKVs.loadFromYaml(contractTrieFile).valueOr:
         raiseAssert "Cannot read test vector: " & error
       stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
       stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
@@ -155,13 +157,13 @@ procSuite "State Endpoints":
     block:
       # seed the account data
       let
-        testData = testCase[0]
+        testData = accountTrieTestCase[0]
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        leafData = testData.recursive_gossip[0]
+        leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
-        contentValueBytes = leafData.content_value.hexToSeqByte()
+        contentValueBytes = leafData.content_value_offer.hexToSeqByte()
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
 
       # set valid state root
@@ -169,7 +171,7 @@ procSuite "State Endpoints":
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
-      await stateNode1.portalProtocol.recursiveGossipOffer(
+      let rootKeyBytes = await stateNode1.portalProtocol.recursiveGossipOffer(
         Opt.none(NodeId),
         contentKeyBytes,
         contentValueBytes,
@@ -177,16 +179,19 @@ procSuite "State Endpoints":
         contentValue,
       )
 
+      # wait for gossip to complete
+      await stateNode2.waitUntilContentAvailable(toContentId(rootKeyBytes))
+
     block:
       # seed the storage data
       let
-        testData = testCase[1]
+        testData = contractTrieTestCase[0]
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        leafData = testData.recursive_gossip[0]
+        leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
-        contentValueBytes = leafData.content_value.hexToSeqByte()
+        contentValueBytes = leafData.content_value_offer.hexToSeqByte()
         contentValue = ContractTrieNodeOffer.decode(contentValueBytes).get()
 
       # set valid state root
@@ -194,7 +199,7 @@ procSuite "State Endpoints":
       stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
-      await stateNode1.portalProtocol.recursiveGossipOffer(
+      let storageRootKeyBytes = await stateNode1.portalProtocol.recursiveGossipOffer(
         Opt.none(NodeId),
         contentKeyBytes,
         contentValueBytes,
@@ -202,10 +207,8 @@ procSuite "State Endpoints":
         contentValue,
       )
 
-      # wait for recursive gossip to complete
-      for node in testData.recursive_gossip:
-        let keyBytes = node.content_key.hexToSeqByte().ContentKeyByteList
-        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
+      # wait for gossip to complete
+      await stateNode2.waitUntilContentAvailable(toContentId(storageRootKeyBytes))
 
       let
         address = EthAddress.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")

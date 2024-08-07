@@ -8,6 +8,7 @@
 import
   unittest2,
   stew/byteutils,
+  eth/common,
   ../../network/state/state_content,
   ../../eth_data/yaml_utils
 
@@ -58,10 +59,10 @@ suite "State Content Keys":
         raiseAssert "Cannot read test vector: " & error
 
       packedNibbles = packNibbles(testCase.path)
-      address = Address.fromHex(testCase.address)
+      addressHash = EthAddress.fromHex(testCase.address).keccakHash()
       nodeHash = NodeHash.fromHex(testCase.node_hash)
       contentKey =
-        ContractTrieNodeKey.init(address, packedNibbles, nodeHash).toContentKey()
+        ContractTrieNodeKey.init(addressHash, packedNibbles, nodeHash).toContentKey()
       encoded = contentKey.encode()
 
     check:
@@ -73,7 +74,9 @@ suite "State Content Keys":
       decoded.isOk()
       decoded.value().contentType == contractTrieNode
       decoded.value().contractTrieNodeKey ==
-        ContractTrieNodeKey(address: address, path: packedNibbles, nodeHash: nodeHash)
+        ContractTrieNodeKey(
+          addressHash: addressHash, path: packedNibbles, nodeHash: nodeHash
+        )
 
   test "Encode/decode ContractCodeKey":
     const file = testVectorDir & "contract_bytecode_key.yaml"
@@ -88,9 +91,9 @@ suite "State Content Keys":
       testCase = YamlContractBytecodeKey.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      address = Address.fromHex(testCase.address)
+      addressHash = EthAddress.fromHex(testCase.address).keccakHash()
       codeHash = CodeHash.fromHex(testCase.code_hash)
-      contentKey = ContractCodeKey.init(address, codeHash).toContentKey()
+      contentKey = ContractCodeKey.init(addressHash, codeHash).toContentKey()
       encoded = contentKey.encode()
 
     check:
@@ -101,7 +104,7 @@ suite "State Content Keys":
     check:
       decoded.isOk()
       decoded.value().contentType == contractCode
-      decoded.value().contractCodeKey.address == address
+      decoded.value().contractCodeKey.addressHash == addressHash
       decoded.value().contractCodeKey.codeHash == codeHash
 
   test "Invalid prefix - 0 value":
