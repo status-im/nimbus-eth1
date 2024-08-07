@@ -10,8 +10,8 @@
 
 import
   std/[os, strformat, sequtils, strutils, times],
-  ../../nimbus/core/tx_pool/[tx_chain, tx_desc, tx_item, tx_tabs],
-  ../../nimbus/core/tx_pool/tx_tasks/[tx_packer, tx_recover],
+  ../../nimbus/core/tx_pool/[tx_desc, tx_item, tx_tabs],
+  ../../nimbus/core/tx_pool/tx_tasks/[tx_recover],
   ../replay/[pp, undump_blocks_gz],
   chronicles,
   eth/[common, keys],
@@ -22,13 +22,7 @@ import
 # to import `tx_pool/*` sup-modules
 export
   pp,
-  tx_chain.clearAccounts,
-  tx_chain.com,
-  tx_chain.nextFork,
-  tx_chain.vmState,
-  tx_desc.chain,
   tx_desc.txDB,
-  tx_packer.packerVmExec,
   tx_recover.recoverItem,
   tx_tabs.TxTabsRef,
   tx_tabs.decAccount,

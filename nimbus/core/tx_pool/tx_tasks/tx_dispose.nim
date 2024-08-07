@@ -61,7 +61,6 @@ proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [KeyError].} =
   ## apply to items in the packed queue.
   let
     deadLine = utcNow() - xp.lifeTime
-    dspPacked = autoZombifyPacked in xp.pFlags
     dspUnpacked = autoZombifyUnpacked in xp.pFlags
 
   var rc = xp.txDB.byItemID.first
@@ -71,10 +70,7 @@ proc disposeExpiredItems*(xp: TxPoolRef) {.gcsafe,raises: [KeyError].} =
       break
     rc = xp.txDB.byItemID.next(key)
 
-    if item.status == txItemPacked:
-      if not dspPacked:
-        continue
-    else:
+    if item.status != txItemPacked:
       if not dspUnpacked:
         continue
 

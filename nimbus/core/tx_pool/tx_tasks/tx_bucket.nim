@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,6 @@
 import
   std/[tables],
   ../../../constants,
-  ../tx_chain,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
@@ -166,7 +165,7 @@ proc bucketFlushPacked*(xp: TxPoolRef)
       discard xp.txDB.reassign(item,txItemStaged)
 
   # Reset bucket status info
-  xp.chain.clearAccounts
+  xp.clearAccounts
 
 # ------------------------------------------------------------------------------
 # End

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -16,18 +16,6 @@ type
     prevRandao  : Hash256
     withdrawals : seq[Withdrawal] ## EIP-4895
     beaconRoot  : Hash256 ## EIP-4788
-
-proc prepare*(ctx: CasperRef, header: var BlockHeader) =
-  header.coinbase   = ctx.feeRecipient
-  header.timestamp  = ctx.timestamp
-  header.prevRandao = ctx.prevRandao
-  header.difficulty = DifficultyInt.zero
-
-proc prepareForSeal*(ctx: CasperRef, header: var BlockHeader) {.gcsafe, raises:[].} =
-  header.nonce      = default(BlockNonce)
-  header.extraData  = @[] # TODO: probably this should be configurable by user?
-  # this repetition, assigning prevRandao is because how txpool works
-  header.prevRandao = ctx.prevRandao
 
 # ------------------------------------------------------------------------------
 # Getters
