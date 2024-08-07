@@ -87,7 +87,7 @@ func removeLeafKeyEndNibbles*(
 func toPath*(hash: KeccakHash): Nibbles {.inline.} =
   Nibbles.init(hash.data, isEven = true)
 
-func toPath*(address: Address): Nibbles {.inline.} =
+func toPath*(address: EthAddress): Nibbles {.inline.} =
   keccakHash(address).toPath()
 
 func toPath*(slotKey: UInt256): Nibbles {.inline.} =

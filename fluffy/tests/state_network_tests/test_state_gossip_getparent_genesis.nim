@@ -68,7 +68,9 @@ suite "State Gossip getParent - Genesis JSON Files":
         (accountState, storageStates) = accounts.toState()
 
       for address, account in accounts:
-        let accountProof = accountState.generateAccountProof(address)
+        let
+          addressHash = address.keccakHash()
+          accountProof = accountState.generateAccountProof(address)
 
         if account.code.len() > 0:
           let storageState = storageStates[address]
@@ -82,7 +84,9 @@ suite "State Gossip getParent - Genesis JSON Files":
                 Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), leafNode
               )
               key = ContractTrieNodeKey(
-                address: address, path: path, nodeHash: keccakHash(leafNode.asSeq())
+                addressHash: addressHash,
+                path: path,
+                nodeHash: keccakHash(leafNode.asSeq()),
               )
               offer = ContractTrieNodeOffer(
                 storageProof: storageProof, accountProof: accountProof

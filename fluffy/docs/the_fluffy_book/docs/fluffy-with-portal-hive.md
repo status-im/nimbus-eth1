@@ -17,11 +17,11 @@ go build .
 Example commands for running test suites:
 
 ```sh
-# Run the history tests with the 3 different clients
-./hive --sim history --client fluffy,trin,ultralight
+# Run the portal tests with only the fluffy client
+./hive --sim portal --client fluffy
 
-# Run the state tests with only the fluffy client
-./hive --sim state --client fluffy
+# Run the portal tests with the 3 different clients
+./hive --sim portal --client fluffy,trin,ultralight
 
 # Access results through web-ui:
 ```sh

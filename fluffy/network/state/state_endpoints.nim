@@ -67,7 +67,7 @@ proc getNextNodeHash(
     raiseAssert(e.msg)
 
 proc getAccountProof(
-    n: StateNetwork, stateRoot: KeccakHash, address: Address
+    n: StateNetwork, stateRoot: KeccakHash, address: EthAddress
 ): Future[Opt[TrieProof]] {.async: (raises: [CancelledError]).} =
   let nibbles = address.toPath().unpackNibbles()
 
@@ -94,13 +94,14 @@ proc getAccountProof(
   Opt.some(proof)
 
 proc getStorageProof(
-    n: StateNetwork, storageRoot: KeccakHash, address: Address, storageKey: UInt256
+    n: StateNetwork, storageRoot: KeccakHash, address: EthAddress, storageKey: UInt256
 ): Future[Opt[TrieProof]] {.async: (raises: [CancelledError]).} =
   let nibbles = storageKey.toPath().unpackNibbles()
 
   var
+    addressHash = keccakHash(address)
     nibblesIdx = 0
-    key = ContractTrieNodeKey.init(address, Nibbles.empty(), storageRoot)
+    key = ContractTrieNodeKey.init(addressHash, Nibbles.empty(), storageRoot)
     proof = TrieProof.empty()
 
   while nibblesIdx < nibbles.len():
@@ -116,12 +117,12 @@ proc getStorageProof(
     let (nextPath, nextNodeHash) = trieNode.getNextNodeHash(nibbles, nibblesIdx).valueOr:
       break
 
-    key = ContractTrieNodeKey.init(address, nextPath, nextNodeHash)
+    key = ContractTrieNodeKey.init(addressHash, nextPath, nextNodeHash)
 
   Opt.some(proof)
 
 proc getAccount(
-    n: StateNetwork, blockHash: BlockHash, address: Address
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress
 ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
   let
     stateRoot = (await n.getStateRootByBlockHash(blockHash)).valueOr:
@@ -138,7 +139,7 @@ proc getAccount(
 
 # Used by: eth_getBalance,
 proc getBalance*(
-    n: StateNetwork, blockHash: BlockHash, address: Address
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
   let account = (await n.getAccount(blockHash, address)).valueOr:
     return Opt.none(UInt256)
@@ -147,7 +148,7 @@ proc getBalance*(
 
 # Used by: eth_getTransactionCount
 proc getTransactionCount*(
-    n: StateNetwork, blockHash: BlockHash, address: Address
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress
 ): Future[Opt[AccountNonce]] {.async: (raises: [CancelledError]).} =
   let account = (await n.getAccount(blockHash, address)).valueOr:
     return Opt.none(AccountNonce)
@@ -156,7 +157,7 @@ proc getTransactionCount*(
 
 # Used by: eth_getStorageAt
 proc getStorageAt*(
-    n: StateNetwork, blockHash: BlockHash, address: Address, slotKey: UInt256
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress, slotKey: UInt256
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
   let
     account = (await n.getAccount(blockHash, address)).valueOr:
@@ -172,12 +173,12 @@ proc getStorageAt*(
 
 # Used by: eth_getCode
 proc getCode*(
-    n: StateNetwork, blockHash: BlockHash, address: Address
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress
 ): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
   let
     account = (await n.getAccount(blockHash, address)).valueOr:
       return Opt.none(Bytecode)
-    contractCodeKey = ContractCodeKey.init(address, account.codeHash)
+    contractCodeKey = ContractCodeKey.init(keccakHash(address), account.codeHash)
 
   let contractCodeRetrieval = (await n.getContractCode(contractCodeKey)).valueOr:
     warn "Failed to get contract code"

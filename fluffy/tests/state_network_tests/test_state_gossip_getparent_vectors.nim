@@ -6,12 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[os, strutils],
+  std/os,
   results,
   unittest2,
   stew/byteutils,
   eth/common,
-  ../../common/common_utils,
   ../../network/state/[state_content, state_gossip],
   ./state_test_helpers
 
@@ -23,29 +22,26 @@ suite "State Gossip getParent - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+      if i == 0 or i == 3:
+        let
+          parentTestData = testCase[i + 1]
+          key = ContentKey
+            .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+            .get()
+          offer = AccountTrieNodeOffer
+            .decode(testData.content_value_offer.hexToSeqByte())
+            .get()
 
-      let key =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
-      let offer =
-        AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
-
-      if i == 1: # second test case only has root node and no recursive gossip
-        doAssertRaises(AssertionDefect):
-          discard offer.withKey(key.accountTrieNodeKey).getParent()
-        continue
-
-      let (parentKey, parentOffer) = offer.withKey(key.accountTrieNodeKey).getParent()
-      check:
-        parentKey.path.unpackNibbles().len() <
-          key.accountTrieNodeKey.path.unpackNibbles().len()
-        parentOffer.proof.len() == offer.proof.len() - 1
-        parentKey.toContentKey().encode() ==
-          testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList
-        parentOffer.encode() ==
-          testData.recursive_gossip.content_value_offer.hexToSeqByte()
-        parentOffer.toRetrievalValue().encode() ==
-          testData.recursive_gossip.content_value_retrieval.hexToSeqByte()
+        let (parentKey, parentOffer) = offer.withKey(key.accountTrieNodeKey).getParent()
+        check:
+          parentKey.path.unpackNibbles().len() <
+            key.accountTrieNodeKey.path.unpackNibbles().len()
+          parentOffer.proof.len() == offer.proof.len() - 1
+          parentKey.toContentKey().encode() ==
+            parentTestData.content_key.hexToSeqByte().ContentKeyByteList
+          parentOffer.encode() == parentTestData.content_value_offer.hexToSeqByte()
+          parentOffer.toRetrievalValue().encode() ==
+            parentTestData.content_value_retrieval.hexToSeqByte()
 
   test "Check contract storage trie node parent matches expected recursive gossip":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
@@ -54,88 +50,24 @@ suite "State Gossip getParent - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-
-      let key =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
-      let offer =
-        ContractTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
-
-      if i == 1: # second test case only has root node and no recursive gossip
-        doAssertRaises(AssertionDefect):
-          discard offer.withKey(key.contractTrieNodeKey).getParent()
-        continue
-
-      let (parentKey, parentOffer) = offer.withKey(key.contractTrieNodeKey).getParent()
-      check:
-        parentKey.path.unpackNibbles().len() <
-          key.contractTrieNodeKey.path.unpackNibbles().len()
-        parentOffer.storageProof.len() == offer.storageProof.len() - 1
-        parentKey.toContentKey().encode() ==
-          testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList
-        parentOffer.encode() ==
-          testData.recursive_gossip.content_value_offer.hexToSeqByte()
-        parentOffer.toRetrievalValue().encode() ==
-          testData.recursive_gossip.content_value_retrieval.hexToSeqByte()
-
-  test "Check each account trie node parent matches expected recursive gossip":
-    const file = testVectorDir / "recursive_gossip.yaml"
-
-    let testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
-      raiseAssert "Cannot read test vector: " & error
-
-    for i, testData in testCase:
-      if i == 1:
-        continue
-
-      for j in 0 ..< testData.recursive_gossip.high:
+      if i == 0:
         let
+          parentTestData = testCase[i + 1]
           key = ContentKey
-            .decode(
-              testData.recursive_gossip[j].content_key.hexToSeqByte().ContentKeyByteList
-            )
-            .get()
-          offer = AccountTrieNodeOffer
-            .decode(testData.recursive_gossip[j].content_value.hexToSeqByte())
-            .get()
-          (parentKey, parentOffer) = offer.withKey(key.accountTrieNodeKey).getParent()
-
-        check:
-          parentKey.path.unpackNibbles().len() <
-            key.accountTrieNodeKey.path.unpackNibbles().len()
-          parentOffer.proof.len() == offer.proof.len() - 1
-          parentKey.toContentKey().encode() ==
-            testData.recursive_gossip[j + 1].content_key.hexToSeqByte().ContentKeyByteList
-          parentOffer.encode() ==
-            testData.recursive_gossip[j + 1].content_value.hexToSeqByte()
-
-  test "Check each contract trie node parent matches expected recursive gossip":
-    const file = testVectorDir / "recursive_gossip.yaml"
-
-    let testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
-      raiseAssert "Cannot read test vector: " & error
-
-    for i, testData in testCase:
-      if i != 1:
-        continue
-
-      for j in 0 ..< testData.recursive_gossip.high:
-        let
-          key = ContentKey
-            .decode(
-              testData.recursive_gossip[j].content_key.hexToSeqByte().ContentKeyByteList
-            )
+            .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
             .get()
           offer = ContractTrieNodeOffer
-            .decode(testData.recursive_gossip[j].content_value.hexToSeqByte())
+            .decode(testData.content_value_offer.hexToSeqByte())
             .get()
-          (parentKey, parentOffer) = offer.withKey(key.contractTrieNodeKey).getParent()
 
+        let (parentKey, parentOffer) =
+          offer.withKey(key.contractTrieNodeKey).getParent()
         check:
           parentKey.path.unpackNibbles().len() <
             key.contractTrieNodeKey.path.unpackNibbles().len()
           parentOffer.storageProof.len() == offer.storageProof.len() - 1
           parentKey.toContentKey().encode() ==
-            testData.recursive_gossip[j + 1].content_key.hexToSeqByte().ContentKeyByteList
-          parentOffer.encode() ==
-            testData.recursive_gossip[j + 1].content_value.hexToSeqByte()
+            parentTestData.content_key.hexToSeqByte().ContentKeyByteList
+          parentOffer.encode() == parentTestData.content_value_offer.hexToSeqByte()
+          parentOffer.toRetrievalValue().encode() ==
+            parentTestData.content_value_retrieval.hexToSeqByte()

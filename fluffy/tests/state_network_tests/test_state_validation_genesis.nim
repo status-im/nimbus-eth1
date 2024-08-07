@@ -26,10 +26,10 @@ template checkValidProofsForExistingLeafs(
     acc.codeHash = keccakHash(account.code)
 
     let
+      addressHash = address.keccakHash()
       accountProof = accountState.generateAccountProof(address)
-      accountPath = removeLeafKeyEndNibbles(
-        Nibbles.init(keccakHash(address).data, true), accountProof[^1]
-      )
+      accountPath =
+        removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), accountProof[^1])
       accountTrieNodeKey = AccountTrieNodeKey(
         path: accountPath, nodeHash: keccakHash(accountProof[^1].asSeq())
       )
@@ -40,7 +40,8 @@ template checkValidProofsForExistingLeafs(
     check proofResult.isOk()
 
     let
-      contractCodeKey = ContractCodeKey(address: address, codeHash: acc.codeHash)
+      contractCodeKey =
+        ContractCodeKey(addressHash: addressHash, codeHash: acc.codeHash)
       contractCode =
         ContractCodeOffer(code: Bytecode.init(account.code), accountProof: accountProof)
       codeResult =
@@ -58,7 +59,7 @@ template checkValidProofsForExistingLeafs(
             Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), storageProof[^1]
           )
           contractTrieNodeKey = ContractTrieNodeKey(
-            address: address,
+            addressHash: addressHash,
             path: slotPath,
             nodeHash: keccakHash(storageProof[^1].asSeq()),
           )
@@ -80,10 +81,10 @@ template checkInvalidProofsWithBadValue(
     acc.codeHash = keccakHash(account.code)
 
     var
+      addressHash = address.keccakHash()
       accountProof = accountState.generateAccountProof(address)
-      accountPath = removeLeafKeyEndNibbles(
-        Nibbles.init(keccakHash(address).data, true), accountProof[^1]
-      )
+      accountPath =
+        removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), accountProof[^1])
       accountTrieNodeKey = AccountTrieNodeKey(
         path: accountPath, nodeHash: keccakHash(accountProof[^1].asSeq())
       )
@@ -96,7 +97,8 @@ template checkInvalidProofsWithBadValue(
     check proofResult.isErr()
 
     let
-      contractCodeKey = ContractCodeKey(address: address, codeHash: acc.codeHash)
+      contractCodeKey =
+        ContractCodeKey(addressHash: addressHash, codeHash: acc.codeHash)
       contractCode = ContractCodeOffer(
         code: Bytecode.init(@[1u8, 2, 3]), # bad code value
         accountProof: accountProof,
@@ -116,7 +118,7 @@ template checkInvalidProofsWithBadValue(
             Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), storageProof[^1]
           )
           contractTrieNodeKey = ContractTrieNodeKey(
-            address: address,
+            addressHash: addressHash,
             path: slotPath,
             nodeHash: keccakHash(storageProof[^1].asSeq()),
           )

@@ -60,7 +60,9 @@ func getParent(p: ProofWithPath): ProofWithPath =
     # leaf or extension node so we need to remove one or more nibbles
     let (_, _, prefixNibbles) = decodePrefix(parentEndNode.listElem(0))
 
-    parentProof.withPath(unpackedNibbles.dropN(prefixNibbles.len()).packNibbles())
+    parentProof.withPath(
+      unpackedNibbles.dropN(prefixNibbles.unpackNibbles().len()).packNibbles()
+    )
   except RlpError as e:
     raiseAssert(e.msg)
 
@@ -79,7 +81,7 @@ func getParent*(offerWithKey: ContractTrieOfferWithKey): ContractTrieOfferWithKe
     (key, offer) = offerWithKey
     parent = offer.storageProof.withPath(key.path).getParent()
     parentKey = ContractTrieNodeKey.init(
-      key.address, parent.path, keccakHash(parent.proof[^1].asSeq())
+      key.addressHash, parent.path, keccakHash(parent.proof[^1].asSeq())
     )
     parentOffer =
       ContractTrieNodeOffer.init(parent.proof, offer.accountProof, offer.blockHash)
@@ -134,12 +136,12 @@ proc recursiveGossipOffer*(
     offerBytes: seq[byte],
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
-) {.async: (raises: [CancelledError]).} =
+): Future[ContentKeyByteList] {.async: (raises: [CancelledError]).} =
   await gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
-    return
+    return keyBytes
 
   # continue the recursive gossip by sharing the parent offer with peers
   let
@@ -159,12 +161,12 @@ proc recursiveGossipOffer*(
     offerBytes: seq[byte],
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
-) {.async: (raises: [CancelledError]).} =
+): Future[ContentKeyByteList] {.async: (raises: [CancelledError]).} =
   await gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
-    return
+    return keyBytes
 
   # continue the recursive gossip by sharing the parent offer with peers
   let

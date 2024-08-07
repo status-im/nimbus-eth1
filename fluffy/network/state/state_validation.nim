@@ -156,7 +156,7 @@ proc validateOffer*(
 ): Result[void, string] =
   ?validateTrieProof(
     trustedStateRoot,
-    key.address.toPath(),
+    key.addressHash.toPath(),
     offer.accountProof,
     allowKeyEndInPathForLeafs = true,
   )
@@ -172,7 +172,7 @@ proc validateOffer*(
 ): Result[void, string] =
   ?validateTrieProof(
     trustedStateRoot,
-    key.address.toPath(),
+    key.addressHash.toPath(),
     offer.accountProof,
     allowKeyEndInPathForLeafs = true,
   )

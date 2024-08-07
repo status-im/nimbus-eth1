@@ -150,27 +150,13 @@ suite "State Validation - Test Vectors":
           )
           .isOk()
 
-      if i == 1:
-        continue # second test case only has root node and no recursive gossip
-
-      let contentKey = ContentKey
-        .decode(testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList)
-        .get()
-      let contentValueOffer = AccountTrieNodeOffer
-        .decode(testData.recursive_gossip.content_value_offer.hexToSeqByte())
-        .get()
-
-      check:
-        validateOffer(
-          Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
-        )
-        .isOk()
-
   test "Validate invalid AccountTrieNodeOffer nodes - bad state roots":
     const file = testVectorDir / "account_trie_node.yaml"
     const stateRoots = [
       "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
       "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
+      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
+      "0xBAD8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544",
       "0xBAD8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544",
     ]
 
@@ -178,16 +164,16 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
-
-      let contentKey =
-        ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
-      let contentValueOffer =
-        AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
-
-      let res = validateOffer(
-        Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
-      )
+      let
+        stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
+        contentKey = ContentKey
+          .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
+          .get()
+        contentValueOffer =
+          AccountTrieNodeOffer.decode(testData.content_value_offer.hexToSeqByte()).get()
+        res = validateOffer(
+          Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
+        )
       check:
         res.isErr()
         res.error() == "hash of proof root node doesn't match the expected root hash"
@@ -216,7 +202,7 @@ suite "State Validation - Test Vectors":
         res.error() == "hash of proof root node doesn't match the expected root hash"
 
     for i, testData in testCase:
-      if i == 1:
+      if i == 2:
         continue # second test case only has root node
       var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
 
@@ -275,25 +261,10 @@ suite "State Validation - Test Vectors":
           )
           .isOk()
 
-      if i == 1:
-        continue # second test case has no recursive gossip
-
-      let contentKey = ContentKey
-        .decode(testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList)
-        .get()
-      let contentValueOffer = ContractTrieNodeOffer
-        .decode(testData.recursive_gossip.content_value_offer.hexToSeqByte())
-        .get()
-
-      check:
-        validateOffer(
-          Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
-        )
-        .isOk()
-
   test "Validate invalid ContractTrieNodeOffer nodes - bad state roots":
     const file = testVectorDir / "contract_storage_trie_node.yaml"
     const stateRoots = [
+      "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
       "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
       "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
     ]
@@ -525,58 +496,3 @@ suite "State Validation - Test Vectors":
           res.isErr()
           res.error() ==
             "hash of bytecode doesn't match the code hash in the account proof"
-
-  # Recursive gossip offer validation tests
-
-  test "Validate valid AccountTrieNodeOffer recursive gossip nodes":
-    const file = testVectorDir / "recursive_gossip.yaml"
-    const stateRoots = [
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
-      "0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61",
-      "0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544",
-    ]
-
-    let testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
-      raiseAssert "Cannot read test vector: " & error
-
-    for i, testData in testCase:
-      if i == 1:
-        continue
-
-      var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
-
-      for kv in testData.recursive_gossip:
-        let contentKey =
-          ContentKey.decode(kv.content_key.hexToSeqByte().ContentKeyByteList).get()
-        let contentValueOffer =
-          AccountTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
-
-        check:
-          validateOffer(
-            Opt.some(stateRoot), contentKey.accountTrieNodeKey, contentValueOffer
-          )
-          .isOk()
-
-  test "Validate valid ContractTrieNodeOffer recursive gossip nodes":
-    const file = testVectorDir / "recursive_gossip.yaml"
-
-    let testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
-      raiseAssert "Cannot read test vector: " & error
-
-    for i, testData in testCase:
-      if i != 1:
-        continue
-
-      var stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-
-      for kv in testData.recursive_gossip:
-        let contentKey =
-          ContentKey.decode(kv.content_key.hexToSeqByte().ContentKeyByteList).get()
-        let contentValueOffer =
-          ContractTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
-
-        check:
-          validateOffer(
-            Opt.some(stateRoot), contentKey.contractTrieNodeKey, contentValueOffer
-          )
-          .isOk()

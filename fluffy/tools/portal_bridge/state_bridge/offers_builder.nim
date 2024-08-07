@@ -27,12 +27,12 @@ proc toTrieProof(proof: seq[seq[byte]]): TrieProof =
   TrieProof.init(proof.map((node) => TrieNode.init(node)))
 
 proc buildAccountTrieNodeOffer(
-    builder: var OffersBuilder, address: EthAddress, proof: TrieProof
+    builder: var OffersBuilder, addressHash: content_keys.AddressHash, proof: TrieProof
 ) =
   try:
     let
       path = removeLeafKeyEndNibbles(
-        Nibbles.init(worldState.toAccountKey(address).data, isEven = true), proof[^1]
+        Nibbles.init(addressHash.data, isEven = true), proof[^1]
       )
       offerKey = AccountTrieNodeKey.init(path, keccakHash(proof[^1].asSeq()))
       offerValue = AccountTrieNodeOffer.init(proof, builder.blockHash)
@@ -43,7 +43,7 @@ proc buildAccountTrieNodeOffer(
 
 proc buildContractTrieNodeOffer(
     builder: var OffersBuilder,
-    address: EthAddress,
+    addressHash: content_keys.AddressHash,
     slotHash: SlotKeyHash,
     storageProof: TrieProof,
     accountProof: TrieProof,
@@ -53,8 +53,9 @@ proc buildContractTrieNodeOffer(
       path = removeLeafKeyEndNibbles(
         Nibbles.init(slotHash.data, isEven = true), storageProof[^1]
       )
-      offerKey =
-        ContractTrieNodeKey.init(address, path, keccakHash(storageProof[^1].asSeq()))
+      offerKey = ContractTrieNodeKey.init(
+        addressHash, path, keccakHash(storageProof[^1].asSeq())
+      )
       offerValue =
         ContractTrieNodeOffer.init(storageProof, accountProof, builder.blockHash)
 
@@ -64,30 +65,32 @@ proc buildContractTrieNodeOffer(
 
 proc buildContractCodeOffer(
     builder: var OffersBuilder,
-    address: EthAddress,
+    addressHash: content_keys.AddressHash,
     code: seq[byte],
     accountProof: TrieProof,
 ) =
   let
     #bytecode = Bytelist.init(code) # This fails to compile for some reason
     bytecode = List[byte, MAX_BYTECODE_LEN](code)
-    offerKey = ContractCodeKey.init(address, keccakHash(code))
+    offerKey = ContractCodeKey.init(addressHash, keccakHash(code))
     offerValue = ContractCodeOffer.init(bytecode, accountProof, builder.blockHash)
 
   builder.contractCodeOffers.add(offerValue.withKey(offerKey))
 
 proc buildBlockOffers*(builder: var OffersBuilder) =
-  for address, proof in builder.worldState.updatedAccountProofs():
+  for addressHash, proof in builder.worldState.updatedAccountProofs():
     let accountProof = toTrieProof(proof)
-    builder.buildAccountTrieNodeOffer(address, accountProof)
+    builder.buildAccountTrieNodeOffer(addressHash, accountProof)
 
-    for slotHash, sProof in builder.worldState.updatedStorageProofs(address):
+    for slotHash, sProof in builder.worldState.updatedStorageProofs(addressHash):
       let storageProof = toTrieProof(sProof)
-      builder.buildContractTrieNodeOffer(address, slotHash, storageProof, accountProof)
+      builder.buildContractTrieNodeOffer(
+        addressHash, slotHash, storageProof, accountProof
+      )
 
-    let code = builder.worldState.getUpdatedBytecode(address)
+    let code = builder.worldState.getUpdatedBytecode(addressHash)
     if code.len() > 0:
-      builder.buildContractCodeOffer(address, code, accountProof)
+      builder.buildContractCodeOffer(addressHash, code, accountProof)
 
 proc getAccountTrieOffers*(builder: OffersBuilder): lent seq[AccountTrieOfferWithKey] =
   builder.accountTrieOffers

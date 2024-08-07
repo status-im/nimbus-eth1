@@ -42,10 +42,11 @@ procSuite "State Gossip - Gossip Offer":
       (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
 
     for i, testData in testCase:
-      if i == 1:
-        continue # skip scenario with no parent
+      if i != 0 and i != 3:
+        continue # skip scenarios with no parent
 
       let
+        parentTestData = testCase[i + 1]
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
@@ -54,11 +55,10 @@ procSuite "State Gossip - Gossip Offer":
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
 
         parentContentKeyBytes =
-          testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList
+          parentTestData.content_key.hexToSeqByte().ContentKeyByteList
         parentContentKey = ContentKey.decode(parentContentKeyBytes).get()
         parentContentId = toContentId(parentContentKeyBytes)
-        parentContentValueBytes =
-          testData.recursive_gossip.content_value_offer.hexToSeqByte()
+        parentContentValueBytes = parentTestData.content_value_offer.hexToSeqByte()
         parentContentValue = AccountTrieNodeOffer.decode(parentContentValueBytes).get()
 
       # set valid state root
@@ -115,10 +115,11 @@ procSuite "State Gossip - Gossip Offer":
       (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
 
     for i, testData in testCase:
-      if i == 1:
-        continue # skip scenario with no parent
+      if i != 0:
+        continue # skip scenarios with no parent
 
       let
+        parentTestData = testCase[i + 1]
         stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
@@ -127,11 +128,10 @@ procSuite "State Gossip - Gossip Offer":
         contentValue = ContractTrieNodeOffer.decode(contentValueBytes).get()
 
         parentContentKeyBytes =
-          testData.recursive_gossip.content_key.hexToSeqByte().ContentKeyByteList
+          parentTestData.content_key.hexToSeqByte().ContentKeyByteList
         parentContentKey = ContentKey.decode(parentContentKeyBytes).get()
         parentContentId = toContentId(parentContentKeyBytes)
-        parentContentValueBytes =
-          testData.recursive_gossip.content_value_offer.hexToSeqByte()
+        parentContentValueBytes = parentTestData.content_value_offer.hexToSeqByte()
         parentContentValue = ContractTrieNodeOffer.decode(parentContentValueBytes).get()
 
       # set valid state root
@@ -222,164 +222,6 @@ procSuite "State Gossip - Gossip Offer":
         res1.isOk()
         res1.get() == contentValue.toRetrievalValue()
         res1.get().code == contentValue.toRetrievalValue().code
-
-    await stateNode1.stop()
-    await stateNode2.stop()
-
-  asyncTest "Recursive gossip account trie nodes":
-    const file = testVectorDir / "recursive_gossip.yaml"
-
-    let
-      testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
-      stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
-
-    stateNode1.start()
-    stateNode2.start()
-
-    check:
-      stateNode1.portalProtocol().addNode(stateNode2.localNode()) == Added
-      stateNode2.portalProtocol().addNode(stateNode1.localNode()) == Added
-      (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
-      (await stateNode2.portalProtocol().ping(stateNode1.localNode())).isOk()
-
-    for i, testData in testCase:
-      if i == 1:
-        continue
-
-      let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        leafData = testData.recursive_gossip[0]
-        contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
-        contentKey = ContentKey.decode(contentKeyBytes).get()
-        contentId = toContentId(contentKeyBytes)
-        contentValueBytes = leafData.content_value.hexToSeqByte()
-        contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
-
-      # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-
-      check not stateNode1.containsId(contentId)
-      check not stateNode2.containsId(contentId)
-
-      # offer the leaf node
-      await stateNode1.portalProtocol.recursiveGossipOffer(
-        Opt.none(NodeId),
-        contentKeyBytes,
-        contentValueBytes,
-        contentKey.accountTrieNodeKey,
-        contentValue,
-      )
-
-      # wait for recursive gossip to complete
-      for node in testData.recursive_gossip:
-        let keyBytes = node.content_key.hexToSeqByte().ContentKeyByteList
-        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
-
-      # check that all nodes were received by both state instances
-      for kv in testData.recursive_gossip:
-        let
-          expectedKeyBytes = kv.content_key.hexToSeqByte().ContentKeyByteList
-          expectedKey = ContentKey.decode(expectedKeyBytes).get()
-          expectedId = toContentId(expectedKeyBytes)
-          expectedValue =
-            AccountTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
-          res1 = await stateNode1.stateNetwork.getAccountTrieNode(
-            expectedKey.accountTrieNodeKey
-          )
-          res2 = await stateNode2.stateNetwork.getAccountTrieNode(
-            expectedKey.accountTrieNodeKey
-          )
-        check:
-          stateNode1.containsId(expectedId)
-          stateNode2.containsId(expectedId)
-          res1.isOk()
-          res1.get() == expectedValue.toRetrievalValue()
-          res1.get().node == expectedValue.toRetrievalValue().node
-          res2.isOk()
-          res2.get() == expectedValue.toRetrievalValue()
-          res2.get().node == expectedValue.toRetrievalValue().node
-
-    await stateNode1.stop()
-    await stateNode2.stop()
-
-  asyncTest "Recursive gossip contract trie nodes":
-    const file = testVectorDir / "recursive_gossip.yaml"
-
-    let
-      testCase = YamlRecursiveGossipKVs.loadFromYaml(file).valueOr:
-        raiseAssert "Cannot read test vector: " & error
-      stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
-      stateNode2 = newStateNode(rng, STATE_NODE2_PORT)
-
-    stateNode1.start()
-    stateNode2.start()
-
-    check:
-      stateNode1.portalProtocol().addNode(stateNode2.localNode()) == Added
-      stateNode2.portalProtocol().addNode(stateNode1.localNode()) == Added
-      (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
-      (await stateNode2.portalProtocol().ping(stateNode1.localNode())).isOk()
-
-    for i, testData in testCase:
-      if i != 1:
-        continue
-
-      let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
-        leafData = testData.recursive_gossip[0]
-        contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
-        contentKey = ContentKey.decode(contentKeyBytes).get()
-        contentId = toContentId(contentKeyBytes)
-        contentValueBytes = leafData.content_value.hexToSeqByte()
-        contentValue = ContractTrieNodeOffer.decode(contentValueBytes).get()
-
-      # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-
-      check not stateNode1.containsId(contentId)
-      check not stateNode2.containsId(contentId)
-
-      # offer the leaf node
-      await stateNode1.portalProtocol.recursiveGossipOffer(
-        Opt.none(NodeId),
-        contentKeyBytes,
-        contentValueBytes,
-        contentKey.contractTrieNodeKey,
-        contentValue,
-      )
-
-      # wait for recursive gossip to complete
-      for node in testData.recursive_gossip:
-        let keyBytes = node.content_key.hexToSeqByte().ContentKeyByteList
-        await stateNode2.waitUntilContentAvailable(toContentId(keyBytes))
-
-      # check that all nodes were received by both state instances
-      for kv in testData.recursive_gossip:
-        let
-          expectedKeyBytes = kv.content_key.hexToSeqByte().ContentKeyByteList
-          expectedKey = ContentKey.decode(expectedKeyBytes).get()
-          expectedId = toContentId(expectedKeyBytes)
-          expectedValue =
-            ContractTrieNodeOffer.decode(kv.content_value.hexToSeqByte()).get()
-          res1 = await stateNode1.stateNetwork.getContractTrieNode(
-            expectedKey.contractTrieNodeKey
-          )
-          res2 = await stateNode2.stateNetwork.getContractTrieNode(
-            expectedKey.contractTrieNodeKey
-          )
-        check:
-          stateNode1.containsId(expectedId)
-          stateNode2.containsId(expectedId)
-          res1.isOk()
-          res1.get() == expectedValue.toRetrievalValue()
-          res1.get().node == expectedValue.toRetrievalValue().node
-          res2.isOk()
-          res2.get() == expectedValue.toRetrievalValue()
-          res2.get().node == expectedValue.toRetrievalValue().node
 
     await stateNode1.stop()
     await stateNode2.stop()
