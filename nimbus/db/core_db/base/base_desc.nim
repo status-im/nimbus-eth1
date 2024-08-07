@@ -54,6 +54,8 @@ type
     HashNotAvailable
     KvtNotFound
     MptNotFound
+    ProofCreate
+    ProofVerify
     RlpException
     StoNotFound
     TxPending

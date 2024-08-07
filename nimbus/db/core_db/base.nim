@@ -55,7 +55,8 @@ when CoreDbEnableCaptJournal:
 else:
   import
     ../aristo/[
-      aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_tx],
+      aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_part,
+      aristo_tx],
     ../kvt/[kvt_desc, kvt_utils, kvt_tx]
 
 # ------------------------------------------------------------------------------
@@ -140,7 +141,7 @@ proc forget*(ctx: CoreDbCtxRef) =
   ctx.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
-# Public main descriptor methods
+# Public base descriptor methods
 # ------------------------------------------------------------------------------
 
 proc finish*(db: CoreDbRef; eradicate = false) =
@@ -211,6 +212,104 @@ proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
     else:
       0u64
   db.ifTrackNewApi: debug logTxt, api, elapsed, result
+
+proc verify*(
+    db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
+    proof: openArray[Blob];
+    root: Hash256;
+    path: openArray[byte];
+      ): CoreDbRc[Blob] =
+  ## This function os the counterpart of any of the `proof()` functions. Given
+  ## the argument chain of rlp-encoded nodes `proof`, this function verifies
+  ## that the chain represents a partial MPT starting with a root node state
+  ## `root` followig the path `key` leading to leaf node encapsulating a
+  ## payload which is passed back as return code.
+  ##
+  ## Note: The `mpt` argument is used for administative purposes (e.g. logging)
+  ##       only. The functionality is provided by the `Aristo` database
+  ##       function `aristo_part.partUntwigGeneric()` with the same prototype
+  ##       arguments except the `db`.
+  ##
+  template mpt: untyped =
+    when db is CoreDbRef:
+      CoreDbAccRef(db.defCtx)
+    else:
+      db
+  mpt.setTrackNewApi BaseVerifyFn
+  result = block:
+    let rc = mpt.call(partUntwigGeneric, proof, root, path)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError($api, ProofVerify))
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
+
+proc verifyOk*(
+    db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
+    proof: openArray[Blob];
+    root: Hash256;
+    path: openArray[byte];
+    payload: openArray[byte];
+      ): CoreDbRc[void] =
+  ## Variant of `verify()` which directly checks the argument `payload`
+  ## against what would be the return code in `verify()`.
+  ##
+  template mpt: untyped =
+    when db is CoreDbRef:
+      CoreDbAccRef(db.defCtx)
+    else:
+      db
+  mpt.setTrackNewApi BaseVerifyOkFn
+  result = block:
+    let rc = mpt.call(partUntwigGenericOk, proof, root, path, payload)
+    if rc.isOk:
+      ok()
+    else:
+      err(rc.error.toError($api, ProofVerify))
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
+
+proc verify*(
+    db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
+    proof: openArray[Blob];
+    root: Hash256;
+    path: Hash256;
+      ): CoreDbRc[Blob] =
+  ## Variant of `verify()`.
+  template mpt: untyped =
+    when db is CoreDbRef:
+      CoreDbAccRef(db.defCtx)
+    else:
+      db
+  mpt.setTrackNewApi BaseVerifyFn
+  result = block:
+    let rc = mpt.call(partUntwigPath, proof, root, path)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError($api, ProofVerify))
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
+
+proc verifyOk*(
+    db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
+    proof: openArray[Blob];
+    root: Hash256;
+    path: Hash256;
+    payload: openArray[byte];
+      ): CoreDbRc[void] =
+  ## Variant of `verifyOk()`.
+  template mpt: untyped =
+    when db is CoreDbRef:
+      CoreDbAccRef(db.defCtx)
+    else:
+      db
+  mpt.setTrackNewApi BaseVerifyOkFn
+  result = block:
+    let rc = mpt.call(partUntwigPathOk, proof, root, path, payload)
+    if rc.isOk:
+      ok()
+    else:
+      err(rc.error.toError($api, ProofVerify))
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 # ------------------------------------------------------------------------------
 # Public key-value table methods
@@ -323,6 +422,22 @@ proc getGeneric*(
 
 # ----------- generic MPT ---------------
 
+proc proof*(
+    mpt: CoreDbMptRef;
+    key: openArray[byte];
+      ): CoreDbRc[seq[Blob]] =
+  ## On the generic MPT, collect the nodes along the `key` interpreted as
+  ## path. Return these path nodes as a chain of rlp-encoded blobs.
+  ##
+  mpt.setTrackNewApi MptProofFn
+  result = block:
+    let rc = mpt.call(partGenericTwig, mpt.mpt, CoreDbVidGeneric, key)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError($api, ProofCreate))
+  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
+
 proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
   ## Fetch data from the argument `mpt`. The function always returns a
   ## non-empty `Blob` or an error code.
@@ -421,6 +536,22 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
   ctx.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ----------- accounts ---------------
+
+proc proof*(
+    acc: CoreDbAccRef;
+    accPath: Hash256;
+      ): CoreDbRc[seq[Blob]] =
+  ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
+  ## path. Return these path nodes as a chain of rlp-encoded blobs.
+  ##
+  acc.setTrackNewApi AccProofFn
+  result = block:
+    let rc = acc.call(partAccountTwig, acc.mpt, accPath)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError($api, ProofCreate))
+  acc.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 proc fetch*(
     acc: CoreDbAccRef;
@@ -528,6 +659,24 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
   acc.ifTrackNewApi: debug logTxt, api, elapsed, updateOK, result
 
 # ------------ storage ---------------
+
+proc slotProof*(
+    acc: CoreDbAccRef;
+    accPath: Hash256;
+    stoPath: Hash256;
+      ): CoreDbRc[seq[Blob]] =
+  ## On the storage MPT related to the argument account `acPath`, collect the
+  ## nodes along the `stoPath` interpreted as path. Return these path nodes as
+  ## a chain of rlp-encoded blobs.
+  ##
+  acc.setTrackNewApi AccSlotProofFn
+  result = block:
+    let rc = acc.call(partStorageTwig, acc.mpt, accPath, stoPath)
+    if rc.isOk:
+      ok(rc.value)
+    else:
+      err(rc.error.toError($api, ProofCreate))
+  acc.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 proc slotFetch*(
     acc: CoreDbAccRef;

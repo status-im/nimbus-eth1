@@ -365,8 +365,9 @@ func init*(
     data.list[KvtApiProfBeLenKvpFn.ord].masked = true
 
     beDup.putKvpFn =
-      proc(a: PutHdlRef; b: openArray[(Blob,Blob)]) =
-        be.putKvpFn(a,b)
+      proc(a: PutHdlRef; b, c: openArray[byte]) =
+        KvtApiProfBePutKvpFn.profileRunner:
+          be.putKvpFn(a, b, c)
     data.list[KvtApiProfBePutKvpFn.ord].masked = true
 
     beDup.putEndFn =

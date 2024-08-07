@@ -183,13 +183,13 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
         # Verify proof
         let root = pq.db.getKey((rVid,rVid)).to(Hash256)
         block:
-          let rc = proof.chain.partUntwig(root, path)
+          let rc = proof.chain.partUntwigPath(root, path)
           check rc.isOk
           if rc.isOk:
             check rc.value == pyl
 
         # Just for completeness (same a above combined into a single function)
-        check proof.chain.partUntwigOk(root, path, pyl).isOk
+        check proof.chain.partUntwigPathOk(root, path, pyl).isOk
 
       # Extension nodes are rare, so there is one created, inserted and the
       # previous test repeated.
@@ -212,12 +212,12 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
 
         let root = pq.db.getKey((rVid,rVid)).to(Hash256)
         block:
-          let rc = chain.partUntwig(root, path)
+          let rc = chain.partUntwigPath(root, path)
           check rc.isOk
           if rc.isOk:
             check rc.value == pyl
 
-        check chain.partUntwigOk(root, path, pyl).isOk
+        check chain.partUntwigPathOk(root, path, pyl).isOk
 
 # ------------------------------------------------------------------------------
 # Test

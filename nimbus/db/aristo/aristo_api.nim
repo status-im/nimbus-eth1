@@ -18,8 +18,8 @@ import
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
-  "."/[aristo_delete, aristo_desc, aristo_fetch,
-       aristo_init, aristo_merge, aristo_path, aristo_profile, aristo_tx]
+  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_init, aristo_merge,
+       aristo_part, aristo_path, aristo_profile, aristo_tx]
 
 export
   AristoDbProfListRef
@@ -327,6 +327,74 @@ type
       ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
       ## and `stoPath`  is the slot path of the corresponding storage area.
 
+  AristoApiPartAccountTwig* =
+    proc(db: AristoDbRef;
+         accPath: Hash256;
+        ): Result[seq[Blob], AristoError]
+        {.noRaise.}
+      ## This function returns a chain of rlp-encoded nodes along the argument
+      ## path `(root,path)`.
+
+  AristoApiPartGenericTwig* =
+    proc(db: AristoDbRef;
+         root: VertexID;
+         path: openArray[byte];
+        ): Result[seq[Blob], AristoError]
+        {.noRaise.}
+      ## Variant of `partAccountTwig()`.
+      ##
+      ## Note: This function provides a functionality comparable to the
+      ## `getBranch()` function from `hexary.nim`
+
+  AristoApiPartStorageTwig* =
+    proc(db: AristoDbRef;
+         accPath: Hash256;
+         stoPath: Hash256;
+        ): Result[seq[Blob], AristoError]
+        {.noRaise.}
+      ## Variant of `partAccountTwig()`.
+
+  AristoApiPartUntwigGeneric* =
+    proc(chain: openArray[Blob];
+         root: Hash256;
+         path: openArray[byte];
+        ): Result[Blob,AristoError]
+        {.noRaise.}
+      ## Follow and verify the argument `chain` up unlil the last entry
+      ## which must be a leaf node. Extract the payload and pass it on
+      ## as return code.
+
+  AristoApiPartUntwigGenericOk* =
+    proc(chain: openArray[Blob];
+         root: Hash256;
+         path: openArray[byte];
+         payload: openArray[byte];
+        ): Result[void,AristoError]
+        {.noRaise.}
+      ## Variant of `partUntwigGeneric()`. The function verifis the argument
+      ## `chain` of rlp-encoded nodes against the `path` and `payload`
+      ## arguments.
+      ##
+      ## Note: This function provides a functionality comparable to the
+      ## `isValidBranch()` function from `hexary.nim`.
+
+  AristoApiPartUntwigPath* =
+    proc(chain: openArray[Blob];
+         root: Hash256;
+         path: Hash256;
+        ): Result[Blob,AristoError]
+        {.noRaise.}
+      ## Variant of `partUntwigGeneric()`.
+
+  AristoApiPartUntwigPathOk* =
+    proc(chain: openArray[Blob];
+         root: Hash256;
+         path: Hash256;
+         payload: openArray[byte];
+        ): Result[void,AristoError]
+        {.noRaise.}
+      ## Variant of `partUntwigGenericOk()`.
+
   AristoApiPathAsBlobFn* =
     proc(tag: PathID;
         ): Blob
@@ -444,6 +512,14 @@ type
     mergeGenericData*: AristoApiMergeGenericDataFn
     mergeStorageData*: AristoApiMergeStorageDataFn
 
+    partAccountTwig*: AristoApiPartAccountTwig
+    partGenericTwig*: AristoApiPartGenericTwig
+    partStorageTwig*: AristoApiPartStorageTwig
+    partUntwigGeneric*: AristoApiPartUntwigGeneric
+    partUntwigGenericOk*: AristoApiPartUntwigGenericOk
+    partUntwigPath*: AristoApiPartUntwigPath
+    partUntwigPathOk*: AristoApiPartUntwigPathOk
+
     pathAsBlob*: AristoApiPathAsBlobFn
     persist*: AristoApiPersistFn
     reCentre*: AristoApiReCentreFn
@@ -490,6 +566,14 @@ type
     AristoApiProfMergeAccountRecordFn   = "mergeAccountRecord"
     AristoApiProfMergeGenericDataFn     = "mergeGenericData"
     AristoApiProfMergeStorageDataFn     = "mergeStorageData"
+
+    AristoApiProfPartAccountTwigFn      = "partAccountTwig"
+    AristoApiProfPartGenericTwigFn      = "partGenericTwig"
+    AristoApiProfPartStorageTwigFn      = "partStorageTwig"
+    AristoApiProfPartUntwigGenericFn    = "partUntwigGeneric"
+    AristoApiProfPartUntwigGenericOkFn  = "partUntwigGenericOk"
+    AristoApiProfPartUntwigPathFn       = "partUntwigPath"
+    AristoApiProfPartUntwigPathOkFn     = "partUntwigPathOk"
 
     AristoApiProfPathAsBlobFn           = "pathAsBlob"
     AristoApiProfPersistFn              = "persist"
@@ -554,6 +638,14 @@ when AutoValidateApiHooks:
     doAssert not api.mergeAccountRecord.isNil
     doAssert not api.mergeGenericData.isNil
     doAssert not api.mergeStorageData.isNil
+
+    doAssert not api.partAccountTwig.isNil
+    doAssert not api.partGenericTwig.isNil
+    doAssert not api.partStorageTwig.isNil
+    doAssert not api.partUntwigGeneric.isNil
+    doAssert not api.partUntwigGenericOk.isNil
+    doAssert not api.partUntwigPath.isNil
+    doAssert not api.partUntwigPathOk.isNil
 
     doAssert not api.pathAsBlob.isNil
     doAssert not api.persist.isNil
@@ -623,6 +715,14 @@ func init*(api: var AristoApiObj) =
   api.mergeGenericData = mergeGenericData
   api.mergeStorageData = mergeStorageData
 
+  api.partAccountTwig = partAccountTwig
+  api.partGenericTwig = partGenericTwig
+  api.partStorageTwig = partStorageTwig
+  api.partUntwigGeneric = partUntwigGeneric
+  api.partUntwigGenericOk = partUntwigGenericOk
+  api.partUntwigPath = partUntwigPath
+  api.partUntwigPathOk = partUntwigPathOk
+
   api.pathAsBlob = pathAsBlob
   api.persist = persist
   api.reCentre = reCentre
@@ -672,6 +772,14 @@ func dup*(api: AristoApiRef): AristoApiRef =
     mergeAccountRecord:   api.mergeAccountRecord,
     mergeGenericData:     api.mergeGenericData,
     mergeStorageData:     api.mergeStorageData,
+
+    partAccountTwig:      api.partAccountTwig,
+    partGenericTwig:      api.partGenericTwig,
+    partStorageTwig:      api.partStorageTwig,
+    partUntwigGeneric:    api.partUntwigGeneric,
+    partUntwigGenericOk:  api.partUntwigGenericOk,
+    partUntwigPath:       api.partUntwigPath,
+    partUntwigPathOk:     api.partUntwigPathOk,
 
     pathAsBlob:           api.pathAsBlob,
     persist:              api.persist,
@@ -844,6 +952,41 @@ func init*(
     proc(a: AristoDbRef; b, c: Hash256, d: Uint256): auto =
       AristoApiProfMergeStorageDataFn.profileRunner:
         result = api.mergeStorageData(a, b, c, d)
+
+  profApi.partAccountTwig =
+    proc(a: AristoDbRef; b: Hash256): auto =
+      AristoApiProfPartAccountTwigFn.profileRunner:
+        result = api.partAccountTwig(a, b)
+
+  profApi.partGenericTwig =
+    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
+      AristoApiProfPartGenericTwigFn.profileRunner:
+        result = api.partGenericTwig(a, b, c)
+
+  profApi.partStorageTwig =
+    proc(a: AristoDbRef; b: Hash256; c: Hash256): auto =
+      AristoApiProfPartStorageTwigFn.profileRunner:
+        result = api.partStorageTwig(a, b, c)
+
+  profApi.partUntwigGeneric =
+    proc(a: openArray[Blob]; b: Hash256; c: openArray[byte]): auto =
+      AristoApiProfPartUntwigGenericFn.profileRunner:
+        result = api.partUntwigGeneric(a, b, c)
+
+  profApi.partUntwigGenericOk =
+    proc(a: openArray[Blob]; b: Hash256; c, d: openArray[byte]): auto =
+      AristoApiProfPartUntwigGenericOkFn.profileRunner:
+        result = api.partUntwigGenericOk(a, b, c, d)
+
+  profApi.partUntwigPath =
+    proc(a: openArray[Blob]; b, c: Hash256): auto =
+      AristoApiProfPartUntwigPathFn.profileRunner:
+        result = api.partUntwigPath(a, b, c)
+
+  profApi.partUntwigPathOk =
+    proc(a: openArray[Blob]; b, c: Hash256; d: openArray[byte]): auto =
+      AristoApiProfPartUntwigPathOkFn.profileRunner:
+        result = api.partUntwigPathOk(a, b, c, d)
 
   profApi.pathAsBlob =
     proc(a: PathID): auto =

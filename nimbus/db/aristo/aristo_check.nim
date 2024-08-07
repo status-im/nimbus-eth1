@@ -20,7 +20,7 @@ import
   results,
   ./aristo_walk/persistent,
   "."/[aristo_desc, aristo_get, aristo_init],
-  ./aristo_check/[check_be, check_top]
+  ./aristo_check/[check_be, check_top, check_twig]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -78,7 +78,7 @@ proc checkBE*(
 
 
 proc check*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoDbRef;                   # Database
     relax = false;                     # Check existing hashes only
     cache = true;                      # Also verify against top layer cache
     proofMode = false;                 # Has proof nodes
@@ -87,6 +87,41 @@ proc check*(
   ? db.checkTop(proofMode = proofMode)
   ? db.checkBE()
   ok()
+
+proc check*(
+    db: AristoDbRef;                   # Database
+    root: VertexID;                    # Start node
+    path: openArray[byte];             # Data path
+      ): Result[void,AristoError] =
+  ## Check generic path `path` against portal proof generation and
+  ## verification.
+  ##
+  ## Note that this check might have side effects in that it might compile
+  ## the hash keys on the `root` sub-tree.
+  db.checkTwig(root, path)
+
+proc check*(
+    db: AristoDbRef;                   # Database
+    accPath: Hash256;                  # Account key
+      ): Result[void,AristoError] =
+  ## Check accounts tree path `accPath` against portal proof generation and
+  ## verification.
+  ##
+  ## Note that this check might have side effects in that it might compile
+  ## the hash keys on the accounts sub-tree.
+  db.checkTwig(VertexID(1), accPath.data)
+
+proc check*(
+    db: AristoDbRef;                   # Database
+    accPath: Hash256;                  # Account key
+    stoPath: Hash256;                  # Storage key
+      ): Result[void,AristoError] =
+  ## Check account tree `Account key` against portal proof generation and
+  ## verification.
+  ##
+  ## Note that this check might have side effects in that it might compile
+  ## the hash keys on the particulat storage sub-tree.
+  db.checkTwig(accPath, stoPath)
 
 # ------------------------------------------------------------------------------
 # End

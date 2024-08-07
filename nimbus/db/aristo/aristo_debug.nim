@@ -488,7 +488,7 @@ proc ppLayer(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pp*(w: Hash256; codeHashOk = false): string =
+proc pp*(w: Hash256; codeHashOk: bool): string =
   if codeHashOk:
     w.ppCodeHash
   elif w == EMPTY_ROOT_HASH:
