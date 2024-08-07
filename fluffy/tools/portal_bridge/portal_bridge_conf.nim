@@ -152,7 +152,8 @@ type
       .}: bool
 
       gossipGenesis* {.
-        desc: "Enable gossip of the genesis state into the portal network when starting from block 1",
+        desc:
+          "Enable gossip of the genesis state into the portal network when starting from block 1",
         defaultValue: true,
         name: "gossip-genesis"
       .}: bool

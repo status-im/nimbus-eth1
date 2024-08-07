@@ -109,9 +109,7 @@ proc setAccountPreimage(
 ) =
   state.preimagesDb.put(rlp.encode(accountKey), rlp.encode(address))
 
-proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
-  let accountKey = toAccountKey(address)
-
+proc getAccount(state: WorldStateRef, accountKey: AddressHash): AccountState =
   try:
     if state.accountsTrie.contains(accountKey.data):
       let accountBytes = state.accountsTrie.get(accountKey.data)
@@ -120,6 +118,9 @@ proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
       AccountState.init()
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
+
+proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState {.inline.} =
+  state.getAccount(toAccountKey(address))
 
 proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountState) =
   let accountKey = toAccountKey(address)
@@ -166,7 +167,7 @@ proc deleteAccount*(state: WorldStateRef, address: EthAddress) =
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
 # Returns the account proofs for all the updated accounts from the last transaction
-iterator updatedAccountProofs*(state: WorldStateRef): (EthAddress, seq[seq[byte]]) =
+iterator updatedAccountProofs*(state: WorldStateRef): (AddressHash, seq[seq[byte]]) =
   let trie = initHexaryTrie(
     state.db.getAccountsUpdatedCache(), state.stateRoot(), isPruning = false
   )
@@ -175,16 +176,15 @@ iterator updatedAccountProofs*(state: WorldStateRef): (EthAddress, seq[seq[byte]
     for key in trie.keys():
       if key.len() == 0:
         continue # skip the empty node created on initialization
-      let address = state.getAccountPreimage(KeccakHash.fromBytes(key))
-      yield (address, trie.getBranch(key))
+      yield (KeccakHash.fromBytes(key), trie.getBranch(key))
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
 # Returns the storage proofs for the updated slots for the given account from the last transaction
 iterator updatedStorageProofs*(
-    state: WorldStateRef, address: EthAddress
+    state: WorldStateRef, accountKey: AddressHash
 ): (SlotKeyHash, seq[seq[byte]]) =
-  let accState = state.getAccount(address)
+  let accState = state.getAccount(accountKey)
 
   let trie = initHexaryTrie(
     state.db.getStorageUpdatedCache(), accState.account.storageRoot, isPruning = false
@@ -199,9 +199,9 @@ iterator updatedStorageProofs*(
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
 proc getUpdatedBytecode*(
-    state: WorldStateRef, address: EthAddress
+    state: WorldStateRef, accountKey: AddressHash
 ): seq[byte] {.inline.} =
-  state.db.getBytecodeUpdatedCache().get(toAccountKey(address).data)
+  state.db.getBytecodeUpdatedCache().get(accountKey.data)
 
 # Slow: Used for testing only
 proc verifyProofs*(
@@ -215,11 +215,11 @@ proc verifyProofs*(
     for k, v in trie.replicate():
       memDb.put(k, v)
 
-    for address, proof in state.updatedAccountProofs():
+    for accountKey, proof in state.updatedAccountProofs():
       doAssert isValidBranch(
         proof,
         expectedStateRoot,
-        @(toAccountKey(address).data),
+        @(accountKey.data),
         rlpFromBytes(proof[^1]).listElem(1).toBytes(), # pull the value out of the proof
       )
       for p in proof:
@@ -228,15 +228,15 @@ proc verifyProofs*(
     let memTrie = initHexaryTrie(memDb, expectedStateRoot, isPruning = false)
     doAssert(memTrie.rootHash() == expectedStateRoot)
 
-    for address, proof in state.updatedAccountProofs():
+    for accountKey, proof in state.updatedAccountProofs():
       let
-        accountBytes = memTrie.get(toAccountKey(address).data)
+        accountBytes = memTrie.get(accountKey.data)
         account = rlp.decode(accountBytes, Account)
       doAssert(accountBytes.len() > 0)
       doAssert(accountBytes == rlpFromBytes(proof[^1]).listElem(1).toBytes())
         # pull the value out of the proof
 
-      for slotHash, sProof in state.updatedStorageProofs(address):
+      for slotHash, sProof in state.updatedStorageProofs(accountKey):
         doAssert isValidBranch(
           sProof,
           account.storageRoot,
@@ -245,7 +245,7 @@ proc verifyProofs*(
             # pull the value out of the proof
         )
 
-      let updatedCode = state.getUpdatedBytecode(address)
+      let updatedCode = state.getUpdatedBytecode(accountKey)
       if updatedCode.len() > 0:
         doAssert(account.codeHash == keccakHash(updatedCode))
   except RlpError as e:
