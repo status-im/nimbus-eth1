@@ -83,9 +83,8 @@ template checkInvalidProofsWithBadValue(
     var
       addressHash = address.keccakHash()
       accountProof = accountState.generateAccountProof(address)
-      accountPath = removeLeafKeyEndNibbles(
-        Nibbles.init(addressHash.data, true), accountProof[^1]
-      )
+      accountPath =
+        removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), accountProof[^1])
       accountTrieNodeKey = AccountTrieNodeKey(
         path: accountPath, nodeHash: keccakHash(accountProof[^1].asSeq())
       )
@@ -98,7 +97,8 @@ template checkInvalidProofsWithBadValue(
     check proofResult.isErr()
 
     let
-      contractCodeKey = ContractCodeKey(addressHash: addressHash, codeHash: acc.codeHash)
+      contractCodeKey =
+        ContractCodeKey(addressHash: addressHash, codeHash: acc.codeHash)
       contractCode = ContractCodeOffer(
         code: Bytecode.init(@[1u8, 2, 3]), # bad code value
         accountProof: accountProof,
