@@ -89,8 +89,9 @@ proc checkTopCommon*(
       case vtx.vType:
       of Leaf:
         if vtx.lData.pType == AccountData:
-          let stoVid = vtx.lData.stoID
-          if stoVid.isValid:
+          let stoID = vtx.lData.stoID
+          if stoID.isValid:
+            let stoVid = stoID.vid
             if stoVid in stoRoots:
               return err((stoVid,CheckAnyVidSharedStorageRoot))
             if vTop < stoVid:

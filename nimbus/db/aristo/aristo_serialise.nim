@@ -37,15 +37,13 @@ proc serialise(
   of RawData:
     ok pyl.rawBlob
   of AccountData:
-    let
-      vid = pyl.stoID
-      key = block:
-        if vid.isValid:
-          vid.getKey.valueOr:
-            let w = (vid,error)
-            return err(w)
-        else:
-          VOID_HASH_KEY
+    let key = block:
+      if pyl.stoID.isValid:
+        pyl.stoID.vid.getKey.valueOr:
+          let w = (pyl.stoID.vid, error)
+          return err(w)
+      else:
+        VOID_HASH_KEY
 
     ok rlp.encode Account(
       nonce:       pyl.account.nonce,

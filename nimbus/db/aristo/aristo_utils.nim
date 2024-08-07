@@ -59,11 +59,11 @@ proc toNode*(
     let node = NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
     # Need to resolve storage root for account leaf
     if vtx.lData.pType == AccountData:
-      let vid = vtx.lData.stoID
-      if vid.isValid:
-        let key = db.getKey (vid, vid)
+      let stoID = vtx.lData.stoID
+      if stoID.isValid:
+        let key = db.getKey (stoID.vid, stoID.vid)
         if not key.isValid:
-          return err(@[vid])
+          return err(@[stoID.vid])
         node.key[0] = key
     return ok node
 
@@ -90,9 +90,9 @@ iterator subVids*(vtx: VertexRef): VertexID =
   case vtx.vType:
   of Leaf:
     if vtx.lData.pType == AccountData:
-      let vid = vtx.lData.stoID
-      if vid.isValid:
-        yield vid
+      let stoID = vtx.lData.stoID
+      if stoID.isValid:
+        yield stoID.vid
   of Branch:
     for vid in vtx.bVid:
       if vid.isValid:
@@ -103,9 +103,9 @@ iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
   case node.vType:
   of Leaf:
     if node.lData.pType == AccountData:
-      let vid = node.lData.stoID
-      if node.isValid:
-        yield (vid,node.key[0])
+      let stoID = node.lData.stoID
+      if stoID.isValid:
+        yield (stoID.vid, node.key[0])
   of Branch:
     for n in 0 .. 15:
       let vid = node.bVid[n]

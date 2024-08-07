@@ -76,7 +76,7 @@ proc computeKeyImpl(
         stoID = vtx.lData.stoID
         skey =
           if stoID.isValid:
-            let (skey, sl) = ?db.computeKeyImpl((stoID, stoID))
+            let (skey, sl) = ?db.computeKeyImpl((stoID.vid, stoID.vid))
             level = maxLevel(level, sl)
             skey
           else:

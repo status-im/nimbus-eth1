@@ -47,6 +47,14 @@ type
     AccountData                      ## `Aristo account` with vertex IDs links
     StoData                          ## Slot storage data
 
+  StorageID* = tuple
+    ## Once a storage tree is allocated, its root vertex ID is registered in
+    ## the leaf payload of an acoount. After subsequent storage tree deletion
+    ## the root vertex ID will be kept in the leaf payload for re-use but set
+    ## disabled (`.isValid` = `false`).
+    isValid: bool                    ## See also `isValid()` for `VertexID`
+    vid: VertexID                    ## Storage root vertex ID
+
   LeafPayload* = object
     ## The payload type depends on the sub-tree used. The `VertexID(1)` rooted
     ## sub-tree only has `AccountData` type payload, stoID-based have StoData
@@ -56,7 +64,7 @@ type
       rawBlob*: Blob                 ## Opaque data, default value
     of AccountData:
       account*: AristoAccount
-      stoID*: VertexID               ## Storage vertex ID (if any)
+      stoID*: StorageID              ## Storage vertex ID (if any)
     of StoData:
       stoData*: UInt256
 

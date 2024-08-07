@@ -100,6 +100,12 @@ proc ppVid(vid: VertexID; pfx = true): string =
   else:
     result &= "ø"
 
+proc ppVid(sid: StorageID; pfx = true): string =
+  if sid.isValid or not sid.vid.isValid:
+    sid.vid.ppVid(pfx)
+  else:
+    (if pfx: "$" else: "") & "®" & sid.vid.ppVid(false)
+
 proc ppVid(rvid: RootedVertexID; pfx = true): string =
   if pfx:
     result = "$"
@@ -234,7 +240,7 @@ proc ppNode(
       if nd.lData.pType == AccountData:
         result &= "(" & nd.lData.account.ppAriAccount() & ","
         if nd.lData.stoID.isValid:
-          let tag = db.ppKeyOk(nd.key[0],(rvid.root,nd.lData.stoID))
+          let tag = db.ppKeyOk(nd.key[0],(rvid.root,nd.lData.stoID.vid))
           result &= nd.lData.stoID.ppVid & tag
         else:
           result &= nd.lData.stoID.ppVid
