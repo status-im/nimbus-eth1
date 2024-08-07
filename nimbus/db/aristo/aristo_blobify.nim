@@ -146,9 +146,9 @@ proc blobifyTo*(pyl: LeafPayload, data: var Blob) =
       lens += uint16(tmp.len - 1) shl 3 # 5 bits
       data &= tmp.data()
 
-    if VertexID(0) < pyl.stoID:
+    if pyl.stoID.isValid:
       mask = mask or 0x04
-      let tmp = pyl.stoID.blobify()
+      let tmp = pyl.stoID.vid.blobify()
       lens += uint16(tmp.len - 1) shl 8 # 3 bits
       data &= tmp.data()
 
@@ -275,7 +275,7 @@ proc deblobify(
 
   if (mask and 0x04) > 0:
     let len = (lens shr 8) and 0b111
-    pAcc.stoID = VertexID(? load64(data, start, int(len + 1)))
+    pAcc.stoID = (true, VertexID(? load64(data, start, int(len + 1))))
 
   if (mask and 0x08) > 0:
     if data.len() < start + 32:

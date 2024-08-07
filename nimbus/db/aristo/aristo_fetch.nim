@@ -163,7 +163,7 @@ proc fetchStorageID*(
   if not stoID.isValid:
     return err(FetchPathNotFound)
 
-  ok stoID
+  ok stoID.vid
 
 proc retrieveStoragePayload(
     db: AristoDbRef;

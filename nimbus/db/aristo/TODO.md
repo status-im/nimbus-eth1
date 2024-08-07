@@ -16,7 +16,3 @@
 	function mentioned above.
 
 * `aristo_nearby` also qualifies for a re-write, now
-
-* A storage tree vid should be allowed to become stale (or locally deactivated)
-  if the vertex vanishes to be re-used when the tree is re-filled. Currently
-  the vid is removed and then re-allocated.

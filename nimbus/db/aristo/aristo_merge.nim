@@ -127,11 +127,14 @@ proc mergeStorageData*(
         stoID = vtx.lData.stoID
 
         # Provide new storage ID when needed
-        useID = if stoID.isValid: stoID else: db.vidFetch()
+        useID =
+          if stoID.isValid: stoID                     # Use as is
+          elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
+          else: (true, db.vidFetch())                 # Create new vid
 
         # Call merge
         pyl = LeafPayload(pType: StoData, stoData: stoData)
-        rc = db.mergePayloadImpl(useID, stoPath.data, pyl)
+        rc = db.mergePayloadImpl(useID.vid, stoPath.data, pyl)
 
       if rc.isOk:
         # Mark account path Merkle keys for update

@@ -240,7 +240,7 @@ proc partPut*(
       of Leaf:
         let lKey = node.key[0]
         if node.lData.pType == AccountData and lKey.isValid:
-          node.lData.stoID = (? ps.getRvid(root, lKey))[0].vid
+          node.lData.stoID = (true, (? ps.getRvid(root, lKey))[0].vid)
       of Branch:
         for n in 0 .. 15:
           let bKey = node.key[n]

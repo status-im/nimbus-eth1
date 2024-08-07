@@ -90,16 +90,14 @@ proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): Blob =
   of RawData:
     pyl.rawBlob
   of AccountData:
-    let
-      vid = pyl.stoID
-      key = block:
-        if vid.isValid:
-          let rc = ps.db.getKeyRc (VertexID(1),vid)
-          if rc.isErr:
-            raiseAssert info & ": getKey => " & $rc.error
-          rc.value[0]
-        else:
-          VOID_HASH_KEY
+    let key = block:
+      if pyl.stoID.isValid:
+        let rc = ps.db.getKeyRc (VertexID(1),pyl.stoID.vid)
+        if rc.isErr:
+          raiseAssert info & ": getKey => " & $rc.error
+        rc.value[0]
+      else:
+        VOID_HASH_KEY
 
     rlp.encode Account(
       nonce:       pyl.account.nonce,

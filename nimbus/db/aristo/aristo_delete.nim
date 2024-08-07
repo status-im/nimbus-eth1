@@ -200,7 +200,7 @@ proc deleteAccountRecord*(
 
   # Delete storage tree if present
   if stoID.isValid:
-    ? db.delStoTreeImpl((stoID, stoID), accPath, NibblesBuf())
+    ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath, NibblesBuf())
 
   ?db.deleteImpl(hike)
 
@@ -279,7 +279,7 @@ proc deleteStorageData*(
   if not stoID.isValid:
     return err(DelStoRootMissing)
 
-  let stoHike = stoPath.hikeUp(stoID, db).valueOr:
+  let stoHike = stoPath.hikeUp(stoID.vid, db).valueOr:
     if error[1] in HikeAcceptableStopsNotFound:
       return err(DelPathNotFound)
     return err(error[1])
@@ -292,12 +292,12 @@ proc deleteStorageData*(
   db.layersPutStoLeaf(AccountKey.mixUp(accPath, stoPath), nil)
 
   # Make sure that an account leaf has no dangling sub-trie
-  if db.getVtx((stoID, stoID)).isValid:
+  if db.getVtx((stoID.vid, stoID.vid)).isValid:
     return ok(false)
 
   # De-register the deleted storage tree from the account record
   let leaf = wpAcc.vtx.dup           # Dup on modify
-  leaf.lData.stoID = VertexID(0)
+  leaf.lData.stoID.isValid = false
   db.layersPutAccLeaf(accPath, leaf)
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   ok(true)
@@ -323,11 +323,11 @@ proc deleteStorageTree*(
   # Mark account path Merkle keys for update
   db.updateAccountForHasher accHike
 
-  ? db.delStoTreeImpl((stoID, stoID), accPath, NibblesBuf())
+  ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath, NibblesBuf())
 
   # De-register the deleted storage tree from the accounts record
   let leaf = wpAcc.vtx.dup             # Dup on modify
-  leaf.lData.stoID = VertexID(0)
+  leaf.lData.stoID.isValid = false
   db.layersPutAccLeaf(accPath, leaf)
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   ok()
