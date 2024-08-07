@@ -243,8 +243,6 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   defer:
     com.db.finish()
 
-  com.initializeEmptyDb()
-
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, com)

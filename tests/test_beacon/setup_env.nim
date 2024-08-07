@@ -69,7 +69,6 @@ proc setupEnv*(extraValidation: bool = false, ccm: CCModify = nil): TestEnv =
     )
     chain = newChain(com, extraValidation)
 
-  com.initializeEmptyDb()
   TestEnv(
     conf : conf,
     chain: chain,

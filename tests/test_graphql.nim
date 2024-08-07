@@ -73,7 +73,6 @@ proc setupChain(): CommonRef =
     CustomNet,
     customNetwork
   )
-  com.initializeEmptyDb()
 
   let blocks = jn["blocks"]
   var headers: seq[BlockHeader]

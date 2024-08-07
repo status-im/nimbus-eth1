@@ -90,7 +90,6 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     com   = makeCom(conf)
     chain = newChain(com)
 
-  com.initializeEmptyDb()
   let txPool = TxPoolRef.new(com)
 
   node.addEthHandlerCapability(

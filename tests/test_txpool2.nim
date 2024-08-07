@@ -110,8 +110,6 @@ proc initEnv(envFork: HardFork): TestEnv =
     )
     chain = newChain(com)
 
-  com.initializeEmptyDb()
-
   result = TestEnv(
     conf: conf,
     com: com,

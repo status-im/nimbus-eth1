@@ -102,7 +102,6 @@ proc initEnv(): TestEnv =
       conf.networkId,
       conf.networkParams
     )
-  com.initializeEmptyDb()
 
   TestEnv(
     com     : com,

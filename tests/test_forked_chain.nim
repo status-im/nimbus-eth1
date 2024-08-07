@@ -34,15 +34,11 @@ proc setupEnv(): TestEnv =
   TestEnv(conf: conf)
 
 proc newCom(env: TestEnv): CommonRef =
-  let
-    com = CommonRef.new(
+  CommonRef.new(
       newCoreDbRef DefaultDbMemory,
       env.conf.networkId,
       env.conf.networkParams
     )
-
-  com.initializeEmptyDb()
-  com
 
 proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock): EthBlock =
   template parent(): BlockHeader =

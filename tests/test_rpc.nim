@@ -238,7 +238,6 @@ proc rpcMain*() =
       debugEcho unlock.error
     doAssert(unlock.isOk)
 
-    com.initializeEmptyDb()
     let env = setupEnv(com, signer, ks2, ctx)
 
     # Create Ethereum RPCs

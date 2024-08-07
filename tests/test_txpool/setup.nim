@@ -96,7 +96,6 @@ proc setupTxPool*(getStatus: proc(): TxItemStatus): (CommonRef, TxPoolRef, int) 
     conf.networkParams
   )
 
-  com.initializeEmptyDb()
   let txPool = TxPoolRef.new(com)
 
   for n, tx in txEnv.txs:

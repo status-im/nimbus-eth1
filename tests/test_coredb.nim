@@ -185,8 +185,6 @@ proc initRunnerDB(
     params = params,
     pruneHistory = pruneHistory)
 
-  result.initializeEmptyDb
-
   setErrorLevel()
   when CoreDbEnableApiTracking:
     coreDB.trackCoreDbApi = false

@@ -81,7 +81,6 @@ proc setupEnv*(): TestEnv =
     )
 
   manageAccounts(ethCtx, conf)
-  com.initializeEmptyDb()
 
   let chainRef = newChain(com)
   let txPool = TxPoolRef.new(com)
