@@ -92,7 +92,7 @@ procSuite "State Endpoints":
           nonceRes = await stateNode1.stateNetwork.getTransactionCount(
             contentValue.blockHash, address
           )
-        echo balanceRes
+
         check:
           balanceRes.isOk()
           balanceRes.get() == expectedAccount.balance
