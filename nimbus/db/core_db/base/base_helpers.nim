@@ -51,10 +51,10 @@ proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbMptRef | CoreDbTxRef): auto =
 # ------------------------------------------------------------------------------
 
 template kvt*(dsc: CoreDbKvtRef): KvtDbRef =
-  dsc.distinctBase.kvt
+  CoreDbCtxRef(dsc).kvt
 
 template ctx*(kvt: CoreDbKvtRef): CoreDbCtxRef =
-  kvt.distinctBase
+  CoreDbCtxRef(kvt)
 
 # ---------------
 
@@ -65,7 +65,7 @@ template call*(api: KvtApiRef; fn: untyped; args: varArgs[untyped]): untyped =
     fn(args)
 
 template call*(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
-  kvt.distinctBase.parent.kvtApi.call(fn, args)
+  CoreDbCtxRef(kvt).parent.kvtApi.call(fn, args)
 
 # ---------------
 
@@ -81,13 +81,13 @@ func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
 # ------------------------------------------------------------------------------
 
 template mpt*(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
-  dsc.distinctBase.mpt
+  CoreDbCtxRef(dsc).mpt
 
 template mpt*(tx: CoreDbTxRef): AristoDbRef =
   tx.ctx.mpt
 
 template ctx*(acc: CoreDbAccRef): CoreDbCtxRef =
-  acc.distinctBase
+  CoreDbCtxRef(acc)
 
 # ---------------
 
@@ -102,7 +102,7 @@ template call*(
     fn: untyped;
     args: varArgs[untyped];
       ): untyped =
-  acc.distinctBase.parent.ariApi.call(fn, args)
+  CoreDbCtxRef(acc).parent.ariApi.call(fn, args)
 
 # ---------------
 

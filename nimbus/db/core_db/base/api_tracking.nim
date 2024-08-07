@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[strutils, times, typetraits],
+  std/[sequtils, strutils, times, typetraits],
   eth/common,
   results,
   stew/byteutils,
@@ -36,6 +36,7 @@ type
     AccForgetFn         = "acc/forget"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
+    AccProofFn          = "acc/proof"
     AccRecastFn         = "recast"
     AccStateFn          = "acc/state"
 
@@ -43,6 +44,7 @@ type
     AccSlotDeleteFn     = "slotDelete"
     AccSlotHasPathFn    = "slotHasPath"
     AccSlotMergeFn      = "slotMerge"
+    AccSlotProofFn      = "slotProof"
     AccSlotStateFn      = "slotState"
     AccSlotStateEmptyFn = "slotStateEmpty"
     AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
@@ -54,6 +56,8 @@ type
     BaseNewTxFn         = "newTransaction"
     BasePersistentFn    = "persistent"
     BaseStateBlockNumberFn = "stateBlockNumber"
+    BaseVerifyFn        = "verify"
+    BaseVerifyOkFn      = "verifyOk"
 
     CptKvtLogFn         = "kvtLog"
     CptLevelFn          = "level"
@@ -80,6 +84,7 @@ type
     MptForgetFn         = "mpt/forget"
     MptHasPathFn        = "mpt/hasPath"
     MptMergeFn          = "mpt/merge"
+    MptProofFn          = "mpt/proof"
     MptPairsIt          = "mpt/pairs"
     MptReplicateIt      = "mpt/replicate"
     MptStateFn          = "mpt/state"
@@ -120,6 +125,10 @@ func toStr(rc: CoreDbRc[void]): string =
 
 func toStr(rc: CoreDbRc[Blob]): string =
   if rc.isOk: "ok(Blob[" & $rc.value.len & "])"
+  else: "err(" & rc.error.toStr & ")"
+
+func toStr(rc: CoreDbRc[seq[Blob]]): string =
+  if rc.isOk: "ok([" & rc.value.mapIt("[#" & $it.len & "]").join(",") & "])"
   else: "err(" & rc.error.toStr & ")"
 
 func toStr(rc: CoreDbRc[Hash256]): string =
