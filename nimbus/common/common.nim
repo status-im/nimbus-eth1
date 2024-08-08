@@ -119,6 +119,50 @@ func daoCheck(conf: ChainConfig) =
   if conf.daoForkSupport and conf.daoForkBlock.isNone:
     conf.daoForkBlock = conf.homesteadBlock
 
+proc initializeDb(com: CommonRef) =
+  let kvt = com.db.ctx.getKvt()
+  proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
+    kvt.hasKey(key).expect "valid bool"
+  if canonicalHeadHashKey().toOpenArray notin kvt:
+    info "Writing genesis to DB"
+    doAssert(com.genesisHeader.number == 0.BlockNumber,
+      "can't commit genesis block with number > 0")
+    doAssert(com.db.persistHeader(com.genesisHeader,
+      com.consensusType == ConsensusType.POS,
+      startOfHistory=com.genesisHeader.parentHash),
+      "can persist genesis header")
+    doAssert(canonicalHeadHashKey().toOpenArray in kvt)
+
+  # The database must at least contain the base and head pointers - the base
+  # is implicitly considered finalized
+  let
+    baseNum = com.db.getSavedStateBlockNumber()
+    base =
+      try:
+        com.db.getBlockHeader(baseNum)
+      except BlockNotFound as exc:
+        fatal "Cannot load base block header",
+          baseNum, err = exc.msg
+        quit 1
+    finalized =
+      try:
+        com.db.finalizedHeader()
+      except BlockNotFound as exc:
+        debug "No finalized block stored in database, reverting to base"
+        base
+    head =
+      try:
+        com.db.getCanonicalHead()
+      except EVMError as exc:
+        fatal "Cannot load canonical block header",
+          err = exc.msg
+        quit 1
+
+  info "Database initialized",
+    base = (base.blockHash, base.number),
+    finalized = (finalized.blockHash, finalized.number),
+    head = (head.blockHash, head.number)
+
 proc init(com         : CommonRef,
           db          : CoreDbRef,
           networkId   : NetworkId,
@@ -173,6 +217,8 @@ proc init(com         : CommonRef,
 
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
+
+  com.initializeDb()
 
 proc getTd(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
   var td: DifficultyInt
@@ -344,20 +390,6 @@ proc consensus*(com: CommonRef, header: BlockHeader): ConsensusType =
     return ConsensusType.POS
 
   return com.config.consensusType
-
-proc initializeEmptyDb*(com: CommonRef) =
-  let kvt = com.db.ctx.getKvt()
-  proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
-    kvt.hasKey(key).expect "valid bool"
-  if canonicalHeadHashKey().toOpenArray notin kvt:
-    info "Writing genesis to DB"
-    doAssert(com.genesisHeader.number == 0.BlockNumber,
-      "can't commit genesis block with number > 0")
-    doAssert(com.db.persistHeader(com.genesisHeader,
-      com.consensusType == ConsensusType.POS,
-      startOfHistory=com.genesisHeader.parentHash),
-      "can persist genesis header")
-    doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
 proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
     {.gcsafe, raises: [].} =

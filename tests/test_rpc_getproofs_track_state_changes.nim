@@ -121,7 +121,6 @@ proc rpcGetProofsTrackStateChangesMain*() =
 
       let com = CommonRef.new(newCoreDbRef(
         DefaultDbPersistent, DATABASE_PATH, DbOptions.init()))
-      com.initializeEmptyDb()
 
       let
         blockHeader = waitFor client.eth_getBlockByNumber(blockId(START_BLOCK), false)

@@ -71,8 +71,6 @@ proc runTest(steps: Steps) =
     )
     chainRef = newChain(com)
 
-  com.initializeEmptyDb()
-
   var
     rpcServer = newRpcSocketServer(["127.0.0.1:0"])
     client = newRpcSocketClient()

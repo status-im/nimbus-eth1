@@ -280,7 +280,6 @@ proc initVMEnv*(network: string): BaseVMState =
       gasLimit: 100_000
     )
 
-  com.initializeEmptyDb()
   BaseVMState.new(parent, header, com)
 
 proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult): bool =

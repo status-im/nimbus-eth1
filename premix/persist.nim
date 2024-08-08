@@ -67,11 +67,6 @@ proc main() {.used.} =
     discard com.db.setHead(parentBlock.header)
 
   let kvt = com.db.ctx.getKvt()
-  if canonicalHeadHashKey().toOpenArray notin kvt:
-    persistToDb(com.db):
-      com.initializeEmptyDb()
-    doAssert(canonicalHeadHashKey().toOpenArray in kvt)
-
   var head = com.db.getCanonicalHead()
   var blockNumber = head.number + 1
   var chain = newChain(com)

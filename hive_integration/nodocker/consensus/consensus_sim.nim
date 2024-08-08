@@ -26,8 +26,6 @@ proc processChainData(cd: ChainData): TestStatus =
       cd.params
     )
 
-  com.initializeEmptyDb()
-
   for bytes in cd.blocksRlp:
     # ignore return value here
     # because good blocks maybe interleaved with
