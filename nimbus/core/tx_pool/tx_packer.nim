@@ -181,9 +181,6 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string]
   # Flush `packed` bucket
   xp.bucketFlushPacked
 
-  # reset blockValue before adding any tx
-  xp.blockValue = 0.u256
-
   let packer = TxPacker(
     vmState: xp.vmState,
     txDB: xp.txDB,
@@ -340,6 +337,9 @@ proc assembleHeader*(pst: TxPacker): BlockHeader =
     result.parentBeaconBlockRoot = Opt.some(pos.parentBeaconBlockRoot)
     result.blobGasUsed = Opt.some vmState.blobGasUsed
     result.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
+
+func blockValue*(pst: TxPacker): UInt256 =
+  pst.blockValue
 
 # ------------------------------------------------------------------------------
 # End
