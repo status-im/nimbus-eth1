@@ -397,23 +397,6 @@ func `$`*(vids: HashSet[VertexID]): string =
     "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
     ).join(",") & "}"
 
-func `$`*(key: Hash256): string =
-  let w = UInt256.fromBytesBE key.data
-  if w == high(UInt256):
-    "2^256-1"
-  elif w == 0.u256:
-    "0"
-  elif w == 2.u256.pow 255:
-    "2^255" # 800...
-  elif w == 2.u256.pow 254:
-    "2^254" # 400..
-  elif w == 2.u256.pow 253:
-    "2^253" # 200...
-  elif w == 2.u256.pow 251:
-    "2^252" # 100...
-  else:
-    w.toHex
-
 func `$`*(key: HashKey): string =
   toHex(key.data)
 

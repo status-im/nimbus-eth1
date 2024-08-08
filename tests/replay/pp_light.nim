@@ -120,7 +120,7 @@ func pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
    .mapIt(it.mapIt(&"0x{it:02x}").join(", "))
    .join("," & lineSep)
 
-func pp*(a: MDigest[256]; collapse = true): string =
+func pp*(a: Hash256; collapse = true): string =
   if not collapse:
     a.data.toHex
   elif a == ZERO_HASH256:
@@ -136,7 +136,7 @@ func pp*(a: MDigest[256]; collapse = true): string =
   else:
     "£" & a.data.toHex.join[0..6] & ".." & a.data.toHex.join[56..63]
 
-func pp*(a: openArray[MDigest[256]]; collapse = true): string =
+func pp*(a: openArray[Hash256]; collapse = true): string =
   "@[" & a.toSeq.mapIt(it.pp).join(" ") & "]"
 
 func pp*(q: openArray[int]; itemsPerLine: int; indent: int): string =
@@ -146,7 +146,7 @@ func pp*(q: openArray[byte]; noHash = false): string =
   if q.len == 32 and not noHash:
     var a: array[32,byte]
     for n in 0..31: a[n] = q[n]
-    MDigest[256](data: a).pp
+    Hash256(data: a).pp
   else:
     q.toHex.pp(hex = true)
 

@@ -41,7 +41,7 @@ template toStackElem(v: EvmStackInts, elem: EvmStackElement) =
 template toStackElem(v: EthAddress, elem: EvmStackElement) =
   elem.initFromBytesBE(v)
 
-template toStackElem(v: MDigest, elem: EvmStackElement) =
+template toStackElem(v: Hash256, elem: EvmStackElement) =
   elem.initFromBytesBE(v.data)
 
 template toStackElem(v: openArray[byte], elem: EvmStackElement) =
@@ -254,4 +254,3 @@ template unaryAddress*(stack: EvmStack, unOp): EvmResultVoid =
     EvmResultVoid.ok()
   else:
     EvmResultVoid.err(stackErr(StackInsufficient))
-    
