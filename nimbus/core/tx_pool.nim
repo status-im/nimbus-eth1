@@ -472,6 +472,7 @@ func com*(xp: TxPoolRef): CommonRef =
 type EthBlockAndBlobsBundle* = object
   blk*: EthBlock
   blobsBundle*: Opt[BlobsBundle]
+  blockValue*: UInt256
 
 proc assembleBlock*(
     xp: TxPoolRef,
@@ -529,7 +530,8 @@ proc assembleBlock*(
 
   ok EthBlockAndBlobsBundle(
     blk: blk,
-    blobsBundle: blobsBundleOpt)
+    blobsBundle: blobsBundleOpt,
+    blockValue: pst.blockValue)
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {

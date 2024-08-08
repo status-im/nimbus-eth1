@@ -16,9 +16,11 @@ import
   ../nimbus/core/chain,
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
+  ../nimbus/core/tx_pool/tx_desc,
   ../nimbus/core/casper,
   ../nimbus/common/common,
   ../nimbus/utils/utils,
+  ../nimbus/evm/types,
   ./test_txpool/helpers,
   ./macro_assembler
 
@@ -38,7 +40,7 @@ type
     xp      : TxPoolRef
 
 const
-  signerKeyHex = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
+  # signerKeyHex = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
   vaultKeyHex = "63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376"
   recipient = hexToByteArray[20]("0000000000000000000000000000000000000318")
   feeRecipient = hexToByteArray[20]("0000000000000000000000000000000000000212")
@@ -210,7 +212,8 @@ proc runTxPoolBlobhashTest() =
         check false
         return
 
-      blk = r.get.blk
+      let bundle = r.get
+      blk = bundle.blk
       check com.isBlockAfterTtd(blk.header)
 
       body = BlockBody(
@@ -219,6 +222,14 @@ proc runTxPoolBlobhashTest() =
         withdrawals: Opt.some(newSeq[Withdrawal]())
       )
       check blk.txs.len == 2
+
+      let
+        gasUsed1 = xp.vmState.receipts[0].cumulativeGasUsed
+        gasUsed2 = xp.vmState.receipts[1].cumulativeGasUsed - gasUsed1
+        blockValue = gasUsed1.u256 * tx1.effectiveGasTip(blk.header.baseFeePerGas).u256 +
+          gasUsed2.u256 * tx2.effectiveGasTip(blk.header.baseFeePerGas).u256
+
+      check blockValue == bundle.blockValue
 
     test "Blobhash persistBlocks":
       let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
