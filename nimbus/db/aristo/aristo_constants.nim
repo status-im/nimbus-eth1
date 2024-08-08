@@ -38,6 +38,10 @@ const
     ## functions with fixed assignments of the type of a state root (e.g. for
     ## a receipt or a transaction root.)
 
+  ACC_LRU_SIZE* = 1024 * 1024
+    ## LRU cache size for accounts that have storage, see `.accLeaves` and
+    ## `.stoLeaves` fields of the main descriptor.
+
 static:
   # must stay away from `VertexID(1)` and `VertexID(2)`
   doAssert 2 < LEAST_FREE_VID

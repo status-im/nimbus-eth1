@@ -97,12 +97,12 @@ proc deltaPersistent*(
   for accPath, vtx in db.balancer.accLeaves:
     let accKey = accPath.to(AccountKey)
     if not db.accLeaves.lruUpdate(accKey, vtx):
-      discard db.accLeaves.lruAppend(accKey, vtx, accLruSize)
+      discard db.accLeaves.lruAppend(accKey, vtx, ACC_LRU_SIZE)
 
   for mixPath, vtx in db.balancer.stoLeaves:
     let mixKey = mixPath.to(AccountKey)
     if not db.stoLeaves.lruUpdate(mixKey, vtx):
-      discard db.stoLeaves.lruAppend(mixKey, vtx, accLruSize)
+      discard db.stoLeaves.lruAppend(mixKey, vtx, ACC_LRU_SIZE)
 
   # Done with balancer, all saved to backend
   db.balancer = LayerRef(nil)
