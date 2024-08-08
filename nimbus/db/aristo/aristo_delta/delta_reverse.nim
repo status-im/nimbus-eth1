@@ -12,7 +12,46 @@ import
   std/tables,
   eth/common,
   results,
-  ".."/[aristo_desc, aristo_get]
+  ".."/[aristo_desc, aristo_get, aristo_utils]
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc revSubTree(
+    db: AristoDbRef;
+    rev: LayerRef;
+    rvid: RootedVertexID;
+      ): Result[void,(VertexID,AristoError)] =
+  ## Collect subtrees marked for deletion
+  let
+    vtx = block:
+      let rc = db.getVtxUbe rvid
+      if rc.isOk:
+        rc.value
+      elif rc.error == GetVtxNotFound:
+        VertexRef(nil)
+      else:
+        return err((rvid.vid,rc.error))
+
+    key = block:
+      let rc = db.getKeyUbe rvid
+      if rc.isOk:
+        rc.value
+      elif rc.error == GetKeyNotFound:
+        VOID_HASH_KEY
+      else:
+        return err((rvid.vid,rc.error))
+
+  if vtx.isValid:
+    for vid in vtx.subVids:
+      ? db.revSubTree(rev, (rvid.root,vid))
+    rev.sTab[rvid] = vtx
+
+  if key.isValid:
+    rev.kMap[rvid] = key
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -48,7 +87,7 @@ proc revFilter*(
     else:
       return err((rvid.vid,rc.error))
 
-  # Calculate reverse changes for the `kMap` sequence.
+  # Calculate reverse changes for the `kMap[]` structural table.
   for rvid in filter.kMap.keys:
     let rc = db.getKeyUbe rvid
     if rc.isOk:
@@ -57,6 +96,10 @@ proc revFilter*(
       rev.kMap[rvid] = VOID_HASH_KEY
     else:
       return err((rvid.vid,rc.error))
+
+  # Reverse changes for `delTree[]` list.
+  for rvid in filter.delTree:
+    ? db.revSubTree(rev, rvid)
 
   ok(rev)
 
