@@ -222,6 +222,7 @@ proc jwtSharedSecret*(
     try:
       let newSecret = rndSecret()
       jwtSecretPath.writeFile(newSecret.JwtSharedKeyRaw.to0xHex)
+      notice "JWT secret generated", jwtSecretPath
       return ok(newSecret)
     except IOError as e:
       # Allow continuing to run, though this is effectively fatal for a merge
@@ -240,6 +241,7 @@ proc jwtSharedSecret*(
     let rc = key.fromHex(lines[0])
     if rc.isErr:
       return err(rc.error)
+    info "JWT secret loaded", jwtSecretPath = config.jwtSecret.get.string
     return ok(key)
   except IOError:
     return err(jwtKeyFileCannotOpen)
