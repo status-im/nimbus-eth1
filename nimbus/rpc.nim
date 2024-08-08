@@ -147,7 +147,8 @@ proc addHandler(handlers: var seq[RpcHandlerProc],
 proc addHttpServices(handlers: var seq[RpcHandlerProc],
                      nimbus: NimbusNode, conf: NimbusConf,
                      com: CommonRef, oracle: Oracle,
-                     protocols: set[ProtocolFlag]) =
+                     protocols: set[ProtocolFlag],
+                     address: TransportAddress) =
 
   # The order is important: graphql, ws, rpc
   # graphql depends on /graphl path
@@ -158,6 +159,7 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
     let ctx = setupGraphqlContext(com, nimbus.ethNode, nimbus.txPool)
     let server = GraphqlHttpHandlerRef.new(ctx)
     handlers.addHandler(server)
+    info "GraphQL API enabled", url = "http://" & $address
 
   if conf.wsEnabled:
     let server = newRpcWebsocketHandler()
@@ -165,6 +167,7 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
     if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
     installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
+    info "JSON-RPC WebSocket API enabled", url = "ws://" & $address
 
   if conf.rpcEnabled:
     let server = newRpcHttpHandler()
@@ -172,10 +175,12 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
     if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
     installRPC(server, nimbus, conf, com, oracle, rpcFlags)
     handlers.addHandler(server)
+    info "JSON-RPC API enabled", url = "http://" & $address
 
 proc addEngineApiServices(handlers: var seq[RpcHandlerProc],
                           nimbus: NimbusNode, conf: NimbusConf,
-                          com: CommonRef, oracle: Oracle,) =
+                          com: CommonRef, oracle: Oracle,
+                          address: TransportAddress) =
 
   # The order is important: ws, rpc
 
@@ -184,16 +189,19 @@ proc addEngineApiServices(handlers: var seq[RpcHandlerProc],
     setupEngineAPI(nimbus.beaconEngine, server)
     installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
     handlers.addHandler(server)
+    info "Engine WebSocket API enabled", url = "ws://" & $address
 
   if conf.engineApiEnabled:
     let server = newRpcHttpHandler()
     setupEngineAPI(nimbus.beaconEngine, server)
     installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
     handlers.addHandler(server)
+    info "Engine API enabled", url = "http://" & $address
 
 proc addServices(handlers: var seq[RpcHandlerProc],
                  nimbus: NimbusNode, conf: NimbusConf,
-                 com: CommonRef, oracle: Oracle, protocols: set[ProtocolFlag]) =
+                 com: CommonRef, oracle: Oracle, protocols: set[ProtocolFlag],
+                 address: TransportAddress) =
 
   # The order is important: graphql, ws, rpc
 
@@ -201,18 +209,24 @@ proc addServices(handlers: var seq[RpcHandlerProc],
     let ctx = setupGraphqlContext(com, nimbus.ethNode, nimbus.txPool)
     let server = GraphqlHttpHandlerRef.new(ctx)
     handlers.addHandler(server)
+    info "GraphQL API enabled", url = "http://" & $address
 
   if conf.wsEnabled or conf.engineApiWsEnabled:
     let server = newRpcWebsocketHandler()
     if conf.engineApiWsEnabled:
       setupEngineAPI(nimbus.beaconEngine, server)
+
       if not conf.wsEnabled:
         installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
+
+      info "Engine WebSocket API enabled", url = "ws://" & $address
 
     if conf.wsEnabled:
       var rpcFlags = conf.getWsFlags()
       if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
       installRPC(server, nimbus, conf, com, oracle, rpcFlags)
+      info "JSON-RPC WebSocket API enabled", url = "ws://" & $address
+
     handlers.addHandler(server)
 
   if conf.rpcEnabled or conf.engineApiEnabled:
@@ -222,14 +236,22 @@ proc addServices(handlers: var seq[RpcHandlerProc],
       if not conf.rpcEnabled:
         installRPC(server, nimbus, conf, com, oracle, {RpcFlag.Eth})
 
+      info "Engine API enabled", url = "http://" & $address
+
     if conf.rpcEnabled:
       var rpcFlags = conf.getRpcFlags()
       if ProtocolFlag.Eth in protocols: rpcFlags.incl RpcFlag.Eth
       installRPC(server, nimbus, conf, com, oracle, rpcFlags)
+
+      info "JSON-RPC API enabled", url = "http://" & $address
+
     handlers.addHandler(server)
 
 proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
                com: CommonRef, protocols: set[ProtocolFlag]) =
+  if not conf.engineApiEnabled:
+    warn "Engine API disabled, the node will not respond to consensus client updates (enable with `--engine-api`)"
+
   if not conf.serverEnabled:
     return
 
@@ -250,10 +272,10 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     oracle = Oracle.new(com)
 
   if conf.combinedServer:
-    let hooks = @[jwtAuthHook, corsHook]
+    let hooks: seq[RpcAuthHook] = @[jwtAuthHook, corsHook]
     var handlers: seq[RpcHandlerProc]
-    handlers.addServices(nimbus, conf, com, oracle, protocols)
     let address = initTAddress(conf.httpAddress, conf.httpPort)
+    handlers.addServices(nimbus, conf, com, oracle, protocols, address)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
       fatal "Cannot create RPC server", msg=res.error
@@ -265,8 +287,8 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
   if conf.httpServerEnabled:
     let hooks = @[corsHook]
     var handlers: seq[RpcHandlerProc]
-    handlers.addHttpServices(nimbus, conf, com, oracle, protocols)
     let address = initTAddress(conf.httpAddress, conf.httpPort)
+    handlers.addHttpServices(nimbus, conf, com, oracle, protocols, address)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
       fatal "Cannot create RPC server", msg=res.error
@@ -277,13 +299,11 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
   if conf.engineApiServerEnabled:
     let hooks = @[jwtAuthHook, corsHook]
     var handlers: seq[RpcHandlerProc]
-    handlers.addEngineApiServices(nimbus, conf, com, oracle)
     let address = initTAddress(conf.engineApiAddress, conf.engineApiPort)
+    handlers.addEngineApiServices(nimbus, conf, com, oracle, address)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
       fatal "Cannot create RPC server", msg=res.error
       quit(QuitFailure)
     nimbus.engineApiServer = res.get
     nimbus.engineApiServer.start()
-
-{.pop.}
