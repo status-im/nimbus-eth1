@@ -56,7 +56,6 @@ type
 
     lifeTime*: times.Duration   ## Maximum life time of a tx in the system
     priceBump*: uint            ## Min precentage price when superseding
-    blockValue*: UInt256        ## Sum of reward received by feeRecipient
 
 const
   txItemLifeTime = ##\

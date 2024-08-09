@@ -165,11 +165,6 @@ func posFinalized*(ben: BeaconEngineRef): bool =
   ## PoSFinalized reports whether the chain has entered the PoS stage.
   ben.merge.posFinalized
 
-func blockValue*(ben: BeaconEngineRef): UInt256 =
-  ## return sum of reward for feeRecipient for each
-  ## tx included in a block
-  ben.txPool.blockValue
-
 proc get*(ben: BeaconEngineRef, hash: common.Hash256,
           header: var common.BlockHeader): bool =
   ben.queue.get(hash, header)
@@ -208,6 +203,7 @@ proc get*(ben: BeaconEngineRef, id: PayloadID,
 type ExecutionPayloadAndBlobsBundle* = object
   executionPayload*: ExecutionPayload
   blobsBundle*: Opt[BlobsBundleV1]
+  blockValue*: UInt256
 
 proc generatePayload*(ben: BeaconEngineRef,
                       attrs: PayloadAttributes):
@@ -253,7 +249,8 @@ proc generatePayload*(ben: BeaconEngineRef,
 
     ok ExecutionPayloadAndBlobsBundle(
       executionPayload: executionPayload(bundle.blk),
-      blobsBundle: blobsBundle)
+      blobsBundle: blobsBundle,
+      blockValue: bundle.blockValue)
 
 proc setInvalidAncestor*(ben: BeaconEngineRef, header: common.BlockHeader, blockHash: common.Hash256) =
   ben.invalidBlocksHits[blockHash] = 1
