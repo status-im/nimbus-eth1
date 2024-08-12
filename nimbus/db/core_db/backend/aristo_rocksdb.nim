@@ -49,7 +49,13 @@ proc toRocksDb*(
   tableOpts.filterPolicy = createRibbonHybrid(9.9)
 
   if opts.blockCacheSize > 0:
-    # Share a single block cache instance between all column families
+    # The block cache holds uncompressed data blocks that each contain multiple
+    # key-value pairs - it helps in particular when loading sort-adjacent values
+    # such as when the storage of each account is prefixed by a value unique to
+    # that account - it is best that this cache is large enough to hold a
+    # significant portion of the inner trie nodes!
+    # This code sets up a single block cache to be shared, a strategy that
+    # plausibly can be refined in the future.
     tableOpts.blockCache = cacheCreateLRU(opts.blockCacheSize, autoClose = true)
 
   # Single-level indices might cause long stalls due to their large size -
@@ -114,9 +120,10 @@ proc toRocksDb*(
   dbOpts.maxOpenFiles = opts.maxOpenFiles
 
   if opts.rowCacheSize > 0:
-    # Good for GET queries, which is what we do most of the time - if we start
-    # using range queries, we should probably give more attention to the block
-    # cache
+    # Good for GET queries, which is what we do most of the time - however,
+    # because we have other similar caches at different abstraction levels in
+    # the codebase, this cache ends up being less impactful than the block cache
+    # even though it is faster to access.
     # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L1276
     dbOpts.rowCache = cacheCreateLRU(opts.rowCacheSize, autoClose = true)
 
