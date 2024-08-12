@@ -38,6 +38,20 @@ type
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
     keyCol*: ColFamilyReadWrite        ## Hash key column family handler
     session*: WriteBatchRef            ## For batched `put()`
+
+    # Note that the key type `VertexID` for LRU caches requires that there is
+    # strictly no vertex ID re-use.
+    #
+    # Otherwise, in some fringe cases one might remove a vertex with key
+    # `(root1,vid)` and insert another vertex with key `(root2,vid)` while
+    # re-using the vertex ID `vid`. Without knowledge of `root1` and `root2`,
+    # the LRU cache will return the same vertex for `(root2,vid)` also for
+    # `(root1,vid)`.
+    #
+    # The other alternaive would be to use the key type `RootedVertexID` which
+    # is less memory and time efficient (the latter one due to internal LRU
+    # handling of the longer key.)
+    #
     rdKeyLru*: KeyedQueue[VertexID,HashKey] ## Read cache
     rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
 
