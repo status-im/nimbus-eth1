@@ -20,7 +20,7 @@ import
   eth/common,
   results,
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers,
-       aristo_utils, aristo_vid]
+       aristo_utils]
 
 # ------------------------------------------------------------------------------
 # Private heplers
@@ -48,7 +48,6 @@ proc disposeOfVtx(
   # Remove entry
   db.layersResVtx(rvid)
   db.layersResKey(rvid)
-  db.vidDispose rvid.vid               # Recycle ID
 
 # ------------------------------------------------------------------------------
 # Private functions

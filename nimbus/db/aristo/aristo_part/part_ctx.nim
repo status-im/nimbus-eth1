@@ -14,8 +14,7 @@ import
   std/sets,
   eth/common,
   results,
-  ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_utils,
-        aristo_vid],
+  ".."/[aristo_desc, aristo_get, aristo_hike, aristo_layers, aristo_utils],
   #./part_debug,
   ./part_desc
 
@@ -112,7 +111,6 @@ proc ctxAcceptChange(psc: PartStateCtx): Result[bool,AristoError] =
     let key = ps.move(psc.fromVid, toVid)
     doAssert key.isValid
     ps.changed.incl key
-    db.vidDispose psc.fromVid # typically no action
 
     # Remove parent vertex it it has become complete.
     ps.removeCompletedNodes(psc.location)
