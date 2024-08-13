@@ -1,9 +1,4 @@
-* Re-visit `delTree()`. Suggestion is deleting small trees on the memory later,
-  otherwise only deleting the root vertex (so it becomes inaccessible) and
-  remember the follow up vertices which can travel through the tx-layers
-  to be picked up by the backend store.
-
-* Some comletions migh be needed for the `aristo_part` module which is a
+* Some comletions might be needed for the `aristo_part` module which is a
   re-implementation of the module supporting *proof-mode*/partial trees.
   + Complete `partMergeStorageData()`. This function might not be needed at
     all unless *snap-sync* is really revived.

@@ -195,7 +195,7 @@ proc ppPayload(p: LeafPayload, db: AristoDbRef): string =
   of AccountData:
     result = "(" & p.account.ppAriAccount() & "," & p.stoID.ppVid & ")"
   of StoData:
-    result = $p.stoData
+    result = ($p.stoData).squeeze
 
 proc ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
   if not nd.isValid:

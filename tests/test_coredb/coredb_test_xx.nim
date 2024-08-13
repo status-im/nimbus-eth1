@@ -124,21 +124,21 @@ let
   mainTest6r* = mainSampleEx
     .cloneWith(
       name      = "-ex-ar-some",
-      numBlocks = 257_400,
+      numBlocks = 1_000_000,
       dbType    = AristoDbRocks,
       dbName    = "main-open") # for resuming on the same persistent DB
 
   mainTest7r* = mainSampleEx
     .cloneWith(
       name      = "-ex-ar-more",
-      numBlocks = 1_460_700,   # failure at 1,460,736
+      numBlocks = 1_500_000,
       dbType    = AristoDbRocks,
       dbName    = "main-open") # for resuming on the same persistent DB
 
   mainTest8r* = mainSampleEx
     .cloneWith(
       name      = "-ex-ar-more2",
-      numBlocks = 1_460_735,   # failure at 1,460,736
+      numBlocks = 2_000_000,
       dbType    = AristoDbRocks,
       dbName    = "main-open") # for resuming on the same persistent DB
 
