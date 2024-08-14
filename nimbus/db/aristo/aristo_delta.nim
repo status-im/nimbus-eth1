@@ -13,7 +13,7 @@
 ##
 
 import
-  std/tables,
+  std/[strutils, tables],
   chronicles,
   eth/common,
   results,
@@ -28,16 +28,19 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc toStr(rvid: RootedVertexID): string =
+  "$" & rvid.root.uint64.toHex & ":" & rvid.vid.uint64.toHex
+
 proc delSubTree(db: AristoDbRef; writer: PutHdlRef; rvid: RootedVertexID) =
   ## Collect subtrees marked for deletion
   let (vtx,_) = db.getVtxRc(rvid).valueOr:
-    notice "Descending for deletion stopped", rvid, error
+    notice "Descending for deletion stopped", rvid=(rvid.toStr), error
     return
   for vid in vtx.subVids:
     db.delSubTree(writer, (rvid.root, vid))
   db.backend.putVtxFn(writer, rvid, VertexRef(nil))
   db.backend.putKeyFn(writer, rvid, VOID_HASH_KEY)
-  # Make sure the `rvid` is not mentioned here, anymore for furter update.
+  # Make sure the `rvid` is not mentioned here, anymore for further update.
   db.balancer.sTab.del rvid
   db.balancer.kMap.del rvid
 
