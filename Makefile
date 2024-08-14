@@ -56,7 +56,6 @@ EXCLUDED_NIM_PACKAGES := 	\
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
--include ./nimbus/sync/protocol/eth/eth-variables.mk
 
 # debugging tools + testing tools
 TOOLS := \

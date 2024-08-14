@@ -231,10 +231,6 @@ available.)
    cases when the `gc` is involved in a memory corruption or corruption
    camouflage.
 
- * ENABLE_CHUNKED_RLPX=0<br>
-   Disable legacy chunked RLPx messages which are enabled by default for
-   synchronising against `Nethermind` nodes
-
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native Nim VM
 
