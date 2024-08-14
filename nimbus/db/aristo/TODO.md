@@ -11,3 +11,10 @@
 	function mentioned above.
 
 * `aristo_nearby` also qualifies for a re-write, now
+
+* Revisit tree deletion. The idea is to finally use ranges of nodes by
+  exploiting the root ID prefix of a `RootedVertexID`. The `RocksDb` backend
+  seems to support this kind of operation, see
+  https://rocksdb.org/blog/2018/11/21/delete-range.html. For the application
+  part there are some great ideas floating which need to be followed up
+  some time.
