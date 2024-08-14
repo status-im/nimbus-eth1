@@ -38,6 +38,19 @@ const
     ## functions with fixed assignments of the type of a state root (e.g. for
     ## a receipt or a transaction root.)
 
+  ACC_LRU_SIZE* = 1024 * 1024
+    ## LRU cache size for accounts that have storage, see `.accLeaves` and
+    ## `.stoLeaves` fields of the main descriptor.
+
+  DELETE_SUBTREE_VERTICES_MAX* = 25
+    ## Maximum number of vertices for a tree to be deleted instantly. If the
+    ## tree is larger, only the sub-tree root will be deleted immediately and
+    ## subsequent entries will be deleted not until the cache layers are saved
+    ## to the backend.
+    ##
+    ## Set to zero to disable in which case all sub-trees are deleted
+    ## immediately.
+
 static:
   # must stay away from `VertexID(1)` and `VertexID(2)`
   doAssert 2 < LEAST_FREE_VID

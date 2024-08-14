@@ -37,10 +37,6 @@ export
   tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
   desc_structural, keyed_queue
 
-const
-  accLruSize* = 1024 * 1024
-    # LRU cache size for accounts that have storage
-
 type
   AristoTxRef* = ref object
     ## Transaction descriptor

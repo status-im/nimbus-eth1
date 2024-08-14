@@ -78,7 +78,7 @@ proc retrieveAccountPayload(
         return err(FetchPathNotFound)
       return err(error)
 
-  ok db.accLeaves.lruAppend(accKey, leafVtx, accLruSize).lData
+  ok db.accLeaves.lruAppend(accKey, leafVtx, ACC_LRU_SIZE).lData
 
 proc retrieveMerkleHash(
     db: AristoDbRef;
@@ -188,7 +188,7 @@ proc retrieveStoragePayload(
     leafVtx = db.retrieveLeaf(? db.fetchStorageID(accPath), stoPath.data).valueOr:
       return err(error)
 
-  ok db.stoLeaves.lruAppend(mixKey, leafVtx, accLruSize).lData.stoData
+  ok db.stoLeaves.lruAppend(mixKey, leafVtx, ACC_LRU_SIZE).lData.stoData
 
 proc hasStoragePayload(
     db: AristoDbRef;

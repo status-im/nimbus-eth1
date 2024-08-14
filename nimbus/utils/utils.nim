@@ -16,7 +16,7 @@ import
   stew/byteutils,
   nimcrypto,
   results,
-  ../db/aristo,
+  ../db/aristo/aristo_sign,
   ../constants
 
 export eth_types_rlp

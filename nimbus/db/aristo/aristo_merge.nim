@@ -96,9 +96,9 @@ proc mergeGenericData*(
 
 proc mergeStorageData*(
     db: AristoDbRef;                   # Database, top layer
-    accPath: Hash256;          # Needed for accounts payload
-    stoPath: Hash256;          # Storage data path (aka key)
-    stoData: UInt256;          # Storage data payload value
+    accPath: Hash256;                  # Needed for accounts payload
+    stoPath: Hash256;                  # Storage data path (aka key)
+    stoData: UInt256;                  # Storage data payload value
       ): Result[void,AristoError] =
   ## Store the `stoData` data argument on the storage area addressed by
   ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)

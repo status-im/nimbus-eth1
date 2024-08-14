@@ -11,7 +11,6 @@
 ## Aristo DB -- Patricia Trie delete funcionality
 ## ==============================================
 ##
-## Delete by `Hike` type chain of vertices.
 
 {.push raises: [].}
 
@@ -19,6 +18,7 @@ import
   std/typetraits,
   eth/common,
   results,
+  ./aristo_delete/[delete_helpers, delete_subtree],
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers,
        aristo_utils]
 
@@ -39,78 +39,9 @@ proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
   # Oops, degenerated branch node
   err()
 
-# -----------
-
-proc disposeOfVtx(
-    db: AristoDbRef;                   # Database, top layer
-    rvid: RootedVertexID;              # Vertex ID to clear
-      ) =
-  # Remove entry
-  db.layersResVtx(rvid)
-  db.layersResKey(rvid)
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-proc delSubTreeImpl(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # Root vertex
-      ): Result[void,AristoError] =
-  ## Implementation of *delete* sub-trie.
-  var
-    dispose = @[root]
-    (rootVtx, _) = db.getVtxRc((root, root)).valueOr:
-      if error == GetVtxNotFound:
-        return ok()
-      return err(error)
-    follow = @[rootVtx]
-
-  # Collect list of nodes to delete
-  while 0 < follow.len:
-    var redo: seq[VertexRef]
-    for vtx in follow:
-      for vid in vtx.subVids:
-        # Exiting here leaves the tree as-is
-        let vtx = (? db.getVtxRc((root, vid)))[0]
-        redo.add vtx
-        dispose.add vid
-    redo.swap follow
-
-  # Mark collected vertices to be deleted
-  for vid in dispose:
-    db.disposeOfVtx((root, vid))
-
-  ok()
-
-proc delStoTreeImpl(
-    db: AristoDbRef;                   # Database, top layer
-    rvid: RootedVertexID;                    # Root vertex
-    accPath: Hash256;
-    stoPath: NibblesBuf;
-      ): Result[void,AristoError] =
-  ## Implementation of *delete* sub-trie.
-
-  let (vtx, _) = db.getVtxRc(rvid).valueOr:
-    if error == GetVtxNotFound:
-      return ok()
-    return err(error)
-
-  case vtx.vType
-  of Branch:
-    for i in 0..15:
-      if vtx.bVid[i].isValid:
-        ? db.delStoTreeImpl(
-          (rvid.root, vtx.bVid[i]), accPath,
-          stoPath & vtx.ePfx & NibblesBuf.nibble(byte i))
-
-  of Leaf:
-    let stoPath = Hash256(data: (stoPath & vtx.lPfx).getBytes())
-    db.layersPutStoLeaf(AccountKey.mixUp(accPath, stoPath), nil)
-
-  db.disposeOfVtx(rvid)
-
-  ok()
 
 proc deleteImpl(
     db: AristoDbRef;                   # Database, top layer
@@ -199,7 +130,7 @@ proc deleteAccountRecord*(
 
   # Delete storage tree if present
   if stoID.isValid:
-    ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath, NibblesBuf())
+    ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath)
 
   ?db.deleteImpl(hike)
 
@@ -322,7 +253,7 @@ proc deleteStorageTree*(
   # Mark account path Merkle keys for update
   db.updateAccountForHasher accHike
 
-  ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath, NibblesBuf())
+  ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath)
 
   # De-register the deleted storage tree from the accounts record
   let leaf = wpAcc.vtx.dup             # Dup on modify
