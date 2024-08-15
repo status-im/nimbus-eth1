@@ -81,7 +81,7 @@ proc getVmState(c: ChainRef, header: BlockHeader):
     return ok(c.vmState)
 
   let vmState = BaseVMState()
-  if not vmState.init(header, c.com):
+  if not vmState.init(header, c.com, storeSlotHash = storeSlotHash):
     debug "Cannot initialise VmState",
       number = header.number
     return err()

@@ -65,6 +65,7 @@ type
     witnessCache: Table[EthAddress, WitnessData]
     isDirty: bool
     ripemdSpecial: bool
+    storeSlotHash*: bool
     cache: Table[EthAddress, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
       # persist
@@ -149,11 +150,12 @@ proc resetCoreDbAccount(ac: AccountsLedgerRef, acc: AccountRef) =
 
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
-           root: KeccakHash): AccountsLedgerRef =
+           root: KeccakHash, storeSlotHash: bool): AccountsLedgerRef =
   new result
   result.ledger = db.ctx.getAccounts()
   result.kvt = db.ctx.getKvt()
   result.witnessCache = Table[EthAddress, WitnessData]()
+  result.storeSlotHash = storeSlotHash
   discard result.beginSavepoint
 
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
@@ -400,7 +402,7 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
         discard
       acc.originalStorage.del(slot)
 
-    if not cached:
+    if ac.storeSlotHash and not cached:
       # Write only if it was not cached to avoid writing the same data over and
       # over..
       let
