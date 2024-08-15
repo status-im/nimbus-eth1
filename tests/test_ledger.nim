@@ -675,7 +675,7 @@ proc runLedgerBasicOperationsTests() =
       check ac.contractCollision(addr4) == true
 
     test "Ledger storage iterator":
-      var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+      var ac = LedgerRef.init(memDB, EMPTY_ROOT_HASH, storeSlotHash = true)
       let addr2 = initAddr(2)
       ac.setStorage(addr2, 1.u256, 2.u256)
       ac.setStorage(addr2, 2.u256, 3.u256)
