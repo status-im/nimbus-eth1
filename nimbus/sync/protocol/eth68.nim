@@ -12,6 +12,9 @@
 ## This module implements Ethereum Wire Protocol version 67, `eth/67`.
 ## Specification:
 ##   `eth/68 <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
+##
+## Use NIM command line optipn `-d:p2pProtocolDebug` for dumping the
+## generated driver code (just to have it stored somewhere lest one forgets.)
 
 import
   stint,
@@ -76,6 +79,15 @@ const
 template handleHandlerError(x: untyped) =
   if x.isErr:
     raise newException(EthP2PError, x.error)
+
+when trEthTraceGossipOk:
+  import std/[sequtils,strutils]
+
+  func toStr(w: openArray[int]): string =
+    func toStr(n: int): string =
+      if n == 0: "0"
+      else: n.toHex.strip(trailing=false,chars={'0'}).toLowerAscii
+    w.mapIt(it.toStr).join(":")
 
 p2pProtocol eth68(version = ethVersion,
                   rlpxName = "eth",
@@ -244,7 +256,7 @@ p2pProtocol eth68(version = ethVersion,
         ) =
     when trEthTraceGossipOk:
       trace trEthRecvReceived & "NewPooledTransactionHashes (0x08)", peer,
-        txTypes=txTypes.toHex, txSizes,
+        txTypes=txTypes.toHex, txSizes=txSizes.toStr,
         hashes=txHashes.len
 
     let ctx = peer.networkState()
