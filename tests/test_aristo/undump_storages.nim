@@ -12,8 +12,9 @@ import
   std/[os, strformat, strutils],
   eth/common,
   stew/byteutils,
-  ../../nimbus/sync/[protocol, snap/range_desc],
-  ./gunzip
+  ../../nimbus/sync/protocol,
+  ../replay/gunzip,
+  ./undump_desc
 
 import
   nimcrypto/utils except toHex

@@ -15,11 +15,8 @@ import
   ../../nimbus/db/aristo/[
     aristo_debug, aristo_desc, aristo_hike, aristo_layers, aristo_merge,
     aristo_tx],
-  ../replay/[pp, undump_accounts, undump_storages],
-  ./test_samples_xx
-
-from ../../nimbus/sync/snap/range_desc
-  import NodeKey, ByteArray32
+  ../replay/pp,
+  "."/[undump_accounts, undump_desc, undump_storages, test_samples_xx]
 
 type
   ProofTrieData* = object

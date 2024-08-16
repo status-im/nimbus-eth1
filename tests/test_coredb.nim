@@ -28,7 +28,7 @@ const
   unittest2DisableParamFiltering {.booldefine.} = false
 
   baseDir = [".", "..", ".."/"..", $DirSep]
-  repoDir = [".", "tests", "nimbus-eth1-blobs"]
+  repoDir = [".", "tests"]
   subDir = ["replay", "test_coredb", "custom-network", "main-era1"]
 
   # Reference file for finding some database directory base
