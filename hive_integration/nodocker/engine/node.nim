@@ -113,7 +113,7 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
     c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
 
     if blk.withdrawals.isSome:
-      c.db.persistWithdrawals(header.withdrawalsRoot, blk.withdrawals.get)
+      c.db.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
   except CatchableError as exc:
     return err(exc.msg)
 

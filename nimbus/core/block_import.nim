@@ -43,7 +43,7 @@ proc importRlpBlocks*(blocksRlp: openArray[byte],
 
   ok()
 
-proc importRlpBlocks(importFile: string,
+proc importRlpBlocks*(importFile: string,
                      chain: ForkedChainRef,
                      finalize: bool): Result[void, string] =
   let bytes = io2.readAllBytes(importFile).valueOr:
