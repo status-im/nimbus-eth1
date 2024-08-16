@@ -22,7 +22,7 @@ NIM_FLAGS="c -d:release"
 echo "## ${1}" > simulators.md
 
 # more suites: engine, graphql, rpc
-suites=(consensus pyspec)
+suites=(consensus pyspec engine)
 for suite in "${suites[@]}"
 do
   ${ENV_SCRIPT} nim ${NIM_FLAGS} ${SIM_DIR}/${suite}/${suite}_sim
