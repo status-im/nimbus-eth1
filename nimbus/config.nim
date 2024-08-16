@@ -550,6 +550,12 @@ type
         defaultValue: false
         name: "debug-store-receipts".}: bool
 
+      storeSlotHashes* {.
+        hidden
+        desc: "Store reverse slot hashes in database"
+        defaultValue: false
+        name: "debug-store-slot-hashes".}: bool
+
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
   parseInt(p).T

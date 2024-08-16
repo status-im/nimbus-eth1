@@ -58,7 +58,7 @@ template safeTracer(info: string; code: untyped) =
     raiseAssert info & " name=" & $e.name & " msg=" & e.msg
 
 # -------------------
- 
+
 proc init(
     T: type CaptCtxRef;
     com: CommonRef;
@@ -169,7 +169,7 @@ proc traceTransactionImpl(
   let
     tracerInst = newLegacyTracer(tracerFlags)
     cc = activate CaptCtxRef.init(com, header)
-    vmState = BaseVMState.new(header, com).valueOr: return newJNull()
+    vmState = BaseVMState.new(header, com, storeSlotHash = true).valueOr: return newJNull()
     stateDb = vmState.stateDB
 
   defer: cc.release()
@@ -217,7 +217,7 @@ proc traceTransactionImpl(
   # internal transactions:
   let
     cx = activate stateCtx
-    ldgBefore = LedgerRef.init(com.db, cx.root)
+    ldgBefore = LedgerRef.init(com.db, cx.root, storeSlotHash = true)
   defer: cx.release()
 
   for idx, acc in tracedAccountsPairs(tracerInst):
@@ -252,7 +252,7 @@ proc dumpBlockStateImpl(
     # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
     tracerInst = newLegacyTracer(captureFlags)
-    vmState = BaseVMState.new(header, com, tracerInst).valueOr:
+    vmState = BaseVMState.new(header, com, tracerInst, storeSlotHash = true).valueOr:
       return newJNull()
     miner = vmState.coinbase()
 
@@ -261,7 +261,7 @@ proc dumpBlockStateImpl(
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = LedgerRef.init(com.db, parent.stateRoot)
+    stateBefore = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash = true)
 
   for idx, tx in blk.transactions:
     let sender = tx.getSender
@@ -316,7 +316,8 @@ proc traceBlockImpl(
   let
     cc = activate CaptCtxRef.init(com, header)
     tracerInst = newLegacyTracer(tracerFlags)
-    vmState = BaseVMState.new(header, com, tracerInst).valueOr:
+    # Tracer needs a database where the reverse slot hash table has been set up
+    vmState = BaseVMState.new(header, com, tracerInst, storeSlotHash = true).valueOr:
       return newJNull()
 
   defer: cc.release()

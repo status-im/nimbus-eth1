@@ -37,6 +37,7 @@ type
     NoPersistUncles
     NoPersistWithdrawals
     NoPersistReceipts
+    NoPersistSlotHashes
 
   PersistBlockFlags* = set[PersistBlockFlag]
 
@@ -54,12 +55,14 @@ const
 # Private
 # ------------------------------------------------------------------------------
 
-proc getVmState(c: ChainRef, header: BlockHeader): Result[BaseVMState, string] =
+proc getVmState(
+    c: ChainRef, header: BlockHeader, storeSlotHash = false
+): Result[BaseVMState, string] =
   if not c.vmState.isNil:
     return ok(c.vmState)
 
   let vmState = BaseVMState()
-  if not vmState.init(header, c.com):
+  if not vmState.init(header, c.com, storeSlotHash = storeSlotHash):
     return err("Could not initialise VMState")
   ok(vmState)
 
@@ -86,7 +89,8 @@ proc persistBlocksImpl(
 
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
   let
-    vmState = ?c.getVmState(blocks[0].header)
+    vmState =
+      ?c.getVmState(blocks[0].header, storeSlotHash = NoPersistSlotHashes notin flags)
     fromBlock = blocks[0].header.number
     toBlock = blocks[blocks.high()].header.number
   trace "Persisting blocks", fromBlock, toBlock

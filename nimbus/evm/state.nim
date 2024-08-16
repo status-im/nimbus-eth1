@@ -73,7 +73,8 @@ proc new*(
       parent:   BlockHeader;     ## parent header, account sync position
       blockCtx: BlockContext;
       com:      CommonRef;       ## block chain config
-      tracer:   TracerRef = nil): T =
+      tracer:   TracerRef = nil,
+      storeSlotHash = false): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -83,7 +84,7 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac       = LedgerRef.init(com.db, parent.stateRoot),
+    ac       = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash),
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -109,7 +110,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
       com    = self.com
       db     = com.db
       ac     = if linear or self.stateDB.rootHash == parent.stateRoot: self.stateDB
-               else: LedgerRef.init(db, parent.stateRoot)
+               else: LedgerRef.init(db, parent.stateRoot, self.stateDB.ac.storeSlotHash)
       flags  = self.flags
     self[].reset
     self.init(
@@ -157,7 +158,8 @@ proc init*(
       parent: BlockHeader;     ## parent header, account sync position
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil) =
+      tracer: TracerRef = nil,
+      storeSlotHash = false) =
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -166,7 +168,7 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac       = LedgerRef.init(com.db, parent.stateRoot),
+    ac       = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash),
     parent   = parent,
     blockCtx = com.blockCtx(header),
     com      = com,
@@ -177,7 +179,8 @@ proc new*(
       parent: BlockHeader;     ## parent header, account sync position
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil): T =
+      tracer: TracerRef = nil,
+      storeSlotHash = false): T =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -189,13 +192,15 @@ proc new*(
     parent = parent,
     header = header,
     com    = com,
-    tracer = tracer)
+    tracer = tracer,
+    storeSlotHash = storeSlotHash)
 
 proc new*(
       T:      type BaseVMState;
       header: BlockHeader;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil): EvmResult[T] =
+      tracer: TracerRef = nil,
+      storeSlotHash = false): EvmResult[T] =
   ## This is a variant of the `new()` constructor above where the field
   ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
   ## used in the `new()` variant, above.
@@ -205,7 +210,8 @@ proc new*(
       parent = parent,
       header = header,
       com    = com,
-      tracer = tracer))
+      tracer = tracer,
+      storeSlotHash = storeSlotHash))
   else:
     err(evmErr(EvmHeaderNotFound))
 
@@ -213,7 +219,8 @@ proc init*(
       vmState: BaseVMState;
       header:  BlockHeader;     ## header with tx environment data fields
       com:     CommonRef;       ## block chain config
-      tracer:  TracerRef = nil): bool =
+      tracer:  TracerRef = nil,
+      storeSlotHash = false): bool =
   ## Variant of `new()` which does not throw an exception on a dangling
   ## `BlockHeader` parent hash reference.
   var parent: BlockHeader
@@ -222,7 +229,8 @@ proc init*(
       parent = parent,
       header = header,
       com    = com,
-      tracer = tracer)
+      tracer = tracer,
+      storeSlotHash = storeSlotHash)
     return true
 
 func coinbase*(vmState: BaseVMState): EthAddress =
