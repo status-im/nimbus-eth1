@@ -134,7 +134,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
-  if db.getBlockHeader(blockHash, header):
+  if ben.chain.haveBlockLocally(blockHash):
     warn "Ignoring already known beacon payload",
       number = header.number, hash = blockHash.short
     return validStatus(blockHash)
@@ -150,8 +150,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # our live chain. As such, payload execution will not permit reorgs and thus
   # will not trigger a sync cycle. That is fine though, if we get a fork choice
   # update after legit payload executions.
-  var parent: common.BlockHeader
-  if not db.getBlockHeader(header.parentHash, parent):
+  let parent = ben.chain.headerByHash(header.parentHash).valueOr:
     return ben.delayPayloadImport(header)
 
   # We have an existing parent, do some sanity checks to avoid the beacon client

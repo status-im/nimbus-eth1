@@ -517,12 +517,19 @@ proc forkChoice*(c: ForkedChainRef,
 
   ok()
 
-func haveBlockAndState*(c: ForkedChainRef, hash: Hash256): bool =
-  if c.blocks.hasKey(hash):
+func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash256): bool =
+  if c.blocks.hasKey(blockHash):
     return true
-  if c.baseHash == hash:
+  if c.baseHash == blockHash:
     return true
   false
+
+proc haveBlockLocally*(c: ForkedChainRef, blockHash: Hash256): bool =
+  if c.blocks.hasKey(blockHash):
+    return true
+  if c.baseHash == blockHash:
+    return true
+  c.db.hasBlockHeader(blockHash)
 
 func stateReady*(c: ForkedChainRef, header: BlockHeader): bool =
   let blockHash = header.blockHash
@@ -555,7 +562,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader
     if c.db.getBlockHeader(number, header):
       return ok(header)
     else:
-      return err("Failed to get block with number: " & $number)
+      return err("Failed to get header with number: " & $number)
 
   shouldNotKeyError:
     var prevHash = c.cursorHeader.parentHash
@@ -566,3 +573,14 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader
       prevHash = header.parentHash
 
   doAssert(false, "headerByNumber: Unreachable code")
+
+proc headerByHash*(c: ForkedChainRef, blockHash: Hash256): Result[BlockHeader, string] =
+  c.blocks.withValue(blockHash, val) do:
+    return ok(val.blk.header)
+  do:
+    if c.baseHash == blockHash:
+      return ok(c.baseHeader)
+    var header: BlockHeader
+    if c.db.getBlockHeader(blockHash, header):
+      return ok(header)
+    return err("Failed to get header with hash: " & $blockHash)

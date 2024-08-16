@@ -336,6 +336,17 @@ proc getBlockHeader*(
     raise newException(
       BlockNotFound, "No block with hash " & blockHash.data.toHex)
 
+proc hasBlockHeader*(
+    db: CoreDbRef;
+    blockHash: Hash256): bool =
+  const info = "hasBlockHeader()"
+  db.ctx.getKvt().hasKey(genericHashKey(blockHash).toOpenArray).isOkOr:
+    if error.error != KvtNotFound:
+      warn logTxt info, blockHash, action="hasKey()", error=($$error)
+    return false
+
+  return true
+
 proc getHash(
     db: CoreDbRef;
     key: DbKey;
