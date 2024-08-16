@@ -448,8 +448,8 @@ method handleAnnouncedTxsHashes*(
       txSizes: openArray[int];
       txHashes: openArray[Hash256];
         ): Result[void, string] =
-  ## `Eth68` method
-  notImplemented "handleAnnouncedTxsHashes()/eth68"
+  trace "Wire handler ignoring txs hashes", nHashes=txHashes.len
+  ok()
 
 method handleNewBlock*(ctx: EthWireRef,
                        peer: Peer,
