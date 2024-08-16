@@ -22,7 +22,6 @@ const
   VmName* = vmName()
   warningMsg = block:
     var rc = "*** Compiling with " & VmName
-    rc &= ", eth/68"
     when defined(boehmgc):
       rc &= ", boehm/gc"
     when 0 < coreDbBaseConfigExtras.len:
