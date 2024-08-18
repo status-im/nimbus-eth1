@@ -14,11 +14,65 @@ import
   ./nimbus_desc,
   ./db/core_db/persistent,
   ./utils/era_helpers,
+  beacon_chain/spec/digest,
   beacon_chain/spec/eth2_apis/[rest_types, rest_beacon_calls],
   beacon_chain/networking/network_metadata,
   eth/async_utils
 
 var running {.volatile.} = true
+
+template getRootFromHeader(client: RestClientRef, blockIdent: BlockIdent): Eth2Digest =
+  let
+    clHeader =
+      try:
+        awaitWithTimeout(
+            client.getBlockHeader(blockIdent), 
+            30.seconds):
+          error "Failed to get CL head"
+          quit(QuitFailure)
+      except CatchableError as exc:
+        error "Error getting CL head", error = exc.msg
+        quit(QuitFailure)
+
+  if clHeader.isSome():
+    let beaconHeader = clHeader.get()
+    beaconHeader.data.header.message.parent_root
+
+  else:
+    error "CL header is not available"
+    quit(QuitFailure)
+  
+
+template getBlockFromBeaconChain(client: RestClientRef, blockIdent: BlockIdent, clConfig: RuntimeConfig): (EthBlock, Eth2Digest) =
+  let  
+    clBlock = 
+      try:
+        awaitWithTimeout(
+            client.getBlockV2(blockIdent, clConfig), 
+            30.seconds):
+          error "Failed to get CL head"
+          quit(QuitFailure)
+      except CatchableError as exc:
+        error "Error getting CL head", error = exc.msg
+        quit(QuitFailure)
+
+  var prev_hash: Eth2Digest
+  var eth1block: EthBlock
+  if clBlock.isSome():
+    let data = clBlock.get()[]
+    eth1Block = data.asTrusted().getEthBlock().valueOr:
+      error "Failed to get EL block from CL head"
+      quit(QuitFailure)
+
+    withBlck(data):
+      prev_hash = forkyBlck.toBeaconBlockHeader().parent_root
+
+    (eth1Block, prev_hash)  
+
+  else:
+    error "CL head is not available"
+    quit(QuitFailure)
+
 
 proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
   let coreDB =
@@ -36,41 +90,73 @@ proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
   defer:
     com.db.finish()
 
+  template boolFlag(flags, b): PersistBlockFlags =
+    if b:
+      flags
+    else:
+      {}
+
   let
     currentBlockNumber = com.db.getSavedStateBlockNumber()
     chain = com.newChain()
     clConfig = getMetadataForNetwork("sepolia").cfg
 
-  var 
-    client = RestClientRef.new("http://192.168.29.44:3000").valueOr:
+  var
+    # flags =
+    #   boolFlag({PersistBlockFlag.NoValidation}, conf.noValidation) +
+    #   boolFlag({PersistBlockFlag.NoFullValidation}, not conf.fullValidation) +
+    #   boolFlag(NoPersistBodies, not conf.storeBodies) +
+    #   boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts)
+    blocks: seq[EthBlock]
+    hashChain: seq[Eth2Digest]
+    curBlck: EthBlock
+    prevHash: Eth2Digest
+    client = RestClientRef.new("http://127.0.0.1:5052").valueOr:
       error "Cannot connect to server"
       quit(QuitFailure)
   
-  let  
-    clHead = 
-      try:
-        awaitWithTimeout(
-            client.getBlockV2(BlockIdent.init(BlockIdentType.Head), clConfig), 
-            30.seconds):
-          error "Failed to get CL head"
-          quit(QuitFailure)
-      except CatchableError as exc:
-        error "Error getting CL head", error = exc.msg
-        quit(QuitFailure)
+  (curBlck, prevHash) = client.getBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
+  hashChain.add(prevHash) # adding the head
+  notice "Got block from CL head", prevhash
 
-  if clHead.isSome():
-    let data = clHead.get()[]
-    let blck = data.asTrusted()
-    notice "CL head is available", data
+  # Difference Log
+  notice "Current block number", currentBlockNumber
+  let headNumber = curBlck.header.number
+  notice "Block number from CL head", headNumber
+  var diff = headNumber - currentBlockNumber
+  notice "Number of blocks to be covered", diff
 
-    let elBlock =
-      blck.getEthBlock().valueOr:
-        error "Failed to get Eth block"
-        quit(QuitFailure)
+  # TODO: Check if CL head is behind the EL head
 
-    notice "Eth block", elBlock
+  let time1 = Moment.now()
+  while running and diff > 0:
+    prevHash = client.getRootFromHeader(BlockIdent.init(prevHash))
+    hashChain.add(prevHash)
+    diff = diff - 1
+    let 
+      time2 = Moment.now()
+      diff1 = (time2 - time1).nanoseconds().float / 1000000000
+      speed = hashChain.len.float / diff1
+      remaining = diff.float / speed
+    notice "Remaining blocks to be covered", diff
+    notice "Speed of fetching blocks", speed
+    notice "Time remaining", remaining
 
+  let chainLen = hashChain.len
+  notice "Blocks loaded from CL", chainLen
 
+  while running and hashChain.len > 0:
+
+    for i in 0 ..< 50:
+      let (eth1blck, _) = client.getBlockFromBeaconChain(BlockIdent.init(hashChain.pop()), clConfig)
+      blocks.add(eth1blck)
+
+    let statusRes = chain.persistBlocks(blocks)
+    if statusRes.isErr():
+      error "Failed to persist blocks", error = statusRes.error
+      quit(QuitFailure)
+    info "Persisted blocks"
+    blocks.setLen(0)
 
 when isMainModule:
   ## Ctrl+C handling
@@ -87,4 +173,5 @@ when isMainModule:
 
   ## Processing command line arguments
   let conf = makeConfig()
+  setLogLevel(conf.logLevel)
   waitFor loadBlocksFromBeaconChain(conf)

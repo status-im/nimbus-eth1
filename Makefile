@@ -108,6 +108,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	fluffy \
 	nimbus_verified_proxy \
 	libverifproxy \
+	external_sync \
 	test \
 	test-reproducibility \
 	clean \
@@ -211,6 +212,10 @@ $(TOOLS): | build deps rocksdb
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
+
+external_sync: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
 
