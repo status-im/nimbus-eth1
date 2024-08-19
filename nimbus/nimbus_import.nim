@@ -162,10 +162,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     start + imported
 
   func f(value: float): string =
-    try:
-      &"{value:4.3f}"
-    except ValueError:
-      raiseAssert "valid fmt string"
+    &"{value:4.3f}"
 
   template process() =
     let
