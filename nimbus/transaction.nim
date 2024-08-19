@@ -217,17 +217,30 @@ func eip1559TxNormalization*(tx: Transaction;
     result.gasPrice = baseFeePerGas +
       min(result.maxPriorityFeePerGas, result.maxFeePerGas - baseFeePerGas)
 
+func maxPriorityFeePerGasNorm*(tx: Transaction): GasInt =
+  if tx.txType < TxEip1559:
+    tx.gasPrice
+  else:
+    tx.maxPriorityFeePerGas
+
+func maxFeePerGasNorm*(tx: Transaction): GasInt =
+  if tx.txType < TxEip1559:
+    tx.gasPrice
+  else:
+    tx.maxFeePerGas
+
+func effectiveGasPrice*(tx: Transaction, baseFeePerGas: GasInt): GasInt =
+  if tx.txType < TxEip1559:
+    tx.gasPrice
+  else:
+    baseFeePerGas +
+      min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFeePerGas)
+
 func effectiveGasTip*(tx: Transaction; baseFeePerGas: Opt[UInt256]): GasInt =
-  var
-    maxPriorityFeePerGas = tx.maxPriorityFeePerGas
-    maxFeePerGas = tx.maxFeePerGas
+  let
     baseFeePerGas = baseFeePerGas.get(0.u256).truncate(GasInt)
 
-  if tx.txType < TxEip1559:
-    maxPriorityFeePerGas = tx.gasPrice
-    maxFeePerGas = tx.gasPrice
-
-  min(maxPriorityFeePerGas, maxFeePerGas - baseFeePerGas)
+  min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFeePerGas)
 
 proc decodeTx*(bytes: openArray[byte]): Transaction =
   var rlp = rlpFromBytes(bytes)

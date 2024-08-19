@@ -49,7 +49,7 @@ proc commitOrRollbackDependingOnGasUsed(
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   if header.gasLimit < vmState.cumulativeGasUsed + gasBurned:
     vmState.stateDB.rollback(accTx)
-    return err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasBurned}")
+    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasBurned}")
   else:
     # Accept transaction and collect mining fee.
     vmState.stateDB.commit(accTx)
@@ -59,7 +59,7 @@ proc commitOrRollbackDependingOnGasUsed(
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
     vmState.gasPool += tx.gasLimit - gasBurned
-    return ok(gasBurned)
+    ok(gasBurned)
 
 proc processTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
@@ -75,12 +75,8 @@ proc processTransactionImpl(
     roDB = vmState.readOnlyStateDB
     baseFee256 = header.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
-    tx = eip1559TxNormalization(tx, baseFee)
-    priorityFee = min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee)
+    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     excessBlobGas = header.excessBlobGas.get(0'u64)
-
-  # Return failure unless explicitely set `ok()`
-  var res: Result[GasInt, string] = err("")
 
   # buy gas, then the gas goes into gasMeter
   if vmState.gasPool < tx.gasLimit:
@@ -101,28 +97,29 @@ proc processTransactionImpl(
   # before leaving is crucial for some unit tests that us a direct/deep call
   # of the `processTransaction()` function. So there is no `return err()`
   # statement, here.
-  let txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, fork)
-  if txRes.isOk:
+  let
+    txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, fork)
+    res = if txRes.isOk:
+      # EIP-1153
+      vmState.stateDB.clearTransientStorage()
 
-    # EIP-1153
-    vmState.stateDB.clearTransientStorage()
+      # Execute the transaction.
+      vmState.captureTxStart(tx.gasLimit)
+      let
+        accTx = vmState.stateDB.beginSavepoint
+        gasBurned = tx.txCallEvm(sender, vmState, baseFee)
+      vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
-    # Execute the transaction.
-    vmState.captureTxStart(tx.gasLimit)
-    let
-      accTx = vmState.stateDB.beginSavepoint
-      gasBurned = tx.txCallEvm(sender, vmState)
-    vmState.captureTxEnd(tx.gasLimit - gasBurned)
-
-    res = commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
-  else:
-    res = err(txRes.error)
+      commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
+    else:
+      err(txRes.error)
 
   if vmState.collectWitnessData:
     vmState.stateDB.collectWitnessData()
+
   vmState.stateDB.persist(clearEmptyAccount = fork >= FkSpurious)
 
-  return res
+  res
 
 # ------------------------------------------------------------------------------
 # Public functions
