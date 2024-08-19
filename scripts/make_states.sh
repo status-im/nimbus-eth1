@@ -28,7 +28,7 @@ do
     --data-dir:"${DATA_DIR}" \
     --era1-dir:"$2" \
     --era-dir:"$3" \
-    --debug-csv-stats:"$3/stats-${DATE}-${REV}.csv" \
+    --debug-csv-stats:"$4/stats-${DATE}-${REV}.csv" \
     --max-blocks:1000000
   cp -ar "$1/${DATE}-${REV}" "$1/${DATE}-${REV}"-$(printf "%04d" $counter)
   counter=$((counter+1))
