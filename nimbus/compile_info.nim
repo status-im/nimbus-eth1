@@ -19,10 +19,12 @@ func vmName(): string =
     "nimvm"
 
 const
+  chronicles_line_numbers {.strdefine.} = "0"
   VmName* = vmName()
   warningMsg = block:
     var rc = "*** Compiling with " & VmName
-    rc &= ", eth/68"
+    if chronicles_line_numbers notin ["0", "off"]:
+      rc &= ", logger line numbers"
     when defined(boehmgc):
       rc &= ", boehm/gc"
     when 0 < coreDbBaseConfigExtras.len:

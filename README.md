@@ -205,11 +205,14 @@ available.)
    cases when the `gc` is involved in a memory corruption or corruption
    camouflage.
 
+ * ENABLE_LINE_NUMBERS=1
+   Enables logger to print out source code location with log message
+
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native Nim VM
 
  * ENABLE_VMLOWMEM=1<br>
-   Enable new re-factored version of the native Nim VM. This version is not
+   Enable low-memory version of the native Nim VM. This version is not
    optimised and coded in a way so that low memory compilers can handle it
    (observed on 32 bit windows 7.)
 
