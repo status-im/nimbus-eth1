@@ -36,7 +36,8 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -104,7 +105,8 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -173,7 +175,8 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -243,7 +246,8 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -292,7 +296,8 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -342,7 +347,8 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)

@@ -27,7 +27,7 @@ const testVectorDir* = "./vendor/portal-spec-tests/tests/mainnet/state/validatio
 
 type
   YamlTrieNodeKV* = object
-    state_root*: string
+    block_header*: string
     content_key*: string
     content_value_offer*: string
     content_value_retrieval*: string
@@ -35,7 +35,7 @@ type
   YamlTrieNodeKVs* = seq[YamlTrieNodeKV]
 
   YamlContractBytecodeKV* = object
-    state_root*: string
+    block_header*: string
     content_key*: string
     content_value_offer*: string
     content_value_retrieval*: string

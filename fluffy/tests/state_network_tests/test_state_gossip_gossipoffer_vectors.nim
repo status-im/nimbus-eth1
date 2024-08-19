@@ -13,7 +13,6 @@ import
   eth/common,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
-  ../../common/common_utils,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/state/[state_content, state_network, state_gossip],
   ../../database/content_db,
@@ -47,7 +46,8 @@ procSuite "State Gossip - Gossip Offer":
 
       let
         parentTestData = testCase[i + 1]
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -120,7 +120,8 @@ procSuite "State Gossip - Gossip Offer":
 
       let
         parentTestData = testCase[i + 1]
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -190,7 +191,8 @@ procSuite "State Gossip - Gossip Offer":
 
     for i, testData in testCase:
       let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
