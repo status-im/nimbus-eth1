@@ -122,14 +122,16 @@ proc txFrameCommit*(
   let db = ? tx.getDbDescFromTopTx()
 
   # Pop layer from stack and merge database top layer onto it
-  let merged = db.stack[^1]
-  db.stack.setLen(db.stack.len-1)
-  if not db.top.isEmpty():
-    # Only call `layersMergeOnto()` if layer is empty
-    db.top.layersMergeOnto merged[]
+  let merged = db.stack.pop()
+  if not merged.isEmpty():
+    # No need to update top if we popped an empty layer
+    if not db.top.isEmpty():
+      # Only call `layersMergeOnto()` if layer is empty
+      db.top.layersMergeOnto merged[]
 
-  # Install `merged` stack top layer and update stack
-  db.top = merged
+    # Install `merged` stack top layer and update stack
+    db.top = merged
+
   db.txRef = tx.parent
   if 0 < db.stack.len:
     db.txRef.txUid = db.getTxUid
