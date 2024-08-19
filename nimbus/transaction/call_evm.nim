@@ -14,6 +14,7 @@ import
   eth/common/eth_types_rlp,
   ../evm/[types, state, internals],
   ../db/ledger,
+  ../transaction,
   ../common/common,
   ../evm/evm_errors,
   ../rpc/params,
@@ -147,12 +148,12 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   ok(hi)
 
-proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState): CallParams =
+proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, baseFee: GasInt): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
     vmState:      vmState,
-    gasPrice:     tx.gasPrice,
+    gasPrice:     tx.effectiveGasPrice(baseFee),
     gasLimit:     tx.gasLimit,
     sender:       sender,
     to:           tx.destination,
@@ -188,9 +189,9 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
 
 proc txCallEvm*(tx: Transaction,
                 sender: EthAddress,
-                vmState: BaseVMState): GasInt =
+                vmState: BaseVMState, baseFee: GasInt): GasInt =
   let
-    call = callParamsForTx(tx, sender, vmState)
+    call = callParamsForTx(tx, sender, vmState, baseFee)
   runComputation(call, GasInt)
 
 proc testCallEvm*(tx: Transaction,
