@@ -356,8 +356,9 @@ proc runState*(config: PortalBridgeConf) =
       try:
         (waitFor portalClient.portal_stateNodeInfo()).nodeId
       except CatchableError as e:
-        raiseAssert("Failed to connect to portal client: " & e.msg)
-  info "Successfully connected to portal client with nodeId: ", nodeId = portalNodeId
+        fatal "Failed to connect to portal client", error = $e.msg
+        quit QuitFailure
+  info "Connected to portal client with nodeId", nodeId = portalNodeId
 
   let web3Client = newRpcClientConnect(config.web3UrlState)
   if web3Client of RpcHttpClient:
