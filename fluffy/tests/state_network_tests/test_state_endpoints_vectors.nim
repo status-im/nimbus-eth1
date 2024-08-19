@@ -13,7 +13,6 @@ import
   eth/common,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
-  ../../common/common_utils,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/state/
     [state_content, state_network, state_gossip, state_endpoints, state_utils],
@@ -50,7 +49,8 @@ procSuite "State Endpoints":
         continue
 
       let
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
@@ -158,7 +158,8 @@ procSuite "State Endpoints":
       # seed the account data
       let
         testData = accountTrieTestCase[0]
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
@@ -186,7 +187,8 @@ procSuite "State Endpoints":
       # seed the storage data
       let
         testData = contractTrieTestCase[0]
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
@@ -234,7 +236,8 @@ procSuite "State Endpoints":
         testCase = YamlContractBytecodeKVs.loadFromYaml(bytecodeFile).valueOr:
           raiseAssert "Cannot read test vector: " & error
         testData = testCase[0]
-        stateRoot = KeccakHash.fromBytes(testData.state_root.hexToSeqByte())
+        stateRoot =
+          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
