@@ -92,16 +92,17 @@ proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
 
   let
     chain = com.newChain()
-    clConfig =
+    networkName =
       if conf.networkId == MainNet:
-        getMetadataForNetwork("mainnet").cfg
+        "mainnet"
       elif conf.networkId == SepoliaNet:
-        getMetadataForNetwork("sepolia").cfg
+        "sepolia"
       elif conf.networkId == HoleskyNet:
-        getMetadataForNetwork("holesky").cfg
+        "holesky"
       else:
         error "Unsupported network", network = conf.networkId
         quit(QuitFailure)
+    clConfig = getMetadataForNetwork(networkName).cfg
 
   var
     currentBlockNumber = com.db.getSavedStateBlockNumber()
