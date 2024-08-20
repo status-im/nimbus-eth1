@@ -72,11 +72,7 @@ template getBlockFromBeaconChain(
     quit(QuitFailure)
 
 proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
-  let coreDB =
-    # Resolve statically for database type
-    case conf.chainDbMode
-    of Aristo, AriPrune:
-      AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
+  let coreDB = AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
 
   let com = CommonRef.new(
     db = coreDB,
@@ -96,7 +92,16 @@ proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
 
   let
     chain = com.newChain()
-    clConfig = getMetadataForNetwork("sepolia").cfg
+    clConfig =
+      if conf.networkId == MainNet:
+        getMetadataForNetwork("mainnet").cfg
+      elif conf.networkId == SepoliaNet:
+        getMetadataForNetwork("sepolia").cfg
+      elif conf.networkId == HoleskyNet:
+        getMetadataForNetwork("holesky").cfg
+      else:
+        error "Unsupported network", network = conf.networkId
+        quit(QuitFailure)
 
   var
     currentBlockNumber = com.db.getSavedStateBlockNumber()
@@ -144,13 +149,11 @@ proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
         notice "Speed of fetching blocks", speed = speed
         notice "Time remaining", remaining = remaining
 
-      #let chainLen = hashChain.len
-      let (test, _) = client.getBlockFromBeaconChain(
+      let (clBlck, _) = client.getBlockFromBeaconChain(
         BlockIdent.init(hashChain[hashChain.len - 1]), clConfig
       )
       notice "Blocks loaded from CL", chainLen = hashChain.len
-      #let testNumber = test.header.number
-      notice "Last block loaded from CL", blockNumber = test.header.number
+      notice "Last block loaded from CL", blockNumber = clBlck.header.number
       notice "Current block number", currentBlockNumber
 
   # Download the blocks from CL and load into the EL
@@ -160,14 +163,13 @@ proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
         blocks.add(curBlck)
         hashChain.setLen(0)
       else:
-        # Load 2000 block at a time
-        for i in 0 ..< (if hashChain.len <= 2000: hashChain.len else: 2000):
+        let maxBlocks = 2000 # Load 2000 block at a time
+        for i in 0 ..< (if hashChain.len <= maxBlocks: hashChain.len else: maxBlocks):
           let (eth1blck, _) =
             client.getBlockFromBeaconChain(BlockIdent.init(hashChain.pop()), clConfig)
           blocks.add(eth1blck)
         blocks.add(curBlck)
 
-      #let numberOfBlocks = blocks.len
       notice "Blocks Downloaded from CL", numberOfBlocks = blocks.len
 
       let statusRes = chain.persistBlocks(blocks, flags)
