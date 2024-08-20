@@ -97,6 +97,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
       header = ctx.header,
       com    = com,
       tracer = tracer,
+      storeSlotHash = ctx.trace,
     )
 
   var gasUsed: GasInt
