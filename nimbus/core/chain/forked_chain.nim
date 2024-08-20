@@ -553,6 +553,10 @@ func latestHash*(c: ForkedChainRef): Hash256 =
 func baseNumber*(c: ForkedChainRef): BlockNumber =
   c.baseHeader.number
 
+func latestBlock*(c: ForkedChainRef): EthBlock =
+  c.blocks.withValue(c.cursorHash, val) do:
+    return val.blk
+
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader, string] =
   if number > c.cursorHeader.number:
     return err("Requested block number not exists: " & $number)
@@ -600,8 +604,18 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash256): Opt[EthBlock] =
   do:
     return Opt.none(EthBlock)
 
+func blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[EthBlock, string] =
+  shouldNotKeyError:
+    var prevHash = c.cursorHash
+    while prevHash != c.baseHash:
+      c.blocks.withValue(prevHash, item):
+        if item.blk.header.number == number:
+          return ok(item.blk)
+        prevHash = item.blk.header.parentHash
+  return err("Block not found, number = " & $number)
+
 func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[EthBlock] =
-  # return block in reverse oerder
+  # return block in reverse order
   shouldNotKeyError:
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:

@@ -17,7 +17,8 @@ import
   ../db/ledger,
   ../core/chain/forked_chain,
   ../beacon/web3_eth_conv,
-  ./rpc_types
+  ./rpc_types,
+  ./server_api_helpers
 
 type
   ServerAPIRef = ref object
@@ -52,6 +53,17 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
     # TODO: Replay state?
     err("Block state not ready")
 
+proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, string] =
+  if blockTag.kind == bidAlias:
+    let tag = blockTag.alias.toLowerAscii
+    case tag
+    of "latest": return ok(api.chain.latestBlock)
+    else:
+      return err("Unsupported block tag " & tag)
+  else:
+    let blockNum = common.BlockNumber blockTag.number
+    return api.chain.blockByNumber(blockNum)
+
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
   server.rpc("eth_getBalance") do(data: Web3Address, blockTag: BlockTag) -> UInt256:
@@ -79,3 +91,47 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       address = ethAddr data
       nonce   = ledger.getNonce(address)
     result = w3Qty nonce
+
+  server.rpc("eth_blockNumber") do() -> Web3Quantity:
+    ## Returns integer of the current block number the client is on.
+    result = w3Qty(api.chain.latestNumber)
+
+  server.rpc("eth_chainId") do() -> Web3Quantity:
+    return w3Qty(distinctBase(api.com.chainId))
+
+  server.rpc("eth_getCode") do(data: Web3Address, blockTag: BlockTag) -> seq[byte]:
+    ## Returns code at a given address.
+    ##
+    ## data: address
+    ## blockTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns the code from the given address.
+    let
+      ledger  = api.ledgerFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
+      address = ethAddr data
+    result = ledger.getCode(address).bytes()
+
+  server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
+    ## Returns information about a block by hash.
+    ##
+    ## data: Hash of a block.
+    ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
+    ## Returns BlockObject or nil when no block was found.
+    let blockHash = data.ethHash
+
+    let blk = api.chain.blockByHash(blockHash).valueOr:
+      return nil
+
+    return populateBlockObject(blockHash, blk, fullTransactions)
+
+  server.rpc("eth_getBlockByNumber") do(blockTag: BlockTag, fullTransactions: bool) -> BlockObject:
+    ## Returns information about a block by block number.
+    ##
+    ## blockTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+    ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
+    ## Returns BlockObject or nil when no block was found.
+    let blk = api.blockFromTag(blockTag).valueOr:
+      return nil
+
+    let blockHash = blk.header.blockHash
+    return populateBlockObject(blockHash, blk, fullTransactions)

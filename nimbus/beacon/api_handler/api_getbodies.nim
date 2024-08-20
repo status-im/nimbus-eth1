@@ -111,5 +111,5 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
 
   if last > ben.chain.baseNumber:
     let blocks = ben.chain.blockFromBaseTo(last)
-    for blk in blocks:
-      result.add Opt.some(toPayloadBody(blk))
+    for i in countdown(blocks.len-1, 0):
+      result.add Opt.some(toPayloadBody(blocks[i]))
