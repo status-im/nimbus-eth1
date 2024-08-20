@@ -544,8 +544,14 @@ func db*(c: ForkedChainRef): CoreDbRef =
 func latestHeader*(c: ForkedChainRef): BlockHeader =
   c.cursorHeader
 
+func latestNumber*(c: ForkedChainRef): BlockNumber =
+  c.cursorHeader.number
+
 func latestHash*(c: ForkedChainRef): Hash256 =
   c.cursorHash
+
+func baseNumber*(c: ForkedChainRef): BlockNumber =
+  c.baseHeader.number
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader, string] =
   if number > c.cursorHeader.number:
@@ -584,3 +590,22 @@ proc headerByHash*(c: ForkedChainRef, blockHash: Hash256): Result[BlockHeader, s
     if c.db.getBlockHeader(blockHash, header):
       return ok(header)
     return err("Failed to get header with hash: " & $blockHash)
+
+proc blockByHash*(c: ForkedChainRef, blockHash: Hash256): Opt[EthBlock] =
+  # used by getPayloadBodiesByHash
+  # https://github.com/ethereum/execution-apis/blob/main/src/engine/shanghai.md#specification-3
+  # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
+  c.blocks.withValue(blockHash, val) do:
+    return Opt.some(val.blk)
+  do:
+    return Opt.none(EthBlock)
+
+func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[EthBlock] =
+  # return block in reverse oerder
+  shouldNotKeyError:
+    var prevHash = c.cursorHash
+    while prevHash != c.baseHash:
+      c.blocks.withValue(prevHash, item):
+        if item.blk.header.number <= number:
+          result.add item.blk
+        prevHash = item.blk.header.parentHash
