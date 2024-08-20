@@ -88,7 +88,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # need to either trigger a sync, or to reject this forkchoice update for a
   # reason.
   var header: common.BlockHeader
-  if not db.getBlockHeader(blockHash, header):
+  header = ben.chain.headerByHash(blockHash).valueOr:
     # If this block was previously invalidated, keep rejecting it here too
     let res = ben.checkInvalidAncestor(blockHash, blockHash)
     if res.isSome:
@@ -161,7 +161,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       blockHash=blockHash.short,
       blockNumber=header.number
     return validFCU(Opt.none(PayloadID), blockHash)
-  
+
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
   let finalizedBlockHash = ethHash update.finalizedBlockHash
@@ -169,43 +169,17 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     if not ben.posFinalized:
       ben.finalizePoS()
 
-    # TODO: If the finalized block is not in our canonical tree, somethings wrong
-    var finalBlock: common.BlockHeader
-    if not db.getBlockHeader(finalizedBlockHash, finalBlock):
-      warn "Final block not available in database",
-        hash=finalizedBlockHash.short
-      raise invalidForkChoiceState("finalized block header not available")
-    var finalHash: common.Hash256
-    if not db.getBlockHash(finalBlock.number, finalHash):
+    if not ben.chain.isCanonical(finalizedBlockHash):
       warn "Final block not in canonical chain",
-        number=finalBlock.number,
         hash=finalizedBlockHash.short
-      raise invalidForkChoiceState("finalized block hash not available")
-    if finalHash != finalizedBlockHash:
-      warn "Final block not in canonical chain",
-        number=finalBlock.number,
-        expect=finalizedBlockHash.short,
-        get=finalHash.short
       raise invalidForkChoiceState("finalized block not canonical")
     db.finalizedHeaderHash(finalizedBlockHash)
 
   let safeBlockHash = ethHash update.safeBlockHash
   if safeBlockHash != common.Hash256():
-    var safeBlock: common.BlockHeader
-    if not db.getBlockHeader(safeBlockHash, safeBlock):
-      warn "Safe block not available in database",
-        hash = safeBlockHash.short
-      raise invalidForkChoiceState("safe head not available")
-    var safeHash: common.Hash256
-    if not db.getBlockHash(safeBlock.number, safeHash):
-      warn "Safe block hash not available in database",
-        hash = safeHash.short
-      raise invalidForkChoiceState("safe block hash not available")
-    if safeHash != safeBlockHash:
+    if not ben.chain.isCanonical(safeBlockHash):
       warn "Safe block not in canonical chain",
-        blockNumber=safeBlock.number,
-        expect=safeBlockHash.short,
-        get=safeHash.short
+        hash=safeBlockHash.short
       raise invalidForkChoiceState("safe head not canonical")
     db.safeHeaderHash(safeBlockHash)
 

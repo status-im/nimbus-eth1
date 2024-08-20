@@ -609,3 +609,12 @@ func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[EthBlock] =
         if item.blk.header.number <= number:
           result.add item.blk
         prevHash = item.blk.header.parentHash
+
+func isCanonical*(c: ForkedChainRef, blockHash: Hash256): bool =
+  shouldNotKeyError:
+    var prevHash = c.cursorHash
+    while prevHash != c.baseHash:
+      c.blocks.withValue(prevHash, item):
+        if blockHash == prevHash:
+          return true
+        prevHash = item.blk.header.parentHash
