@@ -377,6 +377,11 @@ type
       defaultValueDesc: $NimbusIdent
       name: "agent-string" .}: string
 
+    beaconApi* {.
+      desc: "Beacon API url"
+      defaultValue: ""
+      name: "beacon-api" .}: string
+
     protocols {.
       desc: "Enable specific set of server protocols (available: Eth, " &
             " None.) This will not affect the sync mode"
