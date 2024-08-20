@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, algorithm],
   chronicles,
   chronos,
   stint,
@@ -231,7 +231,7 @@ proc runBackfillBuildBlockOffersLoop(
     db.putLastPersistedBlockNumber(blockData.blockNumber)
 
 proc collectOffer(
-    offersMap: TableRef[seq[byte], seq[byte]],
+    offersMap: OrderedTableRef[seq[byte], seq[byte]],
     offerWithKey:
       AccountTrieOfferWithKey | ContractTrieOfferWithKey | ContractCodeOfferWithKey,
 ) {.inline.} =
@@ -239,7 +239,7 @@ proc collectOffer(
   offersMap[keyBytes] = offerWithKey.offer.encode()
 
 proc recursiveCollectOffer(
-    offersMap: TableRef[seq[byte], seq[byte]],
+    offersMap: OrderedTableRef[seq[byte], seq[byte]],
     offerWithKey: AccountTrieOfferWithKey | ContractTrieOfferWithKey,
 ) =
   offersMap.collectOffer(offerWithKey)
@@ -254,6 +254,7 @@ proc recursiveCollectOffer(
 proc runBackfillGossipBlockOffersLoop(
     blockOffersQueue: AsyncQueue[BlockOffersRef],
     portalClient: RpcClient,
+    portalNodeId: NodeId,
     verifyGossip: bool,
     workerId: int,
 ) {.async: (raises: [CancelledError]).} =
@@ -264,7 +265,7 @@ proc runBackfillGossipBlockOffersLoop(
   while true:
     # A table of offer key, value pairs is used to filter out duplicates so
     # that we don't gossip the same offer multiple times.
-    let offersMap = newTable[seq[byte], seq[byte]]()
+    let offersMap = newOrderedTable[seq[byte], seq[byte]]()
 
     for offerWithKey in blockOffers.accountTrieOffers:
       offersMap.recursiveCollectOffer(offerWithKey)
@@ -272,6 +273,20 @@ proc runBackfillGossipBlockOffersLoop(
       offersMap.recursiveCollectOffer(offerWithKey)
     for offerWithKey in blockOffers.contractCodeOffers:
       offersMap.collectOffer(offerWithKey)
+
+    # We need to use a closure here because nodeId is required to calculate the
+    # distance of each content id from the node
+    proc offersMapCmp(x, y: (seq[byte], seq[byte])): int =
+      let
+        xId = ContentKeyByteList.init(x[0]).toContentId()
+        yId = ContentKeyByteList.init(y[0]).toContentId()
+        xDistance = portalNodeId xor xId
+        yDistance = portalNodeId xor yId
+      if xDistance >= yDistance: 1 else: -1
+
+    # Sort the offers based on the distance from the node so that we will gossip
+    # content that is closest to the node first
+    offersMap.sort(offersMapCmp)
 
     var retryGossip = false
     for k, v in offersMap:
@@ -337,13 +352,21 @@ proc runBackfillMetricsLoop(
 proc runState*(config: PortalBridgeConf) =
   let
     portalClient = newRpcClientConnect(config.portalRpcUrl)
-    web3Client = newRpcClientConnect(config.web3UrlState)
-    db = DatabaseRef.init(config.stateDir.string).get()
-  defer:
-    db.close()
+    portalNodeId =
+      try:
+        (waitFor portalClient.portal_stateNodeInfo()).nodeId
+      except CatchableError as e:
+        fatal "Failed to connect to portal client", error = $e.msg
+        quit QuitFailure
+  info "Connected to portal client with nodeId", nodeId = portalNodeId
 
+  let web3Client = newRpcClientConnect(config.web3UrlState)
   if web3Client of RpcHttpClient:
     warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
+
+  let db = DatabaseRef.init(config.stateDir.string).get()
+  defer:
+    db.close()
 
   let maybeLastPersistedBlock = db.getLastPersistedBlockNumber()
   if maybeLastPersistedBlock.isSome():
@@ -376,7 +399,7 @@ proc runState*(config: PortalBridgeConf) =
 
   for workerId in 1 .. config.gossipWorkersCount.int:
     asyncSpawn runBackfillGossipBlockOffersLoop(
-      blockOffersQueue, portalClient, config.verifyGossip, workerId
+      blockOffersQueue, portalClient, portalNodeId, config.verifyGossip, workerId
     )
 
   asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)

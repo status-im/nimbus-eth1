@@ -103,7 +103,8 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       boolFlag({PersistBlockFlag.NoValidation}, conf.noValidation) +
       boolFlag({PersistBlockFlag.NoFullValidation}, not conf.fullValidation) +
       boolFlag(NoPersistBodies, not conf.storeBodies) +
-      boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts)
+      boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts) +
+      boolFlag({PersistBlockFlag.NoPersistSlotHashes}, not conf.storeSlotHashes)
     blocks: seq[EthBlock]
     clConfig: Eth2NetworkMetadata
     genesis_validators_root: Eth2Digest

@@ -43,26 +43,7 @@ For more detailed write-ups on the development progress, follow the
 
 ### Prerequisites
 
-* [RocksDB](https://github.com/facebook/rocksdb/)
 * GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
-
-On Windows, a precompiled DLL collection download is available through the `fetch-dlls` Makefile target: ([Windows instructions](#windows)).
-
-```bash
-# MacOS with Homebrew
-brew install rocksdb
-
-# Fedora
-dnf install rocksdb-devel
-
-# Debian and Ubuntu
-sudo apt-get install librocksdb-dev
-
-# Arch (AUR)
-pakku -S rocksdb
-```
-
-`rocksdb` can also be installed by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md).
 
 #### Obtaining the prerequisites through the Nix package manager
 
@@ -174,13 +155,6 @@ sudo apt-get install git libgflags-dev libsnappy-dev
 mkdir status
 cd status
 
-# Install rocksdb
-git clone https://github.com/facebook/rocksdb.git
-cd rocksdb
-make shared_lib
-sudo make install
-cd..
-
 # Raspberry pi doesn't include /usr/local/lib in library search path - need to add
 export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
@@ -205,7 +179,7 @@ Note, the Ubuntu PRoot is known to contain all Nimbus prerequisites compiled on 
 
 ```bash
 # Install prerequisites
-apt install git make gcc librocksdb-dev
+apt install git make gcc
 
 # Clone repo and build Nimbus just like above
 git clone https://github.com/status-im/nimbus.git
@@ -231,11 +205,14 @@ available.)
    cases when the `gc` is involved in a memory corruption or corruption
    camouflage.
 
+ * ENABLE_LINE_NUMBERS=1
+   Enables logger to print out source code location with log message
+
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native Nim VM
 
  * ENABLE_VMLOWMEM=1<br>
-   Enable new re-factored version of the native Nim VM. This version is not
+   Enable low-memory version of the native Nim VM. This version is not
    optimised and coded in a way so that low memory compilers can handle it
    (observed on 32 bit windows 7.)
 
