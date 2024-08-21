@@ -164,12 +164,14 @@ proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
         blocks.add(curBlck)
         hashChain.setLen(0)
       else:
-        let maxBlocks = 2000 # Load 2000 block at a time
-        for i in 0 ..< (if hashChain.len <= maxBlocks: hashChain.len else: maxBlocks):
+        const maxBlocks = 2000 # Load 2000 block at a time
+        for i in 0 ..< min(hashChain.len, maxBlocks):
           let (eth1blck, _) =
             client.getBlockFromBeaconChain(BlockIdent.init(hashChain.pop()), clConfig)
           blocks.add(eth1blck)
-        blocks.add(curBlck)
+        
+        if hashChain.len == 0:
+          blocks.add(curBlck)
 
       notice "Blocks Downloaded from CL", numberOfBlocks = blocks.len
 
