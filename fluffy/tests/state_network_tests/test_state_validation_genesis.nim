@@ -19,7 +19,7 @@ import
 template checkValidProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
     accountState: HexaryTrie,
-    storageStates: Table[EthAddress, HexaryTrie],
+    storageStates: TableRef[EthAddress, HexaryTrie],
 ) =
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
@@ -74,7 +74,7 @@ template checkValidProofsForExistingLeafs(
 template checkInvalidProofsWithBadValue(
     genAccounts: GenesisAlloc,
     accountState: HexaryTrie,
-    storageStates: Table[EthAddress, HexaryTrie],
+    storageStates: TableRef[EthAddress, HexaryTrie],
 ) =
   for address, account in genAccounts:
     var acc = newAccount(account.nonce, account.balance)
