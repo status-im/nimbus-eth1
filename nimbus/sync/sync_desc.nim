@@ -49,7 +49,6 @@ type
     chain*: ChainRef            ## Block chain database (no need for `Peer`)
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
-    exCtrlFile*: Opt[string]    ## Extra instructions file (if any)
     pool*: S                    ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------

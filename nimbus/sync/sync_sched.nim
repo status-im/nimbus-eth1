@@ -383,9 +383,8 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
 proc initSync*[S,W](
     dsc: RunnerSyncRef[S,W];
     node: EthereumNode;
-    chain: ChainRef,
+    chain: ChainRef;
     slots: int;
-    exCtrlFile = Opt.none(string);
       ) =
   ## Constructor
   # Leave one extra slot so that it can holds a *zombie* even if all slots
@@ -394,7 +393,6 @@ proc initSync*[S,W](
   dsc.ctx = CtxRef[S](
     ethWireCtx: cast[EthWireRef](node.protocolState protocol.eth),
     buddiesMax: max(1, slots + 1),
-    exCtrlFile: exCtrlFile,
     chain: chain)
   dsc.pool = node.peerPool
   dsc.buddies.init(dsc.ctx.buddiesMax)
