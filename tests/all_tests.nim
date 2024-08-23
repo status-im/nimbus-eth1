@@ -40,6 +40,5 @@ cliBuilder:
           ./test_eip4844,
           ./test_beacon/test_skeleton,
           #./test_getproof_json,                   -- fails
-          #./test_rpc_experimental_json,           -- fails
           ./test_aristo,
           ./test_coredb
