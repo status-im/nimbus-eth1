@@ -61,12 +61,12 @@ func rlpDecodeContractTrieNode*(contractTrieNode: TrieNode): Result[UInt256, str
     err(e.msg)
 
 func toAccount*(accountProof: TrieProof): Result[Account, string] {.inline.} =
-  doAssert(accountProof.len() > 1)
+  doAssert(accountProof.len() > 0)
 
   rlpDecodeAccountTrieNode(accountProof[^1])
 
 func toSlot*(storageProof: TrieProof): Result[UInt256, string] {.inline.} =
-  doAssert(storageProof.len() > 1)
+  doAssert(storageProof.len() > 0)
 
   rlpDecodeContractTrieNode(storageProof[^1])
 
