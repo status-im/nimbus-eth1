@@ -282,7 +282,13 @@ proc runBackfillGossipBlockOffersLoop(
         yId = ContentKeyByteList.init(y[0]).toContentId()
         xDistance = portalNodeId xor xId
         yDistance = portalNodeId xor yId
-      if xDistance >= yDistance: 1 else: -1
+
+      if xDistance == yDistance:
+        0
+      elif xDistance > yDistance:
+        1
+      else:
+        -1
 
     # Sort the offers based on the distance from the node so that we will gossip
     # content that is closest to the node first
