@@ -8,6 +8,7 @@
 # those terms.
 
 import
+  std/sequtils,
   chronicles,
   ./constants,
   ./nimbus_desc,
@@ -15,7 +16,10 @@ import
   ./utils/era_helpers,
   kzg4844/kzg_ex as kzg,
   ./core/eip4844,
+  web3, web3/[engine_api, primitives, conversions],
   beacon_chain/spec/digest,
+  beacon_chain/el/el_conf,
+  beacon_chain/el/el_manager,
   beacon_chain/spec/eth2_apis/[rest_types, rest_beacon_calls],
   beacon_chain/networking/network_metadata,
   eth/async_utils
@@ -46,6 +50,24 @@ template getBlockFromBeaconChain(
     (eth1Block, true)
   else:
     (eth1Block, false)
+
+proc testApi(conf: NimbusConf) {.async.} =
+  let jwtSecret = 
+    if conf.jwtSecret.isSome():
+      loadJwtSecret(Opt.some(conf.jwtSecret.get()))
+    else:
+      Opt.none(seq[byte])
+
+  let engineUrl = EngineApiUrl.init(
+    conf.beaconApi,
+    jwtSecret
+  )
+
+  let web3 = await engineUrl.newWeb3()
+  let rpcClient = web3.provider
+  let data = await rpcClient.exchangeCapabilities(@["engine_exchangeTransitionConfigurationV1","engine_forkchoiceUpdatedV1","engine_getPayloadBodiesByHash","engine_getPayloadBodiesByRangeV1","engine_getPayloadV1","engine_newPayloadV1"])
+
+  notice "Connected to Beacon Chain", data = data
 
 proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
   let coreDB = AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
@@ -84,6 +106,11 @@ proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
     client = RestClientRef.new(conf.beaconApi).valueOr:
       error "Cannot connect to server"
       quit(QuitFailure)
+    jwtSecret = 
+      if conf.jwtSecret.isSome():
+        loadJwtSecret(Opt.some(conf.jwtSecret.get()))
+      else:
+        Opt.none(seq[byte])
 
   if conf.networkId == MainNet:
     clConfig = getMetadataForNetwork("mainnet").cfg
@@ -109,51 +136,54 @@ proc loadBlocksFromBeaconChain(conf: NimbusConf) {.async.} =
     info "Persisted blocks", blocks = blocks.len
     blocks.setLen(0)
 
-  var (headBlck, _) = client.getBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
+  template forwardSyncDb() =
+      
+    var (headBlck, _) = client.getBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
 
-  if headBlck.header.number <= currentBlockNumber:
-    notice "CL head is behind of EL head, or in sync", head = headBlck.header.number
-    quit(QuitSuccess)
+    if headBlck.header.number <= currentBlockNumber:
+      notice "CL head is behind of EL head, or in sync", head = headBlck.header.number
+      quit(QuitSuccess)
 
-  var importedSlot = (currentBlockNumber - lastEra1Block) + firstSlotAfterMerge
-  notice "Finding slot number corresponding to block", importedSlot
+    var importedSlot = (currentBlockNumber - lastEra1Block) + firstSlotAfterMerge
+    notice "Finding slot number corresponding to block", importedSlot
 
-  var clNum = 0'u64
-  while running and clNum < currentBlockNumber:
-    let (blk, stat) = client.getBlockFromBeaconChain(
-      BlockIdent.init(Slot(importedSlot)), clConfig
-    )
-    if not stat:
+    var clNum = 0'u64
+    while running and clNum < currentBlockNumber:
+      let (blk, stat) = client.getBlockFromBeaconChain(
+        BlockIdent.init(Slot(importedSlot)), clConfig
+      )
+      if not stat:
+        importedSlot += 1
+        continue
+
+      clNum = blk.header.number
+      # decreasing the lower bound with each iteration
+      importedSlot += currentBlockNumber - clNum
+
+    notice "Found the slot to start with", slot = importedSlot
+
+    while running and currentBlockNumber < headBlck.header.number:
+      var isAvailable = false
+      (curBlck, isAvailable) = client.getBlockFromBeaconChain(
+        BlockIdent.init(Slot(importedSlot)), clConfig
+      )
+      if not isAvailable:
+        importedSlot += 1
+        continue
+
+      blocks.add(curBlck)
       importedSlot += 1
-      continue
+      currentBlockNumber = curBlck.header.number
 
-    clNum = blk.header.number
-    # decreasing the lower bound with each iteration
-    importedSlot += currentBlockNumber - clNum
+      if blocks.lenu64 mod 1000 == 0 or currentBlockNumber == headBlck.header.number:
+        notice "Blocks Downloaded from CL", numberOfBlocks = blocks.len
+        process()
+        currentBlockNumber = com.db.getSavedStateBlockNumber()
+        (headBlck, _) = client.getBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
 
-  notice "Found the slot to start with", slot = importedSlot
-
-  while running and currentBlockNumber < headBlck.header.number:
-    var isAvailable = false
-    (curBlck, isAvailable) = client.getBlockFromBeaconChain(
-      BlockIdent.init(Slot(importedSlot)), clConfig
-    )
-    if not isAvailable:
-      importedSlot += 1
-      continue
-
-    blocks.add(curBlck)
-    importedSlot += 1
-    currentBlockNumber = curBlck.header.number
-
-    if blocks.lenu64 mod 1000 == 0 or currentBlockNumber == headBlck.header.number:
-      notice "Blocks Downloaded from CL", numberOfBlocks = blocks.len
+    if blocks.len > 0:
       process()
-      currentBlockNumber = com.db.getSavedStateBlockNumber()
-      (headBlck, _) = client.getBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
-
-  if blocks.len > 0:
-    process()
+  
   
 
 when isMainModule:
@@ -186,4 +216,4 @@ when isMainModule:
       fatal "Cannot load baked in Kzg trusted setup", msg = res.error
       quit(QuitFailure)
 
-  waitFor loadBlocksFromBeaconChain(conf)
+  waitFor testApi(conf)
