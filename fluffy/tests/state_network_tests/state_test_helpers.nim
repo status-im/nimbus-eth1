@@ -77,20 +77,21 @@ proc getGenesisAlloc*(filePath: string): GenesisAlloc =
 
 proc toState*(
     alloc: GenesisAlloc
-): (HexaryTrie, Table[EthAddress, HexaryTrie]) {.raises: [RlpError].} =
+): (HexaryTrie, TableRef[EthAddress, HexaryTrie]) {.raises: [RlpError].} =
   var accountTrie = initHexaryTrie(newMemoryDB())
-  var storageStates = Table[EthAddress, HexaryTrie]()
+  let storageStates = TableRef[EthAddress, HexaryTrie]()
 
   for address, genAccount in alloc:
-    var storageRoot = EMPTY_ROOT_HASH
-    var codeHash = EMPTY_CODE_HASH
+    var
+      storageRoot = EMPTY_ROOT_HASH
+      codeHash = EMPTY_CODE_HASH
 
     if genAccount.code.len() > 0:
       var storageTrie = initHexaryTrie(newMemoryDB())
       for slotKey, slotValue in genAccount.storage:
         let key = keccakHash(toBytesBE(slotKey)).data
-        let value = rlp.encode(slotValue)
-        storageTrie.put(key, value)
+        storageTrie.put(key, rlp.encode(slotValue))
+
       storageStates[address] = storageTrie
       storageRoot = storageTrie.rootHash()
       codeHash = keccakHash(genAccount.code)
@@ -101,9 +102,7 @@ proc toState*(
       storageRoot: storageRoot,
       codeHash: codeHash,
     )
-    let key = keccakHash(address).data
-    let value = rlp.encode(account)
-    accountTrie.put(key, value)
+    accountTrie.put(keccakHash(address).data, rlp.encode(account))
 
   (accountTrie, storageStates)
 

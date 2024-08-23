@@ -59,7 +59,6 @@ procSuite "State Gossip - Gossip Offer":
         parentContentKey = ContentKey.decode(parentContentKeyBytes).get()
         parentContentId = toContentId(parentContentKeyBytes)
         parentContentValueBytes = parentTestData.content_value_offer.hexToSeqByte()
-        parentContentValue = AccountTrieNodeOffer.decode(parentContentValueBytes).get()
 
       # set valid state root
       stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
@@ -133,7 +132,6 @@ procSuite "State Gossip - Gossip Offer":
         parentContentKey = ContentKey.decode(parentContentKeyBytes).get()
         parentContentId = toContentId(parentContentKeyBytes)
         parentContentValueBytes = parentTestData.content_value_offer.hexToSeqByte()
-        parentContentValue = ContractTrieNodeOffer.decode(parentContentValueBytes).get()
 
       # set valid state root
       stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)

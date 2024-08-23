@@ -54,7 +54,6 @@ procSuite "State Endpoints":
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
-        contentId = toContentId(contentKeyBytes)
         contentValueBytes = leafData.content_value_offer.hexToSeqByte()
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
 
@@ -163,7 +162,6 @@ procSuite "State Endpoints":
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
-        contentId = toContentId(contentKeyBytes)
         contentValueBytes = leafData.content_value_offer.hexToSeqByte()
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
 
@@ -192,7 +190,6 @@ procSuite "State Endpoints":
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
-        contentId = toContentId(contentKeyBytes)
         contentValueBytes = leafData.content_value_offer.hexToSeqByte()
         contentValue = ContractTrieNodeOffer.decode(contentValueBytes).get()
 

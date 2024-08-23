@@ -117,7 +117,6 @@ suite "State Endpoints - Genesis JSON Files":
             let
               storageProof = storageState.generateStorageProof(slotKey)
               leafNode = storageProof[^1]
-              slotKeyHash = keccakHash(toBytesBE(slotKey)).data
               path = removeLeafKeyEndNibbles(
                 Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), leafNode
               )
