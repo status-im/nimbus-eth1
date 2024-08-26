@@ -34,6 +34,11 @@ type
     current: BlockNumber
     highest: BlockNumber
 
+  SyncState* = enum
+    Waiting
+    Syncing
+    Synced
+
   SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe, raises: [].}
     ## Update head for syncing
 
@@ -61,6 +66,8 @@ type
 
     # synchronizer need this
     syncProgress: SyncProgress
+
+    syncState: SyncState
 
     # one of POW/POS, updated after calling `hardForkTransition`
     consensusType: ConsensusType
@@ -178,6 +185,7 @@ proc init(com         : CommonRef,
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
+  com.syncState   = Waiting
   com.pruneHistory= pruneHistory
   com.pos = CasperRef.new
 
@@ -472,6 +480,9 @@ func syncCurrent*(com: CommonRef): BlockNumber =
 func syncHighest*(com: CommonRef): BlockNumber =
   com.syncProgress.highest
 
+func syncState*(com: CommonRef): SyncState =
+  com.syncState
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
@@ -484,6 +495,9 @@ func `syncCurrent=`*(com: CommonRef, number: BlockNumber) =
 
 func `syncHighest=`*(com: CommonRef, number: BlockNumber) =
   com.syncProgress.highest = number
+
+func `syncState=`*(com: CommonRef, state: SyncState) =
+  com.syncState = state
 
 func `startOfHistory=`*(com: CommonRef, val: Hash256) =
   ## Setter

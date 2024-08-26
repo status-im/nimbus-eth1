@@ -135,3 +135,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
     let blockHash = blk.header.blockHash
     return populateBlockObject(blockHash, blk, fullTransactions)
+
+  server.rpc("eth_syncing") do() -> SyncingStatus:
+    ## Returns SyncObject or false when not syncing.
+    if api.com.syncState != Waiting:
+      let sync = SyncObject(
+        startingBlock: w3Qty api.com.syncStart,
+        currentBlock : w3Qty api.com.syncCurrent,
+        highestBlock : w3Qty api.com.syncHighest
+      )
+      return SyncingStatus(syncing: true, syncObject: sync)
+    else:
+      return SyncingStatus(syncing: false)
+
