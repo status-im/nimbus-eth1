@@ -9,7 +9,7 @@
 # when try to test buildability of these tools.
 # They never run in the CI so it is ok to combine them
 
-{. warning[UnusedImport]:off .}
+{.warning[UnusedImport]: off.}
 
 import
   #../premix/premix,         # -- currently disabled (no tracer at the moment)
@@ -29,5 +29,4 @@ import
   ../tools/t8n/t8n_test,
   ../tools/t8n/t8n_debug,
   ../tools/evmstate/evmstate,
-  ../tools/evmstate/evmstate_test,
-  ./test_rpc_getproofs_track_state_changes
+  ../tools/evmstate/evmstate_test

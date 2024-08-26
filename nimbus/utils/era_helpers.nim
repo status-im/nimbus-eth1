@@ -117,40 +117,40 @@ proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[common.Withdrawal] =
     )
   return withdrawals
 
-proc getEthBlock*(blck: ForkedTrustedSignedBeaconBlock): Opt[EthBlock] =
+proc getEthBlock(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
   ## Convert a beacon block to an eth1 block.
-  withBlck(blck):
-    when consensusFork >= ConsensusFork.Bellatrix:
-      let
-        payload = forkyBlck.message.body.execution_payload
-        txs = getTxs(payload.transactions.asSeq())
-        ethWithdrawals =
-          when consensusFork >= ConsensusFork.Capella:
-            Opt.some(getWithdrawals(payload.withdrawals.asSeq()))
-          else:
-            Opt.none(seq[common.Withdrawal])
-        withdrawalRoot =
-          when consensusFork >= ConsensusFork.Capella:
-            Opt.some(calcWithdrawalsRoot(ethWithdrawals.get()))
-          else:
-            Opt.none(common.Hash256)
-        blobGasUsed =
-          when consensusFork >= ConsensusFork.Deneb:
-            Opt.some(payload.blob_gas_used)
-          else:
-            Opt.none(uint64)
-        excessBlobGas =
-          when consensusFork >= ConsensusFork.Deneb:
-            Opt.some(payload.excess_blob_gas)
-          else:
-            Opt.none(uint64)
-        parentBeaconBlockRoot =
-          when consensusFork >= ConsensusFork.Deneb:
-            Opt.some(forkyBlck.message.parent_root)
-          else:
-            Opt.none(common.Hash256)
+  const consensusFork = typeof(blck).kind
+  when consensusFork >= ConsensusFork.Bellatrix:
+    let
+      payload = blck.body.execution_payload
+      txs = getTxs(payload.transactions.asSeq())
+      ethWithdrawals =
+        when consensusFork >= ConsensusFork.Capella:
+          Opt.some(getWithdrawals(payload.withdrawals.asSeq()))
+        else:
+          Opt.none(seq[common.Withdrawal])
+      withdrawalRoot =
+        when consensusFork >= ConsensusFork.Capella:
+          Opt.some(calcWithdrawalsRoot(ethWithdrawals.get()))
+        else:
+          Opt.none(common.Hash256)
+      blobGasUsed =
+        when consensusFork >= ConsensusFork.Deneb:
+          Opt.some(payload.blob_gas_used)
+        else:
+          Opt.none(uint64)
+      excessBlobGas =
+        when consensusFork >= ConsensusFork.Deneb:
+          Opt.some(payload.excess_blob_gas)
+        else:
+          Opt.none(uint64)
+      parentBeaconBlockRoot =
+        when consensusFork >= ConsensusFork.Deneb:
+          Opt.some(blck.parent_root)
+        else:
+          Opt.none(common.Hash256)
 
-      let header = BlockHeader(
+      header = BlockHeader(
         parentHash: payload.parent_hash,
         ommersHash: EMPTY_UNCLE_HASH,
         coinbase: EthAddress(payload.fee_recipient.data),
@@ -172,9 +172,11 @@ proc getEthBlock*(blck: ForkedTrustedSignedBeaconBlock): Opt[EthBlock] =
         excessBlobGas: excessBlobGas,
         parentBeaconBlockRoot: parentBeaconBlockRoot,
       )
-      return Opt.some EthBlock(
-        header: header, transactions: txs, uncles: @[], withdrawals: ethWithdrawals
-      )
+    Opt.some EthBlock(
+      header: header, transactions: txs, uncles: @[], withdrawals: ethWithdrawals
+    )
+  else:
+    Opt.none(EthBlock)
 
 proc getEthBlockFromEra*(
     db: EraDB,
@@ -184,11 +186,13 @@ proc getEthBlockFromEra*(
     cfg: RuntimeConfig,
 ): Opt[EthBlock] =
   let fork = cfg.consensusForkAtEpoch(slot.epoch)
-  var tmp = ForkedTrustedSignedBeaconBlock(kind: fork)
-  withBlck(tmp):
-    type T = type(forkyBlck)
-    forkyBlck = db.getBlock(
-      historical_roots, historical_summaries, slot, Opt[Eth2Digest].err(), T
+  fork.withConsensusFork:
+    type T = consensusFork.TrustedSignedBeaconBlock
+    var tmp = new T
+    # Pass in default Eth2Digest to avoid block root computation (it is not
+    # needed in this case)
+    tmp[] = db.getBlock(
+      historical_roots, historical_summaries, slot, Opt.some(default(Eth2Digest)), T
     ).valueOr:
       return Opt.none(EthBlock)
-  getEthBlock(tmp)
+    getEthBlock(tmp[].message)

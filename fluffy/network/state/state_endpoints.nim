@@ -50,7 +50,16 @@ proc getNextNodeHash(
       )
 
     # leaf or extension node
-    let (_, isLeaf, prefix) = decodePrefix(trieNodeRlp.listElem(0))
+    let
+      (_, isLeaf, prefix) = decodePrefix(trieNodeRlp.listElem(0))
+      unpackedPrefix = prefix.unpackNibbles()
+
+    if unpackedPrefix != nibbles[nibbleIdx ..< nibbleIdx + unpackedPrefix.len()]:
+      # The nibbles don't match so we stop the search and don't increment
+      # the nibble index to indicate how many nibbles were consumed
+      return Opt.none((Nibbles, NodeHash))
+
+    nibbleIdx += prefix.unpackNibbles().len()
     if isLeaf:
       return Opt.none((Nibbles, NodeHash))
 
@@ -59,7 +68,6 @@ proc getNextNodeHash(
     if nextHashBytes.len() == 0:
       return Opt.none((Nibbles, NodeHash))
 
-    nibbleIdx += prefix.unpackNibbles().len()
     Opt.some(
       (nibbles[0 ..< nibbleIdx].packNibbles(), KeccakHash.fromBytes(nextHashBytes))
     )
@@ -91,7 +99,10 @@ proc getAccountProof(
 
     key = AccountTrieNodeKey.init(nextPath, nextNodeHash)
 
-  Opt.some(proof)
+  if nibblesIdx < nibbles.len():
+    Opt.none(TrieProof)
+  else:
+    Opt.some(proof)
 
 proc getStorageProof(
     n: StateNetwork, storageRoot: KeccakHash, address: EthAddress, storageKey: UInt256
@@ -119,7 +130,10 @@ proc getStorageProof(
 
     key = ContractTrieNodeKey.init(addressHash, nextPath, nextNodeHash)
 
-  Opt.some(proof)
+  if nibblesIdx < nibbles.len():
+    Opt.none(TrieProof)
+  else:
+    Opt.some(proof)
 
 proc getAccount(
     n: StateNetwork, blockHash: BlockHash, address: EthAddress

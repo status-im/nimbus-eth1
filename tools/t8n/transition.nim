@@ -500,7 +500,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     vmState.init(
       parent      = parent,
       header      = header,
-      com         = com
+      com         = com,
+      storeSlotHash = true
     )
 
     vmState.mutateStateDB:

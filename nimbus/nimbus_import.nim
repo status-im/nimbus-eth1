@@ -162,12 +162,9 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     start + imported
 
   func f(value: float): string =
-    try:
-      &"{value:4.3f}"
-    except ValueError:
-      raiseAssert "valid fmt string"
+    &"{value:4.3f}"
 
-  template process() =
+  proc process() =
     let
       time1 = Moment.now()
       statsRes = chain.persistBlocks(blocks, flags)
@@ -227,7 +224,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   # search space by calculating the difference between the `blockNumber` and the `block_number` from the executionPayload
   # of the slot, then adding the difference to the importedSlot. This pushes the lower bound more,
   # making the search way smaller
-  template updateLastImportedSlot(
+  proc updateLastImportedSlot(
       era: EraDB,
       historical_roots: openArray[Eth2Digest],
       historical_summaries: openArray[HistoricalSummary],
@@ -268,13 +265,20 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       defer:
         db.dispose()
 
-      while running and imported < conf.maxBlocks and blockNumber <= lastEra1Block:
-        var blk = db.getEthBlock(blockNumber).valueOr:
+      proc loadEraBlock(blockNumber: uint64): bool =
+        # Separate proc to reduce stack usage of blk
+        let blk = db.getEthBlock(blockNumber).valueOr:
           error "Could not load block from era1", blockNumber, error
+          return false
+
+        blocks.add blk
+        true
+
+      while running and imported < conf.maxBlocks and blockNumber <= lastEra1Block:
+        if not loadEraBlock(blockNumber):
           break
 
         imported += 1
-        blocks.add blk
 
         if blocks.lenu64 mod conf.chunkSize == 0:
           process()
@@ -304,21 +308,28 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         # if resuming import we do not update the slot
         importedSlot = firstSlotAfterMerge
 
-      while running and imported < conf.maxBlocks and importedSlot < endSlot:
+      proc loadEra1Block(importedSlot: Slot): bool =
+        # Separate proc to reduce stack usage of blk
         var blk = getEthBlockFromEra(
           eraDB,
           historical_roots.asSeq(),
           historical_summaries.asSeq(),
-          Slot(importedSlot),
+          importedSlot,
           clConfig.cfg,
         ).valueOr:
+          return false
+
+        blocks.add blk
+        true
+
+      while running and imported < conf.maxBlocks and importedSlot < endSlot:
+        if not loadEra1Block(Slot(importedSlot)):
           importedSlot += 1
           continue
 
-        blocks.add blk
         imported += 1
-
         importedSlot += 1
+
         if blocks.lenu64 mod conf.chunkSize == 0:
           process()
 
