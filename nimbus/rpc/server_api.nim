@@ -17,7 +17,10 @@ import
   ../db/ledger,
   ../core/chain/forked_chain,
   ../beacon/web3_eth_conv,
+  ../transaction/call_evm,
+  ../evm/evm_errors,
   ./rpc_types,
+  ./filters,
   ./server_api_helpers
 
 type
@@ -45,6 +48,10 @@ proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[common.BlockHe
     let blockNum = common.BlockNumber blockTag.number
     return api.chain.headerByNumber(blockNum)
 
+proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[common.BlockHeader, string] =
+  let blockId = blockTag.get(defaultTag)
+  api.headerFromTag(blockId)
+
 proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, string] =
   let header = ?api.headerFromTag(blockTag)
   if api.chain.stateReady(header):
@@ -63,6 +70,10 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, strin
   else:
     let blockNum = common.BlockNumber blockTag.number
     return api.chain.blockByNumber(blockNum)
+
+proc blockFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[EthBlock, string] =
+  let blockId = blockTag.get(defaultTag)
+  api.blockFromTag(blockId)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
@@ -148,3 +159,86 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     else:
       return SyncingStatus(syncing: false)
 
+  proc getLogsForBlock(
+      chain: ForkedChainRef,
+      blk: EthBlock,
+      opts: FilterOptions): seq[FilterLog]
+        {.gcsafe, raises: [RlpError].} =
+    if headerBloomFilter(blk.header, opts.address, opts.topics):
+      let receipts = chain.db.getReceipts(blk.header.receiptsRoot)
+      # Note: this will hit assertion error if number of block transactions
+      # do not match block receipts.
+      # Although this is fine as number of receipts should always match number
+      # of transactions
+      let logs = deriveLogs(blk.header, blk.transactions, receipts)
+      let filteredLogs = filterLogs(logs, opts.address, opts.topics)
+      return filteredLogs
+    else:
+      return @[]
+
+  proc getLogsForRange(
+      chain: ForkedChainRef,
+      start: common.BlockNumber,
+      finish: common.BlockNumber,
+      opts: FilterOptions): seq[FilterLog]
+        {.gcsafe, raises: [RlpError].} =
+    var
+      logs = newSeq[FilterLog]()
+      blockNum = start
+
+    while blockNum <= finish:
+      let
+        blk = chain.blockByNumber(blockNum).valueOr:
+                return logs
+        filtered = chain.getLogsForBlock(blk, opts)
+      logs.add(filtered)
+      blockNum = blockNum + 1
+    return logs
+
+  server.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
+    ## filterOptions: settings for this filter.
+    ## Returns a list of all logs matching a given filter object.
+    ## TODO: Current implementation is pretty naive and not efficient
+    ## as it requires to fetch all transactions and all receipts from database.
+    ## Other clients (Geth):
+    ## - Store logs related data in receipts.
+    ## - Have separate indexes for Logs in given block
+    ## Both of those changes require improvements to the way how we keep our data
+    ## in Nimbus.
+    if filterOptions.blockHash.isSome():
+      let
+        hash = ethHash filterOptions.blockHash.expect("blockHash")
+        blk = api.chain.blockByHash(hash).valueOr:
+          raise newException(ValueError, "Block not found")
+      return getLogsForBlock(api.chain, blk, filterOptions)
+    else:
+      # TODO: do something smarter with tags. It would be the best if
+      # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
+      # would operate on this enum instead of raw strings. This change would need
+      # to be done on every endpoint to be consistent.
+      let
+        blockFrom = api.headerFromTag(filterOptions.fromBlock).valueOr:
+          raise newException(ValueError, "Block not found")
+        blockTo = api.headerFromTag(filterOptions.toBlock).valueOr:
+          raise newException(ValueError, "Block not found")
+
+      # Note: if fromHeader.number > toHeader.number, no logs will be
+      # returned. This is consistent with, what other ethereum clients return
+      return api.chain.getLogsForRange(
+        blockFrom.number,
+        blockTo.number,
+        filterOptions
+      )
+
+  server.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
+    ## Executes a new message call immediately without creating a transaction on the block chain.
+    ##
+    ## call: the transaction call object.
+    ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns the return value of executed contract.
+    let
+      header = api.headerFromTag(blockTag).valueOr:
+                 raise newException(ValueError, "Block not found")
+      res    = rpcCallEvm(args, header, api.com).valueOr:
+                 raise newException(ValueError, "rpcCallEvm error: " & $error.code)
+    result = res.output

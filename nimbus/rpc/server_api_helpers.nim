@@ -101,8 +101,8 @@ proc populateBlockObject*(blockHash: eth_types.Hash256,
 
   if fullTx:
     for i, tx in blk.transactions:
-      let txObj = populateTransactionObject(tx, 
-        Opt.some(blockHash), 
+      let txObj = populateTransactionObject(tx,
+        Opt.some(blockHash),
         Opt.some(header.number), Opt.some(i.uint64))
       result.transactions.add txOrHash(txObj)
   else:
