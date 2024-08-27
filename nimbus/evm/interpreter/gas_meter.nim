@@ -20,7 +20,9 @@ func init*(m: var GasMeter, startGas: GasInt) =
   m.gasRefunded = 0
 
 func consumeGas*(
-    gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid =
+    gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid {.inline.} =
+  # consumeGas is a hotspot in the vm due to it being called for every
+  # instruction
   # TODO report reason - consumeGas is a hotspot in EVM execution so it has to
   #      be done carefully
   if amount > gasMeter.gasRemaining:
