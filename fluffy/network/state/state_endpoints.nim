@@ -136,12 +136,9 @@ proc getStorageProof(
     Opt.some(proof)
 
 proc getAccount(
-    n: StateNetwork, blockHash: BlockHash, address: EthAddress
+    n: StateNetwork, stateRoot: KeccakHash, address: EthAddress
 ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
   let
-    stateRoot = (await n.getStateRootByBlockHash(blockHash)).valueOr:
-      warn "Failed to get state root by block hash"
-      return Opt.none(Account)
     accountProof = (await n.getAccountProof(stateRoot, address)).valueOr:
       warn "Failed to get account proof"
       return Opt.none(Account)
@@ -151,30 +148,27 @@ proc getAccount(
 
   Opt.some(account)
 
-# Used by: eth_getBalance,
-proc getBalance*(
-    n: StateNetwork, blockHash: BlockHash, address: EthAddress
+proc getBalanceByStateRoot*(
+    n: StateNetwork, stateRoot: KeccakHash, address: EthAddress
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-  let account = (await n.getAccount(blockHash, address)).valueOr:
+  let account = (await n.getAccount(stateRoot, address)).valueOr:
     return Opt.none(UInt256)
 
   Opt.some(account.balance)
 
-# Used by: eth_getTransactionCount
-proc getTransactionCount*(
-    n: StateNetwork, blockHash: BlockHash, address: EthAddress
+proc getTransactionCountByStateRoot*(
+    n: StateNetwork, stateRoot: KeccakHash, address: EthAddress
 ): Future[Opt[AccountNonce]] {.async: (raises: [CancelledError]).} =
-  let account = (await n.getAccount(blockHash, address)).valueOr:
+  let account = (await n.getAccount(stateRoot, address)).valueOr:
     return Opt.none(AccountNonce)
 
   Opt.some(account.nonce)
 
-# Used by: eth_getStorageAt
-proc getStorageAt*(
-    n: StateNetwork, blockHash: BlockHash, address: EthAddress, slotKey: UInt256
+proc getStorageAtByStateRoot*(
+    n: StateNetwork, stateRoot: KeccakHash, address: EthAddress, slotKey: UInt256
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
   let
-    account = (await n.getAccount(blockHash, address)).valueOr:
+    account = (await n.getAccount(stateRoot, address)).valueOr:
       return Opt.none(UInt256)
     storageProof = (await n.getStorageProof(account.storageRoot, address, slotKey)).valueOr:
       warn "Failed to get storage proof"
@@ -185,12 +179,11 @@ proc getStorageAt*(
 
   Opt.some(slotValue)
 
-# Used by: eth_getCode
-proc getCode*(
-    n: StateNetwork, blockHash: BlockHash, address: EthAddress
+proc getCodeByStateRoot*(
+    n: StateNetwork, stateRoot: KeccakHash, address: EthAddress
 ): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
   let
-    account = (await n.getAccount(blockHash, address)).valueOr:
+    account = (await n.getAccount(stateRoot, address)).valueOr:
       return Opt.none(Bytecode)
     contractCodeKey = ContractCodeKey.init(keccakHash(address), account.codeHash)
 
@@ -199,3 +192,43 @@ proc getCode*(
     return Opt.none(Bytecode)
 
   Opt.some(contractCodeRetrieval.code)
+
+# Used by: eth_getBalance,
+proc getBalance*(
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress
+): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
+  let stateRoot = (await n.getStateRootByBlockHash(blockHash)).valueOr:
+    warn "Failed to get state root by block hash"
+    return Opt.none(UInt256)
+
+  await n.getBalanceByStateRoot(stateRoot, address)
+
+# Used by: eth_getTransactionCount
+proc getTransactionCount*(
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress
+): Future[Opt[AccountNonce]] {.async: (raises: [CancelledError]).} =
+  let stateRoot = (await n.getStateRootByBlockHash(blockHash)).valueOr:
+    warn "Failed to get state root by block hash"
+    return Opt.none(AccountNonce)
+
+  await n.getTransactionCountByStateRoot(stateRoot, address)
+
+# Used by: eth_getStorageAt
+proc getStorageAt*(
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress, slotKey: UInt256
+): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
+  let stateRoot = (await n.getStateRootByBlockHash(blockHash)).valueOr:
+    warn "Failed to get state root by block hash"
+    return Opt.none(UInt256)
+
+  await n.getStorageAtByStateRoot(stateRoot, address, slotKey)
+
+# Used by: eth_getCode
+proc getCode*(
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress
+): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
+  let stateRoot = (await n.getStateRootByBlockHash(blockHash)).valueOr:
+    warn "Failed to get state root by block hash"
+    return Opt.none(Bytecode)
+
+  await n.getCodeByStateRoot(stateRoot, address)

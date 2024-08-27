@@ -15,6 +15,7 @@ import
   web3/primitives as web3types,
   eth/common/eth_types,
   beacon_chain/spec/forks,
+  ../common/common_utils,
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client
@@ -450,17 +451,82 @@ proc installEthApiHandlers*(
           raise newException(ValueError, "Unable to get code")
       return bytecode.asSeq()
 
-        # rpcServerWithProxy.rpc("eth_getProof") do(
-        #   address: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
-        # ) -> ProofResponse:
-        #   ## Returns information about an account and storage slots (if the account is a contract
-        #   ## and the slots are requested) along with account and storage proofs which prove the
-        #   ## existence of the values in the state.
-        #   ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
-        #   ##
-        #   ## data: address of the account.
-        #   ## slots: integers of the positions in the storage to return with storage proofs.
-        #   ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-        #   ## Returns: the proof response containing the account, account proof and storage proof
-        #   # TODO
-        #   raiseAssert("Not implemented")
+  # TODO: Should we move these debug methods into a separate debug rpcServer?
+  rpcServerWithProxy.rpc("debug_getBalanceByStateRoot") do(
+    data: web3Types.Address, stateRoot: web3types.Hash256
+  ) -> UInt256:
+    ## Returns the balance of the account of given address.
+    ##
+    ## data: address to check for balance.
+    ## stateRoot: the state root used to search the state trie.
+    ## Returns integer of the current balance in wei.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not enabled")
+
+    let balance = (
+      await stateNetwork.get().getBalanceByStateRoot(
+        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
+      )
+    ).valueOr:
+      raise newException(ValueError, "Unable to get balance")
+
+    return balance
+
+  rpcServerWithProxy.rpc("debug_getTransactionCountByStateRoot") do(
+    data: web3Types.Address, stateRoot: web3types.Hash256
+  ) -> Quantity:
+    ## Returns the number of transactions sent from an address.
+    ##
+    ## data: address.
+    ## stateRoot: the state root used to search the state trie.
+    ## Returns integer of the number of transactions send from this address.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not enabled")
+
+    let nonce = (
+      await stateNetwork.get().getTransactionCountByStateRoot(
+        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
+      )
+    ).valueOr:
+      raise newException(ValueError, "Unable to get transaction count")
+    return nonce.Quantity
+
+  rpcServerWithProxy.rpc("debug_getStorageAtByStateRoot") do(
+    data: web3Types.Address, slot: UInt256, stateRoot: web3types.Hash256
+  ) -> FixedBytes[32]:
+    ## Returns the value from a storage position at a given address.
+    ##
+    ## data: address of the storage.
+    ## slot: integer of the position in the storage.
+    ## stateRoot: the state root used to search the state trie.
+    ## Returns: the value at this storage position.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not enabled")
+
+    let slotValue = (
+      await stateNetwork.get().getStorageAtByStateRoot(
+        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress, slot
+      )
+    ).valueOr:
+      raise newException(ValueError, "Unable to get storage slot")
+    return FixedBytes[32](slotValue.toBytesBE())
+
+  rpcServerWithProxy.rpc("debug_getCodeByStateRoot") do(
+    data: web3Types.Address, stateRoot: web3types.Hash256
+  ) -> seq[byte]:
+    ## Returns code at a given address.
+    ##
+    ## data: address
+    ## stateRoot: the state root used to search the state trie.
+    ## Returns the code from the given address.
+    if stateNetwork.isNone():
+      raise newException(ValueError, "State sub-network not enabled")
+
+    let bytecode = (
+      await stateNetwork.get().getCodeByStateRoot(
+        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
+      )
+    ).valueOr:
+      raise newException(ValueError, "Unable to get code")
+
+    return bytecode.asSeq()
