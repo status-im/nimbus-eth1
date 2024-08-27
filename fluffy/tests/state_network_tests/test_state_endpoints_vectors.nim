@@ -99,6 +99,21 @@ procSuite "State Endpoints":
           nonceRes.get() == expectedAccount.nonce
 
       block:
+        # check stateNode1 by state root
+        let
+          balanceRes =
+            await stateNode1.stateNetwork.getBalanceByStateRoot(stateRoot, address)
+          nonceRes = await stateNode1.stateNetwork.getTransactionCountByStateRoot(
+            stateRoot, address
+          )
+
+        check:
+          balanceRes.isOk()
+          balanceRes.get() == expectedAccount.balance
+          nonceRes.isOk()
+          nonceRes.get() == expectedAccount.nonce
+
+      block:
         # check stateNode2
         let
           balanceRes =
@@ -221,11 +236,16 @@ procSuite "State Endpoints":
         badSlotRes = await stateNode2.stateNetwork.getStorageAt(
           contentValue.blockHash, address, badSlot
         )
+        slotByStateRootRes = await stateNode2.stateNetwork.getStorageAtByStateRoot(
+          stateRoot, address, slot
+        )
 
       check:
         slotRes.isOk()
         slotRes.get() == expectedSlot
         badSlotRes.isNone()
+        slotByStateRootRes.isOk()
+        slotByStateRootRes.get() == expectedSlot
 
     block:
       # seed the contract bytecode
@@ -264,11 +284,15 @@ procSuite "State Endpoints":
         codeRes = await stateNode2.stateNetwork.getCode(contentValue.blockHash, address)
         badCodeRes =
           await stateNode2.stateNetwork.getCode(contentValue.blockHash, badAddress)
+        codeByStateRootRes =
+          await stateNode2.stateNetwork.getCodeByStateRoot(stateRoot, address)
 
       check:
         codeRes.isOk()
         codeRes.get() == expectedCode
         badCodeRes.isNone()
+        codeByStateRootRes.isOk()
+        codeByStateRootRes.get() == expectedCode
 
     await stateNode1.stop()
     await stateNode2.stop()
