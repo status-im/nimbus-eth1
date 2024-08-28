@@ -367,7 +367,7 @@ proc installEthApiHandlers*(
       let
         blockNumber = quantityTag.number.uint64.u256
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-          raise newException(ValueError, error)
+          raise newException(ValueError, "Unable to get block hash")
 
         balance = (await stateNetwork.get().getBalance(blockHash, data.EthAddress)).valueOr:
           raise newException(ValueError, "Unable to get balance")
@@ -392,7 +392,7 @@ proc installEthApiHandlers*(
       let
         blockNumber = quantityTag.number.uint64.u256
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-          raise newException(ValueError, error)
+          raise newException(ValueError, "Unable to get block hash")
 
         nonce = (
           await stateNetwork.get().getTransactionCount(blockHash, data.EthAddress)
@@ -419,7 +419,7 @@ proc installEthApiHandlers*(
       let
         blockNumber = quantityTag.number.uint64.u256
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-          raise newException(ValueError, error)
+          raise newException(ValueError, "Unable to get block hash")
 
         slotValue = (
           await stateNetwork.get().getStorageAt(blockHash, data.EthAddress, slot)
@@ -445,7 +445,7 @@ proc installEthApiHandlers*(
       let
         blockNumber = quantityTag.number.uint64.u256
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-          raise newException(ValueError, error)
+          raise newException(ValueError, "Unable to get block hash")
 
         bytecode = (await stateNetwork.get().getCode(blockHash, data.EthAddress)).valueOr:
           raise newException(ValueError, "Unable to get code")
