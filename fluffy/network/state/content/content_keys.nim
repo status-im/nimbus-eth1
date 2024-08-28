@@ -64,27 +64,31 @@ type
 
   ContentKeyType* = AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey
 
-func init*(T: type AccountTrieNodeKey, path: Nibbles, nodeHash: NodeHash): T =
-  AccountTrieNodeKey(path: path, nodeHash: nodeHash)
+func init*(
+    T: type AccountTrieNodeKey, path: Nibbles, nodeHash: NodeHash
+): T {.inline.} =
+  T(path: path, nodeHash: nodeHash)
 
 func init*(
     T: type ContractTrieNodeKey,
     addressHash: AddressHash,
     path: Nibbles,
     nodeHash: NodeHash,
-): T =
-  ContractTrieNodeKey(addressHash: addressHash, path: path, nodeHash: nodeHash)
+): T {.inline.} =
+  T(addressHash: addressHash, path: path, nodeHash: nodeHash)
 
-func init*(T: type ContractCodeKey, addressHash: AddressHash, codeHash: CodeHash): T =
-  ContractCodeKey(addressHash: addressHash, codeHash: codeHash)
+func init*(
+    T: type ContractCodeKey, addressHash: AddressHash, codeHash: CodeHash
+): T {.inline.} =
+  T(addressHash: addressHash, codeHash: codeHash)
 
-func toContentKey*(key: AccountTrieNodeKey): ContentKey =
+func toContentKey*(key: AccountTrieNodeKey): ContentKey {.inline.} =
   ContentKey(contentType: accountTrieNode, accountTrieNodeKey: key)
 
-func toContentKey*(key: ContractTrieNodeKey): ContentKey =
+func toContentKey*(key: ContractTrieNodeKey): ContentKey {.inline.} =
   ContentKey(contentType: contractTrieNode, contractTrieNodeKey: key)
 
-func toContentKey*(key: ContractCodeKey): ContentKey =
+func toContentKey*(key: ContractCodeKey): ContentKey {.inline.} =
   ContentKey(contentType: contractCode, contractCodeKey: key)
 
 proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
@@ -94,14 +98,16 @@ proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszErr
 
   readSszValue(data, val)
 
-func encode*(contentKey: ContentKey): ContentKeyByteList =
+func encode*(contentKey: ContentKey): ContentKeyByteList {.inline.} =
   doAssert(contentKey.contentType != unused)
   ContentKeyByteList.init(SSZ.encode(contentKey))
 
-func decode*(T: type ContentKey, contentKey: ContentKeyByteList): Result[T, string] =
+func decode*(
+    T: type ContentKey, contentKey: ContentKeyByteList
+): Result[T, string] {.inline.} =
   decodeSsz(contentKey.asSeq(), T)
 
-func toContentId*(contentKey: ContentKeyByteList): ContentId =
+func toContentId*(contentKey: ContentKeyByteList): ContentId {.inline.} =
   # TODO: Should we try to parse the content key here for invalid ones?
   let idHash = sha256.digest(contentKey.asSeq())
   readUintBE[256](idHash.data)

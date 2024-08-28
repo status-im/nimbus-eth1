@@ -71,7 +71,7 @@ proc buildContractCodeOffer(
 ) =
   let
     #bytecode = Bytelist.init(code) # This fails to compile for some reason
-    bytecode = List[byte, MAX_BYTECODE_LEN](code)
+    bytecode = Bytecode(code)
     offerKey = ContractCodeKey.init(addressHash, keccakHash(code))
     offerValue = ContractCodeOffer.init(bytecode, accountProof, builder.blockHash)
 

@@ -76,7 +76,7 @@ proc getNextNodeHash(
 
 proc getAccountProof(
     n: StateNetwork, stateRoot: KeccakHash, address: EthAddress
-): Future[Opt[TrieProof]] {.async: (raises: [CancelledError]).} =
+): Future[Result[Opt[TrieProof], string]] {.async: (raises: [CancelledError]).} =
   let nibbles = address.toPath().unpackNibbles()
 
   var
@@ -85,13 +85,12 @@ proc getAccountProof(
     proof = TrieProof.empty()
 
   while nibblesIdx < nibbles.len():
-    let
-      accountTrieNode = (await n.getAccountTrieNode(key)).valueOr:
-        warn "Failed to get account trie node when building account proof"
-        return Opt.none(TrieProof)
-      trieNode = accountTrieNode.node
+    let accountTrieNode = (await n.getAccountTrieNode(key)).valueOr:
+      return err("Failed to get account trie node when building account proof")
 
-    let added = proof.add(trieNode)
+    let
+      trieNode = accountTrieNode.node
+      added = proof.add(trieNode)
     doAssert(added)
 
     let (nextPath, nextNodeHash) = trieNode.getNextNodeHash(nibbles, nibblesIdx).valueOr:
@@ -99,14 +98,16 @@ proc getAccountProof(
 
     key = AccountTrieNodeKey.init(nextPath, nextNodeHash)
 
+  # For now we don't return partial proofs or proofs for non-existing keys
+  # TODO: implement proofs for non-existing keys when needed for eth_getProof RPC
   if nibblesIdx < nibbles.len():
-    Opt.none(TrieProof)
+    ok(Opt.none(TrieProof))
   else:
-    Opt.some(proof)
+    ok(Opt.some(proof))
 
 proc getStorageProof(
     n: StateNetwork, storageRoot: KeccakHash, address: EthAddress, storageKey: UInt256
-): Future[Opt[TrieProof]] {.async: (raises: [CancelledError]).} =
+): Future[Result[Opt[TrieProof], string]] {.async: (raises: [CancelledError]).} =
   let nibbles = storageKey.toPath().unpackNibbles()
 
   var
@@ -116,13 +117,12 @@ proc getStorageProof(
     proof = TrieProof.empty()
 
   while nibblesIdx < nibbles.len():
-    let
-      contractTrieNode = (await n.getContractTrieNode(key)).valueOr:
-        warn "Failed to get contract trie node when building account proof"
-        return Opt.none(TrieProof)
-      trieNode = contractTrieNode.node
+    let contractTrieNode = (await n.getContractTrieNode(key)).valueOr:
+      return err("Failed to get contract trie node when building account proof")
 
-    let added = proof.add(trieNode)
+    let
+      trieNode = contractTrieNode.node
+      added = proof.add(trieNode)
     doAssert(added)
 
     let (nextPath, nextNodeHash) = trieNode.getNextNodeHash(nibbles, nibblesIdx).valueOr:
@@ -130,18 +130,24 @@ proc getStorageProof(
 
     key = ContractTrieNodeKey.init(addressHash, nextPath, nextNodeHash)
 
+  # For now we don't return partial proofs or proofs for non-existing keys
+  # TODO: implement proofs for non-existing keys when needed for eth_getProof RPC
   if nibblesIdx < nibbles.len():
-    Opt.none(TrieProof)
+    ok(Opt.none(TrieProof))
   else:
-    Opt.some(proof)
+    ok(Opt.some(proof))
 
 proc getAccount(
     n: StateNetwork, stateRoot: KeccakHash, address: EthAddress
 ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
   let
-    accountProof = (await n.getAccountProof(stateRoot, address)).valueOr:
-      warn "Failed to get account proof"
+    maybeAccountProof = (await n.getAccountProof(stateRoot, address)).valueOr:
+      warn "Failed to get account proof", error = error
       return Opt.none(Account)
+    accountProof = maybeAccountProof.valueOr:
+      info "Account doesn't exist, returning default account"
+      # return an empty account if the account doesn't exist
+      return Opt.some(newAccount())
     account = accountProof.toAccount().valueOr:
       error "Failed to get account from accountProof"
       return Opt.none(Account)
@@ -167,12 +173,22 @@ proc getTransactionCountByStateRoot*(
 proc getStorageAtByStateRoot*(
     n: StateNetwork, stateRoot: KeccakHash, address: EthAddress, slotKey: UInt256
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
+  let account = (await n.getAccount(stateRoot, address)).valueOr:
+    return Opt.none(UInt256)
+
+  if account.storageRoot == EMPTY_ROOT_HASH:
+    info "Storage doesn't exist, returning default storage value"
+    # return zero if the storage doesn't exist
+    return Opt.some(0.u256)
+
   let
-    account = (await n.getAccount(stateRoot, address)).valueOr:
+    maybeStorageProof = (await n.getStorageProof(account.storageRoot, address, slotKey)).valueOr:
+      warn "Failed to get storage proof", error = error
       return Opt.none(UInt256)
-    storageProof = (await n.getStorageProof(account.storageRoot, address, slotKey)).valueOr:
-      warn "Failed to get storage proof"
-      return Opt.none(UInt256)
+    storageProof = maybeStorageProof.valueOr:
+      info "Slot doesn't exist, returning default storage value"
+      # return zero if the slot doesn't exist
+      return Opt.some(0.u256)
     slotValue = storageProof.toSlot().valueOr:
       error "Failed to get slot from storageProof"
       return Opt.none(UInt256)
@@ -182,14 +198,19 @@ proc getStorageAtByStateRoot*(
 proc getCodeByStateRoot*(
     n: StateNetwork, stateRoot: KeccakHash, address: EthAddress
 ): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
-  let
-    account = (await n.getAccount(stateRoot, address)).valueOr:
-      return Opt.none(Bytecode)
-    contractCodeKey = ContractCodeKey.init(keccakHash(address), account.codeHash)
-
-  let contractCodeRetrieval = (await n.getContractCode(contractCodeKey)).valueOr:
-    warn "Failed to get contract code"
+  let account = (await n.getAccount(stateRoot, address)).valueOr:
     return Opt.none(Bytecode)
+
+  if account.codeHash == EMPTY_CODE_HASH:
+    info "Code doesn't exist, returning default code value"
+    # return empty bytecode if the code doesn't exist
+    return Opt.some(Bytecode.empty())
+
+  let
+    contractCodeKey = ContractCodeKey.init(keccakHash(address), account.codeHash)
+    contractCodeRetrieval = (await n.getContractCode(contractCodeKey)).valueOr:
+      warn "Failed to get contract code"
+      return Opt.none(Bytecode)
 
   Opt.some(contractCodeRetrieval.code)
 
