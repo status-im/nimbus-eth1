@@ -27,7 +27,7 @@ import
                  oph_create, oph_call, oph_sysops]
 
 const
-  allHandlersList = @[
+  allHandlersList = [
     (VmOpExecArithmetic, "Arithmetic"),
     (VmOpExecHash,       "Hash"),
     (VmOpExecEnvInfo,    "EnvInfo"),

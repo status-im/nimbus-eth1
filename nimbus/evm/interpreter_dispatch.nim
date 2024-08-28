@@ -38,8 +38,15 @@ when optimizationCondition:
   # this is a top level pragma since nim 1.6.16
   {.optimization: speed.}
 
-proc selectVM(c: VmCpt, fork: EVMFork, shouldPrepareTracer: bool): EvmResultVoid =
-  ## Op code execution handler main loop.
+proc runVM(
+    c: VmCpt,
+    shouldPrepareTracer: bool,
+    fork: static EVMFork,
+    tracingEnabled: static bool,
+): EvmResultVoid =
+  ## VM instruction handler main loop - for each fork, a distinc version of
+  ## this function is instantiated so that selection of fork-specific
+  ## versions of functions happens only once
 
   # It's important not to re-prepare the tracer after
   # an async operation, only after a call/create.
@@ -49,62 +56,37 @@ proc selectVM(c: VmCpt, fork: EVMFork, shouldPrepareTracer: bool): EvmResultVoid
   # enabled?", whereas shouldPrepareTracer is more like,
   # "Are we at a spot right now where we want to re-initialize
   # the tracer?"
-  if c.tracingEnabled and shouldPrepareTracer:
-    c.prepareTracer()
+  when tracingEnabled:
+    if shouldPrepareTracer:
+      c.prepareTracer()
 
   while true:
+    {.computedGoto.}
     c.instr = c.code.next()
 
-    # Note Mamy's observation in opTableToCaseStmt() from original VM
-    # regarding computed goto
-    #
-    # ackn:
-    #   #{.computedGoto.}
-    #   # computed goto causing stack overflow, it consumes a lot of space
-    #   # we could use manual jump table instead
-    #   # TODO lots of macro magic here to unravel, with chronicles...
-    #   # `c`.logger.log($`c`.stack & "\n\n", fgGreen)
-    when not lowMemoryCompileTime:
-      when defined(release):
-        #
-        # FIXME: OS case list below needs to be adjusted
-        #
-        when defined(windows):
-          when defined(cpu64):
-            {.warning: "*** Win64/VM2 handler switch => computedGoto".}
-            {.computedGoto.}
-          else:
-            # computedGoto not compiling on github/ci (out of memory) -- jordan
-            {.warning: "*** Win32/VM2 handler switch => optimisation disabled".}
-            # {.computedGoto.}
-
-        elif defined(linux):
-          when defined(cpu64):
-            {.warning: "*** Linux64/VM2 handler switch => computedGoto".}
-            {.computedGoto.}
-          else:
-            {.warning: "*** Linux32/VM2 handler switch => computedGoto".}
-            {.computedGoto.}
-
-        elif defined(macosx):
-          when defined(cpu64):
-            {.warning: "*** MacOs64/VM2 handler switch => computedGoto".}
-            {.computedGoto.}
-          else:
-            {.warning: "*** MacOs32/VM2 handler switch => computedGoto".}
-            {.computedGoto.}
-
-        else:
-          {.warning: "*** Unsupported OS => no handler switch optimisation".}
-
-      genOptimisedDispatcher(fork, c.instr, c)
-
-    else:
-      {.warning: "*** low memory compiler mode => program will be slow".}
-
-      genLowMemDispatcher(fork, c.instr, c)
+    dispatchInstr(fork, tracingEnabled, c.instr, c)
 
   ok()
+
+macro selectVM(v: VmCpt, shouldPrepareTracer: bool, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
+  # Generate opcode dispatcher that calls selectVM with a literal for each fork:
+  #
+  # case fork
+  # of A: runVM(v, A, ...)
+  # ...
+
+  let caseStmt = nnkCaseStmt.newTree(fork)
+  for fork in EVMFork:
+    let
+      forkVal = quote:
+        `fork`
+      call = quote:
+        case `tracingEnabled`
+        of false: runVM(`v`, `shouldPrepareTracer`, `forkVal`, `false`)
+        of true: runVM(`v`, `shouldPrepareTracer`, `forkVal`, `true`)
+
+    caseStmt.add nnkOfBranch.newTree(forkVal, call)
+  caseStmt
 
 proc beforeExecCall(c: Computation) =
   c.snapshot()
@@ -131,11 +113,13 @@ proc afterExecCall(c: Computation) =
 proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateStateDB:
     let nonce = db.getNonce(c.msg.sender)
-    if nonce+1 < nonce:
+    if nonce + 1 < nonce:
       let sender = c.msg.sender.toHex
-      c.setError("Nonce overflow when sender=" & sender & " wants to create contract", false)
+      c.setError(
+        "Nonce overflow when sender=" & sender & " wants to create contract", false
+      )
       return true
-    db.setNonce(c.msg.sender, nonce+1)
+    db.setNonce(c.msg.sender, nonce + 1)
 
     # We add this to the access list _before_ taking a snapshot.
     # Even if the creation fails, the access-list change should not be rolled
@@ -176,16 +160,8 @@ proc afterExecCreate(c: Computation) =
   else:
     c.rollback()
 
-
-const
-  MsgKindToOp: array[CallKind, Op] = [
-    Call,
-    DelegateCall,
-    CallCode,
-    Create,
-    Create2,
-    EofCreate
-  ]
+const MsgKindToOp: array[CallKind, Op] =
+  [Call, DelegateCall, CallCode, Create, Create2, EofCreate]
 
 func msgToOp(msg: Message): Op =
   if EVMC_STATIC in msg.flags:
@@ -194,11 +170,15 @@ func msgToOp(msg: Message): Op =
 
 proc beforeExec(c: Computation): bool =
   if c.msg.depth > 0:
-    c.vmState.captureEnter(c,
-        msgToOp(c.msg),
-        c.msg.sender, c.msg.contractAddress,
-        c.msg.data, c.msg.gas,
-        c.msg.value)
+    c.vmState.captureEnter(
+      c,
+      msgToOp(c.msg),
+      c.msg.sender,
+      c.msg.contractAddress,
+      c.msg.data,
+      c.msg.gas,
+      c.msg.value,
+    )
 
   if not c.msg.isCreate:
     c.beforeExecCall()
@@ -253,20 +233,19 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
     # if an exception (e.g. out of gas) is thrown during a continuation.
     # So this code says, "If we've just run a continuation, but there's
     # no *subsequent* continuation, then the opcode is done."
-    if c.tracingEnabled and not(cont.isNil) and nextCont.isNil:
+    if c.tracingEnabled and not (cont.isNil) and nextCont.isNil:
       c.traceOpCodeEnded(c.instr, c.opIndex)
 
-    if c.instr == Return or
-       c.instr == Revert or
-       c.instr == SelfDestruct:
+    if c.instr == Return or c.instr == Revert or c.instr == SelfDestruct:
       break blockOne
 
-    c.selectVM(fork, shouldPrepareTracer).isOkOr:
+    c.selectVM(shouldPrepareTracer, fork, c.tracingEnabled).isOkOr:
       handleEvmError(error)
       break blockOne # this break is not needed but make the flow clear
 
   if c.isError() and c.continuation.isNil:
-    if c.tracingEnabled: c.traceError()
+    if c.tracingEnabled:
+      c.traceError()
 
 when vm_use_recursion:
   # Recursion with tiny stack frame per level.
@@ -298,16 +277,17 @@ else:
         if c.continuation.isNil:
           c.afterExec()
           break
-        (before, shouldPrepareTracer, c.child, c, c.parent) = (true, true, nil.Computation, c.child, c)
+        (before, shouldPrepareTracer, c.child, c, c.parent) =
+          (true, true, nil.Computation, c.child, c)
       if c.parent.isNil:
         break
       c.dispose()
-      (before, shouldPrepareTracer, c.parent, c) = (false, true, nil.Computation, c.parent)
+      (before, shouldPrepareTracer, c.parent, c) =
+        (false, true, nil.Computation, c.parent)
 
     while not c.isNil:
       c.dispose()
       c = c.parent
-
 
 # ------------------------------------------------------------------------------
 # End
