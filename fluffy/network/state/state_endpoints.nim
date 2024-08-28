@@ -145,7 +145,7 @@ proc getAccount(
       warn "Failed to get account proof", error = error
       return Opt.none(Account)
     accountProof = maybeAccountProof.valueOr:
-      warn "Account doesn't exist, returning default account"
+      info "Account doesn't exist, returning default account"
       # return an empty account if the account doesn't exist
       return Opt.some(newAccount())
     account = accountProof.toAccount().valueOr:
@@ -173,14 +173,20 @@ proc getTransactionCountByStateRoot*(
 proc getStorageAtByStateRoot*(
     n: StateNetwork, stateRoot: KeccakHash, address: EthAddress, slotKey: UInt256
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
+  let account = (await n.getAccount(stateRoot, address)).valueOr:
+    return Opt.none(UInt256)
+
+  if account.storageRoot == EMPTY_ROOT_HASH:
+    info "Storage doesn't exist, returning default storage value"
+    # return zero if the storage doesn't exist
+    return Opt.some(0.u256)
+
   let
-    account = (await n.getAccount(stateRoot, address)).valueOr:
-      return Opt.none(UInt256)
     maybeStorageProof = (await n.getStorageProof(account.storageRoot, address, slotKey)).valueOr:
       warn "Failed to get storage proof", error = error
       return Opt.none(UInt256)
     storageProof = maybeStorageProof.valueOr:
-      warn "Slot doesn't exist, returning default storage value"
+      info "Slot doesn't exist, returning default storage value"
       # return zero if the slot doesn't exist
       return Opt.some(0.u256)
     slotValue = storageProof.toSlot().valueOr:
@@ -196,7 +202,7 @@ proc getCodeByStateRoot*(
     return Opt.none(Bytecode)
 
   if account.codeHash == EMPTY_CODE_HASH:
-    warn "Code doesn't exist, returning default code value"
+    info "Code doesn't exist, returning default code value"
     # return empty bytecode if the code doesn't exist
     return Opt.some(Bytecode.empty())
 
