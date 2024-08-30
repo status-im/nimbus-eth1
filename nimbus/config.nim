@@ -183,14 +183,6 @@ type
       abbr: "y"
       name: "sync-mode" .}: SyncMode
 
-    syncCtrlFile* {.
-      desc: "Specify a file that is regularly checked for updates. If it " &
-            "exists it is checked for whether it contains extra information " &
-            "specific to the type of sync process. This option is primarily " &
-            "intended only for sync testing and debugging."
-      abbr: "z"
-      name: "sync-ctrl-file" }: Option[string]
-
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
       defaultValue: ""
@@ -857,11 +849,6 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
   if result.keyStore.string == defaultKeystoreDir() and
      result.dataDir.string != defaultDataDir():
     result.keyStore = OutDir(result.dataDir.string / "keystore")
-
-  # For consistency
-  if result.syncCtrlFile.isSome and result.syncCtrlFile.unsafeGet == "":
-    error "Argument missing", option="sync-ctrl-file"
-    quit QuitFailure
 
 when isMainModule:
   # for testing purpose

@@ -219,12 +219,6 @@ available.)
 For these variables, using &lt;variable&gt;=0 is ignored and &lt;variable&gt;=2
 has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)
 
-Other settings where the non-zero value matters:
-
- * ENABLE_ETH_VERSION=66<br>
-   Enable legacy protocol `eth66` (or another available protocol version.)
-
-
 ### <a name="devel-tips"></a>Development tips
 
 Interesting Make variables and targets are documented in the [nimbus-build-system](https://github.com/status-im/nimbus-build-system) repo.

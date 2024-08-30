@@ -133,12 +133,13 @@ proc len*(
     return db.getBeLen key
   ok(len)
 
-proc hasKey*(
+proc hasKeyRc*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[bool,KvtError] =
-  ## For the argument `key` return the associated value preferably from the
-  ## top layer, or the database otherwise.
+  ## For the argument `key` return `true` if `get()` returned a value on
+  ## that argument, `false` if it returned `GetNotFound`, and an error
+  ## otherwise.
   ##
   if key.len == 0:
     return err(KeyInvalid)
@@ -152,6 +153,14 @@ proc hasKey*(
   if rc.error == GetNotFound:
     return ok(false)
   err(rc.error)
+
+proc hasKey*(
+    db: KvtDbRef;                     # Database
+    key: openArray[byte];             # Key of database record
+      ): bool =
+  ## Simplified version of `hasKeyRc` where `false` is returned instead of
+  ## an error.
+  db.hasKeyRc(key).valueOr: false
 
 # ------------------------------------------------------------------------------
 # End

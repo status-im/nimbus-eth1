@@ -41,7 +41,7 @@ template persistToDb(db: CoreDbRef, body: untyped) =
   block: body
 
 proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
-  kvt.hasKey(key).expect "valid bool"
+  kvt.hasKeyRc(key).expect "valid bool"
 
 proc main() {.used.} =
   # 97 block with uncles

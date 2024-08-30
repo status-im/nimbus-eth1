@@ -391,16 +391,29 @@ proc put*(
   kvt.ifTrackNewApi:
     debug logTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
 
-proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[bool] =
-  ## Would be named `contains` if it returned `bool` rather than `Result[]`.
+proc hasKeyRc*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[bool] =
+  ## For the argument `key` return `true` if `get()` returned a value on
+  ## that argument, `false` if it returned `GetNotFound`, and an error
+  ## otherwise.
   ##
-  kvt.setTrackNewApi KvtHasKeyFn
+  kvt.setTrackNewApi KvtHasKeyRcFn
   result = block:
-    let rc = kvt.call(hasKey, kvt.kvt, key)
+    let rc = kvt.call(hasKeyRc, kvt.kvt, key)
     if rc.isOk:
       ok(rc.value)
     else:
       err(rc.error.toError $api)
+  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
+
+proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
+  ## Simplified version of `hasKeyRc` where `false` is returned instead of
+  ## an error.
+  ##
+  ## This function prototype is in line with the `hasKey` function for
+  ## `Tables`.
+  ##
+  kvt.setTrackNewApi KvtHasKeyFn
+  result = kvt.call(hasKeyRc, kvt.kvt, key).valueOr: false
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 # ------------------------------------------------------------------------------

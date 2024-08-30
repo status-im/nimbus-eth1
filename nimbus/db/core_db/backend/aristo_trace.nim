@@ -433,7 +433,7 @@ proc kvtTraceRecorder(tr: TraceRecorderRef) =
 
       # Find entry on DB
       let
-        hasKey = api.hasKey(kvt, key).valueOr:
+        hasKey = api.hasKeyRc(kvt, key).valueOr:
           when CoreDbNoisyCaptJournal:
             debug logTxt $info, level, key=($$key), error
           tr.jLogger(key, logRecord(info, TrqAdd, error))
@@ -455,7 +455,7 @@ proc kvtTraceRecorder(tr: TraceRecorderRef) =
 
   assert tr.kvtSave != tr.db.kvtApi
   assert tr.kvtSave.del != tr.db.kvtApi.del
-  assert tr.kvtSave.hasKey == tr.db.kvtApi.hasKey
+  assert tr.kvtSave.hasKeyRc == tr.db.kvtApi.hasKeyRc
 
 
 proc ariTraceRecorder(tr: TraceRecorderRef) =
