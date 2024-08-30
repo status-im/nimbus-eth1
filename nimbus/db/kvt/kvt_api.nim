@@ -52,7 +52,7 @@ type
     key: openArray[byte]): Result[Blob,KvtError] {.noRaise.}
   KvtApiLenFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[int,KvtError] {.noRaise.}
-  KvtApiHasKeyFn* = proc(db: KvtDbRef,
+  KvtApiHasKeyRcFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[bool,KvtError] {.noRaise.}
   KvtApiIsCentreFn* = proc(db: KvtDbRef): bool {.noRaise.}
   KvtApiIsTopFn* = proc(tx: KvtTxRef): bool {.noRaise.}
@@ -79,7 +79,7 @@ type
     forkTx*: KvtApiForkTxFn
     get*: KvtApiGetFn
     len*: KvtApiLenFn
-    hasKey*: KvtApiHasKeyFn
+    hasKeyRc*: KvtApiHasKeyRcFn
     isCentre*: KvtApiIsCentreFn
     isTop*: KvtApiIsTopFn
     level*: KvtApiLevelFn
@@ -104,7 +104,7 @@ type
     KvtApiProfForkTxFn       = "forkTx"
     KvtApiProfGetFn          = "get"
     KvtApiProfLenFn          = "len"
-    KvtApiProfHasKeyFn       = "hasKey"
+    KvtApiProfHasKeyRcFn     = "hasKeyRc"
     KvtApiProfIsCentreFn     = "isCentre"
     KvtApiProfIsTopFn        = "isTop"
     KvtApiProfLevelFn        = "level"
@@ -139,7 +139,7 @@ when AutoValidateApiHooks:
     doAssert not api.forget.isNil
     doAssert not api.forkTx.isNil
     doAssert not api.get.isNil
-    doAssert not api.hasKey.isNil
+    doAssert not api.hasKeyRc.isNil
     doAssert not api.isCentre.isNil
     doAssert not api.isTop.isNil
     doAssert not api.level.isNil
@@ -182,7 +182,7 @@ func init*(api: var KvtApiObj) =
   api.forkTx = forkTx
   api.get = get
   api.len = len
-  api.hasKey = hasKey
+  api.hasKeyRc = hasKeyRc
   api.isCentre = isCentre
   api.isTop = isTop
   api.level = level
@@ -210,7 +210,7 @@ func dup*(api: KvtApiRef): KvtApiRef =
     forkTx:     api.forkTx,
     get:        api.get,
     len:        api.len,
-    hasKey:     api.hasKey,
+    hasKeyRc:   api.hasKeyRc,
     isCentre:   api.isCentre,
     isTop:      api.isTop,
     level:      api.level,
@@ -287,10 +287,10 @@ func init*(
       KvtApiProfLenFn.profileRunner:
         result = api.len(a, b)
 
-  profApi.hasKey =
+  profApi.hasKeyRc =
     proc(a: KvtDbRef, b: openArray[byte]): auto =
-      KvtApiProfHasKeyFn.profileRunner:
-        result = api.hasKey(a, b)
+      KvtApiProfHasKeyRcFn.profileRunner:
+        result = api.hasKeyRc(a, b)
 
   profApi.isCentre =
     proc(a: KvtDbRef): auto =

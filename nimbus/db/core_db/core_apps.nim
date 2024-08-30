@@ -301,7 +301,7 @@ proc markCanonicalChain(
 # ------------------------------------------------------------------------------
 
 proc exists*(db: CoreDbRef, hash: Hash256): bool =
-  db.ctx.getKvt().hasKey(hash.data).valueOr:
+  db.ctx.getKvt().hasKeyRc(hash.data).valueOr:
     warn "exisis", hash, error=($$error)
     return false
   # => true/false
@@ -574,7 +574,7 @@ proc getTransactionCount*(
   var txCount = 0'u16
   while true:
     let key = hashIndexKey(txRoot, txCount)
-    let yes = kvt.hasKey(key).valueOr:
+    let yes = kvt.hasKeyRc(key).valueOr:
       warn info, txRoot, key, error=($$error)
       return 0
     if yes:
@@ -743,7 +743,7 @@ proc getTransactionKey*(
 
 proc headerExists*(db: CoreDbRef; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
-  db.ctx.getKvt().hasKey(genericHashKey(blockHash).toOpenArray).valueOr:
+  db.ctx.getKvt().hasKeyRc(genericHashKey(blockHash).toOpenArray).valueOr:
     warn "headerExists()", blockHash, error=($$error)
     return false
   # => true/false

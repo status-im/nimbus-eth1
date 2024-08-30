@@ -122,7 +122,7 @@ func daoCheck(conf: ChainConfig) =
 proc initializeDb(com: CommonRef) =
   let kvt = com.db.ctx.getKvt()
   proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
-    kvt.hasKey(key).expect "valid bool"
+    kvt.hasKeyRc(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin kvt:
     info "Writing genesis to DB"
     doAssert(com.genesisHeader.number == 0.BlockNumber,
