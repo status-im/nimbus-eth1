@@ -57,7 +57,6 @@ type
     LdgIsDeadAccountFn         = "isDeadAccount"
     LdgIsEmptyAccountFn        = "isEmptyAccount"
     LdgIsTopLevelCleanFn       = "isTopLevelClean"
-    LdgLogEntriesFn            = "logEntries"
     LdgMakeMultiKeysFn         = "makeMultiKeys"
     LdgPersistFn               = "persist"
     LdgRipemdSpecialFn         = "ripemdSpecial"

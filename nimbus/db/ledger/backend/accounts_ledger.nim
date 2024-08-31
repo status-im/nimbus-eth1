@@ -16,6 +16,7 @@ import
   eth/common,
   results,
   stew/keyed_queue,
+  ../../../utils/mergeutils,
   ../../../evm/code_bytes,
   ../../../stateless/multi_keys,
   "../../.."/[constants, utils/utils],
@@ -209,16 +210,12 @@ proc commit*(ac: AccountsLedgerRef, sp: LedgerSavePoint) =
   doAssert not sp.parentSavepoint.isNil
 
   ac.savePoint = sp.parentSavepoint
-  for k, v in sp.cache:
-    sp.parentSavepoint.cache[k] = v
-
-  for k, v in sp.dirty:
-    sp.parentSavepoint.dirty[k] = v
-
-  ac.savePoint.transientStorage.merge(sp.transientStorage)
-  ac.savePoint.accessList.merge(sp.accessList)
-  ac.savePoint.selfDestruct.incl sp.selfDestruct
-  ac.savePoint.logEntries.add sp.logEntries
+  ac.savePoint.cache.mergeAndReset(sp.cache)
+  ac.savePoint.dirty.mergeAndReset(sp.dirty)
+  ac.savePoint.transientStorage.mergeAndReset(sp.transientStorage)
+  ac.savePoint.accessList.mergeAndReset(sp.accessList)
+  ac.savePoint.selfDestruct.mergeAndReset(sp.selfDestruct)
+  ac.savePoint.logEntries.mergeAndReset(sp.logEntries)
   sp.state = Committed
 
   when debugAccountsLedgerRef:
@@ -628,9 +625,6 @@ proc selfDestructLen*(ac: AccountsLedgerRef): int =
 
 proc addLogEntry*(ac: AccountsLedgerRef, log: Log) =
   ac.savePoint.logEntries.add log
-
-proc logEntries*(ac: AccountsLedgerRef): lent seq[Log] =
-  ac.savePoint.logEntries
 
 proc getAndClearLogEntries*(ac: AccountsLedgerRef): seq[Log] =
   swap(result, ac.savePoint.logEntries)

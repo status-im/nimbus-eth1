@@ -203,11 +203,6 @@ proc isTopLevelClean*(ldg: LedgerRef): bool =
   result = ldg.ac.isTopLevelClean()
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
-proc logEntries*(ldg: LedgerRef): seq[Log] =
-  ldg.beginTrackApi LdgLogEntriesFn
-  result = ldg.ac.logEntries()
-  ldg.ifTrackApi: debug apiTxt, api, elapsed, result
-
 proc makeMultiKeys*(ldg: LedgerRef): MultiKeysRef =
   ldg.beginTrackApi LdgMakeMultiKeysFn
   result = ldg.ac.makeMultiKeys()

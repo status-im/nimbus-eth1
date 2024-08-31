@@ -11,7 +11,8 @@
 import
   tables,
   stint,
-  eth/common
+  eth/common,
+  ../utils/mergeutils
 
 type
   StorageTable = ref object
@@ -24,9 +25,8 @@ type
 # Private helpers
 #######################################################################
 
-proc merge(a, b: StorageTable) =
-  for k, v in b.map:
-    a.map[k] = v
+proc mergeAndReset*(a, b: StorageTable) =
+  a.map.mergeAndReset(b.map)
 
 #######################################################################
 # Public functions
@@ -58,12 +58,8 @@ proc setStorage*(ac: var TransientStorage,
 
   table.map[slot] = value
 
-proc merge*(ac: var TransientStorage, other: TransientStorage) =
-  for k, v in other.map:
-    ac.map.withValue(k, val):
-      val[].merge(v)
-    do:
-      ac.map[k] = v
+proc mergeAndReset*(ac, other: var TransientStorage) =
+  ac.map.mergeAndReset(other.map)
 
 proc clear*(ac: var TransientStorage) {.inline.} =
   ac.map.clear()
