@@ -115,7 +115,7 @@ func asExtension(b: Blob; path: Hash256): Blob =
     var wr = initRlpWriter()
 
     wr.startList(2)
-    wr.append NibblesBuf.fromBytes(@[nibble]).slice(1).toHexPrefix(isleaf=false)
+    wr.append NibblesBuf.fromBytes(@[nibble]).slice(1).toHexPrefix(isleaf=false).data()
     wr.append node.listElem(nibble.int).toBytes
     wr.finish()
 

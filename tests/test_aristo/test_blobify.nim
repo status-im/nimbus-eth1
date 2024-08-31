@@ -65,8 +65,8 @@ suite "Aristo blobify":
       )
 
     check:
-      deblobify(blobify(leafRawData)[], VertexRef)[] == leafRawData
-      deblobify(blobify(leafAccount)[], VertexRef)[] == leafAccount
-      deblobify(blobify(leafStoData)[], VertexRef)[] == leafStoData
-      deblobify(blobify(branch)[], VertexRef)[] == branch
-      deblobify(blobify(extension)[], VertexRef)[] == extension
+      deblobify(blobify(leafRawData), VertexRef)[] == leafRawData
+      deblobify(blobify(leafAccount), VertexRef)[] == leafAccount
+      deblobify(blobify(leafStoData), VertexRef)[] == leafStoData
+      deblobify(blobify(branch), VertexRef)[] == branch
+      deblobify(blobify(extension), VertexRef)[] == extension
