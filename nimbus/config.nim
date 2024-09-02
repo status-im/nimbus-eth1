@@ -382,6 +382,11 @@ type
       defaultValue: ""
       name: "beacon-api" .}: string
 
+    eth1EngineApi* {.
+      desc: "Eth1 Engine API url"
+      defaultValue: ""
+      name: "eth1-engine-api" .}: string
+
     protocols {.
       desc: "Enable specific set of server protocols (available: Eth, " &
             " None.) This will not affect the sync mode"

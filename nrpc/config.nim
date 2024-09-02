@@ -1,0 +1,394 @@
+# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+{.push raises: [].}
+
+import
+  std/[
+    options,
+    strutils,
+    times,
+    os,
+    net
+  ],
+  pkg/[
+    chronicles,
+    confutils,
+    confutils/defs,
+    confutils/std/net
+  ],
+  eth/[common, net/utils, net/nat, p2p/enode, p2p/discoveryv5/enr],
+  "../nimbus"/[constants, compile_info, version],
+  ../nimbus/common/chain_config,
+  ../nimbus/db/opts
+
+export net, defs
+
+const
+  # TODO: fix this agent-string format to match other
+  # eth clients format
+  NimbusIdent* = "$# v$# [$#: $#, $#, $#]" % [
+    NimbusName,
+    NimbusVersion,
+    hostOS,
+    hostCPU,
+    VmName,
+    GitRevision
+  ]
+
+let
+  # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
+  NimbusCopyright* = "Copyright (c) 2018-" &
+    $(now().utc.year) &
+    " Status Research & Development GmbH"
+
+  # e.g.:
+  # Nimbus v0.1.0 [windows: amd64, rocksdb, evmc, dda8914f]
+  # Copyright (c) 2018-2021 Status Research & Development GmbH
+  NimbusBuild* = "$#\p$#" % [
+    NimbusIdent,
+    NimbusCopyright,
+  ]
+
+  NimbusHeader* = "$#\p\p$#" % [
+    NimbusBuild,
+    version.NimVersion
+  ]
+
+func defaultDataDir*(): string =
+  when defined(windows):
+    getHomeDir() / "AppData" / "Roaming" / "Nimbus"
+  elif defined(macosx):
+    getHomeDir() / "Library" / "Application Support" / "Nimbus"
+  else:
+    getHomeDir() / ".cache" / "nimbus"
+
+func defaultKeystoreDir*(): string =
+  defaultDataDir() / "keystore"
+
+func getLogLevels(): string =
+  var logLevels: seq[string]
+  for level in LogLevel:
+    if level < enabledLogLevel:
+      continue
+    logLevels.add($level)
+  join(logLevels, ", ")
+
+const
+  defaultDataDirDesc = defaultDataDir()
+  defaultMetricsServerPort = 9093
+  defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
+  defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
+  logLevelDesc = getLogLevels()
+
+# `when` around an option doesn't work with confutils; it fails to compile.
+# Workaround that by setting the `ignore` pragma on EVMC-specific options.
+when defined(evmc_enabled):
+  {.pragma: includeIfEvmc.}
+else:
+  {.pragma: includeIfEvmc, ignore.}
+
+const sharedLibText = if defined(linux): " (*.so, *.so.N)"
+                      elif defined(windows): " (*.dll)"
+                      elif defined(macosx): " (*.dylib)"
+                      else: ""
+
+type
+  ChainDbMode* {.pure.} = enum
+    Aristo
+    AriPrune
+
+  NRpcCmd* {.pure.} = enum
+    `sync_db`
+    `external_sync`
+
+  NRpcConf* = object of RootObj
+    ## Main NRpc configuration object
+    
+    beaconApi* {.
+      desc: "Beacon API url"
+      defaultValue: ""
+      name: "beacon-api" .}: string
+
+    network {.
+      desc: "Name or id number of Ethereum network(mainnet(1), sepolia(11155111), holesky(17000), other=custom)"
+      longDesc:
+        "- mainnet: Ethereum main network\n" &
+        "- sepolia: Test network (proof-of-work)\n" &
+        "- holesky: The holesovice post-merge testnet"
+      defaultValue: "" # the default value is set in makeConfig
+      defaultValueDesc: "mainnet(1)"
+      abbr: "i"
+      name: "network" }: string
+
+    customNetwork {.
+      desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
+      defaultValueDesc: ""
+      abbr: "c"
+      name: "custom-network" }: Option[NetworkParams]
+
+    networkId* {.
+      ignore # this field is not processed by confutils
+      defaultValue: MainNet # the defaultValue value is set by `makeConfig`
+      name: "network-id"}: NetworkId
+
+    networkParams* {.
+      ignore # this field is not processed by confutils
+      defaultValue: NetworkParams() # the defaultValue value is set by `makeConfig`
+      name: "network-params"}: NetworkParams
+
+    logLevel* {.
+      separator: "\pLOGGING AND DEBUGGING OPTIONS:"
+      desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
+      defaultValue: LogLevel.INFO
+      defaultValueDesc: $LogLevel.INFO
+      name: "log-level" }: LogLevel
+
+    logFile* {.
+      desc: "Specifies a path for the written Json log file"
+      name: "log-file" }: Option[OutFile]
+
+    logMetricsEnabled* {.
+      desc: "Enable metrics logging"
+      defaultValue: false
+      name: "log-metrics" .}: bool
+
+    logMetricsInterval* {.
+      desc: "Interval at which to log metrics, in seconds"
+      defaultValue: 10
+      name: "log-metrics-interval" .}: int
+
+    metricsEnabled* {.
+      desc: "Enable the built-in metrics HTTP server"
+      defaultValue: false
+      name: "metrics" }: bool
+
+    metricsPort* {.
+      desc: "Listening port of the built-in metrics HTTP server"
+      defaultValue: defaultMetricsServerPort
+      defaultValueDesc: $defaultMetricsServerPort
+      name: "metrics-port" }: Port
+
+    metricsAddress* {.
+      desc: "Listening IP address of the built-in metrics HTTP server"
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: $defaultAdminListenAddressDesc
+      name: "metrics-address" }: IpAddress
+
+    case cmd* {.
+      command
+      desc: "" }: NRpcCmd
+    
+    of `sync_db`:
+
+      chunkSize* {.
+        desc: "Number of blocks per database transaction"
+        defaultValue: 1000
+        name: "chunk-size" .}: uint64
+
+      dataDir* {.
+        desc: "The directory where nimbus will store all blockchain data"
+        defaultValue: defaultDataDir()
+        defaultValueDesc: $defaultDataDirDesc
+        abbr: "d"
+        name: "data-dir" }: OutDir
+
+      chainDbMode* {.
+        desc: "Blockchain database"
+        longDesc:
+          "- Aristo   -- Single state DB, full node\n" &
+          "- AriPrune -- Aristo with curbed block history (for testing)\n" &
+          ""
+        defaultValue: ChainDbMode.Aristo
+        defaultValueDesc: $ChainDbMode.Aristo
+        abbr : "p"
+        name: "chaindb" }: ChainDbMode
+
+      evm* {.
+        desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
+        defaultValue: ""
+        name: "evm"
+        includeIfEvmc }: string
+
+      trustedSetupFile* {.
+        desc: "Load EIP-4844 trusted setup file"
+        defaultValue: none(string)
+        defaultValueDesc: "Baked in trusted setup"
+        name: "trusted-setup-file" .}: Option[string]
+
+      # TODO validation and storage options should be made non-hidden when the
+      #      UX has stabilised and era1 storage is in the app
+      fullValidation* {.
+        hidden
+        desc: "Enable full per-block validation (slow)"
+        defaultValue: false
+        name: "debug-full-validation".}: bool
+
+      noValidation* {.
+        hidden
+        desc: "Disble per-chunk validation"
+        defaultValue: true
+        name: "debug-no-validation".}: bool
+
+      storeBodies* {.
+        hidden
+        desc: "Store block blodies in database"
+        defaultValue: false
+        name: "debug-store-bodies".}: bool
+
+      # TODO this option should probably only cover the redundant parts, ie
+      #      those that are in era1 files - era files presently do not store
+      #      receipts
+      storeReceipts* {.
+        hidden
+        desc: "Store receipts in database"
+        defaultValue: false
+        name: "debug-store-receipts".}: bool
+
+      storeSlotHashes* {.
+        hidden
+        desc: "Store reverse slot hashes in database"
+        defaultValue: false
+        name: "debug-store-slot-hashes".}: bool
+
+      rocksdbMaxOpenFiles {.
+        hidden
+        defaultValue: defaultMaxOpenFiles
+        defaultValueDesc: $defaultMaxOpenFiles
+        name: "debug-rocksdb-max-open-files".}: int
+
+      rocksdbWriteBufferSize {.
+        hidden
+        defaultValue: defaultWriteBufferSize
+        defaultValueDesc: $defaultWriteBufferSize
+        name: "debug-rocksdb-write-buffer-size".}: int
+
+      rocksdbRowCacheSize {.
+        hidden
+        defaultValue: defaultRowCacheSize
+        defaultValueDesc: $defaultRowCacheSize
+        name: "debug-rocksdb-row-cache-size".}: int
+
+      rocksdbBlockCacheSize {.
+        hidden
+        defaultValue: defaultBlockCacheSize
+        defaultValueDesc: $defaultBlockCacheSize
+        name: "debug-rocksdb-block-cache-size".}: int
+
+    of `external_sync`:
+
+      # github.com/ethereum/execution-apis/
+      #   /blob/v1.0.0-alpha.8/src/engine/authentication.md#key-distribution
+      jwtSecret* {.
+        desc: "Path to a file containing a 32 byte hex-encoded shared secret" &
+          " needed for websocket authentication. By default, the secret key" &
+          " is auto-generated."
+        defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
+        name: "jwt-secret" .}: Option[InputFile]
+
+      eth1EngineApi* {.
+        desc: "Eth1 Engine API url"
+        defaultValue: ""
+        name: "eth1-engine-api" .}: string
+
+func parseCmdArg(T: type NetworkId, p: string): T
+    {.gcsafe, raises: [ValueError].} =
+  parseInt(p).T
+
+func completeCmdArg(T: type NetworkId, val: string): seq[string] =
+  return @[]
+
+func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
+  result = fromURI(enr.Record, p).valueOr:
+    raise newException(ValueError, "Invalid ENR")
+
+func completeCmdArg*(T: type enr.Record, val: string): seq[string] =
+  return @[]
+
+proc parseCmdArg(T: type NetworkParams, p: string): T
+    {.gcsafe, raises: [ValueError].} =
+  try:
+    if not loadNetworkParams(p, result):
+      raise newException(ValueError, "failed to load customNetwork")
+  except CatchableError:
+    raise newException(ValueError, "failed to load customNetwork")
+
+func completeCmdArg(T: type NetworkParams, val: string): seq[string] =
+  return @[]
+
+
+proc getNetworkId(conf: NRpcConf): Option[NetworkId] =
+  if conf.network.len == 0:
+    return none NetworkId
+
+  let network = toLowerAscii(conf.network)
+  case network
+  of "mainnet": return some MainNet
+  of "sepolia": return some SepoliaNet
+  of "holesky": return some HoleskyNet
+  else:
+    try:
+      some parseInt(network).NetworkId
+    except CatchableError:
+      error "Failed to parse network name or id", network
+      quit QuitFailure
+
+func dbOptions*(conf: NRpcConf): DbOptions =
+  DbOptions.init(
+    maxOpenFiles = conf.rocksdbMaxOpenFiles,
+    writeBufferSize = conf.rocksdbWriteBufferSize,
+    rowCacheSize = conf.rocksdbRowCacheSize,
+    blockCacheSize = conf.rocksdbBlockCacheSize,
+  )
+
+# KLUDGE: The `load()` template does currently not work within any exception
+#         annotated environment.
+{.pop.}
+
+proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
+    {.raises: [CatchableError].} =
+  ## Note: this function is not gc-safe
+
+  # The try/catch clause can go away when `load()` is clean
+  try:
+    {.push warning[ProveInit]: off.}
+    result = NRpcConf.load(
+      cmdLine,
+      version = NimbusBuild,
+      copyrightBanner = NimbusHeader
+    )
+    {.pop.}
+  except CatchableError as e:
+    raise e
+
+  var networkId = result.getNetworkId()
+
+  if result.customNetwork.isSome:
+    result.networkParams = result.customNetwork.get()
+    if networkId.isNone:
+      # WARNING: networkId and chainId are two distinct things
+      # they usage should not be mixed in other places.
+      # We only set networkId to chainId if networkId not set in cli and
+      # --custom-network is set.
+      # If chainId is not defined in config file, it's ok because
+      # zero means CustomNet
+      networkId = some(NetworkId(result.networkParams.config.chainId))
+
+  if networkId.isNone:
+    # bootnodes is set via getBootNodes
+    networkId = some MainNet
+
+  result.networkId = networkId.get()
+
+  if result.customNetwork.isNone:
+    result.networkParams = networkParams(result.networkId)
+
+
+when isMainModule:
+  # for testing purpose
+  discard makeConfig()
