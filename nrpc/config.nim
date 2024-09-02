@@ -29,37 +29,6 @@ import
 
 export net, defs
 
-const
-  # TODO: fix this agent-string format to match other
-  # eth clients format
-  NimbusIdent* = "$# v$# [$#: $#, $#, $#]" % [
-    NimbusName,
-    NimbusVersion,
-    hostOS,
-    hostCPU,
-    VmName,
-    GitRevision
-  ]
-
-let
-  # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
-  NimbusCopyright* = "Copyright (c) 2018-" &
-    $(now().utc.year) &
-    " Status Research & Development GmbH"
-
-  # e.g.:
-  # Nimbus v0.1.0 [windows: amd64, rocksdb, evmc, dda8914f]
-  # Copyright (c) 2018-2021 Status Research & Development GmbH
-  NimbusBuild* = "$#\p$#" % [
-    NimbusIdent,
-    NimbusCopyright,
-  ]
-
-  NimbusHeader* = "$#\p\p$#" % [
-    NimbusBuild,
-    version.NimVersion
-  ]
-
 func defaultDataDir*(): string =
   when defined(windows):
     getHomeDir() / "AppData" / "Roaming" / "Nimbus"
@@ -282,8 +251,7 @@ type
 
     of `external_sync`:
 
-      # github.com/ethereum/execution-apis/
-      #   /blob/v1.0.0-alpha.8/src/engine/authentication.md#key-distribution
+      # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.
         desc: "Path to a file containing a 32 byte hex-encoded shared secret" &
           " needed for websocket authentication. By default, the secret key" &
@@ -291,10 +259,10 @@ type
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
 
-      eth1EngineApi* {.
+      elEngineApi* {.
         desc: "Eth1 Engine API url"
         defaultValue: ""
-        name: "eth1-engine-api" .}: string
+        name: "el-engine-api" .}: string
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
@@ -322,18 +290,18 @@ func completeCmdArg(T: type NetworkParams, val: string): seq[string] =
   return @[]
 
 
-proc getNetworkId(conf: NRpcConf): Option[NetworkId] =
+proc getNetworkId(conf: NRpcConf): Opt[NetworkId] =
   if conf.network.len == 0:
-    return none NetworkId
+    return Opt.none NetworkId
 
   let network = toLowerAscii(conf.network)
   case network
-  of "mainnet": return some MainNet
-  of "sepolia": return some SepoliaNet
-  of "holesky": return some HoleskyNet
+  of "mainnet": return Opt.some MainNet
+  of "sepolia": return Opt.some SepoliaNet
+  of "holesky": return Opt.some HoleskyNet
   else:
     try:
-      some parseInt(network).NetworkId
+      Opt.some parseInt(network).NetworkId
     except CatchableError:
       error "Failed to parse network name or id", network
       quit QuitFailure
@@ -358,9 +326,7 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
   try:
     {.push warning[ProveInit]: off.}
     result = NRpcConf.load(
-      cmdLine,
-      version = NimbusBuild,
-      copyrightBanner = NimbusHeader
+      cmdLine
     )
     {.pop.}
   except CatchableError as e:
@@ -377,11 +343,11 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
       # --custom-network is set.
       # If chainId is not defined in config file, it's ok because
       # zero means CustomNet
-      networkId = some(NetworkId(result.networkParams.config.chainId))
+      networkId = Opt.some(NetworkId(result.networkParams.config.chainId))
 
   if networkId.isNone:
     # bootnodes is set via getBootNodes
-    networkId = some MainNet
+    networkId = Opt.some MainNet
 
   result.networkId = networkId.get()
 
