@@ -100,7 +100,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
 
   # txPool must be informed of active head
   # so it can know the latest account state
-  doAssert txPool.smartHead(head)
+  doAssert txPool.smartHead(head, chain)
 
   var key: JwtSharedKey
   key.fromHex(jwtSecret).isOkOr:

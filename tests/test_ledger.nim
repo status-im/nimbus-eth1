@@ -42,7 +42,7 @@ type
     nonce   : uint64
     chainId : ChainId
     xp      : TxPoolRef
-    chain   : ChainRef
+    chain   : ForkedChainRef
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -110,7 +110,7 @@ proc initEnv(): TestEnv =
     nonce   : 0'u64,
     chainId : conf.networkParams.config.chainId,
     xp      : TxPoolRef.new(com),
-    chain   : newChain(com),
+    chain   : newForkedChain(com, com.genesisHeader),
   )
 
 func makeTx(
@@ -140,8 +140,8 @@ func initAddr(z: int): EthAddress =
   const L = sizeof(result)
   result[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
 
-proc importBlocks(env: TestEnv; blk: EthBlock) =
-  env.chain.persistBlocks([blk]).isOkOr:
+proc importBlock(env: TestEnv; blk: EthBlock) =
+  env.chain.importBlock(blk).isOkOr:
     raiseAssert "persistBlocks() failed at block #" &
       $blk.header.number & " msg: " & error
 
@@ -333,9 +333,9 @@ proc runLedgerTransactionTests(noisy = true) =
           uncles: blk.uncles,
           withdrawals: Opt.some(newSeq[Withdrawal]())
         )
-        env.importBlocks(EthBlock.init(blk.header, body))
+        env.importBlock(EthBlock.init(blk.header, body))
 
-        check env.xp.smartHead(blk.header)
+        check env.xp.smartHead(blk.header, env.chain)
         for tx in body.transactions:
           env.txs.add tx
 
