@@ -217,10 +217,6 @@ nimbus: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
 
-# external_sync: | build deps rocksdb
-# 	echo -e $(BUILD_MSG) "build/$@" && \
-# 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
-
 # symlink
 nimbus.nims:
 	ln -s nimbus.nimble $@

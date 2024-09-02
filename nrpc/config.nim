@@ -12,7 +12,6 @@ import
   std/[
     options,
     strutils,
-    times,
     os,
     net
   ],
@@ -23,7 +22,7 @@ import
     confutils/std/net
   ],
   eth/[common, net/utils, net/nat, p2p/enode, p2p/discoveryv5/enr],
-  "../nimbus"/[constants, compile_info, version],
+  "../nimbus"/[constants, compile_info],
   ../nimbus/common/chain_config,
   ../nimbus/db/opts
 
@@ -36,9 +35,6 @@ func defaultDataDir*(): string =
     getHomeDir() / "Library" / "Application Support" / "Nimbus"
   else:
     getHomeDir() / ".cache" / "nimbus"
-
-func defaultKeystoreDir*(): string =
-  defaultDataDir() / "keystore"
 
 func getLogLevels(): string =
   var logLevels: seq[string]
@@ -88,7 +84,7 @@ type
       desc: "Name or id number of Ethereum network(mainnet(1), sepolia(11155111), holesky(17000), other=custom)"
       longDesc:
         "- mainnet: Ethereum main network\n" &
-        "- sepolia: Test network (proof-of-work)\n" &
+        "- sepolia: Test network (pow+pos) with merge\n" &
         "- holesky: The holesovice post-merge testnet"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
