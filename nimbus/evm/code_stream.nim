@@ -53,8 +53,10 @@ func readVmWord*(c: var CodeStream, n: static int): UInt256 =
 func len*(c: CodeStream): int =
   len(c.code)
 
-func next*(c: var CodeStream): Op =
-  if c.pc != c.code.len:
+func next*(c: var CodeStream): Op {.inline.} =
+  # The extra >= 0 check helps eliminate `IndexDefect` from the optimized code
+  # which keeps this hotspot in the EVM small, code-size-wise
+  if c.pc >= 0 and c.pc < c.code.len:
     result = Op(c.code.bytes[c.pc])
     inc c.pc
   else:

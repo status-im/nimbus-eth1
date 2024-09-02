@@ -452,6 +452,20 @@ func prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)
 
 func opcodeGasCost*(
+    c: Computation, op: Op, gasCost: static GasInt, tracingEnabled: static bool,
+    reason: static string): EvmResultVoid {.inline.} =
+  # Special case of the opcodeGasCost function used for fixed-gas opcodes - since
+  # the parameters are known at compile time, we inline and specialize it
+  when tracingEnabled:
+    c.vmState.captureGasCost(
+      c,
+      op,
+      gasCost,
+      c.gasMeter.gasRemaining,
+      c.msg.depth + 1)
+  c.gasMeter.consumeGas(gasCost, reason)
+
+func opcodeGasCost*(
     c: Computation, op: Op, gasCost: GasInt, reason: static string): EvmResultVoid =
   if c.vmState.tracingEnabled:
     c.vmState.captureGasCost(

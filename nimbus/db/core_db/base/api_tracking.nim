@@ -73,6 +73,7 @@ type
     KvtDelFn            = "del"
     KvtGetFn            = "get"
     KvtGetOrEmptyFn     = "getOrEmpty"
+    KvtHasKeyRcFn       = "hasKeyRc"
     KvtHasKeyFn         = "hasKey"
     KvtLenFn            = "len"
     KvtPairsIt          = "pairs"

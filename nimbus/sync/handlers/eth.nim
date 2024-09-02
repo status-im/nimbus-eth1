@@ -36,6 +36,9 @@ type
     lastCleanup: Time
 
 const
+  extraTraceMessages = false
+    ## Enabled additional logging noise
+
   txpool_enabled = defined(enable_txpool_in_synchronizer)
 
 when txpool_enabled:
@@ -448,7 +451,8 @@ method handleAnnouncedTxsHashes*(
       txSizes: openArray[int];
       txHashes: openArray[Hash256];
         ): Result[void, string] =
-  trace "Wire handler ignoring txs hashes", nHashes=txHashes.len
+  when extraTraceMessages:
+    trace "Wire handler ignoring txs hashes", nHashes=txHashes.len
   ok()
 
 method handleNewBlock*(ctx: EthWireRef,

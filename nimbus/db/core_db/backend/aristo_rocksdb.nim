@@ -93,13 +93,16 @@ proc toRocksDb*(
   cfOpts.memtableWholeKeyFiltering = true
   cfOpts.memtablePrefixBloomSizeRatio = 0.1
 
-  # LZ4 seems to cut database size to 2/3 roughly, at the time of writing
+  # ZSTD seems to cut database size to 2/3 roughly, at the time of writing
   # Using it for the bottom-most level means it applies to 90% of data but
   # delays compression until data has settled a bit, which seems like a
   # reasonable tradeoff.
-  # TODO evaluate zstd compression with a trained dictionary
-  # https://github.com/facebook/rocksdb/wiki/Compression
-  cfOpts.bottommostCompression = Compression.lz4Compression
+  # Compared to LZ4 that was tested earlier, the default ZSTD config results
+  # in 10% less space and similar or slightly better performance in some
+  # simple tests around mainnet block 14M.
+  # TODO evaluate zstd dictionary compression
+  # https://github.com/facebook/rocksdb/wiki/Dictionary-Compression
+  cfOpts.bottommostCompression = Compression.zstdCompression
 
   # TODO In the AriVtx table, we don't do lookups that are expected to result
   #      in misses thus we could avoid the filter cost - this does not apply to
