@@ -40,8 +40,14 @@ type
 proc headDiff*(xp: TxPoolRef;
                newHead: BlockHeader, chain: ForkedChainRef): Result[TxHeadDiffRef,TxInfo] =
   let
-    newHash = newHead.blockHash
     txDiffs = TxHeadDiffRef()
+
+  if newHead.number <= chain.baseNumber:
+    # return empty diff
+    return ok(txDiffs)
+
+  let
+    newHash = newHead.blockHash
     blk     = chain.blockByHash(newHash).valueOr:
                 return err(txInfoErrForwardHeadMissing)
 
