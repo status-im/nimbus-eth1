@@ -133,14 +133,7 @@ proc putVtxFn(db: MemBackendRef): PutVtxFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vtx.isValid:
-          let rc = vtx.blobify()
-          if rc.isErr:
-            hdl.error = TypedPutHdlErrRef(
-              pfx:  VtxPfx,
-              vid:  rvid.vid,
-              code: rc.error)
-            return
-          hdl.sTab[rvid] = rc.value
+          hdl.sTab[rvid] = vtx.blobify()
         else:
           hdl.sTab[rvid] = EmptyBlob
 

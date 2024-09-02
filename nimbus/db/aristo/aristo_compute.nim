@@ -68,7 +68,7 @@ proc computeKeyImpl(
   case vtx.vType:
   of Leaf:
     writer.startList(2)
-    writer.append(vtx.lPfx.toHexPrefix(isLeaf = true))
+    writer.append(vtx.lPfx.toHexPrefix(isLeaf = true).data())
 
     case vtx.lData.pType
     of AccountData:
@@ -111,7 +111,7 @@ proc computeKeyImpl(
       writeBranch(bwriter)
 
       writer.startList(2)
-      writer.append(vtx.ePfx.toHexPrefix(isleaf = false))
+      writer.append(vtx.ePfx.toHexPrefix(isleaf = false).data())
       writer.append(bwriter.finish().digestTo(HashKey))
     else:
       writeBranch(writer)
