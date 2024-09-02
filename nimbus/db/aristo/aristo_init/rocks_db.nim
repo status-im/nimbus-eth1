@@ -312,10 +312,8 @@ iterator walkVtx*(
     be: RdbBackendRef;
       ): tuple[evid: RootedVertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (rvid, data) in be.rdb.walkVtx:
-    let rc = data.deblobify VertexRef
-    if rc.isOk:
-      yield (rvid, rc.value)
+  for (rvid, vtx) in be.rdb.walkVtx:
+    yield (rvid, vtx)
 
 iterator walkKey*(
     be: RdbBackendRef;

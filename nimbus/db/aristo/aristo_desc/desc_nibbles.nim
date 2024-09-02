@@ -8,15 +8,20 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-import stew/arrayops
+import stew/[arraybuf, arrayops]
 
-type NibblesBuf* = object
-  ## Allocation-free type for storing up to 64 4-bit nibbles, as seen in the
-  ## Ethereum MPT
-  bytes: array[32, byte]
-  ibegin, iend: int8
-    # Where valid nibbles can be found - we use indices here to avoid copies
-    # wen slicing - iend not inclusive
+export arraybuf
+
+type
+  NibblesBuf* = object
+    ## Allocation-free type for storing up to 64 4-bit nibbles, as seen in the
+    ## Ethereum MPT
+    bytes: array[32, byte]
+    ibegin, iend: int8
+      # Where valid nibbles can be found - we use indices here to avoid copies
+      # wen slicing - iend not inclusive
+
+  HexPrefixBuf* = ArrayBuf[33, byte]
 
 func high*(T: type NibblesBuf): int =
   63
@@ -61,7 +66,7 @@ func `$`*(r: NibblesBuf): string =
     const chars = "0123456789abcdef"
     result.add chars[r[i]]
 
-func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf =
+func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf {.noinit.} =
   result.bytes = r.bytes
   result.ibegin = r.ibegin + ibegin.int8
   let e =
@@ -75,7 +80,7 @@ func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf =
 template writeFirstByte(nibbleCountExpr) {.dirty.} =
   let nibbleCount = nibbleCountExpr
   var oddnessFlag = (nibbleCount and 1) != 0
-  newSeq(result, (nibbleCount div 2) + 1)
+  result.setLen((nibbleCount div 2) + 1)
   result[0] = byte((int(isLeaf) * 2 + int(oddnessFlag)) shl 4)
   var writeHead = 0
 
@@ -89,11 +94,11 @@ template writeNibbles(r) {.dirty.} =
       result[writeHead] = nextNibble shl 4
     oddnessFlag = not oddnessFlag
 
-func toHexPrefix*(r: NibblesBuf, isLeaf = false): seq[byte] =
+func toHexPrefix*(r: NibblesBuf, isLeaf = false): HexPrefixBuf =
   writeFirstByte(r.len)
   writeNibbles(r)
 
-func toHexPrefix*(r1, r2: NibblesBuf, isLeaf = false): seq[byte] =
+func toHexPrefix*(r1, r2: NibblesBuf, isLeaf = false): HexPrefixBuf =
   writeFirstByte(r1.len + r2.len)
   writeNibbles(r1)
   writeNibbles(r2)
@@ -131,7 +136,7 @@ func fromHexPrefix*(
   else:
     result.isLeaf = false
 
-func `&`*(a, b: NibblesBuf): NibblesBuf =
+func `&`*(a, b: NibblesBuf): NibblesBuf {.noinit.} =
   for i in 0 ..< a.len:
     result[i] = a[i]
 

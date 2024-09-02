@@ -135,10 +135,10 @@ proc getKey*(
   rdbKeyLruStats[rvid.to(StateType)].inc(false)
 
   # Otherwise fetch from backend database
-  var res: Result[HashKey,(AristoError,string)]
+  # A threadvar is used to avoid allocating an environment for onData
+  var res{.threadvar.}: Opt[HashKey]
   let onData = proc(data: openArray[byte]) =
-    res = HashKey.fromBytes(data).mapErr(proc(): auto =
-      (RdbHashKeyExpected,""))
+    res = HashKey.fromBytes(data)
 
   let gotData = rdb.keyCol.get(rvid.blobify().data(), onData).valueOr:
      const errSym = RdbBeDriverGetKeyError
@@ -148,9 +148,9 @@ proc getKey*(
 
   # Correct result if needed
   if not gotData:
-    res = ok(VOID_HASH_KEY)
+    res.ok(VOID_HASH_KEY)
   elif res.isErr():
-    return res # Parsing failed
+    return err((RdbHashKeyExpected,"")) # Parsing failed
 
   # Update cache and return
   ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), RdKeyLruMaxSize)
@@ -166,10 +166,10 @@ proc getVtx*(
     return ok(move(rc.value))
 
   # Otherwise fetch from backend database
-  var res: Result[VertexRef,(AristoError,string)]
+  # A threadvar is used to avoid allocating an environment for onData
+  var res {.threadvar.}: Result[VertexRef,AristoError]
   let onData = proc(data: openArray[byte]) =
-    res = data.deblobify(VertexRef).mapErr(proc(error: AristoError): auto =
-      (error,""))
+    res = data.deblobify(VertexRef)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
@@ -183,7 +183,7 @@ proc getVtx*(
     return ok(VertexRef(nil))
 
   if res.isErr():
-    return res # Parsing failed
+    return err((res.error(), "Parsing failed")) # Parsing failed
 
   rdbVtxLruStats[rvid.to(StateType)][res.value().vType].inc(false)
 

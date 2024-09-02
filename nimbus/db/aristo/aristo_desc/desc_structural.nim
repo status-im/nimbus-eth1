@@ -124,8 +124,6 @@ type
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                        ## Last used vertex ID
 
-    delTree*: seq[RootedVertexID]          ## Not yet fully deleted sub-trees
-
     accLeaves*: Table[Hash256, VertexRef]  ## Account path -> VertexRef
     stoLeaves*: Table[Hash256, VertexRef]  ## Storage path -> VertexRef
 

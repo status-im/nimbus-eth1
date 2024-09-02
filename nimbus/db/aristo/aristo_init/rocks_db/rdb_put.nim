@@ -122,12 +122,7 @@ proc putVtx*(
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = rdb.session
   if vtx.isValid:
-    let rc = vtx.blobify()
-    if rc.isErr:
-      # Caller must `rollback()` which will flush the `rdVtxLru` cache
-      return err((rvid.vid,rc.error,""))
-
-    dsc.put(rvid.blobify().data(), rc.value, rdb.vtxCol.handle()).isOkOr:
+    dsc.put(rvid.blobify().data(), vtx.blobify(), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdVtxLru` cache
       const errSym = RdbBeDriverPutVtxError
       when extraTraceMessages:

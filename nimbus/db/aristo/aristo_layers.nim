@@ -171,7 +171,6 @@ func isEmpty*(ly: LayerRef): bool =
   ## tables are empty. The field `txUid` is ignored, here.
   ly.sTab.len == 0 and
   ly.kMap.len == 0 and
-  ly.delTree.len == 0 and
   ly.accLeaves.len == 0 and
   ly.stoLeaves.len == 0
 
@@ -187,8 +186,6 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
   for (vid,key) in src.kMap.pairs:
     trg.kMap[vid] = key
   trg.vTop = src.vTop
-  for rvid in src.delTree:
-    trg.delTree.add rvid
   for (accPath,leafVtx) in src.accLeaves.pairs:
     trg.accLeaves[accPath] = leafVtx
   for (mixPath,leafVtx) in src.stoLeaves.pairs:
@@ -207,7 +204,6 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
     sTab: layers[0].sTab.dup,          # explicit dup for ref values
     kMap: layers[0].kMap,
     vTop: layers[^1].vTop,
-    delTree: layers[0].delTree,
     accLeaves: layers[0].accLeaves,
     stoLeaves: layers[0].stoLeaves)
 
@@ -217,8 +213,6 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
       result.sTab[vid] = vtx
     for (vid,key) in layers[n].kMap.pairs:
       result.kMap[vid] = key
-    for rvid in layers[n].delTree:
-      result.delTree.add rvid
     for (accPath,vtx) in layers[n].accLeaves.pairs:
       result.accLeaves[accPath] = vtx
     for (mixPath,vtx) in layers[n].stoLeaves.pairs:
