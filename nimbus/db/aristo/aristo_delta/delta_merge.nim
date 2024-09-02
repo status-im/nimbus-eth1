@@ -48,7 +48,6 @@ proc deltaMerge*(
     result = LayerRef(
       sTab:      lower.sTab, # shallow copy (entries will not be modified)
       kMap:      lower.kMap,
-      delTree:   lower.delTree,
       accLeaves: lower.accLeaves,
       stoLeaves: lower.stoLeaves,
       vTop:      upper.vTop)
@@ -67,9 +66,6 @@ proc deltaMerge*(
     for (rvid,key) in lower.kMap.pairs:
       if not upper.kMap.hasKey(rvid):
         upper.kMap[rvid] = key
-
-    for rvid in lower.delTree:
-      upper.delTree.add rvid
 
     for (accPath,leafVtx) in lower.accLeaves.pairs:
       if not upper.accLeaves.hasKey(accPath):
