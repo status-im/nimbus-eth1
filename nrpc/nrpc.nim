@@ -67,7 +67,39 @@ template getELBlockFromBeaconChain(
   else:
     (eth1Block, false)
 
-proc testApi*(conf: NRpcConf) {.async.} =
+template loadNetworkConfig(conf: NRpcConf): (RuntimeConfig, uint64, uint64) =
+  case conf.networkId
+  of MainNet:
+    (getMetadataForNetwork("mainnet").cfg, 15537393'u64, 4700013'u64)
+  of SepoliaNet:
+    (getMetadataForNetwork("sepolia").cfg, 1450408'u64, 115193'u64)
+  of HoleskyNet:
+    (getMetadataForNetwork("holesky").cfg, 0'u64, 0'u64)
+  else:
+    error "Unsupported network", network = conf.networkId
+    quit(QuitFailure)
+
+template findSlot(client: RestClientRef, currentBlockNumber: uint64, lastEra1Block: uint64, firstSlotAfterMerge: uint64): uint64 =
+  var importedSlot = (currentBlockNumber - lastEra1Block) + firstSlotAfterMerge
+  notice "Finding slot number corresponding to block", importedSlot
+
+  var clNum = 0'u64
+  while running and clNum < currentBlockNumber:
+    let (blk, stat) = client.getELBlockFromBeaconChain(
+      BlockIdent.init(Slot(importedSlot)), clConfig
+    )
+    if not stat:
+      importedSlot += 1
+      continue
+
+    clNum = blk.header.number
+    # decreasing the lower bound with each iteration
+    importedSlot += currentBlockNumber - clNum
+
+  notice "Found the slot to start with", slot = importedSlot
+  importedSlot
+
+proc syncToEngineApi*(conf: NRpcConf) {.async.} =
 
   template boolFlag(flags, b): PersistBlockFlags =
     if b:
@@ -76,17 +108,7 @@ proc testApi*(conf: NRpcConf) {.async.} =
       {}
 
   let
-    (clConfig, lastEra1Block, firstSlotAfterMerge) =
-      case conf.networkId
-      of MainNet:
-        (getMetadataForNetwork("mainnet").cfg, 15537393'u64, 4700013'u64)
-      of SepoliaNet:
-        (getMetadataForNetwork("sepolia").cfg, 1450408'u64, 115193'u64)
-      of HoleskyNet:
-        (getMetadataForNetwork("holesky").cfg, 0'u64, 0'u64)
-      else:
-        error "Unsupported network", network = conf.networkId
-        quit(QuitFailure)
+    (clConfig, lastEra1Block, firstSlotAfterMerge) = loadNetworkConfig(conf)
     jwtSecret = 
       if conf.jwtSecret.isSome():
         loadJwtSecret(Opt.some(conf.jwtSecret.get()))
@@ -108,51 +130,35 @@ proc testApi*(conf: NRpcConf) {.async.} =
 
   notice "Connected to Beacon Chain", data = data
 
+  template elBlockNumber(): uint64 =
+    try:
+      uint64(await rpcClient.eth_blockNumber())
+    except CatchableError as exc:
+      error "Error getting block number", error = exc.msg
+      0'u64
+
   var
-    currentBlockNumber = 
-      try:
-        uint64(await rpcClient.eth_blockNumber())
-      except CatchableError as exc:
-        error "Error getting block number", error = exc.msg
-        0'u64
-    flags =
-      boolFlag({PersistBlockFlag.NoValidation}, true) +
-      boolFlag({PersistBlockFlag.NoFullValidation}, true) +
-      boolFlag(NoPersistBodies, true) +
-      boolFlag({PersistBlockFlag.NoPersistReceipts}, true)
-    blocks: seq[EthBlock]
+    currentBlockNumber = elBlockNumber()
     curBlck: ForkedSignedBeaconBlock
     client = RestClientRef.new(conf.beaconApi).valueOr:
       error "Cannot connect to server"
       quit(QuitFailure)
 
   notice "Current block number", number = currentBlockNumber
-  var (headBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
+  var
+    (finalizedBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Finalized), clConfig)
+    (headBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
 
   if headBlck.header.number <= currentBlockNumber:
     notice "CL head is behind of EL head, or in sync", head = headBlck.header.number
     quit(QuitSuccess)
 
-  var importedSlot = (currentBlockNumber - lastEra1Block) + firstSlotAfterMerge
-  notice "Finding slot number corresponding to block", importedSlot
+  var
+    importedSlot = findSlot(client, currentBlockNumber, lastEra1Block, firstSlotAfterMerge)
+    finalizedHash: Eth2Digest
+    headHash: Eth2Digest
 
-  var clNum = 0'u64
-  while running and clNum < currentBlockNumber:
-    let (blk, stat) = client.getELBlockFromBeaconChain(
-      BlockIdent.init(Slot(importedSlot)), clConfig
-    )
-    if not stat:
-      importedSlot += 1
-      continue
-
-    clNum = blk.header.number
-    # decreasing the lower bound with each iteration
-    importedSlot += currentBlockNumber - clNum
-
-  notice "Found the slot to start with", slot = importedSlot
-  var parentRoot: Eth2Digest
-
-  for i in 0..5000:
+  while running and currentBlockNumber < headBlck.header.number:
 
     var isAvailable = false
     (curBlck, isAvailable) = client.getCLBlockFromBeaconChain(
@@ -173,22 +179,28 @@ proc testApi*(conf: NRpcConf) {.async.} =
           data = await rpcClient.newPayload(
             payload, versioned_hashes, 
             FixedBytes[32] forkyBlck.message.parent_root.data)
-        parentRoot = forkyBlck.message.body.execution_payload.block_hash
         notice "Payload status", response = data
+
+        headHash = forkyBlck.message.body.execution_payload.block_hash
+        if currentBlockNumber == finalizedBlck.header.number:
+          notice "Finalized block reached", number = currentBlockNumber
+          finalizedHash = finalizedBlck.header.parentHash
+          (finalizedBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Finalized), clConfig)
+
     
     var
       state = ForkchoiceStateV1(
-        headBlockHash: parentRoot.asBlockHash,
-        safeBlockHash: parentRoot.asBlockHash,
-        finalizedBlockHash: parentRoot.asBlockHash)
+        headBlockHash: headHash.asBlockHash,
+        safeBlockHash: finalizedHash.asBlockHash,
+        finalizedBlockHash: finalizedHash.asBlockHash)
       fcudata = await rpcClient.forkchoiceUpdated(state, Opt.none(PayloadAttributesV3))
-    notice "FCS", state = state
     notice "Forkchoice Updated", response = fcudata
 
+    currentBlockNumber = elBlockNumber()
+    (headBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
 
 
-
-proc loadBlocksFromBeaconChain*(conf: NRpcConf) {.async.} =
+proc syncToDatabase*(conf: NRpcConf) {.async.} =
   let coreDB = AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
 
   let com = CommonRef.new(
@@ -209,17 +221,7 @@ proc loadBlocksFromBeaconChain*(conf: NRpcConf) {.async.} =
 
   let
     chain = com.newChain()
-    (clConfig, lastEra1Block, firstSlotAfterMerge) =
-      case conf.networkId
-      of MainNet:
-        (getMetadataForNetwork("mainnet").cfg, 15537393'u64, 4700013'u64)
-      of SepoliaNet:
-        (getMetadataForNetwork("sepolia").cfg, 1450408'u64, 115193'u64)
-      of HoleskyNet:
-        (getMetadataForNetwork("holesky").cfg, 0'u64, 0'u64)
-      else:
-        error "Unsupported network", network = conf.networkId
-        quit(QuitFailure)
+    (clConfig, lastEra1Block, firstSlotAfterMerge) = loadNetworkConfig(conf)
 
   var
     currentBlockNumber = com.db.getSavedStateBlockNumber() + 1
@@ -243,7 +245,7 @@ proc loadBlocksFromBeaconChain*(conf: NRpcConf) {.async.} =
     info "Persisted blocks", blocks = blocks.len
     blocks.setLen(0)
 
-  var (headBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
+  var (headBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Finalized), clConfig)
 
   if headBlck.header.number <= currentBlockNumber:
     notice "CL head is behind of EL head, or in sync", head = headBlck.header.number
@@ -252,23 +254,7 @@ proc loadBlocksFromBeaconChain*(conf: NRpcConf) {.async.} =
   info "Current block number", number = currentBlockNumber
   info "Blocks till head", blocks = headBlck.header.number - currentBlockNumber
 
-  var importedSlot = (currentBlockNumber - lastEra1Block) + firstSlotAfterMerge
-  notice "Finding slot number corresponding to block", importedSlot
-
-  var clNum = 0'u64
-  while running and clNum < currentBlockNumber:
-    let (blk, stat) = client.getELBlockFromBeaconChain(
-      BlockIdent.init(Slot(importedSlot)), clConfig
-    )
-    if not stat:
-      importedSlot += 1
-      continue
-
-    clNum = blk.header.number
-    # decreasing the lower bound with each iteration
-    importedSlot += currentBlockNumber - clNum
-
-  notice "Found the slot to start with", slot = importedSlot
+  var importedSlot = findSlot(client, currentBlockNumber, lastEra1Block, firstSlotAfterMerge)
 
   while running and currentBlockNumber < headBlck.header.number:
     var isAvailable = false
@@ -287,7 +273,7 @@ proc loadBlocksFromBeaconChain*(conf: NRpcConf) {.async.} =
       notice "Blocks Downloaded from CL", numberOfBlocks = blocks.len
       process()
       currentBlockNumber = com.db.getSavedStateBlockNumber()
-      (headBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
+      (headBlck, _) = client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Finalized), clConfig)
 
   if blocks.len > 0:
     process()
@@ -324,6 +310,6 @@ when isMainModule:
       if res.isErr:
         fatal "Cannot load baked in Kzg trusted setup", msg = res.error
         quit(QuitFailure)
-    waitFor loadBlocksFromBeaconChain(conf)
+    waitFor syncToDatabase(conf)
   else:
-    waitFor testApi(conf)
+    waitFor syncToEngineApi(conf)
