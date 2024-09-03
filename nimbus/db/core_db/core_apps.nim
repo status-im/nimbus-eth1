@@ -340,11 +340,6 @@ proc getBlockHeader*(
     raise newException(
       BlockNotFound, "No block with hash " & blockHash.data.toHex)
 
-proc hasBlockHeader*(
-    db: CoreDbRef;
-    blockHash: Hash256): bool =
-  db.ctx.getKvt().hasKey(genericHashKey(blockHash).toOpenArray)
-
 proc getHash(
     db: CoreDbRef;
     key: DbKey;

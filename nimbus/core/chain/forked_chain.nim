@@ -529,7 +529,7 @@ proc haveBlockLocally*(c: ForkedChainRef, blockHash: Hash256): bool =
     return true
   if c.baseHash == blockHash:
     return true
-  c.db.hasBlockHeader(blockHash)
+  c.db.headerExists(blockHash)
 
 func stateReady*(c: ForkedChainRef, header: BlockHeader): bool =
   let blockHash = header.blockHash
