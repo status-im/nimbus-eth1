@@ -76,14 +76,6 @@ type
 const
   BaseFolder* = "nimbus"               ## Same as for Legacy DB
   DataFolder* = "aristo"               ## Legacy DB has "data"
-  RdKeyLruMaxSize* = 80000
-    ## Max size of read cache for keys - ~4 levels of MPT
-  RdVtxLruMaxSize* = 1118481
-    ## Max size of read cache for vertex IDs - ~5 levels of MPT - this should
-    ## land at about 200mb of vertex data and probably another 200mb of overhead
-    ## Notably, this cache is an important complement to the rocksdb block cache
-    ## and has a similar effect as the rocksdb row cache, albeit with lower
-    ## overhead
 
 var
   # Hit/miss counters for LRU cache - global so as to integrate easily with

@@ -31,10 +31,10 @@ const
     # currently used has a much larger overhead, 32 is an easily reachable
     # number which likely can be reduced in the future
 
-proc dumpCacheStats() =
+proc dumpCacheStats(keySize, vtxSize: int) =
   block vtx:
     var misses, hits: uint64
-    echo "vtxLru(", RdVtxLruMaxSize, ")"
+    echo "vtxLru(", vtxSize, ")"
     echo "   state    vtype       miss        hit      total hitrate"
     for state in RdbStateType:
       for vtype in VertexType:
@@ -52,7 +52,7 @@ proc dumpCacheStats() =
 
   block key:
     var misses, hits: uint64
-    echo "keyLru(", RdKeyLruMaxSize, ") "
+    echo "keyLru(", keySize, ") "
 
     echo "   state       miss        hit      total hitrate"
 
@@ -89,10 +89,14 @@ proc initImpl(
     opts.rdbVtxCacheSize div (sizeof(VertexID) + sizeof(default(VertexRef)[]) + lruOverhead)
 
   if opts.rdbPrintStats:
+    let
+      ks = rdb.rdKeySize
+      vs = rdb.rdVtxSize
     # TODO instead of dumping at exit, these stats could be logged or written
     #      to a file for better tracking over time - that said, this is mainly
     #      a debug utility at this point
-    addExitProc(dumpCacheStats)
+    addExitProc(proc() =
+      dumpCacheStats(ks, vs))
 
   let
     dataDir = rdb.dataDir
@@ -139,12 +143,6 @@ proc initImpl(
     raiseAssert initFailed & " cannot initialise KeyCF descriptor: " & error
 
   ok(guestCFs.mapIt(baseDb.getColFamily(it.name).expect("loaded cf")))
-
-when defined(printStatsAtExit):
-  # Useful hack for printing exact metrics to compare runs with different
-  # settings
-  addExitProc(
-  )
 
 # ------------------------------------------------------------------------------
 # Public constructor

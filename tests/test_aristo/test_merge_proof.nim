@@ -111,7 +111,7 @@ proc testMergeProofAndKvpList*(
         # New DB with disabled filter slots management
         if 0 < rdbPath.len:
           let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
-          let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
+          let rc = AristoDbRef.init(RdbBackendRef, DbOptions.init(), rdbPath, dbOpts, cfOpts, [])
           xCheckRc rc.error == 0
           rc.value()[0]
         else:
