@@ -122,6 +122,9 @@ proc del(
 ): bool {.gcsafe, raises: [].} =
   if dbBackend.contains(key):
     doAssert dbBackend.tx.delete(key, dbBackend.cfHandle).isOk()
+
+    if not dbBackend.updatedCache.isNil():
+      dbBackend.updatedCache.del(key)
     true
   else:
     false
