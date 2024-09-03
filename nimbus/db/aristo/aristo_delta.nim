@@ -25,26 +25,6 @@ logScope:
   topics = "aristo-delta"
 
 # ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc toStr(rvid: RootedVertexID): string =
-  "$" & rvid.root.uint64.toHex & ":" & rvid.vid.uint64.toHex
-
-proc delSubTree(db: AristoDbRef; writer: PutHdlRef; rvid: RootedVertexID) =
-  ## Collect subtrees marked for deletion
-  let (vtx,_) = db.getVtxRc(rvid).valueOr:
-    notice "Descending for deletion stopped", rvid=(rvid.toStr), error
-    return
-  for vid in vtx.subVids:
-    db.delSubTree(writer, (rvid.root, vid))
-  db.backend.putVtxFn(writer, rvid, VertexRef(nil))
-  db.backend.putKeyFn(writer, rvid, VOID_HASH_KEY)
-  # Make sure the `rvid` is not mentioned here, anymore for further update.
-  db.balancer.sTab.del rvid
-  db.balancer.kMap.del rvid
-
-# ------------------------------------------------------------------------------
 # Public functions, save to backend
 # ------------------------------------------------------------------------------
 
@@ -109,12 +89,6 @@ proc deltaPersistent*(
 
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
-  # This one must come first in order to avoid duplicate `sTree[]` or
-  # `kMap[]` instructions, in the worst case overwiting previously deleted
-  # entries.
-  for rvid in db.balancer.delTree:
-    db.delSubTree(writeBatch, rvid)
-  # Now the standard `sTree[]` and `kMap[]` instructions.
   for rvid, vtx in db.balancer.sTab:
     be.putVtxFn(writeBatch, rvid, vtx)
   for rvid, key in db.balancer.kMap:

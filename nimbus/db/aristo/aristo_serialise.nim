@@ -86,7 +86,7 @@ proc to*(node: NodeRef; T: type seq[Blob]): T =
 
       var wrx = initRlpWriter()
       wrx.startList(2)
-      wrx.append node.ePfx.toHexPrefix(isleaf = false)
+      wrx.append node.ePfx.toHexPrefix(isleaf = false).data()
       wrx.append brHash
 
       result.add wrx.finish()
@@ -104,7 +104,7 @@ proc to*(node: NodeRef; T: type seq[Blob]): T =
 
     var wr = initRlpWriter()
     wr.startList(2)
-    wr.append node.lPfx.toHexPrefix(isleaf = true)
+    wr.append node.lPfx.toHexPrefix(isleaf = true).data()
     wr.append node.lData.serialise(getKey0).value
 
     result.add (wr.finish())
@@ -127,7 +127,7 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
       let brHash = wr.finish().digestTo(HashKey)
       wr = initRlpWriter()
       wr.startList(2)
-      wr.append node.ePfx.toHexPrefix(isleaf = false)
+      wr.append node.ePfx.toHexPrefix(isleaf = false).data()
       wr.append brHash
 
   of Leaf:
@@ -138,7 +138,7 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
       ok(node.key[0]) # always succeeds
 
     wr.startList(2)
-    wr.append node.lPfx.toHexPrefix(isleaf = true)
+    wr.append node.lPfx.toHexPrefix(isleaf = true).data()
     wr.append node.lData.serialise(getKey0).value
 
   wr.finish().digestTo(HashKey)

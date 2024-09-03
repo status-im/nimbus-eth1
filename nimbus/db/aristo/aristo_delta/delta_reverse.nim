@@ -97,10 +97,6 @@ proc revFilter*(
     else:
       return err((rvid.vid,rc.error))
 
-  # Reverse changes for `delTree[]` list.
-  for rvid in filter.delTree:
-    ? db.revSubTree(rev, rvid)
-
   ok(rev)
 
 # ------------------------------------------------------------------------------
