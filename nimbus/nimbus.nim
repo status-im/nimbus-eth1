@@ -230,7 +230,9 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     # Resolve statically for database type
     case conf.chainDbMode:
     of Aristo,AriPrune:
-      AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
+      AristoDbRocks.newCoreDbRef(
+        string conf.dataDir,
+        conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
   setupMetrics(nimbus, conf)
 

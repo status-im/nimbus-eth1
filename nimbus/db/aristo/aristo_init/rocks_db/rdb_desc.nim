@@ -15,6 +15,7 @@
 
 import
   std/os,
+  std/concurrency/atomics,
   eth/common,
   rocksdb,
   stew/[endians2, keyed_queue],
@@ -53,7 +54,9 @@ type
     # handling of the longer key.)
     #
     rdKeyLru*: KeyedQueue[VertexID,HashKey] ## Read cache
+    rdKeySize*: int
     rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
+    rdVtxSize*: int
 
     basePath*: string                  ## Database directory
     trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
@@ -64,13 +67,32 @@ type
     VtxCF = "AriVtx"                   ## Vertex column family name
     KeyCF = "AriKey"                   ## Hash key column family name
 
+  RdbLruCounter* = array[bool, Atomic[uint64]]
+
+  RdbStateType* = enum
+    Account
+    World
+
 const
   BaseFolder* = "nimbus"               ## Same as for Legacy DB
   DataFolder* = "aristo"               ## Legacy DB has "data"
   RdKeyLruMaxSize* = 80000
     ## Max size of read cache for keys - ~4 levels of MPT
-  RdVtxLruMaxSize* = 80000
-    ## Max size of read cache for vertex IDs - ~4 levels of MPT
+  RdVtxLruMaxSize* = 1118481
+    ## Max size of read cache for vertex IDs - ~5 levels of MPT - this should
+    ## land at about 200mb of vertex data and probably another 200mb of overhead
+    ## Notably, this cache is an important complement to the rocksdb block cache
+    ## and has a similar effect as the rocksdb row cache, albeit with lower
+    ## overhead
+
+var
+  # Hit/miss counters for LRU cache - global so as to integrate easily with
+  # nim-metrics and `uint64` to ensure that increasing them is fast - collection
+  # happens from a separate thread.
+  # TODO maybe turn this into more general framework for LRU reporting since
+  #      we have lots of caches of this sort
+  rdbVtxLruStats*: array[RdbStateType, array[VertexType, RdbLruCounter]]
+  rdbKeyLruStats*: array[RdbStateType, RdbLruCounter]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -92,6 +114,15 @@ func dataDir*(rdb: RdbInst): string =
 
 template toOpenArray*(xid: AdminTabID): openArray[byte] =
   xid.uint64.toBytesBE.toOpenArray(0,7)
+
+template to*(v: RootedVertexID, T: type RdbStateType): RdbStateType =
+  if v.root == VertexID(1): RdbStateType.World else: RdbStateType.Account
+
+template inc*(v: var RdbLruCounter, hit: bool) =
+  discard v[hit].fetchAdd(1, moRelaxed)
+
+template get*(v: RdbLruCounter, hit: bool): uint64 =
+  v[hit].load(moRelaxed)
 
 # ------------------------------------------------------------------------------
 # End

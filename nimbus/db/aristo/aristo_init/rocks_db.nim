@@ -250,6 +250,7 @@ proc putBegHostingFn(db: RdbBackendRef): PutBegFn =
 
 proc rocksDbBackend*(
     path: string;
+    opts: DbOptions;
     dbOpts: DbOptionsRef;
     cfOpts: ColFamilyOptionsRef;
     guestCFs: openArray[ColFamilyDescriptor];
@@ -259,7 +260,7 @@ proc rocksDbBackend*(
 
   # Initialise RocksDB
   let oCfs = block:
-    let rc = db.rdb.init(path, dbOpts, cfOpts, guestCFs)
+    let rc = db.rdb.init(path, opts, dbOpts, cfOpts, guestCFs)
     if rc.isErr:
       when extraTraceMessages:
         trace logTxt "constructor failed",
