@@ -166,8 +166,7 @@ proc `$$`*(e: CoreDbError): string =
 proc persistent*(
     db: CoreDbRef;
     blockNumber: BlockNumber;
-      ): CoreDbRc[void]
-      {.discardable.} =
+      ): CoreDbRc[void] =
   ## This function stored cached data from the default context (see `ctx()`
   ## below) to the persistent database.
   ##
@@ -187,16 +186,11 @@ proc persistent*(
       else:
         result = err(rc.error.toError $api)
         break body
-    block:
-      let rc = CoreDbAccRef(db.ctx).call(persist, db.ctx.mpt, blockNumber)
-      if rc.isOk:
-        discard
-      elif CoreDbAccRef(db.ctx).call(level, db.ctx.mpt) != 0:
-        result = err(rc.error.toError($api, TxPending))
-        break body
-      else:
-        result = err(rc.error.toError $api)
-        break body
+    # Having reached here `Aristo` must not fail as both `Kvt` and `Aristo`
+    # are kept in sync. So if there is a legit fail condition it mist be
+    # caught in the previous clause.
+    CoreDbAccRef(db.ctx).call(persist, db.ctx.mpt, blockNumber).isOkOr:
+      raiseAssert $api & ": " & $error
     result = ok()
   db.ifTrackNewApi: debug logTxt, api, elapsed, blockNumber, result
 
