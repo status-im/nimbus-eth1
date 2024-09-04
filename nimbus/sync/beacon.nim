@@ -127,7 +127,7 @@ proc enableRpcMagic(ctx: BeaconSyncRef) =
 proc init*(
     T: type BeaconSyncRef;
     ethNode: EthereumNode;
-    chain: ChainRef;
+    chain: ForkedChainRef;
     rng: ref HmacDrbgContext;
     maxPeers: int;
     id: int = 0): T =

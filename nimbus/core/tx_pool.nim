@@ -330,6 +330,7 @@ import
   stew/keyed_queue,
   results,
   ../common/common,
+  ./chain/forked_chain,
   ./casper
 
 export
@@ -424,7 +425,7 @@ proc add*(xp: TxPoolRef; tx: PooledTransaction; info = "")
   ## Variant of `add()` for a single transaction.
   xp.add(@[tx], info)
 
-proc smartHead*(xp: TxPoolRef; pos: BlockHeader): bool
+proc smartHead*(xp: TxPoolRef; pos: BlockHeader, chain: ForkedChainRef): bool
     {.gcsafe,raises: [CatchableError].} =
   ## This function moves the internal head cache (i.e. tx insertion point,
   ## vmState) and ponts it to a now block on the chain.
@@ -436,20 +437,13 @@ proc smartHead*(xp: TxPoolRef; pos: BlockHeader): bool
   ## the internal head cache, the previously calculated actions will be
   ## applied.
   ##
-  let rcDiff = xp.headDiff(pos)
+  let rcDiff = xp.headDiff(pos, chain)
   if rcDiff.isOk:
     let changes = rcDiff.value
 
     # Need to move head before adding txs which may rightly be rejected in
     # `addTxs()` otherwise.
     xp.setHead(pos)
-
-    # Re-inject transactions, do that via job queue
-    if 0 < changes.addTxs.len:
-      debug "queuing delta txs",
-        mode = "inject",
-        num = changes.addTxs.len
-      xp.pDoubleCheckAdd xp.addTxs(toSeq(changes.addTxs.nextValues)).topItems
 
     # Delete already *mined* transactions
     if 0 < changes.remTxs.len:

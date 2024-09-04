@@ -82,13 +82,13 @@ proc setupEnv*(): TestEnv =
 
   manageAccounts(ethCtx, conf)
 
-  let chainRef = newChain(com)
+  let head = com.db.getCanonicalHead()
+  let chainRef = newForkedChain(com, head)
   let txPool = TxPoolRef.new(com)
 
   # txPool must be informed of active head
   # so it can know the latest account state
-  let head = com.db.getCanonicalHead()
-  doAssert txPool.smartHead(head)
+  doAssert txPool.smartHead(head, chainRef)
 
   let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf)
   let rpcClient = newRpcHttpClient()

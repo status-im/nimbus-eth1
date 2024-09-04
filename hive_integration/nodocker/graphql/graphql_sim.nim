@@ -94,7 +94,8 @@ proc main() =
   # so it can know the latest account state
   # e.g. "sendRawTransaction Nonce too low" case
   let head = com.db.getCanonicalHead()
-  doAssert txPool.smartHead(head)
+  let chainRef = newForkedChain(com, head)
+  doAssert txPool.smartHead(head, chainRef)
 
   for fileName in walkDirRec(
                  caseFolder, yieldFilter = {pcFile,pcLinkToFile}):

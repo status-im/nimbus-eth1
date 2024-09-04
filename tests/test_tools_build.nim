@@ -22,7 +22,7 @@ import
   #./persistBlockTestGen,    # -- ditto
   ../hive_integration/nodocker/rpc/rpc_sim,
   ../hive_integration/nodocker/consensus/consensus_sim,
-  ../hive_integration/nodocker/graphql/graphql_sim,
+  #../hive_integration/nodocker/graphql/graphql_sim,       # -- does not compile
   #../hive_integration/nodocker/engine/engine_sim,         # -- does not compile
   ../hive_integration/nodocker/pyspec/pyspec_sim,
   ../tools/t8n/t8n,

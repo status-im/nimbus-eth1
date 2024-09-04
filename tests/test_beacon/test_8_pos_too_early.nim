@@ -61,5 +61,4 @@ proc test8*() =
       skel.initSyncT(block3, true)
       skel.putBlocksT([block2], 1, {FillCanonical})
       check skel.blockHeight == 3
-      let latestHash = env.chain.currentBlock().blockHash
-      check latestHash == block3.blockHash
+      check env.chain.latestHash == block3.blockHash

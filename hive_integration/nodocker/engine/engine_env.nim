@@ -48,7 +48,7 @@ type
     client : RpcHttpClient
     sync   : BeaconSyncRef
     txPool : TxPoolRef
-    chain  : ChainRef
+    chain  : ForkedChainRef
 
 const
   baseFolder  = "hive_integration/nodocker/engine"
@@ -66,7 +66,6 @@ proc makeCom*(conf: NimbusConf): CommonRef =
 
 proc envConfig*(): NimbusConf =
   makeConfig(@[
-    "--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
     "--custom-network:" & genesisFile,
     "--listen-address: 127.0.0.1",
   ])
@@ -88,7 +87,8 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let
     node  = setupEthNode(conf, ctx)
     com   = makeCom(conf)
-    chain = newChain(com)
+    head  = com.db.getCanonicalHead()
+    chain = newForkedChain(com, head)
 
   let txPool = TxPoolRef.new(com)
 
@@ -99,8 +99,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
 
   # txPool must be informed of active head
   # so it can know the latest account state
-  let head = com.db.getCanonicalHead()
-  doAssert txPool.smartHead(head)
+  doAssert txPool.smartHead(head, chain)
 
   var key: JwtSharedKey
   key.fromHex(jwtSecret).isOkOr:
@@ -120,14 +119,16 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
                BeaconSyncRef(nil)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
     oracle = Oracle.new(com)
+    serverApi = newServerAPI(chain)
 
-  setupEthRpc(node, ctx, com, txPool, oracle, server)
+  setupServerAPI(serverApi, server)
   setupEngineAPI(beaconEngine, server)
-  setupDebugRpc(com, txPool, server)
+  # temporary disabled
+  #setupDebugRpc(com, txPool, server)
 
-  # Do not start clique sealing engine if we are using a Proof of Work chain file
   if chainFile.len > 0:
-    if not importRlpBlock(chainFolder / chainFile, com):
+    importRlpBlocks(chainFolder / chainFile, chain, true).isOkOr:
+      echo "Failed to import RLP blocks: ", error
       quit(QuitFailure)
 
   server.start()
@@ -183,7 +184,6 @@ proc connect*(env: EngineEnv, node: ENode) =
   waitFor env.node.connectToNode(node)
 
 func ID*(env: EngineEnv): string =
-  # $env.node.listeningAddress
   $env.conf.httpPort
 
 proc peer*(env: EngineEnv): Peer =
@@ -218,4 +218,6 @@ func version*(env: EngineEnv, time: uint64): Version =
   env.version(time.EthTime)
 
 proc setBlock*(env: EngineEnv, blk: common.EthBlock): bool =
-  env.chain.setBlock(blk).isOk()
+  # env.chain.setBlock(blk).isOk()
+  debugEcho "TODO: fix setBlock"
+  false
