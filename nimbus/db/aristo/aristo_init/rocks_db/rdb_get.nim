@@ -136,10 +136,11 @@ proc getVtx*(
     rvid: RootedVertexID;
       ): Result[VertexRef,(AristoError,string)] =
   # Try LRU cache first
-  var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
-  if rc.isOK:
-    rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
-    return ok(move(rc.value))
+  if rdb.rdVtxSize > 0:
+    var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
+    if rc.isOK:
+      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
+      return ok(move(rc.value))
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
@@ -164,7 +165,10 @@ proc getVtx*(
   rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
 
   # Update cache and return
-  ok rdb.rdVtxLru.lruAppend(rvid.vid, res.value(), rdb.rdVtxSize)
+  if rdb.rdVtxSize > 0:
+    ok rdb.rdVtxLru.lruAppend(rvid.vid, res.value(), rdb.rdVtxSize)
+  else:
+    ok res.value()
 
 # ------------------------------------------------------------------------------
 # End
