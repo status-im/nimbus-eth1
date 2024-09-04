@@ -13,16 +13,12 @@
 ##
 
 import
-  std/[strutils, tables],
-  chronicles,
+  std/tables,
   eth/common,
   results,
   ./aristo_delta/[delta_merge, delta_reverse],
   ./aristo_desc/desc_backend,
-  "."/[aristo_desc, aristo_get, aristo_layers, aristo_utils]
-
-logScope:
-  topics = "aristo-delta"
+  "."/[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions, save to backend
@@ -55,6 +51,15 @@ proc deltaPersistent*(
 
   # Blind or missing filter
   if db.balancer.isNil:
+    # Add a blind storage frame. This will do no harm if `Aristo` runs
+    # standalone. Yet it is needed if a `Kvt` is tied to `Aristo` and has
+    # triggered a save cyle already which is to be completed here.
+    #
+    # There is no need to add a blind frame on any error return. If there
+    # is a `Kvt` tied to `Aristo`, then it must somehow run in sync and an
+    # error occuring here must have been detected earlier when (implicitely)
+    # registering `Kvt`. So that error should be considered a defect.
+    ? be.putEndFn(? be.putBegFn())
     return ok()
 
   # Make sure that the argument `db` is at the centre so the backend is in
