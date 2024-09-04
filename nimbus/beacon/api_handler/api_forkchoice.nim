@@ -87,8 +87,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # Check whether we have the block yet in our database or not. If not, we'll
   # need to either trigger a sync, or to reject this forkchoice update for a
   # reason.
-  var header: common.BlockHeader
-  header = ben.chain.headerByHash(blockHash).valueOr:
+  let header = ben.chain.headerByHash(blockHash).valueOr:
     # If this block was previously invalidated, keep rejecting it here too
     let res = ben.checkInvalidAncestor(blockHash, blockHash)
     if res.isSome:
@@ -98,6 +97,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # we cannot resolve the header, so not much to do. This could be extended in
     # the future to resolve from the `eth` network, but it's an unexpected case
     # that should be fixed, not papered over.
+    var header: common.BlockHeader
     if not ben.get(blockHash, header):
       warn "Forkchoice requested unknown head",
         hash = blockHash.short

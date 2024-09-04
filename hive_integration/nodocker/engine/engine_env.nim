@@ -66,7 +66,6 @@ proc makeCom*(conf: NimbusConf): CommonRef =
 
 proc envConfig*(): NimbusConf =
   makeConfig(@[
-    #"--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
     "--custom-network:" & genesisFile,
     "--listen-address: 127.0.0.1",
   ])
@@ -124,9 +123,9 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
 
   setupServerAPI(serverApi, server)
   setupEngineAPI(beaconEngine, server)
+  # temporary disabled
   #setupDebugRpc(com, txPool, server)
 
-  # Do not start clique sealing engine if we are using a Proof of Work chain file
   if chainFile.len > 0:
     importRlpBlocks(chainFolder / chainFile, chain, true).isOkOr:
       echo "Failed to import RLP blocks: ", error
@@ -185,7 +184,6 @@ proc connect*(env: EngineEnv, node: ENode) =
   waitFor env.node.connectToNode(node)
 
 func ID*(env: EngineEnv): string =
-  # $env.node.listeningAddress
   $env.conf.httpPort
 
 proc peer*(env: EngineEnv): Peer =

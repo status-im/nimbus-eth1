@@ -597,7 +597,7 @@ proc headerByHash*(c: ForkedChainRef, blockHash: Hash256): Result[BlockHeader, s
 
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash256): Opt[EthBlock] =
   # used by getPayloadBodiesByHash
-  # https://github.com/ethereum/execution-apis/blob/main/src/engine/shanghai.md#specification-3
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
   # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
   c.blocks.withValue(blockHash, val) do:
     return Opt.some(val.blk)

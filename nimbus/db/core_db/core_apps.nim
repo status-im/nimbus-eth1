@@ -300,12 +300,6 @@ proc markCanonicalChain(
 # Public functions
 # ------------------------------------------------------------------------------
 
-#proc exists*(db: CoreDbRef, hash: Hash256): bool =
-#  db.ctx.getKvt().hasKeyRc(hash.data).valueOr:
-#    warn "exisis", hash, error=($$error)
-#    return false
-#  # => true/false
-
 proc getSavedStateBlockNumber*(
     db: CoreDbRef;
       ): BlockNumber =
