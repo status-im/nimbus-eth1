@@ -24,7 +24,7 @@ type
     session*: WriteBatchRef          ## For batched `put()`
 
     basePath*: string                ## Database directory
-    delayedPersist*: KvtDbRef        ## Enable next proggyback write session
+    delayedPersist*: KvtDbRef        ## Enable next piggyback write session
 
   KvtCFs* = enum
     ## Column family symbols/handles and names used on the database
