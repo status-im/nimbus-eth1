@@ -129,7 +129,10 @@ proc getKey*(
     return err((RdbHashKeyExpected,"")) # Parsing failed
 
   # Update cache and return
-  ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), rdb.rdKeySize)
+  if rdb.rdKeySize > 0:
+    ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), rdb.rdKeySize)
+  else:
+    ok value
 
 proc getVtx*(
     rdb: var RdbInst;
