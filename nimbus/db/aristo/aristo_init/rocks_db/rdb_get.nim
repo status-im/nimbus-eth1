@@ -132,7 +132,7 @@ proc getKey*(
   if rdb.rdKeySize > 0:
     ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), rdb.rdKeySize)
   else:
-    ok value
+    ok res.value()
 
 proc getVtx*(
     rdb: var RdbInst;
