@@ -22,7 +22,7 @@ import
   ./beacon_content,
   ./beacon_chain_historical_summaries,
   ./beacon_init_loader,
-  ../wire/portal_protocol
+  ../wire/[portal_protocol, portal_protocol_config]
 
 from beacon_chain/spec/helpers import is_better_update, toMeta
 
@@ -38,6 +38,7 @@ type
   BeaconDb* = ref object
     backend: SqStoreRef
     kv: KvStoreRef
+    dataRadius*: UInt256
     bestUpdates: BestLightClientUpdateStore
     forkDigests: ForkDigests
     cfg*: RuntimeConfig
@@ -159,6 +160,7 @@ proc new*(
   BeaconDb(
     backend: db,
     kv: kvStore,
+    dataRadius: UInt256.high(), # Radius to max to accept all data
     bestUpdates: bestUpdates,
     cfg: networkData.metadata.cfg,
     forkDigests: (newClone networkData.forks)[],
@@ -410,4 +412,10 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
             db.put(contentId, content)
         else:
           db.put(contentId, content)
+  )
+
+proc createRadiusHandler*(db: BeaconDb): DbRadiusHandler =
+  return (
+    proc(): UInt256 {.raises: [], gcsafe.} =
+      db.dataRadius
   )
