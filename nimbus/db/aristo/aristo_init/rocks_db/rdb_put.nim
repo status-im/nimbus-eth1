@@ -98,9 +98,11 @@ proc putKey*(
         trace logTxt "putKey()", vid, error=errSym, info=error
       return err((rvid.vid,errSym,error))
 
-    # Update cache
-    if not rdb.rdKeyLru.lruUpdate(rvid.vid, key):
-      discard rdb.rdKeyLru.lruAppend(rvid.vid, key, RdKeyLruMaxSize)
+    if rdb.rdKeySize > 0:
+      # Update existing cached items but don't add new ones since doing so is
+      # likely to evict more useful items (when putting many items, we might even
+      # evict those that were just added)
+      discard rdb.rdKeyLru.lruUpdate(rvid.vid, key)
 
   else:
     dsc.delete(rvid.blobify().data(), rdb.keyCol.handle()).isOkOr:
@@ -129,9 +131,11 @@ proc putVtx*(
         trace logTxt "putVtx()", vid, error=errSym, info=error
       return err((rvid.vid,errSym,error))
 
-    # Update cache
-    if not rdb.rdVtxLru.lruUpdate(rvid.vid, vtx):
-      discard rdb.rdVtxLru.lruAppend(rvid.vid, vtx, RdVtxLruMaxSize)
+    if rdb.rdVtxSize > 0:
+      # Update existing cached items but don't add new ones since doing so is
+      # likely to evict more useful items (when putting many items, we might even
+      # evict those that were just added)
+      discard rdb.rdVtxLru.lruUpdate(rvid.vid, vtx)
 
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:

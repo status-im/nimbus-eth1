@@ -410,6 +410,23 @@ type
       defaultValueDesc: $defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
 
+    rdbKeyCacheSize {.
+      hidden
+      defaultValue: defaultRdbKeyCacheSize
+      defaultValueDesc: $defaultRdbKeyCacheSize
+      name: "debug-rdb-key-cache-size".}: int
+
+    rdbVtxCacheSize {.
+      hidden
+      defaultValue: defaultRdbVtxCacheSize
+      defaultValueDesc: $defaultRdbVtxCacheSize
+      name: "debug-rdb-vtx-cache-size".}: int
+
+    rdbPrintStats {.
+      hidden
+      desc: "Print RDB statistics at exit"
+      name: "debug-rdb-print-stats".}: bool
+
     case cmd* {.
       command
       defaultValue: NimbusCmd.noCommand }: NimbusCmd
@@ -790,12 +807,19 @@ func era1Dir*(conf: NimbusConf): OutDir =
 func eraDir*(conf: NimbusConf): OutDir =
   conf.eraDirOpt.get(OutDir(conf.dataDir.string & "/era"))
 
-func dbOptions*(conf: NimbusConf): DbOptions =
+func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
   DbOptions.init(
     maxOpenFiles = conf.rocksdbMaxOpenFiles,
     writeBufferSize = conf.rocksdbWriteBufferSize,
     rowCacheSize = conf.rocksdbRowCacheSize,
     blockCacheSize = conf.rocksdbBlockCacheSize,
+    rdbKeyCacheSize =
+      if noKeyCache: 0 else: conf.rdbKeyCacheSize ,
+    rdbVtxCacheSize =
+      # The import command does not use the key cache - better give it to vtx
+      if noKeyCache: conf.rdbKeyCacheSize + conf.rdbVtxCacheSize
+      else: conf.rdbVtxCacheSize,
+    rdbPrintStats = conf.rdbPrintStats,
   )
 
 # KLUDGE: The `load()` template does currently not work within any exception

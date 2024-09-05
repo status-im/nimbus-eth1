@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, sequtils, os],
+  std/[exitprocs, sets, sequtils, strformat, os],
   rocksdb,
   results,
   ../../aristo_desc,
@@ -25,9 +25,54 @@ import
 # Private constructor
 # ------------------------------------------------------------------------------
 
+const
+  lruOverhead = 32
+    # Approximate LRU cache overhead per entry - although `keyed_queue` which is
+    # currently used has a much larger overhead, 32 is an easily reachable
+    # number which likely can be reduced in the future
+
+proc dumpCacheStats(keySize, vtxSize: int) =
+  block vtx:
+    var misses, hits: uint64
+    echo "vtxLru(", vtxSize, ")"
+    echo "   state    vtype       miss        hit      total hitrate"
+    for state in RdbStateType:
+      for vtype in VertexType:
+        let
+          (miss, hit) = (
+            rdbVtxLruStats[state][vtype].get(false),
+            rdbVtxLruStats[state][vtype].get(true),
+          )
+          hitRate = float64(hit * 100) / (float64(hit + miss))
+        misses += miss
+        hits += hit
+        echo &"{state:>8} {vtype:>8} {miss:>10} {hit:>10} {miss+hit:>10} {hitRate:>6.2f}%"
+    let hitRate = float64(hits * 100) / (float64(hits + misses))
+    echo &"     all      all {misses:>10} {hits:>10} {misses+hits:>10} {hitRate:>6.2f}%"
+
+  block key:
+    var misses, hits: uint64
+    echo "keyLru(", keySize, ") "
+
+    echo "   state       miss        hit      total hitrate"
+
+    for state in RdbStateType:
+      let
+        (miss, hit) =
+          (rdbKeyLruStats[state].get(false), rdbKeyLruStats[state].get(true))
+        hitRate = float64(hit * 100) / (float64(hit + miss))
+      misses += miss
+      hits += hit
+
+      echo &"{state:>8} {miss:>10} {hit:>10} {miss+hit:>10} {hitRate:>5.2f}%"
+
+    let hitRate = float64(hits * 100) / (float64(hits + misses))
+    echo &"     all {misses:>10} {hits:>10} {misses+hits:>10} {hitRate:>5.2f}%"
+
 proc initImpl(
     rdb: var RdbInst;
     basePath: string;
+    opts: DbOptions;
     dbOpts: DbOptionsRef,
     cfOpts: ColFamilyOptionsRef;
     guestCFs: openArray[ColFamilyDescriptor] = [];
@@ -36,6 +81,22 @@ proc initImpl(
   const initFailed = "RocksDB/init() failed"
 
   rdb.basePath = basePath
+
+  # bytes -> entries based on overhead estimates
+  rdb.rdKeySize =
+    opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
+  rdb.rdVtxSize =
+    opts.rdbVtxCacheSize div (sizeof(VertexID) + sizeof(default(VertexRef)[]) + lruOverhead)
+
+  if opts.rdbPrintStats:
+    let
+      ks = rdb.rdKeySize
+      vs = rdb.rdVtxSize
+    # TODO instead of dumping at exit, these stats could be logged or written
+    #      to a file for better tracking over time - that said, this is mainly
+    #      a debug utility at this point
+    addExitProc(proc() =
+      dumpCacheStats(ks, vs))
 
   let
     dataDir = rdb.dataDir
@@ -90,12 +151,13 @@ proc initImpl(
 proc init*(
     rdb: var RdbInst;
     basePath: string;
+    opts: DbOptions;
     dbOpts: DbOptionsRef;
     cfOpts: ColFamilyOptionsRef;
     guestCFs: openArray[ColFamilyDescriptor];
       ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
   ## Temporarily define a guest CF list here.
-  rdb.initImpl(basePath, dbOpts, cfOpts, guestCFs)
+  rdb.initImpl(basePath, opts, dbOpts, cfOpts, guestCFs)
 
 
 proc destroy*(rdb: var RdbInst; eradicate: bool) =

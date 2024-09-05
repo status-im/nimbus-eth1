@@ -39,21 +39,6 @@ type
   RdbVtxLruCounter = ref object of Counter
   RdbKeyLruCounter = ref object of Counter
 
-  LruCounter = array[bool, Atomic[uint64]]
-
-  StateType = enum
-    Account
-    World
-
-var
-  # Hit/miss counters for LRU cache - global so as to integrate easily with
-  # nim-metrics and `uint64` to ensure that increasing them is fast - collection
-  # happens from a separate thread.
-  # TODO maybe turn this into more general framework for LRU reporting since
-  #      we have lots of caches of this sort
-  rdbVtxLruStats: array[StateType, array[VertexType, LruCounter]]
-  rdbKeyLruStats: array[StateType, LruCounter]
-
 var
   rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
     "aristo_rdb_vtx_lru_total",
@@ -64,21 +49,12 @@ var
     "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
   )
 
-template to(v: RootedVertexID, T: type StateType): StateType =
-  if v.root == VertexID(1): StateType.World else: StateType.Account
-
-template inc(v: var LruCounter, hit: bool) =
-  discard v[hit].fetchAdd(1, moRelaxed)
-
-template get(v: LruCounter, hit: bool): uint64 =
-  v[hit].load(moRelaxed)
-
 method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
   let timestamp = collector.now()
 
   # We don't care about synchronization between each type of metric or between
   # the metrics thread and others since small differences like this don't matter
-  for state in StateType:
+  for state in RdbStateType:
     for vtype in VertexType:
       for hit in [false, true]:
         output(
@@ -92,7 +68,7 @@ method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
 method collect*(collector: RdbKeyLruCounter, output: MetricHandler) =
   let timestamp = collector.now()
 
-  for state in StateType:
+  for state in RdbStateType:
     for hit in [false, true]:
       output(
         name = "aristo_rdb_key_lru_total",
@@ -129,10 +105,10 @@ proc getKey*(
   # Try LRU cache first
   var rc = rdb.rdKeyLru.lruFetch(rvid.vid)
   if rc.isOK:
-    rdbKeyLruStats[rvid.to(StateType)].inc(true)
+    rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
     return ok(move(rc.value))
 
-  rdbKeyLruStats[rvid.to(StateType)].inc(false)
+  rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
@@ -153,17 +129,21 @@ proc getKey*(
     return err((RdbHashKeyExpected,"")) # Parsing failed
 
   # Update cache and return
-  ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), RdKeyLruMaxSize)
+  if rdb.rdKeySize > 0:
+    ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), rdb.rdKeySize)
+  else:
+    ok res.value()
 
 proc getVtx*(
     rdb: var RdbInst;
     rvid: RootedVertexID;
       ): Result[VertexRef,(AristoError,string)] =
   # Try LRU cache first
-  var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
-  if rc.isOK:
-    rdbVtxLruStats[rvid.to(StateType)][rc.value().vType].inc(true)
-    return ok(move(rc.value))
+  if rdb.rdVtxSize > 0:
+    var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
+    if rc.isOK:
+      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
+      return ok(move(rc.value))
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
@@ -179,61 +159,20 @@ proc getVtx*(
 
   if not gotData:
     # As a hack, we count missing data as leaf nodes
-    rdbVtxLruStats[rvid.to(StateType)][VertexType.Leaf].inc(false)
+    rdbVtxLruStats[rvid.to(RdbStateType)][VertexType.Leaf].inc(false)
     return ok(VertexRef(nil))
 
   if res.isErr():
     return err((res.error(), "Parsing failed")) # Parsing failed
 
-  rdbVtxLruStats[rvid.to(StateType)][res.value().vType].inc(false)
+  rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
 
   # Update cache and return
-  ok rdb.rdVtxLru.lruAppend(rvid.vid, res.value(), RdVtxLruMaxSize)
+  if rdb.rdVtxSize > 0:
+    ok rdb.rdVtxLru.lruAppend(rvid.vid, res.value(), rdb.rdVtxSize)
+  else:
+    ok res.value()
 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-
-when defined(printStatsAtExit):
-  # Useful hack for printing exact metrics to compare runs with different
-  # settings
-  import std/[exitprocs, strformat]
-  addExitProc(
-    proc() =
-      block vtx:
-        var misses, hits: uint64
-        echo "vtxLru(", RdVtxLruMaxSize, ")"
-        echo "   state    vtype       miss        hit      total hitrate"
-        for state in StateType:
-          for vtype in VertexType:
-            let
-              (miss, hit) = (
-                rdbVtxLruStats[state][vtype].get(false),
-                rdbVtxLruStats[state][vtype].get(true),
-              )
-              hitRate = float64(hit * 100) / (float64(hit + miss))
-            misses += miss
-            hits += hit
-            echo &"{state:>8} {vtype:>8} {miss:>10} {hit:>10} {miss+hit:>10} {hitRate:>6.2f}%"
-        let hitRate = float64(hits * 100) / (float64(hits + misses))
-        echo &"     all      all {misses:>10} {hits:>10} {misses+hits:>10} {hitRate:>6.2f}%"
-
-      block key:
-        var misses, hits: uint64
-        echo "keyLru(", RdKeyLruMaxSize, ") "
-
-        echo "   state       miss        hit      total hitrate"
-
-        for state in StateType:
-          let
-            (miss, hit) =
-              (rdbKeyLruStats[state].get(false), rdbKeyLruStats[state].get(true))
-            hitRate = float64(hit * 100) / (float64(hit + miss))
-          misses += miss
-          hits += hit
-
-          echo &"{state:>8} {miss:>10} {hit:>10} {miss+hit:>10} {hitRate:>5.2f}%"
-
-        let hitRate = float64(hits * 100) / (float64(hits + misses))
-        echo &"     all {misses:>10} {hits:>10} {misses+hits:>10} {hitRate:>5.2f}%"
-  )

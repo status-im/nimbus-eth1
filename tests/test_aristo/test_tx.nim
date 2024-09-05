@@ -261,7 +261,7 @@ proc testTxMergeAndDeleteOneByOne*(
     db = block:
       if 0 < rdbPath.len:
         let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init(), dbOpts, cfOpts, [])
         xCheckRc rc.error == 0
         rc.value()[0]
       else:
@@ -368,7 +368,7 @@ proc testTxMergeAndDeleteSubTree*(
     db = block:
       if 0 < rdbPath.len:
         let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
+        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init(), dbOpts, cfOpts, [])
         xCheckRc rc.error == 0
         rc.value()[0]
       else:

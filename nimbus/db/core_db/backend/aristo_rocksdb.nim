@@ -158,7 +158,7 @@ proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
     # Sharing opts means we also share caches between column families!
     (dbOpts, cfOpts) = opts.toRocksDb()
     guestCFs = RdbInst.guestCFs(cfOpts)
-    (adb, oCfs) = AristoDbRef.init(use_ari.RdbBackendRef, path, dbOpts, cfOpts, guestCFs).valueOr:
+    (adb, oCfs) = AristoDbRef.init(use_ari.RdbBackendRef, path, opts, dbOpts, cfOpts, guestCFs).valueOr:
       raiseAssert aristoFail & ": " & $error
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, adb, oCfs).valueOr:
       raiseAssert kvtFail & ": " & $error
@@ -169,7 +169,7 @@ proc newAristoDualRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
   ## database backend.
   let
     (dbOpts, cfOpts) = opts.toRocksDb()
-    (adb, _) = AristoDbRef.init(use_ari.RdbBackendRef, path, dbOpts, cfOpts, []).valueOr:
+    (adb, _) = AristoDbRef.init(use_ari.RdbBackendRef, path, opts, dbOpts, cfOpts, []).valueOr:
       raiseAssert aristoFail & ": " & $error
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, dbOpts, cfOpts).valueOr:
       raiseAssert kvtFail & ": " & $error
