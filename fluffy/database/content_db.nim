@@ -18,7 +18,7 @@ import
   ../network/wire/[portal_protocol, portal_protocol_config],
   ./content_db_custom_sql_functions
 
-export kvstore_sqlite3
+export kvstore_sqlite3, portal_protocol_config
 
 # This version of content db is the most basic, simple solution where data is
 # stored no matter what content type or content network in the same kvstore with
@@ -53,6 +53,8 @@ type
     kv: KvStoreRef
     manualCheckpoint: bool
     storageCapacity*: uint64
+    dataRadius*: UInt256
+    localId: NodeId
     sizeStmt: SqliteStmt[NoParams, int64]
     unusedSizeStmt: SqliteStmt[NoParams, int64]
     vacuumStmt: SqliteStmt[NoParams, void]
@@ -80,10 +82,117 @@ template expectDb(x: auto): untyped =
   # full disk - this requires manual intervention, so we'll panic for now
   x.expect("working database (disk broken/full?)")
 
+## Public calls to get database size, content size and similar.
+
+proc size*(db: ContentDB): int64 =
+  ## Return current size of DB as product of sqlite page_count and page_size:
+  ## https://www.sqlite.org/pragma.html#pragma_page_count
+  ## https://www.sqlite.org/pragma.html#pragma_page_size
+  ## It returns the total size of db on the disk, i.e both data and metadata
+  ## used to store content.
+  ## It is worth noting that when deleting content, the size may lag behind due
+  ## to the way how deleting works in sqlite.
+  ## Good description can be found in: https://www.sqlite.org/lang_vacuum.html
+  var size: int64 = 0
+  discard (
+    db.sizeStmt.exec do(res: int64):
+      size = res).expectDb()
+  return size
+
+proc unusedSize(db: ContentDB): int64 =
+  ## Returns the total size of the pages which are unused by the database,
+  ## i.e they can be re-used for new content.
+  var size: int64 = 0
+  discard (
+    db.unusedSizeStmt.exec do(res: int64):
+      size = res).expectDb()
+  return size
+
+proc usedSize*(db: ContentDB): int64 =
+  ## Returns the total size of the database (data + metadata) minus the unused
+  ## pages.
+  db.size() - db.unusedSize()
+
+proc contentSize*(db: ContentDB): int64 =
+  ## Returns total size of the content stored in DB.
+  var size: int64 = 0
+  discard (
+    db.contentSizeStmt.exec do(res: int64):
+      size = res).expectDb()
+  return size
+
+proc contentCount*(db: ContentDB): int64 =
+  var count: int64 = 0
+  discard (
+    db.contentCountStmt.exec do(res: int64):
+      count = res).expectDb()
+  return count
+
+## Radius estimation and initialization related calls
+
+proc getLargestDistance*(db: ContentDB, localId: UInt256): UInt256 =
+  var distanceBytes: array[32, byte]
+  discard (
+    db.largestDistanceStmt.exec(
+      localId.toBytesBE(),
+      proc(res: array[32, byte]) =
+        distanceBytes = res,
+    )
+  ).expectDb()
+
+  return UInt256.fromBytesBE(distanceBytes)
+
+func estimateNewRadius(
+    currentSize: uint64, storageCapacity: uint64, currentRadius: UInt256
+): UInt256 =
+  if storageCapacity == 0:
+    return 0.stuint(256)
+
+  let sizeRatio = currentSize div storageCapacity
+  if sizeRatio > 0:
+    currentRadius div sizeRatio.stuint(256)
+  else:
+    currentRadius
+
+func estimateNewRadius*(db: ContentDB, rc: RadiusConfig): UInt256 =
+  ## Rough estimation of the new radius for pruning when adjusting the storage
+  ## capacity.
+  case rc.kind
+  of Static:
+    UInt256.fromLogRadius(rc.logRadius)
+  of Dynamic:
+    if db.storageCapacity == 0:
+      return 0.stuint(256)
+
+    let oldRadiusApproximation = db.getLargestDistance(db.localId)
+    estimateNewRadius(uint64(db.usedSize()), db.storageCapacity, oldRadiusApproximation)
+
+func setInitialRadius*(db: ContentDB, rc: RadiusConfig) =
+  ## Set the initial radius based on the radius config and the storage capacity
+  ## and furthest distance of the content in the database.
+  ## In case of a dynamic radius, if the storage capacity is near full, the
+  ## radius will be set to the largest distance of the content in the database.
+  ## Else the radius will be set to the maximum value.
+  case rc.kind
+  of Static:
+    db.dataRadius = UInt256.fromLogRadius(rc.logRadius)
+  of Dynamic:
+    if db.storageCapacity == 0:
+      db.dataRadius = 0.stuint(256)
+      return
+
+    let sizeRatio = db.usedSize().float / db.storageCapacity.float
+    if sizeRatio > 0.95:
+      db.dataRadius = db.getLargestDistance(db.localId)
+    else:
+      db.dataRadius = UInt256.high()
+
 proc new*(
     T: type ContentDB,
     path: string,
     storageCapacity: uint64,
+    radiusConfig: RadiusConfig,
+    localId: NodeId,
     inMemory = false,
     manualCheckpoint = false,
 ): ContentDB =
@@ -141,7 +250,7 @@ proc new*(
     "SELECT max(xorDistance(?, key)) FROM kvstore", array[32, byte], array[32, byte]
   )[]
 
-  ContentDB(
+  let contentDb = ContentDB(
     kv: kvStore,
     backend: db,
     manualCheckpoint: manualCheckpoint,
@@ -155,6 +264,9 @@ proc new*(
     deleteOutOfRadiusStmt: deleteOutOfRadiusStmt,
     largestDistanceStmt: largestDistanceStmt,
   )
+
+  contentDb.setInitialRadius(radiusConfig)
+  contentDb
 
 template disposeSafe(s: untyped): untyped =
   if distinctBase(s) != nil:
@@ -237,77 +349,7 @@ proc del*(db: ContentDB, key: ContentId) =
 proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Opt[T] =
   db.getSszDecoded(key.toBytesBE(), T)
 
-## Public calls to get database size, content size and similar.
-
-proc size*(db: ContentDB): int64 =
-  ## Return current size of DB as product of sqlite page_count and page_size:
-  ## https://www.sqlite.org/pragma.html#pragma_page_count
-  ## https://www.sqlite.org/pragma.html#pragma_page_size
-  ## It returns the total size of db on the disk, i.e both data and metadata
-  ## used to store content.
-  ## It is worth noting that when deleting content, the size may lag behind due
-  ## to the way how deleting works in sqlite.
-  ## Good description can be found in: https://www.sqlite.org/lang_vacuum.html
-  var size: int64 = 0
-  discard (
-    db.sizeStmt.exec do(res: int64):
-      size = res).expectDb()
-  return size
-
-proc unusedSize(db: ContentDB): int64 =
-  ## Returns the total size of the pages which are unused by the database,
-  ## i.e they can be re-used for new content.
-  var size: int64 = 0
-  discard (
-    db.unusedSizeStmt.exec do(res: int64):
-      size = res).expectDb()
-  return size
-
-proc usedSize*(db: ContentDB): int64 =
-  ## Returns the total size of the database (data + metadata) minus the unused
-  ## pages.
-  db.size() - db.unusedSize()
-
-proc contentSize*(db: ContentDB): int64 =
-  ## Returns total size of the content stored in DB.
-  var size: int64 = 0
-  discard (
-    db.contentSizeStmt.exec do(res: int64):
-      size = res).expectDb()
-  return size
-
-proc contentCount*(db: ContentDB): int64 =
-  var count: int64 = 0
-  discard (
-    db.contentCountStmt.exec do(res: int64):
-      count = res).expectDb()
-  return count
-
 ## Pruning related calls
-
-proc getLargestDistance*(db: ContentDB, localId: UInt256): UInt256 =
-  var distanceBytes: array[32, byte]
-  discard (
-    db.largestDistanceStmt.exec(
-      localId.toBytesBE(),
-      proc(res: array[32, byte]) =
-        distanceBytes = res,
-    )
-  ).expectDb()
-
-  return UInt256.fromBytesBE(distanceBytes)
-
-func estimateNewRadius(
-    currentSize: uint64, storageCapacity: uint64, currentRadius: UInt256
-): UInt256 =
-  let sizeRatio = currentSize div storageCapacity
-  if sizeRatio > 0:
-    currentRadius div sizeRatio.stuint(256)
-  else:
-    currentRadius
-
-func estimateNewRadius*(db: ContentDB, currentRadius: UInt256): UInt256 =
-  estimateNewRadius(uint64(db.usedSize()), db.storageCapacity, currentRadius)
 
 proc deleteContentFraction*(
     db: ContentDB, target: UInt256, fraction: float64
@@ -419,12 +461,12 @@ proc put*(
     )
 
 proc adjustRadius(
-    p: PortalProtocol, deletedFraction: float64, distanceOfFurthestElement: UInt256
+    db: ContentDB, deletedFraction: float64, distanceOfFurthestElement: UInt256
 ) =
   # Invert fraction as the UInt256 implementation does not support
   # multiplication by float
   let invertedFractionAsInt = int64(1.0 / deletedFraction)
-  let scaledRadius = p.dataRadius div u256(invertedFractionAsInt)
+  let scaledRadius = db.dataRadius div u256(invertedFractionAsInt)
 
   # Choose a larger value to avoid the situation where the
   # `distanceOfFurthestElement is very close to the local id so that the local
@@ -433,12 +475,12 @@ proc adjustRadius(
   let newRadius = max(scaledRadius, distanceOfFurthestElement)
 
   info "Database radius adjusted",
-    oldRadius = p.dataRadius, newRadius = newRadius, distanceOfFurthestElement
+    oldRadius = db.dataRadius, newRadius = newRadius, distanceOfFurthestElement
 
   # Both scaledRadius and distanceOfFurthestElement are smaller than current
   # dataRadius, so the radius will constantly decrease through the node its
   # lifetime.
-  p.dataRadius = newRadius
+  db.dataRadius = newRadius
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
@@ -473,7 +515,7 @@ proc createStoreHandler*(
             )
 
             if res.deletedFraction > 0.0:
-              p.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
+              db.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
             else:
               # Note:
               # This can occur when the furthest content is bigger than the fraction
@@ -487,4 +529,10 @@ proc createStoreHandler*(
           # constant thorugh node life time, also database max size is disabled
           # so we will effectivly store fraction of the network
           db.put(contentId, content)
+  )
+
+proc createRadiusHandler*(db: ContentDB): DbRadiusHandler =
+  return (
+    proc(): UInt256 {.raises: [], gcsafe.} =
+      db.dataRadius
   )

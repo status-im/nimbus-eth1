@@ -37,7 +37,9 @@ proc initPortalProtocol(
 ): PortalProtocol =
   let
     d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
-    db = ContentDB.new("", uint32.high, inMemory = true)
+    db = ContentDB.new(
+      "", uint32.high, RadiusConfig(kind: Dynamic), d.localNode.id, inMemory = true
+    )
     manager = StreamManager.new(d)
     q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     stream = manager.registerNewStream(q)
@@ -47,6 +49,7 @@ proc initPortalProtocol(
       protocolId,
       toContentId,
       createGetHandler(db),
+      createRadiusHandler(db),
       stream,
       bootstrapRecords = bootstrapRecords,
     )
@@ -331,13 +334,21 @@ procSuite "Portal Wire Protocol Tests":
       node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20303))
 
       dbLimit = 400_000'u32
-      db = ContentDB.new("", dbLimit, inMemory = true)
+      db = ContentDB.new(
+        "", dbLimit, RadiusConfig(kind: Dynamic), node1.localNode.id, inMemory = true
+      )
       m = StreamManager.new(node1)
       q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
       stream = m.registerNewStream(q)
 
-      proto1 =
-        PortalProtocol.new(node1, protocolId, toContentId, createGetHandler(db), stream)
+      proto1 = PortalProtocol.new(
+        node1,
+        protocolId,
+        toContentId,
+        createGetHandler(db),
+        createRadiusHandler(db),
+        stream,
+      )
 
     proto1.dbPut = createStoreHandler(db, defaultRadiusConfig, proto1)
 
@@ -360,9 +371,9 @@ procSuite "Portal Wire Protocol Tests":
       db.get((distances[2] xor proto1.localNode.id)).isNone()
       db.get((distances[3] xor proto1.localNode.id)).isSome()
       # The radius has been updated and is lower than the maximum start value.
-      proto1.dataRadius < UInt256.high
+      proto1.dataRadius() < UInt256.high
       # Yet higher than or equal to the furthest non deleted element.
-      proto1.dataRadius >= distances[3]
+      proto1.dataRadius() >= distances[3]
 
     proto1.stop()
     await node1.closeWait()

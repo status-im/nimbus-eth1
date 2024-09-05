@@ -26,7 +26,9 @@ proc newHistoryNode(
 ): HistoryNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
-    db = ContentDB.new("", uint32.high, inMemory = true)
+    db = ContentDB.new(
+      "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
+    )
     streamManager = StreamManager.new(node)
     historyNetwork =
       HistoryNetwork.new(PortalNetwork.none, node, db, streamManager, accumulator)

@@ -69,7 +69,13 @@ func generateRandomU256(rng: var HmacDrbgContext): UInt256 =
 proc cmdGenerate(conf: DbConf) =
   let
     rng = newRng()
-    db = ContentDB.new(conf.databaseDir.string, maxDbSize, inMemory = false)
+    db = ContentDB.new(
+      conf.databaseDir.string,
+      maxDbSize,
+      RadiusConfig(kind: Dynamic),
+      u256(0),
+      inMemory = false,
+    )
     bytes = newSeq[byte](conf.contentSize)
 
   for i in 0 ..< conf.contentAmount:
@@ -79,7 +85,13 @@ proc cmdGenerate(conf: DbConf) =
 proc cmdBench(conf: DbConf) =
   let
     rng = newRng()
-    db = ContentDB.new(conf.databaseDir.string, 4_000_000_000'u64, inMemory = false)
+    db = ContentDB.new(
+      conf.databaseDir.string,
+      4_000_000_000'u64,
+      RadiusConfig(kind: Dynamic),
+      u256(0),
+      inMemory = false,
+    )
     bytes = newSeq[byte](conf.contentSize)
 
   var timers: array[Timers, RunningStat]
@@ -126,6 +138,8 @@ proc cmdPrune(conf: DbConf) =
     let db = ContentDB.new(
       conf.databaseDir.string,
       storageCapacity = 1_000_000, # Doesn't matter if only space reclaiming is done
+      RadiusConfig(kind: Dynamic),
+      u256(0),
       manualCheckpoint = true,
     )
 

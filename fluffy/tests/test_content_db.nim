@@ -22,7 +22,9 @@ suite "Content Database":
   # underlying kvstore.
   test "ContentDB basic API":
     let
-      db = ContentDB.new("", uint32.high, inMemory = true)
+      db = ContentDB.new(
+        "", uint32.high, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+      )
       key = ContentId(UInt256.high()) # Some key
 
     block:
@@ -50,7 +52,9 @@ suite "Content Database":
         db.contains(key) == false
 
   test "ContentDB size":
-    let db = ContentDB.new("", uint32.high, inMemory = true)
+    let db = ContentDB.new(
+      "", uint32.high, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+    )
 
     let numBytes = 10000
     let size1 = db.size()
@@ -97,7 +101,9 @@ suite "Content Database":
     # both.
     let
       storageCapacity = 100_000'u64
-      db = ContentDB.new("", storageCapacity, inMemory = true)
+      db = ContentDB.new(
+        "", storageCapacity, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+      )
 
       furthestElement = u256(40)
       secondFurthest = u256(30)
@@ -147,7 +153,9 @@ suite "Content Database":
 
     let
       rng = newRng()
-      db = ContentDB.new("", startCapacity, inMemory = true)
+      db = ContentDB.new(
+        "", startCapacity, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+      )
       localId = UInt256.fromHex(
         "30994892f3e4889d99deb5340050510d1842778acc7a7948adffa475fed51d6e"
       )
@@ -167,12 +175,27 @@ suite "Content Database":
 
     db.storageCapacity = endCapacity
 
-    let
-      oldRadiusApproximation = db.getLargestDistance(localId)
-      newRadius = db.estimateNewRadius(oldRadiusApproximation)
+    let newRadius = db.estimateNewRadius(RadiusConfig(kind: Dynamic))
 
     db.forcePrune(localId, newRadius)
 
     let diff = abs(db.size() - int64(db.storageCapacity))
     # Quite a big marging (20%) is added as it is all an approximation.
     check diff < int64(float(db.storageCapacity) * 0.20)
+
+test "ContentDB radius - start with full radius":
+  let
+    storageCapacity = 100_000'u64
+    db = ContentDB.new(
+      "", storageCapacity, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+    )
+    radiusHandler = createRadiusHandler(db)
+
+  check radiusHandler() == UInt256.high()
+
+test "ContentDB radius - 0 capacity":
+  let
+    db = ContentDB.new("", 0, RadiusConfig(kind: Dynamic), u256(0), inMemory = true)
+    radiusHandler = createRadiusHandler(db)
+
+  check radiusHandler() == UInt256.low()

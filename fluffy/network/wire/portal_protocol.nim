@@ -155,6 +155,8 @@ type
     contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
   ) {.raises: [], gcsafe.}
 
+  DbRadiusHandler* = proc(): UInt256 {.raises: [], gcsafe.}
+
   PortalProtocolId* = array[2, byte]
 
   RadiusCache* = LRUCache[NodeId, UInt256]
@@ -182,8 +184,7 @@ type
     toContentId*: ToContentIdHandler
     dbGet*: DbGetHandler
     dbPut*: DbStoreHandler
-    radiusConfig: RadiusConfig
-    dataRadius*: UInt256
+    dataRadius*: DbRadiusHandler
     bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
@@ -319,8 +320,8 @@ func inRange(
   let distance = p.distance(nodeId, contentId)
   distance <= nodeRadius
 
-func inRange*(p: PortalProtocol, contentId: ContentId): bool =
-  p.inRange(p.localNode.id, p.dataRadius, contentId)
+proc inRange*(p: PortalProtocol, contentId: ContentId): bool =
+  p.inRange(p.localNode.id, p.dataRadius(), contentId)
 
 func truncateEnrs(
     nodes: seq[Node], maxSize: int, enrOverhead: int
@@ -339,7 +340,7 @@ func truncateEnrs(
 
   enrs
 
-func handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
+proc handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
   # TODO: This should become custom per Portal Network
   # TODO: Need to think about the effect of malicious actor sending lots of
   # pings from different nodes to clear the LRU.
@@ -351,7 +352,7 @@ func handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] 
       return @[]
   p.radiusCache.put(srcId, customPayloadDecoded.dataRadius)
 
-  let customPayload = CustomPayload(dataRadius: p.dataRadius)
+  let customPayload = CustomPayload(dataRadius: p.dataRadius())
   let p = PongMessage(
     enrSeq: p.localNode.record.seqNum,
     customPayload: ByteList[2048](SSZ.encode(customPayload)),
@@ -560,13 +561,12 @@ proc new*(
     protocolId: PortalProtocolId,
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
+    dbRadius: DbRadiusHandler,
     stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
     config: PortalProtocolConfig = defaultPortalProtocolConfig,
 ): T =
-  let initialRadius: UInt256 = config.radiusConfig.getInitialRadius()
-
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
     protocolId: protocolId,
@@ -577,8 +577,7 @@ proc new*(
     baseProtocol: baseProtocol,
     toContentId: toContentId,
     dbGet: dbGet,
-    radiusConfig: config.radiusConfig,
-    dataRadius: initialRadius,
+    dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
     radiusCache: RadiusCache.init(256),
@@ -647,7 +646,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
 proc pingImpl*(
     p: PortalProtocol, dst: Node
 ): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
-  let customPayload = CustomPayload(dataRadius: p.dataRadius)
+  let customPayload = CustomPayload(dataRadius: p.dataRadius())
   let ping = PingMessage(
     enrSeq: p.localNode.record.seqNum,
     customPayload: ByteList[2048](SSZ.encode(customPayload)),
