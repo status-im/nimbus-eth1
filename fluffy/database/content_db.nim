@@ -417,9 +417,7 @@ proc forcePrune*(db: ContentDB, localId: UInt256, radius: UInt256) =
   db.reclaimAndTruncate()
   notice "Finished database pruning"
 
-proc put*(
-    db: ContentDB, key: ContentId, value: openArray[byte], target: UInt256
-): PutResult =
+proc putAndPrune*(db: ContentDB, key: ContentId, value: openArray[byte]): PutResult =
   db.put(key, value)
 
   # The used size is used as pruning threshold. This means that the database
@@ -449,7 +447,7 @@ proc put*(
     # "SELECT key FROM kvstore ORDER BY xorDistance(?, key) DESC LIMIT 1"
     # Potential adjusting the LIMIT for how many items require deletion.
     let (distanceOfFurthestElement, deletedBytes, totalContentSize, deletedElements) =
-      db.deleteContentFraction(target, contentDeletionFraction)
+      db.deleteContentFraction(db.localId, contentDeletionFraction)
 
     let deletedFraction = float64(deletedBytes) / float64(totalContentSize)
     info "Deleted content fraction", deletedBytes, deletedElements, deletedFraction
@@ -506,14 +504,12 @@ proc createStoreHandler*(
       if p.inRange(contentId):
         case cfg.kind
         of Dynamic:
-          # In case of dynamic radius setting we obey storage limits and adjust
-          # radius to store network fraction corresponding to those storage limits.
-          let res = db.put(contentId, content, p.localNode.id)
+          # In case of dynamic radius, the radius gets adjusted based on the
+          # to storage capacity and content gets pruned accordingly.
+          let res = db.putAndPrune(contentId, content)
           if res.kind == DbPruned:
-            portal_pruning_counter.inc(labelValues = [$p.protocolId])
-            portal_pruning_deleted_elements.set(
-              res.deletedElements.int64, labelValues = [$p.protocolId]
-            )
+            portal_pruning_counter.inc()
+            portal_pruning_deleted_elements.set(res.deletedElements.int64)
 
             if res.deletedFraction > 0.0:
               db.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
@@ -526,9 +522,8 @@ proc createStoreHandler*(
               info "Database pruning attempt resulted in no content deleted"
               return
         of Static:
-          # If the config is set statically, radius is not adjusted, and is kept
-          # constant thorugh node life time, also database max size is disabled
-          # so we will effectivly store fraction of the network
+          # If the radius is static, it may never be adjusted, database capacity
+          # is disabled and no pruning is ever done.
           db.put(contentId, content)
   )
 
