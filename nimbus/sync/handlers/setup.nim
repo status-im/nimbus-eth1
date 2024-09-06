@@ -22,7 +22,7 @@ import
 proc addEthHandlerCapability*(
     node: EthereumNode;
     peerPool: PeerPool;
-    chain: ChainRef;
+    chain: ForkedChainRef;
     txPool = TxPoolRef(nil);
       ) =
   ## Install `eth` handlers. Passing `txPool` as `nil` installs the handler

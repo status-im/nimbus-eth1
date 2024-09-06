@@ -72,8 +72,8 @@ iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
         yield (rvid, val)
 
 
-iterator walkVtx*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
-  ## Walk over key-value pairs of the hash key column of the database.
+iterator walkVtx*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: VertexRef] =
+  ## Walk over key-value pairs of the vertex column of the database.
   ##
   ## Non-decodable entries are are ignored.
   ##
@@ -84,12 +84,32 @@ iterator walkVtx*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
       break walkBody
     defer: rit.close()
 
-    for (key,val) in rit.pairs:
-      if val.len != 0:
-        let rvid = key.deblobify(RootedVertexID).valueOr:
-          continue
+    rit.seekToFirst()
+    var key: RootedVertexID
+    var value: VertexRef
+    while rit.isValid():
+      var valid = true
+      rit.key(
+        proc(data: openArray[byte]) =
+          key = deblobify(data, RootedVertexID).valueOr:
+            valid = false
+            default(RootedVertexID)
+      )
+      if not valid:
+        continue
 
-        yield (rvid, val)
+      rit.value(
+        proc(data: openArray[byte]) =
+          value = deblobify(data, VertexRef).valueOr:
+            valid = false
+            default(VertexRef)
+      )
+      if not valid:
+        continue
+
+      rit.next()
+      yield (key, value)
+    rit.close()
 
 # ------------------------------------------------------------------------------
 # End

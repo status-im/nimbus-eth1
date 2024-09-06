@@ -80,7 +80,7 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
       # Fetch serialised data record
       let vtx = db.rdb.getVtx(rvid).valueOr:
         when extraTraceMessages:
-          trace logTxt "getVtxFn() failed", vid, error=error[0], info=error[1]
+          trace logTxt "getVtxFn() failed", rvid, error=error[0], info=error[1]
         return err(error[0])
 
       if vtx.isValid:
@@ -95,7 +95,7 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
       # Fetch serialised data record
       let key = db.rdb.getKey(rvid).valueOr:
         when extraTraceMessages:
-          trace logTxt "getKeyFn: failed", vid, error=error[0], info=error[1]
+          trace logTxt "getKeyFn: failed", rvid, error=error[0], info=error[1]
         return err(error[0])
 
       if key.isValid:
@@ -207,8 +207,6 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
           case hdl.error.pfx:
           of VtxPfx, KeyPfx: trace logTxt "putEndFn: vtx/key failed",
             pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
-          of FilPfx: trace logTxt "putEndFn: filter failed",
-            pfx=FilPfx, qid=hdl.error.qid, error=hdl.error.code
           of AdmPfx: trace logTxt "putEndFn: admin failed",
             pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
           of Oops: trace logTxt "putEndFn: oops",
@@ -250,6 +248,7 @@ proc putBegHostingFn(db: RdbBackendRef): PutBegFn =
 
 proc rocksDbBackend*(
     path: string;
+    opts: DbOptions;
     dbOpts: DbOptionsRef;
     cfOpts: ColFamilyOptionsRef;
     guestCFs: openArray[ColFamilyDescriptor];
@@ -259,7 +258,7 @@ proc rocksDbBackend*(
 
   # Initialise RocksDB
   let oCfs = block:
-    let rc = db.rdb.init(path, dbOpts, cfOpts, guestCFs)
+    let rc = db.rdb.init(path, opts, dbOpts, cfOpts, guestCFs)
     if rc.isErr:
       when extraTraceMessages:
         trace logTxt "constructor failed",
@@ -312,10 +311,8 @@ iterator walkVtx*(
     be: RdbBackendRef;
       ): tuple[evid: RootedVertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (rvid, data) in be.rdb.walkVtx:
-    let rc = data.deblobify VertexRef
-    if rc.isOk:
-      yield (rvid, rc.value)
+  for (rvid, vtx) in be.rdb.walkVtx:
+    yield (rvid, vtx)
 
 iterator walkKey*(
     be: RdbBackendRef;

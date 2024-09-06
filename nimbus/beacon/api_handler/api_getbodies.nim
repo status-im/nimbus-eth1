@@ -48,19 +48,33 @@ proc getPayloadBodyByHeader(db: CoreDbRef,
     ))
   )
 
+func toPayloadBody(blk: EthBlock): ExecutionPayloadBodyV1 =
+  var wds: seq[WithdrawalV1]
+  if blk.withdrawals.isSome:
+    for w in blk.withdrawals.get:
+      wds.add w3Withdrawal(w)
+
+  ExecutionPayloadBodyV1(
+    transactions: w3Txs(blk.transactions),
+    # pre Shanghai block return null withdrawals
+    # post Shanghai block return at least empty slice
+    withdrawals: if blk.withdrawals.isSome:
+                   Opt.some(wds)
+                 else:
+                   Opt.none(seq[WithdrawalV1])
+  )
+
 proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
                              hashes: seq[Web3Hash]):
                                seq[Opt[ExecutionPayloadBodyV1]] =
   if hashes.len > maxBodyRequest:
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
 
-  let db = ben.com.db
-  var header: common.BlockHeader
   for h in hashes:
-    if not db.getBlockHeader(ethHash h, header):
+    let blk = ben.chain.blockByHash(ethHash h).valueOr:
       result.add Opt.none(ExecutionPayloadBodyV1)
       continue
-    db.getPayloadBodyByHeader(header, result)
+    result.add Opt.some(toPayloadBody(blk))
 
 proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
                               start: uint64, count: uint64):
@@ -75,19 +89,27 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
 
   let
-    com = ben.com
-    db  = com.db
-    current = com.syncCurrent
-
+    db = ben.com.db
+    
   var
-    header: common.BlockHeader
     last = start+count-1
+    header: common.BlockHeader
 
-  if last > current:
-    last = current
+  if start > ben.chain.latestNumber:
+    # requested range beyond the latest known block
+    return
 
-  for bn in start..last:
+  if last > ben.chain.latestNumber:
+    last = ben.chain.latestNumber
+
+  # get bodies from database
+  for bn in start..ben.chain.baseNumber:
     if not db.getBlockHeader(bn, header):
       result.add Opt.none(ExecutionPayloadBodyV1)
       continue
     db.getPayloadBodyByHeader(header, result)
+
+  if last > ben.chain.baseNumber:
+    let blocks = ben.chain.blockFromBaseTo(last)
+    for i in countdown(blocks.len-1, 0):
+      result.add Opt.some(toPayloadBody(blocks[i]))

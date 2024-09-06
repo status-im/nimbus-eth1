@@ -57,6 +57,7 @@ proc new*(
     getProtocolId(portalNetwork, PortalSubnetwork.state),
     toContentIdHandler,
     createGetHandler(contentDB),
+    createRadiusHandler(contentDB),
     s,
     bootstrapRecords,
     config = portalConfig,

@@ -36,7 +36,7 @@ type
     vaultKey: PrivateKey
     conf    : NimbusConf
     com     : CommonRef
-    chain   : ChainRef
+    chain   : ForkedChainRef
     xp      : TxPoolRef
 
 const
@@ -110,7 +110,7 @@ proc initEnv(envFork: HardFork): TestEnv =
       conf.networkId,
       conf.networkParams
     )
-    chain = newChain(com)
+    chain = newForkedChain(com, com.genesisHeader)
 
   result = TestEnv(
     conf: conf,
@@ -167,7 +167,7 @@ proc runTxPoolPosTest() =
       check blk.txs.len == 1
 
     test "PoS persistBlocks":
-      let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
+      let rr = chain.importBlock(EthBlock.init(blk.header, body))
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
@@ -232,7 +232,7 @@ proc runTxPoolBlobhashTest() =
       check blockValue == bundle.blockValue
 
     test "Blobhash persistBlocks":
-      let rr = chain.persistBlocks([EthBlock.init(blk.header, body)])
+      let rr = chain.importBlock(EthBlock.init(blk.header, body))
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
@@ -253,7 +253,7 @@ proc runTxPoolBlobhashTest() =
         tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce-2))
         xp = env.xp
 
-      check xp.smartHead(blk.header)
+      check xp.smartHead(blk.header, chain)
       xp.add(PooledTransaction(tx: tx4))
 
       check inPoolAndOk(xp, rlpHash(tx4)) == false
@@ -308,12 +308,12 @@ proc runTxHeadDelta(noisy = true) =
             uncles: blk.uncles)
 
           # Commit to block chain
-          check chain.persistBlocks([EthBlock.init(blk.header, body)]).isOk
+          check chain.importBlock(EthBlock.init(blk.header, body)).isOk
 
           # Synchronise TxPool against new chain head, register txs differences.
           # In this particular case, these differences will simply flush the
           # packer bucket.
-          check xp.smartHead(blk.header)
+          check xp.smartHead(blk.header, chain)
 
           # Move TxPool chain head to new chain head and apply delta jobs
           check xp.nItems.staged == 0
@@ -355,9 +355,9 @@ proc runGetBlockBodyTest() =
         return
 
       let blk = r.get.blk
-      check env.chain.persistBlocks([blk]).isOk
+      check env.chain.importBlock(blk).isOk
       parentHeader = blk.header
-      check env.xp.smartHead(parentHeader)
+      check env.xp.smartHead(parentHeader, env.chain)
       check blk.transactions.len == 2
 
     test "TxPool create second block":
@@ -380,25 +380,12 @@ proc runGetBlockBodyTest() =
         return
 
       let blk = r.get.blk
-      check env.chain.persistBlocks([blk]).isOk
+      check env.chain.importBlock(blk).isOk
       currentHeader = blk.header
-      check env.xp.smartHead(currentHeader)
+      check env.xp.smartHead(currentHeader, env.chain)
       check blk.transactions.len == 3
-
-    test "Get current block body":
-      var body: BlockBody
-      check env.com.db.getBlockBody(currentHeader, body)
-      check body.transactions.len == 3
-      check env.com.db.getReceipts(currentHeader.receiptsRoot).len == 3
-      check env.com.db.getTransactionCount(currentHeader.txRoot) == 3
-
-    test "Get parent block body":
-      # Make sure parent baggage doesn't swept away by aristo
-      var body: BlockBody
-      check env.com.db.getBlockBody(parentHeader, body)
-      check body.transactions.len == 2
-      check env.com.db.getReceipts(parentHeader.receiptsRoot).len == 2
-      check env.com.db.getTransactionCount(parentHeader.txRoot) == 2
+      let currHash = currentHeader.blockHash
+      check env.chain.forkChoice(currHash, currHash).isOk
 
 proc txPool2Main*() =
   const

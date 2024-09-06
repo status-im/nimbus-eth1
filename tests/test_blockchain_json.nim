@@ -148,6 +148,6 @@ when isMainModule:
       let node = json.parseFile(name)
       executeFile(node, testStatusIMPL)
 
-    executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcTotalDifficultyTest/sideChainWithMoreTransactions.json")
+    executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcWalletTest/walletReorganizeOwners.json")
   else:
     blockchainJsonMain()

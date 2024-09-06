@@ -129,16 +129,12 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       config.dataDir / config.network.getDbDirectory() / "contentdb_" &
         d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacityMB * 1_000_000,
+      radiusConfig = config.radiusConfig,
+      localId = d.localNode.id,
       manualCheckpoint = true,
     )
 
-    let radius =
-      if config.radiusConfig.kind == Static:
-        UInt256.fromLogRadius(config.radiusConfig.logRadius)
-      else:
-        let oldRadiusApproximation = db.getLargestDistance(d.localNode.id)
-        db.estimateNewRadius(oldRadiusApproximation)
-
+    let radius = db.estimateNewRadius(config.radiusConfig)
     # Note: In the case of dynamical radius this is all an approximation that
     # heavily relies on uniformly distributed content and thus will always
     # have an error margin, either down or up of the requested capacity.

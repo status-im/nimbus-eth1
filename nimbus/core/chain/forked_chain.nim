@@ -517,12 +517,19 @@ proc forkChoice*(c: ForkedChainRef,
 
   ok()
 
-func haveBlockAndState*(c: ForkedChainRef, hash: Hash256): bool =
-  if c.blocks.hasKey(hash):
+func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash256): bool =
+  if c.blocks.hasKey(blockHash):
     return true
-  if c.baseHash == hash:
+  if c.baseHash == blockHash:
     return true
   false
+
+proc haveBlockLocally*(c: ForkedChainRef, blockHash: Hash256): bool =
+  if c.blocks.hasKey(blockHash):
+    return true
+  if c.baseHash == blockHash:
+    return true
+  c.db.headerExists(blockHash)
 
 func stateReady*(c: ForkedChainRef, header: BlockHeader): bool =
   let blockHash = header.blockHash
@@ -537,8 +544,18 @@ func db*(c: ForkedChainRef): CoreDbRef =
 func latestHeader*(c: ForkedChainRef): BlockHeader =
   c.cursorHeader
 
+func latestNumber*(c: ForkedChainRef): BlockNumber =
+  c.cursorHeader.number
+
 func latestHash*(c: ForkedChainRef): Hash256 =
   c.cursorHash
+
+func baseNumber*(c: ForkedChainRef): BlockNumber =
+  c.baseHeader.number
+
+func latestBlock*(c: ForkedChainRef): EthBlock =
+  c.blocks.withValue(c.cursorHash, val) do:
+    return val.blk
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader, string] =
   if number > c.cursorHeader.number:
@@ -555,7 +572,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader
     if c.db.getBlockHeader(number, header):
       return ok(header)
     else:
-      return err("Failed to get block with number: " & $number)
+      return err("Failed to get header with number: " & $number)
 
   shouldNotKeyError:
     var prevHash = c.cursorHeader.parentHash
@@ -566,3 +583,52 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader
       prevHash = header.parentHash
 
   doAssert(false, "headerByNumber: Unreachable code")
+
+proc headerByHash*(c: ForkedChainRef, blockHash: Hash256): Result[BlockHeader, string] =
+  c.blocks.withValue(blockHash, val) do:
+    return ok(val.blk.header)
+  do:
+    if c.baseHash == blockHash:
+      return ok(c.baseHeader)
+    var header: BlockHeader
+    if c.db.getBlockHeader(blockHash, header):
+      return ok(header)
+    return err("Failed to get header with hash: " & $blockHash)
+
+proc blockByHash*(c: ForkedChainRef, blockHash: Hash256): Opt[EthBlock] =
+  # used by getPayloadBodiesByHash
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
+  # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
+  c.blocks.withValue(blockHash, val) do:
+    return Opt.some(val.blk)
+  do:
+    return Opt.none(EthBlock)
+
+func blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[EthBlock, string] =
+  shouldNotKeyError:
+    var prevHash = c.cursorHash
+    while prevHash != c.baseHash:
+      c.blocks.withValue(prevHash, item):
+        if item.blk.header.number == number:
+          return ok(item.blk)
+        prevHash = item.blk.header.parentHash
+  return err("Block not found, number = " & $number)
+
+func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[EthBlock] =
+  # return block in reverse order
+  shouldNotKeyError:
+    var prevHash = c.cursorHash
+    while prevHash != c.baseHash:
+      c.blocks.withValue(prevHash, item):
+        if item.blk.header.number <= number:
+          result.add item.blk
+        prevHash = item.blk.header.parentHash
+
+func isCanonical*(c: ForkedChainRef, blockHash: Hash256): bool =
+  shouldNotKeyError:
+    var prevHash = c.cursorHash
+    while prevHash != c.baseHash:
+      c.blocks.withValue(prevHash, item):
+        if blockHash == prevHash:
+          return true
+        prevHash = item.blk.header.parentHash

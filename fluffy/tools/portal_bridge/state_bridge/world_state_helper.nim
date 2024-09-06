@@ -52,15 +52,9 @@ proc applyStateDiff*(worldState: WorldStateRef, txDiff: TransactionDiff) =
 
     if nonceDiff.kind == create or nonceDiff.kind == update:
       accState.setNonce(nonceDiff.after)
-    elif nonceDiff.kind == delete:
-      doAssert deleteAccount == true
 
-    if codeDiff.kind == create and codeDiff.after.len() > 0:
+    if codeDiff.kind == create or codeDiff.kind == update:
       accState.setCode(codeDiff.after)
-    elif codeDiff.kind == update:
-      accState.setCode(codeDiff.after)
-    elif codeDiff.kind == delete:
-      doAssert deleteAccount == true
 
     for (slotKey, slotValueDiff) in storageDiff:
       if slotValueDiff.kind == create or slotValueDiff.kind == update:

@@ -13,36 +13,12 @@
 ##
 
 import
-  std/[strutils, tables],
-  chronicles,
+  std/tables,
   eth/common,
   results,
   ./aristo_delta/[delta_merge, delta_reverse],
   ./aristo_desc/desc_backend,
-  "."/[aristo_desc, aristo_get, aristo_layers, aristo_utils]
-
-logScope:
-  topics = "aristo-delta"
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc toStr(rvid: RootedVertexID): string =
-  "$" & rvid.root.uint64.toHex & ":" & rvid.vid.uint64.toHex
-
-proc delSubTree(db: AristoDbRef; writer: PutHdlRef; rvid: RootedVertexID) =
-  ## Collect subtrees marked for deletion
-  let (vtx,_) = db.getVtxRc(rvid).valueOr:
-    notice "Descending for deletion stopped", rvid=(rvid.toStr), error
-    return
-  for vid in vtx.subVids:
-    db.delSubTree(writer, (rvid.root, vid))
-  db.backend.putVtxFn(writer, rvid, VertexRef(nil))
-  db.backend.putKeyFn(writer, rvid, VOID_HASH_KEY)
-  # Make sure the `rvid` is not mentioned here, anymore for further update.
-  db.balancer.sTab.del rvid
-  db.balancer.kMap.del rvid
+  "."/[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions, save to backend
@@ -75,6 +51,15 @@ proc deltaPersistent*(
 
   # Blind or missing filter
   if db.balancer.isNil:
+    # Add a blind storage frame. This will do no harm if `Aristo` runs
+    # standalone. Yet it is needed if a `Kvt` is tied to `Aristo` and has
+    # triggered a save cyle already which is to be completed here.
+    #
+    # There is no need to add a blind frame on any error return. If there
+    # is a `Kvt` tied to `Aristo`, then it must somehow run in sync and an
+    # error occuring here must have been detected earlier when (implicitely)
+    # registering `Kvt`. So that error should be considered a defect.
+    ? be.putEndFn(? be.putBegFn())
     return ok()
 
   # Make sure that the argument `db` is at the centre so the backend is in
@@ -109,12 +94,6 @@ proc deltaPersistent*(
 
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
-  # This one must come first in order to avoid duplicate `sTree[]` or
-  # `kMap[]` instructions, in the worst case overwiting previously deleted
-  # entries.
-  for rvid in db.balancer.delTree:
-    db.delSubTree(writeBatch, rvid)
-  # Now the standard `sTree[]` and `kMap[]` instructions.
   for rvid, vtx in db.balancer.sTab:
     be.putVtxFn(writeBatch, rvid, vtx)
   for rvid, key in db.balancer.kMap:

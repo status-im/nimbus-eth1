@@ -73,18 +73,6 @@ func fromLogRadius*(T: type UInt256, logRadius: uint16): T =
   # Get the max value of the logRadius range
   pow((2).stuint(256), logRadius) - 1
 
-func getInitialRadius*(rc: RadiusConfig): UInt256 =
-  case rc.kind
-  of Static:
-    return UInt256.fromLogRadius(rc.logRadius)
-  of Dynamic:
-    # In case of a dynamic radius we start from the maximum value to quickly
-    # gather as much data as possible, and also make sure each data piece in
-    # the database is in our range after a node restart.
-    # Alternative would be to store node the radius in database, and initialize
-    # it from database after a restart
-    return UInt256.high()
-
 ## Confutils parsers
 
 proc parseCmdArg*(T: type RadiusConfig, p: string): T {.raises: [ValueError].} =

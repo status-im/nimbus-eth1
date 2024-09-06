@@ -383,7 +383,7 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
 proc initSync*[S,W](
     dsc: RunnerSyncRef[S,W];
     node: EthereumNode;
-    chain: ChainRef;
+    chain: ForkedChainRef,
     slots: int;
       ) =
   ## Constructor

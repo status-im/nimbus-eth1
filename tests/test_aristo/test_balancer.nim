@@ -103,7 +103,7 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
   let db = block:
     if 0 < rdbPath.len:
       let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
-      let rc = AristoDbRef.init(RdbBackendRef, rdbPath, dbOpts, cfOpts, [])
+      let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init(), dbOpts, cfOpts, [])
       xCheckRc rc.error == 0:
         result = err(rc.error)
       rc.value()[0]

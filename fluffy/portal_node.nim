@@ -79,6 +79,8 @@ proc new*(
       config.dataDir / network.getDbDirectory() / "contentdb_" &
         discovery.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacity,
+      radiusConfig = config.portalConfig.radiusConfig,
+      localId = discovery.localNode.id,
     )
     # TODO: Portal works only over mainnet data currently
     networkData = loadNetworkData("mainnet")

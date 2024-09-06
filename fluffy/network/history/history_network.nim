@@ -692,6 +692,7 @@ proc new*(
       getProtocolId(portalNetwork, PortalSubnetwork.history),
       toContentIdHandler,
       createGetHandler(contentDB),
+      createRadiusHandler(contentDB),
       stream,
       bootstrapRecords,
       config = portalConfig,
@@ -752,10 +753,11 @@ proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
       # radius drop.
       # TODO: Get some float precision calculus?
       let radiusPercentage =
-        n.portalProtocol.dataRadius div (UInt256.high() div u256(100))
+        n.portalProtocol.dataRadius() div (UInt256.high() div u256(100))
 
       info "History network status",
-        radius = radiusPercentage.toString(10) & "%",
+        radiusPercentage = radiusPercentage.toString(10) & "%",
+        radius = n.portalProtocol.dataRadius().toHex(),
         dbSize = $(n.contentDB.size() div 1000) & "kb",
         routingTableNodes = n.portalProtocol.routingTable.len()
 

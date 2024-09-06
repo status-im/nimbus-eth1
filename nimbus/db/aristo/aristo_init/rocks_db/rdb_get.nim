@@ -20,7 +20,9 @@ import
   stew/keyed_queue,
   ../../[aristo_blobify, aristo_desc],
   ../init_common,
-  ./rdb_desc
+  ./rdb_desc,
+  metrics,
+  std/concurrency/atomics
 
 const
   extraTraceMessages = false
@@ -32,6 +34,49 @@ when extraTraceMessages:
 
   logScope:
     topics = "aristo-rocksdb"
+
+type
+  RdbVtxLruCounter = ref object of Counter
+  RdbKeyLruCounter = ref object of Counter
+
+var
+  rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
+    "aristo_rdb_vtx_lru_total",
+    "Vertex LRU lookup (hit/miss, world/account, branch/leaf)",
+    labels = ["state", "vtype", "hit"],
+  )
+  rdbKeyLruStatsMetric {.used.} = RdbKeyLruCounter.newCollector(
+    "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
+  )
+
+method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
+  let timestamp = collector.now()
+
+  # We don't care about synchronization between each type of metric or between
+  # the metrics thread and others since small differences like this don't matter
+  for state in RdbStateType:
+    for vtype in VertexType:
+      for hit in [false, true]:
+        output(
+          name = "aristo_rdb_vtx_lru_total",
+          value = float64(rdbVtxLruStats[state][vtype].get(hit)),
+          labels = ["state", "vtype", "hit"],
+          labelValues = [$state, $vtype, $ord(hit)],
+          timestamp = timestamp,
+        )
+
+method collect*(collector: RdbKeyLruCounter, output: MetricHandler) =
+  let timestamp = collector.now()
+
+  for state in RdbStateType:
+    for hit in [false, true]:
+      output(
+        name = "aristo_rdb_key_lru_total",
+        value = float64(rdbKeyLruStats[state].get(hit)),
+        labels = ["state", "hit"],
+        labelValues = [$state, $ord(hit)],
+        timestamp = timestamp,
+      )
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -60,13 +105,16 @@ proc getKey*(
   # Try LRU cache first
   var rc = rdb.rdKeyLru.lruFetch(rvid.vid)
   if rc.isOK:
+    rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
     return ok(move(rc.value))
 
+  rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+
   # Otherwise fetch from backend database
-  var res: Result[HashKey,(AristoError,string)]
+  # A threadvar is used to avoid allocating an environment for onData
+  var res{.threadvar.}: Opt[HashKey]
   let onData = proc(data: openArray[byte]) =
-    res = HashKey.fromBytes(data).mapErr(proc(): auto =
-      (RdbHashKeyExpected,""))
+    res = HashKey.fromBytes(data)
 
   let gotData = rdb.keyCol.get(rvid.blobify().data(), onData).valueOr:
      const errSym = RdbBeDriverGetKeyError
@@ -76,27 +124,32 @@ proc getKey*(
 
   # Correct result if needed
   if not gotData:
-    res = ok(VOID_HASH_KEY)
+    res.ok(VOID_HASH_KEY)
   elif res.isErr():
-    return res # Parsing failed
+    return err((RdbHashKeyExpected,"")) # Parsing failed
 
   # Update cache and return
-  ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), RdKeyLruMaxSize)
+  if rdb.rdKeySize > 0:
+    ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), rdb.rdKeySize)
+  else:
+    ok res.value()
 
 proc getVtx*(
     rdb: var RdbInst;
     rvid: RootedVertexID;
       ): Result[VertexRef,(AristoError,string)] =
   # Try LRU cache first
-  var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
-  if rc.isOK:
-    return ok(move(rc.value))
+  if rdb.rdVtxSize > 0:
+    var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
+    if rc.isOK:
+      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
+      return ok(move(rc.value))
 
   # Otherwise fetch from backend database
-  var res: Result[VertexRef,(AristoError,string)]
+  # A threadvar is used to avoid allocating an environment for onData
+  var res {.threadvar.}: Result[VertexRef,AristoError]
   let onData = proc(data: openArray[byte]) =
-    res = data.deblobify(VertexRef).mapErr(proc(error: AristoError): auto =
-      (error,""))
+    res = data.deblobify(VertexRef)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
@@ -105,12 +158,20 @@ proc getVtx*(
     return err((errSym,error))
 
   if not gotData:
-    res = ok(VertexRef(nil))
-  elif res.isErr():
-    return res # Parsing failed
+    # As a hack, we count missing data as leaf nodes
+    rdbVtxLruStats[rvid.to(RdbStateType)][VertexType.Leaf].inc(false)
+    return ok(VertexRef(nil))
+
+  if res.isErr():
+    return err((res.error(), "Parsing failed")) # Parsing failed
+
+  rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
 
   # Update cache and return
-  ok rdb.rdVtxLru.lruAppend(rvid.vid, res.value(), RdVtxLruMaxSize)
+  if rdb.rdVtxSize > 0:
+    ok rdb.rdVtxLru.lruAppend(rvid.vid, res.value(), rdb.rdVtxSize)
+  else:
+    ok res.value()
 
 # ------------------------------------------------------------------------------
 # End

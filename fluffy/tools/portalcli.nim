@@ -243,7 +243,9 @@ proc run(config: PortalCliConf) =
   d.open()
 
   let
-    db = ContentDB.new("", config.storageSize, inMemory = true)
+    db = ContentDB.new(
+      "", config.storageSize, defaultRadiusConfig, d.localNode.id, inMemory = true
+    )
     sm = StreamManager.new(d)
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     stream = sm.registerNewStream(cq)
@@ -252,6 +254,7 @@ proc run(config: PortalCliConf) =
       config.protocolId,
       testContentIdHandler,
       createGetHandler(db),
+      createRadiusHandler(db),
       stream,
       bootstrapRecords = bootstrapRecords,
     )

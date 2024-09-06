@@ -38,12 +38,13 @@ export
 
 proc newAristoRdbDbRef(
     basePath: string;
+    opts: DbOptions;
     dbOpts: DbOptionsRef;
     cfOpts: ColFamilyOptionsRef;
     guestCFs: openArray[ColFamilyDescriptor];
       ): Result[(AristoDbRef, seq[ColFamilyReadWrite]), AristoError]=
   let
-    (be, oCfs) = ? rocksDbBackend(basePath, dbOpts, cfOpts, guestCFs)
+    (be, oCfs) = ? rocksDbBackend(basePath, opts, dbOpts, cfOpts, guestCFs)
     vTop = block:
       let rc = be.getTuvFn()
       if rc.isErr:
@@ -62,6 +63,7 @@ proc init*(
     T: type AristoDbRef;
     B: type RdbBackendRef;
     basePath: string;
+    opts: DbOptions;
     dbOpts: DbOptionsRef;
     cfOpts: ColFamilyOptionsRef;
     guestCFs: openArray[ColFamilyDescriptor];
@@ -69,7 +71,7 @@ proc init*(
   ## Generic constructor, `basePath` argument is ignored for memory backend
   ## databases (which also unconditionally succeed initialising.)
   ##
-  basePath.newAristoRdbDbRef dbOpts, cfOpts, guestCFs
+  basePath.newAristoRdbDbRef opts, dbOpts, cfOpts, guestCFs
 
 proc activateWrTrigger*(
     db: AristoDbRef;

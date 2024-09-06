@@ -280,8 +280,7 @@ proc fillCanonicalChain*(sk: SkeletonRef): Result[void, string] =
   let subchain = sk.last
   if sk.progress.canonicalHeadReset:
     # Grab previous head block in case of resettng canonical head
-    let oldHead = sk.canonicalHead().valueOr:
-      return err(error)
+    let oldHead = sk.canonicalHead()
     maybeOldHead = Opt.some oldHead
 
     if subchain.tail > canonicalHead + 1:

@@ -45,14 +45,8 @@ proc basicServices(nimbus: NimbusNode,
   # so it can know the latest account state
   # e.g. sender nonce, etc
   let head = com.db.getCanonicalHead()
-  doAssert nimbus.txPool.smartHead(head)
-
-  # chainRef: some name to avoid module-name/filed/function misunderstandings
-  nimbus.chainRef = newChain(com)
-  if conf.verifyFrom.isSome:
-    let verifyFrom = conf.verifyFrom.get()
-    nimbus.chainRef.extraValidation = 0 < verifyFrom
-    nimbus.chainRef.verifyFrom = verifyFrom
+  nimbus.chainRef = newForkedChain(com, head)
+  doAssert nimbus.txPool.smartHead(head, nimbus.chainRef)
 
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
 
@@ -230,7 +224,9 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     # Resolve statically for database type
     case conf.chainDbMode:
     of Aristo,AriPrune:
-      AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
+      AristoDbRocks.newCoreDbRef(
+        string conf.dataDir,
+        conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
   setupMetrics(nimbus, conf)
 

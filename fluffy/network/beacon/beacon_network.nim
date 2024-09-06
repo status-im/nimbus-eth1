@@ -196,23 +196,15 @@ proc new*(
 
     stream = streamManager.registerNewStream(contentQueue)
 
-    # Need to adjust the radius to a static max value as for the Beacon chain
-    # network all data must be accepted currently.
-    portalConfigAdjusted = PortalProtocolConfig(
-      tableIpLimits: portalConfig.tableIpLimits,
-      bitsPerHop: portalConfig.bitsPerHop,
-      radiusConfig: RadiusConfig(kind: Static, logRadius: 256),
-      disablePoke: portalConfig.disablePoke,
-    )
-
     portalProtocol = PortalProtocol.new(
       baseProtocol,
       getProtocolId(portalNetwork, PortalSubnetwork.beacon),
       toContentIdHandler,
       createGetHandler(beaconDb),
+      createRadiusHandler(beaconDb),
       stream,
       bootstrapRecords,
-      config = portalConfigAdjusted,
+      config = portalConfig,
     )
 
   portalProtocol.dbPut = createStoreHandler(beaconDb)

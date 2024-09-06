@@ -300,12 +300,6 @@ proc markCanonicalChain(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc exists*(db: CoreDbRef, hash: Hash256): bool =
-  db.ctx.getKvt().hasKeyRc(hash.data).valueOr:
-    warn "exisis", hash, error=($$error)
-    return false
-  # => true/false
-
 proc getSavedStateBlockNumber*(
     db: CoreDbRef;
       ): BlockNumber =
@@ -940,13 +934,6 @@ proc finalizedHeader*(
       ): BlockHeader
       {.gcsafe, raises: [BlockNotFound].} =
   db.getBlockHeader(db.finalizedHeaderHash)
-
-proc haveBlockAndState*(db: CoreDbRef, headerHash: Hash256): bool =
-  var header: BlockHeader
-  if not db.getBlockHeader(headerHash, header):
-    return false
-  # see if stateRoot exists
-  db.exists(header.stateRoot)
 
 # ------------------------------------------------------------------------------
 # End
