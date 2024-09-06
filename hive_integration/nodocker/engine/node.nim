@@ -81,7 +81,7 @@ proc getVmState(c: ChainRef, header: BlockHeader):
     return ok(c.vmState)
 
   let vmState = BaseVMState()
-  if not vmState.init(header, c.com, storeSlotHash = storeSlotHash):
+  if not vmState.init(header, c.com, storeSlotHash = false):
     debug "Cannot initialise VmState",
       number = header.number
     return err()
@@ -131,7 +131,8 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with
   # `persistent()` together with the respective block number.
-  c.db.persistent(header.number - 1)
+  c.db.persistent(header.number - 1).isOkOr:
+    return err($error)
 
   ok()
 
