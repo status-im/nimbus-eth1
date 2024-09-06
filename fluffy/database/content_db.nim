@@ -255,6 +255,7 @@ proc new*(
     backend: db,
     manualCheckpoint: manualCheckpoint,
     storageCapacity: storageCapacity,
+    localId: localId,
     sizeStmt: sizeStmt,
     unusedSizeStmt: unusedSizeStmt,
     vacuumStmt: vacuumStmt,
