@@ -28,6 +28,8 @@ type
     skeletonBlockHashToNumber = 11
     skeletonHeader = 12
     skeletonBody = 13
+    flareState = 14
+    flareHeader = 15
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -109,6 +111,17 @@ func hashIndexKey*(hash: Hash256, index: uint16): HashIndexKey =
   result[0..31] = hash.data
   result[32] = byte(index and 0xFF)
   result[33] = byte((index shl 8) and 0xFF)
+
+func flareStateKey*(u: uint8): DbKey =
+  result.data[0] = byte ord(flareState)
+  result.data[1] = u
+  result.dataEndPos = 1
+
+func flareHeaderKey*(u: BlockNumber): DbKey =
+  result.data[0] = byte ord(flareHeader)
+  doAssert sizeof(u) <= 32
+  copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
+  result.dataEndPos = uint8 sizeof(u)
 
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))
