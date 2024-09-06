@@ -11,7 +11,8 @@
 import
   std/[tables, sets],
   stint,
-  eth/common
+  eth/common,
+  ../utils/mergeutils
 
 type
   SlotSet = HashSet[UInt256]
@@ -49,12 +50,9 @@ func contains*(ac: var AccessList, address: EthAddress, slot: UInt256): bool =
   ac.slots.withValue(address, val):
     result = slot in val[]
 
-proc merge*(ac: var AccessList, other: AccessList) {.inline.} =
-  for k, v in other.slots:
-    ac.slots.withValue(k, val):
-      val[].incl v
-    do:
-      ac.slots[k] = v
+proc mergeAndReset*(ac, other: var AccessList) =
+  # move values in `other` to `ac`
+  ac.slots.mergeAndReset(other.slots)
 
 proc add*(ac: var AccessList, address: EthAddress) =
   if address notin ac.slots:

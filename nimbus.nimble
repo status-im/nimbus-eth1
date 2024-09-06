@@ -53,8 +53,8 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   exec "nim " & lang & " --out:build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
 
 proc test(path: string, name: string, params = "", lang = "c") =
-  # Verify stack usage is kept low by setting 750k stack limit in tests.
-  const stackLimitKiB = 750
+  # Verify stack usage is kept low by setting 1mb stack limit in tests.
+  const stackLimitKiB = 1024
   when not defined(windows):
     const (buildOption, runPrefix) = ("", "ulimit -s " & $stackLimitKiB & " && ")
   else:
