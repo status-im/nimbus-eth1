@@ -60,7 +60,7 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
     # TODO: Replay state?
     err("Block state not ready")
 
-proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, string] =
+func blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
@@ -71,12 +71,7 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, strin
     let blockNum = common.BlockNumber blockTag.number
     return api.chain.blockByNumber(blockNum)
 
-proc blockFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[EthBlock, string] =
-  let blockId = blockTag.get(defaultTag)
-  api.blockFromTag(blockId)
-
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
-
   server.rpc("eth_getBalance") do(data: Web3Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let

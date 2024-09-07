@@ -117,7 +117,7 @@ proc partUntwigGeneric*(
   try:
     let nibbles = NibblesBuf.fromBytes path
     return chain.trackRlpNodes(root.to(HashKey), nibbles, start=true)
-  except RlpError as e:
+  except RlpError:
     return err(PartTrkRlpError)
 
 proc partUntwigPath*(

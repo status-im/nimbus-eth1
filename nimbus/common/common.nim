@@ -154,7 +154,7 @@ proc initializeDb(com: CommonRef) =
     finalized =
       try:
         com.db.finalizedHeader()
-      except BlockNotFound as exc:
+      except BlockNotFound:
         debug "No finalized block stored in database, reverting to base"
         base
     head =

@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 const
   # help with low memory when compiling selectVM() function
   lowmem {.intdefine.}: int = 0
@@ -19,9 +21,7 @@ import
   ".."/[constants, db/ledger],
   "."/[code_stream, computation, evm_errors],
   "."/[message, precompiles, state, types],
-  ./interpreter/[op_dispatcher, gas_costs]
-
-{.push raises: [].}
+  ./interpreter/op_dispatcher
 
 logScope:
   topics = "vm opcode"
