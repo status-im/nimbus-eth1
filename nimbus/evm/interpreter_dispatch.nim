@@ -10,11 +10,6 @@
 
 {.push raises: [].}
 
-const
-  # help with low memory when compiling selectVM() function
-  lowmem {.intdefine.}: int = 0
-  lowMemoryCompileTime {.used.} = lowmem > 0
-
 import
   std/[macros, strformat],
   pkg/[chronicles, chronos, stew/byteutils],
@@ -29,14 +24,6 @@ logScope:
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-const
-  supportedOS = defined(windows) or defined(linux) or defined(macosx)
-  optimizationCondition = not lowMemoryCompileTime and defined(release) and supportedOS
-
-when optimizationCondition:
-  # this is a top level pragma since nim 1.6.16
-  {.optimization: speed.}
 
 proc runVM(
     c: VmCpt,
