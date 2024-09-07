@@ -10,20 +10,18 @@
 import
   unittest2,
   stint,
-  eth/keys,
   ../network/state/state_content,
   ../database/content_db,
   ./test_helpers
 
 suite "Content Database":
-  let rng = newRng()
-  let testId = u256(0)
+  const testId = u256(0)
   # Note: We are currently not really testing something new here just basic
   # underlying kvstore.
   test "ContentDB basic API":
     let
       db = ContentDB.new(
-        "", uint32.high, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+        "", uint32.high, RadiusConfig(kind: Dynamic), testId, inMemory = true
       )
       key = ContentId(UInt256.high()) # Some key
 
@@ -35,7 +33,7 @@ suite "Content Database":
         db.contains(key) == false
 
     block:
-      discard db.put(key, [byte 0, 1, 2, 3], testId)
+      discard db.putAndPrune(key, [byte 0, 1, 2, 3])
       let val = db.get(key)
 
       check:
@@ -53,16 +51,16 @@ suite "Content Database":
 
   test "ContentDB size":
     let db = ContentDB.new(
-      "", uint32.high, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+      "", uint32.high, RadiusConfig(kind: Dynamic), testId, inMemory = true
     )
 
     let numBytes = 10000
     let size1 = db.size()
-    discard db.put(u256(1), genByteSeq(numBytes), testId)
+    discard db.putAndPrune(u256(1), genByteSeq(numBytes))
     let size2 = db.size()
-    discard db.put(u256(2), genByteSeq(numBytes), testId)
+    discard db.putAndPrune(u256(2), genByteSeq(numBytes))
     let size3 = db.size()
-    discard db.put(u256(2), genByteSeq(numBytes), testId)
+    discard db.putAndPrune(u256(2), genByteSeq(numBytes))
     let size4 = db.size()
     let usedSize = db.usedSize()
 
@@ -102,7 +100,7 @@ suite "Content Database":
     let
       storageCapacity = 100_000'u64
       db = ContentDB.new(
-        "", storageCapacity, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+        "", storageCapacity, RadiusConfig(kind: Dynamic), testId, inMemory = true
       )
 
       furthestElement = u256(40)
@@ -110,16 +108,16 @@ suite "Content Database":
       thirdFurthest = u256(20)
 
       numBytes = 10_000
-      pr1 = db.put(u256(1), genByteSeq(numBytes), u256(0))
-      pr2 = db.put(thirdFurthest, genByteSeq(numBytes), u256(0))
-      pr3 = db.put(u256(3), genByteSeq(numBytes), u256(0))
-      pr4 = db.put(u256(10), genByteSeq(numBytes), u256(0))
-      pr5 = db.put(u256(5), genByteSeq(numBytes), u256(0))
-      pr6 = db.put(u256(11), genByteSeq(numBytes), u256(0))
-      pr7 = db.put(furthestElement, genByteSeq(2000), u256(0))
-      pr8 = db.put(secondFurthest, genByteSeq(2000), u256(0))
-      pr9 = db.put(u256(2), genByteSeq(numBytes), u256(0))
-      pr10 = db.put(u256(4), genByteSeq(12000), u256(0))
+      pr1 = db.putAndPrune(u256(1), genByteSeq(numBytes))
+      pr2 = db.putAndPrune(thirdFurthest, genByteSeq(numBytes))
+      pr3 = db.putAndPrune(u256(3), genByteSeq(numBytes))
+      pr4 = db.putAndPrune(u256(10), genByteSeq(numBytes))
+      pr5 = db.putAndPrune(u256(5), genByteSeq(numBytes))
+      pr6 = db.putAndPrune(u256(11), genByteSeq(numBytes))
+      pr7 = db.putAndPrune(furthestElement, genByteSeq(2000))
+      pr8 = db.putAndPrune(secondFurthest, genByteSeq(2000))
+      pr9 = db.putAndPrune(u256(2), genByteSeq(numBytes))
+      pr10 = db.putAndPrune(u256(4), genByteSeq(12000))
 
     check:
       pr1.kind == ContentStored
@@ -152,9 +150,8 @@ suite "Content Database":
       amountOfItems = 10_000
 
     let
-      rng = newRng()
       db = ContentDB.new(
-        "", startCapacity, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
+        "", startCapacity, RadiusConfig(kind: Dynamic), testId, inMemory = true
       )
       localId = UInt256.fromHex(
         "30994892f3e4889d99deb5340050510d1842778acc7a7948adffa475fed51d6e"
@@ -183,19 +180,19 @@ suite "Content Database":
     # Quite a big marging (20%) is added as it is all an approximation.
     check diff < int64(float(db.storageCapacity) * 0.20)
 
-test "ContentDB radius - start with full radius":
-  let
-    storageCapacity = 100_000'u64
-    db = ContentDB.new(
-      "", storageCapacity, RadiusConfig(kind: Dynamic), u256(0), inMemory = true
-    )
-    radiusHandler = createRadiusHandler(db)
+  test "ContentDB radius - start with full radius":
+    let
+      storageCapacity = 100_000'u64
+      db = ContentDB.new(
+        "", storageCapacity, RadiusConfig(kind: Dynamic), testId, inMemory = true
+      )
+      radiusHandler = createRadiusHandler(db)
 
-  check radiusHandler() == UInt256.high()
+    check radiusHandler() == UInt256.high()
 
-test "ContentDB radius - 0 capacity":
-  let
-    db = ContentDB.new("", 0, RadiusConfig(kind: Dynamic), u256(0), inMemory = true)
-    radiusHandler = createRadiusHandler(db)
+  test "ContentDB radius - 0 capacity":
+    let
+      db = ContentDB.new("", 0, RadiusConfig(kind: Dynamic), testId, inMemory = true)
+      radiusHandler = createRadiusHandler(db)
 
-  check radiusHandler() == UInt256.low()
+    check radiusHandler() == UInt256.low()
