@@ -45,6 +45,10 @@ const
     ## smaller unprocessed slots that mostly all will be served leads to less
     ## fragmentation on a multi-peer downloading approach.
 
+  fetchHeaderReqZombieThreshold* = chronos.seconds(2)
+    ## Response time allowance. If the response time for the set of headers
+    ## exceeds this threshold, then this peer will be banned for a while.
+
   nFetchHeadersOpportunisticly* = 8 * nFetchHeadersRequest
     ## Length of the request/stage batch. Several headers are consecutively
     ## fetched and stashed together as a single record on the staged queue.

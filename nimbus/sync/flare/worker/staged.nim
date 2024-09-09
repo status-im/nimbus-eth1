@@ -224,15 +224,15 @@ proc stagedCollect*(
 
     # Update remaining interval
     let ivRespLen = lhc.revHdrs.len - nLhcHeaders
-    if iv.minPt + ivRespLen.uint < ivTop:
-      let newIvTop = ivTop - ivRespLen.uint # will mostly be `ivReq.minPt-1`
-      when extraTraceMessages:
-        trace info & ": collected range", peer, iv=BnRange.new(iv.minPt, ivTop),
-          ivReq, ivResp=BnRange.new(newIvTop+1, ivReq.maxPt), ivRespLen,
-          isOpportunistic
-      ivTop = newIvTop
-    else:
+    if ivTop <= iv.minPt + ivRespLen.uint or buddy.ctrl.stopped:
       break
+
+    let newIvTop = ivTop - ivRespLen.uint # will mostly be `ivReq.minPt-1`
+    when extraTraceMessages:
+      trace info & ": collected range", peer, iv=BnRange.new(iv.minPt, ivTop),
+        ivReq, ivResp=BnRange.new(newIvTop+1, ivReq.maxPt), ivRespLen,
+        isOpportunistic
+    ivTop = newIvTop
 
   # Store `lhcOpt` chain on the `staged` queue
   let qItem = ctx.lhc.staged.insert(iv.maxPt).valueOr:
@@ -242,10 +242,11 @@ proc stagedCollect*(
   when extraTraceMessages:
     trace info & ": stashed on staged queue", peer,
       iv=BnRange.new(iv.maxPt - lhc.headers.len.uint + 1, iv.maxPt),
-      nHeaders=lhc.headers.len, isOpportunistic
+      nHeaders=lhc.headers.len, isOpportunistic, ctrl=buddy.ctrl.state
   else:
     trace info & ": stashed on staged queue", peer,
-      topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len, isOpportunistic
+      topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
+      isOpportunistic, ctrl=buddy.ctrl.state
 
   return true
 
