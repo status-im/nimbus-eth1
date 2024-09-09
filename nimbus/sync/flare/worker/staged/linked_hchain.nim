@@ -44,27 +44,27 @@ formatIt(Hash256):
 when verifyLinkedHChainOk:
   proc verifyHeaderChainItem(lhc: ref LinkedHChain; info: static[string]) =
     when extraTraceMessages:
-      trace info & ": verifying", nLhc=lhc.headers.len
+      trace info & ": verifying", nLhc=lhc.revHdrs.len
     var
-      firstHdr, prvHdr: BlockHeader
+      topHdr, childHdr: BlockHeader
     try:
-      firstHdr = rlp.decode(lhc.headers[0], BlockHeader)
-      doAssert lhc.parentHash == firstHdr.parentHash
+      doAssert lhc.revHdrs[0].keccakHash == lhc.hash
+      topHdr = rlp.decode(lhc.revHdrs[0], BlockHeader)
 
-      prvHdr = firstHdr
-      for n in 1 ..< lhc.headers.len:
-        let header = rlp.decode(lhc.headers[n], BlockHeader)
-        doAssert lhc.headers[n-1].keccakHash == header.parentHash
-        doAssert prvHdr.number + 1 == header.number
-        prvHdr = header
+      childHdr = topHdr
+      for n in 1 ..< lhc.revHdrs.len:
+        let header = rlp.decode(lhc.revHdrs[n], BlockHeader)
+        doAssert childHdr.number == header.number + 1
+        doAssert lhc.revHdrs[n].keccakHash == childHdr.parentHash
+        childHdr = header
 
-      doAssert lhc.headers[^1].keccakHash == lhc.hash
+      doAssert childHdr.parentHash == lhc.parentHash
     except RlpError as e:
       raiseAssert "verifyHeaderChainItem oops(" & $e.name & ") msg=" & e.msg
 
     when extraTraceMessages:
       trace info & ": verify ok",
-        iv=BnRange.new(firstHdr.number,prvHdr.number), nLhc=lhc.headers.len
+        iv=BnRange.new(childHdr.number,topHdr.number), nLhc=lhc.revHdrs.len
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -90,11 +90,11 @@ proc newLHChain(
     return err()
 
   # Make space for return code array
-  var chain = (ref LinkedHChain)(headers: newSeq[Blob](rev.len))
+  var chain = (ref LinkedHChain)(revHdrs: newSeq[Blob](rev.len))
 
   # Set up header with larges block number
   let blob0 = rlp.encode(rev[0])
-  chain.headers[rev.len-1] = blob0
+  chain.revHdrs[0] = blob0
   chain.hash = blob0.keccakHash
 
   # Verify top block hash (if any)
@@ -111,19 +111,18 @@ proc newLHChain(
         trace info & ": #numbers mismatch", n,
           parentNumber=rev[n-1].number.bnStr, number=rev[n].number.bnStr
       return err()
-    let blob = rlp.encode(rev[n])
-    if rev[n-1].parentHash != blob.keccakHash:
+    chain.revHdrs[n] = rlp.encode(rev[n])
+    if rev[n-1].parentHash != chain.revHdrs[n].keccakHash:
       when extraTraceMessages:
         trace info & ": hash mismatch", n,
-          parentHash=rev[n-1].parentHash, hash=blob.keccakHash
+          parentHash=rev[n-1].parentHash, hash=chain.revHdrs[n].keccakHash
       return err()
-    chain.headers[rev.len-n-1] = blob
 
   # Finalise
   chain.parentHash = rev[rev.len-1].parentHash
 
   when extraTraceMessages:
-    trace info & " new chain record", nChain=chain.headers.len
+    trace info & " new chain record", nChain=chain.revHdrs.len
   ok(chain)
 
 # ------------------------------------------------------------------------------
@@ -155,14 +154,12 @@ proc extendLinkedHChain*(
   #
   when extraTraceMessages:
     trace info & ": extending chain record", peer,
-      blockNumber=blockNumber.bnStr, len=lhc.headers.len,
-      newLen=(newLhc.headers.len + lhc.headers.len), isOpportunistic
+      blockNumber=blockNumber.bnStr, len=lhc.revHdrs.len,
+      newLen=(newLhc.revHdrs.len + lhc.revHdrs.len), isOpportunistic
 
-  if lhc.headers.len == 0:
+  if lhc.revHdrs.len == 0:
     lhc.hash = newLhc.hash
-    lhc.headers = newLhc.headers
-  else:
-    lhc.headers = newLhc.headers & lhc.headers
+  lhc.revHdrs &= newLhc.revHdrs
   lhc.parentHash = newLhc.parentHash
 
   when verifyLinkedHChainOk:

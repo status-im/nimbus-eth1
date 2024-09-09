@@ -54,7 +54,7 @@ when verifyStagedQueueOk:
     while rc.isOk:
       let
         key = rc.value.key
-        nHeaders = rc.value.data.headers.len.uint
+        nHeaders = rc.value.data.revHdrs.len.uint
         minPt = key - nHeaders + 1
         unproc = ctx.unprocCovered(minPt, key)
       if 0 < unproc:
@@ -202,9 +202,9 @@ proc stagedCollect*(
       # Request interval
       ivReq = BnRange.new(ivReqMin, ivTop)
 
-      # Current length of the headers queue. This is one way to calculate
-      # the response length from the network.
-      nLhcHeaders = lhc.headers.len
+      # Current length of the headers queue. This is used to calculate the
+      # response length from the network.
+      nLhcHeaders = lhc.revHdrs.len
 
     # Fetch and extend chain record
     if not await buddy.fetchAndCheck(ivReq, lhc, info):
@@ -223,7 +223,7 @@ proc stagedCollect*(
       break
 
     # Update remaining interval
-    let ivRespLen = lhc.headers.len - nLhcHeaders
+    let ivRespLen = lhc.revHdrs.len - nLhcHeaders
     if iv.minPt + ivRespLen.uint < ivTop:
       let newIvTop = ivTop - ivRespLen.uint # will mostly be `ivReq.minPt-1`
       when extraTraceMessages:
@@ -245,7 +245,7 @@ proc stagedCollect*(
       nHeaders=lhc.headers.len, isOpportunistic
   else:
     trace info & ": stashed on staged queue", peer,
-      topBlock=iv.maxPt.bnStr, nHeaders=lhc.headers.len, isOpportunistic
+      topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len, isOpportunistic
 
   return true
 
@@ -261,7 +261,7 @@ proc stagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
 
     let
       least = ctx.layout.least # `L` from `README.md` (1) or `worker_desc`
-      iv = BnRange.new(qItem.key - qItem.data.headers.len.uint + 1, qItem.key)
+      iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint + 1, qItem.key)
     if iv.maxPt+1 < least:
       when extraTraceMessages:
         trace info & ": there is a gap", iv, L=least.bnStr, nSaved=result
@@ -287,7 +287,7 @@ proc stagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
       break
 
     # Store headers on database
-    ctx.dbStashHeaders(iv.minPt, qItem.data.headers)
+    ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs)
     ctx.layout.least = iv.minPt
     ctx.layout.leastParent = qItem.data.parentHash
     let ok = ctx.dbStoreLinkedHChainsLayout()
@@ -344,7 +344,7 @@ proc stagedReorg*(ctx: FlareCtxRef; info: static[string]) =
       defer: walk.destroy()
       var rc = walk.first
       while rc.isOk:
-        let (key, nHeaders) = (rc.value.key, rc.value.data.headers.len.uint)
+        let (key, nHeaders) = (rc.value.key, rc.value.data.revHdrs.len.uint)
         ctx.unprocMerge(key - nHeaders + 1, key)
         rc = walk.next
     # Reset `staged` queue
