@@ -254,12 +254,11 @@ proc run(config: PortalCliConf) =
       config.protocolId,
       testContentIdHandler,
       createGetHandler(db),
+      createStoreHandler(db, defaultRadiusConfig),
       createRadiusHandler(db),
       stream,
       bootstrapRecords = bootstrapRecords,
     )
-
-  portal.dbPut = createStoreHandler(db, defaultRadiusConfig, portal)
 
   if config.metricsEnabled:
     let

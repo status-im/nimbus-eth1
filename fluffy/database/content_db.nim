@@ -490,41 +490,34 @@ proc createGetHandler*(db: ContentDB): DbGetHandler =
       ok(content)
   )
 
-proc createStoreHandler*(
-    db: ContentDB, cfg: RadiusConfig, p: PortalProtocol
-): DbStoreHandler =
+proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =
   return (
     proc(
         contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
     ) {.raises: [], gcsafe.} =
-      # always re-check that the key is in the node range to make sure only
-      # content in range is stored.
-      # TODO: current silent assumption is that both ContentDB and PortalProtocol
-      # are using the same xor distance function
-      if p.inRange(contentId):
-        case cfg.kind
-        of Dynamic:
-          # In case of dynamic radius, the radius gets adjusted based on the
-          # to storage capacity and content gets pruned accordingly.
-          let res = db.putAndPrune(contentId, content)
-          if res.kind == DbPruned:
-            portal_pruning_counter.inc()
-            portal_pruning_deleted_elements.set(res.deletedElements.int64)
+      case cfg.kind
+      of Dynamic:
+        # In case of dynamic radius, the radius gets adjusted based on the
+        # to storage capacity and content gets pruned accordingly.
+        let res = db.putAndPrune(contentId, content)
+        if res.kind == DbPruned:
+          portal_pruning_counter.inc()
+          portal_pruning_deleted_elements.set(res.deletedElements.int64)
 
-            if res.deletedFraction > 0.0:
-              db.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
-            else:
-              # Note:
-              # This can occur when the furthest content is bigger than the fraction
-              # size. This is unlikely to happen as it would require either very
-              # small storage capacity or a very small `contentDeletionFraction`
-              # combined with some big content.
-              info "Database pruning attempt resulted in no content deleted"
-              return
-        of Static:
-          # If the radius is static, it may never be adjusted, database capacity
-          # is disabled and no pruning is ever done.
-          db.put(contentId, content)
+          if res.deletedFraction > 0.0:
+            db.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
+          else:
+            # Note:
+            # This can occur when the furthest content is bigger than the fraction
+            # size. This is unlikely to happen as it would require either very
+            # small storage capacity or a very small `contentDeletionFraction`
+            # combined with some big content.
+            info "Database pruning attempt resulted in no content deleted"
+            return
+      of Static:
+        # If the radius is static, it may never be adjusted, database capacity
+        # is disabled and no pruning is ever done.
+        db.put(contentId, content)
   )
 
 proc createRadiusHandler*(db: ContentDB): DbRadiusHandler =
