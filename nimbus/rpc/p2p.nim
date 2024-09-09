@@ -31,31 +31,9 @@ import
   ../evm/evm_errors,
   ./filters
 
-const
-  AccountAndStorageProofAvailableAndWorking = false
-    ## Need to include this module despite non-working proof functions. See
-    ## `TODO-P2P.md` for some explanation.
-
 type
   BlockHeader = eth_types.BlockHeader
   Hash256 = eth_types.Hash256
-
-when not AccountAndStorageProofAvailableAndWorking:
-  type
-    MptNodeRlpBytes = seq[byte]
-    AccountProof = seq[MptNodeRlpBytes]
-    SlotProof = seq[MptNodeRlpBytes]
-  func getAccountProof(
-      db: LedgerRef;
-      eAddr: EthAddress;
-        ): AccountProof =
-    discard
-  func getStorageProof(
-      db: LedgerRef;
-      eAddr: EthAddress;
-      slot: seq[UInt256];
-        ): seq[SlotProof] =
-    discard
 
 proc getProof*(
     accDB: LedgerRef,

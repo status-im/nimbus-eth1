@@ -858,6 +858,22 @@ proc getEthAccount*(ac: AccountsLedgerRef, address: EthAddress): Account =
     raiseAssert "getAccount(): cannot convert account: " & $$rc.error
   rc.value
 
+proc getAccountProof*(ac: AccountsLedgerRef, address: EthAddress): seq[seq[byte]] =
+  let accProof = ac.ledger.proof(keccakHash(address)).valueOr:
+    raiseAssert "getAccountProof() cannot get proof: " & $$error
+
+  accProof
+
+proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
+  var storageProof = newSeqOfCap[seq[seq[byte]]](slots.len)
+
+  for slot in slots:
+    let slotProof = ac.ledger.slotProof(keccakHash(address), keccakHash(toBytesBE(slot))).valueOr:
+      raiseAssert "getStorageProofs() cannot get slotProof: " & $$error
+    storageProof.add(slotProof)
+
+  storageProof
+
 proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
@@ -875,3 +891,5 @@ func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress, slot: UInt256): bool {.borrow.}
 func getTransientStorage*(ac: ReadOnlyStateDB,
                           address: EthAddress, slot: UInt256): UInt256 {.borrow.}
+func getAccountProof*(db: ReadOnlyStateDB, eAddr: EthAddress): seq[seq[byte]] {.borrow.}
+func getStorageProof*(db: ReadOnlyStateDB, eAddr: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] {.borrow.}
