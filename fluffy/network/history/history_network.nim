@@ -692,14 +692,12 @@ proc new*(
       getProtocolId(portalNetwork, PortalSubnetwork.history),
       toContentIdHandler,
       createGetHandler(contentDB),
+      createStoreHandler(contentDB, portalConfig.radiusConfig),
       createRadiusHandler(contentDB),
       stream,
       bootstrapRecords,
       config = portalConfig,
     )
-
-  portalProtocol.dbPut =
-    createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   HistoryNetwork(
     portalProtocol: portalProtocol,

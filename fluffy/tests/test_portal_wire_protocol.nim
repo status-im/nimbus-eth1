@@ -49,12 +49,11 @@ proc initPortalProtocol(
       protocolId,
       toContentId,
       createGetHandler(db),
+      createStoreHandler(db, defaultRadiusConfig),
       createRadiusHandler(db),
       stream,
       bootstrapRecords = bootstrapRecords,
     )
-
-  proto.dbPut = createStoreHandler(db, defaultRadiusConfig, proto)
 
   return proto
 
@@ -346,11 +345,10 @@ procSuite "Portal Wire Protocol Tests":
         protocolId,
         toContentId,
         createGetHandler(db),
+        createStoreHandler(db, defaultRadiusConfig),
         createRadiusHandler(db),
         stream,
       )
-
-    proto1.dbPut = createStoreHandler(db, defaultRadiusConfig, proto1)
 
     let item = genByteSeq(10_000)
     var distances: seq[UInt256] = @[]
