@@ -67,100 +67,71 @@ when verifyLinkedHChainOk:
         iv=BnRange.new(childHdr.number,topHdr.number), nLhc=lhc.revHdrs.len
 
 # ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc newLHChain(
-    rev: seq[BlockHeader];
-    buddy: FlareBuddyRef;
-    blockNumber: BlockNumber;
-    topHash: Hash256;
-    info: static[string];
-      ): Opt[ref LinkedHChain] =
-  ## Verify list of headers while assembling them to a `LinkedHChain`
-  when extraTraceMessages:
-    trace info, nHeaders=rev.len
-
-  # Verify top block number
-  assert 0 < rev.len # debugging only
-  if rev[0].number != blockNumber:
-    when extraTraceMessages:
-      trace info & ": top block number mismatch",
-        number=rev[0].number.bnStr, expected=blockNumber.bnStr
-    return err()
-
-  # Make space for return code array
-  var chain = (ref LinkedHChain)(revHdrs: newSeq[Blob](rev.len))
-
-  # Set up header with larges block number
-  let blob0 = rlp.encode(rev[0])
-  chain.revHdrs[0] = blob0
-  chain.hash = blob0.keccakHash
-
-  # Verify top block hash (if any)
-  if topHash != EMPTY_ROOT_HASH and chain.hash != topHash:
-    when extraTraceMessages:
-      trace info & ": top block hash mismatch",
-        hash=(chain.hash.data.toHex), expected=(topHash.data.toHex)
-    return err()
-
-  # Make sure that block headers are chained
-  for n in 1 ..< rev.len:
-    if rev[n].number + 1 != rev[n-1].number:
-      when extraTraceMessages:
-        trace info & ": #numbers mismatch", n,
-          parentNumber=rev[n-1].number.bnStr, number=rev[n].number.bnStr
-      return err()
-    chain.revHdrs[n] = rlp.encode(rev[n])
-    if rev[n-1].parentHash != chain.revHdrs[n].keccakHash:
-      when extraTraceMessages:
-        trace info & ": hash mismatch", n,
-          parentHash=rev[n-1].parentHash, hash=chain.revHdrs[n].keccakHash
-      return err()
-
-  # Finalise
-  chain.parentHash = rev[rev.len-1].parentHash
-
-  when extraTraceMessages:
-    trace info & " new chain record", nChain=chain.revHdrs.len
-  ok(chain)
-
-# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc extendLinkedHChain*(
   rev: seq[BlockHeader];
   buddy: FlareBuddyRef;
-  blockNumber: BlockNumber;
+  topNumber: BlockNumber;
   lhc: ref LinkedHChain; # update in place
   info: static[string];
     ): bool =
-
+  ## Returns sort of `lhc[] += rev[]` where `lhc[]` is updated in place.
   when extraTraceMessages:
-    let
-      peer = buddy.peer
-      isOpportunistic = lhc.parentHash == EMPTY_ROOT_HASH
+    let peer = buddy.peer
 
-  let newLhc = rev.newLHChain(buddy, blockNumber, lhc.parentHash, info).valueOr:
+  # Verify top block number
+  assert 0 < rev.len # debugging only
+  if rev[0].number != topNumber:
     when extraTraceMessages:
-      trace info & ": fetched headers unusable", peer,
-        blockNumber=blockNumber.bnStr, isOpportunistic
+      trace info & ": top block number mismatch", peer, n=0,
+        number=rev[0].number.bnStr, expected=topNumber.bnStr
     return false
 
-  # Prepend `newLhc` before `lhc`
-  #
-  # FIXME: This must be cleaned up and optimised at some point.
-  #
-  when extraTraceMessages:
-    trace info & ": extending chain record", peer,
-      blockNumber=blockNumber.bnStr, len=lhc.revHdrs.len,
-      newLen=(newLhc.revHdrs.len + lhc.revHdrs.len), isOpportunistic
+  # Make space for return code array
+  let offset = lhc.revHdrs.len
+  lhc.revHdrs.setLen(offset + rev.len)
 
-  if lhc.revHdrs.len == 0:
-    lhc.hash = newLhc.hash
-  lhc.revHdrs &= newLhc.revHdrs
-  lhc.parentHash = newLhc.parentHash
+  # Set up header with largest block number
+  let
+    blob0 = rlp.encode(rev[0])
+    hash0 = blob0.keccakHash
+  lhc.revHdrs[offset] = blob0
+  if offset == 0:
+    lhc.hash = hash0
+
+  # Verify top block hash (if any)
+  if lhc.parentHash != EMPTY_ROOT_HASH and hash0 != lhc.parentHash:
+    when extraTraceMessages:
+      trace info & ": top hash mismatch", peer, hash0, expected=lhc.parentHash
+    lhc.revHdrs.setLen(offset)
+    return false
+
+  # Encode block headers and make sure they are chained
+  for n in 1 ..< rev.len:
+    if rev[n].number + 1 != rev[n-1].number:
+      when extraTraceMessages:
+        trace info & ": #numbers mismatch", peer, n,
+          parentNumber=rev[n-1].number.bnStr, number=rev[n].number.bnStr
+      lhc.revHdrs.setLen(offset)
+      return false
+
+    lhc.revHdrs[offset + n] = rlp.encode(rev[n])
+    let hashN = lhc.revHdrs[offset + n].keccakHash
+    if rev[n-1].parentHash != hashN:
+      when extraTraceMessages:
+        trace info & ": hash mismatch", peer, n,
+          parentHash=rev[n-1].parentHash, hashN
+      lhc.revHdrs.setLen(offset)
+      return false
+
+  # Finalise
+  lhc.parentHash = rev[rev.len-1].parentHash
+
+  when extraTraceMessages:
+    trace info & " extended chain record", peer, topNumber=topNumber.bnStr,
+      offset, nLhc=lhc.revHdrs.len
 
   when verifyLinkedHChainOk:
     lhc.verifyHeaderChainItem info
