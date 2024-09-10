@@ -46,11 +46,10 @@ type
     paBlsG1MultiExp = 0x0d,
     paBlsG2Add   = 0x0e,
     paBlsG2Mul   = 0x0f,
-    # EIP-2537: disabled; reason: gas price discrepancies, TODO
-    # paBlsG2MultiExp
-    # paBlsPairing
-    # paBlsMapG1
-    # paBlsMapG2
+    paBlsG2MultiExp = 0x10,
+    paBlsPairing = 0x11,
+    paBlsMapG1 = 0x12,
+    paBlsMapG2 = 0x13
 
   SigRes = object
     msgHash: array[32, byte]
@@ -389,7 +388,7 @@ func blake2bf(c: Computation): EvmResultVoid =
     assign(c.output, output)
   ok()
 
-func blsG1Add*(c: Computation): EvmResultVoid =
+func blsG1Add(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -412,7 +411,7 @@ func blsG1Add*(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
   ok()
 
-func blsG1Mul*(c: Computation): EvmResultVoid =
+func blsG1Mul(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -467,7 +466,7 @@ func calcBlsMultiExpGas(K: GasInt, gasCost: GasInt): GasInt =
   # Calculate gas and return the result
   result = (K * gasCost * discount) div 1000
 
-func blsG1MultiExp*(c: Computation): EvmResultVoid =
+func blsG1MultiExp(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -509,7 +508,7 @@ func blsG1MultiExp*(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
   ok()
 
-func blsG2Add*(c: Computation): EvmResultVoid =
+func blsG2Add(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -532,7 +531,7 @@ func blsG2Add*(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
   ok()
 
-func blsG2Mul*(c: Computation): EvmResultVoid =
+func blsG2Mul(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -556,7 +555,7 @@ func blsG2Mul*(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
   ok()
 
-func blsG2MultiExp*(c: Computation): EvmResultVoid =
+func blsG2MultiExp(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -598,7 +597,7 @@ func blsG2MultiExp*(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
   ok()
 
-func blsPairing*(c: Computation): EvmResultVoid =
+func blsPairing(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -648,7 +647,7 @@ func blsPairing*(c: Computation): EvmResultVoid =
     c.output[^1] = 1.byte
   ok()
 
-func blsMapG1*(c: Computation): EvmResultVoid =
+func blsMapG1(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -668,7 +667,7 @@ func blsMapG1*(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
   ok()
 
-func blsMapG2*(c: Computation): EvmResultVoid =
+func blsMapG2(c: Computation): EvmResultVoid =
   template input: untyped =
     c.msg.data
 
@@ -748,11 +747,10 @@ proc execPrecompiles*(c: Computation, fork: EVMFork): bool =
     of paBlsG1MultiExp: blsG1MultiExp(c)
     of paBlsG2Add: blsG2Add(c)
     of paBlsG2Mul: blsG2Mul(c)
-    # EIP 2537: disabled; gas price changes/discrepancies in test vectors
-    # of paBlsG2MultiExp: blsG2MultiExp(c)
-    # of paBlsPairing: blsPairing(c)
-    # of paBlsMapG1: blsMapG1(c)
-    # of paBlsMapG2: blsMapG2(c)
+    of paBlsG2MultiExp: blsG2MultiExp(c)
+    of paBlsPairing: blsPairing(c)
+    of paBlsMapG1: blsMapG1(c)
+    of paBlsMapG2: blsMapG2(c)
 
   if res.isErr:
     if res.error.code == EvmErrorCode.OutOfGas:

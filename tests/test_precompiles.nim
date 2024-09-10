@@ -61,8 +61,8 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
         check fixtureResult.gasUsed == gasExpected.get
 
 proc parseFork(x: string): string =
-  result = x.capitalizeAscii  
-  
+  result = x.capitalizeAscii
+
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let
     label = fixtures["func"].getStr
@@ -91,11 +91,10 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "blsg1multiexp" : data.doTest(vmState, paBlsG1MultiExp)
   of "blsg2add" : data.doTest(vmState, paBlsG2Add)
   of "blsg2mul" : data.doTest(vmState, paBlsG2Mul)
-  # EIP 2537: disabled due to gas price changes/discprepancies
-  #of "blsg2multiexp": data.doTest(vmState, paBlsG2MultiExp)
-  #of "blspairing": data.doTest(vmState, paBlsPairing)
-  #of "blsmapg1": data.doTest(vmState, paBlsMapG1)
-  #of "blsmapg2": data.doTest(vmState, paBlsMapG2)
+  of "blsg2multiexp": data.doTest(vmState, paBlsG2MultiExp)
+  of "blspairing": data.doTest(vmState, paBlsPairing)
+  of "blsmapg1": data.doTest(vmState, paBlsMapG1)
+  of "blsmapg2": data.doTest(vmState, paBlsMapG2)
   else:
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
