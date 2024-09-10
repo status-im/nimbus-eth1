@@ -234,13 +234,13 @@ proc exec(ctx: var TransContext,
     vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
       raise newError(ErrorConfig, error)
 
-  if vmState.com.isCancunOrLater(ctx.env.currentTimestamp) and
+  if vmState.com.isPragueOrLater(ctx.env.currentTimestamp) and
      ctx.env.blockHashes.len > 0:
     let
       prevNumber = ctx.env.currentNumber - 1
       prevHash = ctx.env.blockHashes.getOrDefault(prevNumber)
 
-    if prevHash == Hash256():
+    if prevHash == static(Hash256()):
       raise newError(ErrorConfig, "previous block hash not found for block number: " & $prevNumber)
 
     vmState.processParentBlockHash(prevHash).isOkOr:
