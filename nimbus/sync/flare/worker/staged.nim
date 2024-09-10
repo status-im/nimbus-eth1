@@ -27,14 +27,14 @@ const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
-  verifyStagedQueueOk = not defined(release) or true
+  verifyDataStructureOk = not defined(release) or true
     ## Debugging mode
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-when verifyStagedQueueOk:
+when verifyDataStructureOk:
   proc verifyStagedQueue(
       ctx: FlareCtxRef;
       info: static[string];
@@ -351,7 +351,7 @@ proc stagedReorg*(ctx: FlareCtxRef; info: static[string]) =
     # Reset `staged` queue
     ctx.lhc.staged.clear()
 
-  when verifyStagedQueueOk:
+  when verifyDataStructureOk:
     ctx.verifyStagedQueue(info, multiMode = false)
 
   when extraTraceMessages:

@@ -20,7 +20,7 @@ const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
-  verifyLinkedHChainOk = not defined(release) # or true
+  verifyDataStructureOk = not defined(release) # or true
     ## Debugging mode
 
 when extraTraceMessages:
@@ -41,7 +41,7 @@ proc `$`(w: Hash256): string =
 formatIt(Hash256):
   $it
 
-when verifyLinkedHChainOk:
+when verifyDataStructureOk:
   proc verifyHeaderChainItem(lhc: ref LinkedHChain; info: static[string]) =
     when extraTraceMessages:
       trace info & ": verifying", nLhc=lhc.revHdrs.len
@@ -133,7 +133,7 @@ proc extendLinkedHChain*(
     trace info & " extended chain record", peer, topNumber=topNumber.bnStr,
       offset, nLhc=lhc.revHdrs.len
 
-  when verifyLinkedHChainOk:
+  when verifyDataStructureOk:
     lhc.verifyHeaderChainItem info
 
   true
