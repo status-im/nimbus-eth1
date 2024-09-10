@@ -17,7 +17,7 @@ import
   "."/[sync_desc, sync_sched, protocol]
 
 logScope:
-  topics = "beacon2-sync"
+  topics = "flare"
 
 type
   FlareSyncRef* = RunnerSyncRef[FlareCtxData,FlareBuddyData]

@@ -20,10 +20,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc unprocFetch*(
-    ctx: FlareCtxRef;
-    maxLen: uint64;
-      ): Result[BnRange,void] =
+proc unprocFetch*(ctx: FlareCtxRef; maxLen: uint64): Result[BnRange,void] =
   ## Fetch interval from block ranges with maximal size `maxLen`, where
   ## `0` is interpreted as `2^64`.
   ##

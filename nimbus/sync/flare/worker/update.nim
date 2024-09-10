@@ -22,7 +22,7 @@ import
 logScope:
   topics = "flare update"
 
-const extraTraceMessages = false # or true
+const extraTraceMessages = false
   ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
@@ -106,6 +106,10 @@ proc mergeAdjacentChains(ctx: FlareCtxRef): bool =
   # No overlap allowed!
   doAssert ctx.lhc.layout.base + 1 == ctx.lhc.layout.least
 
+  when extraTraceMessages:
+    trace info & ": merging", B=ctx.lhc.layout.base.bnStr,
+      L=ctx.lhc.layout.least.bnStr
+
   # Verify adjacent chains
   if ctx.lhc.layout.baseHash != ctx.lhc.layout.leastParent:
     # FIXME: Oops -- any better idea than to defect?
@@ -123,6 +127,8 @@ proc mergeAdjacentChains(ctx: FlareCtxRef): bool =
 
   # Save state
   discard ctx.dbStoreLinkedHChainsLayout()
+
+  true
 
 # ------------------------------------------------------------------------------
 # Public functions
