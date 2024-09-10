@@ -107,4 +107,5 @@ const
       result[19] = x.byte
     initAddress(3)
 
+  HISTORY_STORAGE_ADDRESS* = hexToByteArray[20]("0x0aae40965e6800cd9b1f4b05ff21581047e3f91e")
 # End
