@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.warning: "Hunter: Currently disabled (moved to \"no-hunter.nim\")".}
+# Currently disabled (moved to no-hunter.nim)
 
 # Would never haved worked on Aristo. Needs to maintain the account with
 # the state db, i.e. using `CoreDbAccount` for `Account` (see
