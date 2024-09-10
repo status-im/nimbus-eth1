@@ -125,10 +125,6 @@ proc testMergeProofAndKvpList*(
       # Update root
       rootKey = w.root
 
-    let
-      db = ps.db
-      testId = idPfx & "#" & $w.id & "." & $n
-
     if 0 < w.proof.len:
       let rc = ps.partPut(w.proof, ForceGenericPayload)
       xCheckRc rc.error == 0

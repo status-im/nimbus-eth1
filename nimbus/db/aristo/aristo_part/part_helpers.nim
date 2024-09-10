@@ -124,7 +124,7 @@ func toNodesTab*(
     # Decode blob `w`
     let nd = block:
       try: rlp.decode(w, PrfNode)
-      except RlpError as e:
+      except RlpError:
         return err(PartRlpNodeException)
 
     case nd.prfType:
@@ -142,7 +142,7 @@ func toNodesTab*(
         var pyl: PrfPayload
         try:
           pyl = rlp.decode(nd.lData.rawBlob, PrfPayload)
-        except RlpError as e:
+        except RlpError:
           pyl = PrfPayload(prfType: isError, error: PartRlpPayloadException)
 
         case pyl.prfType:

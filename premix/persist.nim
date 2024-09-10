@@ -17,25 +17,13 @@ import
   ../nimbus/core/chain,
   ../nimbus/common,
   ../nimbus/db/opts,
-  ../nimbus/db/[core_db/persistent, storage_types],
+  ../nimbus/db/core_db/persistent,
   configuration  # must be late (compilation annoyance)
 
 when defined(graphql):
   import graphql_downloader
 else:
   import downloader
-
-# `lmdb` is not used, anymore
-#
-# const
-#   manualCommit = nimbus_db_backend == "lmdb"
-#
-# template persistToDb(db: ChainDB, body: untyped) =
-#   when manualCommit:
-#     if not db.txBegin(): doAssert(false)
-#   body
-#   when manualCommit:
-#     if not db.txCommit(): doAssert(false)
 
 template persistToDb(db: CoreDbRef, body: untyped) =
   block: body

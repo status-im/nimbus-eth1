@@ -191,11 +191,6 @@ ifneq ($(ENABLE_EVMC), 0)
   T8N_PARAMS := -d:chronicles_enabled=off
 endif
 
-# disabled by default, enable with ENABLE_VMLOWMEM=1
-ifneq ($(if $(ENABLE_VMLOWMEM),$(ENABLE_VMLOWMEM),0),0)
-  NIM_PARAMS += -d:lowmem:1
-endif
-
 # eth protocol settings, rules from "nimbus/sync/protocol/eth/variables.mk"
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
