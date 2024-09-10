@@ -29,7 +29,7 @@ const extraTraceMessages = false # or true
 # ------------------------------------------------------------------------------
 
 # Copied from `nimbus_import`
-func shortLog(a: chronos.Duration, parts = int.high): string {.inline.} =
+func shortLog(a: chronos.Duration, parts = int.high): string =
   ## Returns string representation of Duration ``a`` as nanoseconds value.
   var
     res = ""
@@ -45,10 +45,6 @@ func shortLog(a: chronos.Duration, parts = int.high): string {.inline.} =
       if v == 0 or parts <= 0:
         return res
 
-  # f("w", Week)
-  # f("d", Day)
-  # f("h", Hour)
-  # f("m", Minute)
   f("s", Second)
   f("ms", Millisecond)
   f("us", Microsecond)
