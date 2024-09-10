@@ -1,3 +1,6 @@
 * Update/resolve code fragments which are tagged FIXME
 
-* Revisit timeouts when fetching header data from the network
+* Check noisy and verification sections whether they are really wanted
+  when going into production
+  + **extraTraceMessages**
+  + **verifyDataStructureOk**

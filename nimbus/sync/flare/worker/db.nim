@@ -221,21 +221,31 @@ proc dbInitEra1*(ctx: FlareCtxRef): bool =
 proc dbStashHeaders*(
     ctx: FlareCtxRef;
     first: BlockNumber;
-    rlpBlobs: openArray[Blob];
+    revBlobs: openArray[Blob];
       ) =
   ## Temporarily store header chain to persistent db (oblivious of the chain
-  ## layout.) Note that headres should not be stashed if they are available
-  ## on the `Era1` repo, i.e. if the corresponding block number is at most
+  ## layout.) The headers should not be stashed if they are available on the
+  ## `Era1` repo, i.e. if the corresponding block number is at most
   ## `ctx.pool.e1AvailMax`.
   ##
+  ## The `revBlobs[]` arguments are passed in reverse order so that block
+  ## numbers apply as
+  ## ::
+  ##    #first     -- revBlobs[^1]
+  ##    #(first+1) -- revBlobs[^2]
+  ##    ..
+  ##
   const info = "dbStashHeaders"
-  let kvt = ctx.db.ctx.getKvt()
-  for n,data in rlpBlobs:
-    let key = flareHeaderKey(first + n.uint)
+  let
+    kvt = ctx.db.ctx.getKvt()
+    last = first + revBlobs.len.uint - 1
+  for n,data in revBlobs:
+    let key = flareHeaderKey(last - n.uint)
     kvt.put(key.toOpenArray, data).isOkOr:
       raiseAssert info & ": put() failed: " & $$error
   when extraTraceMessages:
-    trace info & ": headers stashed", first=first.bnStr, nHeaders=rlpBlobs.len
+    trace info & ": headers stashed",
+      iv=BnRange.new(first, last), nHeaders=revBlobs.len
 
 proc dbPeekHeader*(ctx: FlareCtxRef; num: BlockNumber): Opt[BlockHeader] =
   ## Retrieve some stashed header.

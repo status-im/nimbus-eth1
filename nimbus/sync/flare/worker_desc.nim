@@ -45,6 +45,10 @@ const
     ## smaller unprocessed slots that mostly all will be served leads to less
     ## fragmentation on a multi-peer downloading approach.
 
+  fetchHeaderReqZombieThreshold* = chronos.seconds(2)
+    ## Response time allowance. If the response time for the set of headers
+    ## exceeds this threshold, then this peer will be banned for a while.
+
   nFetchHeadersOpportunisticly* = 8 * nFetchHeadersRequest
     ## Length of the request/stage batch. Several headers are consecutively
     ## fetched and stashed together as a single record on the staged queue.
@@ -83,16 +87,14 @@ type
     ## Traversal descriptor
 
   LinkedHChain* = object
-    ## Public block items for the `LinkedHChainQueue` list, indexed by
-    ## largest block number.
+    ## Public block items for the `LinkedHChainQueue` list, indexed by the
+    ## largest block number. The list `revHdrs[]` is reversed, i.e. the largest
+    ## block number has the least index `0`. This makes it easier to grow the
+    ## sequence with parent headers, i.e. decreasing block numbers.
     ##
-    ## FIXME: `headers[]` should be reversed, i.e. `headers[0]` has the
-    ##        highest block number. This makes it natural to extend the
-    ##        sequence with parent headers at the growing end.
-    ##
-    parentHash*: Hash256             ## Parent hash of `headers[0]`
-    headers*: seq[Blob]              ## Encoded linked header chain
-    hash*: Hash256                   ## Hash of `headers[^1]`
+    hash*: Hash256                   ## Hash of `headers[0]`
+    revHdrs*: seq[Blob]              ## Encoded linked header chain
+    parentHash*: Hash256             ## Parent hash of `headers[^1]`
 
   # -------------------
 

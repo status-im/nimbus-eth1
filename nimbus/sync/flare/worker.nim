@@ -8,6 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+
 {.push raises:[].}
 
 import
@@ -161,7 +162,7 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
 
   else:
     when extraTraceMessages:
-      debug info & ": failed, done", peer
+      debug info & ": nothing fetched, done", peer
 
 # ------------------------------------------------------------------------------
 # End
