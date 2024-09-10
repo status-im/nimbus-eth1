@@ -237,3 +237,6 @@
 	url = https://github.com/status-im/portal-mainnet.git
 	ignore = untracked
 	branch = master
+[submodule "vendor/nim-minilru"]
+	path = vendor/nim-minilru
+	url = https://github.com/status-im/nim-minilru.git

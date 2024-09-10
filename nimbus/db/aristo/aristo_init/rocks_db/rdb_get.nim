@@ -17,7 +17,6 @@ import
   eth/common,
   rocksdb,
   results,
-  stew/keyed_queue,
   ../../[aristo_blobify, aristo_desc],
   ../init_common,
   ./rdb_desc,
@@ -103,7 +102,7 @@ proc getKey*(
     rvid: RootedVertexID;
       ): Result[HashKey,(AristoError,string)] =
   # Try LRU cache first
-  var rc = rdb.rdKeyLru.lruFetch(rvid.vid)
+  var rc = rdb.rdKeyLru.get(rvid.vid)
   if rc.isOK:
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
     return ok(move(rc.value))
@@ -129,21 +128,19 @@ proc getKey*(
     return err((RdbHashKeyExpected,"")) # Parsing failed
 
   # Update cache and return
-  if rdb.rdKeySize > 0:
-    ok rdb.rdKeyLru.lruAppend(rvid.vid, res.value(), rdb.rdKeySize)
-  else:
-    ok res.value()
+  rdb.rdKeyLru.put(rvid.vid, res.value())
+
+  ok res.value()
 
 proc getVtx*(
     rdb: var RdbInst;
     rvid: RootedVertexID;
       ): Result[VertexRef,(AristoError,string)] =
   # Try LRU cache first
-  if rdb.rdVtxSize > 0:
-    var rc = rdb.rdVtxLru.lruFetch(rvid.vid)
-    if rc.isOK:
-      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
-      return ok(move(rc.value))
+  var rc = rdb.rdVtxLru.get(rvid.vid)
+  if rc.isOK:
+    rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
+    return ok(move(rc.value))
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
@@ -168,10 +165,9 @@ proc getVtx*(
   rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
 
   # Update cache and return
-  if rdb.rdVtxSize > 0:
-    ok rdb.rdVtxLru.lruAppend(rvid.vid, res.value(), rdb.rdVtxSize)
-  else:
-    ok res.value()
+  rdb.rdVtxLru.put(rvid.vid, res.value())
+
+  ok res.value()
 
 # ------------------------------------------------------------------------------
 # End

@@ -23,11 +23,12 @@
 
 import
   std/[hashes, sets, tables],
-  stew/keyed_queue,
   eth/common,
   results,
   ./aristo_constants,
-  ./aristo_desc/[desc_error, desc_identifiers, desc_nibbles, desc_structural]
+  ./aristo_desc/[desc_error, desc_identifiers, desc_nibbles, desc_structural],
+  minilru
+
 
 from ./aristo_desc/desc_backend
   import BackendRef
@@ -35,7 +36,7 @@ from ./aristo_desc/desc_backend
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
-  desc_structural, keyed_queue
+  desc_structural, minilru, common
 
 type
   AristoTxRef* = ref object
@@ -60,12 +61,6 @@ type
     centre: AristoDbRef               ## Link to peer with write permission
     peers: HashSet[AristoDbRef]       ## List of all peers
 
-  AccountKey* = distinct ref Hash256
-    # `ref` version of the account path / key
-    # `KeyedQueue` is inefficient for large keys, so we have to use this ref
-    # workaround to not experience a memory explosion in the account cache
-    # TODO rework KeyedQueue to deal with large keys and/or heterogenous lookup
-
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
@@ -77,7 +72,7 @@ type
     txUidGen*: uint                   ## Tx-relative unique number generator
     dudes: DudesRef                   ## Related DB descriptors
 
-    accLeaves*: KeyedQueue[AccountKey, VertexRef]
+    accLeaves*: LruCache[Hash256, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -85,7 +80,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: KeyedQueue[AccountKey, VertexRef]
+    stoLeaves*: LruCache[Hash256, VertexRef]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
@@ -96,18 +91,7 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-template hash*(a: AccountKey): Hash =
-  mixin hash
-  hash((ref Hash256)(a)[])
-
-template `==`*(a, b: AccountKey): bool =
-  mixin `==`
-  (ref Hash256)(a)[] == (ref Hash256)(b)[]
-
-template to*(a: Hash256, T: type AccountKey): T =
-  AccountKey((ref Hash256)(data: a.data))
-
-template mixUp*(T: type AccountKey, accPath, stoPath: Hash256): Hash256 =
+template mixUp*(accPath, stoPath: Hash256): Hash256 =
   # Insecure but fast way of mixing the values of two hashes, for the purpose
   # of quick lookups - this is certainly not a good idea for general Hash256
   # values but account paths are generated from accounts which would be hard
@@ -235,7 +219,10 @@ proc fork*(
 
   let clone = AristoDbRef(
     dudes:   db.dudes,
-    backend: db.backend)
+    backend: db.backend,
+    accLeaves: db.accLeaves,
+    stoLeaves: db.stoLeaves,
+  )
 
   if not noFilter:
     clone.balancer = db.balancer # Ref is ok here (filters are immutable)

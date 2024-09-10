@@ -64,8 +64,7 @@ proc retrieveAccountPayload(
       return err(FetchPathNotFound)
     return ok leafVtx[].lData
 
-  let accKey = accPath.to(AccountKey)
-  if (let leafVtx = db.accLeaves.lruFetch(accKey); leafVtx.isSome()):
+  if (let leafVtx = db.accLeaves.get(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
     return ok leafVtx[].lData
@@ -78,7 +77,9 @@ proc retrieveAccountPayload(
         return err(FetchPathNotFound)
       return err(error)
 
-  ok db.accLeaves.lruAppend(accKey, leafVtx, ACC_LRU_SIZE).lData
+  db.accLeaves.put(accPath, leafVtx)
+
+  ok leafVtx.lData
 
 proc retrieveMerkleHash(
     db: AristoDbRef;
@@ -182,14 +183,13 @@ proc retrieveStoragePayload(
     accPath: Hash256;
     stoPath: Hash256;
       ): Result[UInt256,AristoError] =
-  let mixPath = AccountKey.mixUp(accPath, stoPath)
+  let mixPath = mixUp(accPath, stoPath)
   if (let leafVtx = db.layersGetStoLeaf(mixPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
     return ok leafVtx[].lData.stoData
 
-  let mixKey = mixPath.to(AccountKey)
-  if (let leafVtx = db.stoLeaves.lruFetch(mixKey); leafVtx.isSome()):
+  if (let leafVtx = db.stoLeaves.get(mixPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
     return ok leafVtx[].lData.stoData
@@ -199,7 +199,9 @@ proc retrieveStoragePayload(
   let leafVtx = db.retrieveLeaf(? db.fetchStorageIdImpl(accPath), stoPath.data).valueOr:
     return err(error)
 
-  ok db.stoLeaves.lruAppend(mixKey, leafVtx, ACC_LRU_SIZE).lData.stoData
+  db.stoLeaves.put(mixPath, leafVtx)
+
+  ok leafVtx.lData.stoData
 
 proc hasStoragePayload(
     db: AristoDbRef;

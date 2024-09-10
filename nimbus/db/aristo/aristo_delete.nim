@@ -219,7 +219,7 @@ proc deleteStorageData*(
 
   ?db.deleteImpl(stoHike)
 
-  db.layersPutStoLeaf(AccountKey.mixUp(accPath, stoPath), nil)
+  db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
 
   # Make sure that an account leaf has no dangling sub-trie
   if db.getVtx((stoID.vid, stoID.vid)).isValid:

@@ -26,10 +26,8 @@ import
 # ------------------------------------------------------------------------------
 
 const
-  lruOverhead = 32
-    # Approximate LRU cache overhead per entry - although `keyed_queue` which is
-    # currently used has a much larger overhead, 32 is an easily reachable
-    # number which likely can be reduced in the future
+  lruOverhead = 20
+    # Approximate LRU cache overhead per entry based on minilru sizes
 
 proc dumpCacheStats(keySize, vtxSize: int) =
   block vtx:
@@ -87,6 +85,9 @@ proc initImpl(
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
   rdb.rdVtxSize =
     opts.rdbVtxCacheSize div (sizeof(VertexID) + sizeof(default(VertexRef)[]) + lruOverhead)
+
+  rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
+  rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
 
   if opts.rdbPrintStats:
     let

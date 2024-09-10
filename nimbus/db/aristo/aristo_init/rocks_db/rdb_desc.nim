@@ -18,9 +18,12 @@ import
   std/concurrency/atomics,
   eth/common,
   rocksdb,
-  stew/[endians2, keyed_queue],
+  stew/endians2,
   ../../aristo_desc,
-  ../init_common
+  ../init_common,
+  minilru
+
+export minilru
 
 type
   RdbWriteEventCb* =
@@ -53,9 +56,9 @@ type
     # is less memory and time efficient (the latter one due to internal LRU
     # handling of the longer key.)
     #
-    rdKeyLru*: KeyedQueue[VertexID,HashKey] ## Read cache
+    rdKeyLru*: LruCache[VertexID,HashKey] ## Read cache
     rdKeySize*: int
-    rdVtxLru*: KeyedQueue[VertexID,VertexRef] ## Read cache
+    rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
     rdVtxSize*: int
 
     basePath*: string                  ## Database directory

@@ -12,7 +12,6 @@
 
 import
   std/sets,
-  eth/common,
   ./aristo_desc/desc_identifiers
 
 const

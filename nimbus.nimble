@@ -30,7 +30,8 @@ requires "nim >= 1.6.0",
   "ethash",
   "blscurve",
   "evmc",
-  "web3"
+  "web3",
+  "minilru"
 
 binDir = "build"
 

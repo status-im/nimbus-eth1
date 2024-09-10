@@ -16,7 +16,7 @@ import
   stew/[arrayops, endians2],
   ./aristo_desc
 
-export aristo_desc
+export aristo_desc, results
 
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
