@@ -27,7 +27,7 @@ const
   extraTraceMessages = false # or true
     ## Enabled additional logging noise
 
-  verifyDataStructureOk = not defined(release) or true
+  verifyDataStructureOk = false or true
     ## Debugging mode
 
 # ------------------------------------------------------------------------------
