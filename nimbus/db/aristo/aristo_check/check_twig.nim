@@ -27,7 +27,7 @@ proc checkTwig*(
   let
     proof = ? db.partGenericTwig(root, path)
     key = ? db.computeKey (root,root)
-    pyl = ? proof.partUntwigGeneric(key.to(Hash256), path)
+    pyl = ? proof[0].partUntwigGeneric(key.to(Hash256), path)
 
   ok()
 
@@ -40,7 +40,7 @@ proc checkTwig*(
     proof = ? db.partStorageTwig(accPath, stoPath)
     vid = ? db.fetchStorageID accPath
     key = ? db.computeKey (VertexID(1),vid)
-    pyl = ? proof.partUntwigPath(key.to(Hash256), stoPath)
+    pyl = ? proof[0].partUntwigPath(key.to(Hash256), stoPath)
 
   ok()
 
