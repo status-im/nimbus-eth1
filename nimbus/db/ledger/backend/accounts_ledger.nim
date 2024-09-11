@@ -859,21 +859,33 @@ proc getEthAccount*(ac: AccountsLedgerRef, address: EthAddress): Account =
   rc.value
 
 proc getAccountProof*(ac: AccountsLedgerRef, address: EthAddress): seq[seq[byte]] =
-  let accProof = ac.ledger.proof(keccakHash(address)).valueOr:
-    raiseAssert "getAccountProof() cannot get proof: " & $$error
+  let accProof = ac.ledger.proof(address.toAccountKey).valueOr:
+    raiseAssert "Failed to get account proof: " & $$error
 
   accProof[0]
 
 proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
   var storageProof = newSeqOfCap[seq[seq[byte]]](slots.len)
 
+  let
+    addressHash = address.toAccountKey
+    accountExists = ac.ledger.hasPath(addressHash).valueOr:
+      raiseAssert "Call to hasPath failed: " & $$error
+
   for slot in slots:
-    let slotProof = ac.ledger.slotProof(keccakHash(address), keccakHash(toBytesBE(slot))).valueOr:
-      if error.aErr == FetchPathNotFound:
-        storageProof.add(@[])
-        continue
-      else:
-        raiseAssert "getStorageProofs() cannot get slotProof: " & $$error
+    if not accountExists:
+      storageProof.add(@[])
+      continue
+
+    let
+      slotKey = ac.slots.lruFetch(slot).valueOr:
+        slot.toBytesBE.keccakHash
+      slotProof = ac.ledger.slotProof(addressHash, slotKey).valueOr:
+        if error.aErr == FetchPathNotFound:
+          storageProof.add(@[])
+          continue
+        else:
+          raiseAssert "Failed to get slot proof: " & $$error
     storageProof.add(slotProof[0])
 
   storageProof
