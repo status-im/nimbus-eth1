@@ -89,7 +89,8 @@ type
 
   FlareBuddyData* = object
     ## Local descriptor data extension
-    fetchBlocks*: BnRange
+    #fetchBlocks*: BnRange
+    nRespErrors*: int                ## Number of errors/slow responses in a row
 
   FlareTossUp* = object
     ## Reminiscent of CSMA/CD. For the next number `nCoins` in a row, each

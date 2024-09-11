@@ -24,10 +24,10 @@ logScope:
   topics = "flare staged"
 
 const
-  extraTraceMessages = false # or true
+  extraTraceMessages = false
     ## Enabled additional logging noise
 
-  verifyDataStructureOk = false or true
+  verifyDataStructureOk = true
     ## Debugging mode
 
 # ------------------------------------------------------------------------------
@@ -106,17 +106,12 @@ proc fetchAndCheck(
   ##
   # Fetch headers for this range of block numbers
   let revHeaders = block:
-    let
-      rc = await buddy.headersFetchReversed(ivReq, lhc.parentHash, info)
-    if rc.isOk:
-      rc.value
-    else:
+    let rc = await buddy.headersFetchReversed(ivReq, lhc.parentHash, info)
+    if rc.isErr:
       when extraTraceMessages:
         trace info & ": fetch headers failed", peer=buddy.peer, ivReq
-      if buddy.ctrl.running:
-        # Suspend peer for a while
-        buddy.ctrl.zombie = true
       return false
+    rc.value
 
   # While assembling a `LinkedHChainRef`, verify that the `revHeaders` list
   # was sound, i.e. contiguous, linked, etc.
@@ -157,6 +152,11 @@ proc stagedCollect*(
     return false
 
   let
+    # Reserve the full range of block numbers so they can be appended in a row.
+    # This avoid some fragmentation when header chains are stashed by multiple
+    # peers, i.e. they interleave peer-wise.
+    iv = ctx.unprocFetch(nFetchHeadersBatch).expect "valid interval"
+
     # Check for top header hash. If the range to fetch directly joins below
     # the top level linked chain `L..F`, then there is the hash available for
     # the top level header to fetch. Otherwise -- with multi-peer mode -- the
@@ -165,23 +165,6 @@ proc stagedCollect*(
 
     # Parent hash for `lhc` below
     topLink = (if isOpportunistic: EMPTY_ROOT_HASH else: ctx.layout.leastParent)
-
-    # Get the total batch size
-    nFetchHeaders = if isOpportunistic: nFetchHeadersOpportunisticly
-                    else: nFetchHeadersByTopHash
-
-    # Number of headers to fetch. Take as much as possible if there are many
-    # more to fetch. Otherwise split the remaining part so that there is room
-    # for opportuninstically fetching headers by other many peers.
-    t2 = ctx.unprocTotal div 2
-    nHeaders = if nFetchHeaders.uint < t2: nFetchHeaders.uint
-               elif t2 < nFetchHeadersRequest: nFetchHeaders.uint
-               else: t2
-
-    # Reserve the full range of block numbers so they can be appended in a row.
-    # This avoid some fragmentation when header chains are stashed by multiple
-    # peers, i.e. they interleave peer-wise.
-    iv = ctx.unprocFetch(nHeaders).expect "valid interval"
 
   var
     # This value is used for splitting the interval `iv` into
@@ -240,13 +223,14 @@ proc stagedCollect*(
   qItem.data = lhc[]
 
   when extraTraceMessages:
-    trace info & ": stashed on staged queue", peer,
-      iv=BnRange.new(iv.maxPt - lhc.headers.len.uint + 1, iv.maxPt),
-      nHeaders=lhc.headers.len, isOpportunistic, ctrl=buddy.ctrl.state
+    trace info & ": staged headers", peer,
+      iv=BnRange.new(iv.maxPt - lhc.revHdrs.len.uint + 1, iv.maxPt),
+      nHeaders=lhc.revHdrs.len, nStaged=ctx.lhc.staged.len, isOpportunistic,
+      ctrl=buddy.ctrl.state
   else:
-    trace info & ": stashed on staged queue", peer,
+    trace info & ": staged headers", peer,
       topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
-      isOpportunistic, ctrl=buddy.ctrl.state
+      nStaged=ctx.lhc.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
 
   return true
 
@@ -258,6 +242,8 @@ proc stagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
   while true:
     # Fetch largest block
     let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
+      when not extraTraceMessages:
+        trace info & ": no staged headers", error
       break # all done
 
     let
@@ -277,11 +263,7 @@ proc stagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
     discard ctx.lhc.staged.delete(iv.maxPt)
 
     if qItem.data.hash != ctx.layout.leastParent:
-      # Discard wrong chain.
-      #
-      # FIXME: Does it make sense to keep the `buddy` with the `qItem` chains
-      #        list object for marking the buddy a `zombie`?
-      #
+      # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.unprocMerge(iv)
       when extraTraceMessages:
         trace info & ": discarding staged record", iv, L=least.bnStr, lap=result

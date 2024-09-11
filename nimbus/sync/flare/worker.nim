@@ -26,6 +26,26 @@ const extraTraceMessages = false or true
   ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc headersToFetchOk(buddy: FlareBuddyRef): bool =
+  0 < buddy.ctx.unprocTotal() and buddy.ctrl.running and not buddy.ctx.poolMode
+
+proc napUnlessHeadersToFetch(
+    buddy: FlareBuddyRef;
+    info: static[string];
+      ): Future[bool] {.async.} =
+  ## When idle, save cpu cycles waiting for something to do.
+  let ctx = buddy.ctx
+  if not buddy.headersToFetchOk():
+    when extraTraceMessages:
+      debug info & ": idle wasting time", peer=buddy.peer
+    await sleepAsync runNoHeadersIdleWaitInterval
+    return true
+  return false
+
+# ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
@@ -53,11 +73,23 @@ proc release*(ctx: FlareCtxRef) =
 
 proc start*(buddy: FlareBuddyRef): bool =
   ## Initialise worker peer
-  if buddy.startBuddy():
+  const info = "RUNSTART"
+
+  when runOnSinglePeerOnly:
+    if 0 < buddy.ctx.pool.nBuddies:
+      debug info & " single peer already connected",
+        peer=buddy.peer, multiOk=buddy.ctrl.multiOk
+      return false
+
+  if not buddy.startBuddy():
+    debug info & " failed", peer=buddy.peer
+    return false
+
+  when not runOnSinglePeerOnly:
     buddy.ctrl.multiOk = true
-    debug "RUNSTART", peer=buddy.peer, multiOk=buddy.ctrl.multiOk
-    return true
-  debug "RUNSTART failed", peer=buddy.peer
+  debug info, peer=buddy.peer, multiOk=buddy.ctrl.multiOk
+  true
+
 
 proc stop*(buddy: FlareBuddyRef) =
   ## Clean up this peer
@@ -98,7 +130,16 @@ proc runSingle*(buddy: FlareBuddyRef) {.async.} =
   ##
   ## Note that this function runs in `async` mode.
   ##
-  raiseAssert "RUNSINGLE should not be used: peer=" & $buddy.peer
+  const info = "RUNSINGLE"
+  when not runOnSinglePeerOnly:
+    raiseAssert info & " should not be used: peer=" & $buddy.peer
+
+  else:
+    if not await buddy.napUnlessHeadersToFetch info:
+      # See `runMulti()` for comments
+      while buddy.headersToFetchOk():
+        if await buddy.stagedCollect info:
+          discard buddy.ctx.stagedProcess info
 
 
 proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
@@ -130,36 +171,36 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
   ## instance can be simultaneously active for all peer workers.
   ##
   const info = "RUNMULTI"
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-
-  if ctx.unprocTotal() == 0 and ctx.stagedChunks() == 0:
-    # Save cpu cycles waiting for something to do
-    when extraTraceMessages:
-      debug info & ": idle wasting time", peer
-    await sleepAsync runMultiIdleWaitInterval
-    return
-
-  if not ctx.flipCoin():
-    # Come back next time
-    when extraTraceMessages:
-      debug info & ": running later", peer
-    return
-
-  # * get unprocessed range from pool
-  # * fetch headers for this range (as much as one can get)
-  # * verify that a block is sound, i.e. contiguous, chained by parent hashes
-  # * return remaining range to unprocessed range in the pool
-  # * store this range on the staged queue on the pool
-  if await buddy.stagedCollect info:
-    # * increase the top/right interval of the trused range `[L,F]`
-    # * save updated state and headers
-    discard buddy.ctx.stagedProcess info
+  when runOnSinglePeerOnly:
+    raiseAssert info & " should not be used: peer=" & $buddy.peer
 
   else:
-    when extraTraceMessages:
-      debug info & ": nothing fetched, done", peer
+    let
+      ctx = buddy.ctx
+      peer = buddy.peer
+
+    if await buddy.napUnlessHeadersToFetch info:
+      return
+
+    if not ctx.flipCoin():
+      # Come back next time
+      when extraTraceMessages:
+        debug info & ": running later", peer
+      return
+
+    # * get unprocessed range from pool
+    # * fetch headers for this range (as much as one can get)
+    # * verify that a block is sound, i.e. contiguous, chained by parent hashes
+    # * return remaining range to unprocessed range in the pool
+    # * store this range on the staged queue on the pool
+    if await buddy.stagedCollect info:
+      # * increase the top/right interval of the trused range `[L,F]`
+      # * save updated state and headers
+      discard buddy.ctx.stagedProcess info
+
+    else:
+      when extraTraceMessages:
+        debug info & ": nothing fetched, done", peer
 
 # ------------------------------------------------------------------------------
 # End
