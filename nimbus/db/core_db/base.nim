@@ -212,7 +212,7 @@ proc verify*(
     proof: openArray[Blob];
     root: Hash256;
     path: openArray[byte];
-      ): CoreDbRc[Blob] =
+      ): CoreDbRc[Opt[Blob]] =
   ## This function os the counterpart of any of the `proof()` functions. Given
   ## the argument chain of rlp-encoded nodes `proof`, this function verifies
   ## that the chain represents a partial MPT starting with a root node state
@@ -243,7 +243,7 @@ proc verifyOk*(
     proof: openArray[Blob];
     root: Hash256;
     path: openArray[byte];
-    payload: openArray[byte];
+    payload: Opt[Blob];
       ): CoreDbRc[void] =
   ## Variant of `verify()` which directly checks the argument `payload`
   ## against what would be the return code in `verify()`.
@@ -267,7 +267,7 @@ proc verify*(
     proof: openArray[Blob];
     root: Hash256;
     path: Hash256;
-      ): CoreDbRc[Blob] =
+      ): CoreDbRc[Opt[Blob]] =
   ## Variant of `verify()`.
   template mpt: untyped =
     when db is CoreDbRef:
@@ -288,7 +288,7 @@ proc verifyOk*(
     proof: openArray[Blob];
     root: Hash256;
     path: Hash256;
-    payload: openArray[byte];
+    payload: Opt[Blob];
       ): CoreDbRc[void] =
   ## Variant of `verifyOk()`.
   template mpt: untyped =
@@ -432,9 +432,12 @@ proc getGeneric*(
 proc proof*(
     mpt: CoreDbMptRef;
     key: openArray[byte];
-      ): CoreDbRc[seq[Blob]] =
+      ): CoreDbRc[(seq[Blob],bool)] =
   ## On the generic MPT, collect the nodes along the `key` interpreted as
-  ## path. Return these path nodes as a chain of rlp-encoded blobs.
+  ## path. Return these path nodes as a chain of rlp-encoded blobs followed
+  ## by a bool value which is `true` if the `key` path exists in the database,
+  ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
+  ## are the nodes proving that the `key` path does not exist.
   ##
   mpt.setTrackNewApi MptProofFn
   result = block:
@@ -547,9 +550,12 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
 proc proof*(
     acc: CoreDbAccRef;
     accPath: Hash256;
-      ): CoreDbRc[seq[Blob]] =
+      ): CoreDbRc[(seq[Blob],bool)] =
   ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
-  ## path. Return these path nodes as a chain of rlp-encoded blobs.
+  ## path. Return these path nodes as a chain of rlp-encoded blobs followed
+  ## by a bool value which is `true` if the `key` path exists in the database,
+  ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
+  ## are the nodes proving that the `key` path does not exist.
   ##
   acc.setTrackNewApi AccProofFn
   result = block:
@@ -671,10 +677,16 @@ proc slotProof*(
     acc: CoreDbAccRef;
     accPath: Hash256;
     stoPath: Hash256;
-      ): CoreDbRc[seq[Blob]] =
+      ): CoreDbRc[(seq[Blob],bool)] =
   ## On the storage MPT related to the argument account `acPath`, collect the
   ## nodes along the `stoPath` interpreted as path. Return these path nodes as
-  ## a chain of rlp-encoded blobs.
+  ## a chain of rlp-encoded blobs followed by a bool value which is `true` if
+  ## the `key` path exists in the database, and `false` otherwise. In the
+  ## latter case, the chain of rlp-encoded blobs are the nodes proving that
+  ## the `key` path does not exist.
+  ##
+  ## Note that the function always returns an error unless the `accPath` is
+  ## valid.
   ##
   acc.setTrackNewApi AccSlotProofFn
   result = block:

@@ -66,6 +66,9 @@ proc procBlkPreamble(
     if blk.transactions.calcTxRoot != header.txRoot:
       return err("Mismatched txRoot")
 
+  if com.isPragueOrLater(header.timestamp):
+    ?vmState.processParentBlockHash(header.parentHash)
+
   if com.isCancunOrLater(header.timestamp):
     if header.parentBeaconBlockRoot.isNone:
       return err("Post-Cancun block header must have parentBeaconBlockRoot")
@@ -144,10 +147,10 @@ proc procBlkEpilogue(
 
     if not skipReceipts:
       let bloom = createBloom(vmState.receipts)
-  
+
       if header.logsBloom != bloom:
         return err("bloom mismatch")
-  
+
       let receiptsRoot = calcReceiptsRoot(vmState.receipts)
       if header.receiptsRoot != receiptsRoot:
         # TODO replace logging with better error

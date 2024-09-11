@@ -63,8 +63,7 @@ proc init(
     T: type CaptCtxRef;
     com: CommonRef;
     root: common.Hash256;
-      ): T
-      {.raises: [CatchableError].} =
+      ): T =
   let ctx = block:
     let rc = com.db.ctx.newCtxByKey(root)
     if rc.isErr:

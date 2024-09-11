@@ -8,10 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-const
-  # help with low memory when compiling selectVM() function
-  lowmem {.intdefine.}: int = 0
-  lowMemoryCompileTime {.used.} = lowmem > 0
+{.push raises: [].}
 
 import
   std/[macros, strformat],
@@ -19,9 +16,7 @@ import
   ".."/[constants, db/ledger],
   "."/[code_stream, computation, evm_errors],
   "."/[message, precompiles, state, types],
-  ./interpreter/[op_dispatcher, gas_costs]
-
-{.push raises: [].}
+  ./interpreter/op_dispatcher
 
 logScope:
   topics = "vm opcode"
@@ -29,14 +24,6 @@ logScope:
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-const
-  supportedOS = defined(windows) or defined(linux) or defined(macosx)
-  optimizationCondition = not lowMemoryCompileTime and defined(release) and supportedOS
-
-when optimizationCondition:
-  # this is a top level pragma since nim 1.6.16
-  {.optimization: speed.}
 
 proc runVM(
     c: VmCpt,

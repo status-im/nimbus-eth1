@@ -131,7 +131,7 @@ type
 
   SyncMode* {.pure.} = enum
     Default
-    #Snap                          ## Beware, experimental
+    Flare                         ## Beware, experimental
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
@@ -175,8 +175,8 @@ type
     syncMode* {.
       desc: "Specify particular blockchain sync mode."
       longDesc:
-        "- default   -- beacon sync mode\n" &
-        # "- snap      -- experimental snap mode (development only)\n" &
+        "- default -- beacon sync mode\n" &
+        "- flare   -- re-facored beacon like mode, experimental\n" &
         ""
       defaultValue: SyncMode.Default
       defaultValueDesc: $SyncMode.Default

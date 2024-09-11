@@ -157,6 +157,36 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   statedb.persist(clearEmptyAccount = true)
   ok()
 
+proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash256):
+                              Result[void, string] =
+  ## processParentBlockHash stores the parent block hash in the 
+  ## history storage contract as per EIP-2935.
+  let
+    statedb = vmState.stateDB
+    call = CallParams(
+      vmState  : vmState,
+      sender   : SYSTEM_ADDRESS,
+      gasLimit : 30_000_000.GasInt,
+      gasPrice : 0.GasInt,
+      to       : HISTORY_STORAGE_ADDRESS,
+      input    : @(prevHash.data),
+
+      # It's a systemCall, no need for other knicks knacks
+      sysCall     : true,
+      noAccessList: true,
+      noIntrinsic : true,
+      noGasCharge : true,
+      noRefund    : true,
+    )
+
+  # runComputation a.k.a syscall/evm.call
+  let res = call.runComputation(string)
+  if res.len > 0:
+    return err("processParentBlockHash: " & res)
+
+  statedb.persist(clearEmptyAccount = true)
+  ok()
+  
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate

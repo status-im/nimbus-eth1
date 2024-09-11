@@ -211,11 +211,6 @@ available.)
  * ENABLE_EVMC=1<br>
    Enable mostly EVMC compliant wrapper around the native Nim VM
 
- * ENABLE_VMLOWMEM=1<br>
-   Enable low-memory version of the native Nim VM. This version is not
-   optimised and coded in a way so that low memory compilers can handle it
-   (observed on 32 bit windows 7.)
-
 For these variables, using &lt;variable&gt;=0 is ignored and &lt;variable&gt;=2
 has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)
 

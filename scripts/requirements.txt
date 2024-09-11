@@ -2,7 +2,7 @@ alabaster==0.7.16
 attrs==23.2.0
 Babel==2.15.0
 cattrs==23.2.3
-certifi==2024.2.2
+certifi==2024.07.04
 charset-normalizer==3.3.2
 contourpy==1.2.1
 cycler==0.12.1
@@ -38,4 +38,4 @@ sphinxcontrib-jsmath==1.0.1
 sphinxcontrib-qthelp==1.0.7
 sphinxcontrib-serializinghtml==1.1.10
 tzdata==2024.1
-urllib3==2.2.1
+urllib3==2.2.2

@@ -170,6 +170,7 @@ type
     PartChkVidTabCoreRootMissing
     PartChkVidTabVidMissing
     PartChnBranchPathExhausted
+    PartChnBranchVoidEdge
     PartChnExtPfxMismatch
     PartChnLeafPathMismatch
     PartChnNodeConvError

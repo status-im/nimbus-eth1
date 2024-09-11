@@ -561,6 +561,7 @@ proc new*(
     protocolId: PortalProtocolId,
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
+    dbPut: DbStoreHandler,
     dbRadius: DbRadiusHandler,
     stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
@@ -577,6 +578,7 @@ proc new*(
     baseProtocol: baseProtocol,
     toContentId: toContentId,
     dbGet: dbGet,
+    dbPut: dbPut,
     dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
@@ -1595,8 +1597,11 @@ proc storeContent*(
     contentId: ContentId,
     content: seq[byte],
 ) =
-  doAssert(p.dbPut != nil)
-  p.dbPut(contentKey, contentId, content)
+  # Always re-check that the key is still in the node range to make sure only
+  # content in range is stored.
+  if p.inRange(contentId):
+    doAssert(p.dbPut != nil)
+    p.dbPut(contentKey, contentId, content)
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are

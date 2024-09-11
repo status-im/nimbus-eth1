@@ -143,6 +143,10 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       nimbus.beaconSyncRef = BeaconSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
       )
+    of SyncMode.Flare:
+      nimbus.flareSyncRef = FlareSyncRef.init(
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
+        conf.era1Dir.string)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -162,6 +166,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     #of SyncMode.Snap:
     #  waitForPeers = false
     of SyncMode.Default:
+      discard
+    of SyncMode.Flare:
       discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
@@ -254,6 +260,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
       case conf.syncMode:
       of SyncMode.Default:
         nimbus.beaconSyncRef.start
+      of SyncMode.Flare:
+        nimbus.flareSyncRef.start
       #of SyncMode.Snap:
       #  nimbus.snapSyncRef.start
 

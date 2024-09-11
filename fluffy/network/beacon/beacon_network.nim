@@ -201,13 +201,12 @@ proc new*(
       getProtocolId(portalNetwork, PortalSubnetwork.beacon),
       toContentIdHandler,
       createGetHandler(beaconDb),
+      createStoreHandler(beaconDb),
       createRadiusHandler(beaconDb),
       stream,
       bootstrapRecords,
       config = portalConfig,
     )
-
-  portalProtocol.dbPut = createStoreHandler(beaconDb)
 
   BeaconNetwork(
     portalProtocol: portalProtocol,

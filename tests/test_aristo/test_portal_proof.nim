@@ -25,6 +25,7 @@ import
 type
   ProofData = ref object
     chain: seq[Blob]
+    missing: bool
     error: AristoError
     hike: Hike
 
@@ -122,6 +123,14 @@ func asExtension(b: Blob; path: Hash256): Blob =
   else:
     b
 
+when false:
+  # just keep for potential debugging
+  proc sq(s: string): string =
+    ## For long strings print `begin..end` only
+    let n = (s.len + 1) div 2
+    result = if s.len < 20: s else: s[0 .. 5] & ".." & s[s.len-8 .. ^1]
+    result &= "[" & (if 0 < n: "#" & $n else: "") & "]"
+
 # ------------------------------------------------------------------------------
 # Private test functions
 # ------------------------------------------------------------------------------
@@ -152,13 +161,33 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
   # Create proof chains
   for (path,proof) in sample.pairs:
     let rc = ps.db.partAccountTwig path
-    check rc.isOk == (proof.error == AristoError 0)
-    if rc.isOk:
-      proof.chain = rc.value
+    if proof.error == AristoError(0):
+      check rc.isOk and rc.value[1] == true
+      proof.chain = rc.value[0]
+    elif proof.error != HikeBranchMissingEdge:
+      # Note that this is a partial data base and in this case the proof for a
+      # non-existing entry might not work properly when the vertex is missing.
+      check rc.isOk and rc.value[1] == false
+      proof.chain = rc.value[0]
+      proof.missing = true
 
   # Verify proof chains
   for (path,proof) in sample.pairs:
-    if proof.error == AristoError 0:
+    if proof.missing:
+      # Proof for missing entries
+      let
+        rVid = proof.hike.root
+        root = ps.db.getKey((rVid,rVid)).to(Hash256)
+        chain = proof.chain
+
+      block:
+        let rc = proof.chain.partUntwigPath(root, path)
+        check rc.isOk and rc.value.isNone
+
+      # Just for completeness (same a above combined into a single function)
+      check proof.chain.partUntwigPathOk(root, path, Opt.none Blob).isOk
+
+    elif proof.error == AristoError 0:
       let
         rVid = proof.hike.root
         pyl = proof.hike.legs[^1].wp.vtx.lData.payloadAsBlob(ps)
@@ -174,9 +203,8 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
         # Create the same proof again which must result into the same as before
         block:
           let rc = pq.db.partAccountTwig path
-          check rc.isOk
-          if rc.isOk:
-            check rc.value == proof.chain
+          if rc.isOk and rc.value[1] == true:
+            check rc.value[0] == proof.chain
 
         # Verify proof
         let root = pq.db.getKey((rVid,rVid)).to(Hash256)
@@ -184,10 +212,10 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
           let rc = proof.chain.partUntwigPath(root, path)
           check rc.isOk
           if rc.isOk:
-            check rc.value == pyl
+            check rc.value == Opt.some(pyl)
 
         # Just for completeness (same a above combined into a single function)
-        check proof.chain.partUntwigPathOk(root, path, pyl).isOk
+        check proof.chain.partUntwigPathOk(root, path, Opt.some pyl).isOk
 
       # Extension nodes are rare, so there is one created, inserted and the
       # previous test repeated.
@@ -204,18 +232,18 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
         # Re-create proof again
         block:
           let rc = pq.db.partAccountTwig path
-          check rc.isOk
-          if rc.isOk:
-            check rc.value == chain
+          check rc.isOk and rc.value[1] == true
+          if rc.isOk and rc.value[1] == true:
+            check rc.value[0] == chain
 
         let root = pq.db.getKey((rVid,rVid)).to(Hash256)
         block:
           let rc = chain.partUntwigPath(root, path)
           check rc.isOk
           if rc.isOk:
-            check rc.value == pyl
+            check rc.value == Opt.some(pyl)
 
-        check chain.partUntwigPathOk(root, path, pyl).isOk
+        check chain.partUntwigPathOk(root, path, Opt.some pyl).isOk
 
 # ------------------------------------------------------------------------------
 # Test

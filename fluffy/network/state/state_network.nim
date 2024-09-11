@@ -57,14 +57,12 @@ proc new*(
     getProtocolId(portalNetwork, PortalSubnetwork.state),
     toContentIdHandler,
     createGetHandler(contentDB),
+    createStoreHandler(contentDB, portalConfig.radiusConfig),
     createRadiusHandler(contentDB),
     s,
     bootstrapRecords,
     config = portalConfig,
   )
-
-  portalProtocol.dbPut =
-    createStoreHandler(contentDB, portalConfig.radiusConfig, portalProtocol)
 
   return StateNetwork(
     portalProtocol: portalProtocol,
