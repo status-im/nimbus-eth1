@@ -98,6 +98,7 @@ type
     FetchLeafKeyInvalid
     FetchPathInvalid
     FetchPathNotFound
+    FetchPathStoRootMissing
     FetchRootVidMissing
     FetchStoRootNotAccepted
 
