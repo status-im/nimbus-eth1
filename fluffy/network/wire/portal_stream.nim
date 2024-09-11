@@ -248,11 +248,24 @@ proc readContentOffer(
     await socket.destroyWait()
   else:
     # This means FIN didn't arrive yet, perhaps it got dropped but it might also
-    # be still in flight. Closing the socket (= sending FIN) ourselves.
-    # Not waiting here for its ACK however, so no `closeWait`. Underneath the
-    # socket will still wait for the FIN-ACK (or timeout) before it destroys the
-    # socket.
-    socket.close()
+    # be still in flight.
+    #
+    # uTP has one-way FIN + FIN-ACK to destroy the connection. The stream
+    # already has the information from the application layer to know that all
+    # required data was received. But not sending a FIN from our side anyhow as
+    # there is probably one from the other side in flight.
+    # Sending a FIN from our side turns out to not to improve the speed of
+    # disconnecting as other implementations seems to not like the situation
+    # of receiving our FIN before our FIN-ACK.
+    # We do however put a limited timeout on the receival of the FIN and destroy
+    # the socket otherwise.
+    proc delayedDestroy(
+        socket: UtpSocket[NodeAddress], delay: Duration
+    ) {.async: (raises: [CancelledError]).} =
+      await sleepAsync(delay)
+      await socket.destroyWait()
+
+    asyncSpawn socket.delayedDestroy(4.seconds)
 
   # TODO: This could currently create a backlog of content items to be validated
   # as `AcceptConnectionCallback` is `asyncSpawn`'ed and there are no limits
