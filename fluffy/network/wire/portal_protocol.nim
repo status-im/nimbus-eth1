@@ -195,6 +195,7 @@ type
     offerWorkers: seq[Future[void]]
     disablePoke: bool
     pingTimings: Table[NodeId, chronos.Moment]
+    disableBootstrapRemoval: bool
 
   PortalResult*[T] = Result[T, string]
 
@@ -586,6 +587,7 @@ proc new*(
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
     disablePoke: config.disablePoke,
     pingTimings: Table[NodeId, chronos.Moment](),
+    disableBootstrapRemoval: config.disableBootstrapRemoval
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -641,7 +643,12 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     debug "Error receiving message response",
       error = messageResponse.error, srcId = dst.id, srcAddress = dst.address
     p.pingTimings.del(dst.id)
-    p.routingTable.replaceNode(dst)
+
+    if p.disableBootstrapRemoval and dst.record in p.bootstrapRecords:
+      debug "Skipping removal of bootstrap record from routing table", enr = toURI(dst.record)
+    else:
+      debug "Removing bootstrap record from routing table", enr = toURI(dst.record)
+      p.routingTable.replaceNode(dst)
 
   return messageResponse
 

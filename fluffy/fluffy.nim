@@ -154,6 +154,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     portalProtocolConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
       config.disablePoke,
+      disableBootstrapRemoval = config.network == PortalNetwork.none # don't remove bootstrap nodes for local networks
     )
 
     portalNodeConfig = PortalNodeConfig(
@@ -166,6 +167,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       portalConfig: portalProtocolConfig,
       dataDir: string config.dataDir,
       storageCapacity: config.storageCapacityMB * 1_000_000,
+
     )
 
     node = PortalNode.new(
