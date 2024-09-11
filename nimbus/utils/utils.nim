@@ -36,6 +36,9 @@ template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Hash256 =
 template calcReceiptsRoot*(receipts: openArray[Receipt]): Hash256 =
   calcRootHash(receipts)
 
+template calcRequestsRoot*(requests: openArray[Request]): Hash256 =
+  calcRootHash(requests)
+  
 func sumHash*(hashes: varargs[Hash256]): Hash256 =
   var ctx: sha256
   ctx.init()
