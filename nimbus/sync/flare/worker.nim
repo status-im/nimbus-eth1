@@ -34,9 +34,6 @@ proc setup*(ctx: FlareCtxRef): bool =
   debug "RUNSETUP"
   ctx.setupRpcMagic()
 
-  # Setup `Era1` access (if any) before setting up layout.
-  discard ctx.dbInitEra1()
-
   # Load initial state from database if there is any
   ctx.dbLoadLinkedHChainsLayout()
 

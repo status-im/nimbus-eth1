@@ -105,16 +105,6 @@ with *L'=Z* and *F'=Z*.
 Note that diagram *(3)* is a generalisation of *(2)*.
 
 
-Era1 repository support:
-------------------------
-
-For the initial blocks, *Era1* repositories are supported for *MainNet*
-and *Sepolia*. They might be truncated at the top, condition is that provide
-consecutive blocks (like the headr chains) and start at *Genesis*.
-
-In that case, the position *B* will be immediately set to the largest available
-*Era1* block number without storing any headers.
-
 Complete header chain:
 ----------------------
 

@@ -17,9 +17,6 @@ import
 declareGauge flare_beacon_block_number, "" &
   "Block number for latest finalised header"
 
-declareGauge flare_era1_max_block_number, "" &
-  "Max block number for era1 blocks"
-
 declareGauge flare_max_trusted_block_number, "" &
   "Max block number for trusted headers chain starting at genesis"
 
@@ -41,7 +38,6 @@ declareCounter flare_serial, "" &
 template updateMetricsImpl*(ctx: FlareCtxRef) =
   let now = Moment.now()
   if ctx.pool.nextUpdate < now:
-    metrics.set(flare_era1_max_block_number, ctx.pool.e1AvailMax.int64)
     metrics.set(flare_max_trusted_block_number, ctx.layout.base.int64)
     metrics.set(flare_least_verified_block_number, ctx.layout.least.int64)
     metrics.set(flare_top_verified_block_number, ctx.layout.final.int64)

@@ -15,7 +15,7 @@ import
   pkg/eth/[common, rlp],
   pkg/stew/[byteutils, interval_set, sorted_set],
   pkg/results,
-  ../../../db/[era1_db, storage_types],
+  ../../../db/storage_types,
   ../../../common,
   ../../sync_desc,
   ../worker_desc,
@@ -36,10 +36,6 @@ type
     hash: Hash256
     parent: Hash256
 
-  Era1Specs = tuple
-    e1db: Era1DbRef
-    maxNum: BlockNumber
-
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
 # ------------------------------------------------------------------------------
@@ -51,45 +47,6 @@ formatIt(Hash256):
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template hasKey(e1db: Era1DbRef; bn: BlockNumber): bool =
-  e1db.getEthBlock(bn).isOk
-
-proc newEra1Desc(networkID: NetworkID; era1Dir: string): Opt[Era1Specs] =
-  const info = "newEra1Desc"
-  var specs: Era1Specs
-
-  case networkID:
-  of MainNet:
-    specs.e1db = Era1DbRef.init(era1Dir, "mainnet").valueOr:
-      when extraTraceMessages:
-        trace info & ": no Era1 available", networkID, era1Dir
-      return err()
-    specs.maxNum = 15_537_393'u64 # Mainnet, copied from `nimbus_import`
-
-  of SepoliaNet:
-    specs.e1db = Era1DbRef.init(era1Dir, "sepolia").valueOr:
-      when extraTraceMessages:
-        trace info & ": no Era1 available", networkID, era1Dir
-      return err()
-    specs.maxNum = 1_450_408'u64 # Sepolia
-
-  else:
-    when extraTraceMessages:
-      trace info & ": Era1 unsupported", networkID
-    return err()
-
-  # At least block 1 should be supported
-  if not specs.e1db.hasKey 1u64:
-    specs.e1db.dispose()
-    notice info & ": Era1 repo disfunctional", networkID, blockNumber=1
-    return err()
-
-  when extraTraceMessages:
-    trace info & ": Era1 supported",
-      networkID, lastEra1Block=specs.maxNum.bnStr
-  ok(specs)
-
-
 proc fetchLinkedHChainsLayout(ctx: FlareCtxRef): Opt[LinkedHChainsLayout] =
   let data = ctx.db.ctx.getKvt().get(LhcStateKey.toOpenArray).valueOr:
     return err()
@@ -98,35 +55,19 @@ proc fetchLinkedHChainsLayout(ctx: FlareCtxRef): Opt[LinkedHChainsLayout] =
   except RlpError:
     return err()
 
-# --------------
-
-proc fetchEra1State(ctx: FlareCtxRef): Opt[SavedDbStateSpecs] =
-  var val: SavedDbStateSpecs
-  val.number = ctx.pool.e1AvailMax
-  if 0 < val.number:
-    let header = ctx.pool.e1db.getEthBlock(val.number).value.header
-    val.parent = header.parentHash
-    val.hash = rlp.encode(header).keccakHash
-    return ok(val)
-  err()
 
 proc fetchSavedState(ctx: FlareCtxRef): Opt[SavedDbStateSpecs] =
-  let
-    db = ctx.db
-    e1Max = ctx.pool.e1AvailMax
-
+  let db = ctx.db
   var val: SavedDbStateSpecs
   val.number = db.getSavedStateBlockNumber()
 
-  if e1Max == 0 or e1Max < val.number:
-    if db.getBlockHash(val.number, val.hash):
-      var header: BlockHeader
-      if db.getBlockHeader(val.hash, header):
-        val.parent = header.parentHash
-        return ok(val)
-    return err()
+  if db.getBlockHash(val.number, val.hash):
+    var header: BlockHeader
+    if db.getBlockHeader(val.hash, header):
+      val.parent = header.parentHash
+      return ok(val)
 
-  ctx.fetchEra1State()
+  err()
 
 # ------------------------------------------------------------------------------
 # Public debugging functions
@@ -255,43 +196,6 @@ proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
   ctx.lhc.lastLayout = ctx.layout
 
 
-proc dbInitEra1*(ctx: FlareCtxRef): bool =
-  ## Initialise Era1 repo.
-  const info = "dbInitEra1"
-  var specs = ctx.chain.com.networkId.newEra1Desc(ctx.pool.e1Dir).valueOr:
-    return false
-
-  ctx.pool.e1db = specs.e1db
-
-  # Verify that last available block number is available
-  if specs.e1db.hasKey specs.maxNum:
-    ctx.pool.e1AvailMax = specs.maxNum
-    when extraTraceMessages:
-      trace info, lastEra1Block=specs.maxNum.bnStr
-    return true
-
-  # This is a truncated repo. Use bisect for finding the top number assuming
-  # that block numbers availability is contiguous.
-  #
-  # BlockNumber(1) is the least supported block number (was checked
-  # in function `newEra1Desc()`)
-  var
-    minNum = BlockNumber(1)
-    middle = (specs.maxNum + minNum) div 2
-    delta = specs.maxNum - minNum
-  while 1 < delta:
-    if specs.e1db.hasKey middle:
-      minNum = middle
-    else:
-      specs.maxNum = middle
-    middle = (specs.maxNum + minNum) div 2
-    delta = specs.maxNum - minNum
-
-  ctx.pool.e1AvailMax = minNum
-  when extraTraceMessages:
-    trace info, e1AvailMax=minNum.bnStr
-  true
-
 # ------------------
 
 proc dbStashHeaders*(
@@ -300,9 +204,8 @@ proc dbStashHeaders*(
     revBlobs: openArray[Blob];
       ) =
   ## Temporarily store header chain to persistent db (oblivious of the chain
-  ## layout.) The headers should not be stashed if they are available on the
-  ## `Era1` repo, i.e. if the corresponding block number is at most
-  ## `ctx.pool.e1AvailMax`.
+  ## layout.) The headers should not be stashed if they are imepreted and
+  ## executed on the database, already.
   ##
   ## The `revBlobs[]` arguments are passed in reverse order so that block
   ## numbers apply as
@@ -325,8 +228,6 @@ proc dbStashHeaders*(
 
 proc dbPeekHeader*(ctx: FlareCtxRef; num: BlockNumber): Opt[BlockHeader] =
   ## Retrieve some stashed header.
-  if num <= ctx.pool.e1AvailMax:
-    return ok(ctx.pool.e1db.getEthBlock(num).value.header)
   let
     key = flareHeaderKey(num)
     rc = ctx.db.ctx.getKvt().get(key.toOpenArray)

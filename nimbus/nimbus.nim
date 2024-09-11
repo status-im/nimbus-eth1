@@ -145,8 +145,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       )
     of SyncMode.Flare:
       nimbus.flareSyncRef = FlareSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        conf.era1Dir.string)
+        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()

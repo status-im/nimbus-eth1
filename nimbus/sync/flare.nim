@@ -109,12 +109,10 @@ proc init*(
     chain: ForkedChainRef;
     rng: ref HmacDrbgContext;
     maxPeers: int;
-    era1Dir: string;
       ): T =
   new result
   result.initSync(ethNode, chain, maxPeers)
   result.ctx.pool.rng = rng
-  result.ctx.pool.e1Dir = era1Dir
 
 proc start*(ctx: FlareSyncRef) =
   ## Beacon Sync always begin with stop mode

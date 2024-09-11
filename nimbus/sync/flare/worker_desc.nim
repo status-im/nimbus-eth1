@@ -13,7 +13,6 @@
 import
   pkg/[bearssl/rand, chronos, chronos/timer],
   pkg/stew/[interval_set, sorted_set],
-  ../../db/era1_db,
   ../sync_desc
 
 export
@@ -156,11 +155,6 @@ type
     lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
     tossUp*: FlareTossUp             ## Reminiscent of CSMA/CD
     nextUpdate*: Moment              ## For updating metrics
-
-    # Era1 related, disabled if `e1db` is `nil`
-    e1Dir*: string                   ## Pre-merge archive (if any)
-    e1db*: Era1DbRef                 ## Era1 db handle (if any)
-    e1AvailMax*: BlockNumber         ## Last Era block applicable here
 
     # Info stuff, no functional contribution
     nBuddies*: int                   ## Number of active workers (info only)
