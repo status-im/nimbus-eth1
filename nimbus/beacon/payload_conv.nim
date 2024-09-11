@@ -35,6 +35,13 @@ func txRoot(list: openArray[Web3Tx]): common.Hash256
   {.noSideEffect.}:
     calcTxRoot(ethTxs(list))
 
+func requestsRoot(p: ExecutionPayload): Opt[common.Hash256]
+             {.gcsafe, raises:[].} =
+  {.noSideEffect.}:
+    let reqs = ethRequests(p)
+    if reqs.isNone: Opt.none(common.Hash256)
+    else: Opt.some(calcRequestsRoot reqs.get)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -59,7 +66,10 @@ func executionPayload*(blk: EthBlock): ExecutionPayload =
     transactions : w3Txs blk.txs,
     withdrawals  : w3Withdrawals blk.withdrawals,
     blobGasUsed  : w3Qty blk.header.blobGasUsed,
-    excessBlobGas: w3Qty blk.header.excessBlobGas
+    excessBlobGas: w3Qty blk.header.excessBlobGas,
+    depositRequests: w3DepositRequests blk.requests,
+    withdrawalRequests: w3WithdrawalRequests blk.requests,
+    consolidationRequests: w3ConsolidationRequests blk.requests,
   )
 
 func executionPayloadV1V2*(blk: EthBlock): ExecutionPayloadV1OrV2 =
@@ -104,7 +114,8 @@ func blockHeader*(p: ExecutionPayload,
     withdrawalsRoot: wdRoot p.withdrawals,
     blobGasUsed    : u64(p.blobGasUsed),
     excessBlobGas  : u64(p.excessBlobGas),
-    parentBeaconBlockRoot: beaconRoot
+    parentBeaconBlockRoot: beaconRoot,
+    requestsRoot   : requestsRoot(p),
   )
 
 func blockBody*(p: ExecutionPayload):
@@ -113,6 +124,7 @@ func blockBody*(p: ExecutionPayload):
     uncles      : @[],
     transactions: ethTxs p.transactions,
     withdrawals : ethWithdrawals p.withdrawals,
+    requests    : ethRequests(p),
   )
 
 func ethBlock*(p: ExecutionPayload,
@@ -122,5 +134,6 @@ func ethBlock*(p: ExecutionPayload,
     header      : blockHeader(p, beaconRoot),
     uncles      : @[],
     transactions: ethTxs p.transactions,
-    withdrawals: ethWithdrawals p.withdrawals,
+    withdrawals : ethWithdrawals p.withdrawals,
+    requests    : ethRequests(p),
   )
