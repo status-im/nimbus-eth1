@@ -123,6 +123,23 @@ proc hasAccountPayload(
     return ok(false)
   err(error)
 
+proc fetchStorageIdImpl(
+    db: AristoDbRef;
+    accPath: Hash256;
+    enaStoRootMissing = false;
+      ): Result[VertexID,AristoError] =
+  ## Helper function for retrieving a storage (vertex) ID for a given account.
+  let
+    payload = ?db.retrieveAccountPayload(accPath)
+    stoID = payload.stoID
+
+  if stoID.isValid:
+    ok stoID.vid
+  elif enaStoRootMissing:
+    err(FetchPathStoRootMissing)
+  else:
+    err(FetchPathNotFound)
+
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
@@ -154,16 +171,11 @@ proc fetchStorageID*(
     db: AristoDbRef;
     accPath: Hash256;
       ): Result[VertexID,AristoError] =
-  ## Public helper function for retrieving a storage (vertex) ID for a
-  ## given account.
-  let
-    payload = ?db.retrieveAccountPayload(accPath)
-    stoID = payload.stoID
-
-  if not stoID.isValid:
-    return err(FetchPathNotFound)
-
-  ok stoID.vid
+  ## Public helper function for retrieving a storage (vertex) ID for a given account. This
+  ## function returns a separate error `FetchPathStoRootMissing` (from `FetchPathNotFound`)
+  ## if the account for the argument path `accPath` exists but has no storage root.
+  ##
+  db.fetchStorageIdImpl(accPath, enaStoRootMissing=true)
 
 proc retrieveStoragePayload(
     db: AristoDbRef;
@@ -184,9 +196,8 @@ proc retrieveStoragePayload(
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
-  let
-    leafVtx = db.retrieveLeaf(? db.fetchStorageID(accPath), stoPath.data).valueOr:
-      return err(error)
+  let leafVtx = db.retrieveLeaf(? db.fetchStorageIdImpl(accPath), stoPath.data).valueOr:
+    return err(error)
 
   ok db.stoLeaves.lruAppend(mixKey, leafVtx, ACC_LRU_SIZE).lData.stoData
 
@@ -281,7 +292,7 @@ proc fetchStorageData*(
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
   ##
-  let leafVtx = ? db.retrieveLeaf(? db.fetchStorageID accPath, stoPath.data)
+  let leafVtx = ? db.retrieveLeaf(? db.fetchStorageIdImpl accPath, stoPath.data)
   assert leafVtx.lData.pType == StoData   # debugging only
   ok leafVtx.lData.stoData
 
@@ -291,7 +302,7 @@ proc fetchStorageState*(
     updateOk: bool;
       ): Result[Hash256,AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
-  let stoID = db.fetchStorageID(accPath).valueOr:
+  let stoID = db.fetchStorageIdImpl(accPath).valueOr:
     if error == FetchPathNotFound:
       return ok(EMPTY_ROOT_HASH) # no sub-tree
     return err(error)
@@ -314,7 +325,7 @@ proc hasStorageData*(
   ## For a storage tree related to account `accPath`, query whether there
   ## is a non-empty data storage area at all.
   ##
-  let stoID = db.fetchStorageID(accPath).valueOr:
+  let stoID = db.fetchStorageIdImpl(accPath).valueOr:
     if error == FetchPathNotFound:
       return ok(false) # no sub-tree
     return err(error)

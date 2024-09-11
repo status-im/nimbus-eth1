@@ -111,9 +111,12 @@ proc partStorageTwig*(
     accPath: Hash256;
     stoPath: Hash256;
       ): Result[(seq[Blob],bool), AristoError] =
-  ## Variant of `partGenericTwig()`. Note that the function always returns an
-  ## error unless the `accPath` is valid.
-  let vid = ? db.fetchStorageID accPath
+  ## Variant of `partGenericTwig()`. Note that the function returns an error unless
+  ## the argument `accPath` is valid.
+  let vid = db.fetchStorageID(accPath).valueOr:
+    if error == FetchPathStoRootMissing:
+      return ok((@[],false))
+    return err(error)
   db.partGenericTwig(vid, NibblesBuf.fromBytes stoPath.data)
 
 # ----------
