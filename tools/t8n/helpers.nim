@@ -346,10 +346,7 @@ proc `@@`*(x: Blob): JsonNode =
 proc `@@`(x: bool): JsonNode =
   %(if x: "0x1" else: "0x0")
 
-proc `@@`(x: EthAddress): JsonNode =
-  %("0x" & x.toHex)
-
-proc `@@`(x: Topic): JsonNode =
+proc `@@`(x: openArray[byte]): JsonNode =
   %("0x" & x.toHex)
 
 proc toJson(x: Table[UInt256, UInt256]): JsonNode =
@@ -406,6 +403,15 @@ proc `@@`(x: RejectedTx): JsonNode =
     "error": %(x.error)
   }
 
+proc `@@`(x: DepositRequest): JsonNode =
+  result = %{
+    "pubkey": @@(x.pubkey),
+    "withdrawalCredentials": @@(x.withdrawalCredentials),
+    "amount": @@(x.amount),
+    "signature": @@(x.signature),
+    "index": @@(x.index),
+  }
+
 proc `@@`[T](x: seq[T]): JsonNode =
   result = newJArray()
   for c in x:
@@ -438,3 +444,7 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["currentExcessBlobGas"] = @@(x.currentExcessBlobGas)
   if x.blobGasUsed.isSome:
     result["blobGasUsed"] = @@(x.blobGasUsed)
+  if x.requestsRoot.isSome:
+    result["requestsRoot"] = @@(x.requestsRoot)
+  if x.depositRequests.isSome:
+    result["depositRequests"] = @@(x.depositRequests)

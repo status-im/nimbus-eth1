@@ -22,6 +22,7 @@ import
   ../../nimbus/core/dao,
   ../../nimbus/core/executor/[process_transaction, executor_helpers],
   ../../nimbus/core/eip4844,
+  ../../nimbus/core/eip6110,
   ../../nimbus/evm/tracer/json_tracer
 
 const
@@ -337,6 +338,19 @@ proc exec(ctx: var TransContext,
       result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
     elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
       result.result.currentExcessBlobGas = Opt.some calcExcessBlobGas(vmState.parent)
+
+  if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
+    var allLogs: seq[Log]
+    for rec in result.result.receipts:
+      allLogs.add rec.logs
+    let reqs = parseDepositLogs(allLogs).valueOr:
+      raise newError(ErrorEVM, error)
+    result.result.requestsRoot = Opt.some(calcRequestsRoot(reqs))
+    var deposits: seq[DepositRequest]
+    for req in reqs:
+      if req.requestType == DepositRequestType:
+        deposits.add req.deposit
+    result.result.depositRequests = Opt.some(deposits)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
