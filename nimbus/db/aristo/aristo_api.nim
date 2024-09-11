@@ -330,16 +330,20 @@ type
   AristoApiPartAccountTwig* =
     proc(db: AristoDbRef;
          accPath: Hash256;
-        ): Result[seq[Blob], AristoError]
+        ): Result[(seq[Blob],bool), AristoError]
         {.noRaise.}
       ## This function returns a chain of rlp-encoded nodes along the argument
-      ## path `(root,path)`.
+      ## path `(root,path)` followed by a `true` value if the `path` argument
+      ## exists in the database. If the argument `path` is not on the database,
+      ## a partial path will be returned follwed by a `false` value.
+      ##
+      ## Errors will only be returned for invalid paths.
 
   AristoApiPartGenericTwig* =
     proc(db: AristoDbRef;
          root: VertexID;
          path: openArray[byte];
-        ): Result[seq[Blob], AristoError]
+        ): Result[(seq[Blob],bool), AristoError]
         {.noRaise.}
       ## Variant of `partAccountTwig()`.
       ##
@@ -350,30 +354,33 @@ type
     proc(db: AristoDbRef;
          accPath: Hash256;
          stoPath: Hash256;
-        ): Result[seq[Blob], AristoError]
+        ): Result[(seq[Blob],bool), AristoError]
         {.noRaise.}
-      ## Variant of `partAccountTwig()`.
+      ## Variant of `partAccountTwig()`. Note that the function always returns
+      ## an error unless the `accPath` is valid.
 
   AristoApiPartUntwigGeneric* =
     proc(chain: openArray[Blob];
          root: Hash256;
          path: openArray[byte];
-        ): Result[Blob,AristoError]
+        ): Result[Opt[Blob],AristoError]
         {.noRaise.}
-      ## Follow and verify the argument `chain` up unlil the last entry
-      ## which must be a leaf node. Extract the payload and pass it on
-      ## as return code.
+      ## Follow and verify the argument `chain` up unlil the last entry which
+      ## must be a leaf node. Extract the payload and pass it on as return
+      ## code. If a `Opt.none()` result is returned then the `path` argument
+      ## does provably not exist relative to `chain`.
 
   AristoApiPartUntwigGenericOk* =
     proc(chain: openArray[Blob];
          root: Hash256;
          path: openArray[byte];
-         payload: openArray[byte];
+         payload: Opt[Blob];
         ): Result[void,AristoError]
         {.noRaise.}
-      ## Variant of `partUntwigGeneric()`. The function verifis the argument
+      ## Variant of `partUntwigGeneric()`. The function verifies the argument
       ## `chain` of rlp-encoded nodes against the `path` and `payload`
-      ## arguments.
+      ## arguments. If `payload` is passed `Opt.none()`, then the function is
+      ## subject to proving that the `path` does not exist relaive to `chain`.
       ##
       ## Note: This function provides a functionality comparable to the
       ## `isValidBranch()` function from `hexary.nim`.
@@ -382,7 +389,7 @@ type
     proc(chain: openArray[Blob];
          root: Hash256;
          path: Hash256;
-        ): Result[Blob,AristoError]
+        ): Result[Opt[Blob],AristoError]
         {.noRaise.}
       ## Variant of `partUntwigGeneric()`.
 
@@ -390,7 +397,7 @@ type
     proc(chain: openArray[Blob];
          root: Hash256;
          path: Hash256;
-         payload: openArray[byte];
+         payload: Opt[Blob];
         ): Result[void,AristoError]
         {.noRaise.}
       ## Variant of `partUntwigGenericOk()`.
@@ -974,7 +981,7 @@ func init*(
         result = api.partUntwigGeneric(a, b, c)
 
   profApi.partUntwigGenericOk =
-    proc(a: openArray[Blob]; b: Hash256; c, d: openArray[byte]): auto =
+    proc(a: openArray[Blob]; b:Hash256; c:openArray[byte]; d:Opt[Blob]): auto =
       AristoApiProfPartUntwigGenericOkFn.profileRunner:
         result = api.partUntwigGenericOk(a, b, c, d)
 
@@ -984,7 +991,7 @@ func init*(
         result = api.partUntwigPath(a, b, c)
 
   profApi.partUntwigPathOk =
-    proc(a: openArray[Blob]; b, c: Hash256; d: openArray[byte]): auto =
+    proc(a: openArray[Blob]; b, c: Hash256; d: Opt[Blob]): auto =
       AristoApiProfPartUntwigPathOkFn.profileRunner:
         result = api.partUntwigPathOk(a, b, c, d)
 

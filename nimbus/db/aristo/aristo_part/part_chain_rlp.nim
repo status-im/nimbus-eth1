@@ -15,6 +15,16 @@ import
   results,
   ".."/[aristo_desc, aristo_get, aristo_utils, aristo_compute, aristo_serialise]
 
+const
+  ChainRlpNodesNoEntry* = {
+    PartChnLeafPathMismatch, PartChnExtPfxMismatch, PartChnBranchVoidEdge}
+    ## Partial path errors that can be used to proof that a path does
+    ## not exists.
+
+  TrackRlpNodesNoEntry* = {PartTrkLinkExpected, PartTrkLeafPfxMismatch}
+    ## This is the opposite of `ChainRlpNodesNoEntry` when verifying that a
+    ## node does not exist.
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -53,6 +63,8 @@ proc chainRlpNodes*(
       let
         nibble = path[nChewOff]
         rest = path.slice(nChewOff+1)
+      if not vtx.bVid[nibble].isValid:
+        return err(PartChnBranchVoidEdge)
       # Recursion!
       db.chainRlpNodes((rvid.root,vtx.bVid[nibble]), rest, chain)
 

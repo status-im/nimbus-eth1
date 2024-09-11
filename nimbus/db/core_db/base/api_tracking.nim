@@ -132,6 +132,11 @@ func toStr(rc: CoreDbRc[seq[Blob]]): string =
   if rc.isOk: "ok([" & rc.value.mapIt("[#" & $it.len & "]").join(",") & "])"
   else: "err(" & rc.error.toStr & ")"
 
+func toStr(rc: CoreDbRc[(seq[Blob],bool)]): string =
+  if rc.isOk: "ok([" & rc.value[0].mapIt("[#" & $it.len & "]").join(",") &
+                             "]," & $rc.value[1] & ")"
+  else: "err(" & rc.error.toStr & ")"
+
 func toStr(rc: CoreDbRc[Hash256]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
