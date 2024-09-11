@@ -862,15 +862,19 @@ proc getAccountProof*(ac: AccountsLedgerRef, address: EthAddress): seq[seq[byte]
   let accProof = ac.ledger.proof(keccakHash(address)).valueOr:
     raiseAssert "getAccountProof() cannot get proof: " & $$error
 
-  accProof
+  accProof[0]
 
 proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
   var storageProof = newSeqOfCap[seq[seq[byte]]](slots.len)
 
   for slot in slots:
     let slotProof = ac.ledger.slotProof(keccakHash(address), keccakHash(toBytesBE(slot))).valueOr:
-      raiseAssert "getStorageProofs() cannot get slotProof: " & $$error
-    storageProof.add(slotProof)
+      if error.aErr == FetchPathNotFound:
+        storageProof.add(@[])
+        continue
+      else:
+        raiseAssert "getStorageProofs() cannot get slotProof: " & $$error
+    storageProof.add(slotProof[0])
 
   storageProof
 
