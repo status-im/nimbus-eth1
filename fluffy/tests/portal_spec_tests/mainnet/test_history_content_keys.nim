@@ -35,9 +35,7 @@ suite "History ContentKey Encodings":
       contentIdHexBE =
         "3e86b3767b57402ea72e369ae0496ce47cc15be685bec3b4726b9f316e3895fe"
 
-    let contentKey = ContentKey(
-      contentType: blockHeader, blockHeaderKey: BlockKey(blockHash: blockHash)
-    )
+    let contentKey = blockHeaderContentKey(blockHash)
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -69,8 +67,7 @@ suite "History ContentKey Encodings":
       contentIdHexBE =
         "ebe414854629d60c58ddd5bf60fd72e41760a5f7a463fdcb169f13ee4a26786b"
 
-    let contentKey =
-      ContentKey(contentType: blockBody, blockBodyKey: BlockKey(blockHash: blockHash))
+    let contentKey = blockBodyContentKey(blockHash)
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -102,8 +99,7 @@ suite "History ContentKey Encodings":
       contentIdHexBE =
         "a888f4aafe9109d495ac4d4774a6277c1ada42035e3da5e10a04cc93247c04a4"
 
-    let contentKey =
-      ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: blockHash))
+    let contentKey = receiptsContentKey(blockHash)
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -119,25 +115,20 @@ suite "History ContentKey Encodings":
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
-  test "Epoch Accumulator":
+  test "BlockHeader by Number":
     # Input
-    const epochHash = Digest.fromHex(
-      "0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491"
-    )
+    const blockNumber = 12345678'u64
 
     # Output
     const
-      contentKeyHex =
-        "03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491"
+      contentKeyHex = "034e61bc0000000000"
       contentId =
-        "72232402989179419196382321898161638871438419016077939952896528930608027961710"
+        "14960950260935695396511307566164035182676768442501235074589175304147024756175"
       # or
       contentIdHexBE =
-        "9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e"
+        "2113990747a85ab39785d21342fa5db1f68acc0011605c0c73f68fc331643dcf"
 
-    let contentKey = ContentKey(
-      contentType: epochRecord, epochRecordKey: EpochRecordKey(epochHash: epochHash)
-    )
+    let contentKey = blockHeaderContentKey(blockNumber)
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -147,7 +138,7 @@ suite "History ContentKey Encodings":
     let contentKeyDecoded = decoded.get()
     check:
       contentKeyDecoded.contentType == contentKey.contentType
-      contentKeyDecoded.epochRecordKey == contentKey.epochRecordKey
+      contentKeyDecoded.blockNumberKey == contentKey.blockNumberKey
 
       toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string

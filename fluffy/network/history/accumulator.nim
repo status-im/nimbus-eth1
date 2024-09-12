@@ -70,10 +70,6 @@ type
     historicalEpochs*: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)]
     currentEpoch*: EpochRecord
 
-  BlockEpochData* = object
-    epochHash*: Bytes32
-    blockRelativeIndex*: uint64
-
 func init*(T: type Accumulator): T =
   Accumulator(
     historicalEpochs: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)].init(@[]),
@@ -221,20 +217,3 @@ func buildHeaderWithProof*(
       proof: BlockHeaderProof.init(proof),
     )
   )
-
-func getBlockEpochDataForBlockNumber*(
-    a: FinishedAccumulator, bn: UInt256
-): Result[BlockEpochData, string] =
-  let blockNumber = bn.truncate(uint64)
-
-  if blockNumber.isPreMerge:
-    let epochIndex = getEpochIndex(blockNumber)
-
-    ok(
-      BlockEpochData(
-        epochHash: a.historicalEpochs[epochIndex],
-        blockRelativeIndex: getHeaderRecordIndex(blockNumber, epochIndex),
-      )
-    )
-  else:
-    err("Block number is post merge: " & $blockNumber)

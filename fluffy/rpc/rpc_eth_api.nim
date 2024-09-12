@@ -10,6 +10,7 @@
 import
   std/[times, sequtils, strutils, typetraits],
   json_rpc/[rpcproxy, rpcserver],
+  chronicles,
   web3/conversions, # sigh, for FixedBytes marshalling
   web3/eth_api_types,
   web3/primitives as web3types,
@@ -30,7 +31,7 @@ from ../../nimbus/beacon/web3_eth_conv import w3Addr, w3Hash, ethHash
 # Currently supported subset:
 # - eth_chainId
 # - eth_getBlockByHash
-# - eth_getBlockByNumber - Partially: only by tags and block numbers before TheMerge
+# - eth_getBlockByNumber
 # - eth_getBlockTransactionCountByHash
 # - eth_getLogs - Partially: only requests by block hash
 #
@@ -279,15 +280,11 @@ proc installEthApiHandlers*(
         raise newException(ValueError, "Unsupported block tag " & tag)
     else:
       let
-        blockNumber = quantityTag.number.uint64.u256
-        maybeBlock = (await historyNetwork.getBlock(blockNumber)).valueOr:
-          raise newException(ValueError, error)
+        blockNumber = quantityTag.number.uint64
+        (header, body) = (await historyNetwork.getBlock(blockNumber)).valueOr:
+          return Opt.none(BlockObject)
 
-      if maybeBlock.isNone():
-        return Opt.none(BlockObject)
-      else:
-        let (header, body) = maybeBlock.get()
-        return Opt.some(BlockObject.init(header, body, fullTransactions))
+      return Opt.some(BlockObject.init(header, body, fullTransactions))
 
   rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
     data: eth_api_types.Hash256
@@ -320,7 +317,7 @@ proc installEthApiHandlers*(
   ) -> seq[LogObject]:
     if filterOptions.blockHash.isNone():
       # Currently only queries by blockhash are supported.
-      # To support range queries the Indicies network is required.
+      # TODO: Can impolement range queries by block number now.
       raise newException(
         ValueError,
         "Unsupported query: Only `blockHash` queries are currently supported",
@@ -365,7 +362,7 @@ proc installEthApiHandlers*(
       raise newException(ValueError, "tag not yet implemented")
     else:
       let
-        blockNumber = quantityTag.number.uint64.u256
+        blockNumber = quantityTag.number.uint64
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
           raise newException(ValueError, "Unable to get block hash")
 
@@ -390,7 +387,7 @@ proc installEthApiHandlers*(
       raise newException(ValueError, "tag not yet implemented")
     else:
       let
-        blockNumber = quantityTag.number.uint64.u256
+        blockNumber = quantityTag.number.uint64
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
           raise newException(ValueError, "Unable to get block hash")
 
@@ -417,7 +414,7 @@ proc installEthApiHandlers*(
       raise newException(ValueError, "tag not yet implemented")
     else:
       let
-        blockNumber = quantityTag.number.uint64.u256
+        blockNumber = quantityTag.number.uint64
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
           raise newException(ValueError, "Unable to get block hash")
 
@@ -443,7 +440,7 @@ proc installEthApiHandlers*(
       raise newException(ValueError, "tag not yet implemented")
     else:
       let
-        blockNumber = quantityTag.number.uint64.u256
+        blockNumber = quantityTag.number.uint64
         blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
           raise newException(ValueError, "Unable to get block hash")
 

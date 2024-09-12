@@ -73,7 +73,6 @@ FLUFFY_TOOLS := \
 	portal_bridge \
 	beacon_lc_bridge \
 	eth_data_exporter \
-	content_verifier \
 	blockwalk \
 	portalcli \
 	fcli_db
