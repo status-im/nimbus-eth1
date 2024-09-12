@@ -78,6 +78,7 @@ nav:
   - Developers:
     - 'basics-for-developers.md'
     - 'test-suite.md'
+    - 'adding-documentation.md'
     - Local testnet:
       - 'run-local-testnet.md'
       - 'testnet-history-network.md'
