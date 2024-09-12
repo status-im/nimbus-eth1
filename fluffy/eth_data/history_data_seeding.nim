@@ -35,53 +35,6 @@ proc historyStore*(
 
   ok()
 
-proc propagateEpochRecord*(
-    p: PortalProtocol, file: string
-): Future[Result[void, string]] {.async.} =
-  ## Propagate a specific epoch accumulator into the network.
-  ## file holds the SSZ serialized epoch accumulator.
-  let epochRecordRes = readEpochRecord(file)
-  if epochRecordRes.isErr():
-    return err(epochRecordRes.error)
-  else:
-    let
-      epochRecord = epochRecordRes.get()
-      rootHash = epochRecord.hash_tree_root()
-      key = ContentKey(
-        contentType: epochRecord, epochRecordKey: EpochRecordKey(epochHash: rootHash)
-      )
-      encKey = history_content.encode(key)
-      # Note: The file actually holds the SSZ encoded accumulator, but we need
-      # to decode as we need the root for the content key.
-      encodedEpochRecord = SSZ.encode(epochRecord)
-    info "Gossiping epoch record", rootHash, contentKey = encKey
-
-    p.storeContent(encKey, history_content.toContentId(encKey), encodedEpochRecord)
-    discard await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[encKey]), @[encodedEpochRecord]
-    )
-
-    return ok()
-
-proc propagateEpochRecords*(
-    p: PortalProtocol, path: string
-): Future[Result[void, string]] {.async.} =
-  ## Propagate all epoch accumulators created when building the accumulator
-  ## from the block headers.
-  ## path is a directory that holds all SSZ encoded epoch accumulator files.
-  for i in 0 ..< preMergeEpochs:
-    let file =
-      try:
-        path / &"mainnet-epoch-record-{i.uint64:05}.ssz"
-      except ValueError as e:
-        raiseAssert e.msg
-
-    let res = await p.propagateEpochRecord(file)
-    if res.isErr():
-      return err(res.error)
-
-  return ok()
-
 proc historyPropagate*(
     p: PortalProtocol, dataFile: string, verify = false
 ): Future[Result[void, string]] {.async.} =

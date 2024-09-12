@@ -114,32 +114,15 @@ procSuite "History Content Network":
 
     check headersWithProof.isOk()
 
-    # Only node 2 stores the headers and all epoch accumulators.
+    # Only node 2 stores the headers (by number)
     for headerWithProof in headersWithProof.get():
       let
         header = rlp.decode(headerWithProof.header.asSeq(), BlockHeader)
-        headerHash = header.blockHash()
-        blockKey = BlockKey(blockHash: headerHash)
-        contentKey = ContentKey(contentType: blockHeader, blockHeaderKey: blockKey)
+        contentKey = blockHeaderContentKey(header.number)
         encKey = encode(contentKey)
         contentId = toContentId(contentKey)
       historyNode2.portalProtocol().storeContent(
         encKey, contentId, SSZ.encode(headerWithProof)
-      )
-
-    # Need to store the epoch accumulators to be able to do the block to hash
-    # mapping
-    for epochRecord in epochRecords:
-      let
-        rootHash = epochRecord.hash_tree_root()
-        contentKey = ContentKey(
-          contentType: ContentType.epochRecord,
-          epochRecordKey: EpochRecordKey(epochHash: rootHash),
-        )
-        encKey = encode(contentKey)
-        contentId = toContentId(contentKey)
-      historyNode2.portalProtocol().storeContent(
-        encKey, contentId, SSZ.encode(epochRecord)
       )
 
     check:
@@ -150,15 +133,11 @@ procSuite "History Content Network":
       (await historyNode2.portalProtocol().ping(historyNode1.localNode())).isOk()
 
     for i in headersToTest:
-      let blockResponse = await historyNode1.historyNetwork.getBlock(u256(i))
+      let blockResponse = await historyNode1.historyNetwork.getBlock(i.uint64)
 
       check blockResponse.isOk()
 
-      let blockOpt = blockResponse.get()
-
-      check blockOpt.isSome()
-
-      let (blockHeader, blockBody) = blockOpt.unsafeGet()
+      let (blockHeader, blockBody) = blockResponse.value()
 
       check blockHeader == headers[i]
 

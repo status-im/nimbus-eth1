@@ -281,7 +281,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
               blockhash = history_content.`$` hash
 
             block: # gossip header
-              let contentKey = history_content.ContentKey.init(blockHeader, hash)
+              let contentKey = blockHeaderContentKey(hash)
               let encodedContentKey = contentKey.encode.asSeq()
 
               try:
@@ -304,7 +304,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
             await sleepAsync(2.seconds)
 
             block: # gossip block
-              let contentKey = history_content.ContentKey.init(blockBody, hash)
+              let contentKey = blockBodyContentKey(hash)
               let encodedContentKey = contentKey.encode.asSeq()
 
               try:

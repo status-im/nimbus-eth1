@@ -79,19 +79,3 @@ proc installPortalDebugApiHandlers*(
       return true
     else:
       raise newException(ValueError, $res.error)
-
-  rpcServer.rpc("portal_" & network & "_propagateEpochRecord") do(
-    dataFile: string
-  ) -> bool:
-    let res = await p.propagateEpochRecord(dataFile)
-    if res.isOk():
-      return true
-    else:
-      raise newException(ValueError, $res.error)
-
-  rpcServer.rpc("portal_" & network & "_propagateEpochRecords") do(path: string) -> bool:
-    let res = await p.propagateEpochRecords(path)
-    if res.isOk():
-      return true
-    else:
-      raise newException(ValueError, $res.error)

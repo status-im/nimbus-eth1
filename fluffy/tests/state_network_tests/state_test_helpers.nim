@@ -150,9 +150,7 @@ proc mockBlockHashToStateRoot*(
     blockHeaderWithProof = BlockHeaderWithProof(
       header: ByteList[2048].init(headerRlp), proof: BlockHeaderProof.init()
     )
-    contentKeyBytes = history_content.ContentKey
-      .init(history_content.ContentType.blockHeader, blockHash)
-      .encode()
+    contentKeyBytes = blockHeaderContentKey(blockHash).encode()
     contentId = history_content.toContentId(contentKeyBytes)
 
   sn.portalProtocol().storeContent(

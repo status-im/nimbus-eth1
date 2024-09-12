@@ -17,7 +17,8 @@ import
   ../../database/content_db,
   ../../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[history_content, accumulator, beacon_chain_historical_roots]
+  "."/[history_content, accumulator, beacon_chain_historical_roots],
+  ./content/content_deprecated
 
 logScope:
   topics = "portal_hist"
@@ -178,8 +179,20 @@ template calcReceiptsRoot*(receipts: PortalReceipts): Hash256 =
 template calcWithdrawalsRoot*(receipts: Withdrawals): Hash256 =
   calcRootHash(receipts)
 
+func validateBlockHeader*(header: BlockHeader, hash: BlockHash): Result[void, string] =
+  if not (header.blockHash() == hash):
+    err("Block header hash does not match")
+  else:
+    ok()
+
+func validateBlockHeader*(header: BlockHeader, number: uint64): Result[void, string] =
+  if not (header.number == number):
+    err("Block header number does not match")
+  else:
+    ok()
+
 func validateBlockHeaderBytes*(
-    bytes: openArray[byte], hash: BlockHash
+    bytes: openArray[byte], id: uint64 | BlockHash
 ): Result[BlockHeader, string] =
   let header = ?decodeRlp(bytes, BlockHeader)
 
@@ -191,11 +204,13 @@ func validateBlockHeaderBytes*(
   # pretty trivial to provide a non-canonical valid header.
   # It might be somewhat more useful if just done (temporarily) for the headers
   # post-merge which are currently provided without proof.
+  # For comparison by number this is obviously not sufficient as any other field
+  # could be manipulated and because of this a block header proof will always
+  # be needed.
 
-  if not (header.blockHash() == hash):
-    err("Block header hash does not match")
-  else:
-    ok(header)
+  ?header.validateBlockHeader(id)
+
+  ok(header)
 
 proc validateBlockBody*(
     body: PortalBlockBodyLegacy, header: BlockHeader
@@ -267,25 +282,25 @@ proc validateBlockBodyBytes*(
   # post merge, so the checks are still useful, for now.
   if isShanghai(chainConfig, timestamp):
     if header.withdrawalsRoot.isNone():
-      return err("Expected withdrawalsRoot for Shanghai block")
+      err("Expected withdrawalsRoot for Shanghai block")
     elif header.ommersHash != EMPTY_UNCLE_HASH:
-      return err("Expected empty uncles for a Shanghai block")
+      err("Expected empty uncles for a Shanghai block")
     else:
       let body = ?decodeSsz(bytes, PortalBlockBodyShanghai)
       ?validateBlockBody(body, header)
       BlockBody.fromPortalBlockBody(body)
   elif isPoSBlock(chainConfig, header.number):
     if header.withdrawalsRoot.isSome():
-      return err("Expected no withdrawalsRoot for pre Shanghai block")
+      err("Expected no withdrawalsRoot for pre Shanghai block")
     elif header.ommersHash != EMPTY_UNCLE_HASH:
-      return err("Expected empty uncles for a PoS block")
+      err("Expected empty uncles for a PoS block")
     else:
       let body = ?decodeSsz(bytes, PortalBlockBodyLegacy)
       ?validateBlockBody(body, header)
       BlockBody.fromPortalBlockBody(body)
   else:
     if header.withdrawalsRoot.isSome():
-      return err("Expected no withdrawalsRoot for pre Shanghai block")
+      err("Expected no withdrawalsRoot for pre Shanghai block")
     else:
       let body = ?decodeSsz(bytes, PortalBlockBodyLegacy)
       ?validateBlockBody(body, header)
@@ -294,12 +309,10 @@ proc validateBlockBodyBytes*(
 proc validateReceipts*(
     receipts: PortalReceipts, receiptsRoot: KeccakHash
 ): Result[void, string] =
-  let calculatedReceiptsRoot = calcReceiptsRoot(receipts)
-
-  if calculatedReceiptsRoot != receiptsRoot:
-    return err("Unexpected receipt root")
+  if calcReceiptsRoot(receipts) != receiptsRoot:
+    err("Unexpected receipt root")
   else:
-    return ok()
+    ok()
 
 proc validateReceiptsBytes*(
     bytes: openArray[byte], receiptsRoot: KeccakHash
@@ -393,14 +406,14 @@ func verifyHeader(
   verifyHeader(n.accumulator, header, proof)
 
 proc getVerifiedBlockHeader*(
-    n: HistoryNetwork, hash: BlockHash
+    n: HistoryNetwork, id: BlockHash | uint64
 ): Future[Opt[BlockHeader]] {.async: (raises: [CancelledError]).} =
   let
-    contentKey = ContentKey.init(blockHeader, hash).encode()
-    contentId = contentKey.toContentId()
+    contentKey = blockHeaderContentKey(id).encode()
+    contentId = history_content.toContentId(contentKey)
 
   logScope:
-    hash
+    id
     contentKey
 
   # Note: This still requests a BlockHeaderWithProof from the database, as that
@@ -421,7 +434,7 @@ proc getVerifiedBlockHeader*(
         warn "Failed decoding header with proof", error
         continue
 
-      header = validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash).valueOr:
+      header = validateBlockHeaderBytes(headerWithProof.header.asSeq(), id).valueOr:
         warn "Validation of block header failed", error
         continue
 
@@ -449,7 +462,7 @@ proc getBlockBody*(
     return Opt.some(BlockBody(transactions: @[], uncles: @[]))
 
   let
-    contentKey = ContentKey.init(blockBody, hash).encode()
+    contentKey = blockBodyContentKey(hash).encode()
     contentId = contentKey.toContentId()
 
   logScope:
@@ -484,22 +497,35 @@ proc getBlockBody*(
   return Opt.none(BlockBody)
 
 proc getBlock*(
-    n: HistoryNetwork, hash: BlockHash
+    n: HistoryNetwork, id: BlockHash | uint64
 ): Future[Opt[Block]] {.async: (raises: [CancelledError]).} =
-  debug "Trying to retrieve block with hash", hash
+  debug "Trying to retrieve block", id
 
   # Note: Using `getVerifiedBlockHeader` instead of getBlockHeader even though
   # proofs are not necessiarly needed, in order to avoid having to inject
   # also the original type into the network.
   let
-    header = (await n.getVerifiedBlockHeader(hash)).valueOr:
-      warn "Failed to get header when getting block", hash
+    header = (await n.getVerifiedBlockHeader(id)).valueOr:
+      warn "Failed to get header when getting block", id
       return Opt.none(Block)
+    hash =
+      when id is BlockHash:
+        id
+      else:
+        header.blockHash()
     body = (await n.getBlockBody(hash, header)).valueOr:
       warn "Failed to get body when getting block", hash
       return Opt.none(Block)
 
   return Opt.some((header, body))
+
+proc getBlockHashByNumber*(
+    n: HistoryNetwork, blockNumber: uint64
+): Future[Result[BlockHash, string]] {.async: (raises: [CancelledError]).} =
+  let header = (await n.getVerifiedBlockHeader(blockNumber)).valueOr:
+    return err("Cannot retrieve block header for given block number")
+
+  ok(header.blockHash())
 
 proc getReceipts*(
     n: HistoryNetwork, hash: BlockHash, header: BlockHeader
@@ -509,7 +535,7 @@ proc getReceipts*(
     return Opt.some(newSeq[Receipt]())
 
   let
-    contentKey = ContentKey.init(receipts, hash).encode()
+    contentKey = receiptsContentKey(hash).encode()
     contentId = contentKey.toContentId()
 
   logScope:
@@ -538,70 +564,6 @@ proc getReceipts*(
     )
 
     return Opt.some(receipts)
-
-proc getEpochRecord(
-    n: HistoryNetwork, epochHash: Digest
-): Future[Opt[EpochRecord]] {.async: (raises: [CancelledError]).} =
-  let
-    contentKey = ContentKey.init(epochRecord, epochHash).encode()
-    contentId = contentKey.toContentId()
-
-  logScope:
-    epochHash
-    contentKey
-
-  let accumulatorFromDb = n.getContentFromDb(EpochRecord, contentId)
-  if accumulatorFromDb.isSome():
-    info "Fetched epoch accumulator from database"
-    return accumulatorFromDb
-
-  for i in 0 ..< requestRetries:
-    let
-      accumulatorContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
-        warn "Failed fetching epoch accumulator from the network"
-        return Opt.none(EpochRecord)
-
-      epochRecord =
-        try:
-          SSZ.decode(accumulatorContent.content, EpochRecord)
-        except SerializationError:
-          continue
-
-    let hash = hash_tree_root(epochRecord)
-    if hash == epochHash:
-      info "Fetched epoch accumulator from the network"
-      n.portalProtocol.storeContent(contentKey, contentId, accumulatorContent.content)
-      n.portalProtocol.triggerPoke(
-        accumulatorContent.nodesInterestedInContent, contentKey,
-        accumulatorContent.content,
-      )
-
-      return Opt.some(epochRecord)
-    else:
-      warn "Validation of epoch accumulator failed", resultedEpochHash = hash
-
-  return Opt.none(EpochRecord)
-
-proc getBlockHashByNumber*(
-    n: HistoryNetwork, bn: UInt256
-): Future[Result[BlockHash, string]] {.async: (raises: [CancelledError]).} =
-  let
-    epochData = n.accumulator.getBlockEpochDataForBlockNumber(bn).valueOr:
-      return err(error)
-    digest = Digest(data: epochData.epochHash)
-    epoch = (await n.getEpochRecord(digest)).valueOr:
-      return err("Cannot retrieve epoch accumulator for given block number")
-
-  ok(epoch[epochData.blockRelativeIndex].blockHash)
-
-proc getBlock*(
-    n: HistoryNetwork, bn: UInt256
-): Future[Result[Opt[Block], string]] {.async: (raises: [CancelledError]).} =
-  let
-    blockHash = ?(await n.getBlockHashByNumber(bn))
-    maybeBlock = await n.getBlock(blockHash)
-
-  return ok(maybeBlock)
 
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKey: ContentKeyByteList
@@ -649,24 +611,20 @@ proc validateContent(
       return false
     else:
       return true
-  of epochRecord:
-    # Check first if epochHash is part of master accumulator
-    let epochHash = key.epochRecordKey.epochHash
-    if not n.accumulator.historicalEpochs.contains(epochHash.data):
-      warn "Offered epoch accumulator is not part of master accumulator", epochHash
-      return false
-
-    let epochRecord =
-      try:
-        SSZ.decode(content, EpochRecord)
-      except SerializationError:
-        warn "Failed decoding epoch accumulator"
+  of blockNumber:
+    let
+      headerWithProof = decodeSsz(content, BlockHeaderWithProof).valueOr:
+        warn "Failed decoding header with proof", error
+        return false
+      header = validateBlockHeaderBytes(
+        headerWithProof.header.asSeq(), key.blockNumberKey.blockNumber
+      ).valueOr:
+        warn "Invalid block header offered", error
         return false
 
-    # Next check the hash tree root, as this is probably more expensive
-    let hash = hash_tree_root(epochRecord)
-    if hash != epochHash:
-      warn "Epoch accumulator has invalid root hash"
+    let res = n.verifyHeader(header, headerWithProof.proof)
+    if res.isErr():
+      warn "Failed on check if header is part of canonical chain", error = res.error
       return false
     else:
       return true
@@ -771,6 +729,7 @@ proc start*(n: HistoryNetwork) =
 
   n.processContentLoop = processContentLoop(n)
   n.statusLogLoop = statusLogLoop(n)
+  pruneDeprecatedAccumulatorRecords(n.accumulator, n.contentDB)
 
 proc stop*(n: HistoryNetwork) =
   n.portalProtocol.stop()

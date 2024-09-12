@@ -143,7 +143,7 @@ proc gossipBlockHeader(
     headerWithProof: BlockHeaderWithProof,
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
-    contentKey = history_content.ContentKey.init(blockHeader, hash)
+    contentKey = blockHeaderContentKey(hash)
     encodedContentKeyHex = contentKey.encode.asSeq().toHex()
 
     peers =
@@ -163,7 +163,7 @@ proc gossipBlockBody(
     body: PortalBlockBodyLegacy | PortalBlockBodyShanghai,
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
-    contentKey = history_content.ContentKey.init(blockBody, hash)
+    contentKey = blockBodyContentKey(hash)
     encodedContentKeyHex = contentKey.encode.asSeq().toHex()
 
     peers =
@@ -181,8 +181,7 @@ proc gossipReceipts(
     client: RpcClient, hash: common_types.BlockHash, receipts: PortalReceipts
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
-    contentKey =
-      history_content.ContentKey.init(history_content.ContentType.receipts, hash)
+    contentKey = receiptsContentKey(hash)
     encodedContentKeyHex = contentKey.encode.asSeq().toHex()
 
     peers =
@@ -416,7 +415,7 @@ proc runBackfillLoopAuditMode(
     # header
     block headerBlock:
       let
-        contentKey = ContentKey.init(blockHeader, blockHash)
+        contentKey = blockHeaderContentKey(blockHash)
         contentHex =
           try:
             (
@@ -448,7 +447,7 @@ proc runBackfillLoopAuditMode(
     # body
     block bodyBlock:
       let
-        contentKey = ContentKey.init(blockBody, blockHash)
+        contentKey = blockBodyContentKey(blockHash)
         contentHex =
           try:
             (
@@ -476,7 +475,7 @@ proc runBackfillLoopAuditMode(
     # receipts
     block receiptsBlock:
       let
-        contentKey = ContentKey.init(ContentType.receipts, blockHash)
+        contentKey = receiptsContentKey(blockHash)
         contentHex =
           try:
             (

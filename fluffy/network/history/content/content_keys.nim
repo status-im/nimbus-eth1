@@ -31,13 +31,13 @@ type
     blockHeader = 0x00
     blockBody = 0x01
     receipts = 0x02
-    epochRecord = 0x03
+    blockNumber = 0x03
 
   BlockKey* = object
     blockHash*: BlockHash
 
-  EpochRecordKey* = object
-    epochHash*: Digest
+  BlockNumberKey* = object
+    blockNumber*: uint64
 
   ContentKey* = object
     case contentType*: ContentType
@@ -47,21 +47,22 @@ type
       blockBodyKey*: BlockKey
     of receipts:
       receiptsKey*: BlockKey
-    of epochRecord:
-      epochRecordKey*: EpochRecordKey
+    of blockNumber:
+      blockNumberKey*: BlockNumberKey
 
-func init*(T: type ContentKey, contentType: ContentType, hash: BlockHash | Digest): T =
-  case contentType
-  of blockHeader:
-    ContentKey(contentType: contentType, blockHeaderKey: BlockKey(blockHash: hash))
-  of blockBody:
-    ContentKey(contentType: contentType, blockBodyKey: BlockKey(blockHash: hash))
-  of receipts:
-    ContentKey(contentType: contentType, receiptsKey: BlockKey(blockHash: hash))
-  of epochRecord:
+func blockHeaderContentKey*(id: BlockHash | uint64): ContentKey =
+  when id is BlockHash:
+    ContentKey(contentType: blockHeader, blockHeaderKey: BlockKey(blockHash: id))
+  else:
     ContentKey(
-      contentType: contentType, epochRecordKey: EpochRecordKey(epochHash: hash)
+      contentType: blockNumber, blockNumberKey: BlockNumberKey(blockNumber: id)
     )
+
+func blockBodyContentKey*(hash: BlockHash): ContentKey =
+  ContentKey(contentType: blockBody, blockBodyKey: BlockKey(blockHash: hash))
+
+func receiptsContentKey*(hash: BlockHash): ContentKey =
+  ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: hash))
 
 func encode*(contentKey: ContentKey): ContentKeyByteList =
   ContentKeyByteList.init(SSZ.encode(contentKey))
@@ -96,9 +97,8 @@ func `$`*(x: ContentKey): string =
     res.add($x.blockBodyKey)
   of receipts:
     res.add($x.receiptsKey)
-  of epochRecord:
-    let key = x.epochRecordKey
-    res.add("epochHash: " & $key.epochHash)
+  of blockNumber:
+    res.add($x.blockNumberKey)
 
   res.add(")")
 
