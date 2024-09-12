@@ -5,13 +5,12 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
-
 import
   std/os,
   testutils/unittests,
   chronos,
   results,
+  stew/byteutils,
   eth/[common, trie],
   ../../../nimbus/common/chain_config,
   ../../network/wire/[portal_protocol, portal_stream],
@@ -28,137 +27,173 @@ suite "State Endpoints - Genesis JSON Files":
     "devnet4.json", "devnet5.json", "holesky.json", "mainshadow1.json", "merge.json",
   ]
 
+  proc setupAccountInDb(
+      stateNode: StateNode, accountState: HexaryTrie, address: EthAddress
+  ) =
+    let
+      proof = accountState.generateAccountProof(address)
+      leafNode = proof[^1]
+      addressHash = keccakHash(address)
+      path = removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), leafNode)
+      key = AccountTrieNodeKey.init(path, keccakHash(leafNode.asSeq()))
+      offer = AccountTrieNodeOffer(proof: proof)
+
+    # store the account leaf node
+    let contentKey = key.toContentKey().encode()
+    stateNode.portalProtocol.storeContent(
+      contentKey, contentKey.toContentId(), offer.toRetrievalValue().encode()
+    )
+
+    # store the account parent nodes / all remaining nodes
+    var
+      parent = offer.withKey(key).getParent()
+      parentContentKey = parent.key.toContentKey().encode()
+
+    stateNode.portalProtocol.storeContent(
+      parentContentKey,
+      parentContentKey.toContentId(),
+      parent.offer.toRetrievalValue().encode(),
+    )
+
+    for i in proof.low ..< proof.high - 1:
+      parent = parent.getParent()
+      parentContentKey = parent.key.toContentKey().encode()
+
+      stateNode.portalProtocol.storeContent(
+        parentContentKey,
+        parentContentKey.toContentId(),
+        parent.offer.toRetrievalValue().encode(),
+      )
+
+  proc setupCodeInDb(stateNode: StateNode, address: EthAddress, code: seq[byte]) =
+    let
+      key =
+        ContractCodeKey(addressHash: keccakHash(address), codeHash: keccakHash(code))
+      value = ContractCodeRetrieval(code: Bytecode.init(code))
+
+    let contentKey = key.toContentKey().encode()
+    stateNode.portalProtocol.storeContent(
+      contentKey, contentKey.toContentId(), value.encode()
+    )
+
+  proc setupSlotInDb(
+      stateNode: StateNode,
+      accountState: HexaryTrie,
+      storageState: HexaryTrie,
+      address: EthAddress,
+      slot: UInt256,
+  ) =
+    let
+      addressHash = keccakHash(address)
+      proof = accountState.generateAccountProof(address)
+      storageProof = storageState.generateStorageProof(slot)
+      leafNode = storageProof[^1]
+      path = removeLeafKeyEndNibbles(
+        Nibbles.init(keccakHash(toBytesBE(slot)).data, true), leafNode
+      )
+      key = ContractTrieNodeKey(
+        addressHash: addressHash, path: path, nodeHash: keccakHash(leafNode.asSeq())
+      )
+      offer = ContractTrieNodeOffer(storageProof: storageProof, accountProof: proof)
+
+    # store the contract storage leaf node
+    let contentKey = key.toContentKey().encode()
+    stateNode.portalProtocol.storeContent(
+      contentKey, contentKey.toContentId(), offer.toRetrievalValue().encode()
+    )
+
+    # store the remaining contract storage nodes
+    var
+      parent = offer.withKey(key).getParent()
+      parentContentKey = parent.key.toContentKey().encode()
+
+    stateNode.portalProtocol.storeContent(
+      parentContentKey,
+      parentContentKey.toContentId(),
+      parent.offer.toRetrievalValue().encode(),
+    )
+
+    for i in storageProof.low ..< storageProof.high - 1:
+      parent = parent.getParent()
+      parentContentKey = parent.key.toContentKey().encode()
+
+      stateNode.portalProtocol.storeContent(
+        parentContentKey,
+        parentContentKey.toContentId(),
+        parent.offer.toRetrievalValue().encode(),
+      )
+
   asyncTest "Test getBalance, getTransactionCount, getStorageAt and getCode using JSON files":
     let
       rng = newRng()
-      stateNode1 = newStateNode(rng, STATE_NODE1_PORT)
+      stateNode = newStateNode(rng, STATE_NODE1_PORT)
 
     for file in genesisFiles:
       let
         accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
         (accountState, storageStates) = accounts.toState()
-        stateRoot = accountState.rootHash()
+        blockHash = keccakHash("blockHash") # use a dummy block hash
+
+      # mock the block hash because we don't have history network running
+      stateNode.mockBlockHashToStateRoot(blockHash, accountState.rootHash())
 
       for address, account in accounts:
+        stateNode.setupAccountInDb(accountState, address)
+
+        # get balance and nonce of existing account
         let
-          proof = accountState.generateAccountProof(address)
-          leafNode = proof[^1]
-          addressHash = keccakHash(address)
-          path = removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), leafNode)
-          key = AccountTrieNodeKey.init(path, keccakHash(leafNode.asSeq()))
-          offer = AccountTrieNodeOffer(proof: proof)
-
-        # store the account leaf node
-        let contentKey = key.toContentKey().encode()
-        stateNode1.portalProtocol.storeContent(
-          contentKey, contentKey.toContentId(), offer.toRetrievalValue().encode()
-        )
-
-        # store the account parent nodes / all remaining nodes
-        var
-          parent = offer.withKey(key).getParent()
-          parentContentKey = parent.key.toContentKey().encode()
-
-        stateNode1.portalProtocol.storeContent(
-          parentContentKey,
-          parentContentKey.toContentId(),
-          parent.offer.toRetrievalValue().encode(),
-        )
-
-        for i in proof.low ..< proof.high - 1:
-          parent = parent.getParent()
-          parentContentKey = parent.key.toContentKey().encode()
-
-          stateNode1.portalProtocol.storeContent(
-            parentContentKey,
-            parentContentKey.toContentId(),
-            parent.offer.toRetrievalValue().encode(),
-          )
-
-        # mock the block hash because we don't have history network running
-        stateNode1.mockBlockHashToStateRoot(offer.blockHash, stateRoot)
-
-        # verify can lookup account values by walking the trie via the state network endpoints
-        let
-          balanceRes =
-            await stateNode1.stateNetwork.getBalance(offer.blockHash, address)
+          balanceRes = await stateNode.stateNetwork.getBalance(blockHash, address)
           nonceRes =
-            await stateNode1.stateNetwork.getTransactionCount(offer.blockHash, address)
+            await stateNode.stateNetwork.getTransactionCount(blockHash, address)
         check:
-          balanceRes.isOk()
           balanceRes.get() == account.balance
-          nonceRes.isOk()
           nonceRes.get() == account.nonce
 
         if account.code.len() > 0:
-          block:
-            # store the code
-            let
-              key = ContractCodeKey(
-                addressHash: addressHash, codeHash: keccakHash(account.code)
-              )
-              value = ContractCodeRetrieval(code: Bytecode.init(account.code))
+          stateNode.setupCodeInDb(address, account.code)
 
-            let contentKey = key.toContentKey().encode()
-            stateNode1.portalProtocol.storeContent(
-              contentKey, contentKey.toContentId(), value.encode()
-            )
+          # get code of existing account
+          let codeRes = await stateNode.stateNetwork.getCode(blockHash, address)
+          check:
+            codeRes.get().asSeq() == account.code
 
-            # verify can lookup code by walking the trie via the state network endpoints
-            let codeRes =
-              await stateNode1.stateNetwork.getCode(offer.blockHash, address)
-            check:
-              codeRes.isOk()
-              codeRes.get().asSeq() == account.code
-
-          # next test the storage for accounts that have code
-          let storageState = storageStates[address]
+          let storageState = storageStates.getOrDefault(address)
           for slotKey, slotValue in account.storage:
-            let
-              storageProof = storageState.generateStorageProof(slotKey)
-              leafNode = storageProof[^1]
-              path = removeLeafKeyEndNibbles(
-                Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), leafNode
-              )
-              key = ContractTrieNodeKey(
-                addressHash: addressHash,
-                path: path,
-                nodeHash: keccakHash(leafNode.asSeq()),
-              )
-              offer =
-                ContractTrieNodeOffer(storageProof: storageProof, accountProof: proof)
+            stateNode.setupSlotInDb(accountState, storageState, address, slotKey)
 
-            # store the contract storage leaf node
-            let contentKey = key.toContentKey().encode()
-            stateNode1.portalProtocol.storeContent(
-              contentKey, contentKey.toContentId(), offer.toRetrievalValue().encode()
-            )
-
-            # store the remaining contract storage nodes
-            var
-              parent = offer.withKey(key).getParent()
-              parentContentKey = parent.key.toContentKey().encode()
-
-            stateNode1.portalProtocol.storeContent(
-              parentContentKey,
-              parentContentKey.toContentId(),
-              parent.offer.toRetrievalValue().encode(),
-            )
-
-            for i in storageProof.low ..< storageProof.high - 1:
-              parent = parent.getParent()
-              parentContentKey = parent.key.toContentKey().encode()
-
-              stateNode1.portalProtocol.storeContent(
-                parentContentKey,
-                parentContentKey.toContentId(),
-                parent.offer.toRetrievalValue().encode(),
-              )
-
-            # verify can lookup contract values by walking the trie via the state network endpoints
-            let storageAtRes = await stateNode1.stateNetwork.getStorageAt(
-              offer.blockHash, address, slotKey
-            )
+            # get storage slots of existing account
+            let slotRes =
+              await stateNode.stateNetwork.getStorageAt(blockHash, address, slotKey)
             check:
-              storageAtRes.isOk()
-              storageAtRes.get() == slotValue
+              slotRes.get() == slotValue
+        else:
+          # account exists but code and slot doesn't exist
+          let
+            codeRes = await stateNode.stateNetwork.getCode(blockHash, address)
+            slotRes0 =
+              await stateNode.stateNetwork.getStorageAt(blockHash, address, 0.u256)
+            slotRes1 =
+              await stateNode.stateNetwork.getStorageAt(blockHash, address, 1.u256)
+          check:
+            codeRes.get().asSeq().len() == 0
+            slotRes0.get() == 0.u256
+            slotRes1.get() == 0.u256
+
+      # account doesn't exist
+      block:
+        let badAddress =
+          EthAddress.fromHex("0xBAD0000000000000000000000000000000000000")
+
+        let
+          balanceRes = await stateNode.stateNetwork.getBalance(blockHash, badAddress)
+          nonceRes =
+            await stateNode.stateNetwork.getTransactionCount(blockHash, badAddress)
+          codeRes = await stateNode.stateNetwork.getCode(blockHash, badAddress)
+          slotRes =
+            await stateNode.stateNetwork.getStorageAt(blockHash, badAddress, 0.u256)
+
+        check:
+          balanceRes.get() == 0.u256
+          nonceRes.get() == 0.uint64
+          codeRes.get().asSeq().len() == 0
+          slotRes.get() == 0.u256
