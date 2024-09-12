@@ -50,13 +50,13 @@ proc processTransactions*(
       # TODO don't generate logs at all if we're not going to put them in
       #      receipts
       if collectLogs:
-        vmState.allLogs = vmState.getAndClearLogEntries()
+        vmState.allLogs.add vmState.getAndClearLogEntries()
       else:
         discard vmState.getAndClearLogEntries()
-    else:      
+    else:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
       if collectLogs:
-        vmState.allLogs = vmState.receipts[txIndex].logs
+        vmState.allLogs.add vmState.receipts[txIndex].logs
   ok()
 
 proc procBlkPreamble(
@@ -75,14 +75,14 @@ proc procBlkPreamble(
       return err("Mismatched txRoot")
 
   if com.isPragueOrLater(header.timestamp):
-    if header.requestsRoot.isNone:
-      return err("Post-Prague block header must have requestsRoot")
-      
+    if header.requestsRoot.isNone or blk.requests.isNone:
+      return err("Post-Prague block header must have requestsRoot/requests")
+
     ?vmState.processParentBlockHash(header.parentHash)
   else:
-    if header.requestsRoot.isSome:
-      return err("Pre-Prague block header must not have requestsRoot")
-  
+    if header.requestsRoot.isSome or blk.requests.isSome:
+      return err("Pre-Prague block header must not have requestsRoot/requests")
+
   if com.isCancunOrLater(header.timestamp):
     if header.parentBeaconBlockRoot.isNone:
       return err("Post-Cancun block header must have parentBeaconBlockRoot")
@@ -136,8 +136,11 @@ proc procBlkPreamble(
   ok()
 
 proc procBlkEpilogue(
-    vmState: BaseVMState, header: BlockHeader, skipValidation: bool, skipReceipts: bool
+    vmState: BaseVMState, blk: EthBlock, skipValidation: bool, skipReceipts: bool
 ): Result[void, string] =
+  template header(): BlockHeader =
+    blk.header
+
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.collectWitnessData:
@@ -176,15 +179,20 @@ proc procBlkEpilogue(
         return err("receiptRoot mismatch")
 
     if header.requestsRoot.isSome:
-      let reqs = ?parseDepositLogs(vmState.allLogs)        
-      let requestsRoot = calcRequestsRoot(reqs)
+      let requestsRoot = calcRequestsRoot(blk.requests.get)
       if header.requestsRoot.get != requestsRoot:
         debug "wrong requestsRoot in block",
           blockNumber = header.number,
           actual = requestsRoot,
           expected = header.requestsRoot.get
-        return err("requestsRoot mismatch")          
-      
+        return err("requestsRoot mismatch")
+      let depositReqs = ?parseDepositLogs(vmState.allLogs)
+      var expectedDeposits: seq[Request]
+      for req in blk.requests.get:
+        if req.requestType == DepositRequestType:
+          expectedDeposits.add req
+      if depositReqs != expectedDeposits:
+        return err("EIP-6110 deposit requests mismatch")
   ok()
 
 # ------------------------------------------------------------------------------
@@ -205,7 +213,7 @@ proc processBlock*(
   if vmState.com.consensus == ConsensusType.POW:
     vmState.calculateReward(blk.header, blk.uncles)
 
-  ?vmState.procBlkEpilogue(blk.header, skipValidation, skipReceipts)
+  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts)
 
   ok()
 
