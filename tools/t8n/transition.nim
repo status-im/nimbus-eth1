@@ -348,8 +348,9 @@ proc exec(ctx: var TransContext,
     result.result.requestsRoot = Opt.some(calcRequestsRoot(reqs))
     var deposits: seq[DepositRequest]
     for req in reqs:
-      if req.requestType == DepositRequestType:
-        deposits.add req.deposit
+      # all requests produced by parseDepositLogs
+      # should be DepositRequest
+      deposits.add req.deposit
     result.result.depositRequests = Opt.some(deposits)
 
 template wrapException(body: untyped) =
