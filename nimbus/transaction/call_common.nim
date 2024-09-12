@@ -300,6 +300,8 @@ proc finishRunningComputation(
   elif T is string:
     if c.isError:
       result = c.error.info
+  elif T is Blob:
+    result = move(c.output)
   else:
     {.error: "Unknown computation output".}
 

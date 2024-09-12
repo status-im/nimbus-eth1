@@ -13,6 +13,8 @@
 import
   std/strformat,
   results,
+  stew/arrayops,
+  stew/endians2,
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,
@@ -159,7 +161,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
 
 proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash256):
                               Result[void, string] =
-  ## processParentBlockHash stores the parent block hash in the 
+  ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
     statedb = vmState.stateDB
@@ -186,7 +188,87 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash256):
 
   statedb.persist(clearEmptyAccount = true)
   ok()
-  
+
+func parseWithdrawalRequest(data: openArray[byte]): WithdrawalRequest =
+  template copyFrom(T: type, input, a, b): auto =
+    T.initCopyFrom(input.toOpenArray(a, b))
+  WithdrawalRequest(
+    sourceAddress: array[20, byte].copyFrom(data, 0, 19),
+    validatorPubkey: array[48, byte].copyFrom(data, 20, 20+47),
+    amount: uint64.fromBytesLE(data.toOpenArray(68, 68+7)),
+  )
+
+proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[Request] =
+  ## processDequeueWithdrawalRequests applies the EIP-7002 system call
+  ## to the withdrawal requests contract.
+  let
+    statedb = vmState.stateDB
+    call = CallParams(
+      vmState  : vmState,
+      sender   : SYSTEM_ADDRESS,
+      gasLimit : 30_000_000.GasInt,
+      gasPrice : 0.GasInt,
+      to       : WITHDRAWAL_REQUEST_ADDRESS,
+
+      # It's a systemCall, no need for other knicks knacks
+      sysCall     : true,
+      noAccessList: true,
+      noIntrinsic : true,
+      noGasCharge : true,
+      noRefund    : true,
+    )
+
+  # runComputation a.k.a syscall/evm.call
+  let res = call.runComputation(Blob)
+  statedb.persist(clearEmptyAccount = true)
+
+  for i in 0..<res.len div 76:
+    let start = i * 76
+    result.add Request(
+      requestType: WithdrawalRequestType,
+      withdrawal: parseWithdrawalRequest(res.toOpenArray(i, i + 75))
+    )
+
+func parseConsolidationRequest(data: openArray[byte]): ConsolidationRequest =
+  template copyFrom(T: type, input, a, b): auto =
+    T.initCopyFrom(input.toOpenArray(a, b))
+  ConsolidationRequest(
+    sourceAddress: array[20, byte].copyFrom(data, 0, 19),
+    sourcePubkey: array[48, byte].copyFrom(data, 20, 20+47),
+    targetPubkey: array[48, byte].copyFrom(data, 68, 68+47),
+  )
+
+proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[Request] =
+  ## processDequeueConsolidationRequests applies the EIP-7251 system call
+  ## to the consolidation requests contract.
+  let
+    statedb = vmState.stateDB
+    call = CallParams(
+      vmState  : vmState,
+      sender   : SYSTEM_ADDRESS,
+      gasLimit : 30_000_000.GasInt,
+      gasPrice : 0.GasInt,
+      to       : CONSOLIDATION_REQUEST_ADDRESS,
+
+      # It's a systemCall, no need for other knicks knacks
+      sysCall     : true,
+      noAccessList: true,
+      noIntrinsic : true,
+      noGasCharge : true,
+      noRefund    : true,
+    )
+
+  # runComputation a.k.a syscall/evm.call
+  let res = call.runComputation(Blob)
+  statedb.persist(clearEmptyAccount = true)
+
+  for i in 0..<res.len div 116:
+    let start = i * 116
+    result.add Request(
+      requestType: ConsolidationRequestType,
+      consolidation: parseConsolidationRequest(res.toOpenArray(i, i + 115))
+    )
+
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate

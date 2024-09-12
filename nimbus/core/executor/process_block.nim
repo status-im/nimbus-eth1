@@ -193,6 +193,23 @@ proc procBlkEpilogue(
           expectedDeposits.add req
       if depositReqs != expectedDeposits:
         return err("EIP-6110 deposit requests mismatch")
+
+      let withdrawalReqs = processDequeueWithdrawalRequests(vmState)
+      var expectedWithdrawals: seq[Request]
+      for req in blk.requests.get:
+        if req.requestType == WithdrawalRequestType:
+          expectedWithdrawals.add req
+      if withdrawalReqs != expectedWithdrawals:
+        return err("EIP-7002 withdrawal requests mismatch")
+
+      let consolidationReqs = processDequeueConsolidationRequests(vmState)
+      var expectedConsolidations: seq[Request]
+      for req in blk.requests.get:
+        if req.requestType == ConsolidationRequestType:
+          expectedConsolidations.add req
+      if consolidationReqs != expectedConsolidations:
+        return err("EIP-7251 consolidation requests mismatch")
+
   ok()
 
 # ------------------------------------------------------------------------------
