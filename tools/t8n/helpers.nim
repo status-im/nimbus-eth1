@@ -412,6 +412,20 @@ proc `@@`(x: DepositRequest): JsonNode =
     "index": @@(x.index),
   }
 
+proc `@@`(x: WithdrawalRequest): JsonNode =
+  %{
+    "sourceAddress": @@(x.sourceAddress),
+    "validatorPubkey": @@(x.validatorPubkey),
+    "amount": @@(x.amount),
+  }
+
+proc `@@`(x: ConsolidationRequest): JsonNode =
+  %{
+    "sourceAddress": @@(x.sourceAddress),
+    "sourcePubkey": @@(x.sourcePubkey),
+    "targetPubkey": @@(x.targetPubkey),
+  }
+
 proc `@@`[T](x: seq[T]): JsonNode =
   result = newJArray()
   for c in x:
@@ -448,3 +462,7 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["requestsRoot"] = @@(x.requestsRoot)
   if x.depositRequests.isSome:
     result["depositRequests"] = @@(x.depositRequests)
+  if x.withdrawalRequests.isSome:
+    result["withdrawalRequests"] = @@(x.withdrawalRequests)
+  if x.consolidationRequests.isSome:
+    result["consolidationRequests"] = @@(x.consolidationRequests)

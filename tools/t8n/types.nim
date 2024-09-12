@@ -101,6 +101,8 @@ type
     currentExcessBlobGas*: Opt[uint64]
     requestsRoot*: Opt[Hash256]
     depositRequests*: Opt[seq[DepositRequest]]
+    withdrawalRequests*: Opt[seq[WithdrawalRequest]]
+    consolidationRequests*: Opt[seq[ConsolidationRequest]]
 
 const
   ErrorEVM*              = 2.T8NExitCode

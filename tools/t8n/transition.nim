@@ -314,6 +314,15 @@ proc exec(ctx: var TransContext,
   let miner = ctx.env.currentCoinbase
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
 
+  var
+    withdrawalReqs: seq[Request]
+    consolidationReqs: seq[Request]
+
+  if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
+    # Execute EIP-7002 and EIP-7251 before calculating rootHash
+    withdrawalReqs = processDequeueWithdrawalRequests(vmState)
+    consolidationReqs = processDequeueConsolidationRequests(vmState)
+
   let stateDB = vmState.stateDB
   stateDB.postState(result.alloc)
   result.result = ExecutionResult(
@@ -352,6 +361,16 @@ proc exec(ctx: var TransContext,
       # should be DepositRequest
       deposits.add req.deposit
     result.result.depositRequests = Opt.some(deposits)
+
+    var withdrawals: seq[WithdrawalRequest]
+    for req in withdrawalReqs:
+      withdrawals.add req.withdrawal
+    result.result.withdrawalRequests = Opt.some(withdrawals)
+
+    var consolidations: seq[ConsolidationRequest]
+    for req in consolidationReqs:
+      consolidations.add req.consolidation
+    result.result.consolidationRequests = Opt.some(consolidations)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
