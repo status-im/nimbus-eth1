@@ -27,7 +27,7 @@ const
   extraTraceMessages = false
     ## Enabled additional logging noise
 
-  verifyDataStructureOk = true
+  verifyDataStructureOk = false
     ## Debugging mode
 
 # ------------------------------------------------------------------------------
@@ -109,7 +109,8 @@ proc fetchAndCheck(
     let rc = await buddy.headersFetchReversed(ivReq, lhc.parentHash, info)
     if rc.isErr:
       when extraTraceMessages:
-        trace info & ": fetch headers failed", peer=buddy.peer, ivReq
+        trace info & ": fetch headers failed", peer=buddy.peer, ivReq,
+          nRespErrors=buddy.only.nRespErrors
       return false
     rc.value
 
@@ -191,14 +192,19 @@ proc stagedCollect*(
 
     # Fetch and extend chain record
     if not await buddy.fetchAndCheck(ivReq, lhc, info):
-      # Throw away opportunistic data
+      # Throw away opportunistic data (or first time header fetch.) Turn back
+      # unused data.
       if isOpportunistic or nLhcHeaders == 0:
+        if 0 < buddy.only.nRespErrors and buddy.ctrl.stopped:
+          # Make sure that this peer does not immediately reconnect
+          buddy.ctrl.zombie = true
         when extraTraceMessages:
-          trace info & ": completely failed", peer, iv, ivReq, isOpportunistic
+          trace info & ": completely failed", peer, iv, ivReq, isOpportunistic,
+            ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nRespErrors
         ctx.unprocMerge(iv)
         return false
-      # It is deterministic. So safe downloaded data so far. Turn back
-      # unused data.
+      # So it is deterministic and there were some headers downloaded already.
+      # Turn back unused data and proceed with staging.
       when extraTraceMessages:
         trace info & ": partially failed", peer, iv, ivReq,
           unused=BnRange.new(iv.minPt,ivTop), isOpportunistic
@@ -292,52 +298,39 @@ proc stagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
 
 
 proc stagedReorg*(ctx: FlareCtxRef; info: static[string]) =
-  ## Some pool mode intervention.
-
-  if ctx.lhc.staged.len == 0 and
-     ctx.unprocChunks() == 0:
-    # Nothing to do
-    when extraTraceMessages:
-      trace info & ": nothing to do"
-    return
-
+  ## Some pool mode intervention. The effect is that all concurrent peers
+  ## finish up their current work and run this function here (which might
+  ## do nothing.) This stopping should be enough in most cases to re-organise
+  ## when re-starting concurrently, again.
+  ##
+  ## Only when the staged list gets too big it will be cleared to be re-filled
+  ## again. In therory, this might happen on a really slow lead actor
+  ## (downloading deterministically by hashes) and many fast opportunistic
+  ## actors filling the staged queue.
+  ##
   # Update counter
   ctx.pool.nReorg.inc
 
-  # Randomise the invocation order of the next few `runMulti()` calls by
-  # asking an oracle whether to run now or later.
-  #
-  # With a multi peer approach, there might be a slow peer invoked first
-  # that is handling the top range and blocking the rest. That causes the
-  # the staged queue to fill up unnecessarily. Then pool mode is called which
-  # ends up here. Returning to multi peer mode, the same invocation order
-  # might be called as before.
-  ctx.setCoinTosser()
-
-  when extraTraceMessages:
-    trace info & ": coin tosser", nCoins=ctx.pool.tossUp.nCoins,
-      coins=(ctx.pool.tossUp.coins.toHex), nLeft=ctx.pool.tossUp.nLeft
-
-  if stagedQueueLengthHwm < ctx.lhc.staged.len:
+  let nStaged = ctx.lhc.staged.len
+  if stagedQueueLengthHwm < nStaged:
     trace info & ": hwm reached, flushing staged queue",
-      nStaged=ctx.lhc.staged.len, max=stagedQueueLengthLwm
-    # Flush `staged` queue into `unproc` so that it can be fetched anew
-    block:
-      let walk = LinkedHChainQueueWalk.init(ctx.lhc.staged)
-      defer: walk.destroy()
-      var rc = walk.first
-      while rc.isOk:
-        let (key, nHeaders) = (rc.value.key, rc.value.data.revHdrs.len.uint)
-        ctx.unprocMerge(key - nHeaders + 1, key)
-        rc = walk.next
-    # Reset `staged` queue
-    ctx.lhc.staged.clear()
+      nStaged, max=stagedQueueLengthLwm
+
+    # Remove the leading `1 + nStaged - stagedQueueLengthLwm` entries from list
+    # so that the upper `stagedQueueLengthLwm-1` entries remain.
+    for _ in 0 .. nStaged - stagedQueueLengthLwm:
+      let
+        qItem = ctx.lhc.staged.ge(BlockNumber 0).expect "valid record"
+        key = qItem.key
+        nHeaders = qItem.data.revHdrs.len.uint
+      ctx.unprocMerge(key - nHeaders + 1, key)
+      discard ctx.lhc.staged.delete key
 
   when verifyDataStructureOk:
     ctx.verifyStagedQueue(info, multiMode = false)
 
   when extraTraceMessages:
-    trace info & ": reorg done"
+    trace info & ": reorg done", nStaged=ctx.lhc.staged.len
 
 
 proc stagedTop*(ctx: FlareCtxRef): BlockNumber =

@@ -25,7 +25,7 @@ logScope:
   topics = "flare db"
 
 const
-  extraTraceMessages = false or true
+  extraTraceMessages = false
     ## Enabled additional logging noise
 
   LhcStateKey = 1.flareStateKey

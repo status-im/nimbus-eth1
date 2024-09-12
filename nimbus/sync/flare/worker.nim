@@ -93,7 +93,9 @@ proc start*(buddy: FlareBuddyRef): bool =
 
 proc stop*(buddy: FlareBuddyRef) =
   ## Clean up this peer
-  debug "RUNSTOP", peer=buddy.peer
+  when extraTraceMessages:
+    debug "RUNSTOP", peer=buddy.peer, nInvocations=buddy.only.nMultiLoop,
+      lastIdleGap=buddy.only.multiRunIdle.toStr(2)
   buddy.stopBuddy()
 
 # ------------------------------------------------------------------------------
@@ -179,28 +181,67 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
       ctx = buddy.ctx
       peer = buddy.peer
 
-    if await buddy.napUnlessHeadersToFetch info:
-      return
+    if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
+      buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
+    buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-    if not ctx.flipCoin():
-      # Come back next time
-      when extraTraceMessages:
-        debug info & ": running later", peer
-      return
+    when extraTraceMessages:
+      trace info, peer, nInvocations=buddy.only.nMultiLoop,
+        lastIdleGap=buddy.only.multiRunIdle.toStr(2)
 
-    # * get unprocessed range from pool
-    # * fetch headers for this range (as much as one can get)
-    # * verify that a block is sound, i.e. contiguous, chained by parent hashes
-    # * return remaining range to unprocessed range in the pool
-    # * store this range on the staged queue on the pool
-    if await buddy.stagedCollect info:
-      # * increase the top/right interval of the trused range `[L,F]`
-      # * save updated state and headers
-      discard buddy.ctx.stagedProcess info
+    if not await buddy.napUnlessHeadersToFetch info:
+      #
+      # Layout of a triple of linked header chains
+      # ::
+      #   G                B                     L                F
+      #   | <--- [G,B] --> | <----- (B,L) -----> | <-- [L,F] ---> |
+      #   o----------------o---------------------o----------------o--->
+      #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
+      #
+      # This function is run concurrently for fetching the next batch of
+      # headers and stashing them on the database. Each concurrently running
+      # actor works as follows:
+      #
+      # * Get a range of block numbers from the `unprocessed` range `(B,L)`.
+      # * Fetch headers for this range (as much as one can get).
+      # * Stash then on the database.
+      # * Rinse and repeat.
+      #
+      # The block numbers range concurrently taken from `(B,L)` are chosen
+      # from the upper range. So exactly one of the actors has a range
+      # `[whatever,L-1]` adjacent to `[L,F]`. Call this actor the lead actor.
+      #
+      # For the lead actor, headers can be downloaded all by the hashes as
+      # the parent hash for the header with block number `L` is known. All
+      # other non-lead actors will download headers by the block number only
+      # and stage it to be re-ordered and stashed on the database when ready.
+      #
+      # Once the lead actor stashes the dowloaded headers, the other staged
+      # headers will also be stashed on the database until there is a gap or
+      # the stashed haeders are exhausted.
+      #
+      # Due to the nature of the `async` logic, the current lead actor will
+      # stay lead when fetching the next range of block numbers.
+      #
+      while buddy.headersToFetchOk():
 
-    else:
-      when extraTraceMessages:
-        debug info & ": nothing fetched, done", peer
+        # * Get unprocessed range from pool
+        # * Fetch headers for this range (as much as one can get)
+        # * Verify that a block is contiguous, chained by parent hash, etc.
+        # * Stash this range on the staged queue on the pool
+        if await buddy.stagedCollect info:
+
+          # * Save updated state and headers
+          # * Decrease the left boundary `L` of the trusted range `[L,F]`
+          discard buddy.ctx.stagedProcess info
+
+        # Note that it is important **not** to leave this function to be
+        # re-invoked by the scheduler unless necessary. While the time gap
+        # until restarting is typically a few millisecs, there are always
+        # outliers which well exceed several seconds. This seems to let
+        # remote peers run into timeouts.
+
+    buddy.only.stoppedMultiRun = Moment.now()     # statistics/debugging
 
 # ------------------------------------------------------------------------------
 # End

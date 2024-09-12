@@ -17,7 +17,7 @@ const
   enableTicker* = true
     ## Log regular status updates similar to metrics. Great for debugging.
 
-  runOnSinglePeerOnly* = true
+  runOnSinglePeerOnly* = false
     ## Run on a single peer only at a time. Great for debugging.
 
   # ----------------------
@@ -63,5 +63,6 @@ const
 static:
   doAssert 0 < nFetchHeadersRequest
   doAssert nFetchHeadersRequest <= nFetchHeadersBatch
+  doAssert stagedQueueLengthLwm < stagedQueueLengthHwm
 
 # End

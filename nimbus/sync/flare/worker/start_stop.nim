@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  pkg/bearssl/rand,
   pkg/chronicles,
   pkg/eth/[common, p2p],
   ../../protocol,
@@ -24,7 +23,7 @@ when enableTicker:
 logScope:
   topics = "flare start/stop"
 
-const extraTraceMessages = false or true
+const extraTraceMessages = false
   ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
@@ -106,32 +105,6 @@ proc stopBuddy*(buddy: FlareBuddyRef) =
   buddy.ctx.pool.nBuddies.dec # for metrics
   when enableTicker:
     buddy.ctx.pool.ticker.stopBuddy()
-
-# ---------
-
-proc flipCoin*(ctx: FlareCtxRef): bool =
-  ## This function is intended to randomise recurrent buddy processes. Each
-  ## participant fetches a vote via `getVote()` and continues on a positive
-  ## vote only. The scheduler will then re-queue the participant.
-  ##
-  if ctx.pool.tossUp.nCoins == 0:
-    result = true
-  else:
-    if ctx.pool.tossUp.nLeft == 0:
-      ctx.pool.rng[].generate(ctx.pool.tossUp.coins)
-      ctx.pool.tossUp.nLeft = 8 * sizeof(ctx.pool.tossUp.coins)
-    ctx.pool.tossUp.nCoins.dec
-    ctx.pool.tossUp.nLeft.dec
-    result = bool(ctx.pool.tossUp.coins and 1)
-    ctx.pool.tossUp.coins = ctx.pool.tossUp.coins shr 1
-
-proc setCoinTosser*(ctx: FlareCtxRef; nCoins = 8u) =
-  ## Create a new sequence of `nCoins` oracles.
-  ctx.pool.tossUp.nCoins = nCoins
-
-proc resCoinTosser*(ctx: FlareCtxRef) =
-  ## Set up all oracles to be `true`
-  ctx.pool.tossUp.nCoins = 0
 
 # ------------------------------------------------------------------------------
 # End

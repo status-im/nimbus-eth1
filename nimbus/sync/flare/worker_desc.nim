@@ -92,19 +92,15 @@ type
     #fetchBlocks*: BnRange
     nRespErrors*: int                ## Number of errors/slow responses in a row
 
-  FlareTossUp* = object
-    ## Reminiscent of CSMA/CD. For the next number `nCoins` in a row, each
-    ## participant can fetch a `true`/`false` value to decide whether to
-    ## start doing something or delay.
-    nCoins*: uint                    ## Numner of coins to toss in a row
-    nLeft*: uint                     ## Number of flopped coins left
-    coins*: uint64                   ## Sequence of fliopped coins
+    # Debugging and logging.
+    nMultiLoop*: int                 ## Number of runs
+    stoppedMultiRun*: chronos.Moment ## Time when run-multi stopped
+    multiRunIdle*: chronos.Duration  ## Idle time between runs
 
   FlareCtxData* = object
     ## Globally shared data extension
-    rng*: ref HmacDrbgContext        ## Random generator, pre-initialised
+    rng*: ref HmacDrbgContext        ## Random generator, FIXME: maybe obsolete
     lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
-    tossUp*: FlareTossUp             ## Reminiscent of CSMA/CD
     nextUpdate*: Moment              ## For updating metrics
 
     # Info stuff, no functional contribution
@@ -146,6 +142,32 @@ proc `$`*(w: BnRange): string =
 
 proc bnStr*(w: BlockNumber): string =
   "#" & $w
+
+# Source: `nimbus_import.shortLog()`
+func toStr*(a: chronos.Duration, parts: int): string =
+  ## Returns string representation of Duration ``a`` as nanoseconds value.
+  if a == nanoseconds(0):
+    return "0"
+  var
+    res = ""
+    v = a.nanoseconds()
+    parts = parts
+
+  template f(n: string, T: Duration) =
+    if v >= T.nanoseconds():
+      res.add($(uint64(v div T.nanoseconds())))
+      res.add(n)
+      v = v mod T.nanoseconds()
+      dec parts
+      if v == 0 or parts <= 0:
+        return res
+
+  f("s", Second)
+  f("ms", Millisecond)
+  f("us", Microsecond)
+  f("ns", Nanosecond)
+
+  res
 
 # ------------------------------------------------------------------------------
 # End

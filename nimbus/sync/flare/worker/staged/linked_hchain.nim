@@ -17,10 +17,10 @@ import
   ../../worker_desc
 
 const
-  extraTraceMessages = false # or true
+  extraTraceMessages = false
     ## Enabled additional logging noise
 
-  verifyDataStructureOk = false # or true
+  verifyDataStructureOk = false
     ## Debugging mode
 
 when extraTraceMessages:

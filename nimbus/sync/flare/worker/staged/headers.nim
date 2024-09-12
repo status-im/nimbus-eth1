@@ -28,35 +28,11 @@ const extraTraceMessages = true
 # Private functions
 # ------------------------------------------------------------------------------
 
-# Copied from `nimbus_import`
-func shortLog(a: chronos.Duration, parts = int.high): string =
-  ## Returns string representation of Duration ``a`` as nanoseconds value.
-  var
-    res = ""
-    v = a.nanoseconds()
-    parts = parts
-
-  template f(n: string, T: Duration) =
-    if v >= T.nanoseconds():
-      res.add($(uint64(v div T.nanoseconds())))
-      res.add(n)
-      v = v mod T.nanoseconds()
-      dec parts
-      if v == 0 or parts <= 0:
-        return res
-
-  f("s", Second)
-  f("ms", Millisecond)
-  f("us", Microsecond)
-  f("ns", Nanosecond)
-
-  res
-
 # For some reason neither `formatIt` nor `$` works as expected with logging
 # the `elapsed` variable, below. This might be due to the fact that the
 # `headersFetchReversed()` function is a generic one, i.e. a template.
 func toStr(a: chronos.Duration): string =
-  a.shortLog(2)
+  a.toStr(2)
 
 proc registerError(buddy: FlareBuddyRef) =
   buddy.only.nRespErrors.inc
