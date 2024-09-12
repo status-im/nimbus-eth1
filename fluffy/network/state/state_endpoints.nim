@@ -217,10 +217,7 @@ type Proofs* = ref object
   storageProofs*: seq[TrieProof]
 
 proc getProofsByStateRoot*(
-    n: StateNetwork,
-    stateRoot: KeccakHash,
-    address: EthAddress,
-    slotKeys: openArray[UInt256],
+    n: StateNetwork, stateRoot: KeccakHash, address: EthAddress, slotKeys: seq[UInt256]
 ): Future[Opt[Proofs]] {.async: (raises: [CancelledError]).} =
   let
     (accountProof, accountExists) = (await n.getAccountProof(stateRoot, address)).valueOr:
@@ -233,31 +230,33 @@ proc getProofsByStateRoot*(
           return Opt.none(Proofs)
       else:
         newAccount()
+    storageExists = account.storageRoot != EMPTY_ROOT_HASH
 
   var
     storageSlots = newSeqOfCap[(UInt256, UInt256)](slotKeys.len)
     storageProofs = newSeqOfCap[TrieProof](slotKeys.len)
 
   for slotKey in slotKeys:
-    if account.storageRoot == EMPTY_ROOT_HASH:
+    if not storageExists:
       storageSlots.add((slotKey, 0.u256))
-      storageProofs.add(@[])
-    else:
-      let
-        (storageProof, slotExists) = (
-          await n.getStorageProof(account.storageRoot, address, slotKey)
-        ).valueOr:
-          warn "Failed to get storage proof", error = error
-          return Opt.none(Proofs)
-        slotValue =
-          if slotExists:
-            storageProof.toSlot().valueOr:
-              error "Failed to get slot from storageProof"
-              return Opt.none(Proofs)
-          else:
-            0.u256
-      storageSlots.add((slotKey, slotValue))
-      storageProofs.add(storageProof)
+      storageProofs.add(TrieProof.empty())
+      continue
+
+    let
+      (storageProof, slotExists) = (
+        await n.getStorageProof(account.storageRoot, address, slotKey)
+      ).valueOr:
+        warn "Failed to get storage proof", error = error
+        return Opt.none(Proofs)
+      slotValue =
+        if slotExists:
+          storageProof.toSlot().valueOr:
+            error "Failed to get slot from storageProof"
+            return Opt.none(Proofs)
+        else:
+          0.u256
+    storageSlots.add((slotKey, slotValue))
+    storageProofs.add(storageProof)
 
   return Opt.some(
     Proofs(
@@ -310,10 +309,7 @@ proc getCode*(
 
 # Used by: eth_getProof
 proc getProofs*(
-    n: StateNetwork,
-    blockHash: BlockHash,
-    address: EthAddress,
-    slotKeys: openArray[UInt256],
+    n: StateNetwork, blockHash: BlockHash, address: EthAddress, slotKeys: seq[UInt256]
 ): Future[Opt[Proofs]] {.async: (raises: [CancelledError]).} =
   let stateRoot = (await n.getStateRootByBlockHash(blockHash)).valueOr:
     warn "Failed to get state root by block hash"

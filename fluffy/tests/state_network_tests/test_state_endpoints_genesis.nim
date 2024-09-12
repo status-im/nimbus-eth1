@@ -197,3 +197,102 @@ suite "State Endpoints - Genesis JSON Files":
           nonceRes.get() == 0.uint64
           codeRes.get().asSeq().len() == 0
           slotRes.get() == 0.u256
+
+    await stateNode.stop()
+
+  asyncTest "Test getProofs using JSON files":
+    let
+      rng = newRng()
+      stateNode = newStateNode(rng, STATE_NODE1_PORT)
+
+    for file in genesisFiles:
+      let
+        accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
+        (accountState, storageStates) = accounts.toState()
+        blockHash = keccakHash("blockHash") # use a dummy block hash
+
+      # mock the block hash because we don't have history network running
+      stateNode.mockBlockHashToStateRoot(blockHash, accountState.rootHash())
+
+      for address, account in accounts:
+        stateNode.setupAccountInDb(accountState, address)
+
+        if account.code.len() > 0:
+          stateNode.setupCodeInDb(address, account.code)
+
+          let storageState = storageStates.getOrDefault(address)
+
+          # existing account, no slots
+          let
+            slotKeys = newSeq[UInt256]()
+            proofs = (
+              await stateNode.stateNetwork.getProofs(blockHash, address, slotKeys)
+            ).valueOr:
+              raiseAssert("Failed to get proofs")
+          check:
+            proofs.account.balance == account.balance
+            proofs.account.nonce == account.nonce
+            proofs.account.storageRoot == storageState.rootHash()
+            proofs.account.codeHash == keccakHash(account.code)
+            proofs.accountProof.len() > 0
+            proofs.accountProof == accountState.generateAccountProof(address)
+            proofs.storageProofs.len() == 0
+
+          for slotKey, slotValue in account.storage:
+            stateNode.setupSlotInDb(accountState, storageState, address, slotKey)
+
+            # existing account, with slot
+            let
+              slotKeys = @[slotKey]
+              proofs = (
+                await stateNode.stateNetwork.getProofs(blockHash, address, slotKeys)
+              ).valueOr:
+                raiseAssert("Failed to get proofs")
+            check:
+              proofs.account.balance == account.balance
+              proofs.account.nonce == account.nonce
+              proofs.account.storageRoot == storageState.rootHash()
+              proofs.account.codeHash == keccakHash(account.code)
+              proofs.accountProof.len() > 0
+              proofs.accountProof == accountState.generateAccountProof(address)
+              proofs.storageProofs.len() == 1
+              proofs.storageProofs[0].len() > 0
+              proofs.storageProofs[0] == storageState.generateStorageProof(slotKey)
+        else:
+          # account exists but code and slot doesn't exist
+          let
+            slotKeys = @[2.u256]
+            proofs = (
+              await stateNode.stateNetwork.getProofs(blockHash, address, slotKeys)
+            ).valueOr:
+              raiseAssert("Failed to get proofs")
+          check:
+            proofs.account.balance == account.balance
+            proofs.account.nonce == account.nonce
+            proofs.account.storageRoot == EMPTY_ROOT_HASH
+            proofs.account.codeHash == EMPTY_CODE_HASH
+            proofs.accountProof.len() > 0
+            proofs.accountProof == accountState.generateAccountProof(address)
+            proofs.storageProofs.len() == 1
+            proofs.storageProofs[0].len() == 0
+
+      # account doesn't exist
+      block:
+        let
+          badAddress = EthAddress.fromHex("0xBAD0000000000000000000000000000000000000")
+          slotKeys = @[0.u256, 1.u256]
+          proofs = (
+            await stateNode.stateNetwork.getProofs(blockHash, badAddress, slotKeys)
+          ).valueOr:
+            raiseAssert("Failed to get proofs")
+        check:
+          proofs.account == newAccount()
+          proofs.accountProof.len() > 0
+          proofs.accountProof == accountState.generateAccountProof(badAddress)
+          proofs.storageSlots.len() == 2
+          proofs.storageSlots == @[(0.u256, 0.u256), (1.u256, 0.u256)]
+          proofs.storageProofs.len() == 2
+          proofs.storageProofs[0].len() == 0
+          proofs.storageProofs[1].len() == 0
+
+    await stateNode.stop()
