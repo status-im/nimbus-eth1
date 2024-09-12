@@ -39,6 +39,6 @@ cliBuilder:
           #./test_merge,                           -- fails
           ./test_eip4844,
           ./test_beacon/test_skeleton,
-          #./test_getproof_json,                   -- fails
+          ./test_getproof_json,
           ./test_aristo,
           ./test_coredb

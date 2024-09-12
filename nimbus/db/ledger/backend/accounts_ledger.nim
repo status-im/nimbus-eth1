@@ -858,6 +858,38 @@ proc getEthAccount*(ac: AccountsLedgerRef, address: EthAddress): Account =
     raiseAssert "getAccount(): cannot convert account: " & $$rc.error
   rc.value
 
+proc getAccountProof*(ac: AccountsLedgerRef, address: EthAddress): seq[seq[byte]] =
+  let accProof = ac.ledger.proof(address.toAccountKey).valueOr:
+    raiseAssert "Failed to get account proof: " & $$error
+
+  accProof[0]
+
+proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
+  var storageProof = newSeqOfCap[seq[seq[byte]]](slots.len)
+
+  let
+    addressHash = address.toAccountKey
+    accountExists = ac.ledger.hasPath(addressHash).valueOr:
+      raiseAssert "Call to hasPath failed: " & $$error
+
+  for slot in slots:
+    if not accountExists:
+      storageProof.add(@[])
+      continue
+
+    let
+      slotKey = ac.slots.lruFetch(slot).valueOr:
+        slot.toBytesBE.keccakHash
+      slotProof = ac.ledger.slotProof(addressHash, slotKey).valueOr:
+        if error.aErr == FetchPathNotFound:
+          storageProof.add(@[])
+          continue
+        else:
+          raiseAssert "Failed to get slot proof: " & $$error
+    storageProof.add(slotProof[0])
+
+  storageProof
+
 proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
@@ -875,3 +907,5 @@ func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress, slot: UInt256): bool {.borrow.}
 func getTransientStorage*(ac: ReadOnlyStateDB,
                           address: EthAddress, slot: UInt256): UInt256 {.borrow.}
+func getAccountProof*(db: ReadOnlyStateDB, eAddr: EthAddress): seq[seq[byte]] {.borrow.}
+func getStorageProof*(db: ReadOnlyStateDB, eAddr: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] {.borrow.}

@@ -296,6 +296,12 @@ proc getEthAccount*(ldg: LedgerRef, eAddr: EthAddress): Account =
   result = ldg.ac.getEthAccount(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
+proc getAccountProof*(ldg: LedgerRef, eAddr: EthAddress): seq[seq[byte]] =
+  result = ldg.ac.getAccountProof(eAddr)
+
+proc getStorageProof*(ldg: LedgerRef, eAddr: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
+  result = ldg.ac.getStorageProof(eAddr, slots)
+
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
@@ -316,6 +322,8 @@ proc getCommittedStorage*(db: ReadOnlyStateDB, eAddr: EthAddress, slot: UInt256)
 func inAccessList*(db: ReadOnlyStateDB, eAddr: EthAddress): bool {.borrow.}
 func inAccessList*(db: ReadOnlyStateDB, eAddr: EthAddress, slot: UInt256): bool {.borrow.}
 func getTransientStorage*(db: ReadOnlyStateDB, eAddr: EthAddress, slot: UInt256): UInt256 {.borrow.}
+func getAccountProof*(db: ReadOnlyStateDB, eAddr: EthAddress): seq[seq[byte]] {.borrow.}
+func getStorageProof*(db: ReadOnlyStateDB, eAddr: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] {.borrow.}
 
 # ------------------------------------------------------------------------------
 # End
