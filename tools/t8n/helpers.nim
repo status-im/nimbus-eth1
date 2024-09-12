@@ -375,7 +375,7 @@ proc `@@`(x: BloomFilter): JsonNode =
   %("0x" & toHex[256](x))
 
 proc `@@`(x: Log): JsonNode =
-  result = %{
+  %{
     "address": @@(x.address),
     "topics" : @@(x.topics),
     "data"   : @@(x.data)
@@ -398,13 +398,13 @@ proc `@@`(x: TxReceipt): JsonNode =
     result["type"] = %("0x" & toHex(x.txType.int, 1))
 
 proc `@@`(x: RejectedTx): JsonNode =
-  result = %{
+  %{
     "index": %(x.index),
     "error": %(x.error)
   }
 
 proc `@@`(x: DepositRequest): JsonNode =
-  result = %{
+  %{
     "pubkey": @@(x.pubkey),
     "withdrawalCredentials": @@(x.withdrawalCredentials),
     "amount": @@(x.amount),
