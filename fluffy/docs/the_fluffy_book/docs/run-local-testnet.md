@@ -8,7 +8,7 @@ on them through the JSON-RPC API.
 ## Run the local testnet script
 
 ```bash
-# Run the script, default start 64 nodes
+# Run the script, default start 3 nodes
 ./fluffy/scripts/launch_local_testnet.sh
 # Run the script with 16 nodes
 ./fluffy/scripts/launch_local_testnet.sh -n 16

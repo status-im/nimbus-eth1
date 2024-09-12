@@ -308,7 +308,7 @@ proc runBackfillGossipBlockOffersLoop(
         break
 
     if retryGossip:
-      await sleepAsync(1.seconds)
+      await sleepAsync(3.seconds)
       warn "Retrying state gossip for block number: ",
         blockNumber = blockOffers.blockNumber, workerId
       continue
@@ -330,7 +330,7 @@ proc runBackfillGossipBlockOffersLoop(
           break
 
       if retryGossip:
-        await sleepAsync(1.seconds)
+        await sleepAsync(3.seconds)
         warn "Retrying state gossip for block number: ",
           blockNumber = blockOffers.blockNumber
         continue
@@ -347,7 +347,7 @@ proc runBackfillMetricsLoop(
   info "Starting state backfill metrics loop"
 
   while true:
-    await sleepAsync(10.seconds)
+    await sleepAsync(30.seconds)
     info "Block data queue metrics: ",
       nextBlockNumber = blockDataQueue[0].blockNumber,
       blockDataQueueLen = blockDataQueue.len()

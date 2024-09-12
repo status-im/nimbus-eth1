@@ -308,7 +308,7 @@ jobs:
 
       - name: Run fluffy testnet
         run: |
-          ./fluffy/scripts/launch_local_testnet.sh --run-tests
+          ./fluffy/scripts/launch_local_testnet.sh --nodes=64 --run-tests
 
   lint:
     name: "Lint Fluffy"
