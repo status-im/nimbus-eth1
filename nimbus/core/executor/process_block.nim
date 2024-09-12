@@ -17,6 +17,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../dao,
+  ../eip6110,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
@@ -32,9 +33,11 @@ proc processTransactions*(
     header: BlockHeader,
     transactions: seq[Transaction],
     skipReceipts = false,
+    collectLogs = false
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
+  vmState.allLogs = @[]
 
   for txIndex, tx in transactions:
     var sender: EthAddress
@@ -46,9 +49,14 @@ proc processTransactions*(
     if skipReceipts:
       # TODO don't generate logs at all if we're not going to put them in
       #      receipts
-      discard vmState.getAndClearLogEntries()
+      if collectLogs:
+        vmState.allLogs.add vmState.getAndClearLogEntries()
+      else:
+        discard vmState.getAndClearLogEntries()
     else:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+      if collectLogs:
+        vmState.allLogs.add vmState.receipts[txIndex].logs
   ok()
 
 proc procBlkPreamble(
@@ -67,7 +75,13 @@ proc procBlkPreamble(
       return err("Mismatched txRoot")
 
   if com.isPragueOrLater(header.timestamp):
+    if header.requestsRoot.isNone or blk.requests.isNone:
+      return err("Post-Prague block header must have requestsRoot/requests")
+
     ?vmState.processParentBlockHash(header.parentHash)
+  else:
+    if header.requestsRoot.isSome or blk.requests.isSome:
+      return err("Pre-Prague block header must not have requestsRoot/requests")
 
   if com.isCancunOrLater(header.timestamp):
     if header.parentBeaconBlockRoot.isNone:
@@ -82,7 +96,8 @@ proc procBlkPreamble(
     if blk.transactions.len == 0:
       return err("Transactions missing from body")
 
-    ?processTransactions(vmState, header, blk.transactions, skipReceipts)
+    let collectLogs = header.requestsRoot.isSome and not skipValidation
+    ?processTransactions(vmState, header, blk.transactions, skipReceipts, collectLogs)
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
 
@@ -121,8 +136,11 @@ proc procBlkPreamble(
   ok()
 
 proc procBlkEpilogue(
-    vmState: BaseVMState, header: BlockHeader, skipValidation: bool, skipReceipts: bool
+    vmState: BaseVMState, blk: EthBlock, skipValidation: bool, skipReceipts: bool
 ): Result[void, string] =
+  template header(): BlockHeader =
+    blk.header
+
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.collectWitnessData:
@@ -160,6 +178,21 @@ proc procBlkEpilogue(
           expected = header.receiptsRoot
         return err("receiptRoot mismatch")
 
+    if header.requestsRoot.isSome:
+      let requestsRoot = calcRequestsRoot(blk.requests.get)
+      if header.requestsRoot.get != requestsRoot:
+        debug "wrong requestsRoot in block",
+          blockNumber = header.number,
+          actual = requestsRoot,
+          expected = header.requestsRoot.get
+        return err("requestsRoot mismatch")
+      let depositReqs = ?parseDepositLogs(vmState.allLogs)
+      var expectedDeposits: seq[Request]
+      for req in blk.requests.get:
+        if req.requestType == DepositRequestType:
+          expectedDeposits.add req
+      if depositReqs != expectedDeposits:
+        return err("EIP-6110 deposit requests mismatch")
   ok()
 
 # ------------------------------------------------------------------------------
@@ -180,7 +213,7 @@ proc processBlock*(
   if vmState.com.consensus == ConsensusType.POW:
     vmState.calculateReward(blk.header, blk.uncles)
 
-  ?vmState.procBlkEpilogue(blk.header, skipValidation, skipReceipts)
+  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts)
 
   ok()
 

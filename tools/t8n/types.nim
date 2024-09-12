@@ -99,6 +99,8 @@ type
     withdrawalsRoot*: Opt[Hash256]
     blobGasUsed*: Opt[uint64]
     currentExcessBlobGas*: Opt[uint64]
+    requestsRoot*: Opt[Hash256]
+    depositRequests*: Opt[seq[DepositRequest]]
 
 const
   ErrorEVM*              = 2.T8NExitCode
