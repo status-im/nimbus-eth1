@@ -67,6 +67,7 @@ type
     cumulativeGasUsed*: GasInt
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
+    allLogs*          : seq[Log] # EIP-6110
 
   Computation* = ref object
     # The execution computation
