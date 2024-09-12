@@ -100,18 +100,15 @@ proc setupEthRpc*(
 
   server.rpc("eth_syncing") do() -> SyncingStatus:
     ## Returns SyncObject or false when not syncing.
-    # TODO: make sure we are not syncing
-    # when we reach the recent block
-    let numPeers = node.peerPool.connectedNodes.len
-    if numPeers > 0:
-      var sync = SyncObject(
+    if com.syncState != Waiting:
+      let sync = SyncObject(
         startingBlock: w3Qty com.syncStart,
         currentBlock : w3Qty com.syncCurrent,
         highestBlock : w3Qty com.syncHighest
       )
-      result = SyncingStatus(syncing: true, syncObject: sync)
+      return SyncingStatus(syncing: true, syncObject: sync)
     else:
-      result = SyncingStatus(syncing: false)
+      return SyncingStatus(syncing: false)
 
   server.rpc("eth_coinbase") do() -> Web3Address:
     ## Returns the current coinbase address.
