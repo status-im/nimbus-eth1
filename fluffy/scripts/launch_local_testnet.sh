@@ -34,10 +34,10 @@ if [ ${PIPESTATUS[0]} != 4 ]; then
 fi
 
 OPTS="h:n:d"
-LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes"
+LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes,skip-build,portal-subnetworks:,disable-state-root-validation"
 
 # default values
-NUM_NODES="64"
+NUM_NODES="3"
 DATA_DIR="local_testnet_data"
 RUN_TESTS="0"
 LOG_LEVEL="INFO"
@@ -52,26 +52,32 @@ PORTAL_BRIDGE="0"
 TRUSTED_BLOCK_ROOT=""
 # REST_URL="http://127.0.0.1:5052"
 REST_URL="http://testing.mainnet.beacon-api.nimbus.team"
+SKIP_BUILD="0"
+PORTAL_SUBNETWORKS="beacon,history,state"
+DISABLE_STATE_ROOT_VALIDATION="0"
 
 print_help() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS] -- [FLUFFY OPTIONS]
 E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
 
-  -h, --help                  this help message
-  -n, --nodes                 number of nodes to launch (default: ${NUM_NODES})
-  -d, --data-dir              directory where all the node data and logs will end up
-                              (default: "${DATA_DIR}")
-  --base-port                 bootstrap node's discv5 port (default: ${BASE_PORT})
-  --base-rpc-port             bootstrap node's RPC port (default: ${BASE_RPC_PORT})
-  --base-metrics-port         bootstrap node's metrics server port (default: ${BASE_METRICS_PORT})
-  --portal-bridge             run a portal bridge attached to the bootstrap node
-  --trusted-block-root        recent trusted finalized block root to initialize the consensus light client from
-  --run-tests                 when enabled run tests else use "htop" to see the fluffy processes without doing any tests
-  --log-level                 set the log level (default: ${LOG_LEVEL})
-  --reuse-existing-data-dir   instead of deleting and recreating the data dir, keep it and reuse everything we can from it
-  --timeout                   timeout in seconds (default: ${TIMEOUT_DURATION} - no timeout)
-  --kill-old-processes        if any process is found listening on a port we use, kill it (default: disabled)
+  -h, --help                        this help message
+  -n, --nodes                       number of nodes to launch. Minimum 3 nodes (default: ${NUM_NODES})
+  -d, --data-dir                    directory where all the node data and logs will end up
+                                    (default: "${DATA_DIR}")
+  --base-port                       bootstrap node's discv5 port (default: ${BASE_PORT})
+  --base-rpc-port                   bootstrap node's RPC port (default: ${BASE_RPC_PORT})
+  --base-metrics-port               bootstrap node's metrics server port (default: ${BASE_METRICS_PORT})
+  --portal-bridge                   run a portal bridge attached to the bootstrap node
+  --trusted-block-root              recent trusted finalized block root to initialize the consensus light client from
+  --run-tests                       when enabled run tests else use "htop" to see the fluffy processes without doing any tests
+  --log-level                       set the log level (default: ${LOG_LEVEL})
+  --reuse-existing-data-dir         instead of deleting and recreating the data dir, keep it and reuse everything we can from it
+  --timeout                         timeout in seconds (default: ${TIMEOUT_DURATION} - no timeout)
+  --kill-old-processes              if any process is found listening on a port we use, kill it (default: disabled)
+  --skip-build                      skip building the binaries (default: disabled)
+  --portal-subnetworks              comma separated list of subnetworks to enable (default: ${PORTAL_SUBNETWORKS})
+  --disable-state-root-validation   disable state root validation for the state subnetwork (default: disabled)
 EOF
 }
 
@@ -137,6 +143,18 @@ while true; do
       KILL_OLD_PROCESSES="1"
       shift
       ;;
+    --skip-build)
+      SKIP_BUILD="1"
+      shift
+      ;;
+    --portal-subnetworks)
+      PORTAL_SUBNETWORKS="$2"
+      shift 2
+      ;;
+    --disable-state-root-validation)
+      DISABLE_STATE_ROOT_VALIDATION="1"
+      shift
+      ;;
     --)
       shift
       break
@@ -152,6 +170,11 @@ done
 EXTRA_ARGS="$@"
 if [[ $# != 0 ]]; then
   shift $#
+fi
+
+if [[ $((NUM_NODES)) < 3 ]]; then
+  echo "--nodes is less than minimum of 3. Must have at least 3 nodes in order for the network to be stable."
+  exit 1
 fi
 
 if [[ "$REUSE_EXISTING_DATA_DIR" == "0" ]]; then
@@ -195,16 +218,21 @@ if [[ "${HAVE_LSOF}" == "1" ]]; then
   done
 fi
 
-# Build the binaries
 BINARIES="fluffy"
 if [[ "${PORTAL_BRIDGE}" == "1" ]]; then
   BINARIES="${BINARIES} portal_bridge"
 fi
-$MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES}
 
-if [[ "$RUN_TESTS" == "1" ]]; then
-  TEST_BINARIES="test_portal_testnet"
-  $MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES}
+if [[ "${SKIP_BUILD}" == "1" ]]; then
+  echo "Skipped build. Using existing binaries if they exist."
+else
+  # Build the binaries
+  $MAKE -j ${NPROC} LOG_LEVEL=TRACE ${BINARIES}
+
+  if [[ "$RUN_TESTS" == "1" ]]; then
+    TEST_BINARIES="test_portal_testnet"
+    $MAKE -j ${NPROC} LOG_LEVEL=INFO ${TEST_BINARIES}
+  fi
 fi
 
 # Kill child processes on Ctrl-C/SIGTERM/exit, passing the PID of this shell
@@ -217,13 +245,6 @@ cleanup() {
   sleep 2
   for BINARY in ${BINARIES}; do
     pkill -f -9 -P $$ ${BINARY} &>/dev/null || true
-  done
-
-  # Delete the binaries we just built, because these are with none default logs.
-  # TODO: When fluffy gets run time log options a la nimbus-eth2 we can keep
-  # the binaries around.
-  for BINARY in ${BINARIES}; do
-    rm build/${BINARY}
   done
 }
 trap 'cleanup' SIGINT SIGTERM EXIT
@@ -315,7 +336,8 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --table-ip-limit=1024 \
     --bucket-ip-limit=24 \
     --bits-per-hop=1 \
-    --portal-subnetworks:beacon,history,state \
+    --portal-subnetworks="${PORTAL_SUBNETWORKS}" \
+    --disable-state-root-validation="${DISABLE_STATE_ROOT_VALIDATION}" \
     ${TRUSTED_BLOCK_ROOT_ARG} \
     ${RADIUS_ARG} \
     ${EXTRA_ARGS} \
