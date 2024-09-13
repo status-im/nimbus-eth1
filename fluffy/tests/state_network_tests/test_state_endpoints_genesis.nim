@@ -132,19 +132,19 @@ suite "State Endpoints - Genesis JSON Files":
       let
         accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
         (accountState, storageStates) = accounts.toState()
-        blockHash = keccakHash("blockHash") # use a dummy block hash
+        blockNumber = 123.uint64 # use a dummy block number
 
       # mock the block hash because we don't have history network running
-      stateNode.mockBlockHashToStateRoot(blockHash, accountState.rootHash())
+      stateNode.mockStateRootLookup(blockNumber, accountState.rootHash())
 
       for address, account in accounts:
         stateNode.setupAccountInDb(accountState, address)
 
         # get balance and nonce of existing account
         let
-          balanceRes = await stateNode.stateNetwork.getBalance(blockHash, address)
+          balanceRes = await stateNode.stateNetwork.getBalance(blockNumber, address)
           nonceRes =
-            await stateNode.stateNetwork.getTransactionCount(blockHash, address)
+            await stateNode.stateNetwork.getTransactionCount(blockNumber, address)
         check:
           balanceRes.get() == account.balance
           nonceRes.get() == account.nonce
@@ -153,7 +153,7 @@ suite "State Endpoints - Genesis JSON Files":
           stateNode.setupCodeInDb(address, account.code)
 
           # get code of existing account
-          let codeRes = await stateNode.stateNetwork.getCode(blockHash, address)
+          let codeRes = await stateNode.stateNetwork.getCode(blockNumber, address)
           check:
             codeRes.get().asSeq() == account.code
 
@@ -163,17 +163,17 @@ suite "State Endpoints - Genesis JSON Files":
 
             # get storage slots of existing account
             let slotRes =
-              await stateNode.stateNetwork.getStorageAt(blockHash, address, slotKey)
+              await stateNode.stateNetwork.getStorageAt(blockNumber, address, slotKey)
             check:
               slotRes.get() == slotValue
         else:
           # account exists but code and slot doesn't exist
           let
-            codeRes = await stateNode.stateNetwork.getCode(blockHash, address)
+            codeRes = await stateNode.stateNetwork.getCode(blockNumber, address)
             slotRes0 =
-              await stateNode.stateNetwork.getStorageAt(blockHash, address, 0.u256)
+              await stateNode.stateNetwork.getStorageAt(blockNumber, address, 0.u256)
             slotRes1 =
-              await stateNode.stateNetwork.getStorageAt(blockHash, address, 1.u256)
+              await stateNode.stateNetwork.getStorageAt(blockNumber, address, 1.u256)
           check:
             codeRes.get().asSeq().len() == 0
             slotRes0.get() == 0.u256
@@ -185,12 +185,12 @@ suite "State Endpoints - Genesis JSON Files":
           EthAddress.fromHex("0xBAD0000000000000000000000000000000000000")
 
         let
-          balanceRes = await stateNode.stateNetwork.getBalance(blockHash, badAddress)
+          balanceRes = await stateNode.stateNetwork.getBalance(blockNumber, badAddress)
           nonceRes =
-            await stateNode.stateNetwork.getTransactionCount(blockHash, badAddress)
-          codeRes = await stateNode.stateNetwork.getCode(blockHash, badAddress)
+            await stateNode.stateNetwork.getTransactionCount(blockNumber, badAddress)
+          codeRes = await stateNode.stateNetwork.getCode(blockNumber, badAddress)
           slotRes =
-            await stateNode.stateNetwork.getStorageAt(blockHash, badAddress, 0.u256)
+            await stateNode.stateNetwork.getStorageAt(blockNumber, badAddress, 0.u256)
 
         check:
           balanceRes.get() == 0.u256
@@ -209,10 +209,10 @@ suite "State Endpoints - Genesis JSON Files":
       let
         accounts = getGenesisAlloc("fluffy" / "tests" / "custom_genesis" / file)
         (accountState, storageStates) = accounts.toState()
-        blockHash = keccakHash("blockHash") # use a dummy block hash
+        blockNumber = 123.uint64 # use a dummy block number
 
       # mock the block hash because we don't have history network running
-      stateNode.mockBlockHashToStateRoot(blockHash, accountState.rootHash())
+      stateNode.mockStateRootLookup(blockNumber, accountState.rootHash())
 
       for address, account in accounts:
         stateNode.setupAccountInDb(accountState, address)
@@ -226,7 +226,7 @@ suite "State Endpoints - Genesis JSON Files":
           let
             slotKeys = newSeq[UInt256]()
             proofs = (
-              await stateNode.stateNetwork.getProofs(blockHash, address, slotKeys)
+              await stateNode.stateNetwork.getProofs(blockNumber, address, slotKeys)
             ).valueOr:
               raiseAssert("Failed to get proofs")
           check:
@@ -246,7 +246,7 @@ suite "State Endpoints - Genesis JSON Files":
             let
               slotKeys = @[slotKey]
               proofs = (
-                await stateNode.stateNetwork.getProofs(blockHash, address, slotKeys)
+                await stateNode.stateNetwork.getProofs(blockNumber, address, slotKeys)
               ).valueOr:
                 raiseAssert("Failed to get proofs")
             check:
@@ -265,7 +265,7 @@ suite "State Endpoints - Genesis JSON Files":
           let
             slotKeys = @[2.u256]
             proofs = (
-              await stateNode.stateNetwork.getProofs(blockHash, address, slotKeys)
+              await stateNode.stateNetwork.getProofs(blockNumber, address, slotKeys)
             ).valueOr:
               raiseAssert("Failed to get proofs")
           check:
@@ -285,7 +285,7 @@ suite "State Endpoints - Genesis JSON Files":
           badAddress = EthAddress.fromHex("0xBAD0000000000000000000000000000000000000")
           slotKeys = @[0.u256, 1.u256]
           proofs = (
-            await stateNode.stateNetwork.getProofs(blockHash, badAddress, slotKeys)
+            await stateNode.stateNetwork.getProofs(blockNumber, badAddress, slotKeys)
           ).valueOr:
             raiseAssert("Failed to get proofs")
         check:

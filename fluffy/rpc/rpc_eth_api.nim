@@ -364,10 +364,7 @@ proc installEthApiHandlers*(
 
     let
       blockNumber = quantityTag.number.uint64
-      blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-        raise newException(ValueError, "Unable to get block hash")
-
-      balance = (await sn.getBalance(blockHash, data.EthAddress)).valueOr:
+      balance = (await sn.getBalance(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get balance")
 
     return balance
@@ -390,10 +387,7 @@ proc installEthApiHandlers*(
 
     let
       blockNumber = quantityTag.number.uint64
-      blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-        raise newException(ValueError, "Unable to get block hash")
-
-      nonce = (await sn.getTransactionCount(blockHash, data.EthAddress)).valueOr:
+      nonce = (await sn.getTransactionCount(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get transaction count")
     return nonce.Quantity
 
@@ -416,10 +410,7 @@ proc installEthApiHandlers*(
 
     let
       blockNumber = quantityTag.number.uint64
-      blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-        raise newException(ValueError, "Unable to get block hash")
-
-      slotValue = (await sn.getStorageAt(blockHash, data.EthAddress, slot)).valueOr:
+      slotValue = (await sn.getStorageAt(blockNumber, data.EthAddress, slot)).valueOr:
         raise newException(ValueError, "Unable to get storage slot")
     return FixedBytes[32](slotValue.toBytesBE())
 
@@ -441,10 +432,7 @@ proc installEthApiHandlers*(
 
     let
       blockNumber = quantityTag.number.uint64
-      blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-        raise newException(ValueError, "Unable to get block hash")
-
-      bytecode = (await sn.getCode(blockHash, data.EthAddress)).valueOr:
+      bytecode = (await sn.getCode(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get code")
     return bytecode.asSeq()
 
@@ -469,9 +457,7 @@ proc installEthApiHandlers*(
 
     let
       blockNumber = quantityTag.number.uint64
-      blockHash = (await historyNetwork.getBlockHashByNumber(blockNumber)).valueOr:
-        raise newException(ValueError, "Unable to get block hash")
-      proofs = (await sn.getProofs(blockHash, data.EthAddress, slots)).valueOr:
+      proofs = (await sn.getProofs(blockNumber, data.EthAddress, slots)).valueOr:
         raise newException(ValueError, "Unable to get proofs")
 
     var storageProof = newSeqOfCap[StorageProof](slots.len)

@@ -61,8 +61,8 @@ procSuite "State Gossip - Gossip Offer":
         parentContentValueBytes = parentTestData.content_value_offer.hexToSeqByte()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode2.containsId(contentId)
 
@@ -134,8 +134,8 @@ procSuite "State Gossip - Gossip Offer":
         parentContentValueBytes = parentTestData.content_value_offer.hexToSeqByte()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode2.containsId(contentId)
 
@@ -198,8 +198,8 @@ procSuite "State Gossip - Gossip Offer":
         contentValue = ContractCodeOffer.decode(contentValueBytes).get()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode2.containsId(contentId)
 

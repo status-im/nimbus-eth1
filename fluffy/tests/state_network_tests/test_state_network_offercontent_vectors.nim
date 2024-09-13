@@ -62,7 +62,7 @@ procSuite "State Network - Offer Content":
       let badStateRoot = KeccakHash.fromBytes(
         "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
       )
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, badStateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, badStateRoot)
       check (
         await stateNode1.stateNetwork.processOffer(
           Opt.none(NodeId),
@@ -74,7 +74,7 @@ procSuite "State Network - Offer Content":
       ).isErr()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode1.containsId(contentId)
 
@@ -131,7 +131,7 @@ procSuite "State Network - Offer Content":
       let badStateRoot = KeccakHash.fromBytes(
         "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
       )
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, badStateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, badStateRoot)
       check (
         await stateNode1.stateNetwork.processOffer(
           Opt.none(NodeId),
@@ -143,7 +143,7 @@ procSuite "State Network - Offer Content":
       ).isErr()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode1.containsId(contentId)
 
@@ -201,7 +201,7 @@ procSuite "State Network - Offer Content":
       let badStateRoot = KeccakHash.fromBytes(
         "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
       )
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, badStateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, badStateRoot)
       check (
         await stateNode1.stateNetwork.processOffer(
           Opt.none(NodeId),
@@ -213,7 +213,7 @@ procSuite "State Network - Offer Content":
       ).isErr()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode1.containsId(contentId)
 
@@ -265,8 +265,8 @@ procSuite "State Network - Offer Content":
         (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode2.containsId(contentId)
 
@@ -315,8 +315,8 @@ procSuite "State Network - Offer Content":
         (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode2.containsId(contentId)
 
@@ -366,8 +366,8 @@ procSuite "State Network - Offer Content":
         (await stateNode1.portalProtocol().ping(stateNode2.localNode())).isOk()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       check not stateNode2.containsId(contentId)
 
