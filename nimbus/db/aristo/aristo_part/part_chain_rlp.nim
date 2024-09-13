@@ -48,14 +48,14 @@ proc chainRlpNodes*(
   # Follow up child node
   case vtx.vType:
   of Leaf:
-    if path != vtx.lPfx:
+    if path != vtx.pfx:
       err(PartChnLeafPathMismatch)
     else:
       ok()
 
   of Branch:
-    let nChewOff = sharedPrefixLen(vtx.ePfx, path)
-    if nChewOff != vtx.ePfx.len:
+    let nChewOff = sharedPrefixLen(vtx.pfx, path)
+    if nChewOff != vtx.pfx.len:
       err(PartChnExtPfxMismatch)
     elif path.len == nChewOff:
       err(PartChnBranchPathExhausted)

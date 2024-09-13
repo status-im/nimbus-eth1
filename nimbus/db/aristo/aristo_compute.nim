@@ -68,7 +68,7 @@ proc computeKeyImpl(
   case vtx.vType:
   of Leaf:
     writer.startList(2)
-    writer.append(vtx.lPfx.toHexPrefix(isLeaf = true).data())
+    writer.append(vtx.pfx.toHexPrefix(isLeaf = true).data())
 
     case vtx.lData.pType
     of AccountData:
@@ -106,12 +106,12 @@ proc computeKeyImpl(
         else:
           w.append(VOID_HASH_KEY)
       w.append EmptyBlob
-    if vtx.ePfx.len > 0: # Extension node
+    if vtx.pfx.len > 0: # Extension node
       var bwriter = initRlpWriter()
       writeBranch(bwriter)
 
       writer.startList(2)
-      writer.append(vtx.ePfx.toHexPrefix(isleaf = false).data())
+      writer.append(vtx.pfx.toHexPrefix(isleaf = false).data())
       writer.append(bwriter.finish().digestTo(HashKey))
     else:
       writeBranch(writer)

@@ -16,17 +16,12 @@ import eth/common, results, ".."/[aristo_desc, aristo_get, aristo_layers, aristo
 # Private getters & setters
 # ------------------------------------------------------------------------------
 
-proc xPfx(vtx: VertexRef): NibblesBuf =
-  case vtx.vType
-  of Leaf: vtx.lPfx
-  of Branch: vtx.ePfx
-
 # -----------
 
 proc layersPutLeaf(
     db: AristoDbRef, rvid: RootedVertexID, path: NibblesBuf, payload: LeafPayload
 ): VertexRef =
-  let vtx = VertexRef(vType: Leaf, lPfx: path, lData: payload)
+  let vtx = VertexRef(vType: Leaf, pfx: path, lData: payload)
   db.layersPutVtx(rvid, vtx)
   vtx
 
@@ -68,11 +63,11 @@ proc mergePayloadImpl*(
     touched[pos] = cur
     pos += 1
 
-    let n = path.sharedPrefixLen(vtx.xPfx)
+    let n = path.sharedPrefixLen(vtx.pfx)
     case vtx.vType
     of Leaf:
       let leafVtx =
-        if n == vtx.lPfx.len:
+        if n == vtx.pfx.len:
           # Same path - replace the current vertex with a new payload
 
           if vtx.lData == payload:
@@ -92,11 +87,11 @@ proc mergePayloadImpl*(
         else:
           # Turn leaf into a branch (or extension) then insert the two leaves
           # into the branch
-          let branch = VertexRef(vType: Branch, ePfx: path.slice(0, n))
+          let branch = VertexRef(vType: Branch, pfx: path.slice(0, n))
           block: # Copy of existing leaf node, now one level deeper
             let local = db.vidFetch()
-            branch.bVid[vtx.lPfx[n]] = local
-            discard db.layersPutLeaf((root, local), vtx.lPfx.slice(n + 1), vtx.lData)
+            branch.bVid[vtx.pfx[n]] = local
+            discard db.layersPutLeaf((root, local), vtx.pfx.slice(n + 1), vtx.lData)
 
           let leafVtx = block: # Newly inserted leaf node
             let local = db.vidFetch()
@@ -111,10 +106,10 @@ proc mergePayloadImpl*(
       resetKeys()
       return ok(leafVtx)
     of Branch:
-      if vtx.ePfx.len == n:
+      if vtx.pfx.len == n:
         # The existing branch is a prefix of the new entry
         let
-          nibble = path[vtx.ePfx.len]
+          nibble = path[vtx.pfx.len]
           next = vtx.bVid[nibble]
 
         if next.isValid:
@@ -137,14 +132,14 @@ proc mergePayloadImpl*(
       else:
         # Partial path match - we need to split the existing branch at
         # the point of divergence, inserting a new branch
-        let branch = VertexRef(vType: Branch, ePfx: path.slice(0, n))
+        let branch = VertexRef(vType: Branch, pfx: path.slice(0, n))
         block: # Copy the existing vertex and add it to the new branch
           let local = db.vidFetch()
-          branch.bVid[vtx.ePfx[n]] = local
+          branch.bVid[vtx.pfx[n]] = local
 
           db.layersPutVtx(
             (root, local),
-            VertexRef(vType: Branch, ePfx: vtx.ePfx.slice(n + 1), bVid: vtx.bVid),
+            VertexRef(vType: Branch, pfx: vtx.pfx.slice(n + 1), bVid: vtx.bVid),
           )
 
         let leafVtx = block: # add the new entry

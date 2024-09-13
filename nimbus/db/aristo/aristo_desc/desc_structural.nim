@@ -68,20 +68,21 @@ type
     of StoData:
       stoData*: UInt256
 
-  VertexRef* = ref object of RootRef
+  VertexRef* = ref object
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
+    pfx*: NibblesBuf
+      ## Portion of path segment - extension nodes are branch nodes with
+      ## non-empty prefix
     case vType*: VertexType
     of Leaf:
-      lPfx*: NibblesBuf              ## Portion of path segment
       lData*: LeafPayload            ## Reference to data payload
     of Branch:
-      ePfx*: NibblesBuf              ## Portion of path segment - if non-empty,
-                                     ## it's an extension node!
       bVid*: array[16,VertexID]      ## Edge list with vertex IDs
 
-  NodeRef* = ref object of VertexRef
+  NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
+    vtx*: VertexRef
     key*: array[16,HashKey]          ## Merkle hash/es for vertices
 
   # ----------------------
@@ -174,21 +175,21 @@ proc `==`*(a, b: VertexRef): bool =
       return false
     case a.vType:
     of Leaf:
-      if a.lPfx != b.lPfx or a.lData != b.lData:
+      if a.pfx != b.pfx or a.lData != b.lData:
         return false
     of Branch:
-      if a.ePfx != b.ePfx or a.bVid != b.bVid:
+      if a.pfx != b.pfx or a.bVid != b.bVid:
         return false
   true
 
 proc `==`*(a, b: NodeRef): bool =
   ## Beware, potential deep comparison
-  if a.VertexRef != b.VertexRef:
+  if a.vtx != b.vtx:
     return false
-  case a.vType:
+  case a.vtx.vType:
   of Branch:
     for n in 0..15:
-      if a.bVid[n] != 0.VertexID or b.bVid[n] != 0.VertexID:
+      if a.vtx.bVid[n] != 0.VertexID or b.vtx.bVid[n] != 0.VertexID:
         if a.key[n] != b.key[n]:
           return false
   else:
@@ -227,12 +228,12 @@ func dup*(vtx: VertexRef): VertexRef =
     of Leaf:
       VertexRef(
         vType: Leaf,
-        lPfx:  vtx.lPfx,
+        pfx:   vtx.pfx,
         lData: vtx.lData.dup)
     of Branch:
       VertexRef(
         vType: Branch,
-        ePfx:  vtx.ePfx,
+        pfx:   vtx.pfx,
         bVid:  vtx.bVid)
 
 func dup*(node: NodeRef): NodeRef =
@@ -241,19 +242,9 @@ func dup*(node: NodeRef): NodeRef =
   if node.isNil:
     NodeRef(nil)
   else:
-    case node.vType:
-    of Leaf:
-      NodeRef(
-        vType: Leaf,
-        lPfx:  node.lPfx,
-        lData: node.lData.dup,
-        key:   node.key)
-    of Branch:
-      NodeRef(
-        vType: Branch,
-        ePfx:  node.ePfx,
-        bVid:  node.bVid,
-        key:   node.key)
+    NodeRef(
+      vtx: node.vtx.dup(),
+      key:   node.key)
 
 func dup*(wp: VidVtxPair): VidVtxPair =
   ## Safe copy of `wp` argument

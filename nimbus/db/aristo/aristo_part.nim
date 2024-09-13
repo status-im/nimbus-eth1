@@ -238,11 +238,11 @@ proc partPut*(
           # Register core node.  Even though these nodes are only local to this
           # loop local, they need to be updated because another `chain` might
           # merge into this one at exactly this node.
-          case node.vType:
+          case node.vtx.vType:
           of Leaf:
-            node.lData = vtx.lData
+            node.vtx.lData = vtx.lData
           of Branch:
-            node.bVid = vtx.bVid
+            node.vtx.bVid = vtx.bVid
           ps.addCore(root, key)                # register core node
           ps.pureExt.del key                   # core node can't be an extension
           continue
@@ -251,27 +251,27 @@ proc partPut*(
       # stored separately off the database and will only be temporarily
       # inserted into the database on demand.
       if node.prfType == isExtension:
-        ps.pureExt[key] = PrfExtension(xPfx: node.ePfx, xLink: node.key[0])
+        ps.pureExt[key] = PrfExtension(xPfx: node.vtx.pfx, xLink: node.key[0])
         continue
 
       # Otherwise assign new VIDs to a core node. Even though these nodes are
       # only local to this loop local, they need to be updated because another
       # `chain` might merge into this one at exactly this node.
-      case node.vType:
+      case node.vtx.vType:
       of Leaf:
         let lKey = node.key[0]
-        if node.lData.pType == AccountData and lKey.isValid:
-          node.lData.stoID = (true, (? ps.getRvid(root, lKey))[0].vid)
+        if node.vtx.lData.pType == AccountData and lKey.isValid:
+          node.vtx.lData.stoID = (true, (? ps.getRvid(root, lKey))[0].vid)
       of Branch:
         for n in 0 .. 15:
           let bKey = node.key[n]
           if bKey.isValid:
-            node.bVid[n] = (? ps.getRvid(root, bKey))[0].vid
+            node.vtx.bVid[n] = (? ps.getRvid(root, bKey))[0].vid
       ps.addCore(root, key)                    # register core node
       ps.pureExt.del key                       # core node can't be an extension
 
       # Store vertex on database
-      ps.db.layersPutVtx(rvid, VertexRef(node))
+      ps.db.layersPutVtx(rvid, node.vtx)
       seen.incl key                            # node was processed here
       if stopHere:                             # follow up tail of earlier chain
         #discard ps.pp()
@@ -456,7 +456,7 @@ proc partWithExtBegin*(ps: PartStateRef): Result[void,AristoError] =
     if ps.db.getKey(rvid).isValid:
       restore()
       return err(PartExtVtxExistsAlready)
-    ps.db.layersPutVtx(rvid, VertexRef(vType: Branch, ePfx: ext.xPfx))
+    ps.db.layersPutVtx(rvid, VertexRef(vType: Branch, pfx: ext.xPfx))
     rollback.add rvid
   ok()
 
@@ -464,7 +464,7 @@ proc partWithExtEnd*(ps: PartStateRef): Result[void,AristoError] =
   var rollback: seq[(RootedVertexID,PrfExtension)]
   proc restore() =
     for (rvid,ext) in rollback:
-      ps.db.layersPutVtx(rvid, VertexRef(vType: Branch, ePfx: ext.xPfx))
+      ps.db.layersPutVtx(rvid, VertexRef(vType: Branch, pfx: ext.xPfx))
 
   for (key,ext) in ps.pureExt.pairs:
     let rvid = ps[key]
@@ -474,7 +474,7 @@ proc partWithExtEnd*(ps: PartStateRef): Result[void,AristoError] =
       restore()
       return err(PartExtVtxHasVanished)
     if vtx.vType != Branch or
-       vtx.ePfx != ext.xPfx or
+       vtx.pfx != ext.xPfx or
        vtx.bVid != array[16,VertexID].default:
       restore()
       return err(PartExtVtxWasModified)
