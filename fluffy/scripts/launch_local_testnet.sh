@@ -82,7 +82,7 @@ E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
   --skip-build                      skip building the binaries (default: disabled)
   --portal-subnetworks              comma separated list of subnetworks to enable (default: ${PORTAL_SUBNETWORKS})
   --disable-state-root-validation   disable state root validation for the state subnetwork (default: disabled)
-  --radius                          set the radius to be used by the nodes. [=static:254].
+  --radius                          set the radius to be used by the nodes (default: ${RADIUS})
 EOF
 }
 
