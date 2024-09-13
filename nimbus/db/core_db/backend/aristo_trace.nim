@@ -17,6 +17,7 @@
 
 import
   std/[sequtils, tables, typetraits],
+  stew/keyed_queue,
   eth/common,
   results,
   ../../aristo as use_aristo,

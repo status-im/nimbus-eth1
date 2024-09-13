@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common,
   results,
-  stew/keyed_queue,
+  minilru,
   ../../../utils/mergeutils,
   ../../../evm/code_bytes,
   ../../../stateless/multi_keys,
@@ -70,7 +70,7 @@ type
     cache: Table[EthAddress, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
       # persist
-    code: KeyedQueue[Hash256, CodeBytesRef]
+    code: LruCache[Hash256, CodeBytesRef]
       ## The code cache provides two main benefits:
       ##
       ## * duplicate code is shared in memory beween accounts
@@ -81,7 +81,7 @@ type
       ## when underpriced code opcodes are being run en masse - both advantages
       ## help performance broadly as well.
 
-    slots: KeyedQueue[UInt256, Hash256]
+    slots: LruCache[UInt256, Hash256]
       ## Because the same slots often reappear, we want to avoid writing them
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
@@ -157,6 +157,8 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
   result.kvt = db.ctx.getKvt()
   result.witnessCache = Table[EthAddress, WitnessData]()
   result.storeSlotHash = storeSlotHash
+  result.code = typeof(result.code).init(codeLruSize)
+  result.slots = typeof(result.slots).init(slotsLruSize)
   discard result.beginSavepoint
 
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
@@ -249,11 +251,13 @@ proc getAccount(
     return
 
   # not found in cache, look into state trie
-  let rc = ac.ledger.fetch address.toAccountKey
+  let
+    accPath = address.toAccountKey
+    rc = ac.ledger.fetch accPath
   if rc.isOk:
     result = AccountRef(
       statement: rc.value,
-      accPath:   address.keccakHash,
+      accPath:   accPath,
       flags:     {Alive})
   elif shouldCreate:
     result = AccountRef(
@@ -261,7 +265,7 @@ proc getAccount(
         nonce:    emptyEthAccount.nonce,
         balance:  emptyEthAccount.balance,
         codeHash: emptyEthAccount.codeHash),
-      accPath:    address.keccakHash,
+      accPath:    accPath,
       flags:      {Alive, IsNew})
   else:
     return # ignore, don't cache
@@ -305,7 +309,7 @@ proc originalStorageValue(
 
   # Not in the original values cache - go to the DB.
   let
-    slotKey = ac.slots.lruFetch(slot).valueOr:
+    slotKey = ac.slots.get(slot).valueOr:
       slot.toBytesBE.keccakHash
     rc = ac.ledger.slotFetch(acc.toAccountKey, slotKey)
   if rc.isOk:
@@ -381,9 +385,11 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
         continue # Avoid writing A-B-A updates
 
     var cached = true
-    let slotKey = ac.slots.lruFetch(slot).valueOr:
+    let slotKey = ac.slots.get(slot).valueOr:
       cached = false
-      ac.slots.lruAppend(slot, slot.toBytesBE.keccakHash, slotsLruSize)
+      let hash = slot.toBytesBE.keccakHash
+      ac.slots.put(slot, hash)
+      hash
 
     if value > 0:
       ac.ledger.slotMerge(acc.toAccountKey, slotKey, value).isOkOr:
@@ -449,14 +455,15 @@ proc getCode*(ac: AccountsLedgerRef, address: EthAddress): CodeBytesRef =
   if acc.code == nil:
     acc.code =
       if acc.statement.codeHash != EMPTY_CODE_HASH:
-        ac.code.lruFetch(acc.statement.codeHash).valueOr:
+        ac.code.get(acc.statement.codeHash).valueOr:
           var rc = ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
           if rc.isErr:
             warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
             CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
-            ac.code.lruAppend(acc.statement.codeHash, newCode, codeLruSize)
+            ac.code.put(acc.statement.codeHash, newCode)
+            newCode
       else:
         CodeBytesRef()
 
@@ -470,7 +477,7 @@ proc getCodeSize*(ac: AccountsLedgerRef, address: EthAddress): int =
   if acc.code == nil:
     if acc.statement.codeHash == EMPTY_CODE_HASH:
       return 0
-    acc.code = ac.code.lruFetch(acc.statement.codeHash).valueOr:
+    acc.code = ac.code.get(acc.statement.codeHash).valueOr:
       # On a cache miss, we don't fetch the code - instead, we fetch just the
       # length - should the code itself be needed, it will typically remain
       # cached and easily accessible in the database layer - this is to prevent
@@ -567,7 +574,7 @@ proc setCode*(ac: AccountsLedgerRef, address: EthAddress, code: seq[byte]) =
     acc.statement.codeHash = codeHash
     # Try to reuse cache entry if it exists, but don't save the code - it's not
     # a given that it will be executed within LRU range
-    acc.code = ac.code.lruFetch(codeHash).valueOr(CodeBytesRef.init(code))
+    acc.code = ac.code.get(codeHash).valueOr(CodeBytesRef.init(code))
     acc.flags.incl CodeChanged
 
 proc setStorage*(ac: AccountsLedgerRef, address: EthAddress, slot, value: UInt256) =
@@ -878,7 +885,7 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArr
       continue
 
     let
-      slotKey = ac.slots.lruFetch(slot).valueOr:
+      slotKey = ac.slots.get(slot).valueOr:
         slot.toBytesBE.keccakHash
       slotProof = ac.ledger.slotProof(addressHash, slotKey).valueOr:
         if error.aErr == FetchPathNotFound:

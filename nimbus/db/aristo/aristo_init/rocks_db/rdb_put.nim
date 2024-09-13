@@ -17,7 +17,6 @@ import
   eth/common,
   rocksdb,
   results,
-  stew/keyed_queue,
   ../../[aristo_blobify, aristo_desc],
   ../init_common,
   ./rdb_desc
@@ -50,8 +49,8 @@ proc begin*(rdb: var RdbInst) =
 
 proc rollback*(rdb: var RdbInst) =
   if not rdb.session.isClosed():
-    rdb.rdKeyLru.clear() # Flush caches
-    rdb.rdVtxLru.clear() # Flush caches
+    rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
+    rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
     rdb.disposeSession()
 
 proc commit*(rdb: var RdbInst): Result[void,(AristoError,string)] =
@@ -98,11 +97,10 @@ proc putKey*(
         trace logTxt "putKey()", vid, error=errSym, info=error
       return err((rvid.vid,errSym,error))
 
-    if rdb.rdKeySize > 0:
-      # Update existing cached items but don't add new ones since doing so is
-      # likely to evict more useful items (when putting many items, we might even
-      # evict those that were just added)
-      discard rdb.rdKeyLru.lruUpdate(rvid.vid, key)
+    # Update existing cached items but don't add new ones since doing so is
+    # likely to evict more useful items (when putting many items, we might even
+    # evict those that were just added)
+    discard rdb.rdKeyLru.update(rvid.vid, key)
 
   else:
     dsc.delete(rvid.blobify().data(), rdb.keyCol.handle()).isOkOr:
@@ -131,11 +129,10 @@ proc putVtx*(
         trace logTxt "putVtx()", vid, error=errSym, info=error
       return err((rvid.vid,errSym,error))
 
-    if rdb.rdVtxSize > 0:
-      # Update existing cached items but don't add new ones since doing so is
-      # likely to evict more useful items (when putting many items, we might even
-      # evict those that were just added)
-      discard rdb.rdVtxLru.lruUpdate(rvid.vid, vtx)
+    # Update existing cached items but don't add new ones since doing so is
+    # likely to evict more useful items (when putting many items, we might even
+    # evict those that were just added)
+    discard rdb.rdVtxLru.update(rvid.vid, vtx)
 
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:

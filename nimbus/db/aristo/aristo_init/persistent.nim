@@ -52,8 +52,11 @@ proc newAristoRdbDbRef(
         return err(rc.error)
       rc.value
   ok((AristoDbRef(
-    top: LayerRef(vTop: vTop),
-    backend: be), oCfs))
+      top: LayerRef(vTop: vTop),
+      backend: be,
+      accLeaves: LruCache[Hash256, VertexRef].init(ACC_LRU_SIZE),
+      stoLeaves: LruCache[Hash256, VertexRef].init(ACC_LRU_SIZE),
+    ), oCfs))
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
