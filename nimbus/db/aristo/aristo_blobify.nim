@@ -200,8 +200,8 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
 
     let
       pSegm =
-        if vtx.ePfx.len > 0:
-          vtx.ePfx.toHexPrefix(isleaf = false)
+        if vtx.pfx.len > 0:
+          vtx.pfx.toHexPrefix(isleaf = false)
         else:
           default(HexPrefixBuf)
       psLen = pSegm.len.byte
@@ -214,7 +214,7 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
 
   of Leaf:
     let
-      pSegm = vtx.lPfx.toHexPrefix(isleaf = true)
+      pSegm = vtx.pfx.toHexPrefix(isleaf = true)
       psLen = pSegm.len.byte
     if psLen == 0 or 33 < psLen:
       return err(BlobifyLeafPathOverflow)
@@ -325,7 +325,7 @@ proc deblobify*(
       # End `while`
     VertexRef(
       vType: Branch,
-      ePfx:  pathSegment,
+      pfx:   pathSegment,
       bVid:  vtxList)
 
   of 3: # `Leaf` vertex
@@ -341,7 +341,7 @@ proc deblobify*(
       return err(DeblobLeafGotExtPrefix)
     let vtx = VertexRef(
       vType: Leaf,
-      lPfx:  pathSegment)
+      pfx:  pathSegment)
 
     ? record.toOpenArray(0, pLen - 1).deblobify(vtx.lData)
     vtx

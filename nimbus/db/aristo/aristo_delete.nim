@@ -97,12 +97,12 @@ proc deleteImpl(
         of Leaf:
           VertexRef(
             vType: Leaf,
-            lPfx:  br.vtx.ePfx & NibblesBuf.nibble(nbl.byte) & nxt.lPfx,
+            pfx:  br.vtx.pfx & NibblesBuf.nibble(nbl.byte) & nxt.pfx,
             lData: nxt.lData)
         of Branch:
           VertexRef(
             vType: Branch,
-            ePfx:  br.vtx.ePfx & NibblesBuf.nibble(nbl.byte) & nxt.ePfx,
+            pfx:  br.vtx.pfx & NibblesBuf.nibble(nbl.byte) & nxt.pfx,
             bVid: nxt.bVid)
 
       # Put the new vertex at the id of the obsolete branch

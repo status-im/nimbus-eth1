@@ -58,10 +58,10 @@ proc delStoTreeNow(
       if vtx.bVid[i].isValid:
         ? db.delStoTreeNow(
           (rvid.root, vtx.bVid[i]), accPath,
-          stoPath & vtx.ePfx & NibblesBuf.nibble(byte i))
+          stoPath & vtx.pfx & NibblesBuf.nibble(byte i))
 
   of Leaf:
-    let stoPath = Hash256(data: (stoPath & vtx.lPfx).getBytes())
+    let stoPath = Hash256(data: (stoPath & vtx.pfx).getBytes())
     db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
 
   db.disposeOfVtx(rvid)

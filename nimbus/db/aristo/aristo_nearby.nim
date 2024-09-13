@@ -170,10 +170,10 @@ proc zeroAdjust(
         if n < 0:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
-        pfx = rootVtx.ePfx & NibblesBuf.nibble(n.byte)
+        pfx = rootVtx.pfx & NibblesBuf.nibble(n.byte)
 
       of Leaf:
-        pfx = rootVtx.lPfx
+        pfx = rootVtx.pfx
         if not hike.accept pfx:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
@@ -230,12 +230,12 @@ proc finalise(
       if not vtx.isValid:
         return err((vid,NearbyDanglingLink))
 
-      var pfx: NibblesBuf
-      case vtx.vType:
-      of Leaf:
-        pfx = vtx.lPfx
-      of Branch:
-        pfx = vtx.ePfx & NibblesBuf.nibble(vtx.branchBorderNibble.byte)
+      let pfx =
+        case vtx.vType:
+        of Leaf:
+          vtx.pfx
+        of Branch:
+          vtx.pfx & NibblesBuf.nibble(vtx.branchBorderNibble.byte)
       if hike.beyond pfx:
         return err((vid,NearbyBeyondRange))
 
@@ -308,7 +308,7 @@ proc nearbyNext(
 
       case vtx.vType
       of Leaf:
-        if uHike.accept vtx.lPfx:
+        if uHike.accept vtx.pfx:
           return uHike.complete(vid, db, hikeLenMax, doLeast=moveRight)
       of Branch:
         let nibble = uHike.tail[0].int8
@@ -408,7 +408,7 @@ iterator rightPairs*(
     # Increment `key` by one and update `hike`. In many cases, the current
     # `hike` can be modified and re-used which saves some database lookups.
     block reuseHike:
-      let tail = hike.legs[^1].wp.vtx.lPfx
+      let tail = hike.legs[^1].wp.vtx.pfx
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if topNibble < 15:
@@ -503,7 +503,7 @@ iterator leftPairs*(
     # Decrement `key` by one and update `hike`. In many cases, the current
     # `hike` can be modified and re-used which saves some database lookups.
     block reuseHike:
-      let tail = hike.legs[^1].wp.vtx.lPfx
+      let tail = hike.legs[^1].wp.vtx.pfx
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if 0 < topNibble:
@@ -567,7 +567,7 @@ proc rightMissing*(
 
   case vtx.vType
   of Leaf:
-    return ok(vtx.lPfx < hike.tail)
+    return ok(vtx.pfx < hike.tail)
   of Branch:
     return ok(vtx.branchNibbleMin(hike.tail[0].int8) < 0)
 

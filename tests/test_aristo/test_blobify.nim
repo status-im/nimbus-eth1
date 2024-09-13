@@ -43,7 +43,7 @@ suite "Aristo blobify":
 
       extension = VertexRef(
         vType: Branch,
-        ePfx: NibblesBuf.nibble(2),
+        pfx: NibblesBuf.nibble(2),
         bVid: [
           VertexID(0),
           VertexID(0),

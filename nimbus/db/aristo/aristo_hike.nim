@@ -47,9 +47,9 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
     let leg = hike.legs[n]
     case leg.wp.vtx.vType:
     of Branch:
-      result = result & leg.wp.vtx.ePfx & NibblesBuf.nibble(leg.nibble.byte)
+      result = result & leg.wp.vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
     of Leaf:
-      result = result & leg.wp.vtx.lPfx
+      result = result & leg.wp.vtx.pfx
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -89,24 +89,24 @@ proc step*(
   case vtx.vType:
   of Leaf:
     # This must be the last vertex, so there cannot be any `tail` left.
-    if path.len != path.sharedPrefixLen(vtx.lPfx):
+    if path.len != path.sharedPrefixLen(vtx.pfx):
       return err(HikeLeafUnexpected)
 
     ok (vtx, NibblesBuf(), VertexID(0))
 
   of Branch:
     # There must be some more data (aka `tail`) after a `Branch` vertex.
-    if path.len <= vtx.ePfx.len:
+    if path.len <= vtx.pfx.len:
       return err(HikeBranchTailEmpty)
 
     let
-      nibble = path[vtx.ePfx.len].int8
+      nibble = path[vtx.pfx.len].int8
       nextVid = vtx.bVid[nibble]
 
     if not nextVid.isValid:
       return err(HikeBranchMissingEdge)
 
-    ok (vtx, path.slice(vtx.ePfx.len + 1), nextVid)
+    ok (vtx, path.slice(vtx.pfx.len + 1), nextVid)
 
 
 iterator stepUp*(
@@ -162,7 +162,7 @@ proc hikeUp*(
       break
 
     of Branch:
-      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[vtx.ePfx.len])
+      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[vtx.pfx.len])
 
     hike.tail = path
     vid = next

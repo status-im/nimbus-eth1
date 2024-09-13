@@ -27,7 +27,7 @@ proc read(rlp: var Rlp; T: type PrfNode): T {.gcsafe, raises: [RlpError].} =
   ##
   func readError(error: AristoError): PrfNode =
     ## Prettify return code expression
-    PrfNode(vType: Leaf, prfType: isError, error: error)
+    PrfNode(vtx: VertexRef(vType: Leaf), prfType: isError, error: error)
 
   if not rlp.isList:
     # Otherwise `rlp.items` would raise a `Defect`
@@ -64,17 +64,20 @@ proc read(rlp: var Rlp; T: type PrfNode): T {.gcsafe, raises: [RlpError].} =
     let (isLeaf, pathSegment) = NibblesBuf.fromHexPrefix blobs[0]
     if isLeaf:
       return PrfNode(
-        vType:     Leaf,
         prfType:   ignore,
-        lPfx:      pathSegment,
-        lData:     LeafPayload(
-          pType:   RawData,
-          rawBlob: blobs[1]))
+
+        vtx: VertexRef(
+          vType:     Leaf,
+          pfx:      pathSegment,
+          lData:     LeafPayload(
+            pType:   RawData,
+            rawBlob: blobs[1])))
     else:
       var node = PrfNode(
-        vType:   Branch,
         prfType: isExtension,
-        ePfx:    pathSegment)
+        vtx: VertexRef(
+          vType:   Branch,
+          pfx:    pathSegment))
       node.key[0] = HashKey.fromBytes(blobs[1]).valueOr:
         return readError(PartRlpExtHashKeyExpected)
       return node
@@ -83,7 +86,8 @@ proc read(rlp: var Rlp; T: type PrfNode): T {.gcsafe, raises: [RlpError].} =
       links[n] = HashKey.fromBytes(blobs[n]).valueOr:
         return readError(PartRlpBranchHashKeyExpected)
     return PrfNode(
-      vType:   Branch,
+      vtx: VertexRef(
+        vType:   Branch),
       prfType: ignore,
       key:     links)
   else:
@@ -137,11 +141,11 @@ func toNodesTab*(
       nodes[w.digestTo HashKey] = nd
 
       # Special decoding for account `Leaf` nodes
-      if nd.vType == Leaf and mode != ForceGenericPayload:
+      if nd.vtx.vType == Leaf and mode != ForceGenericPayload:
         # Decode payload to deficated format for storage or accounts
         var pyl: PrfPayload
         try:
-          pyl = rlp.decode(nd.lData.rawBlob, PrfPayload)
+          pyl = rlp.decode(nd.vtx.lData.rawBlob, PrfPayload)
         except RlpError:
           pyl = PrfPayload(prfType: isError, error: PartRlpPayloadException)
 
@@ -150,10 +154,10 @@ func toNodesTab*(
           # Single value encoding might not be unique so it cannot be
           # automatically detected
           if mode != AutomaticPayload:
-            nd.lData = LeafPayload(pType: StoData, stoData: pyl.num)
+            nd.vtx.lData = LeafPayload(pType: StoData, stoData: pyl.num)
         of isAccount:
           nd.key[0] = pyl.acc.storageRoot.to(HashKey)
-          nd.lData = LeafPayload(
+          nd.vtx.lData = LeafPayload(
             pType:   AccountData,
             account: AristoAccount(
               nonce:    pyl.acc.nonce,
@@ -174,11 +178,11 @@ func toNodesTab*(
       # Need to store raw extension
       nodes[xKey] = xNode
       continue
-    if nd.ePfx.len != 0:
+    if nd.vtx.pfx.len != 0:
       return err(PartGarbledExtsInProofs)
     # Move extended `nd` branch node
     nd.prfType = ignore
-    nd.ePfx = xNode.ePfx
+    nd.vtx.pfx = xNode.vtx.pfx
     nodes.del xNode.key[0]
     nodes[xKey] = nd
 
@@ -196,8 +200,8 @@ proc backLinks*(nTab: TableRef[HashKey,PrfNode]): PrfBackLinks =
 
   # Collect predecessor list
   for (key,nd) in nTab.pairs:
-    if nd.vType == Leaf:
-      if nd.lData.pType == AccountData and nd.key[0].isValid:
+    if nd.vtx.vType == Leaf:
+      if nd.vtx.lData.pType == AccountData and nd.key[0].isValid:
         result.links[nd.key[0]] = key
     elif nd.prfType == isExtension:
       result.links[nd.key[0]] = key
@@ -280,7 +284,7 @@ proc updateAccountsTree*(
   for chain in bl.chains:
     for key in chain:
       nodes[].withValue(key,node):
-        if node.vType == Leaf and node.lData.pType == AccountData:
+        if node.vtx.vType == Leaf and node.vtx.lData.pType == AccountData:
 
           # Ok, got an accounts leaf node
           if not accRootKey.isValid:

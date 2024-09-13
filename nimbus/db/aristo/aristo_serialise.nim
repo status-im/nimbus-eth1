@@ -70,7 +70,7 @@ proc to*(node: NodeRef; T: type seq[Blob]): T =
   ## `<rlp-encoded-node>` type entries. Only in case of a combined extension
   ## and branch vertex argument, there will be a double item list result.
   ##
-  case node.vType:
+  case node.vtx.vType:
   of Branch:
     # Do branch node
     var wr = initRlpWriter()
@@ -80,13 +80,13 @@ proc to*(node: NodeRef; T: type seq[Blob]): T =
     wr.append EmptyBlob
     let brData = wr.finish()
 
-    if 0 < node.ePfx.len:
+    if 0 < node.vtx.pfx.len:
       # Prefix branch by embedded extension node
       let brHash = brData.digestTo(HashKey)
 
       var wrx = initRlpWriter()
       wrx.startList(2)
-      wrx.append node.ePfx.toHexPrefix(isleaf = false).data()
+      wrx.append node.vtx.pfx.toHexPrefix(isleaf = false).data()
       wrx.append brHash
 
       result.add wrx.finish()
@@ -104,8 +104,8 @@ proc to*(node: NodeRef; T: type seq[Blob]): T =
 
     var wr = initRlpWriter()
     wr.startList(2)
-    wr.append node.lPfx.toHexPrefix(isleaf = true).data()
-    wr.append node.lData.serialise(getKey0).value
+    wr.append node.vtx.pfx.toHexPrefix(isleaf = true).data()
+    wr.append node.vtx.lData.serialise(getKey0).value
 
     result.add (wr.finish())
 
@@ -114,7 +114,7 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
   ## that a `Dummy` node is encoded as as a `Leaf`.
   ##
   var wr = initRlpWriter()
-  case node.vType:
+  case node.vtx.vType:
   of Branch:
     # Do branch node
     wr.startList(17)
@@ -123,11 +123,11 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
     wr.append EmptyBlob
 
     # Do for embedded extension node
-    if 0 < node.ePfx.len:
+    if 0 < node.vtx.pfx.len:
       let brHash = wr.finish().digestTo(HashKey)
       wr = initRlpWriter()
       wr.startList(2)
-      wr.append node.ePfx.toHexPrefix(isleaf = false).data()
+      wr.append node.vtx.pfx.toHexPrefix(isleaf = false).data()
       wr.append brHash
 
   of Leaf:
@@ -138,8 +138,8 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
       ok(node.key[0]) # always succeeds
 
     wr.startList(2)
-    wr.append node.lPfx.toHexPrefix(isleaf = true).data()
-    wr.append node.lData.serialise(getKey0).value
+    wr.append node.vtx.pfx.toHexPrefix(isleaf = true).data()
+    wr.append node.vtx.lData.serialise(getKey0).value
 
   wr.finish().digestTo(HashKey)
 
