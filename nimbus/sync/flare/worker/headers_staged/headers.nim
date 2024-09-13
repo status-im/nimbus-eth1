@@ -75,7 +75,7 @@ proc headersFetchReversed*(
 
   when extraTraceMessages:
     trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
-      nReq=req.maxResults, useHash
+      nReq=req.maxResults, useHash, nRespErrors=buddy.only.nRespErrors
 
   # Fetch headers from peer
   var resp: Option[blockHeadersObj]
@@ -93,19 +93,11 @@ proc headersFetchReversed*(
       nRespErrors=buddy.only.nRespErrors
     return err()
 
-  # Kludge: Ban an overly slow peer for a while
   let elapsed = Moment.now() - start
-  var seenError = false
-  if elapsed <= fetchHeaderReqThresholdZombie:
-    buddy.only.nRespErrors = 0
-  else:
-    seenError = true
-    buddy.registerError()
 
   # Evaluate result
   if resp.isNone or buddy.ctrl.stopped:
-    if not seenError: # register only once
-      buddy.registerError()
+    buddy.registerError()
     when extraTraceMessages:
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
         nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
@@ -114,13 +106,18 @@ proc headersFetchReversed*(
 
   let h: seq[BlockHeader] = resp.get.headers
   if h.len == 0 or ivReq.len < h.len.uint:
-    if not seenError: # register only once
-      buddy.registerError()
+    buddy.registerError()
     when extraTraceMessages:
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
         nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
         nRespErrors=buddy.only.nRespErrors
     return err()
+
+  # Ban an overly slow peer for a while
+  if fetchHeaderReqThresholdZombie < elapsed:
+    buddy.registerError()
+  else:
+    buddy.only.nRespErrors = 0 # reset error count
 
   when extraTraceMessages:
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
