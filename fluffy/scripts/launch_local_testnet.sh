@@ -34,10 +34,14 @@ if [ ${PIPESTATUS[0]} != 4 ]; then
 fi
 
 OPTS="h:n:d"
-LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes,skip-build,portal-subnetworks:,disable-state-root-validation"
+LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes,skip-build,portal-subnetworks:,disable-state-root-validation,radius:"
 
 # default values
-NUM_NODES="3"
+
+NUM_NODES="8" # With the default radius of 254 which should result in ~1/4th
+# of the data set stored on each node at least 8 nodes are recommended to
+# provide complete coverage of the data set with approx replication factor of 2.
+RADIUS="static:254"
 DATA_DIR="local_testnet_data"
 RUN_TESTS="0"
 LOG_LEVEL="INFO"
@@ -78,6 +82,7 @@ E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
   --skip-build                      skip building the binaries (default: disabled)
   --portal-subnetworks              comma separated list of subnetworks to enable (default: ${PORTAL_SUBNETWORKS})
   --disable-state-root-validation   disable state root validation for the state subnetwork (default: disabled)
+  --radius                          set the radius to be used by the nodes (default: ${RADIUS})
 EOF
 }
 
@@ -154,6 +159,10 @@ while true; do
     --disable-state-root-validation)
       DISABLE_STATE_ROOT_VALIDATION="1"
       shift
+      ;;
+    --radius)
+      RADIUS="$2"
+      shift 2
       ;;
     --)
       shift
@@ -297,11 +306,10 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
 
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
 
+  RADIUS_ARG="--radius=${RADIUS}"
+
   if [[ ${NUM_NODE} != ${BOOTSTRAP_NODE} ]]; then
     BOOTSTRAP_ARG="--bootstrap-file=${BOOTSTRAP_ENR_FILE}"
-    # All nodes but bootstrap node run with log. radius of 254 which should
-    # result in ~1/4th of the data set stored.
-    RADIUS_ARG="--radius=static:254"
 
     # Wait for the bootstrap node to write out its enr file
     START_TIMESTAMP=$(date +%s)
