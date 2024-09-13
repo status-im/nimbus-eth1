@@ -148,6 +148,12 @@ proc validateTxEip4844(tx: Transaction) =
   if not isValid:
     raise newException(ValidationError, "Invalid EIP-4844 transaction")
 
+proc validateTxEip7702(tx: Transaction) =
+  validateTxEip2930(tx)
+
+  if tx.authorizationList.len == 0:
+    raise newException(ValidationError, "Invalid EIP-7702 transaction")
+
 proc validate*(tx: Transaction, fork: EVMFork) =
   # parameters pass validation rules
   if tx.intrinsicGas(fork) > tx.gasLimit:
@@ -168,6 +174,8 @@ proc validate*(tx: Transaction, fork: EVMFork) =
     validateTxEip4844(tx)
   of TxEip2930, TxEip1559:
     validateTxEip2930(tx)
+  of TxEip7702:
+    validateTxEip7702(tx)
 
 proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId, eip155: bool): Transaction =
   result = tx
