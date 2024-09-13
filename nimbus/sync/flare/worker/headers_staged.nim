@@ -17,8 +17,8 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../common,
   ../worker_desc,
-  ./staged/[headers, linked_hchain],
-  ./unproc
+  ./headers_staged/[headers, linked_hchain],
+  ./headers_unproc
 
 logScope:
   topics = "flare staged"
@@ -56,7 +56,7 @@ when verifyDataStructureOk:
         key = rc.value.key
         nHeaders = rc.value.data.revHdrs.len.uint
         minPt = key - nHeaders + 1
-        unproc = ctx.unprocCovered(minPt, key)
+        unproc = ctx.headersUnprocCovered(minPt, key)
       if 0 < unproc:
         raiseAssert info & ": unprocessed staged chain " &
           key.bnStr & " overlap=" & $unproc
@@ -73,7 +73,7 @@ when verifyDataStructureOk:
         " L=" & $ctx.layout.least.bnStr & " stagedTop=" & prv.bnStr
 
     # Check `unprocessed{} <= L`
-    let uTop = ctx.unprocTop()
+    let uTop = ctx.headersUnprocTop()
     if ctx.layout.least <= uTop:
       raiseAssert info & ": unproc top mismatch " &
         " L=" & $ctx.layout.least.bnStr & " unprocTop=" & uTop.bnStr
@@ -81,7 +81,7 @@ when verifyDataStructureOk:
     # Check `staged[] + unprocessed{} == (B,L)`
     if not multiMode:
       let
-        uTotal = ctx.unprocTotal()
+        uTotal = ctx.headersUnprocTotal()
         both = stTotal + uTotal
         unfilled = if ctx.layout.least <= ctx.layout.base + 1: 0u
                    else: ctx.layout.least - ctx.layout.base - 1
@@ -127,7 +127,7 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc stagedCollect*(
+proc headersStagedCollect*(
     buddy: FlareBuddyRef;
     info: static[string];
       ): Future[bool] {.async.} =
@@ -146,7 +146,7 @@ proc stagedCollect*(
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    uTop = ctx.unprocTop()
+    uTop = ctx.headersUnprocTop()
 
   if uTop == 0:
     # Nothing to do
@@ -156,7 +156,7 @@ proc stagedCollect*(
     # Reserve the full range of block numbers so they can be appended in a row.
     # This avoid some fragmentation when header chains are stashed by multiple
     # peers, i.e. they interleave peer-wise.
-    iv = ctx.unprocFetch(nFetchHeadersBatch).expect "valid interval"
+    iv = ctx.headersUnprocFetch(nFetchHeadersBatch).expect "valid interval"
 
     # Check for top header hash. If the range to fetch directly joins below
     # the top level linked chain `L..F`, then there is the hash available for
@@ -201,14 +201,14 @@ proc stagedCollect*(
         when extraTraceMessages:
           trace info & ": completely failed", peer, iv, ivReq, isOpportunistic,
             ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nRespErrors
-        ctx.unprocMerge(iv)
+        ctx.headersUnprocMerge(iv)
         return false
       # So it is deterministic and there were some headers downloaded already.
       # Turn back unused data and proceed with staging.
       when extraTraceMessages:
         trace info & ": partially failed", peer, iv, ivReq,
           unused=BnRange.new(iv.minPt,ivTop), isOpportunistic
-      ctx.unprocMerge(iv.minPt, ivTop)
+      ctx.headersUnprocMerge(iv.minPt, ivTop)
       break
 
     # Update remaining interval
@@ -241,7 +241,7 @@ proc stagedCollect*(
   return true
 
 
-proc stagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
+proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
   ## Store/insert stashed chains from the `staged` queue into the linked
   ## chains layout and the persistent tables. The function returns the number
   ## of records processed and saved.
@@ -270,7 +270,7 @@ proc stagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
 
     if qItem.data.hash != ctx.layout.leastParent:
       # Discard wrong chain and merge back the range into the `unproc` list.
-      ctx.unprocMerge(iv)
+      ctx.headersUnprocMerge(iv)
       when extraTraceMessages:
         trace info & ": discarding staged record", iv, L=least.bnStr, lap=result
       break
@@ -297,7 +297,7 @@ proc stagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
     ctx.poolMode = true
 
 
-proc stagedReorg*(ctx: FlareCtxRef; info: static[string]) =
+proc headersStagedReorg*(ctx: FlareCtxRef; info: static[string]) =
   ## Some pool mode intervention. The effect is that all concurrent peers
   ## finish up their current work and run this function here (which might
   ## do nothing.) This stopping should be enough in most cases to re-organise
@@ -323,7 +323,7 @@ proc stagedReorg*(ctx: FlareCtxRef; info: static[string]) =
         qItem = ctx.lhc.staged.ge(BlockNumber 0).expect "valid record"
         key = qItem.key
         nHeaders = qItem.data.revHdrs.len.uint
-      ctx.unprocMerge(key - nHeaders + 1, key)
+      ctx.headersUnprocMerge(key - nHeaders + 1, key)
       discard ctx.lhc.staged.delete key
 
   when verifyDataStructureOk:
@@ -333,19 +333,19 @@ proc stagedReorg*(ctx: FlareCtxRef; info: static[string]) =
     trace info & ": reorg done", nStaged=ctx.lhc.staged.len
 
 
-proc stagedTop*(ctx: FlareCtxRef): BlockNumber =
+proc headersStagedTop*(ctx: FlareCtxRef): BlockNumber =
   ## Retrieve to staged block number
   let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
     return BlockNumber(0)
   qItem.key
 
-proc stagedChunks*(ctx: FlareCtxRef): int =
+proc headersStagedChunks*(ctx: FlareCtxRef): int =
   ## Number of staged records
   ctx.lhc.staged.len
 
 # ----------------
 
-proc stagedInit*(ctx: FlareCtxRef) =
+proc headersStagedInit*(ctx: FlareCtxRef) =
   ## Constructor
   ctx.lhc.staged = LinkedHChainQueue.init()
 

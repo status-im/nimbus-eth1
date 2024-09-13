@@ -17,7 +17,7 @@ import
   ../../sync_desc,
   ../worker_desc,
   ./update/metrics,
-  "."/[db, unproc]
+  "."/[db, headers_unproc]
 
 logScope:
   topics = "flare update"
@@ -89,7 +89,7 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   discard ctx.dbStoreLinkedHChainsLayout()
 
   # Update range
-  ctx.unprocMerge(ctx.layout.base+1, ctx.layout.least-1)
+  ctx.headersUnprocMerge(ctx.layout.base+1, ctx.layout.least-1)
 
   when extraTraceMessages:
     trace info & ": updated"

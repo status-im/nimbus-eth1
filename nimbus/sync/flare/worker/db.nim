@@ -19,7 +19,7 @@ import
   ../../../common,
   ../../sync_desc,
   ../worker_desc,
-  "."/[staged, unproc]
+  "."/[headers_staged, headers_unproc]
 
 logScope:
   topics = "flare db"
@@ -175,8 +175,8 @@ proc dbStoreLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
 proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
   ## Restore chain layout from persistent db
   const info = "dbLoadLinkedHChainsLayout"
-  ctx.stagedInit()
-  ctx.unprocInit()
+  ctx.headersStagedInit()
+  ctx.headersUnprocInit()
 
   let rc = ctx.fetchLinkedHChainsLayout()
   if rc.isOk:
@@ -184,7 +184,7 @@ proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
     let (uMin,uMax) = (rc.value.base+1, rc.value.least-1)
     if uMin <= uMax:
       # Add interval of unprocessed block range `(B,L)` from README
-      ctx.unprocMerge(uMin, uMax)
+      ctx.headersUnprocMerge(uMin, uMax)
     when extraTraceMessages:
       trace info & ": restored layout from DB"
   else:

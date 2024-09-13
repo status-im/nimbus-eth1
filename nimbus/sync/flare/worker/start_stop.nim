@@ -15,7 +15,7 @@ import
   pkg/eth/[common, p2p],
   ../../protocol,
   ../worker_desc,
-  "."/[staged, unproc]
+  "."/[headers_staged, headers_unproc]
 
 when enableTicker:
   import ./start_stop/ticker
@@ -39,11 +39,11 @@ when enableTicker:
         least:        ctx.layout.least,
         final:        ctx.layout.final,
         beacon:       ctx.lhc.beacon.header.number,
-        nStaged:      ctx.stagedChunks(),
-        stagedTop:    ctx.stagedTop(),
-        unprocTop:    ctx.unprocTop(),
-        nUnprocessed: ctx.unprocTotal(),
-        nUnprocFragm: ctx.unprocChunks(),
+        nStaged:      ctx.headersStagedChunks(),
+        stagedTop:    ctx.headersStagedTop(),
+        unprocTop:    ctx.headersUnprocTop(),
+        nUnprocessed: ctx.headersUnprocTotal(),
+        nUnprocFragm: ctx.headersUnprocChunks(),
         reorg:        ctx.pool.nReorg)
 
 proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncReqNewHeadCB =

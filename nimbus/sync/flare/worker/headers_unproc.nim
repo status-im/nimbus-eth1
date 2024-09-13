@@ -20,7 +20,10 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc unprocFetch*(ctx: FlareCtxRef; maxLen: uint64): Result[BnRange,void] =
+proc headersUnprocFetch*(
+    ctx: FlareCtxRef;
+    maxLen: uint64;
+      ): Result[BnRange,void] =
   ## Fetch interval from block ranges with maximal size `maxLen`, where
   ## `0` is interpreted as `2^64`.
   ##
@@ -48,52 +51,52 @@ proc unprocFetch*(ctx: FlareCtxRef; maxLen: uint64): Result[BnRange,void] =
   discard q.reduce(iv)
   ok(iv)
 
-proc unprocMerge*(ctx: FlareCtxRef; iv: BnRange) =
+proc headersUnprocMerge*(ctx: FlareCtxRef; iv: BnRange) =
   ## Merge back unprocessed range
   discard ctx.lhc.unprocessed.merge(iv)
 
-proc unprocMerge*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
+proc headersUnprocMerge*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
   ## Ditto
   discard ctx.lhc.unprocessed.merge(minPt, maxPt)
 
 
-proc unprocReduce*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
+proc headersUnprocReduce*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
   ## Merge back unprocessed range
   discard ctx.lhc.unprocessed.reduce(minPt, maxPt)
 
 
-proc unprocFullyCovered*(
+proc headersUnprocFullyCovered*(
     ctx: FlareCtxRef; minPt, maxPt: BlockNumber): bool =
   ## Check whether range is fully contained
   ctx.lhc.unprocessed.covered(minPt, maxPt) == maxPt - minPt + 1
 
-proc unprocCovered*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber): uint64 =
+proc headersUnprocCovered*(ctx: FlareCtxRef; minPt,maxPt: BlockNumber): uint64 =
   ## Check whether range is fully contained
   ctx.lhc.unprocessed.covered(minPt, maxPt)
 
-proc unprocCovered*(ctx: FlareCtxRef; pt: BlockNumber): bool =
+proc headersUnprocCovered*(ctx: FlareCtxRef; pt: BlockNumber): bool =
   ## Check whether point is contained
   ctx.lhc.unprocessed.covered(pt, pt) == 1
 
 
-proc unprocClear*(ctx: FlareCtxRef) =
+proc headersUnprocClear*(ctx: FlareCtxRef) =
   ctx.lhc.unprocessed.clear()
 
 
-proc unprocTop*(ctx: FlareCtxRef): BlockNumber =
+proc headersUnprocTop*(ctx: FlareCtxRef): BlockNumber =
   let iv = ctx.lhc.unprocessed.le().valueOr:
     return BlockNumber(0)
   iv.maxPt
 
-proc unprocTotal*(ctx: FlareCtxRef): uint64 =
+proc headersUnprocTotal*(ctx: FlareCtxRef): uint64 =
   ctx.lhc.unprocessed.total()
 
-proc unprocChunks*(ctx: FlareCtxRef): int =
+proc headersUnprocChunks*(ctx: FlareCtxRef): int =
   ctx.lhc.unprocessed.chunks()
 
 # ------------
 
-proc unprocInit*(ctx: FlareCtxRef) =
+proc headersUnprocInit*(ctx: FlareCtxRef) =
   ## Constructor
   ctx.lhc.unprocessed = BnRangeSet.init()
 

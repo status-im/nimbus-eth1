@@ -16,7 +16,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/[db, staged, start_stop, unproc, update],
+  ./worker/[db, headers_staged, headers_unproc, start_stop, update],
   ./worker_desc
 
 logScope:
@@ -30,7 +30,9 @@ const extraTraceMessages = false or true
 # ------------------------------------------------------------------------------
 
 proc headersToFetchOk(buddy: FlareBuddyRef): bool =
-  0 < buddy.ctx.unprocTotal() and buddy.ctrl.running and not buddy.ctx.poolMode
+  0 < buddy.ctx.headersUnprocTotal() and
+    buddy.ctrl.running and
+    not buddy.ctx.poolMode
 
 proc napUnlessHeadersToFetch(
     buddy: FlareBuddyRef;
@@ -140,8 +142,8 @@ proc runSingle*(buddy: FlareBuddyRef) {.async.} =
     if not await buddy.napUnlessHeadersToFetch info:
       # See `runMulti()` for comments
       while buddy.headersToFetchOk():
-        if await buddy.stagedCollect info:
-          discard buddy.ctx.stagedProcess info
+        if await buddy.headersStagedCollect info:
+          discard buddy.ctx.headersStagedProcess info
 
 
 proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
@@ -163,7 +165,7 @@ proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
   const info = "RUNPOOL"
   when extraTraceMessages:
     debug info, peer=buddy.peer, laps
-  buddy.ctx.stagedReorg info # reorg
+  buddy.ctx.headersStagedReorg info # reorg
   true # stop
 
 
@@ -229,11 +231,11 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
         # * Fetch headers for this range (as much as one can get)
         # * Verify that a block is contiguous, chained by parent hash, etc.
         # * Stash this range on the staged queue on the pool
-        if await buddy.stagedCollect info:
+        if await buddy.headersStagedCollect info:
 
           # * Save updated state and headers
           # * Decrease the left boundary `L` of the trusted range `[L,F]`
-          discard buddy.ctx.stagedProcess info
+          discard buddy.ctx.headersStagedProcess info
 
         # Note that it is important **not** to leave this function to be
         # re-invoked by the scheduler unless necessary. While the time gap
