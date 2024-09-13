@@ -314,7 +314,7 @@ proc runBackfillGossipBlockOffersLoop(
       continue
 
     if verifyGossip:
-      #await sleepAsync(100.milliseconds) # wait for the peers to be updated
+      await sleepAsync(100.milliseconds) # wait for the peers to be updated
       for k, _ in offersMap:
         try:
           let contentInfo =
@@ -324,7 +324,7 @@ proc runBackfillGossipBlockOffersLoop(
             retryGossip = true
             break
         except CatchableError as e:
-          error "Failed to find content with key: ",
+          warn "Failed to find content with key: ",
             contentKey = k, error = e.msg, workerId
           retryGossip = true
           break
