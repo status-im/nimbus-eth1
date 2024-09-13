@@ -130,15 +130,15 @@ proc getContractCode*(
 ): Future[Opt[ContractCodeRetrieval]] {.async: (raw: true, raises: [CancelledError]).} =
   n.getContent(key, ContractCodeRetrieval)
 
-proc getStateRootByBlockHash*(
-    n: StateNetwork, hash: BlockHash
+proc getStateRootByBlockNumOrHash*(
+    n: StateNetwork, blockNumOrHash: uint64 | BlockHash
 ): Future[Opt[KeccakHash]] {.async: (raises: [CancelledError]).} =
   if n.historyNetwork.isNone():
     warn "History network is not available"
     return Opt.none(KeccakHash)
 
-  let header = (await n.historyNetwork.get().getVerifiedBlockHeader(hash)).valueOr:
-    warn "Failed to get block header by hash", hash
+  let header = (await n.historyNetwork.get().getVerifiedBlockHeader(blockNumOrHash)).valueOr:
+    warn "Failed to get block header from history", blockNumOrHash
     return Opt.none(KeccakHash)
 
   Opt.some(header.stateRoot)
@@ -156,7 +156,7 @@ proc processOffer*(
 
   let res =
     if n.validateStateIsCanonical:
-      let stateRoot = (await n.getStateRootByBlockHash(contentValue.blockHash)).valueOr:
+      let stateRoot = (await n.getStateRootByBlockNumOrHash(contentValue.blockHash)).valueOr:
         return err("Failed to get state root by block hash")
       validateOffer(Opt.some(stateRoot), contentKey, contentValue)
     else:

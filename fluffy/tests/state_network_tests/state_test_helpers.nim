@@ -141,8 +141,8 @@ proc stop*(sn: StateNode) {.async.} =
 proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =
   return sn.stateNetwork.contentDB.get(contentId).isSome()
 
-proc mockBlockHashToStateRoot*(
-    sn: StateNode, blockHash: BlockHash, stateRoot: KeccakHash
+proc mockStateRootLookup*(
+    sn: StateNode, blockNumOrHash: uint64 | BlockHash, stateRoot: KeccakHash
 ) =
   let
     blockHeader = BlockHeader(stateRoot: stateRoot)
@@ -150,7 +150,7 @@ proc mockBlockHashToStateRoot*(
     blockHeaderWithProof = BlockHeaderWithProof(
       header: ByteList[2048].init(headerRlp), proof: BlockHeaderProof.init()
     )
-    contentKeyBytes = blockHeaderContentKey(blockHash).encode()
+    contentKeyBytes = blockHeaderContentKey(blockNumOrHash).encode()
     contentId = history_content.toContentId(contentKeyBytes)
 
   sn.portalProtocol().storeContent(

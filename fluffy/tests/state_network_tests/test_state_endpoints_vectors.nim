@@ -58,8 +58,8 @@ procSuite "State Endpoints":
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
       let rootKeyBytes = await stateNode1.portalProtocol.recursiveGossipOffer(
@@ -181,8 +181,8 @@ procSuite "State Endpoints":
         contentValue = AccountTrieNodeOffer.decode(contentValueBytes).get()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
       let rootKeyBytes = await stateNode1.portalProtocol.recursiveGossipOffer(
@@ -209,8 +209,8 @@ procSuite "State Endpoints":
         contentValue = ContractTrieNodeOffer.decode(contentValueBytes).get()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       # offer the leaf node
       let storageRootKeyBytes = await stateNode1.portalProtocol.recursiveGossipOffer(
@@ -262,8 +262,8 @@ procSuite "State Endpoints":
         contentValue = ContractCodeOffer.decode(contentValueBytes).get()
 
       # set valid state root
-      stateNode1.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
-      stateNode2.mockBlockHashToStateRoot(contentValue.blockHash, stateRoot)
+      stateNode1.mockStateRootLookup(contentValue.blockHash, stateRoot)
+      stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       await stateNode1.portalProtocol.gossipOffer(
         Opt.none(NodeId),
