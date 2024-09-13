@@ -139,11 +139,11 @@ proc getBlockReceipts(
 
 proc gossipBlockHeader(
     client: RpcClient,
-    hash: common_types.BlockHash,
+    id: common_types.BlockHash | uint64,
     headerWithProof: BlockHeaderWithProof,
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
-    contentKey = blockHeaderContentKey(hash)
+    contentKey = blockHeaderContentKey(id)
     encodedContentKeyHex = contentKey.encode.asSeq().toHex()
 
     peers =
@@ -250,8 +250,11 @@ proc runLatestLoop(
           error "Receipts root is invalid"
           continue
 
-      # gossip block header
+      # gossip block header by hash
       (await portalClient.gossipBlockHeader(hash, headerWithProof)).isOkOr:
+        error "Failed to gossip block header", error, hash
+      # gossip block header by number
+      (await portalClient.gossipBlockHeader(blockNumber, headerWithProof)).isOkOr:
         error "Failed to gossip block header", error, hash
 
       # For bodies & receipts to get verified, the header needs to be available
@@ -508,7 +511,11 @@ proc runBackfillLoopAuditMode(
         headerWithProof = buildHeaderWithProof(header, epochRecord).valueOr:
           raiseAssert "Failed to build header with proof: " & error
 
+      # gossip block header by hash
       (await portalClient.gossipBlockHeader(blockHash, headerWithProof)).isOkOr:
+        error "Failed to gossip block header", error, blockHash
+      # gossip block header by number
+      (await portalClient.gossipBlockHeader(blockNumber, headerWithProof)).isOkOr:
         error "Failed to gossip block header", error, blockHash
     if not bodySuccess:
       (
