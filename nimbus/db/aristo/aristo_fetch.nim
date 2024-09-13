@@ -55,31 +55,31 @@ proc retrieveLeaf(
 
   return err(FetchPathNotFound)
 
-proc retrieveAccountPayload(
+proc retrieveAccountLeaf(
     db: AristoDbRef;
     accPath: Hash256;
-      ): Result[LeafPayload,AristoError] =
+      ): Result[VertexRef,AristoError] =
   if (let leafVtx = db.layersGetAccLeaf(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
-    return ok leafVtx[].lData
+    return ok leafVtx
 
   if (let leafVtx = db.accLeaves.get(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
-    return ok leafVtx[].lData
+    return ok leafVtx
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
   let
     leafVtx = db.retrieveLeaf(VertexID(1), accPath.data).valueOr:
-      if error == FetchAccInaccessible:
-        return err(FetchPathNotFound)
+      if error == FetchPathNotFound:
+        db.accLeaves.put(accPath, nil)
       return err(error)
 
   db.accLeaves.put(accPath, leafVtx)
 
-  ok leafVtx.lData
+  ok leafVtx
 
 proc retrieveMerkleHash(
     db: AristoDbRef;
@@ -117,7 +117,7 @@ proc hasAccountPayload(
     db: AristoDbRef;
     accPath: Hash256;
       ): Result[bool,AristoError] =
-  let error = db.retrieveAccountPayload(accPath).errorOr:
+  let error = db.retrieveAccountLeaf(accPath).errorOr:
     return ok(true)
 
   if error == FetchPathNotFound:
@@ -131,8 +131,8 @@ proc fetchStorageIdImpl(
       ): Result[VertexID,AristoError] =
   ## Helper function for retrieving a storage (vertex) ID for a given account.
   let
-    payload = ?db.retrieveAccountPayload(accPath)
-    stoID = payload.stoID
+    leafVtx = ?db.retrieveAccountLeaf(accPath)
+    stoID = leafVtx[].lData.stoID
 
   if stoID.isValid:
     ok stoID.vid
@@ -197,6 +197,8 @@ proc retrieveStoragePayload(
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
   let leafVtx = db.retrieveLeaf(? db.fetchStorageIdImpl(accPath), stoPath.data).valueOr:
+    if error == FetchPathNotFound:
+      db.stoLeaves.put(mixPath, nil)
     return err(error)
 
   db.stoLeaves.put(mixPath, leafVtx)
@@ -233,10 +235,10 @@ proc fetchAccountRecord*(
       ): Result[AristoAccount,AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let pyl = ? db.retrieveAccountPayload(accPath)
-  assert pyl.pType == AccountData   # debugging only
+  let leafVtx = ? db.retrieveAccountLeaf(accPath)
+  assert leafVtx.lData.pType == AccountData   # debugging only
 
-  ok pyl.account
+  ok leafVtx.lData.account
 
 proc fetchAccountState*(
     db: AristoDbRef;
@@ -294,9 +296,7 @@ proc fetchStorageData*(
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
   ##
-  let leafVtx = ? db.retrieveLeaf(? db.fetchStorageIdImpl accPath, stoPath.data)
-  assert leafVtx.lData.pType == StoData   # debugging only
-  ok leafVtx.lData.stoData
+  db.retrieveStoragePayload(accPath, stoPath)
 
 proc fetchStorageState*(
     db: AristoDbRef;
