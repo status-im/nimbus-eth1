@@ -98,7 +98,7 @@ proc getAccountProof(
 
     key = AccountTrieNodeKey.init(nextPath, nextNodeHash)
 
-  doAssert(nibblesIdx <= nibbles.len()) # remove this
+  doAssert(nibblesIdx <= nibbles.len())
   ok((proof, nibblesIdx == nibbles.len()))
 
 proc getStorageProof(
@@ -126,7 +126,7 @@ proc getStorageProof(
 
     key = ContractTrieNodeKey.init(addressHash, nextPath, nextNodeHash)
 
-  doAssert(nibblesIdx <= nibbles.len()) # remove this
+  doAssert(nibblesIdx <= nibbles.len())
   ok((proof, nibblesIdx == nibbles.len()))
 
 proc getAccount(
@@ -213,8 +213,8 @@ proc getCodeByStateRoot*(
 type Proofs* = ref object
   account*: Account
   accountProof*: TrieProof
-  storageSlots*: seq[(UInt256, UInt256)]
-  storageProofs*: seq[TrieProof]
+  slots*: seq[(UInt256, UInt256)]
+  slotProofs*: seq[TrieProof]
 
 proc getProofsByStateRoot*(
     n: StateNetwork, stateRoot: KeccakHash, address: EthAddress, slotKeys: seq[UInt256]
@@ -233,13 +233,13 @@ proc getProofsByStateRoot*(
     storageExists = account.storageRoot != EMPTY_ROOT_HASH
 
   var
-    storageSlots = newSeqOfCap[(UInt256, UInt256)](slotKeys.len)
-    storageProofs = newSeqOfCap[TrieProof](slotKeys.len)
+    slots = newSeqOfCap[(UInt256, UInt256)](slotKeys.len)
+    slotProofs = newSeqOfCap[TrieProof](slotKeys.len)
 
   for slotKey in slotKeys:
     if not storageExists:
-      storageSlots.add((slotKey, 0.u256))
-      storageProofs.add(TrieProof.empty())
+      slots.add((slotKey, 0.u256))
+      slotProofs.add(TrieProof.empty())
       continue
 
     let
@@ -255,15 +255,12 @@ proc getProofsByStateRoot*(
             return Opt.none(Proofs)
         else:
           0.u256
-    storageSlots.add((slotKey, slotValue))
-    storageProofs.add(storageProof)
+    slots.add((slotKey, slotValue))
+    slotProofs.add(storageProof)
 
   return Opt.some(
     Proofs(
-      account: account,
-      accountProof: accountProof,
-      storageSlots: storageSlots,
-      storageProofs: storageProofs,
+      account: account, accountProof: accountProof, slots: slots, slotProofs: slotProofs
     )
   )
 

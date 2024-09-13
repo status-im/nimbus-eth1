@@ -236,7 +236,8 @@ suite "State Endpoints - Genesis JSON Files":
             proofs.account.codeHash == keccakHash(account.code)
             proofs.accountProof.len() > 0
             proofs.accountProof == accountState.generateAccountProof(address)
-            proofs.storageProofs.len() == 0
+            proofs.slots.len() == 0
+            proofs.slotProofs.len() == 0
 
           for slotKey, slotValue in account.storage:
             stateNode.setupSlotInDb(accountState, storageState, address, slotKey)
@@ -255,9 +256,10 @@ suite "State Endpoints - Genesis JSON Files":
               proofs.account.codeHash == keccakHash(account.code)
               proofs.accountProof.len() > 0
               proofs.accountProof == accountState.generateAccountProof(address)
-              proofs.storageProofs.len() == 1
-              proofs.storageProofs[0].len() > 0
-              proofs.storageProofs[0] == storageState.generateStorageProof(slotKey)
+              proofs.slots == @[(slotKey, slotValue)]
+              proofs.slotProofs.len() == 1
+              proofs.slotProofs[0].len() > 0
+              proofs.slotProofs[0] == storageState.generateStorageProof(slotKey)
         else:
           # account exists but code and slot doesn't exist
           let
@@ -273,8 +275,9 @@ suite "State Endpoints - Genesis JSON Files":
             proofs.account.codeHash == EMPTY_CODE_HASH
             proofs.accountProof.len() > 0
             proofs.accountProof == accountState.generateAccountProof(address)
-            proofs.storageProofs.len() == 1
-            proofs.storageProofs[0].len() == 0
+            proofs.slots == @[(2.u256, 0.u256)]
+            proofs.slotProofs.len() == 1
+            proofs.slotProofs[0].len() == 0
 
       # account doesn't exist
       block:
@@ -289,10 +292,9 @@ suite "State Endpoints - Genesis JSON Files":
           proofs.account == newAccount()
           proofs.accountProof.len() > 0
           proofs.accountProof == accountState.generateAccountProof(badAddress)
-          proofs.storageSlots.len() == 2
-          proofs.storageSlots == @[(0.u256, 0.u256), (1.u256, 0.u256)]
-          proofs.storageProofs.len() == 2
-          proofs.storageProofs[0].len() == 0
-          proofs.storageProofs[1].len() == 0
+          proofs.slots == @[(0.u256, 0.u256), (1.u256, 0.u256)]
+          proofs.slotProofs.len() == 2
+          proofs.slotProofs[0].len() == 0
+          proofs.slotProofs[1].len() == 0
 
     await stateNode.stop()
