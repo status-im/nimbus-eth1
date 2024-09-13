@@ -244,6 +244,10 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           importedSlot += 1
           continue
 
+        if blockNumber >= blk.header.number:
+          error "Era history is behind client history", stateBlockNumber = blockNumber, eraBlockNumber = blk.header.number
+          quit QuitFailure
+
         clNum = blk.header.number
         # decreasing the lower bound with each iteration
         importedSlot += blockNumber - clNum
