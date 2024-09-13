@@ -99,6 +99,21 @@ proc fromJson(T: type Withdrawal, n: JsonNode): Withdrawal =
     amount: fromJson(uint64, n, "amount")
   )
 
+proc fromJson(T: type Authorization, n: JsonNode): Authorization =
+  Authorization(
+    chainId: fromJson(ChainId, n, "chainId"),
+    address: fromJson(EthAddress, n, "address"),
+    nonce: fromJson(uint64, n, "nonce"),
+    yParity: fromJson(uint64, n, "yParity"),
+    R: fromJson(UInt256, n, "R"),
+    S: fromJson(UInt256, n, "S"),
+  )
+
+proc fromJson(T: type seq[Authorization], n: JsonNode, field: string): T =
+  let list = n[field]
+  for x in list:
+    result.add Authorization.fromJson(x)
+
 proc fromJson(T: type VersionedHashes, n: JsonNode, field: string): VersionedHashes =
   let list = n[field]
   for x in list:
@@ -227,6 +242,12 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     omitZero(tx, AccessList, accessList)
     required(tx, UInt256, maxFeePerBlobGas)
     required(tx, VersionedHashes, blobVersionedHashes)
+  of TxEip7702:
+    required(tx, ChainId, chainId)
+    required(tx, GasInt, maxPriorityFeePerGas)
+    required(tx, GasInt, maxFeePerGas)
+    omitZero(tx, AccessList, accessList)
+    required(tx, seq[Authorization], authorizationList)
 
   var eip155 = true
   if n.hasKey("protected"):
