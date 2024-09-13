@@ -62,12 +62,12 @@ proc retrieveAccountLeaf(
   if (let leafVtx = db.layersGetAccLeaf(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
-    return ok leafVtx
+    return ok leafVtx[]
 
   if (let leafVtx = db.accLeaves.get(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
-    return ok leafVtx
+    return ok leafVtx[]
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
