@@ -156,13 +156,19 @@ proc dbStoreLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
 
   # While executing blocks there are frequent save cycles. Otherwise, an
   # extra save request might help to pick up an interrupted sync session.
-  if ctx.db.getSavedStateBlockNumber() == 0:
-    ctx.db.persistent(0).isOkOr:
-      when extraTraceMessages:
-        trace info & ": failed to save layout pesistently", error=($$error)
+  let txLevel = ctx.db.level()
+  if txLevel == 0:
+    let number = ctx.db.getSavedStateBlockNumber()
+    ctx.db.persistent(number).isOkOr:
+      debug info & ": failed to save persistently", error=($$error)
       return false
+  else:
     when extraTraceMessages:
-      trace info & ": layout saved pesistently"
+      trace info & ": not saved, tx pending", txLevel
+    return false
+
+  when extraTraceMessages:
+    trace info & ": saved pesistently on DB"
   true
 
 
@@ -180,7 +186,7 @@ proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
       # Add interval of unprocessed block range `(B,L)` from README
       ctx.unprocMerge(uMin, uMax)
     when extraTraceMessages:
-      trace info & ": restored layout"
+      trace info & ": restored layout from DB"
   else:
     let val = ctx.fetchSavedState().expect "saved states"
     ctx.lhc.layout = LinkedHChainsLayout(
@@ -223,7 +229,7 @@ proc dbStashHeaders*(
     kvt.put(key.toOpenArray, data).isOkOr:
       raiseAssert info & ": put() failed: " & $$error
   when extraTraceMessages:
-    trace info & ": headers stashed",
+    trace info & ": headers stashed on DB",
       iv=BnRange.new(first, last), nHeaders=revBlobs.len
 
 proc dbPeekHeader*(ctx: FlareCtxRef; num: BlockNumber): Opt[BlockHeader] =
