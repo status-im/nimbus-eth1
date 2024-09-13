@@ -22,7 +22,7 @@ import
 logScope:
   topics = "flare update"
 
-const extraTraceMessages = false
+const extraTraceMessages = false or true
   ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
@@ -49,7 +49,7 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   ## ::
   ##     G               B==L                 L'==F'
   ##     o----------------o---------------------o---->
-  ##     | <-- linked --> |
+  ##     | <-- linked --> | <-- unprocessed --> |
   ##
   const info = "updateBeaconChange"
 
@@ -89,7 +89,10 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   discard ctx.dbStoreLinkedHChainsLayout()
 
   # Update range
-  ctx.headersUnprocMerge(ctx.layout.base+1, ctx.layout.least-1)
+  doAssert ctx.headersUnprocTotal() == 0
+  doAssert ctx.headersUnprocBorrowed() == 0
+  doAssert ctx.lhc.staged.len == 0
+  ctx.headersUnprocSet(ctx.layout.base+1, ctx.layout.least-1)
 
   when extraTraceMessages:
     trace info & ": updated"

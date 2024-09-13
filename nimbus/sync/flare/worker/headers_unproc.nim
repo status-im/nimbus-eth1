@@ -49,26 +49,45 @@ proc headersUnprocFetch*(
         BnRange.new(jv.maxPt - maxLen + 1, jv.maxPt)
 
   discard q.reduce(iv)
+  ctx.lhc.borrowed += iv.len
   ok(iv)
 
-proc headersUnprocMerge*(ctx: FlareCtxRef; iv: BnRange) =
-  ## Merge back unprocessed range
-  discard ctx.lhc.unprocessed.merge(iv)
+#proc headersUnprocMerge*(ctx: FlareCtxRef; iv: BnRange) =
+#  ## Merge back unprocessed range
+#  discard ctx.lhc.unprocessed.merge(iv)
 
-proc headersUnprocMerge*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
-  ## Ditto
-  discard ctx.lhc.unprocessed.merge(minPt, maxPt)
+#proc headersUnprocMerge*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
+#  ## Ditto
+#  discard ctx.lhc.unprocessed.merge(minPt, maxPt)
+
+proc headersUnprocCommit*(ctx: FlareCtxRef; borrowed: uint) =
+  ## Commit back all processed range
+  ctx.lhc.borrowed -= borrowed
+
+proc headersUnprocCommit*(ctx: FlareCtxRef; borrowed: uint; retuor: BnRange) =
+  ## Merge back unprocessed range `retour`
+  ctx.headersUnprocCommit borrowed
+  doAssert ctx.lhc.unprocessed.merge(retuor) == retuor.len
+
+proc headersUnprocCommit*(
+    ctx: FlareCtxRef;
+    borrowed: uint;
+    rMinPt: BlockNumber;
+    rMaxPt: BlockNumber) =
+  ## Variant of `headersUnprocCommit()`
+  ctx.headersUnprocCommit borrowed
+  doAssert ctx.lhc.unprocessed.merge(rMinPt, rMaxPt) == rMaxPt - rMinPt + 1
 
 
-proc headersUnprocReduce*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
-  ## Merge back unprocessed range
-  discard ctx.lhc.unprocessed.reduce(minPt, maxPt)
+#proc headersUnprocReduce*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
+#  ## ..
+#  discard ctx.lhc.unprocessed.reduce(minPt, maxPt)
 
+#proc headersUnprocFullyCovered*(
+#    ctx: FlareCtxRef; minPt, maxPt: BlockNumber): bool =
+#  ## Check whether range is fully contained
+#  ctx.lhc.unprocessed.covered(minPt, maxPt) == maxPt - minPt + 1
 
-proc headersUnprocFullyCovered*(
-    ctx: FlareCtxRef; minPt, maxPt: BlockNumber): bool =
-  ## Check whether range is fully contained
-  ctx.lhc.unprocessed.covered(minPt, maxPt) == maxPt - minPt + 1
 
 proc headersUnprocCovered*(ctx: FlareCtxRef; minPt,maxPt: BlockNumber): uint64 =
   ## Check whether range is fully contained
@@ -79,10 +98,6 @@ proc headersUnprocCovered*(ctx: FlareCtxRef; pt: BlockNumber): bool =
   ctx.lhc.unprocessed.covered(pt, pt) == 1
 
 
-proc headersUnprocClear*(ctx: FlareCtxRef) =
-  ctx.lhc.unprocessed.clear()
-
-
 proc headersUnprocTop*(ctx: FlareCtxRef): BlockNumber =
   let iv = ctx.lhc.unprocessed.le().valueOr:
     return BlockNumber(0)
@@ -90,6 +105,9 @@ proc headersUnprocTop*(ctx: FlareCtxRef): BlockNumber =
 
 proc headersUnprocTotal*(ctx: FlareCtxRef): uint64 =
   ctx.lhc.unprocessed.total()
+
+proc headersUnprocBorrowed*(ctx: FlareCtxRef): uint =
+  ctx.lhc.borrowed
 
 proc headersUnprocChunks*(ctx: FlareCtxRef): int =
   ctx.lhc.unprocessed.chunks()
@@ -99,6 +117,22 @@ proc headersUnprocChunks*(ctx: FlareCtxRef): int =
 proc headersUnprocInit*(ctx: FlareCtxRef) =
   ## Constructor
   ctx.lhc.unprocessed = BnRangeSet.init()
+
+
+proc headersUnprocSet*(ctx: FlareCtxRef) =
+  ## Clear
+  ctx.lhc.unprocessed.clear()
+  ctx.lhc.borrowed = 0u
+
+proc headersUnprocSet*(ctx: FlareCtxRef; iv: BnRange) =
+  ## Set up new unprocessed range
+  ctx.headersUnprocSet()
+  discard ctx.lhc.unprocessed.merge(iv)
+
+proc headersUnprocSet*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
+  ## Ditto
+  ctx.headersUnprocSet()
+  discard ctx.lhc.unprocessed.merge(minPt, maxPt)
 
 # ------------------------------------------------------------------------------
 # End

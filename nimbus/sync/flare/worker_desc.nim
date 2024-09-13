@@ -32,9 +32,6 @@ type
   LinkedHChainQueue* = SortedSet[BlockNumber,LinkedHChain]
     ## Block intervals sorted by largest block number.
 
-  LinkedHChainQueueWalk* = SortedSetWalkRef[BlockNumber,LinkedHChain]
-    ## Traversal descriptor
-
   LinkedHChain* = object
     ## Public block items for the `LinkedHChainQueue` list, indexed by the
     ## largest block number. The list `revHdrs[]` is reversed, i.e. the largest
@@ -80,6 +77,7 @@ type
     ## Sync state for linked header chains
     beacon*: BeaconHeader            ## See `Z` in README
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
+    borrowed*: uint                  ## Total of temp. fetched ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
     layout*: LinkedHChainsLayout     ## Current header chains layout
     lastLayout*: LinkedHChainsLayout ## Previous layout (for delta update)

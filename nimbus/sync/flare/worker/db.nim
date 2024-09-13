@@ -184,7 +184,7 @@ proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
     let (uMin,uMax) = (rc.value.base+1, rc.value.least-1)
     if uMin <= uMax:
       # Add interval of unprocessed block range `(B,L)` from README
-      ctx.headersUnprocMerge(uMin, uMax)
+      ctx.headersUnprocSet(uMin, uMax)
     when extraTraceMessages:
       trace info & ": restored layout from DB"
   else:
