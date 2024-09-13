@@ -32,6 +32,8 @@ const
   runNoHeadersIdleWaitInterval* = chronos.seconds(30)
     ## Sllep some time in multi-mode if there is nothing to do
 
+  # ----------------------
+
   nFetchHeadersRequest* = 1_024
     ## Number of headers that will be requested with a single `eth/xx` message.
     ##
@@ -48,21 +50,23 @@ const
     ## Length of the request/stage batch. Several headers are consecutively
     ## fetched and stashed together as a single record on the staged queue.
 
-  stagedQueueLengthLwm* = 32
+  headersStagedQueueLengthLwm* = 32
     ## Limit the number of records in the staged queue. They start accumulating
     ## if one peer stalls while fetching the top chain so leaving a gap. This
     ## gap must be filled first before inserting the queue into a contiguous
     ## chain of headers. So this is a low-water mark where the system will
     ## try some magic to mitigate this problem.
 
-  stagedQueueLengthHwm* = 48
+  headersStagedQueueLengthHwm* = 48
     ## If this size is exceeded, the staged queue is flushed and its contents
     ## is re-fetched from scratch.
 
+  # ----------------------
 
 static:
   doAssert 0 < nFetchHeadersRequest
   doAssert nFetchHeadersRequest <= nFetchHeadersBatch
-  doAssert stagedQueueLengthLwm < stagedQueueLengthHwm
+  doAssert 0 < headersStagedQueueLengthLwm
+  doAssert headersStagedQueueLengthLwm < headersStagedQueueLengthHwm
 
 # End

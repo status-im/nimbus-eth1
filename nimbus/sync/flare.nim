@@ -107,12 +107,10 @@ proc init*(
     T: type FlareSyncRef;
     ethNode: EthereumNode;
     chain: ForkedChainRef;
-    rng: ref HmacDrbgContext;
     maxPeers: int;
       ): T =
   new result
   result.initSync(ethNode, chain, maxPeers)
-  result.ctx.pool.rng = rng
 
 proc start*(ctx: FlareSyncRef) =
   ## Beacon Sync always begin with stop mode

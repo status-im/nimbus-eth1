@@ -75,7 +75,6 @@ type
     ## Beacon state to be implicitely updated by RPC method
     changed*: bool                   ## Set a marker if something has changed
     header*: BlockHeader             ## Running on beacon chain, last header
-    slow_start*: float               ## Share of block number to use if positive
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains
@@ -99,7 +98,6 @@ type
 
   FlareCtxData* = object
     ## Globally shared data extension
-    rng*: ref HmacDrbgContext        ## Random generator, FIXME: maybe obsolete
     lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
     nextUpdate*: Moment              ## For updating metrics
 

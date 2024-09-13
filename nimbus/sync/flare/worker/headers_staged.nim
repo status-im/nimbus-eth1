@@ -283,17 +283,17 @@ proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
 
     result.inc # count records
 
-    when extraTraceMessages:
-      trace info & ": staged record saved", iv, layout=ok, nSaved=result
+    #when extraTraceMessages:
+    #  trace info & ": staged record saved", iv, layout=ok, nSaved=result
 
   when not extraTraceMessages:
     trace info & ": staged records saved",
       nStaged=ctx.lhc.staged.len, nSaved=result
 
-  if stagedQueueLengthLwm < ctx.lhc.staged.len:
+  if headersStagedQueueLengthLwm < ctx.lhc.staged.len:
     when extraTraceMessages:
       trace info & ": staged queue too large => reorg",
-        nStaged=ctx.lhc.staged.len, max=stagedQueueLengthLwm
+        nStaged=ctx.lhc.staged.len, max=headersStagedQueueLengthLwm
     ctx.poolMode = true
 
 
@@ -312,13 +312,14 @@ proc headersStagedReorg*(ctx: FlareCtxRef; info: static[string]) =
   ctx.pool.nReorg.inc
 
   let nStaged = ctx.lhc.staged.len
-  if stagedQueueLengthHwm < nStaged:
+  if headersStagedQueueLengthHwm < nStaged:
     trace info & ": hwm reached, flushing staged queue",
-      nStaged, max=stagedQueueLengthLwm
+      nStaged, max=headersStagedQueueLengthLwm
 
-    # Remove the leading `1 + nStaged - stagedQueueLengthLwm` entries from list
-    # so that the upper `stagedQueueLengthLwm-1` entries remain.
-    for _ in 0 .. nStaged - stagedQueueLengthLwm:
+    # Remove the leading `1 + nStaged - headersStagedQueueLengthLwm` entries
+    # from list so that the upper `headersStagedQueueLengthLwm-1` entries
+    # remain.
+    for _ in 0 .. nStaged - headersStagedQueueLengthLwm:
       let
         qItem = ctx.lhc.staged.ge(BlockNumber 0).expect "valid record"
         key = qItem.key
