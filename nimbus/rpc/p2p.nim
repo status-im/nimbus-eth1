@@ -83,18 +83,6 @@ proc setupEthRpc*(
       {.gcsafe, raises: [CatchableError].} =
     result = getStateDB(chainDB.headerFromTag(quantityTag))
 
-  server.rpc("eth_protocolVersion") do() -> Opt[string]:
-    # Old Ethereum wiki documents this as returning a decimal string.
-    # Infura documents this as returning 0x-prefixed hex string.
-    # Geth 1.10.0 has removed this call "as it makes no sense".
-    # - https://eth.wiki/json-rpc/API#eth_protocolversion
-    # - https://infura.io/docs/ethereum/json-rpc/eth-protocolVersion
-    # - https://blog.ethereum.org/2021/03/03/geth-v1-10-0/#compatibility
-    for n in node.capabilities:
-      if n.name == "eth":
-        return Opt.some($n.version)
-    return Opt.none(string)
-
   server.rpc("eth_chainId") do() -> Web3Quantity:
     return w3Qty(distinctBase(com.chainId))
 
@@ -109,21 +97,6 @@ proc setupEthRpc*(
       return SyncingStatus(syncing: true, syncObject: sync)
     else:
       return SyncingStatus(syncing: false)
-
-  server.rpc("eth_coinbase") do() -> Web3Address:
-    ## Returns the current coinbase address.
-    # currently we don't have miner
-    result = w3Address()
-
-  server.rpc("eth_mining") do() -> bool:
-    ## Returns true if the client is mining, otherwise false.
-    # currently we don't have miner
-    result = false
-
-  server.rpc("eth_hashrate") do() -> Web3Quantity:
-    ## Returns the number of hashes per second that the node is mining with.
-    # currently we don't have miner
-    result = w3Qty(0.uint)
 
   server.rpc("eth_gasPrice") do() -> Web3Quantity:
     ## Returns an integer of the current gas price in wei.
@@ -632,76 +605,3 @@ proc setupEthRpc*(
     if res.isErr:
       raise newException(ValueError, res.error)
     return res.get
-
-#[
-  server.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
-    ## Creates a filter object, based on filter options, to notify when the state changes (logs).
-    ## To check if the state has changed, call eth_getFilterChanges.
-    ## Topics are order-dependent. A transaction with a log with topics [A, B] will be matched by the following topic filters:
-    ## [] "anything"
-    ## [A] "A in first position (and anything after)"
-    ## [null, B] "anything in first position AND B in second position (and anything after)"
-    ## [A, B] "A in first position AND B in second position (and anything after)"
-    ## [[A, B], [A, B]] "(A OR B) in first position AND (A OR B) in second position (and anything after)"
-    ##
-    ## filterOptions: settings for this filter.
-    ## Returns integer filter id.
-    discard
-
-  server.rpc("eth_newBlockFilter") do() -> int:
-    ## Creates a filter in the node, to notify when a new block arrives.
-    ## To check if the state has changed, call eth_getFilterChanges.
-    ##
-    ## Returns integer filter id.
-    discard
-
-  server.rpc("eth_newPendingTransactionFilter") do() -> int:
-    ## Creates a filter in the node, to notify when a new block arrives.
-    ## To check if the state has changed, call eth_getFilterChanges.
-    ##
-    ## Returns integer filter id.
-    discard
-
-  server.rpc("eth_uninstallFilter") do(filterId: int) -> bool:
-    ## Uninstalls a filter with given id. Should always be called when watch is no longer needed.
-    ## Additonally Filters timeout when they aren't requested with eth_getFilterChanges for a period of time.
-    ##
-    ## filterId: The filter id.
-    ## Returns true if the filter was successfully uninstalled, otherwise false.
-    discard
-
-  server.rpc("eth_getFilterChanges") do(filterId: int) -> seq[FilterLog]:
-    ## Polling method for a filter, which returns an list of logs which occurred since last poll.
-    ##
-    ## filterId: the filter id.
-    result = @[]
-
-  server.rpc("eth_getFilterLogs") do(filterId: int) -> seq[FilterLog]:
-    ## filterId: the filter id.
-    ## Returns a list of all logs matching filter with given id.
-    result = @[]
-
-  server.rpc("eth_getWork") do() -> array[3, UInt256]:
-    ## Returns the hash of the current block, the seedHash, and the boundary condition to be met ("target").
-    ## Returned list has the following properties:
-    ## DATA, 32 Bytes - current block header pow-hash.
-    ## DATA, 32 Bytes - the seed hash used for the DAG.
-    ## DATA, 32 Bytes - the boundary condition ("target"), 2^256 / difficulty.
-    discard
-
-  server.rpc("eth_submitWork") do(nonce: int64, powHash: HexDataStr, mixHash: HexDataStr) -> bool:
-    ## Used for submitting a proof-of-work solution.
-    ##
-    ## nonce: the nonce found.
-    ## headerPow: the header's pow-hash.
-    ## mixHash: the mix digest.
-    ## Returns true if the provided solution is valid, otherwise false.
-    discard
-
-  server.rpc("eth_submitHashrate") do(hashRate: HexDataStr, id: HexDataStr) -> bool:
-    ## Used for submitting mining hashrate.
-    ##
-    ## hashRate: a hexadecimal string representation (32 bytes) of the hash rate.
-    ## id: a random hexadecimal(32 bytes) ID identifying the client.
-    ## Returns true if submitting went through succesfully and false otherwise.
-    discard]#
