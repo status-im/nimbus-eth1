@@ -129,7 +129,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       if isDir(conf.eraDir.string):
         4700013'u64 # Mainnet
       else:
-        notice "No eraDir found for Mainnet, block loading will stop after era1"
+        warn "No eraDir found for Mainnet, block loading will stop after era1"
         0'u64 # No eraDir for Mainnet
   elif conf.networkId == SepoliaNet:
     doAssert isDir(conf.era1Dir.string), "Era1 directory not found"
@@ -142,7 +142,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       if isDir(conf.eraDir.string):
         115193'u64 # Sepolia
       else:
-        notice "No eraDir found for Sepolia, block loading will stop after era1"
+        warn "No eraDir found for Sepolia, block loading will stop after era1"
         0'u64 # No eraDir for Sepolia
   elif conf.networkId == HoleskyNet:
     doAssert isDir(conf.eraDir.string), "Era directory not found"
@@ -232,7 +232,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     if blockNumber > 1:
       # Setting the initial lower bound
       importedSlot = (blockNumber - lastEra1Block) + firstSlotAfterMerge
-      notice "Finding slot number after resuming import", importedSlot
+      debug "Finding slot number after resuming import", importedSlot
 
       # BlockNumber based slot finding
       var clNum = 0'u64
@@ -246,15 +246,15 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
         # Checks if the Nimbus block number is ahead the era block number
         if blockNumber >= blk.header.number:
-          error "Era history is behind client history",
+          notice "Avaiable Era Files are already imported",
             stateBlockNumber = blockNumber, eraBlockNumber = blk.header.number
-          quit QuitFailure
+          quit QuitSuccess
 
         clNum = blk.header.number
         # decreasing the lower bound with each iteration
         importedSlot += blockNumber - clNum
 
-      notice "Found the slot to start with", importedSlot
+      notice "Resuming import from", importedSlot
 
   if isDir(conf.era1Dir.string) or isDir(conf.eraDir.string):
     if start <= lastEra1Block:
