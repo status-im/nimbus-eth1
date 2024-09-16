@@ -77,3 +77,9 @@ func isValidOpcode*(c: CodeBytesRef, position: int): bool =
 
 func `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
   a.bytes == b
+
+func hasPrefix*(a: CodeBytesRef, b: openArray[byte]): bool =
+  for i in 0..<b.len:
+    if a.bytes[i] != b[i]:
+      return false
+  true

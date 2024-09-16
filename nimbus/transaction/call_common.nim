@@ -44,6 +44,7 @@ type
     input*:        seq[byte]            # Input data.
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
+    authorizationList*: seq[Authorization] # EIP-7702 (Prague)
     noIntrinsic*:  bool                 # Don't charge intrinsic gas.
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
@@ -57,8 +58,8 @@ type
     gasUsed*:         GasInt            # Gas used by the call.
     contractAddress*: Address        # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
-    stack*:           EvmStack       # EVM stack on return (for test only).
-    memory*:          EvmMemory      # EVM memory on return (for test only).
+    stack*:           EvmStack          # EVM stack on return (for test only).
+    memory*:          EvmMemory         # EVM memory on return (for test only).
 
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
@@ -185,7 +186,8 @@ proc setupHost(call: CallParams): TransactionHost =
         host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg, code)
+    host.computation = newComputation(vmState, call.sysCall, cMsg, code,
+      authorizationList = call.authorizationList)
 
     host.code = code
 
@@ -198,7 +200,8 @@ proc setupHost(call: CallParams): TransactionHost =
       host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg)
+    host.computation = newComputation(vmState, call.sysCall, cMsg,
+      authorizationList = call.authorizationList)
 
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
