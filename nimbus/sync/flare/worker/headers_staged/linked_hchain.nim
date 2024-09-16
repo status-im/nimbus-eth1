@@ -16,24 +16,6 @@ import
   ../../../../common,
   ../../worker_desc
 
-const
-  extraTraceMessages = false
-    ## Enabled additional logging noise
-
-  verifyDataStructureOk = false or true
-    ## Debugging mode
-
-when extraTraceMessages:
-  import
-    pkg/chronicles,
-    stew/interval_set
-
-  logScope:
-    topics = "flare staged"
-
-when verifyDataStructureOk:
-  import ./debug
-
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
 # ------------------------------------------------------------------------------
@@ -56,15 +38,10 @@ proc extendLinkedHChain*(
   info: static[string];
     ): bool =
   ## Returns sort of `lhc[] += rev[]` where `lhc[]` is updated in place.
-  when extraTraceMessages:
-    let peer = buddy.peer
 
   # Verify top block number
   assert 0 < rev.len # debugging only
   if rev[0].number != topNumber:
-    when extraTraceMessages:
-      trace info & ": top block number mismatch", peer, n=0,
-        number=rev[0].number.bnStr, expected=topNumber.bnStr
     return false
 
   # Make space for return code array
@@ -81,38 +58,23 @@ proc extendLinkedHChain*(
 
   # Verify top block hash (if any)
   if lhc.parentHash != EMPTY_ROOT_HASH and hash0 != lhc.parentHash:
-    when extraTraceMessages:
-      trace info & ": top hash mismatch", peer, hash0, expected=lhc.parentHash
     lhc.revHdrs.setLen(offset)
     return false
 
   # Encode block headers and make sure they are chained
   for n in 1 ..< rev.len:
     if rev[n].number + 1 != rev[n-1].number:
-      when extraTraceMessages:
-        trace info & ": #numbers mismatch", peer, n,
-          parentNumber=rev[n-1].number.bnStr, number=rev[n].number.bnStr
       lhc.revHdrs.setLen(offset)
       return false
 
     lhc.revHdrs[offset + n] = rlp.encode(rev[n])
     let hashN = lhc.revHdrs[offset + n].keccakHash
     if rev[n-1].parentHash != hashN:
-      when extraTraceMessages:
-        trace info & ": hash mismatch", peer, n,
-          parentHash=rev[n-1].parentHash, hashN
       lhc.revHdrs.setLen(offset)
       return false
 
   # Finalise
   lhc.parentHash = rev[rev.len-1].parentHash
-
-  when extraTraceMessages:
-    trace info & " extended chain record", peer, topNumber=topNumber.bnStr,
-      offset, nLhc=lhc.revHdrs.len
-
-  when verifyDataStructureOk:
-    lhc.verifyHeaderChainItem info
 
   true
 

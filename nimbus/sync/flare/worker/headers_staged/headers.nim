@@ -21,9 +21,6 @@ import
 logScope:
   topics = "flare headers"
 
-const extraTraceMessages = true
-  ## Enabled additional logging noise
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -73,9 +70,8 @@ proc headersFetchReversed*(
             number:   ivReq.maxPt))
     start = Moment.now()
 
-  when extraTraceMessages:
-    trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
-      nReq=req.maxResults, useHash, nRespErrors=buddy.only.nRespErrors
+  trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
+    nReq=req.maxResults, useHash, nRespErrors=buddy.only.nRespErrors
 
   # Fetch headers from peer
   var resp: Option[blockHeadersObj]
@@ -98,19 +94,17 @@ proc headersFetchReversed*(
   # Evaluate result
   if resp.isNone or buddy.ctrl.stopped:
     buddy.registerError()
-    when extraTraceMessages:
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-        nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-        nRespErrors=buddy.only.nRespErrors
+    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
+      nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+      nRespErrors=buddy.only.nRespErrors
     return err()
 
   let h: seq[BlockHeader] = resp.get.headers
   if h.len == 0 or ivReq.len < h.len.uint:
     buddy.registerError()
-    when extraTraceMessages:
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-        nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-        nRespErrors=buddy.only.nRespErrors
+    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
+      nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+      nRespErrors=buddy.only.nRespErrors
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
@@ -121,17 +115,10 @@ proc headersFetchReversed*(
   else:
     buddy.only.nRespErrors = 0 # reset error count
 
-  when extraTraceMessages:
-    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-      ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
-      elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nRespErrors
-  else:
-    if buddy.ctrl.stopped:
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-        ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
-        elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-        nRespErrors=buddy.only.nRespErrors
+  trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
+    ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
+    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+    nRespErrors=buddy.only.nRespErrors
 
   return ok(h)
 

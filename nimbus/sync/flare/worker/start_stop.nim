@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  pkg/chronicles,
   pkg/eth/[common, p2p],
   ../../protocol,
   ../worker_desc,
@@ -19,12 +18,6 @@ import
 
 when enableTicker:
   import ./start_stop/ticker
-
-logScope:
-  topics = "flare start/stop"
-
-const extraTraceMessages = false or true
-  ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
 # Private functions

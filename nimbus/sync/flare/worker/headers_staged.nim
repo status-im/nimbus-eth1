@@ -23,16 +23,6 @@ import
 logScope:
   topics = "flare staged"
 
-const
-  extraTraceMessages = false or true
-    ## Enabled additional logging noise
-
-  verifyDataStructureOk = false or true
-    ## Debugging mode
-
-when verifyDataStructureOk:
-  import ./headers_staged/debug
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -50,17 +40,12 @@ proc fetchAndCheck(
   let revHeaders = block:
     let rc = await buddy.headersFetchReversed(ivReq, lhc.parentHash, info)
     if rc.isErr:
-      when extraTraceMessages:
-        trace info & ": fetch headers failed", peer=buddy.peer, ivReq,
-          nRespErrors=buddy.only.nRespErrors
       return false
     rc.value
 
   # While assembling a `LinkedHChainRef`, verify that the `revHeaders` list
   # was sound, i.e. contiguous, linked, etc.
   if not revHeaders.extendLinkedHChain(buddy, ivReq.maxPt, lhc, info):
-    when extraTraceMessages:
-      trace info & ": fetched headers unusable", peer=buddy.peer, ivReq
     return false
 
   return true
@@ -157,9 +142,8 @@ proc headersStagedCollect*(
         if 0 < buddy.only.nRespErrors and buddy.ctrl.stopped:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
-        when extraTraceMessages:
-          trace info & ": completely failed", peer, iv, ivReq, isOpportunistic,
-            ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nRespErrors
+        trace info & ": completely failed", peer, iv, ivReq, isOpportunistic,
+          ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nRespErrors
         ctx.headersUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
         # on the currently returned interval.
@@ -168,9 +152,8 @@ proc headersStagedCollect*(
 
       # So it is deterministic and there were some headers downloaded already.
       # Turn back unused data and proceed with staging.
-      when extraTraceMessages:
-        trace info & ": partially failed", peer, iv, ivReq,
-          unused=BnRange.new(iv.minPt,ivTop), isOpportunistic
+      trace info & ": partially failed", peer, iv, ivReq,
+        unused=BnRange.new(iv.minPt,ivTop), isOpportunistic
       # There is some left over to store back
       ctx.headersUnprocCommit(iv.len, iv.minPt, ivTop)
       break
@@ -178,21 +161,15 @@ proc headersStagedCollect*(
     # Update remaining interval
     let ivRespLen = lhc.revHdrs.len - nLhcHeaders
     if ivTop < iv.minPt + ivRespLen.uint:
-      when extraTraceMessages:
-        trace info & ": all collected", peer, iv, ivTop, ivRespLen
       # All collected
       ctx.headersUnprocCommit(iv.len)
       break
 
-    let newIvTop = ivTop - ivRespLen.uint # will mostly be `ivReq.minPt-1`
-    when extraTraceMessages:
-      trace info & ": collected range", peer, iv=BnRange.new(iv.minPt, ivTop),
-        ivReq, ivResp=BnRange.new(newIvTop+1, ivReq.maxPt), ivRespLen,
-        isOpportunistic
-    ivTop = newIvTop
+    ivTop -= ivRespLen.uint # will mostly result into `ivReq.minPt-1`
 
     if buddy.ctrl.stopped:
-      # There is some left over to store back
+      # There is some left over to store back. And `iv.minPt <= ivTop` because
+      # of the check against `ivRespLen` above.
       ctx.headersUnprocCommit(iv.len, iv.minPt, ivTop)
       break
 
@@ -201,18 +178,9 @@ proc headersStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = lhc[]
 
-  when extraTraceMessages:
-    trace info & ": staged headers", peer,
-      iv=BnRange.new(iv.maxPt - lhc.revHdrs.len.uint + 1, iv.maxPt),
-      nHeaders=lhc.revHdrs.len, nStaged=ctx.lhc.staged.len, isOpportunistic,
-      ctrl=buddy.ctrl.state
-  else:
-    trace info & ": staged headers", peer,
-      topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
-      nStaged=ctx.lhc.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
-
-  when verifyDataStructureOk:
-    ctx.verifyStagedQueue info
+  trace info & ": staged headers", peer,
+    topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
+    nStaged=ctx.lhc.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
 
   return true
 
@@ -232,8 +200,7 @@ proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
       least = ctx.layout.least # `L` from `README.md` (1) or `worker_desc`
       iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint + 1, qItem.key)
     if iv.maxPt+1 < least:
-      when extraTraceMessages:
-        trace info & ": there is a gap", iv, L=least.bnStr, nSaved=result
+      trace info & ": there is a gap", iv, L=least.bnStr, nSaved=result
       break # there is a gap -- come back later
 
     # Overlap must not happen
@@ -247,8 +214,7 @@ proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
     if qItem.data.hash != ctx.layout.leastParent:
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
-      when extraTraceMessages:
-        trace info & ": discarding staged record", iv, L=least.bnStr, lap=result
+      trace info & ": discarding staged record", iv, L=least.bnStr, lap=result
       break
 
     # Store headers on database
@@ -259,21 +225,11 @@ proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
 
     result.inc # count records
 
-    #when extraTraceMessages:
-    #  trace info & ": staged record saved", iv, layout=ok, nSaved=result
-
-  when not extraTraceMessages:
-    trace info & ": staged records saved",
-      nStaged=ctx.lhc.staged.len, nSaved=result
+  trace info & ": staged records saved",
+    nStaged=ctx.lhc.staged.len, nSaved=result
 
   if headersStagedQueueLengthLwm < ctx.lhc.staged.len:
-    when extraTraceMessages:
-      trace info & ": staged queue too large => reorg",
-        nStaged=ctx.lhc.staged.len, max=headersStagedQueueLengthLwm
     ctx.poolMode = true
-
-  when verifyDataStructureOk:
-    ctx.verifyStagedQueue info
 
 
 proc headersStagedReorg*(ctx: FlareCtxRef; info: static[string]) =
@@ -309,12 +265,6 @@ proc headersStagedReorg*(ctx: FlareCtxRef; info: static[string]) =
         nHeaders = qItem.data.revHdrs.len.uint
       ctx.headersUnprocCommit(0, key - nHeaders + 1, key)
       discard ctx.lhc.staged.delete key
-
-  when verifyDataStructureOk:
-    ctx.verifyStagedQueue info
-
-  when extraTraceMessages:
-    trace info & ": reorg done", nStaged=ctx.lhc.staged.len
 
 
 proc headersStagedTop*(ctx: FlareCtxRef): BlockNumber =

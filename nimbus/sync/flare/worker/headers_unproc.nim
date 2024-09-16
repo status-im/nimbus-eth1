@@ -52,13 +52,6 @@ proc headersUnprocFetch*(
   ctx.lhc.borrowed += iv.len
   ok(iv)
 
-#proc headersUnprocMerge*(ctx: FlareCtxRef; iv: BnRange) =
-#  ## Merge back unprocessed range
-#  discard ctx.lhc.unprocessed.merge(iv)
-
-#proc headersUnprocMerge*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
-#  ## Ditto
-#  discard ctx.lhc.unprocessed.merge(minPt, maxPt)
 
 proc headersUnprocCommit*(ctx: FlareCtxRef; borrowed: uint) =
   ## Commit back all processed range
@@ -78,15 +71,6 @@ proc headersUnprocCommit*(
   ctx.headersUnprocCommit borrowed
   doAssert ctx.lhc.unprocessed.merge(rMinPt, rMaxPt) == rMaxPt - rMinPt + 1
 
-
-#proc headersUnprocReduce*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
-#  ## ..
-#  discard ctx.lhc.unprocessed.reduce(minPt, maxPt)
-
-#proc headersUnprocFullyCovered*(
-#    ctx: FlareCtxRef; minPt, maxPt: BlockNumber): bool =
-#  ## Check whether range is fully contained
-#  ctx.lhc.unprocessed.covered(minPt, maxPt) == maxPt - minPt + 1
 
 
 proc headersUnprocCovered*(ctx: FlareCtxRef; minPt,maxPt: BlockNumber): uint64 =
