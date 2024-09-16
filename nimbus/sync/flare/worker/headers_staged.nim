@@ -21,7 +21,7 @@ import
   ./headers_unproc
 
 logScope:
-  topics = "flare staged"
+  topics = "flare headers"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -121,7 +121,7 @@ proc headersStagedCollect*(
     lhc = (ref LinkedHChain)(parentHash: topLink)
 
   while true:
-    # Extract a top range interval and fetch/stage it
+    # Extract top range interval and fetch/stage it
     let
       ivReqMin = if ivTop + 1 <= iv.minPt + nFetchHeadersRequest: iv.minPt
                  else: ivTop - nFetchHeadersRequest + 1
@@ -139,15 +139,15 @@ proc headersStagedCollect*(
       # Throw away opportunistic data (or first time header fetch.) Turn back
       # unused data.
       if isOpportunistic or nLhcHeaders == 0:
-        if 0 < buddy.only.nRespErrors and buddy.ctrl.stopped:
+        if 0 < buddy.only.nHdrRespErrors and buddy.ctrl.stopped:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
         trace info & ": completely failed", peer, iv, ivReq, isOpportunistic,
-          ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nRespErrors
+          ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nHdrRespErrors
         ctx.headersUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
-        # on the currently returned interval.
-        await sleepAsync nanoseconds(10)
+        # to work on the currently returned interval.
+        await sleepAsync asyncThreadSwitchTimeSlot
         return false
 
       # So it is deterministic and there were some headers downloaded already.
@@ -192,8 +192,7 @@ proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
   while true:
     # Fetch largest block
     let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
-      when not extraTraceMessages:
-        trace info & ": no staged headers", error
+      trace info & ": no staged headers", error
       break # all done
 
     let
@@ -267,15 +266,19 @@ proc headersStagedReorg*(ctx: FlareCtxRef; info: static[string]) =
       discard ctx.lhc.staged.delete key
 
 
-proc headersStagedTop*(ctx: FlareCtxRef): BlockNumber =
+proc headersStagedTopKey*(ctx: FlareCtxRef): BlockNumber =
   ## Retrieve to staged block number
   let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
     return BlockNumber(0)
   qItem.key
 
-proc headersStagedChunks*(ctx: FlareCtxRef): int =
+proc headersStagedQueueLen*(ctx: FlareCtxRef): int =
   ## Number of staged records
   ctx.lhc.staged.len
+
+proc headersStagedQueueIsEmpty*(ctx: FlareCtxRef): bool =
+  ## `true` iff no data are on the queue.
+  ctx.lhc.staged.len == 0
 
 # ----------------
 

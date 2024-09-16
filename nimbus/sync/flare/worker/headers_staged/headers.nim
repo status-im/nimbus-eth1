@@ -32,8 +32,8 @@ func toStr(a: chronos.Duration): string =
   a.toStr(2)
 
 proc registerError(buddy: FlareBuddyRef) =
-  buddy.only.nRespErrors.inc
-  if fetchHeaderReqThresholdCount < buddy.only.nRespErrors:
+  buddy.only.nHdrRespErrors.inc
+  if fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
 
 # ------------------------------------------------------------------------------
@@ -71,7 +71,7 @@ proc headersFetchReversed*(
     start = Moment.now()
 
   trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
-    nReq=req.maxResults, useHash, nRespErrors=buddy.only.nRespErrors
+    nReq=req.maxResults, useHash, nRespErrors=buddy.only.nHdrRespErrors
 
   # Fetch headers from peer
   var resp: Option[blockHeadersObj]
@@ -86,7 +86,7 @@ proc headersFetchReversed*(
     buddy.registerError()
     `info` info & " error", peer, ivReq, nReq=req.maxResults, useHash,
       elapsed=(Moment.now() - start).toStr, error=($e.name), msg=e.msg,
-      nRespErrors=buddy.only.nRespErrors
+      nRespErrors=buddy.only.nHdrRespErrors
     return err()
 
   let elapsed = Moment.now() - start
@@ -96,7 +96,7 @@ proc headersFetchReversed*(
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
       nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nRespErrors
+      nRespErrors=buddy.only.nHdrRespErrors
     return err()
 
   let h: seq[BlockHeader] = resp.get.headers
@@ -104,21 +104,21 @@ proc headersFetchReversed*(
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
       nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nRespErrors
+      nRespErrors=buddy.only.nHdrRespErrors
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchHeaderReqThresholdZombie < elapsed or
-     h.len.uint * 100 < req.maxResults * fetchHeaderReqMinResponsePC:
+  if fetchHeadersReqThresholdZombie < elapsed or
+     h.len.uint * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
     buddy.registerError()
   else:
-    buddy.only.nRespErrors = 0 # reset error count
+    buddy.only.nHdrRespErrors = 0 # reset error count
 
   trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
     ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
     elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-    nRespErrors=buddy.only.nRespErrors
+    nRespErrors=buddy.only.nHdrRespErrors
 
   return ok(h)
 

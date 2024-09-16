@@ -30,7 +30,7 @@ proc headersUnprocFetch*(
   let
     q = ctx.lhc.unprocessed
 
-    # Fetch top right interval with largest block numbers
+    # Fetch top/right interval with largest block numbers
     jv = q.le().valueOr:
       return err()
 
@@ -44,7 +44,7 @@ proc headersUnprocFetch*(
         # Note that either (fringe case):
         #   (`jv.len`==0)  => (`jv`==`[0,high(u64)]`) => `jv.maxPt`==`high(u64)`
         # or (in the non-fringe case)
-        #   (`maxLen` < `jv.len`) => (`jv.maxPt` - `maxLen` + 1 <= `jv.maxPt`)
+        #   (`maxLen` < `jv.len`) => (`jv.maxPt` - `maxLen` + 1 < `jv.maxPt`)
         #
         BnRange.new(jv.maxPt - maxLen + 1, jv.maxPt)
 

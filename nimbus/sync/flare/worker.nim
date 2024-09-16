@@ -34,7 +34,7 @@ proc headersToFetchOk(buddy: FlareBuddyRef): bool =
     buddy.ctrl.running and
     not buddy.ctx.poolMode
 
-proc napUnlessHeadersToFetch(
+proc napUnlessSomethingToFetch(
     buddy: FlareBuddyRef;
     info: static[string];
       ): Future[bool] {.async.} =
@@ -42,7 +42,7 @@ proc napUnlessHeadersToFetch(
   if not buddy.headersToFetchOk():
     when extraTraceMessages:
       debug info & ": idly wasting time", peer=buddy.peer
-    await sleepAsync runNoHeadersIdleWaitInterval
+    await sleepAsync workerIdleWaitInterval
     return true
   return false
 
@@ -56,7 +56,7 @@ proc setup*(ctx: FlareCtxRef): bool =
   ctx.setupRpcMagic()
 
   # Load initial state from database if there is any
-  ctx.dbLoadLinkedHChainsLayout()
+  ctx.setupDatabase()
 
   # Debugging stuff, might be an empty template
   ctx.setupTicker()
@@ -177,9 +177,9 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
   # fetched from the current peer.
   await buddy.headerStagedUpdateBeacon info
 
-  if not await buddy.napUnlessHeadersToFetch info:
+  if not await buddy.napUnlessSomethingToFetch info:
     #
-    # Layout of a triple of linked header chains
+    # Layout of a triple of linked header chains (see `README.md`)
     # ::
     #   G                B                     L                F
     #   | <--- [G,B] --> | <----- (B,L) -----> | <-- [L,F] ---> |
@@ -223,11 +223,11 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
         # * Decrease the left boundary `L` of the trusted range `[L,F]`
         discard buddy.ctx.headersStagedProcess info
 
-      # Note that it is important **not** to leave this function to be
-      # re-invoked by the scheduler unless necessary. While the time gap
-      # until restarting is typically a few millisecs, there are always
-      # outliers which well exceed several seconds. This seems to let
-      # remote peers run into timeouts.
+    # Note that it is important **not** to leave this function to be
+    # re-invoked by the scheduler unless necessary. While the time gap
+    # until restarting is typically a few millisecs, there are always
+    # outliers which well exceed several seconds. This seems to let
+    # remote peers run into timeouts.
 
   buddy.only.stoppedMultiRun = Moment.now()     # statistics/debugging
 

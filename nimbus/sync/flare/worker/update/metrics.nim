@@ -12,7 +12,8 @@
 
 import
   pkg/metrics,
-  ../../worker_desc
+  ../../worker_desc,
+  ../headers_staged
 
 declareGauge flare_beacon_block_number, "" &
   "Block number for latest finalised header"
@@ -42,7 +43,7 @@ template updateMetricsImpl*(ctx: FlareCtxRef) =
     metrics.set(flare_least_verified_block_number, ctx.layout.least.int64)
     metrics.set(flare_top_verified_block_number, ctx.layout.final.int64)
     metrics.set(flare_beacon_block_number, ctx.lhc.beacon.header.number.int64)
-    metrics.set(flare_staged_headers_queue_size, ctx.lhc.staged.len)
+    metrics.set(flare_staged_headers_queue_size, ctx.headersStagedQueueLen())
     metrics.set(flare_number_of_buddies, ctx.pool.nBuddies)
     flare_serial.inc(1)
     ctx.pool.nextUpdate += metricsUpdateInterval

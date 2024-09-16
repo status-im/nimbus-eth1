@@ -87,7 +87,7 @@ type
 
   FlareBuddyData* = object
     ## Local descriptor data extension
-    nRespErrors*: int                ## Number of errors/slow responses in a row
+    nHdrRespErrors*: int             ## Number of errors/slow responses in a row
 
     # Debugging and logging.
     nMultiLoop*: int                 ## Number of runs

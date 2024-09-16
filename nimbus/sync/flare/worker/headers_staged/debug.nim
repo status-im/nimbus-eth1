@@ -20,15 +20,14 @@ import
 
 type
   LinkedHChainQueueWalk = SortedSetWalkRef[BlockNumber,LinkedHChain]
-    ## Traversal descriptor (for `verifyStagedQueue()`)
+    ## Traversal descriptor (for `verifyStagedHeadersQueue()`)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
-proc verifyStagedQueue*(ctx: FlareCtxRef; info: static[string]) =
-  ## Verify stated queue, check that recorded ranges are no unprocessed,
-  ## and return the total sise if headers covered.
+proc verifyStagedHeadersQueue*(ctx: FlareCtxRef; info: static[string]) =
+  ## Verify staged queue
   ##
   # Walk queue items
   let walk = LinkedHChainQueueWalk.init(ctx.lhc.staged)
@@ -57,13 +56,13 @@ proc verifyStagedQueue*(ctx: FlareCtxRef; info: static[string]) =
   # Check `staged[] <= L`
   if ctx.layout.least <= prv:
     raiseAssert info & ": staged top mismatch " &
-      " L=" & $ctx.layout.least.bnStr & " stagedTop=" & prv.bnStr
+      " L=" & ctx.layout.least.bnStr & " stagedTop=" & prv.bnStr
 
   # Check `unprocessed{} <= L`
   let uTop = ctx.headersUnprocTop()
   if ctx.layout.least <= uTop:
     raiseAssert info & ": unproc top mismatch " &
-      " L=" & $ctx.layout.least.bnStr & " unprocTop=" & uTop.bnStr
+      " L=" & ctx.layout.least.bnStr & " unprocTop=" & uTop.bnStr
 
   # Check `staged[] + unprocessed{} == (B,L)`
   let
@@ -83,7 +82,7 @@ proc verifyStagedQueue*(ctx: FlareCtxRef; info: static[string]) =
 proc verifyHeaderChainItem*(lhc: ref LinkedHChain; info: static[string]) =
   ## Verify a header chain.
   if lhc.revHdrs.len == 0:
-    trace info & ": verifying ok", nLhc=lhc.revHdrs.len
+    trace info & ": verifying ok", nLhc=0
     return
 
   trace info & ": verifying", nLhc=lhc.revHdrs.len

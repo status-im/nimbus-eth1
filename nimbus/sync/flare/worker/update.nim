@@ -14,10 +14,9 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
   pkg/stew/sorted_set,
-  ../../sync_desc,
   ../worker_desc,
   ./update/metrics,
-  "."/[db, headers_unproc]
+  "."/[db, headers_staged, headers_unproc]
 
 logScope:
   topics = "flare update"
@@ -58,14 +57,13 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   # Need: `F < Z` and `B == L`
   if z != 0 and z <= ctx.layout.final:       # violates `F < Z`
     when extraTraceMessages:
-      trace info & ": not applicable",
-        Z=("#" & $z), F=("#" & $ctx.layout.final)
+      trace info & ": not applicable", Z=z.bnStr, F=ctx.layout.final.bnStr
     return false
 
   if ctx.layout.base != ctx.layout.least:    # violates `B == L`
     when extraTraceMessages:
       trace info & ": not applicable",
-        B=("#" & $ctx.layout.base), L=("#" & $ctx.layout.least)
+        B=ctx.layout.base.bnStr, L=ctx.layout.least.bnStr
     return false
 
   # Check consistency: `B == L <= F` for maximal `B` => `L == F`
@@ -91,7 +89,7 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   # Update range
   doAssert ctx.headersUnprocTotal() == 0
   doAssert ctx.headersUnprocBorrowed() == 0
-  doAssert ctx.lhc.staged.len == 0
+  doAssert ctx.headersStagedQueueIsEmpty()
   ctx.headersUnprocSet(ctx.layout.base+1, ctx.layout.least-1)
 
   when extraTraceMessages:
@@ -109,23 +107,22 @@ proc mergeAdjacentChains(ctx: FlareCtxRef): bool =
   # No overlap allowed!
   doAssert ctx.lhc.layout.base + 1 == ctx.lhc.layout.least
 
-  when extraTraceMessages:
-    trace info & ": merging", B=ctx.lhc.layout.base.bnStr,
-      L=ctx.lhc.layout.least.bnStr
-
   # Verify adjacent chains
   if ctx.lhc.layout.baseHash != ctx.lhc.layout.leastParent:
     # FIXME: Oops -- any better idea than to defect?
     raiseAssert info & ": hashes do not match" &
-      " B=#" & $ctx.lhc.layout.base & " L=#" & $ctx.lhc.layout.least
+      " B=" & ctx.lhc.layout.base.bnStr & " L=" & $ctx.lhc.layout.least.bnStr
+
+  trace info & ": merging", B=ctx.lhc.layout.base.bnStr,
+    L=ctx.lhc.layout.least.bnStr
 
   # Merge adjacent linked chains
   ctx.lhc.layout = LinkedHChainsLayout(
-    base:        ctx.layout.final,
+    base:        ctx.layout.final,               # `B`
     baseHash:    ctx.layout.finalHash,
-    least:       ctx.layout.final,
+    least:       ctx.layout.final,               # `L`
     leastParent: ctx.dbPeekParentHash(ctx.layout.final).expect "Hash256",
-    final:       ctx.layout.final,
+    final:       ctx.layout.final,               # `F`
     finalHash:   ctx.layout.finalHash)
 
   # Save state

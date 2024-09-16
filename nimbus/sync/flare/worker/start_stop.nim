@@ -14,7 +14,7 @@ import
   pkg/eth/[common, p2p],
   ../../protocol,
   ../worker_desc,
-  "."/[headers_staged, headers_unproc]
+  "."/[db, headers_staged, headers_unproc]
 
 when enableTicker:
   import ./start_stop/ticker
@@ -32,10 +32,11 @@ when enableTicker:
         least:        ctx.layout.least,
         final:        ctx.layout.final,
         beacon:       ctx.lhc.beacon.header.number,
-        nStaged:      ctx.headersStagedChunks(),
-        stagedTop:    ctx.headersStagedTop(),
+
+        nStaged:      ctx.headersStagedQueueLen(),
+        stagedTop:    ctx.headersStagedTopKey(),
         unprocTop:    ctx.headersUnprocTop(),
-        nUnprocessed: ctx.headersUnprocTotal(),
+        nUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
         nUnprocFragm: ctx.headersUnprocChunks(),
         reorg:        ctx.pool.nReorg)
 
@@ -66,6 +67,17 @@ else:
   template destroyTicker*(ctx: FlareCtxRef) = discard
 
 # ---------
+
+proc setupDatabase*(ctx: FlareCtxRef) =
+  ## Initalise database related stuff
+
+  # Initialise up queues and lists
+  ctx.headersStagedInit()
+  ctx.headersUnprocInit()
+
+  # Load initial state from database if there is any
+  ctx.dbLoadLinkedHChainsLayout()
+
 
 proc setupRpcMagic*(ctx: FlareCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC

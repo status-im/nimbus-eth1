@@ -36,12 +36,15 @@ const
   metricsUpdateInterval* = chronos.seconds(10)
     ## Wait at least this time before next update
 
-  daemonWaitInterval* = chronos.seconds(30)
+  daemonWaitInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background.
 
-  runNoHeadersIdleWaitInterval* = chronos.seconds(30)
+  workerIdleWaitInterval* = chronos.seconds(10)
     ## Sleep some time in multi-mode if there is nothing to do
+
+  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(10)
+    ## Nano-sleep to allows pseudo/async thread switch
 
   # ----------------------
 
@@ -51,13 +54,13 @@ const
     ## On `Geth`, responses to larger requests are all truncted to 1024 header
     ## entries (see `Geth` constant `maxHeadersServe`.)
 
-  fetchHeaderReqThresholdZombie* = chronos.seconds(2)
-  fetchHeaderReqThresholdCount* = 3
+  fetchHeadersReqThresholdZombie* = chronos.seconds(2)
+  fetchHeadersReqThresholdCount* = 3
     ## Response time allowance. If the response time for the set of headers
-    ## exceeds this threshold for more than `fetchHeaderReqThresholdCount`
+    ## exceeds this threshold for more than `fetchHeadersReqThresholdCount`
     ## times in a row, then this peer will be banned for a while.
 
-  fetchHeaderReqMinResponsePC* = 10
+  fetchHeadersReqMinResponsePC* = 10
     ## Some peers only returned one header at a time. If these peers sit on a
     ## farm, they might collectively slow down the download process. So this
     ## constant sets a percentage of minimum headers needed to return so that
@@ -83,6 +86,7 @@ const
 
 static:
   doAssert 0 < runsThisManyPeersOnly
+
   doAssert 0 < nFetchHeadersRequest
   doAssert nFetchHeadersRequest <= nFetchHeadersBatch
   doAssert 0 < headersStagedQueueLengthLwm
