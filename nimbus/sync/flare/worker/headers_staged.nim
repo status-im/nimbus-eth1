@@ -255,7 +255,7 @@ proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
     ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs)
     ctx.layout.least = iv.minPt
     ctx.layout.leastParent = qItem.data.parentHash
-    let ok = ctx.dbStoreLinkedHChainsLayout()
+    discard ctx.dbStoreLinkedHChainsLayout()
 
     result.inc # count records
 

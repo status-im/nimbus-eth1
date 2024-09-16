@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[bearssl/rand, chronos], # chronos/timer],
+  pkg/chronos,
   pkg/stew/[interval_set, sorted_set],
   ../sync_desc,
   ./worker_config
@@ -87,7 +87,6 @@ type
 
   FlareBuddyData* = object
     ## Local descriptor data extension
-    #fetchBlocks*: BnRange
     nRespErrors*: int                ## Number of errors/slow responses in a row
 
     # Debugging and logging.

@@ -79,6 +79,34 @@ proc verifyStagedQueue*(ctx: FlareCtxRef; info: static[string]) =
       " unproc=" & $uTotal & " borrowed=" & $uBorrowed &
       " exp-sum=" & $unfilled
 
+
+proc verifyHeaderChainItem*(lhc: ref LinkedHChain; info: static[string]) =
+  ## Verify a header chain.
+  if lhc.revHdrs.len == 0:
+    trace info & ": verifying ok", nLhc=lhc.revHdrs.len
+    return
+
+  trace info & ": verifying", nLhc=lhc.revHdrs.len
+  var
+    topHdr, childHdr: BlockHeader
+  try:
+    doAssert lhc.revHdrs[0].keccakHash == lhc.hash
+    topHdr = rlp.decode(lhc.revHdrs[0], BlockHeader)
+
+    childHdr = topHdr
+    for n in 1 ..< lhc.revHdrs.len:
+      let header = rlp.decode(lhc.revHdrs[n], BlockHeader)
+      doAssert childHdr.number == header.number + 1
+      doAssert lhc.revHdrs[n].keccakHash == childHdr.parentHash
+      childHdr = header
+
+    doAssert childHdr.parentHash == lhc.parentHash
+  except RlpError as e:
+    raiseAssert "verifyHeaderChainItem oops(" & $e.name & ") msg=" & e.msg
+
+  trace info & ": verify ok",
+    iv=BnRange.new(childHdr.number,topHdr.number), nLhc=lhc.revHdrs.len
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

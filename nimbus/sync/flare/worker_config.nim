@@ -41,7 +41,7 @@ const
     ## in the background.
 
   runNoHeadersIdleWaitInterval* = chronos.seconds(30)
-    ## Sllep some time in multi-mode if there is nothing to do
+    ## Sleep some time in multi-mode if there is nothing to do
 
   # ----------------------
 

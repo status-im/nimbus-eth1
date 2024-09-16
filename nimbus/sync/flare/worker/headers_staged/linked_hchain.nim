@@ -20,7 +20,7 @@ const
   extraTraceMessages = false
     ## Enabled additional logging noise
 
-  verifyDataStructureOk = false
+  verifyDataStructureOk = false or true
     ## Debugging mode
 
 when extraTraceMessages:
@@ -31,6 +31,9 @@ when extraTraceMessages:
   logScope:
     topics = "flare staged"
 
+when verifyDataStructureOk:
+  import ./debug
+
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
 # ------------------------------------------------------------------------------
@@ -40,31 +43,6 @@ proc `$`(w: Hash256): string =
 
 formatIt(Hash256):
   $it
-
-when verifyDataStructureOk:
-  proc verifyHeaderChainItem(lhc: ref LinkedHChain; info: static[string]) =
-    when extraTraceMessages:
-      trace info & ": verifying", nLhc=lhc.revHdrs.len
-    var
-      topHdr, childHdr: BlockHeader
-    try:
-      doAssert lhc.revHdrs[0].keccakHash == lhc.hash
-      topHdr = rlp.decode(lhc.revHdrs[0], BlockHeader)
-
-      childHdr = topHdr
-      for n in 1 ..< lhc.revHdrs.len:
-        let header = rlp.decode(lhc.revHdrs[n], BlockHeader)
-        doAssert childHdr.number == header.number + 1
-        doAssert lhc.revHdrs[n].keccakHash == childHdr.parentHash
-        childHdr = header
-
-      doAssert childHdr.parentHash == lhc.parentHash
-    except RlpError as e:
-      raiseAssert "verifyHeaderChainItem oops(" & $e.name & ") msg=" & e.msg
-
-    when extraTraceMessages:
-      trace info & ": verify ok",
-        iv=BnRange.new(childHdr.number,topHdr.number), nLhc=lhc.revHdrs.len
 
 # ------------------------------------------------------------------------------
 # Public functions

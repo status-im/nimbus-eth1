@@ -39,7 +39,6 @@ proc napUnlessHeadersToFetch(
     info: static[string];
       ): Future[bool] {.async.} =
   ## When idle, save cpu cycles waiting for something to do.
-  let ctx = buddy.ctx
   if not buddy.headersToFetchOk():
     when extraTraceMessages:
       debug info & ": idly wasting time", peer=buddy.peer
@@ -163,9 +162,7 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
   ## instance can be simultaneously active for all peer workers.
   ##
   const info = "RUNMULTI"
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
+  let peer = buddy.peer
 
   if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun

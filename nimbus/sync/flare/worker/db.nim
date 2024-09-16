@@ -174,7 +174,8 @@ proc dbStoreLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
 
 proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
   ## Restore chain layout from persistent db
-  const info = "dbLoadLinkedHChainsLayout"
+  when extraTraceMessages:
+    const info = "dbLoadLinkedHChainsLayout"
   ctx.headersStagedInit()
   ctx.headersUnprocInit()
 
