@@ -129,7 +129,8 @@ proc setupHost(call: CallParams): TransactionHost =
         host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg, code)
+    host.computation = newComputation(vmState, call.sysCall, cMsg, code,
+      authorizationList = call.authorizationList)
 
     host.code = code
 
@@ -142,7 +143,8 @@ proc setupHost(call: CallParams): TransactionHost =
       host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg)
+    host.computation = newComputation(vmState, call.sysCall, cMsg,
+      authorizationList = call.authorizationList)
 
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,

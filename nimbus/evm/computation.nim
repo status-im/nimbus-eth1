@@ -224,8 +224,9 @@ template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
     c.vmState.readOnlyStateDB.
       getTransientStorage(c.msg.contractAddress, slot)
 
-proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
-                     salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
+proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,                     
+                     salt: ContractSalt = ZERO_CONTRACTSALT,
+                     authorizationList: openArray[Authorization] = []): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -242,9 +243,11 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
   else:
     result.code = CodeStream.init(
       vmState.readOnlyStateDB.getCode(message.codeAddress))
+  assign(result.authorizationList, authorizationList)
 
 func newComputation*(vmState: BaseVMState, sysCall: bool,
-                     message: Message, code: CodeBytesRef): Computation =
+                     message: Message, code: CodeBytesRef,
+                     authorizationList: openArray[Authorization] = []): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -254,6 +257,7 @@ func newComputation*(vmState: BaseVMState, sysCall: bool,
   result.gasMeter.init(message.gas)
   result.code = CodeStream.init(code)
   result.sysCall = sysCall
+  assign(result.authorizationList, authorizationList)
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
