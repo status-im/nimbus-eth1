@@ -71,7 +71,8 @@ type
   BeaconHeader* = object
     ## Beacon state to be implicitely updated by RPC method
     changed*: bool                   ## Set a marker if something has changed
-    header*: BlockHeader             ## Running on beacon chain, last header
+    header*: BlockHeader             ## Beacon chain, finalised header
+    finalised*: Hash256              ## From RPC, ghash of finalised header
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains

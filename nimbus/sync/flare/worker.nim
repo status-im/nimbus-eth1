@@ -42,7 +42,7 @@ proc napUnlessHeadersToFetch(
   let ctx = buddy.ctx
   if not buddy.headersToFetchOk():
     when extraTraceMessages:
-      debug info & ": idle wasting time", peer=buddy.peer
+      debug info & ": idly wasting time", peer=buddy.peer
     await sleepAsync runNoHeadersIdleWaitInterval
     return true
   return false
@@ -190,6 +190,11 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
     when extraTraceMessages:
       trace info, peer, nInvocations=buddy.only.nMultiLoop,
         lastIdleGap=buddy.only.multiRunIdle.toStr(2)
+
+    # Update beacon header when needed. For the beacon header, a hash will be
+    # auto-magically made available via RPC. The corresponding header is then
+    # fetched from the current peer.
+    await buddy.headerStagedUpdateBeacon info
 
     if not await buddy.napUnlessHeadersToFetch info:
       #

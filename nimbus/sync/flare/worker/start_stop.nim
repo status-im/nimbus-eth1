@@ -23,7 +23,7 @@ when enableTicker:
 logScope:
   topics = "flare start/stop"
 
-const extraTraceMessages = false
+const extraTraceMessages = false or true
   ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
@@ -46,19 +46,13 @@ when enableTicker:
         nUnprocFragm: ctx.headersUnprocChunks(),
         reorg:        ctx.pool.nReorg)
 
-proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncReqNewHeadCB =
+proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncFinalisedBlockHashCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  when extraTraceMessages:
-    var count = 0
-  result = proc(h: BlockHeader) {.gcsafe, raises: [].} =
-    if ctx.lhc.beacon.header.number < h.number:
-      when extraTraceMessages:
-        if count mod 77 == 0: # reduce some noise
-          trace "updateBeaconHeaderCB", blockNumber=("#" & $h.number), count
-        count.inc
-      ctx.lhc.beacon.header = h
-      ctx.lhc.beacon.changed = true
+  result = proc(h: Hash256) {.gcsafe, raises: [].} =
+    # Rpc checks empty header against `Hash256()` rather than `EMPTY_ROOT_HASH`
+    if ctx.lhc.beacon.finalised == Hash256():
+      ctx.lhc.beacon.finalised = h
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -82,11 +76,11 @@ else:
 
 proc setupRpcMagic*(ctx: FlareCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.chain.com.syncReqNewHead = ctx.updateBeaconHeaderCB
+  ctx.chain.com.syncFinalisedBlockHash = ctx.updateBeaconHeaderCB
 
 proc destroyRpcMagic*(ctx: FlareCtxRef) =
   ## Helper for `release()`
-  ctx.chain.com.syncReqNewHead = SyncReqNewHeadCB(nil)
+  ctx.chain.com.syncFinalisedBlockHash = SyncFinalisedBlockHashCB(nil)
 
 # ---------
 
