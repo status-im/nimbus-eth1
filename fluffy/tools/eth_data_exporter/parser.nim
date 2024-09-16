@@ -184,12 +184,15 @@ proc parseTransaction*(n: JsonNode): Transaction =
       for acn in accessList:
         tx.accessList.add parseAccessPair(acn)
 
-  if tx.txType >= TxEip4844:
+  if tx.txType == TxEip4844:
     n.fromJson "maxFeePerBlobGas", tx.maxFeePerBlobGas
 
-  if n.hasKey("versionedHashes") and n["versionedHashes"].kind != JNull:
-    n.fromJson "versionedHashes", tx.versionedHashes
+    if n.hasKey("versionedHashes") and n["versionedHashes"].kind != JNull:
+      n.fromJson "versionedHashes", tx.versionedHashes
 
+  if tx.txType == TxEip7702:
+    n.fromJson "authorizationList", tx.authorizationList
+    
   tx
 
 proc parseWithdrawal*(n: JsonNode): Withdrawal =

@@ -109,7 +109,7 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
         baseFee = xp.baseFee
       return false
 
-  if item.tx.txType >= TxEip4844:
+  if item.tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
       blobGasPrice = getBlobBaseFee(excessBlobGas)
