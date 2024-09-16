@@ -46,6 +46,13 @@ const
     ## exceeds this threshold for more than `fetchHeaderReqThresholdCount`
     ## times in a row, then this peer will be banned for a while.
 
+  fetchHeaderReqMinResponsePC* = 10
+    ## Some peers only returned one header at a time. If these peers sit on a
+    ## farm, they might collectively slow down the download process. So this
+    ## constant sets a percentage of minimum headers needed to return so that
+    ## the peers is not treated as a slow responder (see above for slow
+    ## responder count.)
+
   nFetchHeadersBatch* = 8 * nFetchHeadersRequest
     ## Length of the request/stage batch. Several headers are consecutively
     ## fetched and stashed together as a single record on the staged queue.

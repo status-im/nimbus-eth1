@@ -113,8 +113,10 @@ proc headersFetchReversed*(
         nRespErrors=buddy.only.nRespErrors
     return err()
 
-  # Ban an overly slow peer for a while
-  if fetchHeaderReqThresholdZombie < elapsed:
+  # Ban an overly slow peer for a while when seen in a row. Also there is a
+  # mimimum share of the number of requested headers expected, typically 10%.
+  if fetchHeaderReqThresholdZombie < elapsed or
+     h.len.uint * 100 < req.maxResults * fetchHeaderReqMinResponsePC:
     buddy.registerError()
   else:
     buddy.only.nRespErrors = 0 # reset error count
