@@ -77,27 +77,23 @@ proc start*(buddy: FlareBuddyRef): bool =
   ## Initialise worker peer
   const info = "RUNSTART"
 
-  when runOnSinglePeerOnly:
-    if 0 < buddy.ctx.pool.nBuddies:
-      debug info & " single peer already connected",
-        peer=buddy.peer, multiOk=buddy.ctrl.multiOk
-      return false
+  if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
+    debug info & " peer limit reached",
+      peer=buddy.peer, multiOk=buddy.ctrl.multiOk
+    return false
 
   if not buddy.startBuddy():
     debug info & " failed", peer=buddy.peer
     return false
 
-  when not runOnSinglePeerOnly:
-    buddy.ctrl.multiOk = true
+  buddy.ctrl.multiOk = true
   debug info, peer=buddy.peer, multiOk=buddy.ctrl.multiOk
   true
 
-
 proc stop*(buddy: FlareBuddyRef) =
   ## Clean up this peer
-  when extraTraceMessages:
-    debug "RUNSTOP", peer=buddy.peer, nInvocations=buddy.only.nMultiLoop,
-      lastIdleGap=buddy.only.multiRunIdle.toStr(2)
+  debug "RUNSTOP", peer=buddy.peer, nInvocations=buddy.only.nMultiLoop,
+    lastIdleGap=buddy.only.multiRunIdle.toStr(2)
   buddy.stopBuddy()
 
 # ------------------------------------------------------------------------------
@@ -135,15 +131,7 @@ proc runSingle*(buddy: FlareBuddyRef) {.async.} =
   ## Note that this function runs in `async` mode.
   ##
   const info = "RUNSINGLE"
-  when not runOnSinglePeerOnly:
-    raiseAssert info & " should not be used: peer=" & $buddy.peer
-
-  else:
-    if not await buddy.napUnlessHeadersToFetch info:
-      # See `runMulti()` for comments
-      while buddy.headersToFetchOk():
-        if await buddy.headersStagedCollect info:
-          discard buddy.ctx.headersStagedProcess info
+  raiseAssert info & " should not be used: peer=" & $buddy.peer
 
 
 proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
@@ -175,80 +163,76 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
   ## instance can be simultaneously active for all peer workers.
   ##
   const info = "RUNMULTI"
-  when runOnSinglePeerOnly:
-    raiseAssert info & " should not be used: peer=" & $buddy.peer
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
 
-  else:
-    let
-      ctx = buddy.ctx
-      peer = buddy.peer
+  if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
+    buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
+  buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-    if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
-      buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
-    buddy.only.nMultiLoop.inc                     # statistics/debugging
+  when extraTraceMessages:
+    trace info, peer, nInvocations=buddy.only.nMultiLoop,
+      lastIdleGap=buddy.only.multiRunIdle.toStr(2)
 
-    when extraTraceMessages:
-      trace info, peer, nInvocations=buddy.only.nMultiLoop,
-        lastIdleGap=buddy.only.multiRunIdle.toStr(2)
+  # Update beacon header when needed. For the beacon header, a hash will be
+  # auto-magically made available via RPC. The corresponding header is then
+  # fetched from the current peer.
+  await buddy.headerStagedUpdateBeacon info
 
-    # Update beacon header when needed. For the beacon header, a hash will be
-    # auto-magically made available via RPC. The corresponding header is then
-    # fetched from the current peer.
-    await buddy.headerStagedUpdateBeacon info
+  if not await buddy.napUnlessHeadersToFetch info:
+    #
+    # Layout of a triple of linked header chains
+    # ::
+    #   G                B                     L                F
+    #   | <--- [G,B] --> | <----- (B,L) -----> | <-- [L,F] ---> |
+    #   o----------------o---------------------o----------------o--->
+    #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
+    #
+    # This function is run concurrently for fetching the next batch of
+    # headers and stashing them on the database. Each concurrently running
+    # actor works as follows:
+    #
+    # * Get a range of block numbers from the `unprocessed` range `(B,L)`.
+    # * Fetch headers for this range (as much as one can get).
+    # * Stash then on the database.
+    # * Rinse and repeat.
+    #
+    # The block numbers range concurrently taken from `(B,L)` are chosen
+    # from the upper range. So exactly one of the actors has a range
+    # `[whatever,L-1]` adjacent to `[L,F]`. Call this actor the lead actor.
+    #
+    # For the lead actor, headers can be downloaded all by the hashes as
+    # the parent hash for the header with block number `L` is known. All
+    # other non-lead actors will download headers by the block number only
+    # and stage it to be re-ordered and stashed on the database when ready.
+    #
+    # Once the lead actor stashes the dowloaded headers, the other staged
+    # headers will also be stashed on the database until there is a gap or
+    # the stashed haeders are exhausted.
+    #
+    # Due to the nature of the `async` logic, the current lead actor will
+    # stay lead when fetching the next range of block numbers.
+    #
+    while buddy.headersToFetchOk():
 
-    if not await buddy.napUnlessHeadersToFetch info:
-      #
-      # Layout of a triple of linked header chains
-      # ::
-      #   G                B                     L                F
-      #   | <--- [G,B] --> | <----- (B,L) -----> | <-- [L,F] ---> |
-      #   o----------------o---------------------o----------------o--->
-      #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
-      #
-      # This function is run concurrently for fetching the next batch of
-      # headers and stashing them on the database. Each concurrently running
-      # actor works as follows:
-      #
-      # * Get a range of block numbers from the `unprocessed` range `(B,L)`.
-      # * Fetch headers for this range (as much as one can get).
-      # * Stash then on the database.
-      # * Rinse and repeat.
-      #
-      # The block numbers range concurrently taken from `(B,L)` are chosen
-      # from the upper range. So exactly one of the actors has a range
-      # `[whatever,L-1]` adjacent to `[L,F]`. Call this actor the lead actor.
-      #
-      # For the lead actor, headers can be downloaded all by the hashes as
-      # the parent hash for the header with block number `L` is known. All
-      # other non-lead actors will download headers by the block number only
-      # and stage it to be re-ordered and stashed on the database when ready.
-      #
-      # Once the lead actor stashes the dowloaded headers, the other staged
-      # headers will also be stashed on the database until there is a gap or
-      # the stashed haeders are exhausted.
-      #
-      # Due to the nature of the `async` logic, the current lead actor will
-      # stay lead when fetching the next range of block numbers.
-      #
-      while buddy.headersToFetchOk():
+      # * Get unprocessed range from pool
+      # * Fetch headers for this range (as much as one can get)
+      # * Verify that a block is contiguous, chained by parent hash, etc.
+      # * Stash this range on the staged queue on the pool
+      if await buddy.headersStagedCollect info:
 
-        # * Get unprocessed range from pool
-        # * Fetch headers for this range (as much as one can get)
-        # * Verify that a block is contiguous, chained by parent hash, etc.
-        # * Stash this range on the staged queue on the pool
-        if await buddy.headersStagedCollect info:
+        # * Save updated state and headers
+        # * Decrease the left boundary `L` of the trusted range `[L,F]`
+        discard buddy.ctx.headersStagedProcess info
 
-          # * Save updated state and headers
-          # * Decrease the left boundary `L` of the trusted range `[L,F]`
-          discard buddy.ctx.headersStagedProcess info
+      # Note that it is important **not** to leave this function to be
+      # re-invoked by the scheduler unless necessary. While the time gap
+      # until restarting is typically a few millisecs, there are always
+      # outliers which well exceed several seconds. This seems to let
+      # remote peers run into timeouts.
 
-        # Note that it is important **not** to leave this function to be
-        # re-invoked by the scheduler unless necessary. While the time gap
-        # until restarting is typically a few millisecs, there are always
-        # outliers which well exceed several seconds. This seems to let
-        # remote peers run into timeouts.
-
-    buddy.only.stoppedMultiRun = Moment.now()     # statistics/debugging
+  buddy.only.stoppedMultiRun = Moment.now()     # statistics/debugging
 
 # ------------------------------------------------------------------------------
 # End

@@ -97,11 +97,11 @@ type
 
   FlareCtxData* = object
     ## Globally shared data extension
+    nBuddies*: int                   ## Number of active workers
     lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
     nextUpdate*: Moment              ## For updating metrics
 
     # Info stuff, no functional contribution
-    nBuddies*: int                   ## Number of active workers (info only)
     nReorg*: int                     ## Number of reorg invocations (info only)
 
     # Debugging stuff
