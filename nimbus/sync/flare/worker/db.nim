@@ -178,6 +178,17 @@ proc dbPeekParentHash*(ctx: FlareCtxRef; num: BlockNumber): Opt[Hash256] =
   ## Retrieve some stashed parent hash.
   ok (? ctx.dbPeekHeader num).parentHash
 
+proc dbUnstashHeader*(ctx: FlareCtxRef; bn: BlockNumber) =
+  ## Remove header from temporary DB list
+  discard ctx.db.ctx.getKvt().del(flareHeaderKey(bn).toOpenArray)
+
+# ------------------
+
+proc dbStateBlockNumber*(ctx: FlareCtxRef): BlockNumber =
+  ## Currently only a wrapper around the function returning the current
+  ## database state block number
+  ctx.db.getSavedStateBlockNumber()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

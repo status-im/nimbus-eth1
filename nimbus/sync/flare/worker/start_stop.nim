@@ -14,7 +14,7 @@ import
   pkg/eth/[common, p2p],
   ../../protocol,
   ../worker_desc,
-  "."/[db, headers_staged, headers_unproc]
+  "."/[blocks_staged, blocks_unproc, db, headers_staged, headers_unproc]
 
 when enableTicker:
   import ./start_stop/ticker
@@ -28,17 +28,25 @@ when enableTicker:
     ## Legacy stuff, will be probably be superseded by `metrics`
     result = proc: auto =
       TickerFlareStats(
-        base:         ctx.layout.base,
-        least:        ctx.layout.least,
-        final:        ctx.layout.final,
-        beacon:       ctx.lhc.beacon.header.number,
+        stateTop:        ctx.dbStateBlockNumber(),
+        base:            ctx.layout.base,
+        least:           ctx.layout.least,
+        final:           ctx.layout.final,
+        beacon:          ctx.lhc.beacon.header.number,
 
-        nStaged:      ctx.headersStagedQueueLen(),
-        stagedTop:    ctx.headersStagedTopKey(),
-        unprocTop:    ctx.headersUnprocTop(),
-        nUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
-        nUnprocFragm: ctx.headersUnprocChunks(),
-        reorg:        ctx.pool.nReorg)
+        nHdrStaged:      ctx.headersStagedQueueLen(),
+        hdrStagedTop:    ctx.headersStagedTopKey(),
+        hdrUnprocTop:    ctx.headersUnprocTop(),
+        nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
+        nHdrUnprocFragm: ctx.headersUnprocChunks(),
+
+        nBlkStaged:      ctx.blocksStagedQueueLen(),
+        blkStagedBottom: ctx.blocksStagedBottomKey(),
+        blkUnprocTop:    ctx.blk.topRequest,
+        nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
+        nBlkUnprocFragm: ctx.blocksUnprocChunks(),
+
+        reorg:           ctx.pool.nReorg)
 
 proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncFinalisedBlockHashCB =
   ## Update beacon header. This function is intended as a call back function
@@ -73,7 +81,13 @@ proc setupDatabase*(ctx: FlareCtxRef) =
 
   # Initialise up queues and lists
   ctx.headersStagedInit()
+  ctx.blocksStagedInit()
   ctx.headersUnprocInit()
+  ctx.blocksUnprocInit()
+
+  # Initalise for `persistBlocks()`. Note that the `ctx.chain` is of
+  # type `ForkedChainRef` while `ctx.pool.chain` is a `ChainRef`
+  ctx.pool.chain = ctx.chain.com.newChain()
 
   # Load initial state from database if there is any
   ctx.dbLoadLinkedHChainsLayout()

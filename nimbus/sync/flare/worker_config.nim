@@ -84,6 +84,26 @@ const
 
   # ----------------------
 
+  nFetchBodiesRequest* = 256
+    ## Similar to `nFetchHeadersRequest`
+
+  fetchBodiesReqThresholdZombie* = chronos.seconds(4)
+  fetchBodiesReqThresholdCount* = 3
+    ## Similar to `fetchHeadersReqThreshold*`
+
+  fetchBodiesReqMinResponsePC* = 10
+    ## Similar to `fetchHeadersReqMinResponsePC`
+
+  nFetchBodiesBatch* = 3 * nFetchBodiesRequest
+    ## Similar to `nFetchHeadersBatch`
+
+  blocksStagedQueueLengthMax* = 16
+    ## Maximum number of staged header + bodies blocks to be filled. If this
+    ## size is reached, the process stops with staging with the exception of
+    ## the lowest blockes (in case there is a gap.)
+
+  # ----------------------
+
 static:
   doAssert 0 < runsThisManyPeersOnly
 
@@ -91,5 +111,9 @@ static:
   doAssert nFetchHeadersRequest <= nFetchHeadersBatch
   doAssert 0 < headersStagedQueueLengthLwm
   doAssert headersStagedQueueLengthLwm < headersStagedQueueLengthHwm
+
+  doAssert 0 < nFetchBodiesRequest
+  doAssert nFetchBodiesRequest <= nFetchBodiesBatch
+  doAssert 0 < blocksStagedQueueLengthMax
 
 # End

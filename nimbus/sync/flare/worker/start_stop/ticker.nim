@@ -12,7 +12,7 @@
 {.push raises: [].}
 
 import
-  std/[strformat, strutils],
+  std/strutils,
   pkg/[chronos, chronicles, eth/common, stint],
   ../../../../utils/prettify,
   ../../../types
@@ -26,15 +26,24 @@ type
 
   TickerFlareStats* = object
     ## Full sync state (see `TickerFullStatsUpdater`)
+    stateTop*: BlockNumber
     base*: BlockNumber
     least*: BlockNumber
     final*: BlockNumber
     beacon*: BlockNumber
-    unprocTop*: BlockNumber
-    nUnprocessed*: uint64
-    nUnprocFragm*: int
-    nStaged*: int
-    stagedTop*: BlockNumber
+
+    hdrUnprocTop*: BlockNumber
+    nHdrUnprocessed*: uint64
+    nHdrUnprocFragm*: int
+    nHdrStaged*: int
+    hdrStagedTop*: BlockNumber
+
+    blkUnprocTop*: BlockNumber
+    nBlkUnprocessed*: uint64
+    nBlkUnprocFragm*: int
+    nBlkStaged*: int
+    blkStagedBottom*: BlockNumber
+
     reorg*: int
 
   TickerRef* = ref object
@@ -47,14 +56,9 @@ type
     lastStats: TickerFlareStats
 
 const
-  extraTraceMessages = false or true
-    ## Enabled additional logging noise
-
   tickerStartDelay = chronos.milliseconds(100)
   tickerLogInterval = chronos.seconds(1)
   tickerLogSuppressMax = chronos.seconds(100)
-
-  logTxt0 = "Flare ticker"
 
 # ------------------------------------------------------------------------------
 # Private functions: pretty printing
@@ -73,10 +77,6 @@ proc toStr(a: Opt[int]): string =
 # Private functions: printing ticker messages
 # ------------------------------------------------------------------------------
 
-when extraTraceMessages:
-  template logTxt(info: static[string]): static[string] =
-    logTxt0 & " " & info
-
 proc flareTicker(t: TickerRef) {.gcsafe.} =
   let
     data = t.flareCb()
@@ -85,15 +85,24 @@ proc flareTicker(t: TickerRef) {.gcsafe.} =
   if data != t.lastStats or
      tickerLogSuppressMax < (now - t.visited):
     let
+      T = data.stateTop.toStr
       B = data.base.toStr
       L = data.least.toStr
       F = data.final.toStr
       Z = data.beacon.toStr
-      staged = if data.nStaged == 0: "n/a"
-               else: data.stagedTop.toStr & "(" & $data.nStaged & ")"
-      unproc = if data.nUnprocFragm == 0: "n/a"
-               else: data.unprocTop.toStr & "(" &
-                     data.nUnprocessed.toSI & "," & $data.nUnprocFragm & ")"
+
+      hS = if data.nHdrStaged == 0: "n/a"
+           else: data.hdrStagedTop.toStr & "(" & $data.nHdrStaged & ")"
+      hU = if data.nHdrUnprocFragm == 0: "n/a"
+           else: data.hdrUnprocTop.toStr & "(" &
+                 data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
+
+      bS = if data.nBlkStaged == 0: "n/a"
+           else: data.blkStagedBottom.toStr & "(" & $data.nBlkStaged & ")"
+      bU = if data.nBlkUnprocFragm == 0: "n/a"
+           else: data.blkUnprocTop.toStr & "(" &
+                 data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
+
       reorg = data.reorg
       peers = t.nBuddies
 
@@ -104,7 +113,7 @@ proc flareTicker(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    info logTxt0, up, peers, B, L, F, Z, staged, unproc, reorg, mem
+    info "State", up, peers, T, B, L, F, Z, hS, hU, bS, bU, reorg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages
@@ -118,8 +127,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
 
 proc setLogTicker(t: TickerRef; at: Moment) =
   if t.flareCb.isNil:
-    when extraTraceMessages:
-      debug logTxt "was stopped", nBuddies=t.nBuddies
+    debug "Stopped", nBuddies=t.nBuddies
   else:
     # Store the `runLogTicker()` in a closure to avoid some garbage collection
     # memory corruption issues that might occur otherwise.
@@ -153,8 +161,7 @@ proc startBuddy*(t: TickerRef) =
       t.nBuddies = 1
     else:
       t.nBuddies.inc
-    when extraTraceMessages:
-      debug logTxt "start buddy", nBuddies=t.nBuddies
+    debug "Start buddy", nBuddies=t.nBuddies
 
 proc stopBuddy*(t: TickerRef) =
   ## Decrement buddies counter and stop ticker if there are no more registered
@@ -162,8 +169,7 @@ proc stopBuddy*(t: TickerRef) =
   if not t.isNil:
     if 0 < t.nBuddies:
       t.nBuddies.dec
-    when extraTraceMessages:
-      debug logTxt "stop buddy", nBuddies=t.nBuddies
+    debug "Stop buddy", nBuddies=t.nBuddies
 
 # ------------------------------------------------------------------------------
 # End

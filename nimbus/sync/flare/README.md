@@ -44,8 +44,7 @@ Meaning of *G*, *B*, *L*, *F*:
 This definition implies *G <= B <= L <= F* and the header chains can uniquely
 be described by the triple of block numbers *(B,L,F)*.
 
-Storage of header chains:
--------------------------
+### Storage of header chains:
 
 Some block numbers from the set *{w|G<=w<=B}* may correspond to finalised
 blocks which may be stored anywhere. If some block numbers do not correspond
@@ -56,8 +55,7 @@ a sub-chain starting at *G*.
 The block numbers from the set *{w|L<=w<=F}* must reside in the *flareHeader*
 database table. They do not correspond to finalised blocks.
 
-Header chains initialisation:
------------------------------
+### Header chains initialisation:
 
 Minimal layout on a pristine system
 
@@ -69,8 +67,7 @@ Minimal layout on a pristine system
 
 When first initialised, the header chains are set to *(G,G,G)*.
 
-Updating header chains:
------------------------
+### Updating header chains:
 
 A header chain with an non empty open interval *(B,L)* can be updated only by
 increasing *B* or decreasing *L* by adding headers so that the linked chain
@@ -105,8 +102,7 @@ with *L'=Z* and *F'=Z*.
 Note that diagram *(3)* is a generalisation of *(2)*.
 
 
-Complete header chain:
-----------------------
+### Complete header chain:
 
 The header chain is *relatively complete* if it satisfies clause *(3)* above
 for *G < B*. It is *fully complete* if *F==Z*. It should be obvious that the
@@ -117,3 +113,20 @@ If a *relatively complete* header chain is reached for the first time, the
 execution layer can start running an importer in the background compiling
 or executing blocks (starting from block number *#1*.) So the ledger database
 state will be updated incrementally.
+
+Imported block chain
+--------------------
+
+The following imported block chain diagram amends the layout *(1)*:
+
+      G                  T       B                     L                F    (5)
+      o------------------o-------o---------------------o----------------o-->
+      | <-- imported --> |       |                     |                |
+      | <-------  linked ------> | <-- unprocessed --> | <-- linked --> |
+
+
+where *T* is the number of the last imported and executed block. Coincidentally,
+*T* also refers to the global state of the ledger database.
+
+The headers corresponding to the half open interval `(T,B]` can be completed by
+fetching block bodies and then imported/executed.

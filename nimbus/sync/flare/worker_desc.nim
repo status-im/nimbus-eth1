@@ -42,6 +42,13 @@ type
     revHdrs*: seq[Blob]              ## Encoded linked header chain
     parentHash*: Hash256             ## Parent hash of `headers[^1]`
 
+  StagedBlocksQueue* = SortedSet[BlockNumber,BlocksForImport]
+    ## Blocks sorted by least block number.
+
+  BlocksForImport* = object
+    ## Block request item sorted by least block number (i.e. from `blocks[0]`.)
+    blocks*: seq[EthBlock]           ## List of blocks for import
+
   # -------------------
 
   LinkedHChainsLayout* = object
@@ -83,11 +90,19 @@ type
     layout*: LinkedHChainsLayout     ## Current header chains layout
     lastLayout*: LinkedHChainsLayout ## Previous layout (for delta update)
 
+  BlocksImportSync* = object
+    ## Sync state for blocks to import/execute
+    unprocessed*: BnRangeSet         ## Blocks download requested
+    borrowed*: uint                  ## Total of temp. fetched ranges
+    topRequest*: BlockNumber         ## Max requested block number
+    staged*: StagedBlocksQueue       ## Blocks ready for import
+
   # -------------------
 
   FlareBuddyData* = object
     ## Local descriptor data extension
     nHdrRespErrors*: int             ## Number of errors/slow responses in a row
+    nBdyRespErrors*: int             ## Ditto for bodies
 
     # Debugging and logging.
     nMultiLoop*: int                 ## Number of runs
@@ -98,7 +113,10 @@ type
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
     lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
+    blkSyncState*: BlocksImportSync  ## For importing/executing blocks
     nextUpdate*: Moment              ## For updating metrics
+    chain*: ChainRef                 ## For `persistBlocks()`
+    importRunningOk*: bool           ## Advisory flag, `persistBlocks()` running
 
     # Info stuff, no functional contribution
     nReorg*: int                     ## Number of reorg invocations (info only)
@@ -120,6 +138,10 @@ type
 func lhc*(ctx: FlareCtxRef): var LinkedHChainsSync =
   ## Shortcut
   ctx.pool.lhcSyncState
+
+func blk*(ctx: FlareCtxRef): var BlocksImportSync =
+  ## Shortcut
+  ctx.pool.blkSyncState
 
 func layout*(ctx: FlareCtxRef): var LinkedHChainsLayout =
   ## Shortcut

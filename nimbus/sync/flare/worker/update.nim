@@ -16,7 +16,7 @@ import
   pkg/stew/sorted_set,
   ../worker_desc,
   ./update/metrics,
-  "."/[db, headers_staged, headers_unproc]
+  "."/[blocks_unproc, db, headers_staged, headers_unproc]
 
 logScope:
   topics = "flare update"
@@ -145,6 +145,26 @@ proc updateLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
   # Check whether header downloading is done
   if ctx.mergeAdjacentChains():
     result = true
+
+
+proc updateBlockRequests*(ctx: FlareCtxRef): bool =
+  ## Update block requests if there staged block queue is empty
+  const info = "updateBlockRequests"
+
+  let t = ctx.dbStateBlockNumber()
+  if t < ctx.layout.base: # so the half open interval `(T,B]` is not empty
+
+    # One can fill/import/execute blocks by number from `(T,B]`
+    if ctx.blk.topRequest < ctx.layout.base:
+      # So there is some space
+      trace info & ": extending", T=t.bnStr, topReq=ctx.blk.topRequest.bnStr,
+        B=ctx.layout.base.bnStr
+
+      ctx.blocksUnprocCommit(0, max(t,ctx.blk.topRequest) + 1, ctx.layout.base)
+      ctx.blk.topRequest = ctx.layout.base
+      return true
+
+  false
 
 
 proc updateMetrics*(ctx: FlareCtxRef) =

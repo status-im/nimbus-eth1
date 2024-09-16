@@ -16,7 +16,8 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/[db, headers_staged, headers_unproc, start_stop, update],
+  ./worker/[blocks_staged, db, headers_staged, headers_unproc,
+            start_stop, update],
   ./worker_desc
 
 logScope:
@@ -34,12 +35,19 @@ proc headersToFetchOk(buddy: FlareBuddyRef): bool =
     buddy.ctrl.running and
     not buddy.ctx.poolMode
 
+proc bodiesToFetchOk(buddy: FlareBuddyRef): bool =
+  buddy.ctx.blocksStagedFetchOk() and
+    buddy.ctrl.running and
+    not buddy.ctx.poolMode
+
 proc napUnlessSomethingToFetch(
     buddy: FlareBuddyRef;
     info: static[string];
       ): Future[bool] {.async.} =
   ## When idle, save cpu cycles waiting for something to do.
-  if not buddy.headersToFetchOk():
+  if buddy.ctx.pool.importRunningOk or
+     not (buddy.headersToFetchOk() or
+          buddy.bodiesToFetchOk()):
     when extraTraceMessages:
       debug info & ": idly wasting time", peer=buddy.peer
     await sleepAsync workerIdleWaitInterval
@@ -113,8 +121,29 @@ proc runDaemon*(ctx: FlareCtxRef) {.async.} =
   if ctx.updateLinkedHChainsLayout():
     debug info & ": headers chain layout was updated"
 
+  # Execute staged block records.
+  if ctx.blocksStagedCanImportOk():
+
+    # Set advisory flag telling that a slow/long running process will take
+    # place. This works a bit like `runSingle()` only that in the case here
+    # we might have no peer.
+    ctx.pool.importRunningOk = true
+    defer: ctx.pool.importRunningOk = false
+
+    # Import from staged queue.
+    while ctx.blocksStagedImport info:
+      ctx.updateMetrics()
+
+      # Allow pseudo/async thread switch
+      await sleepAsync asyncThreadSwitchTimeSlot
+
   ctx.updateMetrics()
-  await sleepAsync daemonWaitInterval
+
+  # If there are no staged block records left, define a new unprocessed range
+  # of block numbers.
+  if not ctx.updateBlockRequests():
+    debug info & ": no block requests possible => wasting idle time"
+    await sleepAsync daemonWaitInterval
 
 
 proc runSingle*(buddy: FlareBuddyRef) {.async.} =
@@ -222,6 +251,11 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
         # * Save updated state and headers
         # * Decrease the left boundary `L` of the trusted range `[L,F]`
         discard buddy.ctx.headersStagedProcess info
+
+    # Fetch bodies and combine them with headers to blocks to be staged. These
+    # staged blocks are then excuted by the daemon process (no `peer` needed.)
+    while buddy.bodiesToFetchOk():
+      discard await buddy.blocksStagedCollect info
 
     # Note that it is important **not** to leave this function to be
     # re-invoked by the scheduler unless necessary. While the time gap
