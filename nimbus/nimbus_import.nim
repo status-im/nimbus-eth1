@@ -235,7 +235,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     # Since the slot emptiness cannot be predicted, we iterate over to find the block and check
     # if the block number is greater than the current block number
     var
-      lastEra = era(endSlot - 1) 
+      lastEra = era(endSlot - 1)
       startSlot = start_slot(lastEra) - 8192
     debug "Finding slot number to resume import", startSlot, endSlot
 
@@ -244,7 +244,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         era, historical_roots, historical_summaries, startSlot, clConfig.cfg
       ).valueOr:
         startSlot += 1
-        if startSlot == endSlot - 1 :
+        if startSlot == endSlot - 1:
           error "No blocks found in the last era file"
           quit QuitFailure
         else:
