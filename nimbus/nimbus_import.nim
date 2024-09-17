@@ -228,7 +228,36 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       era: EraDB,
       historical_roots: openArray[Eth2Digest],
       historical_summaries: openArray[HistoricalSummary],
+      endSlot: Slot,
   ) =
+    # Checks if the Nimbus block number is ahead the era block number
+    # First we load the last era number, and get the fist slot number 
+    # Since the slot emptiness cannot be predicted, we iterate over to find the block and check
+    # if the block number is greater than the current block number
+    var
+      lastEra = era(endSlot - 1) 
+      startSlot = start_slot(lastEra) - 8192
+    debug "Finding slot number to resume import", startSlot, endSlot
+
+    while startSlot < endSlot:
+      let blk = getEthBlockFromEra(
+        era, historical_roots, historical_summaries, startSlot, clConfig.cfg
+      ).valueOr:
+        startSlot += 1
+        if startSlot == endSlot - 1 :
+          error "No blocks found in the last era file"
+          quit QuitFailure
+        else:
+          continue
+
+      startSlot += 1
+      if blk.header.number < blockNumber:
+        notice "Avaiable Era Files are already imported",
+          stateBlockNumber = blockNumber, eraBlockNumber = blk.header.number
+        quit QuitSuccess
+      else:
+        break
+
     if blockNumber > 1:
       # Setting the initial lower bound
       importedSlot = (blockNumber - lastEra1Block) + firstSlotAfterMerge
@@ -243,12 +272,6 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         ).valueOr:
           importedSlot += 1
           continue
-
-        # Checks if the Nimbus block number is ahead the era block number
-        if blockNumber < blk.header.number:
-          notice "Avaiable Era Files are already imported",
-            stateBlockNumber = blockNumber, eraBlockNumber = blk.header.number
-          quit QuitSuccess
 
         clNum = blk.header.number
         # decreasing the lower bound with each iteration
@@ -307,7 +330,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       # Load the last slot number
       if blockNumber > lastEra1Block + 1:
         updateLastImportedSlot(
-          eraDB, historical_roots.asSeq(), historical_summaries.asSeq()
+          eraDB, historical_roots.asSeq(), historical_summaries.asSeq(), endSlot
         )
 
       if importedSlot < firstSlotAfterMerge and firstSlotAfterMerge != 0:
