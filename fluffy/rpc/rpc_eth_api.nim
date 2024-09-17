@@ -144,7 +144,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_feeHistory")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getBalance")
+  #rpcServerWithProxy.registerProxyMethod("eth_getBalance")
 
   # rpcServerWithProxy.registerProxyMethod("eth_getBlockByHash")
 
@@ -154,7 +154,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByNumber")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getCode")
+  #rpcServerWithProxy.registerProxyMethod("eth_getCode")
 
   rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByHash")
 
@@ -162,7 +162,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByBlockNumberAndIndex")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getStorageAt")
+  #rpcServerWithProxy.registerProxyMethod("eth_getStorageAt")
 
   rpcServerWithProxy.registerProxyMethod("eth_getTransactionByBlockHashAndIndex")
 
@@ -170,7 +170,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getTransactionByHash")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getTransactionCount")
+  #rpcServerWithProxy.registerProxyMethod("eth_getTransactionCount")
 
   rpcServerWithProxy.registerProxyMethod("eth_getTransactionReceipt")
 
@@ -182,7 +182,7 @@ proc installEthApiHandlers*(
 
   rpcServerWithProxy.registerProxyMethod("eth_getUncleCountByBlockNumber")
 
-  rpcServerWithProxy.registerProxyMethod("eth_getProof")
+  #rpcServerWithProxy.registerProxyMethod("eth_getProof")
 
   rpcServerWithProxy.registerProxyMethod("eth_sendRawTransaction")
 
