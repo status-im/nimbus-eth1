@@ -245,7 +245,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           continue
 
         # Checks if the Nimbus block number is ahead the era block number
-        if blockNumber >= blk.header.number:
+        if blockNumber < blk.header.number:
           notice "Avaiable Era Files are already imported",
             stateBlockNumber = blockNumber, eraBlockNumber = blk.header.number
           quit QuitSuccess
