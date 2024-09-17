@@ -1,19 +1,19 @@
-# Bridging content: Portal history network
+# Bridging content into the Portal history network
 
-## From content bridges
+## Seeding from content bridges
 
 ### Seeding history data with the `portal_bridge`
 
 #### Step 1: Run a Portal client
 
-Run a Portal client with the Portal JSON-RPC API enabled, e.g. fluffy:
+Run a Portal client with the Portal JSON-RPC API enabled, e.g. Fluffy:
 
 ```bash
 ./build/fluffy --rpc --storage-capacity:0
 ```
 
 > Note: The `--storage-capacity:0` option is not required, but it is added here
-for the use case where the node its only focus is on gossiping content from the
+for the use case where the node's only focus is on gossiping content from the
 `portal_bridge`.
 
 #### Step 2: Run an EL client

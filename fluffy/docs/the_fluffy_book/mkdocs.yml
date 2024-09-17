@@ -73,6 +73,7 @@ nav:
     - Portal bridge:
       - 'history-content-bridging.md'
       - 'beacon-content-bridging.md'
+      - 'state-content-bridging.md'
     - 'db_pruning.md'
 
   - Developers:
