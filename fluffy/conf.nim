@@ -15,7 +15,6 @@ import
   chronicles,
   eth/keys,
   eth/p2p/discoveryv5/[enr, node, routing_table],
-  json_rpc/rpcproxy,
   nimcrypto/hash,
   stew/byteutils,
   eth/net/nat, # must be late (compilation annoyance)
@@ -36,13 +35,10 @@ proc defaultDataDir*(): string =
 const
   defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
   defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
-  defaultProxyAddress* = (static "http://127.0.0.1:8546")
-  defaultClientConfig* = getHttpClientConfig(defaultProxyAddress)
 
   defaultListenAddressDesc = $defaultListenAddress
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
   defaultDataDirDesc = defaultDataDir()
-  defaultClientConfigDesc = $(defaultClientConfig.httpUri)
   defaultStorageCapacity* = 2000'u32 # 2 GB default
   defaultStorageCapacityDesc* = $defaultStorageCapacity
 
@@ -192,15 +188,6 @@ type
       name: "rpc-address"
     .}: IpAddress
 
-    # it makes little sense to have default value here in final release, but until then
-    # it would be troublesome to add some fake uri param every time
-    proxyUri* {.
-      defaultValue: defaultClientConfig,
-      defaultValueDesc: $defaultClientConfigDesc,
-      desc: "URI of eth client where to proxy unimplemented JSON-RPC methods to",
-      name: "proxy-uri"
-    .}: ClientConfig
-
     tableIpLimit* {.
       hidden,
       desc:
@@ -327,20 +314,6 @@ proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
     raise newException(ValueError, "Invalid private key")
 
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
-  return @[]
-
-proc parseCmdArg*(T: type ClientConfig, p: string): T {.raises: [ValueError].} =
-  let uri = parseUri(p)
-  if (uri.scheme == "http" or uri.scheme == "https"):
-    getHttpClientConfig(p)
-  elif (uri.scheme == "ws" or uri.scheme == "wss"):
-    getWebSocketClientConfig(p)
-  else:
-    raise newException(
-      ValueError, "Proxy uri should have defined scheme (http/https/ws/wss)"
-    )
-
-proc completeCmdArg*(T: type ClientConfig, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(

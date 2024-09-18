@@ -9,7 +9,7 @@
 
 import
   std/sequtils,
-  json_rpc/[rpcproxy, rpcserver],
+  json_rpc/rpcserver,
   stew/byteutils,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./rpc_types
@@ -23,9 +23,7 @@ type PongResponse* = object
 
 PongResponse.useDefaultSerializationIn JrpcConv
 
-proc installDiscoveryApiHandlers*(
-    rpcServer: RpcServer | RpcProxy, d: discv5_protocol.Protocol
-) =
+proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Protocol) =
   ## Discovery v5 JSON-RPC API such as defined here:
   ## https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 

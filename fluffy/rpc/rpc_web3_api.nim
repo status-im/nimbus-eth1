@@ -7,10 +7,10 @@
 
 {.push raises: [].}
 
-import json_rpc/[rpcproxy, rpcserver], ../version
+import json_rpc/rpcserver, ../version
 
 export rpcserver
 
-proc installWeb3ApiHandlers*(rpcServer: RpcServer | RpcProxy) =
+proc installWeb3ApiHandlers*(rpcServer: RpcServer) =
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion

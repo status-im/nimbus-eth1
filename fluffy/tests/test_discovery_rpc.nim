@@ -10,7 +10,7 @@
 import
   chronos,
   testutils/unittests,
-  json_rpc/[rpcproxy, rpcserver],
+  json_rpc/rpcserver,
   json_rpc/clients/httpclient,
   stint,
   eth/p2p/discoveryv5/enr,
@@ -21,7 +21,7 @@ import
 
 type TestCase = ref object
   localDiscovery: discv5_protocol.Protocol
-  server: RpcProxy
+  server: RpcHttpServer
   client: RpcHttpClient
 
 proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
@@ -31,20 +31,17 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     ta = initTAddress(localSrvAddress, localSrvPort)
     localDiscoveryNode =
       initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
-    fakeProxyConfig = getHttpClientConfig("http://127.0.0.1:8546")
     client = newRpcHttpClient()
 
-  var rpcHttpServerWithProxy = RpcProxy.new([ta], fakeProxyConfig)
+  let rpcHttpServer = RpcHttpServer.new()
+  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
 
-  rpcHttpServerWithProxy.installDiscoveryApiHandlers(localDiscoveryNode)
+  rpcHttpServer.installDiscoveryApiHandlers(localDiscoveryNode)
 
-  await rpcHttpServerWithProxy.start()
-  await client.connect(
-    localSrvAddress, rpcHttpServerWithProxy.localAddress[0].port, false
-  )
-  return TestCase(
-    localDiscovery: localDiscoveryNode, server: rpcHttpServerWithProxy, client: client
-  )
+  rpcHttpServer.start()
+  await client.connect(localSrvAddress, rpcHttpServer.localAddress[0].port, false)
+  return
+    TestCase(localDiscovery: localDiscoveryNode, server: rpcHttpServer, client: client)
 
 proc stop(testCase: TestCase) {.async.} =
   await testCase.server.stop()
