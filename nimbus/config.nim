@@ -122,7 +122,6 @@ type
     ## RPC flags
     Eth                           ## enable eth_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
-    Exp                           ## enable exp_ set of RPC API
 
   DiscoveryType* {.pure.} = enum
     None
@@ -451,7 +450,7 @@ type
         name: "rpc" }: bool
 
       rpcApi {.
-        desc: "Enable specific set of RPC API (available: eth, debug, exp)"
+        desc: "Enable specific set of RPC API (available: eth, debug)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "rpc-api" }: seq[string]
@@ -462,7 +461,7 @@ type
         name: "ws" }: bool
 
       wsApi {.
-        desc: "Enable specific set of Websocket RPC API (available: eth, debug, exp)"
+        desc: "Enable specific set of Websocket RPC API (available: eth, debug)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" }: seq[string]
@@ -702,7 +701,6 @@ proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
     case item.toLowerAscii()
     of "eth": result.incl RpcFlag.Eth
     of "debug": result.incl RpcFlag.Debug
-    of "exp": result.incl RpcFlag.Exp
     else:
       error "Unknown RPC API: ", name=item
       quit QuitFailure
