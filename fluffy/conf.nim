@@ -190,14 +190,20 @@ type
     .}: IpAddress
 
     wsEnabled* {.
-      desc: "Enable the Websocket JSON-RPC server", defaultValue: false, name: "ws"
+      desc: "Enable the WebSocket JSON-RPC server", defaultValue: false, name: "ws"
     .}: bool
 
     wsPort* {.
-      desc: "Port for the Websocket JSON-RPC server",
+      desc: "Port for the WebSocket JSON-RPC server",
       defaultValue: 8546,
       name: "ws-port"
     .}: Port
+
+    wsCompression* {.
+      desc: "Enable compression for the WebSocket JSON-RPC server",
+      defaultValue: false,
+      name: "ws-compression"
+    .}: bool
 
     tableIpLimit* {.
       hidden,

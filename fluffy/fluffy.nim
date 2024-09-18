@@ -244,28 +244,30 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   if config.wsEnabled:
     let
       ta = initTAddress(config.rpcAddress, config.wsPort)
-      wsServer = newRpcWebSocketServer(ta)
+      rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
 
-    wsServer.installDiscoveryApiHandlers(d)
-    wsServer.installWeb3ApiHandlers()
+    rpcWsServer.installDiscoveryApiHandlers(d)
+    rpcWsServer.installWeb3ApiHandlers()
     if node.stateNetwork.isSome():
-      wsServer.installPortalApiHandlers(node.stateNetwork.value.portalProtocol, "state")
+      rpcWsServer.installPortalApiHandlers(
+        node.stateNetwork.value.portalProtocol, "state"
+      )
     if node.historyNetwork.isSome():
-      wsServer.installEthApiHandlers(
+      rpcWsServer.installEthApiHandlers(
         node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
       )
-      wsServer.installPortalApiHandlers(
+      rpcWsServer.installPortalApiHandlers(
         node.historyNetwork.value.portalProtocol, "history"
       )
-      wsServer.installPortalDebugApiHandlers(
+      rpcWsServer.installPortalDebugApiHandlers(
         node.historyNetwork.value.portalProtocol, "history"
       )
     if node.beaconNetwork.isSome():
-      wsServer.installPortalApiHandlers(
+      rpcWsServer.installPortalApiHandlers(
         node.beaconNetwork.value.portalProtocol, "beacon"
       )
 
-    wsServer.start()
+    rpcWsServer.start()
 
   runForever()
 
