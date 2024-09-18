@@ -9,7 +9,7 @@
 
 import
   std/[times, sequtils, strutils, typetraits],
-  json_rpc/[rpcproxy, rpcserver],
+  json_rpc/rpcserver,
   chronicles,
   web3/conversions, # sigh, for FixedBytes marshalling
   web3/eth_api_types,
@@ -34,12 +34,6 @@ from ../../nimbus/beacon/web3_eth_conv import w3Addr, w3Hash, ethHash
 # - eth_getBlockByNumber
 # - eth_getBlockTransactionCountByHash
 # - eth_getLogs - Partially: only requests by block hash
-#
-# In order to be able to use Fluffy as drop-in replacement for apps/tools that
-# use the JSON RPC API, unsupported methods can be forwarded to a configured
-# web3 provider.
-# Supported methods will be handled by Fluffy by making use of the Portal network,
-# unsupported methods will be proxied to the given web3 provider.
 #
 
 # Some similar code as from nimbus `rpc_utils`, but avoiding that import as it
@@ -128,94 +122,19 @@ func init*(
   blockObject
 
 proc installEthApiHandlers*(
-    rpcServerWithProxy: var RpcProxy,
+    rpcServer: RpcServer,
     historyNetwork: HistoryNetwork,
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
 ) =
-  # Supported API
-  rpcServerWithProxy.registerProxyMethod("eth_blockNumber")
-
-  rpcServerWithProxy.registerProxyMethod("eth_call")
-
-  # rpcServerWithProxy.registerProxyMethod("eth_chainId")
-
-  rpcServerWithProxy.registerProxyMethod("eth_estimateGas")
-
-  rpcServerWithProxy.registerProxyMethod("eth_feeHistory")
-
-  #rpcServerWithProxy.registerProxyMethod("eth_getBalance")
-
-  # rpcServerWithProxy.registerProxyMethod("eth_getBlockByHash")
-
-  # rpcServerWithProxy.registerProxyMethod("eth_getBlockByNumber")
-
-  # rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByHash")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByNumber")
-
-  #rpcServerWithProxy.registerProxyMethod("eth_getCode")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByHash")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByBlockHashAndIndex")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByBlockNumberAndIndex")
-
-  #rpcServerWithProxy.registerProxyMethod("eth_getStorageAt")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getTransactionByBlockHashAndIndex")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getTransactionByBlockNumberAndIndex")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getTransactionByHash")
-
-  #rpcServerWithProxy.registerProxyMethod("eth_getTransactionCount")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getTransactionReceipt")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getUncleByBlockHashAndIndex")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getUncleByBlockNumberAndIndex")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getUncleCountByBlockHash")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getUncleCountByBlockNumber")
-
-  #rpcServerWithProxy.registerProxyMethod("eth_getProof")
-
-  rpcServerWithProxy.registerProxyMethod("eth_sendRawTransaction")
-
-  # Optional API
-
-  rpcServerWithProxy.registerProxyMethod("eth_gasPrice")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getFilterChanges")
-
-  rpcServerWithProxy.registerProxyMethod("eth_getFilterLogs")
-
-  # rpcServerWithProxy.registerProxyMethod("eth_getLogs")
-
-  rpcServerWithProxy.registerProxyMethod("eth_newBlockFilter")
-
-  rpcServerWithProxy.registerProxyMethod("eth_newFilter")
-
-  rpcServerWithProxy.registerProxyMethod("eth_newPendingTransactionFilter")
-
-  rpcServerWithProxy.registerProxyMethod("eth_pendingTransactions")
-
-  rpcServerWithProxy.registerProxyMethod("eth_syncing")
-
-  rpcServerWithProxy.registerProxyMethod("eth_uninstallFilter")
-
   # Supported API through the Portal Network
 
-  rpcServerWithProxy.rpc("eth_chainId") do() -> Quantity:
+  rpcServer.rpc("eth_chainId") do() -> Quantity:
     # The Portal Network can only support MainNet at the moment, so always return
     # 1
     return Quantity(uint64(1))
 
-  rpcServerWithProxy.rpc("eth_getBlockByHash") do(
+  rpcServer.rpc("eth_getBlockByHash") do(
     data: eth_api_types.Hash256, fullTransactions: bool
   ) -> Opt[BlockObject]:
     ## Returns information about a block by hash.
@@ -232,7 +151,7 @@ proc installEthApiHandlers*(
 
     return Opt.some(BlockObject.init(header, body, fullTransactions))
 
-  rpcServerWithProxy.rpc("eth_getBlockByNumber") do(
+  rpcServer.rpc("eth_getBlockByNumber") do(
     quantityTag: RtBlockIdentifier, fullTransactions: bool
   ) -> Opt[BlockObject]:
     if quantityTag.kind == bidAlias:
@@ -286,7 +205,7 @@ proc installEthApiHandlers*(
 
       return Opt.some(BlockObject.init(header, body, fullTransactions))
 
-  rpcServerWithProxy.rpc("eth_getBlockTransactionCountByHash") do(
+  rpcServer.rpc("eth_getBlockTransactionCountByHash") do(
     data: eth_api_types.Hash256
   ) -> Quantity:
     ## Returns the number of transactions in a block from a block matching the
@@ -312,9 +231,7 @@ proc installEthApiHandlers*(
   # rpcServerWithProxy.rpc("eth_getTransactionReceipt") do(
   #     data: EthHashStr) -> Opt[ReceiptObject]:
 
-  rpcServerWithProxy.rpc("eth_getLogs") do(
-    filterOptions: FilterOptions
-  ) -> seq[LogObject]:
+  rpcServer.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
     if filterOptions.blockHash.isNone():
       # Currently only queries by blockhash are supported.
       # TODO: Can impolement range queries by block number now.
@@ -346,7 +263,7 @@ proc installEthApiHandlers*(
       # bloomfilter returned false, there are no logs matching the criteria
       return @[]
 
-  rpcServerWithProxy.rpc("eth_getBalance") do(
+  rpcServer.rpc("eth_getBalance") do(
     data: web3Types.Address, quantityTag: RtBlockIdentifier
   ) -> UInt256:
     ## Returns the balance of the account of given address.
@@ -369,7 +286,7 @@ proc installEthApiHandlers*(
 
     return balance
 
-  rpcServerWithProxy.rpc("eth_getTransactionCount") do(
+  rpcServer.rpc("eth_getTransactionCount") do(
     data: web3Types.Address, quantityTag: RtBlockIdentifier
   ) -> Quantity:
     ## Returns the number of transactions sent from an address.
@@ -391,7 +308,7 @@ proc installEthApiHandlers*(
         raise newException(ValueError, "Unable to get transaction count")
     return nonce.Quantity
 
-  rpcServerWithProxy.rpc("eth_getStorageAt") do(
+  rpcServer.rpc("eth_getStorageAt") do(
     data: web3Types.Address, slot: UInt256, quantityTag: RtBlockIdentifier
   ) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
@@ -414,7 +331,7 @@ proc installEthApiHandlers*(
         raise newException(ValueError, "Unable to get storage slot")
     return FixedBytes[32](slotValue.toBytesBE())
 
-  rpcServerWithProxy.rpc("eth_getCode") do(
+  rpcServer.rpc("eth_getCode") do(
     data: web3Types.Address, quantityTag: RtBlockIdentifier
   ) -> seq[byte]:
     ## Returns code at a given address.
@@ -436,7 +353,7 @@ proc installEthApiHandlers*(
         raise newException(ValueError, "Unable to get code")
     return bytecode.asSeq()
 
-  rpcServerWithProxy.rpc("eth_getProof") do(
+  rpcServer.rpc("eth_getProof") do(
     data: web3Types.Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
   ) -> ProofResponse:
     ## Returns information about an account and storage slots along with account
@@ -483,7 +400,7 @@ proc installEthApiHandlers*(
 
   # TODO: Should we move these debug methods into a separate debug rpcServer?
 
-  rpcServerWithProxy.rpc("debug_getBalanceByStateRoot") do(
+  rpcServer.rpc("debug_getBalanceByStateRoot") do(
     data: web3Types.Address, stateRoot: web3types.Hash256
   ) -> UInt256:
     ## Returns the balance of the account of given address.
@@ -504,7 +421,7 @@ proc installEthApiHandlers*(
 
     return balance
 
-  rpcServerWithProxy.rpc("debug_getTransactionCountByStateRoot") do(
+  rpcServer.rpc("debug_getTransactionCountByStateRoot") do(
     data: web3Types.Address, stateRoot: web3types.Hash256
   ) -> Quantity:
     ## Returns the number of transactions sent from an address.
@@ -524,7 +441,7 @@ proc installEthApiHandlers*(
       raise newException(ValueError, "Unable to get transaction count")
     return nonce.Quantity
 
-  rpcServerWithProxy.rpc("debug_getStorageAtByStateRoot") do(
+  rpcServer.rpc("debug_getStorageAtByStateRoot") do(
     data: web3Types.Address, slot: UInt256, stateRoot: web3types.Hash256
   ) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
@@ -545,7 +462,7 @@ proc installEthApiHandlers*(
       raise newException(ValueError, "Unable to get storage slot")
     return FixedBytes[32](slotValue.toBytesBE())
 
-  rpcServerWithProxy.rpc("debug_getCodeByStateRoot") do(
+  rpcServer.rpc("debug_getCodeByStateRoot") do(
     data: web3Types.Address, stateRoot: web3types.Hash256
   ) -> seq[byte]:
     ## Returns code at a given address.
@@ -566,7 +483,7 @@ proc installEthApiHandlers*(
 
     return bytecode.asSeq()
 
-  rpcServerWithProxy.rpc("debug_getProofByStateRoot") do(
+  rpcServer.rpc("debug_getProofByStateRoot") do(
     data: web3Types.Address, slots: seq[UInt256], stateRoot: web3types.Hash256
   ) -> ProofResponse:
     ## Returns information about an account and storage slots along with account

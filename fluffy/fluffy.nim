@@ -17,7 +17,6 @@ import
   metrics,
   metrics/chronos_httpserver,
   json_rpc/clients/httpclient,
-  json_rpc/rpcproxy,
   results,
   stew/[byteutils, io2],
   eth/keys,
@@ -216,30 +215,29 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
     # that reach that limit (in hex, for gossip method).
     rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
-    var rpcHttpServerWithProxy = RpcProxy.new(rpcHttpServer, config.proxyUri)
 
-    rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
-    rpcHttpServerWithProxy.installWeb3ApiHandlers()
+    rpcHttpServer.installDiscoveryApiHandlers(d)
+    rpcHttpServer.installWeb3ApiHandlers()
     if node.stateNetwork.isSome():
-      rpcHttpServerWithProxy.installPortalApiHandlers(
+      rpcHttpServer.installPortalApiHandlers(
         node.stateNetwork.value.portalProtocol, "state"
       )
     if node.historyNetwork.isSome():
-      rpcHttpServerWithProxy.installEthApiHandlers(
+      rpcHttpServer.installEthApiHandlers(
         node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
       )
-      rpcHttpServerWithProxy.installPortalApiHandlers(
+      rpcHttpServer.installPortalApiHandlers(
         node.historyNetwork.value.portalProtocol, "history"
       )
-      rpcHttpServerWithProxy.installPortalDebugApiHandlers(
+      rpcHttpServer.installPortalDebugApiHandlers(
         node.historyNetwork.value.portalProtocol, "history"
       )
     if node.beaconNetwork.isSome():
-      rpcHttpServerWithProxy.installPortalApiHandlers(
+      rpcHttpServer.installPortalApiHandlers(
         node.beaconNetwork.value.portalProtocol, "beacon"
       )
-    # TODO: Test proxy with remote node over HTTPS
-    waitFor rpcHttpServerWithProxy.start()
+
+    rpcHttpServer.start()
 
   runForever()
 

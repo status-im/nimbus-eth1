@@ -21,7 +21,7 @@ import
 
 type TestCase = ref object
   localDiscovery: discv5_protocol.Protocol
-  server: RpcProxy
+  server: RpcHttpServer
   client: RpcHttpClient
 
 proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
@@ -34,17 +34,17 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     fakeProxyConfig = getHttpClientConfig("http://127.0.0.1:8546")
     client = newRpcHttpClient()
 
-  var rpcHttpServerWithProxy = RpcProxy.new([ta], fakeProxyConfig)
+  let rpcHttpServer = RpcHttpServer.new()
+  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
 
-  rpcHttpServerWithProxy.installDiscoveryApiHandlers(localDiscoveryNode)
+  # var rpcHttpServerWithProxy = RpcProxy.new([ta], fakeProxyConfig)
 
-  await rpcHttpServerWithProxy.start()
-  await client.connect(
-    localSrvAddress, rpcHttpServerWithProxy.localAddress[0].port, false
-  )
-  return TestCase(
-    localDiscovery: localDiscoveryNode, server: rpcHttpServerWithProxy, client: client
-  )
+  rpcHttpServer.installDiscoveryApiHandlers(localDiscoveryNode)
+
+  rpcHttpServer.start()
+  await client.connect(localSrvAddress, rpcHttpServer.localAddress[0].port, false)
+  return
+    TestCase(localDiscovery: localDiscoveryNode, server: rpcHttpServer, client: client)
 
 proc stop(testCase: TestCase) {.async.} =
   await testCase.server.stop()
