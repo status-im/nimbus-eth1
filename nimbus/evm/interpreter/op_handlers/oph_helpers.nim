@@ -26,6 +26,7 @@ import
 when defined(evmc_enabled):
   import
     ../../evmc_api,
+    ../../code_bytes,
     evmc/evmc
 else:
   import

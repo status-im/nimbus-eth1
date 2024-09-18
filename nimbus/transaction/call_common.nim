@@ -177,7 +177,7 @@ proc setupHost(call: CallParams): TransactionHost =
     else:
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
-      if host.vmstate.fork >= FkPrague:
+      if host.vmState.fork >= FkPrague:
         code = host.vmState.readOnlyStateDB.resolveCode(host.msg.code_address.fromEvmc)
       else:
         code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
