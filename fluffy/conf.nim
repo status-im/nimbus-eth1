@@ -174,11 +174,12 @@ type
       name: "metrics-port"
     .}: Port
 
-    rpcEnabled* {.desc: "Enable the JSON-RPC server", defaultValue: false, name: "rpc".}:
-      bool
+    rpcEnabled* {.
+      desc: "Enable the HTTP JSON-RPC server", defaultValue: false, name: "rpc"
+    .}: bool
 
     rpcPort* {.
-      desc: "HTTP port for the JSON-RPC server", defaultValue: 8545, name: "rpc-port"
+      desc: "Port for the HTTP JSON-RPC server", defaultValue: 8545, name: "rpc-port"
     .}: Port
 
     rpcAddress* {.
@@ -187,6 +188,16 @@ type
       defaultValueDesc: $defaultAdminListenAddressDesc,
       name: "rpc-address"
     .}: IpAddress
+
+    wsEnabled* {.
+      desc: "Enable the Websocket JSON-RPC server", defaultValue: false, name: "ws"
+    .}: bool
+
+    wsPort* {.
+      desc: "Port for the Websocket JSON-RPC server",
+      defaultValue: 8546,
+      name: "ws-port"
+    .}: Port
 
     tableIpLimit* {.
       hidden,

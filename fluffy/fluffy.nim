@@ -208,10 +208,12 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   node.start()
 
   ## Start the JSON-RPC APIs
-  if config.rpcEnabled:
-    let ta = initTAddress(config.rpcAddress, config.rpcPort)
 
-    let rpcHttpServer = RpcHttpServer.new()
+  if config.rpcEnabled:
+    let
+      ta = initTAddress(config.rpcAddress, config.rpcPort)
+      rpcHttpServer = RpcHttpServer.new()
+
     # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
     # that reach that limit (in hex, for gossip method).
     rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
@@ -238,6 +240,32 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       )
 
     rpcHttpServer.start()
+
+  if config.wsEnabled:
+    let
+      ta = initTAddress(config.rpcAddress, config.wsPort)
+      wsServer = newRpcWebSocketServer(ta)
+
+    wsServer.installDiscoveryApiHandlers(d)
+    wsServer.installWeb3ApiHandlers()
+    if node.stateNetwork.isSome():
+      wsServer.installPortalApiHandlers(node.stateNetwork.value.portalProtocol, "state")
+    if node.historyNetwork.isSome():
+      wsServer.installEthApiHandlers(
+        node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
+      )
+      wsServer.installPortalApiHandlers(
+        node.historyNetwork.value.portalProtocol, "history"
+      )
+      wsServer.installPortalDebugApiHandlers(
+        node.historyNetwork.value.portalProtocol, "history"
+      )
+    if node.beaconNetwork.isSome():
+      wsServer.installPortalApiHandlers(
+        node.beaconNetwork.value.portalProtocol, "beacon"
+      )
+
+    wsServer.start()
 
   runForever()
 
