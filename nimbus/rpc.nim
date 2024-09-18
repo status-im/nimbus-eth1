@@ -19,7 +19,6 @@ import
   ./rpc/jwt_auth,
   ./rpc/cors,
   ./rpc/rpc_server,
-  ./rpc/experimental,
   ./rpc/oracle,
   ./rpc/server_api,
   ./nimbus_desc,
@@ -33,7 +32,6 @@ export
   jwt_auth,
   cors,
   rpc_server,
-  experimental,
   oracle,
   server_api
 
@@ -49,7 +47,7 @@ func combinedServer(conf: NimbusConf): bool =
   conf.httpServerEnabled and
     conf.shareServerWithEngineApi
 
-proc installRPC(server: RpcServer,
+func installRPC(server: RpcServer,
                 nimbus: NimbusNode,
                 conf: NimbusConf,
                 com: CommonRef,
@@ -65,9 +63,6 @@ proc installRPC(server: RpcServer,
   # if RpcFlag.Debug in flags:
   #   setupDebugRpc(com, nimbus.txPool, server)
 
-  if RpcFlag.Exp in flags:
-    setupExpRpc(com, server)
-
   server.rpc("admin_quit") do() -> string:
     {.gcsafe.}:
       nimbus.state = NimbusState.Stopping
@@ -79,12 +74,12 @@ proc newRpcWebsocketHandler(): RpcWebSocketHandler =
     wsserver: WSServer.new(rng = rng),
   )
 
-proc newRpcHttpHandler(): RpcHttpHandler =
+func newRpcHttpHandler(): RpcHttpHandler =
   RpcHttpHandler(
     maxChunkSize: DefaultChunkSize,
   )
 
-proc addHandler(handlers: var seq[RpcHandlerProc],
+func addHandler(handlers: var seq[RpcHandlerProc],
                 server: RpcHttpHandler) =
 
   proc handlerProc(request: HttpRequestRef):
@@ -100,7 +95,7 @@ proc addHandler(handlers: var seq[RpcHandlerProc],
 
   handlers.add handlerProc
 
-proc addHandler(handlers: var seq[RpcHandlerProc],
+func addHandler(handlers: var seq[RpcHandlerProc],
                 server: RpcWebSocketHandler) =
 
   proc handlerProc(request: HttpRequestRef):
@@ -130,7 +125,7 @@ proc addHandler(handlers: var seq[RpcHandlerProc],
 
   handlers.add handlerProc
 
-proc addHandler(handlers: var seq[RpcHandlerProc],
+func addHandler(handlers: var seq[RpcHandlerProc],
                 server: GraphqlHttpHandlerRef) =
 
   proc handlerProc(request: HttpRequestRef):

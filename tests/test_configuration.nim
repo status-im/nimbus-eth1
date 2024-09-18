@@ -111,18 +111,6 @@ proc configurationMain*() =
       let cx = cc.getRpcFlags()
       check { RpcFlag.Eth, RpcFlag.Debug } == cx
 
-      let dd = makeConfig(@["--rpc-api:eth", "--rpc-api:exp"])
-      let dx = dd.getRpcFlags()
-      check { RpcFlag.Eth, RpcFlag.Exp } == dx
-
-      let ee = makeConfig(@["--rpc-api:eth,exp"])
-      let ex = ee.getRpcFlags()
-      check { RpcFlag.Eth, RpcFlag.Exp } == ex
-
-      let ff = makeConfig(@["--rpc-api:eth,debug,exp"])
-      let fx = ff.getRpcFlags()
-      check { RpcFlag.Eth, RpcFlag.Debug, RpcFlag.Exp } == fx
-
     test "ws-api":
       let conf = makeTestConfig()
       let flags = conf.getWsFlags()
@@ -139,18 +127,6 @@ proc configurationMain*() =
       let cc = makeConfig(@["--ws-api:eth,debug"])
       let cx = cc.getWsFlags()
       check { RpcFlag.Eth, RpcFlag.Debug } == cx
-
-      let dd = makeConfig(@["--ws-api:eth", "--ws-api:exp"])
-      let dx = dd.getWsFlags()
-      check { RpcFlag.Eth, RpcFlag.Exp } == dx
-
-      let ee = makeConfig(@["--ws-api:eth,exp"])
-      let ex = ee.getWsFlags()
-      check { RpcFlag.Eth, RpcFlag.Exp } == ex
-
-      let ff = makeConfig(@["--ws-api:eth,exp,debug"])
-      let fx = ff.getWsFlags()
-      check { RpcFlag.Eth, RpcFlag.Debug, RpcFlag.Exp } == fx
 
     test "protocols":
       let conf = makeTestConfig()
