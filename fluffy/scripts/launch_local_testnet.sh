@@ -181,7 +181,7 @@ if [[ $# != 0 ]]; then
   shift $#
 fi
 
-if [[ $((NUM_NODES)) < 3 ]]; then
+if [[ $((NUM_NODES)) -lt 3 ]]; then
   echo "--nodes is less than minimum of 3. Must have at least 3 nodes in order for the network to be stable."
   exit 1
 fi
