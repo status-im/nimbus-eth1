@@ -120,7 +120,10 @@ proc setupHost(call: CallParams): TransactionHost =
     else:
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
-      code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
+      if host.vmState.fork >= FkPrague:
+        code = host.vmState.readOnlyStateDB.resolveCode(host.msg.code_address.fromEvmc)
+      else:
+        code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
       if call.input.len > 0:
         host.msg.input_size = call.input.len.csize_t
         # Must copy the data so the `host.msg.input_data` pointer

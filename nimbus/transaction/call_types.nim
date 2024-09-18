@@ -30,6 +30,7 @@ type
     input*:        seq[byte]            # Input data.
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
+    authorizationList*: seq[Authorization] # EIP-7702 (Prague) authorization list
     noIntrinsic*:  bool                 # Don't charge intrinsic gas.
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.

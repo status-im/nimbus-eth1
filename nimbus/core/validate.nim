@@ -291,11 +291,11 @@ proc validateTxBasic*(
     const SECP256K1halfN = SECPK1_N div 2
 
     for auth in tx.authorizationList:
-      if auth.yParity > 1'u64:
-        return err("invalid tx: auth.yParity must be 0 or 1")
+      if auth.v > 1'u64:
+        return err("invalid tx: auth.v must be 0 or 1")
 
-      if auth.S > SECP256K1halfN:
-        return err("invalid tx: auth.S must be <= SECP256K1N/2")
+      if auth.s > SECP256K1halfN:
+        return err("invalid tx: auth.s must be <= SECP256K1N/2")
 
   ok()
 

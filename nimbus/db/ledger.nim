@@ -19,6 +19,7 @@ import
   ../utils/mergeutils,
   ../evm/code_bytes,
   ../stateless/multi_keys,
+  ../core/eip7702,
   "/.."/[constants, utils/utils],
   ./access_list as ac_access_list,
   "."/[core_db, storage_types, transient_storage],
@@ -451,11 +452,16 @@ proc getNonce*(ac: LedgerRef, address: Address): AccountNonce =
   if acc.isNil: emptyEthAccount.nonce
   else: acc.statement.nonce
 
-proc getCode*(ac: LedgerRef, address: Address): CodeBytesRef =
+proc getCode*(ac: LedgerRef,
+              address: Address,
+              returnHash: static[bool] = false): auto =
   # Always returns non-nil!
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    return CodeBytesRef()
+    when returnHash:
+      return (EMPTY_CODE_HASH, CodeBytesRef())
+    else:
+      return CodeBytesRef()
 
   if acc.code == nil:
     acc.code =
@@ -472,7 +478,10 @@ proc getCode*(ac: LedgerRef, address: Address): CodeBytesRef =
       else:
         CodeBytesRef()
 
-  acc.code
+  when returnHash:
+    (acc.statement.codeHash, acc.code)
+  else:
+    acc.code
 
 proc getCodeSize*(ac: LedgerRef, address: Address): int =
   let acc = ac.getAccount(address, false)
@@ -495,6 +504,24 @@ proc getCodeSize*(ac: LedgerRef, address: Address): int =
         0
 
   acc.code.len()
+
+proc resolveCodeHash*(ac: LedgerRef, address: Address): Hash32 =
+  let (codeHash, code) = ac.getCode(address, true)
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return codeHash
+  ac.getCodeHash(delegateTo)
+
+proc resolveCode*(ac: LedgerRef, address: Address): CodeBytesRef =
+  let code = ac.getCode(address)
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return code
+  ac.getCode(delegateTo)
+
+proc resolveCodeSize*(ac: LedgerRef, address: Address): int =
+  let code = ac.getCode(address)
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return code.len
+  ac.getCodeSize(delegateTo)
 
 proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
@@ -925,6 +952,9 @@ proc getTransientStorage*(db: ReadOnlyStateDB,
                           address: Address, slot: UInt256): UInt256 = getTransientStorage(distinctBase db, address, slot)
 proc getAccountProof*(db: ReadOnlyStateDB, address: Address): seq[seq[byte]] = getAccountProof(distinctBase db, address)
 proc getStorageProof*(db: ReadOnlyStateDB, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] = getStorageProof(distinctBase db, address, slots)
+proc resolveCodeHash*(db: ReadOnlyStateDB, address: Address): Hash32 = resolveCodeHash(distinctBase db, address)
+proc resolveCode*(db: ReadOnlyStateDB, address: Address): CodeBytesRef = resolveCode(distinctBase db, address)
+proc resolveCodeSize*(db: ReadOnlyStateDB, address: Address): int = resolveCodeSize(distinctBase db, address)
 
 # ------------------------------------------------------------------------------
 # End

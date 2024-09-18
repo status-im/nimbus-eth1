@@ -118,6 +118,27 @@ proc fromJson*[T: Bytes32 | Hash32](n: JsonNode, name: string, x: var seq[T]) =
     hexToByteArray(v.getStr(), h.data)
     x.add h
 
+proc fromJson*(n: JsonNode, name: string, x: var ChainId) =
+  let node = n[name]
+  if node.kind == JInt:
+    x = ChainId(node.getInt)
+  else:
+    x = hexToInt(node.getStr(), int).ChainId
+
+proc parseAuth(n: JsonNode): Authorization =
+  n.fromJson("chainId", result.chainId)
+  n.fromJson("address", result.address)
+  n.fromJson("nonce", result.nonce)
+  n.fromJson("v", result.v)
+  n.fromJson("r", result.r)
+  n.fromJson("s", result.s)
+
+proc fromJson*(n: JsonNode, name: string, x: var seq[Authorization]) =
+  let node = n[name]
+  for v in node:
+    x = newSeqOfCap[Authorization](node.len)
+    x.add parseAuth(node)
+
 proc parseBlockHeader*(n: JsonNode): Header =
   n.fromJson "parentHash", result.parentHash
   n.fromJson "sha3Uncles", result.ommersHash
@@ -192,7 +213,7 @@ proc parseTransaction*(n: JsonNode): Transaction =
 
   if tx.txType == TxEip7702:
     n.fromJson "authorizationList", tx.authorizationList
-    
+
   tx
 
 proc parseWithdrawal*(n: JsonNode): Withdrawal =
