@@ -179,7 +179,7 @@ proc getBalance(host: TransactionHost, address: HostAddress): HostBalance {.show
 proc getCodeSize(host: TransactionHost, address: HostAddress): HostSize {.show.} =
   # TODO: Check this `HostSize`, it was copied as `uint` from other code.
   # Note: Old `evmc_host` uses `getCode(address).len` instead.
-  host.vmState.fork >= FkPrague:
+  if host.vmState.fork >= FkPrague:
     host.vmState.readOnlyStateDB.resolveCodeSize(address).HostSize
   else:
     host.vmState.readOnlyStateDB.getCodeSize(address).HostSize
@@ -191,7 +191,7 @@ proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash {.show.}
   if not db.accountExists(address) or db.isEmptyAccount(address):
     default(HostHash)
   else:
-    db.fork >= FkPrague:
+    if host.vmState.fork >= FkPrague:
       db.resolveCodeHash(address)
     else:
       db.getCodeHash(address)
