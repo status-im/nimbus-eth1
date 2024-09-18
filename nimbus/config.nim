@@ -450,7 +450,7 @@ type
         name: "rpc" }: bool
 
       rpcApi {.
-        desc: "Enable specific set of RPC API (available: eth, debug, exp)"
+        desc: "Enable specific set of RPC API (available: eth, debug)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "rpc-api" }: seq[string]
@@ -461,7 +461,7 @@ type
         name: "ws" }: bool
 
       wsApi {.
-        desc: "Enable specific set of Websocket RPC API (available: eth, debug, exp)"
+        desc: "Enable specific set of Websocket RPC API (available: eth, debug)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" }: seq[string]
