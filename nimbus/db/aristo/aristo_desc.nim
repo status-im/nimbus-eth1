@@ -87,6 +87,17 @@ type
     # Debugging data below, might go away in future
     xMap*: Table[HashKey,RootedVertexID] ## For pretty printing/debugging
 
+  Leg* = object
+    ## For constructing a `VertexPath`
+    wp*: VidVtxPair                ## Vertex ID and data ref
+    nibble*: int8                  ## Next vertex selector for `Branch` (if any)
+
+  Hike* = object
+    ## Trie traversal path
+    root*: VertexID                ## Handy for some fringe cases
+    legs*: ArrayBuf[NibblesBuf.high + 1, Leg] ## Chain of vertices and IDs
+    tail*: NibblesBuf              ## Portion of non completed path
+
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------

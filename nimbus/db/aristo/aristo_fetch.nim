@@ -35,7 +35,6 @@ func mustBeGeneric(
     return err(FetchStoRootNotAccepted)
   ok()
 
-
 proc retrieveLeaf(
     db: AristoDbRef;
     root: VertexID;
@@ -55,16 +54,25 @@ proc retrieveLeaf(
 
   return err(FetchPathNotFound)
 
+proc cachedAccLeaf*(db: AristoDbRef; accPath: Hash256): Opt[VertexRef] =
+  # Return vertex from layers or cache, `nil` if it's known to not exist and
+  # none otherwise
+  db.layersGetAccLeaf(accPath) or
+    db.accLeaves.get(accPath) or
+    Opt.none(VertexRef)
+
+proc cachedStoLeaf*(db: AristoDbRef; mixPath: Hash256): Opt[VertexRef] =
+  # Return vertex from layers or cache, `nil` if it's known to not exist and
+  # none otherwise
+  db.layersGetStoLeaf(mixPath) or
+    db.stoLeaves.get(mixPath) or
+    Opt.none(VertexRef)
+
 proc retrieveAccountLeaf(
     db: AristoDbRef;
     accPath: Hash256;
       ): Result[VertexRef,AristoError] =
-  if (let leafVtx = db.layersGetAccLeaf(accPath); leafVtx.isSome()):
-    if not leafVtx[].isValid():
-      return err(FetchPathNotFound)
-    return ok leafVtx[]
-
-  if (let leafVtx = db.accLeaves.get(accPath); leafVtx.isSome()):
+  if (let leafVtx = db.cachedAccLeaf(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
     return ok leafVtx[]
@@ -148,25 +156,25 @@ proc fetchStorageIdImpl(
 proc fetchAccountHike*(
     db: AristoDbRef;                   # Database
     accPath: Hash256;                  # Implies a storage ID (if any)
-      ): Result[Hike,AristoError] =
-  ## Verify that the `accPath` argument properly referres to a storage root
-  ## vertex ID. The function will reset the keys along the `accPath` for
-  ## being modified.
-  ##
-  ## On success, the function will return an account leaf pair with the leaf
-  ## vertex and the vertex ID.
-  ##
-  # Expand vertex path to account leaf
-  var hike = accPath.hikeUp(VertexID(1), db).valueOr:
+    accHike: var Hike
+      ): Result[void,AristoError] =
+  ## Expand account path to account leaf or return failure
+
+  # Prefer the leaf cache so as not to burden the lower layers
+  let leaf = db.cachedAccLeaf(accPath)
+  if leaf == Opt.some(VertexRef(nil)):
+    return err(FetchAccInaccessible)
+
+  accPath.hikeUp(VertexID(1), db, leaf, accHike).isOkOr:
     return err(FetchAccInaccessible)
 
   # Extract the account payload from the leaf
-  let wp = hike.legs[^1].wp
-  if wp.vtx.vType != Leaf:
+  if accHike.legs.len == 0 or accHike.legs[^1].wp.vtx.vType != Leaf:
     return err(FetchAccPathWithoutLeaf)
-  assert wp.vtx.lData.pType == AccountData            # debugging only
 
-  ok(move(hike))
+  assert accHike.legs[^1].wp.vtx.lData.pType == AccountData
+
+  ok()
 
 proc fetchStorageID*(
     db: AristoDbRef;
@@ -184,12 +192,8 @@ proc retrieveStoragePayload(
     stoPath: Hash256;
       ): Result[UInt256,AristoError] =
   let mixPath = mixUp(accPath, stoPath)
-  if (let leafVtx = db.layersGetStoLeaf(mixPath); leafVtx.isSome()):
-    if not leafVtx[].isValid():
-      return err(FetchPathNotFound)
-    return ok leafVtx[].lData.stoData
 
-  if (let leafVtx = db.stoLeaves.get(mixPath); leafVtx.isSome()):
+  if (let leafVtx = db.cachedStoLeaf(mixPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
     return ok leafVtx[].lData.stoData

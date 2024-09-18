@@ -87,7 +87,7 @@ proc removeCompletedNodes(ps: PartStateRef; rvid: RootedVertexID) =
       do: return               # done
 
 # -------------------
-  
+
 proc ctxAcceptChange(psc: PartStateCtx): Result[bool,AristoError] =
   ## Apply `psc` context if there was a change on the targeted vertex,
   ## otherwise restore. Returns `true` exactly if there was a change on
@@ -130,15 +130,13 @@ proc ctxMergeBegin*(
       ): Result[PartStateCtx,AristoError] =
   ## This function clears the way for mering some payload at the argument
   ## path `(root,path)`.
-  let hike = block:
-    let rc = NibblesBuf.fromBytes(path).hikeUp(root,ps.db)
-    if rc.isOk:
-      return ok PartStateCtx(nil) # Nothing to do
-    if rc.error[1] != HikeDanglingEdge:
-      return err( rc.error[1]) # Cannot help here
-    rc.to(Hike)
+  var hike: Hike
+  path.hikeUp(root,ps.db, Opt.none(VertexRef), hike).isOkOr:
+    if error[1] != HikeDanglingEdge:
+      return err error[1] # Cannot help here
+    return ps.newCtx hike
 
-  ps.newCtx hike
+  ok PartStateCtx(nil) # Nothing to do
 
 proc ctxMergeBegin*(
     ps: PartStateRef;
@@ -147,9 +145,9 @@ proc ctxMergeBegin*(
   ## Variant of `partMergeBegin()` for different path representation
   ps.ctxMergeBegin(VertexID(1), accPath.data)
 
-  
+
 proc ctxMergeCommit*(psc: PartStateCtx): Result[bool,AristoError] =
-  ## 
+  ##
   if psc.isNil:
     return ok(false) # Nothing to do
   if psc.ps.isNil:
@@ -170,7 +168,7 @@ proc ctxMergeRollback*(psc: PartStateCtx): Result[void,AristoError] =
   let yn = ? psc.ctxAcceptChange()
   psc[].reset
   if yn: err(PartVtxSlotWasModified) else: ok()
-    
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

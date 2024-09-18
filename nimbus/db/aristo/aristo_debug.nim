@@ -17,7 +17,7 @@ import
   stew/[byteutils, interval_set],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, memory_only, rocks_db],
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
+  "."/[aristo_desc, aristo_get, aristo_layers,
        aristo_serialise, aristo_utils]
 
 # ------------------------------------------------------------------------------

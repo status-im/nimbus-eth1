@@ -28,11 +28,145 @@ import
   std/typetraits,
   eth/common,
   results,
-  "."/[aristo_desc, aristo_hike, aristo_layers, aristo_vid],
-  ./aristo_merge/merge_payload_helper
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_layers, aristo_vid]
 
-const
-  MergeNoAction = {MergeLeafPathCachedAlready, MergeLeafPathOnBackendAlready}
+
+proc layersPutLeaf(
+    db: AristoDbRef, rvid: RootedVertexID, path: NibblesBuf, payload: LeafPayload
+): VertexRef =
+  let vtx = VertexRef(vType: Leaf, pfx: path, lData: payload)
+  db.layersPutVtx(rvid, vtx)
+  vtx
+
+proc mergePayloadImpl(
+    db: AristoDbRef, # Database, top layer
+    root: VertexID, # MPT state root
+    path: openArray[byte], # Leaf item to add to the database
+    leaf: Opt[VertexRef],
+    payload: LeafPayload, # Payload value
+): Result[(VertexRef, VertexRef, VertexRef), AristoError] =
+  ## Merge the argument `(root,path)` key-value-pair into the top level vertex
+  ## table of the database `db`. The `path` argument is used to address the
+  ## leaf vertex with the payload. It is stored or updated on the database
+  ## accordingly.
+  ##
+  var
+    path = NibblesBuf.fromBytes(path)
+    cur = root
+    (vtx, _) = db.getVtxRc((root, cur)).valueOr:
+      if error != GetVtxNotFound:
+        return err(error)
+
+      # We're at the root vertex and there is no data - this must be a fresh
+      # VertexID!
+      return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil)
+    steps: ArrayBuf[NibblesBuf.high + 1, VertexID]
+
+  template resetKeys() =
+    # Reset cached hashes of touched verticies
+    for i in 1..steps.len:
+      db.layersResKey((root, steps[^i]))
+
+  while path.len > 0:
+    # Clear existing merkle keys along the traversal path
+    steps.add cur
+
+    let n = path.sharedPrefixLen(vtx.pfx)
+    case vtx.vType
+    of Leaf:
+      let res =
+        if n == vtx.pfx.len:
+          # Same path - replace the current vertex with a new payload
+
+          if vtx.lData == payload:
+            return err(MergeNoAction)
+
+          let leafVtx = if root == VertexID(1):
+            var payload = payload.dup()
+            # TODO can we avoid this hack? it feels like the caller should already
+            #      have set an appropriate stoID - this "fixup" feels risky,
+            #      specially from a caching point of view
+            payload.stoID = vtx.lData.stoID
+            db.layersPutLeaf((root, cur), path, payload)
+          else:
+            db.layersPutLeaf((root, cur), path, payload)
+          (leafVtx, nil, nil)
+        else:
+          # Turn leaf into a branch (or extension) then insert the two leaves
+          # into the branch
+          let branch = VertexRef(vType: Branch, pfx: path.slice(0, n))
+          let other = block: # Copy of existing leaf node, now one level deeper
+            let local = db.vidFetch()
+            branch.bVid[vtx.pfx[n]] = local
+            db.layersPutLeaf((root, local), vtx.pfx.slice(n + 1), vtx.lData)
+
+          let leafVtx = block: # Newly inserted leaf node
+            let local = db.vidFetch()
+            branch.bVid[path[n]] = local
+            db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+
+          # Put the branch at the vid where the leaf was
+          db.layersPutVtx((root, cur), branch)
+
+          # We need to return vtx here because its pfx member hasn't yet been
+          # sliced off and is therefore shared with the hike
+          (leafVtx, vtx, other)
+
+      resetKeys()
+      return ok(res)
+    of Branch:
+      if vtx.pfx.len == n:
+        # The existing branch is a prefix of the new entry
+        let
+          nibble = path[vtx.pfx.len]
+          next = vtx.bVid[nibble]
+
+        if next.isValid:
+          cur = next
+          path = path.slice(n + 1)
+          vtx =
+            if leaf.isSome and leaf[].isValid and leaf[].pfx == path:
+              leaf[]
+            else:
+              (?db.getVtxRc((root, next)))[0]
+
+        else:
+          # There's no vertex at the branch point - insert the payload as a new
+          # leaf and update the existing branch
+          let
+            local = db.vidFetch()
+            leafVtx = db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+            brDup = vtx.dup()
+
+          brDup.bVid[nibble] = local
+          db.layersPutVtx((root, cur), brDup)
+
+          resetKeys()
+          return ok((leafVtx, nil, nil))
+      else:
+        # Partial path match - we need to split the existing branch at
+        # the point of divergence, inserting a new branch
+        let branch = VertexRef(vType: Branch, pfx: path.slice(0, n))
+        block: # Copy the existing vertex and add it to the new branch
+          let local = db.vidFetch()
+          branch.bVid[vtx.pfx[n]] = local
+
+          db.layersPutVtx(
+            (root, local),
+            VertexRef(vType: Branch, pfx: vtx.pfx.slice(n + 1), bVid: vtx.bVid),
+          )
+
+        let leafVtx = block: # add the new entry
+          let local = db.vidFetch()
+          branch.bVid[path[n]] = local
+          db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+
+        db.layersPutVtx((root, cur), branch)
+
+        resetKeys()
+        return ok((leafVtx, nil, nil))
+
+  err(MergeHikeFailed)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -52,15 +186,21 @@ proc mergeAccountRecord*(
   ##
   let
     pyl =  LeafPayload(pType: AccountData, account: accRec)
-    rc = db.mergePayloadImpl(VertexID(1), accPath.data, pyl)
-  if rc.isOk:
-    db.layersPutAccLeaf(accPath, rc.value)
-    ok true
-  elif rc.error in MergeNoAction:
-    ok false
-  else:
-    err(rc.error)
+    updated = db.mergePayloadImpl(
+        VertexID(1), accPath.data, db.cachedAccLeaf(accPath), pyl).valueOr:
+      if error == MergeNoAction:
+        return ok false
+      return err(error)
 
+  # Update leaf cache both of the merged value and potentially the displaced
+  # leaf resulting from splitting a leaf into a branch with two leaves
+  db.layersPutAccLeaf(accPath, updated[0])
+  if updated[1].isValid:
+    let otherPath = Hash256(data: getBytes(
+      NibblesBuf.fromBytes(accPath.data).replaceSuffix(updated[1].pfx)))
+    db.layersPutAccLeaf(otherPath, updated[2])
+
+  ok true
 
 proc mergeGenericData*(
     db: AristoDbRef;                   # Database, top layer
@@ -85,14 +225,13 @@ proc mergeGenericData*(
 
   let
     pyl = LeafPayload(pType: RawData, rawBlob: @data)
-    rc = db.mergePayloadImpl(root, path, pyl)
-  if rc.isOk:
-    ok true
-  elif rc.error in MergeNoAction:
-    ok false
-  else:
-    err(rc.error)
 
+  discard db.mergePayloadImpl(root, path, Opt.none(VertexRef), pyl).valueOr:
+    if error == MergeNoAction:
+      return ok false
+    return err error
+
+  ok true
 
 proc mergeStorageData*(
     db: AristoDbRef;                   # Database, top layer
@@ -104,60 +243,49 @@ proc mergeStorageData*(
   ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
   ## and `stoPath`  is the slot path of the corresponding storage area.
   ##
-  var
-    path = NibblesBuf.fromBytes(accPath.data)
-    next = VertexID(1)
-    vtx: VertexRef
-    touched: array[NibblesBuf.high(), VertexID]
-    pos: int
+  var accHike: Hike
+  db.fetchAccountHike(accPath,accHike).isOkOr:
+    return err(MergeStoAccMissing)
 
-  template resetKeys() =
-    # Reset cached hashes of touched verticies
-    for i in 0 ..< pos:
-      db.layersResKey((VertexID(1), touched[pos - i - 1]))
+  let
+    stoID = accHike.legs[^1].wp.vtx.lData.stoID
 
-  while path.len > 0:
-    touched[pos] = next
-    pos += 1
-
-    (vtx, path, next) = ?step(path, (VertexID(1), next), db)
-
-    if vtx.vType == Leaf:
-      let
-        stoID = vtx.lData.stoID
-
-        # Provide new storage ID when needed
-        useID =
-          if stoID.isValid: stoID                     # Use as is
-          elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
-          else: (true, db.vidFetch())                 # Create new vid
-
-        # Call merge
-        pyl = LeafPayload(pType: StoData, stoData: stoData)
-        rc = db.mergePayloadImpl(useID.vid, stoPath.data, pyl)
-
-      if rc.isOk:
-        # Mark account path Merkle keys for update
-        resetKeys()
-
-        db.layersPutStoLeaf(mixUp(accPath, stoPath), rc.value)
-
-        if not stoID.isValid:
-          # Make sure that there is an account that refers to that storage trie
-          let leaf = vtx.dup # Dup on modify
-          leaf.lData.stoID = useID
-          db.layersPutAccLeaf(accPath, leaf)
-          db.layersPutVtx((VertexID(1), touched[pos - 1]), leaf)
-
-        return ok()
-
-      elif rc.error in MergeNoAction:
+    # Provide new storage ID when needed
+    useID =
+      if stoID.isValid: stoID                     # Use as is
+      elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
+      else: (true, db.vidFetch())                 # Create new vid
+    mixPath = mixUp(accPath, stoPath)
+    # Call merge
+    pyl = LeafPayload(pType: StoData, stoData: stoData)
+    updated = db.mergePayloadImpl(
+        useID.vid, stoPath.data, db.cachedStoLeaf(mixPath), pyl).valueOr:
+      if error == MergeNoAction:
         assert stoID.isValid         # debugging only
         return ok()
 
-      return err(rc.error)
+      return err(error)
 
-  err(MergeHikeFailed)
+  # Mark account path Merkle keys for update
+  db.layersResKeys(accHike)
+
+  # Update leaf cache both of the merged value and potentially the displaced
+  # leaf resulting from splitting a leaf into a branch with two leaves
+  db.layersPutStoLeaf(mixPath, updated[0])
+
+  if updated[1].isValid:
+    let otherPath = Hash256(data: getBytes(
+      NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
+    db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
+
+  if not stoID.isValid:
+    # Make sure that there is an account that refers to that storage trie
+    let leaf = accHike.legs[^1].wp.vtx.dup # Dup on modify
+    leaf.lData.stoID = useID
+    db.layersPutAccLeaf(accPath, leaf)
+    db.layersPutVtx((VertexID(1), accHike.legs[^1].wp.vid), leaf)
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

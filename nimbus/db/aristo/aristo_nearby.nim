@@ -144,9 +144,9 @@ proc zeroAdjust(
 
   proc toHike(pfx: NibblesBuf, root: VertexID, db: AristoDbRef): Hike =
     when doLeast:
-      pfx.pathPfxPad(0).hikeUp(root, db).to(Hike)
+      discard pfx.pathPfxPad(0).hikeUp(root, db, Opt.none(VertexRef), result)
     else:
-      pfx.pathPfxPad(255).hikeUp(root, db).to(Hike)
+      discard pfx.pathPfxPad(255).hikeUp(root, db, Opt.none(VertexRef), result)
 
   if 0 < hike.legs.len:
     return ok(hike)
@@ -180,13 +180,13 @@ proc zeroAdjust(
 
         # Pathological case: matching `rootVtx` which is a leaf
         if hike.legs.len == 0 and hike.tail.len == 0:
-          return ok(Hike(
-            root:     hike.root,
-            legs:     @[Leg(
+          var ret =  Hike(root: hike.root)
+          ret.legs.add Leg(
               nibble: -1,
               wp:     VidVtxPair(
                 vid:  hike.root,
-                vtx:  rootVtx))]))
+                vtx:  rootVtx))
+          return ok ret
 
       var newHike = pfx.toHike(hike.root, db)
       if 0 < newHike.legs.len:
@@ -348,7 +348,9 @@ proc nearbyNextLeafTie(
     moveRight:static[bool];             # Direction of next vertex
       ): Result[PathID,(VertexID,AristoError)] =
   ## Variant of `nearbyNext()`, convenience wrapper
-  let hike = ? lty.hikeUp(db).to(Hike).nearbyNext(db, hikeLenMax, moveRight)
+  var hike: Hike
+  discard lty.hikeUp(db, Opt.none(VertexRef), hike)
+  hike = ?hike.nearbyNext(db, hikeLenMax, moveRight)
 
   if 0 < hike.legs.len:
     if hike.legs[^1].wp.vtx.vType != Leaf:
@@ -395,9 +397,9 @@ iterator rightPairs*(
       ): (LeafTie,LeafPayload) =
   ## Traverse the sub-trie implied by the argument `start` with increasing
   ## order.
-  var
-    hike = start.hikeUp(db).to(Hike)
-    rc = hike.right db
+  var hike: Hike
+  discard start.hikeUp(db, Opt.none(VertexRef), hike)
+  var rc = hike.right db
   while rc.isOK:
     hike = rc.value
     let (key, pyl) = hike.toLeafTiePayload
@@ -424,7 +426,7 @@ iterator rightPairs*(
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       # Fall back to default method
-      hike = key.next.hikeUp(db).to(Hike)
+      discard key.next.hikeUp(db, Opt.none(VertexRef), hike)
 
     rc = hike.right db
     # End while
@@ -491,8 +493,10 @@ iterator leftPairs*(
   ## can run the function `left()` on the last returned `LiefTie` item with
   ## the `path` field decremented by `1`.
   var
-    hike = start.hikeUp(db).to(Hike)
-    rc = hike.left db
+    hike: Hike
+  discard start.hikeUp(db, Opt.none(VertexRef), hike)
+
+  var rc = hike.left db
   while rc.isOK:
     hike = rc.value
     let (key, pyl) = hike.toLeafTiePayload
@@ -519,7 +523,7 @@ iterator leftPairs*(
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       # Fall back to default method
-      hike = key.prev.hikeUp(db).to(Hike)
+      discard key.prev.hikeUp(db, Opt.none(VertexRef), hike)
 
     rc = hike.left db
     # End while

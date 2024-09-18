@@ -77,6 +77,13 @@ func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf {.noinit.} =
   doAssert ibegin >= 0 and e <= result.bytes.len * 2
   result.iend = e.int8
 
+func replaceSuffix*(r: NibblesBuf, suffix: NibblesBuf): NibblesBuf =
+  for i in 0..<r.len - suffix.len:
+    result[i] = r[i]
+  for i in 0..<suffix.len:
+    result[i + r.len - suffix.len] = suffix[i]
+  result.iend = min(64, r.len + suffix.len).int8
+
 template writeFirstByte(nibbleCountExpr) {.dirty.} =
   let nibbleCount = nibbleCountExpr
   var oddnessFlag = (nibbleCount and 1) != 0
