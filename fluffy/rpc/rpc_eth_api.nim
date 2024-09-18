@@ -228,7 +228,7 @@ proc installEthApiHandlers*(
   # of tx hash -> block number -> block hash, in order to get the receipt
   # from from the block with that block hash. The Canonical Indices Network
   # would need to be implemented to get this information.
-  # rpcServerWithProxy.rpc("eth_getTransactionReceipt") do(
+  # rpcServer.rpc("eth_getTransactionReceipt") do(
   #     data: EthHashStr) -> Opt[ReceiptObject]:
 
   rpcServer.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:

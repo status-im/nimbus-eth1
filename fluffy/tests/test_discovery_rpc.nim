@@ -10,7 +10,7 @@
 import
   chronos,
   testutils/unittests,
-  json_rpc/[rpcproxy, rpcserver],
+  json_rpc/rpcserver,
   json_rpc/clients/httpclient,
   stint,
   eth/p2p/discoveryv5/enr,
@@ -31,13 +31,10 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     ta = initTAddress(localSrvAddress, localSrvPort)
     localDiscoveryNode =
       initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
-    fakeProxyConfig = getHttpClientConfig("http://127.0.0.1:8546")
     client = newRpcHttpClient()
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
-
-  # var rpcHttpServerWithProxy = RpcProxy.new([ta], fakeProxyConfig)
 
   rpcHttpServer.installDiscoveryApiHandlers(localDiscoveryNode)
 
