@@ -209,65 +209,48 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
 
   ## Start the JSON-RPC APIs
 
+  proc setupRpcServer(
+      rpcServer: RpcHttpServer | RpcWebSocketServer
+  ) {.raises: [CatchableError].} =
+    rpcServer.installDiscoveryApiHandlers(d)
+    rpcServer.installWeb3ApiHandlers()
+    if node.stateNetwork.isSome():
+      rpcServer.installPortalApiHandlers(
+        node.stateNetwork.value.portalProtocol, "state"
+      )
+    if node.historyNetwork.isSome():
+      rpcServer.installEthApiHandlers(
+        node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
+      )
+      rpcServer.installPortalApiHandlers(
+        node.historyNetwork.value.portalProtocol, "history"
+      )
+      rpcServer.installPortalDebugApiHandlers(
+        node.historyNetwork.value.portalProtocol, "history"
+      )
+    if node.beaconNetwork.isSome():
+      rpcServer.installPortalApiHandlers(
+        node.beaconNetwork.value.portalProtocol, "beacon"
+      )
+
+    rpcServer.start()
+
   if config.rpcEnabled:
     let
       ta = initTAddress(config.rpcAddress, config.rpcPort)
       rpcHttpServer = RpcHttpServer.new()
-
     # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
     # that reach that limit (in hex, for gossip method).
     rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
 
-    rpcHttpServer.installDiscoveryApiHandlers(d)
-    rpcHttpServer.installWeb3ApiHandlers()
-    if node.stateNetwork.isSome():
-      rpcHttpServer.installPortalApiHandlers(
-        node.stateNetwork.value.portalProtocol, "state"
-      )
-    if node.historyNetwork.isSome():
-      rpcHttpServer.installEthApiHandlers(
-        node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
-      )
-      rpcHttpServer.installPortalApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-      rpcHttpServer.installPortalDebugApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-    if node.beaconNetwork.isSome():
-      rpcHttpServer.installPortalApiHandlers(
-        node.beaconNetwork.value.portalProtocol, "beacon"
-      )
-
-    rpcHttpServer.start()
+    setupRpcServer(rpcHttpServer)
 
   if config.wsEnabled:
     let
       ta = initTAddress(config.rpcAddress, config.wsPort)
       rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
 
-    rpcWsServer.installDiscoveryApiHandlers(d)
-    rpcWsServer.installWeb3ApiHandlers()
-    if node.stateNetwork.isSome():
-      rpcWsServer.installPortalApiHandlers(
-        node.stateNetwork.value.portalProtocol, "state"
-      )
-    if node.historyNetwork.isSome():
-      rpcWsServer.installEthApiHandlers(
-        node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
-      )
-      rpcWsServer.installPortalApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-      rpcWsServer.installPortalDebugApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-    if node.beaconNetwork.isSome():
-      rpcWsServer.installPortalApiHandlers(
-        node.beaconNetwork.value.portalProtocol, "beacon"
-      )
-
-    rpcWsServer.start()
+    setupRpcServer(rpcWsServer)
 
   runForever()
 
