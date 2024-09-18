@@ -5,7 +5,11 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import stew/byteutils, results, ./interpreter/op_codes
+import
+  stew/byteutils,
+  stew/assign2,
+  results,
+  ./interpreter/op_codes
 
 export results
 
@@ -83,3 +87,6 @@ func hasPrefix*(a: CodeBytesRef, b: openArray[byte]): bool =
     if a.bytes[i] != b[i]:
       return false
   true
+
+func slice*[N: static[int]](a: CodeBytesRef, b, c: int): array[N, byte] =
+  assign(result, a.bytes.toOpenArray(b, c))

@@ -22,7 +22,8 @@ import
   "../../.."/[constants, utils/utils],
   ../../access_list as ac_access_list,
   "../.."/[core_db, storage_types, transient_storage],
-  ../../aristo/aristo_blobify
+  ../../aristo/aristo_blobify,
+  ../../../core/eip7702
 
 const
   debugAccountsLedgerRef = false
@@ -490,6 +491,24 @@ proc getCodeSize*(ac: AccountsLedgerRef, address: EthAddress): int =
         0
 
   acc.code.len()
+
+proc resolveCodeHash*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
+  let code = ac.getCode(address)
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return emptyEthAccount.codeHash
+  ac.getCodeHash(delegateTo)
+
+proc resolveCode*(ac: AccountsLedgerRef, address: EthAddress): CodeBytesRef =
+  let code = ac.getCode(address)
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return CodeBytesRef()
+  ac.getCode(delegateTo)
+
+proc resolveCodeSize*(ac: AccountsLedgerRef, address: EthAddress): int =
+  let code = ac.getCode(address)
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return 0
+  ac.getCodeSize(delegateTo)
 
 proc getCommittedStorage*(ac: AccountsLedgerRef, address: EthAddress, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)

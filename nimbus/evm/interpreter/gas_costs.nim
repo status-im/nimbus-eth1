@@ -68,7 +68,7 @@ type
     kind*: Op
     isNewAccount*: bool
     gasLeft*: GasInt
-    gasCallEIP2929*: GasInt
+    gasCallEIPs*: GasInt
     contractGas*: UInt256
     currentMemSize*: GasNatural
     memOffset*: GasNatural
@@ -375,9 +375,9 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     # Both gasCost and childGasLimit are always on positive side
 
     var gasLeft = params.gasLeft
-    if gasLeft < params.gasCallEIP2929:
+    if gasLeft < params.gasCallEIPs:
       return err(opErr(OutOfGas))
-    gasLeft -= params.gasCallEIP2929
+    gasLeft -= params.gasCallEIPs
 
     var gasCost: GasInt = `prefix gasMemoryExpansion`(
                              params.currentMemSize,
@@ -422,11 +422,11 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         return err(gasErr(GasIntOverflow))
       childGasLimit = params.contractGas.truncate(GasInt)
 
-    if gasCost.u256 + childGasLimit.u256 + params.gasCallEIP2929.u256 > high(GasInt).u256:
+    if gasCost.u256 + childGasLimit.u256 + params.gasCallEIPs.u256 > high(GasInt).u256:
       return err(gasErr(GasIntOverflow))
 
     gasCost += childGasLimit
-    gasCost += params.gasCallEIP2929
+    gasCost += params.gasCallEIPs
 
     # Ccallgas - Gas sent to the child message
     if not value.isZero and params.kind in {Call, CallCode}:

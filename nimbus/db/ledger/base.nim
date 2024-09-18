@@ -302,6 +302,15 @@ proc getAccountProof*(ldg: LedgerRef, eAddr: EthAddress): seq[seq[byte]] =
 proc getStorageProof*(ldg: LedgerRef, eAddr: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
   result = ldg.ac.getStorageProof(eAddr, slots)
 
+proc resolveCode*(ldg: LedgerRef, eAddr: EthAddress): CodeBytesRef =
+  ldg.ac.resolveCode(eAddr)  
+
+proc resolveCodeHash*(ldg: LedgerRef, eAddr: EthAddress): Hash256  =
+  ldg.ac.resolveCodeHash(eAddr)
+
+proc resolveCodeSize*(ldg: LedgerRef, eAddr: EthAddress): int =
+  ldg.ac.resolveCodeSize(eAddr)
+  
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
@@ -324,6 +333,9 @@ func inAccessList*(db: ReadOnlyStateDB, eAddr: EthAddress, slot: UInt256): bool 
 func getTransientStorage*(db: ReadOnlyStateDB, eAddr: EthAddress, slot: UInt256): UInt256 {.borrow.}
 func getAccountProof*(db: ReadOnlyStateDB, eAddr: EthAddress): seq[seq[byte]] {.borrow.}
 func getStorageProof*(db: ReadOnlyStateDB, eAddr: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] {.borrow.}
+proc resolveCodeHash*(db: ReadOnlyStateDB, eAddr: EthAddress): Hash256 {.borrow.}
+proc resolveCode*(db: ReadOnlyStateDB, eAddr: EthAddress): CodeBytesRef {.borrow.}
+proc resolveCodeSize*(db: ReadOnlyStateDB, eAddr: EthAddress): int {.borrow.}
 
 # ------------------------------------------------------------------------------
 # End
