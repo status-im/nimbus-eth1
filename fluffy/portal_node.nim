@@ -9,6 +9,7 @@
 
 import
   results,
+  chronos,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
   ./network_metadata,
@@ -39,6 +40,7 @@ type
     historyNetwork*: Opt[HistoryNetwork]
     stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
+    statusLogLoop: Future[void]
 
 # Beacon light client application callbacks triggered when new finalized header
 # or optimistic header is available.
@@ -179,7 +181,27 @@ proc new*(
     beaconLightClient: beaconLightClient,
   )
 
+proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
+  try:
+    while true:
+      # This is the data radius percentage compared to full storage. This will
+      # drop a lot when using the logbase2 scale, namely `/ 2` per 1 logaritmic
+      # radius drop.
+      # TODO: Get some float precision calculus?
+      let radiusPercentage = n.contentDB.dataRadius div (UInt256.high() div u256(100))
+
+      info "Portal node status",
+        radiusPercentage = radiusPercentage.toString(10) & "%",
+        radius = n.contentDB.dataRadius.toHex(),
+        dbSize = $(n.contentDB.size() div 1000) & "kb"
+
+      await sleepAsync(60.seconds)
+  except CancelledError:
+    trace "statusLogLoop canceled"
+
 proc start*(n: PortalNode) =
+  debug "Starting Portal node"
+
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
   if n.historyNetwork.isSome():
@@ -189,3 +211,21 @@ proc start*(n: PortalNode) =
 
   if n.beaconLightClient.isSome():
     n.beaconLightClient.value.start()
+
+  n.statusLogLoop = statusLogLoop(n)
+
+proc stop*(n: PortalNode) =
+  debug "Stopping Portal node"
+
+  if n.beaconNetwork.isSome():
+    n.beaconNetwork.value.stop()
+  if n.historyNetwork.isSome():
+    n.historyNetwork.value.stop()
+  if n.stateNetwork.isSome():
+    n.stateNetwork.value.stop()
+
+  if n.beaconLightClient.isSome():
+    n.beaconLightClient.value.stop()
+
+  if not n.statusLogLoop.isNil:
+    n.statusLogLoop.cancelSoon()

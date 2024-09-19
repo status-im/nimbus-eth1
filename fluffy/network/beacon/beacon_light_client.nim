@@ -178,9 +178,12 @@ proc new*(
   )
 
 proc start*(lightClient: LightClient) =
-  notice "Starting beacon light client",
-    trusted_block_root = lightClient.trustedBlockRoot
+  info "Starting beacon light client", trusted_block_root = lightClient.trustedBlockRoot
   lightClient.manager.start()
+
+proc stop*(lightClient: LightClient) =
+  info "Stopping beacon light client"
+  discard lightClient.manager.stop()
 
 proc resetToFinalizedHeader*(
     lightClient: LightClient,

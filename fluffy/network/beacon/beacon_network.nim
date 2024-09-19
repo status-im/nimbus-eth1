@@ -31,6 +31,7 @@ type BeaconNetwork* = ref object
   forkDigests*: ForkDigests
   trustedBlockRoot: Opt[Eth2Digest]
   processContentLoop: Future[void]
+  statusLogLoop: Future[void]
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -364,13 +365,29 @@ proc processContentLoop(n: BeaconNetwork) {.async: (raises: []).} =
   except CancelledError:
     trace "processContentLoop canceled"
 
+proc statusLogLoop(n: BeaconNetwork) {.async: (raises: []).} =
+  try:
+    while true:
+      info "Beacon network status",
+        routingTableNodes = n.portalProtocol.routingTable.len()
+
+      await sleepAsync(60.seconds)
+  except CancelledError:
+    trace "statusLogLoop canceled"
+
 proc start*(n: BeaconNetwork) =
   info "Starting Portal beacon chain network"
+
   n.portalProtocol.start()
   n.processContentLoop = processContentLoop(n)
 
 proc stop*(n: BeaconNetwork) =
+  info "Stopping Portal beacon chain network"
+
   n.portalProtocol.stop()
 
   if not n.processContentLoop.isNil:
     n.processContentLoop.cancelSoon()
+
+  if not n.statusLogLoop.isNil():
+    n.statusLogLoop.cancelSoon()
