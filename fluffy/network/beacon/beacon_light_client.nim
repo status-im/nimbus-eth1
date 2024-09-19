@@ -183,7 +183,7 @@ proc start*(lightClient: LightClient) =
 
 proc stop*(lightClient: LightClient) =
   info "Stopping beacon light client"
-  lightClient.manager.stop()
+  discard lightClient.manager.stop()
 
 proc resetToFinalizedHeader*(
     lightClient: LightClient,
