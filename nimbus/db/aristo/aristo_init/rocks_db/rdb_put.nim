@@ -89,7 +89,13 @@ proc putKey*(
     rvid: RootedVertexID, key: HashKey;
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = rdb.session
-  if key.isValid:
+  # We only write keys whose value has to be hashed - the trivial ones can be
+  # loaded from the corresponding vertex directly!
+  # TODO move this logic to a higher layer
+  # TODO skip the delete for trivial keys - it's here to support databases that
+  #      were written at a time when trivial keys were also cached - it should
+  #      be cleaned up when revising the key cache in general.
+  if key.isValid and key.len == 32:
     dsc.put(rvid.blobify().data(), key.data, rdb.keyCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdKeyLru` cache
       const errSym = RdbBeDriverPutKeyError

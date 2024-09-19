@@ -86,7 +86,7 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 
 proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
-    proc(rvid: RootedVertexID): Result[VertexRef,AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] =
       # Fetch serialised data record
       let data = db.mdb.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:

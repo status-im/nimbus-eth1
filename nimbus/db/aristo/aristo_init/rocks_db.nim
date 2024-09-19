@@ -75,10 +75,10 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 
 proc getVtxFn(db: RdbBackendRef): GetVtxFn =
   result =
-    proc(rvid: RootedVertexID): Result[VertexRef,AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] =
 
       # Fetch serialised data record
-      let vtx = db.rdb.getVtx(rvid).valueOr:
+      let vtx = db.rdb.getVtx(rvid, flags).valueOr:
         when extraTraceMessages:
           trace logTxt "getVtxFn() failed", rvid, error=error[0], info=error[1]
         return err(error[0])
