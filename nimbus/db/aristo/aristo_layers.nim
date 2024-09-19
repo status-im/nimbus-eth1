@@ -146,6 +146,11 @@ func layersResKey*(db: AristoDbRef; rvid: RootedVertexID) =
   ## equivalent of a delete function.
   db.layersPutKey(rvid, VOID_HASH_KEY)
 
+func layersResKeys*(db: AristoDbRef; hike: Hike) =
+  ## Reset all cached keys along the given hike
+  for i in 1..hike.legs.len:
+    db.layersResKey((hike.root, hike.legs[^i].wp.vid))
+
 proc layersUpdateVtx*(
     db: AristoDbRef;                   # Database, top layer
     rvid: RootedVertexID;
@@ -154,7 +159,6 @@ proc layersUpdateVtx*(
   ## Update a vertex at `rvid` and reset its associated key entry
   db.layersPutVtx(rvid, vtx)
   db.layersResKey(rvid)
-
 
 func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash256; leafVtx: VertexRef) =
   db.top.accLeaves[accPath] = leafVtx

@@ -16,7 +16,7 @@
 import
   eth/common,
   results,
-  "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
+  "."/[aristo_constants, aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
@@ -111,18 +111,6 @@ iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
       let vid = node.vtx.bVid[n]
       if vid.isValid:
         yield (vid,node.key[n])
-
-# ---------------------
-
-proc updateAccountForHasher*(
-    db: AristoDbRef;                   # Database
-    hike: Hike;                        # Return value from `retrieveStorageID()`
-      ) =
-  ## The argument `hike` is used to mark/reset the keys along the implied
-  ## vertex path for being re-calculated.
-  ##
-  for w in hike.legs:
-    db.layersResKey((hike.root, w.wp.vid))
 
 # ------------------------------------------------------------------------------
 # End

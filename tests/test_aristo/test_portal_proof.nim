@@ -150,10 +150,11 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
   for a in addresses:
     let
       path = a.keccakHash
-      rc = path.hikeUp(VertexID(1), ps.db)
+    var hike: Hike
+    let rc = path.hikeUp(VertexID(1), ps.db, Opt.none(VertexRef), hike)
     sample[path] = ProofData(
       error: (if rc.isErr: rc.error[1] else: AristoError(0)),
-      hike: rc.to(Hike)) # keep `hike` for potential debugging
+      hike: hike) # keep `hike` for potential debugging
 
   # Verify that there is somehing to do, at all
   check 0 < sample.values.toSeq.filterIt(it.error == AristoError 0).len

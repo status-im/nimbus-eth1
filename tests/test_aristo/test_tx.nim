@@ -94,8 +94,8 @@ proc randomisedLeafs(
        ): Result[seq[(LeafTie,RootedVertexID)],(VertexID,AristoError)] =
   var lvp: seq[(LeafTie,RootedVertexID)]
   for lty in ltys:
-    let hike = lty.hikeUp(db).valueOr:
-      return err((error[0],error[1]))
+    var hike: Hike
+    ?lty.hikeUp(db, Opt.none(VertexRef), hike)
     lvp.add (lty,(hike.root, hike.legs[^1].wp.vid))
 
   var lvp2 = lvp.sorted(
