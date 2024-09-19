@@ -377,14 +377,17 @@ proc statusLogLoop(n: BeaconNetwork) {.async: (raises: []).} =
 
 proc start*(n: BeaconNetwork) =
   info "Starting Portal beacon chain network"
+
   n.portalProtocol.start()
   n.processContentLoop = processContentLoop(n)
 
 proc stop*(n: BeaconNetwork) =
+  info "Stopping Portal beacon chain network"
+
   n.portalProtocol.stop()
 
   if not n.processContentLoop.isNil:
     n.processContentLoop.cancelSoon()
-    
+
   if not n.statusLogLoop.isNil():
     n.statusLogLoop.cancelSoon()

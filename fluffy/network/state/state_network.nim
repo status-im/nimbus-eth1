@@ -235,16 +235,19 @@ proc statusLogLoop(n: StateNetwork) {.async: (raises: []).} =
 proc start*(n: StateNetwork) =
   info "Starting Portal execution state network",
     protocolId = n.portalProtocol.protocolId
+
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
   n.statusLogLoop = statusLogLoop(n)
 
 proc stop*(n: StateNetwork) =
+  info "Stopping Portal execution state network"
+
   n.portalProtocol.stop()
 
   if not n.processContentLoop.isNil():
     n.processContentLoop.cancelSoon()
-    
+
   if not n.statusLogLoop.isNil():
     n.statusLogLoop.cancelSoon()

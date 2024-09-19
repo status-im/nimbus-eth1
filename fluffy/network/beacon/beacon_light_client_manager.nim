@@ -320,8 +320,7 @@ proc start*(self: var LightClientManager) =
   doAssert self.loopFuture == nil
   self.loopFuture = self.loop()
 
-proc stop*(self: var LightClientManager) {.async: (raises: []).} =
+proc stop*(self: var LightClientManager) =
   ## Stop light client manager's loop.
-  if self.loopFuture != nil:
-    await noCancel self.loopFuture.cancelAndWait()
-    self.loopFuture = nil
+  if not self.loopFuture.isNil():
+    self.loopFuture.cancelSoon()

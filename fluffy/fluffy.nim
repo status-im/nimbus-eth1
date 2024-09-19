@@ -41,7 +41,7 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
   else:
     Opt.none(T)
 
-proc run(config: PortalConf) {.raises: [CatchableError].} =
+proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
@@ -166,7 +166,6 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
       dataDir: string config.dataDir,
       storageCapacity: config.storageCapacityMB * 1_000_000,
     )
-
     node = PortalNode.new(
       config.network,
       portalNodeConfig,
@@ -252,7 +251,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
 
     setupRpcServer(rpcWsServer)
 
-  runForever()
+  return node
 
 when isMainModule:
   {.pop.}
@@ -262,6 +261,21 @@ when isMainModule:
   )
   {.push raises: [].}
 
-  case config.cmd
-  of PortalCmd.noCommand:
-    run(config)
+  let node =
+    case config.cmd
+    of PortalCmd.noCommand:
+      run(config)
+
+  ## Ctrl+C handling
+  proc controlCHandler() {.noconv.} =
+    when defined(windows):
+      # workaround for https://github.com/nim-lang/Nim/issues/4057
+      setupForeignThreadGc()
+
+    notice "Got interrupt, Fluffy shutting down..."
+    node.stop()
+    quit QuitSuccess
+
+  setControlCHook(controlCHandler)
+
+  runForever()

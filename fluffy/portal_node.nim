@@ -200,6 +200,8 @@ proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
     trace "statusLogLoop canceled"
 
 proc start*(n: PortalNode) =
+  debug "Starting Portal node"
+
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
   if n.historyNetwork.isSome():
@@ -213,6 +215,8 @@ proc start*(n: PortalNode) =
   n.statusLogLoop = statusLogLoop(n)
 
 proc stop*(n: PortalNode) =
+  debug "Stopping Portal node"
+
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.stop()
   if n.historyNetwork.isSome():

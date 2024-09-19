@@ -715,6 +715,7 @@ proc start*(n: HistoryNetwork) =
   info "Starting Portal execution history network",
     protocolId = n.portalProtocol.protocolId,
     accumulatorRoot = hash_tree_root(n.accumulator)
+
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
@@ -722,6 +723,8 @@ proc start*(n: HistoryNetwork) =
   pruneDeprecatedAccumulatorRecords(n.accumulator, n.contentDB)
 
 proc stop*(n: HistoryNetwork) =
+  info "Stopping Portal execution history network"
+
   n.portalProtocol.stop()
 
   if not n.processContentLoop.isNil:
