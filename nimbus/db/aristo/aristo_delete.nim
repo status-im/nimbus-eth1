@@ -71,7 +71,7 @@ proc deleteImpl(
 
   # Unlink child vertex from structural table
   br.vtx.bVid[hike.legs[^2].nibble] = VertexID(0)
-  db.layersUpdateVtx((hike.root, br.vid), br.vtx)
+  db.layersPutVtx((hike.root, br.vid), br.vtx)
 
   # Clear all Merkle hash keys up to the root key
   for n in 0 .. hike.legs.len - 2:
@@ -111,7 +111,7 @@ proc deleteImpl(
           bVid: nxt.bVid)
 
     # Put the new vertex at the id of the obsolete branch
-    db.layersUpdateVtx((hike.root, br.vid), vtx)
+    db.layersPutVtx((hike.root, br.vid), vtx)
 
     if vtx.vType == Leaf:
       ok(vtx)
