@@ -266,13 +266,13 @@ when isMainModule:
     of PortalCmd.noCommand:
       run(config)
 
-  ## Ctrl+C handling
+  # Ctrl+C handling
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
       setupForeignThreadGc()
 
-    notice "Got interrupt, Fluffy shutting down..."
+    notice "Got interrupt, shutting down Fluffy..."
     node.stop()
     quit QuitSuccess
 

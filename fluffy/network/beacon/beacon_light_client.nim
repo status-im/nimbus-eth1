@@ -178,8 +178,7 @@ proc new*(
   )
 
 proc start*(lightClient: LightClient) =
-  info "Starting beacon light client",
-    trusted_block_root = lightClient.trustedBlockRoot
+  info "Starting beacon light client", trusted_block_root = lightClient.trustedBlockRoot
   lightClient.manager.start()
 
 proc stop*(lightClient: LightClient) =
