@@ -704,17 +704,7 @@ proc processContentLoop(n: HistoryNetwork) {.async: (raises: []).} =
 proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
-      # This is the data radius percentage compared to full storage. This will
-      # drop a lot when using the logbase2 scale, namely `/ 2` per 1 logaritmic
-      # radius drop.
-      # TODO: Get some float precision calculus?
-      let radiusPercentage =
-        n.portalProtocol.dataRadius() div (UInt256.high() div u256(100))
-
       info "History network status",
-        radiusPercentage = radiusPercentage.toString(10) & "%",
-        radius = n.portalProtocol.dataRadius().toHex(),
-        dbSize = $(n.contentDB.size() div 1000) & "kb",
         routingTableNodes = n.portalProtocol.routingTable.len()
 
       await sleepAsync(60.seconds)
@@ -737,5 +727,5 @@ proc stop*(n: HistoryNetwork) =
   if not n.processContentLoop.isNil:
     n.processContentLoop.cancelSoon()
 
-  if not n.processContentLoop.isNil:
+  if not n.statusLogLoop.isNil:
     n.statusLogLoop.cancelSoon()

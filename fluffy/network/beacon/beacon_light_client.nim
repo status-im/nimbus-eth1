@@ -182,6 +182,10 @@ proc start*(lightClient: LightClient) =
     trusted_block_root = lightClient.trustedBlockRoot
   lightClient.manager.start()
 
+proc stop*(lightClient: LightClient) =
+  notice "Stopping beacon light client"
+  discard lightClient.manager.stop()
+
 proc resetToFinalizedHeader*(
     lightClient: LightClient,
     header: ForkedLightClientHeader,

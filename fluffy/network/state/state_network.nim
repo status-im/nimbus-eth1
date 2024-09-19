@@ -31,6 +31,7 @@ type StateNetwork* = ref object
   contentDB*: ContentDB
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
+  statusLogLoop: Future[void]
   historyNetwork: Opt[HistoryNetwork]
   validateStateIsCanonical: bool
 
@@ -221,15 +222,29 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
   except CancelledError:
     trace "processContentLoop canceled"
 
+proc statusLogLoop(n: StateNetwork) {.async: (raises: []).} =
+  try:
+    while true:
+      info "State network status",
+        routingTableNodes = n.portalProtocol.routingTable.len()
+
+      await sleepAsync(60.seconds)
+  except CancelledError:
+    trace "statusLogLoop canceled"
+
 proc start*(n: StateNetwork) =
   info "Starting Portal execution state network",
     protocolId = n.portalProtocol.protocolId
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
+  n.statusLogLoop = statusLogLoop(n)
 
 proc stop*(n: StateNetwork) =
   n.portalProtocol.stop()
 
-  if not n.processContentLoop.isNil:
+  if not n.processContentLoop.isNil():
     n.processContentLoop.cancelSoon()
+    
+  if not n.statusLogLoop.isNil():
+    n.statusLogLoop.cancelSoon()
