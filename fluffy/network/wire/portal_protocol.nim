@@ -1708,14 +1708,21 @@ proc start*(p: PortalProtocol) =
   for i in 0 ..< concurrentOffers:
     p.offerWorkers.add(offerWorker(p))
 
-proc stop*(p: PortalProtocol) =
-  if not p.revalidateLoop.isNil:
-    p.revalidateLoop.cancelSoon()
-  if not p.refreshLoop.isNil:
-    p.refreshLoop.cancelSoon()
+proc stop*(p: PortalProtocol) {.async: (raises: []).} =
+  var futures: seq[Future[void]]
+
+  if not p.revalidateLoop.isNil():
+    futures.add(p.revalidateLoop.cancelAndWait())
+  if not p.refreshLoop.isNil():
+    futures.add(p.refreshLoop.cancelAndWait())
 
   for worker in p.offerWorkers:
-    worker.cancelSoon()
+    futures.add(worker.cancelAndWait())
+
+  await noCancel(allFutures(futures))
+
+  p.revalidateLoop = nil
+  p.refreshLoop = nil
   p.offerWorkers = @[]
 
 proc resolve*(

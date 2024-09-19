@@ -214,18 +214,27 @@ proc start*(n: PortalNode) =
 
   n.statusLogLoop = statusLogLoop(n)
 
-proc stop*(n: PortalNode) =
+proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"
 
+  var futures: seq[Future[void]]
+
   if n.beaconNetwork.isSome():
-    n.beaconNetwork.value.stop()
+    futures.add(n.beaconNetwork.value.stop())
   if n.historyNetwork.isSome():
-    n.historyNetwork.value.stop()
+    futures.add(n.historyNetwork.value.stop())
   if n.stateNetwork.isSome():
-    n.stateNetwork.value.stop()
+    futures.add(n.stateNetwork.value.stop())
 
   if n.beaconLightClient.isSome():
-    n.beaconLightClient.value.stop()
+    futures.add(n.beaconLightClient.value.stop())
 
   if not n.statusLogLoop.isNil:
-    n.statusLogLoop.cancelSoon()
+    futures.add(n.statusLogLoop.cancelAndWait())
+
+  futures.add(n.discovery.closeWait())
+
+  await noCancel(allFutures(futures))
+
+  n.contentDB.close()
+  n.statusLogLoop = nil

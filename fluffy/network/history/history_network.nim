@@ -722,13 +722,17 @@ proc start*(n: HistoryNetwork) =
   n.statusLogLoop = statusLogLoop(n)
   pruneDeprecatedAccumulatorRecords(n.accumulator, n.contentDB)
 
-proc stop*(n: HistoryNetwork) =
+proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
   info "Stopping Portal execution history network"
 
-  n.portalProtocol.stop()
+  var futures: seq[Future[void]]
+  futures.add(n.portalProtocol.stop())
 
   if not n.processContentLoop.isNil:
-    n.processContentLoop.cancelSoon()
-
+    futures.add(n.processContentLoop.cancelAndWait())
   if not n.statusLogLoop.isNil:
-    n.statusLogLoop.cancelSoon()
+    futures.add(n.statusLogLoop.cancelAndWait())
+  await noCancel(allFutures(futures))
+
+  n.processContentLoop = nil
+  n.statusLogLoop = nil
