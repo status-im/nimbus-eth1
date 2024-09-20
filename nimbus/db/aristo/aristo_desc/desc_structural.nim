@@ -130,6 +130,11 @@ type
 
     txUid*: uint                           ## Transaction identifier if positive
 
+  GetVtxFlag* = enum
+    PeekCache
+      ## Peek into, but don't update cache - useful on work loads that are
+      ## unfriendly to caches
+
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
 # ------------------------------------------------------------------------------
