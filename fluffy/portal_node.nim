@@ -10,8 +10,6 @@
 import
   results,
   chronos,
-  metrics/chronos_httpserver,
-  json_rpc/rpcserver,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
   ./network_metadata,
@@ -49,9 +47,6 @@ type
     stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
     statusLogLoop: Future[void]
-    metricsServer*: Opt[MetricsHttpServerRef]
-    rpcHttpServer*: Opt[RpcHttpServer]
-    rpcWsServer*: Opt[RpcWebSocketServer]
 
 # Beacon light client application callbacks triggered when new finalized header
 # or optimistic header is available.
@@ -231,30 +226,6 @@ proc start*(n: PortalNode) =
 
 proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"
-
-  if n.rpcWsServer.isSome():
-    let server = n.rpcWsServer.get()
-    try:
-      server.stop()
-      await server.closeWait()
-    except CatchableError as e:
-      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
-
-  if n.rpcHttpServer.isSome():
-    let server = n.rpcHttpServer.get()
-    try:
-      await server.stop()
-      await server.closeWait()
-    except CatchableError as e:
-      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
-
-  if n.metricsServer.isSome():
-    let server = n.metricsServer.get()
-    try:
-      await server.stop()
-      await server.close()
-    except CatchableError as e:
-      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
 
   var futures: seq[Future[void]]
 

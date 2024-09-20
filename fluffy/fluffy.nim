@@ -41,7 +41,11 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
   else:
     Opt.none(T)
 
-proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
+proc run(
+    config: PortalConf
+): (PortalNode, Opt[MetricsHttpServerRef], Opt[RpcHttpServer], Opt[RpcWebSocketServer]) {.
+    raises: [CatchableError]
+.} =
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
@@ -185,7 +189,7 @@ proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
     quit 1
 
   ## Start metrics HTTP server
-  node.metricsServer =
+  let metricsServer =
     if config.metricsEnabled:
       let
         address = config.metricsAddress
@@ -239,7 +243,7 @@ proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
 
     rpcServer.start()
 
-  node.rpcHttpServer =
+  let rpcHttpServer =
     if config.rpcEnabled:
       let
         ta = initTAddress(config.rpcAddress, config.rpcPort)
@@ -253,7 +257,7 @@ proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
     else:
       Opt.none(RpcHttpServer)
 
-  node.rpcWsServer =
+  let rpcWsServer =
     if config.wsEnabled:
       let
         ta = initTAddress(config.rpcAddress, config.wsPort)
@@ -264,7 +268,7 @@ proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
     else:
       Opt.none(RpcWebSocketServer)
 
-  return node
+  return (node, metricsServer, rpcHttpServer, rpcWsServer)
 
 when isMainModule:
   {.pop.}
@@ -274,7 +278,7 @@ when isMainModule:
   )
   {.push raises: [].}
 
-  let node =
+  let (node, metricsServer, rpcHttpServer, rpcWsServer) =
     case config.cmd
     of PortalCmd.noCommand:
       run(config)
@@ -301,5 +305,29 @@ when isMainModule:
       poll()
     except CatchableError as e:
       warn "Exception in poll()", exc = e.name, err = e.msg
+
+  if rpcWsServer.isSome():
+    let server = rpcWsServer.get()
+    try:
+      server.stop()
+      waitFor server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
+
+  if rpcHttpServer.isSome():
+    let server = rpcHttpServer.get()
+    try:
+      waitFor server.stop()
+      waitFor server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
+
+  if metricsServer.isSome():
+    let server = metricsServer.get()
+    try:
+      waitFor server.stop()
+      waitFor server.close()
+    except CatchableError as e:
+      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
 
   waitFor node.stop()
