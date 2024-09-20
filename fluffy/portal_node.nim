@@ -24,6 +24,11 @@ export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
 type
+  PortalNodeState* = enum
+    Starting
+    Running
+    Stopping
+
   PortalNodeConfig* = object
     accumulatorFile*: Opt[string]
     disableStateRootValidation*: bool
@@ -33,6 +38,7 @@ type
     storageCapacity*: uint64
 
   PortalNode* = ref object
+    state*: PortalNodeState
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
@@ -214,6 +220,8 @@ proc start*(n: PortalNode) =
 
   n.statusLogLoop = statusLogLoop(n)
 
+  n.state = PortalNodeState.Running
+
 proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"
 
@@ -233,8 +241,8 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
     futures.add(n.statusLogLoop.cancelAndWait())
 
   futures.add(n.discovery.closeWait())
+  n.contentDB.close()
 
   await noCancel(allFutures(futures))
 
-  n.contentDB.close()
   n.statusLogLoop = nil

@@ -41,7 +41,7 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
   else:
     Opt.none(T)
 
-proc run(config: PortalConf) {.raises: [CatchableError].} =
+proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
@@ -252,7 +252,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
 
     setupRpcServer(rpcWsServer)
 
-  runForever()
+  return node
 
 when isMainModule:
   {.pop.}
@@ -262,6 +262,32 @@ when isMainModule:
   )
   {.push raises: [].}
 
-  case config.cmd
-  of PortalCmd.noCommand:
-    run(config)
+  let node =
+    case config.cmd
+    of PortalCmd.noCommand:
+      run(config)
+
+  # Ctrl+C handling
+  proc controlCHandler() {.noconv.} =
+    when defined(windows):
+      # workaround for https://github.com/nim-lang/Nim/issues/4057
+      try:
+        setupForeignThreadGc()
+      except Exception as exc:
+        raiseAssert exc.msg # shouldn't happen
+
+    notice "Shutting down after having received SIGINT"
+    node.state = PortalNodeState.Stopping
+
+  try:
+    setControlCHook(controlCHandler)
+  except Exception as exc: # TODO Exception
+    warn "Cannot set ctrl-c handler", msg = exc.msg
+
+  while node.state == PortalNodeState.Running:
+    try:
+      poll()
+    except CatchableError as e:
+      warn "Exception in poll()", exc = e.name, err = e.msg
+
+  waitFor node.stop()
