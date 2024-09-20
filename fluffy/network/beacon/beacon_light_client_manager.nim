@@ -50,7 +50,7 @@ type
   GetBoolCallback* = proc(): bool {.gcsafe, raises: [].}
   GetSlotCallback* = proc(): Slot {.gcsafe, raises: [].}
 
-  LightClientManager* = object
+  LightClientManager* = ref object
     network: BeaconNetwork
     rng: ref HmacDrbgContext
     getTrustedBlockRoot: GetTrustedBlockRootCallback
@@ -315,13 +315,13 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
         didLatestSyncTaskProgress = didProgress,
       )
 
-proc start*(self: var LightClientManager) =
+proc start*(self: LightClientManager) =
   ## Start light client manager's loop.
   doAssert self.loopFuture == nil
   self.loopFuture = self.loop()
 
-proc stop*(self: var LightClientManager) {.async: (raises: []).} =
+proc stop*(self: LightClientManager) {.async: (raises: []).} =
   ## Stop light client manager's loop.
-  if self.loopFuture != nil:
-    await noCancel self.loopFuture.cancelAndWait()
+  if not self.loopFuture.isNil():
+    await noCancel(self.loopFuture.cancelAndWait())
     self.loopFuture = nil

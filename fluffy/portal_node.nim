@@ -24,6 +24,11 @@ export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
 type
+  PortalNodeState* = enum
+    Starting
+    Running
+    Stopping
+
   PortalNodeConfig* = object
     accumulatorFile*: Opt[string]
     disableStateRootValidation*: bool
@@ -33,6 +38,7 @@ type
     storageCapacity*: uint64
 
   PortalNode* = ref object
+    state*: PortalNodeState
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
@@ -202,6 +208,8 @@ proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
 proc start*(n: PortalNode) =
   debug "Starting Portal node"
 
+  n.discovery.start()
+
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
   if n.historyNetwork.isSome():
@@ -214,18 +222,26 @@ proc start*(n: PortalNode) =
 
   n.statusLogLoop = statusLogLoop(n)
 
-proc stop*(n: PortalNode) =
+  n.state = PortalNodeState.Running
+
+proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"
 
+  var futures: seq[Future[void]]
+
   if n.beaconNetwork.isSome():
-    n.beaconNetwork.value.stop()
+    futures.add(n.beaconNetwork.value.stop())
   if n.historyNetwork.isSome():
-    n.historyNetwork.value.stop()
+    futures.add(n.historyNetwork.value.stop())
   if n.stateNetwork.isSome():
-    n.stateNetwork.value.stop()
-
+    futures.add(n.stateNetwork.value.stop())
   if n.beaconLightClient.isSome():
-    n.beaconLightClient.value.stop()
+    futures.add(n.beaconLightClient.value.stop())
+  if not n.statusLogLoop.isNil():
+    futures.add(n.statusLogLoop.cancelAndWait())
 
-  if not n.statusLogLoop.isNil:
-    n.statusLogLoop.cancelSoon()
+  await noCancel(allFutures(futures))
+
+  await n.discovery.closeWait()
+  n.contentDB.close()
+  n.statusLogLoop = nil

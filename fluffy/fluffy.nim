@@ -41,7 +41,11 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
   else:
     Opt.none(T)
 
-proc run(config: PortalConf) {.raises: [CatchableError].} =
+proc run(
+    config: PortalConf
+): (PortalNode, Opt[MetricsHttpServerRef], Opt[RpcHttpServer], Opt[RpcWebSocketServer]) {.
+    raises: [CatchableError]
+.} =
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
@@ -185,26 +189,30 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     quit 1
 
   ## Start metrics HTTP server
-  if config.metricsEnabled:
-    let
-      address = config.metricsAddress
-      port = config.metricsPort
-      url = "http://" & $address & ":" & $port & "/metrics"
+  let metricsServer =
+    if config.metricsEnabled:
+      let
+        address = config.metricsAddress
+        port = config.metricsPort
+        url = "http://" & $address & ":" & $port & "/metrics"
 
-      server = MetricsHttpServerRef.new($address, port).valueOr:
-        error "Could not instantiate metrics HTTP server", url, error
+        server = MetricsHttpServerRef.new($address, port).valueOr:
+          error "Could not instantiate metrics HTTP server", url, error
+          quit QuitFailure
+
+      info "Starting metrics HTTP server", url
+      try:
+        waitFor server.start()
+      except MetricsError as exc:
+        fatal "Could not start metrics HTTP server",
+          url, error_msg = exc.msg, error_name = exc.name
         quit QuitFailure
 
-    info "Starting metrics HTTP server", url
-    try:
-      waitFor server.start()
-    except MetricsError as exc:
-      fatal "Could not start metrics HTTP server",
-        url, error_msg = exc.msg, error_name = exc.name
-      quit QuitFailure
+      Opt.some(server)
+    else:
+      Opt.none(MetricsHttpServerRef)
 
-  ## Start discovery v5 protocol and the Portal node.
-  d.start()
+  ## Start the Portal node.
   node.start()
 
   ## Start the JSON-RPC APIs
@@ -235,24 +243,32 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
 
     rpcServer.start()
 
-  if config.rpcEnabled:
-    let
-      ta = initTAddress(config.rpcAddress, config.rpcPort)
-      rpcHttpServer = RpcHttpServer.new()
-    # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
-    # that reach that limit (in hex, for gossip method).
-    rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+  let rpcHttpServer =
+    if config.rpcEnabled:
+      let
+        ta = initTAddress(config.rpcAddress, config.rpcPort)
+        rpcHttpServer = RpcHttpServer.new()
+      # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
+      # that reach that limit (in hex, for gossip method).
+      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+      setupRpcServer(rpcHttpServer)
 
-    setupRpcServer(rpcHttpServer)
+      Opt.some(rpcHttpServer)
+    else:
+      Opt.none(RpcHttpServer)
 
-  if config.wsEnabled:
-    let
-      ta = initTAddress(config.rpcAddress, config.wsPort)
-      rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
+  let rpcWsServer =
+    if config.wsEnabled:
+      let
+        ta = initTAddress(config.rpcAddress, config.wsPort)
+        rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
+      setupRpcServer(rpcWsServer)
 
-    setupRpcServer(rpcWsServer)
+      Opt.some(rpcWsServer)
+    else:
+      Opt.none(RpcWebSocketServer)
 
-  runForever()
+  return (node, metricsServer, rpcHttpServer, rpcWsServer)
 
 when isMainModule:
   {.pop.}
@@ -262,6 +278,56 @@ when isMainModule:
   )
   {.push raises: [].}
 
-  case config.cmd
-  of PortalCmd.noCommand:
-    run(config)
+  let (node, metricsServer, rpcHttpServer, rpcWsServer) =
+    case config.cmd
+    of PortalCmd.noCommand:
+      run(config)
+
+  # Ctrl+C handling
+  proc controlCHandler() {.noconv.} =
+    when defined(windows):
+      # workaround for https://github.com/nim-lang/Nim/issues/4057
+      try:
+        setupForeignThreadGc()
+      except Exception as exc:
+        raiseAssert exc.msg # shouldn't happen
+
+    notice "Shutting down after having received SIGINT"
+    node.state = PortalNodeState.Stopping
+
+  try:
+    setControlCHook(controlCHandler)
+  except Exception as exc: # TODO Exception
+    warn "Cannot set ctrl-c handler", msg = exc.msg
+
+  while node.state == PortalNodeState.Running:
+    try:
+      poll()
+    except CatchableError as e:
+      warn "Exception in poll()", exc = e.name, err = e.msg
+
+  if rpcWsServer.isSome():
+    let server = rpcWsServer.get()
+    try:
+      server.stop()
+      waitFor server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
+
+  if rpcHttpServer.isSome():
+    let server = rpcHttpServer.get()
+    try:
+      waitFor server.stop()
+      waitFor server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
+
+  if metricsServer.isSome():
+    let server = metricsServer.get()
+    try:
+      waitFor server.stop()
+      waitFor server.close()
+    except CatchableError as e:
+      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
+
+  waitFor node.stop()

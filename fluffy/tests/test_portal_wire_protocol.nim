@@ -58,7 +58,7 @@ proc initPortalProtocol(
   return proto
 
 proc stopPortalProtocol(proto: PortalProtocol) {.async.} =
-  proto.stop()
+  await proto.stop()
   await proto.baseProtocol.closeWait()
 
 proc defaultTestSetup(rng: ref HmacDrbgContext): (PortalProtocol, PortalProtocol) =
@@ -373,5 +373,5 @@ procSuite "Portal Wire Protocol Tests":
       # Yet higher than or equal to the furthest non deleted element.
       proto1.dataRadius() >= distances[3]
 
-    proto1.stop()
+    await proto1.stop()
     await node1.closeWait()

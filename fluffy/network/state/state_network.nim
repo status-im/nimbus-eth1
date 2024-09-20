@@ -241,13 +241,18 @@ proc start*(n: StateNetwork) =
   n.processContentLoop = processContentLoop(n)
   n.statusLogLoop = statusLogLoop(n)
 
-proc stop*(n: StateNetwork) =
+proc stop*(n: StateNetwork) {.async: (raises: []).} =
   info "Stopping Portal execution state network"
 
-  n.portalProtocol.stop()
+  var futures: seq[Future[void]]
+  futures.add(n.portalProtocol.stop())
 
   if not n.processContentLoop.isNil():
-    n.processContentLoop.cancelSoon()
-
+    futures.add(n.processContentLoop.cancelAndWait())
   if not n.statusLogLoop.isNil():
-    n.statusLogLoop.cancelSoon()
+    futures.add(n.statusLogLoop.cancelAndWait())
+
+  await noCancel(allFutures(futures))
+
+  n.processContentLoop = nil
+  n.statusLogLoop = nil

@@ -381,13 +381,19 @@ proc start*(n: BeaconNetwork) =
   n.portalProtocol.start()
   n.processContentLoop = processContentLoop(n)
 
-proc stop*(n: BeaconNetwork) =
+proc stop*(n: BeaconNetwork) {.async: (raises: []).} =
   info "Stopping Portal beacon chain network"
 
-  n.portalProtocol.stop()
+  var futures: seq[Future[void]]
+  futures.add(n.portalProtocol.stop())
 
-  if not n.processContentLoop.isNil:
-    n.processContentLoop.cancelSoon()
+  if not n.processContentLoop.isNil():
+    futures.add(n.processContentLoop.cancelAndWait())
 
   if not n.statusLogLoop.isNil():
-    n.statusLogLoop.cancelSoon()
+    futures.add(n.statusLogLoop.cancelAndWait())
+
+  await noCancel(allFutures(futures))
+
+  n.processContentLoop = nil
+  n.statusLogLoop = nil
