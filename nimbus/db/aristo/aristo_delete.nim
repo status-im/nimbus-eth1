@@ -25,10 +25,13 @@ import
 # Private heplers
 # ------------------------------------------------------------------------------
 
-proc branchStillNeeded(vtx: VertexRef): Result[int,void] =
+proc branchStillNeeded(vtx: VertexRef, removed: int): Result[int,void] =
   ## Returns the nibble if there is only one reference left.
   var nibble = -1
   for n in 0 .. 15:
+    if n == removed:
+      continue
+
     if vtx.bVid[n].isValid:
       if 0 <= nibble:
         return ok(-1)
@@ -61,31 +64,23 @@ proc deleteImpl(
     # leaves to update
     return ok(nil)
 
-  # Get current `Branch` vertex `br`
-  let br = block:
-    var wp = hike.legs[^2].wp
-    wp.vtx = wp.vtx.dup # make sure that layers are not impliciteley modified
-    wp
-  if br.vtx.vType != Branch:
+  if hike.legs[^2].wp.vtx.vType != Branch:
     return err(DelBranchExpexted)
 
-  # Unlink child vertex from structural table
-  br.vtx.bVid[hike.legs[^2].nibble] = VertexID(0)
-  db.layersPutVtx((hike.root, br.vid), br.vtx)
+  # Get current `Branch` vertex `br`
+  let
+    br = hike.legs[^2].wp
+    nbl = br.vtx.branchStillNeeded(hike.legs[^2].nibble).valueOr:
+      return err(DelBranchWithoutRefs)
 
   # Clear all Merkle hash keys up to the root key
   for n in 0 .. hike.legs.len - 2:
     let vid = hike.legs[n].wp.vid
     db.layersResKey((hike.root, vid))
 
-  let nbl = block:
-    let rc = br.vtx.branchStillNeeded()
-    if rc.isErr:
-      return err(DelBranchWithoutRefs)
-    rc.value
-
   if 0 <= nbl:
-    # Branch has only one entry - convert it to a leaf or join with parent
+    # Branch has only one entry - move that entry to where the branch was and
+    # update its path
 
     # Get child vertex (there must be one after a `Branch` node)
     let
@@ -118,6 +113,11 @@ proc deleteImpl(
     else:
       ok(nil)
   else:
+    # Clear the removed leaf from the branch (that still contains other children)
+    let brDup = br.vtx.dup
+    brDup.bVid[hike.legs[^2].nibble] = VertexID(0)
+    db.layersPutVtx((hike.root, br.vid), brDup)
+
     ok(nil)
 
 # ------------------------------------------------------------------------------
