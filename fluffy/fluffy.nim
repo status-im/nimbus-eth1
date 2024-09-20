@@ -185,26 +185,30 @@ proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
     quit 1
 
   ## Start metrics HTTP server
-  if config.metricsEnabled:
-    let
-      address = config.metricsAddress
-      port = config.metricsPort
-      url = "http://" & $address & ":" & $port & "/metrics"
+  node.metricsServer =
+    if config.metricsEnabled:
+      let
+        address = config.metricsAddress
+        port = config.metricsPort
+        url = "http://" & $address & ":" & $port & "/metrics"
 
-      server = MetricsHttpServerRef.new($address, port).valueOr:
-        error "Could not instantiate metrics HTTP server", url, error
+        server = MetricsHttpServerRef.new($address, port).valueOr:
+          error "Could not instantiate metrics HTTP server", url, error
+          quit QuitFailure
+
+      info "Starting metrics HTTP server", url
+      try:
+        waitFor server.start()
+      except MetricsError as exc:
+        fatal "Could not start metrics HTTP server",
+          url, error_msg = exc.msg, error_name = exc.name
         quit QuitFailure
 
-    info "Starting metrics HTTP server", url
-    try:
-      waitFor server.start()
-    except MetricsError as exc:
-      fatal "Could not start metrics HTTP server",
-        url, error_msg = exc.msg, error_name = exc.name
-      quit QuitFailure
+      Opt.some(server)
+    else:
+      Opt.none(MetricsHttpServerRef)
 
-  ## Start discovery v5 protocol and the Portal node.
-  d.start()
+  ## Start the Portal node.
   node.start()
 
   ## Start the JSON-RPC APIs
@@ -235,22 +239,30 @@ proc run(config: PortalConf): PortalNode {.raises: [CatchableError].} =
 
     rpcServer.start()
 
-  if config.rpcEnabled:
-    let
-      ta = initTAddress(config.rpcAddress, config.rpcPort)
-      rpcHttpServer = RpcHttpServer.new()
-    # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
-    # that reach that limit (in hex, for gossip method).
-    rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+  node.rpcHttpServer =
+    if config.rpcEnabled:
+      let
+        ta = initTAddress(config.rpcAddress, config.rpcPort)
+        rpcHttpServer = RpcHttpServer.new()
+      # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
+      # that reach that limit (in hex, for gossip method).
+      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+      setupRpcServer(rpcHttpServer)
 
-    setupRpcServer(rpcHttpServer)
+      Opt.some(rpcHttpServer)
+    else:
+      Opt.none(RpcHttpServer)
 
-  if config.wsEnabled:
-    let
-      ta = initTAddress(config.rpcAddress, config.wsPort)
-      rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
+  node.rpcWsServer =
+    if config.wsEnabled:
+      let
+        ta = initTAddress(config.rpcAddress, config.wsPort)
+        rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
+      setupRpcServer(rpcWsServer)
 
-    setupRpcServer(rpcWsServer)
+      Opt.some(rpcWsServer)
+    else:
+      Opt.none(RpcWebSocketServer)
 
   return node
 

@@ -10,6 +10,8 @@
 import
   results,
   chronos,
+  metrics/chronos_httpserver,
+  json_rpc/rpcserver,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
   ./network_metadata,
@@ -47,6 +49,9 @@ type
     stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
     statusLogLoop: Future[void]
+    metricsServer*: Opt[MetricsHttpServerRef]
+    rpcHttpServer*: Opt[RpcHttpServer]
+    rpcWsServer*: Opt[RpcWebSocketServer]
 
 # Beacon light client application callbacks triggered when new finalized header
 # or optimistic header is available.
@@ -208,6 +213,8 @@ proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
 proc start*(n: PortalNode) =
   debug "Starting Portal node"
 
+  n.discovery.start()
+
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
   if n.historyNetwork.isSome():
@@ -225,6 +232,30 @@ proc start*(n: PortalNode) =
 proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"
 
+  if n.rpcWsServer.isSome():
+    let server = n.rpcWsServer.get()
+    try:
+      server.stop()
+      await server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
+
+  if n.rpcHttpServer.isSome():
+    let server = n.rpcHttpServer.get()
+    try:
+      await server.stop()
+      await server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
+
+  if n.metricsServer.isSome():
+    let server = n.metricsServer.get()
+    try:
+      await server.stop()
+      await server.close()
+    except CatchableError as e:
+      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
+
   var futures: seq[Future[void]]
 
   if n.beaconNetwork.isSome():
@@ -233,16 +264,13 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
     futures.add(n.historyNetwork.value.stop())
   if n.stateNetwork.isSome():
     futures.add(n.stateNetwork.value.stop())
-
   if n.beaconLightClient.isSome():
     futures.add(n.beaconLightClient.value.stop())
-
-  if not n.statusLogLoop.isNil:
+  if not n.statusLogLoop.isNil():
     futures.add(n.statusLogLoop.cancelAndWait())
-
-  futures.add(n.discovery.closeWait())
-  n.contentDB.close()
 
   await noCancel(allFutures(futures))
 
+  await n.discovery.closeWait()
+  n.contentDB.close()
   n.statusLogLoop = nil

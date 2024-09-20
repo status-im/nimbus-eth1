@@ -45,7 +45,7 @@ proc start(hn: HistoryNode) =
   hn.historyNetwork.start()
 
 proc stop(hn: HistoryNode) {.async.} =
-  hn.historyNetwork.stop()
+  discard hn.historyNetwork.stop()
   await hn.discoveryProtocol.closeWait()
 
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
