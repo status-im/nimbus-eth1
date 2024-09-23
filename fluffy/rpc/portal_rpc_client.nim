@@ -53,26 +53,26 @@ proc historyRecursiveFindContent(
 #   ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: hash))
 
 proc historyRecursiveFindBlockHeader*(
-    client: PortalRpcClient, blockHash: BlockHash
+    client: PortalRpcClient, blockNumOrHash: uint64 | BlockHash
 ): Future[Result[BlockHeader, string]] {.async: (raises: []).} =
   let
-    contentKeyBytes = blockHeaderContentKey(blockHash).encode().asSeq()
+    contentKeyBytes = blockHeaderContentKey(blockNumOrHash).encode().asSeq()
     content = ?await client.historyRecursiveFindContent(contentKeyBytes.to0xHex())
-    headerWithProof = ?decodeSsz(hexToSeqByte(content), BlockHeaderWithProof)
+    contentBytes =
+      try:
+        hexToSeqByte(content)
+      except ValueError as e:
+        return err(e.msg)
+    headerWithProof = ?decodeSsz(contentBytes, BlockHeaderWithProof)
     header = ?validateBlockHeaderBytes(headerWithProof.header.asSeq(), blockHash)
   ok(header)
 
-# proc historyRecursiveFindBlockHeaderByNumber*(
-#     client: PortalRpcClient, blockNumber: uint64
-# ): Future[Result[BlockHeader, string]] {.async: (raises: []).} =
-#   discard
+proc historyRecursiveFindBlockBody*(
+    client: PortalRpcClient, blockHash: BlockHash
+): Future[Result[BlockBody, string]] {.async: (raises: []).} =
+  discard
 
-# proc historyRecursiveFindBlockBody*(
-#     client: PortalRpcClient, blockHash: BlockHash
-# ): Future[Result[BlockBody, string]] {.async: (raises: []).} =
-#   discard
-
-# proc historyRecursiveFindReceipts*(
-#     client: PortalRpcClient, blockHash: BlockHash
-# ): Future[Result[seq[Receipt], string]] {.async: (raises: []).} =
-#   discard
+proc historyRecursiveFindReceipts*(
+    client: PortalRpcClient, blockHash: BlockHash
+): Future[Result[seq[Receipt], string]] {.async: (raises: []).} =
+  discard
