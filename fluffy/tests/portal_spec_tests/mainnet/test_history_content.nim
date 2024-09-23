@@ -15,7 +15,8 @@ import
   eth/common/eth_types_rlp,
   ../../../network_metadata,
   ../../../eth_data/[history_data_json_store, history_data_ssz_e2s],
-  ../../../network/history/[history_content, history_network, accumulator],
+  ../../../network/history/
+    [history_content, history_network, validation/historical_hashes_accumulator],
   ../../test_history_util,
   ../../../eth_data/yaml_utils
 

@@ -14,7 +14,7 @@ import
   stint,
   eth/common/eth_types_rlp,
   ../eth_data/history_data_json_store,
-  ../network/history/[history_content, accumulator],
+  ../network/history/[history_content, validation/historical_hashes_accumulator],
   ./test_helpers
 
 suite "Header Accumulator":

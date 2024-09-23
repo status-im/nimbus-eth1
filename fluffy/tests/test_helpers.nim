@@ -12,7 +12,7 @@ import
   eth/[common, keys, rlp],
   eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/history/[accumulator, history_content],
+  ../network/history/[history_content, validation/historical_hashes_accumulator],
   ../database/content_db
 
 proc localAddress*(port: int): Address {.raises: [ValueError].} =

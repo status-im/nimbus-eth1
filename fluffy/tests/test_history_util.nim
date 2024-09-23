@@ -8,9 +8,11 @@
 {.push raises: [].}
 
 import
-  results, eth/common/eth_types_rlp, ../network/history/[history_content, accumulator]
+  results,
+  eth/common/eth_types_rlp,
+  ../network/history/[history_content, validation/historical_hashes_accumulator]
 
-export results, accumulator, history_content
+export results, historical_hashes_accumulator, history_content
 
 proc buildHeadersWithProof*(
     blockHeaders: seq[BlockHeader], epochRecord: EpochRecordCached
