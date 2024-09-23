@@ -83,6 +83,8 @@ func `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
   a.bytes == b
 
 func hasPrefix*(a: CodeBytesRef, b: openArray[byte]): bool =
+  if b.len > a.bytes.len:
+    return false
   for i in 0..<b.len:
     if a.bytes[i] != b[i]:
       return false
