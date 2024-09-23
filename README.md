@@ -25,19 +25,8 @@ All consensus-layer client development is happening in parallel in the
 Monthly development updates are shared
 [here](https://hackmd.io/jRpxY4WBQJ-hnsKaPDYqTw).
 
-Some recent highlights include:
-- Renewed funding from the EF to accelerate development
-- Completed Berlin and London fork compatibility (EIP-1559). It now passes nearly all the EF Hive testsuite, and 100% of contract execution tests (47,951 tests)
-- New GraphQL and WebSocket APIs, complementing JSON-RPC
-- EVMC compatibility, supporting third-party optimised EVM plugins
-- Up to 100x memory saving during contract executions
-- Asynchronous EVM to execute many contracts in parallel, while they wait for data from the network
-- Updated network protocols, to work with the latest eth/66-68 protocols
-- A prototype new mechanism for state sync which combines what have been called Fast sync, Snap sync and Beam sync in a self-tuning way, and allows the user to participate in the network (read accounts, run transactions etc.) while sync is still in progress
-- A significant redesign of the storage database to use less disk space and run faster.
-
 For more detailed write-ups on the development progress, follow the
-[Nimbus blog](https://our.status.im/tag/nimbus/).
+[Nimbus blog](https://blog.nimbus.team/).
 
 ## Building & Testing
 
