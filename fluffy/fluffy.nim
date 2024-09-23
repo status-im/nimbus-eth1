@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[os, enumutils],
+  std/[os, enumutils, exitprocs],
   confutils,
   confutils/std/net,
   chronicles,
@@ -61,6 +61,23 @@ proc run(
     fatal "Failed to create data directory",
       dataDir = config.dataDir, error = pathExists.error
     quit 1
+
+  # Make sure multiple instances to the same dataDir do not exist
+  let lockFilePath = config.dataDir.string / "fluffy.lock"
+  if isFile(lockFilePath):
+    fatal "Please ensure no other fluffy instances are running with the same data directory",
+     dataDir = config.dataDir
+    quit 1
+
+  if io2.writeFile(lockFilePath, "Fluffy is running").isErr():
+    fatal "Failed to create lock file", lock_file = lockFilePath
+    quit 1
+
+  addExitProc(proc() =
+    discard io2.removeFile(lockFilePath)
+  )
+
+  info "New lock file was created", lock_file = lockFilePath
 
   ## Network configuration
   let
