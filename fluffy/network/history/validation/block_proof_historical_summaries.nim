@@ -30,18 +30,18 @@ import
   beacon_chain/spec/eth2_ssz_serialization,
   beacon_chain/spec/presets,
   beacon_chain/spec/datatypes/capella,
-  ../beacon_chain_block_proof_common
+  ./block_proof_common
 
-export beacon_chain_block_proof_common
+export block_proof_common
 
 type
-  HistoricalSummariesProof* = array[13, Digest]
+  BeaconBlockProofHistoricalRoots* = array[13, Digest]
 
-  BeaconChainBlockProof* = object
+  BlockProofHistoricalSummaries* = object
     # Total size (11 + 1 + 13) * 32 bytes + 4 bytes = 804 bytes
-    beaconBlockProof*: BeaconBlockProof
+    beaconBlockProof*: BeaconBlockProofHistoricalRoots
     beaconBlockRoot*: Digest
-    historicalSummariesProof*: HistoricalSummariesProof
+    executionBlockProof*: ExecutionBlockProof
     slot*: Slot
 
 template `[]`(x: openArray[Eth2Digest], chunk: Limit): Eth2Digest =
@@ -64,11 +64,11 @@ func getHistoricalSummariesIndex*(
 # block_roots for given root.
 func buildProof*(
     blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest], blockRootIndex: uint64
-): Result[HistoricalSummariesProof, string] =
+): Result[BeaconBlockProofHistoricalRoots, string] =
   # max list size * 1 is start point of leaves
   let gIndex = GeneralizedIndex(SLOTS_PER_HISTORICAL_ROOT + blockRootIndex)
 
-  var proof: HistoricalSummariesProof
+  var proof: BeaconBlockProofHistoricalRoots
   ?blockRoots.build_proof(gIndex, proof)
 
   ok(proof)
@@ -78,24 +78,24 @@ func buildProof*(
 func buildProof*(
     blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest],
     beaconBlock: capella.TrustedBeaconBlock | capella.BeaconBlock,
-): Result[BeaconChainBlockProof, string] =
+): Result[BlockProofHistoricalSummaries, string] =
   let
     blockRootIndex = getBlockRootsIndex(beaconBlock)
-    beaconBlockProof = ?beaconBlock.buildProof()
-    historicalSummariesProof = ?blockRoots.buildProof(blockRootIndex)
+    executionBlockProof = ?beaconBlock.buildProof()
+    beaconBlockProof = ?blockRoots.buildProof(blockRootIndex)
 
   ok(
-    BeaconChainBlockProof(
-      beaconBlockProof: beaconBlockProof,
+    BlockProofHistoricalSummaries(
       beaconBlockRoot: hash_tree_root(beaconBlock),
-      historicalSummariesProof: historicalSummariesProof,
+      beaconBlockProof: beaconBlockProof,
+      executionBlockProof: executionBlockProof,
       slot: beaconBlock.slot,
     )
   )
 
 func verifyProof*(
     blockHeaderRoot: Digest,
-    proof: HistoricalSummariesProof,
+    proof: BeaconBlockProofHistoricalRoots,
     historicalRoot: Digest,
     blockRootIndex: uint64,
 ): bool =
@@ -105,7 +105,7 @@ func verifyProof*(
 
 func verifyProof*(
     historical_summaries: HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT],
-    proof: BeaconChainBlockProof,
+    proof: BlockProofHistoricalSummaries,
     blockHash: Digest,
     cfg: RuntimeConfig,
 ): bool =
@@ -113,9 +113,9 @@ func verifyProof*(
     historicalRootsIndex = getHistoricalSummariesIndex(proof.slot, cfg)
     blockRootIndex = getBlockRootsIndex(proof.slot)
 
-  blockHash.verifyProof(proof.beaconBlockProof, proof.beaconBlockRoot) and
+  blockHash.verifyProof(proof.executionBlockProof, proof.beaconBlockRoot) and
     proof.beaconBlockRoot.verifyProof(
-      proof.historicalSummariesProof,
+      proof.beaconBlockProof,
       historical_summaries[historicalRootsIndex].block_summary_root,
       blockRootIndex,
     )

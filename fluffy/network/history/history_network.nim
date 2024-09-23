@@ -17,13 +17,17 @@ import
   ../../database/content_db,
   ../../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[history_content, accumulator, beacon_chain_historical_roots],
+  "."/[
+    history_content,
+    beacon_chain_historical_roots,
+    validation/historical_hashes_accumulator,
+  ],
   ./content/content_deprecated
 
 logScope:
   topics = "portal_hist"
 
-export accumulator
+export historical_hashes_accumulator
 
 type
   HistoryNetwork* = ref object
