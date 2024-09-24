@@ -447,11 +447,16 @@ proc getNonce*(ac: AccountsLedgerRef, address: Address): AccountNonce =
   if acc.isNil: emptyEthAccount.nonce
   else: acc.statement.nonce
 
-proc getCode*(ac: AccountsLedgerRef, address: Address): CodeBytesRef =
+proc getCode*(ac: AccountsLedgerRef,
+              address: Address,
+              returnHash: static[bool] = false): auto =
   # Always returns non-nil!
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    return CodeBytesRef()
+    when returnHash:
+      return (EMPTY_CODE_HASH, CodeBytesRef())
+    else:
+      return CodeBytesRef()
 
   if acc.code == nil:
     acc.code =
@@ -468,7 +473,10 @@ proc getCode*(ac: AccountsLedgerRef, address: Address): CodeBytesRef =
       else:
         CodeBytesRef()
 
-  acc.code
+  when returnHash:
+    (acc.statement.codeHash, acc.code)
+  else:
+    acc.code
 
 proc getCodeSize*(ac: AccountsLedgerRef, address: Address): int =
   let acc = ac.getAccount(address, false)
@@ -493,21 +501,21 @@ proc getCodeSize*(ac: AccountsLedgerRef, address: Address): int =
   acc.code.len()
 
 proc resolveCodeHash*(ac: AccountsLedgerRef, address: Address): Hash32 =
-  let code = ac.getCode(address)
+  let (codeHash, code) = ac.getCode(address, true)
   let delegateTo = parseDelegationAddress(code).valueOr:
-    return emptyEthAccount.codeHash
+    return codeHash
   ac.getCodeHash(delegateTo)
 
 proc resolveCode*(ac: AccountsLedgerRef, address: Address): CodeBytesRef =
   let code = ac.getCode(address)
   let delegateTo = parseDelegationAddress(code).valueOr:
-    return CodeBytesRef()
+    return code
   ac.getCode(delegateTo)
 
 proc resolveCodeSize*(ac: AccountsLedgerRef, address: Address): int =
   let code = ac.getCode(address)
   let delegateTo = parseDelegationAddress(code).valueOr:
-    return 0
+    return code.len
   ac.getCodeSize(delegateTo)
 
 proc getCommittedStorage*(ac: AccountsLedgerRef, address: Address, slot: UInt256): UInt256 =
