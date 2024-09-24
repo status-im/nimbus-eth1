@@ -53,9 +53,6 @@ proc preExecComputation(c: Computation) =
 
     # 6. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
-      const
-        PER_AUTH_BASE_COST = 2500
-        PER_EMPTY_ACCOUNT_COST = 25000
       c.gasMeter.refundGas(PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST)
 
     # 7. Set the code of authority to be 0xef0100 || address. This is a delegation designation.

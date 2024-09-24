@@ -18,6 +18,7 @@ import
   ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
+  ../core/eip7702,
   ./host_types
 
 import ../evm/computation except fromEvmc, toEvmc
@@ -103,6 +104,10 @@ func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
     for account in call.accessList:
       gas += ACCESS_LIST_ADDRESS_COST
       gas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
+
+  # EIP-7702 intrinsic gas for authorization tuples, regardless of validity or duplication
+  if fork >= FkPrague:
+    gas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
 
   return gas.GasInt
 
