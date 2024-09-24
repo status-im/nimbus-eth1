@@ -63,21 +63,25 @@ proc run(
     quit 1
 
   # Make sure multiple instances to the same dataDir do not exist
-  let lockFilePath = config.dataDir.string / "fluffy.lock"
-  if isFile(lockFilePath):
+  let
+    lockFilePath = config.dataDir.string / "fluffy.lock"
+    lockFlags = {OpenFlags.Create, OpenFlags.Read, OpenFlags.Write}
+    lockFileHandleResult = openFile(lockFilePath, lockFlags)
+
+  if lockFileHandleResult.isErr():
+    error "Failed to open lock file", error = ioErrorMsg(lockFileHandleResult.error)
+    quit 1
+
+  let lockFileHandle = lockFileHandleResult.get()
+  if lockFile(lockFileHandle, LockType.Exclusive).isErr():
     fatal "Please ensure no other fluffy instances are running with the same data directory",
-     dataDir = config.dataDir
+      dataDir = config.dataDir
     quit 1
 
-  if io2.writeFile(lockFilePath, "Fluffy is running").isErr():
-    fatal "Failed to create lock file", lock_file = lockFilePath
-    quit 1
-
-  addExitProc(proc() =
-    discard io2.removeFile(lockFilePath)
+  addExitProc(
+    proc() =
+      discard closeFile(lockFileHandle)
   )
-
-  info "New lock file was created", lock_file = lockFilePath
 
   ## Network configuration
   let
