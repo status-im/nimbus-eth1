@@ -156,7 +156,7 @@ proc run(
   let
     portalProtocolConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
-      config.disablePoke,
+      config.disablePoke, config.maxGossipNodes,
     )
 
     portalNodeConfig = PortalNodeConfig(
