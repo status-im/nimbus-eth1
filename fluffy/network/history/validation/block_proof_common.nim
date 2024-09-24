@@ -9,7 +9,7 @@
 
 import results, beacon_chain/spec/presets, beacon_chain/spec/forks
 
-type BeaconBlockProof* = array[11, Digest]
+type ExecutionBlockProof* = array[11, Digest]
 
 func getBlockRootsIndex*(slot: Slot): uint64 =
   slot mod SLOTS_PER_HISTORICAL_ROOT
@@ -19,7 +19,9 @@ func getBlockRootsIndex*(beaconBlock: SomeForkyBeaconBlock): uint64 =
 
 # Builds proof to be able to verify that the EL block hash is part of the
 # CL BeaconBlock for given root.
-func buildProof*(blockBody: SomeForkyBeaconBlock): Result[BeaconBlockProof, string] =
+func buildProof*(
+    beaconBlock: SomeForkyBeaconBlock
+): Result[ExecutionBlockProof, string] =
   let
     # BeaconBlock level:
     # - 8 as there are 5 fields
@@ -34,12 +36,14 @@ func buildProof*(blockBody: SomeForkyBeaconBlock): Result[BeaconBlockProof, stri
     # - 12 as pos of field is 12
     gIndex = GeneralizedIndex(gIndexMidLevel * 1 * 16 + 12)
 
-  var proof: BeaconBlockProof
-  ?blockBody.build_proof(gIndex, proof)
+  var proof: ExecutionBlockProof
+  ?beaconBlock.build_proof(gIndex, proof)
 
   ok(proof)
 
-func verifyProof*(blockHash: Digest, proof: BeaconBlockProof, blockRoot: Digest): bool =
+func verifyProof*(
+    blockHash: Digest, proof: ExecutionBlockProof, blockRoot: Digest
+): bool =
   let
     gIndexTopLevel = (1 * 1 * 8 + 4)
     gIndexMidLevel = (gIndexTopLevel * 1 * 16 + 9)

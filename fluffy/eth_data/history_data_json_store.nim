@@ -15,7 +15,7 @@ import
   chronicles,
   eth/[rlp, common/eth_types],
   ../../nimbus/common/[chain_config, genesis],
-  ../network/history/[history_content, accumulator]
+  ../network/history/[history_content, validation/historical_hashes_accumulator]
 
 export results, tables
 

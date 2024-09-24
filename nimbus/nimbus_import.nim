@@ -129,7 +129,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       if isDir(conf.eraDir.string):
         4700013'u64 # Mainnet
       else:
-        notice "No eraDir found for Mainnet, block loading will stop after era1"
+        warn "No eraDir found for Mainnet, block loading will stop after era1"
         0'u64 # No eraDir for Mainnet
   elif conf.networkId == SepoliaNet:
     doAssert isDir(conf.era1Dir.string), "Era1 directory not found"
@@ -142,7 +142,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       if isDir(conf.eraDir.string):
         115193'u64 # Sepolia
       else:
-        notice "No eraDir found for Sepolia, block loading will stop after era1"
+        warn "No eraDir found for Sepolia, block loading will stop after era1"
         0'u64 # No eraDir for Sepolia
   elif conf.networkId == HoleskyNet:
     doAssert isDir(conf.eraDir.string), "Era directory not found"
@@ -228,11 +228,40 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       era: EraDB,
       historical_roots: openArray[Eth2Digest],
       historical_summaries: openArray[HistoricalSummary],
-  ) =
+      endSlot: Slot,
+  ): bool =
+    # Checks if the Nimbus block number is ahead the era block number
+    # First we load the last era number, and get the fist slot number 
+    # Since the slot emptiness cannot be predicted, we iterate over to find the block and check
+    # if the block number is greater than the current block number
+    var
+      lastEra = era(endSlot - 1)
+      startSlot = start_slot(lastEra) - 8192
+    debug "Finding slot number to resume import", startSlot, endSlot
+
+    while startSlot < endSlot:
+      let blk = getEthBlockFromEra(
+        era, historical_roots, historical_summaries, startSlot, clConfig.cfg
+      ).valueOr:
+        startSlot += 1
+        if startSlot == endSlot - 1:
+          error "No blocks found in the last era file"
+          return false
+        else:
+          continue
+
+      startSlot += 1
+      if blk.header.number < blockNumber:
+        notice "Available Era Files are already imported",
+          stateBlockNumber = blockNumber, eraBlockNumber = blk.header.number
+        quit QuitSuccess
+      else:
+        break
+
     if blockNumber > 1:
       # Setting the initial lower bound
       importedSlot = (blockNumber - lastEra1Block) + firstSlotAfterMerge
-      notice "Finding slot number after resuming import", importedSlot
+      debug "Finding slot number after resuming import", importedSlot
 
       # BlockNumber based slot finding
       var clNum = 0'u64
@@ -248,7 +277,8 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         # decreasing the lower bound with each iteration
         importedSlot += blockNumber - clNum
 
-      notice "Found the slot to start with", importedSlot
+      notice "Resuming import from", importedSlot
+    return true
 
   if isDir(conf.era1Dir.string) or isDir(conf.eraDir.string):
     if start <= lastEra1Block:
@@ -299,9 +329,10 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           quit QuitFailure
 
       # Load the last slot number
+      var moreEraAvailable = true
       if blockNumber > lastEra1Block + 1:
-        updateLastImportedSlot(
-          eraDB, historical_roots.asSeq(), historical_summaries.asSeq()
+        moreEraAvailable = updateLastImportedSlot(
+          eraDB, historical_roots.asSeq(), historical_summaries.asSeq(), endSlot
         )
 
       if importedSlot < firstSlotAfterMerge and firstSlotAfterMerge != 0:
@@ -322,7 +353,8 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         blocks.add blk
         true
 
-      while running and imported < conf.maxBlocks and importedSlot < endSlot:
+      while running and moreEraAvailable and imported < conf.maxBlocks and
+          importedSlot < endSlot:
         if not loadEra1Block(Slot(importedSlot)):
           importedSlot += 1
           continue

@@ -13,9 +13,8 @@ import
   ./test_history_network,
   ./test_content_db,
   ./test_discovery_rpc,
-  ./test_beacon_chain_block_proof_bellatrix,
-  ./test_beacon_chain_block_proof_capella,
   ./test_beacon_chain_historical_roots,
   ./test_beacon_chain_historical_summaries,
+  ./history_network_tests/all_history_network_tests,
   ./beacon_network_tests/all_beacon_network_tests,
   ./state_network_tests/all_state_network_tests

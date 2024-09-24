@@ -19,7 +19,7 @@ import
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
   ../eth_data/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
-  ../network/history/[history_content, accumulator],
+  ../network/history/[history_content, validation/historical_hashes_accumulator],
   ../tests/test_history_util
 
 type

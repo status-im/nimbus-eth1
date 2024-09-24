@@ -7,7 +7,12 @@
 
 {.push raises: [].}
 
-import std/os, stew/io2, results, ../network/history/accumulator, ../eth_data/era1
+import
+  std/os,
+  stew/io2,
+  results,
+  ../network/history/validation/historical_hashes_accumulator,
+  ../eth_data/era1
 
 type Era1DB* = ref object
   ## The Era1 database manages a collection of era files that together make up
