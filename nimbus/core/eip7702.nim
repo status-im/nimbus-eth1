@@ -22,6 +22,10 @@ const
   DelegationPrefix = [0xef.byte, 0x01, 0x00]
   Magic = 0x05
 
+const
+  PER_AUTH_BASE_COST* = 2500
+  PER_EMPTY_ACCOUNT_COST* = 25000
+
 func authority*(auth: Authorization): Opt[EthAddress] =
   var w = initRlpWriter()
   w.appendRawBytes([Magic.byte])

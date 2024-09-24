@@ -129,9 +129,9 @@ proc parseAuth(n: JsonNode): Authorization =
   n.fromJson("chainId", result.chainId)
   n.fromJson("address", result.address)
   n.fromJson("nonce", result.nonce)
-  n.fromJson("yParity", result.yParity)
-  n.fromJson("R", result.R)
-  n.fromJson("S", result.S)
+  n.fromJson("v", result.v)
+  n.fromJson("r", result.r)
+  n.fromJson("s", result.s)
 
 proc fromJson*(n: JsonNode, name: string, x: var seq[Authorization]) =
   let node = n[name]
