@@ -24,9 +24,6 @@ logScope:
   topics = "flare db"
 
 const
-  extraTraceMessages = false
-    ## Enabled additional logging noise
-
   LhcStateKey = 1.flareStateKey
 
 type
@@ -77,8 +74,6 @@ proc dbStoreLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
   ## Save chain layout to persistent db
   const info = "dbStoreLinkedHChainsLayout"
   if ctx.layout == ctx.lhc.lastLayout:
-    when extraTraceMessages:
-      trace info & ": no layout change"
     return false
 
   let data = rlp.encode(ctx.layout)
@@ -94,19 +89,16 @@ proc dbStoreLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
       debug info & ": failed to save persistently", error=($$error)
       return false
   else:
-    when extraTraceMessages:
-      trace info & ": not saved, tx pending", txLevel
+    trace info & ": not saved, tx pending", txLevel
     return false
 
-  when extraTraceMessages:
-    trace info & ": saved pesistently on DB"
+  trace info & ": saved pesistently on DB"
   true
 
 
 proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
   ## Restore chain layout from persistent db
-  when extraTraceMessages:
-    const info = "dbLoadLinkedHChainsLayout"
+  const info = "dbLoadLinkedHChainsLayout"
 
   let rc = ctx.fetchLinkedHChainsLayout()
   if rc.isOk:
@@ -115,8 +107,7 @@ proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
     if uMin <= uMax:
       # Add interval of unprocessed block range `(B,L)` from README
       ctx.headersUnprocSet(uMin, uMax)
-    when extraTraceMessages:
-      trace info & ": restored layout from DB"
+    trace info & ": restored layout from DB"
   else:
     let val = ctx.fetchSavedState().expect "saved states"
     ctx.lhc.layout = LinkedHChainsLayout(
@@ -126,8 +117,7 @@ proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
       leastParent: val.parent,
       final:       val.number,
       finalHash:   val.hash)
-    when extraTraceMessages:
-      trace info & ": new layout"
+    trace info & ": new layout"
 
   ctx.lhc.lastLayout = ctx.layout
 
@@ -158,9 +148,6 @@ proc dbStashHeaders*(
     let key = flareHeaderKey(last - n.uint)
     kvt.put(key.toOpenArray, data).isOkOr:
       raiseAssert info & ": put() failed: " & $$error
-  when extraTraceMessages:
-    trace info & ": headers stashed on DB",
-      iv=BnRange.new(first, last), nHeaders=revBlobs.len
 
 proc dbPeekHeader*(ctx: FlareCtxRef; num: BlockNumber): Opt[BlockHeader] =
   ## Retrieve some stashed header.

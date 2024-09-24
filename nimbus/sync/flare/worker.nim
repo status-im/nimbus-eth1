@@ -23,9 +23,6 @@ import
 logScope:
   topics = "flare"
 
-const extraTraceMessages = false or true
-  ## Enabled additional logging noise
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -48,8 +45,7 @@ proc napUnlessSomethingToFetch(
   if buddy.ctx.pool.importRunningOk or
      not (buddy.headersToFetchOk() or
           buddy.bodiesToFetchOk()):
-    when extraTraceMessages:
-      debug info & ": idly wasting time", peer=buddy.peer
+    debug info & ": idly wasting time", peer=buddy.peer
     await sleepAsync workerIdleWaitInterval
     return true
   return false
@@ -179,8 +175,7 @@ proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
   ## Note that this function does not run in `async` mode.
   ##
   const info = "RUNPOOL"
-  when extraTraceMessages:
-    debug info, peer=buddy.peer, laps
+  #debug info, peer=buddy.peer, laps
   buddy.ctx.headersStagedReorg info # reorg
   true # stop
 
@@ -197,9 +192,8 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-  when extraTraceMessages:
-    trace info, peer, nInvocations=buddy.only.nMultiLoop,
-      lastIdleGap=buddy.only.multiRunIdle.toStr(2)
+  trace info, peer, nInvocations=buddy.only.nMultiLoop,
+    lastIdleGap=buddy.only.multiRunIdle.toStr(2)
 
   # Update beacon header when needed. For the beacon header, a hash will be
   # auto-magically made available via RPC. The corresponding header is then

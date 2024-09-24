@@ -21,10 +21,6 @@ import
 logScope:
   topics = "flare bodies"
 
-const
-  extraTraceMessages = true
-    ## Enabled additional logging noise
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -53,9 +49,8 @@ proc bodiesFetch*(
     start = Moment.now()
     nReq = blockHashes.len
 
-  when extraTraceMessages:
-    trace trEthSendSendingGetBlockBodies, peer, nReq,
-      nRespErrors=buddy.only.nBdyRespErrors
+  trace trEthSendSendingGetBlockBodies, peer, nReq,
+    nRespErrors=buddy.only.nBdyRespErrors
 
   var resp: Option[blockBodiesObj]
   try:
@@ -71,19 +66,17 @@ proc bodiesFetch*(
   # Evaluate result
   if resp.isNone or buddy.ctrl.stopped:
     buddy.fetchRegisterError()
-    when extraTraceMessages:
-      trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
-        elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-        nRespErrors=buddy.only.nBdyRespErrors
+    trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
+      elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+      nRespErrors=buddy.only.nBdyRespErrors
     return err()
 
   let b: seq[BlockBody] = resp.get.blocks
   if b.len == 0 or nReq < b.len:
     buddy.fetchRegisterError()
-    when extraTraceMessages:
-      trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-        elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-        nRespErrors=buddy.only.nBdyRespErrors
+    trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
+      elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+      nRespErrors=buddy.only.nBdyRespErrors
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a

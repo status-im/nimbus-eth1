@@ -61,19 +61,6 @@ const
   tickerLogSuppressMax = chronos.seconds(100)
 
 # ------------------------------------------------------------------------------
-# Private functions: pretty printing
-# ------------------------------------------------------------------------------
-
-proc pc99(val: float): string =
-  if 0.99 <= val and val < 1.0: "99%"
-  elif 0.0 < val and val <= 0.01: "1%"
-  else: val.toPC(0)
-
-proc toStr(a: Opt[int]): string =
-  if a.isNone: "n/a"
-  else: $a.unsafeGet
-
-# ------------------------------------------------------------------------------
 # Private functions: printing ticker messages
 # ------------------------------------------------------------------------------
 

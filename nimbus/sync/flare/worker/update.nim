@@ -21,9 +21,6 @@ import
 logScope:
   topics = "flare update"
 
-const extraTraceMessages = false or true
-  ## Enabled additional logging noise
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -56,14 +53,12 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
 
   # Need: `F < Z` and `B == L`
   if z != 0 and z <= ctx.layout.final:       # violates `F < Z`
-    when extraTraceMessages:
-      trace info & ": not applicable", Z=z.bnStr, F=ctx.layout.final.bnStr
+    trace info & ": not applicable", Z=z.bnStr, F=ctx.layout.final.bnStr
     return false
 
   if ctx.layout.base != ctx.layout.least:    # violates `B == L`
-    when extraTraceMessages:
-      trace info & ": not applicable",
-        B=ctx.layout.base.bnStr, L=ctx.layout.least.bnStr
+    trace info & ": not applicable",
+      B=ctx.layout.base.bnStr, L=ctx.layout.least.bnStr
     return false
 
   # Check consistency: `B == L <= F` for maximal `B` => `L == F`
@@ -92,8 +87,7 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   doAssert ctx.headersStagedQueueIsEmpty()
   ctx.headersUnprocSet(ctx.layout.base+1, ctx.layout.least-1)
 
-  when extraTraceMessages:
-    trace info & ": updated"
+  trace info & ": updated"
   true
 
 

@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  std/strutils,
   pkg/[chronicles, chronos],
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
@@ -25,10 +24,7 @@ logScope:
   topics = "flare blocks"
 
 const
-  extraTraceMessages = false or true
-    ## Enabled additional logging noise
-
-  verifyDataStructureOk = false or true
+  verifyDataStructureOk = true
     ## Debugging mode
 
 when verifyDataStructureOk:
@@ -69,9 +65,6 @@ proc fetchAndCheck(
   let bodies = block:
     let rc = await buddy.bodiesFetch(blockHash, info)
     if rc.isErr:
-      when extraTraceMessages:
-        trace info & ": fetch bodies failed", peer=buddy.peer, ivReq,
-          nRespErrors=buddy.only.nBdyRespErrors
       blk.blocks.setLen(offset)
       return false
     rc.value
@@ -93,10 +86,9 @@ proc fetchAndCheck(
         # Oops, cut off the rest
         blk.blocks.setLen(offset + n)
         buddy.fetchRegisterError()
-        when extraTraceMessages:
-          trace info & ": fetch bodies cut off junk", peer=buddy.peer, ivReq,
-            n, nTxs=bodies[n].transactions.len, nBodies,
-            nRespErrors=buddy.only.nBdyRespErrors
+        trace info & ": fetch bodies cut off junk", peer=buddy.peer, ivReq,
+          n, nTxs=bodies[n].transactions.len, nBodies,
+          nRespErrors=buddy.only.nBdyRespErrors
         break loop
 
       blk.blocks[offset + n].transactions = bodies[n].transactions
@@ -209,15 +201,8 @@ proc blocksStagedCollect*(
     let ivRespLen = blk.blocks.len - nBlkBlocks
     if iv.maxPt < ivBottom + ivRespLen.uint:
       # All collected
-      when extraTraceMessages:
-        trace info & ": all collected", peer, iv, ivBottom=ivBottom.bnStr,
-          ivRespLen
       ctx.blocksUnprocCommit(iv.len)
       break
-
-    when extraTraceMessages:
-      trace info & ": collected range", peer, iv, ivReq,
-        ivResp=BnRange.new(ivBottom, ivBottom + ivRespLen.uint - 1), ivRespLen
 
     ivBottom += ivRespLen.uint # will mostly result into `ivReq.maxPt+1`
 
@@ -235,13 +220,8 @@ proc blocksStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = blk[]
 
-  when extraTraceMessages:
-    trace info & ": staged blocks", peer,
-      iv=BnRange.new(iv.minPt, iv.minPt + blk.blocks.len.uint - 1),
-      nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state
-  else:
-    trace info & ": staged blocks", peer, bottomBlock=iv.minPt.bnStr,
-      nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state
+  trace info & ": staged blocks", peer, bottomBlock=iv.minPt.bnStr,
+    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state
 
   when verifyDataStructureOk:
     ctx.verifyStagedBlocksQueue info
