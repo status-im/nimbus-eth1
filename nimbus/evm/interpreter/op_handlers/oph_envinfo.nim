@@ -372,7 +372,7 @@ const
      exec: extCodeSizeOp),
 
 
-    (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin and later
+    (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin through Cancun
      forks: VmOpBerlinAndLater - VmOpPragueAndLater,
      name: "extCodeSizeEIP2929",
      info: "EIP2929: Get size of an account's code",
@@ -393,7 +393,7 @@ const
      exec: extCodeCopyOp),
 
 
-    (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin and later
+    (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin through Cancun
      forks: VmOpBerlinAndLater - VmOpPragueAndLater,
      name: "extCodeCopyEIP2929",
      info: "EIP2929: Copy an account's code to memory",
@@ -429,7 +429,7 @@ const
      exec: extCodeHashOp),
 
 
-    (opCode: ExtCodeHash,    ## 0x3f, Contract hash for berlin and later
+    (opCode: ExtCodeHash,    ## 0x3f, Contract hash for Berlin through Cancun
      forks: VmOpBerlinAndLater - VmOpPragueAndLater,
      name: "extCodeHashEIP2929",
      info: "EIP2929: Returns the keccak256 hash of a contract’s code",
