@@ -632,3 +632,28 @@ func isCanonical*(c: ForkedChainRef, blockHash: Hash256): bool =
         if blockHash == prevHash:
           return true
         prevHash = item.blk.header.parentHash
+
+proc isCanonicalAncestor*(c: ForkedChainRef,
+                    blockNumber: BlockNumber,
+                    blockHash: Hash256): bool =
+  if blockNumber >= c.cursorHeader.number:
+    return false
+
+  if blockHash == c.cursorHash:
+    return false
+
+  if c.baseHeader.number < c.cursorHeader.number:
+    # The current canonical chain in memory is headed by
+    # cursorHeader
+    shouldNotKeyError:
+      var prevHash = c.cursorHeader.parentHash
+      while prevHash != c.baseHash:
+        var header = c.blocks[prevHash].blk.header
+        if prevHash == blockHash and blockNumber == header.number:
+          return true
+        prevHash = header.parentHash
+
+  # canonical chain in database should have a marker
+  # and the marker is block number
+  var canonHash: common.Hash256
+  c.db.getBlockHash(blockNumber, canonHash) and canonHash == blockHash
