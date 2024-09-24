@@ -13,15 +13,16 @@ import
   unittest2,
   stew/byteutils,
   eth/common/eth_types_rlp,
-  ../../../network_metadata,
-  ../../../eth_data/[history_data_json_store, history_data_ssz_e2s],
-  ../../../network/history/[history_content, history_network, accumulator],
-  ../../test_history_util,
-  ../../../eth_data/yaml_utils
+  ../../network_metadata,
+  ../../eth_data/[history_data_json_store, history_data_ssz_e2s],
+  ../../network/history/
+    [history_content, history_network, validation/historical_hashes_accumulator],
+  ../../eth_data/yaml_utils,
+  ./test_history_util
 
 from std/os import walkDir, splitFile, PathComponent
 
-suite "History Content Encodings":
+suite "History Content Values":
   test "HeaderWithProof Building and Encoding":
     const
       headerFile =

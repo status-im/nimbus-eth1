@@ -20,7 +20,7 @@ import
 
 type
   GetVtxFn* =
-    proc(rvid: RootedVertexID): Result[VertexRef,AristoError] {.gcsafe, raises: [].}
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for a single structural
       ## `Aristo DB` data record.
 

@@ -12,10 +12,12 @@ import
   eth/p2p/discoveryv5/routing_table,
   eth/common/eth_types_rlp,
   eth/rlp,
-  ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../network/history/[history_network, accumulator, history_content],
-  ../database/content_db,
-  ./test_helpers
+  ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../../network/history/
+    [history_network, history_content, validation/historical_hashes_accumulator],
+  ../../database/content_db,
+  ../test_helpers,
+  ./test_history_util
 
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
@@ -45,7 +47,7 @@ proc start(hn: HistoryNode) =
   hn.historyNetwork.start()
 
 proc stop(hn: HistoryNode) {.async.} =
-  hn.historyNetwork.stop()
+  discard hn.historyNetwork.stop()
   await hn.discoveryProtocol.closeWait()
 
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =

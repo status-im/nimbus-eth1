@@ -17,7 +17,7 @@ import
   stew/[byteutils, interval_set],
   ./aristo_desc/desc_backend,
   ./aristo_init/[memory_db, memory_only, rocks_db],
-  "."/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
+  "."/[aristo_desc, aristo_get, aristo_layers,
        aristo_serialise, aristo_utils]
 
 # ------------------------------------------------------------------------------
@@ -209,9 +209,9 @@ proc ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
       result = ["ł(", "þ("][nd.vType.ord]
     case nd.vType:
     of Leaf:
-      result &= nd.lPfx.ppPathPfx & "," & nd.lData.ppPayload(db)
+      result &= nd.pfx.ppPathPfx & "," & nd.lData.ppPayload(db)
     of Branch:
-      result &= nd.ePfx.ppPathPfx & ":"
+      result &= nd.pfx.ppPathPfx & ":"
       for n in 0..15:
         if nd.bVid[n].isValid:
           result &= nd.bVid[n].ppVid
@@ -229,33 +229,33 @@ proc ppNode(
     result = "ø"
   else:
     if not rvid.isValid:
-      result = ["L(", "B("][nd.vType.ord]
+      result = ["L(", "B("][nd.vtx.vType.ord]
     elif db.layersGetKey(rvid).isOk:
-      result = ["l(", "b("][nd.vType.ord]
+      result = ["l(", "b("][nd.vtx.vType.ord]
     else:
-      result = ["ł(", "þ("][nd.vType.ord]
-    case nd.vType:
+      result = ["ł(", "þ("][nd.vtx.vType.ord]
+    case nd.vtx.vType:
     of Leaf:
-      result &= nd.lPfx.ppPathPfx & ","
-      if nd.lData.pType == AccountData:
-        result &= "(" & nd.lData.account.ppAriAccount() & ","
-        if nd.lData.stoID.isValid:
-          let tag = db.ppKeyOk(nd.key[0],(rvid.root,nd.lData.stoID.vid))
-          result &= nd.lData.stoID.ppVid & tag
+      result &= nd.vtx.pfx.ppPathPfx & ","
+      if nd.vtx.lData.pType == AccountData:
+        result &= "(" & nd.vtx.lData.account.ppAriAccount() & ","
+        if nd.vtx.lData.stoID.isValid:
+          let tag = db.ppKeyOk(nd.key[0],(rvid.root,nd.vtx.lData.stoID.vid))
+          result &= nd.vtx.lData.stoID.ppVid & tag
         else:
-          result &= nd.lData.stoID.ppVid
+          result &= nd.vtx.lData.stoID.ppVid
           if nd.key[0].isValid:
             result &= nd.key[0].ppKey(db)
         result &= ")"
       else:
-        result &= nd.lData.ppPayload(db)
+        result &= nd.vtx.lData.ppPayload(db)
     of Branch:
-      let keyOnly = nd.bVid.toSeq.filterIt(it.isValid).len == 0
-      result &= nd.ePfx.ppPathPfx & ":"
+      let keyOnly = nd.vtx.bVid.toSeq.filterIt(it.isValid).len == 0
+      result &= nd.vtx.pfx.ppPathPfx & ":"
       for n in 0..15:
-        if nd.bVid[n].isValid:
-          let tag = db.ppKeyOk(nd.key[n],(rvid.root,nd.bVid[n]))
-          result &= nd.bVid[n].ppVid & tag
+        if nd.vtx.bVid[n].isValid:
+          let tag = db.ppKeyOk(nd.key[n],(rvid.root,nd.vtx.bVid[n]))
+          result &= nd.vtx.bVid[n].ppVid & tag
         elif keyOnly and nd.key[n].isValid:
           result &= nd.key[n].ppKey(db)
         if n < 15:

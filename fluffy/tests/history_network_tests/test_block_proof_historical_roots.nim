@@ -16,7 +16,7 @@ import
   beacon_chain /../ tests/testblockutil,
   # Mock helpers
   beacon_chain /../ tests/mocking/mock_genesis,
-  ../network/history/beacon_chain_block_proof_bellatrix
+  ../../network/history/validation/block_proof_historical_roots
 
 # Test suite for the proofs:
 # - HistoricalRootsProof
@@ -35,7 +35,7 @@ import
 # TODO: Add more blocks to reach 1+ historical roots, to make sure that indexing
 # is properly tested.
 
-suite "Beacon Chain Block Proofs - Bellatrix":
+suite "History Block Proofs - Historical Roots":
   let
     cfg = block:
       var res = defaultRuntimeConfig
@@ -67,7 +67,7 @@ suite "Beacon Chain Block Proofs - Bellatrix":
     SLOTS_PER_HISTORICAL_ROOT - 2,
   ]
 
-  test "HistoricalRootsProof for BeaconBlock":
+  test "BeaconBlockProofHistoricalRoots for BeaconBlock":
     let
       # Historical batch of first historical root
       batch = HistoricalBatch(
@@ -91,7 +91,7 @@ suite "Beacon Chain Block Proofs - Bellatrix":
         blocks[i].root, proof, historical_roots[historicalRootsIndex], blockRootIndex
       )
 
-  test "BeaconBlockProof for BeaconBlock":
+  test "ExecutionBlockProof for Execution BlockHeader":
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
     for i in blocksToTest:
       let beaconBlock = blocks[i].message
@@ -103,7 +103,7 @@ suite "Beacon Chain Block Proofs - Bellatrix":
       let leave = beaconBlock.body.execution_payload.block_hash
       check verifyProof(leave, proof, blocks[i].root)
 
-  test "BeaconChainBlockProof for Execution BlockHeader":
+  test "BlockProofHistoricalRoots for Execution BlockHeader":
     let
       # Historical batch of first historical root
       batch = HistoricalBatch(

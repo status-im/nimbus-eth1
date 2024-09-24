@@ -13,7 +13,7 @@ import
   results,
   eth/[rlp, common/eth_types],
   ncli/e2store,
-  ../network/history/[history_content, accumulator]
+  ../network/history/[history_content, validation/historical_hashes_accumulator]
 
 export results
 

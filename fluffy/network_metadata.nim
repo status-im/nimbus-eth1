@@ -13,7 +13,7 @@ import
   stew/io2,
   chronos/timer,
   beacon_chain/spec/forks,
-  ./network/history/accumulator
+  ./network/history/validation/historical_hashes_accumulator
 
 proc loadBootstrapNodes(path: string): seq[string] {.raises: [IOError].} =
   # Read a list of ENR URIs from a file containing a flat list of entries.

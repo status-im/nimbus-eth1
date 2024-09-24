@@ -17,13 +17,14 @@ import
   ../../database/content_db,
   ../../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[history_content, accumulator, beacon_chain_historical_roots],
+  "."/[history_content, validation/historical_hashes_accumulator],
+  ../beacon/beacon_chain_historical_roots,
   ./content/content_deprecated
 
 logScope:
   topics = "portal_hist"
 
-export accumulator
+export historical_hashes_accumulator
 
 type
   HistoryNetwork* = ref object
@@ -704,17 +705,7 @@ proc processContentLoop(n: HistoryNetwork) {.async: (raises: []).} =
 proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
-      # This is the data radius percentage compared to full storage. This will
-      # drop a lot when using the logbase2 scale, namely `/ 2` per 1 logaritmic
-      # radius drop.
-      # TODO: Get some float precision calculus?
-      let radiusPercentage =
-        n.portalProtocol.dataRadius() div (UInt256.high() div u256(100))
-
       info "History network status",
-        radiusPercentage = radiusPercentage.toString(10) & "%",
-        radius = n.portalProtocol.dataRadius().toHex(),
-        dbSize = $(n.contentDB.size() div 1000) & "kb",
         routingTableNodes = n.portalProtocol.routingTable.len()
 
       await sleepAsync(60.seconds)
@@ -725,17 +716,24 @@ proc start*(n: HistoryNetwork) =
   info "Starting Portal execution history network",
     protocolId = n.portalProtocol.protocolId,
     accumulatorRoot = hash_tree_root(n.accumulator)
+
   n.portalProtocol.start()
 
   n.processContentLoop = processContentLoop(n)
   n.statusLogLoop = statusLogLoop(n)
   pruneDeprecatedAccumulatorRecords(n.accumulator, n.contentDB)
 
-proc stop*(n: HistoryNetwork) =
-  n.portalProtocol.stop()
+proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
+  info "Stopping Portal execution history network"
+
+  var futures: seq[Future[void]]
+  futures.add(n.portalProtocol.stop())
 
   if not n.processContentLoop.isNil:
-    n.processContentLoop.cancelSoon()
+    futures.add(n.processContentLoop.cancelAndWait())
+  if not n.statusLogLoop.isNil:
+    futures.add(n.statusLogLoop.cancelAndWait())
+  await noCancel(allFutures(futures))
 
-  if not n.processContentLoop.isNil:
-    n.statusLogLoop.cancelSoon()
+  n.processContentLoop = nil
+  n.statusLogLoop = nil

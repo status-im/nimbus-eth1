@@ -18,7 +18,7 @@ import
   ssz_serialization,
   ../../../common/common_types,
   ../../../database/content_db,
-  ../accumulator
+  ../validation/historical_hashes_accumulator
 
 type
   ContentType = enum

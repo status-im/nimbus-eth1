@@ -127,8 +127,7 @@ type
     MergeHikeFailed # Ooops, internal error
     MergeAccRootNotAccepted
     MergeStoRootNotAccepted
-    MergeLeafPathCachedAlready
-    MergeLeafPathOnBackendAlready
+    MergeNoAction
     MergeRootVidMissing
     MergeStoAccMissing
 

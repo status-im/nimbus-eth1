@@ -298,7 +298,9 @@ proc runBackfillGossipBlockOffersLoop(
     for k, v in offersMap:
       try:
         let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
-        if numPeers == 0:
+        if numPeers > 0:
+          debug "Offer successfully gossipped to peers: ", numPeers, workerId
+        elif numPeers == 0:
           warn "Offer gossipped to no peers", workerId
           retryGossip = true
           break

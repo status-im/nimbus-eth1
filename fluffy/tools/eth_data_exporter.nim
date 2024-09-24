@@ -50,7 +50,7 @@ import
   snappy,
   ncli/e2store,
   ../../premix/[downloader, parser],
-  ../network/history/[history_content, accumulator],
+  ../network/history/[history_content, validation/historical_hashes_accumulator],
   ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter]
 
@@ -200,7 +200,7 @@ proc cmdExportEra1(config: ExporterConf) =
       var group = Era1Group.init(e2, startNumber).get()
 
       # Header records to build the accumulator root
-      var headerRecords: seq[accumulator.HeaderRecord]
+      var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
       for blockNumber in startNumber .. endNumber:
         let blck =
           try:
@@ -220,7 +220,7 @@ proc cmdExportEra1(config: ExporterConf) =
           break writeFileBlock
 
         headerRecords.add(
-          accumulator.HeaderRecord(
+          historical_hashes_accumulator.HeaderRecord(
             blockHash: blck.header.blockHash(), totalDifficulty: ttd
           )
         )

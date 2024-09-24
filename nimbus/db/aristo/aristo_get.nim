@@ -43,11 +43,12 @@ proc getLstUbe*(
 proc getVtxUbe*(
     db: AristoDbRef;
     rvid: RootedVertexID;
+    flags: set[GetVtxFlag] = {};
       ): Result[VertexRef,AristoError] =
   ## Get the vertex from the unfiltered backened if available.
   let be = db.backend
   if not be.isNil:
-    return be.getVtxFn rvid
+    return be.getVtxFn(rvid, flags)
   err GetVtxNotFound
 
 proc getKeyUbe*(
@@ -73,6 +74,7 @@ proc getTuvBE*(
 proc getVtxBE*(
     db: AristoDbRef;
     rvid: RootedVertexID;
+    flags: set[GetVtxFlag] = {};
       ): Result[(VertexRef, int),AristoError] =
   ## Get the vertex from the (filtered) backened if available.
   if not db.balancer.isNil:
@@ -80,7 +82,7 @@ proc getVtxBE*(
       if w[].isValid:
         return ok (w[], -1)
       return err(GetVtxNotFound)
-  ok (? db.getVtxUbe rvid, -2)
+  ok (? db.getVtxUbe(rvid, flags), -2)
 
 proc getKeyBE*(
     db: AristoDbRef;
@@ -98,7 +100,8 @@ proc getKeyBE*(
 
 proc getVtxRc*(
     db: AristoDbRef;
-    rvid: RootedVertexID
+    rvid: RootedVertexID;
+    flags: set[GetVtxFlag] = {};
       ): Result[(VertexRef, int),AristoError] =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ##
@@ -113,14 +116,13 @@ proc getVtxRc*(
     else:
       return err(GetVtxNotFound)
 
-  db.getVtxBE rvid
+  db.getVtxBE(rvid, flags)
 
-proc getVtx*(db: AristoDbRef; rvid: RootedVertexID): VertexRef =
+proc getVtx*(db: AristoDbRef; rvid: RootedVertexID, flags: set[GetVtxFlag] = {}): VertexRef =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
   db.getVtxRc(rvid).valueOr((VertexRef(nil), 0))[0]
-
 
 proc getKeyRc*(db: AristoDbRef; rvid: RootedVertexID): Result[(HashKey, int),AristoError] =
   ## Cascaded attempt to fetch a Merkle hash from the cache layers or the

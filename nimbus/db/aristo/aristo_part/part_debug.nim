@@ -41,7 +41,7 @@ proc pp*(n: PrfNode; ps: PartStateRef): string =
   elif n.prfType == isError:
     "(" & $n.error & ")"
   elif n.prfType == isExtension:
-    "X(" & n.ePfx.pp & "," & n.key[0].pp(ps.db) & ")"
+    "X(" & n.vtx.pfx.pp & "," & n.key[0].pp(ps.db) & ")"
   else:
     "(" & NodeRef(n).pp(ps.db) & ")"
 
@@ -93,7 +93,7 @@ proc pp*(t: Table[VertexID,HashKey]; ps: PartStateRef; indent = 4): string =
          .mapIt((it,t.getOrDefault it))
          .mapIt("(" & it[0].pp & "," & it[1].pp(ps.db) & ")")
          .join("," & indent.toPfx(1)) & "}"
-      
+
 proc pp*(q: seq[HashKey]; ps: PartStateRef): string =
   "(" & q.mapIt(it.pp ps.db).join("->") & ")[#" & $q.len & "]"
 

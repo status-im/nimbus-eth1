@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  json_rpc/[rpcproxy, rpcserver],
+  json_rpc/rpcserver,
   stew/byteutils,
   ../network/wire/portal_protocol,
   ../eth_data/history_data_seeding,
@@ -19,7 +19,7 @@ export rpcserver
 # Non-spec-RPCs that are used for testing, debugging and seeding data without a
 # bridge.
 proc installPortalDebugApiHandlers*(
-    rpcServer: RpcServer | RpcProxy, p: PortalProtocol, network: static string
+    rpcServer: RpcServer, p: PortalProtocol, network: static string
 ) =
   ## Portal debug API calls related to storage and seeding from Era1 files.
   rpcServer.rpc("portal_" & network & "GossipHeaders") do(

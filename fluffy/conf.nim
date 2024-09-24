@@ -15,7 +15,6 @@ import
   chronicles,
   eth/keys,
   eth/p2p/discoveryv5/[enr, node, routing_table],
-  json_rpc/rpcproxy,
   nimcrypto/hash,
   stew/byteutils,
   eth/net/nat, # must be late (compilation annoyance)
@@ -36,13 +35,10 @@ proc defaultDataDir*(): string =
 const
   defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
   defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
-  defaultProxyAddress* = (static "http://127.0.0.1:8546")
-  defaultClientConfig* = getHttpClientConfig(defaultProxyAddress)
 
   defaultListenAddressDesc = $defaultListenAddress
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
   defaultDataDirDesc = defaultDataDir()
-  defaultClientConfigDesc = $(defaultClientConfig.httpUri)
   defaultStorageCapacity* = 2000'u32 # 2 GB default
   defaultStorageCapacityDesc* = $defaultStorageCapacity
 
@@ -93,7 +89,7 @@ type
 
     portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {PortalSubnetwork.history},
+      defaultValue: {PortalSubnetwork.history, PortalSubnetwork.state},
       name: "portal-subnetworks"
     .}: set[PortalSubnetwork]
 
@@ -178,11 +174,12 @@ type
       name: "metrics-port"
     .}: Port
 
-    rpcEnabled* {.desc: "Enable the JSON-RPC server", defaultValue: false, name: "rpc".}:
-      bool
+    rpcEnabled* {.
+      desc: "Enable the HTTP JSON-RPC server", defaultValue: false, name: "rpc"
+    .}: bool
 
     rpcPort* {.
-      desc: "HTTP port for the JSON-RPC server", defaultValue: 8545, name: "rpc-port"
+      desc: "Port for the HTTP JSON-RPC server", defaultValue: 8545, name: "rpc-port"
     .}: Port
 
     rpcAddress* {.
@@ -192,14 +189,21 @@ type
       name: "rpc-address"
     .}: IpAddress
 
-    # it makes little sense to have default value here in final release, but until then
-    # it would be troublesome to add some fake uri param every time
-    proxyUri* {.
-      defaultValue: defaultClientConfig,
-      defaultValueDesc: $defaultClientConfigDesc,
-      desc: "URI of eth client where to proxy unimplemented JSON-RPC methods to",
-      name: "proxy-uri"
-    .}: ClientConfig
+    wsEnabled* {.
+      desc: "Enable the WebSocket JSON-RPC server", defaultValue: false, name: "ws"
+    .}: bool
+
+    wsPort* {.
+      desc: "Port for the WebSocket JSON-RPC server",
+      defaultValue: 8546,
+      name: "ws-port"
+    .}: Port
+
+    wsCompression* {.
+      desc: "Enable compression for the WebSocket JSON-RPC server",
+      defaultValue: false,
+      name: "ws-compression"
+    .}: bool
 
     tableIpLimit* {.
       hidden,
@@ -327,20 +331,6 @@ proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =
     raise newException(ValueError, "Invalid private key")
 
 proc completeCmdArg*(T: type PrivateKey, val: string): seq[string] =
-  return @[]
-
-proc parseCmdArg*(T: type ClientConfig, p: string): T {.raises: [ValueError].} =
-  let uri = parseUri(p)
-  if (uri.scheme == "http" or uri.scheme == "https"):
-    getHttpClientConfig(p)
-  elif (uri.scheme == "ws" or uri.scheme == "wss"):
-    getWebSocketClientConfig(p)
-  else:
-    raise newException(
-      ValueError, "Proxy uri should have defined scheme (http/https/ws/wss)"
-    )
-
-proc completeCmdArg*(T: type ClientConfig, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(

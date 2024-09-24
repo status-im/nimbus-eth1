@@ -14,13 +14,13 @@ import
   unittest2,
   yaml,
   beacon_chain/spec/datatypes/bellatrix,
-  ../../../common/common_types,
-  ../../../network_metadata,
-  ../../../network/history/beacon_chain_block_proof_bellatrix,
-  ../../../eth_data/[yaml_utils, yaml_eth_types]
+  ../../common/common_types,
+  ../../network_metadata,
+  ../../network/history/validation/block_proof_historical_roots,
+  ../../eth_data/[yaml_utils, yaml_eth_types]
 
-suite "History Block Proofs - Bellatrix":
-  test "BeaconChainBlockProof for Execution BlockHeader":
+suite "History Block Proofs - Historical Roots - Test Vectors":
+  test "BlockProofHistoricalRoots for Execution BlockHeader":
     let
       testsPath =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/"
@@ -33,11 +33,11 @@ suite "History Block Proofs - Bellatrix":
             raiseAssert "Cannot read test vector: " & error
 
           blockHash = BlockHash.fromHex(testProof.execution_block_header)
-          blockProof = BeaconChainBlockProof(
-            beaconBlockProof: array[11, Digest].fromHex(testProof.beacon_block_proof),
-            beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
-            historicalRootsProof:
+          blockProof = BlockProofHistoricalRoots(
+            beaconBlockProof:
               array[14, Digest].fromHex(testProof.historical_roots_proof),
+            beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
+            executionBlockProof: array[11, Digest].fromHex(testProof.beacon_block_proof),
             slot: Slot(testProof.slot),
           )
 

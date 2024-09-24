@@ -135,7 +135,7 @@ proc start*(sn: StateNode) =
   sn.stateNetwork.start()
 
 proc stop*(sn: StateNode) {.async.} =
-  sn.stateNetwork.stop()
+  discard sn.stateNetwork.stop()
   await sn.discoveryProtocol.closeWait()
 
 proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =

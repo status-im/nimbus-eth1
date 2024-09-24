@@ -9,7 +9,7 @@
 
 import
   std/[sequtils, json],
-  json_rpc/[rpcproxy, rpcserver],
+  json_rpc/rpcserver,
   json_serialization/std/tables,
   stew/byteutils,
   ../network/wire/portal_protocol,
@@ -41,7 +41,7 @@ TraceResponse.useDefaultSerializationIn JrpcConv
 # as the proc becomes generic, where the rpc macro from router.nim can no longer
 # be found, which is why we export rpcserver which should export router.
 proc installPortalApiHandlers*(
-    rpcServer: RpcServer | RpcProxy, p: PortalProtocol, network: static string
+    rpcServer: RpcServer, p: PortalProtocol, network: static string
 ) =
   let
     invalidKeyErr =

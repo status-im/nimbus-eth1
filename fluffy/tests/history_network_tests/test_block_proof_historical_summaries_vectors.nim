@@ -16,10 +16,10 @@ import
   yaml,
   ssz_serialization,
   beacon_chain/spec/datatypes/capella,
-  ../../../common/common_types,
-  ../../../network/history/experimental/beacon_chain_block_proof_capella,
-  ../../../network/beacon/beacon_init_loader,
-  ../../../eth_data/[yaml_utils, yaml_eth_types]
+  ../../common/common_types,
+  ../../network/history/validation/block_proof_historical_summaries,
+  ../../network/beacon/beacon_init_loader,
+  ../../eth_data/[yaml_utils, yaml_eth_types]
 
 proc toString(v: IoErrorCode): string =
   try:
@@ -44,8 +44,8 @@ proc readHistoricalSummaries(
   except SerializationError as err:
     err("Failed decoding historical_summaries: " & err.msg)
 
-suite "History Block Proofs - Capella":
-  test "BeaconChainBlockProof for Execution BlockHeader":
+suite "History Block Proofs - Historical Summaries - Test Vectors":
+  test "BlockProofHistoricalSummaries for Execution BlockHeader":
     let
       testsPath =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/"
@@ -62,11 +62,11 @@ suite "History Block Proofs - Capella":
             raiseAssert "Cannot read test vector: " & error
 
           blockHash = BlockHash.fromHex(testProof.execution_block_header)
-          blockProof = BeaconChainBlockProof(
-            beaconBlockProof: array[11, Digest].fromHex(testProof.beacon_block_proof),
-            beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
-            historicalSummariesProof:
+          blockProof = BlockProofHistoricalSummaries(
+            beaconBlockProof:
               array[13, Digest].fromHex(testProof.historical_summaries_proof),
+            beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
+            executionBlockProof: array[11, Digest].fromHex(testProof.beacon_block_proof),
             slot: Slot(testProof.slot),
           )
 

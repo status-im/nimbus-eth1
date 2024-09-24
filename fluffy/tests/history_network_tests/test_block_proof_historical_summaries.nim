@@ -16,7 +16,7 @@ import
   beacon_chain /../ tests/testblockutil,
   # Mock helpers
   beacon_chain /../ tests/mocking/mock_genesis,
-  ../network/history/experimental/beacon_chain_block_proof_capella
+  ../../network/history/validation/block_proof_historical_summaries
 
 # Test suite for the proofs:
 # - historicalSummariesProof
@@ -38,7 +38,7 @@ import
 # - Adjust tests to test usage of historical_summaries and historical_roots
 # together.
 
-suite "Beacon Chain Block Proofs - Capella":
+suite "History Block Proofs - Historical Summaries":
   let
     cfg = block:
       var res = defaultRuntimeConfig
@@ -82,7 +82,7 @@ suite "Beacon Chain Block Proofs - Capella":
     SLOTS_PER_HISTORICAL_ROOT - 2,
   ]
 
-  test "HistoricalRootsProof for BeaconBlockHeader":
+  test "BeaconBlockProofHistoricalSummaries for BeaconBlock":
     let blockRoots = getStateField(state[], block_roots).data
 
     withState(state[]):
@@ -107,7 +107,7 @@ suite "Beacon Chain Block Proofs - Capella":
             blockRootIndex,
           )
 
-  test "BeaconBlockProof for BeaconBlock":
+  test "ExecutionBlockProof for Execution BlockHeader":
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
     for i in blocksToTest:
       let beaconBlock = blocks[i].message
@@ -119,7 +119,7 @@ suite "Beacon Chain Block Proofs - Capella":
       let leave = beaconBlock.body.execution_payload.block_hash
       check verifyProof(leave, proof, blocks[i].root)
 
-  test "BeaconChainBlockProof for Execution BlockHeader":
+  test "BlockProofHistoricalSummaries for Execution BlockHeader":
     let blockRoots = getStateField(state[], block_roots).data
 
     withState(state[]):

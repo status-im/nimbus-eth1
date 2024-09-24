@@ -17,7 +17,7 @@ import
   beacon_chain/spec/beacon_time,
   ssz_serialization,
   ncli/e2store,
-  ../network/history/accumulator
+  ../network/history/validation/historical_hashes_accumulator
 
 from nimcrypto/hash import fromHex
 from ../../nimbus/utils/utils import calcTxRoot, calcReceiptsRoot

@@ -162,8 +162,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # probably resyncing. Ignore the update.
   # See point 2 of fCUV1 specification
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
-  var canonHash: common.Hash256
-  if db.getBlockHash(header.number, canonHash) and canonHash == blockHash:
+  if ben.chain.isCanonicalAncestor(header.number, blockHash):
     notice "Ignoring beacon update to old head",
       blockHash=blockHash.short,
       blockNumber=header.number

@@ -14,10 +14,10 @@ import
   stint,
   stew/byteutils,
   eth/common/eth_types_rlp,
-  ../../../eth_data/history_data_json_store,
-  ../../../network/history/[history_content, accumulator]
+  ../../eth_data/history_data_json_store,
+  ../../network/history/[history_content, validation/historical_hashes_accumulator]
 
-suite "Header Accumulator Root":
+suite "Historical Hashes Accumulator Root":
   test "Header Accumulator Update":
     const
       hashTreeRoots = [

@@ -16,7 +16,7 @@
 import
   eth/common,
   results,
-  "."/[aristo_constants, aristo_desc, aristo_get, aristo_hike, aristo_layers]
+  "."/[aristo_constants, aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
@@ -56,7 +56,7 @@ proc toNode*(
 
   case vtx.vType:
   of Leaf:
-    let node = NodeRef(vType: Leaf, lPfx: vtx.lPfx, lData: vtx.lData)
+    let node = NodeRef(vtx: vtx.dup())
     # Need to resolve storage root for account leaf
     if vtx.lData.pType == AccountData:
       let stoID = vtx.lData.stoID
@@ -68,7 +68,7 @@ proc toNode*(
     return ok node
 
   of Branch:
-    let node = NodeRef(vType: Branch, bVid: vtx.bVid, ePfx: vtx.ePfx)
+    let node = NodeRef(vtx: vtx.dup())
     var missing: seq[VertexID]
     for n in 0 .. 15:
       let vid = vtx.bVid[n]
@@ -100,29 +100,17 @@ iterator subVids*(vtx: VertexRef): VertexID =
 
 iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
   ## Simolar to `subVids()` but for nodes
-  case node.vType:
+  case node.vtx.vType:
   of Leaf:
-    if node.lData.pType == AccountData:
-      let stoID = node.lData.stoID
+    if node.vtx.lData.pType == AccountData:
+      let stoID = node.vtx.lData.stoID
       if stoID.isValid:
         yield (stoID.vid, node.key[0])
   of Branch:
     for n in 0 .. 15:
-      let vid = node.bVid[n]
+      let vid = node.vtx.bVid[n]
       if vid.isValid:
         yield (vid,node.key[n])
-
-# ---------------------
-
-proc updateAccountForHasher*(
-    db: AristoDbRef;                   # Database
-    hike: Hike;                        # Return value from `retrieveStorageID()`
-      ) =
-  ## The argument `hike` is used to mark/reset the keys along the implied
-  ## vertex path for being re-calculated.
-  ##
-  for w in hike.legs:
-    db.layersResKey((hike.root, w.wp.vid))
 
 # ------------------------------------------------------------------------------
 # End

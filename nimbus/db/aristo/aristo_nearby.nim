@@ -144,9 +144,9 @@ proc zeroAdjust(
 
   proc toHike(pfx: NibblesBuf, root: VertexID, db: AristoDbRef): Hike =
     when doLeast:
-      pfx.pathPfxPad(0).hikeUp(root, db).to(Hike)
+      discard pfx.pathPfxPad(0).hikeUp(root, db, Opt.none(VertexRef), result)
     else:
-      pfx.pathPfxPad(255).hikeUp(root, db).to(Hike)
+      discard pfx.pathPfxPad(255).hikeUp(root, db, Opt.none(VertexRef), result)
 
   if 0 < hike.legs.len:
     return ok(hike)
@@ -170,23 +170,23 @@ proc zeroAdjust(
         if n < 0:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
-        pfx = rootVtx.ePfx & NibblesBuf.nibble(n.byte)
+        pfx = rootVtx.pfx & NibblesBuf.nibble(n.byte)
 
       of Leaf:
-        pfx = rootVtx.lPfx
+        pfx = rootVtx.pfx
         if not hike.accept pfx:
           # Before or after the database range
           return err((hike.root,NearbyBeyondRange))
 
         # Pathological case: matching `rootVtx` which is a leaf
         if hike.legs.len == 0 and hike.tail.len == 0:
-          return ok(Hike(
-            root:     hike.root,
-            legs:     @[Leg(
+          var ret =  Hike(root: hike.root)
+          ret.legs.add Leg(
               nibble: -1,
               wp:     VidVtxPair(
                 vid:  hike.root,
-                vtx:  rootVtx))]))
+                vtx:  rootVtx))
+          return ok ret
 
       var newHike = pfx.toHike(hike.root, db)
       if 0 < newHike.legs.len:
@@ -230,12 +230,12 @@ proc finalise(
       if not vtx.isValid:
         return err((vid,NearbyDanglingLink))
 
-      var pfx: NibblesBuf
-      case vtx.vType:
-      of Leaf:
-        pfx = vtx.lPfx
-      of Branch:
-        pfx = vtx.ePfx & NibblesBuf.nibble(vtx.branchBorderNibble.byte)
+      let pfx =
+        case vtx.vType:
+        of Leaf:
+          vtx.pfx
+        of Branch:
+          vtx.pfx & NibblesBuf.nibble(vtx.branchBorderNibble.byte)
       if hike.beyond pfx:
         return err((vid,NearbyBeyondRange))
 
@@ -308,7 +308,7 @@ proc nearbyNext(
 
       case vtx.vType
       of Leaf:
-        if uHike.accept vtx.lPfx:
+        if uHike.accept vtx.pfx:
           return uHike.complete(vid, db, hikeLenMax, doLeast=moveRight)
       of Branch:
         let nibble = uHike.tail[0].int8
@@ -348,7 +348,9 @@ proc nearbyNextLeafTie(
     moveRight:static[bool];             # Direction of next vertex
       ): Result[PathID,(VertexID,AristoError)] =
   ## Variant of `nearbyNext()`, convenience wrapper
-  let hike = ? lty.hikeUp(db).to(Hike).nearbyNext(db, hikeLenMax, moveRight)
+  var hike: Hike
+  discard lty.hikeUp(db, Opt.none(VertexRef), hike)
+  hike = ?hike.nearbyNext(db, hikeLenMax, moveRight)
 
   if 0 < hike.legs.len:
     if hike.legs[^1].wp.vtx.vType != Leaf:
@@ -395,9 +397,9 @@ iterator rightPairs*(
       ): (LeafTie,LeafPayload) =
   ## Traverse the sub-trie implied by the argument `start` with increasing
   ## order.
-  var
-    hike = start.hikeUp(db).to(Hike)
-    rc = hike.right db
+  var hike: Hike
+  discard start.hikeUp(db, Opt.none(VertexRef), hike)
+  var rc = hike.right db
   while rc.isOK:
     hike = rc.value
     let (key, pyl) = hike.toLeafTiePayload
@@ -408,7 +410,7 @@ iterator rightPairs*(
     # Increment `key` by one and update `hike`. In many cases, the current
     # `hike` can be modified and re-used which saves some database lookups.
     block reuseHike:
-      let tail = hike.legs[^1].wp.vtx.lPfx
+      let tail = hike.legs[^1].wp.vtx.pfx
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if topNibble < 15:
@@ -424,7 +426,7 @@ iterator rightPairs*(
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       # Fall back to default method
-      hike = key.next.hikeUp(db).to(Hike)
+      discard key.next.hikeUp(db, Opt.none(VertexRef), hike)
 
     rc = hike.right db
     # End while
@@ -491,8 +493,10 @@ iterator leftPairs*(
   ## can run the function `left()` on the last returned `LiefTie` item with
   ## the `path` field decremented by `1`.
   var
-    hike = start.hikeUp(db).to(Hike)
-    rc = hike.left db
+    hike: Hike
+  discard start.hikeUp(db, Opt.none(VertexRef), hike)
+
+  var rc = hike.left db
   while rc.isOK:
     hike = rc.value
     let (key, pyl) = hike.toLeafTiePayload
@@ -503,7 +507,7 @@ iterator leftPairs*(
     # Decrement `key` by one and update `hike`. In many cases, the current
     # `hike` can be modified and re-used which saves some database lookups.
     block reuseHike:
-      let tail = hike.legs[^1].wp.vtx.lPfx
+      let tail = hike.legs[^1].wp.vtx.pfx
       if 0 < tail.len:
         let topNibble = tail[tail.len - 1]
         if 0 < topNibble:
@@ -519,7 +523,7 @@ iterator leftPairs*(
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       # Fall back to default method
-      hike = key.prev.hikeUp(db).to(Hike)
+      discard key.prev.hikeUp(db, Opt.none(VertexRef), hike)
 
     rc = hike.left db
     # End while
@@ -567,7 +571,7 @@ proc rightMissing*(
 
   case vtx.vType
   of Leaf:
-    return ok(vtx.lPfx < hike.tail)
+    return ok(vtx.pfx < hike.tail)
   of Branch:
     return ok(vtx.branchNibbleMin(hike.tail[0].int8) < 0)
 

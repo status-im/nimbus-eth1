@@ -116,19 +116,6 @@ const
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
-  # TalkResp message is a response message so the session is established and a
-  # regular discv5 packet is assumed for size calculation.
-  # Regular message = IV + header + message
-  # talkResp message = rlp: [request-id, response]
-  talkRespOverhead =
-    16 + # IV size
-    55 + # header size
-    1 + # talkResp msg id
-    3 + # rlp encoding outer list, max length will be encoded in 2 bytes
-    9 + # request id (max = 8) + 1 byte from rlp encoding byte string
-    3 + # rlp encoding response byte string, max length in 2 bytes
-    16 # HMAC
-
   # These are the concurrent offers per Portal wire protocol that is running.
   # Using the `offerQueue` allows for limiting the amount of offers send and
   # thus how many streams can be started.
@@ -385,7 +372,7 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       # will still be passed.
       const
         nodesOverhead = 1 + 1 + 4 # msg id + total + container offset
-        maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - nodesOverhead
+        maxPayloadSize = maxDiscv5TalkRespPayload - nodesOverhead
         enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
       let enrs = truncateEnrs(nodes, maxPayloadSize, enrOverhead)
@@ -402,7 +389,7 @@ proc handleFindContent(
 ): seq[byte] =
   const
     contentOverhead = 1 + 1 # msg id + SSZ Union selector
-    maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
+    maxPayloadSize = maxDiscv5TalkRespPayload - contentOverhead
     enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
   let contentId = p.toContentId(fc.contentKey).valueOr:
@@ -1708,14 +1695,21 @@ proc start*(p: PortalProtocol) =
   for i in 0 ..< concurrentOffers:
     p.offerWorkers.add(offerWorker(p))
 
-proc stop*(p: PortalProtocol) =
-  if not p.revalidateLoop.isNil:
-    p.revalidateLoop.cancelSoon()
-  if not p.refreshLoop.isNil:
-    p.refreshLoop.cancelSoon()
+proc stop*(p: PortalProtocol) {.async: (raises: []).} =
+  var futures: seq[Future[void]]
+
+  if not p.revalidateLoop.isNil():
+    futures.add(p.revalidateLoop.cancelAndWait())
+  if not p.refreshLoop.isNil():
+    futures.add(p.refreshLoop.cancelAndWait())
 
   for worker in p.offerWorkers:
-    worker.cancelSoon()
+    futures.add(worker.cancelAndWait())
+
+  await noCancel(allFutures(futures))
+
+  p.revalidateLoop = nil
+  p.refreshLoop = nil
   p.offerWorkers = @[]
 
 proc resolve*(

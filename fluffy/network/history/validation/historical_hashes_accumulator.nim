@@ -12,8 +12,8 @@ import
   eth/common/eth_types_rlp,
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
-  ../../common/common_types,
-  ./history_content
+  ../../../common/common_types,
+  ../history_content
 
 export ssz_serialization, merkleization, proofs, eth_types_rlp
 

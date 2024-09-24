@@ -1,5 +1,5 @@
-# Fluffy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Nimbus
+# Copyright (c) 2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -7,11 +7,7 @@
 
 {.warning[UnusedImport]: off.}
 
-import
-  ./test_portal_wire_encoding,
-  ./test_history_content_keys,
-  ./test_history_content,
-  ./test_history_content_validation,
-  ./test_history_block_proof_bellatrix,
-  ./test_history_block_proof_capella,
-  ./test_accumulator_root
+# Note: These tests are separated because they require a custom merge block
+# number defined at compile time. Once runtime chain config gets added these
+# tests can be compiled together with all the other portal tests.
+import ./test_historical_hashes_accumulator, ./test_history_network
