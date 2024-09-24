@@ -18,7 +18,7 @@ import
   "."/[genesis_alloc, hardforks]
 
 export
-  hardforks
+  tables, hardforks
 
 type
   Genesis* = ref object
