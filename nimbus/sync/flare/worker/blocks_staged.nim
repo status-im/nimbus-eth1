@@ -23,13 +23,6 @@ import
 logScope:
   topics = "flare blocks"
 
-const
-  verifyDataStructureOk = true
-    ## Debugging mode
-
-when verifyDataStructureOk:
-  import ./blocks_staged/debug
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -212,9 +205,6 @@ proc blocksStagedCollect*(
       ctx.blocksUnprocCommit(iv.len, ivBottom, iv.maxPt)
       break
 
-  when verifyDataStructureOk:
-    blk.verifyStagedBlocksItem info
-
   # Store `blk` chain on the `staged` queue
   let qItem = ctx.blk.staged.insert(iv.minPt).valueOr:
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
@@ -222,9 +212,6 @@ proc blocksStagedCollect*(
 
   trace info & ": staged blocks", peer, bottomBlock=iv.minPt.bnStr,
     nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state
-
-  when verifyDataStructureOk:
-    ctx.verifyStagedBlocksQueue info
 
   return true
 
@@ -258,9 +245,6 @@ proc blocksStagedImport*(ctx: FlareCtxRef; info: static[string]): bool =
   # Remove stashed headers
   for bn in qItem.key ..< qItem.key + qItem.data.blocks.len.uint:
     ctx.dbUnstashHeader bn
-
-  when verifyDataStructureOk:
-    ctx.verifyStagedBlocksQueue info
 
   true
 
