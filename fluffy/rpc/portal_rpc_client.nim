@@ -21,16 +21,6 @@ export
 
 type PortalRpcClient* = distinct RpcClient
 
-# TODO: How to check if rpc client is connected?
-# TODO: Should we implement a reconnect mechanism if disconnected? Note that HTTP
-# behaves differently from WS. If the rpc server goes down, then the WS connection is
-# lost and requests will fail even after the server comes back up, where as HTTP
-# doesn't have an real connection so the next request will be ok once the server comes back up.
-# TODO: Should we implement retries for RPC calls?
-# TODO: Note that the WS client appears to only be able to handle one concurrent call at a time
-# while the HTTP client can handle multiple. Either we fix this on the Rpc Client library side
-# or if this is a limitation of the WebSocket protocol then should document the behaviour here
-# TODO: should we verify content or just trust the content coming from the rpc server?
 proc init*(T: type PortalRpcClient, rpcClient: RpcClient): T =
   T(rpcClient)
 
@@ -44,14 +34,6 @@ proc historyRecursiveFindContent(
   except CatchableError as e:
     err(e.msg)
 
-#to0xHex
-#hexToSeqByte
-# func blockBodyContentKey*(hash: BlockHash): ContentKey =
-#   ContentKey(contentType: blockBody, blockBodyKey: BlockKey(blockHash: hash))
-
-# func receiptsContentKey*(hash: BlockHash): ContentKey =
-#   ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: hash))
-
 proc historyRecursiveFindBlockHeader*(
     client: PortalRpcClient, blockNumOrHash: uint64 | BlockHash
 ): Future[Result[BlockHeader, string]] {.async: (raises: []).} =
@@ -64,15 +46,34 @@ proc historyRecursiveFindBlockHeader*(
       except ValueError as e:
         return err(e.msg)
     headerWithProof = ?decodeSsz(contentBytes, BlockHeaderWithProof)
-    header = ?validateBlockHeaderBytes(headerWithProof.header.asSeq(), blockHash)
+    header = ?decodeRlp(headerWithProof.header.asSeq(), BlockHeader)
   ok(header)
 
 proc historyRecursiveFindBlockBody*(
     client: PortalRpcClient, blockHash: BlockHash
 ): Future[Result[BlockBody, string]] {.async: (raises: []).} =
-  discard
+  let
+    contentKeyBytes = blockBodyContentKey(blockHash).encode().asSeq()
+    content = ?await client.historyRecursiveFindContent(contentKeyBytes.to0xHex())
+    contentBytes =
+      try:
+        hexToSeqByte(content)
+      except ValueError as e:
+        return err(e.msg)
+    blockBody = ?decodeBlockBodyBytes(contentBytes)
+  ok(blockBody)
 
 proc historyRecursiveFindReceipts*(
     client: PortalRpcClient, blockHash: BlockHash
 ): Future[Result[seq[Receipt], string]] {.async: (raises: []).} =
-  discard
+  let
+    contentKeyBytes = receiptsContentKey(blockHash).encode().asSeq()
+    content = ?await client.historyRecursiveFindContent(contentKeyBytes.to0xHex())
+    contentBytes =
+      try:
+        hexToSeqByte(content)
+      except ValueError as e:
+        return err(e.msg)
+    receipts =
+      ?seq[Receipt].fromPortalReceipts(?decodeSsz(contentBytes, PortalReceipts))
+  ok(receipts)
