@@ -81,6 +81,7 @@ proc run(
   addExitProc(
     proc() =
       discard closeFile(lockFileHandle)
+      discard unlockFile(lockFileHandle, 0'i64, 0'i64)
   )
 
   ## Network configuration
