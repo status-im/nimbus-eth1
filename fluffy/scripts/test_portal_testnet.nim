@@ -20,7 +20,7 @@ import
   ../rpc/eth_rpc_client,
   ../eth_data/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
   ../network/history/[history_content, validation/historical_hashes_accumulator],
-  ../tests/test_history_util
+  ../tests/history_network_tests/test_history_util
 
 type
   FutureCallback[A] = proc(): Future[A] {.gcsafe, raises: [].}

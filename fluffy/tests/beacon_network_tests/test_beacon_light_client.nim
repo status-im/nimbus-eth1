@@ -18,7 +18,7 @@ import
   ../../network/beacon/[beacon_init_loader, beacon_light_client],
   "."/[light_client_test_data, beacon_test_helpers]
 
-procSuite "Portal Beacon Light Client":
+procSuite "Beacon Light Client":
   let rng = newRng()
 
   proc headerCallback(

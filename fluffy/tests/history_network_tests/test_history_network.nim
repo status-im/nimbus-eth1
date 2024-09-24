@@ -12,11 +12,12 @@ import
   eth/p2p/discoveryv5/routing_table,
   eth/common/eth_types_rlp,
   eth/rlp,
-  ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../network/history/
+  ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../../network/history/
     [history_network, history_content, validation/historical_hashes_accumulator],
-  ../database/content_db,
-  ./test_helpers
+  ../../database/content_db,
+  ../test_helpers,
+  ./test_history_util
 
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol

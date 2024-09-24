@@ -13,12 +13,12 @@ import
   unittest2,
   stint,
   eth/common/eth_types_rlp,
-  ../eth_data/history_data_json_store,
-  ../network/history/[history_content, validation/historical_hashes_accumulator],
-  ./test_helpers
+  ../../eth_data/history_data_json_store,
+  ../../network/history/[history_content, validation/historical_hashes_accumulator],
+  ./test_history_util
 
-suite "Header Accumulator":
-  test "Header Accumulator Canonical Verification":
+suite "Historical Hashes Accumulator":
+  test "Historical Hashes Accumulator Canonical Verification":
     const
       # Amount of headers to be created and added to the accumulator
       amount = mergeBlockNumber
@@ -77,7 +77,7 @@ suite "Header Accumulator":
       for i in headersToTest:
         check verifyAccumulatorProof(accumulator, headers[i], proof).isErr()
 
-  test "Header Accumulator - Not Finished":
+  test "Historical Hashes Accumulator - Not Finished":
     # Less headers than needed to finish the accumulator
     const amount = mergeBlockNumber - 1
 
