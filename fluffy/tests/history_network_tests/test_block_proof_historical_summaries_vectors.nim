@@ -44,7 +44,7 @@ proc readHistoricalSummaries(
   except SerializationError as err:
     err("Failed decoding historical_summaries: " & err.msg)
 
-suite "History Block Proofs - Historical Summaries":
+suite "History Block Proofs - Historical Summaries - Test Vectors":
   test "BlockProofHistoricalSummaries for Execution BlockHeader":
     let
       testsPath =

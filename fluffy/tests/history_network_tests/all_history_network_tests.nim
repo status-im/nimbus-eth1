@@ -8,6 +8,10 @@
 {.warning[UnusedImport]: off.}
 
 import
+  ./test_history_content_keys,
+  ./test_history_content,
+  ./test_history_content_validation,
+  ./test_historical_hashes_accumulator_root,
   ./test_block_proof_historical_roots,
   ./test_block_proof_historical_roots_vectors,
   ./test_block_proof_historical_summaries,

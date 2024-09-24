@@ -38,7 +38,7 @@ import
 # - Adjust tests to test usage of historical_summaries and historical_roots
 # together.
 
-suite "Beacon Chain Block Proofs - Capella":
+suite "History Block Proofs - Historical Summaries":
   let
     cfg = block:
       var res = defaultRuntimeConfig

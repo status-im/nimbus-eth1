@@ -19,7 +19,7 @@ import
   ../../network/history/validation/block_proof_historical_roots,
   ../../eth_data/[yaml_utils, yaml_eth_types]
 
-suite "History Block Proofs - Historical Roots":
+suite "History Block Proofs - Historical Roots - Test Vectors":
   test "BlockProofHistoricalRoots for Execution BlockHeader":
     let
       testsPath =

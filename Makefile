@@ -281,17 +281,17 @@ fluffy-test-reproducibility:
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
 # fluffy tests
-all_fluffy_portal_spec_tests: | build deps
+all_history_network_custom_chain_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -o:build/$@ "fluffy/tests/portal_spec_tests/mainnet/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -d:nimbus_db_backend=sqlite -o:build/$@ "fluffy/tests/history_network_tests/$@.nim"
 
 
 all_fluffy_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130 -o:build/$@ "fluffy/tests/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -o:build/$@ "fluffy/tests/$@.nim"
 
 # builds and runs the fluffy test suite
-fluffy-test: | all_fluffy_portal_spec_tests all_fluffy_tests
+fluffy-test: | all_fluffy_tests all_history_network_custom_chain_tests
 
 # builds the fluffy tools, wherever they are
 $(FLUFFY_TOOLS): | build deps rocksdb
@@ -357,7 +357,7 @@ txparse: | build deps
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_fluffy_portal_spec_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus,fluffy,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)

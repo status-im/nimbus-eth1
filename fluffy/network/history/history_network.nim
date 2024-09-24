@@ -17,11 +17,8 @@ import
   ../../database/content_db,
   ../../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
-  "."/[
-    history_content,
-    beacon_chain_historical_roots,
-    validation/historical_hashes_accumulator,
-  ],
+  "."/[history_content, validation/historical_hashes_accumulator],
+  ../beacon/beacon_chain_historical_roots,
   ./content/content_deprecated
 
 logScope:

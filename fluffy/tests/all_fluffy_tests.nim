@@ -8,13 +8,9 @@
 {.warning[UnusedImport]: off.}
 
 import
-  ./test_portal_wire_protocol,
-  ./test_accumulator,
-  ./test_history_network,
   ./test_content_db,
   ./test_discovery_rpc,
-  ./test_beacon_chain_historical_roots,
-  ./test_beacon_chain_historical_summaries,
+  ./wire_protocol_tests/all_wire_protocol_tests,
   ./history_network_tests/all_history_network_tests,
   ./beacon_network_tests/all_beacon_network_tests,
   ./state_network_tests/all_state_network_tests

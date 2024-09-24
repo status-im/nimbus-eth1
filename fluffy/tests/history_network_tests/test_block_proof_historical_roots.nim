@@ -35,7 +35,7 @@ import
 # TODO: Add more blocks to reach 1+ historical roots, to make sure that indexing
 # is properly tested.
 
-suite "Beacon Chain Block Proofs - Bellatrix":
+suite "History Block Proofs - Historical Roots":
   let
     cfg = block:
       var res = defaultRuntimeConfig
