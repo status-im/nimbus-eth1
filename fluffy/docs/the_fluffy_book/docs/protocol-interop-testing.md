@@ -16,7 +16,7 @@ First build Fluffy as explained [here](./quick-start.md#build-the-fluffy-client)
 
 Next run it with the JSON-RPC server enabled:
 ```bash
-./build/fluffy --rpc --bootstrap-node:enr:<base64 encoding of ENR>
+./build/fluffy --rpc --rpc-api:portal,discovery --bootstrap-node:enr:<base64 encoding of ENR>
 ```
 
 ### Testing Discovery v5 Layer

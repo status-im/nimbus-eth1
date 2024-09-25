@@ -46,8 +46,17 @@ const
   defaultBucketIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit
   defaultBitsPerHopDesc* = $defaultPortalProtocolConfig.bitsPerHop
   defaultMaxGossipNodesDesc* = $defaultPortalProtocolConfig.maxGossipNodes
+  defaultRpcApis* = @["eth", "portal"]
+  defaultRpcApisDesc* = "eth,portal"
 
 type
+  RpcFlag* {.pure.} = enum
+    eth
+    debug
+    portal
+    portal_debug
+    discovery
+
   TrustedDigest* = MDigest[32 * 8]
 
   PortalCmd* = enum
@@ -179,16 +188,24 @@ type
       desc: "Enable the HTTP JSON-RPC server", defaultValue: false, name: "rpc"
     .}: bool
 
-    rpcPort* {.
-      desc: "Port for the HTTP JSON-RPC server", defaultValue: 8545, name: "rpc-port"
-    .}: Port
-
     rpcAddress* {.
       desc: "Listening address of the RPC server",
       defaultValue: defaultAdminListenAddress,
       defaultValueDesc: $defaultAdminListenAddressDesc,
       name: "rpc-address"
     .}: IpAddress
+
+    rpcPort* {.
+      desc: "Port for the HTTP JSON-RPC server", defaultValue: 8545, name: "rpc-port"
+    .}: Port
+
+    rpcApi* {.
+      desc:
+        "Enable specific set of RPC APIs (available: eth, debug, portal, portal_debug, discovery)",
+      defaultValue: defaultRpcApis,
+      defaultValueDesc: $defaultRpcApisDesc,
+      name: "rpc-api"
+    .}: seq[string]
 
     wsEnabled* {.
       desc: "Enable the WebSocket JSON-RPC server", defaultValue: false, name: "ws"
@@ -367,3 +384,41 @@ chronicles.formatIt(OutDir):
   $it
 chronicles.formatIt(InputFile):
   $it
+
+func processList(v: string, o: var seq[string]) =
+  ## Process comma-separated list of strings.
+  if len(v) > 0:
+    for n in v.split({' ', ','}):
+      if len(n) > 0:
+        o.add(n)
+
+iterator repeatingList(listOfList: openArray[string]): string =
+  for strList in listOfList:
+    var list = newSeq[string]()
+    processList(strList, list)
+    for item in list:
+      yield item
+
+proc getRpcFlags*(rpcApis: openArray[string]): set[RpcFlag] =
+  if rpcApis.len == 0:
+    error "No RPC APIs specified"
+    quit QuitFailure
+
+  var rpcFlags: set[RpcFlag]
+  for apiStr in rpcApis.repeatingList():
+    case apiStr.toLowerAscii()
+    of "eth":
+      rpcFlags.incl RpcFlag.eth
+    of "debug":
+      rpcFlags.incl RpcFlag.debug
+    of "portal":
+      rpcFlags.incl RpcFlag.portal
+    of "portal_debug":
+      rpcFlags.incl RpcFlag.portal_debug
+    of "discovery":
+      rpcFlags.incl RpcFlag.discovery
+    else:
+      error "Unknown RPC API: ", name = apiStr
+      quit QuitFailure
+
+  rpcFlags

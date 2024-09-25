@@ -17,6 +17,11 @@ import
   ../common/common_utils,
   ../network/state/state_endpoints
 
+template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
+  let sn = stateNetwork.valueOr:
+    raise newException(ValueError, "state sub-network not enabled")
+  sn
+
 proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwork]) =
   rpcServer.rpc("debug_getBalanceByStateRoot") do(
     data: web3Types.Address, stateRoot: web3types.Hash256
@@ -27,15 +32,14 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
     ## stateRoot: the state root used to search the state trie.
     ## Returns integer of the current balance in wei.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
-    let balance = (
-      await sn.getBalanceByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get balance")
+    let
+      sn = stateNetwork.getOrRaise()
+      balance = (
+        await sn.getBalanceByStateRoot(
+          KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
+        )
+      ).valueOr:
+        raise newException(ValueError, "Unable to get balance")
 
     return balance
 
@@ -48,15 +52,15 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
     ## stateRoot: the state root used to search the state trie.
     ## Returns integer of the number of transactions send from this address.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
+    let
+      sn = stateNetwork.getOrRaise()
+      nonce = (
+        await sn.getTransactionCountByStateRoot(
+          KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
+        )
+      ).valueOr:
+        raise newException(ValueError, "Unable to get transaction count")
 
-    let nonce = (
-      await sn.getTransactionCountByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get transaction count")
     return nonce.Quantity
 
   rpcServer.rpc("debug_getStorageAtByStateRoot") do(
@@ -69,15 +73,15 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
     ## stateRoot: the state root used to search the state trie.
     ## Returns: the value at this storage position.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
+    let
+      sn = stateNetwork.getOrRaise()
+      slotValue = (
+        await sn.getStorageAtByStateRoot(
+          KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress, slot
+        )
+      ).valueOr:
+        raise newException(ValueError, "Unable to get storage slot")
 
-    let slotValue = (
-      await sn.getStorageAtByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress, slot
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get storage slot")
     return FixedBytes[32](slotValue.toBytesBE())
 
   rpcServer.rpc("debug_getCodeByStateRoot") do(
@@ -89,15 +93,14 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
     ## stateRoot: the state root used to search the state trie.
     ## Returns the code from the given address.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
-    let bytecode = (
-      await sn.getCodeByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get code")
+    let
+      sn = stateNetwork.getOrRaise()
+      bytecode = (
+        await sn.getCodeByStateRoot(
+          KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
+        )
+      ).valueOr:
+        raise newException(ValueError, "Unable to get code")
 
     return bytecode.asSeq()
 
@@ -112,15 +115,14 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
     ## stateRoot: the state root used to search the state trie.
     ## Returns: the proof response containing the account, account proof and storage proof
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
-    let proofs = (
-      await sn.getProofsByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress, slots
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get proofs")
+    let
+      sn = stateNetwork.getOrRaise()
+      proofs = (
+        await sn.getProofsByStateRoot(
+          KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress, slots
+        )
+      ).valueOr:
+        raise newException(ValueError, "Unable to get proofs")
 
     var storageProof = newSeqOfCap[StorageProof](slots.len)
     for i, slot in slots:

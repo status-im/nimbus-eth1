@@ -220,30 +220,39 @@ proc run(
 
   ## Start the JSON-RPC APIs
 
+  let rpcFlags = getRpcFlags(config.rpcApi)
+
   proc setupRpcServer(
       rpcServer: RpcHttpServer | RpcWebSocketServer
   ) {.raises: [CatchableError].} =
-    rpcServer.installDiscoveryApiHandlers(d)
-
-    if node.stateNetwork.isSome():
-      rpcServer.installDebugApiHandlers(node.stateNetwork)
-      rpcServer.installPortalApiHandlers(
-        node.stateNetwork.value.portalProtocol, "state"
-      )
-    if node.historyNetwork.isSome():
-      rpcServer.installEthApiHandlers(
-        node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
-      )
-      rpcServer.installPortalApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-      rpcServer.installPortalDebugApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-    if node.beaconNetwork.isSome():
-      rpcServer.installPortalApiHandlers(
-        node.beaconNetwork.value.portalProtocol, "beacon"
-      )
+    for rpcFlag in rpcFlags:
+      case rpcFlag
+      of RpcFlag.eth:
+        rpcServer.installEthApiHandlers(
+          node.historyNetwork, node.beaconLightClient, node.stateNetwork
+        )
+      of RpcFlag.debug:
+        rpcServer.installDebugApiHandlers(node.stateNetwork)
+      of RpcFlag.portal:
+        if node.historyNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.historyNetwork.value.portalProtocol, "history"
+          )
+        if node.beaconNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.beaconNetwork.value.portalProtocol, "beacon"
+          )
+        if node.stateNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.stateNetwork.value.portalProtocol, "state"
+          )
+      of RpcFlag.portal_debug:
+        if node.historyNetwork.isSome():
+          rpcServer.installPortalDebugApiHandlers(
+            node.historyNetwork.value.portalProtocol, "history"
+          )
+      of RpcFlag.discovery:
+        rpcServer.installDiscoveryApiHandlers(d)
 
     rpcServer.start()
 
