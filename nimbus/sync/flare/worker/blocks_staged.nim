@@ -98,7 +98,7 @@ proc fetchAndCheck(
 proc blocksStagedCanImportOk*(ctx: FlareCtxRef): bool =
   ## Check whether the queue is at its maximum size so import can start with
   ## a full queue.
-  if blocksStagedQueueLengthMax <= ctx.blk.staged.len:
+  if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
     return true
 
   if 0 < ctx.blk.staged.len:
@@ -118,7 +118,7 @@ proc blocksStagedFetchOk*(ctx: FlareCtxRef): bool =
   if uBottom < high(BlockNumber):
     # Not to start fetching while the queue is busy (i.e. larger than Lwm)
     # so that import might still be running strong.
-    if ctx.blk.staged.len < blocksStagedQueueLengthMax:
+    if ctx.blk.staged.len < ctx.pool.blocksStagedQuLenMax:
       return true
 
     # Make sure that there is no gap at the bottom which needs to be
@@ -144,7 +144,8 @@ proc blocksStagedCollect*(
     peer = buddy.peer
 
     # Fetch the full range of headers to be completed to blocks
-    iv = ctx.blocksUnprocFetch(nFetchBodiesBatch).expect "valid interval"
+    iv = ctx.blocksUnprocFetch(
+      ctx.pool.nBodiesBatch.uint).expect "valid interval"
 
   var
     # This value is used for splitting the interval `iv` into

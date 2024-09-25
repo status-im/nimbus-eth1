@@ -92,6 +92,21 @@ proc setupDatabase*(ctx: FlareCtxRef) =
   # Load initial state from database if there is any
   ctx.dbLoadLinkedHChainsLayout()
 
+  # Set blocks batch import value for `persistBlocks()`
+  if ctx.pool.nBodiesBatch < nFetchBodiesRequest:
+    if ctx.pool.nBodiesBatch == 0:
+      ctx.pool.nBodiesBatch = nFetchBodiesBatchDefault
+    else:
+      ctx.pool.nBodiesBatch = nFetchBodiesRequest
+
+  # Set length of `staged` queue
+  if ctx.pool.nBodiesBatch < nFetchBodiesBatchDefault:
+    const nBlocks = blocksStagedQueueLenMaxDefault * nFetchBodiesBatchDefault
+    ctx.pool.blocksStagedQuLenMax =
+      (nBlocks + ctx.pool.nBodiesBatch - 1) div ctx.pool.nBodiesBatch
+  else:
+    ctx.pool.blocksStagedQuLenMax = blocksStagedQueueLenMaxDefault
+
 
 proc setupRpcMagic*(ctx: FlareCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC

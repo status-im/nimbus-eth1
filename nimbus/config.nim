@@ -385,6 +385,12 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
+    flareChunkSize* {.
+      hidden
+      desc: "Number of blocks per database transaction for flare sync"
+      defaultValue: 0
+      name: "debug-flare-chunk-size" .}: int
+
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles

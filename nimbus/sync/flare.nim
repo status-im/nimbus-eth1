@@ -108,9 +108,11 @@ proc init*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
+    chunkSize: int;
       ): T =
   new result
   result.initSync(ethNode, chain, maxPeers)
+  result.ctx.pool.nBodiesBatch = chunkSize
 
 proc start*(ctx: FlareSyncRef) =
   ## Beacon Sync always begin with stop mode

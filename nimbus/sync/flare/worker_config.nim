@@ -89,23 +89,29 @@ const
 
   # ----------------------
 
-  nFetchBodiesRequest* = 256
+  nFetchBodiesRequest* = 128
     ## Similar to `nFetchHeadersRequest`
 
-  fetchBodiesReqThresholdZombie* = chronos.seconds(4)
+  fetchBodiesReqThresholdZombie* = chronos.seconds(2)
   fetchBodiesReqThresholdCount* = 3
     ## Similar to `fetchHeadersReqThreshold*`
 
   fetchBodiesReqMinResponsePC* = 10
     ## Similar to `fetchHeadersReqMinResponsePC`
 
-  nFetchBodiesBatch* = 3 * nFetchBodiesRequest
+  nFetchBodiesBatchDefault* = 6 * nFetchBodiesRequest
     ## Similar to `nFetchHeadersBatch`
+    ##
+    ## This value can be overridden with a smaller value which must be at
+    ## least `nFetchBodiesRequest`.
 
-  blocksStagedQueueLengthMax* = 16
-    ## Maximum number of staged header + bodies block records to be filled. If
+  blocksStagedQueueLenMaxDefault* = 16
+    ## Maximum number of staged header + bodies blocks records to be filled. If
     ## this size is reached, the process stops with staging with the exception
     ## of the lowest blockes (in case there is a gap.)
+    ##
+    ## This value might be adjusted with a larger value if
+    ## `nFetchBodiesBatchDefault` is overridden with a smaller value.
     ##
     ## Some cursory measurements on `MainNet` suggest an average maximum block
     ## size ~25KiB (i.e. header + body) at block height ~4.5MiB. There will be
@@ -126,7 +132,7 @@ static:
   doAssert headersStagedQueueLengthLwm < headersStagedQueueLengthHwm
 
   doAssert 0 < nFetchBodiesRequest
-  doAssert nFetchBodiesRequest <= nFetchBodiesBatch
-  doAssert 0 < blocksStagedQueueLengthMax
+  doAssert nFetchBodiesRequest <= nFetchBodiesBatchDefault
+  doAssert 0 < blocksStagedQueueLenMaxDefault
 
 # End

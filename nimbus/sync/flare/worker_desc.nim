@@ -115,8 +115,14 @@ type
     lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
     blkSyncState*: BlocksImportSync  ## For importing/executing blocks
     nextUpdate*: Moment              ## For updating metrics
-    chain*: ChainRef                 ## For `persistBlocks()`
-    importRunningOk*: bool           ## Advisory flag, `persistBlocks()` running
+
+    # Blocks import/execution settings for running  `persistBlocks()` with
+    # `nBodiesBatch` blocks in each round (minimum value is
+    # `nFetchBodiesRequest`.)
+    chain*: ChainRef
+    importRunningOk*: bool           ## Advisory lock, fetch vs. import
+    nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
+    blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
 
     # Info stuff, no functional contribution
     nReorg*: int                     ## Number of reorg invocations (info only)
