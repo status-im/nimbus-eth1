@@ -46,7 +46,7 @@ const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
   defaultDisablePoke* = false
-  defaultMaxGossipNodes = 8
+  defaultMaxGossipNodes = 4
   revalidationTimeout* = chronos.seconds(30)
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(

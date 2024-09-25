@@ -115,7 +115,7 @@ const
   ## that will be processed
   refreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
-  revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
+  revalidateMax = 4000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
@@ -1500,8 +1500,8 @@ proc neighborhoodGossip*(
   # 1. Select the closest neighbours in the routing table
   # 2. Check if the radius is known for these these nodes and whether they are
   # in range of the content to be offered.
-  # 3. If more than n (= 8) nodes are in range, offer these nodes the content
-  # (max nodes set at 8).
+  # 3. If more than n (= maxGossipNodes) nodes are in range, offer these nodes
+  # the content (maxed out at n).
   # 4. If less than n nodes are in range, do a node lookup, and offer the nodes
   # returned from the lookup the content (max nodes set at 8)
   #
