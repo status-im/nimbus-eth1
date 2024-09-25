@@ -446,6 +446,10 @@ proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash256,
                  finalizedHash: Hash256): Result[void, string] =
 
+  if headHash == c.cursorHash:
+    # Do nothing if the new head already our current head
+    return ok()
+
   # If there are multiple heads, find which chain headHash belongs to
   let head = ?c.findCanonicalHead(headHash)
 
