@@ -75,6 +75,9 @@ declareCounter portal_gossip_without_lookup,
   "Portal wire protocol neighborhood gossip that did not require a node lookup",
   labels = ["protocol_id"]
 
+declareCounter portal_poke_offers,
+  "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
+
 # Note: These metrics are to get some idea on how many enrs are send on average.
 # Relevant issue: https://github.com/ethereum/portal-network-specs/issues/136
 const enrsBuckets = [0.0, 1.0, 3.0, 5.0, 8.0, 9.0, Inf]
@@ -1103,6 +1106,7 @@ proc triggerPoke*(
           list = List[ContentKV, contentKeysLimit].init(@[contentKV])
           req = OfferRequest(dst: node, kind: Direct, contentList: list)
         p.offerQueue.putNoWait(req)
+        portal_poke_offers.inc(labelValues = [$p.protocolId])
       except AsyncQueueFullError as e:
         # Should not occur as full() check is done.
         raiseAssert(e.msg)
@@ -1641,12 +1645,13 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledErr
 proc getNodeForRevalidation(p: PortalProtocol): Opt[Node] =
   let node = p.routingTable.nodeToRevalidate()
   if node.isNil:
+    # This should not occur except for when the RT is empty
     return Opt.none(Node)
 
   let now = now(chronos.Moment)
-  let timestamp = p.pingTimings.getOrDefault(node.id, now)
+  let timestamp = p.pingTimings.getOrDefault(node.id, Moment.init(0'i64, Second))
 
-  if (timestamp + revalidationTimeout) <= now:
+  if (timestamp + revalidationTimeout) < now:
     Opt.some(node)
   else:
     Opt.none(Node)
