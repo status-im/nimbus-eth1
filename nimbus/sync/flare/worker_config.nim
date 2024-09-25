@@ -72,15 +72,20 @@ const
     ## fetched and stashed together as a single record on the staged queue.
 
   headersStagedQueueLengthLwm* = 32
-    ## Limit the number of records in the staged queue. They start accumulating
-    ## if one peer stalls while fetching the top chain so leaving a gap. This
-    ## gap must be filled first before inserting the queue into a contiguous
-    ## chain of headers. So this is a low-water mark where the system will
-    ## try some magic to mitigate this problem.
+    ## Limit the number of records in the staged headers queue.
+    ##
+    ## Queue entries start accumulating if one peer stalls while fetching the
+    ## top chain so leaving a gap. This gap must be filled first before
+    ## inserting the queue into a contiguous chain of headers.
+    ##
+    ## This low-water mark tryggers the system to do some **magic** to mitigate
+    ## the above problem. Currently the **magic** is to let (pseudo) threads
+    ## terminate and then restart all over again.
 
   headersStagedQueueLengthHwm* = 48
-    ## If this size is exceeded, the staged queue is flushed and its contents
-    ## is re-fetched from scratch.
+    ## If this size is exceeded, the staged queue is flushed and resized to
+    ## `headersStagedQueueLengthLwm-1` entries. Then contents is re-fetched
+    ## from scratch.
 
   # ----------------------
 
@@ -98,9 +103,17 @@ const
     ## Similar to `nFetchHeadersBatch`
 
   blocksStagedQueueLengthMax* = 16
-    ## Maximum number of staged header + bodies blocks to be filled. If this
-    ## size is reached, the process stops with staging with the exception of
-    ## the lowest blockes (in case there is a gap.)
+    ## Maximum number of staged header + bodies block records to be filled. If
+    ## this size is reached, the process stops with staging with the exception
+    ## of the lowest blockes (in case there is a gap.)
+    ##
+    ## Some cursory measurements on `MainNet` suggest an average maximum block
+    ## size ~25KiB (i.e. header + body) at block height ~4.5MiB. There will be
+    ## as many as `nFetchBodiesBatch` blocks on a single staged blocks record.
+    ## And there will be at most `blocksStagedQueueLengthMax+1` records on the
+    ## staged blocks queue. (The `+1` is exceptional, appears when the least
+    ## entry block number is too high and so leaves a gap to the ledger state
+    ## block number.)
 
   # ----------------------
 

@@ -26,6 +26,10 @@ type
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
+proc rlpSize*(blk: ref BlocksForImport): int =
+  rlp.encode(blk[]).len
+
+
 proc verifyStagedBlocksQueue*(ctx: FlareCtxRef; info: static[string]) =
   ## Verify staged queue
   ##
@@ -66,7 +70,7 @@ proc verifyStagedBlocksQueue*(ctx: FlareCtxRef; info: static[string]) =
       raiseAssert info & ": staged top mismatch " &
         " B=" & ctx.lhc.layout.base.bnStr & " stTop=" & prv.bnStr
 
-  if 0 < ctx.blocksUnprocChunks:
+  if not ctx.blocksUnprocIsEmpty():
     let
       uBottom = ctx.blocksUnprocBottom()
       uTop = ctx.blocksUnprocTop()

@@ -96,6 +96,9 @@ proc headersUnprocBorrowed*(ctx: FlareCtxRef): uint =
 proc headersUnprocChunks*(ctx: FlareCtxRef): int =
   ctx.lhc.unprocessed.chunks()
 
+proc headersUnprocIsEmpty*(ctx: FlareCtxRef): bool =
+  ctx.lhc.unprocessed.chunks() == 0
+
 # ------------
 
 proc headersUnprocInit*(ctx: FlareCtxRef) =

@@ -103,7 +103,7 @@ proc blocksStagedCanImportOk*(ctx: FlareCtxRef): bool =
 
   # What is on the queue might be all we have got.
   if 0 < ctx.blk.staged.len and
-     ctx.blocksUnprocChunks() == 0 and
+     ctx.blocksUnprocIsEmpty() and
      ctx.blocksUnprocBorrowed() == 0:
     return true
 
@@ -133,7 +133,7 @@ proc blocksStagedCollect*(
       ): Future[bool] {.async.} =
   ## Collect bodies and stage them.
   ##
-  if buddy.ctx.blocksUnprocChunks() == 0:
+  if buddy.ctx.blocksUnprocIsEmpty():
     # Nothing to do
     return false
 

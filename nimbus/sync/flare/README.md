@@ -130,3 +130,86 @@ where *T* is the number of the last imported and executed block. Coincidentally,
 
 The headers corresponding to the half open interval `(T,B]` can be completed by
 fetching block bodies and then imported/executed.
+
+Running the sync process for *MainNet*
+--------------------------------------
+
+For syncing, a beacon node is needed that regularly informs via *RPC* of a
+recently finalised block header.
+
+The beacon node program used here is the *nimbus_beacon_node* binary from the
+*nimbus-eth2* project (any other will do.) *Nimbus_beacon_node* is started as
+
+      ./run-mainnet-beacon-node.sh \
+	     --web3-url=http://127.0.0.1:8551 \
+	     --jwt-secret=/tmp/jwtsecret
+
+where *http://127.0.0.1:8551* is the URL of the sync process that receives the
+finalised block header (here on the same physical machine) and `/tmp/jwtsecret`
+is the shared secret file needed for mutual communication authentication.
+
+It will take a while for *nimbus_beacon_node* to catch up (see the
+[Nimbus Guide](https://nimbus.guide/quick-start.html) for details.)
+
+### Starting `nimbus` for syncing
+
+As the sync process is quite slow, it makes sense to pre-load the database
+with data from an `Era1` archive (if available) before starting the real
+sync process. The command would be something like
+
+       ./build/nimbus import \
+          --era1-dir:/path/to/main-era1/repo \
+		  ...
+
+which will take a while for the full *MainNet* era1 repository (but way faster
+than the sync.)
+
+On a system with memory considerably larger than *8GiB* the *nimbus*
+binary is started on the same machine where the beacon node runs as
+
+       ./build/nimbus \
+		  --network=mainnet \
+	      --sync-mode=flare \
+		  --engine-api=true \
+		  --engine-api-port=8551 \
+		  --engine-api-ws=true \
+		  --jwt-secret=/tmp/jwtsecret \
+	      ...
+
+Note that *--engine-api-port=8551* and *--jwt-secret=/tmp/jwtsecret* match
+the corresponding options from the *nimbus-eth2* beacon source example.
+
+### Syncing on a low memory machine
+
+On a system with memory with *8GiB* the following additional options proved
+useful for *nimbus* to reduce the memory footprint.
+
+For the *Era1* pre-load (if any) the following extra options apply to
+"*nimbus import*":
+
+       --chunk-size=1024
+	   --debug-rocksdb-row-cache-size=512000
+	   --debug-rocksdb-block-cache-size=1500000
+
+To start syncing, the following additional options apply to *nimbus*:
+
+       --debug-flare-chunk-size=384
+       --debug-rocksdb-max-open-files=384
+       --debug-rocksdb-write-buffer-size=50331648
+       --debug-rocksdb-block-cache-size=1073741824
+       --debug-rdb-key-cache-size=67108864
+       --debug-rdb-vtx-cache-size=268435456
+
+Also, to reduce the backlog for *nimbus-eth2* stored on disk, the following
+changes might be considerd. For file
+*nimbus-eth2/vendor/mainnet/metadata/config.yaml* change setting constants:
+
+       MIN_EPOCHS_FOR_BLOCK_REQUESTS: 33024
+	   MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS: 4096
+to
+
+       MIN_EPOCHS_FOR_BLOCK_REQUESTS: 8
+	   MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS: 8
+
+Caveat: These changes are not useful when running *nimbus_beacon_node* as a
+production system.

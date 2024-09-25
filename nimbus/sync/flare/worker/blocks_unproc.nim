@@ -101,6 +101,9 @@ proc blocksUnprocBorrowed*(ctx: FlareCtxRef): uint =
 proc blocksUnprocChunks*(ctx: FlareCtxRef): int =
   ctx.blk.unprocessed.chunks()
 
+proc blocksUnprocIsEmpty*(ctx: FlareCtxRef): bool =
+  ctx.blk.unprocessed.chunks() == 0
+
 # ------------------
 
 proc blocksUnprocInit*(ctx: FlareCtxRef) =
