@@ -113,33 +113,31 @@ proc runDaemon*(ctx: FlareCtxRef) {.async.} =
   const info = "RUNDAEMON"
   debug info
 
-  # Check for a possible layout change of the `HeaderChainsSync` state
-  if ctx.updateLinkedHChainsLayout():
-    debug info & ": headers chain layout was updated"
+  # Check for a possible header layout and body request changes
+  discard ctx.updateLinkedHChainsLayout()
+  discard ctx.updateBlockRequests()
 
   # Execute staged block records.
   if ctx.blocksStagedCanImportOk():
 
-    # Set advisory flag telling that a slow/long running process will take
-    # place. This works a bit like `runSingle()` only that in the case here
-    # we might have no peer.
-    ctx.pool.importRunningOk = true
-    defer: ctx.pool.importRunningOk = false
+    block:
+      # Set advisory flag telling that a slow/long running process will take
+      # place. This works a bit like `runSingle()` only that in the case here
+      # we might have no peer.
+      ctx.pool.importRunningOk = true
+      defer: ctx.pool.importRunningOk = false
 
-    # Import from staged queue.
-    while ctx.blocksStagedImport info:
-      ctx.updateMetrics()
+      # Import from staged queue.
+      while ctx.blocksStagedImport info:
+        ctx.updateMetrics()
 
-      # Allow pseudo/async thread switch
-      await sleepAsync asyncThreadSwitchTimeSlot
+        # Allow pseudo/async thread switch
+        await sleepAsync asyncThreadSwitchTimeSlot
+
+  # At the end of the cycle, leave time to refill
+  await sleepAsync daemonWaitInterval
 
   ctx.updateMetrics()
-
-  # If there are no staged block records left, define a new unprocessed range
-  # of block numbers.
-  if not ctx.updateBlockRequests():
-    debug info & ": no block requests possible => wasting idle time"
-    await sleepAsync daemonWaitInterval
 
 
 proc runSingle*(buddy: FlareBuddyRef) {.async.} =

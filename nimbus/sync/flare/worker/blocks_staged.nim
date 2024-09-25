@@ -101,11 +101,13 @@ proc blocksStagedCanImportOk*(ctx: FlareCtxRef): bool =
   if blocksStagedQueueLengthMax <= ctx.blk.staged.len:
     return true
 
-  # What is on the queue might be all we have got.
-  if 0 < ctx.blk.staged.len and
-     ctx.blocksUnprocIsEmpty() and
-     ctx.blocksUnprocBorrowed() == 0:
-    return true
+  if 0 < ctx.blk.staged.len:
+    # Import if what is on the queue is all we have got.
+    if ctx.blocksUnprocIsEmpty() and ctx.blocksUnprocBorrowed() == 0:
+      return true
+    # Import if there is currently no peer active
+    if ctx.pool.nBuddies == 0:
+      return true
 
   false
 
