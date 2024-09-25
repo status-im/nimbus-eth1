@@ -40,17 +40,21 @@ type
     bitsPerHop*: int
     radiusConfig*: RadiusConfig
     disablePoke*: bool
+    maxGossipNodes*: int
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
   defaultDisablePoke* = false
+  defaultMaxGossipNodes = 8
   revalidationTimeout* = chronos.seconds(30)
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
     bitsPerHop: DefaultBitsPerHop,
     radiusConfig: defaultRadiusConfig,
+    disablePoke: defaultDisablePoke,
+    maxGossipNodes: defaultMaxGossipNodes,
   )
 
 proc init*(
@@ -60,6 +64,7 @@ proc init*(
     bitsPerHop: int,
     radiusConfig: RadiusConfig,
     disablePoke: bool,
+    maxGossipNodes: int,
 ): T =
   PortalProtocolConfig(
     tableIpLimits:
@@ -67,6 +72,7 @@ proc init*(
     bitsPerHop: bitsPerHop,
     radiusConfig: radiusConfig,
     disablePoke: disablePoke,
+    maxGossipNodes: maxGossipNodes,
   )
 
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =
