@@ -46,8 +46,8 @@ const
   defaultBucketIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit
   defaultBitsPerHopDesc* = $defaultPortalProtocolConfig.bitsPerHop
   defaultMaxGossipNodesDesc* = $defaultPortalProtocolConfig.maxGossipNodes
-  defaultRpcApis* = @["eth", "debug"]
-  defaultRpcApisDesc* = "eth,debug"
+  defaultRpcApis* = @["eth", "portal"]
+  defaultRpcApisDesc* = "eth,portal"
 
 type
   RpcFlag* {.pure.} = enum

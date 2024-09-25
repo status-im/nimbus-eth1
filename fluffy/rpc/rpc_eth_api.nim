@@ -116,9 +116,24 @@ func init*(
 
   blockObject
 
+template getOrRaise(historyNetwork: Opt[HistoryNetwork]): HistoryNetwork =
+  let hn = historyNetwork.valueOr:
+    raise newException(ValueError, "history sub-network not enabled")
+  hn
+
+template getOrRaise(beaconLightClient: Opt[LightClient]): LightClient =
+  let sn = beaconLightClient.valueOr:
+    raise newException(ValueError, "beacon sub-network not enabled")
+  sn
+
+template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
+  let sn = stateNetwork.valueOr:
+    raise newException(ValueError, "state sub-network not enabled")
+  sn
+
 proc installEthApiHandlers*(
     rpcServer: RpcServer,
-    historyNetwork: HistoryNetwork,
+    historyNetwork: Opt[HistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
 ) =
@@ -141,8 +156,9 @@ proc installEthApiHandlers*(
     ##
     ## Returns BlockObject or nil when no block was found.
     let
+      hn = historyNetwork.getOrRaise()
       blockHash = data.toHash()
-      (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+      (header, body) = (await hn.getBlock(blockHash)).valueOr:
         return Opt.none(BlockObject)
 
     return Opt.some(BlockObject.init(header, body, fullTransactions))
@@ -150,6 +166,8 @@ proc installEthApiHandlers*(
   rpcServer.rpc("eth_getBlockByNumber") do(
     quantityTag: RtBlockIdentifier, fullTransactions: bool
   ) -> Opt[BlockObject]:
+    let hn = historyNetwork.getOrRaise()
+
     if quantityTag.kind == bidAlias:
       let tag = quantityTag.alias.toLowerAscii
       case tag
@@ -162,28 +180,26 @@ proc installEthApiHandlers*(
       of "earliest":
         raise newException(ValueError, "Earliest tag not yet implemented")
       of "safe":
-        if beaconLightClient.isNone():
-          raise newException(ValueError, "Safe tag not yet implemented")
+        let blc = beaconLightClient.getOrRaise()
 
-        withForkyStore(beaconLightClient.value().store[]):
+        withForkyStore(blc.store[]):
           when lcDataFork > LightClientDataFork.Altair:
             let
               blockHash = forkyStore.optimistic_header.execution.block_hash
-              (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+              (header, body) = (await hn.getBlock(blockHash)).valueOr:
                 return Opt.none(BlockObject)
 
             return Opt.some(BlockObject.init(header, body, fullTransactions))
           else:
             raise newException(ValueError, "Not available before Capella - not synced?")
       of "finalized":
-        if beaconLightClient.isNone():
-          raise newException(ValueError, "Finalized tag not yet implemented")
+        let blc = beaconLightClient.getOrRaise()
 
-        withForkyStore(beaconLightClient.value().store[]):
+        withForkyStore(blc.store[]):
           when lcDataFork > LightClientDataFork.Altair:
             let
               blockHash = forkyStore.finalized_header.execution.block_hash
-              (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+              (header, body) = (await hn.getBlock(blockHash)).valueOr:
                 return Opt.none(BlockObject)
 
             return Opt.some(BlockObject.init(header, body, fullTransactions))
@@ -196,7 +212,7 @@ proc installEthApiHandlers*(
     else:
       let
         blockNumber = quantityTag.number.uint64
-        (header, body) = (await historyNetwork.getBlock(blockNumber)).valueOr:
+        (header, body) = (await hn.getBlock(blockNumber)).valueOr:
           return Opt.none(BlockObject)
 
       return Opt.some(BlockObject.init(header, body, fullTransactions))
@@ -210,8 +226,9 @@ proc installEthApiHandlers*(
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
     let
+      hn = historyNetwork.getOrRaise()
       blockHash = data.toHash()
-      (_, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+      (_, body) = (await hn.getBlock(blockHash)).valueOr:
         raise newException(ValueError, "Could not find block with requested hash")
 
     var txCount: uint = 0
@@ -236,19 +253,20 @@ proc installEthApiHandlers*(
         "Unsupported query: Only `blockHash` queries are currently supported",
       )
 
-    let hash = ethHash filterOptions.blockHash.unsafeGet()
-
-    let header = (await historyNetwork.getVerifiedBlockHeader(hash)).valueOr:
-      raise newException(ValueError, "Could not find header with requested hash")
+    let
+      hn = historyNetwork.getOrRaise()
+      hash = ethHash filterOptions.blockHash.unsafeGet()
+      header = (await hn.getVerifiedBlockHeader(hash)).valueOr:
+        raise newException(ValueError, "Could not find header with requested hash")
 
     if headerBloomFilter(header, filterOptions.address, filterOptions.topics):
       # TODO: These queries could be done concurrently, investigate if there
       # are no assumptions about usage of concurrent queries on portal
       # wire protocol level
       let
-        body = (await historyNetwork.getBlockBody(hash, header)).valueOr:
+        body = (await hn.getBlockBody(hash, header)).valueOr:
           raise newException(ValueError, "Could not find block body for requested hash")
-        receipts = (await historyNetwork.getReceipts(hash, header)).valueOr:
+        receipts = (await hn.getReceipts(hash, header)).valueOr:
           raise newException(ValueError, "Could not find receipts for requested hash")
 
         logs = deriveLogs(header, body.transactions, receipts)
@@ -268,14 +286,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getBalance
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       balance = (await sn.getBalance(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get balance")
@@ -291,14 +311,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getTransactionCount
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       nonce = (await sn.getTransactionCount(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get transaction count")
@@ -314,14 +336,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getStorageAt
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       slotValue = (await sn.getStorageAt(blockNumber, data.EthAddress, slot)).valueOr:
         raise newException(ValueError, "Unable to get storage slot")
@@ -336,14 +360,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getCode
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       bytecode = (await sn.getCode(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get code")
@@ -361,14 +387,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the proof response containing the account, account proof and storage proof
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getProof
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       proofs = (await sn.getProofs(blockNumber, data.EthAddress, slots)).valueOr:
         raise newException(ValueError, "Unable to get proofs")
