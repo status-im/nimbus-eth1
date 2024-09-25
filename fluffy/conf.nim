@@ -45,6 +45,7 @@ const
   defaultTableIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.tableIpLimit
   defaultBucketIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit
   defaultBitsPerHopDesc* = $defaultPortalProtocolConfig.bitsPerHop
+  defaultMaxGossipNodesDesc* = $defaultPortalProtocolConfig.maxGossipNodes
 
 type
   TrustedDigest* = MDigest[32 * 8]
@@ -233,6 +234,14 @@ type
       defaultValue: defaultPortalProtocolConfig.bitsPerHop,
       defaultValueDesc: $defaultBitsPerHopDesc,
       name: "bits-per-hop"
+    .}: int
+
+    maxGossipNodes* {.
+      hidden,
+      desc: "The maximum number of nodes to send content to during gossip",
+      defaultValue: defaultPortalProtocolConfig.maxGossipNodes,
+      defaultValueDesc: $defaultMaxGossipNodesDesc,
+      name: "max-gossip-nodes"
     .}: int
 
     radiusConfig* {.
