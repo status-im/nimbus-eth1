@@ -220,6 +220,8 @@ proc run(
 
   ## Start the JSON-RPC APIs
 
+  let rpcFlags = getRpcFlags(config.rpcApi)
+
   proc setupRpcServer(
       rpcServer: RpcHttpServer | RpcWebSocketServer
   ) {.raises: [CatchableError].} =
