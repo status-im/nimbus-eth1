@@ -162,7 +162,10 @@ proc updateBlockRequests*(ctx: FlareCtxRef): bool =
 
 
 proc updateMetrics*(ctx: FlareCtxRef) =
-  ctx.updateMetricsImpl()
+  let now = Moment.now()
+  if ctx.pool.nextUpdate < now:
+    ctx.updateMetricsImpl()
+    ctx.pool.nextUpdate = now + metricsUpdateInterval
 
 # ------------------------------------------------------------------------------
 # End
