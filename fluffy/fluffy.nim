@@ -26,7 +26,10 @@ import
   ./network_metadata,
   ./common/common_utils,
   ./rpc/
-    [rpc_web3_api, rpc_eth_api, rpc_discovery_api, rpc_portal_api, rpc_portal_debug_api],
+    [
+      rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_api,
+      rpc_portal_debug_api,
+    ],
   ./database/content_db,
   ./portal_node,
   ./version,
@@ -221,8 +224,9 @@ proc run(
       rpcServer: RpcHttpServer | RpcWebSocketServer
   ) {.raises: [CatchableError].} =
     rpcServer.installDiscoveryApiHandlers(d)
-    rpcServer.installWeb3ApiHandlers()
+
     if node.stateNetwork.isSome():
+      rpcServer.installDebugApiHandlers(node.stateNetwork)
       rpcServer.installPortalApiHandlers(
         node.stateNetwork.value.portalProtocol, "state"
       )
