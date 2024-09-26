@@ -446,8 +446,9 @@ proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash256,
                  finalizedHash: Hash256): Result[void, string] =
 
-  if headHash == c.cursorHash:
+  if headHash == c.cursorHash and finalizedHash == static(Hash256()):
     # Do nothing if the new head already our current head
+    # and there is no request to new finality
     return ok()
 
   # If there are multiple heads, find which chain headHash belongs to
@@ -569,9 +570,21 @@ func latestHash*(c: ForkedChainRef): Hash256 =
 func baseNumber*(c: ForkedChainRef): BlockNumber =
   c.baseHeader.number
 
-func latestBlock*(c: ForkedChainRef): EthBlock =
+proc latestBlock*(c: ForkedChainRef): EthBlock =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
+  do:
+    # This can happen if block pointed by cursorHash is not loaded yet
+    try:
+      result = c.db.getEthBlock(c.cursorHash)
+      c.blocks[c.cursorHash] = BlockDesc(
+        blk: result,
+        receipts: c.db.getReceipts(result.header.receiptsRoot),
+      )
+    except BlockNotFound:
+      doAssert(false, "Block should exists in database")
+    except RlpError:
+      doAssert(false, "Receipts should exists in database")
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader, string] =
   if number > c.cursorHeader.number:
