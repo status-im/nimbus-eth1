@@ -96,11 +96,11 @@ proc runBackfillCollectBlockDataLoop(
       let
         blockId = blockId(currentBlockNumber)
         blockObject = (await web3Client.getBlockByNumber(blockId, false)).valueOr:
-          error "Failed to get block", error
+          error "Failed to get block", error = error
           await sleepAsync(1.seconds)
           continue
         stateDiffs = (await web3Client.getStateDiffsByBlockNumber(blockId)).valueOr:
-          error "Failed to get state diffs", error
+          error "Failed to get state diffs", error = error
           await sleepAsync(1.seconds)
           continue
 
@@ -109,7 +109,7 @@ proc runBackfillCollectBlockDataLoop(
         let uncleBlock = (
           await web3Client.getUncleByBlockNumberAndIndex(blockId, i.Quantity)
         ).valueOr:
-          error "Failed to get uncle block", error
+          error "Failed to get uncle block", error = error
           await sleepAsync(1.seconds)
           continue
         uncleBlocks.add(uncleBlock)

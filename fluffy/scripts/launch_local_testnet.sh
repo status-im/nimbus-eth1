@@ -338,6 +338,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --rpc \
     --rpc-address="127.0.0.1" \
     --rpc-port="$(( BASE_RPC_PORT + NUM_NODE ))" \
+    --rpc-api=eth,debug,portal,portal_debug,discovery \
     --metrics \
     --metrics-address="127.0.0.1" \
     --metrics-port="$(( BASE_METRICS_PORT + NUM_NODE ))" \
