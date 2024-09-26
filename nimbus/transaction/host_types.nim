@@ -99,4 +99,4 @@ template isZero*(n: evmc_bytes32): bool =
 # `evmc_flags` won't export the flags, `evmc_flag_bit_shifts` must be used.
 export
   evmc_status_code, evmc_call_kind,
-  evmc_flag_bit_shifts, evmc_storage_status, evmc_access_status
+  evmc_flag_bit_shifts, evmc_storage_status, evmc_access_status, eth_types.toHex
