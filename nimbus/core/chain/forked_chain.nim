@@ -446,7 +446,7 @@ proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash256,
                  finalizedHash: Hash256): Result[void, string] =
 
-  if headHash == c.cursorHash and finalizedHash == static(Hash256()):
+  if headHash == c.cursorHash and finalizedHash == static(default(Hash256)):
     # Do nothing if the new head already our current head
     # and there is no request to new finality
     return ok()
@@ -454,7 +454,7 @@ proc forkChoice*(c: ForkedChainRef,
   # If there are multiple heads, find which chain headHash belongs to
   let head = ?c.findCanonicalHead(headHash)
 
-  if finalizedHash == static(Hash256()):
+  if finalizedHash == static(default(Hash256)):
     # skip newBase calculation and skip chain finalization
     # if finalizedHash is zero
     c.updateHeadIfNecessary(head, headHash)
