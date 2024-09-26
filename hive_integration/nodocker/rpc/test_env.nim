@@ -16,6 +16,8 @@ import
   ../../../nimbus/common,
   ../../../nimbus/config,
   ../../../nimbus/rpc,
+  ../../../nimbus/rpc/oracle,
+  ../../../nimbus/rpc/p2p,
   ../../../nimbus/utils/utils,
   ../../../nimbus/core/[chain, tx_pool],
   ../../../tests/test_helpers,
