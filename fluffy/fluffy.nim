@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[os, enumutils],
+  std/[os, enumutils, exitprocs],
   confutils,
   confutils/std/net,
   chronicles,
@@ -26,7 +26,10 @@ import
   ./network_metadata,
   ./common/common_utils,
   ./rpc/
-    [rpc_web3_api, rpc_eth_api, rpc_discovery_api, rpc_portal_api, rpc_portal_debug_api],
+    [
+      rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_api,
+      rpc_portal_debug_api,
+    ],
   ./database/content_db,
   ./portal_node,
   ./version,
@@ -57,7 +60,30 @@ proc run(
   if pathExists.isErr():
     fatal "Failed to create data directory",
       dataDir = config.dataDir, error = pathExists.error
-    quit 1
+    quit QuitFailure
+
+  # Make sure multiple instances to the same dataDir do not exist
+  let
+    lockFilePath = config.dataDir.string / "fluffy.lock"
+    lockFlags = {OpenFlags.Create, OpenFlags.Read, OpenFlags.Write}
+    lockFileHandleResult = openFile(lockFilePath, lockFlags)
+
+  if lockFileHandleResult.isErr():
+    fatal "Failed to open lock file", error = ioErrorMsg(lockFileHandleResult.error)
+    quit QuitFailure
+
+  let lockFileHandle = lockFile(lockFileHandleResult.value(), LockType.Exclusive)
+  if lockFileHandle.isErr():
+    fatal "Please ensure no other fluffy instances are running with the same data directory",
+      dataDir = config.dataDir
+    quit QuitFailure
+
+  let lockFileIoHandle = lockFileHandle.value()
+  addExitProc(
+    proc() =
+      discard unlockFile(lockFileIoHandle)
+      discard closeFile(lockFileIoHandle.handle)
+  )
 
   ## Network configuration
   let
@@ -156,7 +182,7 @@ proc run(
   let
     portalProtocolConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
-      config.disablePoke,
+      config.disablePoke, config.maxGossipNodes,
     )
 
     portalNodeConfig = PortalNodeConfig(
@@ -217,29 +243,39 @@ proc run(
 
   ## Start the JSON-RPC APIs
 
+  let rpcFlags = getRpcFlags(config.rpcApi)
+
   proc setupRpcServer(
       rpcServer: RpcHttpServer | RpcWebSocketServer
   ) {.raises: [CatchableError].} =
-    rpcServer.installDiscoveryApiHandlers(d)
-    rpcServer.installWeb3ApiHandlers()
-    if node.stateNetwork.isSome():
-      rpcServer.installPortalApiHandlers(
-        node.stateNetwork.value.portalProtocol, "state"
-      )
-    if node.historyNetwork.isSome():
-      rpcServer.installEthApiHandlers(
-        node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
-      )
-      rpcServer.installPortalApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-      rpcServer.installPortalDebugApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-    if node.beaconNetwork.isSome():
-      rpcServer.installPortalApiHandlers(
-        node.beaconNetwork.value.portalProtocol, "beacon"
-      )
+    for rpcFlag in rpcFlags:
+      case rpcFlag
+      of RpcFlag.eth:
+        rpcServer.installEthApiHandlers(
+          node.historyNetwork, node.beaconLightClient, node.stateNetwork
+        )
+      of RpcFlag.debug:
+        rpcServer.installDebugApiHandlers(node.stateNetwork)
+      of RpcFlag.portal:
+        if node.historyNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.historyNetwork.value.portalProtocol, "history"
+          )
+        if node.beaconNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.beaconNetwork.value.portalProtocol, "beacon"
+          )
+        if node.stateNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.stateNetwork.value.portalProtocol, "state"
+          )
+      of RpcFlag.portal_debug:
+        if node.historyNetwork.isSome():
+          rpcServer.installPortalDebugApiHandlers(
+            node.historyNetwork.value.portalProtocol, "history"
+          )
+      of RpcFlag.discovery:
+        rpcServer.installDiscoveryApiHandlers(d)
 
     rpcServer.start()
 

@@ -28,7 +28,7 @@ const
   ZERO_ADDRESS* =                           default(EthAddress)
 
   # ZERO_HASH256 is the parent hash of genesis blocks.
-  ZERO_HASH256* =                           Hash256()
+  ZERO_HASH256* =                           default(Hash256)
 
   GAS_LIMIT_ADJUSTMENT_FACTOR* =            1_024
 

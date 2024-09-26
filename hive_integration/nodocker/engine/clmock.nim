@@ -432,7 +432,7 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
       # the blockHash of the payload is valid
       # the payload doesn't extend the canonical chain
       # the payload hasn't been fully validated.
-      let nullHash = w3Hash common.Hash256()
+      let nullHash = w3Hash default(common.Hash256)
       let latestValidHash = s.latestValidHash.get(nullHash)
       if s.latestValidHash.isSome and latestValidHash != nullHash:
         error "CLMocker: NewPayload returned ACCEPTED status with incorrect LatestValidHash",

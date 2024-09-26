@@ -93,7 +93,7 @@ proc envToHeader(env: EnvStruct): BlockHeader =
   BlockHeader(
     coinbase   : env.currentCoinbase,
     difficulty : env.currentDifficulty.get(0.u256),
-    mixHash    : env.currentRandom.get(Hash256()),
+    mixHash    : env.currentRandom.get(default(Hash256)),
     number     : env.currentNumber,
     gasLimit   : env.currentGasLimit,
     timestamp  : env.currentTimestamp,
@@ -129,7 +129,7 @@ proc toTxReceipt(rec: Receipt,
   let contractAddress = genAddress(tx, sender)
   TxReceipt(
     txType: tx.txType,
-    root: if rec.isHash: rec.hash else: Hash256(),
+    root: if rec.isHash: rec.hash else: default(Hash256),
     status: rec.status,
     cumulativeGasUsed: rec.cumulativeGasUsed,
     logsBloom: rec.logsBloom,
@@ -137,7 +137,7 @@ proc toTxReceipt(rec: Receipt,
     transactionHash: rlpHash(tx),
     contractAddress: contractAddress,
     gasUsed: gasUsed,
-    blockHash: Hash256(),
+    blockHash: default(Hash256),
     transactionIndex: txIndex
   )
 
@@ -241,7 +241,7 @@ proc exec(ctx: var TransContext,
       prevNumber = ctx.env.currentNumber - 1
       prevHash = ctx.env.blockHashes.getOrDefault(prevNumber)
 
-    if prevHash == static(Hash256()):
+    if prevHash == static(default(Hash256)):
       raise newError(ErrorConfig, "previous block hash not found for block number: " & $prevNumber)
 
     vmState.processParentBlockHash(prevHash).isOkOr:
@@ -397,7 +397,7 @@ proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
-  var h = Hash256()
+  var h = default(Hash256)
   if vmState.blockHashes.len == 0:
     vmState.hashError = "getAncestorHash(" &
       $blockNumber & ") invoked, no blockhashes provided"
@@ -465,7 +465,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         let n = json.parseFile(conf.inputTxs)
         ctx.parseTxs(n)
 
-    let uncleHash = if ctx.env.parentUncleHash == Hash256():
+    let uncleHash = if ctx.env.parentUncleHash == default(Hash256):
                       EMPTY_UNCLE_HASH
                     else:
                       ctx.env.parentUncleHash
