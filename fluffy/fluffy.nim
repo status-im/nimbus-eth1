@@ -60,7 +60,7 @@ proc run(
   if pathExists.isErr():
     fatal "Failed to create data directory",
       dataDir = config.dataDir, error = pathExists.error
-    quit 1
+    quit QuitFailure
 
   # Make sure multiple instances to the same dataDir do not exist
   let
@@ -69,19 +69,20 @@ proc run(
     lockFileHandleResult = openFile(lockFilePath, lockFlags)
 
   if lockFileHandleResult.isErr():
-    error "Failed to open lock file", error = ioErrorMsg(lockFileHandleResult.error)
-    quit 1
+    fatal "Failed to open lock file", error = ioErrorMsg(lockFileHandleResult.error)
+    quit QuitFailure
 
-  let lockFileHandle = lockFileHandleResult.get()
-  if lockFile(lockFileHandle, LockType.Exclusive).isErr():
+  let lockFileHandle = lockFile(lockFileHandleResult.value(), LockType.Exclusive)
+  if lockFileHandle.isErr():
     fatal "Please ensure no other fluffy instances are running with the same data directory",
       dataDir = config.dataDir
-    quit 1
+    quit QuitFailure
 
+  let lockFileIoHandle = lockFileHandle.value()
   addExitProc(
     proc() =
-      discard closeFile(lockFileHandle)
-      discard unlockFile(lockFileHandle, 0'i64, 0'i64)
+      discard unlockFile(lockFileIoHandle)
+      discard closeFile(lockFileIoHandle.handle)
   )
 
   ## Network configuration
