@@ -15,16 +15,16 @@ import
   stew/byteutils,
   results,
   eth/[common/eth_types, rlp],
-  ../../../common/common_types,
-  ../../../eth_data/history_data_json_store,
-  ../../../network/history/history_network
+  ../../common/common_types,
+  ../../eth_data/history_data_json_store,
+  ../../network/history/history_network
 
 const
   dataFile = "./fluffy/tests/blocks/mainnet_blocks_selected.json"
   # Block that will be validated
   blockHashStr = "0xce8f770a56203e10afe19c7dd7e2deafc356e6cce0a560a30a85add03da56137"
 
-suite "History Network Content Validation":
+suite "History Content Values Validation":
   let blockDataTable =
     readJsonType(dataFile, BlockDataTable).expect("Valid data file should parse")
 

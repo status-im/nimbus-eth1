@@ -332,7 +332,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
         # Get a payload from the invalid payload producer and invalidate it
         let
           customizer = BasePayloadAttributesCustomizer(
-            prevRandao: Opt.some(common.Hash256()),
+            prevRandao: Opt.some(default(common.Hash256)),
             suggestedFeerecipient: Opt.some(ZeroAddr),
           )
           payloadAttributes = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
@@ -352,7 +352,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
         let basePayload = s.get.executionPayload
         var src = ExecutableData(basePayload: basePayload)
         if versione == Version.V3:
-          src.beaconRoot = Opt.some(common.Hash256())
+          src.beaconRoot = Opt.some(default(common.Hash256))
           src.versionedHashes = Opt.some(collectBlobHashes(basePayload.transactions))
 
         inv_p = env.generateInvalidPayload(src, InvalidStateRoot)

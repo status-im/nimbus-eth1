@@ -16,25 +16,20 @@ import
   web3/primitives as web3types,
   eth/common/eth_types,
   beacon_chain/spec/forks,
-  ../common/common_utils,
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
-  ../network/beacon/beacon_light_client
+  ../network/beacon/beacon_light_client,
+  ../version
 
 from ../../nimbus/transaction import getSender, ValidationError
 from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs, filterLogs
 from ../../nimbus/beacon/web3_eth_conv import w3Addr, w3Hash, ethHash
 
-# Subset of Ethereum execution JSON-RPC API:
-# https://ethereum.github.io/execution-apis/api-documentation/
-#
-# Currently supported subset:
-# - eth_chainId
-# - eth_getBlockByHash
-# - eth_getBlockByNumber
-# - eth_getBlockTransactionCountByHash
-# - eth_getLogs - Partially: only requests by block hash
-#
+export rpcserver
+
+# See the list of Ethereum execution JSON-RPC APIs which will be supported by
+# Portal Network clients such as Fluffy:
+# https://github.com/ethereum/portal-network-specs?tab=readme-ov-file#the-json-rpc-api
 
 # Some similar code as from nimbus `rpc_utils`, but avoiding that import as it
 # brings in  a lot more. Should restructure `rpc_utils` a bit before using that.
@@ -121,13 +116,29 @@ func init*(
 
   blockObject
 
+template getOrRaise(historyNetwork: Opt[HistoryNetwork]): HistoryNetwork =
+  let hn = historyNetwork.valueOr:
+    raise newException(ValueError, "history sub-network not enabled")
+  hn
+
+template getOrRaise(beaconLightClient: Opt[LightClient]): LightClient =
+  let sn = beaconLightClient.valueOr:
+    raise newException(ValueError, "beacon sub-network not enabled")
+  sn
+
+template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
+  let sn = stateNetwork.valueOr:
+    raise newException(ValueError, "state sub-network not enabled")
+  sn
+
 proc installEthApiHandlers*(
     rpcServer: RpcServer,
-    historyNetwork: HistoryNetwork,
+    historyNetwork: Opt[HistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
 ) =
-  # Supported API through the Portal Network
+  rpcServer.rpc("web3_clientVersion") do() -> string:
+    return clientVersion
 
   rpcServer.rpc("eth_chainId") do() -> Quantity:
     # The Portal Network can only support MainNet at the moment, so always return
@@ -145,8 +156,9 @@ proc installEthApiHandlers*(
     ##
     ## Returns BlockObject or nil when no block was found.
     let
+      hn = historyNetwork.getOrRaise()
       blockHash = data.toHash()
-      (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+      (header, body) = (await hn.getBlock(blockHash)).valueOr:
         return Opt.none(BlockObject)
 
     return Opt.some(BlockObject.init(header, body, fullTransactions))
@@ -154,6 +166,8 @@ proc installEthApiHandlers*(
   rpcServer.rpc("eth_getBlockByNumber") do(
     quantityTag: RtBlockIdentifier, fullTransactions: bool
   ) -> Opt[BlockObject]:
+    let hn = historyNetwork.getOrRaise()
+
     if quantityTag.kind == bidAlias:
       let tag = quantityTag.alias.toLowerAscii
       case tag
@@ -166,28 +180,26 @@ proc installEthApiHandlers*(
       of "earliest":
         raise newException(ValueError, "Earliest tag not yet implemented")
       of "safe":
-        if beaconLightClient.isNone():
-          raise newException(ValueError, "Safe tag not yet implemented")
+        let blc = beaconLightClient.getOrRaise()
 
-        withForkyStore(beaconLightClient.value().store[]):
+        withForkyStore(blc.store[]):
           when lcDataFork > LightClientDataFork.Altair:
             let
               blockHash = forkyStore.optimistic_header.execution.block_hash
-              (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+              (header, body) = (await hn.getBlock(blockHash)).valueOr:
                 return Opt.none(BlockObject)
 
             return Opt.some(BlockObject.init(header, body, fullTransactions))
           else:
             raise newException(ValueError, "Not available before Capella - not synced?")
       of "finalized":
-        if beaconLightClient.isNone():
-          raise newException(ValueError, "Finalized tag not yet implemented")
+        let blc = beaconLightClient.getOrRaise()
 
-        withForkyStore(beaconLightClient.value().store[]):
+        withForkyStore(blc.store[]):
           when lcDataFork > LightClientDataFork.Altair:
             let
               blockHash = forkyStore.finalized_header.execution.block_hash
-              (header, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+              (header, body) = (await hn.getBlock(blockHash)).valueOr:
                 return Opt.none(BlockObject)
 
             return Opt.some(BlockObject.init(header, body, fullTransactions))
@@ -200,7 +212,7 @@ proc installEthApiHandlers*(
     else:
       let
         blockNumber = quantityTag.number.uint64
-        (header, body) = (await historyNetwork.getBlock(blockNumber)).valueOr:
+        (header, body) = (await hn.getBlock(blockNumber)).valueOr:
           return Opt.none(BlockObject)
 
       return Opt.some(BlockObject.init(header, body, fullTransactions))
@@ -214,8 +226,9 @@ proc installEthApiHandlers*(
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
     let
+      hn = historyNetwork.getOrRaise()
       blockHash = data.toHash()
-      (_, body) = (await historyNetwork.getBlock(blockHash)).valueOr:
+      (_, body) = (await hn.getBlock(blockHash)).valueOr:
         raise newException(ValueError, "Could not find block with requested hash")
 
     var txCount: uint = 0
@@ -240,19 +253,20 @@ proc installEthApiHandlers*(
         "Unsupported query: Only `blockHash` queries are currently supported",
       )
 
-    let hash = ethHash filterOptions.blockHash.unsafeGet()
-
-    let header = (await historyNetwork.getVerifiedBlockHeader(hash)).valueOr:
-      raise newException(ValueError, "Could not find header with requested hash")
+    let
+      hn = historyNetwork.getOrRaise()
+      hash = ethHash filterOptions.blockHash.unsafeGet()
+      header = (await hn.getVerifiedBlockHeader(hash)).valueOr:
+        raise newException(ValueError, "Could not find header with requested hash")
 
     if headerBloomFilter(header, filterOptions.address, filterOptions.topics):
       # TODO: These queries could be done concurrently, investigate if there
       # are no assumptions about usage of concurrent queries on portal
       # wire protocol level
       let
-        body = (await historyNetwork.getBlockBody(hash, header)).valueOr:
+        body = (await hn.getBlockBody(hash, header)).valueOr:
           raise newException(ValueError, "Could not find block body for requested hash")
-        receipts = (await historyNetwork.getReceipts(hash, header)).valueOr:
+        receipts = (await hn.getReceipts(hash, header)).valueOr:
           raise newException(ValueError, "Could not find receipts for requested hash")
 
         logs = deriveLogs(header, body.transactions, receipts)
@@ -272,14 +286,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getBalance
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       balance = (await sn.getBalance(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get balance")
@@ -295,14 +311,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getTransactionCount
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       nonce = (await sn.getTransactionCount(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get transaction count")
@@ -318,14 +336,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getStorageAt
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       slotValue = (await sn.getStorageAt(blockNumber, data.EthAddress, slot)).valueOr:
         raise newException(ValueError, "Unable to get storage slot")
@@ -340,14 +360,16 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getCode
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       bytecode = (await sn.getCode(blockNumber, data.EthAddress)).valueOr:
         raise newException(ValueError, "Unable to get code")
@@ -365,144 +387,19 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the proof response containing the account, account proof and storage proof
 
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
     if quantityTag.kind == bidAlias:
       # TODO: Implement
       raise newException(ValueError, "tag not yet implemented")
 
+    # This endpoint requires history network to be enabled in order to look up
+    # the state root by block number in the call to getProof
+    discard historyNetwork.getOrRaise()
+
     let
+      sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
       proofs = (await sn.getProofs(blockNumber, data.EthAddress, slots)).valueOr:
         raise newException(ValueError, "Unable to get proofs")
-
-    var storageProof = newSeqOfCap[StorageProof](slots.len)
-    for i, slot in slots:
-      let (slotKey, slotValue) = proofs.slots[i]
-      storageProof.add(
-        StorageProof(
-          key: slotKey,
-          value: slotValue,
-          proof: seq[RlpEncodedBytes](proofs.slotProofs[i]),
-        )
-      )
-
-    return ProofResponse(
-      address: data,
-      accountProof: seq[RlpEncodedBytes](proofs.accountProof),
-      balance: proofs.account.balance,
-      nonce: web3types.Quantity(proofs.account.nonce),
-      codeHash: web3types.Hash256(proofs.account.codeHash.data),
-      storageHash: web3types.Hash256(proofs.account.storageRoot.data),
-      storageProof: storageProof,
-    )
-
-  # TODO: Should we move these debug methods into a separate debug rpcServer?
-
-  rpcServer.rpc("debug_getBalanceByStateRoot") do(
-    data: web3Types.Address, stateRoot: web3types.Hash256
-  ) -> UInt256:
-    ## Returns the balance of the account of given address.
-    ##
-    ## data: address to check for balance.
-    ## stateRoot: the state root used to search the state trie.
-    ## Returns integer of the current balance in wei.
-
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
-    let balance = (
-      await sn.getBalanceByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get balance")
-
-    return balance
-
-  rpcServer.rpc("debug_getTransactionCountByStateRoot") do(
-    data: web3Types.Address, stateRoot: web3types.Hash256
-  ) -> Quantity:
-    ## Returns the number of transactions sent from an address.
-    ##
-    ## data: address.
-    ## stateRoot: the state root used to search the state trie.
-    ## Returns integer of the number of transactions send from this address.
-
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
-    let nonce = (
-      await sn.getTransactionCountByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get transaction count")
-    return nonce.Quantity
-
-  rpcServer.rpc("debug_getStorageAtByStateRoot") do(
-    data: web3Types.Address, slot: UInt256, stateRoot: web3types.Hash256
-  ) -> FixedBytes[32]:
-    ## Returns the value from a storage position at a given address.
-    ##
-    ## data: address of the storage.
-    ## slot: integer of the position in the storage.
-    ## stateRoot: the state root used to search the state trie.
-    ## Returns: the value at this storage position.
-
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
-    let slotValue = (
-      await sn.getStorageAtByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress, slot
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get storage slot")
-    return FixedBytes[32](slotValue.toBytesBE())
-
-  rpcServer.rpc("debug_getCodeByStateRoot") do(
-    data: web3Types.Address, stateRoot: web3types.Hash256
-  ) -> seq[byte]:
-    ## Returns code at a given address.
-    ##
-    ## data: address
-    ## stateRoot: the state root used to search the state trie.
-    ## Returns the code from the given address.
-
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
-    let bytecode = (
-      await sn.getCodeByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get code")
-
-    return bytecode.asSeq()
-
-  rpcServer.rpc("debug_getProofByStateRoot") do(
-    data: web3Types.Address, slots: seq[UInt256], stateRoot: web3types.Hash256
-  ) -> ProofResponse:
-    ## Returns information about an account and storage slots along with account
-    ## and storage proofs which prove the existence of the values in the state.
-    ##
-    ## data: address of the account.
-    ## slots: integers of the positions in the storage to return.
-    ## stateRoot: the state root used to search the state trie.
-    ## Returns: the proof response containing the account, account proof and storage proof
-
-    let sn = stateNetwork.valueOr:
-      raise newException(ValueError, "State sub-network not enabled")
-
-    let proofs = (
-      await sn.getProofsByStateRoot(
-        KeccakHash.fromBytes(stateRoot.bytes()), data.EthAddress, slots
-      )
-    ).valueOr:
-      raise newException(ValueError, "Unable to get proofs")
 
     var storageProof = newSeqOfCap[StorageProof](slots.len)
     for i, slot in slots:

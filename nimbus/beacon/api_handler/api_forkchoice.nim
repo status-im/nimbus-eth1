@@ -80,7 +80,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     chain = ben.chain
     blockHash = ethHash update.headBlockHash
 
-  if blockHash == common.Hash256():
+  if blockHash == default(common.Hash256):
     warn "Forkchoice requested update to zero hash"
     return simpleFCU(PayloadExecutionStatus.invalid)
 
@@ -155,8 +155,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # probably resyncing. Ignore the update.
   # See point 2 of fCUV1 specification
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
-  var canonHash: common.Hash256
-  if db.getBlockHash(header.number, canonHash) and canonHash == blockHash:
+  if ben.chain.isCanonicalAncestor(header.number, blockHash):
     notice "Ignoring beacon update to old head",
       blockHash=blockHash.short,
       blockNumber=header.number
@@ -165,7 +164,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
   let finalizedBlockHash = ethHash update.finalizedBlockHash
-  if finalizedBlockHash != common.Hash256():
+  if finalizedBlockHash != default(common.Hash256):
     if not ben.posFinalized:
       ben.finalizePoS()
 
@@ -176,7 +175,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     db.finalizedHeaderHash(finalizedBlockHash)
 
   let safeBlockHash = ethHash update.safeBlockHash
-  if safeBlockHash != common.Hash256():
+  if safeBlockHash != default(common.Hash256):
     if not ben.chain.isCanonical(safeBlockHash):
       warn "Safe block not in canonical chain",
         hash=safeBlockHash.short

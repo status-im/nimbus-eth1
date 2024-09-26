@@ -75,6 +75,9 @@ declareCounter portal_gossip_without_lookup,
   "Portal wire protocol neighborhood gossip that did not require a node lookup",
   labels = ["protocol_id"]
 
+declareCounter portal_poke_offers,
+  "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
+
 # Note: These metrics are to get some idea on how many enrs are send on average.
 # Relevant issue: https://github.com/ethereum/portal-network-specs/issues/136
 const enrsBuckets = [0.0, 1.0, 3.0, 5.0, 8.0, 9.0, Inf]
@@ -112,7 +115,7 @@ const
   ## that will be processed
   refreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
-  revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
+  revalidateMax = 4000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
@@ -182,6 +185,7 @@ type
     offerWorkers: seq[Future[void]]
     disablePoke: bool
     pingTimings: Table[NodeId, chronos.Moment]
+    maxGossipNodes: int
 
   PortalResult*[T] = Result[T, string]
 
@@ -573,6 +577,7 @@ proc new*(
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
     disablePoke: config.disablePoke,
     pingTimings: Table[NodeId, chronos.Moment](),
+    maxGossipNodes: config.maxGossipNodes,
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -1101,6 +1106,7 @@ proc triggerPoke*(
           list = List[ContentKV, contentKeysLimit].init(@[contentKV])
           req = OfferRequest(dst: node, kind: Direct, contentList: list)
         p.offerQueue.putNoWait(req)
+        portal_poke_offers.inc(labelValues = [$p.protocolId])
       except AsyncQueueFullError as e:
         # Should not occur as full() check is done.
         raiseAssert(e.msg)
@@ -1494,8 +1500,8 @@ proc neighborhoodGossip*(
   # 1. Select the closest neighbours in the routing table
   # 2. Check if the radius is known for these these nodes and whether they are
   # in range of the content to be offered.
-  # 3. If more than n (= 8) nodes are in range, offer these nodes the content
-  # (max nodes set at 8).
+  # 3. If more than n (= maxGossipNodes) nodes are in range, offer these nodes
+  # the content (maxed out at n).
   # 4. If less than n nodes are in range, do a node lookup, and offer the nodes
   # returned from the lookup the content (max nodes set at 8)
   #
@@ -1503,7 +1509,6 @@ proc neighborhoodGossip*(
   # in its propagation than when looking only for nodes in the own routing
   # table, but at the same time avoid unnecessary node lookups.
   # It might still cause issues in data getting propagated in a wider id range.
-  const maxGossipNodes = 8
 
   let closestLocalNodes =
     p.routingTable.neighbours(NodeId(contentId), k = 16, seenOnly = true)
@@ -1518,9 +1523,9 @@ proc neighborhoodGossip*(
         elif node.id != srcNodeId.get():
           gossipNodes.add(node)
 
-  if gossipNodes.len >= 8: # use local nodes for gossip
+  if gossipNodes.len >= p.maxGossipNodes: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    let numberOfGossipedNodes = min(gossipNodes.len, maxGossipNodes)
+    let numberOfGossipedNodes = min(gossipNodes.len, p.maxGossipNodes)
     for node in gossipNodes[0 ..< numberOfGossipedNodes]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
@@ -1528,7 +1533,7 @@ proc neighborhoodGossip*(
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
-    let numberOfGossipedNodes = min(closestNodes.len, maxGossipNodes)
+    let numberOfGossipedNodes = min(closestNodes.len, p.maxGossipNodes)
     for node in closestNodes[0 ..< numberOfGossipedNodes]:
       # Note: opportunistically not checking if the radius of the node is known
       # and thus if the node is in radius with the content. Reason is, these
@@ -1640,12 +1645,13 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledErr
 proc getNodeForRevalidation(p: PortalProtocol): Opt[Node] =
   let node = p.routingTable.nodeToRevalidate()
   if node.isNil:
+    # This should not occur except for when the RT is empty
     return Opt.none(Node)
 
   let now = now(chronos.Moment)
-  let timestamp = p.pingTimings.getOrDefault(node.id, now)
+  let timestamp = p.pingTimings.getOrDefault(node.id, Moment.init(0'i64, Second))
 
-  if (timestamp + revalidationTimeout) <= now:
+  if (timestamp + revalidationTimeout) < now:
     Opt.some(node)
   else:
     Opt.none(Node)
