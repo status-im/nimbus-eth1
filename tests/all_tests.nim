@@ -41,4 +41,5 @@ cliBuilder:
           ./test_beacon/test_skeleton,
           ./test_getproof_json,
           ./test_aristo,
-          ./test_coredb
+          ./test_coredb,
+          ./test_edgedb
