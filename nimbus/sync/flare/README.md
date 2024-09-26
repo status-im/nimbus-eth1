@@ -213,3 +213,26 @@ to
 
 Caveat: These changes are not useful when running *nimbus_beacon_node* as a
 production system.
+
+Metrics
+-------
+
+The following metrics are defined in *worker/update/metrics.nim* which will
+be available if *nimbus* is compiled with the additional make flags
+*NIMFLAGS="-d:metrics \-\-threads:on"*:
+
+| *Variable*                    | *Logic type* | *Short description* |
+|:------------------------------|:------------:|:--------------------|
+|                               |              |                     |
+| flare_state_block_number      | block height | **T**, *increasing* |
+| flare_base_block_number       | block height | **B**, *increasing* |
+| flare_least_block_number      | block height | **L**               |
+| flare_final_block_number      | block height | **F**, *increasing* |
+| flare_beacon_block_number     | block height | **Z**, *increasing* |
+|                               |              |                     |
+| flare_headers_staged_queue_len| size | # of staged header list records      |
+| flare_headers_unprocessed     | size | # of accumulated header block numbers|
+| flare_blocks_staged_queue_len | size | # of staged block list records       |
+| flare_blocks_unprocessed      | size | # of accumulated body block numbers  |
+|                               |              |                     |
+| flare_number_of_buddies       | size         | # of working peers  |
