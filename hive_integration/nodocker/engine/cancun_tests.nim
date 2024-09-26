@@ -527,7 +527,7 @@ let cancunTestListA* = [
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: UpgradeForkchoiceUpdatedVersion(
-            beaconRoot: Opt.some(common.Hash256()),
+            beaconRoot: Opt.some(default(common.Hash256)),
             expectedError: engineApiUnsupportedFork,
           ),
           expectationDescription: """
@@ -555,7 +555,7 @@ let cancunTestListA* = [
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
-            beaconRoot: Opt.some(common.Hash256()),
+            beaconRoot: Opt.some(default(common.Hash256)),
             expectedError: engineApiInvalidPayloadAttributes,
           ),
           expectationDescription: """
@@ -583,7 +583,7 @@ let cancunTestListA* = [
       testSequence: @[
         NewPayloads(
           fcUOnPayloadRequest: DowngradeForkchoiceUpdatedVersion(
-            beaconRoot: Opt.some(common.Hash256()),
+            beaconRoot: Opt.some(default(common.Hash256)),
             expectedError: engineApiInvalidPayloadAttributes,
           ),
           expectationDescription: """
@@ -641,7 +641,7 @@ let cancunTestListA* = [
         NewPayloads(
           expectedIncludedBlobCount: MAX_BLOBS_PER_BLOCK,
           fcUOnPayloadRequest: BaseForkchoiceUpdatedCustomizer(
-            beaconRoot: Opt.some(common.Hash256()),
+            beaconRoot: Opt.some(default(common.Hash256)),
           ),
         ),
         SendBlobTransactions(
@@ -818,7 +818,7 @@ let cancunTestListA* = [
             payloadCustomizer: CustomPayloadData(
               excessBlobGas:    Opt.some(0'u64),
               blobGasUsed:      Opt.some(0'u64),
-              parentBeaconRoot: Opt.some(common.Hash256()),
+              parentBeaconRoot: Opt.some(default(common.Hash256)),
               versionedHashesCustomizer: VersionedHashesCustomizer(
                 blobs: Opt.some(newSeq[BlobID]()),
               ),
@@ -1673,7 +1673,7 @@ let cancunTestListA* = [
         NewPayloads(
           newPayloadCustomizer: UpgradeNewPayloadVersion(
             payloadCustomizer: CustomPayloadData(
-              parentBeaconRoot: some(common.Hash256()),
+              parentBeaconRoot: some(default(common.Hash256)),
             ),
             expectedError: engineApiInvalidParams,
           ),

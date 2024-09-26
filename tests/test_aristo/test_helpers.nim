@@ -155,7 +155,7 @@ proc to*(sample: AccountsSample; T: type seq[UndumpStorages]): T =
     result.add w
 
 func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (Hash256(), VertexID(0))
+  var (rootKey, rootVid) = (default(Hash256), VertexID(0))
   for w in ua:
     let thisRoot = w.root
     if rootKey != thisRoot:
@@ -171,7 +171,7 @@ func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
           payload: LeafPayload(pType: RawData, rawBlob: it.accBlob))))
 
 func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (Hash256(), VertexID(0))
+  var (rootKey, rootVid) = (default(Hash256), VertexID(0))
   for n,s in us:
     for w in s.data.storages:
       let thisRoot = w.account.storageRoot
@@ -216,7 +216,7 @@ proc schedStow*(
     db.stow()
 
 # ------------------
-    
+
 proc mergeGenericData*(
     db: AristoDbRef;                   # Database, top layer
     leaf: LeafTiePayload;              # Leaf item to add to the database

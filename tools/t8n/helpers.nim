@@ -404,7 +404,7 @@ proc `@@`(x: Log): JsonNode =
 
 proc `@@`(x: TxReceipt): JsonNode =
   result = %{
-    "root"             : if x.root == Hash256(): %("0x") else: @@(x.root),
+    "root"             : if x.root == default(Hash256): %("0x") else: @@(x.root),
     "status"           : @@(x.status),
     "cumulativeGasUsed": @@(x.cumulativeGasUsed),
     "logsBloom"        : @@(x.logsBloom),

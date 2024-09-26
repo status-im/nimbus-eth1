@@ -123,7 +123,7 @@ proc ppVids(vids: HashSet[RootedVertexID]): string =
 
 func ppCodeHash(h: Hash256): string =
   result = "¢"
-  if h == Hash256():
+  if h == default(Hash256):
     result &= "©"
   elif h == EMPTY_CODE_HASH:
     result &= "ø"
@@ -143,7 +143,7 @@ proc ppVidList(vLst: openArray[VertexID]): string =
 proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
   if pfx:
     result = "£"
-  if key.to(Hash256) == Hash256():
+  if key.to(Hash256) == default(Hash256):
     result &= "©"
   elif not key.isValid:
     result &= "ø"
@@ -499,8 +499,8 @@ proc pp*(w: Hash256; codeHashOk: bool): string =
     w.ppCodeHash
   elif w == EMPTY_ROOT_HASH:
     "EMPTY_ROOT_HASH"
-  elif w == Hash256():
-    "Hash256()"
+  elif w == default(Hash256):
+    "default(Hash256)"
   else:
     w.data.toHex.squeeze(hex=true,ignLen=true)
 

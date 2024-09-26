@@ -305,7 +305,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
     var header: common.BlockHeader
     if ben.com.db.getBlockHeader(invalid.parentHash, header):
       if header.difficulty != 0.u256:
-        lastValid = common.Hash256()
+        lastValid = default(common.Hash256)
 
     return Opt.some invalidStatus(lastValid, "links to previously rejected block")
 

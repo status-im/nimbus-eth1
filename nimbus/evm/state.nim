@@ -259,9 +259,9 @@ method getAncestorHash*(
     if db.getBlockHash(blockNumber, blockHash):
       blockHash
     else:
-      Hash256()
+      default(Hash256)
   except RlpError:
-    Hash256()
+    default(Hash256)
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)
