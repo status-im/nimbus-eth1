@@ -52,7 +52,7 @@ func makeGetBlocksJob(number, maxResults: uint64) : BeaconJob =
 
 func makeHeaderRequest(number: uint64, maxResults: uint64): BlocksRequest =
   BlocksRequest(
-    startBlock: HashOrNum(isHash: false, number: number),
+    startBlock: BlockHashOrNumber(isHash: false, number: number),
     maxResults: maxResults.uint,
     skip: 0,
     reverse: true

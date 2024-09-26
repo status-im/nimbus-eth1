@@ -102,12 +102,12 @@ func header*(com: CommonRef, bn: uint64, temp, parent: BlockHeader): BlockHeader
 func header*(bn: uint64, temp, parent: BlockHeader,
              diff: uint64, stateRoot: string): BlockHeader =
   result = header(bn, temp, parent, diff)
-  result.stateRoot = Hash256(data: hextoByteArray[32](stateRoot))
+  result.stateRoot = Hash32(hextoByteArray[32](stateRoot))
 
 func header*(com: CommonRef, bn: uint64, temp, parent: BlockHeader,
              stateRoot: string): BlockHeader =
   result = com.header(bn, temp, parent)
-  result.stateRoot = Hash256(data: hextoByteArray[32](stateRoot))
+  result.stateRoot = Hash32(hextoByteArray[32](stateRoot))
 
 func emptyBody*(): BlockBody =
   BlockBody(

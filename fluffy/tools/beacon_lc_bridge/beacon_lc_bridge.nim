@@ -70,7 +70,7 @@ from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 type Hash256 = etypes.Hash256
 
 template asEthHash(hash: web3types.BlockHash): Hash256 =
-  Hash256(data: distinctBase(hash))
+  Hash32(distinctBase(hash))
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]

@@ -240,3 +240,4 @@
 [submodule "vendor/nim-minilru"]
 	path = vendor/nim-minilru
 	url = https://github.com/status-im/nim-minilru.git
+	branch = master

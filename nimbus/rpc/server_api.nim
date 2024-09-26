@@ -80,7 +80,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       address = ethAddr data
     result = ledger.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, blockTag: BlockTag) -> FixedBytes[32]:
+  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, blockTag: BlockTag) -> Web3FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:

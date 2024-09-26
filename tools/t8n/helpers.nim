@@ -35,13 +35,10 @@ proc parseHexOrInt[T](x: string): T =
       parseInt(x).T
 
 proc fromJson(T: type EthAddress, n: JsonNode, field: string): EthAddress =
-  let x = n[field].getStr()
-  var xlen = x.len
-  if x.startsWith("0x"):
-    xlen = xlen - 2
-  if xlen != sizeof(T) * 2:
-    raise newError(ErrorJson, "malformed Eth address " & x)
-  hexToByteArray(x, sizeof(T))
+  try:
+    EthAddress.fromHex(n[field].getStr())
+  except ValueError:
+    raise newError(ErrorJson, "malformed Eth address " & n[field].getStr)
 
 template fromJson(T: type Blob, n: JsonNode, field: string): Blob =
   hexToSeqByte(n[field].getStr())
@@ -63,7 +60,7 @@ proc fromJson(T: type Hash256, n: JsonNode): Hash256 =
   num.removePrefix("0x")
   if num.len < 64:
     num = repeat('0', 64 - num.len) & num
-  Hash256(data: hexToByteArray(num, 32))
+  Hash32(hexToByteArray(num, 32))
 
 proc fromJson(T: type Hash256, n: JsonNode, field: string): Hash256 =
   fromJson(T, n[field])
@@ -82,7 +79,7 @@ proc fromJson(T: type AccessList, n: JsonNode, field: string): AccessList =
     )
     let sks = x["storageKeys"]
     for sk in sks:
-      ap.storageKeys.add hexToByteArray(sk.getStr(), 32)
+      ap.storageKeys.add Bytes32.fromHex(sk.getStr())
     result.add ap
 
 proc fromJson(T: type Ommer, n: JsonNode): Ommer =
@@ -117,7 +114,7 @@ proc fromJson(T: type seq[Authorization], n: JsonNode, field: string): T =
 proc fromJson(T: type VersionedHashes, n: JsonNode, field: string): VersionedHashes =
   let list = n[field]
   for x in list:
-    result.add Hash256.fromJson(x)
+    result.add Bytes32.fromHex(x.getStr)
 
 template `gas=`(tx: var Transaction, x: GasInt) =
   tx.gasLimit = x
@@ -155,7 +152,7 @@ template optional(o: untyped, T: type, oField: untyped) =
 
 proc parseAlloc*(ctx: var TransContext, n: JsonNode) =
   for accAddr, acc in n:
-    let address = hexToByteArray[20](accAddr)
+    let address = EthAddress.fromHex(accAddr)
     var ga = GenesisAccount()
     if acc.hasKey("code"):
       ga.code = Blob.fromJson(acc, "code")
@@ -370,6 +367,9 @@ proc `@@`(x: bool): JsonNode =
 proc `@@`(x: openArray[byte]): JsonNode =
   %("0x" & x.toHex)
 
+proc `@@`(x: FixedBytes|Hash32|Address): JsonNode =
+  @@(x.data)
+
 proc toJson(x: Table[UInt256, UInt256]): JsonNode =
   # special case, we need to convert UInt256 into full 32 bytes
   # and not shorter
@@ -393,7 +393,7 @@ proc `@@`[K, V](x: Table[K, V]): JsonNode =
     result[k.to0xHex] = @@(v)
 
 proc `@@`(x: BloomFilter): JsonNode =
-  %("0x" & toHex[256](x))
+  %("0x" & toHex(x))
 
 proc `@@`(x: Log): JsonNode =
   %{

@@ -728,7 +728,7 @@ func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
 
   ok(ENode(
     pubkey: pk,
-    address: Address(
+    address: enode.Address(
       ip: utils.ipv4(tr.ip.get()),
       udpPort: Port(tr.udp.get()),
       tcpPort: Port(tr.tcp.get())

@@ -123,7 +123,7 @@ proc setupEthRpc*(
       address = data.ethAddr
     result = accDB.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: BlockTag) -> FixedBytes[32]:
+  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: BlockTag) -> Web3FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     ##
     ## data: address of the storage.

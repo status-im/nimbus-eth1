@@ -64,7 +64,7 @@ type
 const
   DefaultTimeout* = 60 # seconds
   DefaultSleep* = 1
-  prevRandaoContractAddr* = hexToByteArray[20]("0000000000000000000000000000000000000316")
+  prevRandaoContractAddr* = address"0000000000000000000000000000000000000316"
   GenesisTimestamp* = 0x1234
   Head*      = "latest"
   Pending*   = "pending"
@@ -72,23 +72,17 @@ const
   Safe*      = "safe"
 
 func toAddress*(x: UInt256): EthAddress =
-  var
-    mm = x.toByteArrayBE
-    x = 0
-  for i in 12..31:
-    result[x] = mm[i]
-    inc x
+  x.to(Bytes32).to(EthAddress)
 
-const
-  ZeroAddr* =  toAddress(0.u256)
+const ZeroAddr* = default(EthAddress)
 
 func toHash*(x: UInt256): common.Hash256 =
-  common.Hash256(data: x.toByteArrayBE)
+  common.Hash32(x.toByteArrayBE)
 
-func timestampToBeaconRoot*(timestamp: Quantity): FixedBytes[32] =
+func timestampToBeaconRoot*(timestamp: Quantity): Web3FixedBytes[32] =
   # Generates a deterministic hash from the timestamp
   let h = sha2.sha256.digest(timestamp.uint64.toBytesBE)
-  FixedBytes[32](h.data)
+  Web3FixedBytes[32](h.data)
 
 proc randomBytes*(_: type common.Hash256): common.Hash256 =
   doAssert randomBytes(result.data) == 32
@@ -254,7 +248,7 @@ template expectHash*(res: untyped, hash: common.Hash256) =
   testCond s.blockHash == hash:
     error "Unexpected expectHash", expect=hash.short, get=s.blockHash.short
 
-template expectStorageEqual*(res: untyped, expectedValue: FixedBytes[32]) =
+template expectStorageEqual*(res: untyped, expectedValue: Web3FixedBytes[32]) =
   testCond res.isOk:
     error "expectStorageEqual", msg=res.error
   testCond res.get == expectedValue:

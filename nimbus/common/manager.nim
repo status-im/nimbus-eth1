@@ -36,7 +36,7 @@ proc loadKeystores*(am: var AccountsManager, path: string):
     createDir(path)
     for filename in walkDirRec(path):
       var data = Json.loadFile(filename, JsonNode)
-      let address: EthAddress = hexToByteArray[20](data["address"].getStr())
+      let address = EthAddress.fromHex(data["address"].getStr())
       am.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
   except CatchableError as exc:
     return err("loadKeystrores: " & exc.msg)

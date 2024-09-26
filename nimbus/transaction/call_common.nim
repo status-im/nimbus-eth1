@@ -130,7 +130,7 @@ proc initialAccessListEIP2929(call: CallParams) =
     for account in call.accessList:
       db.accessList(account.address)
       for key in account.storageKeys:
-        db.accessList(account.address, UInt256.fromBytesBE(key))
+        db.accessList(account.address, key.to(UInt256))
 
 proc setupHost(call: CallParams): TransactionHost =
   let vmState = call.vmState

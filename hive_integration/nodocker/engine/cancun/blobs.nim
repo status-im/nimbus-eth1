@@ -11,7 +11,7 @@
 import
   eth/common/eth_types,
   stint,
-  kzg4844/kzg_ex as kzg,
+  kzg4844/kzg,
   stew/endians2,
   nimcrypto/sha2,
   results,

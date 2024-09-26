@@ -30,6 +30,7 @@ export
 type
   Hash256 = eth_types.Hash256
   VersionedHash = engine_api_types.VersionedHash
+  FixedBytes[N: static int] = engine_api_types.FixedBytes[N]
 
 template wrapTry(body: untyped) =
   try:
@@ -207,7 +208,7 @@ proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
   for w3tx in list:
     let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
-      result.add w3Hash(h)
+      result.add w3Hash(common.Hash32(h))
 
 proc newPayload*(client: RpcClient,
                  payload: ExecutionPayload,
@@ -271,7 +272,7 @@ proc exchangeCapabilities*(client: RpcClient,
 proc toBlockNonce(n: Opt[FixedBytes[8]]): common.BlockNonce =
   if n.isNone:
     return default(BlockNonce)
-  n.get.bytes
+  BlockNonce(n.get.bytes)
 
 proc maybeU64(n: Opt[Quantity]): Opt[uint64] =
   if n.isNone:
@@ -305,7 +306,7 @@ proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
     nonce          : toBlockNonce(bc.nonce),
     ommersHash     : ethHash bc.sha3Uncles,
     logsBloom      : BloomFilter bc.logsBloom,
-    txRoot         : ethHash bc.transactionsRoot,
+    transactionsRoot : ethHash bc.transactionsRoot,
     stateRoot      : ethHash bc.stateRoot,
     receiptsRoot   : ethHash bc.receiptsRoot,
     coinbase       : ethAddr bc.miner,
@@ -322,9 +323,9 @@ proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
     parentBeaconBlockRoot: ethHash bc.parentBeaconBlockRoot,
   )
 
-func vHashes(x: Opt[seq[Web3Hash]]): seq[common.Hash256] =
+func vHashes(x: Opt[seq[Web3Hash]]): seq[common.VersionedHash] =
   if x.isNone: return
-  else: ethHashes(x.get)
+  else: ethVersionedHashes(x.get)
 
 proc toTransaction(tx: TransactionObject): Transaction =
   common.Transaction(
@@ -455,7 +456,10 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     chainId: maybeChainId(tx.chainId),
     accessList: tx.accessList,
     maxFeePerBlobGas: tx.maxFeePerBlobGas,
-    versionedHashes: ethHashes tx.blobVersionedHashes,
+    versionedHashes: if tx.blobVersionedHashes.isSome:
+      Opt.some(vHashes tx.blobVersionedHashes)
+    else:
+      Opt.none(VersionedHashes),
   )
 
 proc waitForTTD*(client: RpcClient,
@@ -652,7 +656,7 @@ proc debugPrevRandaoTransaction*(
       if stack.len < 1:
         return err("Invalid stack after PREVRANDAO operation")
 
-      let stackHash = Hash256(data: hextoByteArray[32](stack[0].getStr))
+      let stackHash = Hash32(hextoByteArray[32](stack[0].getStr))
       if stackHash != expectedPrevRandao:
         return err("Invalid stack after PREVRANDAO operation $1 != $2" % [stackHash.data.toHex, expectedPrevRandao.data.toHex])
 

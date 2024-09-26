@@ -196,7 +196,7 @@ proc mergeAccountRecord*(
   # leaf resulting from splitting a leaf into a branch with two leaves
   db.layersPutAccLeaf(accPath, updated[0])
   if updated[1].isValid:
-    let otherPath = Hash256(data: getBytes(
+    let otherPath = Hash32(getBytes(
       NibblesBuf.fromBytes(accPath.data).replaceSuffix(updated[1].pfx)))
     db.layersPutAccLeaf(otherPath, updated[2])
 
@@ -274,7 +274,7 @@ proc mergeStorageData*(
   db.layersPutStoLeaf(mixPath, updated[0])
 
   if updated[1].isValid:
-    let otherPath = Hash256(data: getBytes(
+    let otherPath = Hash32(getBytes(
       NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
     db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
 
