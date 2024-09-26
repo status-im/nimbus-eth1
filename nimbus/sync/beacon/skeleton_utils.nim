@@ -19,7 +19,7 @@ logScope:
 const
   # How often to log sync status (in ms)
   STATUS_LOG_INTERVAL* = initDuration(microseconds = 8000)
-  zeroBlockHash* = Hash256()
+  zeroBlockHash* = default(Hash256)
 
 # ------------------------------------------------------------------------------
 # Misc helpers

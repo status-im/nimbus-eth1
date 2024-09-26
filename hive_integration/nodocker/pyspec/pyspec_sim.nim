@@ -119,7 +119,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
   let blks = node["blocks"]
   var
-    latestValidHash = common.Hash256()
+    latestValidHash = default(common.Hash256)
     latestVersion: Version
 
   result = TestStatus.OK
@@ -164,7 +164,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
   block blockOne:
     # only update head of beacon chain if valid response occurred
-    if latestValidHash != common.Hash256():
+    if latestValidHash != default(common.Hash256):
       # update with latest valid response
       let fcState = ForkchoiceStateV1(headBlockHash: BlockHash latestValidHash.data)
       let res = env.rpcClient.forkchoiceUpdated(latestVersion, fcState)
