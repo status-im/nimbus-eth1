@@ -37,7 +37,7 @@
 {.push raises: [].}
 
 import
-  std/[os, strutils, options],
+  std/[os, strutils],
   chronicles,
   chronos,
   confutils,
@@ -46,9 +46,9 @@ import
   # for `BlockHeader`.
   eth/common/eth_types as etypes,
   eth/common/eth_types_rlp,
-  beacon_chain/el/el_manager,
+  beacon_chain/el/[el_manager, engine_api_conversions],
   beacon_chain/gossip_processing/optimistic_processor,
-  beacon_chain/networking/topic_params,
+  beacon_chain/networking/[eth2_network, topic_params],
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common],
@@ -61,7 +61,6 @@ import
   ../../common/common_types,
   ./beacon_lc_bridge_conf
 
-from stew/objects import checkedEnumAssign
 from web3/primitives as web3types import BlockHash
 
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
@@ -95,7 +94,7 @@ proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash256 {.raises:
       let withdrawal = etypes.Withdrawal(
         index: distinctBase(w.index),
         validatorIndex: distinctBase(w.validatorIndex),
-        address: distinctBase(w.address),
+        address: distinctBase(w.address).to(EthAddress),
         amount: distinctBase(w.amount),
       )
       tr.put(rlp.encode(i), rlp.encode(withdrawal))
@@ -115,9 +114,9 @@ proc asPortalBlockData*(
       ommersHash: EMPTY_UNCLE_HASH,
       coinbase: EthAddress payload.feeRecipient,
       stateRoot: payload.stateRoot.asEthHash,
-      txRoot: txRoot,
+      transactionsRoot: txRoot,
       receiptsRoot: payload.receiptsRoot.asEthHash,
-      logsBloom: distinctBase(payload.logsBloom),
+      logsBloom: distinctBase(payload.logsBloom).to(Bloom),
       difficulty: default(DifficultyInt),
       number: payload.blockNumber.distinctBase,
       gasLimit: distinctBase(payload.gasLimit),
@@ -160,9 +159,9 @@ proc asPortalBlockData*(
       ommersHash: EMPTY_UNCLE_HASH,
       coinbase: EthAddress payload.feeRecipient,
       stateRoot: payload.stateRoot.asEthHash,
-      txRoot: txRoot,
+      transactionsRoot: txRoot,
       receiptsRoot: payload.receiptsRoot.asEthHash,
-      logsBloom: distinctBase(payload.logsBloom),
+      logsBloom: distinctBase(payload.logsBloom).to(Bloom),
       difficulty: default(DifficultyInt),
       number: payload.blockNumber.distinctBase,
       gasLimit: distinctBase(payload.gasLimit),
@@ -271,7 +270,7 @@ proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
         when consensusFork >= ConsensusFork.Bellatrix:
           if forkyBlck.message.is_execution_block:
             template payload(): auto =
-              forkyBlck.message.body.execution_payload
+              forkyBlck.message.body
 
             # TODO: Get rid of the asEngineExecutionPayload step?
             let executionPayload = payload.asEngineExecutionPayload()
