@@ -14,16 +14,12 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
   pkg/stew/sorted_set,
-  ../../sync_desc,
   ../worker_desc,
   ./update/metrics,
-  "."/[db, unproc]
+  "."/[blocks_unproc, db, headers_staged, headers_unproc]
 
 logScope:
   topics = "flare update"
-
-const extraTraceMessages = false # or true
-  ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -49,7 +45,7 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   ## ::
   ##     G               B==L                 L'==F'
   ##     o----------------o---------------------o---->
-  ##     | <-- linked --> |
+  ##     | <-- linked --> | <-- unprocessed --> |
   ##
   const info = "updateBeaconChange"
 
@@ -57,15 +53,12 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
 
   # Need: `F < Z` and `B == L`
   if z != 0 and z <= ctx.layout.final:       # violates `F < Z`
-    when extraTraceMessages:
-      trace info & ": not applicable",
-        Z=("#" & $z), F=("#" & $ctx.layout.final)
+    trace info & ": not applicable", Z=z.bnStr, F=ctx.layout.final.bnStr
     return false
 
   if ctx.layout.base != ctx.layout.least:    # violates `B == L`
-    when extraTraceMessages:
-      trace info & ": not applicable",
-        B=("#" & $ctx.layout.base), L=("#" & $ctx.layout.least)
+    trace info & ": not applicable",
+      B=ctx.layout.base.bnStr, L=ctx.layout.least.bnStr
     return false
 
   # Check consistency: `B == L <= F` for maximal `B` => `L == F`
@@ -89,10 +82,12 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   discard ctx.dbStoreLinkedHChainsLayout()
 
   # Update range
-  ctx.unprocMerge(ctx.layout.base+1, ctx.layout.least-1)
+  doAssert ctx.headersUnprocTotal() == 0
+  doAssert ctx.headersUnprocBorrowed() == 0
+  doAssert ctx.headersStagedQueueIsEmpty()
+  ctx.headersUnprocSet(ctx.layout.base+1, ctx.layout.least-1)
 
-  when extraTraceMessages:
-    trace info & ": updated"
+  trace info & ": updated"
   true
 
 
@@ -110,19 +105,24 @@ proc mergeAdjacentChains(ctx: FlareCtxRef): bool =
   if ctx.lhc.layout.baseHash != ctx.lhc.layout.leastParent:
     # FIXME: Oops -- any better idea than to defect?
     raiseAssert info & ": hashes do not match" &
-      " B=#" & $ctx.lhc.layout.base & " L=#" & $ctx.lhc.layout.least
+      " B=" & ctx.lhc.layout.base.bnStr & " L=" & $ctx.lhc.layout.least.bnStr
+
+  trace info & ": merging", B=ctx.lhc.layout.base.bnStr,
+    L=ctx.lhc.layout.least.bnStr
 
   # Merge adjacent linked chains
   ctx.lhc.layout = LinkedHChainsLayout(
-    base:        ctx.layout.final,
+    base:        ctx.layout.final,               # `B`
     baseHash:    ctx.layout.finalHash,
-    least:       ctx.layout.final,
+    least:       ctx.layout.final,               # `L`
     leastParent: ctx.dbPeekParentHash(ctx.layout.final).expect "Hash256",
-    final:       ctx.layout.final,
+    final:       ctx.layout.final,               # `F`
     finalHash:   ctx.layout.finalHash)
 
   # Save state
   discard ctx.dbStoreLinkedHChainsLayout()
+
+  true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -141,8 +141,31 @@ proc updateLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
     result = true
 
 
+proc updateBlockRequests*(ctx: FlareCtxRef): bool =
+  ## Update block requests if there staged block queue is empty
+  const info = "updateBlockRequests"
+
+  let t = ctx.dbStateBlockNumber()
+  if t < ctx.layout.base: # so the half open interval `(T,B]` is not empty
+
+    # One can fill/import/execute blocks by number from `(T,B]`
+    if ctx.blk.topRequest < ctx.layout.base:
+      # So there is some space
+      trace info & ": extending", T=t.bnStr, topReq=ctx.blk.topRequest.bnStr,
+        B=ctx.layout.base.bnStr
+
+      ctx.blocksUnprocCommit(0, max(t,ctx.blk.topRequest) + 1, ctx.layout.base)
+      ctx.blk.topRequest = ctx.layout.base
+      return true
+
+  false
+
+
 proc updateMetrics*(ctx: FlareCtxRef) =
-  ctx.updateMetricsImpl()
+  let now = Moment.now()
+  if ctx.pool.nextUpdate < now:
+    ctx.updateMetricsImpl()
+    ctx.pool.nextUpdate = now + metricsUpdateInterval
 
 # ------------------------------------------------------------------------------
 # End

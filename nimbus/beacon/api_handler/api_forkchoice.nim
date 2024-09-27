@@ -116,6 +116,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     # Update sync header (if any)
     com.syncReqNewHead(header)
+
+    # Pass on finalised header
+    if com.haveSyncFinalisedBlockHash():
+      let finalizedBlockHash = ethHash update.finalizedBlockHash
+      if finalizedBlockHash != common.Hash256():
+        com.syncFinalisedBlockHash(finalizedBlockHash)
+
     return simpleFCU(PayloadExecutionStatus.syncing)
 
   validateHeaderTimestamp(header, com, apiVersion)

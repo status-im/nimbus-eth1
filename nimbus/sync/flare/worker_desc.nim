@@ -11,64 +11,13 @@
 {.push raises:[].}
 
 import
-  pkg/[bearssl/rand, chronos, chronos/timer],
+  pkg/chronos,
   pkg/stew/[interval_set, sorted_set],
-  ../../db/era1_db,
-  ../sync_desc
+  ../sync_desc,
+  ./worker_config
 
 export
-  sync_desc
-
-const
-  enableTicker* = false or true
-    ## Log regular status updates similar to metrics. Great for debugging.
-
-  metricsUpdateInterval* = chronos.seconds(10)
-    ## Wait at least this time before next update
-
-  daemonWaitInterval* = chronos.seconds(30)
-    ## Some waiting time at the end of the daemon task which always lingers
-    ## in the background.
-
-  runMultiIdleWaitInterval* = chronos.seconds(30)
-    ## Sllep some time in multi-mode if there is nothing to do
-
-  nFetchHeadersRequest* = 1_024
-    ## Number of headers that will be requested with a single `eth/xx` message.
-    ## Generously calculating a header with size 1k, fetching 1_024 headers
-    ## would amount to a megabyte. As suggested in
-    ## github.com/ethereum/devp2p/blob/master/caps/eth.md#blockheaders-0x04,
-    ## the size of a message should not exceed 2 MiB.
-    ##
-    ## On live tests, responses to larger requests where all truncted to 1024
-    ## header entries. It makes sense to not ask for more. So reserving
-    ## smaller unprocessed slots that mostly all will be served leads to less
-    ## fragmentation on a multi-peer downloading approach.
-
-  fetchHeaderReqZombieThreshold* = chronos.seconds(2)
-    ## Response time allowance. If the response time for the set of headers
-    ## exceeds this threshold, then this peer will be banned for a while.
-
-  nFetchHeadersOpportunisticly* = 8 * nFetchHeadersRequest
-    ## Length of the request/stage batch. Several headers are consecutively
-    ## fetched and stashed together as a single record on the staged queue.
-    ## This is the size of an opportunistic run where the record stashed on
-    ## the queue might be later discarded.
-
-  nFetchHeadersByTopHash* = 16 * nFetchHeadersRequest
-    ## This entry is similar to `nFetchHeadersOpportunisticly` only that it
-    ## will always be successfully merged into the database.
-
-  stagedQueueLengthLwm* = 24
-    ## Limit the number of records in the staged queue. They start accumulating
-    ## if one peer stalls while fetching the top chain so leaving a gap. This
-    ## gap must be filled first before inserting the queue into a contiguous
-    ## chain of headers. So this is a low-water mark where the system will
-    ## try some magic to mitigate this problem.
-
-  stagedQueueLengthHwm* = 40
-    ## If this size is exceeded, the staged queue is flushed and its contents
-    ## is re-fetched from scratch.
+  sync_desc, worker_config
 
 when enableTicker:
   import ./worker/start_stop/ticker
@@ -83,9 +32,6 @@ type
   LinkedHChainQueue* = SortedSet[BlockNumber,LinkedHChain]
     ## Block intervals sorted by largest block number.
 
-  LinkedHChainQueueWalk* = SortedSetWalkRef[BlockNumber,LinkedHChain]
-    ## Traversal descriptor
-
   LinkedHChain* = object
     ## Public block items for the `LinkedHChainQueue` list, indexed by the
     ## largest block number. The list `revHdrs[]` is reversed, i.e. the largest
@@ -95,6 +41,13 @@ type
     hash*: Hash256                   ## Hash of `headers[0]`
     revHdrs*: seq[Blob]              ## Encoded linked header chain
     parentHash*: Hash256             ## Parent hash of `headers[^1]`
+
+  StagedBlocksQueue* = SortedSet[BlockNumber,BlocksForImport]
+    ## Blocks sorted by least block number.
+
+  BlocksForImport* = object
+    ## Block request item sorted by least block number (i.e. from `blocks[0]`.)
+    blocks*: seq[EthBlock]           ## List of blocks for import
 
   # -------------------
 
@@ -125,45 +78,53 @@ type
   BeaconHeader* = object
     ## Beacon state to be implicitely updated by RPC method
     changed*: bool                   ## Set a marker if something has changed
-    header*: BlockHeader             ## Running on beacon chain, last header
-    slow_start*: float               ## Share of block number to use if positive
+    header*: BlockHeader             ## Beacon chain, finalised header
+    finalised*: Hash256              ## From RPC, ghash of finalised header
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains
     beacon*: BeaconHeader            ## See `Z` in README
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
+    borrowed*: uint64                ## Total of temp. fetched ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
     layout*: LinkedHChainsLayout     ## Current header chains layout
     lastLayout*: LinkedHChainsLayout ## Previous layout (for delta update)
+
+  BlocksImportSync* = object
+    ## Sync state for blocks to import/execute
+    unprocessed*: BnRangeSet         ## Blocks download requested
+    borrowed*: uint64                ## Total of temp. fetched ranges
+    topRequest*: BlockNumber         ## Max requested block number
+    staged*: StagedBlocksQueue       ## Blocks ready for import
 
   # -------------------
 
   FlareBuddyData* = object
     ## Local descriptor data extension
-    fetchBlocks*: BnRange
+    nHdrRespErrors*: int             ## Number of errors/slow responses in a row
+    nBdyRespErrors*: int             ## Ditto for bodies
 
-  FlareTossUp* = object
-    ## Reminiscent of CSMA/CD. For the next number `nCoins` in a row, each
-    ## participant can fetch a `true`/`false` value to decide whether to
-    ## start doing something or delay.
-    nCoins*: uint                    ## Numner of coins to toss in a row
-    nLeft*: uint                     ## Number of flopped coins left
-    coins*: uint64                   ## Sequence of fliopped coins
+    # Debugging and logging.
+    nMultiLoop*: int                 ## Number of runs
+    stoppedMultiRun*: chronos.Moment ## Time when run-multi stopped
+    multiRunIdle*: chronos.Duration  ## Idle time between runs
 
   FlareCtxData* = object
     ## Globally shared data extension
-    rng*: ref HmacDrbgContext        ## Random generator, pre-initialised
+    nBuddies*: int                   ## Number of active workers
     lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
-    tossUp*: FlareTossUp             ## Reminiscent of CSMA/CD
+    blkSyncState*: BlocksImportSync  ## For importing/executing blocks
     nextUpdate*: Moment              ## For updating metrics
 
-    # Era1 related, disabled if `e1db` is `nil`
-    e1Dir*: string                   ## Pre-merge archive (if any)
-    e1db*: Era1DbRef                 ## Era1 db handle (if any)
-    e1AvailMax*: BlockNumber         ## Last Era block applicable here
+    # Blocks import/execution settings for running  `persistBlocks()` with
+    # `nBodiesBatch` blocks in each round (minimum value is
+    # `nFetchBodiesRequest`.)
+    chain*: ChainRef
+    importRunningOk*: bool           ## Advisory lock, fetch vs. import
+    nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
+    blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
 
     # Info stuff, no functional contribution
-    nBuddies*: int                   ## Number of active workers (info only)
     nReorg*: int                     ## Number of reorg invocations (info only)
 
     # Debugging stuff
@@ -176,11 +137,6 @@ type
   FlareCtxRef* = CtxRef[FlareCtxData]
     ## Extended global descriptor
 
-static:
-  doAssert 0 < nFetchHeadersRequest
-  doAssert nFetchHeadersRequest <= nFetchHeadersOpportunisticly
-  doAssert nFetchHeadersRequest <= nFetchHeadersByTopHash
-
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
@@ -188,6 +144,10 @@ static:
 func lhc*(ctx: FlareCtxRef): var LinkedHChainsSync =
   ## Shortcut
   ctx.pool.lhcSyncState
+
+func blk*(ctx: FlareCtxRef): var BlocksImportSync =
+  ## Shortcut
+  ctx.pool.blkSyncState
 
 func layout*(ctx: FlareCtxRef): var LinkedHChainsLayout =
   ## Shortcut
@@ -206,6 +166,32 @@ proc `$`*(w: BnRange): string =
 
 proc bnStr*(w: BlockNumber): string =
   "#" & $w
+
+# Source: `nimbus_import.shortLog()`
+func toStr*(a: chronos.Duration, parts: int): string =
+  ## Returns string representation of Duration ``a`` as nanoseconds value.
+  if a == nanoseconds(0):
+    return "0"
+  var
+    res = ""
+    v = a.nanoseconds()
+    parts = parts
+
+  template f(n: string, T: Duration) =
+    if v >= T.nanoseconds():
+      res.add($(uint64(v div T.nanoseconds())))
+      res.add(n)
+      v = v mod T.nanoseconds()
+      dec parts
+      if v == 0 or parts <= 0:
+        return res
+
+  f("s", Second)
+  f("ms", Millisecond)
+  f("us", Microsecond)
+  f("ns", Nanosecond)
+
+  res
 
 # ------------------------------------------------------------------------------
 # End
