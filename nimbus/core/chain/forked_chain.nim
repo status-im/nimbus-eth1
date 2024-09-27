@@ -364,6 +364,27 @@ proc setHead(c: ForkedChainRef,
   # update global syncHighest
   c.com.syncHighest = number
 
+proc updateHeadIfNecessary(c: ForkedChainRef,
+                           head: CanonicalDesc, headHash: Hash256) =
+  # update head if the new head is different
+  # from current head or current chain
+  if c.cursorHash != head.cursorHash:
+    if not c.stagingTx.isNil:
+      c.stagingTx.rollback()
+    c.stagingTx = c.db.ctx.newTransaction()
+    c.replaySegment(headHash)
+
+  c.trimCanonicalChain(head, headHash)
+  if c.cursorHash != headHash:
+    c.cursorHeader = head.header
+    c.cursorHash = headHash
+
+  if c.stagingTx.isNil:
+    # setHead below don't go straight to db
+    c.stagingTx = c.db.ctx.newTransaction()
+
+  c.setHead(headHash, head.header.number)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -425,8 +446,19 @@ proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash256,
                  finalizedHash: Hash256): Result[void, string] =
 
+  if headHash == c.cursorHash and finalizedHash == static(default(Hash256)):
+    # Do nothing if the new head already our current head
+    # and there is no request to new finality
+    return ok()
+
   # If there are multiple heads, find which chain headHash belongs to
   let head = ?c.findCanonicalHead(headHash)
+
+  if finalizedHash == static(default(Hash256)):
+    # skip newBase calculation and skip chain finalization
+    # if finalizedHash is zero
+    c.updateHeadIfNecessary(head, headHash)
+    return ok()
 
   # Finalized block must be part of canonical chain
   let finalizedHeader = ?c.canonicalChain(finalizedHash, headHash)
@@ -436,22 +468,7 @@ proc forkChoice*(c: ForkedChainRef,
 
   if newBase.hash == c.baseHash:
     # The base is not updated but the cursor maybe need update
-    if c.cursorHash != head.cursorHash:
-      if not c.stagingTx.isNil:
-        c.stagingTx.rollback()
-      c.stagingTx = c.db.ctx.newTransaction()
-      c.replaySegment(headHash)
-
-    c.trimCanonicalChain(head, headHash)
-    if c.cursorHash != headHash:
-      c.cursorHeader = head.header
-      c.cursorHash = headHash
-
-    if c.stagingTx.isNil:
-      # setHead below don't go straight to db
-      c.stagingTx = c.db.ctx.newTransaction()
-
-    c.setHead(headHash, head.header.number)
+    c.updateHeadIfNecessary(head, headHash)
     return ok()
 
   # At this point cursorHeader.number > baseHeader.number
@@ -553,9 +570,21 @@ func latestHash*(c: ForkedChainRef): Hash256 =
 func baseNumber*(c: ForkedChainRef): BlockNumber =
   c.baseHeader.number
 
-func latestBlock*(c: ForkedChainRef): EthBlock =
+proc latestBlock*(c: ForkedChainRef): EthBlock =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
+  do:
+    # This can happen if block pointed by cursorHash is not loaded yet
+    try:
+      result = c.db.getEthBlock(c.cursorHash)
+      c.blocks[c.cursorHash] = BlockDesc(
+        blk: result,
+        receipts: c.db.getReceipts(result.header.receiptsRoot),
+      )
+    except BlockNotFound:
+      doAssert(false, "Block should exists in database")
+    except RlpError:
+      doAssert(false, "Receipts should exists in database")
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[BlockHeader, string] =
   if number > c.cursorHeader.number:

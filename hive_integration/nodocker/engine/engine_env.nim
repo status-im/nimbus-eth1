@@ -23,6 +23,7 @@ import
     core/tx_pool/tx_item,
     core/block_import,
     rpc,
+    rpc/oracle,
     sync/protocol,
     sync/beacon,
     sync/handlers,

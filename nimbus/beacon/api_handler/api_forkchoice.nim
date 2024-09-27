@@ -42,7 +42,7 @@ template validateVersion(attr, com, apiVersion) =
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
         raise invalidParams("forkChoiceUpdated" & $apiVersion &
-          " doesn't support payloadAttributesV1")
+          " doesn't support payloadAttributesV1 when Shanghai is activated")
       if version > Version.V2:
         raise invalidAttr("if timestamp is Shanghai or later," &
           " payloadAttributes must be PayloadAttributesV2")
@@ -189,7 +189,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidForkChoiceState("safe head not canonical")
     db.safeHeaderHash(safeBlockHash)
 
-  chain.forkChoice(finalizedBlockHash, blockHash).isOkOr:
+  chain.forkChoice(blockHash, finalizedBlockHash).isOkOr:
     return invalidFCU(error, com, header)
 
   # If payload generation was requested, create a new block to be potentially
@@ -209,7 +209,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     info "Created payload for sealing",
       id = id.toHex,
       hash = bundle.executionPayload.blockHash.short,
-      number = bundle.executionPayload.blockNumber
+      number = bundle.executionPayload.blockNumber,
+      attr = attrs
 
     return validFCU(Opt.some(id), blockHash)
 
