@@ -203,7 +203,7 @@ proc opEnvMain*() =
 
   suite "Environmental Information Opcodes 2":
     let
-      acc = hexToByteArray[20]("0xfbe0afcd7658ba86be41922059dd879c192d4c73")
+      acc = address"0xfbe0afcd7658ba86be41922059dd879c192d4c73"
       code = hexToSeqByte("0x0102030405060708090A0B0C0D0E0F" &
         "611234600054615566602054603E6000602073471FD3AD3E9EEADEEC4608B92D" &
         "16CE6B500704CC3C6000605f556014600054601e60205463abcddcba6040545b" &

@@ -42,8 +42,8 @@ type
 const
   # signerKeyHex = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
   vaultKeyHex = "63b508a03c3b5937ceb903af8b1b0c191012ef6eb7e9c3fb7afa94e5d214d376"
-  recipient = hexToByteArray[20]("0000000000000000000000000000000000000318")
-  feeRecipient = hexToByteArray[20]("0000000000000000000000000000000000000212")
+  recipient = address"0000000000000000000000000000000000000318"
+  feeRecipient = address"0000000000000000000000000000000000000212"
   contractCode = evmByteCode:
     PrevRandao    # VAL
     Push1 "0x11"  # KEY

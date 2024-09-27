@@ -32,7 +32,7 @@ type
 
 func logsBloom(logs: openArray[Log]): LogsBloom =
   for log in logs:
-    result.incl log.address.to(Bytes32)
+    result.incl log.address
     for topic in log.topics:
       result.incl topic
 

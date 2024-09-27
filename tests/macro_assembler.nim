@@ -19,6 +19,7 @@ import
 import
   ../nimbus/db/ledger,
   ../nimbus/evm/types,
+  ../nimbus/evm/interpreter/op_codes,
   ../nimbus/evm/internals,
   ../nimbus/transaction/[call_common, call_evm],
   ../nimbus/evm/state,
@@ -32,6 +33,7 @@ import ../nimbus/transaction except GasPrice
 import ../tools/common/helpers except LogLevel
 
 export byteutils
+
 {.experimental: "dynamicBindSym".}
 
 type
@@ -125,11 +127,11 @@ proc parseLog(node: NimNode): Log =
       let value = body.strVal
       if value.len < 20:
         error("bad address format", body)
-      hexToByteArray(value, result.address)
+      hexToByteArray(value, result.address.data)
     of "topics":
       body.expectKind(nnkBracket)
       for x in body:
-        result.topics.add validateVMWord(x.strVal, x)
+        result.topics.add Topic validateVMWord(x.strVal, x)
     of "data":
       result.data = hexToSeqByte(body.strVal)
     else:error("unknown log section '" & label & "'", item[0])
@@ -141,14 +143,11 @@ proc parseLogs(list: NimNode): seq[Log] =
     result.add parseLog(n)
 
 proc validateOpcode(sym: NimNode) =
-  let typ = getTypeInst(sym)
-  typ.expectKind(nnkSym)
-  if $typ != "Op":
+  if $sym notin idToOpcode:
     error("unknown opcode '" & $sym & "'", sym)
 
 proc addOpCode(code: var seq[byte], node, params: NimNode) =
-  node.expectKind nnkSym
-  let opcode = Op(idToOpcode[node.strVal].intVal)
+  let opcode = Op(idToOpcode[$node].intVal)
   case opcode
   of Push1..Push32:
     if params.len != 1:
@@ -257,8 +256,8 @@ proc generateAssemblerTest(masm: MacroAssembler): NimNode =
     echo result.toStrLit.strVal
 
 const
-  codeAddress = hexToByteArray[20]("460121576cc7df020759730751f92bd62fd78dd6")
-  coinbase = hexToByteArray[20]("bb7b8287f3f0a933474a79eae42cbca977791171")
+  codeAddress = address"460121576cc7df020759730751f92bd62fd78dd6"
+  coinbase = address"bb7b8287f3f0a933474a79eae42cbca977791171"
 
 proc initVMEnv*(network: string): BaseVMState =
   let
@@ -385,7 +384,7 @@ proc createSignedTx(payload: Blob, chainId: ChainId): Transaction =
     to: Opt.some codeAddress,
     value: 500.u256,
     payload: payload,
-    versionedHashes: @[EMPTY_UNCLE_HASH, EMPTY_SHA3]
+    versionedHashes: @[VersionedHash(EMPTY_UNCLE_HASH), VersionedHash(EMPTY_SHA3)]
   )
   signTransaction(unsignedTx, privateKey, chainId, false)
 

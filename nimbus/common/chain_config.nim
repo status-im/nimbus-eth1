@@ -554,9 +554,6 @@ func networkParams*(id: NetworkId): NetworkParams
   result.genesis = genesisBlockForNetwork(id)
   result.config  = chainConfigForNetwork(id)
 
-func `==`*(a, b: ChainId): bool =
-  a.uint64 == b.uint64
-
 func `==`*(a, b: Genesis): bool =
   if a.isNil and b.isNil: return true
   if a.isNil and not b.isNil: return false

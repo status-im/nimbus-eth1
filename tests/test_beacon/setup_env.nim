@@ -85,7 +85,7 @@ func header*(bn: uint64, temp, parent: BlockHeader, diff: uint64): BlockHeader =
     timestamp  : parent.timestamp + 1,
     gasLimit   : temp.gasLimit,
     stateRoot  : temp.stateRoot,
-    txRoot     : temp.txRoot,
+    transactionsRoot     : temp.txRoot,
     baseFeePerGas  : temp.baseFeePerGas,
     receiptsRoot   : temp.receiptsRoot,
     ommersHash     : temp.ommersHash,
