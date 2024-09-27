@@ -52,7 +52,7 @@ template toBytes(content: string): seq[byte] =
   except ValueError as e:
     raiseAssert(e.msg)
 
-template getHistoryContent(
+template historyGetContent(
     client: PortalRpcClient, contentKeyBytes: openArray[byte]
 ): untyped =
   # Look up the content from the local db before trying to get it from the network
@@ -64,76 +64,86 @@ template getHistoryContent(
 
   content.toBytes()
 
-proc historyRecursiveFindBlockHeader*(
-    client: PortalRpcClient, blockNumOrHash: uint64 | BlockHash
+proc historyGetBlockHeader*(
+    client: PortalRpcClient, blockHash: BlockHash
 ): Future[Result[BlockHeader, string]] {.async: (raises: []).} =
-  ## Fetches the block header for the given block number or hash from the
-  ## Portal History Network. The data is first looked up in the local database
-  ## before trying to fetch it from the network.
+  ## Fetches the block header for the given hash from the Portal History Network.
+  ## The data is first looked up in the node's local database before trying to
+  ## fetch it from the network.
+  ##
+  ## Note: This does not validate that the returned header is part of the canonical
+  ## chain, it only validates that the header matches the block hash. For example,
+  ## a malicious portal node could return a valid but non-canonical header such
+  ## as an uncle block that matches the block hash. For this reason the caller
+  ## needs to use another method to verify the header is part of the canonical chain.
 
   let
-    contentKeyBytes = blockHeaderContentKey(blockNumOrHash).encode().asSeq()
-    contentBytes = client.getHistoryContent(contentKeyBytes)
+    contentKeyBytes = blockHeaderContentKey(blockHash).encode().asSeq()
+    contentBytes = client.historyGetContent(contentKeyBytes)
     headerWithProof = ?decodeSsz(contentBytes, BlockHeaderWithProof)
 
-  validateBlockHeaderBytes(headerWithProof.header.asSeq(), blockNumOrHash)
+  # TODO: How can we verify that the header is part of the canonical chain
+  # over JSON-RPC?
+  # The verifyHeader(n.accumulator, header, proof) call requires access to
+  # the accumulator which is not available here on the client side.
+  validateBlockHeaderBytes(headerWithProof.header.asSeq(), blockHash)
 
-proc historyRecursiveFindBlockBody*(
+proc historyGetBlockBody*(
     client: PortalRpcClient, blockHeader: BlockHeader
 ): Future[Result[BlockBody, string]] {.async: (raises: []).} =
   ## Fetches the block body for the given block header from the Portal History
-  ## Network. The data is first looked up in the local database before trying
-  ## to fetch it from the network. If you have the block header then this function
-  ## should be preferred over the one below which does an extra call to lookup the
-  ## block header by blockHash.
+  ## Network. The data is first looked up in the node's local database before
+  ## trying to fetch it from the network. If you have the block header then this
+  ## function should be preferred over the one below which does an extra call to
+  ## lookup the block header by blockHash.
 
   let
     contentKeyBytes = blockBodyContentKey(blockHeader.blockHash()).encode().asSeq()
-    contentBytes = client.getHistoryContent(contentKeyBytes)
+    contentBytes = client.historyGetContent(contentKeyBytes)
 
   validateBlockBodyBytes(contentBytes, blockHeader)
 
-proc historyRecursiveFindBlockBody*(
+proc historyGetBlockBody*(
     client: PortalRpcClient, blockHash: BlockHash
 ): Future[Result[BlockBody, string]] {.async: (raises: []).} =
   ## Fetches the block body for the given block hash from the Portal History
-  ## Network. The data is first looked up in the local database before trying
-  ## to fetch it from the network. The block header is fetched first and then
-  ## the block body.
+  ## Network. The data is first looked up in the node's local database before
+  ## trying to fetch it from the network. The block header is fetched first and
+  ## then the block body.
 
   let
     contentKeyBytes = blockBodyContentKey(blockHash).encode().asSeq()
-    contentBytes = client.getHistoryContent(contentKeyBytes)
-    blockHeader = ?await client.historyRecursiveFindBlockHeader(blockHash)
+    contentBytes = client.historyGetContent(contentKeyBytes)
+    blockHeader = ?await client.historyGetBlockHeader(blockHash)
 
   validateBlockBodyBytes(contentBytes, blockHeader)
 
-proc historyRecursiveFindReceipts*(
+proc historyGetReceipts*(
     client: PortalRpcClient, blockHeader: BlockHeader
 ): Future[Result[seq[Receipt], string]] {.async: (raises: []).} =
   ## Fetches the receipts for the given block header from the Portal History
-  ## Network. The data is first looked up in the local database before trying
-  ## to fetch it from the network. If you have the block header then this function
-  ## should be preferred over the one below which does an extra call to lookup the
-  ## block header by blockHash.
+  ## Network. The data is first looked up in the node's local database before
+  ## trying to fetch it from the network. If you have the block header then this
+  ## function should be preferred over the one below which does an extra call to
+  ## lookup the block header by blockHash.
 
   let
     contentKeyBytes = receiptsContentKey(blockHeader.blockHash()).encode().asSeq()
-    contentBytes = client.getHistoryContent(contentKeyBytes)
+    contentBytes = client.historyGetContent(contentKeyBytes)
 
   validateReceiptsBytes(contentBytes, blockHeader.receiptsRoot)
 
-proc historyRecursiveFindReceipts*(
+proc historyGetReceipts*(
     client: PortalRpcClient, blockHash: BlockHash
 ): Future[Result[seq[Receipt], string]] {.async: (raises: []).} =
   ## Fetches the receipts for the given block hash from the Portal History
-  ## Network. The data is first looked up in the local database before trying
-  ## to fetch it from the network. The block header is fetched first and then
-  ## the receipts.
+  ## Network. The data is first looked up in the node's local database before
+  ## trying to fetch it from the network. The block header is fetched first and
+  ## then the receipts.
 
   let
     contentKeyBytes = receiptsContentKey(blockHash).encode().asSeq()
-    contentBytes = client.getHistoryContent(contentKeyBytes)
-    blockHeader = ?await client.historyRecursiveFindBlockHeader(blockHash)
+    contentBytes = client.historyGetContent(contentKeyBytes)
+    blockHeader = ?await client.historyGetBlockHeader(blockHash)
 
   validateReceiptsBytes(contentBytes, blockHeader.receiptsRoot)
