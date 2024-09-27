@@ -160,6 +160,7 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
     try:
       networkParams(id)
     except ValueError, RlpError:
+      debugEcho getCurrentException()[]
       raise (ref Defect)(msg: "Network parameters should be valid")
 
   try:

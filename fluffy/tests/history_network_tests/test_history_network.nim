@@ -61,7 +61,7 @@ proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
     bh.difficulty = u256(i)
     # empty so that we won't care about creating fake block bodies
     bh.ommersHash = EMPTY_UNCLE_HASH
-    bh.txRoot = EMPTY_ROOT_HASH
+    bh.transactionsRoot = EMPTY_ROOT_HASH
     headers.add(bh)
   return headers
 

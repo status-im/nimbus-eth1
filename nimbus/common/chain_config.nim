@@ -105,7 +105,7 @@ type
 proc read*(rlp: var Rlp, T: type AddressBalance): T {.gcsafe, raises: [RlpError].}=
   let listLen = rlp.listLen
   rlp.tryEnterList()
-  let abytes = rlp.read(Bytes32)
+  let abytes = rlp.read(UInt256).to(Bytes32)
   result.address = abytes.to(Address)
   result.account.balance = rlp.read(UInt256)
   if listLen == 3:
@@ -123,7 +123,7 @@ proc append*(w: var RlpWriter, ab: AddressBalance) =
     inc listLen
 
   w.startList(listLen)
-  w.append(ab.address.to(Bytes32))
+  w.append(ab.address.to(Bytes32).to(UInt256))
   w.append(ab.account.balance)
   if listLen == 3:
     var misc: Misc
