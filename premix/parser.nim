@@ -40,9 +40,6 @@ func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
 proc to0xHex*(x: int64 | uint64 | byte | int): string =
   toLowerAscii(encodeQuantity(x.uint64))
 
-proc to0xHex*(x: openArray[byte]): string =
-  "0x" & toHex(x, true)
-
 proc to0xHex*(x: UInt256): string =
   "0x" & stint.toHex(x)
 
