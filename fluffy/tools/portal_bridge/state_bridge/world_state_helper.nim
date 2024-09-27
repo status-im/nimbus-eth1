@@ -97,8 +97,7 @@ proc applyBlockRewards*(
     worldState.setAccount(uncleMinerAddress, accState)
 
 const
-  DAORefundContract: EthAddress =
-    address"0xbf4ed7b27f1d666546e30d74d50d173d20bca754"
+  DAORefundContract: EthAddress = address"0xbf4ed7b27f1d666546e30d74d50d173d20bca754"
 
   DAODrainList = [
     address"0xd4fe7bc31cedb7bfb8a345f31e668033056b2728",
