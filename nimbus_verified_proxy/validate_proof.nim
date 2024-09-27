@@ -10,7 +10,8 @@
 import
   std/[sequtils, typetraits, options],
   stint,
-  results, nimcrypto/hash,
+  results,
+  nimcrypto/hash,
   eth/common/eth_types as etypes,
   eth/common/eth_types_rlp,
   eth/rlp,

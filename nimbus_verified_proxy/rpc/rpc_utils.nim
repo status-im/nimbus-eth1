@@ -10,7 +10,8 @@
 import
   std/typetraits,
   eth/common/eth_types as etypes,
-  eth/rlp, nimcrypto/hash,
+  eth/rlp,
+  nimcrypto/hash,
   stint,
   web3,
   web3/engine_api_types,
