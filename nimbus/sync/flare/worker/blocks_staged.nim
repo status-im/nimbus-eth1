@@ -36,7 +36,7 @@ proc fetchAndCheck(
 
   let
     ctx = buddy.ctx
-    offset = blk.blocks.len.uint
+    offset = blk.blocks.len.uint64
 
   # Make sure that the block range matches the top
   doAssert offset == 0 or blk.blocks[offset - 1].header.number+1 == ivReq.minPt
@@ -64,7 +64,7 @@ proc fetchAndCheck(
 
   # Append bodies, note that the bodies are not fully verified here but rather
   # when they are imported and executed.
-  let nBodies = bodies.len.uint
+  let nBodies = bodies.len.uint64
   if nBodies < ivReq.len:
     blk.blocks.setLen(offset + nBodies)
   block loop:
@@ -89,7 +89,7 @@ proc fetchAndCheck(
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
       blk.blocks[offset + n].requests     = bodies[n].requests
 
-  return offset < blk.blocks.len.uint
+  return offset < blk.blocks.len.uint64
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -145,7 +145,7 @@ proc blocksStagedCollect*(
 
     # Fetch the full range of headers to be completed to blocks
     iv = ctx.blocksUnprocFetch(
-      ctx.pool.nBodiesBatch.uint).expect "valid interval"
+      ctx.pool.nBodiesBatch.uint64).expect "valid interval"
 
   var
     # This value is used for splitting the interval `iv` into
@@ -195,12 +195,12 @@ proc blocksStagedCollect*(
 
     # Update remaining interval
     let ivRespLen = blk.blocks.len - nBlkBlocks
-    if iv.maxPt < ivBottom + ivRespLen.uint:
+    if iv.maxPt < ivBottom + ivRespLen.uint64:
       # All collected
       ctx.blocksUnprocCommit(iv.len)
       break
 
-    ivBottom += ivRespLen.uint # will mostly result into `ivReq.maxPt+1`
+    ivBottom += ivRespLen.uint64 # will mostly result into `ivReq.maxPt+1`
 
     if buddy.ctrl.stopped:
       # There is some left over to store back. And `ivBottom <= iv.maxPt`
@@ -238,7 +238,7 @@ proc blocksStagedImport*(ctx: FlareCtxRef; info: static[string]): bool =
   let stats = ctx.pool.chain.persistBlocks(qItem.data.blocks).valueOr:
     # FIXME: should that be rather an `raiseAssert` here?
     warn info & ": block exec error", T=t.bnStr,
-      iv=BnRange.new(qItem.key,qItem.key+qItem.data.blocks.len.uint-1), error
+      iv=BnRange.new(qItem.key,qItem.key+qItem.data.blocks.len.uint64-1), error
     doAssert t == ctx.dbStateBlockNumber()
     return false
 
@@ -246,7 +246,7 @@ proc blocksStagedImport*(ctx: FlareCtxRef; info: static[string]): bool =
     first=qItem.key.bnStr, stats
 
   # Remove stashed headers
-  for bn in qItem.key ..< qItem.key + qItem.data.blocks.len.uint:
+  for bn in qItem.key ..< qItem.key + qItem.data.blocks.len.uint64:
     ctx.dbUnstashHeader bn
 
   true

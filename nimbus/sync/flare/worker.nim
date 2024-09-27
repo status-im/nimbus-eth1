@@ -81,8 +81,7 @@ proc start*(buddy: FlareBuddyRef): bool =
   const info = "RUNSTART"
 
   if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
-    debug info & " peer limit reached",
-      peer=buddy.peer, multiOk=buddy.ctrl.multiOk
+    debug info & " peer limit reached", peer=buddy.peer
     return false
 
   if not buddy.startBuddy():
@@ -90,7 +89,7 @@ proc start*(buddy: FlareBuddyRef): bool =
     return false
 
   buddy.ctrl.multiOk = true
-  debug info, peer=buddy.peer, multiOk=buddy.ctrl.multiOk
+  debug info, peer=buddy.peer
   true
 
 proc stop*(buddy: FlareBuddyRef) =

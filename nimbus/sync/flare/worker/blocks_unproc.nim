@@ -95,7 +95,7 @@ proc blocksUnprocBottom*(ctx: FlareCtxRef): BlockNumber =
 proc blocksUnprocTotal*(ctx: FlareCtxRef): uint64 =
   ctx.blk.unprocessed.total()
 
-proc blocksUnprocBorrowed*(ctx: FlareCtxRef): uint =
+proc blocksUnprocBorrowed*(ctx: FlareCtxRef): uint64 =
   ctx.blk.borrowed
 
 proc blocksUnprocChunks*(ctx: FlareCtxRef): int =

@@ -160,12 +160,12 @@ proc headersStagedCollect*(
 
     # Update remaining interval
     let ivRespLen = lhc.revHdrs.len - nLhcHeaders
-    if ivTop < iv.minPt + ivRespLen.uint:
+    if ivTop < iv.minPt + ivRespLen.uint64:
       # All collected
       ctx.headersUnprocCommit(iv.len)
       break
 
-    ivTop -= ivRespLen.uint # will mostly result into `ivReq.minPt-1`
+    ivTop -= ivRespLen.uint64 # will mostly result into `ivReq.minPt-1`
 
     if buddy.ctrl.stopped:
       # There is some left over to store back. And `iv.minPt <= ivTop` because
@@ -197,7 +197,7 @@ proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
 
     let
       least = ctx.layout.least # `L` from `README.md` (1) or `worker_desc`
-      iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint + 1, qItem.key)
+      iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint64 + 1, qItem.key)
     if iv.maxPt+1 < least:
       trace info & ": there is a gap", iv, L=least.bnStr, nSaved=result
       break # there is a gap -- come back later
@@ -261,7 +261,7 @@ proc headersStagedReorg*(ctx: FlareCtxRef; info: static[string]) =
       let
         qItem = ctx.lhc.staged.ge(BlockNumber 0).expect "valid record"
         key = qItem.key
-        nHeaders = qItem.data.revHdrs.len.uint
+        nHeaders = qItem.data.revHdrs.len.uint64
       ctx.headersUnprocCommit(0, key - nHeaders + 1, key)
       discard ctx.lhc.staged.delete key
 

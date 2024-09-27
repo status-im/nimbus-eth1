@@ -44,7 +44,7 @@ proc verifyStagedBlocksQueue*(ctx: FlareCtxRef; info: static[string]) =
   while rc.isOk:
     let
       key = rc.value.key
-      nBlocks = rc.value.data.blocks.len.uint
+      nBlocks = rc.value.data.blocks.len.uint64
       maxPt = key + nBlocks - 1
       unproc = ctx.blocksUnprocCovered(key, maxPt)
     if 0 < unproc:

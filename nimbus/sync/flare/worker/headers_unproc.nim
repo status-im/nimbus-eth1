@@ -90,7 +90,7 @@ proc headersUnprocTop*(ctx: FlareCtxRef): BlockNumber =
 proc headersUnprocTotal*(ctx: FlareCtxRef): uint64 =
   ctx.lhc.unprocessed.total()
 
-proc headersUnprocBorrowed*(ctx: FlareCtxRef): uint =
+proc headersUnprocBorrowed*(ctx: FlareCtxRef): uint64 =
   ctx.lhc.borrowed
 
 proc headersUnprocChunks*(ctx: FlareCtxRef): int =

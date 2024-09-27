@@ -100,7 +100,7 @@ proc headersFetchReversed*(
     return err()
 
   let h: seq[BlockHeader] = resp.get.headers
-  if h.len == 0 or ivReq.len < h.len.uint:
+  if h.len == 0 or ivReq.len < h.len.uint64:
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
       nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
@@ -110,7 +110,7 @@ proc headersFetchReversed*(
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
   if fetchHeadersReqThresholdZombie < elapsed or
-     h.len.uint * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
+     h.len.uint64 * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
     buddy.registerError()
   else:
     buddy.only.nHdrRespErrors = 0 # reset error count

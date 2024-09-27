@@ -85,7 +85,7 @@ type
     ## Sync state for linked header chains
     beacon*: BeaconHeader            ## See `Z` in README
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
-    borrowed*: uint                  ## Total of temp. fetched ranges
+    borrowed*: uint64                ## Total of temp. fetched ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
     layout*: LinkedHChainsLayout     ## Current header chains layout
     lastLayout*: LinkedHChainsLayout ## Previous layout (for delta update)
@@ -93,7 +93,7 @@ type
   BlocksImportSync* = object
     ## Sync state for blocks to import/execute
     unprocessed*: BnRangeSet         ## Blocks download requested
-    borrowed*: uint                  ## Total of temp. fetched ranges
+    borrowed*: uint64                ## Total of temp. fetched ranges
     topRequest*: BlockNumber         ## Max requested block number
     staged*: StagedBlocksQueue       ## Blocks ready for import
 

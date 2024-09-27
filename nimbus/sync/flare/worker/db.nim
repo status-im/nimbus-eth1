@@ -143,9 +143,9 @@ proc dbStashHeaders*(
   const info = "dbStashHeaders"
   let
     kvt = ctx.db.ctx.getKvt()
-    last = first + revBlobs.len.uint - 1
+    last = first + revBlobs.len.uint64 - 1
   for n,data in revBlobs:
-    let key = flareHeaderKey(last - n.uint)
+    let key = flareHeaderKey(last - n.uint64)
     kvt.put(key.toOpenArray, data).isOkOr:
       raiseAssert info & ": put() failed: " & $$error
 

@@ -40,7 +40,7 @@ proc verifyStagedHeadersQueue*(ctx: FlareCtxRef; info: static[string]) =
   while rc.isOk:
     let
       key = rc.value.key
-      nHeaders = rc.value.data.revHdrs.len.uint
+      nHeaders = rc.value.data.revHdrs.len.uint64
       minPt = key - nHeaders + 1
       unproc = ctx.headersUnprocCovered(minPt, key)
     if 0 < unproc:

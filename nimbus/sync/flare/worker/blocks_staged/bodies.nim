@@ -82,7 +82,7 @@ proc bodiesFetch*(
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
   if fetchBodiesReqThresholdZombie < elapsed or
-     b.len.uint * 100 < nReq.uint * fetchBodiesReqMinResponsePC:
+     b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
     buddy.fetchRegisterError()
   else:
     buddy.only.nBdyRespErrors = 0 # reset error count
