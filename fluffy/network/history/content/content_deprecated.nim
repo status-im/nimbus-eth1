@@ -52,7 +52,7 @@ func toContentId(contentKey: ContentKeyByteList): ContentId =
   readUintBE[256](idHash.data)
 
 proc pruneDeprecatedAccumulatorRecords*(
-    accumulator: FinishedAccumulator, contentDB: ContentDB
+    accumulator: FinishedHistoricalHashesAccumulator, contentDB: ContentDB
 ) =
   info "Pruning deprecated accumulator records"
 

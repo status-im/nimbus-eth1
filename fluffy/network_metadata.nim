@@ -52,9 +52,9 @@ const
 
   historicalRootsSSZ* = slurp(portalConfigDir / "historical_roots.ssz")
 
-func loadAccumulator*(): FinishedAccumulator =
+func loadAccumulator*(): FinishedHistoricalHashesAccumulator =
   try:
-    SSZ.decode(historicalHashesAccumulatorSSZ, FinishedAccumulator)
+    SSZ.decode(historicalHashesAccumulatorSSZ, FinishedHistoricalHashesAccumulator)
   except SerializationError as err:
     raiseAssert "Invalid baked-in accumulator: " & err.msg
 
