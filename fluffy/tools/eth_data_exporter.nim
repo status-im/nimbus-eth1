@@ -69,7 +69,7 @@ proc downloadHeader(client: RpcClient, i: uint64): BlockHeader =
     fatal "Error while requesting BlockHeader", error = e.msg, number = i
     quit 1
 
-proc downloadBlock(i: uint64, client: RpcClient): Block =
+proc downloadBlock(i: uint64, client: RpcClient): downloader.Block =
   try:
     return requestBlock(i, flags = {DownloadReceipts}, client = some(client))
   except CatchableError as e:

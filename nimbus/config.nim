@@ -566,7 +566,7 @@ type
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
-  parseInt(p).T
+  parseBiggestUInt(p).T
 
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
@@ -671,7 +671,7 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   of "holesky": return some HoleskyNet
   else:
     try:
-      some parseInt(network).NetworkId
+      some parseBiggestUInt(network).NetworkId
     except CatchableError:
       error "Failed to parse network name or id", network
       quit QuitFailure
