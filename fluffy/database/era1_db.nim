@@ -19,7 +19,7 @@ type Era1DB* = ref object
   ## a linear history of pre-merge execution chain data.
   path: string
   network: string
-  accumulator: FinishedAccumulator
+  accumulator: FinishedHistoricalHashesAccumulator
   files: seq[Era1File]
 
 proc getEra1File(db: Era1DB, era: Era1): Result[Era1File, string] =
@@ -51,7 +51,10 @@ proc getEra1File(db: Era1DB, era: Era1): Result[Era1File, string] =
   ok(f)
 
 proc new*(
-    T: type Era1DB, path: string, network: string, accumulator: FinishedAccumulator
+    T: type Era1DB,
+    path: string,
+    network: string,
+    accumulator: FinishedHistoricalHashesAccumulator,
 ): Era1DB =
   Era1DB(path: path, network: network, accumulator: accumulator)
 

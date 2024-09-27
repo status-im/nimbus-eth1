@@ -24,7 +24,9 @@ type HistoryNode = ref object
   historyNetwork*: HistoryNetwork
 
 proc newHistoryNode(
-    rng: ref HmacDrbgContext, port: int, accumulator: FinishedAccumulator
+    rng: ref HmacDrbgContext,
+    port: int,
+    accumulator: FinishedHistoricalHashesAccumulator,
 ): HistoryNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
