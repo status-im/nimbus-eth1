@@ -411,7 +411,7 @@ proc processNewHead*(sk: SkeletonRef, head: BlockHeader,
                  newHead=number
                # set the lastchain to genesis for comparison in
                # following conditions
-               segment(0, 0, zeroBlockHash)
+               segment(0, 0, ZERO_HASH256)
              else:
                sk.last
 

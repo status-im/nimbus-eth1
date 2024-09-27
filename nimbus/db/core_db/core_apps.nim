@@ -209,7 +209,7 @@ proc setAsCanonicalChainHead(
   # TODO This code handles reorgs - this should be moved elsewhere because we'll
   #      be handling reorgs mainly in-memory
   if header.number == 0 or
-      db.getCanonicalHeaderHash().valueOr(default(Hash256)) != header.parentHash:
+      db.getCanonicalHeaderHash().valueOr(ZERO_HASH256) != header.parentHash:
     var newCanonicalHeaders = sequtils.toSeq(db.findNewAncestors(header))
     reverse(newCanonicalHeaders)
     for h in newCanonicalHeaders:
@@ -255,7 +255,7 @@ proc markCanonicalChain(
     return false
 
   # it is a genesis block, done
-  if currHeader.parentHash == default(Hash256):
+  if currHeader.parentHash == ZERO_HASH256:
     return true
 
   # mark ancestor blocks as canonical too
@@ -268,9 +268,9 @@ proc markCanonicalChain(
       rlp.decode(data, Hash256)
     except RlpError as exc:
       warn info, key, error=exc.msg
-      default(Hash256)
+      ZERO_HASH256
 
-  while currHash != default(Hash256):
+  while currHash != ZERO_HASH256:
     let key = blockNumberToHashKey(currHeader.number)
     let data = kvt.getOrEmpty(key.toOpenArray).valueOr:
       warn info, key, error=($$error)
@@ -287,7 +287,7 @@ proc markCanonicalChain(
       # forking point, done
       break
 
-    if currHeader.parentHash == default(Hash256):
+    if currHeader.parentHash == ZERO_HASH256:
       break
 
     currHash = currHeader.parentHash
@@ -391,7 +391,7 @@ proc getBlockHash*(
     raise newException(BlockNotFound, "No block hash for number " & $n)
 
 proc getHeadBlockHash*(db: CoreDbRef): Hash256 =
-  db.getHash(canonicalHeadHashKey()).valueOr(default(Hash256))
+  db.getHash(canonicalHeadHashKey()).valueOr(ZERO_HASH256)
 
 proc getBlockHeader*(
     db: CoreDbRef;
@@ -904,7 +904,7 @@ proc persistUncles*(db: CoreDbRef, uncles: openArray[BlockHeader]): Hash256 =
 
 
 proc safeHeaderHash*(db: CoreDbRef): Hash256 =
-  db.getHash(safeHashKey()).valueOr(default(Hash256))
+  db.getHash(safeHashKey()).valueOr(ZERO_HASH256)
 
 proc safeHeaderHash*(db: CoreDbRef, headerHash: Hash256) =
   let safeHashKey = safeHashKey()
@@ -915,7 +915,7 @@ proc safeHeaderHash*(db: CoreDbRef, headerHash: Hash256) =
 proc finalizedHeaderHash*(
     db: CoreDbRef;
       ): Hash256 =
-  db.getHash(finalizedHashKey()).valueOr(default(Hash256))
+  db.getHash(finalizedHashKey()).valueOr(ZERO_HASH256)
 
 proc finalizedHeaderHash*(db: CoreDbRef, headerHash: Hash256) =
   let finalizedHashKey = finalizedHashKey()

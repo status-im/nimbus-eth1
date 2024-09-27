@@ -9,10 +9,8 @@
 # according to those terms.
 
 import
-  std/[base64, times, strutils],
+  std/times,
   eth/common,
-  nimcrypto/[hmac],
-  stew/byteutils,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
   web3/engine_api,

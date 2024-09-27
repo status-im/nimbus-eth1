@@ -19,7 +19,6 @@ logScope:
 const
   # How often to log sync status (in ms)
   STATUS_LOG_INTERVAL* = initDuration(microseconds = 8000)
-  zeroBlockHash* = default(Hash256)
 
 # ------------------------------------------------------------------------------
 # Misc helpers
@@ -30,7 +29,7 @@ func u64*(h: BlockHeader): uint64 =
 
 func blockHash*(x: Opt[BlockHeader]): Hash256 =
   if x.isSome: x.get.blockHash
-  else: zeroBlockHash
+  else: ZERO_HASH256
 
 func numberStr*(x: Opt[BlockHeader]): string =
   if x.isSome: $(x.get.u64)

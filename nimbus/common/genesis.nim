@@ -137,7 +137,7 @@ proc toGenesisHeader*(
   if fork >= Cancun:
     result.blobGasUsed           = Opt.some g.blobGasUsed.get(0'u64)
     result.excessBlobGas         = Opt.some g.excessBlobGas.get(0'u64)
-    result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(default(Hash256))
+    result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(ZERO_HASH256)
 
 proc toGenesisHeader*(
     genesis: Genesis;

@@ -222,7 +222,7 @@ proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string
   ok()
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
-  if header.parentHash == default(Hash256):
+  if header.parentHash == ZERO_HASH256:
     if not c.db.setHead(header):
       return err("setHead failed")
     return ok()

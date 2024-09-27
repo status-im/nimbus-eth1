@@ -146,18 +146,18 @@ proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 =
       blockNumber = BlockNumber c.host.getTxContext().block_number
       ancestorDepth  = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return default(Hash256)
+      return ZERO_HASH256
     if number >= blockNumber:
-      return default(Hash256)
+      return ZERO_HASH256
     c.host.getBlockHash(number)
   else:
     let
       blockNumber = c.vmState.blockNumber
       ancestorDepth = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return default(Hash256)
+      return ZERO_HASH256
     if number >= blockNumber:
-      return default(Hash256)
+      return ZERO_HASH256
     c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
@@ -194,7 +194,7 @@ template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
     let
       db = c.vmState.readOnlyStateDB
     if not db.accountExists(address) or db.isEmptyAccount(address):
-      default(Hash256)
+      ZERO_HASH256
     else:
       db.getCodeHash(address)
 

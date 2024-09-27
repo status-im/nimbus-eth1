@@ -185,7 +185,7 @@ proc test1*() =
           skel.putHeader(header)
 
         for x in z.oldState:
-          skel.push(x.head, x.tail, default(Hash256))
+          skel.push(x.head, x.tail, ZERO_HASH256)
 
         let r = skel.initSync(z.head).valueOr:
           debugEcho "initSync: ", error

@@ -48,11 +48,11 @@ proc toBytes(x: string): seq[byte] =
 
 method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256 =
   if blockNumber >= vmState.blockNumber:
-    return default(Hash256)
+    return ZERO_HASH256
   elif blockNumber < 0:
-    return default(Hash256)
+    return ZERO_HASH256
   elif blockNumber < vmState.blockNumber - 256:
-    return default(Hash256)
+    return ZERO_HASH256
   else:
     return keccakHash(toBytes($blockNumber))
 
