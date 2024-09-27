@@ -110,9 +110,10 @@ proc init*(
     maxPeers: int;
     chunkSize: int;
       ): T =
-  new result
-  result.initSync(ethNode, chain, maxPeers)
-  result.ctx.pool.nBodiesBatch = chunkSize
+  var desc = T()
+  desc.initSync(ethNode, chain, maxPeers)
+  desc.ctx.pool.nBodiesBatch = chunkSize
+  desc
 
 proc start*(ctx: FlareSyncRef) =
   ## Beacon Sync always begin with stop mode

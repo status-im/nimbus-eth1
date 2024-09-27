@@ -30,7 +30,7 @@ proc extendLinkedHChain*(
   ## Returns sort of `lhc[] += rev[]` where `lhc[]` is updated in place.
 
   # Verify top block number
-  assert 0 < rev.len # debugging only
+  doAssert 0 < rev.len
   if rev[0].number != topNumber:
     return false
 

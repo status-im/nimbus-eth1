@@ -117,7 +117,7 @@ proc headersUnprocSet*(ctx: FlareCtxRef; iv: BnRange) =
   discard ctx.lhc.unprocessed.merge(iv)
 
 proc headersUnprocSet*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
-  ## Ditto
+  ## Set up new unprocessed range
   ctx.headersUnprocSet()
   discard ctx.lhc.unprocessed.merge(minPt, maxPt)
 
