@@ -139,11 +139,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     #  nimbus.snapSyncRef = SnapSyncRef.init(
     #    nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
     #    tickerOK, exCtrlFile)
-    of SyncMode.Default:
-      nimbus.beaconSyncRef = BeaconSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-      )
-    of SyncMode.Flare:
+    of SyncMode.Default, SyncMode.Flare:
       nimbus.flareSyncRef = FlareSyncRef.init(
         nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.flareChunkSize)
 
@@ -257,9 +253,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 
     if conf.maxPeers > 0:
       case conf.syncMode:
-      of SyncMode.Default:
-        nimbus.beaconSyncRef.start
-      of SyncMode.Flare:
+      of SyncMode.Default, SyncMode.Flare:
         nimbus.flareSyncRef.start
       #of SyncMode.Snap:
       #  nimbus.snapSyncRef.start
