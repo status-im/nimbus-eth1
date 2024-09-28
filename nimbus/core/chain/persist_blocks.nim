@@ -85,8 +85,6 @@ proc persistBlocksImpl(
   defer:
     dbTx.dispose()
 
-  c.com.hardForkTransition(blocks[0].header)
-
   # Note that `0 < headers.len`, assured when called from `persistBlocks()`
   let
     vmState =
@@ -123,7 +121,6 @@ proc persistBlocksImpl(
     let skipValidation =
       NoFullValidation in flags and header.number != toBlock or NoValidation in flags
 
-    c.com.hardForkTransition(header)
 
     if blks > 0:
       template parent(): BlockHeader =
@@ -161,7 +158,7 @@ proc persistBlocksImpl(
     let blockHash = header.blockHash()
     if NoPersistHeader notin flags:
       if not c.db.persistHeader(
-        blockHash, header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory
+        blockHash, header, c.com.proofOfStake(header), c.com.startOfHistory
       ):
         return err("Could not persist header")
 

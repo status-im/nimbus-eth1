@@ -84,7 +84,8 @@ proc debugAccounts*(vmState: BaseVMState): string =
   res.pretty
 
 proc debug*(vms: BaseVMState): string =
-  result.add "com.consensus    : " & $vms.com.consensus       & "\n"
+  result.add "com.proofOfStake : " & $vms.com.proofOfStake(vms.blockNumber,
+                                      vms.blockCtx.difficulty) & "\n"
   result.add "parent           : " & $vms.parent.blockHash    & "\n"
   result.add "timestamp        : " & $vms.blockCtx.timestamp  & "\n"
   result.add "gasLimit         : " & $vms.blockCtx.gasLimit   & "\n"

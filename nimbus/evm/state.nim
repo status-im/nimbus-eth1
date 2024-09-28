@@ -56,6 +56,7 @@ func blockCtx(com: CommonRef, header: BlockHeader):
     difficulty   : header.difficulty,
     coinbase     : header.coinbase,
     excessBlobGas: header.excessBlobGas.get(0'u64),
+    parentHash   : header.parentHash,
   )
 
 # --------------
@@ -241,8 +242,15 @@ func blockNumber*(vmState: BaseVMState): BlockNumber =
   # and not head.number
   vmState.parent.number + 1
 
-func difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
-  if vmState.com.consensus == ConsensusType.POS:
+proc proofOfStake(vmState: BaseVMState): bool =
+  vmState.com.proofOfStake(Header(
+    number: vmState.blockNumber,
+    parentHash: vmState.blockCtx.parentHash,
+    difficulty: vmState.blockCtx.difficulty,
+  ))
+
+proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
+  if vmState.proofOfStake():
     # EIP-4399/EIP-3675
     UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)
   else:

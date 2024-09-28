@@ -75,7 +75,7 @@ proc executeCase(node: JsonNode): bool =
   stateDB.persist()
 
   if not com.db.persistHeader(env.genesisHeader,
-                              com.consensus == ConsensusType.POS):
+                              com.proofOfStake(env.genesisHeader)):
     debugEcho "Failed to put genesis header into database"
     return false
 
@@ -147,7 +147,9 @@ when isMainModule:
       var testStatusIMPL: TestStatus
       let node = json.parseFile(name)
       executeFile(node, testStatusIMPL)
+      if testStatusIMPL == FAILED:
+        quit(QuitFailure)
 
-    executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcWalletTest/walletReorganizeOwners.json")
+    executeFile("tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/stTransactionTest/ValueOverflowParis.json")
   else:
     blockchainJsonMain()

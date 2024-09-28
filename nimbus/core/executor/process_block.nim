@@ -227,7 +227,7 @@ proc processBlock*(
   ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
 
   # EIP-3675: no reward for miner in POA/POS
-  if vmState.com.consensus == ConsensusType.POW:
+  if not vmState.com.proofOfStake(blk.header):
     vmState.calculateReward(blk.header, blk.uncles)
 
   ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts)

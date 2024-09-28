@@ -96,6 +96,7 @@ proc initEnv(envFork: HardFork): TestEnv =
   )
 
   if envFork >= MergeFork:
+    conf.networkParams.config.mergeForkBlock = Opt.some(0'u64)
     conf.networkParams.config.terminalTotalDifficulty = Opt.some(100.u256)
 
   if envFork >= Shanghai:
@@ -158,7 +159,7 @@ proc runTxPoolPosTest() =
         return
 
       blk = r.get.blk
-      check com.isBlockAfterTtd(blk.header)
+      check com.proofOfStake(blk.header)
 
       body = BlockBody(
         transactions: blk.txs,
@@ -214,7 +215,7 @@ proc runTxPoolBlobhashTest() =
 
       let bundle = r.get
       blk = bundle.blk
-      check com.isBlockAfterTtd(blk.header)
+      check com.proofOfStake(blk.header)
 
       body = BlockBody(
         transactions: blk.txs,
@@ -301,7 +302,7 @@ proc runTxHeadDelta(noisy = true) =
             return
 
           let blk = r.get.blk
-          check com.isBlockAfterTtd(blk.header)
+          check com.proofOfStake(blk.header)
 
           let body = BlockBody(
             transactions: blk.txs,
@@ -333,8 +334,8 @@ proc runGetBlockBodyTest() =
   var
     env = initEnv(Cancun)
     blockTime = EthTime.now()
-    parentHeader: BlockHeader
-    currentHeader: BlockHeader
+    parentHeader: Header
+    currentHeader: Header
 
   suite "Test get parent transactions after persistBlock":
     test "TxPool create first block":

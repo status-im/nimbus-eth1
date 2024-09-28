@@ -18,15 +18,6 @@ import
 {.push raises: [].}
 
 type
-  ConsensusType* {.pure.} = enum
-    # Proof of Work
-    # algorithm: Ethash
-    POW
-
-    # Proof of Stake
-    # algorithm: Casper
-    POS
-
   HardFork* = enum
     Frontier
     Homestead
@@ -177,8 +168,6 @@ type
 
     terminalTotalDifficulty*: Opt[UInt256]
     terminalTotalDifficultyPassed*: Opt[bool]
-    consensusType*
-      {.dontSerialize.} : ConsensusType
 
   # These are used for checking that the values of the fields
   # are in a valid order.
