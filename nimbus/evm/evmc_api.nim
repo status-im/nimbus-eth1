@@ -61,30 +61,30 @@ type
     padding*       : array[4, byte]
 
   nimbus_host_interface* = object
-    account_exists*: proc(context: evmc_host_context, address: EthAddress): bool {.cdecl, gcsafe, raises: [].}
-    get_storage*: proc(context: evmc_host_context, address: EthAddress, key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [].}
-    set_storage*: proc(context: evmc_host_context, address: EthAddress,
+    account_exists*: proc(context: evmc_host_context, address: ptr evmc_address): bool {.cdecl, gcsafe, raises: [].}
+    get_storage*: proc(context: evmc_host_context, address: ptr evmc_address, key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [].}
+    set_storage*: proc(context: evmc_host_context, address: ptr evmc_address,
                        key, value: ptr evmc_uint256be): evmc_storage_status {.cdecl, gcsafe, raises: [].}
-    get_balance*: proc(context: evmc_host_context, address: EthAddress): evmc_uint256be {.cdecl, gcsafe, raises: [].}
-    get_code_size*: proc(context: evmc_host_context, address: EthAddress): uint {.cdecl, gcsafe, raises: [].}
-    get_code_hash*: proc(context: evmc_host_context, address: EthAddress): Hash256 {.cdecl, gcsafe, raises: [].}
-    copy_code*: proc(context: evmc_host_context, address: EthAddress,
+    get_balance*: proc(context: evmc_host_context, address: ptr evmc_address): evmc_uint256be {.cdecl, gcsafe, raises: [].}
+    get_code_size*: proc(context: evmc_host_context, address: ptr evmc_address): uint {.cdecl, gcsafe, raises: [].}
+    get_code_hash*: proc(context: evmc_host_context, address: ptr evmc_address): evmc_bytes32 {.cdecl, gcsafe, raises: [].}
+    copy_code*: proc(context: evmc_host_context, address: ptr evmc_address,
                      code_offset: int, buffer_data: ptr byte,
                      buffer_size: int): int {.cdecl, gcsafe, raises: [].}
-    selfdestruct*: proc(context: evmc_host_context, address, beneficiary: EthAddress) {.cdecl, gcsafe, raises: [].}
+    selfdestruct*: proc(context: evmc_host_context, address, beneficiary: ptr evmc_address) {.cdecl, gcsafe, raises: [].}
     call*: proc(context: evmc_host_context, msg: ptr nimbus_message): nimbus_result {.cdecl, gcsafe, raises: [].}
     get_tx_context*: proc(context: evmc_host_context): nimbus_tx_context {.cdecl, gcsafe, raises: [].}
-    get_block_hash*: proc(context: evmc_host_context, number: int64): Hash256 {.cdecl, gcsafe, raises: [].}
-    emit_log*: proc(context: evmc_host_context, address: EthAddress,
+    get_block_hash*: proc(context: evmc_host_context, number: int64): evmc_bytes32 {.cdecl, gcsafe, raises: [].}
+    emit_log*: proc(context: evmc_host_context, address: ptr evmc_address,
                     data: ptr byte, data_size: uint,
                     topics: ptr evmc_bytes32, topics_count: uint) {.cdecl, gcsafe, raises: [].}
     access_account*: proc(context: evmc_host_context,
-                          address: EthAddress): evmc_access_status {.cdecl, gcsafe, raises: [].}
-    access_storage*: proc(context: evmc_host_context, address: EthAddress,
-                          key: var evmc_bytes32): evmc_access_status {.cdecl, gcsafe, raises: [].}
-    get_transient_storage*: proc(context: evmc_host_context, address: EthAddress,
+                          address: ptr evmc_address): evmc_access_status {.cdecl, gcsafe, raises: [].}
+    access_storage*: proc(context: evmc_host_context, address: ptr evmc_address,
+                          key: ptr evmc_bytes32): evmc_access_status {.cdecl, gcsafe, raises: [].}
+    get_transient_storage*: proc(context: evmc_host_context, address: ptr evmc_address,
                        key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [].}
-    set_transient_storage*: proc(context: evmc_host_context, address: EthAddress,
+    set_transient_storage*: proc(context: evmc_host_context, address: ptr evmc_address,
                        key, value: ptr evmc_uint256be) {.cdecl, gcsafe, raises: [].}
 
 proc nim_host_get_interface*(): ptr nimbus_host_interface {.importc, cdecl.}
@@ -108,45 +108,57 @@ proc getTxContext*(ctx: HostContext): nimbus_tx_context =
   ctx.host.get_tx_context(ctx.context)
 
 proc getBlockHash*(ctx: HostContext, number: BlockNumber): Hash256 =
-  ctx.host.get_block_hash(ctx.context, number.int64)
+  Hash256.fromEvmc ctx.host.get_block_hash(ctx.context, number.int64)
 
 proc accountExists*(ctx: HostContext, address: EthAddress): bool =
-  ctx.host.account_exists(ctx.context, address)
+  var address = toEvmc(address)
+  ctx.host.account_exists(ctx.context, address.addr)
 
 proc getStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256 =
-  var key = toEvmc(key)
-  UInt256.fromEvmc ctx.host.get_storage(ctx.context, address, key.addr)
+  var
+    address = toEvmc(address)
+    key = toEvmc(key)
+  UInt256.fromEvmc ctx.host.get_storage(ctx.context, address.addr, key.addr)
 
 proc setStorage*(ctx: HostContext, address: EthAddress,
                  key, value: UInt256): evmc_storage_status =
   var
+    address = toEvmc(address)
     key = toEvmc(key)
     value = toEvmc(value)
-  ctx.host.set_storage(ctx.context, address, key.addr, value.addr)
+  ctx.host.set_storage(ctx.context, address.addr, key.addr, value.addr)
 
 proc getBalance*(ctx: HostContext, address: EthAddress): UInt256 =
-  UInt256.fromEvmc ctx.host.get_balance(ctx.context, address)
+  var address = toEvmc(address)
+  UInt256.fromEvmc ctx.host.get_balance(ctx.context, address.addr)
 
 proc getCodeSize*(ctx: HostContext, address: EthAddress): uint =
-  ctx.host.get_code_size(ctx.context, address)
+  var address = toEvmc(address)
+  ctx.host.get_code_size(ctx.context, address.addr)
 
 proc getCodeHash*(ctx: HostContext, address: EthAddress): Hash256 =
-  ctx.host.get_code_hash(ctx.context, address)
+  var address = toEvmc(address)
+  Hash256.fromEvmc ctx.host.get_code_hash(ctx.context, address.addr)
 
 proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[byte] =
   let size = ctx.getCodeSize(address).int
   if size - codeOffset > 0:
     result = newSeq[byte](size - codeOffset)
-    let read = ctx.host.copy_code(ctx.context, address,
+    var address = toEvmc(address)
+    let read = ctx.host.copy_code(ctx.context, address.addr,
         codeOffset, result[0].addr, result.len)
     doAssert(read == result.len)
 
 proc selfDestruct*(ctx: HostContext, address, beneficiary: EthAddress) =
-  ctx.host.selfdestruct(ctx.context, address, beneficiary)
+  var
+    address = toEvmc(address)
+    beneficiary = toEvmc(beneficiary)
+  ctx.host.selfdestruct(ctx.context, address.addr, beneficiary.addr)
 
 proc emitLog*(ctx: HostContext, address: EthAddress, data: openArray[byte],
               topics: ptr evmc_bytes32, topicsCount: int) =
-  ctx.host.emit_log(ctx.context, address, if data.len > 0: data[0].unsafeAddr else: nil,
+  var address = toEvmc(address)
+  ctx.host.emit_log(ctx.context, address.addr, if data.len > 0: data[0].unsafeAddr else: nil,
                     data.len.uint, topics, topicsCount.uint)
 
 proc call*(ctx: HostContext, msg: nimbus_message): nimbus_result =
@@ -154,23 +166,29 @@ proc call*(ctx: HostContext, msg: nimbus_message): nimbus_result =
 
 proc accessAccount*(ctx: HostContext,
                     address: EthAddress): evmc_access_status =
-  ctx.host.access_account(ctx.context, address)
+  var address = toEvmc(address)
+  ctx.host.access_account(ctx.context, address.addr)
 
 proc accessStorage*(ctx: HostContext, address: EthAddress,
                     key: UInt256): evmc_access_status =
-  var key = toEvmc(key)
-  ctx.host.access_storage(ctx.context, address, key)
+  var
+    address = toEvmc(address)
+    key = toEvmc(key)
+  ctx.host.access_storage(ctx.context, address.addr, key.addr)
 
 proc getTransientStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256 =
-  var key = toEvmc(key)
-  UInt256.fromEvmc ctx.host.get_transient_storage(ctx.context, address, key.addr)
+  var
+    address = toEvmc(address)
+    key = toEvmc(key)
+  UInt256.fromEvmc ctx.host.get_transient_storage(ctx.context, address.addr, key.addr)
 
 proc setTransientStorage*(ctx: HostContext, address: EthAddress,
                  key, value: UInt256) =
   var
+    address = toEvmc(address)
     key = toEvmc(key)
     value = toEvmc(value)
-  ctx.host.set_transient_storage(ctx.context, address, key.addr, value.addr)
+  ctx.host.set_transient_storage(ctx.context, address.addr, key.addr, value.addr)
 
 # The following two templates put here because the stupid style checker
 # complaints about block_number vs blockNumber and chain_id vs chainId

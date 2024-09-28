@@ -74,16 +74,16 @@ template toEvmc*(n: UInt256): evmc_uint256be =
   cast[evmc_uint256be](n)
 
 template toEvmc*(n: Hash256): evmc_bytes32 =
-  cast[evmc_bytes32](n)
+  evmc_bytes32(bytes: n.data)
 
 template toEvmc*(address: EthAddress): evmc_address =
-  cast[evmc_address](address)
+  evmc_address(bytes: address.data)
 
 template fromEvmc*(n: evmc_uint256be): UInt256 =
   cast[UInt256](n)
 
 template fromEvmc*(address: evmc_address): EthAddress =
-  cast[EthAddress](address)
+  EthAddress(address.bytes)
 
 template flip256*(word256: evmc_uint256be): evmc_uint256be =
   cast[evmc_uint256be](UInt256.fromBytesBE(word256.bytes).toBytes(cpuEndian))
