@@ -45,7 +45,7 @@ suite "Historical Hashes Accumulator Root":
       let header = res.get()
       headers[header.number] = header
 
-    var accumulator: Accumulator
+    var accumulator: HistoricalHashesAccumulator
 
     for i, hash in hashTreeRoots:
       updateAccumulator(accumulator, headers[i])

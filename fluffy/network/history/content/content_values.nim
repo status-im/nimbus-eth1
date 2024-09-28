@@ -27,18 +27,18 @@ const
 
 type
   ## BlockHeader types
-  AccumulatorProof* = array[15, Digest]
+  HistoricalHashesAccumulatorProof* = array[15, Digest]
 
   BlockHeaderProofType* = enum
     none = 0x00 # An SSZ Union None
-    accumulatorProof = 0x01
+    historicalHashesAccumulatorProof = 0x01
 
   BlockHeaderProof* = object
     case proofType*: BlockHeaderProofType
     of none:
       discard
-    of accumulatorProof:
-      accumulatorProof*: AccumulatorProof
+    of historicalHashesAccumulatorProof:
+      historicalHashesAccumulatorProof*: HistoricalHashesAccumulatorProof
 
   BlockHeaderWithProof* = object
     header*: ByteList[MAX_HEADER_LENGTH] # RLP data
@@ -68,8 +68,10 @@ type
   ReceiptByteList* = ByteList[MAX_RECEIPT_LENGTH] # RLP data
   PortalReceipts* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
 
-func init*(T: type BlockHeaderProof, proof: AccumulatorProof): T =
-  BlockHeaderProof(proofType: accumulatorProof, accumulatorProof: proof)
+func init*(T: type BlockHeaderProof, proof: HistoricalHashesAccumulatorProof): T =
+  BlockHeaderProof(
+    proofType: historicalHashesAccumulatorProof, historicalHashesAccumulatorProof: proof
+  )
 
 func init*(T: type BlockHeaderProof): T =
   BlockHeaderProof(proofType: none)

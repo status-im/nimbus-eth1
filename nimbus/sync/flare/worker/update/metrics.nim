@@ -12,43 +12,56 @@
 
 import
   pkg/metrics,
-  ../../worker_desc
+  ../../worker_desc,
+  ".."/[db, blocks_staged, headers_staged]
 
 declareGauge flare_beacon_block_number, "" &
-  "Block number for latest finalised header"
+  "Block number of latest known finalised header"
 
-declareGauge flare_era1_max_block_number, "" &
-  "Max block number for era1 blocks"
+declareGauge flare_state_block_number, "" &
+  "Max block number of imported/executed blocks"
+  
+declareGauge flare_base_block_number, "" &
+  "Max block number inital header chain starting at genesis"
 
-declareGauge flare_max_trusted_block_number, "" &
-  "Max block number for trusted headers chain starting at genesis"
+declareGauge flare_least_block_number, "" &
+  "Starting/min block number for higher up headers chain"
 
-declareGauge flare_least_verified_block_number, "" &
-  "Starting block number for verified higher up headers chain"
+declareGauge flare_final_block_number, "" &
+  "Ending/max block number of higher up headers chain"
 
-declareGauge flare_top_verified_block_number, "" &
-  "Top block number for verified higher up headers chain"
+declareGauge flare_headers_staged_queue_len, "" &
+  "Number of header list records staged for serialised processing"
 
-declareGauge flare_staged_headers_queue_size, "" &
-  "Number of isolated verified header chains, gaps to be filled"
+declareGauge flare_headers_unprocessed, "" &
+  "Number of block numbers ready to fetch and stage headers"
+
+declareGauge flare_blocks_staged_queue_len, "" &
+  "Number of block list records staged for importing"
+
+declareGauge flare_blocks_unprocessed, "" &
+  "Number of block numbers ready to fetch and stage block data"
 
 declareGauge flare_number_of_buddies, "" &
-  "Number of current worker instances"
+  "Number of currently active worker instances"
 
-declareCounter flare_serial, "" &
-  "Serial counter for debugging"
 
 template updateMetricsImpl*(ctx: FlareCtxRef) =
-  let now = Moment.now()
-  if ctx.pool.nextUpdate < now:
-    metrics.set(flare_era1_max_block_number, ctx.pool.e1AvailMax.int64)
-    metrics.set(flare_max_trusted_block_number, ctx.layout.base.int64)
-    metrics.set(flare_least_verified_block_number, ctx.layout.least.int64)
-    metrics.set(flare_top_verified_block_number, ctx.layout.final.int64)
-    metrics.set(flare_beacon_block_number, ctx.lhc.beacon.header.number.int64)
-    metrics.set(flare_staged_headers_queue_size, ctx.lhc.staged.len)
-    metrics.set(flare_number_of_buddies, ctx.pool.nBuddies)
-    flare_serial.inc(1)
-    ctx.pool.nextUpdate += metricsUpdateInterval
+  metrics.set(flare_beacon_block_number, ctx.lhc.beacon.header.number.int64)
+
+  metrics.set(flare_state_block_number, ctx.dbStateBlockNumber().int64)
+  metrics.set(flare_base_block_number, ctx.layout.base.int64)
+  metrics.set(flare_least_block_number, ctx.layout.least.int64)
+  metrics.set(flare_final_block_number, ctx.layout.final.int64)
+
+  metrics.set(flare_headers_staged_queue_len, ctx.headersStagedQueueLen())
+  metrics.set(flare_headers_unprocessed,
+              (ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed()).int64)
+
+  metrics.set(flare_blocks_staged_queue_len, ctx.blocksStagedQueueLen())
+  metrics.set(flare_blocks_unprocessed,
+              (ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed()).int64)
+
+  metrics.set(flare_number_of_buddies, ctx.pool.nBuddies)
 
 # End

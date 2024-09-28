@@ -20,7 +20,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc unprocFetch*(
+proc headersUnprocFetch*(
     ctx: FlareCtxRef;
     maxLen: uint64;
       ): Result[BnRange,void] =
@@ -30,7 +30,7 @@ proc unprocFetch*(
   let
     q = ctx.lhc.unprocessed
 
-    # Fetch top right interval with largest block numbers
+    # Fetch top/right interval with largest block numbers
     jv = q.le().valueOr:
       return err()
 
@@ -44,61 +44,82 @@ proc unprocFetch*(
         # Note that either (fringe case):
         #   (`jv.len`==0)  => (`jv`==`[0,high(u64)]`) => `jv.maxPt`==`high(u64)`
         # or (in the non-fringe case)
-        #   (`maxLen` < `jv.len`) => (`jv.maxPt` - `maxLen` + 1 <= `jv.maxPt`)
+        #   (`maxLen` < `jv.len`) => (`jv.maxPt` - `maxLen` + 1 < `jv.maxPt`)
         #
         BnRange.new(jv.maxPt - maxLen + 1, jv.maxPt)
 
   discard q.reduce(iv)
+  ctx.lhc.borrowed += iv.len
   ok(iv)
 
-proc unprocMerge*(ctx: FlareCtxRef; iv: BnRange) =
-  ## Merge back unprocessed range
-  discard ctx.lhc.unprocessed.merge(iv)
 
-proc unprocMerge*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
-  ## Ditto
-  discard ctx.lhc.unprocessed.merge(minPt, maxPt)
+proc headersUnprocCommit*(ctx: FlareCtxRef; borrowed: uint) =
+  ## Commit back all processed range
+  ctx.lhc.borrowed -= borrowed
+
+proc headersUnprocCommit*(ctx: FlareCtxRef; borrowed: uint; retuor: BnRange) =
+  ## Merge back unprocessed range `retour`
+  ctx.headersUnprocCommit borrowed
+  doAssert ctx.lhc.unprocessed.merge(retuor) == retuor.len
+
+proc headersUnprocCommit*(
+    ctx: FlareCtxRef;
+    borrowed: uint;
+    rMinPt: BlockNumber;
+    rMaxPt: BlockNumber) =
+  ## Variant of `headersUnprocCommit()`
+  ctx.headersUnprocCommit borrowed
+  doAssert ctx.lhc.unprocessed.merge(rMinPt, rMaxPt) == rMaxPt - rMinPt + 1
 
 
-proc unprocReduce*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
-  ## Merge back unprocessed range
-  discard ctx.lhc.unprocessed.reduce(minPt, maxPt)
 
-
-proc unprocFullyCovered*(
-    ctx: FlareCtxRef; minPt, maxPt: BlockNumber): bool =
-  ## Check whether range is fully contained
-  ctx.lhc.unprocessed.covered(minPt, maxPt) == maxPt - minPt + 1
-
-proc unprocCovered*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber): uint64 =
+proc headersUnprocCovered*(ctx: FlareCtxRef; minPt,maxPt: BlockNumber): uint64 =
   ## Check whether range is fully contained
   ctx.lhc.unprocessed.covered(minPt, maxPt)
 
-proc unprocCovered*(ctx: FlareCtxRef; pt: BlockNumber): bool =
+proc headersUnprocCovered*(ctx: FlareCtxRef; pt: BlockNumber): bool =
   ## Check whether point is contained
   ctx.lhc.unprocessed.covered(pt, pt) == 1
 
 
-proc unprocClear*(ctx: FlareCtxRef) =
-  ctx.lhc.unprocessed.clear()
-
-
-proc unprocTop*(ctx: FlareCtxRef): BlockNumber =
+proc headersUnprocTop*(ctx: FlareCtxRef): BlockNumber =
   let iv = ctx.lhc.unprocessed.le().valueOr:
     return BlockNumber(0)
   iv.maxPt
 
-proc unprocTotal*(ctx: FlareCtxRef): uint64 =
+proc headersUnprocTotal*(ctx: FlareCtxRef): uint64 =
   ctx.lhc.unprocessed.total()
 
-proc unprocChunks*(ctx: FlareCtxRef): int =
+proc headersUnprocBorrowed*(ctx: FlareCtxRef): uint64 =
+  ctx.lhc.borrowed
+
+proc headersUnprocChunks*(ctx: FlareCtxRef): int =
   ctx.lhc.unprocessed.chunks()
+
+proc headersUnprocIsEmpty*(ctx: FlareCtxRef): bool =
+  ctx.lhc.unprocessed.chunks() == 0
 
 # ------------
 
-proc unprocInit*(ctx: FlareCtxRef) =
+proc headersUnprocInit*(ctx: FlareCtxRef) =
   ## Constructor
   ctx.lhc.unprocessed = BnRangeSet.init()
+
+
+proc headersUnprocSet*(ctx: FlareCtxRef) =
+  ## Clear
+  ctx.lhc.unprocessed.clear()
+  ctx.lhc.borrowed = 0u
+
+proc headersUnprocSet*(ctx: FlareCtxRef; iv: BnRange) =
+  ## Set up new unprocessed range
+  ctx.headersUnprocSet()
+  discard ctx.lhc.unprocessed.merge(iv)
+
+proc headersUnprocSet*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
+  ## Set up new unprocessed range
+  ctx.headersUnprocSet()
+  discard ctx.lhc.unprocessed.merge(minPt, maxPt)
 
 # ------------------------------------------------------------------------------
 # End
