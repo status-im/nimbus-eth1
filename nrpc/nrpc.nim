@@ -8,7 +8,6 @@
 # those terms.
 
 import
-  std/sequtils,
   chronicles,
   ../nimbus/constants,
   ../nimbus/core/chain,
@@ -16,7 +15,6 @@ import
   ../nimbus/db/core_db/persistent,
   ../nimbus/utils/era_helpers,
   kzg4844/kzg_ex as kzg,
-  ../nimbus/core/eip4844,
   web3,
   web3/[engine_api, primitives, conversions],
   beacon_chain/spec/digest,
@@ -163,134 +161,47 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
   var
     importedSlot =
       findSlot(client, currentBlockNumber, lastEra1Block, firstSlotAfterMerge)
-    finalizedHash: Eth2Digest
+    finalizedHash = Eth2Digest.fromHex("0x00")
     headHash: Eth2Digest
 
   while running and currentBlockNumber < headBlck.header.number:
     var isAvailable = false
     (curBlck, isAvailable) =
       client.getCLBlockFromBeaconChain(BlockIdent.init(Slot(importedSlot)), clConfig)
-    importedSlot += 1
+  
     if not isAvailable:
       importedSlot += 1
       continue
-
+    
+    importedSlot += 1
     withBlck(curBlck):
-      when consensusFork >= ConsensusFork.Deneb:
+      when consensusFork == ConsensusFork.Bellatrix:
         let
           payload = forkyBlck.message.body.execution_payload.asEngineExecutionPayload
-          versioned_hashes = mapIt(
-            forkyBlck.message.body.blob_kzg_commitments,
-            engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
-          )
-          data = await rpcClient.newPayload(
-            payload, versioned_hashes, FixedBytes[32] forkyBlck.message.parent_root.data
-          )
+          # versioned_hashes = mapIt(
+          #   forkyBlck.message.body.blob_kzg_commitments,
+          #   engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
+          # )
+          data = await rpcClient.newPayload(payload)
         notice "Payload status", response = data
 
         headHash = forkyBlck.message.body.execution_payload.block_hash
-        if currentBlockNumber == finalizedBlck.header.number:
-          notice "Finalized block reached", number = currentBlockNumber
-          finalizedHash = finalizedBlck.header.parentHash
-          (finalizedBlck, _) = client.getELBlockFromBeaconChain(
-            BlockIdent.init(BlockIdentType.Finalized), clConfig
-          )
 
-    var
-      state = ForkchoiceStateV1(
-        headBlockHash: headHash.asBlockHash,
-        safeBlockHash: finalizedHash.asBlockHash,
-        finalizedBlockHash: finalizedHash.asBlockHash,
-      )
-      fcudata = await rpcClient.forkchoiceUpdated(state, Opt.none(PayloadAttributesV3))
-    notice "Forkchoice Updated", response = fcudata
+        var
+          state = ForkchoiceStateV1(
+            headBlockHash: headHash.asBlockHash,
+            safeBlockHash: finalizedHash.asBlockHash,
+            finalizedBlockHash: finalizedHash.asBlockHash,
+          )
+          fcudata = await rpcClient.forkchoiceUpdated(state, Opt.none(PayloadAttributesV1))
+        notice "Forkchoice Updated", state=state, response = fcudata
+
+        if forkyBlck.message.body.execution_payload.block_number mod 32 == 0:
+          finalizedHash = headHash
 
     currentBlockNumber = elBlockNumber()
     (headBlck, _) =
       client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
-
-proc syncToDatabase(conf: NRpcConf) {.async.} =
-  let coreDB = AristoDbRocks.newCoreDbRef(string conf.dataDir, conf.dbOptions())
-
-  let com = CommonRef.new(
-    db = coreDB,
-    pruneHistory = (conf.chainDbMode == AriPrune),
-    networkId = conf.networkId,
-    params = conf.networkParams,
-  )
-
-  defer:
-    com.db.finish()
-
-  template boolFlag(flags, b): PersistBlockFlags =
-    if b:
-      flags
-    else:
-      {}
-
-  let
-    chain = com.newChain()
-    (clConfig, lastEra1Block, firstSlotAfterMerge) = loadNetworkConfig(conf)
-
-  var
-    currentBlockNumber = com.db.getSavedStateBlockNumber() + 1
-    flags =
-      boolFlag({PersistBlockFlag.NoValidation}, conf.noValidation) +
-      boolFlag({PersistBlockFlag.NoFullValidation}, not conf.fullValidation) +
-      boolFlag(NoPersistBodies, not conf.storeBodies) +
-      boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts) +
-      boolFlag({PersistBlockFlag.NoPersistSlotHashes}, not conf.storeSlotHashes)
-    blocks: seq[EthBlock]
-    curBlck: EthBlock
-    client = RestClientRef.new(conf.beaconApi).valueOr:
-      error "Cannot connect to beacon API", url = conf.beaconApi
-      quit(QuitFailure)
-
-  template process() =
-    let statusRes = chain.persistBlocks(blocks, flags)
-    if statusRes.isErr():
-      error "Failed to persist blocks", error = statusRes.error
-      quit(QuitFailure)
-    info "Persisted blocks", blocks = blocks.len
-    blocks.setLen(0)
-
-  var (headBlck, _) = client.getELBlockFromBeaconChain(
-    BlockIdent.init(BlockIdentType.Finalized), clConfig
-  )
-
-  if headBlck.header.number <= currentBlockNumber:
-    notice "CL head is behind of EL head, or in sync", head = headBlck.header.number
-    quit(QuitSuccess)
-
-  info "Current block number", number = currentBlockNumber
-  info "Blocks till head", blocks = headBlck.header.number - currentBlockNumber
-
-  var importedSlot =
-    findSlot(client, currentBlockNumber, lastEra1Block, firstSlotAfterMerge)
-
-  while running and currentBlockNumber < headBlck.header.number:
-    var isAvailable = false
-    (curBlck, isAvailable) =
-      client.getELBlockFromBeaconChain(BlockIdent.init(Slot(importedSlot)), clConfig)
-    if not isAvailable:
-      importedSlot += 1
-      continue
-
-    blocks.add(curBlck)
-    importedSlot += 1
-    currentBlockNumber = curBlck.header.number
-
-    if blocks.lenu64 mod conf.chunkSize == 0 or
-        currentBlockNumber == headBlck.header.number:
-      notice "Blocks Downloaded from CL", numberOfBlocks = blocks.len
-      process()
-      currentBlockNumber = com.db.getSavedStateBlockNumber()
-      (headBlck, _) = client.getELBlockFromBeaconChain(
-        BlockIdent.init(BlockIdentType.Finalized), clConfig
-      )
-
-  if blocks.len > 0:
-    process()
 
 when isMainModule:
   ## Ctrl+C handling
@@ -310,19 +221,5 @@ when isMainModule:
   setLogLevel(conf.logLevel)
 
   case conf.cmd
-  of NRpcCmd.`sync_db`:
-    # Trusted setup is needed for processing Cancun+ blocks
-    if conf.trustedSetupFile.isSome:
-      let fileName = conf.trustedSetupFile.get()
-      let res = Kzg.loadTrustedSetup(fileName)
-      if res.isErr:
-        fatal "Cannot load Kzg trusted setup from file", msg = res.error
-        quit(QuitFailure)
-    else:
-      let res = loadKzgTrustedSetup()
-      if res.isErr:
-        fatal "Cannot load baked in Kzg trusted setup", msg = res.error
-        quit(QuitFailure)
-    waitFor syncToDatabase(conf)
-  else:
+  of NRpcCmd.`external_sync`:
     waitFor syncToEngineApi(conf)

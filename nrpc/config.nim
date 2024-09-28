@@ -45,23 +45,7 @@ func getLogLevels(): string =
   join(logLevels, ", ")
 
 const
-  defaultDataDirDesc = defaultDataDir()
-  defaultMetricsServerPort = 9093
-  defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
-  defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
-
-# `when` around an option doesn't work with confutils; it fails to compile.
-# Workaround that by setting the `ignore` pragma on EVMC-specific options.
-when defined(evmc_enabled):
-  {.pragma: includeIfEvmc.}
-else:
-  {.pragma: includeIfEvmc, ignore.}
-
-const sharedLibText = if defined(linux): " (*.so, *.so.N)"
-                      elif defined(windows): " (*.dll)"
-                      elif defined(macosx): " (*.dylib)"
-                      else: ""
 
 type
   ChainDbMode* {.pure.} = enum
@@ -69,7 +53,6 @@ type
     AriPrune
 
   NRpcCmd* {.pure.} = enum
-    `sync_db`
     `external_sync`
 
   NRpcConf* = object of RootObj
@@ -118,132 +101,9 @@ type
       desc: "Specifies a path for the written Json log file"
       name: "log-file" }: Option[OutFile]
 
-    logMetricsEnabled* {.
-      desc: "Enable metrics logging"
-      defaultValue: false
-      name: "log-metrics" .}: bool
-
-    logMetricsInterval* {.
-      desc: "Interval at which to log metrics, in seconds"
-      defaultValue: 10
-      name: "log-metrics-interval" .}: int
-
-    metricsEnabled* {.
-      desc: "Enable the built-in metrics HTTP server"
-      defaultValue: false
-      name: "metrics" }: bool
-
-    metricsPort* {.
-      desc: "Listening port of the built-in metrics HTTP server"
-      defaultValue: defaultMetricsServerPort
-      defaultValueDesc: $defaultMetricsServerPort
-      name: "metrics-port" }: Port
-
-    metricsAddress* {.
-      desc: "Listening IP address of the built-in metrics HTTP server"
-      defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "metrics-address" }: IpAddress
-
     case cmd* {.
       command
       desc: "" }: NRpcCmd
-    
-    of `sync_db`:
-
-      chunkSize* {.
-        desc: "Number of blocks per database transaction"
-        defaultValue: 1000
-        name: "chunk-size" .}: uint64
-
-      dataDir* {.
-        desc: "The directory where nimbus will store all blockchain data"
-        defaultValue: defaultDataDir()
-        defaultValueDesc: $defaultDataDirDesc
-        abbr: "d"
-        name: "data-dir" }: OutDir
-
-      chainDbMode* {.
-        desc: "Blockchain database"
-        longDesc:
-          "- Aristo   -- Single state DB, full node\n" &
-          "- AriPrune -- Aristo with curbed block history (for testing)\n" &
-          ""
-        defaultValue: ChainDbMode.Aristo
-        defaultValueDesc: $ChainDbMode.Aristo
-        abbr : "p"
-        name: "chaindb" }: ChainDbMode
-
-      evm* {.
-        desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
-        defaultValue: ""
-        name: "evm"
-        includeIfEvmc }: string
-
-      trustedSetupFile* {.
-        desc: "Load EIP-4844 trusted setup file"
-        defaultValue: none(string)
-        defaultValueDesc: "Baked in trusted setup"
-        name: "trusted-setup-file" .}: Option[string]
-
-      # TODO validation and storage options should be made non-hidden when the
-      #      UX has stabilised and era1 storage is in the app
-      fullValidation* {.
-        hidden
-        desc: "Enable full per-block validation (slow)"
-        defaultValue: false
-        name: "debug-full-validation".}: bool
-
-      noValidation* {.
-        hidden
-        desc: "Disble per-chunk validation"
-        defaultValue: true
-        name: "debug-no-validation".}: bool
-
-      storeBodies* {.
-        hidden
-        desc: "Store block blodies in database"
-        defaultValue: false
-        name: "debug-store-bodies".}: bool
-
-      # TODO this option should probably only cover the redundant parts, ie
-      #      those that are in era1 files - era files presently do not store
-      #      receipts
-      storeReceipts* {.
-        hidden
-        desc: "Store receipts in database"
-        defaultValue: false
-        name: "debug-store-receipts".}: bool
-
-      storeSlotHashes* {.
-        hidden
-        desc: "Store reverse slot hashes in database"
-        defaultValue: false
-        name: "debug-store-slot-hashes".}: bool
-
-      rocksdbMaxOpenFiles {.
-        hidden
-        defaultValue: defaultMaxOpenFiles
-        defaultValueDesc: $defaultMaxOpenFiles
-        name: "debug-rocksdb-max-open-files".}: int
-
-      rocksdbWriteBufferSize {.
-        hidden
-        defaultValue: defaultWriteBufferSize
-        defaultValueDesc: $defaultWriteBufferSize
-        name: "debug-rocksdb-write-buffer-size".}: int
-
-      rocksdbRowCacheSize {.
-        hidden
-        defaultValue: defaultRowCacheSize
-        defaultValueDesc: $defaultRowCacheSize
-        name: "debug-rocksdb-row-cache-size".}: int
-
-      rocksdbBlockCacheSize {.
-        hidden
-        defaultValue: defaultBlockCacheSize
-        defaultValueDesc: $defaultBlockCacheSize
-        name: "debug-rocksdb-block-cache-size".}: int
 
     of `external_sync`:
 
@@ -301,14 +161,6 @@ proc getNetworkId(conf: NRpcConf): Opt[NetworkId] =
     except CatchableError:
       error "Failed to parse network name or id", network
       quit QuitFailure
-
-func dbOptions*(conf: NRpcConf): DbOptions =
-  DbOptions.init(
-    maxOpenFiles = conf.rocksdbMaxOpenFiles,
-    writeBufferSize = conf.rocksdbWriteBufferSize,
-    rowCacheSize = conf.rocksdbRowCacheSize,
-    blockCacheSize = conf.rocksdbBlockCacheSize,
-  )
 
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.
