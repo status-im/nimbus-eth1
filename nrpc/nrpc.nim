@@ -60,7 +60,8 @@ template getELBlockFromBeaconChain(
   # Constructing the EL block from the CL block
   var eth1block: EthBlock
   if isAvailable:
-    eth1Block = clBlock.asTrusted().getEthBlock().valueOr:
+    withBlck(clBlock.asTrusted()):
+      eth1Block = getEthBlock(forkyBlck.message).valueOr:
         error "Failed to get EL block from CL head"
         quit(QuitFailure)
 
