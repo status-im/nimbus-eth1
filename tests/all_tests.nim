@@ -38,7 +38,6 @@ cliBuilder:
           ./test_txpool2,
           ./test_engine_api,
           ./test_eip4844,
-          ./test_beacon/test_skeleton,
           ./test_getproof_json,
           ./test_aristo,
           ./test_coredb

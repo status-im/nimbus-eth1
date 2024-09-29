@@ -23,10 +23,6 @@ import
     core/tx_pool/tx_item,
     core/block_import,
     rpc,
-    rpc/oracle,
-    sync/protocol,
-    sync/beacon,
-    sync/handlers,
     beacon/beacon_engine,
     beacon/web3_eth_conv,
     common
@@ -47,7 +43,6 @@ type
     server : RpcHttpServer
     ttd    : DifficultyInt
     client : RpcHttpClient
-    sync   : BeaconSyncRef
     txPool : TxPoolRef
     chain  : ForkedChainRef
 
@@ -114,12 +109,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)
 
-    sync   = if com.ttd().isSome:
-               BeaconSyncRef.init(node, chain, ctx.rng, conf.maxPeers, id=conf.tcpPort.int)
-             else:
-               BeaconSyncRef(nil)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
-    oracle = Oracle.new(com)
     serverApi = newServerAPI(chain)
 
   setupServerAPI(serverApi, server)
@@ -137,9 +127,6 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let client = newRpcHttpClient()
   waitFor client.connect("127.0.0.1", conf.httpPort, false)
 
-  if com.ttd().isSome:
-    sync.start()
-
   node.startListening()
 
   EngineEnv(
@@ -148,15 +135,12 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     node   : node,
     server : server,
     client : client,
-    sync   : sync,
     txPool : txPool,
     chain  : chain
   )
 
 proc close*(env: EngineEnv) =
   waitFor env.node.closeWait()
-  if not env.sync.isNil:
-    env.sync.stop()
   waitFor env.client.close()
   waitFor env.server.closeWait()
 
