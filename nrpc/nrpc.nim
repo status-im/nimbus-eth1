@@ -15,12 +15,13 @@ import
   ./config,
   ../nimbus/db/core_db/persistent,
   ../nimbus/utils/era_helpers,
-  kzg4844/kzg_ex as kzg,
+  kzg4844/kzg,
   web3,
   web3/[engine_api, primitives, conversions],
   beacon_chain/spec/digest,
   beacon_chain/el/el_conf,
   beacon_chain/el/el_manager,
+  beacon_chain/el/engine_api_conversions,
   beacon_chain/spec/[forks, state_transition_block],
   beacon_chain/spec/eth2_apis/[rest_types, rest_beacon_calls],
   beacon_chain/networking/network_metadata,
@@ -196,7 +197,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       # Don't include blocks before bellatrix, as it doesn't have payload
       when consensusFork >= ConsensusFork.Bellatrix:
         # Load the execution payload for all blocks after the bellatrix upgrade
-        let payload = forkyBlck.message.body.execution_payload.asEngineExecutionPayload
+        let payload = forkyBlck.message.body.asEngineExecutionPayload()
         var payloadResponse: engine_api.PayloadStatusV1
 
         # Make the newPayload call based on the consensus fork
@@ -215,7 +216,9 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           )
           debug "Making new payload call for Deneb"
           payloadResponse = await rpcClient.newPayload(
-            payload, versioned_hashes, FixedBytes[32] forkyBlck.message.parent_root.data
+            payload,
+            versioned_hashes,
+            primitives.FixedBytes[32] forkyBlck.message.parent_root.data,
           )
         notice "Payload status", response = payloadResponse
 
