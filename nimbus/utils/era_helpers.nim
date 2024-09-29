@@ -117,7 +117,7 @@ proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[common.Withdrawal] =
     )
   return withdrawals
 
-proc getEthBlock(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
+proc getEthBlock*(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
   ## Convert a beacon block to an eth1 block.
   const consensusFork = typeof(blck).kind
   when consensusFork >= ConsensusFork.Bellatrix:
