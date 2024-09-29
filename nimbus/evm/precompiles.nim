@@ -160,7 +160,7 @@ func ecRecover(c: Computation): EvmResultVoid =
       return err(prcErr(PrcInvalidSig))
 
   c.output.setLen(32)
-  assign(c.output.toOpenArray(12, 31), pubkey.toCanonicalAddress())
+  assign(c.output.toOpenArray(12, 31), pubkey.toCanonicalAddress().data)
   ok()
 
 func sha256(c: Computation): EvmResultVoid =
@@ -714,7 +714,7 @@ iterator activePrecompiles*(fork: EVMFork): EthAddress =
   let maxPrecompileAddr = getMaxPrecompileAddr(fork)
   for c in PrecompileAddresses.low..maxPrecompileAddr:
     if validPrecompileAddr(c.byte, maxPrecompileAddr.byte):
-      res[^1] = c.byte
+      res.data[^1] = c.byte
       yield res
 
 func activePrecompilesList*(fork: EVMFork): seq[EthAddress] =
@@ -723,10 +723,10 @@ func activePrecompilesList*(fork: EVMFork): seq[EthAddress] =
 
 proc execPrecompiles*(c: Computation, fork: EVMFork): bool =
   for i in 0..18:
-    if c.msg.codeAddress[i] != 0:
+    if c.msg.codeAddress.data[i] != 0:
       return false
 
-  let lb = c.msg.codeAddress[19]
+  let lb = c.msg.codeAddress.data[19]
   if not validPrecompileAddr(lb, fork):
     return false
 

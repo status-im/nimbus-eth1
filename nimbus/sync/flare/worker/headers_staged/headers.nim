@@ -57,7 +57,7 @@ proc headersFetchReversed*(
           maxResults: ivReq.len.uint,
           skip:       0,
           reverse:    true,
-          startBlock: HashOrNum(
+          startBlock: BlockHashOrNumber(
             isHash:   true,
             hash:     topHash))
       else:
@@ -65,7 +65,7 @@ proc headersFetchReversed*(
           maxResults: ivReq.len.uint,
           skip:       0,
           reverse:    true,
-          startBlock: HashOrNum(
+          startBlock: BlockHashOrNumber(
             isHash:   false,
             number:   ivReq.maxPt))
     start = Moment.now()

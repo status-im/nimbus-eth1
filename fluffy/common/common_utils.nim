@@ -16,7 +16,7 @@ import
 
 func fromBytes*(T: type KeccakHash, hash: openArray[byte]): T =
   doAssert(hash.len() == 32)
-  KeccakHash(data: array[32, byte].initCopyFrom(hash))
+  KeccakHash(array[32, byte].initCopyFrom(hash))
 
 iterator strippedLines(filename: string): string {.raises: [ref IOError].} =
   for line in lines(filename):

@@ -24,7 +24,7 @@ type
     ## underlying `Hash256` type which needs to be converted to `BlockHash`.
 
   BlocksRequest* = object
-    startBlock*: HashOrNum
+    startBlock*: BlockHashOrNumber
     maxResults*, skip*: uint
     reverse*: bool
 
@@ -61,8 +61,8 @@ proc to*(w: seq[BlockHash]; T: type seq[Hash256]): T =
   ## Ditto
   cast[seq[Hash256]](w)
 
-proc to*(bh: BlockHash; T: type HashOrNum): T =
-  ## Convert argument blocj hash `bh` to `HashOrNum`
+proc to*(bh: BlockHash; T: type BlockHashOrNumber): T =
+  ## Convert argument blocj hash `bh` to `BlockHashOrNumber`
   T(isHash: true, hash: bh.Hash256)
 
 # ------------------------------------------------------------------------------
@@ -102,7 +102,7 @@ func `$`*(h: BlockHash): string =
 func `$`*(blob: Blob): string =
   blob.toHex
 
-func `$`*(hashOrNum: HashOrNum): string =
+func `$`*(hashOrNum: BlockHashOrNumber): string =
   # It's always obvious which one from the visible length of the string.
   if hashOrNum.isHash: $hashOrNum.hash
   else: $hashOrNum.number

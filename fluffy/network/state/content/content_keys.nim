@@ -64,6 +64,17 @@ type
 
   ContentKeyType* = AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey
 
+func fromSszBytes*(
+    T: type KeccakHash, data: openArray[byte]
+): T {.raises: [SszError].} =
+  if data.len != sizeof(result):
+    raiseIncorrectSize T
+
+  T.copyFrom(data)
+
+template toSszType*(v: KeccakHash): array[32, byte] =
+  v.data
+
 func init*(
     T: type AccountTrieNodeKey, path: Nibbles, nodeHash: NodeHash
 ): T {.inline.} =

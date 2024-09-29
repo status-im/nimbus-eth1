@@ -9,7 +9,7 @@
 
 import
   std/net,
-  eth/[common, keys],
+  eth/common/keys,
   eth/p2p/discoveryv5/[enr, node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol
 

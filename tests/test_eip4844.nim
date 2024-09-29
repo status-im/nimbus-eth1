@@ -15,13 +15,13 @@ import
   ../nimbus/transaction
 
 const
-  recipient = hexToByteArray[20]("095e7baea6a6c7c4c2dfeb977efac326af552d87")
-  source    = hexToByteArray[20]("0x0000000000000000000000000000000000000001")
+  recipient = address"095e7baea6a6c7c4c2dfeb977efac326af552d87"
+  source    = address"0x0000000000000000000000000000000000000001"
   storageKey= default(StorageKey)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
   abcdef    = hexToSeqByte("abcdef")
   hexKey    = "af1a9be9f1a54421cac82943820a0fe0f601bb5f4f6d0bccc81c613f0ce6ae22"
-  senderTop = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
+  senderTop = address"73cf19657412508833f618a15e8251306b3e6ee5"
 
 proc tx0(i: int): Transaction =
   Transaction(
@@ -86,7 +86,7 @@ proc tx5(i: int): Transaction =
 
 proc tx6(i: int): Transaction =
   const
-    digest = "010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014".toDigest
+    digest = bytes32"010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014"
 
   Transaction(
     txType:              TxEip4844,
@@ -101,7 +101,7 @@ proc tx6(i: int): Transaction =
 
 proc tx7(i: int): Transaction =
   const
-    digest = "01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e".toDigest
+    digest = bytes32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
   Transaction(
     txType:              TxEip4844,
@@ -117,7 +117,7 @@ proc tx7(i: int): Transaction =
 
 proc tx8(i: int): Transaction =
   const
-    digest = "01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e".toDigest
+    digest = bytes32"01624652859a6e98ffc1608e2af0147ca4e86e1ce27672d8d3f3c9d4ffd6ef7e"
 
   Transaction(
     txType:              TxEip4844,

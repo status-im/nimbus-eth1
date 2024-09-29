@@ -146,17 +146,17 @@ proc getEthBlock(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
           Opt.none(uint64)
       parentBeaconBlockRoot =
         when consensusFork >= ConsensusFork.Deneb:
-          Opt.some(blck.parent_root)
+          Opt.some(common.Hash32(blck.parent_root.data))
         else:
-          Opt.none(common.Hash256)
+          Opt.none(common.Hash32)
 
       header = BlockHeader(
-        parentHash: payload.parent_hash,
+        parentHash: Hash32(payload.parent_hash.data),
         ommersHash: EMPTY_UNCLE_HASH,
         coinbase: EthAddress(payload.fee_recipient.data),
-        stateRoot: payload.state_root,
-        txRoot: calcTxRoot(txs),
-        receiptsRoot: payload.receipts_root,
+        stateRoot: Root(payload.state_root.data),
+        transactionsRoot: calcTxRoot(txs),
+        receiptsRoot: Root(payload.receipts_root.data),
         logsBloom: BloomFilter(payload.logs_bloom.data),
         difficulty: 0.u256,
         number: payload.block_number,
@@ -164,7 +164,7 @@ proc getEthBlock(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
         gasUsed: GasInt(payload.gas_used),
         timestamp: EthTime(payload.timestamp),
         extraData: payload.extra_data.asSeq(),
-        mixHash: payload.prev_randao,
+        mixHash: Hash32(payload.prev_randao.data),
         nonce: default(BlockNonce),
         baseFeePerGas: Opt.some(payload.base_fee_per_gas),
         withdrawalsRoot: withdrawalRoot,

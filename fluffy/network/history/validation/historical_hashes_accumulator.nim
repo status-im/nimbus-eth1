@@ -15,7 +15,7 @@ import
   ../../../common/common_types,
   ../history_content
 
-export ssz_serialization, merkleization, proofs, eth_types_rlp
+export ssz_serialization, merkleization, proofs, eth_types_rlp, BlockHash
 
 # HistoricalHashesAccumulator, as per specification:
 # https://github.com/ethereum/portal-network-specs/blob/master/history/history-network.md#the-historical-hashes-accumulator
@@ -68,6 +68,8 @@ type
     historicalEpochs*: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)]
     currentEpoch*: EpochRecord
 
+  Bytes32 = common_types.Bytes32
+
 func init*(T: type HistoricalHashesAccumulator): T =
   HistoricalHashesAccumulator(
     historicalEpochs: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)].init(@[]),
@@ -101,7 +103,7 @@ func updateAccumulator*(a: var HistoricalHashesAccumulator, header: BlockHeader)
     a.currentEpoch = EpochRecord.init(@[])
 
   let headerRecord = HeaderRecord(
-    blockHash: header.blockHash(),
+    blockHash: BlockHash(data: header.blockHash().data),
     totalDifficulty: lastTotalDifficulty + header.difficulty,
   )
 
@@ -152,7 +154,7 @@ func verifyProof(
     epochIndex = getEpochIndex(header)
     epochRecordHash = Digest(data: a.historicalEpochs[epochIndex])
 
-    leave = hash_tree_root(header.blockHash())
+    leave = hash_tree_root(BlockHash(data: header.blockHash().data))
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
 
     gIndex = GeneralizedIndex(EPOCH_SIZE * 2 * 2 + (headerRecordIndex * 2))

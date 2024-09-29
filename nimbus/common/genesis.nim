@@ -115,7 +115,7 @@ proc toGenesisHeader*(
     coinbase: g.coinbase,
     stateRoot: sdb.rootHash(),
     parentHash: GENESIS_PARENT_HASH,
-    txRoot: EMPTY_ROOT_HASH,
+    transactionsRoot: EMPTY_ROOT_HASH,
     receiptsRoot: EMPTY_ROOT_HASH,
     ommersHash: EMPTY_UNCLE_HASH
   )

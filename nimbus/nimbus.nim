@@ -17,7 +17,7 @@ import
   eth/net/nat,
   metrics,
   metrics/chronicles_support,
-  kzg4844/kzg_ex as kzg,
+  kzg4844/kzg,
   ./rpc,
   ./version,
   ./constants,
@@ -72,7 +72,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     quit(QuitFailure)
 
   let keypair = kpres.get()
-  var address = Address(
+  var address = enode.Address(
     ip: conf.listenAddress,
     tcpPort: conf.tcpPort,
     udpPort: conf.udpPort
@@ -210,7 +210,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   # Trusted setup is needed for processing Cancun+ blocks
   if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
-    let res = Kzg.loadTrustedSetup(fileName)
+    let res = loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)

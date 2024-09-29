@@ -19,7 +19,6 @@ import
   ./code_bytes,
   ../common/[common, evmforks],
   ../utils/utils,
-  stew/byteutils,
   chronicles, chronos,
   eth/[keys],
   sets

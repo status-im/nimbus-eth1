@@ -12,7 +12,7 @@ import
   std/[os, strutils],
   stew/arrayops,
   nimcrypto/sha2,
-  kzg4844/kzg_ex as kzg,
+  kzg4844/kzg,
   results,
   stint,
   ../constants,
@@ -41,7 +41,7 @@ const
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
 proc kzgToVersionedHash*(kzg: kzg.KzgCommitment): VersionedHash =
-  result = sha256.digest(kzg.bytes)
+  result = sha256.digest(kzg.bytes).data.to(Bytes32)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
@@ -183,13 +183,13 @@ proc validateBlobTransactionWrapper*(tx: PooledTransaction):
     return err("tx wrapper is ill formatted")
 
   let commitments = tx.networkPayload.commitments.mapIt(
-                      kzg.KzgCommitment(bytes: it))
+                      kzg.KzgCommitment(bytes: it.data))
 
   # Verify that commitments match the blobs by checking the KZG proof
   let res = kzg.verifyBlobKzgProofBatch(
               tx.networkPayload.blobs.mapIt(kzg.KzgBlob(bytes: it)),
               commitments,
-              tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it)))
+              tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it.data)))
 
   if res.isErr:
     return err(res.error)
@@ -215,4 +215,4 @@ proc loadKzgTrustedSetup*(): Result[void, string] =
     trustedSetupDir = vendorDir & "/nim-kzg4844/kzg4844/csources/src"
     trustedSetup = staticRead trustedSetupDir & "/trusted_setup.txt"
 
-  Kzg.loadTrustedSetupFromString(trustedSetup)
+  loadTrustedSetupFromString(trustedSetup, 0)

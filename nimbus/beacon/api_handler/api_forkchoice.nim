@@ -120,7 +120,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # Pass on finalised header
     if com.haveSyncFinalisedBlockHash():
       let finalizedBlockHash = ethHash update.finalizedBlockHash
-      if finalizedBlockHash != common.Hash256():
+      if finalizedBlockHash != default(common.Hash256):
         com.syncFinalisedBlockHash(finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)

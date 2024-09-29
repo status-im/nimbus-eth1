@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, hashes, sets],
+  std/[tables, hashes, sets, typetraits],
   chronicles,
   eth/common,
   results,
@@ -898,21 +898,21 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArr
   storageProof
 
 proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
-proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
-proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
-proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}
-proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
-proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
-proc getCode*(db: ReadOnlyStateDB, address: EthAddress): CodeBytesRef {.borrow.}
-proc getCodeSize*(db: ReadOnlyStateDB, address: EthAddress): int {.borrow.}
-proc contractCollision*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
-proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
-proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
-proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
-proc getCommittedStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
-func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
-func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress, slot: UInt256): bool {.borrow.}
-func getTransientStorage*(ac: ReadOnlyStateDB,
-                          address: EthAddress, slot: UInt256): UInt256 {.borrow.}
-func getAccountProof*(db: ReadOnlyStateDB, eAddr: EthAddress): seq[seq[byte]] {.borrow.}
-func getStorageProof*(db: ReadOnlyStateDB, eAddr: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] {.borrow.}
+proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 = getCodeHash(distinctBase db, address)
+proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 = getStorageRoot(distinctBase db, address)
+proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 = getBalance(distinctBase db, address)
+proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 = getStorage(distinctBase db, address, slot)
+proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce = getNonce(distinctBase db, address)
+proc getCode*(db: ReadOnlyStateDB, address: EthAddress): CodeBytesRef = getCode(distinctBase db, address)
+proc getCodeSize*(db: ReadOnlyStateDB, address: EthAddress): int = getCodeSize(distinctBase db, address)
+proc contractCollision*(db: ReadOnlyStateDB, address: EthAddress): bool = contractCollision(distinctBase db, address)
+proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool = accountExists(distinctBase db, address)
+proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool = isDeadAccount(distinctBase db, address)
+proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool = isEmptyAccount(distinctBase db, address)
+proc getCommittedStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 = getCommittedStorage(distinctBase db, address, slot)
+proc inAccessList*(db: ReadOnlyStateDB, address: EthAddress): bool = inAccessList(distinctBase db, address)
+proc inAccessList*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): bool = inAccessList(distinctBase db, address)
+proc getTransientStorage*(db: ReadOnlyStateDB,
+                          address: EthAddress, slot: UInt256): UInt256 = getTransientStorage(distinctBase db, address, slot)
+proc getAccountProof*(db: ReadOnlyStateDB, address: EthAddress): seq[seq[byte]] = getAccountProof(distinctBase db, address)
+proc getStorageProof*(db: ReadOnlyStateDB, address: EthAddress, slots: openArray[UInt256]): seq[seq[seq[byte]]] = getStorageProof(distinctBase db, address, slots)

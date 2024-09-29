@@ -149,7 +149,7 @@ proc deleteAccountRecord*(
 
   if otherLeaf.isValid:
     db.layersPutAccLeaf(
-      Hash256(data: getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf.pfx))),
+      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf.pfx))),
       otherLeaf)
 
   ok()
@@ -250,7 +250,7 @@ proc deleteStorageData*(
   if otherLeaf.isValid:
     let leafMixPath = mixUp(
       accPath,
-      Hash256(data: getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx))))
+      Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx))))
     db.layersPutStoLeaf(leafMixPath, otherLeaf)
 
   # If there was only one item (that got deleted), update the account as well

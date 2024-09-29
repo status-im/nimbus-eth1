@@ -361,7 +361,7 @@ proc deblobify*(
     return err(DeblobWrongType)
 
   ok(SavedState(
-    key: Hash256(data: array[32, byte].initCopyFrom(data.toOpenArray(0, 31))),
+    key: Hash32(array[32, byte].initCopyFrom(data.toOpenArray(0, 31))),
     serial: uint64.fromBytesBE data.toOpenArray(32, 39)))
 
 # ------------------------------------------------------------------------------

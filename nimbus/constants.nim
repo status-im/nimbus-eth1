@@ -51,7 +51,7 @@ const
   GAS_LIMIT_MAXIMUM* =                      int64.high.GasInt # Maximum the gas limit (2^63-1).
   DEFAULT_GAS_LIMIT* =                      8_000_000
 
-  EMPTY_SHA3* =                             "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
+  EMPTY_SHA3* =                             hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* =      20.u256
 
@@ -98,17 +98,17 @@ const
 
   # EIP-4788 addresses
   # BEACON_ROOTS_ADDRESS is the address where historical beacon roots are stored as per EIP-4788
-  BEACON_ROOTS_ADDRESS* = hexToByteArray[20]("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02")
+  BEACON_ROOTS_ADDRESS* = address"0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
   # SYSTEM_ADDRESS is where the system-transaction is sent from as per EIP-4788
-  SYSTEM_ADDRESS* = hexToByteArray[20]("0xfffffffffffffffffffffffffffffffffffffffe")
+  SYSTEM_ADDRESS* = address"0xfffffffffffffffffffffffffffffffffffffffe"
 
   RIPEMD_ADDR* = block:
     proc initAddress(x: int): EthAddress {.compileTime.} =
-      result[19] = x.byte
+      result.data[19] = x.byte
     initAddress(3)
 
-  HISTORY_STORAGE_ADDRESS* = hexToByteArray[20]("0x0aae40965e6800cd9b1f4b05ff21581047e3f91e")
-  DEPOSIT_CONTRACT_ADDRESS* = hexToByteArray[20]("0x00000000219ab540356cbb839cbe05303d7705fa")
-  WITHDRAWAL_REQUEST_ADDRESS* = hexToByteArray[20]("0x00A3ca265EBcb825B45F985A16CEFB49958cE017")
-  CONSOLIDATION_REQUEST_ADDRESS* = hexToByteArray[20]("0x00b42dbF2194e931E80326D950320f7d9Dbeac02")
+  HISTORY_STORAGE_ADDRESS* = address"0x0aae40965e6800cd9b1f4b05ff21581047e3f91e"
+  DEPOSIT_CONTRACT_ADDRESS* = address"0x00000000219ab540356cbb839cbe05303d7705fa"
+  WITHDRAWAL_REQUEST_ADDRESS* = address"0x00A3ca265EBcb825B45F985A16CEFB49958cE017"
+  CONSOLIDATION_REQUEST_ADDRESS* = address"0x00b42dbF2194e931E80326D950320f7d9Dbeac02"
 # End

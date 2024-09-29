@@ -79,9 +79,9 @@ proc populateBlockObject*(blockHash: eth_types.Hash256,
   result.number = w3BlockNumber(header.number)
   result.hash = w3Hash blockHash
   result.parentHash = w3Hash header.parentHash
-  result.nonce = Opt.some(FixedBytes[8] header.nonce)
+  result.nonce = Opt.some(Web3FixedBytes[8] header.nonce)
   result.sha3Uncles = w3Hash header.ommersHash
-  result.logsBloom = FixedBytes[256] header.logsBloom
+  result.logsBloom = Web3FixedBytes[256] header.logsBloom
   result.transactionsRoot = w3Hash header.txRoot
   result.stateRoot = w3Hash header.stateRoot
   result.receiptsRoot = w3Hash header.receiptsRoot

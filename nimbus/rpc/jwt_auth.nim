@@ -22,7 +22,7 @@ import
   chronos/apps/http/httptable,
   chronos/apps/http/httpserver,
   httputils,
-  nimcrypto/[hmac, utils],
+  nimcrypto/[hmac, sha2, utils],
   stew/[byteutils, objects],
   results,
   ../config,

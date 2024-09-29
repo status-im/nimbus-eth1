@@ -50,6 +50,8 @@ type
     config* : ChainConfig
     genesis*: Genesis
 
+  Address = addresses.Address
+
 const
   CustomNet*  = 0.NetworkId
   # these are public network id
@@ -103,8 +105,8 @@ type
 proc read*(rlp: var Rlp, T: type AddressBalance): T {.gcsafe, raises: [RlpError].}=
   let listLen = rlp.listLen
   rlp.tryEnterList()
-  let val = rlp.read(UInt256).toBytesBE()
-  result.address[0..^1] = val.toOpenArray(12, val.high)
+  let abytes = rlp.read(UInt256).to(Bytes32)
+  result.address = abytes.to(Address)
   result.account.balance = rlp.read(UInt256)
   if listLen == 3:
     var misc = rlp.read(Misc)
@@ -121,10 +123,7 @@ proc append*(w: var RlpWriter, ab: AddressBalance) =
     inc listLen
 
   w.startList(listLen)
-  var tmp: array[32, byte]
-  tmp[12..^1] = ab.address[0..^1]
-  var val = UInt256.fromBytesBE(tmp)
-  w.append(val)
+  w.append(ab.address.to(Bytes32).to(UInt256))
   w.append(ab.account.balance)
   if listLen == 3:
     var misc: Misc
@@ -210,7 +209,8 @@ proc readValue(reader: var JsonReader[JGenesis], value: var ChainId)
 
 proc readValue(reader: var JsonReader[JGenesis], value: var Hash256)
     {.gcsafe, raises: [SerializationError, IOError].} =
-  value = Hash256.fromHex(reader.readValue(string))
+  wrapError:
+    value = Hash256.fromHex(reader.readValue(string))
 
 proc readValue(reader: var JsonReader[JGenesis], value: var BlockNonce)
     {.gcsafe, raises: [SerializationError, IOError].} =
@@ -248,7 +248,7 @@ proc readValue(reader: var JsonReader[JGenesis], value: var seq[byte])
 proc readValue(reader: var JsonReader[JGenesis], value: var EthAddress)
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
-    value = parseAddress(reader.readValue(string))
+    value = Address.fromHex(reader.readValue(string))
 
 proc readValue(reader: var JsonReader[JGenesis], value: var uint64)
     {.gcsafe, raises: [SerializationError, IOError].} =
@@ -273,7 +273,7 @@ proc readValue(reader: var JsonReader[JGenesis], value: var GenesisAlloc)
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
     for key in reader.readObjectFields:
-      value[parseAddress(key)] = reader.readValue(GenesisAccount)
+      value[Address.fromHex(key)] = reader.readValue(GenesisAccount)
 
 macro fillArrayOfBlockNumberBasedForkOptionals(conf, tmp: typed): untyped =
   result = newStmtList()
@@ -456,7 +456,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       daoForkBlock:        Opt.some(1_920_000.BlockNumber),  # 2016-07-20 13:20:40 UTC
       daoForkSupport:      true,
       eip150Block:         Opt.some(2_463_000.BlockNumber),  # 2016-10-18 13:19:31 UTC
-      eip150Hash:          toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
+      eip150Hash:          hash32"2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0",
       eip155Block:         Opt.some(2_675_000.BlockNumber),  # Same as EIP-158
       eip158Block:         Opt.some(2_675_000.BlockNumber),  # 2016-11-22 16:15:44 UTC
       byzantiumBlock:      Opt.some(4_370_000.BlockNumber),  # 2017-10-16 05:22:11 UTC
@@ -480,7 +480,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       homesteadBlock:      Opt.some(0.BlockNumber),
       daoForkSupport:      false,
       eip150Block:         Opt.some(0.BlockNumber),
-      eip150Hash:          toDigest("0000000000000000000000000000000000000000000000000000000000000000"),
+      eip150Hash:          hash32"0000000000000000000000000000000000000000000000000000000000000000",
       eip155Block:         Opt.some(0.BlockNumber),
       eip158Block:         Opt.some(0.BlockNumber),
       byzantiumBlock:      Opt.some(0.BlockNumber),
@@ -553,9 +553,6 @@ func networkParams*(id: NetworkId): NetworkParams
     {.gcsafe, raises: [ValueError, RlpError].} =
   result.genesis = genesisBlockForNetwork(id)
   result.config  = chainConfigForNetwork(id)
-
-func `==`*(a, b: ChainId): bool =
-  a.uint64 == b.uint64
 
 func `==`*(a, b: Genesis): bool =
   if a.isNil and b.isNil: return true
