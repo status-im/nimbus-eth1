@@ -20,11 +20,11 @@ import
 when false:
   const
     # This is the account that sends vault funding transactions.
-    vaultAccountAddr = hextoByteArray[20]("0xcf49fda3be353c69b41ed96333cd24302da4556f")
+    vaultAccountAddr = address"0xcf49fda3be353c69b41ed96333cd24302da4556f"
 
 const
   # Address of the vault in genesis.
-  predeployedVaultAddr = hextoByteArray[20]("0000000000000000000000000000000000000315")
+  predeployedVaultAddr = address"0000000000000000000000000000000000000315"
   # Number of blocks to wait before funding tx is considered valid.
   vaultTxConfirmationCount = 5
 
@@ -75,7 +75,7 @@ proc sendSome(address: EthAddress, amount: UInt256): seq[byte] =
   let h = keccakHash("sendSome(address,uint256)".toBytes)
   result.add h.data[0..3] # first 4 bytes of hash
   result.add padding # left pad address
-  result.add address
+  result.add address.data
   result.add amount.toBytesBE
   doAssert(result.len == 68) # 4 + 32 + 32
 

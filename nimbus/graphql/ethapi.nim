@@ -81,7 +81,7 @@ type
 {.pragma: apiPragma, cdecl, gcsafe, apiRaises.}
 
 proc toHash(n: Node): common.Hash256 {.gcsafe, raises: [ValueError].} =
-  result.data = hexToByteArray[32](n.stringVal)
+  common.Hash256.fromHex(n.stringVal)
 
 proc toBlockNumber(n: Node): common.BlockNumber {.gcsafe, raises: [ValueError].} =
   if n.kind == nkInt:
@@ -529,7 +529,7 @@ proc scalarLong(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsa
 
 proc accountAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let acc = AccountNode(parent)
-  resp(acc.address)
+  resp(acc.address.data)
 
 proc accountBalance(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let acc = AccountNode(parent)
@@ -842,7 +842,7 @@ const txProcs = {
 
 proc aclAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let acl = AclNode(parent)
-  resp(acl.acl.address)
+  resp(acl.acl.address.data)
 
 proc aclStorageKeys(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let acl = AclNode(parent)
@@ -851,7 +851,7 @@ proc aclStorageKeys(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
   else:
     var list = respList()
     for n in acl.acl.storageKeys:
-      list.add resp(n).get()
+      list.add resp(n.data).get()
     ok(list)
 
 const aclProcs = {
@@ -869,7 +869,7 @@ proc wdValidator(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
 
 proc wdAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let w = WdNode(parent)
-  resp(w.wd.address)
+  resp(w.wd.address.data)
 
 proc wdAmount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let w = WdNode(parent)
@@ -940,7 +940,7 @@ proc blockTimestamp(ud: RootRef, params: Args, parent: Node): RespResult {.apiPr
 
 proc blockLogsBloom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
-  resp(h.header.logsBloom)
+  resp(h.header.logsBloom.data)
 
 proc blockMixHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let h = HeaderNode(parent)
@@ -1000,7 +1000,7 @@ proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   try:
-    let address = hexToByteArray[20](params[0].val.stringVal)
+    let address = EthAddress.fromHex(params[0].val.stringVal)
     ctx.accountNode(h.header, address)
   except ValueError as ex:
     err(ex.msg)
@@ -1025,8 +1025,8 @@ template fieldString(n: Node, field: int): string =
 
 template optionalAddress(dstField: untyped, n: Node, field: int) =
   if isSome(n, field):
-    let address = Address.fromHex(fieldString(n, field))
-    dstField = Opt.some(address)
+    let address = addresses.Address.fromHex(fieldString(n, field))
+    dstField = Opt.some(primitives.Address address.data)
 
 template optionalGasInt(dstField: untyped, n: Node, field: int) =
   if isSome(n, field):
@@ -1046,7 +1046,7 @@ template optionalBytes(dstField: untyped, n: Node, field: int) =
     dstField = Opt.some(hexToSeqByte(fieldString(n, field)))
 
 proc toTxArgs(n: Node): TransactionArgs {.gcsafe, raises: [ValueError].} =
-  optionalAddress(result.source, n, fFrom)
+  optionalAddress(result.`from`, n, fFrom)
   optionalAddress(result.to, n, fTo)
   optionalGasInt(result.gas, n, fGasLimit)
   optionalGasHex(result.gasPrice, n, fGasPrice)
@@ -1247,7 +1247,7 @@ proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): common.BlockNumber =
 proc queryAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   try:
-    let address = hexToByteArray[20](params[0].val.stringVal)
+    let address = EthAddress.fromHex(params[0].val.stringVal)
     let blockNumber = pickBlockNumber(ctx, params[1].val)
     let hres = getBlockByNumber(ctx, blockNumber)
     if hres.isErr:

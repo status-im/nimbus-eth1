@@ -307,7 +307,7 @@ func to*(lid: HashKey; T: type Hash256): T =
   ## Returns the `Hash236` key if available, otherwise the Keccak hash of
   ## the `Blob` version.
   if lid.len == 32:
-    Hash256(data: lid.buf)
+    Hash256(lid.buf)
   elif 0 < lid.len:
     lid.data.keccakHash
   else:

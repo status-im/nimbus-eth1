@@ -315,7 +315,7 @@ proc assembleHeader*(pst: TxPacker): BlockHeader =
     ommersHash:    EMPTY_UNCLE_HASH,
     coinbase:      pos.feeRecipient,
     stateRoot:     pst.stateRoot,
-    txRoot:        pst.txRoot,
+    transactionsRoot: pst.txRoot,
     receiptsRoot:  pst.receiptsRoot,
     logsBloom:     pst.logsBloom,
     difficulty:    UInt256.zero(),

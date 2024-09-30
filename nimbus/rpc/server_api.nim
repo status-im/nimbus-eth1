@@ -24,7 +24,7 @@ import
   ./server_api_helpers
 
 type
-  ServerAPIRef = ref object
+  ServerAPIRef* = ref object
     com: CommonRef
     chain: ForkedChainRef
 
@@ -60,11 +60,12 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
     # TODO: Replay state?
     err("Block state not ready")
 
-func blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, string] =
+proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
-    of "latest": return ok(api.chain.latestBlock)
+    of "latest":
+      return ok(api.chain.latestBlock)
     else:
       return err("Unsupported block tag " & tag)
   else:
@@ -80,7 +81,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       address = ethAddr data
     result = ledger.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, blockTag: BlockTag) -> FixedBytes[32]:
+  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, blockTag: BlockTag) -> Web3FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:

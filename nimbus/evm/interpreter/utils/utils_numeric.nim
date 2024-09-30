@@ -96,8 +96,3 @@ func safeInt*(x: UInt256): int {.inline.} =
   result = x.truncate(int)
   if x > high(int32).u256 or result < 0:
     result = high(int32)
-
-func toInt*(x: EthAddress): int =
-  type T = uint32
-  const len = sizeof(T)
-  fromBytesBE(T, x.toOpenArray(x.len-len, x.len-1)).int

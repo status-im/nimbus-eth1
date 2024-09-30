@@ -17,7 +17,7 @@ import
   "."/[sync_desc, sync_sched, protocol]
 
 logScope:
-  topics = "beacon2-sync"
+  topics = "flare"
 
 type
   FlareSyncRef* = RunnerSyncRef[FlareCtxData,FlareBuddyData]
@@ -107,14 +107,13 @@ proc init*(
     T: type FlareSyncRef;
     ethNode: EthereumNode;
     chain: ForkedChainRef;
-    rng: ref HmacDrbgContext;
     maxPeers: int;
-    era1Dir: string;
+    chunkSize: int;
       ): T =
-  new result
-  result.initSync(ethNode, chain, maxPeers)
-  result.ctx.pool.rng = rng
-  result.ctx.pool.e1Dir = era1Dir
+  var desc = T()
+  desc.initSync(ethNode, chain, maxPeers)
+  desc.ctx.pool.nBodiesBatch = chunkSize
+  desc
 
 proc start*(ctx: FlareSyncRef) =
   ## Beacon Sync always begin with stop mode

@@ -72,7 +72,7 @@ proc bloomFilter*(
     addresses: AddressOrList,
     topics: seq[TopicOrList]): bool =
 
-  let bloomFilter = bFilter.BloomFilter(value:  StUint[2048].fromBytesBE(bloom))
+  let bloomFilter = bFilter.BloomFilter(value: bloom.to(StUint[2048]))
 
   if addresses.participateInFilter():
     var addrIncluded: bool = false

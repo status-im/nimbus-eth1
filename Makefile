@@ -61,8 +61,10 @@ EXCLUDED_NIM_PACKAGES := 	\
 TOOLS := \
 	test_tools_build \
 	persist \
-	hunter
+	hunter \
+	nrpc
 TOOLS_DIRS := \
+	nrpc \
 	tests \
 	premix
 # comma-separated values for the "clean" target
@@ -108,6 +110,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	fluffy \
 	nimbus_verified_proxy \
 	libverifproxy \
+	external_sync \
 	test \
 	test-reproducibility \
 	clean \
@@ -207,7 +210,7 @@ update-from-ci: | sanity-checks update-test
 $(TOOLS): | build deps rocksdb
 	for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps rocksdb

@@ -138,7 +138,7 @@ func makeTx(
 
 func initAddr(z: int): EthAddress =
   const L = sizeof(result)
-  result[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
+  result.data[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
 
 proc importBlock(env: TestEnv; blk: EthBlock) =
   env.chain.importBlock(blk).isOkOr:
@@ -396,7 +396,7 @@ proc runLedgerBasicOperationsTests() =
       var
         memDB = newCoreDbRef DefaultDbMemory
         stateDB {.used.} = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
-        address {.used.} = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+        address {.used.} = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         rootHash {.used.} : KeccakHash
 

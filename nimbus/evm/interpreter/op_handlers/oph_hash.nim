@@ -50,7 +50,7 @@ proc sha3Op(cpt: VmCpt): EvmResultVoid =
   if endRange == -1 or pos >= cpt.memory.len:
     cpt.stack.lsTop(EMPTY_SHA3)
   else:
-    cpt.stack.lsTop keccakHash cpt.memory.bytes.toOpenArray(pos, endRange)
+    cpt.stack.lsTop keccak256 cpt.memory.bytes.toOpenArray(pos, endRange)
   ok()
 
 # ------------------------------------------------------------------------------

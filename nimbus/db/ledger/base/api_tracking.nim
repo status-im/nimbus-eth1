@@ -88,10 +88,10 @@ func oaToStr(w: openArray[byte]): string =
   w.toHex.toLowerAscii
 
 func toStr(w: EthAddress): string =
-  w.oaToStr
+  w.toHex
 
 func toStr(w: Hash256): string =
-  w.data.oaToStr
+  w.toHex
 
 func toStr(w: CodeBytesRef): string =
   if w.isNil: "nil"

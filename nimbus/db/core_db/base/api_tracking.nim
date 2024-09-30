@@ -176,7 +176,6 @@ func toLenStr*(w: openArray[byte]): string =
 
 func `$`*[T](rc: CoreDbRc[T]): string = rc.toStr
 func `$`*(t: Elapsed): string = t.Duration.toStr
-func `$`*(e: EthAddress): string = e.toStr
 func `$$`*(h: Hash256): string = h.toStr # otherwise collision w/existing `$`
 
 # ------------------------------------------------------------------------------

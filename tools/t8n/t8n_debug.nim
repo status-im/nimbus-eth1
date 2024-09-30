@@ -50,7 +50,7 @@ type
     hashes: seq[BCTHash]
 
   BCTEnv* = object
-    currentCoinbase*: Address
+    currentCoinbase*: primitives.Address
     currentDifficulty*: UInt256
     currentRandom*: Opt[BlockHash]
     parentDifficulty*: Opt[UInt256]

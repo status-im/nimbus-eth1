@@ -95,8 +95,6 @@ macro jsonTest*(inputFolder, outputName: static[string], handler: untyped, skipT
 macro jsonTest*(inputFolder: static[string], handler: untyped, skipTest: untyped = skipNothing): untyped =
   result = jsonTestImpl(inputFolder, inputFolder, handler, skipTest)
 
-func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
-
 func safeHexToSeqByte*(hexStr: string): seq[byte] =
   if hexStr == "":
     @[]
@@ -111,7 +109,7 @@ func getHexadecimalInt*(j: JsonNode): int64 =
 
 proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
   for ac, accountData in wantedState:
-    let account = ethAddressFromHex(ac)
+    let account = EthAddress.fromHex(ac)
     for slot, value in accountData{"storage"}:
       let
         slotId = UInt256.fromHex slot
@@ -143,7 +141,7 @@ proc setupEthNode*(
     conf: NimbusConf, ctx: EthContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
   let keypair = ctx.getNetKeys(conf.netKey, conf.dataDir.string).tryGet()
-  let srvAddress = Address(
+  let srvAddress = enode.Address(
     ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
 
   var node = newEthereumNode(

@@ -36,27 +36,24 @@ func unpackIntoDeposit(data: openArray[byte]): Result[Request, string] =
     e = d + 8 + 24 + 32
     f = e + 96 + 32
 
-  template copyFrom(T: type, input, a, b): auto =
-    T.initCopyFrom(input.toOpenArray(a, b))
-
   let res = Request(
     requestType: DepositRequestType,
     deposit: DepositRequest(
       # PublicKey is the first element. ABI encoding pads values to 32 bytes,
       # so despite BLS public keys being length 48, the value length
       # here is 64. Then skip over the next length value.
-      pubkey: array[48, byte].copyFrom(data, b, b+47),
+      pubkey: Bytes48.copyFrom(data, b),
 
       # WithdrawalCredentials is 32 bytes. Read that value then skip over next
       # length.
-      withdrawalCredentials: array[32, byte].copyFrom(data, c, c+31),
+      withdrawalCredentials: Bytes32.copyFrom(data, c),
 
       # Amount is 8 bytes, but it is padded to 32. Skip over it and the next
       # length.
       amount: uint64.fromBytesLE(data.toOpenArray(d, d+7)),
 
       # Signature is 96 bytes. Skip over it and the next length.
-      signature: array[96, byte].copyFrom(data, e, e+95),
+      signature: Bytes96.copyFrom(data, e),
 
       # Amount is 8 bytes.
       index: uint64.fromBytesLE(data.toOpenArray(f, f+7)),

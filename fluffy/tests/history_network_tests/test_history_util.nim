@@ -31,8 +31,10 @@ proc buildHeadersWithProof*(
 
   ok(blockHeadersWithProof)
 
-func buildAccumulator*(headers: seq[BlockHeader]): Result[FinishedAccumulator, string] =
-  var accumulator: Accumulator
+func buildAccumulator*(
+    headers: seq[BlockHeader]
+): Result[FinishedHistoricalHashesAccumulator, string] =
+  var accumulator: HistoricalHashesAccumulator
   for header in headers:
     updateAccumulator(accumulator, header)
 
@@ -43,8 +45,8 @@ func buildAccumulator*(headers: seq[BlockHeader]): Result[FinishedAccumulator, s
 
 func buildAccumulatorData*(
     headers: seq[BlockHeader]
-): Result[(FinishedAccumulator, seq[EpochRecord]), string] =
-  var accumulator: Accumulator
+): Result[(FinishedHistoricalHashesAccumulator, seq[EpochRecord]), string] =
+  var accumulator: HistoricalHashesAccumulator
   var epochRecords: seq[EpochRecord]
   for header in headers:
     updateAccumulator(accumulator, header)
@@ -61,7 +63,7 @@ func buildAccumulatorData*(
 
 func buildProof*(
     header: BlockHeader, epochRecords: seq[EpochRecord]
-): Result[AccumulatorProof, string] =
+): Result[HistoricalHashesAccumulatorProof, string] =
   let epochIndex = getEpochIndex(header)
   doAssert(epochIndex < uint64(epochRecords.len()))
   let epochRecord = epochRecords[epochIndex]

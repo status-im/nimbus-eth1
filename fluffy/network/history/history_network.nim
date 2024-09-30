@@ -31,7 +31,7 @@ type
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
-    accumulator*: FinishedAccumulator
+    accumulator*: FinishedHistoricalHashesAccumulator
     historicalRoots*: HistoricalRoots
     processContentLoop: Future[void]
     statusLogLoop: Future[void]
@@ -636,7 +636,7 @@ proc new*(
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
     streamManager: StreamManager,
-    accumulator: FinishedAccumulator,
+    accumulator: FinishedHistoricalHashesAccumulator,
     historicalRoots: HistoricalRoots = loadHistoricalRoots(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,

@@ -12,7 +12,7 @@ import
   std/[base64, times, strutils],
   test_env,
   chronicles,
-  nimcrypto/[hmac],
+  nimcrypto/[hmac, sha2],
   web3/engine_api_types,
   web3/conversions,
   json_rpc/[rpcclient],

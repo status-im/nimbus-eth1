@@ -38,7 +38,7 @@ template calcReceiptsRoot*(receipts: openArray[Receipt]): Hash256 =
 
 template calcRequestsRoot*(requests: openArray[Request]): Hash256 =
   calcRootHash(requests)
-  
+
 func sumHash*(hashes: varargs[Hash256]): Hash256 =
   var ctx: sha256
   ctx.init()
@@ -67,7 +67,7 @@ func hasBody*(h: BlockHeader): bool =
     h.withdrawalsRoot.get(EMPTY_ROOT_HASH) != EMPTY_ROOT_HASH
 
 func generateAddress*(address: EthAddress, nonce: AccountNonce): EthAddress =
-  result[0..19] = keccakHash(rlp.encodeList(address, nonce)).data.toOpenArray(12, 31)
+  result.data[0..19] = keccak256(rlp.encodeList(address, nonce)).data.toOpenArray(12, 31)
 
 type ContractSalt* = object
   bytes*: array[32, byte]
@@ -78,14 +78,14 @@ func generateSafeAddress*(address: EthAddress, salt: ContractSalt,
                           data: openArray[byte]): EthAddress =
   const prefix = [0xff.byte]
   let
-    dataHash = keccakHash(data)
-    hashResult = withKeccakHash:
+    dataHash = keccak256(data)
+    hashResult = withKeccak256:
       h.update(prefix)
-      h.update(address)
+      h.update(address.data)
       h.update(salt.bytes)
       h.update(dataHash.data)
 
-  result[0..19] = hashResult.data.toOpenArray(12, 31)
+  hashResult.to(Address)
 
 proc crc32*(crc: uint32, buf: openArray[byte]): uint32 =
   const kcrc32 = [ 0'u32, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190,

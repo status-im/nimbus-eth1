@@ -37,19 +37,13 @@ func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
     result = result shl 4 or readHexChar(s[i]).T
     inc(i)
 
-proc prefixHex*(x: Hash256): string =
-  "0x" & toLowerAscii($x)
-
-proc prefixHex*(x: int64 | uint64 | byte | int): string =
+proc to0xHex*(x: int64 | uint64 | byte | int): string =
   toLowerAscii(encodeQuantity(x.uint64))
 
-proc prefixHex*(x: openArray[byte]): string =
-  "0x" & toHex(x, true)
-
-proc prefixHex*(x: UInt256): string =
+proc to0xHex*(x: UInt256): string =
   "0x" & stint.toHex(x)
 
-proc prefixHex*(x: string): string =
+proc to0xHex*(x: string): string =
   "0x" & toLowerAscii(x)
 
 type
@@ -58,30 +52,30 @@ type
 proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
   let node = n[name]
   if node.kind == JString:
-    hexToByteArray(node.getStr(), x)
-    doAssert(x.prefixHex == toLowerAscii(node.getStr()), name)
+    hexToByteArray(node.getStr(), x.data)
+    doAssert(x.to0xHex == toLowerAscii(node.getStr()), name)
   else:
-    hexToByteArray(node["value"].getStr(), x)
-    doAssert(x.prefixHex == toLowerAscii(node["value"].getStr()), name)
+    hexToByteArray(node["value"].getStr(), x.data)
+    doAssert(x.to0xHex == toLowerAscii(node["value"].getStr()), name)
 
 proc fromJson*(n: JsonNode, name: string, x: var Hash256) =
   let node = n[name]
   if node.kind == JString:
     hexToByteArray(node.getStr(), x.data)
-    doAssert(x.prefixHex == toLowerAscii(node.getStr()), name)
+    doAssert(x.to0xHex == toLowerAscii(node.getStr()), name)
   else:
     hexToByteArray(node["value"].getStr(), x.data)
-    doAssert(x.prefixHex == toLowerAscii(node["value"].getStr()), name)
+    doAssert(x.to0xHex == toLowerAscii(node["value"].getStr()), name)
 
 proc fromJson*(n: JsonNode, name: string, x: var Blob) =
   x = hexToSeqByte(n[name].getStr())
-  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()), name)
+  doAssert(x.to0xHex == toLowerAscii(n[name].getStr()), name)
 
 proc fromJson*(n: JsonNode, name: string, x: var UInt256) =
   let node = n[name]
   if node.kind == JString:
     x = UInt256.fromHex(node.getStr())
-    doAssert(x.prefixHex == toLowerAscii(node.getStr()), name)
+    doAssert(x.to0xHex == toLowerAscii(node.getStr()), name)
   else:
     x = node.getInt().u256
     doAssert($x == $node.getInt, name)
@@ -90,7 +84,7 @@ proc fromJson*(n: JsonNode, name: string, x: var SomeInteger) =
   let node = n[name]
   if node.kind == JString:
     x = hexToInt(node.getStr(), type(x))
-    doAssert(x.prefixHex == toLowerAscii(node.getStr()), name)
+    doAssert(x.to0xHex == toLowerAscii(node.getStr()), name)
   else:
     type T = type x
     x = T(node.getInt)
@@ -98,7 +92,7 @@ proc fromJson*(n: JsonNode, name: string, x: var SomeInteger) =
 
 proc fromJson*(n: JsonNode, name: string, x: var EthTime) =
   x = EthTime(hexToInt(n[name].getStr(), uint64))
-  doAssert(x.uint64.prefixHex == toLowerAscii(n[name].getStr()), name)
+  doAssert(x.uint64.to0xHex == toLowerAscii(n[name].getStr()), name)
 
 proc fromJson*[T](n: JsonNode, name: string, x: var Opt[T]) =
   if name in n:
@@ -113,10 +107,10 @@ proc fromJson*(n: JsonNode, name: string, x: var TxType) =
   else:
     x = hexToInt(node.getStr(), int).TxType
 
-proc fromJson*(n: JsonNode, name: string, x: var seq[Hash256]) =
+proc fromJson*(n: JsonNode, name: string, x: var seq[Bytes32]) =
   let node = n[name]
-  var h: Hash256
-  x = newSeqOfCap[Hash256](node.len)
+  var h: Bytes32
+  x = newSeqOfCap[Bytes32](node.len)
   for v in node:
     hexToByteArray(v.getStr(), h.data)
     x.add h
@@ -151,7 +145,7 @@ proc parseAccessPair(n: JsonNode): AccessPair =
   n.fromJson "address", result.address
   let keys = n["storageKeys"]
   for kn in keys:
-    result.storageKeys.add hexToByteArray[32](kn.getStr())
+    result.storageKeys.add Bytes32.fromHex(kn.getStr())
 
 proc parseTransaction*(n: JsonNode): Transaction =
   var tx = Transaction(txType: TxLegacy)
@@ -205,8 +199,8 @@ proc validateTxSenderAndHash*(n: JsonNode, tx: Transaction) =
   var sender = tx.getSender()
   var fromAddr: EthAddress
   n.fromJson "from", fromAddr
-  doAssert sender.prefixHex == fromAddr.prefixHex
-  doAssert n["hash"].getStr() == tx.rlpHash().prefixHex
+  doAssert sender.to0xHex == fromAddr.to0xHex
+  doAssert n["hash"].getStr() == tx.rlpHash().to0xHex
 
 proc parseLog(n: JsonNode): Log =
   n.fromJson "address", result.address
@@ -215,7 +209,7 @@ proc parseLog(n: JsonNode): Log =
   result.topics = newSeqOfCap[Topic](n.len)
   var topicHash: Topic
   for tp in topics:
-    hexToByteArray(tp.getStr(), topicHash)
+    hexToByteArray(tp.getStr(), topicHash.data)
     result.topics.add topicHash
 
 proc parseLogs(n: JsonNode): seq[Log] =

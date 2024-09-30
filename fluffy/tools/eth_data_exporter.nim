@@ -69,7 +69,7 @@ proc downloadHeader(client: RpcClient, i: uint64): BlockHeader =
     fatal "Error while requesting BlockHeader", error = e.msg, number = i
     quit 1
 
-proc downloadBlock(i: uint64, client: RpcClient): Block =
+proc downloadBlock(i: uint64, client: RpcClient): downloader.Block =
   try:
     return requestBlock(i, flags = {DownloadReceipts}, client = some(client))
   except CatchableError as e:
@@ -199,7 +199,7 @@ proc cmdExportEra1(config: ExporterConf) =
       # error cases are fatal. But maybe we could throw proper errors still.
       var group = Era1Group.init(e2, startNumber).get()
 
-      # Header records to build the accumulator root
+      # Header records to build the HistoricalHashesAccumulator root
       var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
       for blockNumber in startNumber .. endNumber:
         let blck =
@@ -234,7 +234,7 @@ proc cmdExportEra1(config: ExporterConf) =
     if completed:
       let name = era1FileName("mainnet", era, accumulatorRoot)
       # We cannot check for the exact file any earlier as we need to know the
-      # accumulator root.
+      # HistoricalHashesAccumulator root.
       # TODO: Could scan for file with era number in it.
       if isFile(name):
         info "Era1 file already exists", era, name
@@ -381,7 +381,8 @@ when isMainModule:
       # to build it.
       let accumulatorFile = dataDir / config.accumulatorFileName
       if isFile(accumulatorFile):
-        notice "Not building accumulator, file already exists", file = accumulatorFile
+        notice "Not building HistoricalHashesAccumulator, file already exists",
+          file = accumulatorFile
         quit 1
 
       # Lets verify if the necessary files exists before starting to build the
@@ -394,8 +395,8 @@ when isMainModule:
 
       proc buildAccumulator(
           dataDir: string, writeEpochRecords = false
-      ): Result[FinishedAccumulator, string] =
-        var accumulator: Accumulator
+      ): Result[FinishedHistoricalHashesAccumulator, string] =
+        var accumulator: HistoricalHashesAccumulator
         for i in 0 ..< preMergeEpochs:
           let file =
             try:
@@ -453,43 +454,45 @@ when isMainModule:
 
               if blockHeader.number == mergeBlockNumber - 1:
                 let finishedAccumulator = finishAccumulator(accumulator)
-                info "Updated last epoch, finished building master accumulator",
+                info "Updated last epoch, finished building HistoricalHashesAccumulatorr",
                   epoch = i
                 return ok(finishedAccumulator)
             else:
               warn "Skipping record, not a block header", typ = toHex(header.typ)
 
-        err("Not enough headers provided to finish the accumulator")
+        err("Not enough headers provided to finish the HistoricalHashesAccumulator")
 
       let accumulatorRes = buildAccumulator(dataDir, config.writeEpochRecords)
       if accumulatorRes.isErr():
-        fatal "Could not build accumulator", error = accumulatorRes.error
+        fatal "Could not build HistoricalHashesAccumulator",
+          error = accumulatorRes.error
         quit 1
       let accumulator = accumulatorRes.get()
 
       let res = io2.writeFile(accumulatorFile, SSZ.encode(accumulator))
       if res.isErr():
-        error "Failed writing accumulator to file",
+        error "Failed writing HistoricalHashesAccumulator to file",
           file = accumulatorFile, error = res.error
         quit 1
       else:
-        notice "Succesfully wrote Historical Hashes Accumulator to file",
+        notice "Succesfully wrote HistoricalHashesAccumulator to file",
           file = accumulatorFile
     of HistoryCmd.printAccumulatorData:
       let file = dataDir / config.accumulatorFileNamePrint
 
       let res = readAccumulator(file)
       if res.isErr():
-        fatal "Failed reading accumulator from file", error = res.error, file
+        fatal "Failed reading HistoricalHashesAccumulator from file",
+          error = res.error, file
         quit 1
 
       let
         accumulator = res.get()
         accumulatorRoot = hash_tree_root(accumulator)
 
-      info "Accumulator decoded successfully", root = accumulatorRoot
+      info "HistoricalHashesAccumulator decoded successfully", root = accumulatorRoot
 
-      echo "Master Accumulator:"
+      echo "HistoricalHashesAccumulator:"
       echo "-------------------"
       echo &"Root: {accumulatorRoot}"
       echo ""

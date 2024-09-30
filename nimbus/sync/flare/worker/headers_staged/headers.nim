@@ -21,42 +21,20 @@ import
 logScope:
   topics = "flare headers"
 
-const extraTraceMessages = false # or true
-  ## Enabled additional logging noise
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-# Copied from `nimbus_import`
-func shortLog(a: chronos.Duration, parts = int.high): string =
-  ## Returns string representation of Duration ``a`` as nanoseconds value.
-  var
-    res = ""
-    v = a.nanoseconds()
-    parts = parts
-
-  template f(n: string, T: Duration) =
-    if v >= T.nanoseconds():
-      res.add($(uint64(v div T.nanoseconds())))
-      res.add(n)
-      v = v mod T.nanoseconds()
-      dec parts
-      if v == 0 or parts <= 0:
-        return res
-
-  f("s", Second)
-  f("ms", Millisecond)
-  f("us", Microsecond)
-  f("ns", Nanosecond)
-
-  res
 
 # For some reason neither `formatIt` nor `$` works as expected with logging
 # the `elapsed` variable, below. This might be due to the fact that the
 # `headersFetchReversed()` function is a generic one, i.e. a template.
 func toStr(a: chronos.Duration): string =
-  a.shortLog(2)
+  a.toStr(2)
+
+proc registerError(buddy: FlareBuddyRef) =
+  buddy.only.nHdrRespErrors.inc
+  if fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
+    buddy.ctrl.zombie = true # abandon slow peer
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -70,8 +48,6 @@ proc headersFetchReversed*(
       ): Future[Result[seq[BlockHeader],void]]
       {.async.} =
   ## Get a list of headers in reverse order.
-  const
-    threshold = fetchHeaderReqZombieThreshold # shortcut
   let
     peer = buddy.peer
     useHash = (topHash != EMPTY_ROOT_HASH)
@@ -81,7 +57,7 @@ proc headersFetchReversed*(
           maxResults: ivReq.len.uint,
           skip:       0,
           reverse:    true,
-          startBlock: HashOrNum(
+          startBlock: BlockHashOrNumber(
             isHash:   true,
             hash:     topHash))
       else:
@@ -89,14 +65,13 @@ proc headersFetchReversed*(
           maxResults: ivReq.len.uint,
           skip:       0,
           reverse:    true,
-          startBlock: HashOrNum(
+          startBlock: BlockHashOrNumber(
             isHash:   false,
             number:   ivReq.maxPt))
     start = Moment.now()
 
-  when extraTraceMessages:
-    trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
-      nReq=req.maxResults, useHash
+  trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
+    nReq=req.maxResults, useHash, nRespErrors=buddy.only.nHdrRespErrors
 
   # Fetch headers from peer
   var resp: Option[blockHeadersObj]
@@ -108,38 +83,42 @@ proc headersFetchReversed*(
     # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
     resp = await peer.getBlockHeaders(req)
   except TransportError as e:
+    buddy.registerError()
     `info` info & " error", peer, ivReq, nReq=req.maxResults, useHash,
-      elapsed=(Moment.now() - start).toStr, error=($e.name), msg=e.msg
+      elapsed=(Moment.now() - start).toStr, error=($e.name), msg=e.msg,
+      nRespErrors=buddy.only.nHdrRespErrors
     return err()
 
-  # Kludge: Ban an overly slow peer for a while
   let elapsed = Moment.now() - start
-  if threshold < elapsed:
-    buddy.ctrl.zombie = true # abandon slow peer
 
   # Evaluate result
   if resp.isNone or buddy.ctrl.stopped:
-    when extraTraceMessages:
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-        nResp=0, elapsed=elapsed.toStr, threshold, ctrl=buddy.ctrl.state
+    buddy.registerError()
+    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
+      nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+      nRespErrors=buddy.only.nHdrRespErrors
     return err()
 
   let h: seq[BlockHeader] = resp.get.headers
-  if h.len == 0 or ivReq.len < h.len.uint:
-    when extraTraceMessages:
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-        nResp=h.len, elapsed=elapsed.toStr, threshold, ctrl=buddy.ctrl.state
+  if h.len == 0 or ivReq.len < h.len.uint64:
+    buddy.registerError()
+    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
+      nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+      nRespErrors=buddy.only.nHdrRespErrors
     return err()
 
-  when extraTraceMessages:
-    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-      ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
-      elapsed=elapsed.toStr, threshold, ctrl=buddy.ctrl.state
+  # Ban an overly slow peer for a while when seen in a row. Also there is a
+  # mimimum share of the number of requested headers expected, typically 10%.
+  if fetchHeadersReqThresholdZombie < elapsed or
+     h.len.uint64 * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
+    buddy.registerError()
   else:
-    if buddy.ctrl.stopped:
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-        ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
-        elapsed=elapsed.toStr, threshold, ctrl=buddy.ctrl.state
+    buddy.only.nHdrRespErrors = 0 # reset error count
+
+  trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
+    ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
+    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+    nRespErrors=buddy.only.nHdrRespErrors
 
   return ok(h)
 

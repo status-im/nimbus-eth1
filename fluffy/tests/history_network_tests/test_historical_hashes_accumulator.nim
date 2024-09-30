@@ -57,7 +57,7 @@ suite "Historical Hashes Accumulator":
 
     block: # Test invalid headers
       # Post merge block number must fail (> than latest header in accumulator)
-      var proof: AccumulatorProof
+      var proof: HistoricalHashesAccumulatorProof
       let header = BlockHeader(number: mergeBlockNumber)
       check verifyAccumulatorProof(accumulator, header, proof).isErr()
 
@@ -72,7 +72,7 @@ suite "Historical Hashes Accumulator":
         check verifyAccumulatorProof(accumulator, header, proof.get()).isErr()
 
     block: # Test invalid proofs
-      var proof: AccumulatorProof
+      var proof: HistoricalHashesAccumulatorProof
 
       for i in headersToTest:
         check verifyAccumulatorProof(accumulator, headers[i], proof).isErr()

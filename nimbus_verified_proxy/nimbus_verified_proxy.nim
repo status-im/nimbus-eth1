@@ -14,7 +14,7 @@ import
   confutils,
   eth/keys,
   json_rpc/rpcproxy,
-  beacon_chain/el/el_manager,
+  beacon_chain/el/[el_manager, engine_api_conversions],
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
@@ -137,7 +137,7 @@ proc run*(
         when consensusFork >= ConsensusFork.Bellatrix:
           if forkyBlck.message.is_execution_block:
             template payload(): auto =
-              forkyBlck.message.body.execution_payload
+              forkyBlck.message.body
 
             blockCache.add(asExecutionData(payload.asEngineExecutionPayload()))
         else:

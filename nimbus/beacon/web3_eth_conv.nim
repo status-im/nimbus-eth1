@@ -23,6 +23,7 @@ export
   primitives
 
 type
+  Web3FixedBytes*[N: static int] = web3Types.FixedBytes[N]
   Web3Hash*          = web3types.Hash256
   Web3Address*       = web3types.Address
   Web3Bloom*         = web3types.FixedBytes[256]
@@ -58,7 +59,7 @@ proc `$`*(x: Web3Quantity): string =
   $distinctBase(x)
 
 proc short*(x: Web3Hash): string =
-  let z = common.Hash256(data: distinctBase x)
+  let z = common.Hash32(distinctBase x)
   short(z)
 
 # ------------------------------------------------------------------------------
@@ -91,14 +92,17 @@ func u256*(x: Web3Quantity): UInt256 =
 func u256*(x: Web3BlockNumber): UInt256 =
   u256(x.uint64)
 
-func u256*(x: FixedBytes[32]): UInt256 =
+func u256*(x: Web3FixedBytes[32]): UInt256 =
   UInt256.fromBytesBE(x.bytes)
 
 func ethTime*(x: Web3Quantity): common.EthTime =
   common.EthTime(x)
 
 func ethHash*(x: Web3PrevRandao): common.Hash256 =
-  common.Hash256(data: distinctBase x)
+  common.Hash32(distinctBase x)
+
+func ethVersionedHash*(x: Web3PrevRandao): common.VersionedHash =
+  common.VersionedHash(distinctBase x)
 
 func ethHash*(x: Opt[Web3Hash]): Opt[common.Hash256] =
   if x.isNone: Opt.none(common.Hash256)
@@ -111,6 +115,10 @@ func ethHashes*(list: openArray[Web3Hash]): seq[common.Hash256] =
 func ethHashes*(list: Opt[seq[Web3Hash]]): Opt[seq[common.Hash256]] =
   if list.isNone: Opt.none(seq[common.Hash256])
   else: Opt.some ethHashes(list.get)
+
+func ethVersionedHashes*(list: openArray[Web3Hash]): seq[common.VersionedHash] =
+  for x in list:
+    result.add ethVersionedHash(x)
 
 func ethAddr*(x: Web3Address): common.EthAddress =
   EthAddress x
@@ -158,7 +166,7 @@ func ethTxs*(list: openArray[Web3Tx]):
   for x in list:
     result.add ethTx(x)
 
-func storageKeys(list: seq[FixedBytes[32]]): seq[StorageKey] =
+func storageKeys(list: seq[Web3FixedBytes[32]]): seq[StorageKey] =
   for x in list:
     result.add StorageKey(x)
 
@@ -180,11 +188,11 @@ func ethAccessList*(x: Opt[seq[AccessTuple]]): common.AccessList =
 func w3Hash*(x: common.Hash256): Web3Hash =
   Web3Hash x.data
 
-func w3Hashes*(list: openArray[common.Hash256]): seq[Web3Hash] =
+func w3Hashes*[T: common.Hash256 | common.VersionedHash](list: openArray[T]): seq[Web3Hash] =
   for x in list:
     result.add Web3Hash x.data
 
-func w3Hashes*(z: Opt[seq[common.Hash256]]): Opt[seq[Web3Hash]] =
+func w3Hashes*[T: common.Hash256 | common.VersionedHash](z: Opt[seq[T]]): Opt[seq[Web3Hash]] =
   if z.isNone: Opt.none(seq[Web3Hash])
   else:
     let list = z.get
@@ -252,8 +260,8 @@ func w3BlockNumber*(x: uint64): Web3BlockNumber =
 func w3BlockNumber*(x: UInt256): Web3BlockNumber =
   Web3BlockNumber x.truncate(uint64)
 
-func w3FixedBytes*(x: UInt256): FixedBytes[32] =
-  FixedBytes[32](x.toBytesBE)
+func w3FixedBytes*(x: UInt256): Web3FixedBytes[32] =
+  Web3FixedBytes[32](x.toBytesBE)
 
 func w3ExtraData*(x: common.Blob): Web3ExtraData =
   Web3ExtraData x
@@ -355,10 +363,10 @@ func ethRequest*(x: DepositRequestV1): Request =
   Request(
     requestType: DepositRequestType,
     deposit: DepositRequest(
-      pubkey: x.pubkey.bytes,
-      withdrawalCredentials: x.withdrawalCredentials.bytes,
+      pubkey: Bytes48 x.pubkey.bytes,
+      withdrawalCredentials: Bytes32 x.withdrawalCredentials.bytes,
       amount: uint64 x.amount,
-      signature: x.signature.bytes,
+      signature: Bytes96 x.signature.bytes,
       index: uint64 x.index,
     )
   )
@@ -368,7 +376,7 @@ func ethRequest*(x: WithdrawalRequestV1): Request =
     requestType: WithdrawalRequestType,
     withdrawal: WithDrawalRequest(
       sourceAddress: ethAddr x.sourceAddress,
-      validatorPubkey: x.validatorPubkey.bytes,
+      validatorPubkey: Bytes48 x.validatorPubkey.bytes,
       amount: uint64 x.amount,
     )
   )
@@ -378,8 +386,8 @@ func ethRequest*(x: ConsolidationRequestV1): Request =
     requestType: ConsolidationRequestType,
     consolidation: ConsolidationRequest(
       sourceAddress: ethAddr x.sourceAddress,
-      sourcePubkey: x.sourcePubkey.bytes,
-      targetPubkey: x.targetPubkey.bytes,
+      sourcePubkey: Bytes48 x.sourcePubkey.bytes,
+      targetPubkey: Bytes48 x.targetPubkey.bytes,
     )
   )
 

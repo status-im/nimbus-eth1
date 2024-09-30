@@ -19,7 +19,7 @@ import
   ../../nimbus/common/chain_config
 
 template fromJson(T: type EthAddress, n: JsonNode): EthAddress =
-  hexToByteArray(n.getStr, sizeof(T))
+  EthAddress.fromHex(n.getStr)
 
 proc fromJson(T: type UInt256, n: JsonNode): UInt256 =
   # stTransactionTest/ValueOverflow.json
@@ -31,7 +31,7 @@ proc fromJson(T: type UInt256, n: JsonNode): UInt256 =
     UInt256.fromHex(hex)
 
 template fromJson*(T: type Hash256, n: JsonNode): Hash256 =
-  Hash256(data: hexToByteArray(n.getStr, 32))
+  Hash32(hexToByteArray(n.getStr, 32))
 
 proc fromJson(T: type Blob, n: JsonNode): Blob =
   let hex = n.getStr
@@ -61,12 +61,12 @@ proc fromJson(T: type AccessList, n: JsonNode): AccessList =
     )
     let sks = x["storageKeys"]
     for sk in sks:
-      ap.storageKeys.add hexToByteArray(sk.getStr, 32)
+      ap.storageKeys.add Bytes32.fromHex(sk.getStr)
     result.add ap
 
 proc fromJson(T: type VersionedHashes, list: JsonNode): VersionedHashes =
   for x in list:
-    result.add Hash256.fromJson(x)
+    result.add Bytes32.fromHex(x.getStr)
 
 template required(T: type, nField: string): auto =
   fromJson(T, n[nField])
@@ -141,7 +141,7 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
 
   let rawTo = n["to"].getStr
   if rawTo != "":
-    tx.to = Opt.some(hexToByteArray(rawTo, 20))
+    tx.to = Opt.some(EthAddress.fromHex(rawTo))
 
   let secretKey = required(PrivateKey, "secretKey")
   signTransaction(tx, secretKey, tx.chainId, false)
@@ -155,7 +155,7 @@ proc parseTx*(txData, index: JsonNode): Transaction =
 
 proc setupStateDB*(wantedState: JsonNode, stateDB: LedgerRef) =
   for ac, accountData in wantedState:
-    let account = hexToByteArray[20](ac)
+    let account = Address.fromHex(ac)
     for slot, value in accountData{"storage"}:
       stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
 
@@ -165,7 +165,7 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: LedgerRef) =
 
 iterator postState*(node: JsonNode): (EthAddress, GenesisAccount) =
   for ac, accountData in node:
-    let account = hexToByteArray[20](ac)
+    let account = EthAddress.fromHex(ac)
     var ga = GenesisAccount(
       nonce  : fromJson(AccountNonce, accountData["nonce"]),
       code   : fromJson(Blob, accountData["code"]),

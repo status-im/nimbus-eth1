@@ -11,6 +11,7 @@ import
   std/[sequtils, typetraits, options],
   stint,
   results,
+  nimcrypto/hash,
   eth/common/eth_types as etypes,
   eth/common/eth_types_rlp,
   eth/rlp,
@@ -19,7 +20,11 @@ import
 
 export results
 
-func toMDigest(arg: FixedBytes[32]): MDigest[256] =
+type
+  FixedBytes[N: static int] = primitives.FixedBytes[N]
+  Address = primitives.Address
+
+func toMDigest(arg: primitives.FixedBytes[32]): MDigest[256] =
   MDigest[256](data: distinctBase(arg))
 
 func emptyAccount(): etypes.Account =
@@ -52,12 +57,12 @@ proc getAccountFromProof*(
 ): Result[etypes.Account, string] =
   let
     mptNodesBytes = mptNodes.mapIt(distinctBase(it))
-    keccakStateRootHash = toMDigest(stateRoot)
+    keccakStateRootHash = Hash32(stateRoot)
     acc = etypes.Account(
       nonce: distinctBase(accountNonce),
       balance: accountBalance,
-      storageRoot: toMDigest(accountStorageRootHash),
-      codeHash: toMDigest(accountCodeHash),
+      storageRoot: Hash32(accountStorageRootHash),
+      codeHash: Hash32(accountCodeHash),
     )
     accountEncoded = rlp.encode(acc)
     accountKey = toSeq(keccakHash(distinctBase(accountAddress)).data)
