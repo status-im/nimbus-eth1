@@ -20,7 +20,7 @@ logScope:
 
 type
   NewBlockHashesAnnounce* = object
-    hash*: Hash256
+    hash*: Hash32
     number*: BlockNumber
 
   ChainForkId* = object
@@ -31,13 +31,13 @@ type
 
   EthState* = object
     totalDifficulty*: DifficultyInt
-    genesisHash*: Hash256
-    bestBlockHash*: Hash256
+    genesisHash*: Hash32
+    bestBlockHash*: Hash32
     forkId*: ChainForkId
 
   EthPeerState* = ref object of RootRef
     initialized*: bool
-    bestBlockHash*: Hash256
+    bestBlockHash*: Hash32
     bestDifficulty*: DifficultyInt
 
   EthBlocksRequest* = object
@@ -59,26 +59,26 @@ method getStatus*(ctx: EthWireBase): Result[EthState, string]
   notImplemented("getStatus")
 
 method getReceipts*(ctx: EthWireBase,
-                    hashes: openArray[Hash256]):
+                    hashes: openArray[Hash32]):
                       Result[seq[seq[Receipt]], string]
     {.base, gcsafe.} =
   notImplemented("getReceipts")
 
 method getPooledTxs*(ctx: EthWireBase,
-                     hashes: openArray[Hash256]):
+                     hashes: openArray[Hash32]):
                        Result[seq[PooledTransaction], string]
     {.base, gcsafe.} =
   notImplemented("getPooledTxs")
 
 method getBlockBodies*(ctx: EthWireBase,
-                       hashes: openArray[Hash256]):
+                       hashes: openArray[Hash32]):
                          Result[seq[BlockBody], string]
     {.base, gcsafe.} =
   notImplemented("getBlockBodies")
 
 method getBlockHeaders*(ctx: EthWireBase,
                         req: EthBlocksRequest):
-                          Result[seq[BlockHeader], string]
+                          Result[seq[Header], string]
     {.base, gcsafe.} =
   notImplemented("getBlockHeaders")
 
@@ -100,9 +100,9 @@ method handleAnnouncedTxs*(ctx: EthWireBase,
 method handleAnnouncedTxsHashes*(
   ctx: EthWireBase;
   peer: Peer;
-  txTypes: Blob;
+  txTypes: seq[byte];
   txSizes: openArray[int];
-  txHashes: openArray[Hash256];
+  txHashes: openArray[Hash32];
     ): Result[void, string]
     {.base, gcsafe.} =
   notImplemented("handleAnnouncedTxsHashes/eth68")

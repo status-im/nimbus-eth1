@@ -151,8 +151,8 @@ p2pProtocol eth68(version = ethVersion,
                 ethVersionArg: uint,
                 networkId: NetworkId,
                 totalDifficulty: DifficultyInt,
-                bestHash: Hash256,
-                genesisHash: Hash256,
+                bestHash: Hash32,
+                genesisHash: Hash32,
                 forkId: ChainForkId) =
       trace trEthRecvReceived & "Status (0x00)", peer,
           networkId, totalDifficulty, bestHash=short(bestHash), genesisHash=short(genesisHash),
@@ -204,11 +204,11 @@ p2pProtocol eth68(version = ethVersion,
       await response.send(headers.get)
 
     # User message 0x04: BlockHeaders.
-    proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
+    proc blockHeaders(p: Peer, headers: openArray[Header])
 
   requestResponse:
     # User message 0x05: GetBlockBodies.
-    proc getBlockBodies(peer: Peer, hashes: openArray[Hash256]) =
+    proc getBlockBodies(peer: Peer, hashes: openArray[Hash32]) =
       trace trEthRecvReceived & "GetBlockBodies (0x05)", peer,
         hashes=hashes.len
       if hashes.len > maxBodiesFetch:
@@ -249,9 +249,9 @@ p2pProtocol eth68(version = ethVersion,
   # User message 0x08: NewPooledTransactionHashes.
   proc newPooledTransactionHashes(
       peer: Peer,
-      txTypes: Blob,
+      txTypes: seq[byte],
       txSizes: openArray[int],
-      txHashes: openArray[Hash256]
+      txHashes: openArray[Hash32]
         ) =
     when trEthTraceGossipOk:
       trace trEthRecvReceived & "NewPooledTransactionHashes (0x08)", peer,
@@ -264,7 +264,7 @@ p2pProtocol eth68(version = ethVersion,
 
   requestResponse:
     # User message 0x09: GetPooledTransactions.
-    proc getPooledTransactions(peer: Peer, txHashes: openArray[Hash256]) =
+    proc getPooledTransactions(peer: Peer, txHashes: openArray[Hash32]) =
       trace trEthRecvReceived & "GetPooledTransactions (0x09)", peer,
         hashes=txHashes.len
 
@@ -291,7 +291,7 @@ p2pProtocol eth68(version = ethVersion,
 
   requestResponse:
     # User message 0x0f: GetReceipts.
-    proc getReceipts(peer: Peer, hashes: openArray[Hash256]) =
+    proc getReceipts(peer: Peer, hashes: openArray[Hash32]) =
       trace trEthRecvReceived & "GetReceipts (0x0f)", peer,
         hashes=hashes.len
 
