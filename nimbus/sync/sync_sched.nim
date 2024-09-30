@@ -27,8 +27,8 @@
 ##   Global background job that will be re-started as long as the variable
 ##   `ctx.daemon` is set `true`. If that job was stopped due to re-setting
 ##   `ctx.daemon` to `false`, it will be restarted next after it was reset
-##   as `true` not before there is some activity on the `runPool()`,
-##   `runSingle()`, or `runMulti()` functions.
+##   as `true` not before there is some activity on the `runPool()`, or
+##   `runPeer()` functions.
 ##
 ##
 ## *runStart(buddy: BuddyRef[S,W]): bool*
@@ -40,12 +40,11 @@
 ##
 ## *runPool(buddy: BuddyRef[S,W], last: bool; laps: int): bool*
 ##   Once started, the function `runPool()` is called for all worker peers in
-##   sequence as the body of an iteration as long as the function returns
-##   `false`. There will be no other worker peer functions activated
-##   simultaneously.
+##   sequence as long as the function returns `false`. There will be no other
+##   `runPeer()` functions (see below) activated while `runPool()` is active.
 ##
 ##   This procedure is started if the global flag `buddy.ctx.poolMode` is set
-##   `true` (default is `false`.) It will be automatically reset before the
+##   `true` (default is `false`.) The flag will be automatically reset before
 ##   the loop starts. Re-setting it again results in repeating the loop. The
 ##   argument `laps` (starting with `0`) indicated the currend lap of the
 ##   repeated loops. To avoid continous looping, the number of `laps` is
@@ -54,31 +53,14 @@
 ##   The argument `last` is set `true` if the last entry of the current loop
 ##   has been reached.
 ##
-##   Note:
-##   + This function does *not* runs in `async` mode.
-##   + The flag `buddy.ctx.poolMode` has priority over the flag
-##     `buddy.ctrl.multiOk` which controls `runSingle()` and `runMulti()`.
+##   Note that this function does *not* run in `async` mode.
 ##
 ##
-## *runSingle(buddy: BuddyRef[S,W]) {.async.}*
-##   This worker peer method is invoked if the peer-local flag
-##   `buddy.ctrl.multiOk` is set `false` which is the default mode. This flag
-##   is updated by the worker peer when deemed appropriate.
-##   + For all worker peerss, there can be only one `runSingle()` function
-##     active simultaneously.
-##   + There will be no `runMulti()` function active for the very same worker
-##     peer that runs the `runSingle()` function.
-##   + There will be no `runPool()` iterator active.
+## *runPeer(buddy: BuddyRef[S,W]) {.async.}*
+##   This peer worker method is repeatedly invoked (exactly one per peer) while
+##   the `buddy.ctrl.poolMode` flag is set `false`.
 ##
-##   Note that this function runs in `async` mode.
-##
-##
-## *runMulti(buddy: BuddyRef[S,W]) {.async.}*
-##   This worker peer method is invoked if the `buddy.ctrl.multiOk` flag is
-##   set `true` which is typically done after finishing `runSingle()`. This
-##   instance can be simultaneously active for all worker peers.
-##
-##   Note that this function runs in `async` mode.
+##   These peer worker methods run concurrently in `async` mode.
 ##
 ##
 ## Additional import files needed when using this template:
@@ -93,7 +75,7 @@
 import
   std/hashes,
   chronos,
-  eth/[keys, p2p, p2p/peer_pool],
+  eth/[p2p, p2p/peer_pool],
   stew/keyed_queue,
   "."/[handlers, sync_desc]
 
@@ -112,7 +94,6 @@ type
     pool: PeerPool              ## For starting the system
     buddies: ActiveBuddies[S,W] ## LRU cache with worker descriptors
     daemonRunning: bool         ## Run global background job
-    singleRunLock: bool         ## Some single mode runner is activated
     monitorLock: bool           ## Monitor mode is activated
     activeMulti: int            ## Number of activated runners in multi-mode
     shutdown: bool              ## Internal shut down flag
@@ -192,7 +173,7 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
 
 
 proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
-  mixin runMulti, runSingle, runPool, runStop
+  mixin runPeer, runPool, runStop
   let
     dsc = buddy.dsc
     ctx = dsc.ctx
@@ -213,7 +194,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
         # Grab `monitorLock` (was `false` as checked above) and wait until
         # clear to run as the only activated instance.
         dsc.monitorLock = true
-        while 0 < dsc.activeMulti or dsc.singleRunLock:
+        while 0 < dsc.activeMulti:
           await sleepAsync execLoopPollingTime
           if worker.ctrl.stopped:
             dsc.monitorLock = false
@@ -244,24 +225,11 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
         # end. So zombies will end up leftish.
         discard dsc.buddies.lruFetch peer.key
 
-        # Multi mode
-        if worker.ctrl.multiOk:
-          if not dsc.singleRunLock:
-            dsc.activeMulti.inc
-            # Continue doing something, work a bit
-            await worker.runMulti()
-            dsc.activeMulti.dec
-
-        elif dsc.singleRunLock:
-          # Some other process is running single mode
-          discard # suspend some time at the end of loop body
-
-        else:
-          # Start single instance mode by grabbing `singleRunLock` (was
-          # `false` as checked above).
-          dsc.singleRunLock = true
-          await worker.runSingle()
-          dsc.singleRunLock = false
+        # Peer mode
+        dsc.activeMulti.inc
+        # Continue doing something, work a bit
+        await worker.runPeer()
+        dsc.activeMulti.dec
 
       # Dispatch daemon sevice if needed
       if not dsc.daemonRunning and dsc.ctx.daemon:

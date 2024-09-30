@@ -33,7 +33,6 @@ type
   BuddyCtrlRef* = ref object
     ## Control and state settings
     runState: BuddyRunState     ## Access with getters
-    multiOk*: bool              ## Triggers `runSingle()` mode unless `true`
 
   BuddyRef*[S,W] = ref object
     ## Worker peer state descriptor.
