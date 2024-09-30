@@ -134,7 +134,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       try:
         await rpcClient.exchangeCapabilities(
           @[
-            "engine_exchangeTransitionConfigurationV1", "engine_forkchoiceUpdatedV1",
+            "engine_forkchoiceUpdatedV1",
             "engine_getPayloadBodiesByHash", "engine_getPayloadBodiesByRangeV1",
             "engine_getPayloadV1", "engine_newPayloadV1",
           ]
