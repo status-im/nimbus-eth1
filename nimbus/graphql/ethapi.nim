@@ -1323,8 +1323,7 @@ proc queryLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
 proc queryGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   try:
-    {.cast(noSideEffect).}:
-      bigIntNode(calculateMedianGasPrice(ctx.chainDB))
+    bigIntNode(calculateMedianGasPrice(ctx.chainDB))
   except CatchableError as em:
     err("can't get gasPrice: " & em.msg)
 
@@ -1332,7 +1331,7 @@ proc queryProtocolVersion(ud: RootRef, params: Args, parent: Node): RespResult {
   let ctx = GraphqlContextRef(ud)
   for n in ctx.ethNode.capabilities:
     if n.name == "eth":
-      return ok(resp(n.version))
+      return bigIntNode(n.version)
   err("can't get protocol version")
 
 proc querySyncing(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =

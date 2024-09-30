@@ -149,7 +149,7 @@ p2pProtocol eth68(version = ethVersion,
   handshake:
     # User message 0x00: Status.
     proc status(peer: Peer,
-                ethVersionArg: uint,
+                ethVersionArg: uint64,
                 networkId: NetworkId,
                 totalDifficulty: DifficultyInt,
                 bestHash: Hash256,
@@ -251,7 +251,7 @@ p2pProtocol eth68(version = ethVersion,
   proc newPooledTransactionHashes(
       peer: Peer,
       txTypes: Blob,
-      txSizes: openArray[int],
+      txSizes: openArray[uint64],
       txHashes: openArray[Hash256]
         ) =
     when trEthTraceGossipOk:
