@@ -40,7 +40,7 @@ proc fetchRegisterError*(buddy: FlareBuddyRef) =
 
 proc bodiesFetch*(
     buddy: FlareBuddyRef;
-    blockHashes: seq[Hash256];
+    blockHashes: seq[Hash32];
     info: static[string];
       ): Future[Result[seq[BlockBody],void]]
       {.async.} =

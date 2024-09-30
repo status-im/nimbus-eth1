@@ -45,14 +45,14 @@ proc registerError(buddy: FlareBuddyRef) =
 proc headersFetchReversed*(
     buddy: FlareBuddyRef;
     ivReq: BnRange;
-    topHash: Hash256;
+    topHash: Hash32;
     info: static[string];
-      ): Future[Result[seq[BlockHeader],void]]
+      ): Future[Result[seq[Header],void]]
       {.async.} =
   ## Get a list of headers in reverse order.
   let
     peer = buddy.peer
-    useHash = (topHash != EMPTY_ROOT_HASH)
+    useHash = (topHash != emptyRoot)
     req = block:
       if useHash:
         EthBlocksRequest(
@@ -101,7 +101,7 @@ proc headersFetchReversed*(
       nRespErrors=buddy.only.nHdrRespErrors
     return err()
 
-  let h: seq[BlockHeader] = resp.get.headers
+  let h: seq[Header] = resp.get.headers
   if h.len == 0 or ivReq.len < h.len.uint64:
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,

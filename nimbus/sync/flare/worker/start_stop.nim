@@ -52,9 +52,9 @@ when enableTicker:
 proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncFinalisedBlockHashCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  return proc(h: Hash256) {.gcsafe, raises: [].} =
-    # Rpc checks empty header against `Hash256()` rather than `EMPTY_ROOT_HASH`
-    if ctx.lhc.beacon.finalised == ZERO_HASH256:
+  return proc(h: Hash32) {.gcsafe, raises: [].} =
+    # Rpc checks empty header against a zero hash rather than `emptyRoot`
+    if ctx.lhc.beacon.finalised == zeroHash32:
       ctx.lhc.beacon.finalised = h
 
 # ------------------------------------------------------------------------------

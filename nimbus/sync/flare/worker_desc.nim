@@ -12,6 +12,7 @@
 
 import
   pkg/chronos,
+  pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../core/chain,
   ../sync_desc,
@@ -39,9 +40,9 @@ type
     ## block number has the least index `0`. This makes it easier to grow the
     ## sequence with parent headers, i.e. decreasing block numbers.
     ##
-    hash*: Hash256                   ## Hash of `headers[0]`
-    revHdrs*: seq[Blob]              ## Encoded linked header chain
-    parentHash*: Hash256             ## Parent hash of `headers[^1]`
+    hash*: Hash32                    ## Hash of `headers[0]`
+    revHdrs*: seq[seq[byte]]         ## Encoded linked header chain
+    parentHash*: Hash32              ## Parent hash of `headers[^1]`
 
   StagedBlocksQueue* = SortedSet[BlockNumber,BlocksForImport]
     ## Blocks sorted by least block number.
@@ -63,24 +64,24 @@ type
     ##
     base*: BlockNumber
       ## `B`, maximal block number of linked chain starting at Genesis `G`
-    baseHash*: Hash256
+    baseHash*: Hash32
       ## Hash of `B`
 
     least*: BlockNumber
       ## `L`, minimal block number of linked chain ending at `F` with `B <= L`
-    leastParent*: Hash256
+    leastParent*: Hash32
       ## Parent hash of `L` (similar to `parentHash` in `HeaderChainItemRef`)
 
     final*: BlockNumber
       ## `F`, some finalised block
-    finalHash*: Hash256
+    finalHash*: Hash32
       ## Hash of `F` (similar to `hash` in `HeaderChainItemRef`)
 
   BeaconHeader* = object
     ## Beacon state to be implicitely updated by RPC method
     changed*: bool                   ## Set a marker if something has changed
-    header*: BlockHeader             ## Beacon chain, finalised header
-    finalised*: Hash256              ## From RPC, ghash of finalised header
+    header*: Header                  ## Beacon chain, finalised header
+    finalised*: Hash32               ## From RPC, ghash of finalised header
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains
