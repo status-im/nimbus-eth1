@@ -20,7 +20,7 @@ import
     [beacon_network, beacon_init_loader, beacon_chain_historical_summaries],
   "."/[light_client_test_data, beacon_test_helpers]
 
-procSuite "Beacon Content Network":
+procSuite "Beacon Network":
   let rng = newRng()
 
   asyncTest "Get bootstrap by trusted block hash":

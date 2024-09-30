@@ -17,7 +17,7 @@ import
   beacon_chain/spec/beacon_time,
   ssz_serialization,
   ncli/e2store,
-  ../network/history/accumulator
+  ../network/history/validation/historical_hashes_accumulator
 
 from nimcrypto/hash import fromHex
 from ../../nimbus/utils/utils import calcTxRoot, calcReceiptsRoot
@@ -450,7 +450,10 @@ proc buildAccumulator*(f: Era1File): Result[EpochRecordCached, string] =
       totalDifficulty = ?f.getTotalDifficulty(blockNumber)
 
     headerRecords.add(
-      HeaderRecord(blockHash: blockHeader.blockHash(), totalDifficulty: totalDifficulty)
+      HeaderRecord(
+        blockHash: BlockHash(data: blockHeader.blockHash().data),
+        totalDifficulty: totalDifficulty,
+      )
     )
 
   ok(EpochRecordCached.init(headerRecords))
@@ -479,7 +482,10 @@ proc verify*(f: Era1File): Result[Digest, string] =
       return err("Invalid receipts root")
 
     headerRecords.add(
-      HeaderRecord(blockHash: blockHeader.blockHash(), totalDifficulty: totalDifficulty)
+      HeaderRecord(
+        blockHash: BlockHash(data: blockHeader.blockHash().data),
+        totalDifficulty: totalDifficulty,
+      )
     )
 
   let expectedRoot = ?f.getAccumulatorRoot()

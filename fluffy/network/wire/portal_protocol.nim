@@ -75,6 +75,9 @@ declareCounter portal_gossip_without_lookup,
   "Portal wire protocol neighborhood gossip that did not require a node lookup",
   labels = ["protocol_id"]
 
+declareCounter portal_poke_offers,
+  "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
+
 # Note: These metrics are to get some idea on how many enrs are send on average.
 # Relevant issue: https://github.com/ethereum/portal-network-specs/issues/136
 const enrsBuckets = [0.0, 1.0, 3.0, 5.0, 8.0, 9.0, Inf]
@@ -112,22 +115,9 @@ const
   ## that will be processed
   refreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
-  revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
+  revalidateMax = 4000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
-
-  # TalkResp message is a response message so the session is established and a
-  # regular discv5 packet is assumed for size calculation.
-  # Regular message = IV + header + message
-  # talkResp message = rlp: [request-id, response]
-  talkRespOverhead =
-    16 + # IV size
-    55 + # header size
-    1 + # talkResp msg id
-    3 + # rlp encoding outer list, max length will be encoded in 2 bytes
-    9 + # request id (max = 8) + 1 byte from rlp encoding byte string
-    3 + # rlp encoding response byte string, max length in 2 bytes
-    16 # HMAC
 
   # These are the concurrent offers per Portal wire protocol that is running.
   # Using the `offerQueue` allows for limiting the amount of offers send and
@@ -195,6 +185,7 @@ type
     offerWorkers: seq[Future[void]]
     disablePoke: bool
     pingTimings: Table[NodeId, chronos.Moment]
+    maxGossipNodes: int
 
   PortalResult*[T] = Result[T, string]
 
@@ -385,7 +376,7 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       # will still be passed.
       const
         nodesOverhead = 1 + 1 + 4 # msg id + total + container offset
-        maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - nodesOverhead
+        maxPayloadSize = maxDiscv5TalkRespPayload - nodesOverhead
         enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
       let enrs = truncateEnrs(nodes, maxPayloadSize, enrOverhead)
@@ -402,7 +393,7 @@ proc handleFindContent(
 ): seq[byte] =
   const
     contentOverhead = 1 + 1 # msg id + SSZ Union selector
-    maxPayloadSize = maxDiscv5PacketSize - talkRespOverhead - contentOverhead
+    maxPayloadSize = maxDiscv5TalkRespPayload - contentOverhead
     enrOverhead = 4 # per added ENR, 4 bytes offset overhead
 
   let contentId = p.toContentId(fc.contentKey).valueOr:
@@ -586,6 +577,7 @@ proc new*(
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
     disablePoke: config.disablePoke,
     pingTimings: Table[NodeId, chronos.Moment](),
+    maxGossipNodes: config.maxGossipNodes,
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -1114,6 +1106,7 @@ proc triggerPoke*(
           list = List[ContentKV, contentKeysLimit].init(@[contentKV])
           req = OfferRequest(dst: node, kind: Direct, contentList: list)
         p.offerQueue.putNoWait(req)
+        portal_poke_offers.inc(labelValues = [$p.protocolId])
       except AsyncQueueFullError as e:
         # Should not occur as full() check is done.
         raiseAssert(e.msg)
@@ -1507,8 +1500,8 @@ proc neighborhoodGossip*(
   # 1. Select the closest neighbours in the routing table
   # 2. Check if the radius is known for these these nodes and whether they are
   # in range of the content to be offered.
-  # 3. If more than n (= 8) nodes are in range, offer these nodes the content
-  # (max nodes set at 8).
+  # 3. If more than n (= maxGossipNodes) nodes are in range, offer these nodes
+  # the content (maxed out at n).
   # 4. If less than n nodes are in range, do a node lookup, and offer the nodes
   # returned from the lookup the content (max nodes set at 8)
   #
@@ -1516,7 +1509,6 @@ proc neighborhoodGossip*(
   # in its propagation than when looking only for nodes in the own routing
   # table, but at the same time avoid unnecessary node lookups.
   # It might still cause issues in data getting propagated in a wider id range.
-  const maxGossipNodes = 8
 
   let closestLocalNodes =
     p.routingTable.neighbours(NodeId(contentId), k = 16, seenOnly = true)
@@ -1531,9 +1523,9 @@ proc neighborhoodGossip*(
         elif node.id != srcNodeId.get():
           gossipNodes.add(node)
 
-  if gossipNodes.len >= 8: # use local nodes for gossip
+  if gossipNodes.len >= p.maxGossipNodes: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    let numberOfGossipedNodes = min(gossipNodes.len, maxGossipNodes)
+    let numberOfGossipedNodes = min(gossipNodes.len, p.maxGossipNodes)
     for node in gossipNodes[0 ..< numberOfGossipedNodes]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
@@ -1541,7 +1533,7 @@ proc neighborhoodGossip*(
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
-    let numberOfGossipedNodes = min(closestNodes.len, maxGossipNodes)
+    let numberOfGossipedNodes = min(closestNodes.len, p.maxGossipNodes)
     for node in closestNodes[0 ..< numberOfGossipedNodes]:
       # Note: opportunistically not checking if the radius of the node is known
       # and thus if the node is in radius with the content. Reason is, these
@@ -1653,12 +1645,13 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledErr
 proc getNodeForRevalidation(p: PortalProtocol): Opt[Node] =
   let node = p.routingTable.nodeToRevalidate()
   if node.isNil:
+    # This should not occur except for when the RT is empty
     return Opt.none(Node)
 
   let now = now(chronos.Moment)
-  let timestamp = p.pingTimings.getOrDefault(node.id, now)
+  let timestamp = p.pingTimings.getOrDefault(node.id, Moment.init(0'i64, Second))
 
-  if (timestamp + revalidationTimeout) <= now:
+  if (timestamp + revalidationTimeout) < now:
     Opt.some(node)
   else:
     Opt.none(Node)
@@ -1708,14 +1701,21 @@ proc start*(p: PortalProtocol) =
   for i in 0 ..< concurrentOffers:
     p.offerWorkers.add(offerWorker(p))
 
-proc stop*(p: PortalProtocol) =
-  if not p.revalidateLoop.isNil:
-    p.revalidateLoop.cancelSoon()
-  if not p.refreshLoop.isNil:
-    p.refreshLoop.cancelSoon()
+proc stop*(p: PortalProtocol) {.async: (raises: []).} =
+  var futures: seq[Future[void]]
+
+  if not p.revalidateLoop.isNil():
+    futures.add(p.revalidateLoop.cancelAndWait())
+  if not p.refreshLoop.isNil():
+    futures.add(p.refreshLoop.cancelAndWait())
 
   for worker in p.offerWorkers:
-    worker.cancelSoon()
+    futures.add(worker.cancelAndWait())
+
+  await noCancel(allFutures(futures))
+
+  p.revalidateLoop = nil
+  p.refreshLoop = nil
   p.offerWorkers = @[]
 
 proc resolve*(

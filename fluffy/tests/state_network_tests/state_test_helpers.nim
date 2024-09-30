@@ -119,7 +119,9 @@ proc newStateNode*(
       "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
     )
     sm = StreamManager.new(node)
-    hn = HistoryNetwork.new(PortalNetwork.none, node, db, sm, FinishedAccumulator())
+    hn = HistoryNetwork.new(
+      PortalNetwork.none, node, db, sm, FinishedHistoricalHashesAccumulator()
+    )
     sn =
       StateNetwork.new(PortalNetwork.none, node, db, sm, historyNetwork = Opt.some(hn))
 
@@ -135,7 +137,7 @@ proc start*(sn: StateNode) =
   sn.stateNetwork.start()
 
 proc stop*(sn: StateNode) {.async.} =
-  sn.stateNetwork.stop()
+  discard sn.stateNetwork.stop()
   await sn.discoveryProtocol.closeWait()
 
 proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =

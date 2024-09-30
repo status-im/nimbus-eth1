@@ -17,7 +17,7 @@ import
   eth/net/nat,
   metrics,
   metrics/chronicles_support,
-  kzg4844/kzg_ex as kzg,
+  kzg4844/kzg,
   ./rpc,
   ./version,
   ./constants,
@@ -72,7 +72,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     quit(QuitFailure)
 
   let keypair = kpres.get()
-  var address = Address(
+  var address = enode.Address(
     ip: conf.listenAddress,
     tcpPort: conf.tcpPort,
     udpPort: conf.udpPort
@@ -139,14 +139,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     #  nimbus.snapSyncRef = SnapSyncRef.init(
     #    nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
     #    tickerOK, exCtrlFile)
-    of SyncMode.Default:
-      nimbus.beaconSyncRef = BeaconSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-      )
-    of SyncMode.Flare:
+    of SyncMode.Default, SyncMode.Flare:
       nimbus.flareSyncRef = FlareSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-        conf.era1Dir.string)
+        nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.flareChunkSize)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -215,7 +210,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   # Trusted setup is needed for processing Cancun+ blocks
   if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
-    let res = Kzg.loadTrustedSetup(fileName)
+    let res = loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
@@ -258,9 +253,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 
     if conf.maxPeers > 0:
       case conf.syncMode:
-      of SyncMode.Default:
-        nimbus.beaconSyncRef.start
-      of SyncMode.Flare:
+      of SyncMode.Default, SyncMode.Flare:
         nimbus.flareSyncRef.start
       #of SyncMode.Snap:
       #  nimbus.snapSyncRef.start

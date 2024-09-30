@@ -19,8 +19,8 @@ import
   ./code_bytes,
   ../common/[common, evmforks],
   ../utils/utils,
-  stew/byteutils,
   stew/assign2,
+  stew/byteutils,
   chronicles, chronos,
   eth/[keys],
   sets
@@ -147,18 +147,18 @@ proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 =
       blockNumber = BlockNumber c.host.getTxContext().block_number
       ancestorDepth  = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return Hash256()
+      return default(Hash256)
     if number >= blockNumber:
-      return Hash256()
+      return default(Hash256)
     c.host.getBlockHash(number)
   else:
     let
       blockNumber = c.vmState.blockNumber
       ancestorDepth = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return Hash256()
+      return default(Hash256)
     if number >= blockNumber:
-      return Hash256()
+      return default(Hash256)
     c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
@@ -247,8 +247,8 @@ template resolveCode*(c: Computation, address: EthAddress): CodeBytesRef =
     CodeBytesRef.init(c.host.copyCode(address))
   else:
     c.vmState.readOnlyStateDB.resolveCode(address)
-    
-proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,                     
+
+proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
                      salt: ContractSalt = ZERO_CONTRACTSALT,
                      authorizationList: openArray[Authorization] = []): Computation =
   new result

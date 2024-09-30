@@ -37,7 +37,7 @@ proc new*(T: type AccessListTracer,
     if acp.address notin act.excl:
       act.list.add acp.address
     for slot in acp.storageKeys:
-      act.list.add(acp.address, UInt256.fromBytesBE(slot))
+      act.list.add(acp.address, slot.to(UInt256))
 
   act
 

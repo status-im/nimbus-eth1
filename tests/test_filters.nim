@@ -16,6 +16,8 @@ import
   ../nimbus/beacon/web3_eth_conv,
   ./test_block_fixture
 
+type Address = primitives.Address
+
 let allLogs = deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995)
 
 func w3Hash(x: string): Web3Hash =

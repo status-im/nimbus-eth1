@@ -128,7 +128,6 @@ proc gossipOffer*(
   debug "Offered content gossipped successfully with peers", keyBytes, peers
 
 # Currently only used for testing to gossip an entire account trie proof
-# This may also be useful for the state network bridge
 proc recursiveGossipOffer*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],

@@ -20,8 +20,8 @@ import
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
-  ../../network/history/beacon_chain_block_proof_bellatrix,
-  ../../network/history/experimental/beacon_chain_block_proof_capella,
+  ../../network/history/validation/block_proof_historical_roots,
+  ../../network/history/validation/block_proof_historical_summaries,
   ../../network_metadata,
   ../../eth_data/[yaml_utils, yaml_eth_types],
   ./exporter_common
@@ -295,9 +295,9 @@ proc exportBeaconBlockProofBellatrix(
   let yamlTestProof = YamlTestProofBellatrix(
     execution_block_header:
       beaconBlock.message.body.execution_payload.block_hash.data.to0xHex(),
-    beacon_block_proof: blockProof.beaconBlockProof.toHex(array[11, string]),
+    beacon_block_proof: blockProof.executionBlockProof.toHex(array[11, string]),
     beacon_block_root: blockProof.beaconBlockRoot.data.to0xHex(),
-    historical_roots_proof: blockProof.historicalRootsProof.toHex(array[14, string]),
+    historical_roots_proof: blockProof.beaconBlockProof.toHex(array[14, string]),
     slot: blockProof.slot.uint64,
   )
 
@@ -405,7 +405,7 @@ proc exportBeaconBlockProofCapella(
       quit QuitFailure
 
     blockRoots = getStateField(state, block_roots).data
-    blockProof = beacon_chain_block_proof_capella.buildProof(
+    blockProof = block_proof_historical_summaries.buildProof(
       blockRoots, beaconBlock.message
     ).valueOr:
       error "Failed to build proof for Bellatrix block", slot, error
@@ -414,10 +414,9 @@ proc exportBeaconBlockProofCapella(
   let yamlTestProof = YamlTestProof(
     execution_block_header:
       beaconBlock.message.body.execution_payload.block_hash.data.to0xHex(),
-    beacon_block_proof: blockProof.beaconBlockProof.toHex(array[11, string]),
+    beacon_block_proof: blockProof.executionBlockProof.toHex(array[11, string]),
     beacon_block_root: blockProof.beaconBlockRoot.data.to0xHex(),
-    historical_summaries_proof:
-      blockProof.historicalSummariesProof.toHex(array[13, string]),
+    historical_summaries_proof: blockProof.beaconBlockProof.toHex(array[13, string]),
     slot: blockProof.slot.uint64,
   )
 

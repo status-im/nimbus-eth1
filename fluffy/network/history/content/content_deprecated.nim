@@ -18,7 +18,7 @@ import
   ssz_serialization,
   ../../../common/common_types,
   ../../../database/content_db,
-  ../accumulator
+  ../validation/historical_hashes_accumulator
 
 type
   ContentType = enum
@@ -52,7 +52,7 @@ func toContentId(contentKey: ContentKeyByteList): ContentId =
   readUintBE[256](idHash.data)
 
 proc pruneDeprecatedAccumulatorRecords*(
-    accumulator: FinishedAccumulator, contentDB: ContentDB
+    accumulator: FinishedHistoricalHashesAccumulator, contentDB: ContentDB
 ) =
   info "Pruning deprecated accumulator records"
 

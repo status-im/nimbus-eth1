@@ -32,7 +32,7 @@ func authority*(auth: Authorization): Opt[EthAddress] =
   w.append(auth.chainId.uint64)
   w.append(auth.address)
   w.append(auth.nonce)
-  let sigHash = keccakHash(w.finish())
+  let sigHash = keccak256(w.finish())
 
   var bytes: array[65, byte]
   assign(bytes.toOpenArray(0, 31), auth.R.toBytesBE())
@@ -58,7 +58,7 @@ func parseDelegation*(code: CodeBytesRef): bool =
 
 func addressToDelegation*(auth: EthAddress): array[23, byte] =
   assign(result.toOpenArray(0, 2), DelegationPrefix)
-  assign(result.toOpenArray(3, 22), auth)
+  assign(result.toOpenArray(3, 22), auth.data)
 
 func parseDelegationAddress*(code: CodeBytesRef): Opt[EthAddress] =
   if code.len != 23:
@@ -67,4 +67,4 @@ func parseDelegationAddress*(code: CodeBytesRef): Opt[EthAddress] =
   if not code.hasPrefix(DelegationPrefix):
     return Opt.none(EthAddress)
 
-  Opt.some(slice[20](code, 3, 22))
+  Opt.some(slice[20](code, 3, 22).to(Address))

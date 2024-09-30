@@ -13,19 +13,8 @@
 import
   eth/common,
   results,
+  stew/arraybuf,
   "."/[aristo_desc, aristo_get]
-
-type
-  Leg* = object
-    ## For constructing a `VertexPath`
-    wp*: VidVtxPair                ## Vertex ID and data ref
-    nibble*: int8                  ## Next vertex selector for `Branch` (if any)
-
-  Hike* = object
-    ## Trie traversal path
-    root*: VertexID                ## Handy for some fringe cases
-    legs*: seq[Leg]                ## Chain of vertices and IDs
-    tail*: NibblesBuf              ## Portion of non completed path
 
 const
   HikeAcceptableStopsNotFound* = {
@@ -81,6 +70,8 @@ proc step*(
     if error != GetVtxNotFound:
       return err(error)
 
+    if rvid.root == rvid.vid:
+      return err(HikeNoLegs)
     # The vertex ID `vid` was a follow up from a parent vertex, but there is
     # no child vertex on the database. So `vid` is a dangling link which is
     # allowed only if there is a partial trie (e.g. with `snap` sync.)
@@ -135,22 +126,32 @@ proc hikeUp*(
     path: NibblesBuf;                            # Partial path
     root: VertexID;                              # Start vertex
     db: AristoDbRef;                             # Database
-      ): Result[Hike,(VertexID,AristoError,Hike)] =
+    leaf: Opt[VertexRef];
+    hike: var Hike;
+      ): Result[void,(VertexID,AristoError)] =
   ## For the argument `path`, find and return the logest possible path in the
-  ## argument database `db`.
-  var hike = Hike(
-    root: root,
-    tail: path)
+  ## argument database `db` - this may result in a partial match in which case
+  ## hike.tail will be non-empty.
+  ##
+  ## If a leaf is given, it gets used for the "last" leg of the hike.
+  hike.root = root
+  hike.tail = path
+  hike.legs.setLen(0)
 
   if not root.isValid:
-    return err((VertexID(0),HikeRootMissing,hike))
+    return err((VertexID(0),HikeRootMissing))
   if path.len == 0:
-    return err((VertexID(0),HikeEmptyPath,hike))
+    return err((VertexID(0),HikeEmptyPath))
 
   var vid = root
   while true:
+    if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
+      hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[]), nibble: -1)
+      reset(hike.tail)
+      break
+
     let (vtx, path, next) = step(hike.tail, (root, vid), db).valueOr:
-      return err((vid,error,hike))
+      return err((vid,error))
 
     let wp = VidVtxPair(vid:vid, vtx:vtx)
 
@@ -167,30 +168,36 @@ proc hikeUp*(
     hike.tail = path
     vid = next
 
-  ok hike
+  ok()
 
 proc hikeUp*(
     lty: LeafTie;
     db: AristoDbRef;
-      ): Result[Hike,(VertexID,AristoError,Hike)] =
+    leaf: Opt[VertexRef];
+    hike: var Hike
+      ): Result[void,(VertexID,AristoError)] =
   ## Variant of `hike()`
-  lty.path.to(NibblesBuf).hikeUp(lty.root, db)
+  lty.path.to(NibblesBuf).hikeUp(lty.root, db, leaf, hike)
 
 proc hikeUp*(
     path: openArray[byte];
     root: VertexID;
     db: AristoDbRef;
-      ): Result[Hike,(VertexID,AristoError,Hike)] =
+    leaf: Opt[VertexRef];
+    hike: var Hike
+      ): Result[void,(VertexID,AristoError)] =
   ## Variant of `hike()`
-  NibblesBuf.fromBytes(path).hikeUp(root, db)
+  NibblesBuf.fromBytes(path).hikeUp(root, db, leaf, hike)
 
 proc hikeUp*(
     path: Hash256;
     root: VertexID;
     db: AristoDbRef;
-      ): Result[Hike,(VertexID,AristoError,Hike)] =
+    leaf: Opt[VertexRef];
+    hike: var Hike
+      ): Result[void,(VertexID,AristoError)] =
   ## Variant of `hike()`
-  NibblesBuf.fromBytes(path.data).hikeUp(root, db)
+  NibblesBuf.fromBytes(path.data).hikeUp(root, db, leaf, hike)
 
 # ------------------------------------------------------------------------------
 # End

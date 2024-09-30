@@ -38,16 +38,16 @@ proc genesisTest() =
   suite "Genesis":
     test "Correct mainnet hash":
       let b = makeGenesis(MainNet)
-      check(b.blockHash == "D4E56740F876AEF8C010B86A40D5F56745A118D0906A34E69AEC8C0DB1CB8FA3".toDigest)
+      check(b.blockHash == hash32"D4E56740F876AEF8C010B86A40D5F56745A118D0906A34E69AEC8C0DB1CB8FA3")
 
     test "Correct sepolia hash":
       let b = makeGenesis(SepoliaNet)
-      check b.blockHash == "25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9".toDigest
+      check b.blockHash == hash32"25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9"
 
     test "Correct holesky hash":
       let b = makeGenesis(HoleskyNet)
-      check b.blockHash == "b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4".toDigest
-      check b.stateRoot == "69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783".toDigest
+      check b.blockHash == hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
+      check b.stateRoot == hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
 
 proc customGenesisTest() =
   suite "Custom Genesis":
@@ -64,8 +64,8 @@ proc customGenesisTest() =
       var cg: NetworkParams
       check loadNetworkParams("devnet4.json".findFilePath, cg)
       let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      let stateRoot = "3b84f313bfd49c03cc94729ade2e0de220688f813c0c895a99bd46ecc9f45e1e".toDigest
-      let genesisHash = "a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399".toDigest
+      let stateRoot = hash32"3b84f313bfd49c03cc94729ade2e0de220688f813c0c895a99bd46ecc9f45e1e"
+      let genesisHash = hash32"a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399"
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.consensus == ConsensusType.POW
@@ -74,8 +74,8 @@ proc customGenesisTest() =
       var cg: NetworkParams
       check loadNetworkParams("devnet5.json".findFilePath, cg)
       let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      let stateRoot = "52e628c7f35996ba5a0402d02b34535993c89ff7fc4c430b2763ada8554bee62".toDigest
-      let genesisHash = "51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8".toDigest
+      let stateRoot = hash32"52e628c7f35996ba5a0402d02b34535993c89ff7fc4c430b2763ada8554bee62"
+      let genesisHash = hash32"51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8"
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.consensus == ConsensusType.POW
@@ -84,8 +84,8 @@ proc customGenesisTest() =
       var cg: NetworkParams
       check loadNetworkParams("mainshadow1.json".findFilePath, cg)
       let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      let stateRoot = "d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".toDigest
-      let genesisHash = "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3".toDigest
+      let stateRoot = hash32"d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
+      let genesisHash = hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
       let ttd = "46_089_003_871_917_200_000_000".parse(Uint256)
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
@@ -97,8 +97,8 @@ proc customGenesisTest() =
       var cg: NetworkParams
       check loadNetworkParams("geth_mainshadow1.json".findFilePath, cg)
       let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      let stateRoot = "d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544".toDigest
-      let genesisHash = "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3".toDigest
+      let stateRoot = hash32"d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
+      let genesisHash = hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
       let ttd = "46_089_003_871_917_200_000_000".parse(Uint256)
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
@@ -112,8 +112,8 @@ proc customGenesisTest() =
       var cg: NetworkParams
       check loadNetworkParams("holesky.json".findFilePath, cg)
       let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      let stateRoot = "69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783".toDigest
-      let genesisHash = "b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4".toDigest
+      let stateRoot = hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
+      let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.chainId == 17000.ChainId
@@ -123,8 +123,8 @@ proc customGenesisTest() =
       var cg: NetworkParams
       check loadNetworkParams("geth_holesky.json".findFilePath, cg)
       let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      let stateRoot = "69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783".toDigest
-      let genesisHash = "b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4".toDigest
+      let stateRoot = hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
+      let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.chainId == 17000.ChainId

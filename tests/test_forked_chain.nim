@@ -9,7 +9,6 @@
 # according to those terms.
 
 import
-  stew/byteutils,
   ../nimbus/common,
   ../nimbus/config,
   ../nimbus/utils/utils,
@@ -19,7 +18,7 @@ import
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
-  senderAddr  = hexToByteArray[20]("73cf19657412508833f618a15e8251306b3e6ee5")
+  senderAddr  = address"73cf19657412508833f618a15e8251306b3e6ee5"
 
 type
   TestEnv = object
@@ -71,7 +70,7 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock): EthBlock
     timestamp  : parent.timestamp + 1,
     gasLimit   : parent.gasLimit,
     stateRoot  : ledger.state,
-    txRoot     : parent.txRoot,
+    transactionsRoot     : parent.txRoot,
     baseFeePerGas  : parent.baseFeePerGas,
     receiptsRoot   : parent.receiptsRoot,
     ommersHash     : parent.ommersHash,

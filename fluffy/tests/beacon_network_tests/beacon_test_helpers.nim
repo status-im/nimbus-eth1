@@ -45,7 +45,7 @@ proc start*(n: BeaconNode) =
   n.beaconNetwork.start()
 
 proc stop*(n: BeaconNode) {.async.} =
-  n.beaconNetwork.stop()
+  discard n.beaconNetwork.stop()
   await n.discoveryProtocol.closeWait()
 
 proc containsId*(n: BeaconNode, contentId: ContentId): bool =

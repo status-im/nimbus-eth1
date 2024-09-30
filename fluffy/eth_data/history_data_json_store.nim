@@ -15,7 +15,7 @@ import
   chronicles,
   eth/[rlp, common/eth_types],
   ../../nimbus/common/[chain_config, genesis],
-  ../network/history/[history_content, accumulator]
+  ../network/history/[history_content, validation/historical_hashes_accumulator]
 
 export results, tables
 
@@ -160,6 +160,7 @@ proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
     try:
       networkParams(id)
     except ValueError, RlpError:
+      debugEcho getCurrentException()[]
       raise (ref Defect)(msg: "Network parameters should be valid")
 
   try:

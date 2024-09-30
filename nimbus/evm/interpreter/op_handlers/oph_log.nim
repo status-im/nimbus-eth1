@@ -77,7 +77,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
     var log: Log
     log.topics = newSeqOfCap[Topic](topicCount)
     for i in 0 ..< topicCount:
-      log.topics.add c.stack.lsPeekTopic(^(i+3))
+      log.topics.add Bytes32 c.stack.lsPeekTopic(^(i+3))
 
     assign(log.data, c.memory.read(memPos, len))
     log.address = c.msg.contractAddress

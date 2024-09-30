@@ -135,9 +135,15 @@ proc getKey*(
 proc getVtx*(
     rdb: var RdbInst;
     rvid: RootedVertexID;
+    flags: set[GetVtxFlag];
       ): Result[VertexRef,(AristoError,string)] =
   # Try LRU cache first
-  var rc = rdb.rdVtxLru.get(rvid.vid)
+  var rc =
+    if GetVtxFlag.PeekCache in flags:
+      rdb.rdVtxLru.peek(rvid.vid)
+    else:
+      rdb.rdVtxLru.get(rvid.vid)
+
   if rc.isOK:
     rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
     return ok(move(rc.value))
@@ -164,8 +170,9 @@ proc getVtx*(
 
   rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
 
-  # Update cache and return
-  rdb.rdVtxLru.put(rvid.vid, res.value())
+  # Update cache and return - in peek mode, avoid evicting cache items
+  if GetVtxFlag.PeekCache notin flags or rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+    rdb.rdVtxLru.put(rvid.vid, res.value())
 
   ok res.value()
 

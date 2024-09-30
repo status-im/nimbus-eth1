@@ -80,7 +80,7 @@ proc blobHashOp(cpt: VmCpt): EvmResultVoid =
       len = cpt.getVersionedHashesLen
 
     if index < len:
-      conv(cpt.getVersionedHash(index), top)
+      conv(cpt.getVersionedHash(index).data, top)
     else:
       top = zero(UInt256)
 

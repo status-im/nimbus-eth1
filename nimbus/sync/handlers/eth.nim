@@ -73,7 +73,7 @@ proc ancestorHeader(db: CoreDbRef,
     result = db.getBlockHeader(h.number - offset, output)
 
 proc blockHeader(db: CoreDbRef,
-                 b: HashOrNum,
+                 b: BlockHashOrNumber,
                  output: var BlockHeader): bool =
   if b.isHash:
     db.getBlockHeader(b.hash, output)

@@ -13,7 +13,7 @@ import
   stew/io2,
   chronos/timer,
   beacon_chain/spec/forks,
-  ./network/history/accumulator
+  ./network/history/validation/historical_hashes_accumulator
 
 proc loadBootstrapNodes(path: string): seq[string] {.raises: [IOError].} =
   # Read a list of ENR URIs from a file containing a flat list of entries.
@@ -52,9 +52,9 @@ const
 
   historicalRootsSSZ* = slurp(portalConfigDir / "historical_roots.ssz")
 
-func loadAccumulator*(): FinishedAccumulator =
+func loadAccumulator*(): FinishedHistoricalHashesAccumulator =
   try:
-    SSZ.decode(historicalHashesAccumulatorSSZ, FinishedAccumulator)
+    SSZ.decode(historicalHashesAccumulatorSSZ, FinishedHistoricalHashesAccumulator)
   except SerializationError as err:
     raiseAssert "Invalid baked-in accumulator: " & err.msg
 

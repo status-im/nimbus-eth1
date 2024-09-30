@@ -43,7 +43,7 @@ proc exchangeConf*(ben: BeaconEngineRef,
     terminalBlockNumber = common.BlockNumber conf.terminalBlockNumber
     terminalBlockHash   = ethHash conf.terminalBlockHash
 
-  if terminalBlockHash != common.Hash256():
+  if terminalBlockHash != default(common.Hash256):
     var headerHash: common.Hash256
 
     if not db.getBlockHash(terminalBlockNumber, headerHash):
@@ -69,7 +69,7 @@ proc exchangeConf*(ben: BeaconEngineRef,
     raise newException(ValueError, "invalid terminal block number: $1" % [
       $terminalBlockNumber])
 
-  if terminalBlockHash != common.Hash256():
+  if terminalBlockHash != default(common.Hash256):
     raise newException(ValueError, "invalid terminal block hash, no terminal header set")
 
   TransitionConfigurationV1(terminalTotalDifficulty: ttd.get)

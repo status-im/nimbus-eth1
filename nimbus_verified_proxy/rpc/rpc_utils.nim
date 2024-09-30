@@ -10,12 +10,16 @@
 import
   std/typetraits,
   eth/common/eth_types as etypes,
-  eth/[trie, rlp],
-  results,
+  eth/rlp,
+  nimcrypto/hash,
   stint,
   web3,
   web3/engine_api_types,
   ../../nimbus/db/core_db
+
+type
+  FixedBytes[N: static int] = primitives.FixedBytes[N]
+  Address = primitives.Address
 
 type ExecutionData* = object
   parentHash*: BlockHash
@@ -77,7 +81,7 @@ func toFixedBytes(d: MDigest[256]): FixedBytes[32] =
   FixedBytes[32](d.data)
 
 template asEthHash(hash: BlockHash): etypes.Hash256 =
-  etypes.Hash256(data: distinctBase(hash))
+  etypes.Hash256(distinctBase(hash))
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]
@@ -103,9 +107,9 @@ func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
     ommersHash: etypes.EMPTY_UNCLE_HASH,
     coinbase: etypes.EthAddress payload.feeRecipient,
     stateRoot: payload.stateRoot.asEthHash,
-    txRoot: txRoot,
+    transactionsRoot: txRoot,
     receiptsRoot: payload.receiptsRoot.asEthHash,
-    logsBloom: distinctBase(payload.logsBloom),
+    logsBloom: distinctBase(payload.logsBloom).to(Bloom),
     difficulty: default(etypes.DifficultyInt),
     number: payload.blockNumber.distinctBase,
     gasLimit: distinctBase(payload.gasLimit),

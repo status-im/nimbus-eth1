@@ -31,7 +31,7 @@ func u256(x: string): UInt256 =
   UInt256.fromHex(x)
 
 func ethAddr(x: string): EthAddress =
-  hexToByteArray[20](x)
+ EthAddress.fromHex(x)
 
 # envTest make sure the env is set up properly for subsequent tests
 proc envTest(t: TestEnv): Future[TestStatus] {.async.} =

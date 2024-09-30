@@ -67,7 +67,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
 
   template versionedHashes(args: TransactionArgs): VersionedHashes =
     if args.blobVersionedHashes.isSome:
-      ethHashes args.blobVersionedHashes.get
+      ethVersionedHashes args.blobVersionedHashes.get
     else:
       @[]
 

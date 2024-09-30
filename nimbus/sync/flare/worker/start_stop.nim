@@ -11,21 +11,13 @@
 {.push raises:[].}
 
 import
-  pkg/bearssl/rand,
-  pkg/chronicles,
   pkg/eth/[common, p2p],
   ../../protocol,
   ../worker_desc,
-  "."/[staged, unproc]
+  "."/[blocks_staged, blocks_unproc, db, headers_staged, headers_unproc]
 
 when enableTicker:
   import ./start_stop/ticker
-
-logScope:
-  topics = "flare start/stop"
-
-const extraTraceMessages = false or true
-  ## Enabled additional logging noise
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -36,30 +28,33 @@ when enableTicker:
     ## Legacy stuff, will be probably be superseded by `metrics`
     result = proc: auto =
       TickerFlareStats(
-        base:         ctx.layout.base,
-        least:        ctx.layout.least,
-        final:        ctx.layout.final,
-        beacon:       ctx.lhc.beacon.header.number,
-        nStaged:      ctx.stagedChunks(),
-        stagedTop:    ctx.stagedTop(),
-        unprocTop:    ctx.unprocTop(),
-        nUnprocessed: ctx.unprocTotal(),
-        nUnprocFragm: ctx.unprocChunks(),
-        reorg:        ctx.pool.nReorg)
+        stateTop:        ctx.dbStateBlockNumber(),
+        base:            ctx.layout.base,
+        least:           ctx.layout.least,
+        final:           ctx.layout.final,
+        beacon:          ctx.lhc.beacon.header.number,
 
-proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncReqNewHeadCB =
+        nHdrStaged:      ctx.headersStagedQueueLen(),
+        hdrStagedTop:    ctx.headersStagedTopKey(),
+        hdrUnprocTop:    ctx.headersUnprocTop(),
+        nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
+        nHdrUnprocFragm: ctx.headersUnprocChunks(),
+
+        nBlkStaged:      ctx.blocksStagedQueueLen(),
+        blkStagedBottom: ctx.blocksStagedBottomKey(),
+        blkUnprocTop:    ctx.blk.topRequest,
+        nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
+        nBlkUnprocFragm: ctx.blocksUnprocChunks(),
+
+        reorg:           ctx.pool.nReorg)
+
+proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncFinalisedBlockHashCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  when extraTraceMessages:
-    var count = 0
-  result = proc(h: BlockHeader) {.gcsafe, raises: [].} =
-    if ctx.lhc.beacon.header.number < h.number:
-      when extraTraceMessages:
-        if count mod 77 == 0: # reduce some noise
-          trace "updateBeaconHeaderCB", blockNumber=("#" & $h.number), count
-        count.inc
-      ctx.lhc.beacon.header = h
-      ctx.lhc.beacon.changed = true
+  return proc(h: Hash256) {.gcsafe, raises: [].} =
+    # Rpc checks empty header against `Hash256()` rather than `EMPTY_ROOT_HASH`
+    if ctx.lhc.beacon.finalised == ZERO_HASH256:
+      ctx.lhc.beacon.finalised = h
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -81,13 +76,45 @@ else:
 
 # ---------
 
+proc setupDatabase*(ctx: FlareCtxRef) =
+  ## Initalise database related stuff
+
+  # Initialise up queues and lists
+  ctx.headersStagedInit()
+  ctx.blocksStagedInit()
+  ctx.headersUnprocInit()
+  ctx.blocksUnprocInit()
+
+  # Initalise for `persistBlocks()`. Note that the `ctx.chain` is of
+  # type `ForkedChainRef` while `ctx.pool.chain` is a `ChainRef`
+  ctx.pool.chain = ctx.chain.com.newChain()
+
+  # Load initial state from database if there is any
+  ctx.dbLoadLinkedHChainsLayout()
+
+  # Set blocks batch import value for `persistBlocks()`
+  if ctx.pool.nBodiesBatch < nFetchBodiesRequest:
+    if ctx.pool.nBodiesBatch == 0:
+      ctx.pool.nBodiesBatch = nFetchBodiesBatchDefault
+    else:
+      ctx.pool.nBodiesBatch = nFetchBodiesRequest
+
+  # Set length of `staged` queue
+  if ctx.pool.nBodiesBatch < nFetchBodiesBatchDefault:
+    const nBlocks = blocksStagedQueueLenMaxDefault * nFetchBodiesBatchDefault
+    ctx.pool.blocksStagedQuLenMax =
+      (nBlocks + ctx.pool.nBodiesBatch - 1) div ctx.pool.nBodiesBatch
+  else:
+    ctx.pool.blocksStagedQuLenMax = blocksStagedQueueLenMaxDefault
+
+
 proc setupRpcMagic*(ctx: FlareCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.chain.com.syncReqNewHead = ctx.updateBeaconHeaderCB
+  ctx.chain.com.syncFinalisedBlockHash = ctx.updateBeaconHeaderCB
 
 proc destroyRpcMagic*(ctx: FlareCtxRef) =
   ## Helper for `release()`
-  ctx.chain.com.syncReqNewHead = SyncReqNewHeadCB(nil)
+  ctx.chain.com.syncFinalisedBlockHash = SyncFinalisedBlockHashCB(nil)
 
 # ---------
 
@@ -106,32 +133,6 @@ proc stopBuddy*(buddy: FlareBuddyRef) =
   buddy.ctx.pool.nBuddies.dec # for metrics
   when enableTicker:
     buddy.ctx.pool.ticker.stopBuddy()
-
-# ---------
-
-proc flipCoin*(ctx: FlareCtxRef): bool =
-  ## This function is intended to randomise recurrent buddy processes. Each
-  ## participant fetches a vote via `getVote()` and continues on a positive
-  ## vote only. The scheduler will then re-queue the participant.
-  ##
-  if ctx.pool.tossUp.nCoins == 0:
-    result = true
-  else:
-    if ctx.pool.tossUp.nLeft == 0:
-      ctx.pool.rng[].generate(ctx.pool.tossUp.coins)
-      ctx.pool.tossUp.nLeft = 8 * sizeof(ctx.pool.tossUp.coins)
-    ctx.pool.tossUp.nCoins.dec
-    ctx.pool.tossUp.nLeft.dec
-    result = bool(ctx.pool.tossUp.coins and 1)
-    ctx.pool.tossUp.coins = ctx.pool.tossUp.coins shr 1
-
-proc setCoinTosser*(ctx: FlareCtxRef; nCoins = 8u) =
-  ## Create a new sequence of `nCoins` oracles.
-  ctx.pool.tossUp.nCoins = nCoins
-
-proc resCoinTosser*(ctx: FlareCtxRef) =
-  ## Set up all oracles to be `true`
-  ctx.pool.tossUp.nCoins = 0
 
 # ------------------------------------------------------------------------------
 # End

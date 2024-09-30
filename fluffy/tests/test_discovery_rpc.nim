@@ -48,7 +48,7 @@ proc stop(testCase: TestCase) {.async.} =
   await testCase.server.closeWait()
   await testCase.localDiscovery.closeWait()
 
-procSuite "Discovery RPC":
+procSuite "Discovery v5 JSON-RPC API":
   let rng = newRng()
 
   asyncTest "Get local node info":

@@ -26,7 +26,7 @@ type
 
 func toStorageKeys(slots: SlotSet): seq[StorageKey] =
   for slot in slots:
-    result.add slot.toBytesBE
+    result.add slot.to(Bytes32)
 
 # ------------------------------------------------------------------------------
 # Public constructors

@@ -146,7 +146,7 @@ func pp*(q: openArray[byte]; noHash = false): string =
   if q.len == 32 and not noHash:
     var a: array[32,byte]
     for n in 0..31: a[n] = q[n]
-    Hash256(data: a).pp
+    Hash32(a).pp
   else:
     q.toHex.pp(hex = true)
 

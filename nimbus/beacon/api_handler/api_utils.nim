@@ -87,7 +87,7 @@ proc simpleFCU*(status: PayloadExecutionStatus,
 
 proc invalidFCU*(
     validationError: string,
-    hash = common.Hash256()): ForkchoiceUpdatedResponse =
+    hash = default(common.Hash256)): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus:
     PayloadStatusV1(
       status: PayloadExecutionStatus.invalid,
@@ -113,7 +113,7 @@ proc invalidStatus*(validHash: common.Hash256, msg: string): PayloadStatusV1 =
     validationError: Opt.some(msg)
   )
 
-proc invalidStatus*(validHash = common.Hash256()): PayloadStatusV1 =
+proc invalidStatus*(validHash = default(common.Hash256)): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash)
@@ -176,14 +176,14 @@ proc latestValidHash*(db: CoreDbRef,
                       parent: common.BlockHeader,
                       ttd: DifficultyInt): common.Hash256 =
   if parent.isGenesis:
-    return common.Hash256()
+    return default(common.Hash256)
   let ptd = db.getScore(parent.parentHash).valueOr(0.u256)
   if ptd >= ttd:
     parent.blockHash
   else:
     # If the most recent valid ancestor is a PoW block,
     # latestValidHash MUST be set to ZERO
-    common.Hash256()
+    default(common.Hash256)
 
 proc invalidFCU*(validationError: string,
                  com: CommonRef,

@@ -96,11 +96,11 @@ proc runBackfillCollectBlockDataLoop(
       let
         blockId = blockId(currentBlockNumber)
         blockObject = (await web3Client.getBlockByNumber(blockId, false)).valueOr:
-          error "Failed to get block", error
+          error "Failed to get block", error = error
           await sleepAsync(1.seconds)
           continue
         stateDiffs = (await web3Client.getStateDiffsByBlockNumber(blockId)).valueOr:
-          error "Failed to get state diffs", error
+          error "Failed to get state diffs", error = error
           await sleepAsync(1.seconds)
           continue
 
@@ -109,7 +109,7 @@ proc runBackfillCollectBlockDataLoop(
         let uncleBlock = (
           await web3Client.getUncleByBlockNumberAndIndex(blockId, i.Quantity)
         ).valueOr:
-          error "Failed to get uncle block", error
+          error "Failed to get uncle block", error = error
           await sleepAsync(1.seconds)
           continue
         uncleBlocks.add(uncleBlock)
@@ -164,9 +164,9 @@ proc runBackfillBuildBlockOffersLoop(
       ws.applyGenesisAccounts(genesisAccounts)
 
       if gossipGenesis:
-        let genesisBlockHash = KeccakHash.fromHex(
-          "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
-        )
+        let genesisBlockHash =
+          hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
+
         var builder = OffersBuilder.init(ws, genesisBlockHash)
         builder.buildBlockOffers()
 
@@ -298,7 +298,9 @@ proc runBackfillGossipBlockOffersLoop(
     for k, v in offersMap:
       try:
         let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
-        if numPeers == 0:
+        if numPeers > 0:
+          debug "Offer successfully gossipped to peers: ", numPeers, workerId
+        elif numPeers == 0:
           warn "Offer gossipped to no peers", workerId
           retryGossip = true
           break

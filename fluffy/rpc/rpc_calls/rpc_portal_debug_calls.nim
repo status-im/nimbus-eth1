@@ -15,25 +15,10 @@ Opt[string].useDefaultSerializationIn JrpcConv
 
 createRpcSigsFromNim(RpcClient):
   ## Portal History Network json-rpc debug & custom calls
-  proc portal_historyGossipHeaders(
-    era1File: string, epochAccumulatorFile: Opt[string]
-  ): bool
-
+  proc portal_historyGossipHeaders(era1File: string, epochRecordFile: Opt[string]): bool
   proc portal_historyGossipHeaders(era1File: string): bool
   proc portal_historyGossipBlockContent(era1File: string): bool
   proc portal_history_storeContent(dataFile: string): bool
   proc portal_history_propagate(dataFile: string): bool
   proc portal_history_propagateHeaders(dataFile: string): bool
   proc portal_history_propagateBlock(dataFile: string, blockHash: string): bool
-  proc portal_history_propagateEpochRecord(dataFile: string): bool
-  proc portal_history_propagateEpochRecords(path: string): bool
-  proc portal_history_storeContentInNodeRange(
-    dbPath: string, max: uint32, starting: uint32
-  ): bool
-
-  proc portal_history_offerContentInNodeRange(
-    dbPath: string, nodeId: NodeId, max: uint32, starting: uint32
-  ): int
-
-  proc portal_history_depthContentPropagate(dbPath: string, max: uint32): bool
-  proc portal_history_breadthContentPropagate(dbPath: string): bool

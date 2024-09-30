@@ -14,6 +14,7 @@ import
   stew/byteutils,
   unittest2,
   stint,
+  eth/common/eth_hash,
   nimcrypto/hash,
   eth/trie/[hexary, db, trie_defs],
   ../../network/state/[state_content, state_validation],

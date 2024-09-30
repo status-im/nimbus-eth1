@@ -95,8 +95,8 @@ proc release(cc: CaptCtxRef) =
 
 # -------------------
 
-proc `%`(x: openArray[byte]): JsonNode =
-  result = %toHex(x, false)
+proc `%`(x: addresses.Address|Bytes32|Bytes256|Hash32): JsonNode =
+  result = %toHex(x)
 
 proc toJson(receipt: Receipt): JsonNode =
   result = newJObject()
@@ -106,7 +106,7 @@ proc toJson(receipt: Receipt): JsonNode =
   result["logs"] = %receipt.logs
 
   if receipt.hasStateRoot:
-    result["root"] = %($receipt.stateRoot)
+    result["root"] = %(receipt.stateRoot.toHex)
   else:
     result["status"] = %receipt.status
 
@@ -131,7 +131,7 @@ proc captureAccount(
       ) =
   var jaccount = newJObject()
   jaccount["name"] = %name
-  jaccount["address"] = %("0x" & $address)
+  jaccount["address"] = %(address.to0xHex)
 
   let nonce = db.getNonce(address)
   let balance = db.getBalance(address)
@@ -142,9 +142,9 @@ proc captureAccount(
   jaccount["balance"] = %("0x" & balance.toHex)
 
   let code = db.getCode(address)
-  jaccount["codeHash"] = %("0x" & ($codeHash).toLowerAscii)
+  jaccount["codeHash"] = %(codeHash.to0xHex)
   jaccount["code"] = %("0x" & code.bytes.toHex(true))
-  jaccount["storageRoot"] = %("0x" & ($storageRoot).toLowerAscii)
+  jaccount["storageRoot"] = %(storageRoot.to0xHex)
 
   var storage = newJObject()
   for key, value in db.storage(address):
@@ -196,7 +196,7 @@ proc traceTransactionImpl(
       before.captureAccount(stateDb, recipient, recipientName)
       before.captureAccount(stateDb, miner, minerName)
       stateDb.persist()
-      stateDiff["beforeRoot"] = %($stateDb.rootHash)
+      stateDiff["beforeRoot"] = %(stateDb.rootHash.toHex)
       discard com.db.ctx.getAccounts.state(updateOk=true) # lazy hashing!
       stateCtx = CaptCtxRef.init(com, stateDb.rootHash)
 
@@ -210,7 +210,7 @@ proc traceTransactionImpl(
       after.captureAccount(stateDb, miner, minerName)
       tracerInst.removeTracedAccounts(sender, recipient, miner)
       stateDb.persist()
-      stateDiff["afterRoot"] = %($stateDb.rootHash)
+      stateDiff["afterRoot"] = %(stateDb.rootHash.toHex)
       break
 
   # internal transactions:

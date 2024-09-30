@@ -1036,9 +1036,9 @@ func init*(
 
   else:
     beDup.getVtxFn =
-      proc(a: RootedVertexID): auto =
+      proc(a: RootedVertexID, flags: set[GetVtxFlag]): auto =
         AristoApiProfBeGetVtxFn.profileRunner:
-          result = be.getVtxFn(a)
+          result = be.getVtxFn(a, flags)
     data.list[AristoApiProfBeGetVtxFn.ord].masked = true
 
     beDup.getKeyFn =

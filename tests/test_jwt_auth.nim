@@ -21,7 +21,7 @@ import
   chronos/apps/http/httpclient as chronoshttpclient,
   chronos/apps/http/httptable,
   eth/[common, keys, p2p],
-  nimcrypto/[hmac, utils],
+  nimcrypto/[hmac, sha2, utils],
   results,
   stint,
   unittest2,

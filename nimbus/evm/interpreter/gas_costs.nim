@@ -525,7 +525,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Sha3:            memExpansion `prefix gasSha3`,
 
           # 30s: Environmental Information
-          Address:         fixed GasBase,
+          opcodes.Address: fixed GasBase,
           Balance:         fixedOrLater GasBalance,
           Origin:          fixed GasBase,
           Caller:          fixed GasBase,

@@ -83,7 +83,7 @@ proc toXX(q: Blob): string =
   q.mapIt(it.toHex2).join(":")
 
 proc toXX(a: EthAddress): string =
-  a.mapIt(it.toHex2).joinXX
+  a.data.mapIt(it.toHex2).joinXX
 
 proc toXX(h: Hash256): string =
   h.data.mapIt(it.toHex2).joinXX

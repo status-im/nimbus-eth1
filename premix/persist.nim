@@ -69,7 +69,7 @@ proc main() {.used.} =
   var retryCount = 0
 
   while true:
-    var thisBlock: Block
+    var thisBlock: downloader.Block
     try:
       thisBlock = requestBlock(blockNumber, { DownloadAndValidate })
     except CatchableError as e:

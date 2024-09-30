@@ -39,7 +39,7 @@ template toStackElem(v: EvmStackInts, elem: EvmStackElement) =
   elem = v.u256
 
 template toStackElem(v: EthAddress, elem: EvmStackElement) =
-  elem.initFromBytesBE(v)
+  elem.initFromBytesBE(v.data)
 
 template toStackElem(v: Hash256, elem: EvmStackElement) =
   elem.initFromBytesBE(v.data)
@@ -52,10 +52,10 @@ template fromStackElem(elem: EvmStackElement, _: type UInt256): UInt256 =
   elem
 
 func fromStackElem(elem: EvmStackElement, _: type EthAddress): EthAddress =
-  assign(result, elem.toBytesBE().toOpenArray(12, 31))
+  elem.to(Bytes32).to(EthAddress)
 
 template fromStackElem(elem: EvmStackElement, _: type Hash256): Hash256 =
-  Hash256(data: elem.toBytesBE())
+  Hash32(elem.toBytesBE())
 
 template fromStackElem(elem: EvmStackElement, _: type EvmStackBytes32): EvmStackBytes32 =
   elem.toBytesBE()

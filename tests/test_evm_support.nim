@@ -268,25 +268,8 @@ proc runGasMeterTests() =
         gasMeter.refundGas(5)
         check(gasMeter.gasRefunded == 5)
 
-func toAddress(n: int): EthAddress =
-  result[19] = n.byte
-
-func toAddress(a, b: int): EthAddress =
-  result[18] = a.byte
-  result[19] = b.byte
-
-func toAddress(a, b, c: int): EthAddress =
-  result[17] = a.byte
-  result[18] = b.byte
-  result[19] = c.byte
-
 proc runMiscTests() =
   suite "Misc test suite":
-    test "EthAddress to int":
-      check toAddress(0xff).toInt == 0xFF
-      check toAddress(0x10, 0x0).toInt == 0x1000
-      check toAddress(0x10, 0x0, 0x0).toInt == 0x100000
-
     test "calcGasLimitEIP1559":
       type
         GLT = object
@@ -338,8 +321,8 @@ const
     0x80, 0x3d, 0x59, 0x59, 0x59, 0x59, 0x81, 0x00, 0x59, 0x2f, 0x45, 0x30,
     0x32, 0xf4, 0x5d, 0x5b, 0x37, 0x19]
 
-  codeAddress = hexToByteArray[20]("000000000000000000000000636f6e7472616374")
-  coinbase = hexToByteArray[20]("4444588443C3a91288c5002483449Aba1054192b")
+  codeAddress = address"000000000000000000000000636f6e7472616374"
+  coinbase = address"4444588443C3a91288c5002483449Aba1054192b"
 
 proc runTestOverflow() =
   test "GasCall unhandled overflow":

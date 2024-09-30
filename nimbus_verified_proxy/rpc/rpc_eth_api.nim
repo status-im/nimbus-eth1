@@ -26,6 +26,10 @@ import
 
 export forks
 
+type
+  FixedBytes[N: static int] = primitives.FixedBytes[N]
+  Address = primitives.Address
+
 logScope:
   topics = "verified_proxy"
 

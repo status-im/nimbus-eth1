@@ -13,17 +13,19 @@ import
   results,
   eth/[rlp, common/eth_types],
   ncli/e2store,
-  ../network/history/[history_content, accumulator]
+  ../network/history/[history_content, validation/historical_hashes_accumulator]
 
 export results
 
 # Reading SSZ data from files
 
-proc readAccumulator*(file: string): Result[FinishedAccumulator, string] =
+proc readAccumulator*(
+    file: string
+): Result[FinishedHistoricalHashesAccumulator, string] =
   let encodedAccumulator = ?readAllFile(file).mapErr(toString)
 
   try:
-    ok(SSZ.decode(encodedAccumulator, FinishedAccumulator))
+    ok(SSZ.decode(encodedAccumulator, FinishedHistoricalHashesAccumulator))
   except SerializationError as e:
     err("Failed decoding accumulator: " & e.msg)
 

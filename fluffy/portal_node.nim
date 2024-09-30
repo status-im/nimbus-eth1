@@ -9,6 +9,7 @@
 
 import
   results,
+  chronos,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
   ./network_metadata,
@@ -23,6 +24,11 @@ export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
 type
+  PortalNodeState* = enum
+    Starting
+    Running
+    Stopping
+
   PortalNodeConfig* = object
     accumulatorFile*: Opt[string]
     disableStateRootValidation*: bool
@@ -32,6 +38,7 @@ type
     storageCapacity*: uint64
 
   PortalNode* = ref object
+    state*: PortalNodeState
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
@@ -39,6 +46,7 @@ type
     historyNetwork*: Opt[HistoryNetwork]
     stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
+    statusLogLoop: Future[void]
 
 # Beacon light client application callbacks triggered when new finalized header
 # or optimistic header is available.
@@ -179,7 +187,29 @@ proc new*(
     beaconLightClient: beaconLightClient,
   )
 
+proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
+  try:
+    while true:
+      # This is the data radius percentage compared to full storage. This will
+      # drop a lot when using the logbase2 scale, namely `/ 2` per 1 logaritmic
+      # radius drop.
+      # TODO: Get some float precision calculus?
+      let radiusPercentage = n.contentDB.dataRadius div (UInt256.high() div u256(100))
+
+      info "Portal node status",
+        radiusPercentage = radiusPercentage.toString(10) & "%",
+        radius = n.contentDB.dataRadius.toHex(),
+        dbSize = $(n.contentDB.size() div 1000) & "kb"
+
+      await sleepAsync(60.seconds)
+  except CancelledError:
+    trace "statusLogLoop canceled"
+
 proc start*(n: PortalNode) =
+  debug "Starting Portal node"
+
+  n.discovery.start()
+
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
   if n.historyNetwork.isSome():
@@ -189,3 +219,29 @@ proc start*(n: PortalNode) =
 
   if n.beaconLightClient.isSome():
     n.beaconLightClient.value.start()
+
+  n.statusLogLoop = statusLogLoop(n)
+
+  n.state = PortalNodeState.Running
+
+proc stop*(n: PortalNode) {.async: (raises: []).} =
+  debug "Stopping Portal node"
+
+  var futures: seq[Future[void]]
+
+  if n.beaconNetwork.isSome():
+    futures.add(n.beaconNetwork.value.stop())
+  if n.historyNetwork.isSome():
+    futures.add(n.historyNetwork.value.stop())
+  if n.stateNetwork.isSome():
+    futures.add(n.stateNetwork.value.stop())
+  if n.beaconLightClient.isSome():
+    futures.add(n.beaconLightClient.value.stop())
+  if not n.statusLogLoop.isNil():
+    futures.add(n.statusLogLoop.cancelAndWait())
+
+  await noCancel(allFutures(futures))
+
+  await n.discovery.closeWait()
+  n.contentDB.close()
+  n.statusLogLoop = nil

@@ -18,12 +18,13 @@ import
 
 type
   Hash256 = eth_types.Hash256
+  Address = primitives.Address
 
 func ethAddr*(x: Address): EthAddress =
   EthAddress x
 
 func ethAddr(x: string): EthAddress =
-  hexToByteArray[20](x)
+  EthAddress.fromHex(x)
 
 template toHash256(hash: untyped): Hash256 =
   fromHex(Hash256, hash.toHex())

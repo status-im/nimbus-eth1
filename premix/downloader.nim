@@ -61,9 +61,9 @@ proc requestBlockBody(
   let uncles = n["uncles"]
   if uncles.len > 0:
     result.uncles = newSeqOfCap[BlockHeader](uncles.len)
-    let blockNumber = blockNumber.prefixHex
+    let blockNumber = blockNumber.to0xHex
     for i in 0 ..< uncles.len:
-      let idx = i.prefixHex
+      let idx = i.to0xHex
       let uncle = request("eth_getUncleByBlockNumberAndIndex", %[%blockNumber, %idx], client)
       if uncle.kind == JNull:
         error "requested uncle not available", blockNumber=blockNumber, uncleIdx=i
@@ -101,7 +101,7 @@ proc requestTxTraces(
 proc requestHeader*(
     blockNumber: BlockNumber,
     client: Option[RpcClient] = none[RpcClient]()): JsonNode =
-  result = request("eth_getBlockByNumber", %[%blockNumber.prefixHex, %true], client)
+  result = request("eth_getBlockByNumber", %[%blockNumber.to0xHex, %true], client)
   if result.kind == JNull:
     error "requested block not available", blockNumber=blockNumber
     raise newException(ValueError, "Error when retrieving block header")
@@ -122,19 +122,19 @@ proc requestBlock*(
     result.receipts   = requestReceipts(header, client)
     if DownloadAndValidate in flags:
       let
-        receiptsRoot   = calcReceiptsRoot(result.receipts).prefixHex
-        receiptsRootOK = result.header.receiptsRoot.prefixHex
+        receiptsRoot   = calcReceiptsRoot(result.receipts).to0xHex
+        receiptsRootOK = result.header.receiptsRoot.to0xHex
       if receiptsRoot != receiptsRootOK:
         debug "wrong receipt root", receiptsRoot, receiptsRootOK, blockNumber
         raise newException(ValueError, "Error when validating receipt root")
 
   if DownloadAndValidate in flags:
     let
-      txRoot        = calcTxRoot(result.body.transactions).prefixHex
-      txRootOK      = result.header.txRoot.prefixHex
-      ommersHash    = rlpHash(result.body.uncles).prefixHex
-      ommersHashOK  = result.header.ommersHash.prefixHex
-      headerHash    = rlpHash(result.header).prefixHex
+      txRoot        = calcTxRoot(result.body.transactions).to0xHex
+      txRootOK      = result.header.txRoot.to0xHex
+      ommersHash    = rlpHash(result.body.uncles).to0xHex
+      ommersHashOK  = result.header.ommersHash.to0xHex
+      headerHash    = rlpHash(result.header).to0xHex
       headerHashOK  = header["hash"].getStr().toLowerAscii
 
     if txRoot != txRootOK:

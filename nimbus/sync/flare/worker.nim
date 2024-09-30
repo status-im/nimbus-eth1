@@ -16,14 +16,39 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/[db, staged, start_stop, unproc, update],
+  ./worker/[blocks_staged, db, headers_staged, headers_unproc,
+            start_stop, update],
   ./worker_desc
 
 logScope:
   topics = "flare"
 
-const extraTraceMessages = false or true
-  ## Enabled additional logging noise
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc headersToFetchOk(buddy: FlareBuddyRef): bool =
+  0 < buddy.ctx.headersUnprocTotal() and
+    buddy.ctrl.running and
+    not buddy.ctx.poolMode
+
+proc bodiesToFetchOk(buddy: FlareBuddyRef): bool =
+  buddy.ctx.blocksStagedFetchOk() and
+    buddy.ctrl.running and
+    not buddy.ctx.poolMode
+
+proc napUnlessSomethingToFetch(
+    buddy: FlareBuddyRef;
+    info: static[string];
+      ): Future[bool] {.async.} =
+  ## When idle, save cpu cycles waiting for something to do.
+  if buddy.ctx.pool.importRunningOk or
+     not (buddy.headersToFetchOk() or
+          buddy.bodiesToFetchOk()):
+    debug info & ": idly wasting time", peer=buddy.peer
+    await sleepAsync workerIdleWaitInterval
+    return true
+  return false
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -34,11 +59,8 @@ proc setup*(ctx: FlareCtxRef): bool =
   debug "RUNSETUP"
   ctx.setupRpcMagic()
 
-  # Setup `Era1` access (if any) before setting up layout.
-  discard ctx.dbInitEra1()
-
   # Load initial state from database if there is any
-  ctx.dbLoadLinkedHChainsLayout()
+  ctx.setupDatabase()
 
   # Debugging stuff, might be an empty template
   ctx.setupTicker()
@@ -56,15 +78,24 @@ proc release*(ctx: FlareCtxRef) =
 
 proc start*(buddy: FlareBuddyRef): bool =
   ## Initialise worker peer
-  if buddy.startBuddy():
-    buddy.ctrl.multiOk = true
-    debug "RUNSTART", peer=buddy.peer, multiOk=buddy.ctrl.multiOk
-    return true
-  debug "RUNSTART failed", peer=buddy.peer
+  const info = "RUNSTART"
+
+  if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
+    debug info & " peer limit reached", peer=buddy.peer
+    return false
+
+  if not buddy.startBuddy():
+    debug info & " failed", peer=buddy.peer
+    return false
+
+  buddy.ctrl.multiOk = true
+  debug info, peer=buddy.peer
+  true
 
 proc stop*(buddy: FlareBuddyRef) =
   ## Clean up this peer
-  debug "RUNSTOP", peer=buddy.peer
+  debug "RUNSTOP", peer=buddy.peer, nInvocations=buddy.only.nMultiLoop,
+    lastIdleGap=buddy.only.multiRunIdle.toStr(2)
   buddy.stopBuddy()
 
 # ------------------------------------------------------------------------------
@@ -81,12 +112,31 @@ proc runDaemon*(ctx: FlareCtxRef) {.async.} =
   const info = "RUNDAEMON"
   debug info
 
-  # Check for a possible layout change of the `HeaderChainsSync` state
-  if ctx.updateLinkedHChainsLayout():
-    debug info & ": headers chain layout was updated"
+  # Check for a possible header layout and body request changes
+  discard ctx.updateLinkedHChainsLayout()
+  discard ctx.updateBlockRequests()
+
+  # Execute staged block records.
+  if ctx.blocksStagedCanImportOk():
+
+    block:
+      # Set advisory flag telling that a slow/long running process will take
+      # place. This works a bit like `runSingle()` only that in the case here
+      # we might have no peer.
+      ctx.pool.importRunningOk = true
+      defer: ctx.pool.importRunningOk = false
+
+      # Import from staged queue.
+      while ctx.blocksStagedImport info:
+        ctx.updateMetrics()
+
+        # Allow pseudo/async thread switch
+        await sleepAsync asyncThreadSwitchTimeSlot
+
+  # At the end of the cycle, leave time to refill
+  await sleepAsync daemonWaitInterval
 
   ctx.updateMetrics()
-  await sleepAsync daemonWaitInterval
 
 
 proc runSingle*(buddy: FlareBuddyRef) {.async.} =
@@ -101,7 +151,8 @@ proc runSingle*(buddy: FlareBuddyRef) {.async.} =
   ##
   ## Note that this function runs in `async` mode.
   ##
-  raiseAssert "RUNSINGLE should not be used: peer=" & $buddy.peer
+  const info = "RUNSINGLE"
+  raiseAssert info & " should not be used: peer=" & $buddy.peer
 
 
 proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
@@ -121,9 +172,8 @@ proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
   ## Note that this function does not run in `async` mode.
   ##
   const info = "RUNPOOL"
-  when extraTraceMessages:
-    debug info, peer=buddy.peer, laps
-  buddy.ctx.stagedReorg info # reorg
+  #debug info, peer=buddy.peer, laps
+  buddy.ctx.headersStagedReorg info # reorg
   true # stop
 
 
@@ -133,36 +183,78 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
   ## instance can be simultaneously active for all peer workers.
   ##
   const info = "RUNMULTI"
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
+  let peer = buddy.peer
 
-  if ctx.unprocTotal() == 0 and ctx.stagedChunks() == 0:
-    # Save cpu cycles waiting for something to do
-    when extraTraceMessages:
-      debug info & ": idle wasting time", peer
-    await sleepAsync runMultiIdleWaitInterval
-    return
+  if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
+    buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
+  buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-  if not ctx.flipCoin():
-    # Come back next time
-    when extraTraceMessages:
-      debug info & ": running later", peer
-    return
+  trace info, peer, nInvocations=buddy.only.nMultiLoop,
+    lastIdleGap=buddy.only.multiRunIdle.toStr(2)
 
-  # * get unprocessed range from pool
-  # * fetch headers for this range (as much as one can get)
-  # * verify that a block is sound, i.e. contiguous, chained by parent hashes
-  # * return remaining range to unprocessed range in the pool
-  # * store this range on the staged queue on the pool
-  if await buddy.stagedCollect info:
-    # * increase the top/right interval of the trused range `[L,F]`
-    # * save updated state and headers
-    discard buddy.ctx.stagedProcess info
+  # Update beacon header when needed. For the beacon header, a hash will be
+  # auto-magically made available via RPC. The corresponding header is then
+  # fetched from the current peer.
+  await buddy.headerStagedUpdateBeacon info
 
-  else:
-    when extraTraceMessages:
-      debug info & ": nothing fetched, done", peer
+  if not await buddy.napUnlessSomethingToFetch info:
+    #
+    # Layout of a triple of linked header chains (see `README.md`)
+    # ::
+    #   G                B                     L                F
+    #   | <--- [G,B] --> | <----- (B,L) -----> | <-- [L,F] ---> |
+    #   o----------------o---------------------o----------------o--->
+    #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
+    #
+    # This function is run concurrently for fetching the next batch of
+    # headers and stashing them on the database. Each concurrently running
+    # actor works as follows:
+    #
+    # * Get a range of block numbers from the `unprocessed` range `(B,L)`.
+    # * Fetch headers for this range (as much as one can get).
+    # * Stash then on the database.
+    # * Rinse and repeat.
+    #
+    # The block numbers range concurrently taken from `(B,L)` are chosen
+    # from the upper range. So exactly one of the actors has a range
+    # `[whatever,L-1]` adjacent to `[L,F]`. Call this actor the lead actor.
+    #
+    # For the lead actor, headers can be downloaded all by the hashes as
+    # the parent hash for the header with block number `L` is known. All
+    # other non-lead actors will download headers by the block number only
+    # and stage it to be re-ordered and stashed on the database when ready.
+    #
+    # Once the lead actor stashes the dowloaded headers, the other staged
+    # headers will also be stashed on the database until there is a gap or
+    # the stashed haeders are exhausted.
+    #
+    # Due to the nature of the `async` logic, the current lead actor will
+    # stay lead when fetching the next range of block numbers.
+    #
+    while buddy.headersToFetchOk():
+
+      # * Get unprocessed range from pool
+      # * Fetch headers for this range (as much as one can get)
+      # * Verify that a block is contiguous, chained by parent hash, etc.
+      # * Stash this range on the staged queue on the pool
+      if await buddy.headersStagedCollect info:
+
+        # * Save updated state and headers
+        # * Decrease the left boundary `L` of the trusted range `[L,F]`
+        discard buddy.ctx.headersStagedProcess info
+
+    # Fetch bodies and combine them with headers to blocks to be staged. These
+    # staged blocks are then excuted by the daemon process (no `peer` needed.)
+    while buddy.bodiesToFetchOk():
+      discard await buddy.blocksStagedCollect info
+
+    # Note that it is important **not** to leave this function to be
+    # re-invoked by the scheduler unless necessary. While the time gap
+    # until restarting is typically a few millisecs, there are always
+    # outliers which well exceed several seconds. This seems to let
+    # remote peers run into timeouts.
+
+  buddy.only.stoppedMultiRun = Moment.now()     # statistics/debugging
 
 # ------------------------------------------------------------------------------
 # End

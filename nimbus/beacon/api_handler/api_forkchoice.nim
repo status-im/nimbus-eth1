@@ -42,7 +42,7 @@ template validateVersion(attr, com, apiVersion) =
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
         raise invalidParams("forkChoiceUpdated" & $apiVersion &
-          " doesn't support payloadAttributesV1")
+          " doesn't support payloadAttributesV1 when Shanghai is activated")
       if version > Version.V2:
         raise invalidAttr("if timestamp is Shanghai or later," &
           " payloadAttributes must be PayloadAttributesV2")
@@ -80,7 +80,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     chain = ben.chain
     blockHash = ethHash update.headBlockHash
 
-  if blockHash == common.Hash256():
+  if blockHash == default(common.Hash256):
     warn "Forkchoice requested update to zero hash"
     return simpleFCU(PayloadExecutionStatus.invalid)
 
@@ -116,6 +116,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     # Update sync header (if any)
     com.syncReqNewHead(header)
+
+    # Pass on finalised header
+    if com.haveSyncFinalisedBlockHash():
+      let finalizedBlockHash = ethHash update.finalizedBlockHash
+      if finalizedBlockHash != default(common.Hash256):
+        com.syncFinalisedBlockHash(finalizedBlockHash)
+
     return simpleFCU(PayloadExecutionStatus.syncing)
 
   validateHeaderTimestamp(header, com, apiVersion)
@@ -155,8 +162,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # probably resyncing. Ignore the update.
   # See point 2 of fCUV1 specification
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
-  var canonHash: common.Hash256
-  if db.getBlockHash(header.number, canonHash) and canonHash == blockHash:
+  if ben.chain.isCanonicalAncestor(header.number, blockHash):
     notice "Ignoring beacon update to old head",
       blockHash=blockHash.short,
       blockNumber=header.number
@@ -165,7 +171,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
   let finalizedBlockHash = ethHash update.finalizedBlockHash
-  if finalizedBlockHash != common.Hash256():
+  if finalizedBlockHash != default(common.Hash256):
     if not ben.posFinalized:
       ben.finalizePoS()
 
@@ -176,14 +182,14 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     db.finalizedHeaderHash(finalizedBlockHash)
 
   let safeBlockHash = ethHash update.safeBlockHash
-  if safeBlockHash != common.Hash256():
+  if safeBlockHash != default(common.Hash256):
     if not ben.chain.isCanonical(safeBlockHash):
       warn "Safe block not in canonical chain",
         hash=safeBlockHash.short
       raise invalidForkChoiceState("safe head not canonical")
     db.safeHeaderHash(safeBlockHash)
 
-  chain.forkChoice(finalizedBlockHash, blockHash).isOkOr:
+  chain.forkChoice(blockHash, finalizedBlockHash).isOkOr:
     return invalidFCU(error, com, header)
 
   # If payload generation was requested, create a new block to be potentially
@@ -203,7 +209,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     info "Created payload for sealing",
       id = id.toHex,
       hash = bundle.executionPayload.blockHash.short,
-      number = bundle.executionPayload.blockNumber
+      number = bundle.executionPayload.blockNumber,
+      attr = attrs
 
     return validFCU(Opt.some(id), blockHash)
 

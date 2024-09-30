@@ -190,11 +190,9 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash256):
   ok()
 
 func parseWithdrawalRequest(data: openArray[byte]): WithdrawalRequest =
-  template copyFrom(T: type, input, a, b): auto =
-    T.initCopyFrom(input.toOpenArray(a, b))
   WithdrawalRequest(
-    sourceAddress: array[20, byte].copyFrom(data, 0, 19),
-    validatorPubkey: array[48, byte].copyFrom(data, 20, 20+47),
+    sourceAddress: Address.copyFrom(data, 0),
+    validatorPubkey: Bytes48.copyFrom(data, 20),
     amount: uint64.fromBytesLE(data.toOpenArray(68, 68+7)),
   )
 
@@ -223,19 +221,16 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[Request] =
   statedb.persist(clearEmptyAccount = true)
 
   for i in 0..<res.len div 76:
-    let start = i * 76
     result.add Request(
       requestType: WithdrawalRequestType,
       withdrawal: parseWithdrawalRequest(res.toOpenArray(i, i + 75))
     )
 
 func parseConsolidationRequest(data: openArray[byte]): ConsolidationRequest =
-  template copyFrom(T: type, input, a, b): auto =
-    T.initCopyFrom(input.toOpenArray(a, b))
   ConsolidationRequest(
-    sourceAddress: array[20, byte].copyFrom(data, 0, 19),
-    sourcePubkey: array[48, byte].copyFrom(data, 20, 20+47),
-    targetPubkey: array[48, byte].copyFrom(data, 68, 68+47),
+    sourceAddress: Address.copyFrom(data, 0),
+    sourcePubkey: Bytes48.copyFrom(data, 20),
+    targetPubkey: Bytes48.copyFrom(data, 68),
   )
 
 proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[Request] =

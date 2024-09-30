@@ -15,7 +15,7 @@ import
   ./core/chain,
   ./core/tx_pool,
   ./sync/peers,
-  ./sync/[beacon, flare],
+  ./sync/flare,
   # ./sync/snap, # -- todo
   ./beacon/beacon_engine,
   ./common,
@@ -29,7 +29,6 @@ export
   chain,
   tx_pool,
   peers,
-  beacon,
   flare,
   #snap,
   full,
@@ -52,7 +51,6 @@ type
     networkLoop*: Future[void]
     peerManager*: PeerManagerRef
     # snapSyncRef*: SnapSyncRef # -- todo
-    beaconSyncRef*: BeaconSyncRef
     flareSyncRef*: FlareSyncRef
     beaconEngine*: BeaconEngineRef
     metricsServer*: MetricsHttpServerRef
@@ -71,8 +69,6 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.peerManager.stop()
   #if nimbus.snapSyncRef.isNil.not:
   #  nimbus.snapSyncRef.stop()
-  if nimbus.beaconSyncRef.isNil.not:
-    nimbus.beaconSyncRef.stop()
   if nimbus.metricsServer.isNil.not:
     await nimbus.metricsServer.stop()
 

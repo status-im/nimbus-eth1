@@ -54,7 +54,7 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.blocks = parseBlocks(node["blocks"])
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
   result.genesisHeader = rlp.decode(genesisRLP, EthBlock).header
-  result.lastBlockHash = Hash256(data: hexToByteArray[32](node["lastblockhash"].getStr))
+  result.lastBlockHash = Hash32(hexToByteArray[32](node["lastblockhash"].getStr))
   result.network = node["network"].getStr
   result.pre = node["pre"]
 

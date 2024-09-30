@@ -18,6 +18,7 @@ import
 export eth_api_types
 
 createRpcSigsFromNim(RpcClient):
+  proc web3_clientVersion(): string
   proc eth_chainId(): Quantity
   proc eth_getBlockByHash(data: BlockHash, fullTransactions: bool): Opt[BlockObject]
   proc eth_getBlockByNumber(

@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[os, enumutils],
+  std/[os, enumutils, exitprocs],
   confutils,
   confutils/std/net,
   chronicles,
@@ -26,7 +26,10 @@ import
   ./network_metadata,
   ./common/common_utils,
   ./rpc/
-    [rpc_web3_api, rpc_eth_api, rpc_discovery_api, rpc_portal_api, rpc_portal_debug_api],
+    [
+      rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_api,
+      rpc_portal_debug_api,
+    ],
   ./database/content_db,
   ./portal_node,
   ./version,
@@ -41,7 +44,11 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
   else:
     Opt.none(T)
 
-proc run(config: PortalConf) {.raises: [CatchableError].} =
+proc run(
+    config: PortalConf
+): (PortalNode, Opt[MetricsHttpServerRef], Opt[RpcHttpServer], Opt[RpcWebSocketServer]) {.
+    raises: [CatchableError]
+.} =
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
@@ -53,7 +60,30 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   if pathExists.isErr():
     fatal "Failed to create data directory",
       dataDir = config.dataDir, error = pathExists.error
-    quit 1
+    quit QuitFailure
+
+  # Make sure multiple instances to the same dataDir do not exist
+  let
+    lockFilePath = config.dataDir.string / "fluffy.lock"
+    lockFlags = {OpenFlags.Create, OpenFlags.Read, OpenFlags.Write}
+    lockFileHandleResult = openFile(lockFilePath, lockFlags)
+
+  if lockFileHandleResult.isErr():
+    fatal "Failed to open lock file", error = ioErrorMsg(lockFileHandleResult.error)
+    quit QuitFailure
+
+  let lockFileHandle = lockFile(lockFileHandleResult.value(), LockType.Exclusive)
+  if lockFileHandle.isErr():
+    fatal "Please ensure no other fluffy instances are running with the same data directory",
+      dataDir = config.dataDir
+    quit QuitFailure
+
+  let lockFileIoHandle = lockFileHandle.value()
+  addExitProc(
+    proc() =
+      discard unlockFile(lockFileIoHandle)
+      discard closeFile(lockFileIoHandle.handle)
+  )
 
   ## Network configuration
   let
@@ -152,7 +182,7 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
   let
     portalProtocolConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
-      config.disablePoke,
+      config.disablePoke, config.maxGossipNodes,
     )
 
     portalNodeConfig = PortalNodeConfig(
@@ -185,61 +215,96 @@ proc run(config: PortalConf) {.raises: [CatchableError].} =
     quit 1
 
   ## Start metrics HTTP server
-  if config.metricsEnabled:
-    let
-      address = config.metricsAddress
-      port = config.metricsPort
-      url = "http://" & $address & ":" & $port & "/metrics"
+  let metricsServer =
+    if config.metricsEnabled:
+      let
+        address = config.metricsAddress
+        port = config.metricsPort
+        url = "http://" & $address & ":" & $port & "/metrics"
 
-      server = MetricsHttpServerRef.new($address, port).valueOr:
-        error "Could not instantiate metrics HTTP server", url, error
+        server = MetricsHttpServerRef.new($address, port).valueOr:
+          error "Could not instantiate metrics HTTP server", url, error
+          quit QuitFailure
+
+      info "Starting metrics HTTP server", url
+      try:
+        waitFor server.start()
+      except MetricsError as exc:
+        fatal "Could not start metrics HTTP server",
+          url, error_msg = exc.msg, error_name = exc.name
         quit QuitFailure
 
-    info "Starting metrics HTTP server", url
-    try:
-      waitFor server.start()
-    except MetricsError as exc:
-      fatal "Could not start metrics HTTP server",
-        url, error_msg = exc.msg, error_name = exc.name
-      quit QuitFailure
+      Opt.some(server)
+    else:
+      Opt.none(MetricsHttpServerRef)
 
-  ## Start discovery v5 protocol and the Portal node.
-  d.start()
+  ## Start the Portal node.
   node.start()
 
   ## Start the JSON-RPC APIs
-  if config.rpcEnabled:
-    let ta = initTAddress(config.rpcAddress, config.rpcPort)
 
-    let rpcHttpServer = RpcHttpServer.new()
-    # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
-    # that reach that limit (in hex, for gossip method).
-    rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+  let rpcFlags = getRpcFlags(config.rpcApi)
 
-    rpcHttpServer.installDiscoveryApiHandlers(d)
-    rpcHttpServer.installWeb3ApiHandlers()
-    if node.stateNetwork.isSome():
-      rpcHttpServer.installPortalApiHandlers(
-        node.stateNetwork.value.portalProtocol, "state"
-      )
-    if node.historyNetwork.isSome():
-      rpcHttpServer.installEthApiHandlers(
-        node.historyNetwork.value, node.beaconLightClient, node.stateNetwork
-      )
-      rpcHttpServer.installPortalApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-      rpcHttpServer.installPortalDebugApiHandlers(
-        node.historyNetwork.value.portalProtocol, "history"
-      )
-    if node.beaconNetwork.isSome():
-      rpcHttpServer.installPortalApiHandlers(
-        node.beaconNetwork.value.portalProtocol, "beacon"
-      )
+  proc setupRpcServer(
+      rpcServer: RpcHttpServer | RpcWebSocketServer
+  ) {.raises: [CatchableError].} =
+    for rpcFlag in rpcFlags:
+      case rpcFlag
+      of RpcFlag.eth:
+        rpcServer.installEthApiHandlers(
+          node.historyNetwork, node.beaconLightClient, node.stateNetwork
+        )
+      of RpcFlag.debug:
+        rpcServer.installDebugApiHandlers(node.stateNetwork)
+      of RpcFlag.portal:
+        if node.historyNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.historyNetwork.value.portalProtocol, "history"
+          )
+        if node.beaconNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.beaconNetwork.value.portalProtocol, "beacon"
+          )
+        if node.stateNetwork.isSome():
+          rpcServer.installPortalApiHandlers(
+            node.stateNetwork.value.portalProtocol, "state"
+          )
+      of RpcFlag.portal_debug:
+        if node.historyNetwork.isSome():
+          rpcServer.installPortalDebugApiHandlers(
+            node.historyNetwork.value.portalProtocol, "history"
+          )
+      of RpcFlag.discovery:
+        rpcServer.installDiscoveryApiHandlers(d)
 
-    rpcHttpServer.start()
+    rpcServer.start()
 
-  runForever()
+  let rpcHttpServer =
+    if config.rpcEnabled:
+      let
+        ta = initTAddress(config.rpcAddress, config.rpcPort)
+        rpcHttpServer = RpcHttpServer.new()
+      # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
+      # that reach that limit (in hex, for gossip method).
+      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+      setupRpcServer(rpcHttpServer)
+
+      Opt.some(rpcHttpServer)
+    else:
+      Opt.none(RpcHttpServer)
+
+  let rpcWsServer =
+    if config.wsEnabled:
+      let
+        ta = initTAddress(config.rpcAddress, config.wsPort)
+        rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
+      setupRpcServer(rpcWsServer)
+
+      Opt.some(rpcWsServer)
+    else:
+      Opt.none(RpcWebSocketServer)
+
+  return (node, metricsServer, rpcHttpServer, rpcWsServer)
 
 when isMainModule:
   {.pop.}
@@ -249,6 +314,56 @@ when isMainModule:
   )
   {.push raises: [].}
 
-  case config.cmd
-  of PortalCmd.noCommand:
-    run(config)
+  let (node, metricsServer, rpcHttpServer, rpcWsServer) =
+    case config.cmd
+    of PortalCmd.noCommand:
+      run(config)
+
+  # Ctrl+C handling
+  proc controlCHandler() {.noconv.} =
+    when defined(windows):
+      # workaround for https://github.com/nim-lang/Nim/issues/4057
+      try:
+        setupForeignThreadGc()
+      except Exception as exc:
+        raiseAssert exc.msg # shouldn't happen
+
+    notice "Shutting down after having received SIGINT"
+    node.state = PortalNodeState.Stopping
+
+  try:
+    setControlCHook(controlCHandler)
+  except Exception as exc: # TODO Exception
+    warn "Cannot set ctrl-c handler", msg = exc.msg
+
+  while node.state == PortalNodeState.Running:
+    try:
+      poll()
+    except CatchableError as e:
+      warn "Exception in poll()", exc = e.name, err = e.msg
+
+  if rpcWsServer.isSome():
+    let server = rpcWsServer.get()
+    try:
+      server.stop()
+      waitFor server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
+
+  if rpcHttpServer.isSome():
+    let server = rpcHttpServer.get()
+    try:
+      waitFor server.stop()
+      waitFor server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
+
+  if metricsServer.isSome():
+    let server = metricsServer.get()
+    try:
+      waitFor server.stop()
+      waitFor server.close()
+    except CatchableError as e:
+      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
+
+  waitFor node.stop()

@@ -385,6 +385,12 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
+    flareChunkSize* {.
+      hidden
+      desc: "Number of blocks per database transaction for flare sync"
+      defaultValue: 0
+      name: "debug-flare-chunk-size" .}: int
+
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles
@@ -566,7 +572,7 @@ type
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
-  parseInt(p).T
+  parseBiggestUInt(p).T
 
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
@@ -671,7 +677,7 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   of "holesky": return some HoleskyNet
   else:
     try:
-      some parseInt(network).NetworkId
+      some parseBiggestUInt(network).NetworkId
     except CatchableError:
       error "Failed to parse network name or id", network
       quit QuitFailure
@@ -728,7 +734,7 @@ func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
 
   ok(ENode(
     pubkey: pk,
-    address: Address(
+    address: enode.Address(
       ip: utils.ipv4(tr.ip.get()),
       udpPort: Port(tr.udp.get()),
       tcpPort: Port(tr.tcp.get())
