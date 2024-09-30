@@ -13,6 +13,7 @@
 import
   pkg/chronos,
   pkg/stew/[interval_set, sorted_set],
+  ../../core/chain,
   ../sync_desc,
   ./worker_config
 
@@ -155,7 +156,7 @@ func layout*(ctx: FlareCtxRef): var LinkedHChainsLayout =
 
 func db*(ctx: FlareCtxRef): CoreDbRef =
   ## Getter
-  ctx.chain.com.db
+  ctx.pool.chain.db
 
 # ------------------------------------------------------------------------------
 # Public logging/debugging helpers

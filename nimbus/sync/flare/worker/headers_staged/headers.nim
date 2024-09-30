@@ -13,7 +13,7 @@
 import
   std/options,
   pkg/[chronicles, chronos, results],
-  pkg/eth/p2p,
+  pkg/eth/[common, p2p],
   pkg/stew/interval_set,
   ../../../protocol,
   ../../../protocol/eth/eth_types,

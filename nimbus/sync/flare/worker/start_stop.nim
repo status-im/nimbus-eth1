@@ -12,6 +12,7 @@
 
 import
   pkg/eth/[common, p2p],
+  ../../../core/chain,
   ../../protocol,
   ../worker_desc,
   "."/[blocks_staged, blocks_unproc, db, headers_staged, headers_unproc]
@@ -85,10 +86,6 @@ proc setupDatabase*(ctx: FlareCtxRef) =
   ctx.headersUnprocInit()
   ctx.blocksUnprocInit()
 
-  # Initalise for `persistBlocks()`. Note that the `ctx.chain` is of
-  # type `ForkedChainRef` while `ctx.pool.chain` is a `ChainRef`
-  ctx.pool.chain = ctx.chain.com.newChain()
-
   # Load initial state from database if there is any
   ctx.dbLoadLinkedHChainsLayout()
 
@@ -110,11 +107,11 @@ proc setupDatabase*(ctx: FlareCtxRef) =
 
 proc setupRpcMagic*(ctx: FlareCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.chain.com.syncFinalisedBlockHash = ctx.updateBeaconHeaderCB
+  ctx.pool.chain.com.syncFinalisedBlockHash = ctx.updateBeaconHeaderCB
 
 proc destroyRpcMagic*(ctx: FlareCtxRef) =
   ## Helper for `release()`
-  ctx.chain.com.syncFinalisedBlockHash = SyncFinalisedBlockHashCB(nil)
+  ctx.pool.chain.com.syncFinalisedBlockHash = SyncFinalisedBlockHashCB(nil)
 
 # ---------
 

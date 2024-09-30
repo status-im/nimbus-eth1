@@ -13,6 +13,7 @@
 import
   pkg/[chronicles, chronos, eth/p2p, results],
   pkg/stew/[interval_set, sorted_set],
+  ../core/chain,
   ./flare/[worker, worker_desc],
   "."/[sync_desc, sync_sched, protocol]
 
@@ -61,6 +62,8 @@ proc init*(
   var desc = T()
   desc.initSync(ethNode, chain, maxPeers)
   desc.ctx.pool.nBodiesBatch = chunkSize
+  # Initalise for `persistBlocks()`
+  desc.ctx.pool.chain = chain.com.newChain()
   desc
 
 proc start*(ctx: FlareSyncRef) =
