@@ -16,7 +16,7 @@ import
   pkg/stew/sorted_set,
   ../worker_desc,
   ./update/metrics,
-  "."/[blocks_unproc, db, headers_staged, headers_unproc]
+  "."/[blocks_unproc, db, headers_staged, headers_unproc, helpers]
 
 logScope:
   topics = "flare update"

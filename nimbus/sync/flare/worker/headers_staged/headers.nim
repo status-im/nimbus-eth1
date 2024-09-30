@@ -15,8 +15,10 @@ import
   pkg/[chronicles, chronos, results],
   pkg/eth/p2p,
   pkg/stew/interval_set,
-  "../../.."/[protocol, types],
-  ../../worker_desc
+  ../../../protocol,
+  ../../../protocol/eth/eth_types,
+  ../../worker_desc,
+  ../helpers
 
 logScope:
   topics = "flare headers"
@@ -53,7 +55,7 @@ proc headersFetchReversed*(
     useHash = (topHash != EMPTY_ROOT_HASH)
     req = block:
       if useHash:
-        BlocksRequest(
+        EthBlocksRequest(
           maxResults: ivReq.len.uint,
           skip:       0,
           reverse:    true,
@@ -61,7 +63,7 @@ proc headersFetchReversed*(
             isHash:   true,
             hash:     topHash))
       else:
-        BlocksRequest(
+        EthBlocksRequest(
           maxResults: ivReq.len.uint,
           skip:       0,
           reverse:    true,

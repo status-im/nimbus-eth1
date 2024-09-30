@@ -24,7 +24,6 @@ import
   stew/byteutils,
   ./trace_config,
   ./eth/eth_types,
-  ../types,
   ../../utils/utils
 
 export
@@ -181,7 +180,7 @@ p2pProtocol eth68(version = ethVersion,
 
   requestResponse:
     # User message 0x03: GetBlockHeaders.
-    proc getBlockHeaders(peer: Peer, request: BlocksRequest) =
+    proc getBlockHeaders(peer: Peer, request: EthBlocksRequest) =
       when trEthTracePacketsOk:
         trace trEthRecvReceived & "GetBlockHeaders (0x03)", peer,
           count=request.maxResults

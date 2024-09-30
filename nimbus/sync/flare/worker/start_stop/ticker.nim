@@ -15,7 +15,7 @@ import
   std/strutils,
   pkg/[chronos, chronicles, eth/common, stint],
   ../../../../utils/prettify,
-  ../../../types
+  ../helpers
 
 logScope:
   topics = "ticker"
@@ -72,22 +72,22 @@ proc flareTicker(t: TickerRef) {.gcsafe.} =
   if data != t.lastStats or
      tickerLogSuppressMax < (now - t.visited):
     let
-      T = data.stateTop.toStr
-      B = data.base.toStr
-      L = data.least.toStr
-      F = data.final.toStr
-      Z = data.beacon.toStr
+      T = data.stateTop.bnStr
+      B = data.base.bnStr
+      L = data.least.bnStr
+      F = data.final.bnStr
+      Z = data.beacon.bnStr
 
       hS = if data.nHdrStaged == 0: "n/a"
-           else: data.hdrStagedTop.toStr & "(" & $data.nHdrStaged & ")"
+           else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
       hU = if data.nHdrUnprocFragm == 0: "n/a"
-           else: data.hdrUnprocTop.toStr & "(" &
+           else: data.hdrUnprocTop.bnStr & "(" &
                  data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
 
       bS = if data.nBlkStaged == 0: "n/a"
-           else: data.blkStagedBottom.toStr & "(" & $data.nBlkStaged & ")"
+           else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
       bU = if data.nBlkUnprocFragm == 0: "n/a"
-           else: data.blkUnprocTop.toStr & "(" &
+           else: data.blkUnprocTop.bnStr & "(" &
                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 
       reorg = data.reorg

@@ -15,8 +15,9 @@ import
   pkg/[chronicles, chronos, results],
   pkg/eth/p2p,
   pkg/stew/interval_set,
-  "../../.."/[protocol, types],
-  ../../worker_desc
+  ../../../protocol,
+  ../../worker_desc,
+  ../helpers
 
 logScope:
   topics = "flare bodies"

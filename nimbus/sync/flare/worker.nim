@@ -16,7 +16,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/[blocks_staged, db, headers_staged, headers_unproc,
+  ./worker/[blocks_staged, db, headers_staged, headers_unproc, helpers,
             start_stop, update],
   ./worker_desc
 

@@ -13,8 +13,7 @@
 import
   chronicles,
   results,
-  eth/[common, p2p, p2p/private/p2p_types],
-  ../../types
+  eth/[common, p2p, p2p/private/p2p_types]
 
 logScope:
   topics = "eth-wire"
@@ -40,6 +39,11 @@ type
     initialized*: bool
     bestBlockHash*: Hash256
     bestDifficulty*: DifficultyInt
+
+  EthBlocksRequest* = object
+    startBlock*: BlockHashOrNumber
+    maxResults*, skip*: uint
+    reverse*: bool
 
 const
   maxStateFetch* = 384
@@ -73,7 +77,7 @@ method getBlockBodies*(ctx: EthWireBase,
   notImplemented("getBlockBodies")
 
 method getBlockHeaders*(ctx: EthWireBase,
-                        req: BlocksRequest):
+                        req: EthBlocksRequest):
                           Result[seq[BlockHeader], string]
     {.base, gcsafe.} =
   notImplemented("getBlockHeaders")

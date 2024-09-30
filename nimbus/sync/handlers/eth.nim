@@ -16,7 +16,7 @@ import
   stew/endians2,
   eth/p2p,
   eth/p2p/peer_pool,
-  ".."/[types, protocol],
+  ../protocol,
   ../protocol/eth/eth_types,
   ../../core/[chain, tx_pool]
 
@@ -367,7 +367,7 @@ method getBlockBodies*(ctx: EthWireRef,
   return ok(list)
 
 method getBlockHeaders*(ctx: EthWireRef,
-                        req: BlocksRequest):
+                        req: EthBlocksRequest):
                           Result[seq[BlockHeader], string]
     {.gcsafe.} =
   try:
