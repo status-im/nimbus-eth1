@@ -77,11 +77,7 @@ import
   chronos,
   eth/[p2p, p2p/peer_pool],
   stew/keyed_queue,
-  "."/[handlers, sync_desc]
-
-static:
-  # type `EthWireRef` is needed in `initSync()`
-  type silenceUnusedhandlerComplaint {.used.} = EthWireRef # dummy directive
+  ./sync_desc
 
 type
   ActiveBuddies[S,W] = ##\
@@ -354,12 +350,12 @@ proc initSync*[S,W](
     slots: int;
       ) =
   ## Constructor
+
   # Leave one extra slot so that it can holds a *zombie* even if all slots
   # are full. The effect is that a re-connect on the latest zombie will be
   # rejected as long as its worker descriptor is registered.
-  dsc.ctx = CtxRef[S](
-    ethWireCtx: cast[EthWireRef](node.protocolState protocol.eth),
-    buddiesMax: max(1, slots + 1))
+  dsc.ctx = CtxRef[S](buddiesMax: max(1, slots + 1))
+
   dsc.pool = node.peerPool
   dsc.buddies.init(dsc.ctx.buddiesMax)
 

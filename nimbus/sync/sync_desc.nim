@@ -16,8 +16,7 @@
 {.push raises: [].}
 
 import
-  eth/p2p,
-  ./handlers/eth
+  eth/p2p
 
 type
   BuddyRunState* = enum
@@ -40,7 +39,6 @@ type
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
     buddiesMax*: int            ## Max number of buddies
-    ethWireCtx*: EthWireRef     ## Eth protocol wire context (if available)
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
     pool*: S                    ## Shared context for all worker peers
