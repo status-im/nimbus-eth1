@@ -16,7 +16,7 @@ import
   pkg/stew/sorted_set,
   ../worker_desc,
   ./update/metrics,
-  "."/[blocks_unproc, db, headers_staged, headers_unproc]
+  "."/[blocks_unproc, db, headers_staged, headers_unproc, helpers]
 
 logScope:
   topics = "flare update"
@@ -72,7 +72,7 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
     least:       z,
     leastParent: ctx.lhc.beacon.header.parentHash,
     final:       z,
-    finalHash:   rlpHeader.keccakHash)
+    finalHash:   rlpHeader.keccak256)
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
@@ -115,7 +115,7 @@ proc mergeAdjacentChains(ctx: FlareCtxRef): bool =
     base:        ctx.layout.final,               # `B`
     baseHash:    ctx.layout.finalHash,
     least:       ctx.layout.final,               # `L`
-    leastParent: ctx.dbPeekParentHash(ctx.layout.final).expect "Hash256",
+    leastParent: ctx.dbPeekParentHash(ctx.layout.final).expect "Hash32",
     final:       ctx.layout.final,               # `F`
     finalHash:   ctx.layout.finalHash)
 

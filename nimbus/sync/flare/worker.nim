@@ -16,7 +16,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/[blocks_staged, db, headers_staged, headers_unproc,
+  ./worker/[blocks_staged, db, headers_staged, headers_unproc, helpers,
             start_stop, update],
   ./worker_desc
 
@@ -88,14 +88,13 @@ proc start*(buddy: FlareBuddyRef): bool =
     debug info & " failed", peer=buddy.peer
     return false
 
-  buddy.ctrl.multiOk = true
   debug info, peer=buddy.peer
   true
 
 proc stop*(buddy: FlareBuddyRef) =
   ## Clean up this peer
   debug "RUNSTOP", peer=buddy.peer, nInvocations=buddy.only.nMultiLoop,
-    lastIdleGap=buddy.only.multiRunIdle.toStr(2)
+    lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 
 # ------------------------------------------------------------------------------
@@ -139,30 +138,13 @@ proc runDaemon*(ctx: FlareCtxRef) {.async.} =
   ctx.updateMetrics()
 
 
-proc runSingle*(buddy: FlareBuddyRef) {.async.} =
-  ## This peer worker is invoked if the peer-local flag `buddy.ctrl.multiOk`
-  ## is set `false` which is the default mode. This flag is updated by the
-  ## worker when deemed appropriate.
-  ## * For all workers, there can be only one `runSingle()` function active
-  ##   simultaneously for all worker peers.
-  ## * There will be no `runMulti()` function active for the same worker peer
-  ##   simultaneously
-  ## * There will be no `runPool()` iterator active simultaneously.
-  ##
-  ## Note that this function runs in `async` mode.
-  ##
-  const info = "RUNSINGLE"
-  raiseAssert info & " should not be used: peer=" & $buddy.peer
-
-
 proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
   ## Once started, the function `runPool()` is called for all worker peers in
-  ## sequence as the body of an iteration as long as the function returns
-  ## `false`. There will be no other worker peer functions activated
-  ## simultaneously.
+  ## sequence as long as this function returns `false`. There will be no other
+  ## `runPeer()` functions activated while `runPool()` is active.
   ##
   ## This procedure is started if the global flag `buddy.ctx.poolMode` is set
-  ## `true` (default is `false`.) It will be automatically reset before the
+  ## `true` (default is `false`.) The flag will be automatically reset before
   ## the loop starts. Re-setting it again results in repeating the loop. The
   ## argument `laps` (starting with `0`) indicated the currend lap of the
   ## repeated loops.
@@ -177,12 +159,11 @@ proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
   true # stop
 
 
-proc runMulti*(buddy: FlareBuddyRef) {.async.} =
-  ## This peer worker is invoked if the `buddy.ctrl.multiOk` flag is set
-  ## `true` which is typically done after finishing `runSingle()`. This
-  ## instance can be simultaneously active for all peer workers.
+proc runPeer*(buddy: FlareBuddyRef) {.async.} =
+  ## This peer worker method is repeatedly invoked (exactly one per peer) while
+  ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##
-  const info = "RUNMULTI"
+  const info = "RUNPEER"
   let peer = buddy.peer
 
   if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
@@ -190,7 +171,7 @@ proc runMulti*(buddy: FlareBuddyRef) {.async.} =
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
   trace info, peer, nInvocations=buddy.only.nMultiLoop,
-    lastIdleGap=buddy.only.multiRunIdle.toStr(2)
+    lastIdleGap=buddy.only.multiRunIdle.toStr
 
   # Update beacon header when needed. For the beacon header, a hash will be
   # auto-magically made available via RPC. The corresponding header is then

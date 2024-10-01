@@ -29,14 +29,14 @@ const
 type
   SavedDbStateSpecs = tuple
     number: BlockNumber
-    hash: Hash256
-    parent: Hash256
+    hash: Hash32
+    parent: Hash32
 
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
 # ------------------------------------------------------------------------------
 
-formatIt(Hash256):
+formatIt(Hash32):
   it.data.toHex
 
 # ------------------------------------------------------------------------------
@@ -58,7 +58,7 @@ proc fetchSavedState(ctx: FlareCtxRef): Opt[SavedDbStateSpecs] =
   val.number = db.getSavedStateBlockNumber()
 
   if db.getBlockHash(val.number, val.hash):
-    var header: BlockHeader
+    var header: Header
     if db.getBlockHeader(val.hash, header):
       val.parent = header.parentHash
       return ok(val)
@@ -127,7 +127,7 @@ proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
 proc dbStashHeaders*(
     ctx: FlareCtxRef;
     first: BlockNumber;
-    revBlobs: openArray[Blob];
+    revBlobs: openArray[seq[byte]];
       ) =
   ## Temporarily store header chain to persistent db (oblivious of the chain
   ## layout.) The headers should not be stashed if they are imepreted and
@@ -149,19 +149,19 @@ proc dbStashHeaders*(
     kvt.put(key.toOpenArray, data).isOkOr:
       raiseAssert info & ": put() failed: " & $$error
 
-proc dbPeekHeader*(ctx: FlareCtxRef; num: BlockNumber): Opt[BlockHeader] =
+proc dbPeekHeader*(ctx: FlareCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
   let
     key = flareHeaderKey(num)
     rc = ctx.db.ctx.getKvt().get(key.toOpenArray)
   if rc.isOk:
     try:
-      return ok(rlp.decode(rc.value, BlockHeader))
+      return ok(rlp.decode(rc.value, Header))
     except RlpError:
       discard
   err()
 
-proc dbPeekParentHash*(ctx: FlareCtxRef; num: BlockNumber): Opt[Hash256] =
+proc dbPeekParentHash*(ctx: FlareCtxRef; num: BlockNumber): Opt[Hash32] =
   ## Retrieve some stashed parent hash.
   ok (? ctx.dbPeekHeader num).parentHash
 

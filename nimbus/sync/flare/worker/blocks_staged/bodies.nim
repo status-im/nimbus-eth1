@@ -13,20 +13,14 @@
 import
   std/options,
   pkg/[chronicles, chronos, results],
-  pkg/eth/p2p,
+  pkg/eth/[common, p2p],
   pkg/stew/interval_set,
-  "../../.."/[protocol, types],
-  ../../worker_desc
+  ../../../protocol,
+  ../../worker_desc,
+  ../helpers
 
 logScope:
   topics = "flare bodies"
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-func toStr(a: chronos.Duration): string =
-  a.toStr(2)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -39,7 +33,7 @@ proc fetchRegisterError*(buddy: FlareBuddyRef) =
 
 proc bodiesFetch*(
     buddy: FlareBuddyRef;
-    blockHashes: seq[Hash256];
+    blockHashes: seq[Hash32];
     info: static[string];
       ): Future[Result[seq[BlockBody],void]]
       {.async.} =
