@@ -78,7 +78,7 @@ proc calculateTransactionData(
   for i, t in items:
     try:
       let tx = distinctBase(t)
-      tr.put(rlp.encode(i), tx)
+      tr.put(rlp.encode(uint64 i), tx)
     except CatchableError as e:
       # tr.put interface can raise exception
       raiseAssert(e.msg)
@@ -97,7 +97,7 @@ proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash256 {.raises:
         address: distinctBase(w.address).to(EthAddress),
         amount: distinctBase(w.amount),
       )
-      tr.put(rlp.encode(i), rlp.encode(withdrawal))
+      tr.put(rlp.encode(uint64 i), rlp.encode(withdrawal))
     except CatchableError as e:
       raiseAssert(e.msg)
 

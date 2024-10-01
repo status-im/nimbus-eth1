@@ -101,7 +101,7 @@ method handleAnnouncedTxsHashes*(
   ctx: EthWireBase;
   peer: Peer;
   txTypes: seq[byte];
-  txSizes: openArray[int];
+  txSizes: openArray[uint64];
   txHashes: openArray[Hash32];
     ): Result[void, string]
     {.base, gcsafe.} =

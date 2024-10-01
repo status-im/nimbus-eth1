@@ -96,7 +96,7 @@ proc calculateTransactionData(
   for i, t in items:
     let tx = distinctBase(t)
     txSize = txSize + uint64(len(tx))
-    tr.merge(rlp.encode(i), tx).expect "merge data"
+    tr.merge(rlp.encode(uint64 i), tx).expect "merge data"
     txHashes.add(txOrHash toFixedBytes(keccakHash(tx)))
   let rootHash = tr.state(updateOk = true).expect "hash"
   (rootHash, txHashes, txSize)

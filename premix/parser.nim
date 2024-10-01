@@ -107,10 +107,10 @@ proc fromJson*(n: JsonNode, name: string, x: var TxType) =
   else:
     x = hexToInt(node.getStr(), int).TxType
 
-proc fromJson*(n: JsonNode, name: string, x: var seq[Bytes32]) =
+proc fromJson*[T: Bytes32|Hash32](n: JsonNode, name: string, x: var seq[T]) =
   let node = n[name]
-  var h: Bytes32
-  x = newSeqOfCap[Bytes32](node.len)
+  var h: T
+  x = newSeqOfCap[T](node.len)
   for v in node:
     hexToByteArray(v.getStr(), h.data)
     x.add h

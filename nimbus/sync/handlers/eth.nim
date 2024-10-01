@@ -448,7 +448,7 @@ method handleAnnouncedTxsHashes*(
       ctx: EthWireRef;
       peer: Peer;
       txTypes: seq[byte];
-      txSizes: openArray[int];
+      txSizes: openArray[uint64];
       txHashes: openArray[Hash32];
         ): Result[void, string] =
   when extraTraceMessages:
