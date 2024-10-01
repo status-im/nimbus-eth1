@@ -33,6 +33,7 @@ proc init*(T: type PortalRpcClient, rpcClient: RpcClient): T =
   T(rpcClient)
 
 func toPortalRpcError(e: ref CatchableError): PortalRpcError =
+  # TODO: Update this to parse the error message json
   if e.msg.contains("-39001"):
     ContentNotFound
   elif e.msg.contains("-32602"):
@@ -64,6 +65,12 @@ template toBytes(content: string): seq[byte] =
     hexToSeqByte(content)
   except ValueError as e:
     raiseAssert(e.msg)
+
+template valueOrErr[T](res: Result[T, string], error: PortalRpcError): auto =
+  if res.isOk():
+    ok(res.value)
+  else:
+    err(error)
 
 proc historyGetContent(
     client: PortalRpcClient, contentKey: string
@@ -97,92 +104,44 @@ proc historyGetBlockHeader*(
     headerBytes = headerWithProof.header.asSeq()
 
   if validateContent:
-    validateBlockHeaderBytes(headerBytes, blockHash).isOkOr:
-      return err(ContentValidationFailed)
+    validateBlockHeaderBytes(headerBytes, blockHash).valueOrErr(ContentValidationFailed)
   else:
-    decodeRlp(headerBytes, BlockHeader).isOkOr:
-      return err(InvalidContentValue)
-
-proc historyGetBlockBody*(
-    client: PortalRpcClient, blockHeader: BlockHeader, validateContent = true
-): Future[Result[BlockBody, PortalRpcError]] {.async: (raises: []).} =
-  ## Fetches the block body for the given block header from the Portal History
-  ## Network. The data is first looked up in the node's local database before
-  ## trying to fetch it from the network. If you have the block header then this
-  ## function should be preferred over the one below which does an extra call to
-  ## lookup the block header by blockHash.
-
-  let
-    contentKey = blockBodyContentKey(blockHeader.blockHash()).encode().asSeq().to0xHex()
-    content = ?await client.historyGetContent(contentKey)
-
-  if validateContent:
-    validateBlockBodyBytes(content.toBytes(), blockHeader).isOkOr:
-      return err(ContentValidationFailed)
-  else:
-    decodeBlockBodyBytes(content.toBytes()).isOkOr:
-      return err(InvalidContentValue)
+    decodeRlp(headerBytes, BlockHeader).valueOrErr(InvalidContentValue)
 
 proc historyGetBlockBody*(
     client: PortalRpcClient, blockHash: BlockHash, validateContent = true
 ): Future[Result[BlockBody, PortalRpcError]] {.async: (raises: []).} =
   ## Fetches the block body for the given block hash from the Portal History
   ## Network. The data is first looked up in the node's local database before
-  ## trying to fetch it from the network. The block header is fetched first and
-  ## then the block body.
+  ## trying to fetch it from the network. If validateContent is true, the
+  ## block header is fetched first in order to run the content validation.
 
   let
     contentKey = blockBodyContentKey(blockHash).encode().asSeq().to0xHex()
     content = ?await client.historyGetContent(contentKey)
-    blockHeader = ?await client.historyGetBlockHeader(blockHash)
 
   if validateContent:
-    validateBlockBodyBytes(content.toBytes(), blockHeader).isOkOr:
-      return err(ContentValidationFailed)
+    let blockHeader = ?await client.historyGetBlockHeader(blockHash)
+    validateBlockBodyBytes(content.toBytes(), blockHeader).valueOrErr(ContentValidationFailed)
   else:
-    decodeBlockBodyBytes(content.toBytes()).isOkOr:
-      return err(InvalidContentValue)
-
-proc historyGetReceipts*(
-    client: PortalRpcClient, blockHeader: BlockHeader, validateContent = true
-): Future[Result[seq[Receipt], PortalRpcError]] {.async: (raises: []).} =
-  ## Fetches the receipts for the given block header from the Portal History
-  ## Network. The data is first looked up in the node's local database before
-  ## trying to fetch it from the network. If you have the block header then this
-  ## function should be preferred over the one below which does an extra call to
-  ## lookup the block header by blockHash.
-
-  let
-    contentKey = receiptsContentKey(blockHeader.blockHash()).encode().asSeq().to0xHex()
-    content = ?await client.historyGetContent(contentKey)
-
-  if validateContent:
-    validateReceiptsBytes(content.toBytes(), blockHeader.receiptsRoot).isOkOr:
-      return err(ContentValidationFailed)
-  else:
-    let receipts = decodeSsz(content.toBytes(), PortalReceipts).valueOr:
-      return err(InvalidContentValue)
-    seq[Receipt].fromPortalReceipts(receipts).isOkOr:
-      return err(InvalidContentValue)
+    decodeBlockBodyBytes(content.toBytes()).valueOrErr(InvalidContentValue)
 
 proc historyGetReceipts*(
     client: PortalRpcClient, blockHash: BlockHash, validateContent = true
 ): Future[Result[seq[Receipt], PortalRpcError]] {.async: (raises: []).} =
   ## Fetches the receipts for the given block hash from the Portal History
   ## Network. The data is first looked up in the node's local database before
-  ## trying to fetch it from the network. The block header is fetched first and
-  ## then the receipts.
+  ## trying to fetch it from the network. If validateContent is true, the
+  ## block header is fetched first in order to run the content validation.
 
   let
     contentKey = receiptsContentKey(blockHash).encode().asSeq().to0xHex()
     content = ?await client.historyGetContent(contentKey)
-    blockHeader = ?await client.historyGetBlockHeader(blockHash)
 
   if validateContent:
-    validateReceiptsBytes(content.toBytes(), blockHeader.receiptsRoot).isOkOr:
-      return err(ContentValidationFailed)
+    let blockHeader = ?await client.historyGetBlockHeader(blockHash)
+    validateReceiptsBytes(content.toBytes(), blockHeader.receiptsRoot).valueOrErr(ContentValidationFailed)
   else:
     let receipts = decodeSsz(content.toBytes(), PortalReceipts).valueOr:
       return err(InvalidContentValue)
-    seq[Receipt].fromPortalReceipts(receipts).isOkOr:
-      return err(InvalidContentValue)
+    seq[Receipt].fromPortalReceipts(receipts).valueOrErr(InvalidContentValue)

@@ -16,8 +16,8 @@ import
   eth/p2p/discoveryv5/enr,
   eth/keys,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../rpc/rpc_discovery_api,
-  ./test_helpers
+  ../../rpc/rpc_discovery_api,
+  ../test_helpers
 
 type TestCase = ref object
   localDiscovery: discv5_protocol.Protocol
