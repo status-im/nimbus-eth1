@@ -71,10 +71,10 @@ type
     ## on-the-fly.
     ##
     ## This compaction feature nees an abstraction of the hash link object
-    ## which is either a `Hash32` or a `Blob` of length at most 31 bytes.
+    ## which is either a `Hash32` or a `seq[byte]` of length at most 31 bytes.
     ## This leaves two ways of representing an empty/void `HashKey` type.
-    ## It may be available as an empty `Blob` of zero length, or the
-    ## `Hash32` type of the Keccak hash of an empty `Blob` (see constant
+    ## It may be available as an empty `seq[byte]` of zero length, or the
+    ## `Hash32` type of the Keccak hash of an empty `seq[byte]` (see constant
     ## `EMPTY_ROOT_HASH`.)
     ##
     ## For performance, storing blobs as `seq` is avoided, instead storing
@@ -296,8 +296,8 @@ func to*(pid: PathID; T: type NibblesBuf): T =
   else:
     nibbles
 
-func `@`*(pid: PathID): Blob =
-  ## Representation of a `PathID` as a `Blob`. The result is left padded
+func `@`*(pid: PathID): seq[byte] =
+  ## Representation of a `PathID` as a `seq[byte]`. The result is left padded
   ## by a zero LSB if the path length was odd.
   result = pid.pfx.toBytesBE.toSeq
   if pid.length < 63:
@@ -305,11 +305,11 @@ func `@`*(pid: PathID): Blob =
 
 func to*(lid: HashKey; T: type Hash32): T =
   ## Returns the `Hash236` key if available, otherwise the Keccak hash of
-  ## the `Blob` version.
+  ## the `seq[byte]` version.
   if lid.len == 32:
     Hash32(lid.buf)
   elif 0 < lid.len:
-    lid.data.keccakHash
+    lid.data.keccak256
   else:
     EMPTY_ROOT_HASH
 
@@ -358,7 +358,7 @@ func digestTo*(data: openArray[byte]; T: type HashKey): T =
     (addr result.data[0]).copyMem(unsafeAddr data[0], data.len)
   else:
     result.len = 32
-    result.buf = data.keccakHash.data
+    result.buf = data.keccak256.data
 
 func normal*(a: PathID): PathID =
   ## Normalise path ID representation

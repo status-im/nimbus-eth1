@@ -24,7 +24,7 @@ import
 
 type
   ProofData = ref object
-    chain: seq[Blob]
+    chain: seq[seq[byte]]
     missing: bool
     error: AristoError
     hike: Hike
@@ -33,7 +33,7 @@ type
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc createPartDb(ps: PartStateRef; data: seq[Blob]; info: static[string]) =
+proc createPartDb(ps: PartStateRef; data: seq[seq[byte]]; info: static[string]) =
   # Set up production MPT
   block:
     let rc = ps.partPut(data, AutomaticPayload)
@@ -54,13 +54,13 @@ proc preLoadAristoDb(jKvp: JsonNode): PartStateRef =
   let ps = PartStateRef.init AristoDbRef.init()
 
   # Collect rlp-encodede node blobs
-  var proof: seq[Blob]
+  var proof: seq[seq[byte]]
   for (k,v) in jKvp.pairs:
     let
       key = hexToSeqByte(k)
       val = hexToSeqByte(v.getStr())
     if key.len == 32:
-      doAssert key == val.keccakHash.data
+      doAssert key == val.keccak256.data
       if val != @[0x80u8]: # Exclude empty item
         proof.add val
 
@@ -83,7 +83,7 @@ proc collectAddresses(node: JsonNode, collect: var HashSet[EthAddress]) =
       discard
 
 
-proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): Blob =
+proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): seq[byte] =
   ## Modified function `aristo_serialise.serialise()`.
   ##
   const info = "payloadAsBlob"
@@ -109,7 +109,7 @@ proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): Blob =
     rlp.encode pyl.stoData
 
 
-func asExtension(b: Blob; path: Hash32): Blob =
+func asExtension(b: seq[byte]; path: Hash32): seq[byte] =
   var node = rlpFromBytes b
   if node.listLen == 17:
     let nibble = NibblesBuf.fromBytes(path.data)[0]
@@ -149,7 +149,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
   var sample: Table[Hash32,ProofData]
   for a in addresses:
     let
-      path = a.keccakHash
+      path = a.data.keccak256
     var hike: Hike
     let rc = path.hikeUp(VertexID(1), ps.db, Opt.none(VertexRef), hike)
     sample[path] = ProofData(
@@ -186,7 +186,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
         check rc.isOk and rc.value.isNone
 
       # Just for completeness (same a above combined into a single function)
-      check proof.chain.partUntwigPathOk(root, path, Opt.none Blob).isOk
+      check proof.chain.partUntwigPathOk(root, path, Opt.none seq[byte]).isOk
 
     elif proof.error == AristoError 0:
       let

@@ -62,7 +62,7 @@ proc merkleSignDelete*(
 
 proc merkleSignCommit*(
     sdb: MerkleSignRef;
-      ): Result[Hash32,(Blob,AristoError)] =
+      ): Result[Hash32,(seq[byte],AristoError)] =
   ## Finish with the list, calculate signature and return it.
   if sdb.count == 0:
     return ok EMPTY_ROOTHASH

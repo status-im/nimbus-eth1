@@ -264,7 +264,7 @@ proc fetchGenericData*(
     db: AristoDbRef;
     root: VertexID;
     path: openArray[byte];
-      ): Result[Blob,AristoError] =
+      ): Result[seq[byte],AristoError] =
   ## For a generic sub-tree starting at `root`, fetch the data record
   ## indexed by `path`.
   ##

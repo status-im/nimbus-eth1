@@ -33,7 +33,7 @@ proc chainRlpNodes*(
     db: AristoDbRef;
     rvid: RootedVertexID;
     path: NibblesBuf,
-    chain: var seq[Blob];
+    chain: var seq[seq[byte]];
       ): Result[void,AristoError] =
   ## Inspired by the `getBranchAux()` function from `hexary.nim`
   let
@@ -43,7 +43,7 @@ proc chainRlpNodes*(
       return err(PartChnNodeConvError)
 
   # Save rpl encoded node(s)
-  chain &= node.to(seq[Blob])
+  chain &= node.to(seq[seq[byte]])
 
   # Follow up child node
   case vtx.vType:
@@ -70,11 +70,11 @@ proc chainRlpNodes*(
 
 
 proc trackRlpNodes*(
-    chain: openArray[Blob];
+    chain: openArray[seq[byte]];
     topKey: HashKey;
     path: NibblesBuf;
     start = false;
-     ): Result[Blob,AristoError]
+     ): Result[seq[byte],AristoError]
      {.gcsafe, raises: [RlpError]} =
   ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
   if path.len == 0:
@@ -92,7 +92,7 @@ proc trackRlpNodes*(
   var
     node = rlpFromBytes chain[0]
     nChewOff = 0
-    link: Blob
+    link: seq[byte]
 
   # Decode rlp-node and prepare for recursion
   case node.listLen

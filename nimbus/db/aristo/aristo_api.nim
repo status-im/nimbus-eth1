@@ -126,7 +126,7 @@ type
     proc(db: AristoDbRef;
          root: VertexID;
          path: openArray[byte];
-        ): Result[Blob,AristoError]
+        ): Result[seq[byte],AristoError]
         {.noRaise.}
       ## For a generic sub-tree starting at `root`, fetch the data record
       ## indexed by `path`.
@@ -330,7 +330,7 @@ type
   AristoApiPartAccountTwig* =
     proc(db: AristoDbRef;
          accPath: Hash32;
-        ): Result[(seq[Blob],bool), AristoError]
+        ): Result[(seq[seq[byte]],bool), AristoError]
         {.noRaise.}
       ## This function returns a chain of rlp-encoded nodes along the argument
       ## path `(root,path)` followed by a `true` value if the `path` argument
@@ -343,7 +343,7 @@ type
     proc(db: AristoDbRef;
          root: VertexID;
          path: openArray[byte];
-        ): Result[(seq[Blob],bool), AristoError]
+        ): Result[(seq[seq[byte]],bool), AristoError]
         {.noRaise.}
       ## Variant of `partAccountTwig()`.
       ##
@@ -354,16 +354,16 @@ type
     proc(db: AristoDbRef;
          accPath: Hash32;
          stoPath: Hash32;
-        ): Result[(seq[Blob],bool), AristoError]
+        ): Result[(seq[seq[byte]],bool), AristoError]
         {.noRaise.}
       ## Variant of `partAccountTwig()`. Note that the function always returns
       ## an error unless the `accPath` is valid.
 
   AristoApiPartUntwigGeneric* =
-    proc(chain: openArray[Blob];
+    proc(chain: openArray[seq[byte]];
          root: Hash32;
          path: openArray[byte];
-        ): Result[Opt[Blob],AristoError]
+        ): Result[Opt[seq[byte]],AristoError]
         {.noRaise.}
       ## Follow and verify the argument `chain` up unlil the last entry which
       ## must be a leaf node. Extract the payload and pass it on as return
@@ -371,10 +371,10 @@ type
       ## does provably not exist relative to `chain`.
 
   AristoApiPartUntwigGenericOk* =
-    proc(chain: openArray[Blob];
+    proc(chain: openArray[seq[byte]];
          root: Hash32;
          path: openArray[byte];
-         payload: Opt[Blob];
+         payload: Opt[seq[byte]];
         ): Result[void,AristoError]
         {.noRaise.}
       ## Variant of `partUntwigGeneric()`. The function verifies the argument
@@ -386,33 +386,33 @@ type
       ## `isValidBranch()` function from `hexary.nim`.
 
   AristoApiPartUntwigPath* =
-    proc(chain: openArray[Blob];
+    proc(chain: openArray[seq[byte]];
          root: Hash32;
          path: Hash32;
-        ): Result[Opt[Blob],AristoError]
+        ): Result[Opt[seq[byte]],AristoError]
         {.noRaise.}
       ## Variant of `partUntwigGeneric()`.
 
   AristoApiPartUntwigPathOk* =
-    proc(chain: openArray[Blob];
+    proc(chain: openArray[seq[byte]];
          root: Hash32;
          path: Hash32;
-         payload: Opt[Blob];
+         payload: Opt[seq[byte]];
         ): Result[void,AristoError]
         {.noRaise.}
       ## Variant of `partUntwigGenericOk()`.
 
   AristoApiPathAsBlobFn* =
     proc(tag: PathID;
-        ): Blob
+        ): seq[byte]
         {.noRaise.}
       ## Converts the `tag` argument to a sequence of an even number of
-      ## nibbles represented by a `Blob`. If the argument `tag` represents
+      ## nibbles represented by a `seq[byte]`. If the argument `tag` represents
       ## an odd number of nibbles, a zero nibble is appendend.
       ##
       ## This function is useful only if there is a tacit agreement that all
       ## paths used to index database leaf values can be represented as
-      ## `Blob`, i.e. `PathID` type paths with an even number of nibbles.
+      ## `seq[byte]`, i.e. `PathID` type paths with an even number of nibbles.
 
   AristoApiPersistFn* =
     proc(db: AristoDbRef;
@@ -976,22 +976,22 @@ func init*(
         result = api.partStorageTwig(a, b, c)
 
   profApi.partUntwigGeneric =
-    proc(a: openArray[Blob]; b: Hash32; c: openArray[byte]): auto =
+    proc(a: openArray[seq[byte]]; b: Hash32; c: openArray[byte]): auto =
       AristoApiProfPartUntwigGenericFn.profileRunner:
         result = api.partUntwigGeneric(a, b, c)
 
   profApi.partUntwigGenericOk =
-    proc(a: openArray[Blob]; b:Hash32; c:openArray[byte]; d:Opt[Blob]): auto =
+    proc(a: openArray[seq[byte]]; b:Hash32; c:openArray[byte]; d:Opt[seq[byte]]): auto =
       AristoApiProfPartUntwigGenericOkFn.profileRunner:
         result = api.partUntwigGenericOk(a, b, c, d)
 
   profApi.partUntwigPath =
-    proc(a: openArray[Blob]; b, c: Hash32): auto =
+    proc(a: openArray[seq[byte]]; b, c: Hash32): auto =
       AristoApiProfPartUntwigPathFn.profileRunner:
         result = api.partUntwigPath(a, b, c)
 
   profApi.partUntwigPathOk =
-    proc(a: openArray[Blob]; b, c: Hash32; d: Opt[Blob]): auto =
+    proc(a: openArray[seq[byte]]; b, c: Hash32; d: Opt[seq[byte]]): auto =
       AristoApiProfPartUntwigPathOkFn.profileRunner:
         result = api.partUntwigPathOk(a, b, c, d)
 

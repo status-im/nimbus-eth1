@@ -68,11 +68,11 @@ proc dumpAccounts*(
     data: PackedAccountRange;
       ): string =
   ## Dump accounts data in parseable Ascii text
-  proc ppStr(blob: Blob): string =
+  proc ppStr(blob: seq[byte]): string =
     blob.toHex
 
   proc ppStr(proof: SnapProof): string =
-    proof.to(Blob).ppStr
+    proof.to(seq[byte]).ppStr
 
   proc ppStr(hash: Hash32): string =
     hash.data.toHex

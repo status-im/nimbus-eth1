@@ -81,8 +81,8 @@ method collect*(collector: RdbKeyLruCounter, output: MetricHandler) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[Blob,(AristoError,string)] =
-  var res: Blob
+proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[seq[byte],(AristoError,string)] =
+  var res: seq[byte]
   let onData = proc(data: openArray[byte]) =
     res = @data
 

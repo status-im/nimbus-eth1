@@ -25,7 +25,7 @@ export
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
-func pp*(b: Blob): string =
+func pp*(b: seq[byte]): string =
   b.toHex.pp(hex = true)
 
 func pp*(a: EthAddress): string =

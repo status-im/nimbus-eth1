@@ -70,7 +70,7 @@ proc partGenericTwig*(
     db: AristoDbRef;
     root: VertexID;
     path: NibblesBuf;
-      ): Result[(seq[Blob],bool), AristoError] =
+      ): Result[(seq[seq[byte]],bool), AristoError] =
   ## This function returns a chain of rlp-encoded nodes along the argument
   ## path `(root,path)` followed by a `true` value if the `path` argument
   ## exists in the database. If the argument `path` is not on the database,
@@ -78,7 +78,7 @@ proc partGenericTwig*(
   ##
   ## Errors will only be returned for invalid paths.
   ##
-  var chain: seq[Blob]
+  var chain: seq[seq[byte]]
   let rc = db.chainRlpNodes((root,root), path, chain)
   if rc.isOk:
     ok((chain, true))
@@ -91,7 +91,7 @@ proc partGenericTwig*(
     db: AristoDbRef;
     root: VertexID;
     path: openArray[byte];
-      ): Result[(seq[Blob],bool), AristoError] =
+      ): Result[(seq[seq[byte]],bool), AristoError] =
   ## Variant of `partGenericTwig()`.
   ##
   ## Note: This function provides a functionality comparable to the
@@ -102,7 +102,7 @@ proc partGenericTwig*(
 proc partAccountTwig*(
     db: AristoDbRef;
     accPath: Hash32;
-      ): Result[(seq[Blob],bool), AristoError] =
+      ): Result[(seq[seq[byte]],bool), AristoError] =
   ## Variant of `partGenericTwig()`.
   db.partGenericTwig(VertexID(1), NibblesBuf.fromBytes accPath.data)
 
@@ -110,7 +110,7 @@ proc partStorageTwig*(
     db: AristoDbRef;
     accPath: Hash32;
     stoPath: Hash32;
-      ): Result[(seq[Blob],bool), AristoError] =
+      ): Result[(seq[seq[byte]],bool), AristoError] =
   ## Variant of `partGenericTwig()`. Note that the function returns an error unless
   ## the argument `accPath` is valid.
   let vid = db.fetchStorageID(accPath).valueOr:
@@ -122,10 +122,10 @@ proc partStorageTwig*(
 # ----------
 
 proc partUntwigGeneric*(
-    chain: openArray[Blob];
+    chain: openArray[seq[byte]];
     root: Hash32;
     path: openArray[byte];
-      ): Result[Opt[Blob],AristoError] =
+      ): Result[Opt[seq[byte]],AristoError] =
   ## Verify the chain of rlp-encoded nodes and return the payload. If a
   ## `Opt.none()` result is returned then the `path` argument does provably
   ## not exist relative to `chain`.
@@ -136,25 +136,25 @@ proc partUntwigGeneric*(
     if rc.isOk:
       return ok(Opt.some rc.value)
     if rc.error in TrackRlpNodesNoEntry:
-      return ok(Opt.none Blob)
+      return ok(Opt.none seq[byte])
     return err(rc.error)
   except RlpError:
     return err(PartTrkRlpError)
 
 proc partUntwigPath*(
-    chain: openArray[Blob];
+    chain: openArray[seq[byte]];
     root: Hash32;
     path: Hash32;
-      ): Result[Opt[Blob],AristoError] =
+      ): Result[Opt[seq[byte]],AristoError] =
   ## Variant of `partUntwigGeneric()`.
   chain.partUntwigGeneric(root, path.data)
 
 
 proc partUntwigGenericOk*(
-    chain: openArray[Blob];
+    chain: openArray[seq[byte]];
     root: Hash32;
     path: openArray[byte];
-    payload: Opt[Blob];
+    payload: Opt[seq[byte]];
       ): Result[void,AristoError] =
   ## Verify the argument `chain` of rlp-encoded nodes against the `path`
   ## and `payload` arguments.
@@ -168,10 +168,10 @@ proc partUntwigGenericOk*(
     err(PartTrkPayloadMismatch)
 
 proc partUntwigPathOk*(
-    chain: openArray[Blob];
+    chain: openArray[seq[byte]];
     root: Hash32;
     path: Hash32;
-    payload: Opt[Blob];
+    payload: Opt[seq[byte]];
       ): Result[void,AristoError] =
   ## Variant of `partUntwigGenericOk()`.
   chain.partUntwigGenericOk(root, path.data, payload)
@@ -180,7 +180,7 @@ proc partUntwigPathOk*(
 
 proc partPut*(
     ps: PartStateRef;                         # Partial database descriptor
-    proof: openArray[Blob];                   # RLP encoded proof nodes
+    proof: openArray[seq[byte]];              # RLP encoded proof nodes
     mode = AutomaticPayload;                  # Try accounts, otherwise generic
       ): Result[void,AristoError] =
   ## Decode an argument list `proof` of RLP encoded nodes and add them to

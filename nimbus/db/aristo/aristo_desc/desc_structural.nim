@@ -61,7 +61,7 @@ type
     ## while generic have RawData
     case pType*: PayloadType
     of RawData:
-      rawBlob*: Blob                 ## Opaque data, default value
+      rawBlob*: seq[byte]            ## Opaque data, default value
     of AccountData:
       account*: AristoAccount
       stoID*: StorageID              ## Storage vertex ID (if any)

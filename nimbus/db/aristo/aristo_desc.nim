@@ -52,7 +52,7 @@ type
     db*: AristoDbRef
     count*: uint
     error*: AristoError
-    errKey*: Blob
+    errKey*: seq[byte]
 
   DudesRef = ref object
     ## List of peers accessing the same database. This list is layzily allocated
