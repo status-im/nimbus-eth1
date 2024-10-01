@@ -94,7 +94,7 @@ proc start*(buddy: FlareBuddyRef): bool =
 proc stop*(buddy: FlareBuddyRef) =
   ## Clean up this peer
   debug "RUNSTOP", peer=buddy.peer, nInvocations=buddy.only.nMultiLoop,
-    lastIdleGap=buddy.only.multiRunIdle.toStr(2)
+    lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 
 # ------------------------------------------------------------------------------
@@ -171,7 +171,7 @@ proc runPeer*(buddy: FlareBuddyRef) {.async.} =
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
   trace info, peer, nInvocations=buddy.only.nMultiLoop,
-    lastIdleGap=buddy.only.multiRunIdle.toStr(2)
+    lastIdleGap=buddy.only.multiRunIdle.toStr
 
   # Update beacon header when needed. For the beacon header, a hash will be
   # auto-magically made available via RPC. The corresponding header is then

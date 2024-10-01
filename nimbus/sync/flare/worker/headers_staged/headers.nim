@@ -27,12 +27,6 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-# For some reason neither `formatIt` nor `$` works as expected with logging
-# the `elapsed` variable, below. This might be due to the fact that the
-# `headersFetchReversed()` function is a generic one, i.e. a template.
-func toStr(a: chronos.Duration): string =
-  a.toStr(2)
-
 proc registerError(buddy: FlareBuddyRef) =
   buddy.only.nHdrRespErrors.inc
   if fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
