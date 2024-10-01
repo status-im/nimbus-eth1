@@ -54,14 +54,14 @@ proc retrieveLeaf(
 
   return err(FetchPathNotFound)
 
-proc cachedAccLeaf*(db: AristoDbRef; accPath: Hash256): Opt[VertexRef] =
+proc cachedAccLeaf*(db: AristoDbRef; accPath: Hash32): Opt[VertexRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetAccLeaf(accPath) or
     db.accLeaves.get(accPath) or
     Opt.none(VertexRef)
 
-proc cachedStoLeaf*(db: AristoDbRef; mixPath: Hash256): Opt[VertexRef] =
+proc cachedStoLeaf*(db: AristoDbRef; mixPath: Hash32): Opt[VertexRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetStoLeaf(mixPath) or
@@ -70,7 +70,7 @@ proc cachedStoLeaf*(db: AristoDbRef; mixPath: Hash256): Opt[VertexRef] =
 
 proc retrieveAccountLeaf(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[VertexRef,AristoError] =
   if (let leafVtx = db.cachedAccLeaf(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
@@ -93,7 +93,7 @@ proc retrieveMerkleHash(
     db: AristoDbRef;
     root: VertexID;
     updateOk: bool;
-      ): Result[Hash256,AristoError] =
+      ): Result[Hash32,AristoError] =
   let key =
     if updateOk:
       db.computeKey((root, root)).valueOr:
@@ -106,7 +106,7 @@ proc retrieveMerkleHash(
           return ok(EMPTY_ROOT_HASH) # empty sub-tree
         return err(error)
       key
-  ok key.to(Hash256)
+  ok key.to(Hash32)
 
 
 proc hasPayload(
@@ -123,7 +123,7 @@ proc hasPayload(
 
 proc hasAccountPayload(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[bool,AristoError] =
   let error = db.retrieveAccountLeaf(accPath).errorOr:
     return ok(true)
@@ -134,7 +134,7 @@ proc hasAccountPayload(
 
 proc fetchStorageIdImpl(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
     enaStoRootMissing = false;
       ): Result[VertexID,AristoError] =
   ## Helper function for retrieving a storage (vertex) ID for a given account.
@@ -155,7 +155,7 @@ proc fetchStorageIdImpl(
 
 proc fetchAccountHike*(
     db: AristoDbRef;                   # Database
-    accPath: Hash256;                  # Implies a storage ID (if any)
+    accPath: Hash32;                  # Implies a storage ID (if any)
     accHike: var Hike
       ): Result[void,AristoError] =
   ## Expand account path to account leaf or return failure
@@ -178,7 +178,7 @@ proc fetchAccountHike*(
 
 proc fetchStorageID*(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[VertexID,AristoError] =
   ## Public helper function for retrieving a storage (vertex) ID for a given account. This
   ## function returns a separate error `FetchPathStoRootMissing` (from `FetchPathNotFound`)
@@ -188,8 +188,8 @@ proc fetchStorageID*(
 
 proc retrieveStoragePayload(
     db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ): Result[UInt256,AristoError] =
   let mixPath = mixUp(accPath, stoPath)
 
@@ -211,8 +211,8 @@ proc retrieveStoragePayload(
 
 proc hasStoragePayload(
     db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ): Result[bool,AristoError] =
   let error = db.retrieveStoragePayload(accPath, stoPath).errorOr:
     return ok(true)
@@ -235,7 +235,7 @@ proc fetchLastSavedState*(
 
 proc fetchAccountRecord*(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[AristoAccount,AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
@@ -247,13 +247,13 @@ proc fetchAccountRecord*(
 proc fetchAccountState*(
     db: AristoDbRef;
     updateOk: bool;
-      ): Result[Hash256,AristoError] =
+      ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the account root.
   db.retrieveMerkleHash(VertexID(1), updateOk)
 
 proc hasPathAccount*(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[bool,AristoError] =
   ## For an account record indexed by `accPath` query whether this record exists
   ## on the database.
@@ -277,7 +277,7 @@ proc fetchGenericState*(
     db: AristoDbRef;
     root: VertexID;
     updateOk: bool;
-      ): Result[Hash256,AristoError] =
+      ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the argument `root`.
   db.retrieveMerkleHash(root, updateOk)
 
@@ -294,8 +294,8 @@ proc hasPathGeneric*(
 
 proc fetchStorageData*(
     db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ): Result[UInt256,AristoError] =
   ## For a storage tree related to account `accPath`, fetch the data record
   ## from the database indexed by `path`.
@@ -304,9 +304,9 @@ proc fetchStorageData*(
 
 proc fetchStorageState*(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
     updateOk: bool;
-      ): Result[Hash256,AristoError] =
+      ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
   let stoID = db.fetchStorageIdImpl(accPath).valueOr:
     if error == FetchPathNotFound:
@@ -316,8 +316,8 @@ proc fetchStorageState*(
 
 proc hasPathStorage*(
     db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ): Result[bool,AristoError] =
   ## For a storage tree related to account `accPath`, query whether the data
   ## record indexed by `path` exists on the database.
@@ -326,7 +326,7 @@ proc hasPathStorage*(
 
 proc hasStorageData*(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[bool,AristoError] =
   ## For a storage tree related to account `accPath`, query whether there
   ## is a non-empty data storage area at all.

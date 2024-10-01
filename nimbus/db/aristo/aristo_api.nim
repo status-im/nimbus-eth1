@@ -50,7 +50,7 @@ type
 
   AristoApiDeleteAccountRecordFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[void,AristoError]
         {.noRaise.}
       ## Delete the account leaf entry addressed by the argument `path`. If
@@ -80,8 +80,8 @@ type
 
   AristoApiDeleteStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a given account argument `accPath`, this function deletes the
@@ -93,7 +93,7 @@ type
 
   AristoApiDeleteStorageTreeFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[void,AristoError]
         {.noRaise.}
       ## Variant of `deleteStorageData()` for purging the whole storage tree
@@ -109,7 +109,7 @@ type
 
   AristoApiFetchAccountRecordFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[AristoAccount,AristoError]
         {.noRaise.}
       ## Fetch an account record from the database indexed by `accPath`.
@@ -117,7 +117,7 @@ type
   AristoApiFetchAccountStateFn* =
     proc(db: AristoDbRef;
          updateOk: bool;
-        ): Result[Hash256,AristoError]
+        ): Result[Hash32,AristoError]
         {.noRaise.}
       ## Fetch the Merkle hash of the account root. Force update if the
       ## argument `updateOK` is set `true`.
@@ -135,15 +135,15 @@ type
     proc(db: AristoDbRef;
          root: VertexID;
          updateOk: bool;
-        ): Result[Hash256,AristoError]
+        ): Result[Hash32,AristoError]
         {.noRaise.}
       ## Fetch the Merkle hash of the argument `root`. Force update if the
       ## argument `updateOK` is set `true`.
 
   AristoApiFetchStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
         ): Result[Uint256,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, fetch the data
@@ -151,9 +151,9 @@ type
 
   AristoApiFetchStorageStateFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
          updateOk: bool;
-        ): Result[Hash256,AristoError]
+        ): Result[Hash32,AristoError]
         {.noRaise.}
       ## Fetch the Merkle hash of the storage root related to `accPath`. Force
       ## update if the argument `updateOK` is set `true`.
@@ -239,7 +239,7 @@ type
 
   AristoApiHasPathAccountFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For an account record indexed by `accPath` query whether this record
@@ -256,8 +256,8 @@ type
 
   AristoApiHasPathStorageFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, query whether the
@@ -265,7 +265,7 @@ type
 
   AristoApiHasStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, query whether there
@@ -295,7 +295,7 @@ type
 
   AristoApiMergeAccountRecordFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
          accRec: AristoAccount;
         ): Result[bool,AristoError]
         {.noRaise.}
@@ -318,8 +318,8 @@ type
 
   AristoApiMergeStorageDataFn* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
          stoData: UInt256;
         ): Result[void,AristoError]
         {.noRaise.}
@@ -329,7 +329,7 @@ type
 
   AristoApiPartAccountTwig* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[(seq[Blob],bool), AristoError]
         {.noRaise.}
       ## This function returns a chain of rlp-encoded nodes along the argument
@@ -352,8 +352,8 @@ type
 
   AristoApiPartStorageTwig* =
     proc(db: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
         ): Result[(seq[Blob],bool), AristoError]
         {.noRaise.}
       ## Variant of `partAccountTwig()`. Note that the function always returns
@@ -361,7 +361,7 @@ type
 
   AristoApiPartUntwigGeneric* =
     proc(chain: openArray[Blob];
-         root: Hash256;
+         root: Hash32;
          path: openArray[byte];
         ): Result[Opt[Blob],AristoError]
         {.noRaise.}
@@ -372,7 +372,7 @@ type
 
   AristoApiPartUntwigGenericOk* =
     proc(chain: openArray[Blob];
-         root: Hash256;
+         root: Hash32;
          path: openArray[byte];
          payload: Opt[Blob];
         ): Result[void,AristoError]
@@ -387,16 +387,16 @@ type
 
   AristoApiPartUntwigPath* =
     proc(chain: openArray[Blob];
-         root: Hash256;
-         path: Hash256;
+         root: Hash32;
+         path: Hash32;
         ): Result[Opt[Blob],AristoError]
         {.noRaise.}
       ## Variant of `partUntwigGeneric()`.
 
   AristoApiPartUntwigPathOk* =
     proc(chain: openArray[Blob];
-         root: Hash256;
-         path: Hash256;
+         root: Hash32;
+         path: Hash32;
          payload: Opt[Blob];
         ): Result[void,AristoError]
         {.noRaise.}
@@ -831,7 +831,7 @@ func init*(
         result = api.commit(a)
 
   profApi.deleteAccountRecord =
-    proc(a: AristoDbRef; b: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash32): auto =
       AristoApiProfDeleteAccountRecordFn.profileRunner:
         result = api.deleteAccountRecord(a, b)
 
@@ -846,12 +846,12 @@ func init*(
         result = api.deleteGenericTree(a, b)
 
   profApi.deleteStorageData =
-    proc(a: AristoDbRef; b: Hash256, c: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash32, c: Hash32): auto =
       AristoApiProfDeleteStorageDataFn.profileRunner:
         result = api.deleteStorageData(a, b, c)
 
   profApi.deleteStorageTree =
-    proc(a: AristoDbRef; b: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash32): auto =
       AristoApiProfDeleteStorageTreeFn.profileRunner:
         result = api.deleteStorageTree(a, b)
 
@@ -861,7 +861,7 @@ func init*(
         result = api.fetchLastSavedState(a)
 
   profApi.fetchAccountRecord =
-    proc(a: AristoDbRef; b: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash32): auto =
       AristoApiProfFetchAccountRecordFn.profileRunner:
         result = api.fetchAccountRecord(a, b)
 
@@ -881,12 +881,12 @@ func init*(
         result = api.fetchGenericState(a, b, c)
 
   profApi.fetchStorageData =
-    proc(a: AristoDbRef; b, stoPath: Hash256): auto =
+    proc(a: AristoDbRef; b, stoPath: Hash32): auto =
       AristoApiProfFetchStorageDataFn.profileRunner:
         result = api.fetchStorageData(a, b, stoPath)
 
   profApi.fetchStorageState =
-    proc(a: AristoDbRef; b: Hash256; c: bool): auto =
+    proc(a: AristoDbRef; b: Hash32; c: bool): auto =
       AristoApiProfFetchStorageStateFn.profileRunner:
         result = api.fetchStorageState(a, b, c)
 
@@ -911,7 +911,7 @@ func init*(
         result = api.forkTx(a, b)
 
   profApi.hasPathAccount =
-    proc(a: AristoDbRef; b: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash32): auto =
       AristoApiProfHasPathAccountFn.profileRunner:
         result = api.hasPathAccount(a, b)
 
@@ -921,12 +921,12 @@ func init*(
         result = api.hasPathGeneric(a, b, c)
 
   profApi.hasPathStorage =
-    proc(a: AristoDbRef; b, c: Hash256): auto =
+    proc(a: AristoDbRef; b, c: Hash32): auto =
       AristoApiProfHasPathStorageFn.profileRunner:
         result = api.hasPathStorage(a, b, c)
 
   profApi.hasStorageData =
-    proc(a: AristoDbRef; b: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash32): auto =
       AristoApiProfHasStorageDataFn.profileRunner:
         result = api.hasStorageData(a, b)
 
@@ -946,7 +946,7 @@ func init*(
          result = api.nForked(a)
 
   profApi.mergeAccountRecord =
-    proc(a: AristoDbRef; b: Hash256; c: AristoAccount): auto =
+    proc(a: AristoDbRef; b: Hash32; c: AristoAccount): auto =
       AristoApiProfMergeAccountRecordFn.profileRunner:
         result = api.mergeAccountRecord(a, b, c)
 
@@ -956,12 +956,12 @@ func init*(
         result = api.mergeGenericData(a, b, c, d)
 
   profApi.mergeStorageData =
-    proc(a: AristoDbRef; b, c: Hash256, d: Uint256): auto =
+    proc(a: AristoDbRef; b, c: Hash32, d: Uint256): auto =
       AristoApiProfMergeStorageDataFn.profileRunner:
         result = api.mergeStorageData(a, b, c, d)
 
   profApi.partAccountTwig =
-    proc(a: AristoDbRef; b: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash32): auto =
       AristoApiProfPartAccountTwigFn.profileRunner:
         result = api.partAccountTwig(a, b)
 
@@ -971,27 +971,27 @@ func init*(
         result = api.partGenericTwig(a, b, c)
 
   profApi.partStorageTwig =
-    proc(a: AristoDbRef; b: Hash256; c: Hash256): auto =
+    proc(a: AristoDbRef; b: Hash32; c: Hash32): auto =
       AristoApiProfPartStorageTwigFn.profileRunner:
         result = api.partStorageTwig(a, b, c)
 
   profApi.partUntwigGeneric =
-    proc(a: openArray[Blob]; b: Hash256; c: openArray[byte]): auto =
+    proc(a: openArray[Blob]; b: Hash32; c: openArray[byte]): auto =
       AristoApiProfPartUntwigGenericFn.profileRunner:
         result = api.partUntwigGeneric(a, b, c)
 
   profApi.partUntwigGenericOk =
-    proc(a: openArray[Blob]; b:Hash256; c:openArray[byte]; d:Opt[Blob]): auto =
+    proc(a: openArray[Blob]; b:Hash32; c:openArray[byte]; d:Opt[Blob]): auto =
       AristoApiProfPartUntwigGenericOkFn.profileRunner:
         result = api.partUntwigGenericOk(a, b, c, d)
 
   profApi.partUntwigPath =
-    proc(a: openArray[Blob]; b, c: Hash256): auto =
+    proc(a: openArray[Blob]; b, c: Hash32): auto =
       AristoApiProfPartUntwigPathFn.profileRunner:
         result = api.partUntwigPath(a, b, c)
 
   profApi.partUntwigPathOk =
-    proc(a: openArray[Blob]; b, c: Hash256; d: Opt[Blob]): auto =
+    proc(a: openArray[Blob]; b, c: Hash32; d: Opt[Blob]): auto =
       AristoApiProfPartUntwigPathOkFn.profileRunner:
         result = api.partUntwigPathOk(a, b, c, d)
 

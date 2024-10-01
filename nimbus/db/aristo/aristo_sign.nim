@@ -62,7 +62,7 @@ proc merkleSignDelete*(
 
 proc merkleSignCommit*(
     sdb: MerkleSignRef;
-      ): Result[Hash256,(Blob,AristoError)] =
+      ): Result[Hash32,(Blob,AristoError)] =
   ## Finish with the list, calculate signature and return it.
   if sdb.count == 0:
     return ok EMPTY_ROOTHASH
@@ -75,7 +75,7 @@ proc merkleSignCommit*(
         return ok EMPTY_ROOTHASH
     raiseAssert "merkleSignCommit(): " & $error
 
-  ok sign.to(Hash256)
+  ok sign.to(Hash32)
 
 # ------------------------------------------------------------------------------
 # End

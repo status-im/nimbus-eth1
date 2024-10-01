@@ -48,7 +48,7 @@ proc serialise(
     ok rlp.encode Account(
       nonce:       pyl.account.nonce,
       balance:     pyl.account.balance,
-      storageRoot: key.to(Hash256),
+      storageRoot: key.to(Hash32),
       codeHash:    pyl.account.codeHash)
   of StoData:
     ok rlp.encode pyl.stoData

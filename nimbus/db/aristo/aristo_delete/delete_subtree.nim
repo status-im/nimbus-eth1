@@ -42,7 +42,7 @@ proc delSubTreeNow(
 proc delStoTreeNow(
   db: AristoDbRef;                   # Database, top layer
   rvid: RootedVertexID;              # Root vertex
-  accPath: Hash256;                  # Accounts cache designator
+  accPath: Hash32;                   # Accounts cache designator
   stoPath: NibblesBuf;               # Current storage path
     ): Result[void,AristoError] =
   ## Implementation of *delete* sub-trie.
@@ -82,7 +82,7 @@ proc delSubTreeImpl*(
 proc delStoTreeImpl*(
     db: AristoDbRef;                   # Database, top layer
     rvid: RootedVertexID;              # Root vertex
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[void,AristoError] =
   ## Implementation of *delete* sub-trie.
   db.delStoTreeNow(rvid, accPath, NibblesBuf())

@@ -39,7 +39,7 @@ type
     ## data/tree reference is not part of the account (see `LeafPayload` below.)
     nonce*:     AccountNonce         ## Some `uint64` type
     balance*:   UInt256
-    codeHash*:  Hash256
+    codeHash*:  Hash32
 
   PayloadType* = enum
     ## Type of leaf data.
@@ -89,12 +89,12 @@ type
 
   VidVtxPair* = object
     ## Handy helper structure
-    vid*: VertexID                    ## Table lookup vertex ID (if any)
-    vtx*: VertexRef                   ## Reference to vertex
+    vid*: VertexID                   ## Table lookup vertex ID (if any)
+    vtx*: VertexRef                  ## Reference to vertex
 
   SavedState* = object
     ## Last saved state
-    key*: Hash256                    ## Some state hash (if any)
+    key*: Hash32                     ## Some state hash (if any)
     serial*: uint64                  ## Generic identifier from application
 
   LayerRef* = ref LayerObj
@@ -125,8 +125,8 @@ type
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                        ## Last used vertex ID
 
-    accLeaves*: Table[Hash256, VertexRef]  ## Account path -> VertexRef
-    stoLeaves*: Table[Hash256, VertexRef]  ## Storage path -> VertexRef
+    accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
+    stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
 
     txUid*: uint                           ## Transaction identifier if positive
 

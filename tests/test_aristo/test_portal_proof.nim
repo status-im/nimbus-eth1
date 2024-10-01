@@ -103,13 +103,13 @@ proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): Blob =
     rlp.encode Account(
       nonce:       pyl.account.nonce,
       balance:     pyl.account.balance,
-      storageRoot: key.to(Hash256),
+      storageRoot: key.to(Hash32),
       codeHash:    pyl.account.codeHash)
   of StoData:
     rlp.encode pyl.stoData
 
 
-func asExtension(b: Blob; path: Hash256): Blob =
+func asExtension(b: Blob; path: Hash32): Blob =
   var node = rlpFromBytes b
   if node.listLen == 17:
     let nibble = NibblesBuf.fromBytes(path.data)[0]
@@ -146,7 +146,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
   node.collectAddresses addresses
 
   # Convert addresses to valid paths (not all addresses might work)
-  var sample: Table[Hash256,ProofData]
+  var sample: Table[Hash32,ProofData]
   for a in addresses:
     let
       path = a.keccakHash
@@ -178,7 +178,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
       # Proof for missing entries
       let
         rVid = proof.hike.root
-        root = ps.db.getKey((rVid,rVid)).to(Hash256)
+        root = ps.db.getKey((rVid,rVid)).to(Hash32)
         chain = proof.chain
 
       block:
@@ -208,7 +208,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
             check rc.value[0] == proof.chain
 
         # Verify proof
-        let root = pq.db.getKey((rVid,rVid)).to(Hash256)
+        let root = pq.db.getKey((rVid,rVid)).to(Hash32)
         block:
           let rc = proof.chain.partUntwigPath(root, path)
           check rc.isOk
@@ -237,7 +237,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
           if rc.isOk and rc.value[1] == true:
             check rc.value[0] == chain
 
-        let root = pq.db.getKey((rVid,rVid)).to(Hash256)
+        let root = pq.db.getKey((rVid,rVid)).to(Hash32)
         block:
           let rc = chain.partUntwigPath(root, path)
           check rc.isOk

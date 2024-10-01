@@ -22,7 +22,7 @@ declareGauge flare_state_block_number, "" &
   "Max block number of imported/executed blocks"
   
 declareGauge flare_base_block_number, "" &
-  "Max block number inital header chain starting at genesis"
+  "Max block number initial header chain starting at genesis"
 
 declareGauge flare_least_block_number, "" &
   "Starting/min block number for higher up headers chain"

@@ -83,7 +83,7 @@ proc trackRlpNodes*(
   # Verify key against rlp-node
   let digest = chain[0].digestTo(HashKey)
   if start:
-    if topKey.to(Hash256) != digest.to(Hash256):
+    if topKey.to(Hash32) != digest.to(Hash32):
       return err(PartTrkFollowUpKeyMismatch)
   else:
     if topKey != digest:

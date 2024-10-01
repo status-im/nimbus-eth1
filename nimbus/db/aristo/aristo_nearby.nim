@@ -452,7 +452,7 @@ iterator rightPairsGeneric*(
 
 iterator rightPairsStorage*(
     db: AristoDbRef;                    # Database layer
-    accPath: Hash256;           # Account the storage data belong to
+    accPath: Hash32;                    # Account the storage data belong to
     start = low(PathID);                # Before or at first value
       ): (PathID,UInt256) =
   ## Variant of `rightPairs()` for a storage tree

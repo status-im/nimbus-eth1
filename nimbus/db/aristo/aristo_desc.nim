@@ -72,7 +72,7 @@ type
     txUidGen*: uint                   ## Tx-relative unique number generator
     dudes: DudesRef                   ## Related DB descriptors
 
-    accLeaves*: LruCache[Hash256, VertexRef]
+    accLeaves*: LruCache[Hash32, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -80,7 +80,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash256, VertexRef]
+    stoLeaves*: LruCache[Hash32, VertexRef]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
@@ -102,13 +102,13 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-template mixUp*(accPath, stoPath: Hash256): Hash256 =
+template mixUp*(accPath, stoPath: Hash32): Hash32 =
   # Insecure but fast way of mixing the values of two hashes, for the purpose
-  # of quick lookups - this is certainly not a good idea for general Hash256
+  # of quick lookups - this is certainly not a good idea for general Hash32
   # values but account paths are generated from accounts which would be hard
   # to create pre-images for, for the purpose of collisions with a particular
   # storage slot
-  var v {.noinit.}: Hash256
+  var v {.noinit.}: Hash32
   for i in 0..<v.data.len:
     # `+` wraps leaving all bits used
     v.data[i] = accPath.data[i] + stoPath.data[i]
@@ -143,11 +143,11 @@ func isValid*(pid: PathID): bool =
 func isValid*(layer: LayerRef): bool =
   layer != LayerRef(nil)
 
-func isValid*(root: Hash256): bool =
+func isValid*(root: Hash32): bool =
   root != EMPTY_ROOT_HASH
 
 func isValid*(key: HashKey): bool =
-  assert key.len != 32 or key.to(Hash256).isValid
+  assert key.len != 32 or key.to(Hash32).isValid
   0 < key.len
 
 func isValid*(vid: VertexID): bool =

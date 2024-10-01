@@ -101,15 +101,15 @@ proc partGenericTwig*(
 
 proc partAccountTwig*(
     db: AristoDbRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[(seq[Blob],bool), AristoError] =
   ## Variant of `partGenericTwig()`.
   db.partGenericTwig(VertexID(1), NibblesBuf.fromBytes accPath.data)
 
 proc partStorageTwig*(
     db: AristoDbRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ): Result[(seq[Blob],bool), AristoError] =
   ## Variant of `partGenericTwig()`. Note that the function returns an error unless
   ## the argument `accPath` is valid.
@@ -123,7 +123,7 @@ proc partStorageTwig*(
 
 proc partUntwigGeneric*(
     chain: openArray[Blob];
-    root: Hash256;
+    root: Hash32;
     path: openArray[byte];
       ): Result[Opt[Blob],AristoError] =
   ## Verify the chain of rlp-encoded nodes and return the payload. If a
@@ -143,8 +143,8 @@ proc partUntwigGeneric*(
 
 proc partUntwigPath*(
     chain: openArray[Blob];
-    root: Hash256;
-    path: Hash256;
+    root: Hash32;
+    path: Hash32;
       ): Result[Opt[Blob],AristoError] =
   ## Variant of `partUntwigGeneric()`.
   chain.partUntwigGeneric(root, path.data)
@@ -152,7 +152,7 @@ proc partUntwigPath*(
 
 proc partUntwigGenericOk*(
     chain: openArray[Blob];
-    root: Hash256;
+    root: Hash32;
     path: openArray[byte];
     payload: Opt[Blob];
       ): Result[void,AristoError] =
@@ -169,8 +169,8 @@ proc partUntwigGenericOk*(
 
 proc partUntwigPathOk*(
     chain: openArray[Blob];
-    root: Hash256;
-    path: Hash256;
+    root: Hash32;
+    path: Hash32;
     payload: Opt[Blob];
       ): Result[void,AristoError] =
   ## Variant of `partUntwigGenericOk()`.
@@ -291,13 +291,13 @@ proc partPut*(
   ok()
 
 
-proc partGetSubTree*(ps: PartStateRef; rootHash: Hash256): VertexID =
+proc partGetSubTree*(ps: PartStateRef; rootHash: Hash32): VertexID =
   ## For the argument `roothash` retrieve the root vertex ID of a particular
   ## sub tree from the partial state descriptor argument `ps`. The function
   ## returns `VertexID(0)` if there is no match.
   ##
   for vid in ps.core.keys:
-    if ps[vid].to(Hash256) == rootHash:
+    if ps[vid].to(Hash32) == rootHash:
       return vid
 
 
@@ -399,7 +399,7 @@ proc partMergeGenericData*(
 
 proc partMergeAccountRecord*(
     ps: PartStateRef;
-    accPath: Hash256;                  # Even nibbled byte path
+    accPath: Hash32;                  # Even nibbled byte path
     accRec: AristoAccount;             # Account data
       ): Result[bool,AristoError] =
   ## ..
@@ -429,8 +429,8 @@ proc partMergeAccountRecord*(
 
 proc mergeStorageData*(
     ps: PartStateRef;
-    accPath: Hash256;                  # Needed for accounts payload
-    stoPath: Hash256;                  # Storage data path (aka key)
+    accPath: Hash32;                   # Needed for accounts payload
+    stoPath: Hash32;                   # Storage data path (aka key)
     stoData: UInt256;                  # Storage data payload value
       ): Result[void,AristoError] =
   block:
