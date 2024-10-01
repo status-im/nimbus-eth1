@@ -136,7 +136,7 @@ template toAccountKey(acc: AccountRef): Hash32 =
   acc.accPath
 
 template toAccountKey(eAddr: EthAddress): Hash32 =
-  eAddr.keccakHash
+  eAddr.keccak256
 
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
@@ -151,7 +151,7 @@ proc resetCoreDbAccount(ac: AccountsLedgerRef, acc: AccountRef) =
 
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
-           root: KeccakHash, storeSlotHash: bool): AccountsLedgerRef =
+           root: Keccak256, storeSlotHash: bool): AccountsLedgerRef =
   new result
   result.ledger = db.ctx.getAccounts()
   result.kvt = db.ctx.getKvt()
@@ -165,7 +165,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
   init(x, db, EMPTY_ROOT_HASH)
 
 # Renamed `rootHash()` => `state()`
-proc state*(ac: AccountsLedgerRef): KeccakHash =
+proc state*(ac: AccountsLedgerRef): Keccak256 =
   const info = "state(): "
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
@@ -310,7 +310,7 @@ proc originalStorageValue(
   # Not in the original values cache - go to the DB.
   let
     slotKey = ac.slots.get(slot).valueOr:
-      slot.toBytesBE.keccakHash
+      slot.toBytesBE.keccak256
     rc = ac.ledger.slotFetch(acc.toAccountKey, slotKey)
   if rc.isOk:
     result = rc.value
@@ -387,7 +387,7 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
     var cached = true
     let slotKey = ac.slots.get(slot).valueOr:
       cached = false
-      let hash = slot.toBytesBE.keccakHash
+      let hash = slot.toBytesBE.keccak256
       ac.slots.put(slot, hash)
       hash
 
@@ -568,7 +568,7 @@ proc incNonce*(ac: AccountsLedgerRef, address: EthAddress) =
 proc setCode*(ac: AccountsLedgerRef, address: EthAddress, code: seq[byte]) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
-  let codeHash = keccakHash(code)
+  let codeHash = keccak256(code)
   if acc.statement.codeHash != codeHash:
     var acc = ac.makeDirty(address)
     acc.statement.codeHash = codeHash
@@ -886,7 +886,7 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArr
 
     let
       slotKey = ac.slots.get(slot).valueOr:
-        slot.toBytesBE.keccakHash
+        slot.toBytesBE.keccak256
       slotProof = ac.ledger.slotProof(addressHash, slotKey).valueOr:
         if error.aErr == FetchPathNotFound:
           storageProof.add(@[])
@@ -897,7 +897,7 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArr
 
   storageProof
 
-proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
+proc state*(db: ReadOnlyStateDB): Keccak256 {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getCodeHash(distinctBase db, address)
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getStorageRoot(distinctBase db, address)
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 = getBalance(distinctBase db, address)

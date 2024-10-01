@@ -249,7 +249,7 @@ proc setBalance*(ldg: LedgerRef, eAddr: EthAddress, balance: UInt256) =
   ldg.ac.setBalance(eAddr, balance)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), balance
 
-proc setCode*(ldg: LedgerRef, eAddr: EthAddress, code: Blob) =
+proc setCode*(ldg: LedgerRef, eAddr: EthAddress, code: seq[byte]) =
   ldg.beginTrackApi LdgSetCodeFn
   ldg.ac.setCode(eAddr, code)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), code
