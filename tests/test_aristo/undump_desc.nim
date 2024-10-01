@@ -13,7 +13,7 @@
 import
   eth/common,
   stint,
-  ../../nimbus/sync/[protocol, types]
+  ../../nimbus/sync/protocol
 
 ## Stripped down version of `sync/snap/range_desc` in order to decode the
 ## snap sync dump samples.
@@ -46,12 +46,12 @@ type
     ## In fact, the `snap/1` driver returns the `Account` structure which is
     ## unwanted overhead, here.
     accKey*: NodeKey
-    accBlob*: Blob
+    accBlob*: seq[byte]
 
   AccountSlotsHeader* = object
     ## Storage root header
     accKey*: NodeKey                ## Owner account, maybe unnecessary
-    storageRoot*: Hash256           ## Start of storage tree
+    storageRoot*: Hash32            ## Start of storage tree
     #subRange*: Opt[NodeTagRange]    ## Sub-range of slot range covered
 
   AccountStorageRange* = object
@@ -67,11 +67,11 @@ type
     data*: seq[SnapStorage]
 
 
-proc to*(tag: NodeTag; T: type Hash256): T =
+proc to*(tag: NodeTag; T: type Hash32): T =
   ## Convert to serialised equivalent
   result.data = tag.UInt256.toBytesBE
 
-proc to*(key: Hash256; T: type NodeTag): T =
+proc to*(key: Hash32; T: type NodeTag): T =
   ## Syntactic sugar
   key.data.NodeKey.to(T)
 

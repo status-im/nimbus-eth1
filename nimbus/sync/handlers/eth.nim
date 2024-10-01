@@ -16,7 +16,7 @@ import
   stew/endians2,
   eth/p2p,
   eth/p2p/peer_pool,
-  ".."/[types, protocol],
+  ../protocol,
   ../protocol/eth/eth_types,
   ../../core/[chain, tx_pool]
 
@@ -24,7 +24,7 @@ logScope:
   topics = "eth-wire"
 
 type
-  HashToTime = TableRef[Hash256, Time]
+  HashToTime = TableRef[Hash32, Time]
 
   EthWireRef* = ref object of EthWireBase
     db: CoreDbRef
@@ -32,7 +32,7 @@ type
     txPool: TxPoolRef
     peerPool: PeerPool
     knownByPeer: Table[Peer, HashToTime]
-    pending: HashSet[Hash256]
+    pending: HashSet[Hash32]
     lastCleanup: Time
 
 const
@@ -57,16 +57,16 @@ proc notImplemented(name: string) {.used.} =
   debug "Wire handler method not implemented", meth = name
 
 proc successorHeader(db: CoreDbRef,
-                     h: BlockHeader,
-                     output: var BlockHeader,
+                     h: Header,
+                     output: var Header,
                      skip = 0'u): bool =
   let offset = 1 + skip.BlockNumber
   if h.number <= (not 0.BlockNumber) - offset:
     result = db.getBlockHeader(h.number + offset, output)
 
 proc ancestorHeader(db: CoreDbRef,
-                     h: BlockHeader,
-                     output: var BlockHeader,
+                     h: Header,
+                     output: var Header,
                      skip = 0'u): bool =
   let offset = 1 + skip.BlockNumber
   if h.number >= offset:
@@ -74,7 +74,7 @@ proc ancestorHeader(db: CoreDbRef,
 
 proc blockHeader(db: CoreDbRef,
                  b: BlockHashOrNumber,
-                 output: var BlockHeader): bool =
+                 output: var Header): bool =
   if b.isHash:
     db.getBlockHeader(b.hash, output)
   else:
@@ -96,7 +96,7 @@ when txpool_enabled:
 
   proc cleanupKnownByPeer(ctx: EthWireRef) =
     let now = getTime()
-    var tmp = HashSet[Hash256]()
+    var tmp = HashSet[Hash32]()
     for _, map in ctx.knownByPeer:
       for hash, time in map:
         if time - now >= POOLED_STORAGE_TIME_LIMIT:
@@ -115,12 +115,12 @@ when txpool_enabled:
 
     ctx.lastCleanup = now
 
-  proc addToKnownByPeer(ctx: EthWireRef, txHashes: openArray[Hash256], peer: Peer) =
+  proc addToKnownByPeer(ctx: EthWireRef, txHashes: openArray[Hash32], peer: Peer) =
     var map: HashToTime
     ctx.knownByPeer.withValue(peer, val) do:
       map = val[]
     do:
-      map = newTable[Hash256, Time]()
+      map = newTable[Hash32, Time]()
       ctx.knownByPeer[peer] = map
 
     for txHash in txHashes:
@@ -128,17 +128,17 @@ when txpool_enabled:
         map[txHash] = getTime()
 
   proc addToKnownByPeer(ctx: EthWireRef,
-                        txHashes: openArray[Hash256],
+                        txHashes: openArray[Hash32],
                         peer: Peer,
-                        newHashes: var seq[Hash256]) =
+                        newHashes: var seq[Hash32]) =
     var map: HashToTime
     ctx.knownByPeer.withValue(peer, val) do:
       map = val[]
     do:
-      map = newTable[Hash256, Time]()
+      map = newTable[Hash32, Time]()
       ctx.knownByPeer[peer] = map
 
-    newHashes = newSeqOfCap[Hash256](txHashes.len)
+    newHashes = newSeqOfCap[Hash32](txHashes.len)
     for txHash in txHashes:
       if txHash notin map:
         map[txHash] = getTime()
@@ -150,12 +150,12 @@ when txpool_enabled:
 
 when txpool_enabled:
   proc sendNewTxHashes(ctx: EthWireRef,
-                      txHashes: seq[Hash256],
+                      txHashes: seq[Hash32],
                       peers: seq[Peer]): Future[void] {.async.} =
     try:
       for peer in peers:
         # Add to known tx hashes and get hashes still to send to peer
-        var hashesToSend: seq[Hash256]
+        var hashesToSend: seq[Hash32]
         ctx.addToKnownByPeer(txHashes, peer, hashesToSend)
 
         # Broadcast to peer if at least 1 new tx hash to announce
@@ -176,7 +176,7 @@ when txpool_enabled:
       debug "Exception in sendNewTxHashes", exc = e.name, err = e.msg
 
   proc sendTransactions(ctx: EthWireRef,
-                        txHashes: seq[Hash256],
+                        txHashes: seq[Hash32],
                         txs: seq[Transaction],
                         peers: seq[Peer]): Future[void] {.async.} =
     try:
@@ -191,7 +191,7 @@ when txpool_enabled:
     except CatchableError as e:
       debug "Exception in sendTransactions", exc = e.name, err = e.msg
 
-  proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash256], peer: Peer): Future[void] {.async.} =
+  proc fetchTransactions(ctx: EthWireRef, reqHashes: seq[Hash32], peer: Peer): Future[void] {.async.} =
     debug "fetchTx: requesting txs",
       number = reqHashes.len
 
@@ -220,7 +220,7 @@ when txpool_enabled:
       debug "Exception in fetchTransactions", exc = e.name, err = e.msg
       return
 
-    var newTxHashes = newSeqOfCap[Hash256](reqHashes.len)
+    var newTxHashes = newSeqOfCap[Hash32](reqHashes.len)
     for txHash in reqHashes:
       if ctx.txPool.inPoolAndOk(txHash):
         newTxHashes.add txHash
@@ -237,7 +237,7 @@ when txpool_enabled:
 
 proc onPeerConnected(ctx: EthWireRef, peer: Peer) =
   when txpool_enabled:
-    var txHashes = newSeqOfCap[Hash256](ctx.txPool.numTxs)
+    var txHashes = newSeqOfCap[Hash32](ctx.txPool.numTxs)
     for txHash, item in okPairs(ctx.txPool):
       txHashes.add txHash
 
@@ -315,12 +315,12 @@ method getStatus*(ctx: EthWireRef): Result[EthState, string]
     return err(exc.msg)
 
 method getReceipts*(ctx: EthWireRef,
-                    hashes: openArray[Hash256]):
+                    hashes: openArray[Hash32]):
                       Result[seq[seq[Receipt]], string]
     {.gcsafe.} =
   try:
     let db = ctx.db
-    var header: BlockHeader
+    var header: Header
     var list: seq[seq[Receipt]]
     for blockHash in hashes:
       if db.getBlockHeader(blockHash, header):
@@ -333,7 +333,7 @@ method getReceipts*(ctx: EthWireRef,
     return err(exc.msg)
 
 method getPooledTxs*(ctx: EthWireRef,
-                     hashes: openArray[Hash256]):
+                     hashes: openArray[Hash32]):
                        Result[seq[PooledTransaction], string]
     {.gcsafe.} =
 
@@ -352,7 +352,7 @@ method getPooledTxs*(ctx: EthWireRef,
     ok(list)
 
 method getBlockBodies*(ctx: EthWireRef,
-                       hashes: openArray[Hash256]):
+                       hashes: openArray[Hash32]):
                         Result[seq[BlockBody], string]
     {.gcsafe.} =
   let db = ctx.db
@@ -367,13 +367,13 @@ method getBlockBodies*(ctx: EthWireRef,
   return ok(list)
 
 method getBlockHeaders*(ctx: EthWireRef,
-                        req: BlocksRequest):
-                          Result[seq[BlockHeader], string]
+                        req: EthBlocksRequest):
+                          Result[seq[Header], string]
     {.gcsafe.} =
   try:
     let db = ctx.db
-    var foundBlock: BlockHeader
-    var list = newSeqOfCap[BlockHeader](req.maxResults)
+    var foundBlock: Header
+    var list = newSeqOfCap[Header](req.maxResults)
 
     if db.blockHeader(req.startBlock, foundBlock):
       list.add foundBlock
@@ -407,7 +407,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
       if ctx.lastCleanup - getTime() > POOLED_STORAGE_TIME_LIMIT:
         ctx.cleanupKnownByPeer()
 
-      var txHashes = newSeqOfCap[Hash256](txs.len)
+      var txHashes = newSeqOfCap[Hash32](txs.len)
       for tx in txs:
         txHashes.add rlpHash(tx)
 
@@ -418,7 +418,7 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
           continue
         ctx.txPool.add PooledTransaction(tx: tx)
 
-      var newTxHashes = newSeqOfCap[Hash256](txHashes.len)
+      var newTxHashes = newSeqOfCap[Hash32](txHashes.len)
       var validTxs = newSeqOfCap[Transaction](txHashes.len)
       for i, txHash in txHashes:
         # Nodes must not automatically broadcast blob transactions to
@@ -447,9 +447,9 @@ method handleAnnouncedTxs*(ctx: EthWireRef,
 method handleAnnouncedTxsHashes*(
       ctx: EthWireRef;
       peer: Peer;
-      txTypes: Blob;
+      txTypes: seq[byte];
       txSizes: openArray[uint64];
-      txHashes: openArray[Hash256];
+      txHashes: openArray[Hash32];
         ): Result[void, string] =
   when extraTraceMessages:
     trace "Wire handler ignoring txs hashes", nHashes=txHashes.len

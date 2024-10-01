@@ -21,7 +21,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc extendLinkedHChain*(
-  rev: seq[BlockHeader];
+  rev: seq[Header];
   buddy: FlareBuddyRef;
   topNumber: BlockNumber;
   lhc: ref LinkedHChain; # update in place
@@ -41,13 +41,13 @@ proc extendLinkedHChain*(
   # Set up header with largest block number
   let
     blob0 = rlp.encode(rev[0])
-    hash0 = blob0.keccakHash
+    hash0 = blob0.keccak256
   lhc.revHdrs[offset] = blob0
   if offset == 0:
     lhc.hash = hash0
 
   # Verify top block hash (if any)
-  if lhc.parentHash != EMPTY_ROOT_HASH and hash0 != lhc.parentHash:
+  if lhc.parentHash != emptyRoot and hash0 != lhc.parentHash:
     lhc.revHdrs.setLen(offset)
     return false
 
@@ -58,7 +58,7 @@ proc extendLinkedHChain*(
       return false
 
     lhc.revHdrs[offset + n] = rlp.encode(rev[n])
-    let hashN = lhc.revHdrs[offset + n].keccakHash
+    let hashN = lhc.revHdrs[offset + n].keccak256
     if rev[n-1].parentHash != hashN:
       lhc.revHdrs.setLen(offset)
       return false

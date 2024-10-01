@@ -12,9 +12,8 @@
 
 import
   pkg/[chronicles, chronos],
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
-  ../../../common,
   ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
@@ -44,7 +43,7 @@ proc fetchAndCheck(
   # Preset/append headers to be completed with bodies. Also collect block hashes
   # for fetching missing blocks.
   blk.blocks.setLen(offset + ivReq.len)
-  var blockHash = newSeq[Hash256](ivReq.len)
+  var blockHash = newSeq[Hash32](ivReq.len)
   for n in 1u ..< ivReq.len:
     let header = ctx.dbPeekHeader(ivReq.minPt + n).expect "stashed header"
     blockHash[n - 1] = header.parentHash
@@ -52,7 +51,7 @@ proc fetchAndCheck(
   blk.blocks[offset].header =
     ctx.dbPeekHeader(ivReq.minPt).expect "stashed header"
   blockHash[ivReq.len - 1] =
-    rlp.encode(blk.blocks[offset + ivReq.len - 1].header).keccakHash
+    rlp.encode(blk.blocks[offset + ivReq.len - 1].header).keccak256
 
   # Fetch bodies
   let bodies = block:
@@ -70,7 +69,7 @@ proc fetchAndCheck(
   block loop:
     for n in 0 ..< nBodies:
       block checkTxLenOk:
-        if blk.blocks[offset + n].header.txRoot != EMPTY_ROOT_HASH:
+        if blk.blocks[offset + n].header.transactionsRoot != emptyRoot:
           if 0 < bodies[n].transactions.len:
             break checkTxLenOk
         else:
