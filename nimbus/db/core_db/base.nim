@@ -71,7 +71,7 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   ##
   db.defCtx
 
-proc newCtxByKey*(ctx: CoreDbCtxRef; root: Hash256): CoreDbRc[CoreDbCtxRef] =
+proc newCtxByKey*(ctx: CoreDbCtxRef; root: Hash32): CoreDbRc[CoreDbCtxRef] =
   ## Create new context derived from a matching transaction of the currently
   ## active context. If successful, the resulting context has the following
   ## properties:
@@ -210,7 +210,7 @@ proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
 proc verify*(
     db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
     proof: openArray[Blob];
-    root: Hash256;
+    root: Hash32;
     path: openArray[byte];
       ): CoreDbRc[Opt[Blob]] =
   ## This function os the counterpart of any of the `proof()` functions. Given
@@ -241,7 +241,7 @@ proc verify*(
 proc verifyOk*(
     db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
     proof: openArray[Blob];
-    root: Hash256;
+    root: Hash32;
     path: openArray[byte];
     payload: Opt[Blob];
       ): CoreDbRc[void] =
@@ -265,8 +265,8 @@ proc verifyOk*(
 proc verify*(
     db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
     proof: openArray[Blob];
-    root: Hash256;
-    path: Hash256;
+    root: Hash32;
+    path: Hash32;
       ): CoreDbRc[Opt[Blob]] =
   ## Variant of `verify()`.
   template mpt: untyped =
@@ -286,8 +286,8 @@ proc verify*(
 proc verifyOk*(
     db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
     proof: openArray[Blob];
-    root: Hash256;
-    path: Hash256;
+    root: Hash32;
+    path: Hash32;
     payload: Opt[Blob];
       ): CoreDbRc[void] =
   ## Variant of `verifyOk()`.
@@ -518,7 +518,7 @@ proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
       err(rc.error.toError $api)
   mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
-proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash256] =
+proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the argument
   ## database column (if acvailable.)
   ##
@@ -549,7 +549,7 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
 
 proc proof*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): CoreDbRc[(seq[Blob],bool)] =
   ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
   ## path. Return these path nodes as a chain of rlp-encoded blobs followed
@@ -568,7 +568,7 @@ proc proof*(
 
 proc fetch*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): CoreDbRc[CoreDbAccount] =
   ## Fetch the account data record for the particular account indexed by
   ## the key `accPath`.
@@ -586,7 +586,7 @@ proc fetch*(
 
 proc delete*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): CoreDbRc[void] =
   ## Delete the particular account indexed by the key `accPath`. This
   ## will also destroy an associated storage area.
@@ -606,7 +606,7 @@ proc delete*(
 
 proc clearStorage*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): CoreDbRc[void] =
   ## Delete all data slots from the storage area associated with the
   ## particular account indexed by the key `accPath`.
@@ -623,7 +623,7 @@ proc clearStorage*(
 
 proc merge*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
     accRec: CoreDbAccount;
       ): CoreDbRc[void] =
   ## Add or update the argument account data record `account`. Note that the
@@ -641,7 +641,7 @@ proc merge*(
 
 proc hasPath*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
@@ -655,7 +655,7 @@ proc hasPath*(
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
+proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
   ## column (if available.)
   ##
@@ -675,8 +675,8 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash256] =
 
 proc slotProof*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ): CoreDbRc[(seq[Blob],bool)] =
   ## On the storage MPT related to the argument account `acPath`, collect the
   ## nodes along the `stoPath` interpreted as path. Return these path nodes as
@@ -699,8 +699,8 @@ proc slotProof*(
 
 proc slotFetch*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ):  CoreDbRc[UInt256] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotFetchFn
@@ -718,8 +718,8 @@ proc slotFetch*(
 
 proc slotDelete*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotDeleteFn
@@ -739,8 +739,8 @@ proc slotDelete*(
 
 proc slotHasPath*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
       ):  CoreDbRc[bool] =
   ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotHasPathFn
@@ -756,8 +756,8 @@ proc slotHasPath*(
 
 proc slotMerge*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
     stoData: UInt256;
       ):  CoreDbRc[void] =
   ## Like `merge()` but with cascaded index `(accPath,slot)`.
@@ -774,9 +774,9 @@ proc slotMerge*(
 
 proc slotState*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
     updateOk = false;
-      ):  CoreDbRc[Hash256] =
+      ):  CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the storage data
   ## column (if available) related to the account  indexed by the key
   ## `accPath`.`.
@@ -796,7 +796,7 @@ proc slotState*(
 
 proc slotStateEmpty*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ):  CoreDbRc[bool] =
   ## This function returns `true` if the storage data column is empty or
   ## missing.
@@ -813,7 +813,7 @@ proc slotStateEmpty*(
 
 proc slotStateEmptyOrVoid*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): bool =
   ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
   acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
@@ -830,7 +830,7 @@ proc slotStateEmptyOrVoid*(
 
 proc recast*(
     acc: CoreDbAccRef;
-    accPath: Hash256;
+    accPath: Hash32;
     accRec: CoreDbAccount;
     updateOk = false;
       ): CoreDbRc[Account] =

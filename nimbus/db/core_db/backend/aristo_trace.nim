@@ -69,7 +69,7 @@ type
     of TdtBigNum:
       bigNum*: UInt256
     of TdtHash:
-      hash*: Hash256
+      hash*: Hash32
     of TdtVoid, TdtOops:
       discard
 
@@ -131,7 +131,7 @@ when CoreDbNoisyCaptJournal:
   func `$`(w: UInt256): string =
     "#" & w.toHex.stripZeros.squeezeHex
 
-  func `$`(w: Hash256): string =
+  func `$`(w: Hash32): string =
     "£" & w.data.toHex.squeezeHex
 
   func `$`(w: VertexID): string =
@@ -222,7 +222,7 @@ proc jLogger(
 
 proc jLogger(
     tr: TraceRecorderRef;
-    accPath: Hash256;
+    accPath: Hash32;
     ti: TraceDataItemRef;
       ) =
   tr.jLogger(accPath.data.toSeq, ti)
@@ -250,8 +250,8 @@ proc jLogger(
 
 proc jLogger(
     tr: TraceRecorderRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
     ti: TraceDataItemRef;
       ) =
   tr.jLogger(accPath.data.toSeq & stoPath.data.toSeq, ti)
@@ -337,7 +337,7 @@ func logRecord(
 func logRecord(
     info: AristoApiProfNames;
     req: TraceRequest;
-    state: Hash256;
+    state: Hash32;
       ): TraceDataItemRef =
   TraceDataItemRef(
     pfx:  info.to(TracePfx),
@@ -470,7 +470,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.fetchAccountRecord =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[AristoAccount,AristoError] =
       const info = AristoApiProfFetchAccountRecordFn
 
@@ -493,7 +493,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
   tracerApi.fetchAccountState =
     proc(mpt: AristoDbRef;
          updateOk: bool;
-        ): Result[Hash256,AristoError] =
+        ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchAccountStateFn
 
       when CoreDbNoisyCaptJournal:
@@ -539,7 +539,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
     proc(mpt: AristoDbRef;
          root: VertexID;
          updateOk: bool;
-        ): Result[Hash256,AristoError] =
+        ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchGenericStateFn
 
       when CoreDbNoisyCaptJournal:
@@ -560,8 +560,8 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.fetchStorageData =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
         ): Result[Uint256,AristoError] =
       const info = AristoApiProfFetchStorageDataFn
 
@@ -583,9 +583,9 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.fetchStorageState =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
          updateOk: bool;
-        ): Result[Hash256,AristoError] =
+        ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchStorageStateFn
 
       when CoreDbNoisyCaptJournal:
@@ -606,7 +606,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.deleteAccountRecord =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[void,AristoError] =
       const info = AristoApiProfDeleteAccountRecordFn
 
@@ -702,8 +702,8 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.deleteStorageData =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
         ): Result[bool,AristoError] =
       const info = AristoApiProfDeleteStorageDataFn
 
@@ -738,7 +738,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.deleteStorageTree =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[void,AristoError] =
       const info = AristoApiProfDeleteStorageTreeFn
 
@@ -761,7 +761,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.mergeAccountRecord =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
          accRec: AristoAccount;
         ): Result[bool,AristoError] =
       const info = AristoApiProfMergeAccountRecordFn
@@ -828,8 +828,8 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.mergeStorageData =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
          stoData: UInt256;
         ): Result[void,AristoError] =
       const info = AristoApiProfMergeStorageDataFn
