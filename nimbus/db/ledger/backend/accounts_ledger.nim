@@ -136,7 +136,7 @@ template toAccountKey(acc: AccountRef): Hash32 =
   acc.accPath
 
 template toAccountKey(eAddr: EthAddress): Hash32 =
-  eAddr.keccak256
+  eAddr.data.keccak256
 
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
@@ -151,7 +151,7 @@ proc resetCoreDbAccount(ac: AccountsLedgerRef, acc: AccountRef) =
 
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
-           root: Keccak256, storeSlotHash: bool): AccountsLedgerRef =
+           root: Hash32, storeSlotHash: bool): AccountsLedgerRef =
   new result
   result.ledger = db.ctx.getAccounts()
   result.kvt = db.ctx.getKvt()
@@ -165,7 +165,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
   init(x, db, EMPTY_ROOT_HASH)
 
 # Renamed `rootHash()` => `state()`
-proc state*(ac: AccountsLedgerRef): Keccak256 =
+proc state*(ac: AccountsLedgerRef): Hash32 =
   const info = "state(): "
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
@@ -897,7 +897,7 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArr
 
   storageProof
 
-proc state*(db: ReadOnlyStateDB): Keccak256 {.borrow.}
+proc state*(db: ReadOnlyStateDB): Hash32 {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getCodeHash(distinctBase db, address)
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getStorageRoot(distinctBase db, address)
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 = getBalance(distinctBase db, address)
