@@ -16,12 +16,7 @@
 {.push raises: [].}
 
 import
-  eth/p2p,
-  ../core/chain,
-  ./handlers/eth
-
-export
-  chain
+  eth/p2p
 
 type
   BuddyRunState* = enum
@@ -33,7 +28,6 @@ type
   BuddyCtrlRef* = ref object
     ## Control and state settings
     runState: BuddyRunState     ## Access with getters
-    multiOk*: bool              ## Triggers `runSingle()` mode unless `true`
 
   BuddyRef*[S,W] = ref object
     ## Worker peer state descriptor.
@@ -45,8 +39,6 @@ type
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
     buddiesMax*: int            ## Max number of buddies
-    ethWireCtx*: EthWireRef     ## Eth protocol wire context (if available)
-    chain*: ForkedChainRef      ## Block chain database (no need for `Peer`)
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
     pool*: S                    ## Shared context for all worker peers
