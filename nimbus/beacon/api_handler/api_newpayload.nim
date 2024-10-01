@@ -21,7 +21,7 @@ import
 
 func validateVersionedHashed(payload: ExecutionPayload,
                               expected: openArray[Web3Hash]): bool  =
-  var versionedHashes: seq[common.Bytes32]
+  var versionedHashes: seq[common.VersionedHash]
   for x in payload.transactions:
     let tx = rlp.decode(distinctBase(x), Transaction)
     versionedHashes.add tx.versionedHashes

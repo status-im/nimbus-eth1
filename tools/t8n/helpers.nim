@@ -114,7 +114,7 @@ proc fromJson(T: type seq[Authorization], n: JsonNode, field: string): T =
 proc fromJson(T: type VersionedHashes, n: JsonNode, field: string): VersionedHashes =
   let list = n[field]
   for x in list:
-    result.add Bytes32.fromHex(x.getStr)
+    result.add VersionedHash.fromHex(x.getStr)
 
 template `gas=`(tx: var Transaction, x: GasInt) =
   tx.gasLimit = x

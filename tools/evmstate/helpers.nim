@@ -66,7 +66,7 @@ proc fromJson(T: type AccessList, n: JsonNode): AccessList =
 
 proc fromJson(T: type VersionedHashes, list: JsonNode): VersionedHashes =
   for x in list:
-    result.add Bytes32.fromHex(x.getStr)
+    result.add VersionedHash.fromHex(x.getStr)
 
 template required(T: type, nField: string): auto =
   fromJson(T, n[nField])
