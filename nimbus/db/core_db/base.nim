@@ -209,10 +209,10 @@ proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
 
 proc verify*(
     db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
-    proof: openArray[Blob];
+    proof: openArray[seq[byte]];
     root: Hash32;
     path: openArray[byte];
-      ): CoreDbRc[Opt[Blob]] =
+      ): CoreDbRc[Opt[seq[byte]]] =
   ## This function os the counterpart of any of the `proof()` functions. Given
   ## the argument chain of rlp-encoded nodes `proof`, this function verifies
   ## that the chain represents a partial MPT starting with a root node state
@@ -240,10 +240,10 @@ proc verify*(
 
 proc verifyOk*(
     db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
-    proof: openArray[Blob];
+    proof: openArray[seq[byte]];
     root: Hash32;
     path: openArray[byte];
-    payload: Opt[Blob];
+    payload: Opt[seq[byte]];
       ): CoreDbRc[void] =
   ## Variant of `verify()` which directly checks the argument `payload`
   ## against what would be the return code in `verify()`.
@@ -264,10 +264,10 @@ proc verifyOk*(
 
 proc verify*(
     db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
-    proof: openArray[Blob];
+    proof: openArray[seq[byte]];
     root: Hash32;
     path: Hash32;
-      ): CoreDbRc[Opt[Blob]] =
+      ): CoreDbRc[Opt[seq[byte]]] =
   ## Variant of `verify()`.
   template mpt: untyped =
     when db is CoreDbRef:
@@ -285,10 +285,10 @@ proc verify*(
 
 proc verifyOk*(
     db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
-    proof: openArray[Blob];
+    proof: openArray[seq[byte]];
     root: Hash32;
     path: Hash32;
-    payload: Opt[Blob];
+    payload: Opt[seq[byte]];
       ): CoreDbRc[void] =
   ## Variant of `verifyOk()`.
   template mpt: untyped =
@@ -319,8 +319,8 @@ proc getKvt*(ctx: CoreDbCtxRef): CoreDbKvtRef =
 
 # ----------- KVT ---------------
 
-proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
-  ## This function always returns a non-empty `Blob` or an error code.
+proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
+  ## This function always returns a non-empty `seq[byte]` or an error code.
   kvt.setTrackNewApi KvtGetFn
   result = block:
     let rc = kvt.call(get, kvt.kvt, key)
@@ -332,8 +332,8 @@ proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
       err(rc.error.toError $api)
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
-proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
-  ## Variant of `get()` returning an empty `Blob` if the key is not found
+proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
+  ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
   ##
   kvt.setTrackNewApi KvtGetOrEmptyFn
@@ -342,7 +342,7 @@ proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[Blob] =
     if rc.isOk:
       ok(rc.value)
     elif rc.error == GetNotFound:
-      CoreDbRc[Blob].ok(EmptyBlob)
+      CoreDbRc[seq[byte]].ok(EmptyBlob)
     else:
       err(rc.error.toError $api)
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
@@ -432,7 +432,7 @@ proc getGeneric*(
 proc proof*(
     mpt: CoreDbMptRef;
     key: openArray[byte];
-      ): CoreDbRc[(seq[Blob],bool)] =
+      ): CoreDbRc[(seq[seq[byte]],bool)] =
   ## On the generic MPT, collect the nodes along the `key` interpreted as
   ## path. Return these path nodes as a chain of rlp-encoded blobs followed
   ## by a bool value which is `true` if the `key` path exists in the database,
@@ -448,9 +448,9 @@ proc proof*(
       err(rc.error.toError($api, ProofCreate))
   mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
 
-proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
+proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## Fetch data from the argument `mpt`. The function always returns a
-  ## non-empty `Blob` or an error code.
+  ## non-empty `seq[byte]` or an error code.
   ##
   mpt.setTrackNewApi MptFetchFn
   result = block:
@@ -463,8 +463,8 @@ proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
       err(rc.error.toError $api)
   mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
-proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
-  ## This function returns an empty `Blob` if the argument `key` is not found
+proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
+  ## This function returns an empty `seq[byte]` if the argument `key` is not found
   ## on the database.
   ##
   mpt.setTrackNewApi MptFetchOrEmptyFn
@@ -473,7 +473,7 @@ proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[Blob] =
     if rc.isOk:
       ok(rc.value)
     elif rc.error == FetchPathNotFound:
-      CoreDbRc[Blob].ok(EmptyBlob)
+      CoreDbRc[seq[byte]].ok(EmptyBlob)
     else:
       err(rc.error.toError $api)
   mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
@@ -550,7 +550,7 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
 proc proof*(
     acc: CoreDbAccRef;
     accPath: Hash32;
-      ): CoreDbRc[(seq[Blob],bool)] =
+      ): CoreDbRc[(seq[seq[byte]],bool)] =
   ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
   ## path. Return these path nodes as a chain of rlp-encoded blobs followed
   ## by a bool value which is `true` if the `key` path exists in the database,
@@ -677,7 +677,7 @@ proc slotProof*(
     acc: CoreDbAccRef;
     accPath: Hash32;
     stoPath: Hash32;
-      ): CoreDbRc[(seq[Blob],bool)] =
+      ): CoreDbRc[(seq[seq[byte]],bool)] =
   ## On the storage MPT related to the argument account `acPath`, collect the
   ## nodes along the `stoPath` interpreted as path. Return these path nodes as
   ## a chain of rlp-encoded blobs followed by a bool value which is `true` if
@@ -938,7 +938,7 @@ when CoreDbEnableCaptJournal:
     result = log.level()
     log.db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
-  proc kvtLog*(cpt: CoreDbCaptRef): seq[(Blob,Blob)] =
+  proc kvtLog*(cpt: CoreDbCaptRef): seq[(seq[byte],seq[byte])] =
     ## Getter, returns the `Kvt` logger list for the argument instance.
     ##
     let log = cpt.distinctBase

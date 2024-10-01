@@ -124,15 +124,15 @@ func toStr(rc: CoreDbRc[bool]): string =
 func toStr(rc: CoreDbRc[void]): string =
   if rc.isOk: "ok()" else: "err(" & rc.error.toStr & ")"
 
-func toStr(rc: CoreDbRc[Blob]): string =
-  if rc.isOk: "ok(Blob[" & $rc.value.len & "])"
+func toStr(rc: CoreDbRc[seq[byte]]): string =
+  if rc.isOk: "ok(seq[byte,#" & $rc.value.len & "])"
   else: "err(" & rc.error.toStr & ")"
 
-func toStr(rc: CoreDbRc[seq[Blob]]): string =
+func toStr(rc: CoreDbRc[seq[seq[byte]]]): string =
   if rc.isOk: "ok([" & rc.value.mapIt("[#" & $it.len & "]").join(",") & "])"
   else: "err(" & rc.error.toStr & ")"
 
-func toStr(rc: CoreDbRc[(seq[Blob],bool)]): string =
+func toStr(rc: CoreDbRc[(seq[seq[byte]],bool)]): string =
   if rc.isOk: "ok([" & rc.value[0].mapIt("[#" & $it.len & "]").join(",") &
                              "]," & $rc.value[1] & ")"
   else: "err(" & rc.error.toStr & ")"

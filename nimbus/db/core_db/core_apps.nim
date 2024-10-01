@@ -112,7 +112,7 @@ iterator findNewAncestors(
 iterator getBlockTransactionData*(
     db: CoreDbRef;
     txRoot: Hash32;
-      ): Blob =
+      ): seq[byte] =
   block body:
     if txRoot == EMPTY_ROOT_HASH:
       break body
@@ -145,7 +145,7 @@ iterator getBlockTransactionHashes*(
   ## Returns an iterable of the transaction hashes from th block specified
   ## by the given block header.
   for encodedTx in db.getBlockTransactionData(blockHeader.txRoot):
-    yield keccakHash(encodedTx)
+    yield keccak256(encodedTx)
 
 iterator getWithdrawals*(
     db: CoreDbRef;
@@ -504,7 +504,7 @@ proc persistTransactions*(
   for idx, tx in transactions:
     let
       encodedTx = rlp.encode(tx)
-      txHash = keccakHash(encodedTx)
+      txHash = keccak256(encodedTx)
       blockKey = transactionHashToBlockKey(txHash)
       txKey: TransactionKey = (blockNumber, idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
@@ -897,7 +897,7 @@ proc persistUncles*(db: CoreDbRef, uncles: openArray[BlockHeader]): Hash32 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
-  result = keccakHash(enc)
+  result = keccak256(enc)
   db.ctx.getKvt.put(genericHashKey(result).toOpenArray, enc).isOkOr:
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
