@@ -21,7 +21,7 @@ import
 proc revFilter*(
     db: KvtDbRef;                      # Database
     filter: LayerRef;                  # Filter to revert
-      ): Result[LayerRef,(Blob,KvtError)] =
+      ): Result[LayerRef,(seq[byte],KvtError)] =
   ## Assemble reverse filter for the `filter` argument, i.e. changes to the
   ## backend that reverse the effect of applying the this read-only filter.
   ##

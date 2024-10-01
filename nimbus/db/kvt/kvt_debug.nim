@@ -45,17 +45,17 @@ proc toPfx(indent: int; offset = 0): string =
   if 0 < indent+offset: "\n" & " ".repeat(indent+offset) else: ""
 
 
-func getOrVoid*(tab: Table[Blob,uint64]; w: Blob): uint64 =
+func getOrVoid*(tab: Table[seq[byte],uint64]; w: seq[byte]): uint64 =
   tab.getOrDefault(w, 0u64)
 
-func getOrVoid*(tab: Table[uint64,Blob]; w: uint64): Blob =
+func getOrVoid*(tab: Table[uint64,seq[byte]]; w: uint64): seq[byte] =
   tab.getOrDefault(w, EmptyBlob)
 
 func isValid*(id: uint64): bool =
   0 < id
 
 
-proc keyID(key: Blob; db = KvtDbRef(nil)): uint64 =
+proc keyID(key: seq[byte]; db = KvtDbRef(nil)): uint64 =
   if key.len == 0:
     return 0
   elif db.isNil:
@@ -73,7 +73,7 @@ proc keyID(key: Blob; db = KvtDbRef(nil)): uint64 =
       ctr.pAmx[db.xIdGen] = key
       ctr.xIdGen
 
-#proc keyBlob(id: uint64; db = KvtDbRef(nil)): Blob =
+#proc keyBlob(id: uint64; db = KvtDbRef(nil)): seq[byte] =
 #  if 0 < id and not db.isNil:
 #    result = db.getCentre.pAmx.getOrVoid id
 
@@ -81,7 +81,7 @@ proc keyID(key: Blob; db = KvtDbRef(nil)): uint64 =
 proc ppID(id: uint64): string =
   "$" & (if id == 0: "ø" else: $id)
 
-proc ppKey(key: Blob; db = KvtDbRef(nil)): string =
+proc ppKey(key: seq[byte]; db = KvtDbRef(nil)): string =
   if key.len == 0:
     0.ppID
   elif db.isNil:
@@ -90,10 +90,10 @@ proc ppKey(key: Blob; db = KvtDbRef(nil)): string =
   else:
     key.keyID(db).ppID
 
-proc ppValue(data: Blob): string =
+proc ppValue(data: seq[byte]): string =
   data.toHex.squeeze(hex=true)
 
-proc ppTab(tab: Table[Blob,Blob]; db = KvtDbRef(nil); indent = 4): string =
+proc ppTab(tab: Table[seq[byte],seq[byte]]; db = KvtDbRef(nil); indent = 4): string =
   result = "{"
   if db.isNil:
     let keys = tab.keys.toSeq.sorted
@@ -107,7 +107,7 @@ proc ppTab(tab: Table[Blob,Blob]; db = KvtDbRef(nil); indent = 4): string =
                   .join(indent.toPfx(1))
   result &= "}"
 
-proc ppMap(tab: Table[uint64,Blob]; indent = 4): string =
+proc ppMap(tab: Table[uint64,seq[byte]]; indent = 4): string =
   let keys = tab.keys.toSeq.sorted
   "{" &
     keys.mapIt((it, tab.getOrVoid it))

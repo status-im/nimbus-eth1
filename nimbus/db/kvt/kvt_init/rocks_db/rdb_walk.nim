@@ -33,7 +33,7 @@ when extraTraceMessages:
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator walk*(rdb: RdbInst): tuple[key: Blob, data: Blob] =
+iterator walk*(rdb: RdbInst): tuple[key: seq[byte], data: seq[byte]] =
   ## Walk over all key-value pairs of the database.
   ##
   ## Non-decodable entries are stepped over and ignored.

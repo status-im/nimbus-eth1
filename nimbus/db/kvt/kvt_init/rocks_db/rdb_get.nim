@@ -38,8 +38,8 @@ when extraTraceMessages:
 proc get*(
     rdb: RdbInst;
     key: openArray[byte],
-      ): Result[Blob,(KvtError,string)] =
-  var res: Blob
+      ): Result[seq[byte],(KvtError,string)] =
+  var res: seq[byte]
   let onData: DataProc = proc(data: openArray[byte]) =
     res = @data
 

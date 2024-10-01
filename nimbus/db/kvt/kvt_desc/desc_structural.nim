@@ -22,7 +22,7 @@ type
   LayerObj* = object
     ## Kvt database layer structures. Any layer holds the full
     ## change relative to the backend.
-    sTab*: Table[Blob,Blob]           ## Structural data table
+    sTab*: Table[seq[byte],seq[byte]] ## Structural data table
     txUid*: uint                      ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
