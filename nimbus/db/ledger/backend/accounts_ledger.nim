@@ -49,7 +49,7 @@ type
 
   AccountRef = ref object
     statement: CoreDbAccount
-    accPath: Hash256
+    accPath: Hash32
     flags: AccountFlags
     code: CodeBytesRef
     originalStorage: TableRef[UInt256, UInt256]
@@ -70,7 +70,7 @@ type
     cache: Table[EthAddress, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
       # persist
-    code: LruCache[Hash256, CodeBytesRef]
+    code: LruCache[Hash32, CodeBytesRef]
       ## The code cache provides two main benefits:
       ##
       ## * duplicate code is shared in memory beween accounts
@@ -81,7 +81,7 @@ type
       ## when underpriced code opcodes are being run en masse - both advantages
       ## help performance broadly as well.
 
-    slots: LruCache[UInt256, Hash256]
+    slots: LruCache[UInt256, Hash32]
       ## Because the same slots often reappear, we want to avoid writing them
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
@@ -132,10 +132,10 @@ when debugAccountsLedgerRef:
 template logTxt(info: static[string]): static[string] =
   "AccountsLedgerRef " & info
 
-template toAccountKey(acc: AccountRef): Hash256 =
+template toAccountKey(acc: AccountRef): Hash32 =
   acc.accPath
 
-template toAccountKey(eAddr: EthAddress): Hash256 =
+template toAccountKey(eAddr: EthAddress): Hash32 =
   eAddr.keccakHash
 
 
@@ -431,7 +431,7 @@ proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true):
   ac.savePoint.cache[address] = result
   ac.savePoint.dirty[address] = result
 
-proc getCodeHash*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
+proc getCodeHash*(ac: AccountsLedgerRef, address: EthAddress): Hash32 =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyEthAccount.codeHash
   else: acc.statement.codeHash
@@ -761,7 +761,7 @@ iterator cachedStorage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, U
       for k, v in acc.originalStorage:
         yield (k, v)
 
-proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
+proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash32 =
   # beware that if the account not persisted,
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
@@ -898,8 +898,8 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArr
   storageProof
 
 proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
-proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 = getCodeHash(distinctBase db, address)
-proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 = getStorageRoot(distinctBase db, address)
+proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getCodeHash(distinctBase db, address)
+proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getStorageRoot(distinctBase db, address)
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 = getBalance(distinctBase db, address)
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 = getStorage(distinctBase db, address, slot)
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce = getNonce(distinctBase db, address)
