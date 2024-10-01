@@ -169,7 +169,6 @@ binary is started on the same machine where the beacon node runs as
 
        ./build/nimbus \
           --network=mainnet \
-          --sync-mode=flare \
           --engine-api=true \
           --engine-api-port=8551 \
           --engine-api-ws=true \

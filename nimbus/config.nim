@@ -128,10 +128,6 @@ type
     V4
     V5
 
-  SyncMode* {.pure.} = enum
-    Default
-    Flare                         ## Beware, experimental
-
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
 
@@ -170,17 +166,6 @@ type
       defaultValueDesc: $ChainDbMode.Aristo
       abbr : "p"
       name: "chaindb" }: ChainDbMode
-
-    syncMode* {.
-      desc: "Specify particular blockchain sync mode."
-      longDesc:
-        "- default -- beacon sync mode\n" &
-        "- flare   -- re-facored beacon like mode, experimental\n" &
-        ""
-      defaultValue: SyncMode.Default
-      defaultValueDesc: $SyncMode.Default
-      abbr: "y"
-      name: "sync-mode" .}: SyncMode
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"

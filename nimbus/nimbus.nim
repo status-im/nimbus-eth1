@@ -13,7 +13,6 @@ import
 import
   std/[os, strutils, net],
   chronicles,
-  eth/keys,
   eth/net/nat,
   metrics,
   metrics/chronicles_support,
@@ -25,7 +24,6 @@ import
   ./nimbus_import,
   ./core/eip4844,
   ./db/core_db/persistent,
-  ./sync/protocol,
   ./sync/handlers
 
 when defined(evmc_enabled):
@@ -123,25 +121,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       nimbus.ethNode.peerPool,
       nimbus.chainRef)
 
-  # Early-initialise "--snap-sync" before starting any network connections.
-  block:
-    #let
-    #  exCtrlFile = if conf.syncCtrlFile.isNone: Opt.none(string)
-    #               else: Opt.some(conf.syncCtrlFile.get)
-    #  tickerOK = conf.logLevel in {
-    #    LogLevel.INFO, LogLevel.DEBUG, LogLevel.TRACE}
-    case conf.syncMode:
-    #of SyncMode.Snap:
-    #  # Minimal capability needed for sync only
-    #  if ProtocolFlag.Snap notin protocols:
-    #    nimbus.ethNode.addSnapHandlerCapability(
-    #      nimbus.ethNode.peerPool)
-    #  nimbus.snapSyncRef = SnapSyncRef.init(
-    #    nimbus.ethNode, nimbus.chainRef, nimbus.ctx.rng, conf.maxPeers,
-    #    tickerOK, exCtrlFile)
-    of SyncMode.Default, SyncMode.Flare:
-      nimbus.flareSyncRef = FlareSyncRef.init(
-        nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.flareChunkSize)
+  # Always start syncer -- will throttle itself unless needed
+  nimbus.flareSyncRef = FlareSyncRef.init(
+    nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.flareChunkSize)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -156,17 +138,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Start Eth node
   if conf.maxPeers > 0:
-    var waitForPeers = true
-    case conf.syncMode:
-    #of SyncMode.Snap:
-    #  waitForPeers = false
-    of SyncMode.Default:
-      discard
-    of SyncMode.Flare:
-      discard
     nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None,
-      waitForPeers = waitForPeers)
+      waitForPeers = true)
 
 
 proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
@@ -252,11 +226,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupRpc(nimbus, conf, com, protocols)
 
     if conf.maxPeers > 0:
-      case conf.syncMode:
-      of SyncMode.Default, SyncMode.Flare:
-        nimbus.flareSyncRef.start
-      #of SyncMode.Snap:
-      #  nimbus.snapSyncRef.start
+      nimbus.flareSyncRef.start
 
     if nimbus.state == NimbusState.Starting:
       # it might have been set to "Stopping" with Ctrl+C

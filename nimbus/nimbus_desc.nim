@@ -50,7 +50,6 @@ type
     txPool*: TxPoolRef
     networkLoop*: Future[void]
     peerManager*: PeerManagerRef
-    # snapSyncRef*: SnapSyncRef # -- todo
     flareSyncRef*: FlareSyncRef
     beaconEngine*: BeaconEngineRef
     metricsServer*: MetricsHttpServerRef
