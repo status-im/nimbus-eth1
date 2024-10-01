@@ -78,7 +78,7 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 
 proc getKvpFn(db: RdbBackendRef): GetKvpFn =
   result =
-    proc(key: openArray[byte]): Result[Blob,KvtError] =
+    proc(key: openArray[byte]): Result[seq[byte],KvtError] =
 
       # Get data record
       var data = db.rdb.get(key).valueOr:
@@ -337,7 +337,7 @@ proc dup*(db: RdbBackendRef): RdbBackendRef =
 
 iterator walk*(
     be: RdbBackendRef;
-      ): tuple[key: Blob, data: Blob] =
+      ): tuple[key: seq[byte], data: seq[byte]] =
   ## Walk over all key-value pairs of the database.
   ##
   for (k,v) in be.rdb.walk:

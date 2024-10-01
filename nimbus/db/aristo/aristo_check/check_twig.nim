@@ -27,20 +27,20 @@ proc checkTwig*(
   let
     proof = ? db.partGenericTwig(root, path)
     key = ? db.computeKey (root,root)
-    pyl = ? proof[0].partUntwigGeneric(key.to(Hash256), path)
+    pyl = ? proof[0].partUntwigGeneric(key.to(Hash32), path)
 
   ok()
 
 proc checkTwig*(
     db: AristoDbRef;                   # Database
-    accPath: Hash256;                  # Account key
-    stoPath: Hash256;                  # Storage key
+    accPath: Hash32;                  # Account key
+    stoPath: Hash32;                  # Storage key
       ): Result[void,AristoError] =
   let
     proof = ? db.partStorageTwig(accPath, stoPath)
     vid = ? db.fetchStorageID accPath
     key = ? db.computeKey (VertexID(1),vid)
-    pyl = ? proof[0].partUntwigPath(key.to(Hash256), stoPath)
+    pyl = ? proof[0].partUntwigPath(key.to(Hash32), stoPath)
 
   ok()
 

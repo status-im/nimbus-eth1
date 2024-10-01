@@ -20,9 +20,9 @@ import
 
 type
   ProofTrieData* = object
-    root*: Hash256
+    root*: Hash32
     id*: int
-    proof*: seq[Blob]
+    proof*: seq[seq[byte]]
     kvpLst*: seq[LeafTiePayload]
 
 const
@@ -113,10 +113,10 @@ func `==`*(a: (int,AristoError), b: (int,int)): bool =
 func `==`*(a: (int,VertexID,AristoError), b: (int,int,int)): bool =
   (a[0], a[1].int, a[2].int) == b
 
-func to*(a: Hash256; T: type UInt256): T =
+func to*(a: Hash32; T: type UInt256): T =
   T.fromBytesBE a.data
 
-func to*(a: Hash256; T: type PathID): T =
+func to*(a: Hash32; T: type PathID): T =
   a.to(UInt256).to(T)
 
 func to*(a: HashKey; T: type UInt256): T =
@@ -125,7 +125,7 @@ func to*(a: HashKey; T: type UInt256): T =
 proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
   ## Convert test data into usable in-memory format
   let file = sample.file.findFilePath.value
-  var root: Hash256
+  var root: Hash32
   for w in file.undumpNextAccount:
     let n = w.seenAccounts - 1
     if n < sample.firstItem:
@@ -141,7 +141,7 @@ proc to*(sample: AccountsSample; T: type seq[UndumpAccounts]): T =
 proc to*(sample: AccountsSample; T: type seq[UndumpStorages]): T =
   ## Convert test data into usable in-memory format
   let file = sample.file.findFilePath.value
-  var root: Hash256
+  var root: Hash32
   for w in file.undumpNextStorages:
     let n = w.seenAccounts - 1 # storages selector based on accounts
     if n < sample.firstItem:
@@ -155,7 +155,7 @@ proc to*(sample: AccountsSample; T: type seq[UndumpStorages]): T =
     result.add w
 
 func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (default(Hash256), VertexID(0))
+  var (rootKey, rootVid) = (default(Hash32), VertexID(0))
   for w in ua:
     let thisRoot = w.root
     if rootKey != thisRoot:
@@ -163,7 +163,7 @@ func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
     if 0 < w.data.accounts.len:
       result.add ProofTrieData(
         root:   rootKey,
-        proof:  cast[seq[Blob]](w.data.proof),
+        proof:  cast[seq[seq[byte]]](w.data.proof),
         kvpLst: w.data.accounts.mapIt(LeafTiePayload(
           leafTie: LeafTie(
             root:  rootVid,
@@ -171,7 +171,7 @@ func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
           payload: LeafPayload(pType: RawData, rawBlob: it.accBlob))))
 
 func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
-  var (rootKey, rootVid) = (default(Hash256), VertexID(0))
+  var (rootKey, rootVid) = (default(Hash32), VertexID(0))
   for n,s in us:
     for w in s.data.storages:
       let thisRoot = w.account.storageRoot
@@ -187,7 +187,7 @@ func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
               path:  it.slotHash.to(PathID)),
             payload: LeafPayload(pType: RawData, rawBlob: it.slotData))))
     if 0 < result.len:
-      result[^1].proof = cast[seq[Blob]](s.data.proof)
+      result[^1].proof = cast[seq[seq[byte]]](s.data.proof)
 
 func mapRootVid*(
     a: openArray[LeafTiePayload];

@@ -443,7 +443,7 @@ iterator rightPairsGeneric*(
     db: AristoDbRef;                    # Database layer
     root: VertexID;                     # Generic root (different from VertexID)
     start = low(PathID);                # Before or at first value
-      ): (PathID,Blob) =
+      ): (PathID,seq[byte]) =
   ## Variant of `rightPairs()` for a generic tree
   # Verify that `root` is neither from an accounts tree nor a strorage tree.
   if VertexID(1) < root and root.distinctBase < LEAST_FREE_VID:
@@ -452,7 +452,7 @@ iterator rightPairsGeneric*(
 
 iterator rightPairsStorage*(
     db: AristoDbRef;                    # Database layer
-    accPath: Hash256;           # Account the storage data belong to
+    accPath: Hash32;                    # Account the storage data belong to
     start = low(PathID);                # Before or at first value
       ): (PathID,UInt256) =
   ## Variant of `rightPairs()` for a storage tree
