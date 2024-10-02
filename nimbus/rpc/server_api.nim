@@ -74,12 +74,7 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, strin
       return err("Unsupported block tag " & tag)
   else:
     let blockNum = common.BlockNumber blockTag.number
-    let blk = api.chain.blockByNumber(blockNum).valueOr:
-      try:
-        api.chain.db.getEthBlock(blockNum)
-      except BlockNotFound:
-        return err("Block not found, number = " & $blockNum)
-    ok(blk)
+    return api.chain.blockByNumber(blockNum)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
   server.rpc("eth_getBalance") do(data: Web3Address, blockTag: BlockTag) -> UInt256:
