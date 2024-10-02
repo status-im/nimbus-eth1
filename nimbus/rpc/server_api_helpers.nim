@@ -88,7 +88,7 @@ proc populateBlockObject*(blockHash: eth_types.Hash256,
   result.miner = w3Addr header.coinbase
   result.difficulty = header.difficulty
   result.extraData = HistoricExtraData header.extraData
-  result.mixHash = w3Hash header.mixHash
+  result.mixHash = Hash32 header.mixHash
 
   # discard sizeof(seq[byte]) of extraData and use actual length
   let size = sizeof(eth_types.BlockHeader) - sizeof(eth_types.Blob) + header.extraData.len

@@ -230,8 +230,8 @@ proc bigIntNode(x: uint64 | int64): RespResult =
 proc byte32Node(val: UInt256): RespResult =
   ok(Node(kind: nkString, stringVal: "0x" & val.dumpHex, pos: Pos()))
 
-proc resp(hash: common.Hash256): RespResult =
-  ok(resp("0x" & hash.data.toHex))
+proc resp(hash: common.Hash32 | common.Bytes32): RespResult =
+  ok(resp(hash.to0xHex))
 
 proc resp(data: openArray[byte]): RespResult =
   ok(resp("0x" & data.toHex))

@@ -11,7 +11,8 @@
 
 import
   std/[tables, strutils, times, macros],
-  eth/[common, rlp, p2p], stint, stew/[byteutils],
+  eth/[common, rlp, p2p], eth/common/eth_types_json_serialization,
+  stint, stew/[byteutils],
   json_serialization, chronicles,
   json_serialization/stew/results,
   json_serialization/lexer,
@@ -27,7 +28,7 @@ type
     extraData*  : seq[byte]
     gasLimit*   : GasInt
     difficulty* : DifficultyInt
-    mixHash*    : Hash256
+    mixHash*    : Bytes32
     coinbase*   : EthAddress
     alloc*      : GenesisAlloc
     number*     : BlockNumber
