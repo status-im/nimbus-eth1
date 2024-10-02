@@ -22,7 +22,7 @@ import
 
 proc extendLinkedHChain*(
   rev: seq[Header];
-  buddy: FlareBuddyRef;
+  buddy: BeaconBuddyRef;
   topNumber: BlockNumber;
   lhc: ref LinkedHChain; # update in place
   info: static[string];

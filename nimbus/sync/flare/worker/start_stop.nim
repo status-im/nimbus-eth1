@@ -25,10 +25,10 @@ when enableTicker:
 # ------------------------------------------------------------------------------
 
 when enableTicker:
-  proc tickerUpdater(ctx: FlareCtxRef): TickerFlareStatsUpdater =
+  proc tickerUpdater(ctx: BeaconCtxRef): TickerStatsUpdater =
     ## Legacy stuff, will be probably be superseded by `metrics`
-    result = proc: auto =
-      TickerFlareStats(
+    return proc: auto =
+      TickerStats(
         stateTop:        ctx.dbStateBlockNumber(),
         base:            ctx.layout.base,
         least:           ctx.layout.least,
@@ -49,7 +49,7 @@ when enableTicker:
 
         reorg:           ctx.pool.nReorg)
 
-proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncFinalisedBlockHashCB =
+proc updateBeaconHeaderCB(ctx: BeaconCtxRef): SyncFinalisedBlockHashCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   return proc(h: Hash32) {.gcsafe, raises: [].} =
@@ -62,22 +62,22 @@ proc updateBeaconHeaderCB(ctx: FlareCtxRef): SyncFinalisedBlockHashCB =
 # ------------------------------------------------------------------------------
 
 when enableTicker:
-  proc setupTicker*(ctx: FlareCtxRef) =
+  proc setupTicker*(ctx: BeaconCtxRef) =
     ## Helper for `setup()`: Start ticker
     ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
 
-  proc destroyTicker*(ctx: FlareCtxRef) =
+  proc destroyTicker*(ctx: BeaconCtxRef) =
     ## Helper for `release()`
     ctx.pool.ticker.destroy()
     ctx.pool.ticker = TickerRef(nil)
 
 else:
-  template setupTicker*(ctx: FlareCtxRef) = discard
-  template destroyTicker*(ctx: FlareCtxRef) = discard
+  template setupTicker*(ctx: BeaconCtxRef) = discard
+  template destroyTicker*(ctx: BeaconCtxRef) = discard
 
 # ---------
 
-proc setupDatabase*(ctx: FlareCtxRef) =
+proc setupDatabase*(ctx: BeaconCtxRef) =
   ## Initalise database related stuff
 
   # Initialise up queues and lists
@@ -105,17 +105,17 @@ proc setupDatabase*(ctx: FlareCtxRef) =
     ctx.pool.blocksStagedQuLenMax = blocksStagedQueueLenMaxDefault
 
 
-proc setupRpcMagic*(ctx: FlareCtxRef) =
+proc setupRpcMagic*(ctx: BeaconCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
   ctx.pool.chain.com.syncFinalisedBlockHash = ctx.updateBeaconHeaderCB
 
-proc destroyRpcMagic*(ctx: FlareCtxRef) =
+proc destroyRpcMagic*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
   ctx.pool.chain.com.syncFinalisedBlockHash = SyncFinalisedBlockHashCB(nil)
 
 # ---------
 
-proc startBuddy*(buddy: FlareBuddyRef): bool =
+proc startBuddy*(buddy: BeaconBuddyRef): bool =
   ## Convenience setting for starting a new worker
   let
     ctx = buddy.ctx
@@ -126,7 +126,7 @@ proc startBuddy*(buddy: FlareBuddyRef): bool =
       ctx.pool.ticker.startBuddy()
     return true
 
-proc stopBuddy*(buddy: FlareBuddyRef) =
+proc stopBuddy*(buddy: BeaconBuddyRef) =
   buddy.ctx.pool.nBuddies.dec # for metrics
   when enableTicker:
     buddy.ctx.pool.ticker.stopBuddy()

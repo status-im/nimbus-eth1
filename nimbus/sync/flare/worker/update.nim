@@ -19,13 +19,13 @@ import
   "."/[blocks_unproc, db, headers_staged, headers_unproc, helpers]
 
 logScope:
-  topics = "flare update"
+  topics = "beacon update"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc updateBeaconChange(ctx: FlareCtxRef): bool =
+proc updateBeaconChange(ctx: BeaconCtxRef): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
@@ -91,7 +91,7 @@ proc updateBeaconChange(ctx: FlareCtxRef): bool =
   true
 
 
-proc mergeAdjacentChains(ctx: FlareCtxRef): bool =
+proc mergeAdjacentChains(ctx: BeaconCtxRef): bool =
   const info = "mergeAdjacentChains"
 
   if ctx.lhc.layout.base + 1 < ctx.lhc.layout.least or # gap betw `B` and `L`
@@ -128,7 +128,7 @@ proc mergeAdjacentChains(ctx: FlareCtxRef): bool =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc updateLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
+proc updateLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
   ## Update layout
 
   # Check whether there is something to do regarding beacon node change
@@ -141,7 +141,7 @@ proc updateLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
     result = true
 
 
-proc updateBlockRequests*(ctx: FlareCtxRef): bool =
+proc updateBlockRequests*(ctx: BeaconCtxRef): bool =
   ## Update block requests if there staged block queue is empty
   const info = "updateBlockRequests"
 
@@ -161,7 +161,7 @@ proc updateBlockRequests*(ctx: FlareCtxRef): bool =
   false
 
 
-proc updateMetrics*(ctx: FlareCtxRef) =
+proc updateMetrics*(ctx: BeaconCtxRef) =
   let now = Moment.now()
   if ctx.pool.nextUpdate < now:
     ctx.updateMetricsImpl()

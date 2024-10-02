@@ -21,10 +21,10 @@ logScope:
   topics = "ticker"
 
 type
-  TickerFlareStatsUpdater* = proc: TickerFlareStats {.gcsafe, raises: [].}
+  TickerStatsUpdater* = proc: TickerStats {.gcsafe, raises: [].}
     ## Full sync state update function
 
-  TickerFlareStats* = object
+  TickerStats* = object
     ## Full sync state (see `TickerFullStatsUpdater`)
     stateTop*: BlockNumber
     base*: BlockNumber
@@ -52,8 +52,8 @@ type
     started: Moment
     visited: Moment
     prettyPrint: proc(t: TickerRef) {.gcsafe, raises: [].}
-    flareCb: TickerFlareStatsUpdater
-    lastStats: TickerFlareStats
+    statsCb: TickerStatsUpdater
+    lastStats: TickerStats
 
 const
   tickerStartDelay = chronos.milliseconds(100)
@@ -64,9 +64,9 @@ const
 # Private functions: printing ticker messages
 # ------------------------------------------------------------------------------
 
-proc flareTicker(t: TickerRef) {.gcsafe.} =
+proc tickerLogger(t: TickerRef) {.gcsafe.} =
   let
-    data = t.flareCb()
+    data = t.statsCb()
     now = Moment.now()
 
   if data != t.lastStats or
@@ -113,7 +113,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
   t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 proc setLogTicker(t: TickerRef; at: Moment) =
-  if t.flareCb.isNil:
+  if t.statsCb.isNil:
     debug "Stopped", nBuddies=t.nBuddies
   else:
     # Store the `runLogTicker()` in a closure to avoid some garbage collection
@@ -124,18 +124,18 @@ proc setLogTicker(t: TickerRef; at: Moment) =
 # Public constructor and start/stop functions
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TickerRef; cb: TickerFlareStatsUpdater): T =
+proc init*(T: type TickerRef; cb: TickerStatsUpdater): T =
   ## Constructor
   result = TickerRef(
-    prettyPrint: flareTicker,
-    flareCb:     cb,
+    prettyPrint: tickerLogger,
+    statsCb:     cb,
     started:     Moment.now())
   result.setLogTicker Moment.fromNow(tickerStartDelay)
 
 proc destroy*(t: TickerRef) =
   ## Stop ticker unconditionally
   if not t.isNil:
-    t.flareCb = TickerFlareStatsUpdater(nil)
+    t.statsCb = TickerStatsUpdater(nil)
 
 # ------------------------------------------------------------------------------
 # Public functions

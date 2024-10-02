@@ -21,13 +21,13 @@ import
   ../helpers
 
 logScope:
-  topics = "flare headers"
+  topics = "beacon headers"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc registerError(buddy: FlareBuddyRef) =
+proc registerError(buddy: BeaconBuddyRef) =
   buddy.only.nHdrRespErrors.inc
   if fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
@@ -37,7 +37,7 @@ proc registerError(buddy: FlareBuddyRef) =
 # ------------------------------------------------------------------------------
 
 proc headersFetchReversed*(
-    buddy: FlareBuddyRef;
+    buddy: BeaconBuddyRef;
     ivReq: BnRange;
     topHash: Hash32;
     info: static[string];

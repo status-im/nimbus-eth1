@@ -370,11 +370,11 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
-    flareChunkSize* {.
+    beaconChunkSize* {.
       hidden
-      desc: "Number of blocks per database transaction for flare sync"
+      desc: "Number of blocks per database transaction for beacon sync"
       defaultValue: 0
-      name: "debug-flare-chunk-size" .}: int
+      name: "debug-beacon-chunk-size" .}: int
 
     rocksdbMaxOpenFiles {.
       hidden

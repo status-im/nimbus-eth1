@@ -21,14 +21,14 @@ import
   ./headers_unproc
 
 logScope:
-  topics = "flare headers"
+  topics = "beacon headers"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc fetchAndCheck(
-    buddy: FlareBuddyRef;
+    buddy: BeaconBuddyRef;
     ivReq: BnRange;
     lhc: ref LinkedHChain; # update in place
     info: static[string];
@@ -55,7 +55,7 @@ proc fetchAndCheck(
 # ------------------------------------------------------------------------------
 
 proc headerStagedUpdateBeacon*(
-    buddy: FlareBuddyRef;
+    buddy: BeaconBuddyRef;
     info: static[string];
       ) {.async.} =
   ## Fetch beacon header if there is an update available
@@ -71,7 +71,7 @@ proc headerStagedUpdateBeacon*(
 
 
 proc headersStagedCollect*(
-    buddy: FlareBuddyRef;
+    buddy: BeaconBuddyRef;
     info: static[string];
       ): Future[bool] {.async.} =
   ## Collect a batch of chained headers totalling to at most `nHeaders`
@@ -185,7 +185,7 @@ proc headersStagedCollect*(
   return true
 
 
-proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
+proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
   ## Store/insert stashed chains from the `staged` queue into the linked
   ## chains layout and the persistent tables. The function returns the number
   ## of records processed and saved.
@@ -231,7 +231,7 @@ proc headersStagedProcess*(ctx: FlareCtxRef; info: static[string]): int =
     ctx.poolMode = true
 
 
-proc headersStagedReorg*(ctx: FlareCtxRef; info: static[string]) =
+proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention. The effect is that all concurrent peers
   ## finish up their current work and run this function here (which might
   ## do nothing.) This stopping should be enough in most cases to re-organise
@@ -266,23 +266,23 @@ proc headersStagedReorg*(ctx: FlareCtxRef; info: static[string]) =
       discard ctx.lhc.staged.delete key
 
 
-proc headersStagedTopKey*(ctx: FlareCtxRef): BlockNumber =
+proc headersStagedTopKey*(ctx: BeaconCtxRef): BlockNumber =
   ## Retrieve to staged block number
   let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
     return BlockNumber(0)
   qItem.key
 
-proc headersStagedQueueLen*(ctx: FlareCtxRef): int =
+proc headersStagedQueueLen*(ctx: BeaconCtxRef): int =
   ## Number of staged records
   ctx.lhc.staged.len
 
-proc headersStagedQueueIsEmpty*(ctx: FlareCtxRef): bool =
+proc headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
   ctx.lhc.staged.len == 0
 
 # ----------------
 
-proc headersStagedInit*(ctx: FlareCtxRef) =
+proc headersStagedInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.lhc.staged = LinkedHChainQueue.init()
 

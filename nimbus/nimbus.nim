@@ -122,8 +122,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       nimbus.chainRef)
 
   # Always start syncer -- will throttle itself unless needed
-  nimbus.flareSyncRef = FlareSyncRef.init(
-    nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.flareChunkSize)
+  nimbus.beaconSyncRef = BeaconSyncRef.init(
+    nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.beaconChunkSize)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -226,7 +226,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupRpc(nimbus, conf, com, protocols)
 
     if conf.maxPeers > 0:
-      nimbus.flareSyncRef.start
+      nimbus.beaconSyncRef.start
 
     if nimbus.state == NimbusState.Starting:
       # it might have been set to "Stopping" with Ctrl+C

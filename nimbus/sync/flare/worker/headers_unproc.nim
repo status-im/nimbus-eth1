@@ -21,7 +21,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc headersUnprocFetch*(
-    ctx: FlareCtxRef;
+    ctx: BeaconCtxRef;
     maxLen: uint64;
       ): Result[BnRange,void] =
   ## Fetch interval from block ranges with maximal size `maxLen`, where
@@ -53,17 +53,17 @@ proc headersUnprocFetch*(
   ok(iv)
 
 
-proc headersUnprocCommit*(ctx: FlareCtxRef; borrowed: uint) =
+proc headersUnprocCommit*(ctx: BeaconCtxRef; borrowed: uint) =
   ## Commit back all processed range
   ctx.lhc.borrowed -= borrowed
 
-proc headersUnprocCommit*(ctx: FlareCtxRef; borrowed: uint; retuor: BnRange) =
+proc headersUnprocCommit*(ctx: BeaconCtxRef; borrowed: uint; retuor: BnRange) =
   ## Merge back unprocessed range `retour`
   ctx.headersUnprocCommit borrowed
   doAssert ctx.lhc.unprocessed.merge(retuor) == retuor.len
 
 proc headersUnprocCommit*(
-    ctx: FlareCtxRef;
+    ctx: BeaconCtxRef;
     borrowed: uint;
     rMinPt: BlockNumber;
     rMaxPt: BlockNumber) =
@@ -73,50 +73,50 @@ proc headersUnprocCommit*(
 
 
 
-proc headersUnprocCovered*(ctx: FlareCtxRef; minPt,maxPt: BlockNumber): uint64 =
+proc headersUnprocCovered*(ctx: BeaconCtxRef; minPt,maxPt: BlockNumber): uint64 =
   ## Check whether range is fully contained
   ctx.lhc.unprocessed.covered(minPt, maxPt)
 
-proc headersUnprocCovered*(ctx: FlareCtxRef; pt: BlockNumber): bool =
+proc headersUnprocCovered*(ctx: BeaconCtxRef; pt: BlockNumber): bool =
   ## Check whether point is contained
   ctx.lhc.unprocessed.covered(pt, pt) == 1
 
 
-proc headersUnprocTop*(ctx: FlareCtxRef): BlockNumber =
+proc headersUnprocTop*(ctx: BeaconCtxRef): BlockNumber =
   let iv = ctx.lhc.unprocessed.le().valueOr:
     return BlockNumber(0)
   iv.maxPt
 
-proc headersUnprocTotal*(ctx: FlareCtxRef): uint64 =
+proc headersUnprocTotal*(ctx: BeaconCtxRef): uint64 =
   ctx.lhc.unprocessed.total()
 
-proc headersUnprocBorrowed*(ctx: FlareCtxRef): uint64 =
+proc headersUnprocBorrowed*(ctx: BeaconCtxRef): uint64 =
   ctx.lhc.borrowed
 
-proc headersUnprocChunks*(ctx: FlareCtxRef): int =
+proc headersUnprocChunks*(ctx: BeaconCtxRef): int =
   ctx.lhc.unprocessed.chunks()
 
-proc headersUnprocIsEmpty*(ctx: FlareCtxRef): bool =
+proc headersUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
   ctx.lhc.unprocessed.chunks() == 0
 
 # ------------
 
-proc headersUnprocInit*(ctx: FlareCtxRef) =
+proc headersUnprocInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.lhc.unprocessed = BnRangeSet.init()
 
 
-proc headersUnprocSet*(ctx: FlareCtxRef) =
+proc headersUnprocSet*(ctx: BeaconCtxRef) =
   ## Clear
   ctx.lhc.unprocessed.clear()
   ctx.lhc.borrowed = 0u
 
-proc headersUnprocSet*(ctx: FlareCtxRef; iv: BnRange) =
+proc headersUnprocSet*(ctx: BeaconCtxRef; iv: BnRange) =
   ## Set up new unprocessed range
   ctx.headersUnprocSet()
   discard ctx.lhc.unprocessed.merge(iv)
 
-proc headersUnprocSet*(ctx: FlareCtxRef; minPt, maxPt: BlockNumber) =
+proc headersUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
   ## Set up new unprocessed range
   ctx.headersUnprocSet()
   discard ctx.lhc.unprocessed.merge(minPt, maxPt)

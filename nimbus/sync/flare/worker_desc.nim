@@ -101,7 +101,7 @@ type
 
   # -------------------
 
-  FlareBuddyData* = object
+  BeaconBuddyData* = object
     ## Local descriptor data extension
     nHdrRespErrors*: int             ## Number of errors/slow responses in a row
     nBdyRespErrors*: int             ## Ditto for bodies
@@ -111,7 +111,7 @@ type
     stoppedMultiRun*: chronos.Moment ## Time when run-multi stopped
     multiRunIdle*: chronos.Duration  ## Idle time between runs
 
-  FlareCtxData* = object
+  BeaconCtxData* = object
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
     lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
@@ -133,29 +133,29 @@ type
     when enableTicker:
       ticker*: TickerRef             ## Logger ticker
 
-  FlareBuddyRef* = BuddyRef[FlareCtxData,FlareBuddyData]
+  BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
     ## Extended worker peer descriptor
 
-  FlareCtxRef* = CtxRef[FlareCtxData]
+  BeaconCtxRef* = CtxRef[BeaconCtxData]
     ## Extended global descriptor
 
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func lhc*(ctx: FlareCtxRef): var LinkedHChainsSync =
+func lhc*(ctx: BeaconCtxRef): var LinkedHChainsSync =
   ## Shortcut
   ctx.pool.lhcSyncState
 
-func blk*(ctx: FlareCtxRef): var BlocksImportSync =
+func blk*(ctx: BeaconCtxRef): var BlocksImportSync =
   ## Shortcut
   ctx.pool.blkSyncState
 
-func layout*(ctx: FlareCtxRef): var LinkedHChainsLayout =
+func layout*(ctx: BeaconCtxRef): var LinkedHChainsLayout =
   ## Shortcut
   ctx.pool.lhcSyncState.layout
 
-func db*(ctx: FlareCtxRef): CoreDbRef =
+func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter
   ctx.pool.chain.db
 

@@ -15,53 +15,53 @@ import
   ../../worker_desc,
   ".."/[db, blocks_staged, headers_staged]
 
-declareGauge flare_beacon_block_number, "" &
+declareGauge beacon_beacon_block_number, "" &
   "Block number of latest known finalised header"
 
-declareGauge flare_state_block_number, "" &
+declareGauge beacon_state_block_number, "" &
   "Max block number of imported/executed blocks"
   
-declareGauge flare_base_block_number, "" &
+declareGauge beacon_base_block_number, "" &
   "Max block number initial header chain starting at genesis"
 
-declareGauge flare_least_block_number, "" &
+declareGauge beacon_least_block_number, "" &
   "Starting/min block number for higher up headers chain"
 
-declareGauge flare_final_block_number, "" &
+declareGauge beacon_final_block_number, "" &
   "Ending/max block number of higher up headers chain"
 
-declareGauge flare_headers_staged_queue_len, "" &
+declareGauge beacon_headers_staged_queue_len, "" &
   "Number of header list records staged for serialised processing"
 
-declareGauge flare_headers_unprocessed, "" &
+declareGauge beacon_headers_unprocessed, "" &
   "Number of block numbers ready to fetch and stage headers"
 
-declareGauge flare_blocks_staged_queue_len, "" &
+declareGauge beacon_blocks_staged_queue_len, "" &
   "Number of block list records staged for importing"
 
-declareGauge flare_blocks_unprocessed, "" &
+declareGauge beacon_blocks_unprocessed, "" &
   "Number of block numbers ready to fetch and stage block data"
 
-declareGauge flare_number_of_buddies, "" &
+declareGauge beacon_number_of_buddies, "" &
   "Number of currently active worker instances"
 
 
-template updateMetricsImpl*(ctx: FlareCtxRef) =
-  metrics.set(flare_beacon_block_number, ctx.lhc.beacon.header.number.int64)
+template updateMetricsImpl*(ctx: BeaconCtxRef) =
+  metrics.set(beacon_beacon_block_number, ctx.lhc.beacon.header.number.int64)
 
-  metrics.set(flare_state_block_number, ctx.dbStateBlockNumber().int64)
-  metrics.set(flare_base_block_number, ctx.layout.base.int64)
-  metrics.set(flare_least_block_number, ctx.layout.least.int64)
-  metrics.set(flare_final_block_number, ctx.layout.final.int64)
+  metrics.set(beacon_state_block_number, ctx.dbStateBlockNumber().int64)
+  metrics.set(beacon_base_block_number, ctx.layout.base.int64)
+  metrics.set(beacon_least_block_number, ctx.layout.least.int64)
+  metrics.set(beacon_final_block_number, ctx.layout.final.int64)
 
-  metrics.set(flare_headers_staged_queue_len, ctx.headersStagedQueueLen())
-  metrics.set(flare_headers_unprocessed,
+  metrics.set(beacon_headers_staged_queue_len, ctx.headersStagedQueueLen())
+  metrics.set(beacon_headers_unprocessed,
               (ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed()).int64)
 
-  metrics.set(flare_blocks_staged_queue_len, ctx.blocksStagedQueueLen())
-  metrics.set(flare_blocks_unprocessed,
+  metrics.set(beacon_blocks_staged_queue_len, ctx.blocksStagedQueueLen())
+  metrics.set(beacon_blocks_unprocessed,
               (ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed()).int64)
 
-  metrics.set(flare_number_of_buddies, ctx.pool.nBuddies)
+  metrics.set(beacon_number_of_buddies, ctx.pool.nBuddies)
 
 # End
