@@ -14,7 +14,7 @@ import
   pkg/[chronicles, chronos, eth/p2p, results],
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
-  ./flare/[worker, worker_desc],
+  ./beacon/[worker, worker_desc],
   "."/[sync_desc, sync_sched, protocol]
 
 logScope:
