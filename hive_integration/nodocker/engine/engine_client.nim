@@ -279,11 +279,6 @@ proc maybeU64(n: Opt[Quantity]): Opt[uint64] =
     return Opt.none(uint64)
   Opt.some(n.get.uint64)
 
-proc maybeU64(n: Opt[Web3BlockNumber]): Opt[uint64] =
-  if n.isNone:
-    return Opt.none(uint64)
-  Opt.some(n.get.uint64)
-
 proc maybeBool(n: Opt[Quantity]): Opt[bool] =
   if n.isNone:
     return Opt.none(bool)
@@ -312,7 +307,7 @@ proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
     coinbase       : ethAddr bc.miner,
     difficulty     : bc.difficulty,
     extraData      : bc.extraData.bytes,
-    mixHash        : ethHash bc.mixHash,
+    mixHash        : bc.mixHash,
     gasLimit       : bc.gasLimit.GasInt,
     gasUsed        : bc.gasUsed.GasInt,
     timestamp      : EthTime bc.timestamp,
