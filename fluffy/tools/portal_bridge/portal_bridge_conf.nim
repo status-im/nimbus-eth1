@@ -151,6 +151,13 @@ type
         name: "verify-state-proofs"
       .}: bool
 
+      enableGossip* {.
+        desc:
+          "Enable gossipping the state into the portal network. Disable to only build the state without gossiping it.",
+        defaultValue: true,
+        name: "enable-gossip"
+      .}: bool
+
       gossipGenesis* {.
         desc:
           "Enable gossip of the genesis state into the portal network when starting from block 1",
