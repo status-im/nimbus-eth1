@@ -103,7 +103,7 @@ proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
   let rc = ctx.fetchLinkedHChainsLayout()
   if rc.isOk:
     ctx.lhc.layout = rc.value
-    let (uMin,uMax) = (rc.value.base+1, rc.value.least-1)
+    let (uMin,uMax) = (rc.value.coupler+1, rc.value.least-1)
     if uMin <= uMax:
       # Add interval of unprocessed block range `(B,L)` from README
       ctx.headersUnprocSet(uMin, uMax)
@@ -111,8 +111,8 @@ proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
   else:
     let val = ctx.fetchSavedState().expect "saved states"
     ctx.lhc.layout = LinkedHChainsLayout(
-      base:        val.number,
-      baseHash:    val.hash,
+      coupler:     val.number,
+      couplerHash: val.hash,
       least:       val.number,
       leastParent: val.parent,
       final:       val.number,

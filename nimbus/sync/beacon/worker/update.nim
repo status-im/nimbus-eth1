@@ -29,13 +29,13 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
-  ##     G             B==L==F                  Z
+  ##     G             C==L==F                  Z
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> |
   ##
   ## or
   ## ::
-  ##    G==Z            B==L==F
+  ##    G==Z           C==L==F
   ##     o----------------o-------------------------->
   ##     | <-- linked --> |
   ##
@@ -43,7 +43,7 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
   ##
   ## to be updated to
   ## ::
-  ##     G               B==L                 L'==F'
+  ##     G               C==L                 L'==F'
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> | <-- unprocessed --> |
   ##
@@ -51,24 +51,24 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
 
   var z = ctx.lhc.beacon.header.number
 
-  # Need: `F < Z` and `B == L`
+  # Need: `F < Z` and `C == L`
   if z != 0 and z <= ctx.layout.final:       # violates `F < Z`
     trace info & ": not applicable", Z=z.bnStr, F=ctx.layout.final.bnStr
     return false
 
-  if ctx.layout.base != ctx.layout.least:    # violates `B == L`
+  if ctx.layout.coupler != ctx.layout.least: # violates `C == L`
     trace info & ": not applicable",
-      B=ctx.layout.base.bnStr, L=ctx.layout.least.bnStr
+      C=ctx.layout.coupler.bnStr, L=ctx.layout.least.bnStr
     return false
 
-  # Check consistency: `B == L <= F` for maximal `B` => `L == F`
+  # Check consistency: `C == L <= F` for maximal `C` => `L == F`
   doAssert ctx.layout.least == ctx.layout.final
 
   let rlpHeader = rlp.encode(ctx.lhc.beacon.header)
 
   ctx.lhc.layout = LinkedHChainsLayout(
-    base:        ctx.layout.base,
-    baseHash:    ctx.layout.baseHash,
+    coupler:     ctx.layout.coupler,
+    couplerHash: ctx.layout.couplerHash,
     least:       z,
     leastParent: ctx.lhc.beacon.header.parentHash,
     final:       z,
@@ -85,7 +85,7 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
   doAssert ctx.headersUnprocTotal() == 0
   doAssert ctx.headersUnprocBorrowed() == 0
   doAssert ctx.headersStagedQueueIsEmpty()
-  ctx.headersUnprocSet(ctx.layout.base+1, ctx.layout.least-1)
+  ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.least-1)
 
   trace info & ": updated"
   true
@@ -94,26 +94,27 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
 proc mergeAdjacentChains(ctx: BeaconCtxRef): bool =
   const info = "mergeAdjacentChains"
 
-  if ctx.lhc.layout.base + 1 < ctx.lhc.layout.least or # gap betw `B` and `L`
-     ctx.lhc.layout.base == ctx.lhc.layout.least:      # merged already
+  if ctx.lhc.layout.coupler+1 < ctx.lhc.layout.least or   # gap btw. `C` and `L`
+     ctx.lhc.layout.coupler == ctx.lhc.layout.least:      # merged already
     return false
 
   # No overlap allowed!
-  doAssert ctx.lhc.layout.base + 1 == ctx.lhc.layout.least
+  doAssert ctx.lhc.layout.coupler+1 == ctx.lhc.layout.least
 
   # Verify adjacent chains
-  if ctx.lhc.layout.baseHash != ctx.lhc.layout.leastParent:
+  if ctx.lhc.layout.couplerHash != ctx.lhc.layout.leastParent:
     # FIXME: Oops -- any better idea than to defect?
     raiseAssert info & ": hashes do not match" &
-      " B=" & ctx.lhc.layout.base.bnStr & " L=" & $ctx.lhc.layout.least.bnStr
+      " C=" & ctx.lhc.layout.coupler.bnStr &
+      " L=" & $ctx.lhc.layout.least.bnStr
 
-  trace info & ": merging", B=ctx.lhc.layout.base.bnStr,
+  trace info & ": merging", C=ctx.lhc.layout.coupler.bnStr,
     L=ctx.lhc.layout.least.bnStr
 
   # Merge adjacent linked chains
   ctx.lhc.layout = LinkedHChainsLayout(
-    base:        ctx.layout.final,               # `B`
-    baseHash:    ctx.layout.finalHash,
+    coupler:     ctx.layout.final,               # `C`
+    couplerHash: ctx.layout.finalHash,
     least:       ctx.layout.final,               # `L`
     leastParent: ctx.dbPeekParentHash(ctx.layout.final).expect "Hash32",
     final:       ctx.layout.final,               # `F`
@@ -146,16 +147,17 @@ proc updateBlockRequests*(ctx: BeaconCtxRef): bool =
   const info = "updateBlockRequests"
 
   let t = ctx.dbStateBlockNumber()
-  if t < ctx.layout.base: # so the half open interval `(T,B]` is not empty
+  if t < ctx.layout.coupler: # so the half open interval `(T,C]` is not empty
 
-    # One can fill/import/execute blocks by number from `(T,B]`
-    if ctx.blk.topRequest < ctx.layout.base:
+    # One can fill/import/execute blocks by number from `(T,C]`
+    if ctx.blk.topRequest < ctx.layout.coupler:
       # So there is some space
       trace info & ": extending", T=t.bnStr, topReq=ctx.blk.topRequest.bnStr,
-        B=ctx.layout.base.bnStr
+        C=ctx.layout.coupler.bnStr
 
-      ctx.blocksUnprocCommit(0, max(t,ctx.blk.topRequest) + 1, ctx.layout.base)
-      ctx.blk.topRequest = ctx.layout.base
+      ctx.blocksUnprocCommit(
+        0, max(t,ctx.blk.topRequest)+1, ctx.layout.coupler)
+      ctx.blk.topRequest = ctx.layout.coupler
       return true
 
   false

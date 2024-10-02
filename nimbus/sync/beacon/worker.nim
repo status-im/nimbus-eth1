@@ -182,8 +182,8 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
     #
     # Layout of a triple of linked header chains (see `README.md`)
     # ::
-    #   G                B                     L                F
-    #   | <--- [G,B] --> | <----- (B,L) -----> | <-- [L,F] ---> |
+    #   G                C                     L                F
+    #   | <--- [G,C] --> | <----- (C,L) -----> | <-- [L,F] ---> |
     #   o----------------o---------------------o----------------o--->
     #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     #
@@ -191,12 +191,12 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
     # headers and stashing them on the database. Each concurrently running
     # actor works as follows:
     #
-    # * Get a range of block numbers from the `unprocessed` range `(B,L)`.
+    # * Get a range of block numbers from the `unprocessed` range `(C,L)`.
     # * Fetch headers for this range (as much as one can get).
     # * Stash then on the database.
     # * Rinse and repeat.
     #
-    # The block numbers range concurrently taken from `(B,L)` are chosen
+    # The block numbers range concurrently taken from `(C,L)` are chosen
     # from the upper range. So exactly one of the actors has a range
     # `[whatever,L-1]` adjacent to `[L,F]`. Call this actor the lead actor.
     #

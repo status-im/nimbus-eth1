@@ -56,16 +56,16 @@ type
   LinkedHChainsLayout* = object
     ## Layout of a triple of linked header chains
     ## ::
-    ##   G                B                     L                F
+    ##   G                C                     L                F
     ##   o----------------o---------------------o----------------o--->
     ##   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     ##
     ## see `README.md` for details and explanations
     ##
-    base*: BlockNumber
-      ## `B`, maximal block number of linked chain starting at Genesis `G`
-    baseHash*: Hash32
-      ## Hash of `B`
+    coupler*: BlockNumber
+      ## `H`, maximal block number of linked chain starting at Genesis `G`
+    couplerHash*: Hash32
+      ## Hash of `H`
 
     least*: BlockNumber
       ## `L`, minimal block number of linked chain ending at `F` with `B <= L`

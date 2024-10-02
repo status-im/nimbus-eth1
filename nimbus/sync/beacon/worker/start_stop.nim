@@ -30,7 +30,7 @@ when enableTicker:
     return proc: auto =
       TickerStats(
         stateTop:        ctx.dbStateBlockNumber(),
-        base:            ctx.layout.base,
+        coupler:         ctx.layout.coupler,
         least:           ctx.layout.least,
         final:           ctx.layout.final,
         beacon:          ctx.lhc.beacon.header.number,
