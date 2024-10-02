@@ -24,12 +24,8 @@ type
     transitionStatus = 7
     safeHash = 8
     finalizedHash = 9
-    skeletonProgress = 10
-    skeletonBlockHashToNumber = 11
-    skeletonHeader = 12
-    skeletonBody = 13
-    beaconState = 14
-    beaconHeader = 15
+    beaconState = 10
+    beaconHeader = 11
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -86,26 +82,6 @@ func safeHashKey*(): DbKey {.inline.} =
 func finalizedHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(finalizedHash)
   result.dataEndPos = uint8 1
-
-func skeletonProgressKey*(): DbKey {.inline.} =
-  result.data[0] = byte ord(skeletonProgress)
-  result.dataEndPos = 1
-
-func skeletonBlockHashToNumberKey*(h: Hash32): DbKey {.inline.} =
-  result.data[0] = byte ord(skeletonBlockHashToNumber)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
-
-func skeletonHeaderKey*(u: BlockNumber): DbKey {.inline.} =
-  result.data[0] = byte ord(skeletonHeader)
-  doAssert sizeof(u) <= 32
-  copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
-  result.dataEndPos = uint8 sizeof(u)
-
-func skeletonBodyKey*(h: Hash32): DbKey {.inline.} =
-  result.data[0] = byte ord(skeletonBody)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
 
 func hashIndexKey*(hash: Hash32, index: uint16): HashIndexKey =
   result[0..31] = hash.data
