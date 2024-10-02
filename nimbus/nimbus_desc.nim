@@ -15,8 +15,7 @@ import
   ./core/chain,
   ./core/tx_pool,
   ./sync/peers,
-  ./sync/flare,
-  # ./sync/snap, # -- todo
+  ./sync/beacon as beacon_sync,
   ./beacon/beacon_engine,
   ./common,
   ./config
@@ -29,9 +28,7 @@ export
   chain,
   tx_pool,
   peers,
-  flare,
-  #snap,
-  full,
+  beacon_sync,
   beacon_engine,
   common,
   config
@@ -50,8 +47,7 @@ type
     txPool*: TxPoolRef
     networkLoop*: Future[void]
     peerManager*: PeerManagerRef
-    # snapSyncRef*: SnapSyncRef # -- todo
-    flareSyncRef*: FlareSyncRef
+    beaconSyncRef*: BeaconSyncRef
     beaconEngine*: BeaconEngineRef
     metricsServer*: MetricsHttpServerRef
 

@@ -21,24 +21,24 @@ import
   ./worker_desc
 
 logScope:
-  topics = "flare"
+  topics = "beacon"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc headersToFetchOk(buddy: FlareBuddyRef): bool =
+proc headersToFetchOk(buddy: BeaconBuddyRef): bool =
   0 < buddy.ctx.headersUnprocTotal() and
     buddy.ctrl.running and
     not buddy.ctx.poolMode
 
-proc bodiesToFetchOk(buddy: FlareBuddyRef): bool =
+proc bodiesToFetchOk(buddy: BeaconBuddyRef): bool =
   buddy.ctx.blocksStagedFetchOk() and
     buddy.ctrl.running and
     not buddy.ctx.poolMode
 
 proc napUnlessSomethingToFetch(
-    buddy: FlareBuddyRef;
+    buddy: BeaconBuddyRef;
     info: static[string];
       ): Future[bool] {.async.} =
   ## When idle, save cpu cycles waiting for something to do.
@@ -54,7 +54,7 @@ proc napUnlessSomethingToFetch(
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc setup*(ctx: FlareCtxRef): bool =
+proc setup*(ctx: BeaconCtxRef): bool =
   ## Global set up
   debug "RUNSETUP"
   ctx.setupRpcMagic()
@@ -69,14 +69,14 @@ proc setup*(ctx: FlareCtxRef): bool =
   ctx.daemon = true
   true
 
-proc release*(ctx: FlareCtxRef) =
+proc release*(ctx: BeaconCtxRef) =
   ## Global clean up
   debug "RUNRELEASE"
   ctx.destroyRpcMagic()
   ctx.destroyTicker()
 
 
-proc start*(buddy: FlareBuddyRef): bool =
+proc start*(buddy: BeaconBuddyRef): bool =
   ## Initialise worker peer
   const info = "RUNSTART"
 
@@ -91,7 +91,7 @@ proc start*(buddy: FlareBuddyRef): bool =
   debug info, peer=buddy.peer
   true
 
-proc stop*(buddy: FlareBuddyRef) =
+proc stop*(buddy: BeaconBuddyRef) =
   ## Clean up this peer
   debug "RUNSTOP", peer=buddy.peer, nInvocations=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
@@ -101,7 +101,7 @@ proc stop*(buddy: FlareBuddyRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc runDaemon*(ctx: FlareCtxRef) {.async.} =
+proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true`. If that job was stopped due to re-setting
   ## `ctx.daemon` to `false`, it will be restarted next after it was reset
@@ -138,7 +138,7 @@ proc runDaemon*(ctx: FlareCtxRef) {.async.} =
   ctx.updateMetrics()
 
 
-proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
+proc runPool*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   ## Once started, the function `runPool()` is called for all worker peers in
   ## sequence as long as this function returns `false`. There will be no other
   ## `runPeer()` functions activated while `runPool()` is active.
@@ -159,7 +159,7 @@ proc runPool*(buddy: FlareBuddyRef; last: bool; laps: int): bool =
   true # stop
 
 
-proc runPeer*(buddy: FlareBuddyRef) {.async.} =
+proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##

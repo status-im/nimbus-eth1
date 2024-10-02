@@ -48,11 +48,11 @@ be described by the triple of block numbers *(B,L,F)*.
 
 Some block numbers from the set *{w|G<=w<=B}* may correspond to finalised
 blocks which may be stored anywhere. If some block numbers do not correspond
-to finalised blocks, then the headers must reside in the *flareHeader*
+to finalised blocks, then the headers must reside in the *beaconHeader*
 database table. Of course, due to being finalised such block numbers constitute
 a sub-chain starting at *G*.
 
-The block numbers from the set *{w|L<=w<=F}* must reside in the *flareHeader*
+The block numbers from the set *{w|L<=w<=F}* must reside in the *beaconHeader*
 database table. They do not correspond to finalised blocks.
 
 ### Header chains initialisation:
@@ -169,7 +169,6 @@ binary is started on the same machine where the beacon node runs as
 
        ./build/nimbus \
           --network=mainnet \
-          --sync-mode=flare \
           --engine-api=true \
           --engine-api-port=8551 \
           --engine-api-ws=true \
@@ -193,7 +192,7 @@ For the *Era1* pre-load (if any) the following extra options apply to
 
 To start syncing, the following additional options apply to *nimbus*:
 
-       --debug-flare-chunk-size=384
+       --debug-beacon-chunk-size=384
        --debug-rocksdb-max-open-files=384
        --debug-rocksdb-write-buffer-size=50331648
        --debug-rocksdb-block-cache-size=1073741824
@@ -221,18 +220,18 @@ The following metrics are defined in *worker/update/metrics.nim* which will
 be available if *nimbus* is compiled with the additional make flags
 *NIMFLAGS="-d:metrics \-\-threads:on"*:
 
-| *Variable*                    | *Logic type* | *Short description* |
-|:------------------------------|:------------:|:--------------------|
-|                               |              |                     |
-| flare_state_block_number      | block height | **T**, *increasing* |
-| flare_base_block_number       | block height | **B**, *increasing* |
-| flare_least_block_number      | block height | **L**               |
-| flare_final_block_number      | block height | **F**, *increasing* |
-| flare_beacon_block_number     | block height | **Z**, *increasing* |
-|                               |              |                     |
-| flare_headers_staged_queue_len| size | # of staged header list records      |
-| flare_headers_unprocessed     | size | # of accumulated header block numbers|
-| flare_blocks_staged_queue_len | size | # of staged block list records       |
-| flare_blocks_unprocessed      | size | # of accumulated body block numbers  |
-|                               |              |                     |
-| flare_number_of_buddies       | size         | # of working peers  |
+| *Variable*                     | *Logic type* | *Short description* |
+|:-------------------------------|:------------:|:--------------------|
+|                                |              |                     |
+| beacon_state_block_number      | block height | **T**, *increasing* |
+| beacon_base_block_number       | block height | **B**, *increasing* |
+| beacon_least_block_number      | block height | **L**               |
+| beacon_final_block_number      | block height | **F**, *increasing* |
+| beacon_beacon_block_number     | block height | **Z**, *increasing* |
+|                                |              |                     |
+| beacon_headers_staged_queue_len| size | # of staged header list records      |
+| beacon_headers_unprocessed     | size | # of accumulated header block numbers|
+| beacon_blocks_staged_queue_len | size | # of staged block list records       |
+| beacon_blocks_unprocessed      | size | # of accumulated body block numbers  |
+|                                |              |                     |
+| beacon_number_of_buddies       | size         | # of working peers  |

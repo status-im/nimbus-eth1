@@ -21,7 +21,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc blocksUnprocFetch*(
-    ctx: FlareCtxRef;
+    ctx: BeaconCtxRef;
     maxLen: uint64;
       ): Result[BnRange,void] =
   ## Fetch interval from block ranges with maximal size `maxLen`, where
@@ -53,17 +53,17 @@ proc blocksUnprocFetch*(
   ok(iv)
 
 
-proc blocksUnprocCommit*(ctx: FlareCtxRef; borrowed: uint) =
+proc blocksUnprocCommit*(ctx: BeaconCtxRef; borrowed: uint) =
   ## Commit back all processed range
   ctx.blk.borrowed -= borrowed
 
-proc blocksUnprocCommit*(ctx: FlareCtxRef; borrowed: uint; retuor: BnRange) =
+proc blocksUnprocCommit*(ctx: BeaconCtxRef; borrowed: uint; retuor: BnRange) =
   ## Merge back unprocessed range `retour`
   ctx.blocksUnprocCommit borrowed
   doAssert ctx.blk.unprocessed.merge(retuor) == retuor.len
 
 proc blocksUnprocCommit*(
-    ctx: FlareCtxRef;
+    ctx: BeaconCtxRef;
     borrowed: uint;
     rMinPt: BlockNumber;
     rMaxPt: BlockNumber) =
@@ -72,41 +72,41 @@ proc blocksUnprocCommit*(
   doAssert ctx.blk.unprocessed.merge(rMinPt, rMaxPt) == rMaxPt - rMinPt + 1
 
 
-proc blocksUnprocCovered*(ctx: FlareCtxRef; minPt,maxPt: BlockNumber): uint64 =
+proc blocksUnprocCovered*(ctx: BeaconCtxRef; minPt,maxPt: BlockNumber): uint64 =
   ## Check whether range is fully contained
   ctx.blk.unprocessed.covered(minPt, maxPt)
 
-proc blocksUnprocCovered*(ctx: FlareCtxRef; pt: BlockNumber): bool =
+proc blocksUnprocCovered*(ctx: BeaconCtxRef; pt: BlockNumber): bool =
   ## Check whether point is contained
   ctx.blk.unprocessed.covered(pt, pt) == 1
 
 
-proc blocksUnprocTop*(ctx: FlareCtxRef): BlockNumber =
+proc blocksUnprocTop*(ctx: BeaconCtxRef): BlockNumber =
   let iv = ctx.blk.unprocessed.le().valueOr:
     return BlockNumber(0)
   iv.maxPt
 
-proc blocksUnprocBottom*(ctx: FlareCtxRef): BlockNumber =
+proc blocksUnprocBottom*(ctx: BeaconCtxRef): BlockNumber =
   let iv = ctx.blk.unprocessed.ge().valueOr:
     return high(BlockNumber)
   iv.minPt
 
 
-proc blocksUnprocTotal*(ctx: FlareCtxRef): uint64 =
+proc blocksUnprocTotal*(ctx: BeaconCtxRef): uint64 =
   ctx.blk.unprocessed.total()
 
-proc blocksUnprocBorrowed*(ctx: FlareCtxRef): uint64 =
+proc blocksUnprocBorrowed*(ctx: BeaconCtxRef): uint64 =
   ctx.blk.borrowed
 
-proc blocksUnprocChunks*(ctx: FlareCtxRef): int =
+proc blocksUnprocChunks*(ctx: BeaconCtxRef): int =
   ctx.blk.unprocessed.chunks()
 
-proc blocksUnprocIsEmpty*(ctx: FlareCtxRef): bool =
+proc blocksUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
   ctx.blk.unprocessed.chunks() == 0
 
 # ------------------
 
-proc blocksUnprocInit*(ctx: FlareCtxRef) =
+proc blocksUnprocInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.blk.unprocessed = BnRangeSet.init()
 

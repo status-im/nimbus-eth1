@@ -28,7 +28,7 @@ const
     ## or rejected as insignificant.
     ##
     ## FIXME: This setting has priority over the `maxPeers` setting of the
-    ##        `FlareSyncRef.init()` initaliser. This might be harmonised at
+    ##        `BeaconSyncRef.init()` initaliser. This might be harmonised at
     ##        a later stage.
 
   # ----------------------

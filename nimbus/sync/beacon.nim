@@ -14,38 +14,38 @@ import
   pkg/[chronicles, chronos, eth/p2p, results],
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
-  ./flare/[worker, worker_desc],
+  ./beacon/[worker, worker_desc],
   "."/[sync_desc, sync_sched, protocol]
 
 logScope:
-  topics = "flare"
+  topics = "beacon"
 
 type
-  FlareSyncRef* = RunnerSyncRef[FlareCtxData,FlareBuddyData]
+  BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
 
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
-proc runSetup(ctx: FlareCtxRef): bool =
+proc runSetup(ctx: BeaconCtxRef): bool =
   worker.setup(ctx)
 
-proc runRelease(ctx: FlareCtxRef) =
+proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx)
 
-proc runDaemon(ctx: FlareCtxRef) {.async.} =
+proc runDaemon(ctx: BeaconCtxRef) {.async.} =
   await worker.runDaemon(ctx)
 
-proc runStart(buddy: FlareBuddyRef): bool =
+proc runStart(buddy: BeaconBuddyRef): bool =
   worker.start(buddy)
 
-proc runStop(buddy: FlareBuddyRef) =
+proc runStop(buddy: BeaconBuddyRef) =
   worker.stop(buddy)
 
-proc runPool(buddy: FlareBuddyRef; last: bool; laps: int): bool =
+proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps)
 
-proc runPeer(buddy: FlareBuddyRef) {.async.} =
+proc runPeer(buddy: BeaconBuddyRef) {.async.} =
   await worker.runPeer(buddy)
 
 # ------------------------------------------------------------------------------
@@ -53,7 +53,7 @@ proc runPeer(buddy: FlareBuddyRef) {.async.} =
 # ------------------------------------------------------------------------------
 
 proc init*(
-    T: type FlareSyncRef;
+    T: type BeaconSyncRef;
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
@@ -66,11 +66,11 @@ proc init*(
   desc.ctx.pool.chain = chain.com.newChain()
   desc
 
-proc start*(ctx: FlareSyncRef) =
+proc start*(ctx: BeaconSyncRef) =
   ## Beacon Sync always begin with stop mode
   doAssert ctx.startSync()      # Initialize subsystems
 
-proc stop*(ctx: FlareSyncRef) =
+proc stop*(ctx: BeaconSyncRef) =
   ctx.stopSync()
 
 # ------------------------------------------------------------------------------

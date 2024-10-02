@@ -20,19 +20,19 @@ import
   ../helpers
 
 logScope:
-  topics = "flare bodies"
+  topics = "beacon bodies"
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchRegisterError*(buddy: FlareBuddyRef) =
+proc fetchRegisterError*(buddy: BeaconBuddyRef) =
   buddy.only.nBdyRespErrors.inc
   if fetchBodiesReqThresholdCount < buddy.only.nBdyRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
 
 proc bodiesFetch*(
-    buddy: FlareBuddyRef;
+    buddy: BeaconBuddyRef;
     blockHashes: seq[Hash32];
     info: static[string];
       ): Future[Result[seq[BlockBody],void]]

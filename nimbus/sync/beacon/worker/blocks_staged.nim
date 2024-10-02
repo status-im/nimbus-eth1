@@ -20,14 +20,14 @@ import
   "."/[blocks_unproc, db]
 
 logScope:
-  topics = "flare blocks"
+  topics = "beacon blocks"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc fetchAndCheck(
-    buddy: FlareBuddyRef;
+    buddy: BeaconBuddyRef;
     ivReq: BnRange;
     blk: ref BlocksForImport; # update in place
     info: static[string];
@@ -94,7 +94,7 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blocksStagedCanImportOk*(ctx: FlareCtxRef): bool =
+proc blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
   ## Check whether the queue is at its maximum size so import can start with
   ## a full queue.
   if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
@@ -110,7 +110,7 @@ proc blocksStagedCanImportOk*(ctx: FlareCtxRef): bool =
 
   false
 
-proc blocksStagedFetchOk*(ctx: FlareCtxRef): bool =
+proc blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
   let uBottom = ctx.blocksUnprocBottom()
@@ -129,7 +129,7 @@ proc blocksStagedFetchOk*(ctx: FlareCtxRef): bool =
 
 
 proc blocksStagedCollect*(
-    buddy: FlareBuddyRef;
+    buddy: BeaconBuddyRef;
     info: static[string];
       ): Future[bool] {.async.} =
   ## Collect bodies and stage them.
@@ -218,7 +218,7 @@ proc blocksStagedCollect*(
   return true
 
 
-proc blocksStagedImport*(ctx: FlareCtxRef; info: static[string]): bool =
+proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -251,23 +251,23 @@ proc blocksStagedImport*(ctx: FlareCtxRef; info: static[string]): bool =
   true
 
 
-proc blocksStagedBottomKey*(ctx: FlareCtxRef): BlockNumber =
+proc blocksStagedBottomKey*(ctx: BeaconCtxRef): BlockNumber =
   ## Retrieve to staged block number
   let qItem = ctx.blk.staged.ge(0).valueOr:
     return high(BlockNumber)
   qItem.key
 
-proc blocksStagedQueueLen*(ctx: FlareCtxRef): int =
+proc blocksStagedQueueLen*(ctx: BeaconCtxRef): int =
   ## Number of staged records
   ctx.blk.staged.len
 
-proc blocksStagedQueueIsEmpty*(ctx: FlareCtxRef): bool =
+proc blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
   ctx.blk.staged.len == 0
 
 # ----------------
 
-proc blocksStagedInit*(ctx: FlareCtxRef) =
+proc blocksStagedInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.blk.staged = StagedBlocksQueue.init()
 

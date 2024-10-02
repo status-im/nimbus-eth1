@@ -21,10 +21,10 @@ import
   ./headers_unproc
 
 logScope:
-  topics = "flare db"
+  topics = "beacon db"
 
 const
-  LhcStateKey = 1.flareStateKey
+  LhcStateKey = 1.beaconStateKey
 
 type
   SavedDbStateSpecs = tuple
@@ -43,7 +43,7 @@ formatIt(Hash32):
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc fetchLinkedHChainsLayout(ctx: FlareCtxRef): Opt[LinkedHChainsLayout] =
+proc fetchLinkedHChainsLayout(ctx: BeaconCtxRef): Opt[LinkedHChainsLayout] =
   let data = ctx.db.ctx.getKvt().get(LhcStateKey.toOpenArray).valueOr:
     return err()
   try:
@@ -52,7 +52,7 @@ proc fetchLinkedHChainsLayout(ctx: FlareCtxRef): Opt[LinkedHChainsLayout] =
     return err()
 
 
-proc fetchSavedState(ctx: FlareCtxRef): Opt[SavedDbStateSpecs] =
+proc fetchSavedState(ctx: BeaconCtxRef): Opt[SavedDbStateSpecs] =
   let db = ctx.db
   var val: SavedDbStateSpecs
   val.number = db.getSavedStateBlockNumber()
@@ -70,7 +70,7 @@ proc fetchSavedState(ctx: FlareCtxRef): Opt[SavedDbStateSpecs] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc dbStoreLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
+proc dbStoreLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
   ## Save chain layout to persistent db
   const info = "dbStoreLinkedHChainsLayout"
   if ctx.layout == ctx.lhc.lastLayout:
@@ -96,7 +96,7 @@ proc dbStoreLinkedHChainsLayout*(ctx: FlareCtxRef): bool =
   true
 
 
-proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
+proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
   ## Restore chain layout from persistent db
   const info = "dbLoadLinkedHChainsLayout"
 
@@ -125,7 +125,7 @@ proc dbLoadLinkedHChainsLayout*(ctx: FlareCtxRef) =
 # ------------------
 
 proc dbStashHeaders*(
-    ctx: FlareCtxRef;
+    ctx: BeaconCtxRef;
     first: BlockNumber;
     revBlobs: openArray[seq[byte]];
       ) =
@@ -145,14 +145,14 @@ proc dbStashHeaders*(
     kvt = ctx.db.ctx.getKvt()
     last = first + revBlobs.len.uint64 - 1
   for n,data in revBlobs:
-    let key = flareHeaderKey(last - n.uint64)
+    let key = beaconHeaderKey(last - n.uint64)
     kvt.put(key.toOpenArray, data).isOkOr:
       raiseAssert info & ": put() failed: " & $$error
 
-proc dbPeekHeader*(ctx: FlareCtxRef; num: BlockNumber): Opt[Header] =
+proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
   let
-    key = flareHeaderKey(num)
+    key = beaconHeaderKey(num)
     rc = ctx.db.ctx.getKvt().get(key.toOpenArray)
   if rc.isOk:
     try:
@@ -161,17 +161,17 @@ proc dbPeekHeader*(ctx: FlareCtxRef; num: BlockNumber): Opt[Header] =
       discard
   err()
 
-proc dbPeekParentHash*(ctx: FlareCtxRef; num: BlockNumber): Opt[Hash32] =
+proc dbPeekParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
   ## Retrieve some stashed parent hash.
   ok (? ctx.dbPeekHeader num).parentHash
 
-proc dbUnstashHeader*(ctx: FlareCtxRef; bn: BlockNumber) =
+proc dbUnstashHeader*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
-  discard ctx.db.ctx.getKvt().del(flareHeaderKey(bn).toOpenArray)
+  discard ctx.db.ctx.getKvt().del(beaconHeaderKey(bn).toOpenArray)
 
 # ------------------
 
-proc dbStateBlockNumber*(ctx: FlareCtxRef): BlockNumber =
+proc dbStateBlockNumber*(ctx: BeaconCtxRef): BlockNumber =
   ## Currently only a wrapper around the function returning the current
   ## database state block number
   ctx.db.getSavedStateBlockNumber()
