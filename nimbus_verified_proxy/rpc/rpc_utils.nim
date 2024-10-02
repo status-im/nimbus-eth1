@@ -97,7 +97,7 @@ proc calculateTransactionData(
     let tx = distinctBase(t)
     txSize = txSize + uint64(len(tx))
     tr.merge(rlp.encode(uint64 i), tx).expect "merge data"
-    txHashes.add(txOrHash toFixedBytes(keccakHash(tx)))
+    txHashes.add(txOrHash keccakHash(tx))
   let rootHash = tr.state(updateOk = true).expect "hash"
   (rootHash, txHashes, txSize)
 
@@ -116,7 +116,7 @@ func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
     gasUsed: distinctBase(payload.gasUsed),
     timestamp: payload.timestamp.EthTime,
     extraData: bytes payload.extraData,
-    mixHash: payload.prevRandao.asEthHash,
+    mixHash: Hash32 payload.prevRandao,
     nonce: default(etypes.BlockNonce),
     baseFeePerGas: Opt.some payload.baseFeePerGas,
   )
@@ -133,9 +133,9 @@ proc asBlockObject*(p: ExecutionData): BlockObject {.raises: [ValueError].} =
     number: web3.BlockNumber p.blockNumber,
     hash: p.blockHash,
     parentHash: p.parentHash,
-    sha3Uncles: FixedBytes(etypes.EMPTY_UNCLE_HASH.data),
+    sha3Uncles: etypes.EMPTY_UNCLE_HASH,
     logsBloom: p.logsBloom,
-    transactionsRoot: toFixedBytes(txRoot),
+    transactionsRoot: txRoot,
     stateRoot: p.stateRoot,
     receiptsRoot: p.receiptsRoot,
     miner: p.feeRecipient,

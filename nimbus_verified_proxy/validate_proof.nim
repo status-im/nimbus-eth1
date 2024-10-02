@@ -47,7 +47,7 @@ proc isValidProof(
     return false
 
 proc getAccountFromProof*(
-    stateRoot: FixedBytes[32],
+    stateRoot: Hash32,
     accountAddress: Address,
     accountBalance: UInt256,
     accountNonce: Quantity,
@@ -97,7 +97,7 @@ proc getStorageData(
     return err(proofResult.errorMsg)
 
 proc getStorageData*(
-    stateRoot: FixedBytes[32], requestedSlot: UInt256, proof: ProofResponse
+    stateRoot: Hash32, requestedSlot: UInt256, proof: ProofResponse
 ): Result[UInt256, string] =
   let account =
     ?getAccountFromProof(
