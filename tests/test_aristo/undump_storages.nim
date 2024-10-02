@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -34,7 +34,7 @@ type
 
   UndumpStorages* = object
     ## Palatable output for iterator
-    root*: Hash256
+    root*: Hash32
     data*: AccountStorageRange
     seenAccounts*: int
     seenStorages*: int
@@ -50,7 +50,7 @@ template say(args: varargs[untyped]) =
 proc toByteSeq(s: string): seq[byte] =
   utils.fromHex(s)
 
-proc fromHex(T: type Hash256; s: string): T =
+proc fromHex(T: type Hash32; s: string): T =
   result.data = ByteArray32.fromHex(s)
 
 proc fromHex(T: type NodeKey; s: string): T =
@@ -64,17 +64,17 @@ proc fromHex(T: type NodeTag; s: string): T =
 # ------------------------------------------------------------------------------
 
 proc dumpStorages*(
-    root: Hash256;
+    root: Hash32;
     data: AccountStorageRange
       ): string =
   ## Dump account and storage data in parseable Ascii text
-  proc ppStr(blob: Blob): string =
+  proc ppStr(blob: seq[byte]): string =
     blob.toHex
 
   proc ppStr(proof: SnapProof): string =
-    proof.to(Blob).ppStr
+    proof.to(seq[byte]).ppStr
 
-  proc ppStr(hash: Hash256): string =
+  proc ppStr(hash: Hash32): string =
     hash.data.toHex
 
   proc ppStr(key: NodeKey): string =
@@ -153,7 +153,7 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
 
     of UndumpStoragesRoot:
       if flds.len == 1:
-        data.root = Hash256.fromHex(flds[0])
+        data.root = Hash32.fromHex(flds[0])
         if 0 < nAccounts:
           state = UndumpSlotsHeader
           continue
@@ -182,7 +182,7 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
 
     of UndumpSlotsRoot:
       if flds.len == 1:
-        data.data.storages[^1].account.storageRoot = Hash256.fromHex(flds[0])
+        data.data.storages[^1].account.storageRoot = Hash32.fromHex(flds[0])
         state = UndumpSlotsList
         continue
       state = UndumpError
@@ -191,7 +191,7 @@ iterator undumpNextStorages*(gzFile: string): UndumpStorages =
     of UndumpSlotsList:
       if flds.len == 2:
         data.data.storages[^1].data.add SnapStorage(
-          slotHash: Hash256.fromHex(flds[0]),
+          slotHash: Hash32.fromHex(flds[0]),
           slotData: flds[1].toByteSeq)
         nSlots.dec
         if 0 < nSlots:

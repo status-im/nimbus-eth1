@@ -16,8 +16,8 @@ import
   eth/p2p/discoveryv5/enr,
   eth/keys,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../rpc/rpc_discovery_api,
-  ./test_helpers
+  ../../rpc/rpc_discovery_api,
+  ../test_helpers
 
 type TestCase = ref object
   localDiscovery: discv5_protocol.Protocol
@@ -30,7 +30,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     localSrvPort = 0 # let the OS choose a port
     ta = initTAddress(localSrvAddress, localSrvPort)
     localDiscoveryNode =
-      initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
+      initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20332))
     client = newRpcHttpClient()
 
   let rpcHttpServer = RpcHttpServer.new()

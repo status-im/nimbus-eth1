@@ -49,7 +49,7 @@ type
 
   AccountRef = ref object
     statement: CoreDbAccount
-    accPath: Hash256
+    accPath: Hash32
     flags: AccountFlags
     code: CodeBytesRef
     originalStorage: TableRef[UInt256, UInt256]
@@ -70,7 +70,7 @@ type
     cache: Table[EthAddress, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
       # persist
-    code: LruCache[Hash256, CodeBytesRef]
+    code: LruCache[Hash32, CodeBytesRef]
       ## The code cache provides two main benefits:
       ##
       ## * duplicate code is shared in memory beween accounts
@@ -81,7 +81,7 @@ type
       ## when underpriced code opcodes are being run en masse - both advantages
       ## help performance broadly as well.
 
-    slots: LruCache[UInt256, Hash256]
+    slots: LruCache[UInt256, Hash32]
       ## Because the same slots often reappear, we want to avoid writing them
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
@@ -132,11 +132,11 @@ when debugAccountsLedgerRef:
 template logTxt(info: static[string]): static[string] =
   "AccountsLedgerRef " & info
 
-template toAccountKey(acc: AccountRef): Hash256 =
+template toAccountKey(acc: AccountRef): Hash32 =
   acc.accPath
 
-template toAccountKey(eAddr: EthAddress): Hash256 =
-  eAddr.keccakHash
+template toAccountKey(eAddr: EthAddress): Hash32 =
+  eAddr.data.keccak256
 
 
 proc beginSavepoint*(ac: AccountsLedgerRef): LedgerSavePoint {.gcsafe.}
@@ -151,7 +151,7 @@ proc resetCoreDbAccount(ac: AccountsLedgerRef, acc: AccountRef) =
 
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
-           root: KeccakHash, storeSlotHash: bool): AccountsLedgerRef =
+           root: Hash32, storeSlotHash: bool): AccountsLedgerRef =
   new result
   result.ledger = db.ctx.getAccounts()
   result.kvt = db.ctx.getKvt()
@@ -165,7 +165,7 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
   init(x, db, EMPTY_ROOT_HASH)
 
 # Renamed `rootHash()` => `state()`
-proc state*(ac: AccountsLedgerRef): KeccakHash =
+proc state*(ac: AccountsLedgerRef): Hash32 =
   const info = "state(): "
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
@@ -310,7 +310,7 @@ proc originalStorageValue(
   # Not in the original values cache - go to the DB.
   let
     slotKey = ac.slots.get(slot).valueOr:
-      slot.toBytesBE.keccakHash
+      slot.toBytesBE.keccak256
     rc = ac.ledger.slotFetch(acc.toAccountKey, slotKey)
   if rc.isOk:
     result = rc.value
@@ -387,7 +387,7 @@ proc persistStorage(acc: AccountRef, ac: AccountsLedgerRef) =
     var cached = true
     let slotKey = ac.slots.get(slot).valueOr:
       cached = false
-      let hash = slot.toBytesBE.keccakHash
+      let hash = slot.toBytesBE.keccak256
       ac.slots.put(slot, hash)
       hash
 
@@ -431,7 +431,7 @@ proc makeDirty(ac: AccountsLedgerRef, address: EthAddress, cloneStorage = true):
   ac.savePoint.cache[address] = result
   ac.savePoint.dirty[address] = result
 
-proc getCodeHash*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
+proc getCodeHash*(ac: AccountsLedgerRef, address: EthAddress): Hash32 =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyEthAccount.codeHash
   else: acc.statement.codeHash
@@ -568,7 +568,7 @@ proc incNonce*(ac: AccountsLedgerRef, address: EthAddress) =
 proc setCode*(ac: AccountsLedgerRef, address: EthAddress, code: seq[byte]) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
-  let codeHash = keccakHash(code)
+  let codeHash = keccak256(code)
   if acc.statement.codeHash != codeHash:
     var acc = ac.makeDirty(address)
     acc.statement.codeHash = codeHash
@@ -761,7 +761,7 @@ iterator cachedStorage*(ac: AccountsLedgerRef, address: EthAddress): (UInt256, U
       for k, v in acc.originalStorage:
         yield (k, v)
 
-proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash256 =
+proc getStorageRoot*(ac: AccountsLedgerRef, address: EthAddress): Hash32 =
   # beware that if the account not persisted,
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
@@ -886,7 +886,7 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArr
 
     let
       slotKey = ac.slots.get(slot).valueOr:
-        slot.toBytesBE.keccakHash
+        slot.toBytesBE.keccak256
       slotProof = ac.ledger.slotProof(addressHash, slotKey).valueOr:
         if error.aErr == FetchPathNotFound:
           storageProof.add(@[])
@@ -897,9 +897,9 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: EthAddress, slots: openArr
 
   storageProof
 
-proc state*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
-proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 = getCodeHash(distinctBase db, address)
-proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 = getStorageRoot(distinctBase db, address)
+proc state*(db: ReadOnlyStateDB): Hash32 {.borrow.}
+proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getCodeHash(distinctBase db, address)
+proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getStorageRoot(distinctBase db, address)
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 = getBalance(distinctBase db, address)
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 = getStorage(distinctBase db, address, slot)
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce = getNonce(distinctBase db, address)

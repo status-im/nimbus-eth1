@@ -126,7 +126,7 @@ proc getCode*(ldg: LedgerRef, eAddr: EthAddress): CodeBytesRef =
   result = ldg.ac.getCode(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), result
 
-proc getCodeHash*(ldg: LedgerRef, eAddr: EthAddress): Hash256  =
+proc getCodeHash*(ldg: LedgerRef, eAddr: EthAddress): Hash32  =
   ldg.beginTrackApi LdgGetCodeHashFn
   result = ldg.ac.getCodeHash(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), result=($$result)
@@ -155,7 +155,7 @@ proc getStorage*(ldg: LedgerRef, eAddr: EthAddress, slot: UInt256): UInt256 =
   result = ldg.ac.getStorage(eAddr, slot)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), slot, result
 
-proc getStorageRoot*(ldg: LedgerRef, eAddr: EthAddress): Hash256 =
+proc getStorageRoot*(ldg: LedgerRef, eAddr: EthAddress): Hash32 =
   ldg.beginTrackApi LdgGetStorageRootFn
   result = ldg.ac.getStorageRoot(eAddr)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), result=($$result)
@@ -249,7 +249,7 @@ proc setBalance*(ldg: LedgerRef, eAddr: EthAddress, balance: UInt256) =
   ldg.ac.setBalance(eAddr, balance)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), balance
 
-proc setCode*(ldg: LedgerRef, eAddr: EthAddress, code: Blob) =
+proc setCode*(ldg: LedgerRef, eAddr: EthAddress, code: seq[byte]) =
   ldg.beginTrackApi LdgSetCodeFn
   ldg.ac.setCode(eAddr, code)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), code
@@ -274,7 +274,7 @@ proc setTransientStorage*(
   ldg.ac.setTransientStorage(eAddr, slot, val)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), slot, val
 
-proc state*(ldg: LedgerRef): Hash256 =
+proc state*(ldg: LedgerRef): Hash32 =
   ldg.beginTrackApi LdgStateFn
   result = ldg.ac.state()
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
@@ -308,8 +308,8 @@ proc getStorageProof*(ldg: LedgerRef, eAddr: EthAddress, slots: openArray[UInt25
 # ------------------------------------------------------------------------------
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
-proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 = getCodeHash(distinctBase db, address)
-proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 = getStorageRoot(distinctBase db, address)
+proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getCodeHash(distinctBase db, address)
+proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash32 = getStorageRoot(distinctBase db, address)
 proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 = getBalance(distinctBase db, address)
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 = getStorage(distinctBase db, address, slot)
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce = getNonce(distinctBase db, address)

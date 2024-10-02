@@ -36,13 +36,13 @@ func pathPfxPad*(pfx: NibblesBuf; dblNibble: static[byte]): NibblesBuf
 # Public functions
 # ------------------------------------------------------------------------------
 
-func pathAsBlob*(tag: PathID): Blob =
+func pathAsBlob*(tag: PathID): seq[byte] =
   ## Convert the `tag` argument to a sequence of an even number of nibbles
-  ## represented by a `Blob`. If the argument `tag` represents an odd number
-  ## of nibbles, a zero nibble is appendend.
+  ## represented by a `seq[byte]`. If the argument `tag` represents an odd
+  ## number of nibbles, a zero nibble is appendend.
   ##
   ## This function is useful only if there is a tacit agreement that all paths
-  ## used to index database leaf values can be represented as `Blob`, i.e.
+  ## used to index database leaf values can be represented as `seq[byte]`, i.e.
   ## `PathID` type paths with an even number of nibbles.
   if 0 < tag.length:
     let key = tag.pfx.toBytesBE

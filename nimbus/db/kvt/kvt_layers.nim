@@ -51,7 +51,7 @@ func layersHasKey*(db: KvtDbRef; key: openArray[byte]|seq[byte]): bool =
   ##
   db.layersLen(key).isSome()
 
-func layersGet*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[Blob] =
+func layersGet*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[seq[byte]] =
   ## Find an item on the cache layers. An `ok()` result might contain an
   ## empty value if it is stored on the cache  that way.
   ##
@@ -65,7 +65,7 @@ func layersGet*(db: KvtDbRef; key: openArray[byte]|seq[byte]): Opt[Blob] =
     w.sTab.withValue(key, item):
       return Opt.some(item[])
 
-  Opt.none(Blob)
+  Opt.none(seq[byte])
 
 # ------------------------------------------------------------------------------
 # Public functions: put function
@@ -100,8 +100,8 @@ func layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
 
 iterator layersWalk*(
     db: KvtDbRef;
-    seen: var HashSet[Blob];
-      ): tuple[key: Blob, data: Blob] =
+    seen: var HashSet[seq[byte]];
+      ): tuple[key: seq[byte], data: seq[byte]] =
   ## Walk over all key-value pairs on the cache layers. Note that
   ## entries are unsorted.
   ##
@@ -121,9 +121,9 @@ iterator layersWalk*(
 
 iterator layersWalk*(
     db: KvtDbRef;
-      ): tuple[key: Blob, data: Blob] =
+      ): tuple[key: seq[byte], data: seq[byte]] =
   ## Variant of `layersWalk()`.
-  var seen: HashSet[Blob]
+  var seen: HashSet[seq[byte]]
   for (key,val) in db.layersWalk seen:
     yield (key,val)
 

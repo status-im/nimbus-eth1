@@ -121,9 +121,9 @@ proc ppVids(vids: HashSet[RootedVertexID]): string =
       result &= ","
     result[^1] = '}'
 
-func ppCodeHash(h: Hash256): string =
+func ppCodeHash(h: Hash32): string =
   result = "¢"
-  if h == default(Hash256):
+  if h == default(Hash32):
     result &= "©"
   elif h == EMPTY_CODE_HASH:
     result &= "ø"
@@ -143,7 +143,7 @@ proc ppVidList(vLst: openArray[VertexID]): string =
 proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
   if pfx:
     result = "£"
-  if key.to(Hash256) == default(Hash256):
+  if key.to(Hash32) == default(Hash32):
     result &= "©"
   elif not key.isValid:
     result &= "ø"
@@ -494,13 +494,13 @@ proc ppLayer(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pp*(w: Hash256; codeHashOk: bool): string =
+proc pp*(w: Hash32; codeHashOk: bool): string =
   if codeHashOk:
     w.ppCodeHash
   elif w == EMPTY_ROOT_HASH:
     "EMPTY_ROOT_HASH"
-  elif w == default(Hash256):
-    "default(Hash256)"
+  elif w == default(Hash32):
+    "default(Hash32)"
   else:
     w.data.toHex.squeeze(hex=true,ignLen=true)
 
@@ -510,13 +510,13 @@ proc pp*(n: NibblesBuf): string =
 proc pp*(w: HashKey; sig: MerkleSignRef): string =
   w.ppKey(sig.db)
 
-proc pp*(w: Hash256; sig: MerkleSignRef): string =
+proc pp*(w: Hash32; sig: MerkleSignRef): string =
   w.to(HashKey).ppKey(sig.db)
 
 proc pp*(w: HashKey; db = AristoDbRef(nil)): string =
   w.ppKey(db.orDefault)
 
-proc pp*(w: Hash256; db = AristoDbRef(nil)): string =
+proc pp*(w: Hash32; db = AristoDbRef(nil)): string =
   w.to(HashKey).ppKey(db.orDefault)
 
 proc pp*(w: openArray[HashKey]; db = AristoDbRef(nil)): string =

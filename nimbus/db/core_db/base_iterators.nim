@@ -45,7 +45,7 @@ when CoreDbEnableApiTracking:
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
+iterator pairs*(kvt: CoreDbKvtRef): (seq[byte], seq[byte]) {.apiRaise.} =
   ## Iterator supported on memory DB (otherwise implementation dependent)
   ##
   kvt.setTrackNewApi KvtPairsIt
@@ -64,7 +64,7 @@ iterator pairs*(kvt: CoreDbKvtRef): (Blob, Blob) {.apiRaise.} =
     raiseAssert: "Unsupported database type: " & $kvt.dbType
   kvt.ifTrackNewApi: debug logTxt, api, elapsed
 
-iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
+iterator pairs*(mpt: CoreDbMptRef): (seq[byte], seq[byte]) =
   ## Trie traversal, only supported for `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptPairsIt
@@ -76,7 +76,7 @@ iterator pairs*(mpt: CoreDbMptRef): (Blob, Blob) =
     raiseAssert: "Unsupported database type: " & $mpt.dbType
   mpt.ifTrackNewApi: debug logTxt, api, elapsed
 
-iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash256): (Blob, UInt256) =
+iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash32): (seq[byte], UInt256) =
   ## Trie traversal, only supported for `CoreDbMptRef`
   ##
   acc.setTrackNewApi AccSlotPairsIt
@@ -89,7 +89,7 @@ iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash256): (Blob, UInt256) =
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed
 
-iterator replicate*(mpt: CoreDbMptRef): (Blob, Blob) {.apiRaise.} =
+iterator replicate*(mpt: CoreDbMptRef): (seq[byte], seq[byte]) {.apiRaise.} =
   ## Low level trie dump, only supported for non persistent `CoreDbMptRef`
   ##
   mpt.setTrackNewApi MptReplicateIt

@@ -32,7 +32,7 @@ type
 
   UndumpAccounts* = object
     ## Palatable output for iterator
-    root*: Hash256
+    root*: Hash32
     base*: NodeTag
     data*: PackedAccountRange
     seenAccounts*: int
@@ -49,7 +49,7 @@ template say(args: varargs[untyped]) =
 proc toByteSeq(s: string): seq[byte] =
   utils.fromHex(s)
 
-proc fromHex(T: type Hash256; s: string): T =
+proc fromHex(T: type Hash32; s: string): T =
   result.data = ByteArray32.fromHex(s)
 
 proc fromHex(T: type NodeKey; s: string): T =
@@ -63,18 +63,18 @@ proc fromHex(T: type NodeTag; s: string): T =
 # ------------------------------------------------------------------------------
 
 proc dumpAccounts*(
-    root: Hash256;
+    root: Hash32;
     base: NodeTag;
     data: PackedAccountRange;
       ): string =
   ## Dump accounts data in parseable Ascii text
-  proc ppStr(blob: Blob): string =
+  proc ppStr(blob: seq[byte]): string =
     blob.toHex
 
   proc ppStr(proof: SnapProof): string =
-    proof.to(Blob).ppStr
+    proof.to(seq[byte]).ppStr
 
-  proc ppStr(hash: Hash256): string =
+  proc ppStr(hash: Hash32): string =
     hash.data.toHex
 
   proc ppStr(key: NodeKey): string =
@@ -83,7 +83,7 @@ proc dumpAccounts*(
   result = "accounts " & $data.accounts.len & " " & $data.proof.len & "\n"
 
   result &= root.ppStr & "\n"
-  result &= base.to(Hash256).ppStr & "\n"
+  result &= base.to(Hash32).ppStr & "\n"
 
   for n in 0 ..< data.accounts.len:
     result &= data.accounts[n].accKey.ppStr & " "
@@ -146,7 +146,7 @@ iterator undumpNextAccount*(gzFile: string): UndumpAccounts =
 
     of UndumpStateRoot:
       if flds.len == 1:
-        data.root = Hash256.fromHex(flds[0])
+        data.root = Hash32.fromHex(flds[0])
         state = UndumpBase
         continue
       state = UndumpError

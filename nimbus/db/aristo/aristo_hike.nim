@@ -190,7 +190,7 @@ proc hikeUp*(
   NibblesBuf.fromBytes(path).hikeUp(root, db, leaf, hike)
 
 proc hikeUp*(
-    path: Hash256;
+    path: Hash32;
     root: VertexID;
     db: AristoDbRef;
     leaf: Opt[VertexRef];

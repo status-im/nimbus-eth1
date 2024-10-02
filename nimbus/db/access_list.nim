@@ -24,7 +24,7 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func toStorageKeys(slots: SlotSet): seq[StorageKey] =
+func toStorageKeys(slots: SlotSet): seq[Bytes32] =
   for slot in slots:
     result.add slot.to(Bytes32)
 

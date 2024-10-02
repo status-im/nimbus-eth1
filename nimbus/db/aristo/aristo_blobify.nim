@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   results,
   stew/[arrayops, endians2],
   ./aristo_desc
@@ -123,7 +122,7 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blobifyTo*(pyl: LeafPayload, data: var Blob) =
+proc blobifyTo*(pyl: LeafPayload, data: var seq[byte]) =
   case pyl.pType
   of RawData:
     data &= pyl.rawBlob
@@ -162,20 +161,20 @@ proc blobifyTo*(pyl: LeafPayload, data: var Blob) =
     data &= pyl.stoData.blobify().data
     data &= [0x20.byte]
 
-proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
+proc blobifyTo*(vtx: VertexRef; data: var seq[byte]): Result[void,AristoError] =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
   ## fixed byte boundaries.
   ## ::
   ##   Branch:
-  ##     [VertexID, ...] -- list of up to 16 child vertices lookup keys
-  ##     Blob           -- hex encoded partial path (non-empty for extension nodes)
+  ##     [VertexID, ..] -- list of up to 16 child vertices lookup keys
+  ##     seq[byte]      -- hex encoded partial path (non-empty for extension nodes)
   ##     uint64         -- lengths of each child vertex, each taking 4 bits
   ##     0x80 + xx      -- marker(2) + pathSegmentLen(6)
   ##
   ##   Leaf:
-  ##     Blob           -- opaque leaf data payload (might be zero length)
-  ##     Blob           -- hex encoded partial path (at least one byte)
+  ##     seq[byte]      -- opaque leaf data payload (might be zero length)
+  ##     seq[byte]      -- hex encoded partial path (at least one byte)
   ##     0xc0 + yy      -- marker(2) + partialPathLen(6)
   ##
   ## For a branch record, the bytes of the `access` array indicate the position
@@ -224,22 +223,22 @@ proc blobifyTo*(vtx: VertexRef; data: var Blob): Result[void,AristoError] =
 
   ok()
 
-proc blobify*(vtx: VertexRef): Blob =
+proc blobify*(vtx: VertexRef): seq[byte] =
   ## Variant of `blobify()`
   result = newSeqOfCap[byte](128)
   if vtx.blobifyTo(result).isErr:
     result.setLen(0) # blobify only fails on invalid verticies
 
-proc blobifyTo*(lSst: SavedState; data: var Blob): Result[void,AristoError] =
+proc blobifyTo*(lSst: SavedState; data: var seq[byte]): Result[void,AristoError] =
   ## Serialise a last saved state record
   data.add lSst.key.data
   data.add lSst.serial.toBytesBE
   data.add @[0x7fu8]
   ok()
 
-proc blobify*(lSst: SavedState): Result[Blob,AristoError] =
+proc blobify*(lSst: SavedState): Result[seq[byte],AristoError] =
   ## Variant of `blobify()`
-  var data: Blob
+  var data: seq[byte]
   ? lSst.blobifyTo data
   ok(move(data))
 
