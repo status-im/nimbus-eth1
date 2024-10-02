@@ -13,7 +13,7 @@ type
   CasperRef* = ref object
     feeRecipient: EthAddress
     timestamp   : EthTime
-    prevRandao  : Hash256
+    prevRandao  : Bytes32
     withdrawals : seq[Withdrawal] ## EIP-4895
     beaconRoot  : Hash256 ## EIP-4788
 
@@ -27,7 +27,7 @@ func feeRecipient*(ctx: CasperRef): EthAddress =
 func timestamp*(ctx: CasperRef): EthTime =
   ctx.timestamp
 
-func prevRandao*(ctx: CasperRef): Hash256 =
+func prevRandao*(ctx: CasperRef): Bytes32 =
   ctx.prevRandao
 
 proc withdrawals*(ctx: CasperRef): seq[Withdrawal] =
@@ -46,7 +46,7 @@ proc `feeRecipient=`*(ctx: CasperRef, val: EthAddress) =
 proc `timestamp=`*(ctx: CasperRef, val: EthTime) =
   ctx.timestamp = val
 
-proc `prevRandao=`*(ctx: CasperRef, val: Hash256) =
+proc `prevRandao=`*(ctx: CasperRef, val: Bytes32) =
   ctx.prevRandao = val
 
 proc `withdrawals=`*(ctx: CasperRef, val: sink seq[Withdrawal]) =

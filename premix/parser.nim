@@ -58,7 +58,7 @@ proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
     hexToByteArray(node["value"].getStr(), x.data)
     doAssert(x.to0xHex == toLowerAscii(node["value"].getStr()), name)
 
-proc fromJson*(n: JsonNode, name: string, x: var Hash256) =
+proc fromJson*(n: JsonNode, name: string, x: var (Hash256|Bytes32)) =
   let node = n[name]
   if node.kind == JString:
     hexToByteArray(node.getStr(), x.data)

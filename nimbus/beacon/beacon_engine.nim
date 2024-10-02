@@ -214,7 +214,7 @@ proc generatePayload*(ben: BeaconEngineRef,
       pos = xp.com.pos
       headBlock = ben.chain.latestHeader
 
-    pos.prevRandao   = ethHash attrs.prevRandao
+    pos.prevRandao   = attrs.prevRandao
     pos.timestamp    = ethTime attrs.timestamp
     pos.feeRecipient = ethAddr attrs.suggestedFeeRecipient
 

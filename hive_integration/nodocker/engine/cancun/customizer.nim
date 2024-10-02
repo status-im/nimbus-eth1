@@ -106,7 +106,7 @@ method getPayloadAttributes*(cust: PayloadAttributesCustomizer, basePayloadAttri
 type
   BasePayloadAttributesCustomizer* = ref object of PayloadAttributesCustomizer
     timestamp*             : Opt[uint64]
-    prevRandao*            : Opt[common.Hash256]
+    prevRandao*            : Opt[common.Bytes32]
     suggestedFeeRecipient* : Opt[common.EthAddress]
     withdrawals*           : Opt[seq[Withdrawal]]
     removeWithdrawals*     : bool
@@ -309,7 +309,7 @@ type
     stateRoot*                : Opt[common.Hash256]
     receiptsRoot*             : Opt[common.Hash256]
     logsBloom*                : Opt[BloomFilter]
-    prevRandao*               : Opt[common.Hash256]
+    prevRandao*               : Opt[common.Bytes32]
     number*                   : Opt[uint64]
     gasLimit*                 : Opt[GasInt]
     gasUsed*                  : Opt[GasInt]
