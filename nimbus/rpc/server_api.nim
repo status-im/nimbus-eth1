@@ -50,7 +50,12 @@ proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[common.BlockHe
       return err("Unsupported block tag " & tag)
   else:
     let blockNum = common.BlockNumber blockTag.number
-    return api.chain.headerByNumber(blockNum)
+    let blkhdr = api.chain.headerByNumber(blockNum).valueOr:
+      try:
+        api.chain.db.getBlockHeader(blockNum)
+      except BlockNotFound:
+        return err("Block header not found, number = " & $blockNum)
+    ok(blkhdr)
 
 proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[common.BlockHeader, string] =
   let blockId = blockTag.get(defaultTag)
@@ -74,7 +79,12 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, strin
       return err("Unsupported block tag " & tag)
   else:
     let blockNum = common.BlockNumber blockTag.number
-    return api.chain.blockByNumber(blockNum)
+    let blk = api.chain.blockByNumber(blockNum).valueOr:
+      try:
+        api.chain.db.getEthBlock(blockNum)
+      except BlockNotFound:
+        return err("Block not found, number = " & $blockNum)
+    ok(blk)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
   server.rpc("eth_getBalance") do(data: Web3Address, blockTag: BlockTag) -> UInt256:
