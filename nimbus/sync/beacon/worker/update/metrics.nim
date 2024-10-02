@@ -22,7 +22,7 @@ declareGauge beacon_base, "" &
 declareGauge beacon_coupler, "" &
   "Max block number for header chain starting at genesis"
 
-declareGauge beacon_least_block_number, "" &
+declareGauge beacon_dangling, "" &
   "Starting/min block number for higher up headers chain"
 
 declareGauge beacon_end, "" &
@@ -52,7 +52,7 @@ declareGauge beacon_number_of_buddies, "" &
 template updateMetricsImpl*(ctx: BeaconCtxRef) =
   metrics.set(beacon_base, ctx.dbStateBlockNumber().int64)
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
-  metrics.set(beacon_least_block_number, ctx.layout.least.int64)
+  metrics.set(beacon_dangling, ctx.layout.dangling.int64)
   metrics.set(beacon_end, ctx.layout.endBn.int64)
   metrics.set(beacon_final, ctx.lhc.final.header.number.int64)
 

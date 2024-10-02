@@ -28,7 +28,7 @@ type
     ## Full sync state (see `TickerFullStatsUpdater`)
     base*: BlockNumber
     coupler*: BlockNumber
-    least*: BlockNumber
+    dangling*: BlockNumber
     endBn*: BlockNumber
     final*: BlockNumber
 
@@ -74,7 +74,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     let
       B = data.base.bnStr
       C = data.coupler.bnStr
-      L = data.least.bnStr
+      D = data.dangling.bnStr
       E = data.endBn.bnStr
       F = data.final.bnStr
 
@@ -100,7 +100,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    info "State", up, peers, B, C, L, E, F, hS, hU, bS, bU, reorg, mem
+    info "State", up, peers, B, C, D, E, F, hS, hU, bS, bU, reorg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages

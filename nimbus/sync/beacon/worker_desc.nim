@@ -54,18 +54,18 @@ type
   # -------------------
 
   LinkedHChainsLayout* = object
-    ## Layout of a linked header chains defined by the triple `(C,L,E)` as
+    ## Layout of a linked header chains defined by the triple `(C,D,E)` as
     ## described in the `README.md` text.
     ## ::
-    ##   G                C                     L                E
+    ##   G                C                     D                E
     ##   o----------------o---------------------o----------------o--->
     ##   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     ##
     coupler*: BlockNumber            ## Right end `C` of linked chain `[G,C]`
     couplerHash*: Hash32             ## Hash of `C`
 
-    least*: BlockNumber              ## Left end `L` of linked chain `[L,E]`
-    leastParent*: Hash32             ## Parent hash of `L`
+    dangling*: BlockNumber           ## Left end `D` of linked chain `[D,E]`
+    danglingParent*: Hash32          ## Parent hash of `D`
 
     endBn*: BlockNumber              ## `E`, block num of some finalised block
     endHash*: Hash32                 ## Hash of `E`
@@ -78,7 +78,7 @@ type
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains
-    final*: BeaconHeader             ## See `F` in `README.md`
+    final*: BeaconHeader             ## Finalised block, see `F` in `README.md`
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: uint64                ## Total of temp. fetched ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet

@@ -25,24 +25,25 @@ linked chain if
 
 General header chains layout diagram
 
-      G                H                     L                E              (1)
+      G                C                     D                E              (1)
       o----------------o---------------------o----------------o--->
       | <-- linked --> | <-- unprocessed --> | <-- linked --> |
 
-Here, the single upper letter symbols *G*, *H*, *L*, *E* denote block numbers.
+Here, the single upper letter symbols *G*, *C*, *D*, *E* denote block numbers.
 For convenience, these letters are also identified with its associated block
 header or the full block. Saying *"the header G"* is short for *"the header
 with block number G"*.
 
-Meaning of *G*, *C*, *L*, *E*:
+Meaning of *G*, *C*, *D*, *E*:
 
 * *G* -- Genesis block number *#0*
 * *C* -- coupler, maximal block number of linked chain starting at *G*
-* *L* -- least, minimal block number of linked chain ending at *E* with *C <= L*
+* *D* -- dangling, minimal block number of linked chain ending at *E*
+         with *C <= D*
 * *E* -- end, block number of some finalised block
 
-This definition implies *G <= C <= L <= E* and the header chains can uniquely
-be described by the triple of block numbers *(C,L,E)*.
+This definition implies *G <= C <= D <= E* and the header chains can uniquely
+be described by the triple of block numbers *(C,D,E)*.
 
 ### Storage of header chains:
 
@@ -53,7 +54,7 @@ correspond to finalised blocks, e.g. the sub-interval *[G,**base**]* where
 half open interval *(**base**,C]* are always stored on the *beaconHeader*
 column of the *KVT* database.
 
-The block numbers from the interval *[L,E]* also reside on the *beaconHeader*
+The block numbers from the interval *[D,E]* also reside on the *beaconHeader*
 column of the *KVT* database table.
 
 ### Header chains initialisation:
@@ -62,7 +63,7 @@ Minimal layout on a pristine system
 
       G                                                                      (2)
       C
-      L
+      D
       E
       o--->
 
@@ -70,14 +71,14 @@ When first initialised, the header chains are set to *(G,G,G)*.
 
 ### Updating header chains:
 
-A header chain with an non empty open interval *(C,L)* can be updated only by
-increasing *C* or decreasing *L* by adding headers so that the linked chain
+A header chain with an non empty open interval *(H,D)* can be updated only by
+increasing *H* or decreasing *D* by adding headers so that the linked chain
 condition is not violated.
 
-Only when the gap open interval *(C,L)* vanishes, the right end *E* can be
+Only when the gap open interval *(C,D)* vanishes, the right end *E* can be
 increased by a larger **finalised** block number *F* say, then
 
-* *C==L* beacuse interval *(C,L)* is empty
+* *C==D* beacuse interval *(C,D)* is empty
 * *C==E* because *C* is maximal
 
 and the header chains *(E,E,E)* (depicted in *(3)*) can be set to *(C,F,F)*
@@ -86,19 +87,19 @@ and the header chains *(E,E,E)* (depicted in *(3)*) can be set to *(C,F,F)*
 Layout before updating of *E*
 
                        C                                                     (3)
-                       L
+                       D
       G                E                     F
       o----------------o---------------------o---->
       | <-- linked --> |
 
-New layout with moving `L` and `E` to *F*
+New layout with moving *D* and *E* to *F*
 
-                                             L'                              (4)
+                                             D'                              (4)
       G                C                     E'
       o----------------o---------------------o---->
       | <-- linked --> | <-- unprocessed --> |
 
-with *L'=F* and *E'=F*.
+with *D'=F* and *E'=F*.
 
 Note that diagram *(3)* is a generalisation of *(2)*.
 
@@ -120,7 +121,7 @@ Imported block chain
 
 The following imported block chain diagram amends the layout *(1)*:
 
-      G                  B       C                     L                E    (5)
+      G                  B       C                     D                E    (5)
       o------------------o-------o---------------------o----------------o-->
       | <-- imported --> |       |                     |                |
       | <-------  linked ------> | <-- unprocessed --> | <-- linked --> |
@@ -223,18 +224,18 @@ The following metrics are defined in *worker/update/metrics.nim* which will
 be available if *nimbus* is compiled with the additional make flags
 *NIMFLAGS="-d:metrics \-\-threads:on"*:
 
-| *Variable*                     | *Logic type* | *Short description* |
-|:-------------------------------|:------------:|:--------------------|
-|                                |              |                     |
-| beacon_base                    | block height | **B**, *increasing* |
-| beacon_coupler                 | block height | **C**, *increasing* |
-| beacon_least_block_number      | block height | **L**               |
-| beacon_end                     | block height | **E**, *increasing* |
-| beacon_final                   | block height | **F**, *increasing* |
-|                                |              |                     |
+| *Variable*             | *Logic type* | *Short description* |
+|:-----------------------|:------------:|:--------------------|
+|                        |              |                     |
+| beacon_base            | block height | **B**, *increasing* |
+| beacon_coupler         | block height | **C**, *increasing* |
+| beacon_dangling        | block height | **D**               |
+| beacon_end             | block height | **E**, *increasing* |
+| beacon_final           | block height | **F**, *increasing* |
+|                                |      |                     |
 | beacon_headers_staged_queue_len| size | # of staged header list records      |
 | beacon_headers_unprocessed     | size | # of accumulated header block numbers|
 | beacon_blocks_staged_queue_len | size | # of staged block list records       |
 | beacon_blocks_unprocessed      | size | # of accumulated body block numbers  |
-|                                |              |                     |
-| beacon_number_of_buddies       | size         | # of working peers  |
+|                                |      |                     |
+| beacon_number_of_buddies       | size | # of working peers  |

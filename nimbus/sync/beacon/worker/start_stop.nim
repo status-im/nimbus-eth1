@@ -31,7 +31,7 @@ when enableTicker:
       TickerStats(
         base:            ctx.dbStateBlockNumber(),
         coupler:         ctx.layout.coupler,
-        least:           ctx.layout.least,
+        dangling:        ctx.layout.dangling,
         endBn:           ctx.layout.endBn,
         final:           ctx.lhc.final.header.number,
 

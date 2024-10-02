@@ -29,13 +29,13 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
-  ##     G             C==L==E                  F
+  ##     G             C==D==E                  F
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> |
   ##
   ## or
   ## ::
-  ##    G==F           C==L==E
+  ##    G==F           C==D==E
   ##     o----------------o-------------------------->
   ##     | <-- linked --> |
   ##
@@ -43,7 +43,7 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   ##
   ## to be updated to
   ## ::
-  ##     G               C==L                 L'==E'
+  ##     G               C==D                 D'==E'
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> | <-- unprocessed --> |
   ##
@@ -51,26 +51,26 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
 
   var finBn = ctx.lhc.final.header.number
 
-  # Need: `E < F` and `C == L`
+  # Need: `E < F` and `C == D`
   if finBn != 0 and finBn <= ctx.layout.endBn:        # violates `E < F`
     trace info & ": not applicable", E=ctx.layout.endBn.bnStr, F=finBn.bnStr
     return false
 
-  if ctx.layout.coupler != ctx.layout.least: # violates `C == L`
+  if ctx.layout.coupler != ctx.layout.dangling: # violates `C == D`
     trace info & ": not applicable",
-      C=ctx.layout.coupler.bnStr, L=ctx.layout.least.bnStr
+      C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr
     return false
 
-  # Check consistency: `C == L <= E` for maximal `C` => `L == E`
-  doAssert ctx.layout.least == ctx.layout.endBn
+  # Check consistency: `C == D <= E` for maximal `C` => `D == E`
+  doAssert ctx.layout.dangling == ctx.layout.endBn
 
   let rlpHeader = rlp.encode(ctx.lhc.final.header)
 
   ctx.lhc.layout = LinkedHChainsLayout(
     coupler:     ctx.layout.coupler,
     couplerHash: ctx.layout.couplerHash,
-    least:       finBn,
-    leastParent: ctx.lhc.final.header.parentHash,
+    dangling:       finBn,
+    danglingParent: ctx.lhc.final.header.parentHash,
     endBn:       finBn,
     endHash:     rlpHeader.keccak256)
 
@@ -85,7 +85,7 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   doAssert ctx.headersUnprocTotal() == 0
   doAssert ctx.headersUnprocBorrowed() == 0
   doAssert ctx.headersStagedQueueIsEmpty()
-  ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.least-1)
+  ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
   trace info & ": updated"
   true
@@ -94,31 +94,31 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
 proc mergeAdjacentChains(ctx: BeaconCtxRef): bool =
   const info = "mergeAdjacentChains"
 
-  if ctx.lhc.layout.coupler+1 < ctx.lhc.layout.least or   # gap btw. `C` and `L`
-     ctx.lhc.layout.coupler == ctx.lhc.layout.least:      # merged already
+  if ctx.lhc.layout.coupler+1 < ctx.lhc.layout.dangling or # gap btw. `C` & `D`
+     ctx.lhc.layout.coupler == ctx.lhc.layout.dangling:    # merged already
     return false
 
   # No overlap allowed!
-  doAssert ctx.lhc.layout.coupler+1 == ctx.lhc.layout.least
+  doAssert ctx.lhc.layout.coupler+1 == ctx.lhc.layout.dangling
 
   # Verify adjacent chains
-  if ctx.lhc.layout.couplerHash != ctx.lhc.layout.leastParent:
+  if ctx.lhc.layout.couplerHash != ctx.lhc.layout.danglingParent:
     # FIXME: Oops -- any better idea than to defect?
     raiseAssert info & ": hashes do not match" &
       " C=" & ctx.lhc.layout.coupler.bnStr &
-      " L=" & $ctx.lhc.layout.least.bnStr
+      " D=" & $ctx.lhc.layout.dangling.bnStr
 
   trace info & ": merging", C=ctx.lhc.layout.coupler.bnStr,
-    L=ctx.lhc.layout.least.bnStr
+    D=ctx.lhc.layout.dangling.bnStr
 
   # Merge adjacent linked chains
   ctx.lhc.layout = LinkedHChainsLayout(
-    coupler:     ctx.layout.endBn,               # `C`
-    couplerHash: ctx.layout.endHash,
-    least:       ctx.layout.endBn,               # `L`
-    leastParent: ctx.dbPeekParentHash(ctx.layout.endBn).expect "Hash32",
-    endBn:       ctx.layout.endBn,               # `E`
-    endHash:     ctx.layout.endHash)
+    coupler:        ctx.layout.endBn,               # `C`
+    couplerHash:    ctx.layout.endHash,
+    dangling:       ctx.layout.endBn,               # `D`
+    danglingParent: ctx.dbPeekParentHash(ctx.layout.endBn).expect "Hash32",
+    endBn:          ctx.layout.endBn,               # `E`
+    endHash:        ctx.layout.endHash)
 
   # Save state
   discard ctx.dbStoreLinkedHChainsLayout()
