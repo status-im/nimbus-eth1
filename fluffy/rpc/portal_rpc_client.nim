@@ -122,7 +122,9 @@ proc historyGetBlockBody*(
 
   if validateContent:
     let blockHeader = ?await client.historyGetBlockHeader(blockHash)
-    validateBlockBodyBytes(content.toBytes(), blockHeader).valueOrErr(ContentValidationFailed)
+    validateBlockBodyBytes(content.toBytes(), blockHeader).valueOrErr(
+      ContentValidationFailed
+    )
   else:
     decodeBlockBodyBytes(content.toBytes()).valueOrErr(InvalidContentValue)
 
@@ -140,7 +142,9 @@ proc historyGetReceipts*(
 
   if validateContent:
     let blockHeader = ?await client.historyGetBlockHeader(blockHash)
-    validateReceiptsBytes(content.toBytes(), blockHeader.receiptsRoot).valueOrErr(ContentValidationFailed)
+    validateReceiptsBytes(content.toBytes(), blockHeader.receiptsRoot).valueOrErr(
+      ContentValidationFailed
+    )
   else:
     let receipts = decodeSsz(content.toBytes(), PortalReceipts).valueOr:
       return err(InvalidContentValue)

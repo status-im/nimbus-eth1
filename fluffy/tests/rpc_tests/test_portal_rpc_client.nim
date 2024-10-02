@@ -16,17 +16,12 @@ import
   eth/p2p/discoveryv5/enr,
   eth/keys,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../../rpc/rpc_discovery_api,
-  ../test_helpers,
-  eth/p2p/discoveryv5/protocol as discv5_protocol,
-  eth/p2p/discoveryv5/routing_table,
-  eth/common/eth_types_rlp,
-  eth/rlp,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../network/history/
     [history_network, history_content, validation/historical_hashes_accumulator],
   ../../database/content_db,
-  ../../rpc/[portal_rpc_client, rpc_portal_api]
+  ../../rpc/[portal_rpc_client, rpc_portal_api],
+  ../test_helpers
 
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
@@ -61,8 +56,7 @@ proc stop(hn: HistoryNode) {.async.} =
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
   return hn.historyNetwork.contentDB.get(contentId).isSome()
 
-proc store*(
-    hn: HistoryNode, blockHash: BlockHash, blockHeader: BlockHeader) =
+proc store*(hn: HistoryNode, blockHash: BlockHash, blockHeader: BlockHeader) =
   let
     headerRlp = rlp.encode(blockHeader)
     blockHeaderWithProof = BlockHeaderWithProof(
@@ -75,6 +69,20 @@ proc store*(
     contentKeyBytes, contentId, SSZ.encode(blockHeaderWithProof)
   )
 
+proc store*(hn: HistoryNode, blockHash: BlockHash, blockBody: BlockBody) =
+  let
+    contentKeyBytes = blockBodyContentKey(blockHash).encode()
+    contentId = history_content.toContentId(contentKeyBytes)
+
+  hn.portalProtocol().storeContent(contentKeyBytes, contentId, blockBody.encode())
+
+proc store*(hn: HistoryNode, blockHash: BlockHash, receipts: seq[Receipt]) =
+  let
+    contentKeyBytes = receiptsContentKey(blockHash).encode()
+    contentId = history_content.toContentId(contentKeyBytes)
+
+  hn.portalProtocol().storeContent(contentKeyBytes, contentId, receipts.encode())
+
 type TestCase = ref object
   historyNode: HistoryNode
   server: RpcHttpServer
@@ -86,7 +94,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     localSrvPort = 0 # let the OS choose a port
     ta = initTAddress(localSrvAddress, localSrvPort)
     client = newRpcHttpClient()
-    historyNode = newHistoryNode(rng, 20302)
+    historyNode = newHistoryNode(rng, 20333)
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
@@ -119,7 +127,8 @@ procSuite "Portal RPC Client":
 
     # Test content not found
     block:
-      let blockHeaderRes = await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
+      let blockHeaderRes =
+        await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
       check:
         blockHeaderRes.isErr()
         blockHeaderRes.error() == ContentNotFound
@@ -128,7 +137,8 @@ procSuite "Portal RPC Client":
     block:
       tc.historyNode.store(blockHash, blockHeader)
 
-      let blockHeaderRes = await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
+      let blockHeaderRes =
+        await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
       check:
         blockHeaderRes.isOk()
         blockHeaderRes.value() == blockHeader
@@ -137,10 +147,12 @@ procSuite "Portal RPC Client":
     block:
       tc.historyNode.store(blockHash, BlockHeader()) # bad header
 
-      let blockHeaderRes = await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
+      let blockHeaderRes =
+        await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
       check:
         blockHeaderRes.isErr()
         blockHeaderRes.error() == ContentValidationFailed
+
     waitFor tc.stop()
 
   asyncTest "Test historyGetBlockHeader without validation":
@@ -151,7 +163,8 @@ procSuite "Portal RPC Client":
 
     # Test content not found
     block:
-      let blockHeaderRes = await tc.client.historyGetBlockHeader(blockHash, validateContent = false)
+      let blockHeaderRes =
+        await tc.client.historyGetBlockHeader(blockHash, validateContent = false)
       check:
         blockHeaderRes.isErr()
         blockHeaderRes.error() == ContentNotFound
@@ -160,9 +173,122 @@ procSuite "Portal RPC Client":
 
     # Test content found
     block:
-      let blockHeaderRes = await tc.client.historyGetBlockHeader(blockHash, validateContent = false)
+      let blockHeaderRes =
+        await tc.client.historyGetBlockHeader(blockHash, validateContent = false)
       check:
         blockHeaderRes.isOk()
         blockHeaderRes.value() == blockHeader
+
+    waitFor tc.stop()
+
+  asyncTest "Test historyGetBlockBody with validation":
+    let
+      tc = await setupTest(rng)
+      blockHeader = BlockHeader(number: 300)
+      blockBody = BlockBody()
+      blockHash = blockHeader.blockHash()
+
+    # Test content not found
+    block:
+      let blockBodyRes =
+        await tc.client.historyGetBlockBody(blockHash, validateContent = true)
+      check:
+        blockBodyRes.isErr()
+        blockBodyRes.error() == ContentNotFound
+
+    # Test content validation failed
+    block:
+      tc.historyNode.store(blockHash, blockHeader)
+      tc.historyNode.store(blockHash, blockBody)
+
+      let blockBodyRes =
+        await tc.client.historyGetBlockBody(blockHash, validateContent = true)
+      check:
+        blockBodyRes.isErr()
+        blockBodyRes.error() == ContentValidationFailed
+
+    waitFor tc.stop()
+
+  asyncTest "Test historyGetBlockBody without validation":
+    let
+      tc = await setupTest(rng)
+      blockHeader = BlockHeader(number: 300)
+      blockBody = BlockBody()
+      blockHash = blockHeader.blockHash()
+
+    # Test content not found
+    block:
+      let blockBodyRes =
+        await tc.client.historyGetBlockBody(blockHash, validateContent = false)
+      check:
+        blockBodyRes.isErr()
+        blockBodyRes.error() == ContentNotFound
+
+    # Test content found
+    block:
+      tc.historyNode.store(blockHash, blockHeader)
+      tc.historyNode.store(blockHash, blockBody)
+
+      let blockBodyRes =
+        await tc.client.historyGetBlockBody(blockHash, validateContent = false)
+      check:
+        blockBodyRes.isOk()
+        blockBodyRes.value() == blockBody
+
+    waitFor tc.stop()
+
+  asyncTest "Test historyGetReceipts with validation":
+    let
+      tc = await setupTest(rng)
+      blockHeader = BlockHeader(number: 300)
+      receipts = @[Receipt()]
+      blockHash = blockHeader.blockHash()
+
+    # Test content not found
+    block:
+      let receiptsRes =
+        await tc.client.historyGetReceipts(blockHash, validateContent = true)
+      check:
+        receiptsRes.isErr()
+        receiptsRes.error() == ContentNotFound
+
+    # Test content validation failed
+    block:
+      tc.historyNode.store(blockHash, blockHeader)
+      tc.historyNode.store(blockHash, receipts)
+
+      let receiptsRes =
+        await tc.client.historyGetReceipts(blockHash, validateContent = true)
+      check:
+        receiptsRes.isErr()
+        receiptsRes.error() == ContentValidationFailed
+
+    waitFor tc.stop()
+
+  asyncTest "Test historyGetReceipts without validation":
+    let
+      tc = await setupTest(rng)
+      blockHeader = BlockHeader(number: 300)
+      receipts = @[Receipt()]
+      blockHash = blockHeader.blockHash()
+
+    # Test content not found
+    block:
+      let receiptsRes =
+        await tc.client.historyGetReceipts(blockHash, validateContent = false)
+      check:
+        receiptsRes.isErr()
+        receiptsRes.error() == ContentNotFound
+
+    # Test content found
+    block:
+      tc.historyNode.store(blockHash, blockHeader)
+      tc.historyNode.store(blockHash, receipts)
+
+      let receiptsRes =
+        await tc.client.historyGetReceipts(blockHash, validateContent = false)
+      check:
+        receiptsRes.isOk()
+        receiptsRes.value() == receipts
 
     waitFor tc.stop()

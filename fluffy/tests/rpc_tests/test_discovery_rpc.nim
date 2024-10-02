@@ -30,7 +30,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     localSrvPort = 0 # let the OS choose a port
     ta = initTAddress(localSrvAddress, localSrvPort)
     localDiscoveryNode =
-      initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20302))
+      initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20332))
     client = newRpcHttpClient()
 
   let rpcHttpServer = RpcHttpServer.new()
