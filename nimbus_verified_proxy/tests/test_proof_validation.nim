@@ -118,13 +118,11 @@ suite "Merkle proof of inclusion validation":
           ),
         ],
       balance: UInt256.fromHex("0x0"),
-      codeHash: FixedBytes[32].fromHex(
-        "0x3b45ab254ec24f2bcb75a922f15031796bc433ea5a4514783705d185321e5f82"
-      ),
+      codeHash:
+        hash32"0x3b45ab254ec24f2bcb75a922f15031796bc433ea5a4514783705d185321e5f82",
       nonce: Quantity(uint64(1)),
-      storageHash: FixedBytes[32].fromHex(
-        "0x7bb85da974b0ee4efcb379f528bcf7e947a55901d5a2c0d38bc9cc16c851e785"
-      ),
+      storageHash:
+        hash32"0x7bb85da974b0ee4efcb379f528bcf7e947a55901d5a2c0d38bc9cc16c851e785",
       storageProof:
         @[
           StorageProof(
