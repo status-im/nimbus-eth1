@@ -159,7 +159,7 @@ proc newPayloadV2*(client: RpcClient,
 proc newPayloadV3*(client: RpcClient,
       payload: ExecutionPayloadV3,
       versionedHashes: seq[VersionedHash],
-      parentBeaconBlockRoot: FixedBytes[32]
+      parentBeaconBlockRoot: Hash32
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
@@ -168,7 +168,7 @@ proc newPayloadV3*(client: RpcClient,
 proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayloadV4,
       versionedHashes: seq[VersionedHash],
-      parentBeaconBlockRoot: FixedBytes[32]
+      parentBeaconBlockRoot: Hash32
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
@@ -189,7 +189,7 @@ proc newPayloadV2*(client: RpcClient,
 proc newPayloadV3*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
-      parentBeaconBlockRoot: Opt[FixedBytes[32]]
+      parentBeaconBlockRoot: Opt[Hash32]
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
@@ -198,7 +198,7 @@ proc newPayloadV3*(client: RpcClient,
 proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
-      parentBeaconBlockRoot: Opt[FixedBytes[32]]
+      parentBeaconBlockRoot: Opt[Hash32]
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
