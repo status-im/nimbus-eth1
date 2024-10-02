@@ -262,7 +262,7 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     allowedOrigins = conf.getAllowedOrigins()
     jwtAuthHook = httpJwtAuth(jwtKey)
     corsHook = httpCors(allowedOrigins)
-    serverApi = newServerAPI(nimbus.chainRef)
+    serverApi = newServerAPI(nimbus.chainRef, nimbus.txPool)
 
   if conf.combinedServer:
     let hooks: seq[RpcAuthHook] = @[jwtAuthHook, corsHook]
