@@ -29,7 +29,7 @@ type
     base*: BlockNumber
     coupler*: BlockNumber
     least*: BlockNumber
-    final*: BlockNumber
+    endBn*: BlockNumber
     beacon*: BlockNumber
 
     hdrUnprocTop*: BlockNumber
@@ -75,7 +75,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
       B = data.base.bnStr
       C = data.coupler.bnStr
       L = data.least.bnStr
-      F = data.final.bnStr
+      E = data.endBn.bnStr
       Z = data.beacon.bnStr
 
       hS = if data.nHdrStaged == 0: "n/a"
@@ -100,7 +100,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    info "State", up, peers, B, C, L, F, Z, hS, hU, bS, bU, reorg, mem
+    info "State", up, peers, B, C, L, E, Z, hS, hU, bS, bU, reorg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages

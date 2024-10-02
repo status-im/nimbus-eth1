@@ -102,7 +102,7 @@ proc headersStagedCollect*(
     iv = ctx.headersUnprocFetch(nFetchHeadersBatch).expect "valid interval"
 
     # Check for top header hash. If the range to fetch directly joins below
-    # the top level linked chain `L..F`, then there is the hash available for
+    # the top level linked chain `[L,E]`, then there is the hash available for
     # the top level header to fetch. Otherwise -- with multi-peer mode -- the
     # range of headers is fetched opportunistically using block numbers only.
     isOpportunistic = uTop + 1 != ctx.layout.least

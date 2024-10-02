@@ -32,7 +32,7 @@ when enableTicker:
         base:            ctx.dbStateBlockNumber(),
         coupler:         ctx.layout.coupler,
         least:           ctx.layout.least,
-        final:           ctx.layout.final,
+        endBn:           ctx.layout.endBn,
         beacon:          ctx.lhc.beacon.header.number,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),

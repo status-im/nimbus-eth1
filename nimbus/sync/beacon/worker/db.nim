@@ -115,8 +115,8 @@ proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
       couplerHash: val.hash,
       least:       val.number,
       leastParent: val.parent,
-      final:       val.number,
-      finalHash:   val.hash)
+      endBn:       val.number,
+      endHash:     val.hash)
     trace info & ": new layout"
 
   ctx.lhc.lastLayout = ctx.layout

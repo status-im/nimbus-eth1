@@ -51,9 +51,9 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
 
   var z = ctx.lhc.beacon.header.number
 
-  # Need: `F < Z` and `C == L`
-  if z != 0 and z <= ctx.layout.final:       # violates `F < Z`
-    trace info & ": not applicable", Z=z.bnStr, F=ctx.layout.final.bnStr
+  # Need: `E < Z` and `C == L`
+  if z != 0 and z <= ctx.layout.endBn:        # violates `E < Z`
+    trace info & ": not applicable", Z=z.bnStr, E=ctx.layout.endBn.bnStr
     return false
 
   if ctx.layout.coupler != ctx.layout.least: # violates `C == L`
@@ -61,8 +61,8 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
       C=ctx.layout.coupler.bnStr, L=ctx.layout.least.bnStr
     return false
 
-  # Check consistency: `C == L <= F` for maximal `C` => `L == F`
-  doAssert ctx.layout.least == ctx.layout.final
+  # Check consistency: `C == L <= E` for maximal `C` => `L == E`
+  doAssert ctx.layout.least == ctx.layout.endBn
 
   let rlpHeader = rlp.encode(ctx.lhc.beacon.header)
 
@@ -71,8 +71,8 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
     couplerHash: ctx.layout.couplerHash,
     least:       z,
     leastParent: ctx.lhc.beacon.header.parentHash,
-    final:       z,
-    finalHash:   rlpHeader.keccak256)
+    endBn:       z,
+    endHash:     rlpHeader.keccak256)
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
@@ -113,12 +113,12 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef): bool =
 
   # Merge adjacent linked chains
   ctx.lhc.layout = LinkedHChainsLayout(
-    coupler:     ctx.layout.final,               # `C`
-    couplerHash: ctx.layout.finalHash,
-    least:       ctx.layout.final,               # `L`
-    leastParent: ctx.dbPeekParentHash(ctx.layout.final).expect "Hash32",
-    final:       ctx.layout.final,               # `F`
-    finalHash:   ctx.layout.finalHash)
+    coupler:     ctx.layout.endBn,               # `C`
+    couplerHash: ctx.layout.endHash,
+    least:       ctx.layout.endBn,               # `L`
+    leastParent: ctx.dbPeekParentHash(ctx.layout.endBn).expect "Hash32",
+    endBn:       ctx.layout.endBn,               # `E`
+    endHash:     ctx.layout.endHash)
 
   # Save state
   discard ctx.dbStoreLinkedHChainsLayout()

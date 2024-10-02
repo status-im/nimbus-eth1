@@ -54,21 +54,21 @@ type
   # -------------------
 
   LinkedHChainsLayout* = object
-    ## Layout of a linked header chains defined by the triple `(C,L,F)` as
+    ## Layout of a linked header chains defined by the triple `(C,L,E)` as
     ## described in the `README.md` text.
     ## ::
-    ##   G                C                     L                F
+    ##   G                C                     L                E
     ##   o----------------o---------------------o----------------o--->
     ##   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     ##
     coupler*: BlockNumber            ## Right end `C` of linked chain `[G,C]`
     couplerHash*: Hash32             ## Hash of `C`
 
-    least*: BlockNumber              ## Left end `L` of linked chain `[L,F]`
+    least*: BlockNumber              ## Left end `L` of linked chain `[L,E]`
     leastParent*: Hash32             ## Parent hash of `L`
 
-    final*: BlockNumber              ## `F`, block num of some finalised block
-    finalHash*: Hash32               ## Hash of `F`
+    endBn*: BlockNumber              ## `E`, block num of some finalised block
+    endHash*: Hash32                 ## Hash of `E`
 
   BeaconHeader* = object
     ## Beacon state to be implicitely updated by RPC method

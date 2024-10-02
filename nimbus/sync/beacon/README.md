@@ -25,24 +25,24 @@ linked chain if
 
 General header chains layout diagram
 
-      G                C                     L                F              (1)
+      G                H                     L                E              (1)
       o----------------o---------------------o----------------o--->
       | <-- linked --> | <-- unprocessed --> | <-- linked --> |
 
-Here, the single upper letter symbols *G*, *H*, *L*, *F* denote block numbers.
+Here, the single upper letter symbols *G*, *H*, *L*, *E* denote block numbers.
 For convenience, these letters are also identified with its associated block
 header or the full block. Saying *"the header G"* is short for *"the header
 with block number G"*.
 
-Meaning of *G*, *C*, *L*, *F*:
+Meaning of *G*, *C*, *L*, *E*:
 
 * *G* -- Genesis block number *#0*
 * *C* -- coupler, maximal block number of linked chain starting at *G*
-* *L* -- least, minimal block number of linked chain ending at *F* with *C <= L*
-* *F* -- final, some finalised block
+* *L* -- least, minimal block number of linked chain ending at *E* with *C <= L*
+* *E* -- end, block number of some finalised block
 
-This definition implies *G <= C <= L <= F* and the header chains can uniquely
-be described by the triple of block numbers *(C,L,F)*.
+This definition implies *G <= C <= L <= E* and the header chains can uniquely
+be described by the triple of block numbers *(C,L,E)*.
 
 ### Storage of header chains:
 
@@ -53,7 +53,7 @@ correspond to finalised blocks, e.g. the sub-interval *[G,**base**]* where
 half open interval *(**base**,C]* are always stored on the *beaconHeader*
 column of the *KVT* database.
 
-The block numbers from the interval *[L,F]* also reside on the *beaconHeader*
+The block numbers from the interval *[L,E]* also reside on the *beaconHeader*
 column of the *KVT* database table.
 
 ### Header chains initialisation:
@@ -63,7 +63,7 @@ Minimal layout on a pristine system
       G                                                                      (2)
       C
       L
-      F
+      E
       o--->
 
 When first initialised, the header chains are set to *(G,G,G)*.
@@ -74,31 +74,31 @@ A header chain with an non empty open interval *(C,L)* can be updated only by
 increasing *C* or decreasing *L* by adding headers so that the linked chain
 condition is not violated.
 
-Only when the open interval *(C,L)* vanishes the right end *F* can be increased
+Only when the open interval *(C,L)* vanishes the right end *E* can be increased
 by *Z* say. Then
 
 * *C==L* beacuse interval *(C,L)* is empty
-* *C==F* because *C* is maximal
+* *C==E* because *C* is maximal
 
-and the header chains *(F,F,F)* (depicted in *(3)*) can be set to *(C,Z,Z)*
+and the header chains *(E,E,E)* (depicted in *(3)*) can be set to *(C,Z,Z)*
 (as depicted in *(4)*.)
 
-Layout before updating of *F*
+Layout before updating of *E*
 
                        C                                                     (3)
                        L
-      G                F                     Z
+      G                E                     Z
       o----------------o---------------------o---->
       | <-- linked --> |
 
 New layout with *Z*
 
                                              L'                              (4)
-      G                C                     F'
+      G                C                     E'
       o----------------o---------------------o---->
       | <-- linked --> | <-- unprocessed --> |
 
-with *L'=Z* and *F'=Z*.
+with *L'=Z* and *E'=Z*.
 
 Note that diagram *(3)* is a generalisation of *(2)*.
 
@@ -106,7 +106,7 @@ Note that diagram *(3)* is a generalisation of *(2)*.
 ### Complete header chain:
 
 The header chain is *relatively complete* if it satisfies clause *(3)* above
-for *G < C*. It is *fully complete* if *F==Z*. It should be obvious that the
+for *G < C*. It is *fully complete* if *E==Z*. It should be obvious that the
 latter condition is temporary only on a live system (as *Z* is permanently
 updated.)
 
@@ -120,7 +120,7 @@ Imported block chain
 
 The following imported block chain diagram amends the layout *(1)*:
 
-      G                  B       C                     L                F    (5)
+      G                  B       C                     L                E    (5)
       o------------------o-------o---------------------o----------------o-->
       | <-- imported --> |       |                     |                |
       | <-------  linked ------> | <-- unprocessed --> | <-- linked --> |
@@ -131,7 +131,8 @@ imported and executed block. It also refers to the global state block number of
 the ledger database.
 
 The headers corresponding to the half open interval `(B,C]` can be completed by
-fetching block bodies and then imported/executed.
+fetching block bodies and then import/execute them together with the cached
+headers.
 
 Running the sync process for *MainNet*
 --------------------------------------
@@ -228,7 +229,7 @@ be available if *nimbus* is compiled with the additional make flags
 | beacon_base                    | block height | **B**, *increasing* |
 | beacon_coupler                 | block height | **C**, *increasing* |
 | beacon_least_block_number      | block height | **L**               |
-| beacon_final_block_number      | block height | **F**, *increasing* |
+| beacon_end                     | block height | **E**, *increasing* |
 | beacon_beacon_block_number     | block height | **Z**, *increasing* |
 |                                |              |                     |
 | beacon_headers_staged_queue_len| size | # of staged header list records      |
