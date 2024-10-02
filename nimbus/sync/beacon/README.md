@@ -46,14 +46,15 @@ be described by the triple of block numbers *(C,L,F)*.
 
 ### Storage of header chains:
 
-Some block numbers from the set *{w|G<=w<=C}* may correspond to finalised
-blocks which may be stored anywhere. If some block numbers do not correspond
-to finalised blocks, then the headers must reside in the *beaconHeader*
-database table. Of course, due to being finalised such block numbers constitute
-a sub-chain starting at *G*.
+Some block numbers from the closed interval (including end points) *[G,C]* may
+correspond to finalised blocks, e.g. the sub-interval *[G,**base**]* where
+**base** is the block number of the ledger state. The headers for
+*[G,**base**]* are stored in the persistent state database. The headers for the
+half open interval *(**base**,C]* are always stored on the *beaconHeader*
+column of the *KVT* database.
 
-The block numbers from the set *{w|L<=w<=F}* must reside in the *beaconHeader*
-database table. They do not correspond to finalised blocks.
+The block numbers from the interval *[L,F]* also reside on the *beaconHeader*
+column of the *KVT* database table.
 
 ### Header chains initialisation:
 
@@ -119,16 +120,17 @@ Imported block chain
 
 The following imported block chain diagram amends the layout *(1)*:
 
-      G                  T       C                     L                F    (5)
+      G                  B       C                     L                F    (5)
       o------------------o-------o---------------------o----------------o-->
       | <-- imported --> |       |                     |                |
       | <-------  linked ------> | <-- unprocessed --> | <-- linked --> |
 
 
-where *T* is the number of the last imported and executed block. Coincidentally,
-*T* also refers to the global state of the ledger database.
+where *B* is the **base**, i.e. the **base state** block number of the last
+imported and executed block. It also refers to the global state block number of
+the ledger database.
 
-The headers corresponding to the half open interval `(T,C]` can be completed by
+The headers corresponding to the half open interval `(B,C]` can be completed by
 fetching block bodies and then imported/executed.
 
 Running the sync process for *MainNet*
@@ -223,7 +225,7 @@ be available if *nimbus* is compiled with the additional make flags
 | *Variable*                     | *Logic type* | *Short description* |
 |:-------------------------------|:------------:|:--------------------|
 |                                |              |                     |
-| beacon_state_block_number      | block height | **T**, *increasing* |
+| beacon_base                    | block height | **B**, *increasing* |
 | beacon_coupler                 | block height | **C**, *increasing* |
 | beacon_least_block_number      | block height | **L**               |
 | beacon_final_block_number      | block height | **F**, *increasing* |

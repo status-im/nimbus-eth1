@@ -15,10 +15,8 @@ import
   ../../worker_desc,
   ".."/[db, blocks_staged, headers_staged]
 
-declareGauge beacon_beacon_block_number, "" &
-  "Block number of latest known finalised header"
 
-declareGauge beacon_state_block_number, "" &
+declareGauge beacon_base, "" &
   "Max block number of imported/executed blocks"
   
 declareGauge beacon_coupler, "" &
@@ -29,6 +27,10 @@ declareGauge beacon_least_block_number, "" &
 
 declareGauge beacon_final_block_number, "" &
   "Ending/max block number of higher up headers chain"
+
+declareGauge beacon_beacon_block_number, "" &
+  "Block number of latest known finalised header"
+
 
 declareGauge beacon_headers_staged_queue_len, "" &
   "Number of header list records staged for serialised processing"
@@ -42,17 +44,17 @@ declareGauge beacon_blocks_staged_queue_len, "" &
 declareGauge beacon_blocks_unprocessed, "" &
   "Number of block numbers ready to fetch and stage block data"
 
+
 declareGauge beacon_number_of_buddies, "" &
   "Number of currently active worker instances"
 
 
 template updateMetricsImpl*(ctx: BeaconCtxRef) =
-  metrics.set(beacon_beacon_block_number, ctx.lhc.beacon.header.number.int64)
-
-  metrics.set(beacon_state_block_number, ctx.dbStateBlockNumber().int64)
+  metrics.set(beacon_base, ctx.dbStateBlockNumber().int64)
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_least_block_number, ctx.layout.least.int64)
   metrics.set(beacon_final_block_number, ctx.layout.final.int64)
+  metrics.set(beacon_beacon_block_number, ctx.lhc.beacon.header.number.int64)
 
   metrics.set(beacon_headers_staged_queue_len, ctx.headersStagedQueueLen())
   metrics.set(beacon_headers_unprocessed,

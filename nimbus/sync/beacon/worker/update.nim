@@ -146,17 +146,17 @@ proc updateBlockRequests*(ctx: BeaconCtxRef): bool =
   ## Update block requests if there staged block queue is empty
   const info = "updateBlockRequests"
 
-  let t = ctx.dbStateBlockNumber()
-  if t < ctx.layout.coupler: # so the half open interval `(T,C]` is not empty
+  let base = ctx.dbStateBlockNumber()
+  if base < ctx.layout.coupler:   # so half open interval `(B,C]` is not empty
 
-    # One can fill/import/execute blocks by number from `(T,C]`
+    # One can fill/import/execute blocks by number from `(B,C]`
     if ctx.blk.topRequest < ctx.layout.coupler:
       # So there is some space
-      trace info & ": extending", T=t.bnStr, topReq=ctx.blk.topRequest.bnStr,
+      trace info & ": extending", B=base.bnStr, topReq=ctx.blk.topRequest.bnStr,
         C=ctx.layout.coupler.bnStr
 
       ctx.blocksUnprocCommit(
-        0, max(t,ctx.blk.topRequest)+1, ctx.layout.coupler)
+        0, max(base, ctx.blk.topRequest) + 1, ctx.layout.coupler)
       ctx.blk.topRequest = ctx.layout.coupler
       return true
 
