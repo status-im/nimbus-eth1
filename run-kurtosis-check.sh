@@ -238,7 +238,7 @@ else
   done
   echo
 
-  if [ -z "$failed_test_id" ]; then
+  if ! [ -z "$failed_test_id" ]; then
     echo "failed_test_status"
     get_tasks_status "$failed_test_id"
     echo ""
