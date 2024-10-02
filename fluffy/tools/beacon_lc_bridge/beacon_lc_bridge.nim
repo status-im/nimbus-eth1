@@ -168,7 +168,7 @@ proc asPortalBlockData*(
       gasUsed: distinctBase(payload.gasUsed),
       timestamp: payload.timestamp.EthTime,
       extraData: bytes payload.extraData,
-      mixHash: payload.prevRandao.asEthHash,
+      mixHash: payload.prevRandao,
       nonce: default(BlockNonce),
       baseFeePerGas: Opt.some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
