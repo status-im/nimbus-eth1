@@ -28,9 +28,9 @@ type
     forkJunction: BlockNumber
     hash: Hash256
 
-  BlockDesc = object
-    blk: EthBlock
-    receipts: seq[Receipt]
+  BlockDesc* = object
+    blk*: EthBlock
+    receipts*: seq[Receipt]
 
   BaseDesc = object
     hash: Hash256
@@ -582,9 +582,6 @@ func txRecords*(c: ForkedChainRef): Table[Hash256, Hash256] =
 
 func memoryBlocks*(c: ForkedChainRef): Table[Hash256, BlockDesc] =
   c.blocks
-
-func receipts*(b: BlockDesc): seq[Receipt] =
-  b.receipts
 
 func blockTransactions*(b: BlockDesc): seq[Transaction] =
   b.blk.transactions
