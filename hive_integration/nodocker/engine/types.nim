@@ -90,11 +90,6 @@ proc randomBytes*(_: type common.Hash256): common.Hash256 =
 proc randomBytes*(_: type common.EthAddress): common.EthAddress =
   doAssert randomBytes(result) == 20
 
-proc randomBytes*(_: type Web3Hash): Web3Hash =
-  var res: array[32, byte]
-  doAssert randomBytes(res) == 32
-  result = Web3Hash(res)
-
 proc clone*[T](x: T): T =
   result = T()
   result[] = x[]
