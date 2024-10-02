@@ -34,7 +34,7 @@ export
 iterator walkPairs*(
    T: type RdbBackendRef;
    db: KvtDbRef;
-     ): tuple[key: Blob, data: Blob] =
+     ): tuple[key: seq[byte], data: seq[byte]] =
   ## Iterate over backend filters.
   for (key,data) in walkPairsImpl[T](db):
     yield (key,data)

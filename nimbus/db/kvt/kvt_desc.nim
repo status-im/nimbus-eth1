@@ -55,8 +55,8 @@ type
 
     # Debugging data below, might go away in future
     xIdGen*: uint64
-    xMap*: Table[Blob,uint64]         ## For pretty printing
-    pAmx*: Table[uint64,Blob]         ## For pretty printing
+    xMap*: Table[seq[byte],uint64]    ## For pretty printing
+    pAmx*: Table[uint64,seq[byte]]    ## For pretty printing
 
   KvtDbAction* = proc(db: KvtDbRef) {.gcsafe, raises: [].}
     ## Generic call back function/closure.
@@ -76,10 +76,10 @@ proc canMod(db: KvtDbRef): Result[void,KvtError] =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func getOrVoid*(tab: Table[Blob,Blob]; w: Blob): Blob =
+func getOrVoid*(tab: Table[seq[byte],seq[byte]]; w: seq[byte]): seq[byte] =
   tab.getOrDefault(w, EmptyBlob)
 
-func isValid*(key: Blob): bool =
+func isValid*(key: seq[byte]): bool =
   key != EmptyBlob
 
 func isValid*(layer: LayerRef): bool =

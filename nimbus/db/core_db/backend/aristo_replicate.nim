@@ -58,14 +58,14 @@ template call(
 
 iterator aristoReplicate[T](
     mpt: CoreDbMptRef;
-      ): (Blob,Blob)
+      ): (seq[byte],seq[byte])
       {.gcsafe, raises: [CoreDbApiError].} =
   ## Generic iterator used for building dedicated backend iterators.
   ##
   let p = mpt.call(forkTx, mpt.mpt, 0).valueOrApiError "aristoReplicate()"
   defer: discard mpt.call(forget, p)
   for (rVid,key,vtx,node) in T.replicate(p):
-    let w = node.to(seq[Blob])
+    let w = node.to(seq[seq[byte]])
     yield (@(key.data),w[0])
     if 1 < w.len:
       # Was an extension merged into a branch

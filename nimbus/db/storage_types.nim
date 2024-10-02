@@ -38,17 +38,17 @@ type
 
   HashIndexKey* = array[34, byte]
 
-func genericHashKey*(h: Hash256): DbKey {.inline.} =
+func genericHashKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(genericHash)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-func blockHashToScoreKey*(h: Hash256): DbKey {.inline.} =
+func blockHashToScoreKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(blockHashToScore)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-func transactionHashToBlockKey*(h: Hash256): DbKey {.inline.} =
+func transactionHashToBlockKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(transactionHashToBlock)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
@@ -69,7 +69,7 @@ func slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 32
 
-func contractHashKey*(h: Hash256): DbKey {.inline.} =
+func contractHashKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(contractHash)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
@@ -91,7 +91,7 @@ func skeletonProgressKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(skeletonProgress)
   result.dataEndPos = 1
 
-func skeletonBlockHashToNumberKey*(h: Hash256): DbKey {.inline.} =
+func skeletonBlockHashToNumberKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(skeletonBlockHashToNumber)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
@@ -102,12 +102,12 @@ func skeletonHeaderKey*(u: BlockNumber): DbKey {.inline.} =
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
-func skeletonBodyKey*(h: Hash256): DbKey {.inline.} =
+func skeletonBodyKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(skeletonBody)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-func hashIndexKey*(hash: Hash256, index: uint16): HashIndexKey =
+func hashIndexKey*(hash: Hash32, index: uint16): HashIndexKey =
   result[0..31] = hash.data
   result[32] = byte(index and 0xFF)
   result[33] = byte((index shl 8) and 0xFF)

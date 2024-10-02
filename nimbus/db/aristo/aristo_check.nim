@@ -102,7 +102,7 @@ proc check*(
 
 proc check*(
     db: AristoDbRef;                   # Database
-    accPath: Hash256;                  # Account key
+    accPath: Hash32;                   # Account key
       ): Result[void,AristoError] =
   ## Check accounts tree path `accPath` against portal proof generation and
   ## verification.
@@ -113,8 +113,8 @@ proc check*(
 
 proc check*(
     db: AristoDbRef;                   # Database
-    accPath: Hash256;                  # Account key
-    stoPath: Hash256;                  # Storage key
+    accPath: Hash32;                   # Account key
+    stoPath: Hash32;                   # Storage key
       ): Result[void,AristoError] =
   ## Check account tree `Account key` against portal proof generation and
   ## verification.

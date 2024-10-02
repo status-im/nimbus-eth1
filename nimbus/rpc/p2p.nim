@@ -81,7 +81,7 @@ proc setupEthRpc*(
 
   proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): LedgerRef
       {.gcsafe, raises: [CatchableError].} =
-    result = getStateDB(chainDB.headerFromTag(quantityTag))
+    getStateDB(chainDB.headerFromTag(quantityTag))
 
   server.rpc("eth_chainId") do() -> Web3Quantity:
     return w3Qty(distinctBase(com.chainId))
@@ -100,7 +100,7 @@ proc setupEthRpc*(
 
   server.rpc("eth_gasPrice") do() -> Web3Quantity:
     ## Returns an integer of the current gas price in wei.
-    result = w3Qty(calculateMedianGasPrice(chainDB).uint64)
+    w3Qty(calculateMedianGasPrice(chainDB).uint64)
 
   server.rpc("eth_accounts") do() -> seq[Web3Address]:
     ## Returns a list of addresses owned by client.
@@ -110,7 +110,7 @@ proc setupEthRpc*(
 
   server.rpc("eth_blockNumber") do() -> Web3Quantity:
     ## Returns integer of the current block number the client is on.
-    result = w3Qty(chainDB.getCanonicalHead().number)
+    w3Qty(chainDB.getCanonicalHead().number)
 
   server.rpc("eth_getBalance") do(data: Web3Address, quantityTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
@@ -121,7 +121,7 @@ proc setupEthRpc*(
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
-    result = accDB.getBalance(address)
+    accDB.getBalance(address)
 
   server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: BlockTag) -> Web3FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
@@ -134,7 +134,7 @@ proc setupEthRpc*(
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
       data = accDB.getStorage(address, slot)
-    result = data.w3FixedBytes
+    data.w3FixedBytes
 
   server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions sent from an address.
@@ -145,7 +145,7 @@ proc setupEthRpc*(
     let
       address = data.ethAddr
       accDB   = stateDBFromTag(quantityTag)
-    result = w3Qty(accDB.getNonce(address))
+    w3Qty(accDB.getNonce(address))
 
   server.rpc("eth_getBlockTransactionCountByHash") do(data: Web3Hash) -> Web3Quantity:
     ## Returns the number of transactions in a block from a block matching the given block hash.
@@ -156,7 +156,7 @@ proc setupEthRpc*(
       blockHash = data.ethHash
       header    = chainDB.getBlockHeader(blockHash)
       txCount   = chainDB.getTransactionCount(header.txRoot)
-    result = Web3Quantity(txCount)
+    Web3Quantity(txCount)
 
   server.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions in a block matching the given block number.
@@ -166,7 +166,7 @@ proc setupEthRpc*(
     let
       header  = chainDB.headerFromTag(quantityTag)
       txCount = chainDB.getTransactionCount(header.txRoot)
-    result = Web3Quantity(txCount)
+    Web3Quantity(txCount)
 
   server.rpc("eth_getUncleCountByBlockHash") do(data: Web3Hash) -> Web3Quantity:
     ## Returns the number of uncles in a block from a block matching the given block hash.
@@ -177,7 +177,7 @@ proc setupEthRpc*(
       blockHash   = data.ethHash
       header      = chainDB.getBlockHeader(blockHash)
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
-    result = Web3Quantity(unclesCount)
+    Web3Quantity(unclesCount)
 
   server.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of uncles in a block from a block matching the given block number.
@@ -187,7 +187,7 @@ proc setupEthRpc*(
     let
       header      = chainDB.headerFromTag(quantityTag)
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
-    result = Web3Quantity(unclesCount)
+    Web3Quantity(unclesCount)
 
   server.rpc("eth_getCode") do(data: Web3Address, quantityTag: BlockTag) -> seq[byte]:
     ## Returns code at a given address.
@@ -198,7 +198,7 @@ proc setupEthRpc*(
     let
       accDB   = stateDBFromTag(quantityTag)
       address = data.ethAddr
-    result = accDB.getCode(address).bytes()
+    accDB.getCode(address).bytes()
 
   template sign(privateKey: PrivateKey, message: string): seq[byte] =
     # message length encoded as ASCII representation of decimal
@@ -220,7 +220,7 @@ proc setupEthRpc*(
 
     if not acc.unlocked:
       raise newException(ValueError, "Account locked, please unlock it first")
-    result = sign(acc.privateKey, cast[string](message))
+    sign(acc.privateKey, cast[string](message))
 
   server.rpc("eth_signTransaction") do(data: TransactionArgs) -> seq[byte]:
     ## Signs a transaction that can be submitted to the network at a later time using with
@@ -278,7 +278,7 @@ proc setupEthRpc*(
       pooledTx = PooledTransaction(tx: signedTx, networkPayload: networkPayload)
 
     txPool.add(pooledTx)
-    result = rlpHash(signedTx).w3Hash
+    rlpHash(signedTx).w3Hash
 
   server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
     ## Creates new message call transaction or a contract creation for signed transactions.
@@ -294,7 +294,7 @@ proc setupEthRpc*(
     let res = txPool.inPoolAndReason(txHash)
     if res.isErr:
       raise newException(ValueError, res.error)
-    result = txHash.w3Hash
+    txHash.w3Hash
 
   server.rpc("eth_call") do(args: TransactionArgs, quantityTag: BlockTag) -> seq[byte]:
     ## Executes a new message call immediately without creating a transaction on the block chain.
@@ -306,7 +306,7 @@ proc setupEthRpc*(
       header   = headerFromTag(chainDB, quantityTag)
       res      = rpcCallEvm(args, header, com).valueOr:
                    raise newException(ValueError, "rpcCallEvm error: " & $error.code)
-    result = res.output
+    res.output
 
   server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Web3Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
@@ -321,7 +321,7 @@ proc setupEthRpc*(
       # TODO: DEFAULT_RPC_GAS_CAP should configurable
       gasUsed  = rpcEstimateGas(args, header, com, DEFAULT_RPC_GAS_CAP).valueOr:
                    raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
-    result = w3Qty(gasUsed)
+    w3Qty(gasUsed)
 
   server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
@@ -334,9 +334,9 @@ proc setupEthRpc*(
       hash = data.ethHash
 
     if chainDB.getBlockHeader(hash, header):
-      result = populateBlockObject(header, chainDB, fullTransactions)
+      populateBlockObject(header, chainDB, fullTransactions)
     else:
-      result = nil
+      nil
 
   server.rpc("eth_getBlockByNumber") do(quantityTag: BlockTag, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by block number.
@@ -346,9 +346,9 @@ proc setupEthRpc*(
     ## Returns BlockObject or nil when no block was found.
     try:
       let header = chainDB.headerFromTag(quantityTag)
-      result = populateBlockObject(header, chainDB, fullTransactions)
+      populateBlockObject(header, chainDB, fullTransactions)
     except CatchableError:
-      result = nil
+      nil
 
   server.rpc("eth_getTransactionByHash") do(data: Web3Hash) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
@@ -382,9 +382,9 @@ proc setupEthRpc*(
 
     var tx: Transaction
     if chainDB.getTransactionByIndex(header.txRoot, uint16(index), tx):
-      result = populateTransactionObject(tx, Opt.some(header), Opt.some(index))
+      populateTransactionObject(tx, Opt.some(header), Opt.some(index))
     else:
-      result = nil
+      nil
 
   server.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: BlockTag, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block number and transaction index position.
@@ -397,9 +397,9 @@ proc setupEthRpc*(
 
     var tx: Transaction
     if chainDB.getTransactionByIndex(header.txRoot, uint16(index), tx):
-      result = populateTransactionObject(tx, Opt.some(header), Opt.some(index))
+      populateTransactionObject(tx, Opt.some(header), Opt.some(index))
     else:
-      result = nil
+      nil
 
   server.rpc("eth_getTransactionReceipt") do(data: Web3Hash) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.

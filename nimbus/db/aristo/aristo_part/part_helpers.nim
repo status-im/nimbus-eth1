@@ -34,7 +34,7 @@ proc read(rlp: var Rlp; T: type PrfNode): T {.gcsafe, raises: [RlpError].} =
     return readError(PartRlp2Or17ListEntries)
 
   var
-    blobs = newSeq[Blob](2)         # temporary, cache
+    blobs = newSeq[seq[byte]](2)         # temporary, cache
     links: array[16,HashKey]        # reconstruct branch node
     top = 0                         # count entries and positions
 
@@ -44,13 +44,13 @@ proc read(rlp: var Rlp; T: type PrfNode): T {.gcsafe, raises: [RlpError].} =
     of 0, 1:
       if not w.isBlob:
         return readError(PartRlpBlobExpected)
-      blobs[top] = rlp.read(Blob)
+      blobs[top] = rlp.read(seq[byte])
     of 2 .. 15:
-      let blob = rlp.read(Blob)
+      let blob = rlp.read(seq[byte])
       links[top] = HashKey.fromBytes(blob).valueOr:
         return readError(PartRlpBranchHashKeyExpected)
     of 16:
-      if not w.isBlob or 0 < rlp.read(Blob).len:
+      if not w.isBlob or 0 < rlp.read(seq[byte]).len:
         return readError(PartRlpEmptyBlobExpected)
     else:
       return readError(PartRlp2Or17ListEntries)
@@ -114,7 +114,7 @@ proc read(rlp: var Rlp; T: type PrfPayload): T {.gcsafe, raises: [RlpError].} =
 # ------------------------------------------------------------------------------
 
 func toNodesTab*(
-    proof: openArray[Blob];                     # List of RLP encoded nodes
+    proof: openArray[seq[byte]];                # List of RLP encoded nodes
     mode: PartStateMode;                        # How to decode `Leaf` nodes
       ): Result[TableRef[HashKey,PrfNode],AristoError] =
   ## Convert RLP encoded argument list `proof` to a nodes table indexed by

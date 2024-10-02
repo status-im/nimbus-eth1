@@ -29,7 +29,7 @@ export AccountsLedgerRef, base, base_config, base_iterators
 # ------------------------------------------------------------------------------
 
 proc init*(
-    _: type LedgerRef, db: CoreDbRef, root: Hash256, storeSlotHash: bool = false
+    _: type LedgerRef, db: CoreDbRef, root: Hash32, storeSlotHash: bool = false
 ): LedgerRef =
   LedgerRef(ac: AccountsLedgerRef.init(db, root, storeSlotHash)).bless(db)
 

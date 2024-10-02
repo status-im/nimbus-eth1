@@ -49,7 +49,7 @@ type
   KvtApiForkTxFn* = proc(db: KvtDbRef,
     backLevel: int): Result[KvtDbRef,KvtError] {.noRaise.}
   KvtApiGetFn* = proc(db: KvtDbRef,
-    key: openArray[byte]): Result[Blob,KvtError] {.noRaise.}
+    key: openArray[byte]): Result[seq[byte],KvtError] {.noRaise.}
   KvtApiLenFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[int,KvtError] {.noRaise.}
   KvtApiHasKeyRcFn* = proc(db: KvtDbRef,

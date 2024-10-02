@@ -55,7 +55,7 @@ proc newAristoVoidCoreDbRef*(): CoreDbRef =
 
 proc newCtxByKey*(
     ctx: CoreDbCtxRef;
-    key: Hash256;
+    key: Hash32;
     info: static[string];
       ): CoreDbRc[CoreDbCtxRef] =
   const

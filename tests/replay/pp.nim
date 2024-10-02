@@ -25,7 +25,7 @@ export
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
-func pp*(b: Blob): string =
+func pp*(b: seq[byte]): string =
   b.toHex.pp(hex = true)
 
 func pp*(a: EthAddress): string =
@@ -37,7 +37,7 @@ func pp*(a: Opt[EthAddress]): string =
 func pp*(a: openArray[EthAddress]): string =
   "[" & a.mapIt(it.pp).join(" ") & "]"
 
-func pp*(a: BlockNonce): string =
+func pp*(a: Bytes8): string =
   a.toHex
 
 func pp*(a: NetworkPayload): string =
@@ -48,7 +48,7 @@ func pp*(a: NetworkPayload): string =
       $a.commitments.len & "],[#" &
       $a.proofs.len & "])"
 
-func pp*(h: BlockHeader; sep = " "): string =
+func pp*(h: Header; sep = " "): string =
   "" &
     &"hash={h.blockHash.pp}{sep}" &
     &"blockNumber={h.number}{sep}" &
@@ -104,7 +104,7 @@ func pp*(t: Transaction; sep = " "): string =
     &"R={t.R}{sep}" &
     &"S={t.S}{sep}"
 
-proc pp*(h: BlockHeader; indent: int): string =
+proc pp*(h: Header; indent: int): string =
   h.pp("\n" & " ".repeat(max(1,indent)))
 
 proc pp*(g: Genesis; indent: int): string =

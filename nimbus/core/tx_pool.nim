@@ -10,8 +10,6 @@
 
 ## TODO:
 ## =====
-## * No uncles are handled by this pool
-##
 ## * Impose a size limit to the bucket database. Which items would be removed?
 ##
 ## * There is a conceivable problem with the per-account optimisation. The

@@ -27,7 +27,7 @@ import
 proc getUbe*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
-      ): Result[Blob,KvtError] =
+      ): Result[seq[byte],KvtError] =
   ## For the argument `key` return the associated value from the backend
   ## database if available.
   ##
@@ -51,7 +51,7 @@ proc getUbeLen*(
 proc getBe*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
-      ): Result[Blob,KvtError] =
+      ): Result[seq[byte],KvtError] =
   ## Get the vertex from the (filtered) backened if available.
   if not db.balancer.isNil:
     db.balancer.sTab.withValue(@key, w):
@@ -107,7 +107,7 @@ proc del*(
 proc get*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
-      ): Result[Blob,KvtError] =
+      ): Result[seq[byte],KvtError] =
   ## For the argument `key` return the associated value preferably from the
   ## top layer, or the database otherwise.
   ##
