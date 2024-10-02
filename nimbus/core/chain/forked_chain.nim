@@ -45,6 +45,7 @@ type
     db: CoreDbRef
     com: CommonRef
     blocks: Table[Hash256, BlockDesc]
+    txRecords: Table[Hash256, Hash256]
     baseHash: Hash256
     baseHeader: BlockHeader
     cursorHash: Hash256
@@ -158,6 +159,9 @@ proc validateBlock(c: ForkedChainRef,
   if updateCursor:
     c.updateCursor(blk, move(res.value))
 
+  for tx in blk.transactions:
+    c.txRecords[rlpHash(tx)] = blk.header.blockHash
+
   ok()
 
 proc replaySegment(c: ForkedChainRef, target: Hash256) =
@@ -218,6 +222,8 @@ proc writeBaggage(c: ForkedChainRef, target: Hash256) =
         c.db.persistWithdrawals(
           header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
           blk.blk.withdrawals.get)
+      for tx in blk.blk.transactions:
+        c.txRecords.del(rlpHash(tx))
       prevHash = header.parentHash
 
 func updateBase(c: ForkedChainRef,
@@ -405,6 +411,7 @@ proc newForkedChain*(com: CommonRef,
     cursorHeader: baseHeader,
     extraValidation: extraValidation,
     baseDistance: baseDistance,
+    txRecords: initTable[Hash256, Hash256]()
   )
 
   # update global syncStart
@@ -569,6 +576,18 @@ func latestHash*(c: ForkedChainRef): Hash256 =
 
 func baseNumber*(c: ForkedChainRef): BlockNumber =
   c.baseHeader.number
+
+func txRecords*(c: ForkedChainRef): Table[Hash256, Hash256] =
+  c.txRecords
+
+func memoryBlocks*(c: ForkedChainRef): Table[Hash256, BlockDesc] =
+  c.blocks
+
+func receipts*(b: BlockDesc): seq[Receipt] =
+  b.receipts
+
+func blockTransactions*(b: BlockDesc): seq[Transaction] =
+  b.blk.transactions
 
 proc latestBlock*(c: ForkedChainRef): EthBlock =
   c.blocks.withValue(c.cursorHash, val) do:
