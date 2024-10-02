@@ -633,7 +633,19 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash256): Opt[EthBlock] =
   do:
     return Opt.none(EthBlock)
 
-func blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[EthBlock, string] =
+proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[EthBlock, string] =
+  if number > c.cursorHeader.number:
+    return err("Requested block number not exists: " & $number)
+
+  if number < c.baseHeader.number:
+    var 
+      header: Header
+      body: BlockBody
+    if c.db.getBlockHeader(number, header) and c.db.getBlockBody(header, body):
+      return ok(EthBlock.init(move(header), move(body)))
+    else:
+      return err("Failed to get block with number: " & $number)
+
   shouldNotKeyError:
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:

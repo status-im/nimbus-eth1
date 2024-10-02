@@ -50,12 +50,7 @@ proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[common.BlockHe
       return err("Unsupported block tag " & tag)
   else:
     let blockNum = common.BlockNumber blockTag.number
-    let blkhdr = api.chain.headerByNumber(blockNum).valueOr:
-      try:
-        api.chain.db.getBlockHeader(blockNum)
-      except BlockNotFound:
-        return err("Block header not found, number = " & $blockNum)
-    ok(blkhdr)
+    return api.chain.headerByNumber(blockNum)
 
 proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[common.BlockHeader, string] =
   let blockId = blockTag.get(defaultTag)
