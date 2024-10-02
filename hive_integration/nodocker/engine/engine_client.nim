@@ -307,7 +307,7 @@ proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
     coinbase       : ethAddr bc.miner,
     difficulty     : bc.difficulty,
     extraData      : bc.extraData.bytes,
-    mixHash        : bc.mixHash,
+    mixHash        : Bytes32 bc.mixHash,
     gasLimit       : bc.gasLimit.GasInt,
     gasUsed        : bc.gasUsed.GasInt,
     timestamp      : EthTime bc.timestamp,
