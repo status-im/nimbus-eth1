@@ -32,20 +32,20 @@ declareGauge beacon_final, "" &
   "Block number of latest known finalised header"
 
 
-declareGauge beacon_headers_staged_queue_len, "" &
+declareGauge beacon_header_lists_staged, "" &
   "Number of header list records staged for serialised processing"
 
 declareGauge beacon_headers_unprocessed, "" &
   "Number of block numbers ready to fetch and stage headers"
 
-declareGauge beacon_blocks_staged_queue_len, "" &
+declareGauge beacon_block_lists_staged, "" &
   "Number of block list records staged for importing"
 
 declareGauge beacon_blocks_unprocessed, "" &
   "Number of block numbers ready to fetch and stage block data"
 
 
-declareGauge beacon_number_of_buddies, "" &
+declareGauge beacon_buddies, "" &
   "Number of currently active worker instances"
 
 
@@ -56,14 +56,14 @@ template updateMetricsImpl*(ctx: BeaconCtxRef) =
   metrics.set(beacon_end, ctx.layout.endBn.int64)
   metrics.set(beacon_final, ctx.lhc.final.header.number.int64)
 
-  metrics.set(beacon_headers_staged_queue_len, ctx.headersStagedQueueLen())
+  metrics.set(beacon_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(beacon_headers_unprocessed,
               (ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed()).int64)
 
-  metrics.set(beacon_blocks_staged_queue_len, ctx.blocksStagedQueueLen())
+  metrics.set(beacon_block_lists_staged, ctx.blocksStagedQueueLen())
   metrics.set(beacon_blocks_unprocessed,
               (ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed()).int64)
 
-  metrics.set(beacon_number_of_buddies, ctx.pool.nBuddies)
+  metrics.set(beacon_buddies, ctx.pool.nBuddies)
 
 # End
