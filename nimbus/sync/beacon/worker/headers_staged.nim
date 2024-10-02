@@ -60,14 +60,13 @@ proc headerStagedUpdateBeacon*(
       ) {.async.} =
   ## Fetch beacon header if there is an update available
   let ctx = buddy.ctx
-  if ctx.lhc.beacon.finalised != zeroHash32:
+  if ctx.lhc.final.hash != zeroHash32:
     const iv = BnRange.new(1u,1u) # dummy interval
-    let finHash = ctx.lhc.beacon.finalised
-    let rc = await buddy.headersFetchReversed(iv, finHash, info)
-    if rc.isOk and ctx.lhc.beacon.header.number < rc.value[0].number:
-      ctx.lhc.beacon.header = rc.value[0]
-      ctx.lhc.beacon.changed = true
-    ctx.lhc.beacon.finalised = zeroHash32
+    let rc = await buddy.headersFetchReversed(iv, ctx.lhc.final.hash, info)
+    if rc.isOk and ctx.lhc.final.header.number < rc.value[0].number:
+      ctx.lhc.final.header = rc.value[0]
+      ctx.lhc.final.changed = true
+    ctx.lhc.final.hash = zeroHash32
 
 
 proc headersStagedCollect*(

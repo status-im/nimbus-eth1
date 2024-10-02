@@ -30,7 +30,7 @@ type
     coupler*: BlockNumber
     least*: BlockNumber
     endBn*: BlockNumber
-    beacon*: BlockNumber
+    final*: BlockNumber
 
     hdrUnprocTop*: BlockNumber
     nHdrUnprocessed*: uint64
@@ -76,7 +76,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
       C = data.coupler.bnStr
       L = data.least.bnStr
       E = data.endBn.bnStr
-      Z = data.beacon.bnStr
+      F = data.final.bnStr
 
       hS = if data.nHdrStaged == 0: "n/a"
            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
@@ -100,7 +100,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    info "State", up, peers, B, C, L, E, Z, hS, hU, bS, bU, reorg, mem
+    info "State", up, peers, B, C, L, E, F, hS, hU, bS, bU, reorg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages

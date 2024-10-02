@@ -28,7 +28,7 @@ declareGauge beacon_least_block_number, "" &
 declareGauge beacon_end, "" &
   "Ending/max block number of higher up headers chain"
 
-declareGauge beacon_beacon_block_number, "" &
+declareGauge beacon_final, "" &
   "Block number of latest known finalised header"
 
 
@@ -54,7 +54,7 @@ template updateMetricsImpl*(ctx: BeaconCtxRef) =
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_least_block_number, ctx.layout.least.int64)
   metrics.set(beacon_end, ctx.layout.endBn.int64)
-  metrics.set(beacon_beacon_block_number, ctx.lhc.beacon.header.number.int64)
+  metrics.set(beacon_final, ctx.lhc.final.header.number.int64)
 
   metrics.set(beacon_headers_staged_queue_len, ctx.headersStagedQueueLen())
   metrics.set(beacon_headers_unprocessed,

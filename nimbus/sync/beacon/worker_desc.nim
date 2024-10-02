@@ -74,11 +74,11 @@ type
     ## Beacon state to be implicitely updated by RPC method
     changed*: bool                   ## Set a marker if something has changed
     header*: Header                  ## Beacon chain, finalised header
-    finalised*: Hash32               ## From RPC, ghash of finalised header
+    hash*: Hash32                    ## From RPC, hash of finalised header
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains
-    beacon*: BeaconHeader            ## See `Z` in README
+    final*: BeaconHeader             ## See `F` in `README.md`
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: uint64                ## Total of temp. fetched ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet

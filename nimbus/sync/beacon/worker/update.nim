@@ -25,35 +25,35 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc updateBeaconChange(ctx: BeaconCtxRef): bool =
+proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
-  ##     G             C==L==F                  Z
+  ##     G             C==L==E                  F
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> |
   ##
   ## or
   ## ::
-  ##    G==Z           C==L==F
+  ##    G==F           C==L==E
   ##     o----------------o-------------------------->
   ##     | <-- linked --> |
   ##
-  ## with `Z == beacon.header.number` or `Z == 0`
+  ## with `F == final.header.number` or `F == 0`
   ##
   ## to be updated to
   ## ::
-  ##     G               C==L                 L'==F'
+  ##     G               C==L                 L'==E'
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> | <-- unprocessed --> |
   ##
   const info = "updateBeaconChange"
 
-  var z = ctx.lhc.beacon.header.number
+  var finBn = ctx.lhc.final.header.number
 
-  # Need: `E < Z` and `C == L`
-  if z != 0 and z <= ctx.layout.endBn:        # violates `E < Z`
-    trace info & ": not applicable", Z=z.bnStr, E=ctx.layout.endBn.bnStr
+  # Need: `E < F` and `C == L`
+  if finBn != 0 and finBn <= ctx.layout.endBn:        # violates `E < F`
+    trace info & ": not applicable", E=ctx.layout.endBn.bnStr, F=finBn.bnStr
     return false
 
   if ctx.layout.coupler != ctx.layout.least: # violates `C == L`
@@ -64,19 +64,19 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
   # Check consistency: `C == L <= E` for maximal `C` => `L == E`
   doAssert ctx.layout.least == ctx.layout.endBn
 
-  let rlpHeader = rlp.encode(ctx.lhc.beacon.header)
+  let rlpHeader = rlp.encode(ctx.lhc.final.header)
 
   ctx.lhc.layout = LinkedHChainsLayout(
     coupler:     ctx.layout.coupler,
     couplerHash: ctx.layout.couplerHash,
-    least:       z,
-    leastParent: ctx.lhc.beacon.header.parentHash,
-    endBn:       z,
+    least:       finBn,
+    leastParent: ctx.lhc.final.header.parentHash,
+    endBn:       finBn,
     endHash:     rlpHeader.keccak256)
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
-  ctx.dbStashHeaders(z, @[rlpHeader])
+  ctx.dbStashHeaders(finBn, @[rlpHeader])
 
   # Save state
   discard ctx.dbStoreLinkedHChainsLayout()
@@ -133,9 +133,9 @@ proc updateLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
   ## Update layout
 
   # Check whether there is something to do regarding beacon node change
-  if ctx.lhc.beacon.changed:
-    ctx.lhc.beacon.changed = false
-    result = ctx.updateBeaconChange()
+  if ctx.lhc.final.changed:
+    ctx.lhc.final.changed = false
+    result = ctx.updateFinalisedChange()
 
   # Check whether header downloading is done
   if ctx.mergeAdjacentChains():

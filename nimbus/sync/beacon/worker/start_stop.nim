@@ -33,7 +33,7 @@ when enableTicker:
         coupler:         ctx.layout.coupler,
         least:           ctx.layout.least,
         endBn:           ctx.layout.endBn,
-        beacon:          ctx.lhc.beacon.header.number,
+        final:           ctx.lhc.final.header.number,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
         hdrStagedTop:    ctx.headersStagedTopKey(),
@@ -54,8 +54,8 @@ proc updateBeaconHeaderCB(ctx: BeaconCtxRef): SyncFinalisedBlockHashCB =
   ## for the RPC module.
   return proc(h: Hash32) {.gcsafe, raises: [].} =
     # Rpc checks empty header against a zero hash rather than `emptyRoot`
-    if ctx.lhc.beacon.finalised == zeroHash32:
-      ctx.lhc.beacon.finalised = h
+    if ctx.lhc.final.hash == zeroHash32:
+      ctx.lhc.final.hash = h
 
 # ------------------------------------------------------------------------------
 # Public functions

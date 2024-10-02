@@ -74,31 +74,31 @@ A header chain with an non empty open interval *(C,L)* can be updated only by
 increasing *C* or decreasing *L* by adding headers so that the linked chain
 condition is not violated.
 
-Only when the open interval *(C,L)* vanishes the right end *E* can be increased
-by *Z* say. Then
+Only when the gap open interval *(C,L)* vanishes, the right end *E* can be
+increased by a larger **finalised** block number *F* say, then
 
 * *C==L* beacuse interval *(C,L)* is empty
 * *C==E* because *C* is maximal
 
-and the header chains *(E,E,E)* (depicted in *(3)*) can be set to *(C,Z,Z)*
+and the header chains *(E,E,E)* (depicted in *(3)*) can be set to *(C,F,F)*
 (as depicted in *(4)*.)
 
 Layout before updating of *E*
 
                        C                                                     (3)
                        L
-      G                E                     Z
+      G                E                     F
       o----------------o---------------------o---->
       | <-- linked --> |
 
-New layout with *Z*
+New layout with moving `L` and `E` to *F*
 
                                              L'                              (4)
       G                C                     E'
       o----------------o---------------------o---->
       | <-- linked --> | <-- unprocessed --> |
 
-with *L'=Z* and *E'=Z*.
+with *L'=F* and *E'=F*.
 
 Note that diagram *(3)* is a generalisation of *(2)*.
 
@@ -106,8 +106,8 @@ Note that diagram *(3)* is a generalisation of *(2)*.
 ### Complete header chain:
 
 The header chain is *relatively complete* if it satisfies clause *(3)* above
-for *G < C*. It is *fully complete* if *E==Z*. It should be obvious that the
-latter condition is temporary only on a live system (as *Z* is permanently
+for *G < C*. It is *fully complete* if *E==F*. It should be obvious that the
+latter condition is temporary only on a live system (as *F* is contiuously
 updated.)
 
 If a *relatively complete* header chain is reached for the first time, the
@@ -230,7 +230,7 @@ be available if *nimbus* is compiled with the additional make flags
 | beacon_coupler                 | block height | **C**, *increasing* |
 | beacon_least_block_number      | block height | **L**               |
 | beacon_end                     | block height | **E**, *increasing* |
-| beacon_beacon_block_number     | block height | **Z**, *increasing* |
+| beacon_final                   | block height | **F**, *increasing* |
 |                                |              |                     |
 | beacon_headers_staged_queue_len| size | # of staged header list records      |
 | beacon_headers_unprocessed     | size | # of accumulated header block numbers|
