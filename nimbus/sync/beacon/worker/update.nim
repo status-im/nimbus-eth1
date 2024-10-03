@@ -29,13 +29,13 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
-  ##     G             C==D==E                  F
+  ##     0             C==D==E                  F
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> |
   ##
   ## or
   ## ::
-  ##    G==F           C==D==E
+  ##    0==F           C==D==E
   ##     o----------------o-------------------------->
   ##     | <-- linked --> |
   ##
@@ -43,7 +43,7 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   ##
   ## to be updated to
   ## ::
-  ##     G               C==D                 D'==E'
+  ##     0               C==D                 D'==E'
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> | <-- unprocessed --> |
   ##

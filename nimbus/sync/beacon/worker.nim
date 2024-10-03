@@ -182,8 +182,8 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
     #
     # Layout of a triple of linked header chains (see `README.md`)
     # ::
-    #   G                C                     D                E
-    #   | <--- [G,C] --> | <----- (C,D) -----> | <-- [D,E] ---> |
+    #   0                C                     D                E
+    #   | <--- [0,C] --> | <----- (C,D) -----> | <-- [D,E] ---> |
     #   o----------------o---------------------o----------------o--->
     #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     #

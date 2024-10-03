@@ -57,11 +57,11 @@ type
     ## Layout of a linked header chains defined by the triple `(C,D,E)` as
     ## described in the `README.md` text.
     ## ::
-    ##   G                C                     D                E
+    ##   0                C                     D                E
     ##   o----------------o---------------------o----------------o--->
     ##   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     ##
-    coupler*: BlockNumber            ## Right end `C` of linked chain `[G,C]`
+    coupler*: BlockNumber            ## Right end `C` of linked chain `[0,C]`
     couplerHash*: Hash32             ## Hash of `C`
 
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,E]`
