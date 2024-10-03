@@ -30,7 +30,7 @@ type
     ContentValidationFailed
 
   ErrorResponse = object
-    code*   : int
+    code*: int
     message*: string
 
 proc init*(T: type PortalRpcClient, rpcClient: RpcClient): T =

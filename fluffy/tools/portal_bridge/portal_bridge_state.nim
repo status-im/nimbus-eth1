@@ -358,16 +358,14 @@ proc runBackfillMetricsLoop(
         nextBlockNumber = blockDataQueue[0].blockNumber,
         blockDataQueueLen = blockDataQueue.len()
     else:
-      info "Block data queue metrics: ",
-        blockDataQueueLen = blockDataQueue.len()
+      info "Block data queue metrics: ", blockDataQueueLen = blockDataQueue.len()
 
     if blockOffersQueue.len() > 0:
       info "Block offers queue metrics: ",
         nextBlockNumber = blockOffersQueue[0].blockNumber,
         blockOffersQueueLen = blockOffersQueue.len()
     else:
-      info "Block offers queue metrics: ",
-        blockOffersQueueLen = blockOffersQueue.len()
+      info "Block offers queue metrics: ", blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
   let
@@ -414,7 +412,8 @@ proc runState*(config: PortalBridgeConf) =
     db, blockDataQueue, web3Client, config.startBlockNumber
   )
   asyncSpawn runBackfillBuildBlockOffersLoop(
-    db, blockDataQueue, blockOffersQueue, config.verifyStateProofs, config.enableGossip, config.gossipGenesis
+    db, blockDataQueue, blockOffersQueue, config.verifyStateProofs, config.enableGossip,
+    config.gossipGenesis,
   )
 
   for workerId in 1 .. config.gossipWorkersCount.int:

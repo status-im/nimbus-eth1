@@ -28,7 +28,7 @@ proc init(T: type AccountState, account = newAccount()): T =
 template getBalance*(accState: AccountState): UInt256 =
   accState.account.balance
 
-template getNonce*(accState: AccountState): AccountNonce  =
+template getNonce*(accState: AccountState): AccountNonce =
   accState.account.nonce
 
 template setBalance*(accState: var AccountState, bal: UInt256) =
@@ -40,9 +40,7 @@ template addBalance*(accState: var AccountState, bal: UInt256) =
 template setNonce*(accState: var AccountState, nce: AccountNonce) =
   accState.account.nonce = nce
 
-template setStorage*(
-    accState: var AccountState, slotKey: UInt256, slotValue: UInt256
-) =
+template setStorage*(accState: var AccountState, slotKey: UInt256, slotValue: UInt256) =
   accState.storageUpdates[slotKey] = slotValue
 
 template deleteStorage*(accState: var AccountState, slotKey: UInt256) =
@@ -78,7 +76,7 @@ proc init*(
         initHexaryTrie(db.getAccountsBackend(), accountsTrieRoot, isPruning = false),
     storageTries: newTable[AddressHash, HexaryTrie](),
     storageDb: db.getStorageBackend(),
-    bytecodeDb: db.getBytecodeBackend()
+    bytecodeDb: db.getBytecodeBackend(),
   )
 
 template stateRoot*(state: WorldStateRef): KeccakHash =
@@ -178,9 +176,7 @@ iterator updatedStorageProofs*(
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
-template getUpdatedBytecode*(
-    state: WorldStateRef, accountKey: AddressHash
-): seq[byte] =
+template getUpdatedBytecode*(state: WorldStateRef, accountKey: AddressHash): seq[byte] =
   state.db.getBytecodeUpdatedCache().get(accountKey.data)
 
 # Slow: Only used for testing

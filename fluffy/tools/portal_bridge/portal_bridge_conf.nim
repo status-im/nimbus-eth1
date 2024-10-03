@@ -146,7 +146,8 @@ type
       .}: uint64
 
       verifyStateProofs* {.
-        desc: "Verify state proofs before gossiping them into the portal network (Slow: Only used for testing).",
+        desc:
+          "Verify state proofs before gossiping them into the portal network (Slow: Only used for testing).",
         defaultValue: false,
         name: "verify-state-proofs"
       .}: bool
