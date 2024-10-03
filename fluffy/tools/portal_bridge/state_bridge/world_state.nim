@@ -22,35 +22,33 @@ type AccountState* = ref object
   code: seq[byte]
   codeUpdated: bool
 
-proc init(T: type AccountState, account = newAccount()): T {.inline.} =
+proc init(T: type AccountState, account = newAccount()): T =
   T(account: account, codeUpdated: false)
 
-proc getBalance*(accState: AccountState): UInt256 {.inline.} =
+template getBalance*(accState: AccountState): UInt256 =
   accState.account.balance
 
-proc getNonce*(accState: AccountState): AccountNonce {.inline.} =
+template getNonce*(accState: AccountState): AccountNonce =
   accState.account.nonce
 
-proc setBalance*(accState: var AccountState, balance: UInt256) {.inline.} =
-  accState.account.balance = balance
+template setBalance*(accState: var AccountState, bal: UInt256) =
+  accState.account.balance = bal
 
-proc addBalance*(accState: var AccountState, balance: UInt256) {.inline.} =
-  accState.account.balance += balance
+template addBalance*(accState: var AccountState, bal: UInt256) =
+  accState.account.balance += bal
 
-proc setNonce*(accState: var AccountState, nonce: AccountNonce) {.inline.} =
-  accState.account.nonce = nonce
+template setNonce*(accState: var AccountState, nce: AccountNonce) =
+  accState.account.nonce = nce
 
-proc setStorage*(
-    accState: var AccountState, slotKey: UInt256, slotValue: UInt256
-) {.inline.} =
+template setStorage*(accState: var AccountState, slotKey: UInt256, slotValue: UInt256) =
   accState.storageUpdates[slotKey] = slotValue
 
-proc deleteStorage*(accState: var AccountState, slotKey: UInt256) {.inline.} =
+template deleteStorage*(accState: var AccountState, slotKey: UInt256) =
   # setting to zero has the effect of deleting the slot
   accState.setStorage(slotKey, 0.u256)
 
-proc setCode*(accState: var AccountState, code: seq[byte]) =
-  accState.code = code
+template setCode*(accState: var AccountState, bytecode: seq[byte]) =
+  accState.code = bytecode
   accState.codeUpdated = true
 
 # World State definition
@@ -65,7 +63,6 @@ type
     storageTries: TableRef[AddressHash, HexaryTrie]
     storageDb: TrieDatabaseRef
     bytecodeDb: TrieDatabaseRef # maps AddressHash -> seq[byte]
-    preimagesDb: TrieDatabaseRef # maps AddressHash -> EthAddress
 
 proc init*(
     T: type WorldStateRef, db: DatabaseRef, accountsTrieRoot: KeccakHash = emptyRlpHash
@@ -80,34 +77,16 @@ proc init*(
     storageTries: newTable[AddressHash, HexaryTrie](),
     storageDb: db.getStorageBackend(),
     bytecodeDb: db.getBytecodeBackend(),
-    preimagesDb: db.getPreimagesBackend(),
   )
 
-proc stateRoot*(state: WorldStateRef): KeccakHash {.inline.} =
+template stateRoot*(state: WorldStateRef): KeccakHash =
   state.accountsTrie.rootHash()
 
-proc toAccountKey*(address: EthAddress): AddressHash {.inline.} =
+template toAccountKey*(address: EthAddress): AddressHash =
   keccakHash(address)
 
-proc toStorageKey*(slotKey: UInt256): SlotKeyHash {.inline.} =
+template toStorageKey*(slotKey: UInt256): SlotKeyHash =
   keccakHash(toBytesBE(slotKey))
-
-proc getAccountPreimage(state: WorldStateRef, accountKey: AddressHash): EthAddress =
-  doAssert(
-    state.preimagesDb.contains(rlp.encode(accountKey)),
-    "No account preimage with address hash: " & $accountKey,
-  )
-  let addressBytes = state.preimagesDb.get(rlp.encode(accountKey))
-
-  try:
-    rlp.decode(addressBytes, EthAddress)
-  except RlpError as e:
-    raiseAssert(e.msg) # Should never happen
-
-proc setAccountPreimage(
-    state: WorldStateRef, accountKey: AddressHash, address: EthAddress
-) =
-  state.preimagesDb.put(rlp.encode(accountKey), rlp.encode(address))
 
 proc getAccount(state: WorldStateRef, accountKey: AddressHash): AccountState =
   try:
@@ -119,12 +98,11 @@ proc getAccount(state: WorldStateRef, accountKey: AddressHash): AccountState =
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
-proc getAccount*(state: WorldStateRef, address: EthAddress): AccountState {.inline.} =
+template getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
   state.getAccount(toAccountKey(address))
 
 proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountState) =
   let accountKey = toAccountKey(address)
-  state.setAccountPreimage(accountKey, address)
 
   try:
     if not state.storageTries.contains(accountKey):
@@ -198,12 +176,10 @@ iterator updatedStorageProofs*(
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
-proc getUpdatedBytecode*(
-    state: WorldStateRef, accountKey: AddressHash
-): seq[byte] {.inline.} =
+template getUpdatedBytecode*(state: WorldStateRef, accountKey: AddressHash): seq[byte] =
   state.db.getBytecodeUpdatedCache().get(accountKey.data)
 
-# Slow: Used for testing only
+# Slow: Only used for testing
 proc verifyProofs*(
     state: WorldStateRef, preStateRoot: KeccakHash, expectedStateRoot: KeccakHash
 ) =

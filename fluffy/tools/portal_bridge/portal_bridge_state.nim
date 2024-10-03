@@ -136,6 +136,7 @@ proc runBackfillBuildBlockOffersLoop(
     blockDataQueue: AsyncQueue[BlockData],
     blockOffersQueue: AsyncQueue[BlockOffersRef],
     verifyStateProofs: bool,
+    enableGossip: bool,
     gossipGenesis: bool,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill build block offers loop"
@@ -163,7 +164,7 @@ proc runBackfillBuildBlockOffersLoop(
             raiseAssert(e.msg) # Should never happen
       ws.applyGenesisAccounts(genesisAccounts)
 
-      if gossipGenesis:
+      if enableGossip and gossipGenesis:
         let genesisBlockHash =
           hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
 
@@ -213,17 +214,18 @@ proc runBackfillBuildBlockOffersLoop(
       if verifyStateProofs:
         worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
 
-      var builder = OffersBuilder.init(worldState, blockData.blockHash)
-      builder.buildBlockOffers()
+      if enableGossip:
+        var builder = OffersBuilder.init(worldState, blockData.blockHash)
+        builder.buildBlockOffers()
 
-      await blockOffersQueue.addLast(
-        BlockOffersRef(
-          blockNumber: blockData.blockNumber,
-          accountTrieOffers: builder.getAccountTrieOffers(),
-          contractTrieOffers: builder.getContractTrieOffers(),
-          contractCodeOffers: builder.getContractCodeOffers(),
+        await blockOffersQueue.addLast(
+          BlockOffersRef(
+            blockNumber: blockData.blockNumber,
+            accountTrieOffers: builder.getAccountTrieOffers(),
+            contractTrieOffers: builder.getContractTrieOffers(),
+            contractCodeOffers: builder.getContractCodeOffers(),
+          )
         )
-      )
 
     # After commit of the above db transaction which stores the updated account state
     # then we store the last persisted block number in the database so that we can use it
@@ -350,12 +352,20 @@ proc runBackfillMetricsLoop(
 
   while true:
     await sleepAsync(30.seconds)
-    info "Block data queue metrics: ",
-      nextBlockNumber = blockDataQueue[0].blockNumber,
-      blockDataQueueLen = blockDataQueue.len()
-    info "Block offers queue metrics: ",
-      nextBlockNumber = blockOffersQueue[0].blockNumber,
-      blockOffersQueueLen = blockOffersQueue.len()
+
+    if blockDataQueue.len() > 0:
+      info "Block data queue metrics: ",
+        nextBlockNumber = blockDataQueue[0].blockNumber,
+        blockDataQueueLen = blockDataQueue.len()
+    else:
+      info "Block data queue metrics: ", blockDataQueueLen = blockDataQueue.len()
+
+    if blockOffersQueue.len() > 0:
+      info "Block offers queue metrics: ",
+        nextBlockNumber = blockOffersQueue[0].blockNumber,
+        blockOffersQueueLen = blockOffersQueue.len()
+    else:
+      info "Block offers queue metrics: ", blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
   let
@@ -402,7 +412,8 @@ proc runState*(config: PortalBridgeConf) =
     db, blockDataQueue, web3Client, config.startBlockNumber
   )
   asyncSpawn runBackfillBuildBlockOffersLoop(
-    db, blockDataQueue, blockOffersQueue, config.verifyStateProofs, config.gossipGenesis
+    db, blockDataQueue, blockOffersQueue, config.verifyStateProofs, config.enableGossip,
+    config.gossipGenesis,
   )
 
   for workerId in 1 .. config.gossipWorkersCount.int:

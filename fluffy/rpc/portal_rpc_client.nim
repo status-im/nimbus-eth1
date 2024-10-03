@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/strutils,
+  json_serialization,
   chronos,
   stew/byteutils,
   results,
@@ -29,17 +29,26 @@ type
     InvalidContentValue
     ContentValidationFailed
 
+  ErrorResponse = object
+    code*: int
+    message*: string
+
 proc init*(T: type PortalRpcClient, rpcClient: RpcClient): T =
   T(rpcClient)
 
 func toPortalRpcError(e: ref CatchableError): PortalRpcError =
-  # TODO: Update this to parse the error message json
-  if e.msg.contains("-39001"):
+  let error =
+    try:
+      Json.decode(e.msg, ErrorResponse)
+    except SerializationError as e:
+      raiseAssert(e.msg)
+
+  if error.code == -39001:
     ContentNotFound
-  elif e.msg.contains("-32602"):
+  elif error.code == -32602:
     InvalidContentKey
   else:
-    raiseAssert(e.msg) # Shouldn't happen
+    raiseAssert(e.msg)
 
 proc historyLocalContent(
     client: PortalRpcClient, contentKey: string
