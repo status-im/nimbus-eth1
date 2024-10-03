@@ -295,7 +295,7 @@ const
   NumTransactions = 17
   NumBlocks = 13
   feeRecipient = initAddr(401)
-  prevRandao = EMPTY_UNCLE_HASH # it can be any valid hash
+  prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
 
 proc runLedgerTransactionTests(noisy = true) =
   suite "Ledger nesting scenarios":
