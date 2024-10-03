@@ -16,8 +16,7 @@ import
   ../../nimbus/transaction,
   ../../nimbus/common/chain_config,
   ../common/helpers,
-  ./types,
-  ./txpriv
+  ./types
 
 export
   helpers
@@ -270,23 +269,6 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     required(tx, UInt256, s)
     tx
 
-proc parseTxLegacy(item: var Rlp): Result[Transaction, string] =
-  try:
-    var tx: Transaction
-    item.decodeTxLegacy(tx)
-    return ok(tx)
-  except RlpError as x:
-    return err(x.msg)
-
-proc parseTxTyped(item: var Rlp): Result[Transaction, string] =
-  try:
-    var tx: Transaction
-    var rr = rlpFromBytes(item.read(Blob))
-    rr.decodeTxTyped(tx)
-    return ok(tx)
-  except RlpError as x:
-    return err(x.msg)
-
 proc parseTxJson(ctx: TransContext, i: int, chainId: ChainId): Result[Transaction, string] =
   try:
     let n = ctx.txs.n[i]
@@ -306,10 +288,11 @@ proc parseTxs*(ctx: TransContext, chainId: ChainId): seq[Result[Transaction, str
     result = newSeqOfCap[Result[Transaction, string]](ctx.txs.r.listLen)
     var rlp = ctx.txs.r
     for item in rlp:
-      if item.isList:
-        result.add parseTxLegacy(item)
-      else:
-        result.add parseTxTyped(item)
+      result.add try:
+        Result[Transaction, string].ok item.read(Transaction)
+      except RlpError as e:
+        Result[Transaction, string].err e.msg
+
     return
 
 proc txList*(ctx: TransContext, chainId: ChainId): seq[Transaction] =
