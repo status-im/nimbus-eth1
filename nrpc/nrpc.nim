@@ -130,20 +130,19 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     # And exchange the capabilities for a test communication
     web3 = await engineUrl.newWeb3()
     rpcClient = web3.provider
-    data =
-      try:
-        await rpcClient.exchangeCapabilities(
-          @[
-            "engine_forkchoiceUpdatedV1",
-            "engine_getPayloadBodiesByHash", "engine_getPayloadBodiesByRangeV1",
-            "engine_getPayloadV1", "engine_newPayloadV1",
-          ]
-        )
-      except CatchableError as exc:
-        error "Error Connecting to the EL Engine API", error = exc.msg
-        @[]
 
-  notice "Communication with the EL Success", data = data
+  try:
+    let data = await rpcClient.exchangeCapabilities(
+      @[
+        "engine_forkchoiceUpdatedV1",
+        "engine_getPayloadBodiesByHash", "engine_getPayloadBodiesByRangeV1",
+        "engine_getPayloadV1", "engine_newPayloadV1",
+      ]
+    )
+    notice "Communication with the EL Success", data = data
+  except CatchableError as exc:
+    error "Error Connecting to the EL Engine API", error = exc.msg
+    quit(QuitFailure)
 
   # Get the latest block number from the EL rest api
   template elBlockNumber(): uint64 =
