@@ -24,6 +24,10 @@ export rpcserver, tables
 # Portal Network JSON-RPC impelentation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
+const
+  ContentNotFoundError = (code: -39001, msg: "Content not found")
+  ContentNotFoundErrorWithTrace = (code: -39002, msg: "Content not found")
+
 type ContentInfo = object
   content: string
   utpTransfer: bool
@@ -189,7 +193,9 @@ proc installPortalApiHandlers*(
         raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
       contentResult = (await p.contentLookup(key, contentId)).valueOr:
-        raise (ref ApplicationError)(code: -39001, msg: "Content not found")
+        raise (ref ApplicationError)(
+          code: ContentNotFoundError.code, msg: ContentNotFoundError.msg
+        )
 
     return ContentInfo(
       content: contentResult.content.to0xHex(), utpTransfer: contentResult.utpTransfer
@@ -211,7 +217,11 @@ proc installPortalApiHandlers*(
       return res
     else:
       let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
-      raise (ref ApplicationError)(code: -39001, msg: "Content not found", data: data)
+      raise (ref ApplicationError)(
+        code: ContentNotFoundErrorWithTrace.code,
+        msg: ContentNotFoundErrorWithTrace.msg,
+        data: data,
+      )
 
   rpcServer.rpc("portal_" & network & "Store") do(
     contentKey: string, contentValue: string
@@ -257,7 +267,9 @@ proc installPortalApiHandlers*(
         raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
 
       contentResult = p.dbGet(key, contentId).valueOr:
-        raise (ref ApplicationError)(code: -39001, msg: "Content not found")
+        raise (ref ApplicationError)(
+          code: ContentNotFoundError.code, msg: ContentNotFoundError.msg
+        )
 
     return contentResult.to0xHex()
 
