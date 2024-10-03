@@ -30,7 +30,7 @@ type
   EnvStruct* = object
     currentCoinbase*: EthAddress
     currentDifficulty*: Opt[DifficultyInt]
-    currentRandom*: Opt[Hash256]
+    currentRandom*: Opt[Bytes32]
     parentDifficulty*: Opt[DifficultyInt]
     currentGasLimit*: GasInt
     currentNumber*: BlockNumber

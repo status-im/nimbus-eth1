@@ -52,7 +52,7 @@ type
   BCTEnv* = object
     currentCoinbase*: primitives.Address
     currentDifficulty*: UInt256
-    currentRandom*: Opt[BlockHash]
+    currentRandom*: Opt[Bytes32]
     parentDifficulty*: Opt[UInt256]
     currentGasLimit*: Quantity
     currentNumber*: Quantity
