@@ -30,6 +30,9 @@ proc fromJson(T: type UInt256, n: JsonNode): UInt256 =
   else:
     UInt256.fromHex(hex)
 
+template fromJson*(T: type Bytes32, n: JsonNode): Bytes32 =
+  Bytes32(hexToByteArray(n.getStr, 32))
+
 template fromJson*(T: type Hash256, n: JsonNode): Hash256 =
   Hash32(hexToByteArray(n.getStr, 32))
 
@@ -109,7 +112,7 @@ proc parseHeader*(n: JsonNode): BlockHeader =
     gasLimit   : required(GasInt, "currentGasLimit"),
     timestamp  : required(EthTime, "currentTimestamp"),
     stateRoot  : emptyRlpHash,
-    mixHash    : omitZero(Hash256, "currentRandom"),
+    mixHash    : omitZero(Bytes32, "currentRandom"),
     baseFeePerGas  : optional(UInt256, "currentBaseFee"),
     withdrawalsRoot: optional(Hash256, "currentWithdrawalsRoot"),
     excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
