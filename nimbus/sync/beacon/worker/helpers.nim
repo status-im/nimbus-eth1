@@ -10,6 +10,8 @@
 
 {.push raises:[].}
 
+## Extracted helpers from `worker_desc` (avoids circular import)
+
 import
   pkg/chronos,
   pkg/eth/common

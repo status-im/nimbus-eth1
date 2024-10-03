@@ -16,10 +16,11 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../core/chain,
   ../sync_desc,
+  ./worker/helpers,
   ./worker_config
 
 export
-  sync_desc, worker_config
+  helpers, sync_desc, worker_config
 
 when enableTicker:
   import ./worker/start_stop/ticker

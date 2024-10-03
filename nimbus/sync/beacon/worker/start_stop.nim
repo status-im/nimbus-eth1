@@ -34,6 +34,7 @@ when enableTicker:
         dangling:        ctx.layout.dangling,
         endBn:           ctx.layout.endBn,
         final:           ctx.lhc.final.header.number,
+        finalUpdateOk:   ctx.lhc.final.hash != zeroHash32,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
         hdrStagedTop:    ctx.headersStagedTopKey(),
@@ -47,7 +48,8 @@ when enableTicker:
         nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
         nBlkUnprocFragm: ctx.blocksUnprocChunks(),
 
-        reorg:           ctx.pool.nReorg)
+        reorg:           ctx.pool.nReorg,
+        nBuddies:        ctx.pool.nBuddies)
 
 proc updateBeaconHeaderCB(ctx: BeaconCtxRef): SyncFinalisedBlockHashCB =
   ## Update beacon header. This function is intended as a call back function
@@ -122,14 +124,10 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     peer = buddy.peer
   if peer.supports(protocol.eth) and peer.state(protocol.eth).initialized:
     ctx.pool.nBuddies.inc # for metrics
-    when enableTicker:
-      ctx.pool.ticker.startBuddy()
     return true
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   buddy.ctx.pool.nBuddies.dec # for metrics
-  when enableTicker:
-    buddy.ctx.pool.ticker.stopBuddy()
 
 # ------------------------------------------------------------------------------
 # End

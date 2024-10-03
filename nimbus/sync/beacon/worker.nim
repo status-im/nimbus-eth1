@@ -16,7 +16,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/[blocks_staged, db, headers_staged, headers_unproc, helpers,
+  ./worker/[blocks_staged, db, headers_staged, headers_unproc,
             start_stop, update],
   ./worker_desc
 
@@ -112,8 +112,8 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
   debug info
 
   # Check for a possible header layout and body request changes
-  discard ctx.updateLinkedHChainsLayout()
-  discard ctx.updateBlockRequests()
+  discard ctx.updateLinkedHChainsLayout info
+  discard ctx.updateBlockRequests info
 
   # Execute staged block records.
   if ctx.blocksStagedCanImportOk():
@@ -132,7 +132,7 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
         # Allow pseudo/async thread switch
         await sleepAsync asyncThreadSwitchTimeSlot
 
-  # At the end of the cycle, leave time to refill
+  # At the end of the cycle, leave time to refill headers/blocks
   await sleepAsync daemonWaitInterval
 
   ctx.updateMetrics()

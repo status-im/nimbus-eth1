@@ -65,7 +65,6 @@ proc fetchSavedState(ctx: BeaconCtxRef): Opt[SavedDbStateSpecs] =
 
   err()
 
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -107,7 +106,8 @@ proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
     if uMin <= uMax:
       # Add interval of unprocessed block range `(C,D)` from `README.md`
       ctx.headersUnprocSet(uMin, uMax)
-    trace info & ": restored layout from DB"
+    trace info & ": restored layout", C=rc.value.coupler.bnStr,
+      D=rc.value.dangling.bnStr, E=rc.value.endBn.bnStr
   else:
     let val = ctx.fetchSavedState().expect "saved states"
     ctx.lhc.layout = LinkedHChainsLayout(
@@ -117,7 +117,8 @@ proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
       danglingParent: val.parent,
       endBn:          val.number,
       endHash:        val.hash)
-    trace info & ": new layout"
+    trace info & ": new layout", B=val.number, C=rc.value.coupler.bnStr,
+      D=rc.value.dangling.bnStr, E=rc.value.endBn.bnStr
 
   ctx.lhc.lastLayout = ctx.layout
 

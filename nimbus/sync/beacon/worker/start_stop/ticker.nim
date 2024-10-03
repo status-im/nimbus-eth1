@@ -31,6 +31,7 @@ type
     dangling*: BlockNumber
     endBn*: BlockNumber
     final*: BlockNumber
+    finalUpdateOk*: bool
 
     hdrUnprocTop*: BlockNumber
     nHdrUnprocessed*: uint64
@@ -45,10 +46,10 @@ type
     blkStagedBottom*: BlockNumber
 
     reorg*: int
+    nBuddies*: int
 
   TickerRef* = ref object
     ## Ticker descriptor object
-    nBuddies: int
     started: Moment
     visited: Moment
     prettyPrint: proc(t: TickerRef) {.gcsafe, raises: [].}
@@ -73,10 +74,10 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
      tickerLogSuppressMax < (now - t.visited):
     let
       B = data.base.bnStr
-      C = data.coupler.bnStr
-      D = data.dangling.bnStr
-      E = data.endBn.bnStr
-      F = data.final.bnStr
+      C = if data.base == data.coupler: "B" else: data.coupler.bnStr
+      D = if data.coupler == data.dangling: "C" else: data.dangling.bnStr
+      E = if data.dangling == data.endBn: "D" else: data.endBn.bnStr
+      F = if data.finalUpdateOk: "?" & $data.final else: data.final.bnStr
 
       hS = if data.nHdrStaged == 0: "n/a"
            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
@@ -91,7 +92,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 
       reorg = data.reorg
-      peers = t.nBuddies
+      peers = data.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
       up = (now - t.started).seconds.uint64.toSI
@@ -100,7 +101,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    info "State", up, peers, B, C, D, E, F, hS, hU, bS, bU, reorg, mem
+    info "Sync state", up, peers, B, C, D, E, F, hS, hU, bS, bU, reorg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages
@@ -114,7 +115,7 @@ proc runLogTicker(t: TickerRef) {.gcsafe.} =
 
 proc setLogTicker(t: TickerRef; at: Moment) =
   if t.statsCb.isNil:
-    debug "Stopped", nBuddies=t.nBuddies
+    debug "Stopped", nBuddies=t.lastStats.nBuddies
   else:
     # Store the `runLogTicker()` in a closure to avoid some garbage collection
     # memory corruption issues that might occur otherwise.
@@ -136,27 +137,6 @@ proc destroy*(t: TickerRef) =
   ## Stop ticker unconditionally
   if not t.isNil:
     t.statsCb = TickerStatsUpdater(nil)
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc startBuddy*(t: TickerRef) =
-  ## Increment buddies counter and start ticker unless running.
-  if not t.isNil:
-    if t.nBuddies <= 0:
-      t.nBuddies = 1
-    else:
-      t.nBuddies.inc
-    debug "Start buddy", nBuddies=t.nBuddies
-
-proc stopBuddy*(t: TickerRef) =
-  ## Decrement buddies counter and stop ticker if there are no more registered
-  ## buddies.
-  if not t.isNil:
-    if 0 < t.nBuddies:
-      t.nBuddies.dec
-    debug "Stop buddy", nBuddies=t.nBuddies
 
 # ------------------------------------------------------------------------------
 # End

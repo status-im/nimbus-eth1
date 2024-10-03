@@ -16,7 +16,7 @@ import
   pkg/stew/sorted_set,
   ../worker_desc,
   ./update/metrics,
-  "."/[blocks_unproc, db, headers_staged, headers_unproc, helpers]
+  "."/[blocks_unproc, db, headers_staged, headers_unproc]
 
 logScope:
   topics = "beacon update"
@@ -25,7 +25,7 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
+proc updateFinalisedChange(ctx: BeaconCtxRef; info: static[string]): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
@@ -47,8 +47,6 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> | <-- unprocessed --> |
   ##
-  const info = "updateBeaconChange"
-
   var finBn = ctx.lhc.final.header.number
 
   # Need: `E < F` and `C == D`
@@ -67,12 +65,12 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   let rlpHeader = rlp.encode(ctx.lhc.final.header)
 
   ctx.lhc.layout = LinkedHChainsLayout(
-    coupler:     ctx.layout.coupler,
-    couplerHash: ctx.layout.couplerHash,
+    coupler:        ctx.layout.coupler,
+    couplerHash:    ctx.layout.couplerHash,
     dangling:       finBn,
     danglingParent: ctx.lhc.final.header.parentHash,
-    endBn:       finBn,
-    endHash:     rlpHeader.keccak256)
+    endBn:          finBn,
+    endHash:        rlpHeader.keccak256)
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
@@ -87,13 +85,12 @@ proc updateFinalisedChange(ctx: BeaconCtxRef): bool =
   doAssert ctx.headersStagedQueueIsEmpty()
   ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
-  trace info & ": updated"
+  trace info & ": updated", C=ctx.layout.coupler.bnStr,
+    D=ctx.layout.dangling.bnStr, E=ctx.layout.endBn.bnStr, F=finBn.bnStr
   true
 
 
-proc mergeAdjacentChains(ctx: BeaconCtxRef): bool =
-  const info = "mergeAdjacentChains"
-
+proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]): bool =
   if ctx.lhc.layout.coupler+1 < ctx.lhc.layout.dangling or # gap btw. `C` & `D`
      ctx.lhc.layout.coupler == ctx.lhc.layout.dangling:    # merged already
     return false
@@ -129,30 +126,28 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef): bool =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc updateLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
+proc updateLinkedHChainsLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Update layout
 
   # Check whether there is something to do regarding beacon node change
   if ctx.lhc.final.changed:
     ctx.lhc.final.changed = false
-    result = ctx.updateFinalisedChange()
+    result = ctx.updateFinalisedChange info
 
   # Check whether header downloading is done
-  if ctx.mergeAdjacentChains():
+  if ctx.mergeAdjacentChains info:
     result = true
 
 
-proc updateBlockRequests*(ctx: BeaconCtxRef): bool =
+proc updateBlockRequests*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Update block requests if there staged block queue is empty
-  const info = "updateBlockRequests"
-
   let base = ctx.dbStateBlockNumber()
   if base < ctx.layout.coupler:   # so half open interval `(B,C]` is not empty
 
     # One can fill/import/execute blocks by number from `(B,C]`
     if ctx.blk.topRequest < ctx.layout.coupler:
       # So there is some space
-      trace info & ": extending", B=base.bnStr, topReq=ctx.blk.topRequest.bnStr,
+      trace info & ": updating", B=base.bnStr, topReq=ctx.blk.topRequest.bnStr,
         C=ctx.layout.coupler.bnStr
 
       ctx.blocksUnprocCommit(
