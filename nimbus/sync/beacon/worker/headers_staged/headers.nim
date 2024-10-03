@@ -17,8 +17,7 @@ import
   pkg/stew/interval_set,
   ../../../protocol,
   ../../../protocol/eth/eth_types,
-  ../../worker_desc,
-  ../helpers
+  ../../worker_desc
 
 logScope:
   topics = "beacon headers"

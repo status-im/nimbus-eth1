@@ -16,10 +16,11 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../core/chain,
   ../sync_desc,
+  ./worker/helpers,
   ./worker_config
 
 export
-  sync_desc, worker_config
+  helpers, sync_desc, worker_config
 
 when enableTicker:
   import ./worker/start_stop/ticker
@@ -54,38 +55,31 @@ type
   # -------------------
 
   LinkedHChainsLayout* = object
-    ## Layout of a triple of linked header chains
+    ## Layout of a linked header chains defined by the triple `(C,D,E)` as
+    ## described in the `README.md` text.
     ## ::
-    ##   G                B                     L                F
+    ##   0                C                     D                E
     ##   o----------------o---------------------o----------------o--->
     ##   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     ##
-    ## see `README.md` for details and explanations
-    ##
-    base*: BlockNumber
-      ## `B`, maximal block number of linked chain starting at Genesis `G`
-    baseHash*: Hash32
-      ## Hash of `B`
+    coupler*: BlockNumber            ## Right end `C` of linked chain `[0,C]`
+    couplerHash*: Hash32             ## Hash of `C`
 
-    least*: BlockNumber
-      ## `L`, minimal block number of linked chain ending at `F` with `B <= L`
-    leastParent*: Hash32
-      ## Parent hash of `L` (similar to `parentHash` in `HeaderChainItemRef`)
+    dangling*: BlockNumber           ## Left end `D` of linked chain `[D,E]`
+    danglingParent*: Hash32          ## Parent hash of `D`
 
-    final*: BlockNumber
-      ## `F`, some finalised block
-    finalHash*: Hash32
-      ## Hash of `F` (similar to `hash` in `HeaderChainItemRef`)
+    endBn*: BlockNumber              ## `E`, block num of some finalised block
+    endHash*: Hash32                 ## Hash of `E`
 
   BeaconHeader* = object
     ## Beacon state to be implicitely updated by RPC method
     changed*: bool                   ## Set a marker if something has changed
     header*: Header                  ## Beacon chain, finalised header
-    finalised*: Hash32               ## From RPC, ghash of finalised header
+    hash*: Hash32                    ## From RPC, hash of finalised header
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains
-    beacon*: BeaconHeader            ## See `Z` in README
+    final*: BeaconHeader             ## Finalised block, see `F` in `README.md`
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: uint64                ## Total of temp. fetched ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet

@@ -225,9 +225,9 @@ proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
     return false
 
   # Fetch least record, accept only if it matches the global ledger state
-  let t = ctx.dbStateBlockNumber()
-  if qItem.key != t + 1:
-    trace info & ": there is a gap", T=t.bnStr, stagedBottom=qItem.key.bnStr
+  let base = ctx.dbStateBlockNumber()
+  if qItem.key != base + 1:
+    trace info & ": there is a gap", B=base.bnStr, stagedBottom=qItem.key.bnStr
     return false
 
   # Remove from queue
@@ -236,12 +236,12 @@ proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
   # Execute blocks
   let stats = ctx.pool.chain.persistBlocks(qItem.data.blocks).valueOr:
     # FIXME: should that be rather an `raiseAssert` here?
-    warn info & ": block exec error", T=t.bnStr,
+    warn info & ": block exec error", B=base.bnStr,
       iv=BnRange.new(qItem.key,qItem.key+qItem.data.blocks.len.uint64-1), error
-    doAssert t == ctx.dbStateBlockNumber()
+    doAssert base == ctx.dbStateBlockNumber()
     return false
 
-  trace info & ": imported staged blocks", T=ctx.dbStateBlockNumber.bnStr,
+  trace info & ": imported staged blocks", B=ctx.dbStateBlockNumber.bnStr,
     first=qItem.key.bnStr, stats
 
   # Remove stashed headers

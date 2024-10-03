@@ -1,11 +1,34 @@
-Syncing
-=======
+Beacon Sync
+===========
 
-Syncing blocks is performed in two partially overlapping phases
+According to the merge-first
+[glossary](https://notes.status.im/nimbus-merge-first-el?both=#Glossary),
+a beacon sync is a "*Sync method that relies on devp2p and eth/6x to fetch
+headers and bodies backwards then apply these in the forward direction to the
+head state*".
 
-* loading the header chains into separate database tables
-* removing headers from the headers chain, fetching the rest of the
-  block the header belongs to and executing it
+This [glossary](https://notes.status.im/nimbus-merge-first-el?both=#Glossary)
+is used as a naming template for relevant entities described here. When
+referred to, names from the glossary are printed **bold**.
+
+Syncing blocks is performed in two overlapping phases
+
+* loading header chains and stashing them into a separate database table,
+* removing headers from the stashed headers chain, fetching the block bodies
+  the headers refer to and importing/executing them via `persistentBlocks()`.
+
+So this beacon syncer slightly differs from the definition in the
+[glossary](https://notes.status.im/nimbus-merge-first-el?both=#Glossary) in
+that only headers are stashed on the database table and the block bodies are
+fetched in the *forward* direction.
+
+The reason for that behavioural change is that the block bodies are addressed
+by the hash of the block headers for fetching. They cannot be fully verified
+upon arrival on the cheap (e.g. by a payload hash.) They will be validated not
+before imported/executed. So potentially corrupt blocks will be discarded.
+They will automatically be re-fetched with other missing blocks in the
+*forward* direction.
+
 
 Header chains
 -------------
@@ -15,121 +38,130 @@ The header chains are the triple of
 * a consecutively linked chain of headers starting starting at Genesis
 * followed by a sequence of missing headers
 * followed by a consecutively linked chain of headers ending up at a
-  finalised block header received from the consensus layer
+  finalised block header (earlier received from the consensus layer)
 
-A sequence *@[h(1),h(2),..]* of block headers is called a consecutively
-linked chain if
+A sequence *@[h(1),h(2),..]* of block headers is called a *linked chain* if
 
 * block numbers join without gaps, i.e. *h(n).number+1 == h(n+1).number*
 * parent hashes match, i.e. *h(n).hash == h(n+1).parentHash*
 
-General header chains layout diagram
+General header linked chains layout diagram
 
-      G                B                     L                F              (1)
+      0                C                     D                E              (1)
       o----------------o---------------------o----------------o--->
       | <-- linked --> | <-- unprocessed --> | <-- linked --> |
 
-Here, the single upper letter symbols *G*, *B*, *L*, *F* denote block numbers.
+Here, the single upper letter symbols *0*, *C*, *D*, *E* denote block numbers.
 For convenience, these letters are also identified with its associated block
-header or the full block. Saying *"the header G"* is short for *"the header
-with block number G"*.
+header or the full blocks. Saying *"the header 0"* is short for *"the header
+with block number 0"*.
 
-Meaning of *G*, *B*, *L*, *F*:
+Meaning of *0*, *C*, *D*, *E*:
 
-* *G* -- Genesis block number *#0*
-* *B* -- base, maximal block number of linked chain starting at *G*
-* *L* -- least, minimal block number of linked chain ending at *F* with *B <= L*
-* *F* -- final, some finalised block
+* *0* -- Genesis, block number number *0*
+* *C* -- coupler, maximal block number of linked chain starting at *0*
+* *D* -- dangling, minimal block number of linked chain ending at *E*
+         with *C <= D*
+* *E* -- end, block number of some finalised block (not necessarily the latest
+         one)
 
-This definition implies *G <= B <= L <= F* and the header chains can uniquely
-be described by the triple of block numbers *(B,L,F)*.
+This definition implies *0 <= C <= D <= E* and the state of the header linked
+chains can uniquely be described by the triple of block numbers *(C,D,E)*.
+
 
 ### Storage of header chains:
 
-Some block numbers from the set *{w|G<=w<=B}* may correspond to finalised
-blocks which may be stored anywhere. If some block numbers do not correspond
-to finalised blocks, then the headers must reside in the *beaconHeader*
-database table. Of course, due to being finalised such block numbers constitute
-a sub-chain starting at *G*.
+Some block numbers from the closed interval (including end points) *[0,C]* may
+correspond to finalised blocks, e.g. the sub-interval *[0,**base**]* where
+**base** is the block number of the ledger state. The headers for
+*[0,**base**]* are stored in the persistent state database. The headers for the
+half open interval *(**base**,C]* are always stored on the *beaconHeader*
+column of the *KVT* database.
 
-The block numbers from the set *{w|L<=w<=F}* must reside in the *beaconHeader*
-database table. They do not correspond to finalised blocks.
+The block numbers from the interval *[D,E]* also reside on the *beaconHeader*
+column of the *KVT* database table.
 
-### Header chains initialisation:
+
+### Header linked chains initialisation:
 
 Minimal layout on a pristine system
 
-      G                                                                      (2)
-      B
-      L
-      F
+      0                                                                      (2)
+      C
+      D
+      E
       o--->
 
-When first initialised, the header chains are set to *(G,G,G)*.
+When first initialised, the header linked chains are set to *(0,0,0)*.
 
-### Updating header chains:
 
-A header chain with an non empty open interval *(B,L)* can be updated only by
-increasing *B* or decreasing *L* by adding headers so that the linked chain
-condition is not violated.
+### Updating a header linked chains:
 
-Only when the open interval *(B,L)* vanishes the right end *F* can be increased
-by *Z* say. Then
+A header chain with an non empty open interval *(C,D)* can be updated only by
+increasing *C* or decreasing *D* by adding/prepending headers so that the
+linked chain condition is not violated.
 
-* *B==L* beacuse interval *(B,L)* is empty
-* *B==F* because *B* is maximal
+Only when the gap open interval *(C,D)* vanishes, the right end *E* can be
+increased to a larger **finalised** block number *F* say. Then
 
-and the header chains *(F,F,F)* (depicted in *(3)*) can be set to *(B,Z,Z)*
-(as depicted in *(4)*.)
+* *C==D* beacuse the open interval *(C,D)* is empty
+* *C==E* because *C* is maximal (see definition of `C` above)
 
-Layout before updating of *F*
+and the header chains *(E,E,E)* (depicted in *(3)* below) can be set to
+*(C,F,F)* as depicted in *(4)* below.
 
-                       B                                                     (3)
-                       L
-      G                F                     Z
+Layout before updating of *E*
+
+                       C                                                     (3)
+                       D
+      0                E                     F
       o----------------o---------------------o---->
       | <-- linked --> |
 
-New layout with *Z*
+New layout with moving *D* and *E* to *F*
 
-                                             L'                              (4)
-      G                B                     F'
+                                             D'                              (4)
+      0                C                     E'
       o----------------o---------------------o---->
       | <-- linked --> | <-- unprocessed --> |
 
-with *L'=Z* and *F'=Z*.
+with *D'=F* and *E'=F*.
 
 Note that diagram *(3)* is a generalisation of *(2)*.
 
 
-### Complete header chain:
+### Complete a header linked chain:
 
 The header chain is *relatively complete* if it satisfies clause *(3)* above
-for *G < B*. It is *fully complete* if *F==Z*. It should be obvious that the
-latter condition is temporary only on a live system (as *Z* is permanently
+for *0 < C*. It is *fully complete* if *E==F*. It should be obvious that the
+latter condition is temporary only on a live system (as *F* is contiuously
 updated.)
 
 If a *relatively complete* header chain is reached for the first time, the
-execution layer can start running an importer in the background compiling
-or executing blocks (starting from block number *#1*.) So the ledger database
-state will be updated incrementally.
+execution layer can start running an importer in the background
+compiling/executing blocks (starting from block number *#1*.) So the ledger
+database state will be updated incrementally.
 
-Imported block chain
---------------------
+Block chain import/execution
+-----------------------------
 
-The following imported block chain diagram amends the layout *(1)*:
+The following diagram with a parially imported/executed block chain amends the
+layout *(1)*:
 
-      G                  T       B                     L                F    (5)
+      0                  B       C                     D                E    (5)
       o------------------o-------o---------------------o----------------o-->
       | <-- imported --> |       |                     |                |
       | <-------  linked ------> | <-- unprocessed --> | <-- linked --> |
 
 
-where *T* is the number of the last imported and executed block. Coincidentally,
-*T* also refers to the global state of the ledger database.
+where *B* is the **base**, i.e. the **base state** block number of the last
+imported/executed block. It also refers to the global state block number of
+the ledger database.
 
-The headers corresponding to the half open interval `(T,B]` can be completed by
-fetching block bodies and then imported/executed.
+The headers corresponding to the half open interval `(B,C]` will be completed
+by fetching block bodies and then import/execute them together with the already
+cached headers.
+
 
 Running the sync process for *MainNet*
 --------------------------------------
@@ -138,7 +170,8 @@ For syncing, a beacon node is needed that regularly informs via *RPC* of a
 recently finalised block header.
 
 The beacon node program used here is the *nimbus_beacon_node* binary from the
-*nimbus-eth2* project (any other will do.) *Nimbus_beacon_node* is started as
+*nimbus-eth2* project (any other, e.g.the *light client*  will do.)
+*Nimbus_beacon_node* is started as
 
       ./run-mainnet-beacon-node.sh \
          --web3-url=http://127.0.0.1:8551 \
@@ -153,19 +186,20 @@ It will take a while for *nimbus_beacon_node* to catch up (see the
 
 ### Starting `nimbus` for syncing
 
-As the sync process is quite slow, it makes sense to pre-load the database
-with data from an `Era1` archive (if available) before starting the real
-sync process. The command would be something like
+As the syncing process is quite slow, it makes sense to pre-load the database
+from an *Era1* archive (if available) before starting the real sync process.
+The command for importing an *Era1* reproitory would be something like
 
        ./build/nimbus import \
           --era1-dir:/path/to/main-era1/repo \
           ...
 
-which will take a while for the full *MainNet* era1 repository (but way faster
-than the sync.)
+which will take its time for the full *MainNet* Era1 repository (but way faster
+than the beacon sync.)
 
-On a system with memory considerably larger than *8GiB* the *nimbus*
-binary is started on the same machine where the beacon node runs as
+On a system with memory considerably larger than *8GiB* the *nimbus* binary is
+started on the same machine where the beacon node runs with the command
+
 
        ./build/nimbus \
           --network=mainnet \
@@ -200,8 +234,9 @@ To start syncing, the following additional options apply to *nimbus*:
        --debug-rdb-vtx-cache-size=268435456
 
 Also, to reduce the backlog for *nimbus-eth2* stored on disk, the following
-changes might be considered. For file
-*nimbus-eth2/vendor/mainnet/metadata/config.yaml* change setting constants:
+changes might be considered. In the file
+*nimbus-eth2/vendor/mainnet/metadata/config.yaml* change the folloing
+settings
 
        MIN_EPOCHS_FOR_BLOCK_REQUESTS: 33024
        MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS: 4096
@@ -220,18 +255,18 @@ The following metrics are defined in *worker/update/metrics.nim* which will
 be available if *nimbus* is compiled with the additional make flags
 *NIMFLAGS="-d:metrics \-\-threads:on"*:
 
-| *Variable*                     | *Logic type* | *Short description* |
-|:-------------------------------|:------------:|:--------------------|
-|                                |              |                     |
-| beacon_state_block_number      | block height | **T**, *increasing* |
-| beacon_base_block_number       | block height | **B**, *increasing* |
-| beacon_least_block_number      | block height | **L**               |
-| beacon_final_block_number      | block height | **F**, *increasing* |
-| beacon_beacon_block_number     | block height | **Z**, *increasing* |
-|                                |              |                     |
-| beacon_headers_staged_queue_len| size | # of staged header list records      |
-| beacon_headers_unprocessed     | size | # of accumulated header block numbers|
-| beacon_blocks_staged_queue_len | size | # of staged block list records       |
-| beacon_blocks_unprocessed      | size | # of accumulated body block numbers  |
-|                                |              |                     |
-| beacon_number_of_buddies       | size         | # of working peers  |
+| *Variable*         | *Logic type* | *Short description* |
+|:-------------------|:------------:|:--------------------|
+|                    |              |                     |
+| beacon_base        | block height | **B**, *increasing* |
+| beacon_coupler     | block height | **C**, *increasing* |
+| beacon_dangling    | block height | **D**               |
+| beacon_end         | block height | **E**, *increasing* |
+| beacon_final       | block height | **F**, *increasing* |
+|                            |      |                     |
+| beacon_header_lists_staged | size | # of staged header list records      |
+| beacon_headers_unprocessed | size | # of accumulated header block numbers|
+| beacon_block_lists_staged  | size | # of staged block list records       |
+| beacon_blocks_unprocessed  | size | # of accumulated body block numbers  |
+|                            |      |                                      |
+| beacon_buddies             | size | # of peers working concurrently      |

@@ -16,7 +16,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/[blocks_staged, db, headers_staged, headers_unproc, helpers,
+  ./worker/[blocks_staged, db, headers_staged, headers_unproc,
             start_stop, update],
   ./worker_desc
 
@@ -112,8 +112,8 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
   debug info
 
   # Check for a possible header layout and body request changes
-  discard ctx.updateLinkedHChainsLayout()
-  discard ctx.updateBlockRequests()
+  discard ctx.updateLinkedHChainsLayout info
+  discard ctx.updateBlockRequests info
 
   # Execute staged block records.
   if ctx.blocksStagedCanImportOk():
@@ -132,7 +132,7 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
         # Allow pseudo/async thread switch
         await sleepAsync asyncThreadSwitchTimeSlot
 
-  # At the end of the cycle, leave time to refill
+  # At the end of the cycle, leave time to refill headers/blocks
   await sleepAsync daemonWaitInterval
 
   ctx.updateMetrics()
@@ -182,8 +182,8 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
     #
     # Layout of a triple of linked header chains (see `README.md`)
     # ::
-    #   G                B                     L                F
-    #   | <--- [G,B] --> | <----- (B,L) -----> | <-- [L,F] ---> |
+    #   0                C                     D                E
+    #   | <--- [0,C] --> | <----- (C,D) -----> | <-- [D,E] ---> |
     #   o----------------o---------------------o----------------o--->
     #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     #
@@ -191,17 +191,17 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
     # headers and stashing them on the database. Each concurrently running
     # actor works as follows:
     #
-    # * Get a range of block numbers from the `unprocessed` range `(B,L)`.
+    # * Get a range of block numbers from the `unprocessed` range `(C,D)`.
     # * Fetch headers for this range (as much as one can get).
     # * Stash then on the database.
     # * Rinse and repeat.
     #
-    # The block numbers range concurrently taken from `(B,L)` are chosen
+    # The block numbers range concurrently taken from `(C,D)` are chosen
     # from the upper range. So exactly one of the actors has a range
-    # `[whatever,L-1]` adjacent to `[L,F]`. Call this actor the lead actor.
+    # `[whatever,D-1]` adjacent to `[D,E]`. Call this actor the lead actor.
     #
     # For the lead actor, headers can be downloaded all by the hashes as
-    # the parent hash for the header with block number `L` is known. All
+    # the parent hash for the header with block number `D` is known. All
     # other non-lead actors will download headers by the block number only
     # and stage it to be re-ordered and stashed on the database when ready.
     #
@@ -221,7 +221,7 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
       if await buddy.headersStagedCollect info:
 
         # * Save updated state and headers
-        # * Decrease the left boundary `L` of the trusted range `[L,F]`
+        # * Decrease the dangling left boundary `D` of the trusted range `[D,E]`
         discard buddy.ctx.headersStagedProcess info
 
     # Fetch bodies and combine them with headers to blocks to be staged. These

@@ -60,14 +60,13 @@ proc headerStagedUpdateBeacon*(
       ) {.async.} =
   ## Fetch beacon header if there is an update available
   let ctx = buddy.ctx
-  if ctx.lhc.beacon.finalised != zeroHash32:
+  if ctx.lhc.final.hash != zeroHash32:
     const iv = BnRange.new(1u,1u) # dummy interval
-    let finHash = ctx.lhc.beacon.finalised
-    let rc = await buddy.headersFetchReversed(iv, finHash, info)
-    if rc.isOk and ctx.lhc.beacon.header.number < rc.value[0].number:
-      ctx.lhc.beacon.header = rc.value[0]
-      ctx.lhc.beacon.changed = true
-    ctx.lhc.beacon.finalised = zeroHash32
+    let rc = await buddy.headersFetchReversed(iv, ctx.lhc.final.hash, info)
+    if rc.isOk and ctx.lhc.final.header.number < rc.value[0].number:
+      ctx.lhc.final.header = rc.value[0]
+      ctx.lhc.final.changed = true
+    ctx.lhc.final.hash = zeroHash32
 
 
 proc headersStagedCollect*(
@@ -102,14 +101,14 @@ proc headersStagedCollect*(
     iv = ctx.headersUnprocFetch(nFetchHeadersBatch).expect "valid interval"
 
     # Check for top header hash. If the range to fetch directly joins below
-    # the top level linked chain `L..F`, then there is the hash available for
+    # the top level linked chain `[D,E]`, then there is the hash available for
     # the top level header to fetch. Otherwise -- with multi-peer mode -- the
     # range of headers is fetched opportunistically using block numbers only.
-    isOpportunistic = uTop + 1 != ctx.layout.least
+    isOpportunistic = uTop + 1 != ctx.layout.dangling
 
     # Parent hash for `lhc` below
-    topLink = (if isOpportunistic: EMPTY_ROOT_HASH else: ctx.layout.leastParent)
-
+    topLink = (if isOpportunistic: EMPTY_ROOT_HASH
+               else: ctx.layout.danglingParent)
   var
     # This value is used for splitting the interval `iv` into
     # `[iv.minPt, somePt] + [somePt+1, ivTop] + already-collected` where the
@@ -196,30 +195,31 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
       break # all done
 
     let
-      least = ctx.layout.least # `L` from `README.md` (1) or `worker_desc`
+      dangling = ctx.layout.dangling
       iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint64 + 1, qItem.key)
-    if iv.maxPt+1 < least:
-      trace info & ": there is a gap", iv, L=least.bnStr, nSaved=result
+    if iv.maxPt+1 < dangling:
+      trace info & ": there is a gap", iv, D=dangling.bnStr, nSaved=result
       break # there is a gap -- come back later
 
     # Overlap must not happen
-    if iv.maxPt+1 != least:
-      raiseAssert info & ": Overlap iv=" & $iv & " L=" & least.bnStr
+    if iv.maxPt+1 != dangling:
+      raiseAssert info & ": Overlap iv=" & $iv & " D=" & dangling.bnStr
 
     # Process item from `staged` queue. So it is not needed in the list,
     # anymore.
     discard ctx.lhc.staged.delete(iv.maxPt)
 
-    if qItem.data.hash != ctx.layout.leastParent:
+    if qItem.data.hash != ctx.layout.danglingParent:
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
-      trace info & ": discarding staged record", iv, L=least.bnStr, lap=result
+      trace info & ": discarding staged record",
+        iv, D=dangling.bnStr, lap=result
       break
 
     # Store headers on database
     ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs)
-    ctx.layout.least = iv.minPt
-    ctx.layout.leastParent = qItem.data.parentHash
+    ctx.layout.dangling = iv.minPt
+    ctx.layout.danglingParent = qItem.data.parentHash
     discard ctx.dbStoreLinkedHChainsLayout()
 
     result.inc # count records

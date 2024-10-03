@@ -16,7 +16,7 @@ import
   pkg/stew/sorted_set,
   ../worker_desc,
   ./update/metrics,
-  "."/[blocks_unproc, db, headers_staged, headers_unproc, helpers]
+  "."/[blocks_unproc, db, headers_staged, headers_unproc]
 
 logScope:
   topics = "beacon update"
@@ -25,58 +25,56 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc updateBeaconChange(ctx: BeaconCtxRef): bool =
+proc updateFinalisedChange(ctx: BeaconCtxRef; info: static[string]): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
-  ##     G             B==L==F                  Z
+  ##     0             C==D==E                  F
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> |
   ##
   ## or
   ## ::
-  ##    G==Z            B==L==F
+  ##    0==F           C==D==E
   ##     o----------------o-------------------------->
   ##     | <-- linked --> |
   ##
-  ## with `Z == beacon.header.number` or `Z == 0`
+  ## with `F == final.header.number` or `F == 0`
   ##
   ## to be updated to
   ## ::
-  ##     G               B==L                 L'==F'
+  ##     0               C==D                 D'==E'
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> | <-- unprocessed --> |
   ##
-  const info = "updateBeaconChange"
+  var finBn = ctx.lhc.final.header.number
 
-  var z = ctx.lhc.beacon.header.number
-
-  # Need: `F < Z` and `B == L`
-  if z != 0 and z <= ctx.layout.final:       # violates `F < Z`
-    trace info & ": not applicable", Z=z.bnStr, F=ctx.layout.final.bnStr
+  # Need: `E < F` and `C == D`
+  if finBn != 0 and finBn <= ctx.layout.endBn:        # violates `E < F`
+    trace info & ": not applicable", E=ctx.layout.endBn.bnStr, F=finBn.bnStr
     return false
 
-  if ctx.layout.base != ctx.layout.least:    # violates `B == L`
+  if ctx.layout.coupler != ctx.layout.dangling: # violates `C == D`
     trace info & ": not applicable",
-      B=ctx.layout.base.bnStr, L=ctx.layout.least.bnStr
+      C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr
     return false
 
-  # Check consistency: `B == L <= F` for maximal `B` => `L == F`
-  doAssert ctx.layout.least == ctx.layout.final
+  # Check consistency: `C == D <= E` for maximal `C` => `D == E`
+  doAssert ctx.layout.dangling == ctx.layout.endBn
 
-  let rlpHeader = rlp.encode(ctx.lhc.beacon.header)
+  let rlpHeader = rlp.encode(ctx.lhc.final.header)
 
   ctx.lhc.layout = LinkedHChainsLayout(
-    base:        ctx.layout.base,
-    baseHash:    ctx.layout.baseHash,
-    least:       z,
-    leastParent: ctx.lhc.beacon.header.parentHash,
-    final:       z,
-    finalHash:   rlpHeader.keccak256)
+    coupler:        ctx.layout.coupler,
+    couplerHash:    ctx.layout.couplerHash,
+    dangling:       finBn,
+    danglingParent: ctx.lhc.final.header.parentHash,
+    endBn:          finBn,
+    endHash:        rlpHeader.keccak256)
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
-  ctx.dbStashHeaders(z, @[rlpHeader])
+  ctx.dbStashHeaders(finBn, @[rlpHeader])
 
   # Save state
   discard ctx.dbStoreLinkedHChainsLayout()
@@ -85,39 +83,39 @@ proc updateBeaconChange(ctx: BeaconCtxRef): bool =
   doAssert ctx.headersUnprocTotal() == 0
   doAssert ctx.headersUnprocBorrowed() == 0
   doAssert ctx.headersStagedQueueIsEmpty()
-  ctx.headersUnprocSet(ctx.layout.base+1, ctx.layout.least-1)
+  ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
-  trace info & ": updated"
+  trace info & ": updated", C=ctx.layout.coupler.bnStr,
+    D=ctx.layout.dangling.bnStr, E=ctx.layout.endBn.bnStr, F=finBn.bnStr
   true
 
 
-proc mergeAdjacentChains(ctx: BeaconCtxRef): bool =
-  const info = "mergeAdjacentChains"
-
-  if ctx.lhc.layout.base + 1 < ctx.lhc.layout.least or # gap betw `B` and `L`
-     ctx.lhc.layout.base == ctx.lhc.layout.least:      # merged already
+proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]): bool =
+  if ctx.lhc.layout.coupler+1 < ctx.lhc.layout.dangling or # gap btw. `C` & `D`
+     ctx.lhc.layout.coupler == ctx.lhc.layout.dangling:    # merged already
     return false
 
   # No overlap allowed!
-  doAssert ctx.lhc.layout.base + 1 == ctx.lhc.layout.least
+  doAssert ctx.lhc.layout.coupler+1 == ctx.lhc.layout.dangling
 
   # Verify adjacent chains
-  if ctx.lhc.layout.baseHash != ctx.lhc.layout.leastParent:
+  if ctx.lhc.layout.couplerHash != ctx.lhc.layout.danglingParent:
     # FIXME: Oops -- any better idea than to defect?
     raiseAssert info & ": hashes do not match" &
-      " B=" & ctx.lhc.layout.base.bnStr & " L=" & $ctx.lhc.layout.least.bnStr
+      " C=" & ctx.lhc.layout.coupler.bnStr &
+      " D=" & $ctx.lhc.layout.dangling.bnStr
 
-  trace info & ": merging", B=ctx.lhc.layout.base.bnStr,
-    L=ctx.lhc.layout.least.bnStr
+  trace info & ": merging", C=ctx.lhc.layout.coupler.bnStr,
+    D=ctx.lhc.layout.dangling.bnStr
 
   # Merge adjacent linked chains
   ctx.lhc.layout = LinkedHChainsLayout(
-    base:        ctx.layout.final,               # `B`
-    baseHash:    ctx.layout.finalHash,
-    least:       ctx.layout.final,               # `L`
-    leastParent: ctx.dbPeekParentHash(ctx.layout.final).expect "Hash32",
-    final:       ctx.layout.final,               # `F`
-    finalHash:   ctx.layout.finalHash)
+    coupler:        ctx.layout.endBn,               # `C`
+    couplerHash:    ctx.layout.endHash,
+    dangling:       ctx.layout.endBn,               # `D`
+    danglingParent: ctx.dbPeekParentHash(ctx.layout.endBn).expect "Hash32",
+    endBn:          ctx.layout.endBn,               # `E`
+    endHash:        ctx.layout.endHash)
 
   # Save state
   discard ctx.dbStoreLinkedHChainsLayout()
@@ -128,34 +126,33 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef): bool =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc updateLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
+proc updateLinkedHChainsLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Update layout
 
   # Check whether there is something to do regarding beacon node change
-  if ctx.lhc.beacon.changed:
-    ctx.lhc.beacon.changed = false
-    result = ctx.updateBeaconChange()
+  if ctx.lhc.final.changed:
+    ctx.lhc.final.changed = false
+    result = ctx.updateFinalisedChange info
 
   # Check whether header downloading is done
-  if ctx.mergeAdjacentChains():
+  if ctx.mergeAdjacentChains info:
     result = true
 
 
-proc updateBlockRequests*(ctx: BeaconCtxRef): bool =
+proc updateBlockRequests*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Update block requests if there staged block queue is empty
-  const info = "updateBlockRequests"
+  let base = ctx.dbStateBlockNumber()
+  if base < ctx.layout.coupler:   # so half open interval `(B,C]` is not empty
 
-  let t = ctx.dbStateBlockNumber()
-  if t < ctx.layout.base: # so the half open interval `(T,B]` is not empty
-
-    # One can fill/import/execute blocks by number from `(T,B]`
-    if ctx.blk.topRequest < ctx.layout.base:
+    # One can fill/import/execute blocks by number from `(B,C]`
+    if ctx.blk.topRequest < ctx.layout.coupler:
       # So there is some space
-      trace info & ": extending", T=t.bnStr, topReq=ctx.blk.topRequest.bnStr,
-        B=ctx.layout.base.bnStr
+      trace info & ": updating", B=base.bnStr, topReq=ctx.blk.topRequest.bnStr,
+        C=ctx.layout.coupler.bnStr
 
-      ctx.blocksUnprocCommit(0, max(t,ctx.blk.topRequest) + 1, ctx.layout.base)
-      ctx.blk.topRequest = ctx.layout.base
+      ctx.blocksUnprocCommit(
+        0, max(base, ctx.blk.topRequest) + 1, ctx.layout.coupler)
+      ctx.blk.topRequest = ctx.layout.coupler
       return true
 
   false

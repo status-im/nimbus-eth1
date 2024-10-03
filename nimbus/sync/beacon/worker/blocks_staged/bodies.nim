@@ -16,8 +16,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/interval_set,
   ../../../protocol,
-  ../../worker_desc,
-  ../helpers
+  ../../worker_desc
 
 logScope:
   topics = "beacon bodies"
