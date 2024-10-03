@@ -302,3 +302,5 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
         if txid == idx:
           return populateReceipt(receipt, gasUsed, blkdesc.blk.transactions[txid], txid, blkdesc.blk.header)
+
+        idx.inc
