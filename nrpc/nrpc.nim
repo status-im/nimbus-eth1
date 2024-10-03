@@ -218,14 +218,14 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           payloadResponse = await rpcClient.newPayload(
             payload,
             versioned_hashes,
-            primitives.FixedBytes[32] forkyBlck.message.parent_root.data,
+            forkyBlck.message.parent_root.to(Hash32),
           )
         notice "Payload status", response = payloadResponse
 
         # Load the head hash from the execution payload, for forkchoice
         headHash = forkyBlck.message.body.execution_payload.block_hash
 
-        # Make the forkchoicestate based on the the last 
+        # Make the forkchoicestate based on the the last
         # `new_payload` call and the state received from the EL rest api
         # And generate the PayloadAttributes based on the consensus fork
         let
@@ -248,13 +248,13 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
 
         # Update the finalized hash
         # This is updated after the fcu call is made
-        # So that head - head mod 32 is maintained 
+        # So that head - head mod 32 is maintained
         # i.e finalized have to be mod slots per epoch == 0
         let blknum = forkyBlck.message.body.execution_payload.block_number
         if blknum < finalizedBlck.header.number and blknum mod 32 == 0:
           finalizedHash = headHash
         elif blknum >= finalizedBlck.header.number:
-          # If the real finalized block is crossed, then upate the finalized hash to the real one 
+          # If the real finalized block is crossed, then upate the finalized hash to the real one
           (finalizedBlck, _) = client.getELBlockFromBeaconChain(
             BlockIdent.init(BlockIdentType.Finalized), clConfig
           )

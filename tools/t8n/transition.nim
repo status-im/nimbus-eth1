@@ -93,7 +93,7 @@ proc envToHeader(env: EnvStruct): BlockHeader =
   BlockHeader(
     coinbase   : env.currentCoinbase,
     difficulty : env.currentDifficulty.get(0.u256),
-    mixHash    : env.currentRandom.get(default(Hash256)),
+    mixHash    : env.currentRandom.get(default(Bytes32)),
     number     : env.currentNumber,
     gasLimit   : env.currentGasLimit,
     timestamp  : env.currentTimestamp,

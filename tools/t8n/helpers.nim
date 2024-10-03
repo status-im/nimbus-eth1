@@ -55,6 +55,16 @@ template fromJson(T: type UInt256, n: JsonNode, field: string): UInt256 =
 template fromJson(T: type ChainId, n: JsonNode, field: string): ChainId =
   parseHexOrInt[uint64](n[field].getStr()).ChainId
 
+proc fromJson(T: type Bytes32, n: JsonNode): Bytes32 =
+  var num = n.getStr()
+  num.removePrefix("0x")
+  if num.len < 64:
+    num = repeat('0', 64 - num.len) & num
+  Bytes32(hexToByteArray(num, 32))
+
+proc fromJson(T: type Bytes32, n: JsonNode, field: string): Bytes32 =
+  fromJson(T, n[field])
+
 proc fromJson(T: type Hash256, n: JsonNode): Hash256 =
   var num = n.getStr()
   num.removePrefix("0x")
@@ -174,7 +184,7 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   required(ctx.env, BlockNumber, currentNumber)
   required(ctx.env, EthTime, currentTimestamp)
   optional(ctx.env, DifficultyInt, currentDifficulty)
-  optional(ctx.env, Hash256, currentRandom)
+  optional(ctx.env, Bytes32, currentRandom)
   optional(ctx.env, DifficultyInt, parentDifficulty)
   omitZero(ctx.env, EthTime, parentTimestamp)
   optional(ctx.env, UInt256, currentBaseFee)

@@ -125,7 +125,7 @@ proc initEnv(envFork: HardFork): TestEnv =
 const
   amount = 1000.u256
   slot = 0x11.u256
-  prevRandao = EMPTY_UNCLE_HASH # it can be any valid hash
+  prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
 
 proc runTxPoolPosTest() =
   var
@@ -173,7 +173,7 @@ proc runTxPoolPosTest() =
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
       let val = sdb.getStorage(recipient, slot)
-      let randao = Hash32(val.toBytesBE)
+      let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
@@ -238,7 +238,7 @@ proc runTxPoolBlobhashTest() =
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
       let val = sdb.getStorage(recipient, slot)
-      let randao = Hash32(val.toBytesBE)
+      let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":

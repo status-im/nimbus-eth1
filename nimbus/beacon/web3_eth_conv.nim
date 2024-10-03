@@ -9,6 +9,7 @@
 
 import
   std/[typetraits],
+  chronicles,
   web3/primitives as web3types,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -50,9 +51,6 @@ proc `$`*(x: Opt[common.Hash256]): string =
 proc `$`*(x: Opt[PayloadID]): string =
   if x.isNone: "none"
   else: x.get().toHex
-
-proc `$`*(x: Web3Quantity): string =
-  $distinctBase(x)
 
 # ------------------------------------------------------------------------------
 # Web3 defaults
@@ -403,3 +401,5 @@ func ethRequests*(p: ExecutionPayload): Opt[seq[Request]] =
       res.add ethRequest(x)
 
   ok(res)
+
+chronicles.formatIt(Quantity): $(distinctBase it)
