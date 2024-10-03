@@ -378,7 +378,7 @@ proc opEnvMain*() =
     assembler:
       title: "EIP-4399 PrevRandao: EMPTY_UNCLE_HASH"
       setup:
-        vmState.blockCtx.prevRandao = EMPTY_UNCLE_HASH
+        vmState.blockCtx.prevRandao = Bytes32 EMPTY_UNCLE_HASH
       code:
         PrevRandao
         Stop

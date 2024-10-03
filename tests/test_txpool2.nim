@@ -125,7 +125,7 @@ proc initEnv(envFork: HardFork): TestEnv =
 const
   amount = 1000.u256
   slot = 0x11.u256
-  prevRandao = EMPTY_UNCLE_HASH # it can be any valid hash
+  prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
 
 proc runTxPoolPosTest() =
   var
