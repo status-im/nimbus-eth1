@@ -37,7 +37,7 @@ func pp*(a: Opt[EthAddress]): string =
 func pp*(a: openArray[EthAddress]): string =
   "[" & a.mapIt(it.pp).join(" ") & "]"
 
-func pp*(a: Bytes8): string =
+func pp*(a: Bytes8|Bytes32): string =
   a.toHex
 
 func pp*(a: NetworkPayload): string =
