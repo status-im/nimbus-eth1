@@ -121,7 +121,7 @@ proc toBctEnv(parentBlock, currentBlock: EthBlock, hashes: BCTHashes): BCTEnv =
   result.currentNumber     = w3Qty(current.number)
   result.currentTimestamp  = Opt.some w3Qty(current.timestamp)
   result.currentDifficulty = current.difficulty
-  result.currentRandom     = Opt.some w3Hash(current.mixHash)
+  result.currentRandom     = Opt.some current.mixHash
 
   # t8n should able to calculate these values itself if not supplied
   #result.currentBaseFee        = current.baseFeePerGas
