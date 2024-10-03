@@ -256,8 +256,7 @@ iterator blockContent*(f: Era1File): (ContentKeyByteList, seq[byte]) =
     block: # receipts
       let
         contentKey = ContentKey(
-          contentType: ContentType.receipts,
-          receiptsKey: BlockKey(blockHash: blockHash)
+          contentType: ContentType.receipts, receiptsKey: BlockKey(blockHash: blockHash)
         ).encode()
 
         contentValue = encode(receipts)
