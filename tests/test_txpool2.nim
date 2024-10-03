@@ -173,7 +173,7 @@ proc runTxPoolPosTest() =
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
       let val = sdb.getStorage(recipient, slot)
-      let randao = Hash32(val.toBytesBE)
+      let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
@@ -238,7 +238,7 @@ proc runTxPoolBlobhashTest() =
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
       let val = sdb.getStorage(recipient, slot)
-      let randao = Hash32(val.toBytesBE)
+      let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
