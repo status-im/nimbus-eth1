@@ -583,9 +583,6 @@ func txRecords*(c: ForkedChainRef, txHash: Hash256): (Hash256, uint64) =
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash256): BlockDesc =
   c.blocks.getOrDefault(blockHash)
 
-func blockTransactions*(b: BlockDesc): seq[Transaction] =
-  b.blk.transactions
-
 proc latestBlock*(c: ForkedChainRef): EthBlock =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
