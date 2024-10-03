@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   ../common/common,
   std/strformat,
@@ -16,8 +18,6 @@ import
 
 export
   eip1559
-
-{.push raises: [].}
 
 # ------------------------------------------------------------------------------
 # Pre Eip 1559 gas limit validation
