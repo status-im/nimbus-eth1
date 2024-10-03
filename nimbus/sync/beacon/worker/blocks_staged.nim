@@ -94,7 +94,7 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
+func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
   ## Check whether the queue is at its maximum size so import can start with
   ## a full queue.
   if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
@@ -110,7 +110,7 @@ proc blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
 
   false
 
-proc blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
+func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
   let uBottom = ctx.blocksUnprocBottom()
@@ -237,7 +237,8 @@ proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
   let stats = ctx.pool.chain.persistBlocks(qItem.data.blocks).valueOr:
     # FIXME: should that be rather an `raiseAssert` here?
     warn info & ": block exec error", B=base.bnStr,
-      iv=BnRange.new(qItem.key,qItem.key+qItem.data.blocks.len.uint64-1), error
+      iv=BnRange.new(qItem.key,qItem.key+qItem.data.blocks.len.uint64-1),
+      error=error
     doAssert base == ctx.dbStateBlockNumber()
     return false
 
@@ -251,23 +252,23 @@ proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
   true
 
 
-proc blocksStagedBottomKey*(ctx: BeaconCtxRef): BlockNumber =
+func blocksStagedBottomKey*(ctx: BeaconCtxRef): BlockNumber =
   ## Retrieve to staged block number
   let qItem = ctx.blk.staged.ge(0).valueOr:
     return high(BlockNumber)
   qItem.key
 
-proc blocksStagedQueueLen*(ctx: BeaconCtxRef): int =
+func blocksStagedQueueLen*(ctx: BeaconCtxRef): int =
   ## Number of staged records
   ctx.blk.staged.len
 
-proc blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
+func blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
   ctx.blk.staged.len == 0
 
 # ----------------
 
-proc blocksStagedInit*(ctx: BeaconCtxRef) =
+func blocksStagedInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.blk.staged = StagedBlocksQueue.init()
 

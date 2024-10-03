@@ -436,11 +436,11 @@ proc getVerifiedBlockHeader*(
         return Opt.none(Header)
 
       headerWithProof = decodeSsz(headerContent.content, BlockHeaderWithProof).valueOr:
-        warn "Failed decoding header with proof", error
+        warn "Failed decoding header with proof", error = error
         continue
 
       header = validateBlockHeaderBytes(headerWithProof.header.asSeq(), id).valueOr:
-        warn "Validation of block header failed", error
+        warn "Validation of block header failed", error = error
         continue
 
     if (let r = n.verifyHeader(header, headerWithProof.proof); r.isErr):

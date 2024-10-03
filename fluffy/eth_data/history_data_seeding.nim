@@ -228,7 +228,7 @@ iterator headersWithProof*(
 
     let
       contentKey = ContentKey(
-        contentType: blockHeader,
+        contentType: ContentType.blockHeader,
         blockHeaderKey: BlockKey(blockHash: blockHeader.rlpHash()),
       ).encode()
 
@@ -256,7 +256,8 @@ iterator blockContent*(f: Era1File): (ContentKeyByteList, seq[byte]) =
     block: # receipts
       let
         contentKey = ContentKey(
-          contentType: receipts, receiptsKey: BlockKey(blockHash: blockHash)
+          contentType: ContentType.receipts,
+          receiptsKey: BlockKey(blockHash: blockHash)
         ).encode()
 
         contentValue = encode(receipts)

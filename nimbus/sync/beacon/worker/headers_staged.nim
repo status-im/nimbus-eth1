@@ -191,7 +191,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
   while true:
     # Fetch largest block
     let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
-      trace info & ": no staged headers", error
+      trace info & ": no staged headers", error=error
       break # all done
 
     let
@@ -231,7 +231,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     ctx.poolMode = true
 
 
-proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
+func headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention. The effect is that all concurrent peers
   ## finish up their current work and run this function here (which might
   ## do nothing.) This stopping should be enough in most cases to re-organise
@@ -266,23 +266,23 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
       discard ctx.lhc.staged.delete key
 
 
-proc headersStagedTopKey*(ctx: BeaconCtxRef): BlockNumber =
+func headersStagedTopKey*(ctx: BeaconCtxRef): BlockNumber =
   ## Retrieve to staged block number
   let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
     return BlockNumber(0)
   qItem.key
 
-proc headersStagedQueueLen*(ctx: BeaconCtxRef): int =
+func headersStagedQueueLen*(ctx: BeaconCtxRef): int =
   ## Number of staged records
   ctx.lhc.staged.len
 
-proc headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
+func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
   ctx.lhc.staged.len == 0
 
 # ----------------
 
-proc headersStagedInit*(ctx: BeaconCtxRef) =
+func headersStagedInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.lhc.staged = LinkedHChainQueue.init()
 
