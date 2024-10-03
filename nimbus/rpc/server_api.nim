@@ -269,30 +269,36 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       idx = 0'u64
       prevGasUsed = GasInt(0)
     
-    let txHash = data.ethHash()
-    if api.chain.txRecords.hasKey(txHash):
-      let blockhash = api.chain.txRecords[txHash]
-      let blkdesc = api.chain.memoryBlocks[blockhash]
-      
-      for i, receipt in blkdesc.receipts:
+    let 
+      txHash = data.ethHash()
+      (blockhash, txid) = api.chain.txRecords(txHash)
+
+    if blockhash == zeroHash32:
+      # Receipt in database
+      let txDetails = api.chain.db.getTransactionKey(txHash)
+      if txDetails.index < 0:
+        return nil
+
+      let header = api.chain.headerByNumber(txDetails.blockNumber).valueOr:
+        raise newException(ValueError, "Block not found")
+      var tx: Transaction
+      if not api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
+        return nil
+
+      for receipt in api.chain.db.getReceipts(header.receiptsRoot):
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
         prevGasUsed = receipt.cumulativeGasUsed
-        if txHash == blkdesc.blockTransactions[i].rlpHash:
-          return populateReceipt(receipt, gasUsed, blkdesc.blockTransactions[i], uint64(i), blkdesc.blk.header)
+        if idx == txDetails.index:
+          return populateReceipt(receipt, gasUsed, tx, txDetails.index, header)
+        idx.inc
+    else:
+      # Receipt in memory
+      let blkdesc = api.chain.memoryBlock(blockhash)
+      
+      while idx <= txid:
+        let receipt = blkdesc.receipts[idx]
+        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+        prevGasUsed = receipt.cumulativeGasUsed
 
-    let txDetails = api.chain.db.getTransactionKey(data.ethHash())
-    if txDetails.index < 0:
-      return nil
-
-    let header = api.chain.headerByNumber(txDetails.blockNumber).valueOr:
-      raise newException(ValueError, "Block not found")
-    var tx: Transaction
-    if not api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
-      return nil
-
-    for receipt in api.chain.db.getReceipts(header.receiptsRoot):
-      let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
-      prevGasUsed = receipt.cumulativeGasUsed
-      if idx == txDetails.index:
-        return populateReceipt(receipt, gasUsed, tx, txDetails.index, header)
-      idx.inc
+        if txid == idx:
+          return populateReceipt(receipt, gasUsed, blkdesc.blk.transactions[txid], txid, blkdesc.blk.header)

@@ -45,7 +45,7 @@ type
     db: CoreDbRef
     com: CommonRef
     blocks: Table[Hash256, BlockDesc]
-    txRecords: Table[Hash256, Hash256]
+    txRecords: Table[Hash256, (Hash256, uint64)]
     baseHash: Hash256
     baseHeader: BlockHeader
     cursorHash: Hash256
@@ -159,8 +159,8 @@ proc validateBlock(c: ForkedChainRef,
   if updateCursor:
     c.updateCursor(blk, move(res.value))
 
-  for tx in blk.transactions:
-    c.txRecords[rlpHash(tx)] = blk.header.blockHash
+  for i, tx in blk.transactions:
+    c.txRecords[rlpHash(tx)] = (blk.header.blockHash, uint64(i))
 
   ok()
 
@@ -411,7 +411,7 @@ proc newForkedChain*(com: CommonRef,
     cursorHeader: baseHeader,
     extraValidation: extraValidation,
     baseDistance: baseDistance,
-    txRecords: initTable[Hash256, Hash256]()
+    txRecords: initTable[Hash256, (Hash256, uint64)]()
   )
 
   # update global syncStart
@@ -577,11 +577,11 @@ func latestHash*(c: ForkedChainRef): Hash256 =
 func baseNumber*(c: ForkedChainRef): BlockNumber =
   c.baseHeader.number
 
-func txRecords*(c: ForkedChainRef): Table[Hash256, Hash256] =
-  c.txRecords
+func txRecords*(c: ForkedChainRef, txHash: Hash256): (Hash256, uint64) =
+  c.txRecords.getOrDefault(txHash, (Hash256.default, 0'u64))
 
-func memoryBlocks*(c: ForkedChainRef): Table[Hash256, BlockDesc] =
-  c.blocks
+func memoryBlock*(c: ForkedChainRef, blockHash: Hash256): BlockDesc =
+  c.blocks.getOrDefault(blockHash)
 
 func blockTransactions*(b: BlockDesc): seq[Transaction] =
   b.blk.transactions
