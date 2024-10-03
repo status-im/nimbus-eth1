@@ -13,7 +13,7 @@ import
   chronicles,
   metrics,
   chronos/timer,
-  std/[os, strformat, strutils],
+  std/[strformat, strutils],
   stew/io2,
   beacon_chain/era_db,
   beacon_chain/networking/network_metadata,
@@ -32,33 +32,6 @@ declareCounter nec_imported_transactions, "Transactions processed during import"
 declareCounter nec_imported_gas, "Gas processed during import"
 
 var running {.volatile.} = true
-
-func shortLog(a: timer.Duration, parts = int.high): string {.inline.} =
-  ## Returns string representation of Duration ``a`` as nanoseconds value.
-  var
-    res = ""
-    v = a.nanoseconds()
-    parts = parts
-
-  template f(n: string, T: Duration) =
-    if v >= T.nanoseconds():
-      res.add($(uint64(v div T.nanoseconds())))
-      res.add(n)
-      v = v mod T.nanoseconds()
-      dec parts
-      if v == 0 or parts <= 0:
-        return res
-
-  f("w", Week)
-  f("d", Day)
-  f("h", Hour)
-  f("m", Minute)
-  f("s", Second)
-  f("ms", Millisecond)
-  f("us", Microsecond)
-  f("ns", Nanosecond)
-
-  res
 
 proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   proc controlCHandler() {.noconv.} =
@@ -191,7 +164,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       avgBps = f(imported.float / diff0),
       avgTps = f(txs.float / diff0),
       avgMGps = f(gas.float / 1000000 / diff0),
-      elapsed = shortLog(time2 - time0, 3)
+      elapsed = toString(time2 - time0, 3)
 
     metrics.set(nec_import_block_number, int64(blockNumber))
     nec_imported_blocks.inc(blocks.len)
@@ -231,7 +204,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       endSlot: Slot,
   ): bool =
     # Checks if the Nimbus block number is ahead the era block number
-    # First we load the last era number, and get the fist slot number 
+    # First we load the last era number, and get the fist slot number
     # Since the slot emptiness cannot be predicted, we iterate over to find the block and check
     # if the block number is greater than the current block number
     var
