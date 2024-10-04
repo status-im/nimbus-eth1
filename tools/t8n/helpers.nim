@@ -276,6 +276,16 @@ proc parseTxJson(ctx: TransContext, i: int, chainId: ChainId): Result[Transactio
   except Exception as x:
     return err(x.msg)
 
+proc readNestedTx(rlp: var Rlp): Result[Transaction, string] =
+  try:
+    ok if rlp.isList:
+      rlp.read(Transaction)
+    else:
+      var rr = rlpFromBytes(rlp.read(seq[byte]))
+      rr.read(Transaction)
+  except RlpError as exc:
+    err(exc.msg)
+
 proc parseTxs*(ctx: TransContext, chainId: ChainId): seq[Result[Transaction, string]] =
   if ctx.txs.txsType == TxsJson:
     let len = ctx.txs.n.len
@@ -288,10 +298,7 @@ proc parseTxs*(ctx: TransContext, chainId: ChainId): seq[Result[Transaction, str
     result = newSeqOfCap[Result[Transaction, string]](ctx.txs.r.listLen)
     var rlp = ctx.txs.r
     for item in rlp:
-      result.add try:
-        Result[Transaction, string].ok item.read(Transaction)
-      except RlpError as e:
-        Result[Transaction, string].err e.msg
+      result.add rlp.readNestedTx()
 
     return
 
