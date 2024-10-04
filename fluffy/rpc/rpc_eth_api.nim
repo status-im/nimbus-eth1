@@ -21,6 +21,7 @@ import
   ../network/beacon/beacon_light_client,
   ../version
 
+from ../../nimbus/errors import ValidationError
 from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs, filterLogs
 from ../../nimbus/beacon/web3_eth_conv import w3Addr, w3Hash, ethHash
 
@@ -41,11 +42,13 @@ func init*(
     header: eth_types.BlockHeader,
     txIndex: int,
 ): T {.raises: [ValidationError].} =
+  let sender = tx.recoverSender().valueOr:
+    raise (ref ValidationError)(msg: "Invalid tx signature")
+
   TransactionObject(
     blockHash: Opt.some(w3Hash header.blockHash),
     blockNumber: Opt.some(eth_api_types.BlockNumber(header.number)),
-    `from`: tx.recoverSender().valueOr:
-      raise (ref ValidationError)(msg: "Invalid tx signature"),
+    `from`: sender,
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
     hash: w3Hash tx.rlpHash,
