@@ -271,7 +271,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       proc loadEraBlock(blockNumber: uint64): bool =
         # Separate proc to reduce stack usage of blk
         let blk = db.getEthBlock(blockNumber).valueOr:
-          error "Could not load block from era1", blockNumber, error
+          error "Could not load block from era1", blockNumber, error=error
           return false
 
         blocks.add blk
@@ -279,6 +279,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
       while running and imported < conf.maxBlocks and blockNumber <= lastEra1Block:
         if not loadEraBlock(blockNumber):
+          notice "No more era1 blocks to import", blockNumber
           break
 
         imported += 1
@@ -291,7 +292,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
     if blockNumber > lastEra1Block:
       notice "Importing era archive",
-        start, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
+        blockNumber, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
 
       let
         eraDB = EraDB.new(clConfig.cfg, conf.eraDir.string, genesis_validators_root)
