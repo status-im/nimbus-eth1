@@ -11,7 +11,7 @@ import
   chronicles,
   stint,
   results,
-  eth/common/[eth_types, eth_types_rlp],
+  eth/common/addresses,
   ../../../../nimbus/common/chain_config,
   ./[state_diff, world_state]
 
@@ -71,15 +71,15 @@ proc applyStateDiff*(worldState: WorldStateRef, txDiff: TransactionDiff) =
 
 proc applyBlockRewards*(
     worldState: WorldStateRef,
-    minerData: tuple[miner: EthAddress, blockNumber: uint64],
-    uncleMinersData: openArray[tuple[miner: EthAddress, blockNumber: uint64]],
+    minerData: tuple[miner: Address, blockNumber: uint64],
+    uncleMinersData: openArray[tuple[miner: Address, blockNumber: uint64]],
 ) =
   const baseReward = u256(5) * pow(u256(10), 18)
 
   block:
     # calculate block miner reward
     let
-      minerAddress = EthAddress(minerData.miner)
+      minerAddress = Address(minerData.miner)
       uncleInclusionReward = (baseReward shr 5) * u256(uncleMinersData.len())
 
     var accState = worldState.getAccount(minerAddress)
@@ -89,7 +89,7 @@ proc applyBlockRewards*(
   # calculate uncle miners rewards
   for i, uncleMinerData in uncleMinersData:
     let
-      uncleMinerAddress = EthAddress(uncleMinerData.miner)
+      uncleMinerAddress = Address(uncleMinerData.miner)
       uncleReward =
         (u256(8 + uncleMinerData.blockNumber - minerData.blockNumber) * baseReward) shr 3
     var accState = worldState.getAccount(uncleMinerAddress)
@@ -97,7 +97,7 @@ proc applyBlockRewards*(
     worldState.setAccount(uncleMinerAddress, accState)
 
 const
-  DAORefundContract: EthAddress = address"0xbf4ed7b27f1d666546e30d74d50d173d20bca754"
+  DAORefundContract: Address = address"0xbf4ed7b27f1d666546e30d74d50d173d20bca754"
 
   DAODrainList = [
     address"0xd4fe7bc31cedb7bfb8a345f31e668033056b2728",

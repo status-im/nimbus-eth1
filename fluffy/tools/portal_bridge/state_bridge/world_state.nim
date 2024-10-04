@@ -9,9 +9,10 @@
 
 import
   stint,
-  eth/[common, trie, trie/db, trie/trie_defs],
-  eth/common/[eth_types, eth_types_rlp],
-  ../../../common/[common_types, common_utils],
+  eth/[rlp, trie, trie/db, trie/trie_defs],
+  eth/common/[base, hashes, accounts_rlp],
+  ../../../common/common_types,
+  ../../../network/state/state_utils,
   ./database
 
 # Account State definition
@@ -22,7 +23,7 @@ type AccountState* = ref object
   code: seq[byte]
   codeUpdated: bool
 
-proc init(T: type AccountState, account = newAccount()): T =
+proc init(T: type AccountState, account = EMPTY_ACCOUNT): T =
   T(account: account, codeUpdated: false)
 
 template getBalance*(accState: AccountState): UInt256 =
@@ -54,8 +55,8 @@ template setCode*(accState: var AccountState, bytecode: seq[byte]) =
 # World State definition
 
 type
-  AddressHash* = KeccakHash
-  SlotKeyHash* = KeccakHash
+  AddressHash* = Hash32
+  SlotKeyHash* = Hash32
 
   WorldStateRef* = ref object
     db: DatabaseRef
@@ -65,7 +66,7 @@ type
     bytecodeDb: TrieDatabaseRef # maps AddressHash -> seq[byte]
 
 proc init*(
-    T: type WorldStateRef, db: DatabaseRef, accountsTrieRoot: KeccakHash = emptyRlpHash
+    T: type WorldStateRef, db: DatabaseRef, accountsTrieRoot: Hash32 = emptyRlpHash
 ): T =
   WorldStateRef(
     db: db,
@@ -79,14 +80,14 @@ proc init*(
     bytecodeDb: db.getBytecodeBackend(),
   )
 
-template stateRoot*(state: WorldStateRef): KeccakHash =
+template stateRoot*(state: WorldStateRef): Hash32 =
   state.accountsTrie.rootHash()
 
-template toAccountKey*(address: EthAddress): AddressHash =
-  keccakHash(address)
+template toAccountKey*(address: Address): AddressHash =
+  keccak256(address.data)
 
 template toStorageKey*(slotKey: UInt256): SlotKeyHash =
-  keccakHash(toBytesBE(slotKey))
+  keccak256(toBytesBE(slotKey))
 
 proc getAccount(state: WorldStateRef, accountKey: AddressHash): AccountState =
   try:
@@ -98,10 +99,10 @@ proc getAccount(state: WorldStateRef, accountKey: AddressHash): AccountState =
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
-template getAccount*(state: WorldStateRef, address: EthAddress): AccountState =
+template getAccount*(state: WorldStateRef, address: Address): AccountState =
   state.getAccount(toAccountKey(address))
 
-proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountState) =
+proc setAccount*(state: WorldStateRef, address: Address, accState: AccountState) =
   let accountKey = toAccountKey(address)
 
   try:
@@ -128,13 +129,13 @@ proc setAccount*(state: WorldStateRef, address: EthAddress, accState: AccountSta
 
     if accState.codeUpdated:
       state.bytecodeDb.put(accountKey.data, accState.code)
-      accountToSave.codeHash = keccakHash(accState.code)
+      accountToSave.codeHash = keccak256(accState.code)
 
     state.accountsTrie.put(accountKey.data, rlp.encode(accountToSave))
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
-proc deleteAccount*(state: WorldStateRef, address: EthAddress) =
+proc deleteAccount*(state: WorldStateRef, address: Address) =
   let accountKey = toAccountKey(address)
 
   try:
@@ -154,7 +155,7 @@ iterator updatedAccountProofs*(state: WorldStateRef): (AddressHash, seq[seq[byte
     for key in trie.keys():
       if key.len() == 0:
         continue # skip the empty node created on initialization
-      yield (KeccakHash.fromBytes(key), trie.getBranch(key))
+      yield (Hash32.fromBytes(key), trie.getBranch(key))
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
@@ -172,7 +173,7 @@ iterator updatedStorageProofs*(
     for key in trie.keys():
       if key.len() == 0:
         continue # skip the empty node created on initialization
-      yield (KeccakHash.fromBytes(key), trie.getBranch(key))
+      yield (Hash32.fromBytes(key), trie.getBranch(key))
   except RlpError as e:
     raiseAssert(e.msg) # should never happen unless the database is corrupted
 
@@ -181,7 +182,7 @@ template getUpdatedBytecode*(state: WorldStateRef, accountKey: AddressHash): seq
 
 # Slow: Only used for testing
 proc verifyProofs*(
-    state: WorldStateRef, preStateRoot: KeccakHash, expectedStateRoot: KeccakHash
+    state: WorldStateRef, preStateRoot: Hash32, expectedStateRoot: Hash32
 ) =
   try:
     let trie =
@@ -199,7 +200,7 @@ proc verifyProofs*(
         rlpFromBytes(proof[^1]).listElem(1).toBytes(), # pull the value out of the proof
       )
       for p in proof:
-        memDb.put(keccakHash(p).data, p)
+        memDb.put(keccak256(p).data, p)
 
     let memTrie = initHexaryTrie(memDb, expectedStateRoot, isPruning = false)
     doAssert(memTrie.rootHash() == expectedStateRoot)
@@ -223,6 +224,6 @@ proc verifyProofs*(
 
       let updatedCode = state.getUpdatedBytecode(accountKey)
       if updatedCode.len() > 0:
-        doAssert(account.codeHash == keccakHash(updatedCode))
+        doAssert(account.codeHash == keccak256(updatedCode))
   except RlpError as e:
     raiseAssert(e.msg) # Should never happen

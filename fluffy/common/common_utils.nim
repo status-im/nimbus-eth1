@@ -7,16 +7,7 @@
 
 {.push raises: [].}
 
-import
-  std/[os, strutils],
-  chronicles,
-  eth/common,
-  stew/[io2, arrayops],
-  eth/p2p/discoveryv5/enr
-
-func fromBytes*(T: type KeccakHash, hash: openArray[byte]): T =
-  doAssert(hash.len() == 32)
-  KeccakHash(array[32, byte].initCopyFrom(hash))
+import std/[os, strutils], chronicles, eth/common, stew/io2, eth/p2p/discoveryv5/enr
 
 iterator strippedLines(filename: string): string {.raises: [ref IOError].} =
   for line in lines(filename):

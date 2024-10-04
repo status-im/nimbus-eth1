@@ -10,7 +10,8 @@
 import
   std/[sugar, sequtils],
   chronos,
-  eth/[common, trie, trie/db],
+  eth/[trie, trie/db],
+  eth/common/[addresses, hashes, headers_rlp],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
@@ -57,15 +58,15 @@ proc getTrieProof*(
   branch.asTrieProof()
 
 proc generateAccountProof*(
-    state: HexaryTrie, address: EthAddress
+    state: HexaryTrie, address: addresses.Address
 ): TrieProof {.raises: [RlpError].} =
-  let key = keccakHash(address).data
+  let key = keccak256(address.data).data
   state.getTrieProof(key)
 
 proc generateStorageProof*(
     state: HexaryTrie, slotKey: UInt256
 ): TrieProof {.raises: [RlpError].} =
-  let key = keccakHash(toBytesBE(slotKey)).data
+  let key = keccak256(toBytesBE(slotKey)).data
   state.getTrieProof(key)
 
 proc getGenesisAlloc*(filePath: string): GenesisAlloc =
@@ -77,9 +78,9 @@ proc getGenesisAlloc*(filePath: string): GenesisAlloc =
 
 proc toState*(
     alloc: GenesisAlloc
-): (HexaryTrie, TableRef[EthAddress, HexaryTrie]) {.raises: [RlpError].} =
+): (HexaryTrie, TableRef[addresses.Address, HexaryTrie]) {.raises: [RlpError].} =
   var accountTrie = initHexaryTrie(newMemoryDB())
-  let storageStates = TableRef[EthAddress, HexaryTrie]()
+  let storageStates = TableRef[addresses.Address, HexaryTrie]()
 
   for address, genAccount in alloc:
     var
@@ -89,12 +90,12 @@ proc toState*(
     if genAccount.code.len() > 0:
       var storageTrie = initHexaryTrie(newMemoryDB())
       for slotKey, slotValue in genAccount.storage:
-        let key = keccakHash(toBytesBE(slotKey)).data
+        let key = keccak256(toBytesBE(slotKey)).data
         storageTrie.put(key, rlp.encode(slotValue))
 
       storageStates[address] = storageTrie
       storageRoot = storageTrie.rootHash()
-      codeHash = keccakHash(genAccount.code)
+      codeHash = keccak256(genAccount.code)
 
     let account = Account(
       nonce: genAccount.nonce,
@@ -102,7 +103,7 @@ proc toState*(
       storageRoot: storageRoot,
       codeHash: codeHash,
     )
-    accountTrie.put(keccakHash(address).data, rlp.encode(account))
+    accountTrie.put(keccak256(address.data).data, rlp.encode(account))
 
   (accountTrie, storageStates)
 
@@ -144,10 +145,10 @@ proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =
   return sn.stateNetwork.contentDB.get(contentId).isSome()
 
 proc mockStateRootLookup*(
-    sn: StateNode, blockNumOrHash: uint64 | BlockHash, stateRoot: KeccakHash
+    sn: StateNode, blockNumOrHash: uint64 | BlockHash, stateRoot: Hash32
 ) =
   let
-    blockHeader = BlockHeader(stateRoot: stateRoot)
+    blockHeader = Header(stateRoot: stateRoot)
     headerRlp = rlp.encode(blockHeader)
     blockHeaderWithProof = BlockHeaderWithProof(
       header: ByteList[2048].init(headerRlp), proof: BlockHeaderProof.init()

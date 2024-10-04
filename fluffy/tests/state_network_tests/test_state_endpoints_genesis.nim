@@ -10,8 +10,8 @@ import
   testutils/unittests,
   chronos,
   results,
-  stew/byteutils,
-  eth/[common, trie],
+  eth/trie,
+  eth/common/[addresses, hashes],
   ../../../nimbus/common/chain_config,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/state/
@@ -28,14 +28,14 @@ suite "State Endpoints - Genesis JSON Files":
   ]
 
   proc setupAccountInDb(
-      stateNode: StateNode, accountState: HexaryTrie, address: EthAddress
+      stateNode: StateNode, accountState: HexaryTrie, address: addresses.Address
   ) =
     let
       proof = accountState.generateAccountProof(address)
       leafNode = proof[^1]
-      addressHash = keccakHash(address)
+      addressHash = keccak256(address.data)
       path = removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), leafNode)
-      key = AccountTrieNodeKey.init(path, keccakHash(leafNode.asSeq()))
+      key = AccountTrieNodeKey.init(path, keccak256(leafNode.asSeq()))
       offer = AccountTrieNodeOffer(proof: proof)
 
     # store the account leaf node
@@ -65,10 +65,12 @@ suite "State Endpoints - Genesis JSON Files":
         parent.offer.toRetrievalValue().encode(),
       )
 
-  proc setupCodeInDb(stateNode: StateNode, address: EthAddress, code: seq[byte]) =
+  proc setupCodeInDb(
+      stateNode: StateNode, address: addresses.Address, code: seq[byte]
+  ) =
     let
       key =
-        ContractCodeKey(addressHash: keccakHash(address), codeHash: keccakHash(code))
+        ContractCodeKey(addressHash: keccak256(address.data), codeHash: keccak256(code))
       value = ContractCodeRetrieval(code: Bytecode.init(code))
 
     let contentKey = key.toContentKey().encode()
@@ -80,19 +82,19 @@ suite "State Endpoints - Genesis JSON Files":
       stateNode: StateNode,
       accountState: HexaryTrie,
       storageState: HexaryTrie,
-      address: EthAddress,
+      address: addresses.Address,
       slot: UInt256,
   ) =
     let
-      addressHash = keccakHash(address)
+      addressHash = keccak256(address.data)
       proof = accountState.generateAccountProof(address)
       storageProof = storageState.generateStorageProof(slot)
       leafNode = storageProof[^1]
       path = removeLeafKeyEndNibbles(
-        Nibbles.init(keccakHash(toBytesBE(slot)).data, true), leafNode
+        Nibbles.init(keccak256(toBytesBE(slot)).data, true), leafNode
       )
       key = ContractTrieNodeKey(
-        addressHash: addressHash, path: path, nodeHash: keccakHash(leafNode.asSeq())
+        addressHash: addressHash, path: path, nodeHash: keccak256(leafNode.asSeq())
       )
       offer = ContractTrieNodeOffer(storageProof: storageProof, accountProof: proof)
 
@@ -182,7 +184,7 @@ suite "State Endpoints - Genesis JSON Files":
       # account doesn't exist
       block:
         let badAddress =
-          EthAddress.fromHex("0xBAD0000000000000000000000000000000000000")
+          addresses.Address.fromHex("0xBAD0000000000000000000000000000000000000")
 
         let
           balanceRes = await stateNode.stateNetwork.getBalance(blockNumber, badAddress)
@@ -233,7 +235,7 @@ suite "State Endpoints - Genesis JSON Files":
             proofs.account.balance == account.balance
             proofs.account.nonce == account.nonce
             proofs.account.storageRoot == storageState.rootHash()
-            proofs.account.codeHash == keccakHash(account.code)
+            proofs.account.codeHash == keccak256(account.code)
             proofs.accountProof.len() > 0
             proofs.accountProof == accountState.generateAccountProof(address)
             proofs.slots.len() == 0
@@ -253,7 +255,7 @@ suite "State Endpoints - Genesis JSON Files":
               proofs.account.balance == account.balance
               proofs.account.nonce == account.nonce
               proofs.account.storageRoot == storageState.rootHash()
-              proofs.account.codeHash == keccakHash(account.code)
+              proofs.account.codeHash == keccak256(account.code)
               proofs.accountProof.len() > 0
               proofs.accountProof == accountState.generateAccountProof(address)
               proofs.slots == @[(slotKey, slotValue)]
@@ -282,14 +284,15 @@ suite "State Endpoints - Genesis JSON Files":
       # account doesn't exist
       block:
         let
-          badAddress = EthAddress.fromHex("0xBAD0000000000000000000000000000000000000")
+          badAddress =
+            addresses.Address.fromHex("0xBAD0000000000000000000000000000000000000")
           slotKeys = @[0.u256, 1.u256]
           proofs = (
             await stateNode.stateNetwork.getProofs(blockNumber, badAddress, slotKeys)
           ).valueOr:
             raiseAssert("Failed to get proofs")
         check:
-          proofs.account == newAccount()
+          proofs.account == EMPTY_ACCOUNT
           proofs.accountProof.len() > 0
           proofs.accountProof == accountState.generateAccountProof(badAddress)
           proofs.slots == @[(0.u256, 0.u256), (1.u256, 0.u256)]

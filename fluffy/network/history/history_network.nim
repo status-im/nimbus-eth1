@@ -11,7 +11,8 @@ import
   results,
   chronos,
   chronicles,
-  eth/[common/eth_types_rlp, rlp, trie, trie/db],
+  eth/[trie, trie/db],
+  eth/common/[hashes, headers_rlp, blocks_rlp, receipts_rlp, transactions_rlp],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../common/common_types,
   ../../database/content_db,
@@ -21,10 +22,13 @@ import
   ../beacon/beacon_chain_historical_roots,
   ./content/content_deprecated
 
+from eth/common/eth_types_rlp import rlpHash
+from eth/common/accounts import EMPTY_ROOT_HASH
+
 logScope:
   topics = "portal_hist"
 
-export historical_hashes_accumulator
+export historical_hashes_accumulator, blocks_rlp
 
 type
   HistoryNetwork* = ref object
@@ -36,7 +40,7 @@ type
     processContentLoop: Future[void]
     statusLogLoop: Future[void]
 
-  Block* = (BlockHeader, BlockBody)
+  Block* = (Header, BlockBody)
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -52,7 +56,7 @@ func fromPortalBlockBody*(
     for tx in body.transactions:
       transactions.add(rlp.decode(tx.asSeq(), Transaction))
 
-    let uncles = rlp.decode(body.uncles.asSeq(), seq[BlockHeader])
+    let uncles = rlp.decode(body.uncles.asSeq(), seq[Header])
 
     ok(BlockBody(transactions: transactions, uncles: uncles))
   except RlpError as e:
@@ -159,7 +163,7 @@ func encode*(receipts: seq[Receipt]): seq[byte] =
 # TODO: Failures on validation and perhaps deserialisation should be punished
 # for if/when peer scoring/banning is added.
 
-proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
+proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash32 =
   var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, item in items:
     try:
@@ -171,22 +175,22 @@ proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash256 =
 
   return tr.rootHash
 
-template calcTxsRoot*(transactions: Transactions): Hash256 =
+template calcTxsRoot*(transactions: Transactions): Hash32 =
   calcRootHash(transactions)
 
-template calcReceiptsRoot*(receipts: PortalReceipts): Hash256 =
+template calcReceiptsRoot*(receipts: PortalReceipts): Hash32 =
   calcRootHash(receipts)
 
-template calcWithdrawalsRoot*(receipts: Withdrawals): Hash256 =
+template calcWithdrawalsRoot*(receipts: Withdrawals): Hash32 =
   calcRootHash(receipts)
 
-func validateBlockHeader*(header: BlockHeader, hash: BlockHash): Result[void, string] =
-  if not (header.blockHash() == hash):
+func validateBlockHeader*(header: Header, hash: BlockHash): Result[void, string] =
+  if not (header.rlpHash() == hash):
     err("Block header hash does not match")
   else:
     ok()
 
-func validateBlockHeader*(header: BlockHeader, number: uint64): Result[void, string] =
+func validateBlockHeader*(header: Header, number: uint64): Result[void, string] =
   if not (header.number == number):
     err("Block header number does not match")
   else:
@@ -194,8 +198,8 @@ func validateBlockHeader*(header: BlockHeader, number: uint64): Result[void, str
 
 func validateBlockHeaderBytes*(
     bytes: openArray[byte], id: uint64 | BlockHash
-): Result[BlockHeader, string] =
-  let header = ?decodeRlp(bytes, BlockHeader)
+): Result[Header, string] =
+  let header = ?decodeRlp(bytes, Header)
 
   # Note:
   # One could do additional quick-checks here such as timestamp vs the optional
@@ -214,10 +218,10 @@ func validateBlockHeaderBytes*(
   ok(header)
 
 proc validateBlockBody*(
-    body: PortalBlockBodyLegacy, header: BlockHeader
+    body: PortalBlockBodyLegacy, header: Header
 ): Result[void, string] =
   ## Validate the block body against the txRoot and ommersHash from the header.
-  let calculatedOmmersHash = keccakHash(body.uncles.asSeq())
+  let calculatedOmmersHash = keccak256(body.uncles.asSeq())
   if calculatedOmmersHash != header.ommersHash:
     return err("Invalid ommers hash")
 
@@ -231,7 +235,7 @@ proc validateBlockBody*(
   ok()
 
 proc validateBlockBody*(
-    body: PortalBlockBodyShanghai, header: BlockHeader
+    body: PortalBlockBodyShanghai, header: Header
 ): Result[void, string] =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
   ## from the header.
@@ -271,7 +275,7 @@ proc decodeBlockBodyBytes*(bytes: openArray[byte]): Result[BlockBody, string] =
     err("All Portal block body decodings failed")
 
 proc validateBlockBodyBytes*(
-    bytes: openArray[byte], header: BlockHeader
+    bytes: openArray[byte], header: Header
 ): Result[BlockBody, string] =
   ## Fully decode the SSZ encoded Portal Block Body and validate it against the
   ## header.
@@ -308,7 +312,7 @@ proc validateBlockBodyBytes*(
       BlockBody.fromPortalBlockBody(body)
 
 proc validateReceipts*(
-    receipts: PortalReceipts, receiptsRoot: KeccakHash
+    receipts: PortalReceipts, receiptsRoot: Hash32
 ): Result[void, string] =
   if calcReceiptsRoot(receipts) != receiptsRoot:
     err("Unexpected receipt root")
@@ -316,7 +320,7 @@ proc validateReceipts*(
     ok()
 
 proc validateReceiptsBytes*(
-    bytes: openArray[byte], receiptsRoot: KeccakHash
+    bytes: openArray[byte], receiptsRoot: Hash32
 ): Result[seq[Receipt], string] =
   ## Fully decode the SSZ encoded receipts and validate it against the header's
   ## receipts root.
@@ -328,7 +332,7 @@ proc validateReceiptsBytes*(
 
 ## ContentDB helper calls for specific history network types
 
-proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Opt[T] =
+proc get(db: ContentDB, T: type Header, contentId: ContentId): Opt[T] =
   let contentFromDB = db.get(contentId)
   if contentFromDB.isSome():
     let headerWithProof =
@@ -346,7 +350,7 @@ proc get(db: ContentDB, T: type BlockHeader, contentId: ContentId): Opt[T] =
     Opt.none(T)
 
 proc get(
-    db: ContentDB, T: type BlockBody, contentId: ContentId, header: BlockHeader
+    db: ContentDB, T: type BlockBody, contentId: ContentId, header: Header
 ): Opt[T] =
   let encoded = db.get(contentId).valueOr:
     return Opt.none(T)
@@ -402,13 +406,13 @@ const requestRetries = 4
 # however that response is not yet validated at that moment.
 
 func verifyHeader(
-    n: HistoryNetwork, header: BlockHeader, proof: BlockHeaderProof
+    n: HistoryNetwork, header: Header, proof: BlockHeaderProof
 ): Result[void, string] =
   verifyHeader(n.accumulator, header, proof)
 
 proc getVerifiedBlockHeader*(
     n: HistoryNetwork, id: BlockHash | uint64
-): Future[Opt[BlockHeader]] {.async: (raises: [CancelledError]).} =
+): Future[Opt[Header]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = blockHeaderContentKey(id).encode()
     contentId = history_content.toContentId(contentKey)
@@ -420,7 +424,7 @@ proc getVerifiedBlockHeader*(
   # Note: This still requests a BlockHeaderWithProof from the database, as that
   # is what is stored. But the proof doesn't need to be verified as it gets
   # gets verified before storing.
-  let headerFromDb = n.getContentFromDb(BlockHeader, contentId)
+  let headerFromDb = n.getContentFromDb(Header, contentId)
   if headerFromDb.isSome():
     info "Fetched block header from database"
     return headerFromDb
@@ -429,7 +433,7 @@ proc getVerifiedBlockHeader*(
     let
       headerContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching block header with proof from the network"
-        return Opt.none(BlockHeader)
+        return Opt.none(Header)
 
       headerWithProof = decodeSsz(headerContent.content, BlockHeaderWithProof).valueOr:
         warn "Failed decoding header with proof", error
@@ -453,10 +457,10 @@ proc getVerifiedBlockHeader*(
     return Opt.some(header)
 
   # Headers were requested `requestRetries` times and all failed on validation
-  return Opt.none(BlockHeader)
+  return Opt.none(Header)
 
 proc getBlockBody*(
-    n: HistoryNetwork, hash: BlockHash, header: BlockHeader
+    n: HistoryNetwork, hash: BlockHash, header: Header
 ): Future[Opt[BlockBody]] {.async: (raises: [CancelledError]).} =
   if header.txRoot == EMPTY_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
     # Short path for empty body indicated by txRoot and ommersHash
@@ -513,7 +517,7 @@ proc getBlock*(
       when id is BlockHash:
         id
       else:
-        header.blockHash()
+        header.rlpHash()
     body = (await n.getBlockBody(hash, header)).valueOr:
       warn "Failed to get body when getting block", hash
       return Opt.none(Block)
@@ -526,10 +530,10 @@ proc getBlockHashByNumber*(
   let header = (await n.getVerifiedBlockHeader(blockNumber)).valueOr:
     return err("Cannot retrieve block header for given block number")
 
-  ok(header.blockHash())
+  ok(header.rlpHash())
 
 proc getReceipts*(
-    n: HistoryNetwork, hash: BlockHash, header: BlockHeader
+    n: HistoryNetwork, hash: BlockHash, header: Header
 ): Future[Opt[seq[Receipt]]] {.async: (raises: [CancelledError]).} =
   if header.receiptsRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root

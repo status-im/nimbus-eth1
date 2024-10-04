@@ -9,13 +9,15 @@
 
 import
   results,
-  eth/common/eth_types_rlp,
+  eth/common/headers,
   ../../network/history/[history_content, validation/historical_hashes_accumulator]
+
+from eth/common/eth_types_rlp import rlpHash
 
 export results, historical_hashes_accumulator, history_content
 
 proc buildHeadersWithProof*(
-    blockHeaders: seq[BlockHeader], epochRecord: EpochRecordCached
+    blockHeaders: seq[Header], epochRecord: EpochRecordCached
 ): Result[seq[(seq[byte], seq[byte])], string] =
   var blockHeadersWithProof: seq[(seq[byte], seq[byte])]
   for header in blockHeaders:
@@ -24,7 +26,7 @@ proc buildHeadersWithProof*(
         content = ?buildHeaderWithProof(header, epochRecord)
         contentKey = ContentKey(
           contentType: blockHeader,
-          blockHeaderKey: BlockKey(blockHash: header.blockHash()),
+          blockHeaderKey: BlockKey(blockHash: header.rlpHash()),
         )
 
       blockHeadersWithProof.add((encode(contentKey).asSeq(), SSZ.encode(content)))
@@ -32,7 +34,7 @@ proc buildHeadersWithProof*(
   ok(blockHeadersWithProof)
 
 func buildAccumulator*(
-    headers: seq[BlockHeader]
+    headers: seq[Header]
 ): Result[FinishedHistoricalHashesAccumulator, string] =
   var accumulator: HistoricalHashesAccumulator
   for header in headers:
@@ -44,7 +46,7 @@ func buildAccumulator*(
   err("Not enough headers provided to finish the accumulator")
 
 func buildAccumulatorData*(
-    headers: seq[BlockHeader]
+    headers: seq[Header]
 ): Result[(FinishedHistoricalHashesAccumulator, seq[EpochRecord]), string] =
   var accumulator: HistoricalHashesAccumulator
   var epochRecords: seq[EpochRecord]
@@ -62,7 +64,7 @@ func buildAccumulatorData*(
   err("Not enough headers provided to finish the accumulator")
 
 func buildProof*(
-    header: BlockHeader, epochRecords: seq[EpochRecord]
+    header: Header, epochRecords: seq[EpochRecord]
 ): Result[HistoricalHashesAccumulatorProof, string] =
   let epochIndex = getEpochIndex(header)
   doAssert(epochIndex < uint64(epochRecords.len()))
@@ -71,7 +73,7 @@ func buildProof*(
   buildProof(header, epochRecord)
 
 func buildHeaderWithProof*(
-    header: BlockHeader, epochRecords: seq[EpochRecord]
+    header: Header, epochRecords: seq[EpochRecord]
 ): Result[BlockHeaderWithProof, string] =
   ## Construct the accumulator proof for a specific header.
   ## Returns the block header with the proof
@@ -85,7 +87,7 @@ func buildHeaderWithProof*(
     err("Cannot build accumulator proof for post merge header")
 
 func buildHeadersWithProof*(
-    headers: seq[BlockHeader], epochRecords: seq[EpochRecord]
+    headers: seq[Header], epochRecords: seq[EpochRecord]
 ): Result[seq[BlockHeaderWithProof], string] =
   var headersWithProof: seq[BlockHeaderWithProof]
   for header in headers:

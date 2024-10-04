@@ -10,15 +10,13 @@ import
   chronos,
   stew/byteutils,
   results,
-  eth/common/eth_types,
+  eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   json_rpc/rpcclient,
   ../common/common_types,
   ../network/history/[history_content, history_network],
   ./rpc_calls/[rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls]
 
-export
-  rpcclient, rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls, results,
-  eth_types
+export rpcclient, rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls, results
 
 type
   PortalRpcClient* = distinct RpcClient
@@ -94,7 +92,7 @@ proc historyGetContent(
 
 proc historyGetBlockHeader*(
     client: PortalRpcClient, blockHash: BlockHash, validateContent = true
-): Future[Result[BlockHeader, PortalRpcError]] {.async: (raises: []).} =
+): Future[Result[Header, PortalRpcError]] {.async: (raises: []).} =
   ## Fetches the block header for the given hash from the Portal History Network.
   ## The data is first looked up in the node's local database before trying to
   ## fetch it from the network.
@@ -115,7 +113,7 @@ proc historyGetBlockHeader*(
   if validateContent:
     validateBlockHeaderBytes(headerBytes, blockHash).valueOrErr(ContentValidationFailed)
   else:
-    decodeRlp(headerBytes, BlockHeader).valueOrErr(InvalidContentValue)
+    decodeRlp(headerBytes, Header).valueOrErr(InvalidContentValue)
 
 proc historyGetBlockBody*(
     client: PortalRpcClient, blockHash: BlockHash, validateContent = true
