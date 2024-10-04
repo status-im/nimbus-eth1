@@ -304,3 +304,18 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
           return populateReceipt(receipt, gasUsed, blkdesc.blk.transactions[txid], txid, blkdesc.blk.header)
 
         idx.inc
+  
+  server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Web3Quantity:
+    ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
+    ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
+    ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
+    ##
+    ## args: the transaction call object.
+    ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns the amount of gas used.
+    let
+      header   = api.headerFromTag(blockId("latest")).valueOr:
+          raise newException(ValueError, "Block not found")
+      gasUsed  = rpcEstimateGas(args, header, api.chain.com, DEFAULT_RPC_GAS_CAP).valueOr:
+                   raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
+    w3Qty(gasUsed)
