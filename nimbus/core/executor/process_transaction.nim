@@ -66,7 +66,7 @@ proc commitOrRollbackDependingOnGasUsed(
 proc processTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
+    sender:  EthAddress;  ## tx.recoverSender
     header:  BlockHeader; ## Header for the block containing the current tx
       ): Result[GasInt, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
@@ -267,7 +267,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[Request] =
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.getSender or tx.ecRecover
+    sender:  EthAddress;  ## tx.recoverSender
     header:  BlockHeader; ## Header for the block containing the current tx
       ): Result[GasInt,string] =
   vmState.processTransactionImpl(tx, sender, header)

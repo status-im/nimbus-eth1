@@ -12,6 +12,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   nimcrypto/[keccak, hash],
   eth/[rlp, keys, trie/hexary_proof_verification],
+  eth/common/transaction_utils,
   ../nimbus/[constants, transaction, config, evm/state, evm/types, version],
   ../nimbus/db/[ledger, storage_types],
   ../nimbus/sync/protocol,
@@ -162,7 +163,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
   vmState.receipts = newSeq[Receipt](txs.len)
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in txs:
-    let sender = tx.getSender()
+    let sender = tx.recoverSender().expect("valid signature")
     let rc = vmState.processTransaction(tx, sender, vmHeader)
     doAssert(rc.isOk, "Invalid transaction: " & rc.error)
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
@@ -402,7 +403,7 @@ proc rpcMain*() =
 
       let signedTxBytes = await client.eth_signTransaction(unsignedTx)
       let signedTx = rlp.decode(signedTxBytes, Transaction)
-      check signer == signedTx.getSender() # verified
+      check signer == signedTx.recoverSender().expect("valid signature") # verified
 
       let hashAhex = await client.eth_sendTransaction(unsignedTx)
       let hashBhex = await client.eth_sendRawTransaction(signedTxBytes)

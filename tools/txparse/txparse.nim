@@ -11,6 +11,7 @@
 import
   eth/[common, rlp],
   stew/byteutils,
+  eth/common/transaction_utils,
   ../../nimbus/transaction,
   ../../nimbus/common/evmforks
 
@@ -19,7 +20,7 @@ proc parseTx(hexLine: string) =
     let
       bytes = hexToSeqByte(hexLine)
       tx = decodeTx(bytes)
-      address = tx.getSender()
+      address = tx.recoverSender().expect("valid signature")
 
     tx.validate(FkLondon)
 
@@ -29,8 +30,6 @@ proc parseTx(hexLine: string) =
   except RlpError as ex:
     echo "err: ", ex.msg
   except ValueError as ex:
-    echo "err: ", ex.msg
-  except ValidationError as ex:
     echo "err: ", ex.msg
   except Exception:
     # TODO: rlp.hasData assertion should be

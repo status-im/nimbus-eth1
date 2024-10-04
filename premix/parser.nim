@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  json, strutils, os,
+  json, strutils, os, eth/common/transaction_utils,
   eth/common, httputils, nimcrypto/utils,
   stint, stew/byteutils
 
@@ -196,7 +196,7 @@ proc parseWithdrawal*(n: JsonNode): Withdrawal =
   n.fromJson "amount", result.amount
 
 proc validateTxSenderAndHash*(n: JsonNode, tx: Transaction) =
-  var sender = tx.getSender()
+  var sender = tx.recoverSender().expect("valid signature")
   var fromAddr: EthAddress
   n.fromJson "from", fromAddr
   doAssert sender.to0xHex == fromAddr.to0xHex

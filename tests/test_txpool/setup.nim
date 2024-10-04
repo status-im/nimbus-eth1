@@ -16,6 +16,7 @@ import
   ../../nimbus/utils/ec_recover,
   ../../nimbus/core/tx_pool/[tx_chain, tx_item],
   ../../nimbus/transaction,
+  eth/common/transaction_utils,
   ./helpers,
   eth/[keys, p2p],
   stew/[keyed_queue, byteutils]
@@ -69,7 +70,7 @@ proc fillGenesis(env: var TxEnv, param: NetworkParams) =
   for z in n:
     let bytes = hexToSeqByte(z.getStr)
     let tx = rlp.decode(bytes, Transaction)
-    let sender = tx.getSender()
+    let sender = tx.recoverSender().expect("valid signature")
     let bal = map.getOrDefault(sender, 0.u256)
     if bal + tx.value > 0:
       map[sender] = bal + tx.value
@@ -99,7 +100,7 @@ proc setupTxPool*(getStatus: proc(): TxItemStatus): (CommonRef, TxPoolRef, int) 
   let txPool = TxPoolRef.new(com)
 
   for n, tx in txEnv.txs:
-    let s = txEnv.getSigner(tx.getSender())
+    let s = txEnv.getSigner(tx.recoverSender().expect("valid signature"))
     let status = statusInfo[getStatus()]
     let info = &"{n}/{txEnv.txs.len} {status}"
     let signedTx = signTransaction(tx, s.signer, eip155 = true)
