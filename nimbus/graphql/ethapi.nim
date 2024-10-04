@@ -22,7 +22,8 @@ import
   ../common/common,
   ../transaction/call_evm,
   ../core/[tx_pool, tx_pool/tx_item],
-  ../utils/utils
+  ../utils/utils,
+  eth/common/transaction_utils
 
 from eth/p2p import EthereumNode
 export httpserver
@@ -629,8 +630,7 @@ proc txFrom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   else:
     tx.blockNumber
 
-  var sender: EthAddress
-  if not getSender(tx.tx, sender):
+  let sender = tx.tx.recoverSender.valueOr:
     return ok(respNull())
   let hres = ctx.getBlockByNumber(blockNumber)
   if hres.isErr:
@@ -732,8 +732,7 @@ proc txCumulativeGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.
 proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
-  var sender: EthAddress
-  if not getSender(tx.tx, sender):
+  let sender = tx.tx.recoverSender.valueOr:
     return err("can't calculate sender")
 
   if not tx.tx.contractCreation:

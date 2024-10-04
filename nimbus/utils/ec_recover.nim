@@ -113,22 +113,6 @@ proc ecRecover*(header: BlockHeader): EcAddrResult =
   ## the argument header.
   header.extraData.recoverImpl(header.hashPreSealed)
 
-proc ecRecover*(tx: var Transaction): EcAddrResult =
-  ## Extracts sender address from transaction. This function has similar
-  ## functionality as `transaction.getSender()`.
-  let txSig = tx.vrsSerialised
-  if txSig.isErr:
-    return err(txSig.error)
-  try:
-    result = txSig.value.recoverImpl(tx.txHashNoSignature)
-  except ValueError as ex:
-    return err((errTxEncError, ex.msg))
-
-proc ecRecover*(tx: Transaction): EcAddrResult =
-  ## Variant of `ecRecover()` for call-by-value header.
-  var ty = tx
-  ty.ecRecover
-
 # ------------------------------------------------------------------------------
 # Public constructor for caching ecRecover version
 # ------------------------------------------------------------------------------

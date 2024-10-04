@@ -139,7 +139,8 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
       gasPrice: 30_000_000_000,
       gasLimit: 70_000,
       value   : 1.u256,
-      to      : some(zeroAddress)
+      to      : some(zeroAddress),
+      chainId : com.chainId,
     )
     unsignedTx2 = Transaction(
       txType  : TxLegacy,
@@ -147,11 +148,12 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
       gasPrice: 30_000_000_100,
       gasLimit: 70_000,
       value   : 2.u256,
-      to      : some(zeroAddress)
+      to      : some(zeroAddress),
+      chainId : com.chainId,
     )
     eip155    = com.isEIP155(com.syncCurrent)
-    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, com.chainId, eip155)
-    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, com.chainId, eip155)
+    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, eip155)
+    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, eip155)
     txs = [signedTx1, signedTx2]
 
   let txRoot = calcTxRoot(txs)

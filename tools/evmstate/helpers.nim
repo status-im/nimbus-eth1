@@ -147,7 +147,7 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     tx.to = Opt.some(EthAddress.fromHex(rawTo))
 
   let secretKey = required(PrivateKey, "secretKey")
-  signTransaction(tx, secretKey, tx.chainId, false)
+  signTransaction(tx, secretKey, false)
 
 proc parseTx*(txData, index: JsonNode): Transaction =
   let

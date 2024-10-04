@@ -15,6 +15,7 @@ import
   nimcrypto/utils as ncrutils,
   results,
   web3/conversions,
+  eth/common/transaction_utils,
   ./beacon/web3_eth_conv,
   ./common/common,
   ./constants,
@@ -187,7 +188,7 @@ proc traceTransactionImpl(
     miner = vmState.coinbase()
 
   for idx, tx in transactions:
-    let sender = tx.getSender
+    let sender = tx.recoverSender().expect("valid signature")
     let recipient = tx.getRecipient(sender)
 
     if idx.uint64 == txIndex:
@@ -263,7 +264,7 @@ proc dumpBlockStateImpl(
     stateBefore = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash = true)
 
   for idx, tx in blk.transactions:
-    let sender = tx.getSender
+    let sender = tx.recoverSender().expect("valid signature")
     let recipient = tx.getRecipient(sender)
     before.captureAccount(stateBefore, sender, senderName & $idx)
     before.captureAccount(stateBefore, recipient, recipientName & $idx)
@@ -278,7 +279,7 @@ proc dumpBlockStateImpl(
   var stateAfter = vmState.stateDB
 
   for idx, tx in blk.transactions:
-    let sender = tx.getSender
+    let sender = tx.recoverSender().expect("valid signature")
     let recipient = tx.getRecipient(sender)
     after.captureAccount(stateAfter, sender, senderName & $idx)
     after.captureAccount(stateAfter, recipient, recipientName & $idx)
@@ -329,7 +330,7 @@ proc traceBlockImpl(
 
   for tx in blk.transactions:
     let
-      sender = tx.getSender
+      sender = tx.recoverSender().expect("valid signature")
       rc = vmState.processTransaction(tx, sender, header)
     if rc.isOk:
       gasUsed = gasUsed + rc.value

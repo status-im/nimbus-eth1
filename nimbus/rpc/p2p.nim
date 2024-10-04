@@ -234,9 +234,9 @@ proc setupEthRpc*(
 
     let
       accDB    = stateDBFromTag(blockId("latest"))
-      tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
+      tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1, com.chainId)
       eip155   = com.isEIP155(com.syncCurrent)
-      signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
+      signedTx = signTransaction(tx, acc.privateKey, eip155)
     result    = rlp.encode(signedTx)
 
   server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Web3Hash:
@@ -254,9 +254,9 @@ proc setupEthRpc*(
 
     let
       accDB    = stateDBFromTag(blockId("latest"))
-      tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1)
+      tx       = unsignedTx(data, chainDB, accDB.getNonce(address) + 1, com.chainId)
       eip155   = com.isEIP155(com.syncCurrent)
-      signedTx = signTransaction(tx, acc.privateKey, com.chainId, eip155)
+      signedTx = signTransaction(tx, acc.privateKey, eip155)
       networkPayload =
         if signedTx.txType == TxEip4844:
           if data.blobs.isNone or data.commitments.isNone or data.proofs.isNone:

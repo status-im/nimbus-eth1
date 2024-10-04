@@ -102,7 +102,7 @@ proc setupTxPool*(getStatus: proc(): TxItemStatus): (CommonRef, TxPoolRef, int) 
     let s = txEnv.getSigner(tx.getSender())
     let status = statusInfo[getStatus()]
     let info = &"{n}/{txEnv.txs.len} {status}"
-    let signedTx = signTransaction(tx, s.signer, txEnv.chainId, eip155 = true)
+    let signedTx = signTransaction(tx, s.signer, eip155 = true)
     txPool.add(PooledTransaction(tx: signedTx), info)
 
   (com, txPool, txEnv.txs.len)
