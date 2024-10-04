@@ -51,23 +51,6 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError] =
-  ## Parts copied from `transaction.getSignature`.
-  var data: array[65,byte]
-  data[0..31] = tx.R.toBytesBE
-  data[32..63] = tx.S.toBytesBE
-
-  if tx.txType != TxLegacy:
-    data[64] = tx.V.byte
-  elif tx.V >= EIP155_CHAIN_ID_OFFSET:
-    data[64] = byte(1 - (tx.V and 1))
-  elif tx.V == 27 or tx.V == 28:
-    data[64] = byte(tx.V - 27)
-  else:
-    return err((errSigPrefixError,"")) # legacy error
-
-  ok(data)
-
 proc encodePreSealed(header: BlockHeader): seq[byte] =
   ## Cut sigature off `extraData` header field.
   if header.extraData.len < EXTRA_SEAL:
