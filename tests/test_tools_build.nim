@@ -16,7 +16,6 @@ import
   #../premix/persist,        # -- ditto
   #../premix/debug,          # -- ditto
   #../premix/dumper,         # -- ditto
-  #../premix/hunter,         # -- ditto
   #../premix/regress,        # -- ditto
   #./tracerTestGen,          # -- ditto
   #./persistBlockTestGen,    # -- ditto
