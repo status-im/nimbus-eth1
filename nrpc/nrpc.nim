@@ -134,9 +134,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
   try:
     let data = await rpcClient.exchangeCapabilities(
       @[
-        "engine_forkchoiceUpdatedV1",
-        "engine_getPayloadBodiesByHash", "engine_getPayloadBodiesByRangeV1",
-        "engine_getPayloadV1", "engine_newPayloadV1",
+        "engine_forkchoiceUpdatedV1", "engine_getPayloadBodiesByHash",
+        "engine_getPayloadBodiesByRangeV1", "engine_getPayloadV1", "engine_newPayloadV1",
       ]
     )
     notice "Communication with the EL Success", data = data
@@ -161,6 +160,12 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       quit(QuitFailure)
 
   notice "Current block number", number = currentBlockNumber
+
+  # Check for pre-merge situation
+  if currentBlockNumber <= lastEra1Block:
+    notice "Pre-merge, nrpc syncer works post-merge",
+      blocknumber = currentBlockNumber, lastPoWBlock = lastEra1Block
+    quit(QuitSuccess)
 
   # Load the latest state from the CL
   var
@@ -215,9 +220,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           )
           debug "Making new payload call for Deneb"
           payloadResponse = await rpcClient.newPayload(
-            payload,
-            versioned_hashes,
-            forkyBlck.message.parent_root.to(Hash32),
+            payload, versioned_hashes, forkyBlck.message.parent_root.to(Hash32)
           )
         notice "Payload status", response = payloadResponse
 
