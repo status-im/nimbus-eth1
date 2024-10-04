@@ -77,13 +77,13 @@ func makeTx(
   )
 
   inc t.nonce
-  signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)
+  signTransaction(tx, t.vaultKey, eip155 = true)
 
 func signTxWithNonce(
     t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
   var tx = tx
   tx.nonce = nonce
-  signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)
+  signTransaction(tx, t.vaultKey, eip155 = true)
 
 proc initEnv(envFork: HardFork): TestEnv =
   var

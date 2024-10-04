@@ -9,6 +9,7 @@ import
   std/[strformat, strutils, json, os, tables, macros],
   unittest2, stew/byteutils,
   eth/[keys, trie],
+  eth/common/transaction_utils,
   ../nimbus/common/common,
   ../tools/common/helpers as chp,
   ../nimbus/[evm/computation,
@@ -42,10 +43,11 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
       gasLimit: 1_000_000_000.GasInt,
       to: Opt.some initAddress(address.byte),
       value: 0.u256,
+      chainId: ChainId(1),
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
-    let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let fixtureResult = testCallEvm(tx, tx.getSender, vmState)
+    let tx = signTransaction(unsignedTx, privateKey, false)
+    let fixtureResult = testCallEvm(tx, tx.recoverSender().expect("valid signature"), vmState)
 
     if expectedErr:
       check fixtureResult.isError

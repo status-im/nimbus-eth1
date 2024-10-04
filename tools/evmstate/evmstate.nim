@@ -12,6 +12,7 @@ import
   std/[json, strutils, sets, tables, options, streams],
   chronicles,
   eth/keys,
+  eth/common/transaction_utils,
   stew/byteutils,
   results,
   stint,
@@ -68,7 +69,7 @@ method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 
   keccakHash(toBytes($blockNumber))
 
 proc verifyResult(ctx: var StateContext, vmState: BaseVMState, obtainedHash: Hash256) =
-  ctx.error = ""  
+  ctx.error = ""
   if obtainedHash != ctx.expectedHash:
     ctx.error = "post state root mismatch: got $1, want $2" %
       [($obtainedHash).toLowerAscii, $ctx.expectedHash]
@@ -129,7 +130,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     tracer = tracer)
 
   var gasUsed: GasInt
-  let sender = ctx.tx.getSender()
+  let sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.mutateStateDB:
     setupStateDB(pre, db)

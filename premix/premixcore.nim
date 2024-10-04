@@ -10,7 +10,7 @@
 
 import
   json, strutils, os,
-  chronicles, eth/common,
+  chronicles, eth/common, eth/common/transaction_utils,
   ../nimbus/transaction, ../nimbus/launcher,
   ./js_tracer, ./parser, ./downloader
 
@@ -157,7 +157,8 @@ proc requestPostState*(premix, n: JsonNode, blockNumber: BlockNumber) =
   for t in txs:
     var txKind = TxKind.Regular
     let tx = parseTransaction(t)
-    let sender = tx.getSender
+    let sender = tx.recoverSender().valueOr:
+      raise (ref ValueError)(msg: "Invalid tx signature")
     if tx.contractCreation: txKind = TxKind.ContractCreation
     if hasInternalTx(tx, blockNumber, sender):
       let txTrace = requestInternalTx(t["hash"], tracer)

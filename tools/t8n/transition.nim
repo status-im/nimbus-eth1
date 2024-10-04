@@ -11,6 +11,7 @@
 import
   std/[json, strutils, tables, os, streams],
   eth/[rlp, trie, eip1559],
+  eth/common/transaction_utils,
   stint, results,
   "."/[config, types, helpers],
   ../common/state_clearing,
@@ -256,8 +257,7 @@ proc exec(ctx: var TransContext,
       continue
 
     let tx = txRes.get
-    var sender: EthAddress
-    if not tx.getSender(sender):
+    let sender = tx.recoverSender().valueOr:
       rejected.add RejectedTx(
         index: txIndex,
         error: "Could not get sender"

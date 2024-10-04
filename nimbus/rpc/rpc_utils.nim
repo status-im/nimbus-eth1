@@ -26,7 +26,8 @@ import
   ../evm/state,
   ../evm/precompiles,
   ../evm/tracer/access_list_tracer,
-  ../evm/evm_errors
+  ../evm/evm_errors,
+  eth/common/transaction_utils
 
 
 const
@@ -91,7 +92,7 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
   const minGasPrice = 30_000_000_000.GasInt
   result = max(result, minGasPrice)
 
-proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce): Transaction
+proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce, chainId: ChainId): Transaction
     {.gcsafe, raises: [CatchableError].} =
   if tx.to.isSome:
     result.to = Opt.some(ethAddr(tx.to.get))
@@ -117,6 +118,7 @@ proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNon
     result.nonce = defaultNonce
 
   result.payload = tx.payload
+  result.chainId = chainId
 
 proc toWd(wd: Withdrawal): WithdrawalObject =
   WithdrawalObject(
@@ -142,7 +144,8 @@ proc populateTransactionObject*(tx: Transaction,
     result.blockHash = Opt.some(w3Hash header.blockHash)
     result.blockNumber = Opt.some(w3BlockNumber(header.number))
 
-  result.`from` = w3Addr tx.getSender()
+  if (let sender = tx.recoverSender(); sender.isOk):
+    result.`from` = sender[]
   result.gas = w3Qty(tx.gasLimit)
   result.gasPrice = w3Qty(tx.gasPrice)
   result.hash = w3Hash tx.rlpHash
@@ -221,24 +224,22 @@ proc populateBlockObject*(header: BlockHeader, chain: CoreDbRef, fullTx: bool, i
     result.parentBeaconBlockRoot = Opt.some(w3Hash header.parentBeaconBlockRoot.get)
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
-                      txIndex: uint64, header: BlockHeader): ReceiptObject
-    {.gcsafe, raises: [ValidationError].} =
+                      txIndex: uint64, header: BlockHeader): ReceiptObject =
+  let sender = tx.recoverSender()
   result = ReceiptObject()
   result.transactionHash = w3Hash tx.rlpHash
   result.transactionIndex = w3Qty(txIndex)
   result.blockHash = w3Hash header.blockHash
   result.blockNumber = w3BlockNumber(header.number)
-  result.`from` = w3Addr tx.getSender()
+  if sender.isSome():
+    result.`from` = sender.get()
   result.to = Opt.some(w3Addr tx.destination)
   result.cumulativeGasUsed = w3Qty(receipt.cumulativeGasUsed)
   result.gasUsed = w3Qty(gasUsed)
   result.`type` = Opt.some Quantity(receipt.receiptType)
 
-  if tx.contractCreation:
-    var sender: EthAddress
-    if tx.getSender(sender):
-      let contractAddress = generateAddress(sender, tx.nonce)
-      result.contractAddress = Opt.some(w3Addr contractAddress)
+  if tx.contractCreation and sender.isSome:
+    result.contractAddress = Opt.some(tx.creationAddress(sender[]))
 
   for log in receipt.logs:
     # TODO: Work everywhere with either `Hash256` as topic or `array[32, byte]`
