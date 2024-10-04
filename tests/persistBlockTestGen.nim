@@ -106,7 +106,7 @@ proc main() {.used.} =
   #chainDB.dumpTest(2_283_416) # first DDOS spam attack block
   com.dumpTest(2_463_413) # tangerine call* gas cost bug
   com.dumpTest(2_675_000) # spurious dragon first block
-  com.dumpTest(2_675_002) # EIP155 tx.getSender
+  com.dumpTest(2_675_002) # EIP155 tx.recoverSender
   com.dumpTest(4_370_000) # Byzantium first block
 
 when isMainModule:

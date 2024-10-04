@@ -228,6 +228,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
 
   if n.hasKey("to"):
     tx.to = Opt.some(EthAddress.fromJson(n, "to"))
+  tx.chainId = chainId
 
   case tx.txType
   of TxLegacy:
@@ -262,7 +263,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   if n.hasKey("secretKey"):
     let data = Blob.fromJson(n, "secretKey")
     let secretKey = PrivateKey.fromRaw(data).tryGet
-    signTransaction(tx, secretKey, chainId, eip155)
+    signTransaction(tx, secretKey, eip155)
   else:
     required(tx, uint64, v)
     required(tx, UInt256, r)

@@ -94,7 +94,7 @@ proc makeFundingTx*(
     )
 
   PooledTransaction(
-    tx: signTransaction(unsignedTx, v.vaultKey, v.chainId, eip155 = true))
+    tx: signTransaction(unsignedTx, v.vaultKey))
 
 proc signTx*(v: Vault,
              sender: EthAddress,
@@ -118,7 +118,7 @@ proc signTx*(v: Vault,
 
   let key = v.accounts[sender]
   PooledTransaction(
-    tx: signTransaction(unsignedTx, key, v.chainId, eip155 = true))
+    tx: signTransaction(unsignedTx, key))
 
 # createAccount creates a new account that is funded from the vault contract.
 # It will panic when the account could not be created and funded.

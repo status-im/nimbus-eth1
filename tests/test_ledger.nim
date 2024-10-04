@@ -11,6 +11,7 @@
 import
   std/[strformat, strutils, importutils],
   eth/keys,
+  eth/common/transaction_utils,
   stew/byteutils,
   stew/endians2,
   ../nimbus/config,
@@ -53,13 +54,13 @@ proc pp*(a: EthAddress): string =
 
 proc pp*(tx: Transaction): string =
   # "(" & tx.ecRecover.value.pp & "," & $tx.nonce & ")"
-  "(" & tx.getSender.pp & "," & $tx.nonce & ")"
+  "(" & tx.recoverSender().value().pp & "," & $tx.nonce & ")"
 
 proc pp*(h: KeccakHash): string =
   h.data.toHex[52 .. 63].toLowerAscii
 
 proc pp*(tx: Transaction; ledger: LedgerRef): string =
-  let address = tx.getSender
+  let address = tx.recoverSender().value()
   "(" & address.pp &
     "," & $tx.nonce &
     ";" & $ledger.getNonce(address) &
@@ -134,7 +135,7 @@ func makeTx(
   )
 
   inc env.nonce
-  signTransaction(tx, env.vaultKey, env.chainId, eip155 = true)
+  signTransaction(tx, env.vaultKey, eip155 = true)
 
 func initAddr(z: int): EthAddress =
   const L = sizeof(result)

@@ -6,11 +6,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./constants, ./errors, eth/[common, keys], ./utils/utils,
-  common/evmforks, ./evm/internals
+  ./[constants, errors],
+  ./common/evmforks,
+  ./evm/interpreter/gas_costs,
+  eth/common/[addresses, keys, transactions, transactions_rlp, transaction_utils]
 
-import eth/common/transaction as common_transaction
-export common_transaction, errors
+export addresses, keys, transactions
 
 proc toWordSize(size: GasInt): GasInt =
   # Round input to the nearest bigger multiple of 32
@@ -47,54 +48,6 @@ proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
     for n in tx.accessList:
       inc(numKeys, n.storageKeys.len)
     result += GasInt(numKeys) * ACCESS_LIST_STORAGE_KEY_COST
-
-proc getSignature*(tx: Transaction, output: var Signature): bool =
-  var bytes: array[65, byte]
-  bytes[0..31] = tx.R.toBytesBE()
-  bytes[32..63] = tx.S.toBytesBE()
-
-  if tx.txType == TxLegacy:
-    var v = tx.V
-    if v >= EIP155_CHAIN_ID_OFFSET:
-      v = 28 - (v and 0x01)
-    elif v == 27 or v == 28:
-      discard
-    else:
-      return false
-    bytes[64] = byte(v - 27)
-  else:
-    bytes[64] = tx.V.byte
-
-  let sig = Signature.fromRaw(bytes)
-  if sig.isOk:
-    output = sig[]
-    return true
-  return false
-
-proc toSignature*(tx: Transaction): Signature =
-  if not getSignature(tx, result):
-    raise newException(Exception, "Invalid signature")
-
-proc getSender*(tx: Transaction, output: var EthAddress): bool =
-  ## Find the address the transaction was sent from.
-  var sig: Signature
-  if tx.getSignature(sig):
-    var txHash = tx.txHashNoSignature
-    let pubkey = recover(sig, SkMessage(txHash.data))
-    if pubkey.isOk:
-      output = pubkey[].toCanonicalAddress()
-      result = true
-
-proc getSender*(tx: Transaction): EthAddress =
-  ## Raises error on failure to recover public key
-  if not tx.getSender(result):
-    raise newException(ValidationError, "Could not derive sender address from transaction")
-
-proc getRecipient*(tx: Transaction, sender: EthAddress): EthAddress =
-  if tx.contractCreation:
-    result = generateAddress(sender, tx.nonce)
-  else:
-    result = tx.to.get()
 
 proc validateTxLegacy(tx: Transaction, fork: EVMFork) =
   var
@@ -155,6 +108,8 @@ proc validateTxEip7702(tx: Transaction) =
     raise newException(ValidationError, "Invalid EIP-7702 transaction")
 
 proc validate*(tx: Transaction, fork: EVMFork) =
+  # TODO it doesn't seem like this function is called from anywhere except tests
+  #      which feels like it might be a problem (?)
   # parameters pass validation rules
   if tx.intrinsicGas(fork) > tx.gasLimit:
     raise newException(ValidationError, "Insufficient gas")
@@ -163,8 +118,10 @@ proc validate*(tx: Transaction, fork: EVMFork) =
     raise newException(ValidationError, "Initcode size exceeds max")
 
   # check signature validity
-  var sender: EthAddress
-  if not tx.getSender(sender):
+  # TODO a validation function like this should probably be returning the sender
+  #      since recovering the public key accounts for ~10% of block processing
+  #      time (at the time of writing)
+  let sender = tx.recoverSender().valueOr:
     raise newException(ValidationError, "Invalid signature or failed message verification")
 
   case tx.txType
@@ -177,27 +134,9 @@ proc validate*(tx: Transaction, fork: EVMFork) =
   of TxEip7702:
     validateTxEip7702(tx)
 
-proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId, eip155: bool): Transaction =
+proc signTransaction*(tx: Transaction, privateKey: PrivateKey, eip155 = true): Transaction =
   result = tx
-  if eip155:
-    # trigger rlpEncodeEIP155 in nim-eth
-    result.V = chainId.uint64 * 2'u64 + 35'u64
-
-  let
-    rlpTx = rlpEncode(result)
-    sig = sign(privateKey, rlpTx).toRaw
-
-  case tx.txType
-  of TxLegacy:
-    if eip155:
-      result.V = sig[64].uint64 + result.V
-    else:
-      result.V = sig[64].uint64 + 27'u64
-  else:
-    result.V = sig[64].uint64
-
-  result.R = UInt256.fromBytesBE(sig[0..31])
-  result.S = UInt256.fromBytesBE(sig[32..63])
+  result.signature = result.sign(privateKey, eip155)
 
 # deriveChainId derives the chain id from the given v parameter
 func deriveChainId*(v: uint64, chainId: ChainId): ChainId =

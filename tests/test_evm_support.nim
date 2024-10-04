@@ -10,6 +10,7 @@ import
   unittest2,
   stew/byteutils,
   eth/keys,
+  eth/common/transaction_utils,
   ../nimbus/common,
   ../nimbus/transaction,
   ../nimbus/evm/types,
@@ -358,8 +359,8 @@ proc runTestOverflow() =
     )
 
     let privateKey = PrivateKey.fromHex("0000000000000000000000000000000000000000000000000000001000000000")[]
-    let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
-    let res = testCallEvm(tx, tx.getSender, s)
+    let tx = signTransaction(unsignedTx, privateKey, false)
+    let res = testCallEvm(tx, tx.recoverSender().expect("valid signature"), s)
 
     when defined(evmc_enabled):
       check res.error == "EVMC_FAILURE"

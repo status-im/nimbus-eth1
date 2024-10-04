@@ -14,14 +14,14 @@ import
   web3/conversions, # sigh, for FixedBytes marshalling
   web3/eth_api_types,
   web3/primitives as web3types,
-  eth/common/eth_types,
+  eth/common/[eth_types, transaction_utils],
   beacon_chain/spec/forks,
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
   ../version
 
-from ../../nimbus/transaction import getSender, ValidationError
+from ../../nimbus/errors import ValidationError
 from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs, filterLogs
 from ../../nimbus/beacon/web3_eth_conv import w3Addr, w3Hash, ethHash
 
@@ -42,10 +42,13 @@ func init*(
     header: eth_types.BlockHeader,
     txIndex: int,
 ): T {.raises: [ValidationError].} =
+  let sender = tx.recoverSender().valueOr:
+    raise (ref ValidationError)(msg: "Invalid tx signature")
+
   TransactionObject(
     blockHash: Opt.some(w3Hash header.blockHash),
     blockNumber: Opt.some(eth_api_types.BlockNumber(header.number)),
-    `from`: w3Addr tx.getSender(),
+    `from`: sender,
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
     hash: w3Hash tx.rlpHash,
@@ -107,7 +110,6 @@ func init*(
     if fullTx:
       var i = 0
       for tx in body.transactions:
-        # ValidationError from tx.getSender in TransactionObject.init
         blockObject.transactions.add txOrHash(TransactionObject.init(tx, header, i))
         inc i
     else:
