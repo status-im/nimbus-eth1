@@ -22,6 +22,7 @@ import
   ../transaction/call_evm,
   ../evm/evm_errors,
   ./rpc_types,
+  ./rpc_utils,
   ./filters,
   ./server_api_helpers
 
@@ -258,3 +259,48 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       res    = rpcCallEvm(args, header, api.com).valueOr:
                  raise newException(ValueError, "rpcCallEvm error: " & $error.code)
     res.output
+
+  server.rpc("eth_getTransactionReceipt") do(data: Web3Hash) -> ReceiptObject:
+    ## Returns the receipt of a transaction by transaction hash.
+    ##
+    ## data: Hash of a transaction.
+    ## Returns ReceiptObject or nil when no receipt was found.
+    var
+      idx = 0'u64
+      prevGasUsed = GasInt(0)
+    
+    let 
+      txHash = data.ethHash()
+      (blockhash, txid) = api.chain.txRecords(txHash)
+
+    if blockhash == zeroHash32:
+      # Receipt in database
+      let txDetails = api.chain.db.getTransactionKey(txHash)
+      if txDetails.index < 0:
+        return nil
+
+      let header = api.chain.headerByNumber(txDetails.blockNumber).valueOr:
+        raise newException(ValueError, "Block not found")
+      var tx: Transaction
+      if not api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
+        return nil
+
+      for receipt in api.chain.db.getReceipts(header.receiptsRoot):
+        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+        prevGasUsed = receipt.cumulativeGasUsed
+        if idx == txDetails.index:
+          return populateReceipt(receipt, gasUsed, tx, txDetails.index, header)
+        idx.inc
+    else:
+      # Receipt in memory
+      let blkdesc = api.chain.memoryBlock(blockhash)
+      
+      while idx <= txid:
+        let receipt = blkdesc.receipts[idx]
+        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+        prevGasUsed = receipt.cumulativeGasUsed
+
+        if txid == idx:
+          return populateReceipt(receipt, gasUsed, blkdesc.blk.transactions[txid], txid, blkdesc.blk.header)
+
+        idx.inc

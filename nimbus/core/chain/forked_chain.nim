@@ -28,9 +28,9 @@ type
     forkJunction: BlockNumber
     hash: Hash256
 
-  BlockDesc = object
-    blk: EthBlock
-    receipts: seq[Receipt]
+  BlockDesc* = object
+    blk*: EthBlock
+    receipts*: seq[Receipt]
 
   BaseDesc = object
     hash: Hash256
@@ -45,6 +45,7 @@ type
     db: CoreDbRef
     com: CommonRef
     blocks: Table[Hash256, BlockDesc]
+    txRecords: Table[Hash256, (Hash256, uint64)]
     baseHash: Hash256
     baseHeader: BlockHeader
     cursorHash: Hash256
@@ -158,6 +159,9 @@ proc validateBlock(c: ForkedChainRef,
   if updateCursor:
     c.updateCursor(blk, move(res.value))
 
+  for i, tx in blk.transactions:
+    c.txRecords[rlpHash(tx)] = (blk.header.blockHash, uint64(i))
+
   ok()
 
 proc replaySegment(c: ForkedChainRef, target: Hash256) =
@@ -218,6 +222,8 @@ proc writeBaggage(c: ForkedChainRef, target: Hash256) =
         c.db.persistWithdrawals(
           header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
           blk.blk.withdrawals.get)
+      for tx in blk.blk.transactions:
+        c.txRecords.del(rlpHash(tx))
       prevHash = header.parentHash
 
 func updateBase(c: ForkedChainRef,
@@ -405,6 +411,7 @@ proc newForkedChain*(com: CommonRef,
     cursorHeader: baseHeader,
     extraValidation: extraValidation,
     baseDistance: baseDistance,
+    txRecords: initTable[Hash256, (Hash256, uint64)]()
   )
 
   # update global syncStart
@@ -570,6 +577,12 @@ func latestHash*(c: ForkedChainRef): Hash256 =
 func baseNumber*(c: ForkedChainRef): BlockNumber =
   c.baseHeader.number
 
+func txRecords*(c: ForkedChainRef, txHash: Hash256): (Hash256, uint64) =
+  c.txRecords.getOrDefault(txHash, (Hash256.default, 0'u64))
+
+func memoryBlock*(c: ForkedChainRef, blockHash: Hash256): BlockDesc =
+  c.blocks.getOrDefault(blockHash)
+
 proc latestBlock*(c: ForkedChainRef): EthBlock =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
@@ -633,7 +646,19 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash256): Opt[EthBlock] =
   do:
     return Opt.none(EthBlock)
 
-func blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[EthBlock, string] =
+proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[EthBlock, string] =
+  if number > c.cursorHeader.number:
+    return err("Requested block number not exists: " & $number)
+
+  if number < c.baseHeader.number:
+    var 
+      header: Header
+      body: BlockBody
+    if c.db.getBlockHeader(number, header) and c.db.getBlockBody(header, body):
+      return ok(EthBlock.init(move(header), move(body)))
+    else:
+      return err("Failed to get block with number: " & $number)
+
   shouldNotKeyError:
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:
