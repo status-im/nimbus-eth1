@@ -8,14 +8,15 @@
 {.push raises: [].}
 
 import
-  eth/rlp,
-  eth/common/eth_types_rlp,
+  eth/common/[headers_rlp],
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   ../../../common/common_types,
   ../history_content
 
-export ssz_serialization, merkleization, proofs, eth_types_rlp, BlockHash
+from eth/common/eth_types_rlp import rlpHash
+
+export ssz_serialization, merkleization, proofs, common_types
 
 # HistoricalHashesAccumulator, as per specification:
 # https://github.com/ethereum/portal-network-specs/blob/master/history/history-network.md#the-historical-hashes-accumulator
@@ -81,7 +82,7 @@ func getEpochRecordRoot*(headerRecords: openArray[HeaderRecord]): Digest =
 
   hash_tree_root(epochRecord)
 
-func updateAccumulator*(a: var HistoricalHashesAccumulator, header: BlockHeader) =
+func updateAccumulator*(a: var HistoricalHashesAccumulator, header: Header) =
   doAssert(
     header.number < mergeBlockNumber, "No post merge blocks for header accumulator"
   )
@@ -103,7 +104,7 @@ func updateAccumulator*(a: var HistoricalHashesAccumulator, header: BlockHeader)
     a.currentEpoch = EpochRecord.init(@[])
 
   let headerRecord = HeaderRecord(
-    blockHash: BlockHash(data: header.blockHash().data),
+    blockHash: header.rlpHash(),
     totalDifficulty: lastTotalDifficulty + header.difficulty,
   )
 
@@ -127,7 +128,7 @@ func finishAccumulator*(
 func getEpochIndex*(blockNumber: uint64): uint64 =
   blockNumber div EPOCH_SIZE
 
-func getEpochIndex*(header: BlockHeader): uint64 =
+func getEpochIndex*(header: Header): uint64 =
   ## Get the index for the historical epochs
   getEpochIndex(header.number)
 
@@ -135,26 +136,24 @@ func getHeaderRecordIndex*(blockNumber: uint64, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
   uint64(blockNumber - epochIndex * EPOCH_SIZE)
 
-func getHeaderRecordIndex*(header: BlockHeader, epochIndex: uint64): uint64 =
+func getHeaderRecordIndex*(header: Header, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
   getHeaderRecordIndex(header.number, epochIndex)
 
 func isPreMerge*(blockNumber: uint64): bool =
   blockNumber < mergeBlockNumber
 
-func isPreMerge*(header: BlockHeader): bool =
+func isPreMerge*(header: Header): bool =
   isPreMerge(header.number)
 
 func verifyProof(
-    a: FinishedHistoricalHashesAccumulator,
-    header: BlockHeader,
-    proof: openArray[Digest],
+    a: FinishedHistoricalHashesAccumulator, header: Header, proof: openArray[Digest]
 ): bool =
   let
     epochIndex = getEpochIndex(header)
     epochRecordHash = Digest(data: a.historicalEpochs[epochIndex])
 
-    leave = hash_tree_root(BlockHash(data: header.blockHash().data))
+    leave = hash_tree_root(header.rlpHash())
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
 
     gIndex = GeneralizedIndex(EPOCH_SIZE * 2 * 2 + (headerRecordIndex * 2))
@@ -163,7 +162,7 @@ func verifyProof(
 
 func verifyAccumulatorProof*(
     a: FinishedHistoricalHashesAccumulator,
-    header: BlockHeader,
+    header: Header,
     proof: HistoricalHashesAccumulatorProof,
 ): Result[void, string] =
   if header.isPreMerge():
@@ -177,7 +176,7 @@ func verifyAccumulatorProof*(
     err("Cannot verify post merge header with accumulator proof")
 
 func verifyHeader*(
-    a: FinishedHistoricalHashesAccumulator, header: BlockHeader, proof: BlockHeaderProof
+    a: FinishedHistoricalHashesAccumulator, header: Header, proof: BlockHeaderProof
 ): Result[void, string] =
   case proof.proofType
   of BlockHeaderProofType.historicalHashesAccumulatorProof:
@@ -195,7 +194,7 @@ func verifyHeader*(
       ok()
 
 func buildProof*(
-    header: BlockHeader, epochRecord: EpochRecord | EpochRecordCached
+    header: Header, epochRecord: EpochRecord | EpochRecordCached
 ): Result[HistoricalHashesAccumulatorProof, string] =
   doAssert(header.isPreMerge(), "Must be pre merge header")
 
@@ -211,7 +210,7 @@ func buildProof*(
   ok(proof)
 
 func buildHeaderWithProof*(
-    header: BlockHeader, epochRecord: EpochRecord | EpochRecordCached
+    header: Header, epochRecord: EpochRecord | EpochRecordCached
 ): Result[BlockHeaderWithProof, string] =
   let proof = ?buildProof(header, epochRecord)
 

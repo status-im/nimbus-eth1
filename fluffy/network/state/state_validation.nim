@@ -7,12 +7,14 @@
 
 {.push raises: [].}
 
-import results, eth/common, ../../common/common_utils, ./state_content, ./state_utils
+import results, eth/rlp, eth/common/hashes, ./state_content, ./state_utils
 
-export results, state_content
+export results, state_content, hashes
 
-proc hashEquals(value: TrieNode | Bytecode, expectedHash: KeccakHash): bool {.inline.} =
-  keccakHash(value.asSeq()) == expectedHash
+from eth/common/eth_types_rlp import rlpHash
+
+proc hashEquals(value: TrieNode | Bytecode, expectedHash: Hash32): bool {.inline.} =
+  keccak256(value.asSeq()) == expectedHash
 
 proc isValidNextNode(
     thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode
@@ -29,13 +31,13 @@ proc isValidNextNode(
       let hash = hashOrShortRlp.toBytes()
       if hash.len() != 32:
         return false
-      KeccakHash.fromBytes(hash)
+      Hash32.fromBytes(hash)
 
   nextNode.hashEquals(nextHash)
 
 # TODO: Refactor this function to improve maintainability
 proc validateTrieProof*(
-    expectedRootHash: Opt[KeccakHash],
+    expectedRootHash: Opt[Hash32],
     path: Nibbles,
     proof: TrieProof,
     allowKeyEndInPathForLeafs = false,
@@ -141,16 +143,14 @@ proc validateRetrieval*(
     err("hash of bytecode doesn't match the expected code hash")
 
 proc validateOffer*(
-    trustedStateRoot: Opt[KeccakHash],
-    key: AccountTrieNodeKey,
-    offer: AccountTrieNodeOffer,
+    trustedStateRoot: Opt[Hash32], key: AccountTrieNodeKey, offer: AccountTrieNodeOffer
 ): Result[void, string] =
   ?validateTrieProof(trustedStateRoot, key.path, offer.proof)
 
   validateRetrieval(key, offer.toRetrievalValue())
 
 proc validateOffer*(
-    trustedStateRoot: Opt[KeccakHash],
+    trustedStateRoot: Opt[Hash32],
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
 ): Result[void, string] =
@@ -168,7 +168,7 @@ proc validateOffer*(
   validateRetrieval(key, offer.toRetrievalValue())
 
 proc validateOffer*(
-    trustedStateRoot: Opt[KeccakHash], key: ContractCodeKey, offer: ContractCodeOffer
+    trustedStateRoot: Opt[Hash32], key: ContractCodeKey, offer: ContractCodeOffer
 ): Result[void, string] =
   ?validateTrieProof(
     trustedStateRoot,

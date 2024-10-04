@@ -14,7 +14,6 @@ import
   unittest2,
   yaml,
   beacon_chain/spec/datatypes/bellatrix,
-  ../../common/common_types,
   ../../network_metadata,
   ../../network/history/validation/block_proof_historical_roots,
   ../../eth_data/[yaml_utils, yaml_eth_types]
@@ -32,7 +31,7 @@ suite "History Block Proofs - Historical Roots - Test Vectors":
           testProof = YamlTestProofBellatrix.loadFromYaml(path).valueOr:
             raiseAssert "Cannot read test vector: " & error
 
-          blockHash = BlockHash.fromHex(testProof.execution_block_header)
+          blockHash = Digest.fromHex(testProof.execution_block_header)
           blockProof = BlockProofHistoricalRoots(
             beaconBlockProof:
               array[14, Digest].fromHex(testProof.historical_roots_proof),

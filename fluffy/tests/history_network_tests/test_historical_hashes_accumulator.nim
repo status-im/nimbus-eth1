@@ -12,7 +12,7 @@
 import
   unittest2,
   stint,
-  eth/common/eth_types_rlp,
+  eth/common/headers,
   ../../eth_data/history_data_json_store,
   ../../network/history/[history_content, validation/historical_hashes_accumulator],
   ./test_history_util
@@ -36,12 +36,12 @@ suite "Historical Hashes Accumulator":
         int(amount) - 1,
       ]
 
-    var headers: seq[BlockHeader]
+    var headers: seq[Header]
     for i in 0 ..< amount:
       # Note: These test headers will not be a blockchain, as the parent hashes
       # are not properly filled in. That's fine however for this test, as that
       # is not the way the headers are verified with the accumulator.
-      headers.add(BlockHeader(number: i, difficulty: 1.stuint(256)))
+      headers.add(Header(number: i, difficulty: 1.stuint(256)))
 
     let accumulatorRes = buildAccumulatorData(headers)
     check accumulatorRes.isOk()
@@ -58,7 +58,7 @@ suite "Historical Hashes Accumulator":
     block: # Test invalid headers
       # Post merge block number must fail (> than latest header in accumulator)
       var proof: HistoricalHashesAccumulatorProof
-      let header = BlockHeader(number: mergeBlockNumber)
+      let header = Header(number: mergeBlockNumber)
       check verifyAccumulatorProof(accumulator, header, proof).isErr()
 
       # Test altered block headers by altering the difficulty
@@ -67,7 +67,7 @@ suite "Historical Hashes Accumulator":
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches
-        let header = BlockHeader(number: i.uint64, difficulty: 2.stuint(256))
+        let header = Header(number: i.uint64, difficulty: 2.stuint(256))
 
         check verifyAccumulatorProof(accumulator, header, proof.get()).isErr()
 
@@ -81,9 +81,9 @@ suite "Historical Hashes Accumulator":
     # Less headers than needed to finish the accumulator
     const amount = mergeBlockNumber - 1
 
-    var headers: seq[BlockHeader]
+    var headers: seq[Header]
     for i in 0 ..< amount:
-      headers.add(BlockHeader(number: i, difficulty: 1.stuint(256)))
+      headers.add(Header(number: i, difficulty: 1.stuint(256)))
 
     let accumulatorRes = buildAccumulator(headers)
 

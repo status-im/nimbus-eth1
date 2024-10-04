@@ -16,7 +16,6 @@ import
   yaml,
   ssz_serialization,
   beacon_chain/spec/datatypes/capella,
-  ../../common/common_types,
   ../../network/history/validation/block_proof_historical_summaries,
   ../../network/beacon/beacon_init_loader,
   ../../eth_data/[yaml_utils, yaml_eth_types]
@@ -61,7 +60,7 @@ suite "History Block Proofs - Historical Summaries - Test Vectors":
           testProof = YamlTestProof.loadFromYaml(path).valueOr:
             raiseAssert "Cannot read test vector: " & error
 
-          blockHash = BlockHash.fromHex(testProof.execution_block_header)
+          blockHash = Digest.fromHex(testProof.execution_block_header)
           blockProof = BlockProofHistoricalSummaries(
             beaconBlockProof:
               array[13, Digest].fromHex(testProof.historical_summaries_proof),

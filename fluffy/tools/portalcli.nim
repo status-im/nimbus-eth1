@@ -17,7 +17,7 @@ import
   stew/byteutils,
   results,
   nimcrypto/[hash, sha2],
-  eth/[keys, net/nat],
+  eth/[common/keys, net/nat],
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,

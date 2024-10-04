@@ -20,7 +20,7 @@ export eth_api_types
 createRpcSigsFromNim(RpcClient):
   proc web3_clientVersion(): string
   proc eth_chainId(): Quantity
-  proc eth_getBlockByHash(data: BlockHash, fullTransactions: bool): Opt[BlockObject]
+  proc eth_getBlockByHash(data: Hash32, fullTransactions: bool): Opt[BlockObject]
   proc eth_getBlockByNumber(
     blockId: BlockIdentifier, fullTransactions: bool
   ): Opt[BlockObject]
@@ -29,12 +29,12 @@ createRpcSigsFromNim(RpcClient):
     blockId: BlockIdentifier, quantity: Quantity
   ): BlockObject
 
-  proc eth_getBlockTransactionCountByHash(data: BlockHash): Quantity
-  proc eth_getTransactionReceipt(data: TxHash): Opt[ReceiptObject]
+  proc eth_getBlockTransactionCountByHash(data: Hash32): Quantity
+  proc eth_getTransactionReceipt(data: Hash32): Opt[ReceiptObject]
   proc eth_getLogs(filterOptions: FilterOptions): seq[LogObject]
 
   proc eth_getBlockReceipts(blockId: string): Opt[seq[ReceiptObject]]
-  proc eth_getBlockReceipts(blockId: BlockNumber): Opt[seq[ReceiptObject]]
+  proc eth_getBlockReceipts(blockId: Quantity): Opt[seq[ReceiptObject]]
   proc eth_getBlockReceipts(blockId: RtBlockIdentifier): Opt[seq[ReceiptObject]]
 
   proc eth_getBalance(data: Address, blockId: BlockIdentifier): UInt256

@@ -10,7 +10,6 @@ import
   results,
   unittest2,
   stew/byteutils,
-  eth/common,
   ../../network/state/[state_content, state_gossip],
   ./state_test_helpers
 

@@ -13,12 +13,13 @@ import
   stew/[endians2, io2, byteutils, arrayops],
   stint,
   snappy,
-  eth/common/eth_types_rlp,
+  eth/common/[headers, blocks_rlp, receipts_rlp],
   beacon_chain/spec/beacon_time,
   ssz_serialization,
   ncli/e2store,
   ../network/history/validation/historical_hashes_accumulator
 
+from eth/common/eth_types_rlp import rlpHash
 from nimcrypto/hash import fromHex
 from ../../nimbus/utils/utils import calcTxRoot, calcReceiptsRoot
 
@@ -216,7 +217,7 @@ proc update*(
     g: var Era1Group,
     f: IoHandle,
     blockNumber: uint64,
-    header: BlockHeader,
+    header: headers.Header,
     body: BlockBody,
     receipts: seq[Receipt],
     totalDifficulty: UInt256,
@@ -264,7 +265,7 @@ type
     blockIdx*: BlockIndex
 
   BlockTuple* =
-    tuple[header: BlockHeader, body: BlockBody, receipts: seq[Receipt], td: UInt256]
+    tuple[header: headers.Header, body: BlockBody, receipts: seq[Receipt], td: UInt256]
 
 proc open*(_: type Era1File, name: string): Result[Era1File, string] =
   var f = Opt[IoHandle].ok(?openFile(name, {OpenFlags.Read}).mapErr(ioErrorMsg))
@@ -299,14 +300,14 @@ proc skipRecord*(f: Era1File): Result[void, string] =
 
   f[].handle.get().skipRecord()
 
-proc getBlockHeader(f: Era1File): Result[BlockHeader, string] =
+proc getBlockHeader(f: Era1File): Result[headers.Header, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
   if header.typ != CompressedHeader:
     return err("Invalid era file: didn't find block header at index position")
 
-  fromCompressedRlpBytes(bytes, BlockHeader)
+  fromCompressedRlpBytes(bytes, headers.Header)
 
 proc getBlockBody(f: Era1File): Result[BlockBody, string] =
   var bytes: seq[byte]
@@ -338,7 +339,7 @@ proc getTotalDifficulty(f: Era1File): Result[UInt256, string] =
 
   ok(UInt256.fromBytesLE(bytes))
 
-proc getNextEthBlock*(f: Era1File): Result[EthBlock, string] =
+proc getNextEthBlock*(f: Era1File): Result[Block, string] =
   doAssert not isNil(f) and f[].handle.isSome
 
   var
@@ -347,9 +348,9 @@ proc getNextEthBlock*(f: Era1File): Result[EthBlock, string] =
   ?skipRecord(f) # receipts
   ?skipRecord(f) # totalDifficulty
 
-  ok(EthBlock.init(move(header), move(body)))
+  ok(Block.init(move(header), move(body)))
 
-proc getEthBlock*(f: Era1File, blockNumber: uint64): Result[EthBlock, string] =
+proc getEthBlock*(f: Era1File, blockNumber: uint64): Result[Block, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -386,7 +387,7 @@ proc getBlockTuple*(f: Era1File, blockNumber: uint64): Result[BlockTuple, string
 
   getNextBlockTuple(f)
 
-proc getBlockHeader*(f: Era1File, blockNumber: uint64): Result[BlockHeader, string] =
+proc getBlockHeader*(f: Era1File, blockNumber: uint64): Result[headers.Header, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -410,7 +411,7 @@ proc getTotalDifficulty*(f: Era1File, blockNumber: uint64): Result[UInt256, stri
 
   ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
 
-  ?skipRecord(f) # BlockHeader
+  ?skipRecord(f) # Header
   ?skipRecord(f) # BlockBody
   ?skipRecord(f) # Receipts
   getTotalDifficulty(f)
@@ -450,10 +451,7 @@ proc buildAccumulator*(f: Era1File): Result[EpochRecordCached, string] =
       totalDifficulty = ?f.getTotalDifficulty(blockNumber)
 
     headerRecords.add(
-      HeaderRecord(
-        blockHash: BlockHash(data: blockHeader.blockHash().data),
-        totalDifficulty: totalDifficulty,
-      )
+      HeaderRecord(blockHash: blockHeader.rlpHash(), totalDifficulty: totalDifficulty)
     )
 
   ok(EpochRecordCached.init(headerRecords))
@@ -482,10 +480,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
       return err("Invalid receipts root")
 
     headerRecords.add(
-      HeaderRecord(
-        blockHash: BlockHash(data: blockHeader.blockHash().data),
-        totalDifficulty: totalDifficulty,
-      )
+      HeaderRecord(blockHash: blockHeader.rlpHash(), totalDifficulty: totalDifficulty)
     )
 
   let expectedRoot = ?f.getAccumulatorRoot()
@@ -496,7 +491,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
   else:
     ok(accumulatorRoot)
 
-iterator era1BlockHeaders*(f: Era1File): BlockHeader =
+iterator era1BlockHeaders*(f: Era1File): headers.Header =
   let
     startNumber = f.blockIdx.startNumber
     endNumber = f.blockIdx.endNumber()

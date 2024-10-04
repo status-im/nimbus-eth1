@@ -13,9 +13,11 @@ import
   results,
   stew/[byteutils, io2],
   chronicles,
-  eth/[rlp, common/eth_types],
+  eth/common/[hashes, blocks, receipts, headers_rlp],
   ../../nimbus/common/[chain_config, genesis],
   ../network/history/[history_content, validation/historical_hashes_accumulator]
+
+from eth/common/eth_types_rlp import rlpHash
 
 export results, tables
 
@@ -63,7 +65,7 @@ func readBlockData*(
   try:
     # If wanted the hash for the corresponding header can be verified
     if verify:
-      if keccakHash(blockData.header.hexToSeqByte()) != blockHash:
+      if keccak256(blockData.header.hexToSeqByte()) != blockHash:
         return err("Data is not matching hash, number " & $blockData.number)
 
     block:
@@ -107,7 +109,7 @@ iterator blocksContent*(
         let contentId = history_content.toContentId(ckBytes)
         yield (contentId, ckBytes.asSeq(), value[1])
 
-func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
+func readBlockHeader*(blockData: BlockData): Result[Header, string] =
   var rlp =
     try:
       rlpFromHex(blockData.header)
@@ -117,7 +119,7 @@ func readBlockHeader*(blockData: BlockData): Result[BlockHeader, string] =
       )
 
   try:
-    return ok(rlp.read(BlockHeader))
+    return ok(rlp.read(Header))
   except RlpError as e:
     return err("Invalid header, number " & $blockData.number & ": " & e.msg)
 
@@ -135,7 +137,7 @@ func readHeaderData*(
   try:
     # If wanted the hash for the corresponding header can be verified
     if verify:
-      if keccakHash(blockData.header.hexToSeqByte()) != blockHash:
+      if keccak256(blockData.header.hexToSeqByte()) != blockHash:
         return err("Data is not matching hash, number " & $blockData.number)
 
     let contentKey =
@@ -155,7 +157,7 @@ iterator headers*(blockData: BlockDataTable, verify = false): (ContentKey, seq[b
     else:
       error "Failed reading header from block data", error = res.error
 
-proc getGenesisHeader*(id: NetworkId = MainNet): BlockHeader =
+proc getGenesisHeader*(id: NetworkId = MainNet): Header =
   let params =
     try:
       networkParams(id)
@@ -207,9 +209,7 @@ type
     receipts: string
     number: uint64
 
-proc writeHeaderRecord*(
-    writer: var JsonWriter, header: BlockHeader
-) {.raises: [IOError].} =
+proc writeHeaderRecord*(writer: var JsonWriter, header: Header) {.raises: [IOError].} =
   let
     dataRecord =
       HeaderRecord(header: rlp.encode(header).to0xHex(), number: header.number)
@@ -219,7 +219,7 @@ proc writeHeaderRecord*(
   writer.writeField(headerHash, dataRecord)
 
 proc writeBlockRecord*(
-    writer: var JsonWriter, header: BlockHeader, body: BlockBody, receipts: seq[Receipt]
+    writer: var JsonWriter, header: Header, body: BlockBody, receipts: seq[Receipt]
 ) {.raises: [IOError].} =
   let
     dataRecord = BlockRecord(

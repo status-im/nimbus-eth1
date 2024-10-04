@@ -11,8 +11,6 @@ import
   results,
   chronos,
   chronicles,
-  eth/common/eth_hash,
-  eth/common,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../history/history_network,
@@ -133,14 +131,14 @@ proc getContractCode*(
 
 proc getStateRootByBlockNumOrHash*(
     n: StateNetwork, blockNumOrHash: uint64 | BlockHash
-): Future[Opt[KeccakHash]] {.async: (raises: [CancelledError]).} =
+): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
   if n.historyNetwork.isNone():
     warn "History network is not available"
-    return Opt.none(KeccakHash)
+    return Opt.none(Hash32)
 
   let header = (await n.historyNetwork.get().getVerifiedBlockHeader(blockNumOrHash)).valueOr:
     warn "Failed to get block header from history", blockNumOrHash
-    return Opt.none(KeccakHash)
+    return Opt.none(Hash32)
 
   Opt.some(header.stateRoot)
 
@@ -162,7 +160,7 @@ proc processOffer*(
       validateOffer(Opt.some(stateRoot), contentKey, contentValue)
     else:
       # Skip state root validation
-      validateOffer(Opt.none(KeccakHash), contentKey, contentValue)
+      validateOffer(Opt.none(Hash32), contentKey, contentValue)
 
   if res.isErr():
     return err("Offered content failed validation: " & res.error())

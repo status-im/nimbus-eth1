@@ -41,11 +41,9 @@ import
   chronicles,
   chronos,
   confutils,
-  eth/[keys, rlp, trie, trie/db],
-  # Need to rename this because of web3 ethtypes and ambigious indentifier mess
-  # for `BlockHeader`.
-  eth/common/eth_types as etypes,
-  eth/common/eth_types_rlp,
+  eth/[rlp, trie, trie/db],
+  eth/common/keys,
+  eth/common/[base, headers_rlp, blocks_rlp],
   beacon_chain/el/[el_manager, engine_api_conversions],
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/[eth2_network, topic_params],
@@ -61,19 +59,12 @@ import
   ../../common/common_types,
   ./beacon_lc_bridge_conf
 
-from web3/primitives as web3types import BlockHash
-
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
-type Hash256 = etypes.Hash256
-
-template asEthHash(hash: web3types.BlockHash): Hash256 =
-  Hash32(distinctBase(hash))
-
 proc calculateTransactionData(
     items: openArray[TypedTransaction]
-): Hash256 {.raises: [].} =
+): Hash32 {.raises: [].} =
   var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, t in items:
     try:
@@ -87,14 +78,14 @@ proc calculateTransactionData(
 
 # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
 # could get the Roots through there instead.
-proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash256 {.raises: [].} =
+proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash32 {.raises: [].} =
   var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
   for i, w in items:
     try:
-      let withdrawal = etypes.Withdrawal(
+      let withdrawal = blocks.Withdrawal(
         index: distinctBase(w.index),
         validatorIndex: distinctBase(w.validatorIndex),
-        address: distinctBase(w.address).to(EthAddress),
+        address: w.address,
         amount: distinctBase(w.amount),
       )
       tr.put(rlp.encode(uint64 i), rlp.encode(withdrawal))
@@ -109,24 +100,24 @@ proc asPortalBlockData*(
   let
     txRoot = calculateTransactionData(payload.transactions)
 
-    header = etypes.BlockHeader(
-      parentHash: payload.parentHash.asEthHash,
+    header = Header(
+      parentHash: payload.parentHash,
       ommersHash: EMPTY_UNCLE_HASH,
       coinbase: EthAddress payload.feeRecipient,
-      stateRoot: payload.stateRoot.asEthHash,
+      stateRoot: payload.stateRoot,
       transactionsRoot: txRoot,
-      receiptsRoot: payload.receiptsRoot.asEthHash,
+      receiptsRoot: payload.receiptsRoot,
       logsBloom: distinctBase(payload.logsBloom).to(Bloom),
       difficulty: default(DifficultyInt),
       number: payload.blockNumber.distinctBase,
       gasLimit: distinctBase(payload.gasLimit),
       gasUsed: distinctBase(payload.gasUsed),
       timestamp: payload.timestamp.EthTime,
-      extraData: bytes payload.extraData,
+      extraData: payload.extraData.data,
       mixHash: payload.prevRandao,
-      nonce: default(BlockNonce),
+      nonce: default(Bytes8),
       baseFeePerGas: Opt.some(payload.baseFeePerGas),
-      withdrawalsRoot: Opt.none(Hash256),
+      withdrawalsRoot: Opt.none(Hash32),
       blobGasUsed: Opt.none(uint64),
       excessBlobGas: Opt.none(uint64),
     )
@@ -142,34 +133,32 @@ proc asPortalBlockData*(
   let body =
     PortalBlockBodyLegacy(transactions: transactions, uncles: Uncles(@[byte 0xc0]))
 
-  let hash = common_types.BlockHash(data: distinctBase(payload.blockHash))
-
-  (hash, headerWithProof, body)
+  (payload.blockHash, headerWithProof, body)
 
 proc asPortalBlockData*(
     payload: ExecutionPayloadV2 | ExecutionPayloadV3 | ExecutionPayloadV4
-): (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyShanghai) =
+): (Hash32, BlockHeaderWithProof, PortalBlockBodyShanghai) =
   let
     txRoot = calculateTransactionData(payload.transactions)
     withdrawalsRoot = Opt.some(calculateWithdrawalsRoot(payload.withdrawals))
 
     # TODO: adjust blobGasUsed & excessBlobGas according to deneb fork!
-    header = etypes.BlockHeader(
-      parentHash: payload.parentHash.asEthHash,
+    header = Header(
+      parentHash: payload.parentHash,
       ommersHash: EMPTY_UNCLE_HASH,
       coinbase: EthAddress payload.feeRecipient,
-      stateRoot: payload.stateRoot.asEthHash,
+      stateRoot: payload.stateRoot,
       transactionsRoot: txRoot,
-      receiptsRoot: payload.receiptsRoot.asEthHash,
+      receiptsRoot: payload.receiptsRoot,
       logsBloom: distinctBase(payload.logsBloom).to(Bloom),
       difficulty: default(DifficultyInt),
       number: payload.blockNumber.distinctBase,
       gasLimit: distinctBase(payload.gasLimit),
       gasUsed: distinctBase(payload.gasUsed),
       timestamp: payload.timestamp.EthTime,
-      extraData: bytes payload.extraData,
+      extraData: payload.extraData.data,
       mixHash: payload.prevRandao,
-      nonce: default(BlockNonce),
+      nonce: default(Bytes8),
       baseFeePerGas: Opt.some(payload.baseFeePerGas),
       withdrawalsRoot: withdrawalsRoot,
       blobGasUsed: Opt.none(uint64),
@@ -200,9 +189,7 @@ proc asPortalBlockData*(
     transactions: transactions, uncles: Uncles(@[byte 0xc0]), withdrawals: withdrawals
   )
 
-  let hash = common_types.BlockHash(data: distinctBase(payload.blockHash))
-
-  (hash, headerWithProof, body)
+  (payload.blockHash, headerWithProof, body)
 
 proc run(config: BeaconBridgeConf) {.raises: [CatchableError].} =
   # Required as both Eth2Node and LightClient requires correct config type

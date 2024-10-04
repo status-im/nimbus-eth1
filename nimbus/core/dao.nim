@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import eth/common, ../db/ledger
+import stint, eth/common/addresses, ../db/ledger
 
 const
   # DAOForkBlockExtra is the block header extra-data field to set for the DAO fork
@@ -21,9 +21,9 @@ const
   DAOForkExtraRange* = 10
 
   # DAORefundContract is the address of the refund contract to send DAO balances to.
-  DAORefundContract: EthAddress = address"0xbf4ed7b27f1d666546e30d74d50d173d20bca754"
+  DAORefundContract*: Address = address"0xbf4ed7b27f1d666546e30d74d50d173d20bca754"
 
-  DAODrainList = [
+  DAODrainList* = [
     address"0xd4fe7bc31cedb7bfb8a345f31e668033056b2728",
     address"0xb3fb0e5aba0e20e5c49d252dfd30e102b171a425",
     address"0x2c19c7f9ae8b751e37aeb2d93a699722395ae18f",

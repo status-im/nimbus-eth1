@@ -10,15 +10,9 @@
 
 {.push raises: [].}
 
-import
-  nimcrypto/hash,
-  results,
-  stint,
-  eth/common/eth_types,
-  ssz_serialization,
-  ../../../common/common_types
+import results, ssz_serialization, ../../../common/common_types
 
-export ssz_serialization, common_types, hash, results
+export ssz_serialization, common_types, results
 
 const
   MAX_PACKED_NIBBLES_LEN = 33

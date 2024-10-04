@@ -8,7 +8,7 @@
 import
   unittest2,
   stew/byteutils,
-  eth/common,
+  eth/common/addresses,
   ../../network/state/state_content,
   ../../eth_data/yaml_utils
 
@@ -59,7 +59,7 @@ suite "State Content Keys":
         raiseAssert "Cannot read test vector: " & error
 
       packedNibbles = packNibbles(testCase.path)
-      addressHash = EthAddress.fromHex(testCase.address).keccakHash()
+      addressHash = Address.fromHex(testCase.address).data.keccak256()
       nodeHash = NodeHash.fromHex(testCase.node_hash)
       contentKey =
         ContractTrieNodeKey.init(addressHash, packedNibbles, nodeHash).toContentKey()
@@ -91,7 +91,7 @@ suite "State Content Keys":
       testCase = YamlContractBytecodeKey.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      addressHash = EthAddress.fromHex(testCase.address).keccakHash()
+      addressHash = Address.fromHex(testCase.address).data.keccak256()
       codeHash = CodeHash.fromHex(testCase.code_hash)
       contentKey = ContractCodeKey.init(addressHash, codeHash).toContentKey()
       encoded = contentKey.encode()

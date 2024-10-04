@@ -16,9 +16,8 @@ import
   stew/byteutils,
   web3/[eth_api, eth_api_types],
   results,
-  eth/common/[eth_types, eth_types_rlp],
+  eth/common/[addresses_rlp, hashes_rlp],
   ../../../nimbus/common/chain_config,
-  ../../common/common_utils,
   ../../rpc/rpc_calls/rpc_trace_calls,
   ../../rpc/portal_rpc_client,
   ../../network/state/[state_content, state_gossip],
@@ -27,11 +26,11 @@ import
 
 type BlockData = object
   blockNumber: uint64
-  blockHash: KeccakHash
+  blockHash: Hash32
   miner: EthAddress
   uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
-  parentStateRoot: KeccakHash
-  stateRoot: KeccakHash
+  parentStateRoot: Hash32
+  stateRoot: Hash32
   stateDiffs: seq[TransactionDiff]
 
 type BlockOffersRef = ref object
@@ -122,11 +121,11 @@ proc runBackfillCollectBlockDataLoop(
 
       let blockData = BlockData(
         blockNumber: currentBlockNumber,
-        blockHash: KeccakHash.fromBytes(blockObject.hash.bytes()),
+        blockHash: blockObject.hash,
         miner: blockObject.miner.EthAddress,
         uncles: uncleBlocks.mapIt((it.miner.EthAddress, it.number.uint64)),
-        parentStateRoot: KeccakHash.fromBytes(parentStateRoot.bytes()),
-        stateRoot: KeccakHash.fromBytes(blockObject.stateRoot.bytes()),
+        parentStateRoot: parentStateRoot,
+        stateRoot: blockObject.stateRoot,
         stateDiffs: stateDiffs,
       )
       db.putBlockData(currentBlockNumber, blockData)

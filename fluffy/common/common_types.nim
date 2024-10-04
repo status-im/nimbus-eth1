@@ -7,9 +7,9 @@
 
 {.push raises: [].}
 
-import results, ssz_serialization, stew/byteutils, eth/rlp, nimcrypto/hash
+import results, ssz_serialization, stew/byteutils, eth/rlp, eth/common/hashes
 
-export hash, ssz_serialization
+export hashes, ssz_serialization
 
 type
   Bytes2* = ByteVector[2]
@@ -17,7 +17,16 @@ type
 
   ContentId* = UInt256
   ContentKeyByteList* = ByteList[2048] # The encoded content key
-  BlockHash* = MDigest[32 * 8] # Bytes32
+  BlockHash* = Hash32
+
+func fromSszBytes*(T: type Hash32, data: openArray[byte]): T {.raises: [SszError].} =
+  if data.len != sizeof(result):
+    raiseIncorrectSize T
+
+  T.copyFrom(data)
+
+template toSszType*(v: Hash32): array[32, byte] =
+  v.data
 
 func `$`*(x: ByteList[2048]): string =
   x.asSeq.to0xHex()

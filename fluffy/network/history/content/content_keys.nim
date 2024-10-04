@@ -9,7 +9,6 @@
 
 import
   nimcrypto/[sha2, hash],
-  stew/byteutils,
   results,
   stint,
   ssz_serialization,
@@ -80,9 +79,6 @@ func toContentId*(contentKey: ContentKeyByteList): ContentId =
 
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
-
-func `$`*(x: BlockHash): string =
-  "0x" & x.data.toHex()
 
 func `$`*(x: BlockKey): string =
   "blockHash: " & $x.blockHash

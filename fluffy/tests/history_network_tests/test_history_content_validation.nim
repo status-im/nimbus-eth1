@@ -14,7 +14,7 @@ import
   stint,
   stew/byteutils,
   results,
-  eth/[common/eth_types, rlp],
+  eth/common/headers_rlp,
   ../../common/common_types,
   ../../eth_data/history_data_json_store,
   ../../network/history/history_network
@@ -42,7 +42,7 @@ suite "History Content Values Validation":
     blockHash = BlockHash.fromHex(blockHashStr)
 
     blockHeader =
-      decodeRlp(blockHeaderBytes, BlockHeader).expect("Valid header should decode")
+      decodeRlp(blockHeaderBytes, Header).expect("Valid header should decode")
     blockBody = validateBlockBodyBytes(blockBodyBytes, blockHeader).expect(
         "Should be Valid decoded block body"
       )

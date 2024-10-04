@@ -43,8 +43,9 @@ import
   json_serialization,
   faststreams,
   chronicles,
-  eth/[common, rlp],
   chronos,
+  eth/rlp,
+  eth/common/headers_rlp,
   eth/common/eth_types_json_serialization,
   json_rpc/rpcclient,
   snappy,
@@ -54,14 +55,14 @@ import
   ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter]
 
+from eth/common/eth_types_rlp import rlpHash
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
-from ../../nimbus/utils/utils import calcTxRoot, calcreceiptsRoot
 
 chronicles.formatIt(IoErrorCode):
   $it
 
-proc downloadHeader(client: RpcClient, i: uint64): BlockHeader =
+proc downloadHeader(client: RpcClient, i: uint64): headers.Header =
   try:
     let jsonHeader = requestHeader(i, some(client))
     parseBlockHeader(jsonHeader)
@@ -221,7 +222,7 @@ proc cmdExportEra1(config: ExporterConf) =
 
         headerRecords.add(
           historical_hashes_accumulator.HeaderRecord(
-            blockHash: blck.header.blockHash(), totalDifficulty: ttd
+            blockHash: blck.header.rlpHash(), totalDifficulty: ttd
           )
         )
 
@@ -312,7 +313,7 @@ when isMainModule:
       proc exportEpochHeaders(file: string, epoch: uint64): Result[void, string] =
         # Downloading headers from JSON RPC endpoint
         info "Requesting epoch headers", epoch
-        var headers: seq[BlockHeader]
+        var headers: seq[headers.Header]
         for j in 0 ..< EPOCH_SIZE.uint64:
           debug "Requesting block", number = j
           let header = client.downloadHeader(epoch * EPOCH_SIZE + j)
@@ -357,7 +358,7 @@ when isMainModule:
             let
               blockHeader =
                 try:
-                  rlp.decode(data, BlockHeader)
+                  rlp.decode(data, headers.Header)
                 except RlpError as e:
                   return err("Invalid block header: " & e.msg)
 
@@ -417,7 +418,7 @@ when isMainModule:
             if header.typ == ExecutionBlockHeaderRecord:
               let blockHeader =
                 try:
-                  rlp.decode(data, BlockHeader)
+                  rlp.decode(data, headers.Header)
                 except RlpError as e:
                   return err("Invalid block header in " & file & ": " & e.msg)
 
@@ -522,7 +523,7 @@ when isMainModule:
       ): Result[void, string] =
         # Downloading headers from JSON RPC endpoint
         info "Requesting headers", startBlockNumber, endBlockNumber
-        var headers: seq[BlockHeader]
+        var headers: seq[headers.Header]
         for j in startBlockNumber .. endBlockNumber:
           debug "Requesting block", number = j
           let header = client.downloadHeader(j)
@@ -595,7 +596,7 @@ when isMainModule:
             content = headerWithProof.get()
             contentKey = ContentKey(
               contentType: blockHeader,
-              blockHeaderKey: BlockKey(blockHash: header.blockHash()),
+              blockHeaderKey: BlockKey(blockHash: header.rlpHash()),
             )
             encodedContentKey = history_content.encode(contentKey)
             encodedContent = SSZ.encode(content)
