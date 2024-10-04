@@ -44,7 +44,7 @@ func init*(
   TransactionObject(
     blockHash: Opt.some(w3Hash header.blockHash),
     blockNumber: Opt.some(eth_api_types.BlockNumber(header.number)),
-    `from`: w3Addr tx.recoverSender().valueOr:
+    `from`: tx.recoverSender().valueOr:
       raise (ref ValidationError)(msg: "Invalid tx signature"),
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
