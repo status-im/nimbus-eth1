@@ -654,10 +654,10 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     return false
 
   # mixHash == prevRandao
-  if newHeader.mixHash != cl.prevRandaoHistory[cl.latestHeadNumber]:
+  if newHeader.mixHash != Bytes32 cl.prevRandaoHistory[cl.latestHeadNumber]:
     error "CLMocker: Client produced a new header with incorrect mixHash",
-      get = newHeader.mixHash.data.toHex,
-      expect = cl.prevRandaoHistory[cl.latestHeadNumber].data.toHex
+      get = newHeader.mixHash,
+      expect = cl.prevRandaoHistory[cl.latestHeadNumber]
     return false
 
   # nonce == 0x0000000000000000

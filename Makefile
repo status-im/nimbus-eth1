@@ -60,13 +60,10 @@ EXCLUDED_NIM_PACKAGES := 	\
 # debugging tools + testing tools
 TOOLS := \
 	test_tools_build \
-	persist \
-	hunter \
 	nrpc
 TOOLS_DIRS := \
 	nrpc \
-	tests \
-	premix
+	tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 

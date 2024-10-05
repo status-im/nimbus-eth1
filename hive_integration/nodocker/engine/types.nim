@@ -79,10 +79,10 @@ const ZeroAddr* = default(EthAddress)
 func toHash*(x: UInt256): common.Hash256 =
   common.Hash32(x.toByteArrayBE)
 
-func timestampToBeaconRoot*(timestamp: Quantity): Web3FixedBytes[32] =
+func timestampToBeaconRoot*(timestamp: Quantity): Hash32 =
   # Generates a deterministic hash from the timestamp
   let h = sha2.sha256.digest(timestamp.uint64.toBytesBE)
-  Web3FixedBytes[32](h.data)
+  Hash32(h.data)
 
 proc randomBytes*(_: type common.Hash256): common.Hash256 =
   doAssert randomBytes(result.data) == 32

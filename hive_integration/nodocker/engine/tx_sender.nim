@@ -198,8 +198,8 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
       ),
       networkPayload: NetworkPayload(
         blobs: blobData.blobs.mapIt(it.bytes),
-        commitments: blobData.commitments.mapIt(it.bytes),
-        proofs: blobData.proofs.mapIt(it.bytes),
+        commitments: blobData.commitments.mapIt(KzgCommitment it.bytes),
+        proofs: blobData.proofs.mapIt(KzgProof it.bytes),
       )
     )
   else:
@@ -342,8 +342,8 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
     tx: signTransaction(unsignedTx, params.key),
     networkPayload: NetworkPayload(
       blobs      : data.blobs.mapIt(it.bytes),
-      commitments: data.commitments.mapIt(it.bytes),
-      proofs     : data.proofs.mapIt(it.bytes),
+      commitments: data.commitments.mapIt(KzgCommitment it.bytes),
+      proofs     : data.proofs.mapIt(KzgProof it.bytes),
     ),
   )
 

@@ -23,6 +23,7 @@ import
     core/tx_pool/tx_item,
     core/block_import,
     rpc,
+    sync/handlers,
     beacon/beacon_engine,
     beacon/web3_eth_conv,
     common

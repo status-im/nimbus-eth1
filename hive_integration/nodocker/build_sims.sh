@@ -21,7 +21,7 @@ NIM_FLAGS="c -d:release"
 
 echo "## ${1}" > simulators.md
 
-# more suites: engine, graphql, rpc
+# more suites: graphql, rpc
 suites=(consensus pyspec engine)
 for suite in "${suites[@]}"
 do
