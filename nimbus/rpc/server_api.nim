@@ -315,7 +315,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     ## Returns the amount of gas used.
     let
       header   = api.headerFromTag(blockId("latest")).valueOr:
-          raise newException(ValueError, "Block not found")
+        raise newException(ValueError, "Block not found")
       gasUsed  = rpcEstimateGas(args, header, api.chain.com, DEFAULT_RPC_GAS_CAP).valueOr:
-                   raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
+        raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
     w3Qty(gasUsed)
