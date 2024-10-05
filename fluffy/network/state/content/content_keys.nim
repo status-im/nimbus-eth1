@@ -14,16 +14,16 @@ import
   nimcrypto/[hash, sha2, keccak],
   results,
   stint,
-  eth/common/eth_types,
+  eth/common/hashes,
   ssz_serialization,
   ./nibbles
 
 export ssz_serialization, common_types, hash, results
 
 type
-  NodeHash* = KeccakHash
-  CodeHash* = KeccakHash
-  AddressHash* = KeccakHash
+  NodeHash* = Hash32
+  CodeHash* = Hash32
+  AddressHash* = Hash32
 
   ContentType* = enum
     # Note: Need to add this unused value as a case object with an enum without
@@ -63,17 +63,6 @@ type
       contractCodeKey*: ContractCodeKey
 
   ContentKeyType* = AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey
-
-func fromSszBytes*(
-    T: type KeccakHash, data: openArray[byte]
-): T {.raises: [SszError].} =
-  if data.len != sizeof(result):
-    raiseIncorrectSize T
-
-  T.copyFrom(data)
-
-template toSszType*(v: KeccakHash): array[32, byte] =
-  v.data
 
 func init*(
     T: type AccountTrieNodeKey, path: Nibbles, nodeHash: NodeHash

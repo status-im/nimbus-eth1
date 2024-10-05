@@ -13,7 +13,7 @@ import
   confutils,
   confutils/std/net,
   chronicles,
-  eth/keys,
+  eth/common/keys,
   eth/p2p/discoveryv5/[enr, node, routing_table],
   nimcrypto/hash,
   stew/byteutils,

@@ -11,7 +11,7 @@ import
   results,
   chronos,
   chronicles,
-  eth/common,
+  eth/common/hashes,
   ../wire/portal_protocol,
   ./state_content,
   ./state_utils
@@ -71,7 +71,7 @@ func getParent*(offerWithKey: AccountTrieOfferWithKey): AccountTrieOfferWithKey 
     (key, offer) = offerWithKey
     parent = offer.proof.withPath(key.path).getParent()
     parentKey =
-      AccountTrieNodeKey.init(parent.path, keccakHash(parent.proof[^1].asSeq()))
+      AccountTrieNodeKey.init(parent.path, keccak256(parent.proof[^1].asSeq()))
     parentOffer = AccountTrieNodeOffer.init(parent.proof, offer.blockHash)
 
   parentOffer.withKey(parentKey)
@@ -81,7 +81,7 @@ func getParent*(offerWithKey: ContractTrieOfferWithKey): ContractTrieOfferWithKe
     (key, offer) = offerWithKey
     parent = offer.storageProof.withPath(key.path).getParent()
     parentKey = ContractTrieNodeKey.init(
-      key.addressHash, parent.path, keccakHash(parent.proof[^1].asSeq())
+      key.addressHash, parent.path, keccak256(parent.proof[^1].asSeq())
     )
     parentOffer =
       ContractTrieNodeOffer.init(parent.proof, offer.accountProof, offer.blockHash)

@@ -245,7 +245,9 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
       # End while
 
   # Note that `runStart()` was dispatched in `onPeerConnected()`
-  worker.ctrl.stopped = true
+  if worker.ctrl.running:
+    # So shutdown was called
+    worker.ctrl.stopped = true
   worker.runStop()
 
 
@@ -282,8 +284,12 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     buddy.worker.ctrl.zombie = true
     return
 
-  # Check for table overflow. An overflow might happen if there are zombies
-  # in the table (though preventing them from re-connecting for a while.)
+  # Check for table overflow which might happen any time, not only if there are
+  # to many zombies in the table (which are prevented from being re-accepted
+  # while keept in the local table.)
+  #
+  # In the past, one could not rely on the peer pool for having the number of
+  # connections limited.
   if dsc.ctx.buddiesMax <= dsc.buddies.len:
     let
       leastVal = dsc.buddies.shift.value # unqueue first/least item
@@ -300,8 +306,8 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       # somehow hanging runners.
       trace "Peer table full! Dequeuing least used entry", oldest,
         nPeers, nWorkers=dsc.buddies.len, maxWorkers
+      # Setting to `zombie` will trigger the worker to terminate (if any.)
       oldest.ctrl.zombie = true
-      oldest.runStop()
 
   # Add peer entry
   discard dsc.buddies.lruAppend(peer.key, buddy, dsc.ctx.buddiesMax)

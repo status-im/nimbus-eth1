@@ -11,7 +11,7 @@ import
   stew/[byteutils, io2],
   chronicles,
   results,
-  eth/[rlp, common/eth_types],
+  eth/common/headers_rlp,
   ncli/e2store,
   ../network/history/[history_content, validation/historical_hashes_accumulator]
 
@@ -57,13 +57,13 @@ const
   # first ~1M (?) block headers, after that there is no gain so we don't do it.
   ExecutionBlockHeaderRecord* = [byte 0xFF, 0x00]
 
-proc readBlockHeaders*(file: string): Result[seq[BlockHeader], string] =
+proc readBlockHeaders*(file: string): Result[seq[headers.Header], string] =
   let fh = ?openFile(file, {OpenFlags.Read}).mapErr(toString)
   defer:
     discard closeFile(fh)
 
   var data: seq[byte]
-  var blockHeaders: seq[BlockHeader]
+  var blockHeaders: seq[headers.Header]
   while true:
     let header = readRecord(fh, data).valueOr:
       break
@@ -71,7 +71,7 @@ proc readBlockHeaders*(file: string): Result[seq[BlockHeader], string] =
     if header.typ == ExecutionBlockHeaderRecord:
       let blockHeader =
         try:
-          rlp.decode(data, BlockHeader)
+          rlp.decode(data, headers.Header)
         except RlpError as e:
           return err("Invalid block header in " & file & ": " & e.msg)
 

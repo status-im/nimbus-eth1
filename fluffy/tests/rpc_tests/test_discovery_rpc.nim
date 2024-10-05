@@ -14,7 +14,7 @@ import
   json_rpc/clients/httpclient,
   stint,
   eth/p2p/discoveryv5/enr,
-  eth/keys,
+  eth/common/keys,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../rpc/rpc_discovery_api,
   ../test_helpers

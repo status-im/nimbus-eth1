@@ -10,12 +10,11 @@ import
   testutils/unittests,
   chronos,
   stew/byteutils,
-  eth/common,
+  eth/common/[hashes, headers_rlp],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
-  ../../common/common_utils,
   ../../network/wire/[portal_protocol, portal_stream],
-  ../../network/state/[state_content, state_network],
+  ../../network/state/[state_content, state_network, state_utils],
   ../../database/content_db,
   ./state_test_helpers
 
@@ -36,8 +35,7 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -59,7 +57,7 @@ procSuite "State Network - Offer Content":
       ).isErr()
 
       # set bad state root
-      let badStateRoot = KeccakHash.fromBytes(
+      let badStateRoot = Hash32.fromBytes(
         "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
       )
       stateNode1.mockStateRootLookup(contentValue.blockHash, badStateRoot)
@@ -105,8 +103,7 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -128,7 +125,7 @@ procSuite "State Network - Offer Content":
       ).isErr()
 
       # set bad state root
-      let badStateRoot = KeccakHash.fromBytes(
+      let badStateRoot = Hash32.fromBytes(
         "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
       )
       stateNode1.mockStateRootLookup(contentValue.blockHash, badStateRoot)
@@ -175,8 +172,7 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -198,7 +194,7 @@ procSuite "State Network - Offer Content":
       ).isErr()
 
       # set bad state root
-      let badStateRoot = KeccakHash.fromBytes(
+      let badStateRoot = Hash32.fromBytes(
         "0xBAD7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61".hexToSeqByte()
       )
       stateNode1.mockStateRootLookup(contentValue.blockHash, badStateRoot)
@@ -246,8 +242,7 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -296,8 +291,7 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -347,8 +341,7 @@ procSuite "State Network - Offer Content":
 
     for testData in testCase:
       let
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)

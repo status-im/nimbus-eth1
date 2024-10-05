@@ -10,7 +10,7 @@
 
 {.push raises: [].}
 
-import results, eth/common/eth_types, ssz_serialization, ../../../common/common_types
+import results, ssz_serialization, ../../../common/common_types
 
 export ssz_serialization, common_types, hash, results
 

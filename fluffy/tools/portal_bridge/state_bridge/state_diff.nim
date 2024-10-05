@@ -11,7 +11,7 @@ import
   chronicles,
   stew/byteutils,
   stint,
-  eth/common/[eth_types, eth_types_rlp],
+  eth/common/base,
   ../../../rpc/rpc_calls/rpc_trace_calls,
   ../portal_bridge_common
 
@@ -33,7 +33,7 @@ type
   SlotDiff* = tuple[slotKey: UInt256, slotValueDiff: StateValueDiff[UInt256]]
 
   AccountDiff* = object
-    address*: EthAddress
+    address*: Address
     balanceDiff*: StateValueDiff[UInt256]
     nonceDiff*: StateValueDiff[AccountNonce]
     storageDiff*: seq[SlotDiff]
@@ -88,7 +88,7 @@ proc toTransactionDiff(
       )
 
     let accountDiff = AccountDiff(
-      address: EthAddress.fromHex(addrJson),
+      address: Address.fromHex(addrJson),
       balanceDiff: toStateValueDiff(accJson["balance"], UInt256),
       nonceDiff: toStateValueDiff(accJson["nonce"], AccountNonce),
       storageDiff: storageDiff,

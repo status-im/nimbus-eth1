@@ -21,9 +21,9 @@ import
   ssz_serialization,
   metrics,
   faststreams,
+  minilru,
   eth/rlp,
-  eth/p2p/discoveryv5/
-    [protocol, node, enr, routing_table, random2, nodes_verification, lru],
+  eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
   "."/[portal_stream, portal_protocol_config],
   ./messages
 

@@ -14,7 +14,8 @@ import
   json_rpc/clients/httpclient,
   stint,
   eth/p2p/discoveryv5/enr,
-  eth/keys,
+  eth/common/keys,
+  eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../network/history/
@@ -22,6 +23,8 @@ import
   ../../database/content_db,
   ../../rpc/[portal_rpc_client, rpc_portal_api],
   ../test_helpers
+
+from eth/common/eth_types_rlp import rlpHash
 
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
@@ -56,7 +59,7 @@ proc stop(hn: HistoryNode) {.async.} =
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
   return hn.historyNetwork.contentDB.get(contentId).isSome()
 
-proc store*(hn: HistoryNode, blockHash: BlockHash, blockHeader: BlockHeader) =
+proc store*(hn: HistoryNode, blockHash: BlockHash, blockHeader: Header) =
   let
     headerRlp = rlp.encode(blockHeader)
     blockHeaderWithProof = BlockHeaderWithProof(
@@ -122,8 +125,8 @@ procSuite "Portal RPC Client":
   asyncTest "Test historyGetBlockHeader with validation":
     let
       tc = await setupTest(rng)
-      blockHeader = BlockHeader(number: 100)
-      blockHash = blockHeader.blockHash()
+      blockHeader = Header(number: 100)
+      blockHash = blockHeader.rlpHash()
 
     # Test content not found
     block:
@@ -145,7 +148,7 @@ procSuite "Portal RPC Client":
 
     # Test content validation failed
     block:
-      tc.historyNode.store(blockHash, BlockHeader()) # bad header
+      tc.historyNode.store(blockHash, Header()) # bad header
 
       let blockHeaderRes =
         await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
@@ -158,8 +161,8 @@ procSuite "Portal RPC Client":
   asyncTest "Test historyGetBlockHeader without validation":
     let
       tc = await setupTest(rng)
-      blockHeader = BlockHeader(number: 200)
-      blockHash = blockHeader.blockHash()
+      blockHeader = Header(number: 200)
+      blockHash = blockHeader.rlpHash()
 
     # Test content not found
     block:
@@ -184,9 +187,9 @@ procSuite "Portal RPC Client":
   asyncTest "Test historyGetBlockBody with validation":
     let
       tc = await setupTest(rng)
-      blockHeader = BlockHeader(number: 300)
+      blockHeader = Header(number: 300)
       blockBody = BlockBody()
-      blockHash = blockHeader.blockHash()
+      blockHash = blockHeader.rlpHash()
 
     # Test content not found
     block:
@@ -212,9 +215,9 @@ procSuite "Portal RPC Client":
   asyncTest "Test historyGetBlockBody without validation":
     let
       tc = await setupTest(rng)
-      blockHeader = BlockHeader(number: 300)
+      blockHeader = Header(number: 300)
       blockBody = BlockBody()
-      blockHash = blockHeader.blockHash()
+      blockHash = blockHeader.rlpHash()
 
     # Test content not found
     block:
@@ -240,9 +243,9 @@ procSuite "Portal RPC Client":
   asyncTest "Test historyGetReceipts with validation":
     let
       tc = await setupTest(rng)
-      blockHeader = BlockHeader(number: 300)
+      blockHeader = Header(number: 300)
       receipts = @[Receipt()]
-      blockHash = blockHeader.blockHash()
+      blockHash = blockHeader.rlpHash()
 
     # Test content not found
     block:
@@ -268,9 +271,9 @@ procSuite "Portal RPC Client":
   asyncTest "Test historyGetReceipts without validation":
     let
       tc = await setupTest(rng)
-      blockHeader = BlockHeader(number: 300)
+      blockHeader = Header(number: 300)
       receipts = @[Receipt()]
-      blockHash = blockHeader.blockHash()
+      blockHash = blockHeader.rlpHash()
 
     # Test content not found
     block:

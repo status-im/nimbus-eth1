@@ -7,9 +7,18 @@
 
 {.push raises: [].}
 
-import results, eth/common, ./state_content
+import
+  results,
+  stew/arrayops,
+  eth/rlp,
+  eth/common/[hashes, addresses, base_rlp, accounts_rlp],
+  ./state_content
 
-export results, common
+export results, hashes, accounts, addresses, rlp
+
+func fromBytes*(T: type Hash32, hash: openArray[byte]): T =
+  doAssert(hash.len() == 32)
+  Hash32(array[32, byte].initCopyFrom(hash))
 
 func decodePrefix*(nodePrefixRlp: Rlp): (byte, bool, Nibbles) {.raises: RlpError.} =
   doAssert(not nodePrefixRlp.isEmpty())
@@ -84,11 +93,11 @@ func removeLeafKeyEndNibbles*(
 
   unpackedNibbles.dropN(leafPrefix.len()).packNibbles()
 
-func toPath*(hash: KeccakHash): Nibbles {.inline.} =
+func toPath*(hash: Hash32): Nibbles {.inline.} =
   Nibbles.init(hash.data, isEven = true)
 
-func toPath*(address: EthAddress): Nibbles {.inline.} =
-  keccakHash(address).toPath()
+func toPath*(address: Address): Nibbles {.inline.} =
+  keccak256(address.data).toPath()
 
 func toPath*(slotKey: UInt256): Nibbles {.inline.} =
-  keccakHash(toBytesBE(slotKey)).toPath()
+  keccak256(toBytesBE(slotKey)).toPath()

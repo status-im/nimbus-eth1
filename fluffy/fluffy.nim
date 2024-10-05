@@ -19,7 +19,7 @@ import
   json_rpc/clients/httpclient,
   results,
   stew/[byteutils, io2],
-  eth/keys,
+  eth/common/keys,
   eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./conf,
