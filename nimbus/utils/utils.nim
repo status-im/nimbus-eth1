@@ -105,6 +105,12 @@ proc short*(h: Hash256): string =
   bytes[^3..^1] = h.data[^3..^1]
   bytes.toHex
 
+proc short*(h: Bytes32): string =
+  var bytes: array[6, byte]
+  bytes[0..2] = h.data[0..2]
+  bytes[^3..^1] = h.data[^3..^1]
+  bytes.toHex
+
 func short*(x: Duration): string =
   let parts = x.toParts
   if parts[Hours] > 0:

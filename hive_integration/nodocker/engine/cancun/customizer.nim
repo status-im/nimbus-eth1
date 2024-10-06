@@ -126,7 +126,7 @@ method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAt
     customPayloadAttributes.timestamp = w3Qty cust.timestamp.get
 
   if cust.prevRandao.isSome:
-    customPayloadAttributes.prevRandao = w3Hash cust.prevRandao.get
+    customPayloadAttributes.prevRandao = cust.prevRandao.get
 
   if cust.suggestedFeeRecipient.isSome:
     customPayloadAttributes.suggestedFeeRecipient = w3Addr cust.suggestedFeeRecipient.get
@@ -338,7 +338,7 @@ func getTimestamp*(cust: CustomPayloadData, basePayload: ExecutionPayload): uint
 proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): ExecutableData {.gcsafe.} =
   var customHeader = blockHeader(data.basePayload, beaconRoot = data.beaconRoot)
   if cust.transactions.isSome:
-    customHeader.txRoot = calcTxRoot(cust.transactions.get)
+    customHeader.transactionsRoot = calcTxRoot(cust.transactions.get)
 
   # Overwrite custom information
   if cust.parentHash.isSome:
@@ -533,13 +533,13 @@ type
     ExtraVersionedHashes
     InvalidWithdrawals
 
-func scramble(data: Web3Hash): Opt[common.Hash256] =
+func scramble(data: Web3Hash): Opt[Hash32] =
   var h = ethHash data
   h.data[^1] = byte(255 - h.data[^1])
   Opt.some(h)
 
-func scramble(data: common.Hash256): Opt[common.Hash256] =
-  var h = data
+func scramble(data: Bytes32): Opt[Hash32] =
+  var h = Hash32 data
   h.data[0] = byte(255 - h.data[0])
   Opt.some(h)
 
@@ -585,9 +585,9 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
   of InvalidPrevRandao:
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.
-    let randomHash = common.Hash256.randomBytes()
+    let randomHash = common.Hash32.randomBytes()
     customPayloadMod = CustomPayloadData(
-      prevRandao: Opt.some(randomHash),
+      prevRandao: Opt.some(Bytes32 randomHash.data),
     )
   of InvalidParentBeaconBlockRoot:
     doAssert(data.beaconRoot.isSome,

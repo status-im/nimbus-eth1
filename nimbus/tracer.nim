@@ -23,7 +23,6 @@ import
   ./db/[core_db, ledger],
   ./evm/[code_bytes, state, types],
   ./evm/tracer/legacy_tracer,
-  ./launcher,
   ./transaction,
   ./utils/utils
 
@@ -352,44 +351,6 @@ proc traceTransactionsImpl(
     result.add traceTransactionImpl(
       com, header, transactions, i.uint64, {DisableState})
 
-
-proc dumpDebuggingMetaDataImpl(
-    vmState: BaseVMState;
-    blk: EthBlock;
-    launchDebugger = true;
-      ) {.raises: [CatchableError].} =
-  template header: Header = blk.header
-
-  let
-    cc = activate CaptCtxRef.init(vmState.com, header)
-    blockNumber = header.number
-    bloom = createBloom(vmState.receipts)
-
-  defer: cc.release()
-
-  let blockSummary = %{
-    "receiptsRoot": %("0x" & toHex(calcReceiptsRoot(vmState.receipts).data)),
-    "stateRoot": %("0x" & toHex(vmState.stateDB.rootHash.data)),
-    "logsBloom": %("0x" & toHex(bloom))
-  }
-
-  var metaData = %{
-    "blockNumber": %blockNumber.toHex,
-    "txTraces": traceTransactionsImpl(vmState.com, header, blk.transactions),
-    "stateDump": dumpBlockStateImpl(vmState.com, blk),
-    "blockTrace": traceBlockImpl(vmState.com, blk, {DisableState}),
-    "receipts": toJson(vmState.receipts),
-    "block": blockSummary
-  }
-
-  metaData.dumpMemoryDB(cc.cpt)
-
-  let jsonFileName = "debug" & $blockNumber & ".json"
-  if launchDebugger:
-    launchPremix(jsonFileName, metaData)
-  else:
-    writeFile(jsonFileName, metaData.pretty())
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -442,14 +403,6 @@ proc traceTransactions*(
       ): JsonNode =
   "traceTransactions".safeTracer:
     result = com.traceTransactionsImpl(header, transactions)
-
-proc dumpDebuggingMetaData*(
-    vmState: BaseVMState;
-    blk: EthBlock;
-    launchDebugger = true;
-      ) =
-  "dumpDebuggingMetaData".safeTracer:
-    vmState.dumpDebuggingMetaDataImpl(blk, launchDebugger)
 
 # ------------------------------------------------------------------------------
 # End

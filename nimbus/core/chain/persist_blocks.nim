@@ -158,12 +158,6 @@ proc persistBlocksImpl(
       skipUncles = NoPersistUncles in flags,
     )
 
-    # when defined(nimbusDumpDebuggingMetaData):
-    #   if validationResult == ValidationResult.Error and
-    #      body.transactions.calcTxRoot == header.txRoot:
-    #     vmState.dumpDebuggingMetaData(header, body)
-    #     warn "Validation error. Debugging metadata dumped."
-
     let blockHash = header.blockHash()
     if NoPersistHeader notin flags:
       if not c.db.persistHeader(
