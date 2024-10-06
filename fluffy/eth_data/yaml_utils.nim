@@ -9,7 +9,10 @@
 
 import std/streams, yaml, results, yaml/parser, yaml/presenter
 
-export yaml
+# `except error` is Nim v2.0.10 workaround to avoid ambiguity with
+# chronicles.error. If Nim version later than v2.0.10 fix this, it
+# can be removed.
+export yaml except error
 
 type YamlPortalContent* = object
   content_key*: string
