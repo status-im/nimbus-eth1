@@ -80,7 +80,8 @@ func readBlockData*(
       res.add((contentKey, blockData.body.hexToSeqByte()))
 
     block:
-      let contentKey = ContentKey(contentType: receipts, receiptsKey: contentKeyType)
+      let contentKey = ContentKey(
+        contentType: ContentType.receipts, receiptsKey: contentKeyType)
 
       res.add((contentKey, blockData.receipts.hexToSeqByte()))
   except ValueError as e:
