@@ -33,11 +33,11 @@ type
     alloc*      : GenesisAlloc
     number*     : BlockNumber
     gasUser*    : GasInt
-    parentHash* : Hash256
+    parentHash* : Hash32
     baseFeePerGas*: Opt[UInt256]   # EIP-1559
     blobGasUsed*  : Opt[uint64]    # EIP-4844
     excessBlobGas*: Opt[uint64]    # EIP-4844
-    parentBeaconBlockRoot*: Opt[Hash256]   # EIP-4788
+    parentBeaconBlockRoot*: Opt[Hash32]   # EIP-4788
 
   GenesisAlloc* = Table[EthAddress, GenesisAccount]
   GenesisStorage* = Table[UInt256, UInt256]
@@ -208,10 +208,10 @@ proc readValue(reader: var JsonReader[JGenesis], value: var ChainId)
     {.gcsafe, raises: [SerializationError, IOError].} =
   value = reader.readValue(int).ChainId
 
-proc readValue(reader: var JsonReader[JGenesis], value: var Hash256)
+proc readValue(reader: var JsonReader[JGenesis], value: var Hash32)
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
-    value = Hash256.fromHex(reader.readValue(string))
+    value = Hash32.fromHex(reader.readValue(string))
 
 proc readValue(reader: var JsonReader[JGenesis], value: var BlockNonce)
     {.gcsafe, raises: [SerializationError, IOError].} =

@@ -107,8 +107,8 @@ proc init*(x: typedesc[HostContext], host: ptr nimbus_host_interface, context: e
 proc getTxContext*(ctx: HostContext): nimbus_tx_context =
   ctx.host.get_tx_context(ctx.context)
 
-proc getBlockHash*(ctx: HostContext, number: BlockNumber): Hash256 =
-  Hash256.fromEvmc ctx.host.get_block_hash(ctx.context, number.int64)
+proc getBlockHash*(ctx: HostContext, number: BlockNumber): Hash32 =
+  Hash32.fromEvmc ctx.host.get_block_hash(ctx.context, number.int64)
 
 proc accountExists*(ctx: HostContext, address: EthAddress): bool =
   var address = toEvmc(address)
@@ -136,9 +136,9 @@ proc getCodeSize*(ctx: HostContext, address: EthAddress): uint =
   var address = toEvmc(address)
   ctx.host.get_code_size(ctx.context, address.addr)
 
-proc getCodeHash*(ctx: HostContext, address: EthAddress): Hash256 =
+proc getCodeHash*(ctx: HostContext, address: EthAddress): Hash32 =
   var address = toEvmc(address)
-  Hash256.fromEvmc ctx.host.get_code_hash(ctx.context, address.addr)
+  Hash32.fromEvmc ctx.host.get_code_hash(ctx.context, address.addr)
 
 proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[byte] =
   let size = ctx.getCodeSize(address).int

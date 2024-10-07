@@ -41,9 +41,9 @@ type
 
     # Packer results
     blockValue: UInt256
-    stateRoot: Hash256
-    txRoot: Hash256
-    receiptsRoot: Hash256
+    stateRoot: Hash32
+    txRoot: Hash32
+    receiptsRoot: Hash32
     logsBloom: BloomFilter
 
   GrabResult = enum

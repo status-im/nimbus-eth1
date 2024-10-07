@@ -40,10 +40,10 @@ type
 
     # ----- primary tables ------
 
-    byRejects*: KeyedQueue[Hash256,TxItemRef] ##\
+    byRejects*: KeyedQueue[Hash32,TxItemRef] ##\
       ## Rejects queue and waste basket, queued by disposal event
 
-    byItemID*: KeyedQueue[Hash256,TxItemRef] ##\
+    byItemID*: KeyedQueue[Hash32,TxItemRef] ##\
       ## Primary table containing all tx items, queued by arrival event
 
     # ----- index tables for byItemID ------

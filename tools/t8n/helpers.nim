@@ -64,14 +64,14 @@ proc fromJson(T: type Bytes32, n: JsonNode): Bytes32 =
 proc fromJson(T: type Bytes32, n: JsonNode, field: string): Bytes32 =
   fromJson(T, n[field])
 
-proc fromJson(T: type Hash256, n: JsonNode): Hash256 =
+proc fromJson(T: type Hash32, n: JsonNode): Hash32 =
   var num = n.getStr()
   num.removePrefix("0x")
   if num.len < 64:
     num = repeat('0', 64 - num.len) & num
   Hash32(hexToByteArray(num, 32))
 
-proc fromJson(T: type Hash256, n: JsonNode, field: string): Hash256 =
+proc fromJson(T: type Hash32, n: JsonNode, field: string): Hash32 =
   fromJson(T, n[field])
 
 template fromJson(T: type EthTime, n: JsonNode, field: string): EthTime =
@@ -187,7 +187,7 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   optional(ctx.env, DifficultyInt, parentDifficulty)
   omitZero(ctx.env, EthTime, parentTimestamp)
   optional(ctx.env, UInt256, currentBaseFee)
-  omitZero(ctx.env, Hash256, parentUncleHash)
+  omitZero(ctx.env, Hash32, parentUncleHash)
   optional(ctx.env, UInt256, parentBaseFee)
   optional(ctx.env, GasInt, parentGasUsed)
   optional(ctx.env, GasInt, parentGasLimit)
@@ -195,12 +195,12 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   optional(ctx.env, uint64, currentExcessBlobGas)
   optional(ctx.env, uint64, parentBlobGasUsed)
   optional(ctx.env, uint64, parentExcessBlobGas)
-  optional(ctx.env, Hash256, parentBeaconBlockRoot)
+  optional(ctx.env, Hash32, parentBeaconBlockRoot)
 
   if n.hasKey("blockHashes"):
     let w = n["blockHashes"]
     for k, v in w:
-      ctx.env.blockHashes[parseHexOrInt[uint64](k)] = Hash256.fromHex(v.getStr())
+      ctx.env.blockHashes[parseHexOrInt[uint64](k)] = Hash32.fromHex(v.getStr())
 
   if n.hasKey("ommers"):
     let w = n["ommers"]
@@ -356,7 +356,7 @@ proc `@@`(x: uint64 | int64 | int): JsonNode =
 proc `@@`(x: UInt256): JsonNode =
   %("0x" & x.toHex)
 
-proc `@@`(x: Hash256): JsonNode =
+proc `@@`(x: Hash32): JsonNode =
   %("0x" & x.data.toHex)
 
 proc `@@`*(x: Blob): JsonNode =
@@ -405,7 +405,7 @@ proc `@@`(x: Log): JsonNode =
 
 proc `@@`(x: TxReceipt): JsonNode =
   result = %{
-    "root"             : if x.root == default(Hash256): %("0x") else: @@(x.root),
+    "root"             : if x.root == default(Hash32): %("0x") else: @@(x.root),
     "status"           : @@(x.status),
     "cumulativeGasUsed": @@(x.cumulativeGasUsed),
     "logsBloom"        : @@(x.logsBloom),

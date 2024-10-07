@@ -52,9 +52,9 @@ type
     #     without tracking too much bad data.
 
     # Ephemeral cache to track invalid blocks and their hit count
-    invalidBlocksHits: Table[common.Hash256, int]
+    invalidBlocksHits: Table[common.Hash32, int]
     # Ephemeral cache to track invalid tipsets and their bad ancestor
-    invalidTipsets   : Table[common.Hash256, common.BlockHeader]
+    invalidTipsets   : Table[common.Hash32, common.BlockHeader]
 
 {.push gcsafe, raises:[].}
 
@@ -127,7 +127,7 @@ proc finalizePoS*(ben: BeaconEngineRef) =
   ben.merge.finalizePoS()
 
 proc put*(ben: BeaconEngineRef,
-          hash: common.Hash256, header: common.BlockHeader) =
+          hash: common.Hash32, header: common.BlockHeader) =
   ben.queue.put(hash, header)
 
 proc put*(ben: BeaconEngineRef, id: PayloadID,
@@ -165,7 +165,7 @@ func posFinalized*(ben: BeaconEngineRef): bool =
   ## PoSFinalized reports whether the chain has entered the PoS stage.
   ben.merge.posFinalized
 
-proc get*(ben: BeaconEngineRef, hash: common.Hash256,
+proc get*(ben: BeaconEngineRef, hash: common.Hash32,
           header: var common.BlockHeader): bool =
   ben.queue.get(hash, header)
 
@@ -251,14 +251,14 @@ proc generatePayload*(ben: BeaconEngineRef,
       blobsBundle: blobsBundle,
       blockValue: bundle.blockValue)
 
-proc setInvalidAncestor*(ben: BeaconEngineRef, header: common.BlockHeader, blockHash: common.Hash256) =
+proc setInvalidAncestor*(ben: BeaconEngineRef, header: common.BlockHeader, blockHash: common.Hash32) =
   ben.invalidBlocksHits[blockHash] = 1
   ben.invalidTipsets[blockHash] = header
 
 # checkInvalidAncestor checks whether the specified chain end links to a known
 # bad ancestor. If yes, it constructs the payload failure response to return.
 proc checkInvalidAncestor*(ben: BeaconEngineRef,
-                           check, head: common.Hash256): Opt[PayloadStatusV1] =
+                           check, head: common.Hash32): Opt[PayloadStatusV1] =
   # If the hash to check is unknown, return valid
   ben.invalidTipsets.withValue(check, invalid) do:
     # If the bad hash was hit too many times, evict it and try to reprocess in
@@ -272,7 +272,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 
       ben.invalidBlocksHits.del(badHash)
 
-      var deleted = newSeq[common.Hash256]()
+      var deleted = newSeq[common.Hash32]()
       for descendant, badHeader in ben.invalidTipsets:
         if badHeader.blockHash == badHash:
           deleted.add descendant
@@ -289,7 +289,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 
       if ben.invalidTipsets.len >= invalidTipsetsCap:
         let size = invalidTipsetsCap - ben.invalidTipsets.len
-        var deleted = newSeqOfCap[common.Hash256](size)
+        var deleted = newSeqOfCap[common.Hash32](size)
         for key in ben.invalidTipsets.keys:
           deleted.add key
           if deleted.len >= size:
@@ -305,7 +305,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
     var header: common.BlockHeader
     if ben.com.db.getBlockHeader(invalid.parentHash, header):
       if header.difficulty != 0.u256:
-        lastValid = default(common.Hash256)
+        lastValid = default(common.Hash32)
 
     return Opt.some invalidStatus(lastValid, "links to previously rejected block")
 

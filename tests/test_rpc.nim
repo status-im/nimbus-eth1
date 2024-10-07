@@ -32,12 +32,12 @@ const
     rc
 
 type
-  Hash256 = common.Hash256
+  Hash32 = common.Hash32
   BlockHeader = common.BlockHeader
 
   TestEnv = object
-    txHash: Hash256
-    blockHash: Hash256
+    txHash: Hash32
+    blockHash: Hash32
 
 func ethAddr(x: string): EthAddress =
   hexToByteArray[20](x)
@@ -63,8 +63,8 @@ proc verifyAccountProof(trustedStateRoot: Web3Hash, res: ProofResponse): MptProo
     value = rlp.encode(Account(
         nonce: res.nonce.uint64,
         balance: res.balance,
-        storageRoot: fromHex(Hash256, res.storageHash.toHex()),
-        codeHash: fromHex(Hash256, res.codeHash.toHex())))
+        storageRoot: fromHex(Hash32, res.storageHash.toHex()),
+        codeHash: fromHex(Hash32, res.codeHash.toHex())))
 
   verifyMptProof(
     seq[seq[byte]](res.accountProof),
@@ -195,7 +195,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
     gasUsed     : vmState.cumulativeGasUsed,
     timestamp   : timeStamp
     #extraData:     Blob
-    #mixHash:     Hash256
+    #mixHash:     Hash32
     #nonce:         BlockNonce
     )
 

@@ -242,7 +242,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
     result.contractAddress = Opt.some(tx.creationAddress(sender[]))
 
   for log in receipt.logs:
-    # TODO: Work everywhere with either `Hash256` as topic or `array[32, byte]`
+    # TODO: Work everywhere with either `Hash32` as topic or `array[32, byte]`
     var topics: seq[Web3Topic]
     for topic in log.topics:
       topics.add Web3Topic(topic)

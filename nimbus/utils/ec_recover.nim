@@ -36,7 +36,7 @@ const
 
 type
   EcKey* = ##\
-    ## Internal key used for the LRU cache (derived from Hash256).
+    ## Internal key used for the LRU cache (derived from Hash32).
     array[32,byte]
 
   EcAddrResult* = ##\
@@ -60,12 +60,12 @@ proc encodePreSealed(header: BlockHeader): seq[byte] =
   rlpHeader.extraData.setLen(header.extraData.len - EXTRA_SEAL)
   rlp.encode(rlpHeader)
 
-proc hashPreSealed(header: BlockHeader): Hash256 =
+proc hashPreSealed(header: BlockHeader): Hash32 =
   ## Returns the hash of a block prior to it being sealed.
   keccakHash header.encodePreSealed
 
 
-proc recoverImpl(rawSig: openArray[byte]; msg: Hash256): EcAddrResult =
+proc recoverImpl(rawSig: openArray[byte]; msg: Hash32): EcAddrResult =
   ## Extract account address from the last 65 bytes of the `extraData` argument
   ## (which is typically the bock header field with the same name.) The second
   ## argument `hash` is used to extract the intermediate public key. Typically,
@@ -142,7 +142,7 @@ proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult =
   var hdr = header
   er.ecRecover(hdr)
 
-proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult =
+proc ecRecover*(er: var EcRecover; hash: Hash32): EcAddrResult =
   ## Variant of `ecRecover()` for hash only. Will only succeed it the
   ## argument hash is uk the LRU queue.
   let rc = er.q.lruFetch(hash.data)

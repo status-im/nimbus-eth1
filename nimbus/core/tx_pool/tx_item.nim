@@ -34,7 +34,7 @@ type
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
     tx:        PooledTransaction     ## Transaction data
-    itemID:    Hash256               ## Transaction hash
+    itemID:    Hash32               ## Transaction hash
     timeStamp: Time                  ## Time when added
     sender:    EthAddress            ## Sender account address
     info:      string                ## Whatever
@@ -59,7 +59,7 @@ proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
   item.timeStamp = utcTime()
   item.reject = txInfoOk
 
-proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash256;
+proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash32;
           status: TxItemStatus; info: string): Result[T,void] {.gcsafe,raises: [].} =
   ## Create item descriptor.
   let rc = tx.tx.recoverSender()
@@ -93,11 +93,11 @@ proc hash*(item: TxItemRef): Hash =
 # Public functions, transaction getters
 # ------------------------------------------------------------------------------
 
-proc itemID*(tx: Transaction): Hash256 =
+proc itemID*(tx: Transaction): Hash32 =
   ## Getter, transaction ID
   tx.rlpHash
 
-proc itemID*(tx: PooledTransaction): Hash256 =
+proc itemID*(tx: PooledTransaction): Hash32 =
   ## Getter, transaction ID
   tx.tx.rlpHash
 
@@ -129,7 +129,7 @@ proc info*(item: TxItemRef): string =
   ## Getter
   item.info
 
-proc itemID*(item: TxItemRef): Hash256 =
+proc itemID*(item: TxItemRef): Hash32 =
   ## Getter
   item.itemID
 

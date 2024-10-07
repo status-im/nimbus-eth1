@@ -58,7 +58,7 @@ proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
     hexToByteArray(node["value"].getStr(), x.data)
     doAssert(x.to0xHex == toLowerAscii(node["value"].getStr()), name)
 
-proc fromJson*(n: JsonNode, name: string, x: var (Hash256|Bytes32)) =
+proc fromJson*(n: JsonNode, name: string, x: var (Hash32|Bytes32)) =
   let node = n[name]
   if node.kind == JString:
     hexToByteArray(node.getStr(), x.data)
@@ -231,7 +231,7 @@ proc parseReceipt*(n: JsonNode): Receipt =
       raise newException(ValueError, "Unknown receipt type")
 
   if n.hasKey("root"):
-    var hash: Hash256
+    var hash: Hash32
     n.fromJson "root", hash
     rec.isHash = true
     rec.hash = hash
@@ -246,7 +246,7 @@ proc parseReceipt*(n: JsonNode): Receipt =
   rec.logs = parseLogs(n["logs"])
   rec
 
-proc headerHash*(n: JsonNode): Hash256 =
+proc headerHash*(n: JsonNode): Hash32 =
   n.fromJson "hash", result
 
 proc parseAccount*(n: JsonNode): Account =

@@ -15,7 +15,7 @@ type
     timestamp   : EthTime
     prevRandao  : Bytes32
     withdrawals : seq[Withdrawal] ## EIP-4895
-    beaconRoot  : Hash256 ## EIP-4788
+    beaconRoot  : Hash32 ## EIP-4788
 
 # ------------------------------------------------------------------------------
 # Getters
@@ -33,7 +33,7 @@ func prevRandao*(ctx: CasperRef): Bytes32 =
 proc withdrawals*(ctx: CasperRef): seq[Withdrawal] =
   ctx.withdrawals
 
-func parentBeaconBlockRoot*(ctx: CasperRef): Hash256 =
+func parentBeaconBlockRoot*(ctx: CasperRef): Hash32 =
   ctx.beaconRoot
 
 # ------------------------------------------------------------------------------
@@ -52,5 +52,5 @@ proc `prevRandao=`*(ctx: CasperRef, val: Bytes32) =
 proc `withdrawals=`*(ctx: CasperRef, val: sink seq[Withdrawal]) =
   ctx.withdrawals = system.move(val)
 
-proc `parentBeaconBlockRoot=`*(ctx: CasperRef, val: Hash256) =
+proc `parentBeaconBlockRoot=`*(ctx: CasperRef, val: Hash32) =
   ctx.beaconRoot = val

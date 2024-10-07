@@ -87,10 +87,10 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock, extraData
   blk.header.extraData = @[extraData]
   blk
 
-proc headHash(c: CommonRef): Hash256 =
+proc headHash(c: CommonRef): Hash32 =
   c.db.getCanonicalHead().blockHash
 
-func blockHash(x: EthBlock): Hash256 =
+func blockHash(x: EthBlock): Hash32 =
   x.header.blockHash
 
 proc wdWritten(com: CommonRef, blk: EthBlock): int =

@@ -17,7 +17,7 @@ import
   ../nimbus/rpc/p2p
 
 type
-  Hash256 = eth_types.Hash256
+  Hash32 = eth_types.Hash32
   Address = primitives.Address
 
 func ethAddr*(x: Address): EthAddress =
@@ -26,17 +26,17 @@ func ethAddr*(x: Address): EthAddress =
 func ethAddr(x: string): EthAddress =
   EthAddress.fromHex(x)
 
-template toHash256(hash: untyped): Hash256 =
-  fromHex(Hash256, hash.toHex())
+template toHash32(hash: untyped): Hash32 =
+  fromHex(Hash32, hash.toHex())
 
-proc verifyAccountProof(trustedStateRoot: Hash256, res: ProofResponse): MptProofVerificationResult =
+proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofVerificationResult =
   let
     key = toSeq(keccakHash(res.address.ethAddr).data)
     value = rlp.encode(Account(
         nonce: res.nonce.uint64,
         balance: res.balance,
-        storageRoot: res.storageHash.toHash256(),
-        codeHash: res.codeHash.toHash256()))
+        storageRoot: res.storageHash.toHash32(),
+        codeHash: res.codeHash.toHash32()))
 
   verifyMptProof(
     seq[seq[byte]](res.accountProof),
@@ -44,7 +44,7 @@ proc verifyAccountProof(trustedStateRoot: Hash256, res: ProofResponse): MptProof
     key,
     value)
 
-proc verifySlotProof(trustedStorageRoot: Hash256, slot: StorageProof): MptProofVerificationResult =
+proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVerificationResult =
   let
     key = toSeq(keccakHash(toBytesBE(slot.key)).data)
     value = rlp.encode(slot.value)
@@ -62,7 +62,7 @@ proc getGenesisAlloc(filePath: string): GenesisAlloc =
 
   cn.genesis.alloc
 
-proc setupStateDB(genAccounts: GenesisAlloc, stateDB: LedgerRef): Hash256 =
+proc setupStateDB(genAccounts: GenesisAlloc, stateDB: LedgerRef): Hash32 =
 
   for address, genAccount in genAccounts:
     for slotKey, slotValue in genAccount.storage:
@@ -79,7 +79,7 @@ proc setupStateDB(genAccounts: GenesisAlloc, stateDB: LedgerRef): Hash256 =
 proc checkProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
     accDB: LedgerRef,
-    stateRoot: Hash256) =
+    stateRoot: Hash32) =
 
   for address, account in genAccounts:
     var slots = newSeq[UInt256]()
@@ -92,8 +92,8 @@ proc checkProofsForExistingLeafs(
 
     check:
       proofResponse.balance == account.balance
-      proofResponse.codeHash.toHash256() == accDB.getCodeHash(address)
-      proofResponse.storageHash.toHash256() == accDB.getStorageRoot(address)
+      proofResponse.codeHash.toHash32() == accDB.getCodeHash(address)
+      proofResponse.storageHash.toHash32() == accDB.getStorageRoot(address)
       verifyAccountProof(stateRoot, proofResponse).isValid()
       slotProofs.len() == account.storage.len()
 
@@ -101,12 +101,12 @@ proc checkProofsForExistingLeafs(
       check:
         slotProof.key == slots[i]
         slotProof.value == account.storage[slotProof.key]
-        verifySlotProof(proofResponse.storageHash.toHash256(), slotProof).isValid()
+        verifySlotProof(proofResponse.storageHash.toHash32(), slotProof).isValid()
 
 proc checkProofsForMissingLeafs(
     genAccounts: GenesisAlloc,
     accDB: LedgerRef,
-    stateRoot: Hash256) =
+    stateRoot: Hash32) =
 
   let
     missingAddress = ethAddr("0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E")
@@ -121,7 +121,7 @@ proc checkProofsForMissingLeafs(
 
     check slotProofs.len() == 1
     if account.storage.len() > 0:
-      check verifySlotProof(proofResponse2.storageHash.toHash256(), slotProofs[0]).isMissing()
+      check verifySlotProof(proofResponse2.storageHash.toHash32(), slotProofs[0]).isMissing()
 
 proc getProofJsonMain*() =
   suite "Get proof json tests":

@@ -18,7 +18,7 @@ import
   ./utils,
   ./state_dump
 
-proc `$`(hash: Hash256): string =
+proc `$`(hash: Hash32): string =
   hash.data.toHex
 
 proc `$`(bloom: BloomFilter): string =

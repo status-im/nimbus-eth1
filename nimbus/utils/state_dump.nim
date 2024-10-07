@@ -19,14 +19,14 @@ type
   DumpAccount* = ref object
     balance* : UInt256
     nonce*   : AccountNonce
-    root*    : Hash256
-    codeHash*: Hash256
+    root*    : Hash32
+    codeHash*: Hash32
     code*    : Blob
-    key*     : Hash256
+    key*     : Hash32
     storage* : Table[UInt256, UInt256]
 
   StateDump* = ref object
-    root*: Hash256
+    root*: Hash32
     accounts*: Table[EthAddress, DumpAccount]
 
 proc `%`*(x: UInt256): JsonNode =
@@ -35,7 +35,7 @@ proc `%`*(x: UInt256): JsonNode =
 proc `%`*(x: Blob): JsonNode =
   %("0x" & x.toHex)
 
-proc `%`*(x: Hash256): JsonNode =
+proc `%`*(x: Hash32): JsonNode =
   %("0x" & x.data.toHex)
 
 proc `%`*(x: AccountNonce): JsonNode =

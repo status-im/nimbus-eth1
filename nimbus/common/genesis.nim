@@ -32,7 +32,7 @@ type
 
   GenesisCommitFn = proc() {.noRaise.}
 
-  GenesisRootHashFn = proc: Hash256 {.noRaise.}
+  GenesisRootHashFn = proc: Hash32 {.noRaise.}
 
   GenesisLedgerRef* = ref object
     ## Exportable ledger DB just for initialising Genesis.
@@ -73,7 +73,7 @@ proc initAccountsLedgerRef(
     commit: proc() =
       ac.persist(),
 
-    rootHash: proc(): Hash256 =
+    rootHash: proc(): Hash32 =
       ac.state())
 
 # ------------------------------------------------------------------------------
@@ -137,7 +137,7 @@ proc toGenesisHeader*(
   if fork >= Cancun:
     result.blobGasUsed           = Opt.some g.blobGasUsed.get(0'u64)
     result.excessBlobGas         = Opt.some g.excessBlobGas.get(0'u64)
-    result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(default(Hash256))
+    result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(default(Hash32))
 
 proc toGenesisHeader*(
     genesis: Genesis;

@@ -40,7 +40,7 @@ type
   HostValue*         = UInt256           # Mapped to/from evmc_bytes32.
   HostBalance*       = UInt256           # Mapped to/from evmc_uint256be.
   HostSize*          = uint              # Mapped to/from csize_t - unsigned!
-  HostHash*          = Hash256           # Mapped to/from evmc_bytes32.
+  HostHash*          = Hash32           # Mapped to/from evmc_bytes32.
   HostTopic*         = Topic             # Mapped to/from evmc_bytes32.
   HostBlockNumber*   = BlockNumber       # Mapped to/from int64.
   HostGasInt*        = GasInt            # Mapped to/from int64.
@@ -73,7 +73,7 @@ type
 template toEvmc*(n: UInt256): evmc_uint256be =
   cast[evmc_uint256be](n)
 
-template toEvmc*(n: Hash256): evmc_bytes32 =
+template toEvmc*(n: Hash32): evmc_bytes32 =
   evmc_bytes32(bytes: n.data)
 
 template toEvmc*(address: EthAddress): evmc_address =

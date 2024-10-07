@@ -139,24 +139,24 @@ template getBlobBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.txCtx.blobBaseFee
 
-proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 =
+proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
   when evmc_enabled:
     let
       blockNumber = BlockNumber c.host.getTxContext().block_number
       ancestorDepth  = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return default(Hash256)
+      return default(Hash32)
     if number >= blockNumber:
-      return default(Hash256)
+      return default(Hash32)
     c.host.getBlockHash(number)
   else:
     let
       blockNumber = c.vmState.blockNumber
       ancestorDepth = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return default(Hash256)
+      return default(Hash32)
     if number >= blockNumber:
-      return default(Hash256)
+      return default(Hash32)
     c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
@@ -186,14 +186,14 @@ template getCodeSize*(c: Computation, address: EthAddress): uint =
   else:
     uint(c.vmState.readOnlyStateDB.getCodeSize(address))
 
-template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
+template getCodeHash*(c: Computation, address: EthAddress): Hash32 =
   when evmc_enabled:
     c.host.getCodeHash(address)
   else:
     let
       db = c.vmState.readOnlyStateDB
     if not db.accountExists(address) or db.isEmptyAccount(address):
-      default(Hash256)
+      default(Hash32)
     else:
       db.getCodeHash(address)
 

@@ -42,7 +42,7 @@ type
   SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe, raises: [].}
     ## Update head for syncing
 
-  SyncFinalisedBlockHashCB* = proc(hash: Hash256) {.gcsafe, raises: [].}
+  SyncFinalisedBlockHashCB* = proc(hash: Hash32) {.gcsafe, raises: [].}
     ## Ditto
 
   NotifyBadBlockCB* = proc(invalid, origin: BlockHeader) {.gcsafe, raises: [].}
@@ -87,7 +87,7 @@ type
       ## Allow synchronizer to inform engine-API of bad encountered during sync
       ## progress
 
-    startOfHistory: Hash256
+    startOfHistory: Hash32
       ## This setting is needed for resuming blockwise syncying after
       ## installing a snapshot pivot. The default value for this field is
       ## `GENESIS_PARENT_HASH` to start at the very beginning.
@@ -235,7 +235,7 @@ proc init(com         : CommonRef,
 
   com.initializeDb()
 
-proc getTd(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
+proc getTd(com: CommonRef, blockHash: Hash32): Opt[DifficultyInt] =
   var td: DifficultyInt
   if not com.db.getTd(blockHash, td):
     # TODO: Is this really ok?
@@ -247,7 +247,7 @@ func needTdForHardForkDetermination(com: CommonRef): bool =
   let t = com.forkTransitionTable.mergeForkTransitionThreshold
   t.ttdPassed.isNone and t.number.isNone and t.ttd.isSome
 
-proc getTdIfNecessary(com: CommonRef, blockHash: Hash256): Opt[DifficultyInt] =
+proc getTdIfNecessary(com: CommonRef, blockHash: Hash32): Opt[DifficultyInt] =
   if needTdForHardForkDetermination(com):
     getTd(com, blockHash)
   else:
@@ -343,7 +343,7 @@ func hardForkTransition*(
 
 proc hardForkTransition*(
     com: CommonRef,
-    parentHash: Hash256,
+    parentHash: Hash32,
     number: BlockNumber,
     time: Opt[EthTime]) =
   com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
@@ -415,7 +415,7 @@ proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
 func haveSyncFinalisedBlockHash*(com: CommonRef): bool =
   not com.syncFinalisedBlockHash.isNil
 
-proc syncFinalisedBlockHash*(com: CommonRef; hash: Hash256) =
+proc syncFinalisedBlockHash*(com: CommonRef; hash: Hash32) =
   ## Used by RPC updater
   if not com.syncFinalisedBlockHash.isNil:
     com.syncFinalisedBlockHash(hash)
@@ -430,7 +430,7 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
 # Getters
 # ------------------------------------------------------------------------------
 
-func startOfHistory*(com: CommonRef): Hash256 =
+func startOfHistory*(com: CommonRef): Hash32 =
   ## Getter
   com.startOfHistory
 
@@ -447,7 +447,7 @@ func consensus*(com: CommonRef): ConsensusType =
 func eip150Block*(com: CommonRef): Opt[BlockNumber] =
   com.config.eip150Block
 
-func eip150Hash*(com: CommonRef): Hash256 =
+func eip150Hash*(com: CommonRef): Hash32 =
   com.config.eip150Hash
 
 func daoForkBlock*(com: CommonRef): Opt[BlockNumber] =
@@ -478,7 +478,7 @@ func chainId*(com: CommonRef): ChainId =
 func networkId*(com: CommonRef): NetworkId =
   com.networkId
 
-func genesisHash*(com: CommonRef): Hash256 =
+func genesisHash*(com: CommonRef): Hash32 =
   ## Getter
   com.genesisHash
 
@@ -514,7 +514,7 @@ func `syncHighest=`*(com: CommonRef, number: BlockNumber) =
 func `syncState=`*(com: CommonRef, state: SyncState) =
   com.syncState = state
 
-func `startOfHistory=`*(com: CommonRef, val: Hash256) =
+func `startOfHistory=`*(com: CommonRef, val: Hash32) =
   ## Setter
   com.startOfHistory = val
 

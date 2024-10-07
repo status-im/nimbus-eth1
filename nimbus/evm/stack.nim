@@ -41,7 +41,7 @@ template toStackElem(v: EvmStackInts, elem: EvmStackElement) =
 template toStackElem(v: EthAddress, elem: EvmStackElement) =
   elem.initFromBytesBE(v.data)
 
-template toStackElem(v: Hash256, elem: EvmStackElement) =
+template toStackElem(v: Hash32, elem: EvmStackElement) =
   elem.initFromBytesBE(v.data)
 
 template toStackElem(v: openArray[byte], elem: EvmStackElement) =
@@ -54,7 +54,7 @@ template fromStackElem(elem: EvmStackElement, _: type UInt256): UInt256 =
 func fromStackElem(elem: EvmStackElement, _: type EthAddress): EthAddress =
   elem.to(Bytes32).to(EthAddress)
 
-template fromStackElem(elem: EvmStackElement, _: type Hash256): Hash256 =
+template fromStackElem(elem: EvmStackElement, _: type Hash32): Hash32 =
   Hash32(elem.toBytesBE())
 
 template fromStackElem(elem: EvmStackElement, _: type EvmStackBytes32): EvmStackBytes32 =
@@ -98,7 +98,7 @@ macro genTupleType(len: static[int], elemType: untyped): untyped =
 # ------------------------------------------------------------------------------
 
 func push*(stack: var EvmStack,
-           value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
+           value: EvmStackInts | UInt256 | EthAddress | Hash32): EvmResultVoid =
   pushAux(stack, value)
 
 func push*(stack: var EvmStack, value: openArray[byte]): EvmResultVoid =
@@ -171,7 +171,7 @@ func peekAddress*(stack: EvmStack): EvmResult[EthAddress] =
   ok(fromStackElem(stack.values[^1], EthAddress))
 
 func top*(stack: EvmStack,
-          value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
+          value: EvmStackInts | UInt256 | EthAddress | Hash32): EvmResultVoid =
   if stack.values.len == 0:
     return err(stackErr(StackInsufficient))
   toStackElem(value, stack.values[^1])
@@ -193,7 +193,7 @@ template lsCheck*(stack: EvmStack, expected: int): EvmResultVoid =
   ensurePop(stack, expected)
 
 func lsTop*(stack: EvmStack,
-            value: EvmStackInts | UInt256 | EthAddress | Hash256) =
+            value: EvmStackInts | UInt256 | EthAddress | Hash32) =
   toStackElem(value, stack.values[^1])
 
 func lsTop*(stack: var EvmStack, value: openArray[byte]) =

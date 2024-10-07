@@ -21,25 +21,25 @@ import
 
 export eth_types_rlp
 
-proc calcRootHash[T](items: openArray[T]): Hash256 {.gcsafe.} =
+proc calcRootHash[T](items: openArray[T]): Hash32 {.gcsafe.} =
   let sig = merkleSignBegin()
   for i, t in items:
     sig.merkleSignAdd(rlp.encode(i.uint), rlp.encode(t))
   sig.merkleSignCommit.value
 
-template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
+template calcTxRoot*(transactions: openArray[Transaction]): Hash32 =
   calcRootHash(transactions)
 
-template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Hash256 =
+template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Hash32 =
   calcRootHash(withdrawals)
 
-template calcReceiptsRoot*(receipts: openArray[Receipt]): Hash256 =
+template calcReceiptsRoot*(receipts: openArray[Receipt]): Hash32 =
   calcRootHash(receipts)
 
-template calcRequestsRoot*(requests: openArray[Request]): Hash256 =
+template calcRequestsRoot*(requests: openArray[Request]): Hash32 =
   calcRootHash(requests)
 
-func sumHash*(hashes: varargs[Hash256]): Hash256 =
+func sumHash*(hashes: varargs[Hash32]): Hash32 =
   var ctx: sha256
   ctx.init()
   for hash in hashes:
@@ -47,7 +47,7 @@ func sumHash*(hashes: varargs[Hash256]): Hash256 =
   ctx.finish result.data
   ctx.clear()
 
-proc sumHash*(body: BlockBody): Hash256 {.gcsafe, raises: []} =
+proc sumHash*(body: BlockBody): Hash32 {.gcsafe, raises: []} =
   let txRoot = calcTxRoot(body.transactions)
   let ommersHash = keccakHash(rlp.encode(body.uncles))
   let wdRoot = if body.withdrawals.isSome:
@@ -55,7 +55,7 @@ proc sumHash*(body: BlockBody): Hash256 {.gcsafe, raises: []} =
                else: EMPTY_ROOT_HASH
   sumHash(txRoot, ommersHash, wdRoot)
 
-proc sumHash*(header: BlockHeader): Hash256 =
+proc sumHash*(header: BlockHeader): Hash32 =
   let wdRoot = if header.withdrawalsRoot.isSome:
                  header.withdrawalsRoot.get
                else: EMPTY_ROOT_HASH
@@ -99,7 +99,7 @@ proc crc32*(crc: uint32, buf: openArray[byte]): uint32 =
 
   result = not crcu32
 
-proc short*(h: Hash256): string =
+proc short*(h: Hash32): string =
   var bytes: array[6, byte]
   bytes[0..2] = h.data[0..2]
   bytes[^3..^1] = h.data[^3..^1]

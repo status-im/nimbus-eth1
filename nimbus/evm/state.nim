@@ -252,16 +252,16 @@ func baseFeePerGas*(vmState: BaseVMState): UInt256 =
   vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
-    vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.gcsafe, base.} =
+    vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =
   let db = vmState.com.db
   try:
-    var blockHash: Hash256
+    var blockHash: Hash32
     if db.getBlockHash(blockNumber, blockHash):
       blockHash
     else:
-      default(Hash256)
+      default(Hash32)
   except RlpError:
-    default(Hash256)
+    default(Hash32)
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)

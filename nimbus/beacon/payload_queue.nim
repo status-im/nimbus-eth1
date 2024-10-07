@@ -38,7 +38,7 @@ type
     blobsBundle: Opt[BlobsBundleV1]
 
   HeaderItem = object
-    hash: common.Hash256
+    hash: common.Hash32
     header: common.BlockHeader
 
   PayloadQueue* = object
@@ -68,7 +68,7 @@ iterator items[M, T](x: SimpleQueue[M, T]): T =
 # ------------------------------------------------------------------------------
 
 proc put*(api: var PayloadQueue,
-          hash: common.Hash256, header: common.BlockHeader) =
+          hash: common.Hash32, header: common.BlockHeader) =
   api.headerQueue.put(HeaderItem(hash: hash, header: header))
 
 proc put*(api: var PayloadQueue, id: PayloadID,
@@ -93,7 +93,7 @@ proc put*(api: var PayloadQueue, id: PayloadID,
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc get*(api: PayloadQueue, hash: common.Hash256,
+proc get*(api: PayloadQueue, hash: common.Hash32,
           header: var common.BlockHeader): bool =
   for x in api.headerQueue:
     if x.hash == hash:

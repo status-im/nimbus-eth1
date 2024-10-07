@@ -56,7 +56,7 @@ func toLogs(list: openArray[LogObject]): seq[Log] =
       topics: x.topics
     )
 
-proc txReceipt*(client: RpcClient, txHash: common.Hash256): Future[Option[Receipt]] {.async.} =
+proc txReceipt*(client: RpcClient, txHash: common.Hash32): Future[Option[Receipt]] {.async.} =
   let rc = await client.eth_getTransactionReceipt(w3Hash txHash)
   if rc.isNil:
     return none(Receipt)
@@ -72,7 +72,7 @@ proc txReceipt*(client: RpcClient, txHash: common.Hash256): Future[Option[Receip
   )
   result = some(rec)
 
-proc gasUsed*(client: RpcClient, txHash: common.Hash256): Future[Option[GasInt]] {.async.} =
+proc gasUsed*(client: RpcClient, txHash: common.Hash32): Future[Option[GasInt]] {.async.} =
   let rc = await client.eth_getTransactionReceipt(w3Hash txHash)
   if rc.isNil:
     return none(GasInt)

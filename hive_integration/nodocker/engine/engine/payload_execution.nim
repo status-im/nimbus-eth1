@@ -243,7 +243,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
 
     # Fabricate and send multiple new payloads by changing the PrevRandao field
     for i in 0..<payloadCount:
-      let newPrevRandao = common.Hash256.randomBytes()
+      let newPrevRandao = common.Hash32.randomBytes()
       let customizer = CustomPayloadData(
         prevRandao: Opt.some(newPrevRandao),
       )
