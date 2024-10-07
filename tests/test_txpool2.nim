@@ -159,8 +159,6 @@ proc runTxPoolPosTest() =
         return
 
       blk = r.get.blk
-      check com.proofOfStake(blk.header)
-
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles
@@ -215,8 +213,6 @@ proc runTxPoolBlobhashTest() =
 
       let bundle = r.get
       blk = bundle.blk
-      check com.proofOfStake(blk.header)
-
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles,
@@ -302,8 +298,6 @@ proc runTxHeadDelta(noisy = true) =
             return
 
           let blk = r.get.blk
-          check com.proofOfStake(blk.header)
-
           let body = BlockBody(
             transactions: blk.txs,
             uncles: blk.uncles)
