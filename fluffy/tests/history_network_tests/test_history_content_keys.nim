@@ -21,7 +21,7 @@ import
 suite "History Content Keys":
   test "BlockHeader":
     # Input
-    const blockHash = BlockHash.fromHex(
+    const blockHash = Hash32.fromHex(
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
     )
 
@@ -53,7 +53,7 @@ suite "History Content Keys":
 
   test "BlockBody":
     # Input
-    const blockHash = BlockHash.fromHex(
+    const blockHash = Hash32.fromHex(
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
     )
 
@@ -85,7 +85,7 @@ suite "History Content Keys":
 
   test "Receipts":
     # Input
-    const blockHash = BlockHash.fromHex(
+    const blockHash = Hash32.fromHex(
       "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
     )
 

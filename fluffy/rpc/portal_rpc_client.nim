@@ -91,7 +91,7 @@ proc historyGetContent(
   ok(content)
 
 proc historyGetBlockHeader*(
-    client: PortalRpcClient, blockHash: BlockHash, validateContent = true
+    client: PortalRpcClient, blockHash: Hash32, validateContent = true
 ): Future[Result[Header, PortalRpcError]] {.async: (raises: []).} =
   ## Fetches the block header for the given hash from the Portal History Network.
   ## The data is first looked up in the node's local database before trying to
@@ -116,7 +116,7 @@ proc historyGetBlockHeader*(
     decodeRlp(headerBytes, Header).valueOrErr(InvalidContentValue)
 
 proc historyGetBlockBody*(
-    client: PortalRpcClient, blockHash: BlockHash, validateContent = true
+    client: PortalRpcClient, blockHash: Hash32, validateContent = true
 ): Future[Result[BlockBody, PortalRpcError]] {.async: (raises: []).} =
   ## Fetches the block body for the given block hash from the Portal History
   ## Network. The data is first looked up in the node's local database before
@@ -136,7 +136,7 @@ proc historyGetBlockBody*(
     decodeBlockBodyBytes(content.toBytes()).valueOrErr(InvalidContentValue)
 
 proc historyGetReceipts*(
-    client: PortalRpcClient, blockHash: BlockHash, validateContent = true
+    client: PortalRpcClient, blockHash: Hash32, validateContent = true
 ): Future[Result[seq[Receipt], PortalRpcError]] {.async: (raises: []).} =
   ## Fetches the receipts for the given block hash from the Portal History
   ## Network. The data is first looked up in the node's local database before

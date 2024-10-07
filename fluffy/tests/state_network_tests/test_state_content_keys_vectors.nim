@@ -29,7 +29,7 @@ suite "State Content Keys":
         raiseAssert "Cannot read test vector: " & error
 
       packedNibbles = packNibbles(testCase.path)
-      nodeHash = NodeHash.fromHex(testCase.node_hash)
+      nodeHash = Hash32.fromHex(testCase.node_hash)
       contentKey = AccountTrieNodeKey.init(packedNibbles, nodeHash).toContentKey()
       encoded = contentKey.encode()
 
@@ -60,7 +60,7 @@ suite "State Content Keys":
 
       packedNibbles = packNibbles(testCase.path)
       addressHash = Address.fromHex(testCase.address).data.keccak256()
-      nodeHash = NodeHash.fromHex(testCase.node_hash)
+      nodeHash = Hash32.fromHex(testCase.node_hash)
       contentKey =
         ContractTrieNodeKey.init(addressHash, packedNibbles, nodeHash).toContentKey()
       encoded = contentKey.encode()
@@ -92,7 +92,7 @@ suite "State Content Keys":
         raiseAssert "Cannot read test vector: " & error
 
       addressHash = Address.fromHex(testCase.address).data.keccak256()
-      codeHash = CodeHash.fromHex(testCase.code_hash)
+      codeHash = Hash32.fromHex(testCase.code_hash)
       contentKey = ContractCodeKey.init(addressHash, codeHash).toContentKey()
       encoded = contentKey.encode()
 

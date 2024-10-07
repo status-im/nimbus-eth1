@@ -17,7 +17,6 @@ type
 
   ContentId* = UInt256
   ContentKeyByteList* = ByteList[2048] # The encoded content key
-  BlockHash* = Hash32
 
 func fromSszBytes*(T: type Hash32, data: openArray[byte]): T {.raises: [SszError].} =
   if data.len != sizeof(result):

@@ -130,7 +130,7 @@ proc getContractCode*(
   n.getContent(key, ContractCodeRetrieval)
 
 proc getStateRootByBlockNumOrHash*(
-    n: StateNetwork, blockNumOrHash: uint64 | BlockHash
+    n: StateNetwork, blockNumOrHash: uint64 | Hash32
 ): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
   if n.historyNetwork.isNone():
     warn "History network is not available"

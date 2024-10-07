@@ -96,7 +96,7 @@ proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash32 {.raises: 
 
 proc asPortalBlockData*(
     payload: ExecutionPayloadV1
-): (common_types.BlockHash, BlockHeaderWithProof, PortalBlockBodyLegacy) =
+): (Hash32, BlockHeaderWithProof, PortalBlockBodyLegacy) =
   let
     txRoot = calculateTransactionData(payload.transactions)
 
