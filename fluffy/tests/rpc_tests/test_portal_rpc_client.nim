@@ -21,7 +21,7 @@ import
   ../../network/history/
     [history_network, history_content, validation/historical_hashes_accumulator],
   ../../database/content_db,
-  ../../rpc/[portal_rpc_client, rpc_portal_api],
+  ../../rpc/[portal_rpc_client, rpc_portal_history_api],
   ../test_helpers
 
 from eth/common/eth_types_rlp import rlpHash
@@ -101,8 +101,8 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
-  rpcHttpServer.installPortalApiHandlers(
-    historyNode.historyNetwork.portalProtocol, "history"
+  rpcHttpServer.installPortalHistoryApiHandlers(
+    historyNode.historyNetwork.portalProtocol
   )
   rpcHttpServer.start()
 
