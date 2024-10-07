@@ -18,9 +18,6 @@ import
   ./utils,
   ./state_dump
 
-proc `$`(hash: Hash256): string =
-  hash.data.toHex
-
 proc `$`(bloom: BloomFilter): string =
   bloom.toHex
 
@@ -84,8 +81,7 @@ proc debugAccounts*(vmState: BaseVMState): string =
   res.pretty
 
 proc debug*(vms: BaseVMState): string =
-  result.add "com.proofOfStake : " & $vms.com.proofOfStake(vms.blockNumber,
-                                      vms.blockCtx.difficulty) & "\n"
+  result.add "proofOfStake     : " & $vms.proofOfStake()      & "\n"
   result.add "parent           : " & $vms.parent.blockHash    & "\n"
   result.add "timestamp        : " & $vms.blockCtx.timestamp  & "\n"
   result.add "gasLimit         : " & $vms.blockCtx.gasLimit   & "\n"

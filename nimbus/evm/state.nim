@@ -242,7 +242,7 @@ func blockNumber*(vmState: BaseVMState): BlockNumber =
   # and not head.number
   vmState.parent.number + 1
 
-proc proofOfStake(vmState: BaseVMState): bool =
+proc proofOfStake*(vmState: BaseVMState): bool =
   vmState.com.proofOfStake(Header(
     number: vmState.blockNumber,
     parentHash: vmState.blockCtx.parentHash,
