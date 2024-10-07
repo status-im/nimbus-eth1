@@ -103,7 +103,7 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
       Receipt(
         receiptType: receiptType,
         isHash: true,
-        hash: ethHash receiptObject.root.get(),
+        hash: receiptObject.root.get(),
         cumulativeGasUsed: cumulativeGasUsed,
         logsBloom: Bloom(receiptObject.logsBloom),
         logs: logs,
