@@ -51,87 +51,6 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     invalidValueErr =
       (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content value")
 
-  rpcServer.rpc("portal_historyNodeInfo") do() -> NodeInfo:
-    return p.routingTable.getNodeInfo()
-
-  rpcServer.rpc("portal_historyRoutingTableInfo") do() -> RoutingTableInfo:
-    return getRoutingTableInfo(p.routingTable)
-
-  rpcServer.rpc("portal_historyAddEnr") do(enr: Record) -> bool:
-    let node = Node.fromRecord(enr)
-    let addResult = p.addNode(node)
-    if addResult == Added:
-      p.routingTable.setJustSeen(node)
-    return addResult == Added
-
-  rpcServer.rpc("portal_historyAddEnrs") do(enrs: seq[Record]) -> bool:
-    # Note: unspecified RPC, but useful for our local testnet test
-    for enr in enrs:
-      let node = Node.fromRecord(enr)
-      if p.addNode(node) == Added:
-        p.routingTable.setJustSeen(node)
-
-    return true
-
-  rpcServer.rpc("portal_historyGetEnr") do(nodeId: NodeId) -> Record:
-    if p.localNode.id == nodeId:
-      return p.localNode.record
-
-    let node = p.getNode(nodeId)
-    if node.isSome():
-      return node.get().record
-    else:
-      raise newException(ValueError, "Record not in local routing table.")
-
-  rpcServer.rpc("portal_historyDeleteEnr") do(nodeId: NodeId) -> bool:
-    # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
-    let node = p.getNode(nodeId)
-    if node.isSome():
-      p.routingTable.removeNode(node.get())
-      return true
-    else:
-      return false
-
-  rpcServer.rpc("portal_historyLookupEnr") do(nodeId: NodeId) -> Record:
-    let lookup = await p.resolve(nodeId)
-    if lookup.isSome():
-      return lookup.get().record
-    else:
-      raise newException(ValueError, "Record not found in DHT lookup.")
-
-  rpcServer.rpc("portal_historyPing") do(enr: Record) -> PingResult:
-    let
-      node = toNodeWithAddress(enr)
-      pong = await p.ping(node)
-
-    if pong.isErr():
-      raise newException(ValueError, $pong.error)
-    else:
-      let
-        p = pong.get()
-        # Note: the SSZ.decode cannot fail here as it has already been verified
-        # in the ping call.
-        decodedPayload =
-          try:
-            SSZ.decode(p.customPayload.asSeq(), CustomPayload)
-          except MalformedSszError, SszSizeMismatchError:
-            raiseAssert("Already verified")
-      return (p.enrSeq, decodedPayload.dataRadius)
-
-  rpcServer.rpc("portal_historyFindNodes") do(
-    enr: Record, distances: seq[uint16]
-  ) -> seq[Record]:
-    let
-      node = toNodeWithAddress(enr)
-      nodes = await p.findNodes(node, distances)
-    if nodes.isErr():
-      raise newException(ValueError, $nodes.error)
-    else:
-      return nodes.get().map(
-          proc(n: Node): Record =
-            n.record
-        )
-
   rpcServer.rpc("portal_historyFindContent") do(
     enr: Record, contentKey: string
   ) -> JsonString:
@@ -172,13 +91,6 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       return SSZ.encode(res.get()).to0xHex()
     else:
       raise newException(ValueError, $res.error)
-
-  rpcServer.rpc("portal_historyRecursiveFindNodes") do(nodeId: NodeId) -> seq[Record]:
-    let discovered = await p.lookup(nodeId)
-    return discovered.map(
-      proc(n: Node): Record =
-        n.record
-    )
 
   rpcServer.rpc("portal_historyRecursiveFindContent") do(
     contentKey: string
