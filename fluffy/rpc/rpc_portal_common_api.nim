@@ -28,10 +28,9 @@ const
   ContentNotFoundError = (code: -39001, msg: "Content not found")
   ContentNotFoundErrorWithTrace = (code: -39002, msg: "Content not found")
 
-
 type ContentInfo = object
-    content: string
-    utpTransfer: bool
+  content: string
+  utpTransfer: bool
 
 ContentInfo.useDefaultSerializationIn JrpcConv
 TraceContentLookupResult.useDefaultSerializationIn JrpcConv
