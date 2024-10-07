@@ -26,7 +26,7 @@ type
 
   AccountTrieNodeOffer* = object
     proof*: TrieProof
-    blockHash*: BlockHash
+    blockHash*: Hash32
 
   AccountTrieNodeRetrieval* = object
     node*: TrieNode
@@ -34,7 +34,7 @@ type
   ContractTrieNodeOffer* = object
     storageProof*: TrieProof
     accountProof*: TrieProof
-    blockHash*: BlockHash
+    blockHash*: Hash32
 
   ContractTrieNodeRetrieval* = object
     node*: TrieNode
@@ -42,7 +42,7 @@ type
   ContractCodeOffer* = object
     code*: Bytecode
     accountProof*: TrieProof
-    blockHash*: BlockHash
+    blockHash*: Hash32
 
   ContractCodeRetrieval* = object
     code*: Bytecode
@@ -53,7 +53,7 @@ type
   ContentValueType* = ContentOfferType | ContentRetrievalType
 
 func init*(
-    T: type AccountTrieNodeOffer, proof: TrieProof, blockHash: BlockHash
+    T: type AccountTrieNodeOffer, proof: TrieProof, blockHash: Hash32
 ): T {.inline.} =
   T(proof: proof, blockHash: blockHash)
 
@@ -64,7 +64,7 @@ func init*(
     T: type ContractTrieNodeOffer,
     storageProof: TrieProof,
     accountProof: TrieProof,
-    blockHash: BlockHash,
+    blockHash: Hash32,
 ): T {.inline.} =
   T(storageProof: storageProof, accountProof: accountProof, blockHash: blockHash)
 
@@ -75,7 +75,7 @@ func init*(
     T: type ContractCodeOffer,
     code: Bytecode,
     accountProof: TrieProof,
-    blockHash: BlockHash,
+    blockHash: Hash32,
 ): T {.inline.} =
   T(code: code, accountProof: accountProof, blockHash: blockHash)
 

@@ -184,8 +184,8 @@ template calcReceiptsRoot*(receipts: PortalReceipts): Hash32 =
 template calcWithdrawalsRoot*(receipts: Withdrawals): Hash32 =
   calcRootHash(receipts)
 
-func validateBlockHeader*(header: Header, hash: BlockHash): Result[void, string] =
-  if not (header.rlpHash() == hash):
+func validateBlockHeader*(header: Header, blockHash: Hash32): Result[void, string] =
+  if not (header.rlpHash() == blockHash):
     err("Block header hash does not match")
   else:
     ok()
@@ -197,7 +197,7 @@ func validateBlockHeader*(header: Header, number: uint64): Result[void, string] 
     ok()
 
 func validateBlockHeaderBytes*(
-    bytes: openArray[byte], id: uint64 | BlockHash
+    bytes: openArray[byte], id: uint64 | Hash32
 ): Result[Header, string] =
   let header = ?decodeRlp(bytes, Header)
 
@@ -411,7 +411,7 @@ func verifyHeader(
   verifyHeader(n.accumulator, header, proof)
 
 proc getVerifiedBlockHeader*(
-    n: HistoryNetwork, id: BlockHash | uint64
+    n: HistoryNetwork, id: Hash32 | uint64
 ): Future[Opt[Header]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = blockHeaderContentKey(id).encode()
@@ -460,18 +460,18 @@ proc getVerifiedBlockHeader*(
   return Opt.none(Header)
 
 proc getBlockBody*(
-    n: HistoryNetwork, hash: BlockHash, header: Header
+    n: HistoryNetwork, blockHash: Hash32, header: Header
 ): Future[Opt[BlockBody]] {.async: (raises: [CancelledError]).} =
   if header.txRoot == EMPTY_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
     # Short path for empty body indicated by txRoot and ommersHash
     return Opt.some(BlockBody(transactions: @[], uncles: @[]))
 
   let
-    contentKey = blockBodyContentKey(hash).encode()
+    contentKey = blockBodyContentKey(blockHash).encode()
     contentId = contentKey.toContentId()
 
   logScope:
-    hash
+    blockHash
     contentKey
 
   let bodyFromDb = n.contentDB.get(BlockBody, contentId, header)
@@ -502,7 +502,7 @@ proc getBlockBody*(
   return Opt.none(BlockBody)
 
 proc getBlock*(
-    n: HistoryNetwork, id: BlockHash | uint64
+    n: HistoryNetwork, id: Hash32 | uint64
 ): Future[Opt[Block]] {.async: (raises: [CancelledError]).} =
   debug "Trying to retrieve block", id
 
@@ -514,7 +514,7 @@ proc getBlock*(
       warn "Failed to get header when getting block", id
       return Opt.none(Block)
     hash =
-      when id is BlockHash:
+      when id is Hash32:
         id
       else:
         header.rlpHash()
@@ -526,25 +526,25 @@ proc getBlock*(
 
 proc getBlockHashByNumber*(
     n: HistoryNetwork, blockNumber: uint64
-): Future[Result[BlockHash, string]] {.async: (raises: [CancelledError]).} =
+): Future[Result[Hash32, string]] {.async: (raises: [CancelledError]).} =
   let header = (await n.getVerifiedBlockHeader(blockNumber)).valueOr:
     return err("Cannot retrieve block header for given block number")
 
   ok(header.rlpHash())
 
 proc getReceipts*(
-    n: HistoryNetwork, hash: BlockHash, header: Header
+    n: HistoryNetwork, blockHash: Hash32, header: Header
 ): Future[Opt[seq[Receipt]]] {.async: (raises: [CancelledError]).} =
   if header.receiptsRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root
     return Opt.some(newSeq[Receipt]())
 
   let
-    contentKey = receiptsContentKey(hash).encode()
+    contentKey = receiptsContentKey(blockHash).encode()
     contentId = contentKey.toContentId()
 
   logScope:
-    hash
+    blockHash
     contentKey
 
   let receiptsFromDb = n.getContentFromDb(seq[Receipt], contentId)

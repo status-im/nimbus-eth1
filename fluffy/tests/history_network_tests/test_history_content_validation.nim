@@ -39,7 +39,7 @@ suite "History Content Values Validation":
     blockBodyBytes = blockData.body.hexToSeqByte()
     receiptsBytes = blockData.receipts.hexToSeqByte()
 
-    blockHash = BlockHash.fromHex(blockHashStr)
+    blockHash = Hash32.fromHex(blockHashStr)
 
     blockHeader =
       decodeRlp(blockHeaderBytes, Header).expect("Valid header should decode")

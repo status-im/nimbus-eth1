@@ -38,11 +38,11 @@ type
 
   BlockDataTable* = Table[string, BlockData]
 
-iterator blockHashes*(blockData: BlockDataTable): BlockHash =
+iterator blockHashes*(blockData: BlockDataTable): Hash32 =
   for k, v in blockData:
-    var blockHash: BlockHash
+    var blockHash: Hash32
     try:
-      blockHash.data = hexToByteArray[sizeof(BlockHash)](k)
+      blockHash.data = hexToByteArray[sizeof(Hash32)](k)
     except ValueError as e:
       error "Invalid hex for block hash", error = e.msg, number = v.number
       continue
@@ -54,9 +54,9 @@ func readBlockData*(
 ): Result[seq[(ContentKey, seq[byte])], string] =
   var res: seq[(ContentKey, seq[byte])]
 
-  var blockHash: BlockHash
+  var blockHash: Hash32
   try:
-    blockHash.data = hexToByteArray[sizeof(BlockHash)](hash)
+    blockHash.data = hexToByteArray[sizeof(Hash32)](hash)
   except ValueError as e:
     return err("Invalid hex for blockhash, number " & $blockData.number & ": " & e.msg)
 
@@ -127,9 +127,9 @@ func readBlockHeader*(blockData: BlockData): Result[Header, string] =
 func readHeaderData*(
     hash: string, blockData: BlockData, verify = false
 ): Result[(ContentKey, seq[byte]), string] =
-  var blockHash: BlockHash
+  var blockHash: Hash32
   try:
-    blockHash.data = hexToByteArray[sizeof(BlockHash)](hash)
+    blockHash.data = hexToByteArray[sizeof(Hash32)](hash)
   except ValueError as e:
     return err("Invalid hex for blockhash, number " & $blockData.number & ": " & e.msg)
 
