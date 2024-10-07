@@ -327,6 +327,7 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
   if com.config.mergeForkBlock.isSome:
     header.number >= com.config.mergeForkBlock.get
   else:
+   # This costly check is only executed from test suite
    com.isBlockAfterTtd(header)
 
 proc syncReqNewHead*(com: CommonRef; header: BlockHeader)

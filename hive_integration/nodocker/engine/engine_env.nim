@@ -72,10 +72,6 @@ proc envConfig*(conf: ChainConfig): NimbusConf =
   result.networkParams.config = conf
 
 proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): EngineEnv =
-  if chainFile.len > 0:
-    # disable clique if we are using PoW chain
-    conf.networkParams.config.consensusType = ConsensusType.POW
-
   let ctx = newEthContext()
   ctx.am.importPrivateKey(sealerKey).isOkOr:
     echo error
