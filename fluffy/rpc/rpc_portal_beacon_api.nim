@@ -44,97 +44,14 @@ TraceResponse.useDefaultSerializationIn JrpcConv
 # Using a static string works but some sandwich problem seems to be happening,
 # as the proc becomes generic, where the rpc macro from router.nim can no longer
 # be found, which is why we export rpcserver which should export router.
-proc installPortalApiHandlers*(
-    rpcServer: RpcServer, p: PortalProtocol, network: static string
-) =
+proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   let
     invalidKeyErr =
       (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
     invalidValueErr =
       (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content value")
 
-  rpcServer.rpc("portal_" & network & "NodeInfo") do() -> NodeInfo:
-    return p.routingTable.getNodeInfo()
-
-  rpcServer.rpc("portal_" & network & "RoutingTableInfo") do() -> RoutingTableInfo:
-    return getRoutingTableInfo(p.routingTable)
-
-  rpcServer.rpc("portal_" & network & "AddEnr") do(enr: Record) -> bool:
-    let node = Node.fromRecord(enr)
-    let addResult = p.addNode(node)
-    if addResult == Added:
-      p.routingTable.setJustSeen(node)
-    return addResult == Added
-
-  rpcServer.rpc("portal_" & network & "AddEnrs") do(enrs: seq[Record]) -> bool:
-    # Note: unspecified RPC, but useful for our local testnet test
-    for enr in enrs:
-      let node = Node.fromRecord(enr)
-      if p.addNode(node) == Added:
-        p.routingTable.setJustSeen(node)
-
-    return true
-
-  rpcServer.rpc("portal_" & network & "GetEnr") do(nodeId: NodeId) -> Record:
-    if p.localNode.id == nodeId:
-      return p.localNode.record
-
-    let node = p.getNode(nodeId)
-    if node.isSome():
-      return node.get().record
-    else:
-      raise newException(ValueError, "Record not in local routing table.")
-
-  rpcServer.rpc("portal_" & network & "DeleteEnr") do(nodeId: NodeId) -> bool:
-    # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
-    let node = p.getNode(nodeId)
-    if node.isSome():
-      p.routingTable.removeNode(node.get())
-      return true
-    else:
-      return false
-
-  rpcServer.rpc("portal_" & network & "LookupEnr") do(nodeId: NodeId) -> Record:
-    let lookup = await p.resolve(nodeId)
-    if lookup.isSome():
-      return lookup.get().record
-    else:
-      raise newException(ValueError, "Record not found in DHT lookup.")
-
-  rpcServer.rpc("portal_" & network & "Ping") do(enr: Record) -> PingResult:
-    let
-      node = toNodeWithAddress(enr)
-      pong = await p.ping(node)
-
-    if pong.isErr():
-      raise newException(ValueError, $pong.error)
-    else:
-      let
-        p = pong.get()
-        # Note: the SSZ.decode cannot fail here as it has already been verified
-        # in the ping call.
-        decodedPayload =
-          try:
-            SSZ.decode(p.customPayload.asSeq(), CustomPayload)
-          except MalformedSszError, SszSizeMismatchError:
-            raiseAssert("Already verified")
-      return (p.enrSeq, decodedPayload.dataRadius)
-
-  rpcServer.rpc("portal_" & network & "FindNodes") do(
-    enr: Record, distances: seq[uint16]
-  ) -> seq[Record]:
-    let
-      node = toNodeWithAddress(enr)
-      nodes = await p.findNodes(node, distances)
-    if nodes.isErr():
-      raise newException(ValueError, $nodes.error)
-    else:
-      return nodes.get().map(
-          proc(n: Node): Record =
-            n.record
-        )
-
-  rpcServer.rpc("portal_" & network & "FindContent") do(
+  rpcServer.rpc("portal_beaconFindContent") do(
     enr: Record, contentKey: string
   ) -> JsonString:
     let
@@ -160,7 +77,7 @@ proc installPortalApiHandlers*(
         let jsonEnrs = JrpcConv.encode(enrs)
         return ("{\"enrs\":" & jsonEnrs & "}").JsonString
 
-  rpcServer.rpc("portal_" & network & "Offer") do(
+  rpcServer.rpc("portal_beaconOffer") do(
     enr: Record, contentItems: seq[ContentItem]
   ) -> string:
     let node = toNodeWithAddress(enr)
@@ -180,16 +97,7 @@ proc installPortalApiHandlers*(
 
     SSZ.encode(offerResult).to0xHex()
 
-  rpcServer.rpc("portal_" & network & "RecursiveFindNodes") do(
-    nodeId: NodeId
-  ) -> seq[Record]:
-    let discovered = await p.lookup(nodeId)
-    return discovered.map(
-      proc(n: Node): Record =
-        n.record
-    )
-
-  rpcServer.rpc("portal_" & network & "RecursiveFindContent") do(
+  rpcServer.rpc("portal_beaconRecursiveFindContent") do(
     contentKey: string
   ) -> ContentInfo:
     let
@@ -206,7 +114,7 @@ proc installPortalApiHandlers*(
       content: contentResult.content.to0xHex(), utpTransfer: contentResult.utpTransfer
     )
 
-  rpcServer.rpc("portal_" & network & "TraceRecursiveFindContent") do(
+  rpcServer.rpc("portal_beaconTraceRecursiveFindContent") do(
     contentKey: string
   ) -> TraceContentLookupResult:
     let
@@ -228,44 +136,21 @@ proc installPortalApiHandlers*(
         data: data,
       )
 
-  rpcServer.rpc("portal_" & network & "Store") do(
+  rpcServer.rpc("portal_beaconStore") do(
     contentKey: string, contentValue: string
   ) -> bool:
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentValueBytes = hexToSeqByte(contentValue)
+      contentId = p.toContentId(key)
 
-    let valueToStore =
-      if network == "state":
-        let decodedKey = ContentKey.decode(key).valueOr:
-          raise invalidKeyErr
-
-        case decodedKey.contentType
-        of unused:
-          raise invalidKeyErr
-        of accountTrieNode:
-          let offerValue = AccountTrieNodeOffer.decode(contentValueBytes).valueOr:
-            raise invalidValueErr
-          offerValue.toRetrievalValue.encode()
-        of contractTrieNode:
-          let offerValue = ContractTrieNodeOffer.decode(contentValueBytes).valueOr:
-            raise invalidValueErr
-          offerValue.toRetrievalValue.encode()
-        of contractCode:
-          let offerValue = ContractCodeOffer.decode(contentValueBytes).valueOr:
-            raise invalidValueErr
-          offerValue.toRetrievalValue.encode()
-      else:
-        contentValueBytes
-
-    let contentId = p.toContentId(key)
     if contentId.isSome():
-      p.storeContent(key, contentId.get(), valueToStore)
+      p.storeContent(key, contentId.get(), contentValueBytes)
       return true
     else:
       raise invalidKeyErr
 
-  rpcServer.rpc("portal_" & network & "LocalContent") do(contentKey: string) -> string:
+  rpcServer.rpc("portal_beaconLocalContent") do(contentKey: string) -> string:
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
@@ -278,7 +163,7 @@ proc installPortalApiHandlers*(
 
     return contentResult.to0xHex()
 
-  rpcServer.rpc("portal_" & network & "Gossip") do(
+  rpcServer.rpc("portal_beaconGossip") do(
     contentKey: string, contentValue: string
   ) -> int:
     let
@@ -290,7 +175,7 @@ proc installPortalApiHandlers*(
 
     return numberOfPeers
 
-  rpcServer.rpc("portal_" & network & "RandomGossip") do(
+  rpcServer.rpc("portal_beaconRandomGossip") do(
     contentKey: string, contentValue: string
   ) -> int:
     let
