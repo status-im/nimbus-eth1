@@ -259,21 +259,21 @@ proc run(
       of RpcFlag.portal:
         if node.historyNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
-            node.historyNetwork.value.portalProtocol, "history"
+            node.historyNetwork.value.portalProtocol, PortalSubnetwork.history
           )
           rpcServer.installPortalHistoryApiHandlers(
             node.historyNetwork.value.portalProtocol
           )
         if node.beaconNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
-            node.beaconNetwork.value.portalProtocol, "beacon"
+            node.beaconNetwork.value.portalProtocol, PortalSubnetwork.beacon
           )
           rpcServer.installPortalBeaconApiHandlers(
             node.beaconNetwork.value.portalProtocol
           )
         if node.stateNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
-            node.stateNetwork.value.portalProtocol, "state"
+            node.stateNetwork.value.portalProtocol, PortalSubnetwork.state
           )
           rpcServer.installPortalStateApiHandlers(
             node.stateNetwork.value.portalProtocol
