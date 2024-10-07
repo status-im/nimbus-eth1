@@ -161,19 +161,24 @@ proc installPortalApiHandlers*(
         return ("{\"enrs\":" & jsonEnrs & "}").JsonString
 
   rpcServer.rpc("portal_" & network & "Offer") do(
-    enr: Record, contentKey: string, contentValue: string
+    enr: Record, contentItems: seq[ContentItem]
   ) -> string:
-    let
-      node = toNodeWithAddress(enr)
-      key = hexToSeqByte(contentKey)
-      content = hexToSeqByte(contentValue)
-      contentKV = ContentKV(contentKey: ContentKeyByteList.init(key), content: content)
-      res = await p.offer(node, @[contentKV])
+    let node = toNodeWithAddress(enr)
 
-    if res.isOk():
-      return SSZ.encode(res.get()).to0xHex()
-    else:
-      raise newException(ValueError, $res.error)
+    var contentItemsToOffer: seq[ContentKV]
+    for contentItem in contentItems:
+      let
+        contentKey = hexToSeqByte(contentItem[0])
+        contentValue = hexToSeqByte(contentItem[1])
+        contentKV = ContentKV(
+          contentKey: ContentKeyByteList.init(contentKey), content: contentValue
+        )
+      contentItemsToOffer.add(contentKV)
+
+    let offerResult = (await p.offer(node, contentItemsToOffer)).valueOr:
+      raise newException(ValueError, $error)
+
+    SSZ.encode(offerResult).to0xHex()
 
   rpcServer.rpc("portal_" & network & "RecursiveFindNodes") do(
     nodeId: NodeId

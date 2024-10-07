@@ -31,6 +31,8 @@ type
     content*: string
     utpTransfer*: bool
 
+  ContentItem* = array[2, string]
+
 NodeInfo.useDefaultSerializationIn JrpcConv
 RoutingTableInfo.useDefaultSerializationIn JrpcConv
 (string, string).useDefaultSerializationIn JrpcConv
@@ -125,3 +127,22 @@ proc readValue*(
         discard
   except ValueError as exc:
     r.raiseUnexpectedValue("PingResult parser error: " & exc.msg)
+
+# Note:
+# This is a similar readValue as the default one in nim-json-serialization but
+# with an added exact length check. The default one will successfully parse when
+# a JSON array with less than size n items is provided. And default objects
+# (in this case empty string) will be applied for the missing items.
+proc readValue*(
+    r: var JsonReader[JrpcConv], value: var ContentItem
+) {.gcsafe, raises: [IOError, SerializationError].} =
+  type IDX = typeof low(value)
+  var count = 0
+  r.parseArray(idx):
+    let i = IDX(idx + low(value).int)
+    if i <= high(value):
+      readValue(r, value[i])
+      count.inc
+
+  if count != value.len():
+    r.raiseUnexpectedValue("Array length mismatch")
