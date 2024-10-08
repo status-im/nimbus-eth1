@@ -16,7 +16,7 @@ import
   eth/p2p/discoveryv5/[protocol, enr],
   ../../common/common_types,
   ../../database/content_db,
-  ../../network_me  tadata,
+  ../../network_me tadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[history_content, validation/historical_hashes_accumulator],
   ../beacon/beacon_chain_historical_roots,
