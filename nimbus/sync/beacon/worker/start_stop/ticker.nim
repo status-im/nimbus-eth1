@@ -30,8 +30,8 @@ type
     coupler*: BlockNumber
     dangling*: BlockNumber
     endBn*: BlockNumber
-    final*: BlockNumber
-    finalUpdateOk*: bool
+    target*: BlockNumber
+    newTargetOk*: bool
 
     hdrUnprocTop*: BlockNumber
     nHdrUnprocessed*: uint64
@@ -77,7 +77,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
       C = if data.base == data.coupler: "B" else: data.coupler.bnStr
       D = if data.coupler == data.dangling: "C" else: data.dangling.bnStr
       E = if data.dangling == data.endBn: "D" else: data.endBn.bnStr
-      F = if data.finalUpdateOk: "?" & $data.final else: data.final.bnStr
+      T = if data.newTargetOk: "?" & $data.target else: data.target.bnStr
 
       hS = if data.nHdrStaged == 0: "n/a"
            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
@@ -101,7 +101,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    info "Sync state", up, peers, B, C, D, E, F, hS, hU, bS, bU, reorg, mem
+    info "Sync state", up, peers, B, C, D, E, T, hS, hU, bS, bU, reorg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages

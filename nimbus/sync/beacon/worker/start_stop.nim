@@ -33,8 +33,8 @@ when enableTicker:
         coupler:         ctx.layout.coupler,
         dangling:        ctx.layout.dangling,
         endBn:           ctx.layout.endBn,
-        final:           ctx.lhc.final.header.number,
-        finalUpdateOk:   ctx.lhc.final.changed,
+        target:          ctx.lhc.target.header.number,
+        newTargetOk:     ctx.lhc.target.changed,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
         hdrStagedTop:    ctx.headersStagedTopKey(),
@@ -56,9 +56,9 @@ proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
   ## for the RPC module.
   return proc(h: Header) {.gcsafe, raises: [].} =
     # Rpc checks empty header against a zero hash rather than `emptyRoot`
-    if ctx.lhc.final.header.number < h.number:
-      ctx.lhc.final.header = h
-      ctx.lhc.final.changed = true
+    if ctx.lhc.target.header.number < h.number:
+      ctx.lhc.target.header = h
+      ctx.lhc.target.changed = true
 
 # ------------------------------------------------------------------------------
 # Public functions
