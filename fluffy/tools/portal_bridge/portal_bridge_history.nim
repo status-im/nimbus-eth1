@@ -363,18 +363,19 @@ proc runBackfillLoop(
       info "Gossip headers from era1 file", eraFile
       let headerRes =
         try:
-          await portalClient.portal_historyGossipHeaders(eraFile)
+          await portalClient.portal_debug_historyGossipHeaders(eraFile)
         except CatchableError as e:
-          error "JSON-RPC portal_historyGossipHeaders failed", error = e.msg
+          error "JSON-RPC portal_debug_historyGossipHeaders failed", error = e.msg
           false
 
       if headerRes:
         info "Gossip block content from era1 file", eraFile
         let res =
           try:
-            await portalClient.portal_historyGossipBlockContent(eraFile)
+            await portalClient.portal_debug_historyGossipBlockContent(eraFile)
           except CatchableError as e:
-            error "JSON-RPC portal_historyGossipBlockContent failed", error = e.msg
+            error "JSON-RPC portal_debug_historyGossipBlockContent failed",
+              error = e.msg
             false
         if res:
           error "Failed to gossip block content from era1 file", eraFile
