@@ -10,50 +10,22 @@
 import
   std/[sequtils, json],
   json_rpc/rpcserver,
-  json_serialization/std/tables,
   stew/byteutils,
   ../network/wire/[portal_protocol, portal_protocol_config],
-  ../network/state/state_content,
   ./rpc_types
 
 {.warning[UnusedImport]: off.}
 import json_rpc/errors
 
-export rpcserver, tables, portal_protocol_config
+export portal_protocol_config
 
-# Portal Network JSON-RPC impelentation as per specification:
+# Portal Network JSON-RPC implementation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
-const
-  ContentNotFoundError = (code: -39001, msg: "Content not found")
-  ContentNotFoundErrorWithTrace = (code: -39002, msg: "Content not found")
-
-type ContentInfo = object
-  content: string
-  utpTransfer: bool
-
-ContentInfo.useDefaultSerializationIn JrpcConv
-TraceContentLookupResult.useDefaultSerializationIn JrpcConv
-TraceObject.useDefaultSerializationIn JrpcConv
-NodeMetadata.useDefaultSerializationIn JrpcConv
-TraceResponse.useDefaultSerializationIn JrpcConv
-
-# Note:
-# Using a string for the network parameter will give an error in the rpc macro:
-# Error: Invalid node kind nnkInfix for macros.`$`
-# Using a static string works but some sandwich problem seems to be happening,
-# as the proc becomes generic, where the rpc macro from router.nim can no longer
-# be found, which is why we export rpcserver which should export router.
 proc installPortalCommonApiHandlers*(
     rpcServer: RpcServer, p: PortalProtocol, network: static PortalSubnetwork
 ) =
   const networkStr = network.symbolName()
-
-  let
-    invalidKeyErr =
-      (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
-    invalidValueErr =
-      (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content value")
 
   rpcServer.rpc("portal_" & networkStr & "NodeInfo") do() -> NodeInfo:
     return p.routingTable.getNodeInfo()
