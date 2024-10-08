@@ -12,6 +12,7 @@ import
   chronicles,
   chronos,
   eth/common/eth_types_rlp,
+  stew/assign2,
   ../evm/[types, state, internals],
   ../db/ledger,
   ../transaction,
@@ -162,10 +163,13 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
     input:        tx.payload
   )
   if tx.txType > TxLegacy:
-    result.accessList = tx.accessList
+    assign(result.accessList, tx.accessList)
 
-  if tx.txType >= TxEip4844:
-    result.versionedHashes = tx.versionedHashes
+  if tx.txType == TxEip4844:
+    assign(result.versionedHashes, tx.versionedHashes)
+
+  if tx.txType == TxEip7702:
+    assign(result.authorizationList, tx.authorizationList)
 
 proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState): CallParams =
   result = CallParams(
@@ -182,10 +186,13 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
     noRefund:     true, # Don't apply gas refund/burn rule.
   )
   if tx.txType > TxLegacy:
-    result.accessList = tx.accessList
+    assign(result.accessList, tx.accessList)
 
-  if tx.txType >= TxEip4844:
-    result.versionedHashes = tx.versionedHashes
+  if tx.txType == TxEip4844:
+    assign(result.versionedHashes, tx.versionedHashes)
+
+  if tx.txType == TxEip7702:
+    assign(result.authorizationList, tx.authorizationList)
 
 proc txCallEvm*(tx: Transaction,
                 sender: EthAddress,
