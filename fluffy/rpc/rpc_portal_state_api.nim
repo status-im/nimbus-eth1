@@ -144,11 +144,13 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
   rpcServer.rpc("portal_stateLocalContent") do(contentKey: string) -> string:
     let
-      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentId = p.toContentId(key).valueOr:
+      keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      key = ContentKey.decode(keyBytes).valueOr:
+        raise invalidKeyErr()
+      contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
 
-      contentResult = p.dbGet(key, contentId).valueOr:
+      contentResult = p.dbGet(keyBytes, contentId).valueOr:
         raise contentNotFoundErr()
 
     return contentResult.to0xHex()
