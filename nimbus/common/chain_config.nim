@@ -468,7 +468,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         Opt.some(12_965_000.BlockNumber), # 2021-08-05 12:33:42 UTC
       arrowGlacierBlock:   Opt.some(13_773_000.BlockNumber), # 2021-12-09 19:55:23 UTC
       grayGlacierBlock:    Opt.some(15_050_000.BlockNumber), # 2022-06-30 10:54:04 UTC
-      mergeForkBlock:      Opt.some(15_537_394.BlockNumber), # 2022-09-15 05:42:42 UTC
+      posBlock:            Opt.some(15_537_394.BlockNumber), # 2022-09-15 05:42:42 UTC
       terminalTotalDifficulty: Opt.some(mainNetTTD),
       shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
       cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC

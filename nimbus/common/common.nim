@@ -324,7 +324,10 @@ func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.pragueTime.isSome and t >= com.config.pragueTime.get
 
 proc proofOfStake*(com: CommonRef, header: Header): bool =
-  if com.config.mergeForkBlock.isSome:
+  if com.config.posBlock.isSome:
+    # see comments of posBlock in common/hardforks.nim
+    header.number >= com.config.posBlock.get
+  elif com.config.mergeForkBlock.isSome:
     header.number >= com.config.mergeForkBlock.get
   else:
     # This costly check is only executed from test suite

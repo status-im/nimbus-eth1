@@ -157,6 +157,14 @@ type
     arrowGlacierBlock*  : Opt[BlockNumber]
     grayGlacierBlock*   : Opt[BlockNumber]
 
+    # posBlock does not participate in ForkId
+    # calculation, and in config file
+    # specially crafted for network depends
+    # solely on TTD  for transition to PoS
+    # e.g. MainNet, but now has pass the transition
+    posBlock*
+      {.dontSerialize.} : Opt[BlockNumber]
+
     # mergeNetsplitBlock is an alias to mergeForkBlock
     # and is used for geth compatibility layer
     mergeNetsplitBlock* : Opt[BlockNumber]
