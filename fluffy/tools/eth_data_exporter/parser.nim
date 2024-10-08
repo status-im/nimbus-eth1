@@ -9,11 +9,14 @@
 # according to those terms.
 
 import
-  json, strutils, os, eth/common/transaction_utils,
-  eth/common, httputils, nimcrypto/utils,
-  stint, stew/byteutils
-
-import ../nimbus/transaction, ../nimbus/utils/ec_recover
+  std/[json, strutils, os],
+  eth/common/transaction_utils,
+  eth/common/blocks,
+  eth/common/eth_types_rlp,
+  httputils,
+  nimcrypto/utils,
+  stint,
+  stew/byteutils
 
 from stew/objects import checkedEnumAssign
 
@@ -30,7 +33,8 @@ func encodeQuantity(value: SomeUnsignedInt): string =
 
 func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
   var i = 0
-  if s[i] == '0' and (s[i+1] in {'x', 'X'}): inc(i, 2)
+  if s[i] == '0' and (s[i + 1] in {'x', 'X'}):
+    inc(i, 2)
   if s.len - i > sizeof(T) * 2:
     raise newException(ValueError, "input hex too big for destination int")
   while i < s.len:
@@ -46,8 +50,7 @@ proc to0xHex*(x: UInt256): string =
 proc to0xHex*(x: string): string =
   "0x" & toLowerAscii(x)
 
-type
-  SomeData* = EthAddress | BloomFilter | BlockNonce
+type SomeData* = Address | Bloom | Bytes8
 
 proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
   let node = n[name]
@@ -58,7 +61,7 @@ proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
     hexToByteArray(node["value"].getStr(), x.data)
     doAssert(x.to0xHex == toLowerAscii(node["value"].getStr()), name)
 
-proc fromJson*(n: JsonNode, name: string, x: var (Hash256|Bytes32)) =
+proc fromJson*(n: JsonNode, name: string, x: var (Hash32 | Bytes32)) =
   let node = n[name]
   if node.kind == JString:
     hexToByteArray(node.getStr(), x.data)
@@ -67,7 +70,7 @@ proc fromJson*(n: JsonNode, name: string, x: var (Hash256|Bytes32)) =
     hexToByteArray(node["value"].getStr(), x.data)
     doAssert(x.to0xHex == toLowerAscii(node["value"].getStr()), name)
 
-proc fromJson*(n: JsonNode, name: string, x: var Blob) =
+proc fromJson*(n: JsonNode, name: string, x: var seq[byte]) =
   x = hexToSeqByte(n[name].getStr())
   doAssert(x.to0xHex == toLowerAscii(n[name].getStr()), name)
 
@@ -107,7 +110,7 @@ proc fromJson*(n: JsonNode, name: string, x: var TxType) =
   else:
     x = hexToInt(node.getStr(), int).TxType
 
-proc fromJson*[T: Bytes32|Hash32](n: JsonNode, name: string, x: var seq[T]) =
+proc fromJson*[T: Bytes32 | Hash32](n: JsonNode, name: string, x: var seq[T]) =
   let node = n[name]
   var h: T
   x = newSeqOfCap[T](node.len)
@@ -115,7 +118,7 @@ proc fromJson*[T: Bytes32|Hash32](n: JsonNode, name: string, x: var seq[T]) =
     hexToByteArray(v.getStr(), h.data)
     x.add h
 
-proc parseBlockHeader*(n: JsonNode): BlockHeader =
+proc parseBlockHeader*(n: JsonNode): Header =
   n.fromJson "parentHash", result.parentHash
   n.fromJson "sha3Uncles", result.ommersHash
   n.fromJson "miner", result.coinbase
@@ -154,7 +157,7 @@ proc parseTransaction*(n: JsonNode): Transaction =
   n.fromJson "gas", tx.gasLimit
 
   if n["to"].kind != JNull:
-    var to: EthAddress
+    var to: Address
     n.fromJson "to", to
     tx.to = Opt.some(to)
 
@@ -197,7 +200,7 @@ proc parseWithdrawal*(n: JsonNode): Withdrawal =
 
 proc validateTxSenderAndHash*(n: JsonNode, tx: Transaction) =
   var sender = tx.recoverSender().expect("valid signature")
-  var fromAddr: EthAddress
+  var fromAddr: Address
   n.fromJson "from", fromAddr
   doAssert sender.to0xHex == fromAddr.to0xHex
   doAssert n["hash"].getStr() == tx.rlpHash().to0xHex
@@ -231,7 +234,7 @@ proc parseReceipt*(n: JsonNode): Receipt =
       raise newException(ValueError, "Unknown receipt type")
 
   if n.hasKey("root"):
-    var hash: Hash256
+    var hash: Hash32
     n.fromJson "root", hash
     rec.isHash = true
     rec.hash = hash
@@ -246,7 +249,7 @@ proc parseReceipt*(n: JsonNode): Receipt =
   rec.logs = parseLogs(n["logs"])
   rec
 
-proc headerHash*(n: JsonNode): Hash256 =
+proc headerHash*(n: JsonNode): Hash32 =
   n.fromJson "hash", result
 
 proc parseAccount*(n: JsonNode): Account =
