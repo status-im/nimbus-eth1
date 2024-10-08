@@ -29,17 +29,17 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
-  ##     0             C==D==E                  F
+  ##     0             C==D==E                  T
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> |
   ##
   ## or
   ## ::
-  ##    0==F           C==D==E
+  ##    0==T           C==D==E
   ##     o----------------o-------------------------->
   ##     | <-- linked --> |
   ##
-  ## with `F == final.header.number` or `F == 0`
+  ## with `T == target.header.number` or `T == 0`
   ##
   ## to be updated to
   ## ::
@@ -49,9 +49,9 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]): bool =
   ##
   var target = ctx.lhc.target.header.number
 
-  # Need: `E < F` and `C == D`
-  if target != 0 and target <= ctx.layout.endBn:      # violates `E < F`
-    trace info & ": not applicable", E=ctx.layout.endBn.bnStr, F=target.bnStr
+  # Need: `E < T` and `C == D`
+  if target != 0 and target <= ctx.layout.endBn:      # violates `E < T`
+    trace info & ": not applicable", E=ctx.layout.endBn.bnStr, T=target.bnStr
     return false
 
   if ctx.layout.coupler != ctx.layout.dangling: # violates `C == D`
@@ -86,11 +86,14 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]): bool =
   ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
   trace info & ": updated", C=ctx.layout.coupler.bnStr,
-    D=ctx.layout.dangling.bnStr, E=ctx.layout.endBn.bnStr, F=target.bnStr
+    uTop=ctx.headersUnprocTop(),
+    D=ctx.layout.dangling.bnStr, E=ctx.layout.endBn.bnStr, T=target.bnStr
   true
 
 
 proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]): bool =
+  ## Merge if `C+1` == `D`
+  ##
   if ctx.lhc.layout.coupler+1 < ctx.lhc.layout.dangling or # gap btw. `C` & `D`
      ctx.lhc.layout.coupler == ctx.lhc.layout.dangling:    # merged already
     return false
