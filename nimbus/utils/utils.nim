@@ -12,32 +12,24 @@
 
 import
   std/[math, times, strutils],
-  eth/[rlp, common/eth_types_rlp],
+  eth/[common/eth_types_rlp, trie/ordered_trie],
   stew/byteutils,
-  nimcrypto,
-  results,
-  ../db/aristo/aristo_sign,
+  nimcrypto/sha2,
   ../constants
 
 export eth_types_rlp
 
-proc calcRootHash[T](items: openArray[T]): Hash256 {.gcsafe.} =
-  let sig = merkleSignBegin()
-  for i, t in items:
-    sig.merkleSignAdd(rlp.encode(i.uint), rlp.encode(t))
-  sig.merkleSignCommit.value
+template calcTxRoot*(transactions: openArray[Transaction]): Root =
+  orderedTrieRoot(transactions)
 
-template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
-  calcRootHash(transactions)
+template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
+  orderedTrieRoot(withdrawals)
 
-template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Hash256 =
-  calcRootHash(withdrawals)
+template calcReceiptsRoot*(receipts: openArray[Receipt]): Root =
+  orderedTrieRoot(receipts)
 
-template calcReceiptsRoot*(receipts: openArray[Receipt]): Hash256 =
-  calcRootHash(receipts)
-
-template calcRequestsRoot*(requests: openArray[Request]): Hash256 =
-  calcRootHash(requests)
+template calcRequestsRoot*(requests: openArray[Request]): Root =
+  orderedTrieRoot(requests)
 
 func sumHash*(hashes: varargs[Hash256]): Hash256 =
   var ctx: sha256

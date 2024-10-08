@@ -507,12 +507,6 @@ proc pp*(w: Hash32; codeHashOk: bool): string =
 proc pp*(n: NibblesBuf): string =
   n.ppPathPfx()
 
-proc pp*(w: HashKey; sig: MerkleSignRef): string =
-  w.ppKey(sig.db)
-
-proc pp*(w: Hash32; sig: MerkleSignRef): string =
-  w.to(HashKey).ppKey(sig.db)
-
 proc pp*(w: HashKey; db = AristoDbRef(nil)): string =
   w.ppKey(db.orDefault)
 
@@ -739,14 +733,6 @@ proc pp*(
     result &= indent.toPfx & db.backend.pp(db, limit=limit, indent)
   elif balancerOk:
     result &= indent.toPfx & db.balancer.ppBalancer(db, indent+1)
-
-proc pp*(sdb: MerkleSignRef; indent = 4): string =
-  result = "" &
-    "count=" & $sdb.count &
-    " root=" & sdb.root.pp
-  if sdb.error != AristoError(0):
-    result &= " error=" & $sdb.error
-  result &= "\n    db\n    " & sdb.db.pp(indent=indent+1)
 
 # ------------------------------------------------------------------------------
 # End

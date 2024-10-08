@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  aristo/[aristo_api, aristo_constants, aristo_sign]
+  aristo/[aristo_api, aristo_constants]
 export
-  aristo_api, aristo_constants, aristo_sign
+  aristo_api, aristo_constants
 
 import
   aristo/aristo_init
@@ -48,7 +48,6 @@ export
   AristoDbRef,
   AristoError,
   AristoTxRef,
-  MerkleSignRef,
   isValid
 
 # End
