@@ -12,7 +12,9 @@ import
   std/[json, strutils, tables],
   stew/byteutils,
   stint,
-  eth/[common, rlp, keys],
+  eth/common/eth_types_rlp,
+  eth/common/keys,
+  eth/common/blocks,
   ../../nimbus/transaction,
   ../../nimbus/common/chain_config,
   ../common/helpers,
@@ -33,13 +35,13 @@ proc parseHexOrInt[T](x: string): T =
     else:
       parseInt(x).T
 
-proc fromJson(T: type EthAddress, n: JsonNode, field: string): EthAddress =
+proc fromJson(T: type Address, n: JsonNode, field: string): Address =
   try:
-    EthAddress.fromHex(n[field].getStr())
+    Address.fromHex(n[field].getStr())
   except ValueError:
     raise newError(ErrorJson, "malformed Eth address " & n[field].getStr)
 
-template fromJson(T: type Blob, n: JsonNode, field: string): Blob =
+template fromJson(T: type seq[byte], n: JsonNode, field: string): seq[byte] =
   hexToSeqByte(n[field].getStr())
 
 proc fromJson(T: type uint64, n: JsonNode, field: string): uint64 =
@@ -64,14 +66,14 @@ proc fromJson(T: type Bytes32, n: JsonNode): Bytes32 =
 proc fromJson(T: type Bytes32, n: JsonNode, field: string): Bytes32 =
   fromJson(T, n[field])
 
-proc fromJson(T: type Hash256, n: JsonNode): Hash256 =
+proc fromJson(T: type Hash32, n: JsonNode): Hash32 =
   var num = n.getStr()
   num.removePrefix("0x")
   if num.len < 64:
     num = repeat('0', 64 - num.len) & num
   Hash32(hexToByteArray(num, 32))
 
-proc fromJson(T: type Hash256, n: JsonNode, field: string): Hash256 =
+proc fromJson(T: type Hash32, n: JsonNode, field: string): Hash32 =
   fromJson(T, n[field])
 
 template fromJson(T: type EthTime, n: JsonNode, field: string): EthTime =
@@ -84,7 +86,7 @@ proc fromJson(T: type AccessList, n: JsonNode, field: string): AccessList =
 
   for x in z:
     var ap = AccessPair(
-      address: EthAddress.fromJson(x, "address")
+      address: Address.fromJson(x, "address")
     )
     let sks = x["storageKeys"]
     for sk in sks:
@@ -94,21 +96,21 @@ proc fromJson(T: type AccessList, n: JsonNode, field: string): AccessList =
 proc fromJson(T: type Ommer, n: JsonNode): Ommer =
   Ommer(
     delta: fromJson(uint64, n, "delta"),
-    address: fromJson(EthAddress, n, "address")
+    address: fromJson(Address, n, "address")
   )
 
 proc fromJson(T: type Withdrawal, n: JsonNode): Withdrawal =
   Withdrawal(
     index: fromJson(uint64, n, "index"),
     validatorIndex: fromJson(uint64, n, "validatorIndex"),
-    address: fromJson(EthAddress, n, "address"),
+    address: fromJson(Address, n, "address"),
     amount: fromJson(uint64, n, "amount")
   )
 
 proc fromJson(T: type Authorization, n: JsonNode): Authorization =
   Authorization(
     chainId: fromJson(ChainId, n, "chainId"),
-    address: fromJson(EthAddress, n, "address"),
+    address: fromJson(Address, n, "address"),
     nonce: fromJson(uint64, n, "nonce"),
     yParity: fromJson(uint64, n, "yParity"),
     R: fromJson(UInt256, n, "R"),
@@ -120,7 +122,7 @@ proc fromJson(T: type seq[Authorization], n: JsonNode, field: string): T =
   for x in list:
     result.add Authorization.fromJson(x)
 
-proc fromJson(T: type VersionedHashes, n: JsonNode, field: string): VersionedHashes =
+proc fromJson(T: type seq[VersionedHash], n: JsonNode, field: string): T =
   let list = n[field]
   for x in list:
     result.add VersionedHash.fromHex(x.getStr)
@@ -128,7 +130,7 @@ proc fromJson(T: type VersionedHashes, n: JsonNode, field: string): VersionedHas
 template `gas=`(tx: var Transaction, x: GasInt) =
   tx.gasLimit = x
 
-template `input=`(tx: var Transaction, x: Blob) =
+template `input=`(tx: var Transaction, x: seq[byte]) =
   tx.payload = x
 
 template `v=`(tx: var Transaction, x: uint64) =
@@ -140,7 +142,7 @@ template `r=`(tx: var Transaction, x: UInt256) =
 template `s=`(tx: var Transaction, x: UInt256) =
   tx.S = x
 
-template `blobVersionedHashes=`(tx: var Transaction, x: VersionedHashes) =
+template `blobVersionedHashes=`(tx: var Transaction, x: seq[VersionedHash]) =
   tx.versionedHashes = x
 
 template required(o: untyped, T: type, oField: untyped) =
@@ -161,10 +163,10 @@ template optional(o: untyped, T: type, oField: untyped) =
 
 proc parseAlloc*(ctx: var TransContext, n: JsonNode) =
   for accAddr, acc in n:
-    let address = EthAddress.fromHex(accAddr)
+    let address = Address.fromHex(accAddr)
     var ga = GenesisAccount()
     if acc.hasKey("code"):
-      ga.code = Blob.fromJson(acc, "code")
+      ga.code = seq[byte].fromJson(acc, "code")
     if acc.hasKey("nonce"):
       ga.nonce = AccountNonce.fromJson(acc, "nonce")
     if acc.hasKey("balance"):
@@ -178,7 +180,7 @@ proc parseAlloc*(ctx: var TransContext, n: JsonNode) =
     ctx.alloc[address] = ga
 
 proc parseEnv*(ctx: var TransContext, n: JsonNode) =
-  required(ctx.env, EthAddress, currentCoinbase)
+  required(ctx.env, Address, currentCoinbase)
   required(ctx.env, GasInt, currentGasLimit)
   required(ctx.env, BlockNumber, currentNumber)
   required(ctx.env, EthTime, currentTimestamp)
@@ -187,7 +189,7 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   optional(ctx.env, DifficultyInt, parentDifficulty)
   omitZero(ctx.env, EthTime, parentTimestamp)
   optional(ctx.env, UInt256, currentBaseFee)
-  omitZero(ctx.env, Hash256, parentUncleHash)
+  omitZero(ctx.env, Hash32, parentUncleHash)
   optional(ctx.env, UInt256, parentBaseFee)
   optional(ctx.env, GasInt, parentGasUsed)
   optional(ctx.env, GasInt, parentGasLimit)
@@ -195,12 +197,12 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   optional(ctx.env, uint64, currentExcessBlobGas)
   optional(ctx.env, uint64, parentBlobGasUsed)
   optional(ctx.env, uint64, parentExcessBlobGas)
-  optional(ctx.env, Hash256, parentBeaconBlockRoot)
+  optional(ctx.env, Hash32, parentBeaconBlockRoot)
 
   if n.hasKey("blockHashes"):
     let w = n["blockHashes"]
     for k, v in w:
-      ctx.env.blockHashes[parseHexOrInt[uint64](k)] = Hash256.fromHex(v.getStr())
+      ctx.env.blockHashes[parseHexOrInt[uint64](k)] = Hash32.fromHex(v.getStr())
 
   if n.hasKey("ommers"):
     let w = n["ommers"]
@@ -224,10 +226,10 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   required(tx, AccountNonce, nonce)
   required(tx, GasInt, gas)
   required(tx, UInt256, value)
-  required(tx, Blob, input)
+  required(tx, seq[byte], input)
 
   if n.hasKey("to"):
-    tx.to = Opt.some(EthAddress.fromJson(n, "to"))
+    tx.to = Opt.some(Address.fromJson(n, "to"))
   tx.chainId = chainId
 
   case tx.txType
@@ -248,7 +250,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     required(tx, GasInt, maxFeePerGas)
     omitZero(tx, AccessList, accessList)
     required(tx, UInt256, maxFeePerBlobGas)
-    required(tx, VersionedHashes, blobVersionedHashes)
+    required(tx, seq[VersionedHash], blobVersionedHashes)
   of TxEip7702:
     required(tx, ChainId, chainId)
     required(tx, GasInt, maxPriorityFeePerGas)
@@ -261,7 +263,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
     eip155 = n["protected"].bval
 
   if n.hasKey("secretKey"):
-    let data = Blob.fromJson(n, "secretKey")
+    let data = seq[byte].fromJson(n, "secretKey")
     let secretKey = PrivateKey.fromRaw(data).tryGet
     signTransaction(tx, secretKey, eip155)
   else:
@@ -356,10 +358,10 @@ proc `@@`(x: uint64 | int64 | int): JsonNode =
 proc `@@`(x: UInt256): JsonNode =
   %("0x" & x.toHex)
 
-proc `@@`(x: Hash256): JsonNode =
+proc `@@`(x: Hash32): JsonNode =
   %("0x" & x.data.toHex)
 
-proc `@@`*(x: Blob): JsonNode =
+proc `@@`*(x: seq[byte]): JsonNode =
   %("0x" & x.toHex)
 
 proc `@@`(x: bool): JsonNode =
@@ -393,7 +395,7 @@ proc `@@`[K, V](x: Table[K, V]): JsonNode =
   for k, v in x:
     result[k.to0xHex] = @@(v)
 
-proc `@@`(x: BloomFilter): JsonNode =
+proc `@@`(x: Bloom): JsonNode =
   %("0x" & toHex(x))
 
 proc `@@`(x: Log): JsonNode =
@@ -405,7 +407,7 @@ proc `@@`(x: Log): JsonNode =
 
 proc `@@`(x: TxReceipt): JsonNode =
   result = %{
-    "root"             : if x.root == default(Hash256): %("0x") else: @@(x.root),
+    "root"             : if x.root == default(Hash32): %("0x") else: @@(x.root),
     "status"           : @@(x.status),
     "cumulativeGasUsed": @@(x.cumulativeGasUsed),
     "logsBloom"        : @@(x.logsBloom),

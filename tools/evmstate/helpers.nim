@@ -10,7 +10,9 @@
 
 import
   std/[json, strutils],
-  eth/[common, keys],
+  eth/common/keys,
+  eth/common/headers,
+  eth/common/transactions,
   eth/trie/trie_defs,
   stint,
   stew/byteutils,
@@ -18,8 +20,8 @@ import
   ../../nimbus/db/ledger,
   ../../nimbus/common/chain_config
 
-template fromJson(T: type EthAddress, n: JsonNode): EthAddress =
-  EthAddress.fromHex(n.getStr)
+template fromJson(T: type Address, n: JsonNode): Address =
+  Address.fromHex(n.getStr)
 
 proc fromJson(T: type UInt256, n: JsonNode): UInt256 =
   # stTransactionTest/ValueOverflow.json
@@ -33,10 +35,10 @@ proc fromJson(T: type UInt256, n: JsonNode): UInt256 =
 template fromJson*(T: type Bytes32, n: JsonNode): Bytes32 =
   Bytes32(hexToByteArray(n.getStr, 32))
 
-template fromJson*(T: type Hash256, n: JsonNode): Hash256 =
+template fromJson*(T: type Hash32, n: JsonNode): Hash32 =
   Hash32(hexToByteArray(n.getStr, 32))
 
-proc fromJson(T: type Blob, n: JsonNode): Blob =
+proc fromJson(T: type seq[byte], n: JsonNode): T =
   let hex = n.getStr
   if hex.len == 0:
     @[]
@@ -60,16 +62,16 @@ proc fromJson(T: type AccessList, n: JsonNode): AccessList =
 
   for x in n:
     var ap = AccessPair(
-      address: EthAddress.fromJson(x["address"])
+      address: Address.fromJson(x["address"])
     )
     let sks = x["storageKeys"]
     for sk in sks:
       ap.storageKeys.add Bytes32.fromHex(sk.getStr)
     result.add ap
 
-proc fromJson(T: type VersionedHashes, list: JsonNode): VersionedHashes =
+proc fromJson(T: type seq[Hash32], list: JsonNode): T =
   for x in list:
-    result.add VersionedHash.fromHex(x.getStr)
+    result.add Hash32.fromHex(x.getStr)
 
 template required(T: type, nField: string): auto =
   fromJson(T, n[nField])
@@ -104,9 +106,9 @@ proc txType(n: JsonNode): TxType =
     return TxEip2930
   TxLegacy
 
-proc parseHeader*(n: JsonNode): BlockHeader =
-  BlockHeader(
-    coinbase   : required(EthAddress, "currentCoinbase"),
+proc parseHeader*(n: JsonNode): Header =
+  Header(
+    coinbase   : required(Address, "currentCoinbase"),
     difficulty : required(DifficultyInt, "currentDifficulty"),
     number     : required(BlockNumber, "currentNumber"),
     gasLimit   : required(GasInt, "currentGasLimit"),
@@ -114,13 +116,13 @@ proc parseHeader*(n: JsonNode): BlockHeader =
     stateRoot  : emptyRlpHash,
     mixHash    : omitZero(Bytes32, "currentRandom"),
     baseFeePerGas  : optional(UInt256, "currentBaseFee"),
-    withdrawalsRoot: optional(Hash256, "currentWithdrawalsRoot"),
+    withdrawalsRoot: optional(Hash32, "currentWithdrawalsRoot"),
     excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
-    parentBeaconBlockRoot: optional(Hash256, "currentBeaconRoot"),
+    parentBeaconBlockRoot: optional(Hash32, "currentBeaconRoot"),
   )
 
-proc parseParentHeader*(n: JsonNode): BlockHeader =
-  BlockHeader(
+proc parseParentHeader*(n: JsonNode): Header =
+  Header(
     stateRoot: emptyRlpHash,
     excessBlobGas: optional(uint64, "parentExcessBlobGas"),
     blobGasUsed: optional(uint64, "parentBlobGasUsed"),
@@ -132,19 +134,19 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     nonce   : required(AccountNonce, "nonce"),
     gasLimit: required(GasInt, "gasLimit", gasIndex),
     value   : required(UInt256, "value", valueIndex),
-    payload : required(Blob, "data", dataIndex),
+    payload : required(seq[byte], "data", dataIndex),
     chainId : ChainId(1),
     gasPrice: omitZero(GasInt, "gasPrice"),
     maxFeePerGas        : omitZero(GasInt, "maxFeePerGas"),
     accessList          : omitZero(AccessList, "accessLists", dataIndex),
     maxPriorityFeePerGas: omitZero(GasInt, "maxPriorityFeePerGas"),
     maxFeePerBlobGas    : omitZero(UInt256, "maxFeePerBlobGas"),
-    versionedHashes     : omitZero(VersionedHashes, "blobVersionedHashes")
+    versionedHashes     : omitZero(seq[Hash32], "blobVersionedHashes")
   )
 
   let rawTo = n["to"].getStr
   if rawTo != "":
-    tx.to = Opt.some(EthAddress.fromHex(rawTo))
+    tx.to = Opt.some(Address.fromHex(rawTo))
 
   let secretKey = required(PrivateKey, "secretKey")
   signTransaction(tx, secretKey, false)
@@ -163,15 +165,15 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: LedgerRef) =
       stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
 
     stateDB.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
-    stateDB.setCode(account, fromJson(Blob, accountData["code"]))
+    stateDB.setCode(account, fromJson(seq[byte], accountData["code"]))
     stateDB.setBalance(account, fromJson(UInt256, accountData["balance"]))
 
-iterator postState*(node: JsonNode): (EthAddress, GenesisAccount) =
+iterator postState*(node: JsonNode): (Address, GenesisAccount) =
   for ac, accountData in node:
-    let account = EthAddress.fromHex(ac)
+    let account = Address.fromHex(ac)
     var ga = GenesisAccount(
       nonce  : fromJson(AccountNonce, accountData["nonce"]),
-      code   : fromJson(Blob, accountData["code"]),
+      code   : fromJson(seq[byte], accountData["code"]),
       balance: fromJson(UInt256, accountData["balance"]),
     )
 
