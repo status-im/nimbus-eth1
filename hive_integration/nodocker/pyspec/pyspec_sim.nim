@@ -36,7 +36,7 @@ type
   Payload = object
     badBlock: bool
     payload: ExecutionPayload
-    beaconRoot: Opt[common.Hash256]
+    beaconRoot: Opt[common.Hash32]
 
 proc getPayload(node: JsonNode): Payload  =
   try:
@@ -119,7 +119,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
   let blks = node["blocks"]
   var
-    latestValidHash = default(common.Hash256)
+    latestValidHash = default(common.Hash32)
     latestVersion: Version
 
   result = TestStatus.OK
@@ -164,7 +164,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
   block blockOne:
     # only update head of beacon chain if valid response occurred
-    if latestValidHash != default(common.Hash256):
+    if latestValidHash != default(common.Hash32):
       # update with latest valid response
       let fcState = ForkchoiceStateV1(headBlockHash: BlockHash latestValidHash.data)
       let res = env.rpcClient.forkchoiceUpdated(latestVersion, fcState)

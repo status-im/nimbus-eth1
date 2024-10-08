@@ -81,8 +81,8 @@ type
 {.pragma: apiRaises, raises: [].}
 {.pragma: apiPragma, cdecl, gcsafe, apiRaises.}
 
-proc toHash(n: Node): common.Hash256 {.gcsafe, raises: [ValueError].} =
-  common.Hash256.fromHex(n.stringVal)
+proc toHash(n: Node): common.Hash32 {.gcsafe, raises: [ValueError].} =
+  common.Hash32.fromHex(n.stringVal)
 
 proc toBlockNumber(n: Node): common.BlockNumber {.gcsafe, raises: [ValueError].} =
   if n.kind == nkInt:
@@ -170,7 +170,7 @@ proc getBlockByHash(ctx: GraphqlContextRef, hash: Node): RespResult =
   except CatchableError as e:
     err(e.msg)
 
-proc getBlockByHash(ctx: GraphqlContextRef, hash: common.Hash256): RespResult =
+proc getBlockByHash(ctx: GraphqlContextRef, hash: common.Hash32): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, hash)))
   except CatchableError as e:
@@ -182,7 +182,7 @@ proc getLatestBlock(ctx: GraphqlContextRef): RespResult =
   except CatchableError as e:
     err("can't get latest block: " & e.msg)
 
-proc getTxCount(ctx: GraphqlContextRef, txRoot: common.Hash256): RespResult =
+proc getTxCount(ctx: GraphqlContextRef, txRoot: common.Hash32): RespResult =
   try:
     ok(resp(getTransactionCount(ctx.chainDB, txRoot)))
   except CatchableError as e:
@@ -237,19 +237,19 @@ proc resp(hash: common.Hash32 | common.Bytes32): RespResult =
 proc resp(data: openArray[byte]): RespResult =
   ok(resp("0x" & data.toHex))
 
-proc getTotalDifficulty(ctx: GraphqlContextRef, blockHash: common.Hash256): RespResult =
+proc getTotalDifficulty(ctx: GraphqlContextRef, blockHash: common.Hash32): RespResult =
   let score = getScore(ctx.chainDB, blockHash).valueOr:
     return err("can't get total difficulty")
 
   bigIntNode(score)
 
-proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: common.Hash256): RespResult =
+proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: common.Hash32): RespResult =
   try:
     ok(resp(getUnclesCount(ctx.chainDB, ommersHash)))
   except CatchableError as e:
     err("can't get ommers count: " & e.msg)
 
-proc getOmmers(ctx: GraphqlContextRef, ommersHash: common.Hash256): RespResult =
+proc getOmmers(ctx: GraphqlContextRef, ommersHash: common.Hash32): RespResult =
   try:
     let uncles = getUncles(ctx.chainDB, ommersHash)
     when false:
@@ -264,7 +264,7 @@ proc getOmmers(ctx: GraphqlContextRef, ommersHash: common.Hash256): RespResult =
   except CatchableError as e:
     err("can't get ommers: " & e.msg)
 
-proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: common.Hash256, index: int): RespResult =
+proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: common.Hash32, index: int): RespResult =
   try:
     let uncles = getUncles(ctx.chainDB, ommersHash)
     if uncles.len == 0:
@@ -337,7 +337,7 @@ proc getTxAt(ctx: GraphqlContextRef, header: common.BlockHeader, index: uint64):
   except RlpError as exc:
     err("can't get transaction by index '" & $index & "': " & exc.msg)
 
-proc getTxByHash(ctx: GraphqlContextRef, hash: common.Hash256): RespResult =
+proc getTxByHash(ctx: GraphqlContextRef, hash: common.Hash32): RespResult =
   try:
     let (blockNumber, index) = getTransactionKey(ctx.chainDB, hash)
     let header = getBlockHeader(ctx.chainDB, blockNumber)

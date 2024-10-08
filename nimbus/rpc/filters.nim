@@ -50,7 +50,7 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
         blockNumber: Opt.some(w3BlockNumber(header.number)),
         address: w3Addr log.address,
         data: log.data,
-        #  TODO topics should probably be kept as Hash256 in receipts
+        #  TODO topics should probably be kept as Hash32 in receipts
         topics: topicToDigest(log.topics)
       )
 

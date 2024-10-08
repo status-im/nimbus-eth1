@@ -133,7 +133,7 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
         when consensusFork >= ConsensusFork.Capella:
           Opt.some(calcWithdrawalsRoot(ethWithdrawals.get()))
         else:
-          Opt.none(common.Hash256)
+          Opt.none(common.Hash32)
       blobGasUsed =
         when consensusFork >= ConsensusFork.Deneb:
           Opt.some(payload.blob_gas_used)

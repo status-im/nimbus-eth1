@@ -33,7 +33,7 @@ import
 
 type
   BlockHeader = eth_types.BlockHeader
-  Hash256 = eth_types.Hash256
+  Hash32 = eth_types.Hash32
 
 proc getProof*(
     accDB: LedgerRef,
@@ -464,7 +464,7 @@ proc setupEthRpc*(
 
   proc getLogsForBlock(
       chain: CoreDbRef,
-      hash: Hash256,
+      hash: Hash32,
       header: BlockHeader,
       opts: FilterOptions): seq[FilterLog]
         {.gcsafe, raises: [RlpError,BlockNotFound].} =

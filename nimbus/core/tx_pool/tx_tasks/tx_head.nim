@@ -29,7 +29,7 @@ type
     ## Diff data, txs changes that apply after changing the head\
     ## insertion point of the block chain
 
-    remTxs*: Table[Hash256,bool] ##\
+    remTxs*: Table[Hash32,bool] ##\
       ## txs to remove
 
 # ------------------------------------------------------------------------------

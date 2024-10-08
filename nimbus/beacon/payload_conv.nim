@@ -19,27 +19,27 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func wdRoot(list: openArray[WithdrawalV1]): common.Hash256
+func wdRoot(list: openArray[WithdrawalV1]): common.Hash32
              {.gcsafe, raises:[].} =
   {.noSideEffect.}:
     calcWithdrawalsRoot(ethWithdrawals list)
 
-func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[common.Hash256]
+func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[common.Hash32]
              {.gcsafe, raises:[].} =
   {.noSideEffect.}:
-    if x.isNone: Opt.none(common.Hash256)
+    if x.isNone: Opt.none(common.Hash32)
     else: Opt.some(wdRoot x.get)
 
-func txRoot(list: openArray[Web3Tx]): common.Hash256
+func txRoot(list: openArray[Web3Tx]): common.Hash32
              {.gcsafe, raises:[RlpError].} =
   {.noSideEffect.}:
     calcTxRoot(ethTxs(list))
 
-func requestsRoot(p: ExecutionPayload): Opt[common.Hash256]
+func requestsRoot(p: ExecutionPayload): Opt[common.Hash32]
              {.gcsafe, raises:[].} =
   {.noSideEffect.}:
     let reqs = ethRequests(p)
-    if reqs.isNone: Opt.none(common.Hash256)
+    if reqs.isNone: Opt.none(common.Hash32)
     else: Opt.some(calcRequestsRoot reqs.get)
 
 # ------------------------------------------------------------------------------
@@ -92,7 +92,7 @@ func executionPayloadV1V2*(blk: EthBlock): ExecutionPayloadV1OrV2 =
   )
 
 func blockHeader*(p: ExecutionPayload,
-                  beaconRoot: Opt[common.Hash256]):
+                  beaconRoot: Opt[common.Hash32]):
                     common.BlockHeader {.gcsafe, raises:[RlpError].} =
   common.BlockHeader(
     parentHash     : ethHash p.parentHash,
@@ -128,7 +128,7 @@ func blockBody*(p: ExecutionPayload):
   )
 
 func ethBlock*(p: ExecutionPayload,
-               beaconRoot: Opt[common.Hash256]):
+               beaconRoot: Opt[common.Hash32]):
                  common.EthBlock {.gcsafe, raises:[RlpError].} =
   common.EthBlock(
     header      : blockHeader(p, beaconRoot),

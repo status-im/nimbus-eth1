@@ -20,7 +20,7 @@ const
 func toEvmc*(a: EthAddress): evmc_address {.inline.} =
   evmc_address(bytes: a.data)
 
-func toEvmc*(h: Hash256): evmc_bytes32 {.inline.} =
+func toEvmc*(h: Hash32): evmc_bytes32 {.inline.} =
   doAssert sizeof(h) == sizeof(evmc_bytes32)
   evmc_bytes32(bytes: h.data)
 
@@ -62,7 +62,7 @@ when isMainModule:
   assert(b == fromEvmc(UInt256, eb))
   var h = EMPTY_SHA3
   var eh = toEvmc(h)
-  assert(h == fromEvmc(Hash256, eh))
+  assert(h == fromEvmc(Hash32, eh))
   var s = cast[ContractSalt](EMPTY_ROOT_HASH)
   var es = toEvmc(s)
   assert(s == fromEvmc(ContractSalt, es))

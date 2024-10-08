@@ -99,7 +99,7 @@ proc persistBlocksImpl(
     blks = 0
     txs = 0
     gas = GasInt(0)
-    parentHash: Hash256 # only needed after the first block
+    parentHash: Hash32 # only needed after the first block
   for blk in blocks:
     template header(): BlockHeader =
       blk.header
@@ -216,7 +216,7 @@ proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string
   ok()
 
 proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
-  if header.parentHash == default(Hash256):
+  if header.parentHash == default(Hash32):
     if not c.db.setHead(header):
       return err("setHead failed")
     return ok()
@@ -235,7 +235,7 @@ proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
     return err("setHead failed")
   ok()
 
-proc setCanonical*(c: ChainRef, blockHash: Hash256): Result[void, string] =
+proc setCanonical*(c: ChainRef, blockHash: Hash32): Result[void, string] =
   var header: BlockHeader
   if not c.db.getBlockHeader(blockHash, header):
     debug "Failed to get BlockHeader", hash = blockHash

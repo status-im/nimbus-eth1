@@ -33,7 +33,7 @@ proc fromJson(T: type UInt256, n: JsonNode): UInt256 =
 template fromJson*(T: type Bytes32, n: JsonNode): Bytes32 =
   Bytes32(hexToByteArray(n.getStr, 32))
 
-template fromJson*(T: type Hash256, n: JsonNode): Hash256 =
+template fromJson*(T: type Hash32, n: JsonNode): Hash32 =
   Hash32(hexToByteArray(n.getStr, 32))
 
 proc fromJson(T: type Blob, n: JsonNode): Blob =
@@ -114,9 +114,9 @@ proc parseHeader*(n: JsonNode): BlockHeader =
     stateRoot  : emptyRlpHash,
     mixHash    : omitZero(Bytes32, "currentRandom"),
     baseFeePerGas  : optional(UInt256, "currentBaseFee"),
-    withdrawalsRoot: optional(Hash256, "currentWithdrawalsRoot"),
+    withdrawalsRoot: optional(Hash32, "currentWithdrawalsRoot"),
     excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
-    parentBeaconBlockRoot: optional(Hash256, "currentBeaconRoot"),
+    parentBeaconBlockRoot: optional(Hash32, "currentBeaconRoot"),
   )
 
 proc parseParentHeader*(n: JsonNode): BlockHeader =

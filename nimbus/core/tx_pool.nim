@@ -476,7 +476,7 @@ proc assembleBlock*(
   ## uninitialised:
   ##
   ## * *extraData*: Blob
-  ## * *mixHash*: Hash256
+  ## * *mixHash*: Hash32
   ## * *nonce*:     BlockNonce
   ##
   ## Note that this getter runs *ad hoc* all the txs through the VM in
@@ -540,7 +540,7 @@ func nItems*(xp: TxPoolRef): TxTabsItemsCount =
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
-func getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void] =
+func getItem*(xp: TxPoolRef; hash: Hash32): Result[TxItemRef,void] =
   ## Returns a transaction if it is contained in the pool.
   xp.txDB.byItemID.eq(hash)
 
@@ -553,11 +553,11 @@ func disposeItems*(xp: TxPoolRef; item: TxItemRef;
   ## the number of items eventally removed.
   xp.disposeItemAndHigherNonces(item, reason, otherReason)
 
-iterator txHashes*(xp: TxPoolRef): Hash256 =
+iterator txHashes*(xp: TxPoolRef): Hash32 =
   for txHash in nextKeys(xp.txDB.byItemID):
     yield txHash
 
-iterator okPairs*(xp: TxPoolRef): (Hash256, TxItemRef) =
+iterator okPairs*(xp: TxPoolRef): (Hash32, TxItemRef) =
   for x in nextPairs(xp.txDB.byItemID):
     if x.data.reject == txInfoOk:
       yield (x.key, x.data)
@@ -577,12 +577,12 @@ func disposeAll*(xp: TxPoolRef) {.raises: [CatchableError].} =
 # Public functions, local/remote accounts
 # ------------------------------------------------------------------------------
 
-func inPoolAndOk*(xp: TxPoolRef; txHash: Hash256): bool =
+func inPoolAndOk*(xp: TxPoolRef; txHash: Hash32): bool =
   let res = xp.getItem(txHash)
   if res.isErr: return false
   res.get().reject == txInfoOk
 
-func inPoolAndReason*(xp: TxPoolRef; txHash: Hash256): Result[void, string] =
+func inPoolAndReason*(xp: TxPoolRef; txHash: Hash32): Result[void, string] =
   let res = xp.getItem(txHash)
   if res.isErr:
     # try to look in rejecteds

@@ -26,7 +26,7 @@ type
     # TODO: Syncing   bool
 
   Shadow = ref object
-    txHash: common.Hash256
+    txHash: common.Hash32
 
 method withMainFork(cs: BlockStatus, fork: EngineFork): BaseSpec =
   var res = cs.clone()

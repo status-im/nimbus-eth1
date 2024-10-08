@@ -36,10 +36,10 @@ type
     currentNumber*: BlockNumber
     currentTimestamp*: EthTime
     parentTimestamp*: EthTime
-    blockHashes*: Table[uint64, Hash256]
+    blockHashes*: Table[uint64, Hash32]
     ommers*: seq[Ommer]
     currentBaseFee*: Opt[UInt256]
-    parentUncleHash*: Hash256
+    parentUncleHash*: Hash32
     parentBaseFee*: Opt[UInt256]
     parentGasUsed*: Opt[GasInt]
     parentGasLimit*: Opt[GasInt]
@@ -48,7 +48,7 @@ type
     currentExcessBlobGas*: Opt[uint64]
     parentBlobGasUsed*: Opt[uint64]
     parentExcessBlobGas*: Opt[uint64]
-    parentBeaconBlockRoot*: Opt[Hash256]
+    parentBeaconBlockRoot*: Opt[Hash32]
 
   TxsType* = enum
     TxsNone
@@ -72,34 +72,34 @@ type
 
   TxReceipt* = object
     txType*: TxType
-    root*: Hash256
+    root*: Hash32
     status*: bool
     cumulativeGasUsed*: GasInt
     logsBloom*: BloomFilter
     logs*: seq[Log]
-    transactionHash*: Hash256
+    transactionHash*: Hash32
     contractAddress*: EthAddress
     gasUsed*: GasInt
-    blockHash*: Hash256
+    blockHash*: Hash32
     transactionIndex*: int
 
   # ExecutionResult contains the execution status after running a state test, any
   # error that might have occurred and a dump of the final state if requested.
   ExecutionResult* = object
-    stateRoot*: Hash256
-    txRoot*: Hash256
-    receiptsRoot*: Hash256
-    logsHash*: Hash256
+    stateRoot*: Hash32
+    txRoot*: Hash32
+    receiptsRoot*: Hash32
+    logsHash*: Hash32
     logsBloom*: BloomFilter
     receipts*: seq[TxReceipt]
     rejected*: seq[RejectedTx]
     currentDifficulty*: Opt[DifficultyInt]
     gasUsed*: GasInt
     currentBaseFee*: Opt[UInt256]
-    withdrawalsRoot*: Opt[Hash256]
+    withdrawalsRoot*: Opt[Hash32]
     blobGasUsed*: Opt[uint64]
     currentExcessBlobGas*: Opt[uint64]
-    requestsRoot*: Opt[Hash256]
+    requestsRoot*: Opt[Hash32]
     depositRequests*: Opt[seq[DepositRequest]]
     withdrawalRequests*: Opt[seq[WithdrawalRequest]]
     consolidationRequests*: Opt[seq[ConsolidationRequest]]

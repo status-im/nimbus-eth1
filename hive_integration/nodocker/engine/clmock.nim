@@ -24,7 +24,7 @@ import
   ./engine_client,
   ./types
 
-import web3/engine_api_types except Hash256  # conflict with the one from eth/common
+import web3/engine_api_types except Hash32  # conflict with the one from eth/common
 
 # Consensus Layer Client Mock used to sync the Execution Clients once the TTD has been reached
 type
@@ -56,7 +56,7 @@ type
     payloadIDHistory        : Table[string, PayloadID]
 
     # PoS Chain History Information
-    prevRandaoHistory*      : Table[uint64, common.Hash256]
+    prevRandaoHistory*      : Table[uint64, common.Hash32]
     executedPayloadHistory* : Table[uint64, ExecutionPayload]
     headHashHistory         : seq[BlockHash]
 
@@ -91,7 +91,7 @@ type
     onFinalizedBlockChange*    : proc(): bool {.gcsafe.}
 
 
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
+proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash32] =
   for w3tx in list:
     let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
@@ -270,7 +270,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 
 proc generatePayloadAttributes(cl: CLMocker) =
   # Generate a random value for the PrevRandao field
-  let nextPrevRandao = common.Hash256.randomBytes()
+  let nextPrevRandao = common.Hash32.randomBytes()
   let timestamp = Quantity cl.getNextBlockTimestamp.uint64
   cl.latestPayloadAttributes = PayloadAttributes(
     timestamp:             timestamp,
@@ -432,7 +432,7 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
       # the blockHash of the payload is valid
       # the payload doesn't extend the canonical chain
       # the payload hasn't been fully validated.
-      let nullHash = w3Hash default(common.Hash256)
+      let nullHash = w3Hash default(common.Hash32)
       let latestValidHash = s.latestValidHash.get(nullHash)
       if s.latestValidHash.isSome and latestValidHash != nullHash:
         error "CLMocker: NewPayload returned ACCEPTED status with incorrect LatestValidHash",

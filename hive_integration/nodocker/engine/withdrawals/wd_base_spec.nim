@@ -217,7 +217,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
 
     # Genesis should not contain `withdrawalsRoot` either
     let r = env.client.latestHeader()
-    r.expectWithdrawalsRoot(Opt.none(common.Hash256))
+    r.expectWithdrawalsRoot(Opt.none(common.Hash32))
   else:
     # Genesis is post shanghai, it should contain EmptyWithdrawalsRoot
     let r = env.client.latestHeader()
@@ -309,7 +309,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         let r = env.client.latestHeader()
         #r.ExpectationDescription = "Requested "latest" block expecting block to contain
         #" withdrawalRoot=nil, because (block %d).timestamp < shanghaiTime
-        r.expectWithdrawalsRoot(Opt.none(common.Hash256))
+        r.expectWithdrawalsRoot(Opt.none(common.Hash32))
       return true
     ,
     onForkchoiceBroadcast: proc(): bool =
@@ -433,7 +433,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           var payload = env.clMock.latestExecutedPayload
 
           # Corrupt the hash
-          let randomHash = common.Hash256.randomBytes()
+          let randomHash = common.Hash32.randomBytes()
           payload.blockHash = w3Hash randomHash
 
           # On engine_newPayloadV2 `INVALID_BLOCK_HASH` is deprecated
@@ -497,7 +497,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
 
       # Check the correct withdrawal root on past blocks
       let r = env.client.headerByNumber(bn)
-      var expectedWithdrawalsRoot: Opt[common.Hash256]
+      var expectedWithdrawalsRoot: Opt[common.Hash32]
       if bn >= ws.forkHeight.uint64:
         let wds = ws.wdHistory.getWithdrawals(bn)
         expectedWithdrawalsRoot = Opt.some(calcWithdrawalsRoot(wds.list))

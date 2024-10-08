@@ -36,7 +36,7 @@ func toWdList(x: Opt[seq[eth_types.Withdrawal]]):
   else: Opt.some(toWdList x.get)
 
 proc populateTransactionObject*(tx: Transaction,
-                                optionalHash: Opt[eth_types.Hash256] = Opt.none(eth_types.Hash256),
+                                optionalHash: Opt[eth_types.Hash32] = Opt.none(eth_types.Hash32),
                                 optionalNumber: Opt[eth_types.BlockNumber] = Opt.none(eth_types.BlockNumber),
                                 txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
   result = TransactionObject()
@@ -69,7 +69,7 @@ proc populateTransactionObject*(tx: Transaction,
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
     result.blobVersionedHashes = Opt.some(w3Hashes tx.versionedHashes)
 
-proc populateBlockObject*(blockHash: eth_types.Hash256,
+proc populateBlockObject*(blockHash: eth_types.Hash32,
                           blk: EthBlock,
                           fullTx: bool): BlockObject =
   template header: auto = blk.header

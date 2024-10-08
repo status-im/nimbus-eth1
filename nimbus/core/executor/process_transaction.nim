@@ -127,7 +127,7 @@ proc processTransactionImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
+proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
                               Result[void, string] =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
@@ -159,7 +159,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   statedb.persist(clearEmptyAccount = true)
   ok()
 
-proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash256):
+proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
                               Result[void, string] =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.

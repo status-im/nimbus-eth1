@@ -153,7 +153,7 @@ type
     daoForkBlock*       : Opt[BlockNumber]
     daoForkSupport*     : bool
     eip150Block*        : Opt[BlockNumber]
-    eip150Hash*         : Hash256
+    eip150Hash*         : Hash32
     eip155Block*        : Opt[BlockNumber]
     eip158Block*        : Opt[BlockNumber]
     byzantiumBlock*     : Opt[BlockNumber]

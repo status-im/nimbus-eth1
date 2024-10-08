@@ -202,7 +202,7 @@ proc generateInvalidPayload*(env: TestEnv,
                              payloadField: InvalidPayloadBlockField): ExecutableData =
   env.sender.generateInvalidPayload(data, payloadField)
 
-proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash256): bool =
+proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash32): bool =
   let res = waitFor env.client.verifyPoWProgress(lastBlockHash)
   if res.isErr:
     error "verify PoW Progress error", msg=res.error
