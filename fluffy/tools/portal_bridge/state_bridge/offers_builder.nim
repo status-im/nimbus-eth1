@@ -15,19 +15,19 @@ import
 
 type OffersBuilder* = object
   worldState: WorldStateRef
-  blockHash: BlockHash
+  blockHash: Hash32
   accountTrieOffers: seq[AccountTrieOfferWithKey]
   contractTrieOffers: seq[ContractTrieOfferWithKey]
   contractCodeOffers: seq[ContractCodeOfferWithKey]
 
-proc init*(T: type OffersBuilder, worldState: WorldStateRef, blockHash: BlockHash): T =
+proc init*(T: type OffersBuilder, worldState: WorldStateRef, blockHash: Hash32): T =
   T(worldState: worldState, blockHash: blockHash)
 
 proc toTrieProof(proof: seq[seq[byte]]): TrieProof =
   TrieProof.init(proof.map((node) => TrieNode.init(node)))
 
 proc buildAccountTrieNodeOffer(
-    builder: var OffersBuilder, addressHash: content_keys.AddressHash, proof: TrieProof
+    builder: var OffersBuilder, addressHash: Hash32, proof: TrieProof
 ) =
   try:
     let
@@ -43,7 +43,7 @@ proc buildAccountTrieNodeOffer(
 
 proc buildContractTrieNodeOffer(
     builder: var OffersBuilder,
-    addressHash: content_keys.AddressHash,
+    addressHash: Hash32,
     slotHash: SlotKeyHash,
     storageProof: TrieProof,
     accountProof: TrieProof,
@@ -64,7 +64,7 @@ proc buildContractTrieNodeOffer(
 
 proc buildContractCodeOffer(
     builder: var OffersBuilder,
-    addressHash: content_keys.AddressHash,
+    addressHash: Hash32,
     code: seq[byte],
     accountProof: TrieProof,
 ) =

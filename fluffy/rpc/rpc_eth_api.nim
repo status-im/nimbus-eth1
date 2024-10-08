@@ -21,7 +21,6 @@ import
 
 from ../../nimbus/errors import ValidationError
 from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs, filterLogs
-from ../../nimbus/beacon/web3_eth_conv import w3Addr, w3Hash, ethHash
 
 from eth/common/eth_types_rlp import rlpHash
 
@@ -41,15 +40,15 @@ func init*(
     raise (ref ValidationError)(msg: "Invalid tx signature")
 
   TransactionObject(
-    blockHash: Opt.some(w3Hash header.rlpHash),
+    blockHash: Opt.some(header.rlpHash),
     blockNumber: Opt.some(Quantity(header.number)),
     `from`: sender,
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
-    hash: w3Hash tx.rlpHash,
+    hash: tx.rlpHash,
     input: tx.payload,
     nonce: Quantity(tx.nonce),
-    to: Opt.some(w3Addr tx.destination),
+    to: Opt.some(tx.destination),
     transactionIndex: Opt.some(Quantity(txIndex)),
     value: tx.value,
     v: Quantity(tx.V),
@@ -69,15 +68,15 @@ func init*(
 
   var blockObject = BlockObject(
     number: Quantity(header.number),
-    hash: w3Hash blockHash,
-    parentHash: w3Hash header.parentHash,
+    hash: blockHash,
+    parentHash: header.parentHash,
     nonce: Opt.some(FixedBytes[8](header.nonce)),
-    sha3Uncles: w3Hash header.ommersHash,
+    sha3Uncles: header.ommersHash,
     logsBloom: FixedBytes[256] header.logsBloom,
-    transactionsRoot: w3Hash header.txRoot,
-    stateRoot: w3Hash header.stateRoot,
-    receiptsRoot: w3Hash header.receiptsRoot,
-    miner: w3Addr header.coinbase,
+    transactionsRoot: header.txRoot,
+    stateRoot: header.stateRoot,
+    receiptsRoot: header.receiptsRoot,
+    miner: header.coinbase,
     difficulty: header.difficulty,
     extraData: HistoricExtraData header.extraData,
     # TODO: This is optional according to
@@ -97,7 +96,7 @@ func init*(
   if not isUncle:
     blockObject.uncles = body.uncles.map(
       proc(h: Header): Hash32 =
-        w3Hash h.rlpHash
+        h.rlpHash
     )
 
     if fullTx:
@@ -107,7 +106,7 @@ func init*(
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add txOrHash(w3Hash rlpHash(tx))
+        blockObject.transactions.add txOrHash(rlpHash(tx))
 
   blockObject
 
@@ -246,7 +245,7 @@ proc installEthApiHandlers*(
 
     let
       hn = historyNetwork.getOrRaise()
-      hash = ethHash filterOptions.blockHash.unsafeGet()
+      hash = filterOptions.blockHash.value()
       header = (await hn.getVerifiedBlockHeader(hash)).valueOr:
         raise newException(ValueError, "Could not find header with requested hash")
 

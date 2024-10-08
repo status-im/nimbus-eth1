@@ -25,11 +25,11 @@ import
   ./conf,
   ./network_metadata,
   ./common/common_utils,
-  ./rpc/
-    [
-      rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_api,
-      rpc_portal_debug_api,
-    ],
+  ./rpc/[
+    rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_common_api,
+    rpc_portal_history_api, rpc_portal_beacon_api, rpc_portal_state_api,
+    rpc_portal_debug_history_api,
+  ],
   ./database/content_db,
   ./portal_node,
   ./version,
@@ -258,21 +258,30 @@ proc run(
         rpcServer.installDebugApiHandlers(node.stateNetwork)
       of RpcFlag.portal:
         if node.historyNetwork.isSome():
-          rpcServer.installPortalApiHandlers(
-            node.historyNetwork.value.portalProtocol, "history"
+          rpcServer.installPortalCommonApiHandlers(
+            node.historyNetwork.value.portalProtocol, PortalSubnetwork.history
+          )
+          rpcServer.installPortalHistoryApiHandlers(
+            node.historyNetwork.value.portalProtocol
           )
         if node.beaconNetwork.isSome():
-          rpcServer.installPortalApiHandlers(
-            node.beaconNetwork.value.portalProtocol, "beacon"
+          rpcServer.installPortalCommonApiHandlers(
+            node.beaconNetwork.value.portalProtocol, PortalSubnetwork.beacon
+          )
+          rpcServer.installPortalBeaconApiHandlers(
+            node.beaconNetwork.value.portalProtocol
           )
         if node.stateNetwork.isSome():
-          rpcServer.installPortalApiHandlers(
-            node.stateNetwork.value.portalProtocol, "state"
+          rpcServer.installPortalCommonApiHandlers(
+            node.stateNetwork.value.portalProtocol, PortalSubnetwork.state
+          )
+          rpcServer.installPortalStateApiHandlers(
+            node.stateNetwork.value.portalProtocol
           )
       of RpcFlag.portal_debug:
         if node.historyNetwork.isSome():
-          rpcServer.installPortalDebugApiHandlers(
-            node.historyNetwork.value.portalProtocol, "history"
+          rpcServer.installPortalDebugHistoryApiHandlers(
+            node.historyNetwork.value.portalProtocol
           )
       of RpcFlag.discovery:
         rpcServer.installDiscoveryApiHandlers(d)

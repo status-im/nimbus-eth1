@@ -21,7 +21,7 @@ import
   ../../network/history/
     [history_network, history_content, validation/historical_hashes_accumulator],
   ../../database/content_db,
-  ../../rpc/[portal_rpc_client, rpc_portal_api],
+  ../../rpc/[portal_rpc_client, rpc_portal_history_api],
   ../test_helpers
 
 from eth/common/eth_types_rlp import rlpHash
@@ -59,7 +59,7 @@ proc stop(hn: HistoryNode) {.async.} =
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
   return hn.historyNetwork.contentDB.get(contentId).isSome()
 
-proc store*(hn: HistoryNode, blockHash: BlockHash, blockHeader: Header) =
+proc store*(hn: HistoryNode, blockHash: Hash32, blockHeader: Header) =
   let
     headerRlp = rlp.encode(blockHeader)
     blockHeaderWithProof = BlockHeaderWithProof(
@@ -72,14 +72,14 @@ proc store*(hn: HistoryNode, blockHash: BlockHash, blockHeader: Header) =
     contentKeyBytes, contentId, SSZ.encode(blockHeaderWithProof)
   )
 
-proc store*(hn: HistoryNode, blockHash: BlockHash, blockBody: BlockBody) =
+proc store*(hn: HistoryNode, blockHash: Hash32, blockBody: BlockBody) =
   let
     contentKeyBytes = blockBodyContentKey(blockHash).encode()
     contentId = history_content.toContentId(contentKeyBytes)
 
   hn.portalProtocol().storeContent(contentKeyBytes, contentId, blockBody.encode())
 
-proc store*(hn: HistoryNode, blockHash: BlockHash, receipts: seq[Receipt]) =
+proc store*(hn: HistoryNode, blockHash: Hash32, receipts: seq[Receipt]) =
   let
     contentKeyBytes = receiptsContentKey(blockHash).encode()
     contentId = history_content.toContentId(contentKeyBytes)
@@ -101,8 +101,8 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
-  rpcHttpServer.installPortalApiHandlers(
-    historyNode.historyNetwork.portalProtocol, "history"
+  rpcHttpServer.installPortalHistoryApiHandlers(
+    historyNode.historyNetwork.portalProtocol
   )
   rpcHttpServer.start()
 

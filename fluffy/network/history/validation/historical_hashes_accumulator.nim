@@ -47,7 +47,7 @@ const
 
 type
   HeaderRecord* = object
-    blockHash*: BlockHash
+    blockHash*: Hash32
     totalDifficulty*: UInt256
 
   EpochRecord* = List[HeaderRecord, EPOCH_SIZE]

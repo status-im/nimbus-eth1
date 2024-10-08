@@ -23,7 +23,7 @@ logScope:
 
 proc getNextNodeHash(
     trieNode: TrieNode, nibbles: UnpackedNibbles, nibbleIdx: var int
-): Opt[(Nibbles, NodeHash)] =
+): Opt[(Nibbles, Hash32)] =
   # the trie node should have already been validated against the lookup hash
   # so we expect that no rlp errors should be possible
   try:
@@ -41,7 +41,7 @@ proc getNextNodeHash(
 
       let nextHashBytes = trieNodeRlp.listElem(nextNibble.int).toBytes()
       if nextHashBytes.len() == 0:
-        return Opt.none((Nibbles, NodeHash))
+        return Opt.none((Nibbles, Hash32))
 
       nibbleIdx += 1
       return Opt.some(
@@ -56,16 +56,16 @@ proc getNextNodeHash(
     if unpackedPrefix != nibbles[nibbleIdx ..< nibbleIdx + unpackedPrefix.len()]:
       # The nibbles don't match so we stop the search and don't increment
       # the nibble index to indicate how many nibbles were consumed
-      return Opt.none((Nibbles, NodeHash))
+      return Opt.none((Nibbles, Hash32))
 
     nibbleIdx += prefix.unpackNibbles().len()
     if isLeaf:
-      return Opt.none((Nibbles, NodeHash))
+      return Opt.none((Nibbles, Hash32))
 
     # extension node
     let nextHashBytes = trieNodeRlp.listElem(1).toBytes()
     if nextHashBytes.len() == 0:
-      return Opt.none((Nibbles, NodeHash))
+      return Opt.none((Nibbles, Hash32))
 
     Opt.some((nibbles[0 ..< nibbleIdx].packNibbles(), Hash32.fromBytes(nextHashBytes)))
   except RlpError as e:
@@ -263,7 +263,7 @@ proc getProofsByStateRoot*(
 
 # Used by: eth_getBalance,
 proc getBalance*(
-    n: StateNetwork, blockNumOrHash: uint64 | BlockHash, address: Address
+    n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
   let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
     warn "Failed to get state root by block number or hash", blockNumOrHash
@@ -273,7 +273,7 @@ proc getBalance*(
 
 # Used by: eth_getTransactionCount
 proc getTransactionCount*(
-    n: StateNetwork, blockNumOrHash: uint64 | BlockHash, address: Address
+    n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address
 ): Future[Opt[AccountNonce]] {.async: (raises: [CancelledError]).} =
   let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
     warn "Failed to get state root by block number or hash", blockNumOrHash
@@ -283,10 +283,7 @@ proc getTransactionCount*(
 
 # Used by: eth_getStorageAt
 proc getStorageAt*(
-    n: StateNetwork,
-    blockNumOrHash: uint64 | BlockHash,
-    address: Address,
-    slotKey: UInt256,
+    n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address, slotKey: UInt256
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
   let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
     warn "Failed to get state root by block number or hash", blockNumOrHash
@@ -296,7 +293,7 @@ proc getStorageAt*(
 
 # Used by: eth_getCode
 proc getCode*(
-    n: StateNetwork, blockNumOrHash: uint64 | BlockHash, address: Address
+    n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address
 ): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
   let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
     warn "Failed to get state root by block number or hash", blockNumOrHash
@@ -307,7 +304,7 @@ proc getCode*(
 # Used by: eth_getProof
 proc getProofs*(
     n: StateNetwork,
-    blockNumOrHash: uint64 | BlockHash,
+    blockNumOrHash: uint64 | Hash32,
     address: Address,
     slotKeys: seq[UInt256],
 ): Future[Opt[Proofs]] {.async: (raises: [CancelledError]).} =

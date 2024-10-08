@@ -145,7 +145,7 @@ proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =
   return sn.stateNetwork.contentDB.get(contentId).isSome()
 
 proc mockStateRootLookup*(
-    sn: StateNode, blockNumOrHash: uint64 | BlockHash, stateRoot: Hash32
+    sn: StateNode, blockNumOrHash: uint64 | Hash32, stateRoot: Hash32
 ) =
   let
     blockHeader = Header(stateRoot: stateRoot)

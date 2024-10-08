@@ -103,7 +103,7 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
       Receipt(
         receiptType: receiptType,
         isHash: true,
-        hash: ethHash receiptObject.root.get(),
+        hash: receiptObject.root.get(),
         cumulativeGasUsed: cumulativeGasUsed,
         logsBloom: Bloom(receiptObject.logsBloom),
         logs: logs,
@@ -139,9 +139,7 @@ proc getBlockReceipts(
 ## Portal JSON-RPC API helper calls for pushing block and receipts
 
 proc gossipBlockHeader(
-    client: RpcClient,
-    id: common_types.BlockHash | uint64,
-    headerWithProof: BlockHeaderWithProof,
+    client: RpcClient, id: Hash32 | uint64, headerWithProof: BlockHeaderWithProof
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
     contentKey = blockHeaderContentKey(id)
@@ -160,7 +158,7 @@ proc gossipBlockHeader(
 
 proc gossipBlockBody(
     client: RpcClient,
-    hash: common_types.BlockHash,
+    hash: Hash32,
     body: PortalBlockBodyLegacy | PortalBlockBodyShanghai,
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
@@ -179,7 +177,7 @@ proc gossipBlockBody(
   return ok()
 
 proc gossipReceipts(
-    client: RpcClient, hash: common_types.BlockHash, receipts: PortalReceipts
+    client: RpcClient, hash: Hash32, receipts: PortalReceipts
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
     contentKey = receiptsContentKey(hash)
