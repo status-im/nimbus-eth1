@@ -101,7 +101,6 @@ the assigned `--data-dir`.
 #### Step 2: Seed the epoch accumulators into the Portal network
 Run Fluffy and trigger the propagation of data with the
 `portal_history_propagateEpochRecords` JSON-RPC API call:
-TODO: Was this rpc endpoint removed? Should we remove this part from the book?
 
 ```bash
 ./build/fluffy --rpc --rpc-api:portal,portal_debug
