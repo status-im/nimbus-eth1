@@ -108,7 +108,7 @@ proc new*(
         loadAccumulator()
 
     beaconNetwork =
-      if PortalSubnetwork.beacon in subnetworks and config.trustedBlockRoot.isSome():
+      if PortalSubnetwork.beacon in subnetworks:
         let
           beaconDb = BeaconDb.new(networkData, config.dataDir / "db" / "beacon_db")
           beaconNetwork = BeaconNetwork.new(
@@ -166,7 +166,6 @@ proc new*(
 
         beaconLightClient.onFinalizedHeader = onFinalizedHeader
         beaconLightClient.onOptimisticHeader = onOptimisticHeader
-        beaconLightClient.trustedBlockRoot = config.trustedBlockRoot
 
         # TODO:
         # Quite dirty. Use register validate callbacks instead. Or, revisit
