@@ -17,10 +17,9 @@ import
   ./api_handler/api_utils,
   ../db/core_db,
   ../core/[tx_pool, casper, chain],
-  ../common/common
+  eth/common/[hashes, headers]
 
 export
-  common,
   chain
 
 type
@@ -50,9 +49,9 @@ type
     #     without tracking too much bad data.
 
     # Ephemeral cache to track invalid blocks and their hit count
-    invalidBlocksHits: Table[common.Hash256, int]
+    invalidBlocksHits: Table[Hash32, int]
     # Ephemeral cache to track invalid tipsets and their bad ancestor
-    invalidTipsets   : Table[common.Hash256, common.BlockHeader]
+    invalidTipsets   : Table[Hash32, Header]
 
 {.push gcsafe, raises:[].}
 
@@ -85,8 +84,8 @@ template wrapException(body: untyped): auto =
 
 # setInvalidAncestor is a callback for the downloader to notify us if a bad block
 # is encountered during the async sync.
-func setInvalidAncestor(ben: BeaconEngineRef,
-                         invalid, origin: common.BlockHeader) =
+proc setInvalidAncestor(ben: BeaconEngineRef,
+                         invalid, origin: Header) =
   ben.invalidTipsets[origin.blockHash] = invalid
   inc ben.invalidBlocksHits.mgetOrPut(invalid.blockHash, 0)
 
@@ -103,7 +102,7 @@ func new*(_: type BeaconEngineRef,
     chain : chain,
   )
 
-  txPool.com.notifyBadBlock = proc(invalid, origin: common.BlockHeader)
+  txPool.com.notifyBadBlock = proc(invalid, origin: Header)
     {.gcsafe, raises: [].} =
     ben.setInvalidAncestor(invalid, origin)
 
@@ -113,8 +112,8 @@ func new*(_: type BeaconEngineRef,
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-func put*(ben: BeaconEngineRef,
-          hash: common.Hash256, header: common.BlockHeader) =
+proc put*(ben: BeaconEngineRef,
+          hash: Hash32, header: Header) =
   ben.queue.put(hash, header)
 
 func put*(ben: BeaconEngineRef, id: PayloadID,
@@ -144,8 +143,8 @@ func com*(ben: BeaconEngineRef): CommonRef =
 func chain*(ben: BeaconEngineRef): ForkedChainRef =
   ben.chain
 
-func get*(ben: BeaconEngineRef, hash: common.Hash256,
-          header: var common.BlockHeader): bool =
+proc get*(ben: BeaconEngineRef, hash: Hash32,
+          header: var Header): bool =
   ben.queue.get(hash, header)
 
 func get*(ben: BeaconEngineRef, id: PayloadID,
@@ -230,14 +229,14 @@ proc generatePayload*(ben: BeaconEngineRef,
       blobsBundle: blobsBundle,
       blockValue: bundle.blockValue)
 
-func setInvalidAncestor*(ben: BeaconEngineRef, header: common.BlockHeader, blockHash: common.Hash256) =
+proc setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32) =
   ben.invalidBlocksHits[blockHash] = 1
   ben.invalidTipsets[blockHash] = header
 
 # checkInvalidAncestor checks whether the specified chain end links to a known
 # bad ancestor. If yes, it constructs the payload failure response to return.
 proc checkInvalidAncestor*(ben: BeaconEngineRef,
-                           check, head: common.Hash256): Opt[PayloadStatusV1] =
+                           check, head: Hash32): Opt[PayloadStatusV1] =
   # If the hash to check is unknown, return valid
   ben.invalidTipsets.withValue(check, invalid) do:
     # If the bad hash was hit too many times, evict it and try to reprocess in
@@ -251,7 +250,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 
       ben.invalidBlocksHits.del(badHash)
 
-      var deleted = newSeq[common.Hash256]()
+      var deleted = newSeq[Hash32]()
       for descendant, badHeader in ben.invalidTipsets:
         if badHeader.blockHash == badHash:
           deleted.add descendant
@@ -268,7 +267,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 
       if ben.invalidTipsets.len >= invalidTipsetsCap:
         let size = invalidTipsetsCap - ben.invalidTipsets.len
-        var deleted = newSeqOfCap[common.Hash256](size)
+        var deleted = newSeqOfCap[Hash32](size)
         for key in ben.invalidTipsets.keys:
           deleted.add key
           if deleted.len >= size:
@@ -281,10 +280,10 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
     var lastValid = invalid.parentHash
 
     # If the last valid hash is the terminal pow block, return 0x0 for latest valid hash
-    var header: common.BlockHeader
+    var header: Header
     if ben.com.db.getBlockHeader(invalid.parentHash, header):
       if header.difficulty != 0.u256:
-        lastValid = default(common.Hash256)
+        lastValid = default(Hash32)
 
     return Opt.some invalidStatus(lastValid, "links to previously rejected block")
 
@@ -295,7 +294,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 # either via a forkchoice update or a sync extension. This method is meant to
 # be called by the newpayload command when the block seems to be ok, but some
 # prerequisite prevents it from being processed (e.g. no parent, or snap sync).
-proc delayPayloadImport*(ben: BeaconEngineRef, header: common.BlockHeader): PayloadStatusV1 =
+proc delayPayloadImport*(ben: BeaconEngineRef, header: Header): PayloadStatusV1 =
   # Sanity check that this block's parent is not on a previously invalidated
   # chain. If it is, mark the block as invalid too.
   let blockHash = header.blockHash

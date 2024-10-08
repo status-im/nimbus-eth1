@@ -11,23 +11,23 @@
 import
   chronicles,
   chronos,
-  eth/common/eth_types_rlp,
   ../evm/[types, state, internals],
   ../db/ledger,
   ../transaction,
-  ../common/common,
   ../evm/evm_errors,
   ../rpc/params,
-  ./call_common
+  ./call_common,
+  web3/eth_api_types,
+  ../common/common
 
 export
   call_common
 
 proc rpcCallEvm*(args: TransactionArgs,
-                 header: common.BlockHeader,
+                 header: Header,
                  com: CommonRef): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
-  let topHeader = common.BlockHeader(
+  let topHeader = Header(
     parentHash: header.blockHash,
     timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
@@ -42,7 +42,7 @@ proc rpcCallEvm*(args: TransactionArgs,
   ok(runComputation(params, CallResult))
 
 proc rpcCallEvm*(args: TransactionArgs,
-                 header: common.BlockHeader,
+                 header: Header,
                  com: CommonRef,
                  vmState: BaseVMState): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
@@ -54,10 +54,10 @@ proc rpcCallEvm*(args: TransactionArgs,
   ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(args: TransactionArgs,
-                     header: common.BlockHeader,
+                     header: Header,
                      com: CommonRef, gasCap: GasInt): EvmResult[GasInt] =
   # Binary search the gas requirement, as it may be higher than the amount used
-  let topHeader = common.BlockHeader(
+  let topHeader = Header(
     parentHash: header.blockHash,
     timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
@@ -94,7 +94,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     if args.source.isNone:
       return err(evmErr(EvmInvalidParam))
 
-    let balance = vmState.readOnlyStateDB.getBalance(ethAddr args.source.get)
+    let balance = vmState.readOnlyStateDB.getBalance(args.source.get)
     var available = balance
     if args.value.isSome:
       let value = args.value.get
