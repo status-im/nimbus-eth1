@@ -76,7 +76,7 @@ proc validateHeader(
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")
 
-  if com.consensus == ConsensusType.POS:
+  if com.proofOfStake(header):
     # EIP-4399 and EIP-3675
     # no need to check mixHash because EIP-4399 override this field
     # checking rule
@@ -338,7 +338,7 @@ proc validateHeaderAndKinship*(
   if blk.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
-  if com.consensus != ConsensusType.POS:
+  if not com.proofOfStake(header):
     ? com.validateUncles(header, blk.uncles, checkSealOK)
 
   ok()

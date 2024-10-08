@@ -74,7 +74,6 @@ proc processBlock(c: ForkedChainRef,
 
   let vmState = BaseVMState()
   vmState.init(parent, header, c.com)
-  c.com.hardForkTransition(header)
 
   if c.extraValidation:
     ?c.com.validateHeaderAndKinship(blk, vmState.parent, checkSealOK = false)

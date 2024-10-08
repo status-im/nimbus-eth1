@@ -46,6 +46,7 @@ type
     difficulty*       : UInt256
     coinbase*         : EthAddress
     excessBlobGas*    : uint64
+    parentHash*       : Hash32
 
   TxContext* = object
     origin*         : EthAddress

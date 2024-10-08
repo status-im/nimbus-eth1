@@ -113,8 +113,6 @@ proc setupVMState(com: CommonRef; parent: BlockHeader): BaseVMState =
   # BaseVMState querying any hardfork/consensus from CommonRef
 
   let pos = com.pos
-  com.hardForkTransition(
-    parent.blockHash, parent.number+1, Opt.some(pos.timestamp))
 
   let blockCtx = BlockContext(
     timestamp    : pos.timestamp,

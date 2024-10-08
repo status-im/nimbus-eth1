@@ -18,15 +18,6 @@ import
 {.push raises: [].}
 
 type
-  ConsensusType* {.pure.} = enum
-    # Proof of Work
-    # algorithm: Ethash
-    POW
-
-    # Proof of Stake
-    # algorithm: Casper
-    POS
-
   HardFork* = enum
     Frontier
     Homestead
@@ -166,6 +157,14 @@ type
     arrowGlacierBlock*  : Opt[BlockNumber]
     grayGlacierBlock*   : Opt[BlockNumber]
 
+    # posBlock does not participate in ForkId
+    # calculation, and in config file
+    # specially crafted for network depends
+    # solely on TTD  for transition to PoS
+    # e.g. MainNet, but now has pass the transition
+    posBlock*
+      {.dontSerialize.} : Opt[BlockNumber]
+
     # mergeNetsplitBlock is an alias to mergeForkBlock
     # and is used for geth compatibility layer
     mergeNetsplitBlock* : Opt[BlockNumber]
@@ -177,8 +176,6 @@ type
 
     terminalTotalDifficulty*: Opt[UInt256]
     terminalTotalDifficultyPassed*: Opt[bool]
-    consensusType*
-      {.dontSerialize.} : ConsensusType
 
   # These are used for checking that the values of the fields
   # are in a valid order.
