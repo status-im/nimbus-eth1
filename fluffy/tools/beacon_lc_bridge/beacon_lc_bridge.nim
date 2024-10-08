@@ -69,10 +69,10 @@ template append(w: var RlpWriter, t: WithdrawalV1) =
   # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
   # could get the Roots through there instead.
   w.append blocks.Withdrawal(
-    index: distinctBase(w.index),
-    validatorIndex: distinctBase(w.validatorIndex),
-    address: w.address,
-    amount: distinctBase(w.amount),
+    index: distinctBase(t.index),
+    validatorIndex: distinctBase(t.validatorIndex),
+    address: t.address,
+    amount: distinctBase(t.amount),
   )
 
 proc asPortalBlockData*(
