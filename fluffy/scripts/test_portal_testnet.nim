@@ -267,7 +267,7 @@ procSuite "Portal testnet tests":
 
     # This will fill the first node its db with blocks from the data file. Next,
     # this node wil offer all these blocks their headers one by one.
-    check (await clients[0].portal_history_propagate(blockDataFile))
+    check (await clients[0].portal_debug_history_propagate(blockDataFile))
     await clients[0].close()
 
     for i, client in clients:

@@ -15,10 +15,13 @@ Opt[string].useDefaultSerializationIn JrpcConv
 
 createRpcSigsFromNim(RpcClient):
   ## Portal History Network json-rpc debug & custom calls
-  proc portal_historyGossipHeaders(era1File: string, epochRecordFile: Opt[string]): bool
-  proc portal_historyGossipHeaders(era1File: string): bool
-  proc portal_historyGossipBlockContent(era1File: string): bool
-  proc portal_history_storeContent(dataFile: string): bool
-  proc portal_history_propagate(dataFile: string): bool
-  proc portal_history_propagateHeaders(dataFile: string): bool
-  proc portal_history_propagateBlock(dataFile: string, blockHash: string): bool
+  proc portal_debug_historyGossipHeaders(
+    era1File: string, epochRecordFile: Opt[string]
+  ): bool
+
+  proc portal_debug_historyGossipHeaders(era1File: string): bool
+  proc portal_debug_historyGossipBlockContent(era1File: string): bool
+  proc portal_debug_history_storeContent(dataFile: string): bool
+  proc portal_debug_history_propagate(dataFile: string): bool
+  proc portal_debug_history_propagateHeaders(dataFile: string): bool
+  proc portal_debug_history_propagateBlock(dataFile: string, blockHash: string): bool
