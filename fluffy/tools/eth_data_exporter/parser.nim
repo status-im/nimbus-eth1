@@ -33,7 +33,8 @@ func encodeQuantity(value: SomeUnsignedInt): string =
 
 func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
   var i = 0
-  if s[i] == '0' and (s[i+1] in {'x', 'X'}): inc(i, 2)
+  if s[i] == '0' and (s[i + 1] in {'x', 'X'}):
+    inc(i, 2)
   if s.len - i > sizeof(T) * 2:
     raise newException(ValueError, "input hex too big for destination int")
   while i < s.len:
@@ -49,8 +50,7 @@ proc to0xHex*(x: UInt256): string =
 proc to0xHex*(x: string): string =
   "0x" & toLowerAscii(x)
 
-type
-  SomeData* = Address | Bloom | Bytes8
+type SomeData* = Address | Bloom | Bytes8
 
 proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
   let node = n[name]
@@ -61,7 +61,7 @@ proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
     hexToByteArray(node["value"].getStr(), x.data)
     doAssert(x.to0xHex == toLowerAscii(node["value"].getStr()), name)
 
-proc fromJson*(n: JsonNode, name: string, x: var (Hash32|Bytes32)) =
+proc fromJson*(n: JsonNode, name: string, x: var (Hash32 | Bytes32)) =
   let node = n[name]
   if node.kind == JString:
     hexToByteArray(node.getStr(), x.data)
@@ -110,7 +110,7 @@ proc fromJson*(n: JsonNode, name: string, x: var TxType) =
   else:
     x = hexToInt(node.getStr(), int).TxType
 
-proc fromJson*[T: Bytes32|Hash32](n: JsonNode, name: string, x: var seq[T]) =
+proc fromJson*[T: Bytes32 | Hash32](n: JsonNode, name: string, x: var seq[T]) =
   let node = n[name]
   var h: T
   x = newSeqOfCap[T](node.len)

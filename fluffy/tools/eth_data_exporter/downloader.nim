@@ -19,24 +19,19 @@ import
 logScope:
   topics = "downloader"
 
-type
-  Block* = object
-    header*: Header
-    body*: BlockBody
-    receipts*: seq[Receipt]
-    jsonData*: JsonNode
+type Block* = object
+  header*: Header
+  body*: BlockBody
+  receipts*: seq[Receipt]
+  jsonData*: JsonNode
 
-proc request*(
-    methodName: string,
-    params: JsonNode,
-    client: RpcClient): JsonNode =
+proc request*(methodName: string, params: JsonNode, client: RpcClient): JsonNode =
   let res = waitFor client.call(methodName, params)
   JrpcConv.decode(res.string, JsonNode)
 
 proc requestBlockBody(
-    n: JsonNode,
-    blockNumber: BlockNumber,
-    client: RpcClient): BlockBody =
+    n: JsonNode, blockNumber: BlockNumber, client: RpcClient
+): BlockBody =
   let txs = n["transactions"]
   if txs.len > 0:
     result.transactions = newSeqOfCap[Transaction](txs.len)
@@ -51,15 +46,14 @@ proc requestBlockBody(
     let blockNumber = blockNumber.to0xHex
     for i in 0 ..< uncles.len:
       let idx = i.to0xHex
-      let uncle = request("eth_getUncleByBlockNumberAndIndex", %[%blockNumber, %idx], client)
+      let uncle =
+        request("eth_getUncleByBlockNumberAndIndex", %[%blockNumber, %idx], client)
       if uncle.kind == JNull:
-        error "requested uncle not available", blockNumber=blockNumber, uncleIdx=i
+        error "requested uncle not available", blockNumber = blockNumber, uncleIdx = i
         raise newException(ValueError, "Error when retrieving block uncles")
       result.uncles.add parseBlockHeader(uncle)
 
-proc requestReceipts(
-    n: JsonNode,
-    client: RpcClient): seq[Receipt] =
+proc requestReceipts(n: JsonNode, client: RpcClient): seq[Receipt] =
   let txs = n["transactions"]
   if txs.len > 0:
     result = newSeqOfCap[Receipt](txs.len)
@@ -67,23 +61,19 @@ proc requestReceipts(
       let txHash = tx["hash"]
       let rec = request("eth_getTransactionReceipt", %[txHash], client)
       if rec.kind == JNull:
-        error "requested receipt not available", txHash=txHash
+        error "requested receipt not available", txHash = txHash
         raise newException(ValueError, "Error when retrieving block receipts")
       result.add parseReceipt(rec)
 
-proc requestHeader*(
-    blockNumber: BlockNumber,
-    client: RpcClient): JsonNode =
+proc requestHeader*(blockNumber: BlockNumber, client: RpcClient): JsonNode =
   result = request("eth_getBlockByNumber", %[%blockNumber.to0xHex, %true], client)
   if result.kind == JNull:
-    error "requested block not available", blockNumber=blockNumber
+    error "requested block not available", blockNumber = blockNumber
     raise newException(ValueError, "Error when retrieving block header")
 
-proc requestBlock*(
-    blockNumber: BlockNumber,
-    client: RpcClient): Block =
+proc requestBlock*(blockNumber: BlockNumber, client: RpcClient): Block =
   let header = requestHeader(blockNumber, client)
-  result.jsonData   = header
-  result.header     = parseBlockHeader(header)
-  result.body       = requestBlockBody(header, blockNumber, client)
-  result.receipts   = requestReceipts(header, client)
+  result.jsonData = header
+  result.header = parseBlockHeader(header)
+  result.body = requestBlockBody(header, blockNumber, client)
+  result.receipts = requestReceipts(header, client)
