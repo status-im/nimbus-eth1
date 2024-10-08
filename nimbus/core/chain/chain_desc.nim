@@ -52,14 +52,18 @@ func newChain*(com: CommonRef,
     vmState: vmState
   )
 
-func newChain*(com: CommonRef): ChainRef =
+proc newChain*(com: CommonRef): ChainRef =
   ## Constructor for the `Chain` descriptor object. All sub-object descriptors
   ## are initialised with defaults. So is extra block chain validation
-  let extraValidation = com.consensus == ConsensusType.POS
-  ChainRef(
-    com: com,
-    extraValidation: extraValidation,
-  )
+  try:
+    let header = com.db.getCanonicalHead()
+    let extraValidation = com.proofOfStake(header)
+    return ChainRef(
+      com: com,
+      extraValidation: extraValidation,
+    )
+  except CatchableError:
+    doAssert(false, "no canonical head")
 
 # ------------------------------------------------------------------------------
 # Public `Chain` getters

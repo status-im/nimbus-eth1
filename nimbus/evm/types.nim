@@ -42,10 +42,11 @@ type
     timestamp*        : EthTime
     gasLimit*         : GasInt
     baseFeePerGas*    : Opt[UInt256]
-    prevRandao*       : Hash256
+    prevRandao*       : Bytes32
     difficulty*       : UInt256
     coinbase*         : EthAddress
     excessBlobGas*    : uint64
+    parentHash*       : Hash32
 
   TxContext* = object
     origin*         : EthAddress

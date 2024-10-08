@@ -9,7 +9,6 @@
 
 import
   nimcrypto/[sha2, hash],
-  stew/byteutils,
   results,
   stint,
   ssz_serialization,
@@ -34,7 +33,7 @@ type
     blockNumber = 0x03
 
   BlockKey* = object
-    blockHash*: BlockHash
+    blockHash*: Hash32
 
   BlockNumberKey* = object
     blockNumber*: uint64
@@ -50,19 +49,19 @@ type
     of blockNumber:
       blockNumberKey*: BlockNumberKey
 
-func blockHeaderContentKey*(id: BlockHash | uint64): ContentKey =
-  when id is BlockHash:
+func blockHeaderContentKey*(id: Hash32 | uint64): ContentKey =
+  when id is Hash32:
     ContentKey(contentType: blockHeader, blockHeaderKey: BlockKey(blockHash: id))
   else:
     ContentKey(
       contentType: blockNumber, blockNumberKey: BlockNumberKey(blockNumber: id)
     )
 
-func blockBodyContentKey*(hash: BlockHash): ContentKey =
-  ContentKey(contentType: blockBody, blockBodyKey: BlockKey(blockHash: hash))
+func blockBodyContentKey*(blockHash: Hash32): ContentKey =
+  ContentKey(contentType: blockBody, blockBodyKey: BlockKey(blockHash: blockHash))
 
-func receiptsContentKey*(hash: BlockHash): ContentKey =
-  ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: hash))
+func receiptsContentKey*(blockHash: Hash32): ContentKey =
+  ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: blockHash))
 
 func encode*(contentKey: ContentKey): ContentKeyByteList =
   ContentKeyByteList.init(SSZ.encode(contentKey))
@@ -80,9 +79,6 @@ func toContentId*(contentKey: ContentKeyByteList): ContentId =
 
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
-
-func `$`*(x: BlockHash): string =
-  "0x" & x.data.toHex()
 
 func `$`*(x: BlockKey): string =
   "blockHash: " & $x.blockHash

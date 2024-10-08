@@ -164,7 +164,7 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
         gasUsed: GasInt(payload.gas_used),
         timestamp: EthTime(payload.timestamp),
         extraData: payload.extra_data.asSeq(),
-        mixHash: Hash32(payload.prev_randao.data),
+        mixHash: Bytes32 payload.prev_randao.data,
         nonce: default(BlockNonce),
         baseFeePerGas: Opt.some(payload.base_fee_per_gas),
         withdrawalsRoot: withdrawalRoot,

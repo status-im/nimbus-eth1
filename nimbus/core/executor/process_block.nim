@@ -21,6 +21,7 @@ import
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
+  eth/common/transaction_utils,
   chronicles,
   results
 
@@ -40,8 +41,7 @@ proc processTransactions*(
   vmState.allLogs = @[]
 
   for txIndex, tx in transactions:
-    var sender: EthAddress
-    if not tx.getSender(sender):
+    let sender = tx.recoverSender().valueOr:
       return err("Could not get sender for tx with index " & $(txIndex))
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
@@ -227,7 +227,7 @@ proc processBlock*(
   ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
 
   # EIP-3675: no reward for miner in POA/POS
-  if vmState.com.consensus == ConsensusType.POW:
+  if not vmState.com.proofOfStake(blk.header):
     vmState.calculateReward(blk.header, blk.uncles)
 
   ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts)

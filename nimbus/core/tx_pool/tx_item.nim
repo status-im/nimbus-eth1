@@ -18,7 +18,7 @@ import
   ../../utils/utils,
   ../../transaction,
   ./tx_info,
-  eth/[common, keys],
+  eth/common/transaction_utils,
   results
 
 {.push raises: [].}
@@ -62,7 +62,7 @@ proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
 proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash256;
           status: TxItemStatus; info: string): Result[T,void] {.gcsafe,raises: [].} =
   ## Create item descriptor.
-  let rc = tx.tx.ecRecover
+  let rc = tx.tx.recoverSender()
   if rc.isErr:
     return err()
   ok(T(itemID:    itemID,

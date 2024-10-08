@@ -8,22 +8,21 @@
 {.push raises: [].}
 
 import
-  std/[times, sequtils, strutils, typetraits],
+  std/sequtils,
   json_rpc/rpcserver,
   chronicles,
-  web3/conversions, # sigh, for FixedBytes marshalling
-  web3/eth_api_types,
-  web3/primitives as web3types,
-  eth/common/eth_types,
+  web3/[eth_api_types, conversions],
+  eth/common/transaction_utils,
   beacon_chain/spec/forks,
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
   ../version
 
-from ../../nimbus/transaction import getSender, ValidationError
+from ../../nimbus/errors import ValidationError
 from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs, filterLogs
-from ../../nimbus/beacon/web3_eth_conv import w3Addr, w3Hash, ethHash
+
+from eth/common/eth_types_rlp import rlpHash
 
 export rpcserver
 
@@ -31,27 +30,25 @@ export rpcserver
 # Portal Network clients such as Fluffy:
 # https://github.com/ethereum/portal-network-specs?tab=readme-ov-file#the-json-rpc-api
 
-# Some similar code as from nimbus `rpc_utils`, but avoiding that import as it
-# brings in  a lot more. Should restructure `rpc_utils` a bit before using that.
-func toHash*(value: eth_api_types.Hash256): eth_types.Hash256 =
-  result.data = value.bytes
-
 func init*(
     T: type TransactionObject,
-    tx: eth_types.Transaction,
-    header: eth_types.BlockHeader,
+    tx: transactions.Transaction,
+    header: Header,
     txIndex: int,
 ): T {.raises: [ValidationError].} =
+  let sender = tx.recoverSender().valueOr:
+    raise (ref ValidationError)(msg: "Invalid tx signature")
+
   TransactionObject(
-    blockHash: Opt.some(w3Hash header.blockHash),
-    blockNumber: Opt.some(eth_api_types.BlockNumber(header.number)),
-    `from`: w3Addr tx.getSender(),
+    blockHash: Opt.some(header.rlpHash),
+    blockNumber: Opt.some(Quantity(header.number)),
+    `from`: sender,
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
-    hash: w3Hash tx.rlpHash,
+    hash: tx.rlpHash,
     input: tx.payload,
     nonce: Quantity(tx.nonce),
-    to: Opt.some(w3Addr tx.destination),
+    to: Opt.some(tx.destination),
     transactionIndex: Opt.some(Quantity(txIndex)),
     value: tx.value,
     v: Quantity(tx.V),
@@ -65,25 +62,21 @@ func init*(
 # Note: Similar as `populateBlockObject` from rpc_utils, but lacking the
 # total difficulty
 func init*(
-    T: type BlockObject,
-    header: eth_types.BlockHeader,
-    body: BlockBody,
-    fullTx = true,
-    isUncle = false,
+    T: type BlockObject, header: Header, body: BlockBody, fullTx = true, isUncle = false
 ): T {.raises: [ValidationError].} =
-  let blockHash = header.blockHash
+  let blockHash = header.rlpHash
 
   var blockObject = BlockObject(
-    number: eth_api_types.BlockNumber(header.number),
-    hash: w3Hash blockHash,
-    parentHash: w3Hash header.parentHash,
+    number: Quantity(header.number),
+    hash: blockHash,
+    parentHash: header.parentHash,
     nonce: Opt.some(FixedBytes[8](header.nonce)),
-    sha3Uncles: w3Hash header.ommersHash,
+    sha3Uncles: header.ommersHash,
     logsBloom: FixedBytes[256] header.logsBloom,
-    transactionsRoot: w3Hash header.txRoot,
-    stateRoot: w3Hash header.stateRoot,
-    receiptsRoot: w3Hash header.receiptsRoot,
-    miner: w3Addr header.coinbase,
+    transactionsRoot: header.txRoot,
+    stateRoot: header.stateRoot,
+    receiptsRoot: header.receiptsRoot,
+    miner: header.coinbase,
     difficulty: header.difficulty,
     extraData: HistoricExtraData header.extraData,
     # TODO: This is optional according to
@@ -95,24 +88,25 @@ func init*(
     timestamp: Quantity(header.timestamp),
   )
 
-  let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
+  # TODO: This was copied from `rpc_utils`, but the block size calculation does
+  # not make sense. TO FIX.
+  let size = sizeof(Header) - sizeof(seq[byte]) + header.extraData.len
   blockObject.size = Quantity(size.uint)
 
   if not isUncle:
     blockObject.uncles = body.uncles.map(
-      proc(h: eth_types.BlockHeader): eth_api_types.Hash256 =
-        w3Hash h.blockHash
+      proc(h: Header): Hash32 =
+        h.rlpHash
     )
 
     if fullTx:
       var i = 0
       for tx in body.transactions:
-        # ValidationError from tx.getSender in TransactionObject.init
         blockObject.transactions.add txOrHash(TransactionObject.init(tx, header, i))
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add txOrHash(w3Hash rlpHash(tx))
+        blockObject.transactions.add txOrHash(rlpHash(tx))
 
   blockObject
 
@@ -146,7 +140,7 @@ proc installEthApiHandlers*(
     return Quantity(uint64(1))
 
   rpcServer.rpc("eth_getBlockByHash") do(
-    data: eth_api_types.Hash256, fullTransactions: bool
+    blockHash: Hash32, fullTransactions: bool
   ) -> Opt[BlockObject]:
     ## Returns information about a block by hash.
     ##
@@ -157,7 +151,6 @@ proc installEthApiHandlers*(
     ## Returns BlockObject or nil when no block was found.
     let
       hn = historyNetwork.getOrRaise()
-      blockHash = data.toHash()
       (header, body) = (await hn.getBlock(blockHash)).valueOr:
         return Opt.none(BlockObject)
 
@@ -185,7 +178,7 @@ proc installEthApiHandlers*(
         withForkyStore(blc.store[]):
           when lcDataFork > LightClientDataFork.Altair:
             let
-              blockHash = forkyStore.optimistic_header.execution.block_hash
+              blockHash = forkyStore.optimistic_header.execution.block_hash.to(Hash32)
               (header, body) = (await hn.getBlock(blockHash)).valueOr:
                 return Opt.none(BlockObject)
 
@@ -198,7 +191,7 @@ proc installEthApiHandlers*(
         withForkyStore(blc.store[]):
           when lcDataFork > LightClientDataFork.Altair:
             let
-              blockHash = forkyStore.finalized_header.execution.block_hash
+              blockHash = forkyStore.finalized_header.execution.block_hash.to(Hash32)
               (header, body) = (await hn.getBlock(blockHash)).valueOr:
                 return Opt.none(BlockObject)
 
@@ -217,9 +210,7 @@ proc installEthApiHandlers*(
 
       return Opt.some(BlockObject.init(header, body, fullTransactions))
 
-  rpcServer.rpc("eth_getBlockTransactionCountByHash") do(
-    data: eth_api_types.Hash256
-  ) -> Quantity:
+  rpcServer.rpc("eth_getBlockTransactionCountByHash") do(blockHash: Hash32) -> Quantity:
     ## Returns the number of transactions in a block from a block matching the
     ## given block hash.
     ##
@@ -227,7 +218,6 @@ proc installEthApiHandlers*(
     ## Returns integer of the number of transactions in this block.
     let
       hn = historyNetwork.getOrRaise()
-      blockHash = data.toHash()
       (_, body) = (await hn.getBlock(blockHash)).valueOr:
         raise newException(ValueError, "Could not find block with requested hash")
 
@@ -255,7 +245,7 @@ proc installEthApiHandlers*(
 
     let
       hn = historyNetwork.getOrRaise()
-      hash = ethHash filterOptions.blockHash.unsafeGet()
+      hash = filterOptions.blockHash.value()
       header = (await hn.getVerifiedBlockHeader(hash)).valueOr:
         raise newException(ValueError, "Could not find header with requested hash")
 
@@ -278,7 +268,7 @@ proc installEthApiHandlers*(
       return @[]
 
   rpcServer.rpc("eth_getBalance") do(
-    data: web3Types.Address, quantityTag: RtBlockIdentifier
+    data: Address, quantityTag: RtBlockIdentifier
   ) -> UInt256:
     ## Returns the balance of the account of given address.
     ##
@@ -303,7 +293,7 @@ proc installEthApiHandlers*(
     return balance
 
   rpcServer.rpc("eth_getTransactionCount") do(
-    data: web3Types.Address, quantityTag: RtBlockIdentifier
+    data: Address, quantityTag: RtBlockIdentifier
   ) -> Quantity:
     ## Returns the number of transactions sent from an address.
     ##
@@ -327,7 +317,7 @@ proc installEthApiHandlers*(
     return nonce.Quantity
 
   rpcServer.rpc("eth_getStorageAt") do(
-    data: web3Types.Address, slot: UInt256, quantityTag: RtBlockIdentifier
+    data: Address, slot: UInt256, quantityTag: RtBlockIdentifier
   ) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     ##
@@ -352,7 +342,7 @@ proc installEthApiHandlers*(
     return FixedBytes[32](slotValue.toBytesBE())
 
   rpcServer.rpc("eth_getCode") do(
-    data: web3Types.Address, quantityTag: RtBlockIdentifier
+    data: Address, quantityTag: RtBlockIdentifier
   ) -> seq[byte]:
     ## Returns code at a given address.
     ##
@@ -376,7 +366,7 @@ proc installEthApiHandlers*(
     return bytecode.asSeq()
 
   rpcServer.rpc("eth_getProof") do(
-    data: web3Types.Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
+    data: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
   ) -> ProofResponse:
     ## Returns information about an account and storage slots along with account
     ## and storage proofs which prove the existence of the values in the state.
@@ -416,8 +406,8 @@ proc installEthApiHandlers*(
       address: data,
       accountProof: seq[RlpEncodedBytes](proofs.accountProof),
       balance: proofs.account.balance,
-      nonce: web3types.Quantity(proofs.account.nonce),
-      codeHash: web3types.Hash256(proofs.account.codeHash.data),
-      storageHash: web3types.Hash256(proofs.account.storageRoot.data),
+      nonce: Quantity(proofs.account.nonce),
+      codeHash: proofs.account.codeHash,
+      storageHash: proofs.account.storageRoot,
       storageProof: storageProof,
     )

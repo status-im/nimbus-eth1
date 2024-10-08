@@ -43,9 +43,6 @@ type
       name: "base-rpc-port"
     .}: uint16
 
-func w3Hash*(x: common_types.BlockHash): eth_api_types.BlockHash =
-  eth_api_types.BlockHash(x.data)
-
 proc connectToRpcServers(config: PortalTestnetConf): Future[seq[RpcClient]] {.async.} =
   var clients: seq[RpcClient]
   for i in 0 ..< config.nodeCount:
@@ -283,7 +280,7 @@ procSuite "Portal testnet tests":
         let content = await retryUntil(
           proc(): Future[Opt[BlockObject]] {.async.} =
             try:
-              let res = await client.eth_getBlockByHash(w3Hash hash, true)
+              let res = await client.eth_getBlockByHash(hash, true)
               await client.close()
               return res
             except CatchableError as exc:
@@ -296,13 +293,13 @@ procSuite "Portal testnet tests":
         )
         check content.isSome()
         let blockObj = content.get()
-        check blockObj.hash == w3Hash hash
+        check blockObj.hash == hash
 
         for tx in blockObj.transactions:
           doAssert(tx.kind == tohTx)
-          check tx.tx.blockHash.get == w3Hash hash
+          check tx.tx.blockHash.get == hash
 
-        let filterOptions = FilterOptions(blockHash: Opt.some(w3Hash hash))
+        let filterOptions = FilterOptions(blockHash: Opt.some(hash))
 
         let logs = await retryUntil(
           proc(): Future[seq[LogObject]] {.async.} =
@@ -321,7 +318,7 @@ procSuite "Portal testnet tests":
 
         for l in logs:
           check:
-            l.blockHash == Opt.some(w3Hash hash)
+            l.blockHash == Opt.some(hash)
 
         # TODO: Check ommersHash, need the headers and not just the hashes
         # for uncle in blockObj.uncles:

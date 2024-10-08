@@ -39,14 +39,14 @@ import
 type
   MemDbRef = ref object
     ## Database
-    tab: Table[Blob,Blob]            ## Structural key-value table
+    tab: Table[seq[byte],seq[byte]]  ## Structural key-value table
 
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
     mdb: MemDbRef                    ## Database
 
   MemPutHdlRef = ref object of TypedPutHdlRef
-    tab: Table[Blob,Blob]
+    tab: Table[seq[byte],seq[byte]]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -74,7 +74,7 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 
 proc getKvpFn(db: MemBackendRef): GetKvpFn =
   result =
-    proc(key: openArray[byte]): Result[Blob,KvtError] =
+    proc(key: openArray[byte]): Result[seq[byte],KvtError] =
       if key.len == 0:
         return err(KeyInvalid)
       var data = db.mdb.tab.getOrVoid @key
@@ -172,7 +172,7 @@ proc dup*(db: MemBackendRef): MemBackendRef =
 
 iterator walk*(
     be: MemBackendRef;
-      ): tuple[key: Blob, data: Blob] =
+      ): tuple[key: seq[byte], data: seq[byte]] =
   ## Walk over all key-value pairs of the database.
   for (key,data) in be.mdb.tab.pairs:
     if data.isValid:

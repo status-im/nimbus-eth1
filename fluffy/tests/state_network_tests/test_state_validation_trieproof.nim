@@ -14,14 +14,13 @@ import
   stew/byteutils,
   unittest2,
   stint,
-  eth/common/eth_hash,
-  nimcrypto/hash,
+  eth/common/hashes,
   eth/trie/[hexary, db, trie_defs],
   ../../network/state/[state_content, state_validation],
   ./state_test_helpers
 
 proc getKeyBytes(i: int): seq[byte] =
-  let hash = keccakHash(u256(i).toBytesBE())
+  let hash = keccak256(u256(i).toBytesBE())
   return toSeq(hash.data)
 
 suite "State Validation - validateTrieProof":

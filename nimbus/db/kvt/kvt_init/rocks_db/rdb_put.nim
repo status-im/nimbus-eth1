@@ -41,7 +41,7 @@ proc disposeSession(rdb: var RdbInst) =
   rdb.session = WriteBatchRef(nil)
 
 when extraTraceMessages:
-  proc `$`(a: Blob): string =
+  proc `$`(a: seq[byte]): string =
     a.toHex
 
 # ------------------------------------------------------------------------------

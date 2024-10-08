@@ -12,7 +12,7 @@
 import
   unittest2,
   stew/byteutils,
-  eth/common/eth_types_rlp,
+  eth/common/headers_rlp,
   ../../network_metadata,
   ../../eth_data/[history_data_json_store, history_data_ssz_e2s],
   ../../network/history/
@@ -69,7 +69,7 @@ suite "History Content Values":
 
       let blockHeaderWithProof = contentValue.get()
 
-      let res = decodeRlp(blockHeaderWithProof.header.asSeq(), BlockHeader)
+      let res = decodeRlp(blockHeaderWithProof.header.asSeq(), Header)
       check res.isOk()
       let header = res.get()
 
@@ -104,7 +104,7 @@ suite "History Content Values":
 
         let blockHeaderWithProof = contentValue.get()
 
-        let res = decodeRlp(blockHeaderWithProof.header.asSeq(), BlockHeader)
+        let res = decodeRlp(blockHeaderWithProof.header.asSeq(), Header)
         check res.isOk()
         let header = res.get()
 
@@ -135,7 +135,7 @@ suite "History Content Values":
       headerEncoded = headerContent.content_value.hexToSeqByte()
       headerWithProofRes = decodeSsz(headerEncoded, BlockHeaderWithProof)
     check headerWithProofRes.isOk()
-    let headerRes = decodeRlp(headerWithProofRes.get().header.asSeq(), BlockHeader)
+    let headerRes = decodeRlp(headerWithProofRes.get().header.asSeq(), Header)
     check headerRes.isOk()
     let header = headerRes.get()
 
@@ -201,7 +201,7 @@ suite "History Content Values":
       headerEncoded = headerContent.content_value.hexToSeqByte()
       headerWithProofRes = decodeSsz(headerEncoded, BlockHeaderWithProof)
     check headerWithProofRes.isOk()
-    let headerRes = decodeRlp(headerWithProofRes.get().header.asSeq(), BlockHeader)
+    let headerRes = decodeRlp(headerWithProofRes.get().header.asSeq(), Header)
     check headerRes.isOk()
     let header = headerRes.get()
 

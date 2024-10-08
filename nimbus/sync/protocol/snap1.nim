@@ -88,7 +88,7 @@ p2pProtocol snap1(version = snapVersion,
     # User message 0x00: GetAccountRange.
     proc getAccountRange(
         peer: Peer;
-        root: Hash256;
+        root: Hash32;
         origin: openArray[byte];
         limit: openArray[byte];
         replySizeMax: uint64;
@@ -127,8 +127,8 @@ p2pProtocol snap1(version = snapVersion,
     # User message 0x02: GetStorageRanges.
     proc getStorageRanges(
         peer: Peer;
-        root: Hash256;
-        accounts: openArray[Hash256];
+        root: Hash32;
+        accounts: openArray[Hash32];
         origin: openArray[byte];
         limit: openArray[byte];
         replySizeMax: uint64;
@@ -169,7 +169,7 @@ p2pProtocol snap1(version = snapVersion,
     # User message 0x04: GetByteCodes.
     proc getByteCodes(
         peer: Peer;
-        nodes: openArray[Hash256];
+        nodes: openArray[Hash32];
         replySizeMax: uint64;
           ) =
       trace trSnapRecvReceived & "GetByteCodes (0x04)", peer,
@@ -195,14 +195,14 @@ p2pProtocol snap1(version = snapVersion,
     # User message 0x05: ByteCodes.
     proc byteCodes(
         peer: Peer;
-        codes: openArray[Blob])
+        codes: openArray[seq[byte]])
 
 
   requestResponse:
     # User message 0x06: GetTrieNodes.
     proc getTrieNodes(
         peer: Peer;
-        root: Hash256;
+        root: Hash32;
         pathGroups: openArray[SnapTriePaths];
         replySizeMax: uint64;
           ) =
@@ -229,6 +229,6 @@ p2pProtocol snap1(version = snapVersion,
     # User message 0x07: TrieNodes.
     proc trieNodes(
         peer: Peer;
-        nodes: openArray[Blob])
+        nodes: openArray[seq[byte]])
 
 # End

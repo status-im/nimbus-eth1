@@ -64,7 +64,7 @@ proc processBlock(
     discard com.db.persistUncles(blk.uncles)
 
   # EIP-3675: no reward for miner in POA/POS
-  if com.consensus == ConsensusType.POW:
+  if com.proofOfStake(header):
     vmState.calculateReward(header, blk.uncles)
 
   vmState.mutateStateDB:
@@ -95,8 +95,6 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
   let dbTx = c.db.ctx.newTransaction()
   defer: dbTx.dispose()
 
-  c.com.hardForkTransition(header)
-
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
     vmState = c.getVmState(header).valueOr:
@@ -105,7 +103,7 @@ proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
   ? vmState.processBlock(blk)
 
   if not c.db.persistHeader(
-      header, c.com.consensus == ConsensusType.POS, c.com.startOfHistory):
+      header, c.com.proofOfStake(header), c.com.startOfHistory):
     return err("Could not persist header")
 
   try:

@@ -77,13 +77,13 @@ func makeTx(
   )
 
   inc t.nonce
-  signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)
+  signTransaction(tx, t.vaultKey, eip155 = true)
 
 func signTxWithNonce(
     t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
   var tx = tx
   tx.nonce = nonce
-  signTransaction(tx, t.vaultKey, t.chainId, eip155 = true)
+  signTransaction(tx, t.vaultKey, eip155 = true)
 
 proc initEnv(envFork: HardFork): TestEnv =
   var
@@ -96,6 +96,7 @@ proc initEnv(envFork: HardFork): TestEnv =
   )
 
   if envFork >= MergeFork:
+    conf.networkParams.config.mergeForkBlock = Opt.some(0'u64)
     conf.networkParams.config.terminalTotalDifficulty = Opt.some(100.u256)
 
   if envFork >= Shanghai:
@@ -125,7 +126,7 @@ proc initEnv(envFork: HardFork): TestEnv =
 const
   amount = 1000.u256
   slot = 0x11.u256
-  prevRandao = EMPTY_UNCLE_HASH # it can be any valid hash
+  prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
 
 proc runTxPoolPosTest() =
   var
@@ -158,8 +159,6 @@ proc runTxPoolPosTest() =
         return
 
       blk = r.get.blk
-      check com.isBlockAfterTtd(blk.header)
-
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles
@@ -173,7 +172,7 @@ proc runTxPoolPosTest() =
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
       let val = sdb.getStorage(recipient, slot)
-      let randao = Hash32(val.toBytesBE)
+      let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
@@ -214,8 +213,6 @@ proc runTxPoolBlobhashTest() =
 
       let bundle = r.get
       blk = bundle.blk
-      check com.isBlockAfterTtd(blk.header)
-
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles,
@@ -238,7 +235,7 @@ proc runTxPoolBlobhashTest() =
     test "validate TxPool prevRandao setter":
       var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
       let val = sdb.getStorage(recipient, slot)
-      let randao = Hash32(val.toBytesBE)
+      let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
@@ -301,8 +298,6 @@ proc runTxHeadDelta(noisy = true) =
             return
 
           let blk = r.get.blk
-          check com.isBlockAfterTtd(blk.header)
-
           let body = BlockBody(
             transactions: blk.txs,
             uncles: blk.uncles)
@@ -333,8 +328,8 @@ proc runGetBlockBodyTest() =
   var
     env = initEnv(Cancun)
     blockTime = EthTime.now()
-    parentHeader: BlockHeader
-    currentHeader: BlockHeader
+    parentHeader: Header
+    currentHeader: Header
 
   suite "Test get parent transactions after persistBlock":
     test "TxPool create first block":

@@ -27,10 +27,10 @@ template say(args: varargs[untyped]) =
 # Public capture
 # ------------------------------------------------------------------------------
 
-proc dumpBlocksBegin*(headers: openArray[BlockHeader]): string =
+proc dumpBlocksBegin*(headers: openArray[Header]): string =
   & "transaction #{headers[0].number} {headers.len}"
 
-proc dumpBlocksList*(header: BlockHeader; body: BlockBody): string =
+proc dumpBlocksList*(header: Header; body: BlockBody): string =
   & "block {rlp.encode(header).toHex} {rlp.encode(body).toHex}"
 
 proc dumpBlocksEnd*: string =
@@ -40,11 +40,11 @@ proc dumpBlocksEnd*: string =
 proc dumpBlocksEndNl*: string =
   dumpBlocksEnd() & "\n\n"
 
-proc dumpBlocksListNl*(header: BlockHeader; body: BlockBody): string =
+proc dumpBlocksListNl*(header: Header; body: BlockBody): string =
   dumpBlocksList(header, body) & "\n"
 
 proc dumpBlocksBeginNl*(db: CoreDbRef;
-                       headers: openArray[BlockHeader]): string =
+                       headers: openArray[Header]): string =
   if headers[0].number == 1'u64:
     let
       h0 = db.getBlockHeader(0'u64)
@@ -57,7 +57,7 @@ proc dumpBlocksBeginNl*(db: CoreDbRef;
   result &= dumpBlocksBegin(headers) & "\n"
 
 
-proc dumpBlocksNl*(db: CoreDbRef; headers: openArray[BlockHeader];
+proc dumpBlocksNl*(db: CoreDbRef; headers: openArray[Header];
                    bodies: openArray[BlockBody]): string =
   ## Add this below the line `transaction.commit()` in the function
   ## `p2p/chain/persist_blocks.persistBlocksImpl()`:
@@ -122,7 +122,7 @@ iterator undumpBlocksGz*(gzFile: string): seq[EthBlock] =
             rlpHeader = flds[1].rlpFromHex
             rlpBody = flds[2].rlpFromHex
           blockQ.add EthBlock.init(
-            rlpHeader.read(BlockHeader), rlpBody.read(BlockBody))
+            rlpHeader.read(Header), rlpBody.read(BlockBody))
           current.inc
           continue
         else:

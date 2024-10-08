@@ -97,7 +97,7 @@ proc testMergeProofAndKvpList*(
   var
     ps = PartStateRef(nil)
     tx = AristoTxRef(nil)
-    rootKey: Hash256
+    rootKey: Hash32
   defer:
     if not ps.isNil:
       ps.db.finish(eradicate=true)

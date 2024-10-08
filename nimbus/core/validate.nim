@@ -76,7 +76,7 @@ proc validateHeader(
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")
 
-  if com.consensus == ConsensusType.POS:
+  if com.proofOfStake(header):
     # EIP-4399 and EIP-3675
     # no need to check mixHash because EIP-4399 override this field
     # checking rule
@@ -264,7 +264,7 @@ proc validateTxBasic*(
 proc validateTransaction*(
     roDB:     ReadOnlyStateDB; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
-    sender:   EthAddress;      ## tx.getSender or tx.ecRecover
+    sender:   EthAddress;      ## tx.recoverSender
     maxLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
     excessBlobGas: uint64;    ## excessBlobGas from parent block header
@@ -354,7 +354,7 @@ proc validateHeaderAndKinship*(
   if blk.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
-  if com.consensus != ConsensusType.POS:
+  if not com.proofOfStake(header):
     ? com.validateUncles(header, blk.uncles, checkSealOK)
 
   ok()

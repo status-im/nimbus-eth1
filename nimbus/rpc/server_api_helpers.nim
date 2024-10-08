@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  eth/common/eth_types,
+  eth/common/[eth_types, transaction_utils],
   eth/common/eth_types_rlp,
   web3/eth_api_types,
   ../beacon/web3_eth_conv,
@@ -44,9 +44,8 @@ proc populateTransactionObject*(tx: Transaction,
   result.blockHash = w3Hash optionalHash
   result.blockNumber = w3BlockNumber optionalNumber
 
-  var sender: EthAddress
-  if tx.getSender(sender):
-    result.`from` = w3Addr sender
+  if (let sender = tx.recoverSender(); sender.isOk):
+    result.`from` = sender[]
   result.gas = w3Qty(tx.gasLimit)
   result.gasPrice = w3Qty(tx.gasPrice)
   result.hash = w3Hash tx.rlpHash
@@ -88,7 +87,7 @@ proc populateBlockObject*(blockHash: eth_types.Hash256,
   result.miner = w3Addr header.coinbase
   result.difficulty = header.difficulty
   result.extraData = HistoricExtraData header.extraData
-  result.mixHash = w3Hash header.mixHash
+  result.mixHash = Hash32 header.mixHash
 
   # discard sizeof(seq[byte]) of extraData and use actual length
   let size = sizeof(eth_types.BlockHeader) - sizeof(eth_types.Blob) + header.extraData.len

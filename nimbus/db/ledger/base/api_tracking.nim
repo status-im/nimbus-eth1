@@ -90,16 +90,16 @@ func oaToStr(w: openArray[byte]): string =
 func toStr(w: EthAddress): string =
   w.toHex
 
-func toStr(w: Hash256): string =
+func toStr(w: Hash32): string =
   w.toHex
 
 func toStr(w: CodeBytesRef): string =
   if w.isNil: "nil"
   else: "[" & $w.bytes.len & "]"
 
-func toStr(w: Blob): string =
+func toStr(w: seq[byte]): string =
   if 0 < w.len and w.len < 5: "<" & w.oaToStr & ">"
-  else: "Blob[" & $w.len & "]"
+  else: "seq[byte][" & $w.len & "]"
 
 func toStr(w: seq[Log]): string =
   "Logs[" & $w.len & "]"
@@ -114,9 +114,9 @@ func toStr(ela: Duration): string =
 func `$`*(w: CodeBytesRef): string {.used.} = w.toStr
 func `$`*(e: Elapsed): string = e.Duration.toStr
 func `$`*(l: seq[Log]): string = l.toStr
-func `$`*(b: Blob): string = b.toStr
+func `$`*(b: seq[byte]): string = b.toStr
 func `$$`*(a: EthAddress): string = a.toStr # otherwise collision w/existing `$`
-func `$$`*(h: Hash256): string = h.toStr    # otherwise collision w/existing `$`
+func `$$`*(h: Hash32): string = h.toStr     # otherwise collision w/existing `$`
 
 # ------------------------------------------------------------------------------
 # Public API logging framework

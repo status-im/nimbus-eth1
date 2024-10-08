@@ -31,10 +31,10 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   const
     info = "preLoadAristoDb"
   var
-    proof: seq[Blob]            # for pre-loading MPT
-    predRoot: Hash256           # from predecessor header
-    txRoot: Hash256             # header with block number `num`
-    rcptRoot: Hash256           # ditto
+    proof: seq[seq[byte]]      # for pre-loading MPT
+    predRoot: Hash32           # from predecessor header
+    txRoot: Hash32             # header with block number `num`
+    rcptRoot: Hash32           # ditto
   let
     adb = cdb.ctx.mpt           # `Aristo` db
     kdb = cdb.ctx.kvt           # `Kvt` db
@@ -53,7 +53,7 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
       if key[0] == 0:
         try:
           # Pull our particular header fields (if possible)
-          let header = rlp.decode(val, BlockHeader)
+          let header = rlp.decode(val, Header)
           if header.number == num:
             txRoot = header.txRoot
             rcptRoot = header.receiptsRoot
@@ -148,7 +148,7 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   for inx in 0 ..< node["txTraces"].len:
     for key in ["beforeRoot", "afterRoot"]:
       # Here, `node["txTraces"]` stores a string while `txTraces` uses a
-      # `Hash256` which might expand to a didfferent upper/lower case.
+      # `Hash32` which might expand to a didfferent upper/lower case.
       var strHash = txTraces[inx]["stateDiff"][key].getStr.toUpperAscii
       if strHash.len < 64:
         strHash = '0'.repeat(64 - strHash.len) & strHash

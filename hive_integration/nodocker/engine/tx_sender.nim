@@ -11,6 +11,7 @@
 import
   std/[tables],
   eth/keys,
+  eth/common/transaction_utils,
   stew/endians2,
   nimcrypto/sha2,
   chronicles,
@@ -150,7 +151,8 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         value   : tc.amount,
         gasLimit: tc.gasLimit,
         gasPrice: gasPrice,
-        payload : tc.payload
+        payload : tc.payload,
+        chainId : params.chainId,
       )
     )
   of TxEip1559:
@@ -196,8 +198,8 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
       ),
       networkPayload: NetworkPayload(
         blobs: blobData.blobs.mapIt(it.bytes),
-        commitments: blobData.commitments.mapIt(it.bytes),
-        proofs: blobData.proofs.mapIt(it.bytes),
+        commitments: blobData.commitments.mapIt(KzgCommitment it.bytes),
+        proofs: blobData.proofs.mapIt(KzgProof it.bytes),
       )
     )
   else:
@@ -207,7 +209,7 @@ proc makeTx(params: MakeTxParams, tc: BaseTx): PooledTransaction =
   # Build the transaction depending on the specified type
   let tx = makeTxOfType(params, tc)
   PooledTransaction(
-    tx: signTransaction(tx.tx, params.key, params.chainId, eip155 = true),
+    tx: signTransaction(tx.tx, params.key),
     networkPayload: tx.networkPayload)
 
 proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): PooledTransaction =
@@ -337,11 +339,11 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
   )
 
   PooledTransaction(
-    tx: signTransaction(unsignedTx, params.key, params.chainId, eip155 = true),
+    tx: signTransaction(unsignedTx, params.key),
     networkPayload: NetworkPayload(
       blobs      : data.blobs.mapIt(it.bytes),
-      commitments: data.commitments.mapIt(it.bytes),
-      proofs     : data.proofs.mapIt(it.bytes),
+      commitments: data.commitments.mapIt(KzgCommitment it.bytes),
+      proofs     : data.proofs.mapIt(KzgProof it.bytes),
     ),
   )
 
@@ -427,16 +429,10 @@ proc customizeTransaction*(sender: TxSender,
   if custTx.data.isSome:
     modTx.payload = custTx.data.get
 
-  if custTx.signature.isSome:
-    let signature = custTx.signature.get
-    modTx.V = signature.V
-    modTx.R = signature.R
-    modTx.S = signature.S
+  if custTx.chainId.isSome:
+    modTx.chainId = custTx.chainId.get
 
   if baseTx.txType in {TxEip1559, TxEip4844}:
-    if custTx.chainId.isSome:
-      modTx.chainId = custTx.chainId.get
-
     if custTx.gasPriceOrGasFeeCap.isSome:
       modTx.maxFeePErGas = custTx.gasPriceOrGasFeeCap.get.GasInt
 
@@ -448,7 +444,12 @@ proc customizeTransaction*(sender: TxSender,
       var address: EthAddress
       modTx.to = Opt.some(address)
 
-  if custTx.signature.isNone:
-    return signTransaction(modTx, acc.key, modTx.chainId, eip155 = true)
+  if custTx.signature.isSome:
+    let signature = custTx.signature.get
+    modTx.V = signature.V
+    modTx.R = signature.R
+    modTx.S = signature.S
+  else:
+    modTx.signature = modTx.sign(acc.key, eip155 = true)
 
-  return modTx
+  modTx

@@ -11,7 +11,8 @@ import
   std/os,
   unittest2,
   results,
-  eth/[common, trie, trie/trie_defs],
+  eth/[trie, trie/trie_defs],
+  eth/common/[accounts, addresses, hashes],
   ../../../nimbus/common/chain_config,
   ../../network/state/[state_content, state_validation, state_utils],
   ./state_test_helpers
@@ -19,19 +20,19 @@ import
 template checkValidProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
     accountState: HexaryTrie,
-    storageStates: TableRef[EthAddress, HexaryTrie],
+    storageStates: TableRef[Address, HexaryTrie],
 ) =
   for address, account in genAccounts:
-    var acc = newAccount(account.nonce, account.balance)
-    acc.codeHash = keccakHash(account.code)
+    var acc = Account.init(account.nonce, account.balance)
+    acc.codeHash = keccak256(account.code)
 
     let
-      addressHash = address.keccakHash()
+      addressHash = address.data.keccak256()
       accountProof = accountState.generateAccountProof(address)
       accountPath =
         removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), accountProof[^1])
       accountTrieNodeKey = AccountTrieNodeKey(
-        path: accountPath, nodeHash: keccakHash(accountProof[^1].asSeq())
+        path: accountPath, nodeHash: keccak256(accountProof[^1].asSeq())
       )
       accountTrieOffer = AccountTrieNodeOffer(proof: accountProof)
       proofResult = validateOffer(
@@ -56,12 +57,12 @@ template checkValidProofsForExistingLeafs(
         let
           storageProof = storageState.generateStorageProof(slotKey)
           slotPath = removeLeafKeyEndNibbles(
-            Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), storageProof[^1]
+            Nibbles.init(keccak256(toBytesBE(slotKey)).data, true), storageProof[^1]
           )
           contractTrieNodeKey = ContractTrieNodeKey(
             addressHash: addressHash,
             path: slotPath,
-            nodeHash: keccakHash(storageProof[^1].asSeq()),
+            nodeHash: keccak256(storageProof[^1].asSeq()),
           )
           contractTrieOffer = ContractTrieNodeOffer(
             storageProof: storageProof, accountProof: accountProof
@@ -74,19 +75,19 @@ template checkValidProofsForExistingLeafs(
 template checkInvalidProofsWithBadValue(
     genAccounts: GenesisAlloc,
     accountState: HexaryTrie,
-    storageStates: TableRef[EthAddress, HexaryTrie],
+    storageStates: TableRef[Address, HexaryTrie],
 ) =
   for address, account in genAccounts:
-    var acc = newAccount(account.nonce, account.balance)
-    acc.codeHash = keccakHash(account.code)
+    var acc = Account.init(account.nonce, account.balance)
+    acc.codeHash = keccak256(account.code)
 
     var
-      addressHash = address.keccakHash()
+      addressHash = address.data.keccak256()
       accountProof = accountState.generateAccountProof(address)
       accountPath =
         removeLeafKeyEndNibbles(Nibbles.init(addressHash.data, true), accountProof[^1])
       accountTrieNodeKey = AccountTrieNodeKey(
-        path: accountPath, nodeHash: keccakHash(accountProof[^1].asSeq())
+        path: accountPath, nodeHash: keccak256(accountProof[^1].asSeq())
       )
     accountProof[^1][^1] += 1 # bad account leaf value
     let
@@ -115,12 +116,12 @@ template checkInvalidProofsWithBadValue(
         var
           storageProof = storageState.generateStorageProof(slotKey)
           slotPath = removeLeafKeyEndNibbles(
-            Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), storageProof[^1]
+            Nibbles.init(keccak256(toBytesBE(slotKey)).data, true), storageProof[^1]
           )
           contractTrieNodeKey = ContractTrieNodeKey(
             addressHash: addressHash,
             path: slotPath,
-            nodeHash: keccakHash(storageProof[^1].asSeq()),
+            nodeHash: keccak256(storageProof[^1].asSeq()),
           )
         storageProof[^1][^1] += 1 # bad storage leaf value
         let

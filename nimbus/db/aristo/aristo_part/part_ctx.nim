@@ -140,7 +140,7 @@ proc ctxMergeBegin*(
 
 proc ctxMergeBegin*(
     ps: PartStateRef;
-    accPath: Hash256;
+    accPath: Hash32;
       ): Result[PartStateCtx,AristoError] =
   ## Variant of `partMergeBegin()` for different path representation
   ps.ctxMergeBegin(VertexID(1), accPath.data)

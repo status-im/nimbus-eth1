@@ -98,8 +98,8 @@ proc computeKeyImpl(
 ): Result[(HashKey, int), AristoError] =
   ## Compute the key for an arbitrary vertex ID. If successful, the length of
   ## the resulting key might be smaller than 32. If it is used as a root vertex
-  ## state/hash, it must be converted to a `Hash256` (using (`.to(Hash256)`) as
-  ## in `db.computeKey(rvid).value.to(Hash256)` which always results in a
+  ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
+  ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
   ## 32 byte value.
 
   db.getKeyRc(rvid).isErrOr:
@@ -135,7 +135,7 @@ proc computeKeyImpl(
         encode Account(
           nonce: vtx.lData.account.nonce,
           balance: vtx.lData.account.balance,
-          storageRoot: skey.to(Hash256),
+          storageRoot: skey.to(Hash32),
           codeHash: vtx.lData.account.codeHash,
         )
       )

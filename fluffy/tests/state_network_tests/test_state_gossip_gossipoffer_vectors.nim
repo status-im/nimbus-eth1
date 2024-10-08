@@ -10,7 +10,7 @@ import
   testutils/unittests,
   chronos,
   stew/byteutils,
-  eth/common,
+  eth/common/headers_rlp,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
   ../../network/wire/[portal_protocol, portal_stream],
@@ -46,8 +46,7 @@ procSuite "State Gossip - Gossip Offer":
 
       let
         parentTestData = testCase[i + 1]
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -119,8 +118,7 @@ procSuite "State Gossip - Gossip Offer":
 
       let
         parentTestData = testCase[i + 1]
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -189,8 +187,7 @@ procSuite "State Gossip - Gossip Offer":
 
     for i, testData in testCase:
       let
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)

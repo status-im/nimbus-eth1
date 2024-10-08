@@ -11,7 +11,8 @@ import
   std/os,
   unittest2,
   results,
-  eth/[common, trie, trie/db],
+  eth/[trie, trie/db],
+  eth/common/hashes,
   ../../../nimbus/common/chain_config,
   ../../network/state/[state_content, state_validation, state_gossip, state_utils],
   ./state_test_helpers
@@ -32,9 +33,9 @@ suite "State Gossip getParent - Genesis JSON Files":
         let
           proof = accountState.generateAccountProof(address)
           leafNode = proof[^1]
-          addressHash = keccakHash(address).data
+          addressHash = keccak256(address.data).data
           path = removeLeafKeyEndNibbles(Nibbles.init(addressHash, true), leafNode)
-          key = AccountTrieNodeKey.init(path, keccakHash(leafNode.asSeq()))
+          key = AccountTrieNodeKey.init(path, keccak256(leafNode.asSeq()))
           offer = AccountTrieNodeOffer(proof: proof)
 
         var db = newMemoryDB()
@@ -69,7 +70,7 @@ suite "State Gossip getParent - Genesis JSON Files":
 
       for address, account in accounts:
         let
-          addressHash = address.keccakHash()
+          addressHash = address.data.keccak256()
           accountProof = accountState.generateAccountProof(address)
 
         if account.code.len() > 0:
@@ -79,14 +80,14 @@ suite "State Gossip getParent - Genesis JSON Files":
             let
               storageProof = storageState.generateStorageProof(slotKey)
               leafNode = storageProof[^1]
-              slotKeyHash = keccakHash(toBytesBE(slotKey)).data
+              slotKeyHash = keccak256(toBytesBE(slotKey)).data
               path = removeLeafKeyEndNibbles(
-                Nibbles.init(keccakHash(toBytesBE(slotKey)).data, true), leafNode
+                Nibbles.init(keccak256(toBytesBE(slotKey)).data, true), leafNode
               )
               key = ContractTrieNodeKey(
                 addressHash: addressHash,
                 path: path,
-                nodeHash: keccakHash(leafNode.asSeq()),
+                nodeHash: keccak256(leafNode.asSeq()),
               )
               offer = ContractTrieNodeOffer(
                 storageProof: storageProof, accountProof: accountProof

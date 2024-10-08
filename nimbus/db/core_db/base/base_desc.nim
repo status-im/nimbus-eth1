@@ -43,7 +43,7 @@ type
     ## look like:
     ##   * nonce*:    AccountNonce  -- Some `uint64` type
     ##   * balance*:  UInt256       -- Account balance
-    ##   * codeHash*: Hash256       -- Lookup value
+    ##   * codeHash*: Hash32        -- Lookup value
 
   CoreDbErrorCode* = enum
     Unset = 0

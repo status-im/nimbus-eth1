@@ -61,7 +61,7 @@ type
     req*: TraceRequest            ## Logged action request
     case kind*: TraceDataType
     of TdtBlob:
-      blob*: Blob
+      blob*: seq[byte]
     of TdtError:
       error*: int                 ## `KvtError` or `AristoError`
     of TdtAccount:
@@ -69,7 +69,7 @@ type
     of TdtBigNum:
       bigNum*: UInt256
     of TdtHash:
-      hash*: Hash256
+      hash*: Hash32
     of TdtVoid, TdtOops:
       discard
 
@@ -78,7 +78,7 @@ type
     base: TraceRecorderRef
     level: int
     truncated: bool
-    journal: KeyedQueue[Blob,TraceDataItemRef]
+    journal: KeyedQueue[seq[byte],TraceDataItemRef]
 
   TraceRecorderRef* = ref object of RootRef
     log: seq[TraceLogInstRef]     ## Production stack for log database
@@ -125,13 +125,13 @@ when CoreDbNoisyCaptJournal:
   func `$$`(w: openArray[byte]): string =
     w.toHex.squeezeHex
 
-  func `$`(w: Blob): string =
+  func `$`(w: seq[byte]): string =
     w.toHex.squeezeHex
 
   func `$`(w: UInt256): string =
     "#" & w.toHex.stripZeros.squeezeHex
 
-  func `$`(w: Hash256): string =
+  func `$`(w: Hash32): string =
     "£" & w.data.toHex.squeezeHex
 
   func `$`(w: VertexID): string =
@@ -222,7 +222,7 @@ proc jLogger(
 
 proc jLogger(
     tr: TraceRecorderRef;
-    accPath: Hash256;
+    accPath: Hash32;
     ti: TraceDataItemRef;
       ) =
   tr.jLogger(accPath.data.toSeq, ti)
@@ -250,8 +250,8 @@ proc jLogger(
 
 proc jLogger(
     tr: TraceRecorderRef;
-    accPath: Hash256;
-    stoPath: Hash256;
+    accPath: Hash32;
+    stoPath: Hash32;
     ti: TraceDataItemRef;
       ) =
   tr.jLogger(accPath.data.toSeq & stoPath.data.toSeq, ti)
@@ -337,7 +337,7 @@ func logRecord(
 func logRecord(
     info: AristoApiProfNames;
     req: TraceRequest;
-    state: Hash256;
+    state: Hash32;
       ): TraceDataItemRef =
   TraceDataItemRef(
     pfx:  info.to(TracePfx),
@@ -373,7 +373,7 @@ proc kvtTraceRecorder(tr: TraceRecorderRef) =
 
   # Update production api
   tracerApi.get =
-    proc(kvt: KvtDbRef; key: openArray[byte]): Result[Blob,KvtError] =
+    proc(kvt: KvtDbRef; key: openArray[byte]): Result[seq[byte],KvtError] =
       const info = KvtApiProfGetFn
 
       when CoreDbNoisyCaptJournal:
@@ -470,7 +470,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.fetchAccountRecord =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[AristoAccount,AristoError] =
       const info = AristoApiProfFetchAccountRecordFn
 
@@ -493,7 +493,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
   tracerApi.fetchAccountState =
     proc(mpt: AristoDbRef;
          updateOk: bool;
-        ): Result[Hash256,AristoError] =
+        ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchAccountStateFn
 
       when CoreDbNoisyCaptJournal:
@@ -516,7 +516,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
     proc(mpt: AristoDbRef;
          root: VertexID;
          path: openArray[byte];
-        ): Result[Blob,AristoError] =
+        ): Result[seq[byte],AristoError] =
       const info = AristoApiProfFetchGenericDataFn
 
       when CoreDbNoisyCaptJournal:
@@ -539,7 +539,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
     proc(mpt: AristoDbRef;
          root: VertexID;
          updateOk: bool;
-        ): Result[Hash256,AristoError] =
+        ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchGenericStateFn
 
       when CoreDbNoisyCaptJournal:
@@ -560,8 +560,8 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.fetchStorageData =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
         ): Result[Uint256,AristoError] =
       const info = AristoApiProfFetchStorageDataFn
 
@@ -583,9 +583,9 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.fetchStorageState =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
          updateOk: bool;
-        ): Result[Hash256,AristoError] =
+        ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchStorageStateFn
 
       when CoreDbNoisyCaptJournal:
@@ -606,7 +606,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.deleteAccountRecord =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[void,AristoError] =
       const info = AristoApiProfDeleteAccountRecordFn
 
@@ -702,8 +702,8 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.deleteStorageData =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
         ): Result[bool,AristoError] =
       const info = AristoApiProfDeleteStorageDataFn
 
@@ -738,7 +738,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.deleteStorageTree =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
         ): Result[void,AristoError] =
       const info = AristoApiProfDeleteStorageTreeFn
 
@@ -761,7 +761,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.mergeAccountRecord =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
+         accPath: Hash32;
          accRec: AristoAccount;
         ): Result[bool,AristoError] =
       const info = AristoApiProfMergeAccountRecordFn
@@ -828,8 +828,8 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
   tracerApi.mergeStorageData =
     proc(mpt: AristoDbRef;
-         accPath: Hash256;
-         stoPath: Hash256;
+         accPath: Hash32;
+         stoPath: Hash32;
          stoData: UInt256;
         ): Result[void,AristoError] =
       const info = AristoApiProfMergeStorageDataFn
@@ -880,7 +880,7 @@ func level*(log: TraceLogInstRef): int =
   ## Non-negative stack level of this log instance.
   log.level
 
-func journal*(log: TraceLogInstRef): KeyedQueue[Blob,TraceDataItemRef] =
+func journal*(log: TraceLogInstRef): KeyedQueue[seq[byte],TraceDataItemRef] =
   ## Get the journal
   log.journal
 
@@ -888,19 +888,19 @@ func db*(log: TraceLogInstRef): CoreDbRef =
   ## Get database
   log.base.db
 
-iterator kvtLog*(log: TraceLogInstRef): (Blob,TraceDataItemRef) =
+iterator kvtLog*(log: TraceLogInstRef): (seq[byte],TraceDataItemRef) =
   ## Extract `Kvt` journal
   for p in log.journal.nextPairs:
     let pfx = TracePfx(p.key[0])
     if pfx == TrpKvt:
       yield (p.key[1..^1], p.data)
 
-proc kvtLogBlobs*(log: TraceLogInstRef): seq[(Blob,Blob)] =
+proc kvtLogBlobs*(log: TraceLogInstRef): seq[(seq[byte],seq[byte])] =
   log.kvtLog.toSeq
      .filterIt(it[1].kind==TdtBlob)
      .mapIt((it[0],it[1].blob))
 
-iterator ariLog*(log: TraceLogInstRef): (VertexID,Blob,TraceDataItemRef) =
+iterator ariLog*(log: TraceLogInstRef): (VertexID,seq[byte],TraceDataItemRef) =
   ## Extract `Aristo` journal
   for p in log.journal.nextPairs:
     let

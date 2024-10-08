@@ -109,7 +109,7 @@ func oaToStr(w: openArray[byte]): string =
 # Public API logging helpers
 # ------------------------------------------------------------------------------
 
-func toStr(w: Hash256): string =
+func toStr(w: Hash32): string =
   if w == EMPTY_ROOT_HASH: "EMPTY_ROOT_HASH" else: w.data.oaToStr
 
 func toStr(ela: Duration): string =
@@ -124,20 +124,20 @@ func toStr(rc: CoreDbRc[bool]): string =
 func toStr(rc: CoreDbRc[void]): string =
   if rc.isOk: "ok()" else: "err(" & rc.error.toStr & ")"
 
-func toStr(rc: CoreDbRc[Blob]): string =
-  if rc.isOk: "ok(Blob[" & $rc.value.len & "])"
+func toStr(rc: CoreDbRc[seq[byte]]): string =
+  if rc.isOk: "ok(seq[byte,#" & $rc.value.len & "])"
   else: "err(" & rc.error.toStr & ")"
 
-func toStr(rc: CoreDbRc[seq[Blob]]): string =
+func toStr(rc: CoreDbRc[seq[seq[byte]]]): string =
   if rc.isOk: "ok([" & rc.value.mapIt("[#" & $it.len & "]").join(",") & "])"
   else: "err(" & rc.error.toStr & ")"
 
-func toStr(rc: CoreDbRc[(seq[Blob],bool)]): string =
+func toStr(rc: CoreDbRc[(seq[seq[byte]],bool)]): string =
   if rc.isOk: "ok([" & rc.value[0].mapIt("[#" & $it.len & "]").join(",") &
                              "]," & $rc.value[1] & ")"
   else: "err(" & rc.error.toStr & ")"
 
-func toStr(rc: CoreDbRc[Hash256]): string =
+func toStr(rc: CoreDbRc[Hash32]): string =
   if rc.isOk: "ok(" & rc.value.toStr & ")" else: "err(" & rc.error.toStr & ")"
 
 func toStr(rc: CoreDbRc[Account]): string =
@@ -176,7 +176,7 @@ func toLenStr*(w: openArray[byte]): string =
 
 func `$`*[T](rc: CoreDbRc[T]): string = rc.toStr
 func `$`*(t: Elapsed): string = t.Duration.toStr
-func `$$`*(h: Hash256): string = h.toStr # otherwise collision w/existing `$`
+func `$$`*(h: Hash32): string = h.toStr # otherwise collision w/existing `$`
 
 # ------------------------------------------------------------------------------
 # Public new API logging framework

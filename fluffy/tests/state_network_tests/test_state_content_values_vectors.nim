@@ -27,7 +27,7 @@ suite "State Content Values":
       testCase = YamlAccountTrieNodeWithProof.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      blockHash = BlockHash.fromHex(testCase.block_hash)
+      blockHash = Hash32.fromHex(testCase.block_hash)
       proof =
         TrieProof.init(testCase.proof.map((hex) => TrieNode.init(hex.hexToSeqByte())))
       accountTrieNodeOffer = AccountTrieNodeOffer.init(proof, blockHash)
@@ -75,7 +75,7 @@ suite "State Content Values":
       testCase = YamlContractStorageTrieNodeWithProof.loadFromYaml(file).valueOr:
         raiseAssert "Cannot read test vector: " & error
 
-      blockHash = BlockHash.fromHex(testCase.block_hash)
+      blockHash = Hash32.fromHex(testCase.block_hash)
       storageProof = TrieProof.init(
         testCase.storage_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
       )
@@ -133,7 +133,7 @@ suite "State Content Values":
         raiseAssert "Cannot read test vector: " & error
 
       code = Bytecode.init(testCase.bytecode.hexToSeqByte())
-      blockHash = BlockHash.fromHex(testCase.block_hash)
+      blockHash = Hash32.fromHex(testCase.block_hash)
       accountProof = TrieProof.init(
         testCase.account_proof.map((hex) => TrieNode.init(hex.hexToSeqByte()))
       )

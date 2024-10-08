@@ -38,7 +38,7 @@ when CoreDbEnableApiTracking:
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator replicatePersistent*(mpt: CoreDbMptRef): (Blob, Blob) {.rlpRaise.} =
+iterator replicatePersistent*(mpt: CoreDbMptRef): (seq[byte], seq[byte]) {.rlpRaise.} =
   ## Extended version of `replicate()` for `Aristo` persistent backend.
   ##
   mpt.setTrackNewApi MptReplicateIt

@@ -128,10 +128,6 @@ type
     V4
     V5
 
-  SyncMode* {.pure.} = enum
-    Default
-    Flare                         ## Beware, experimental
-
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
 
@@ -170,17 +166,6 @@ type
       defaultValueDesc: $ChainDbMode.Aristo
       abbr : "p"
       name: "chaindb" }: ChainDbMode
-
-    syncMode* {.
-      desc: "Specify particular blockchain sync mode."
-      longDesc:
-        "- default -- beacon sync mode\n" &
-        "- flare   -- re-facored beacon like mode, experimental\n" &
-        ""
-      defaultValue: SyncMode.Default
-      defaultValueDesc: $SyncMode.Default
-      abbr: "y"
-      name: "sync-mode" .}: SyncMode
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
@@ -385,11 +370,11 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
-    flareChunkSize* {.
+    beaconChunkSize* {.
       hidden
-      desc: "Number of blocks per database transaction for flare sync"
+      desc: "Number of blocks per database transaction for beacon sync"
       defaultValue: 0
-      name: "debug-flare-chunk-size" .}: int
+      name: "debug-beacon-chunk-size" .}: int
 
     rocksdbMaxOpenFiles {.
       hidden

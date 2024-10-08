@@ -12,12 +12,12 @@ import
   results,
   chronos,
   chronicles,
-  eth/common/eth_types,
-  eth/rlp,
   ../network/wire/portal_protocol,
   ../network/history/
     [history_content, history_network, validation/historical_hashes_accumulator],
   "."/[era1, history_data_json_store, history_data_ssz_e2s]
+
+from eth/common/eth_types_rlp import rlpHash
 
 export results
 
@@ -140,7 +140,7 @@ proc historyPropagateHeadersWithProof*(
         content = headerWithProof.get()
         contentKey = ContentKey(
           contentType: blockHeader,
-          blockHeaderKey: BlockKey(blockHash: header.blockHash()),
+          blockHeaderKey: BlockKey(blockHash: header.rlpHash()),
         )
         encKey = history_content.encode(contentKey)
         contentId = history_content.toContentId(encKey)
@@ -228,8 +228,8 @@ iterator headersWithProof*(
 
     let
       contentKey = ContentKey(
-        contentType: blockHeader,
-        blockHeaderKey: BlockKey(blockHash: blockHeader.blockHash()),
+        contentType: ContentType.blockHeader,
+        blockHeaderKey: BlockKey(blockHash: blockHeader.rlpHash()),
       ).encode()
 
       headerWithProof = buildHeaderWithProof(blockHeader, epochRecord).valueOr:
@@ -241,7 +241,7 @@ iterator headersWithProof*(
 
 iterator blockContent*(f: Era1File): (ContentKeyByteList, seq[byte]) =
   for (header, body, receipts, _) in f.era1BlockTuples:
-    let blockHash = header.blockHash()
+    let blockHash = header.rlpHash()
 
     block: # block body
       let
@@ -256,7 +256,7 @@ iterator blockContent*(f: Era1File): (ContentKeyByteList, seq[byte]) =
     block: # receipts
       let
         contentKey = ContentKey(
-          contentType: receipts, receiptsKey: BlockKey(blockHash: blockHash)
+          contentType: ContentType.receipts, receiptsKey: BlockKey(blockHash: blockHash)
         ).encode()
 
         contentValue = encode(receipts)

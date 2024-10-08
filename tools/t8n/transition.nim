@@ -11,6 +11,7 @@
 import
   std/[json, strutils, tables, os, streams],
   eth/[rlp, trie, eip1559],
+  eth/common/transaction_utils,
   stint, results,
   "."/[config, types, helpers],
   ../common/state_clearing,
@@ -93,7 +94,7 @@ proc envToHeader(env: EnvStruct): BlockHeader =
   BlockHeader(
     coinbase   : env.currentCoinbase,
     difficulty : env.currentDifficulty.get(0.u256),
-    mixHash    : env.currentRandom.get(default(Hash256)),
+    mixHash    : env.currentRandom.get(default(Bytes32)),
     number     : env.currentNumber,
     gasLimit   : env.currentGasLimit,
     timestamp  : env.currentTimestamp,
@@ -256,8 +257,7 @@ proc exec(ctx: var TransContext,
       continue
 
     let tx = txRes.get
-    var sender: EthAddress
-    if not tx.getSender(sender):
+    let sender = tx.recoverSender().valueOr:
       rejected.add RejectedTx(
         index: txIndex,
         error: "Could not get sender"

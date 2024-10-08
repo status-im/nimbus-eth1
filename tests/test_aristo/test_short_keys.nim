@@ -23,7 +23,7 @@ import
   ../replay/xcheck,
   ./test_helpers
 
-func x(s: string): Blob = s.hexToSeqByte
+func x(s: string): seq[byte] = s.hexToSeqByte
 func k(s: string): HashKey = HashKey.fromBytes(s.x).value
 
 let samples = [
@@ -134,7 +134,7 @@ suite "Aristo short keys":
             "\n"
 
       # Reverse run deleting entries
-      var deletedKeys: HashSet[Blob]
+      var deletedKeys: HashSet[seq[byte]]
       for iny,(k,v,r,s) in sample.reversed:
         let inx = sample.len - 1 - iny
 

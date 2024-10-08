@@ -36,7 +36,7 @@ when extraTraceMessages:
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator walkAdm*(rdb: RdbInst): tuple[xid: uint64, data: Blob] =
+iterator walkAdm*(rdb: RdbInst): tuple[xid: uint64, data: seq[byte]] =
   ## Walk over key-value pairs of the admin column of the database.
   ##
   ## Non-decodable entries are are ignored.
@@ -52,7 +52,7 @@ iterator walkAdm*(rdb: RdbInst): tuple[xid: uint64, data: Blob] =
       if key.len == 8 and val.len != 0:
         yield (uint64.fromBytesBE key, val)
 
-iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: Blob] =
+iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: seq[byte]] =
   ## Walk over key-value pairs of the hash key column of the database.
   ##
   ## Non-decodable entries are are ignored.

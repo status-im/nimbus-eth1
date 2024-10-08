@@ -22,10 +22,10 @@ logScope:
 
 type
   SnapAccount* = object
-    accHash*: Hash256
+    accHash*: Hash32
     accBody* {.rlpCustomSerialization.}: Account
 
-  SnapProof* = distinct Blob
+  SnapProof* = distinct seq[byte]
     ## Rlp coded node data, to be handled different from a generic `Blob`
 
   SnapProofNodes* = object
@@ -33,12 +33,12 @@ type
     nodes*: seq[SnapProof]
 
   SnapStorage* = object
-    slotHash*: Hash256
-    slotData*: Blob
+    slotHash*: Hash32
+    slotData*: seq[byte]
 
   SnapTriePaths* = object
-    accPath*: Blob
-    slotPaths*: seq[Blob]
+    accPath*: seq[byte]
+    slotPaths*: seq[seq[byte]]
 
   SnapWireBase* = ref object of RootRef
 
@@ -48,16 +48,16 @@ type
 # Public `SnapProof` type helpers
 # ------------------------------------------------------------------------------
 
-proc to*(data: Blob; T: type SnapProof): T = data.T
-proc to*(node: SnapProof; T: type Blob): T = node.T
+proc to*(data: seq[byte]; T: type SnapProof): T = data.T
+proc to*(node: SnapProof; T: type seq[byte]): T = node.T
 
 proc hash*(sp: SnapProof): Hash =
   ## Mixin for Table/HashSet
-  sp.to(Blob).hash
+  sp.to(seq[byte]).hash
 
 proc `==`*(a,b: SnapProof): bool =
   ## Mixin for Table/HashSet
-  a.to(Blob) == b.to(Blob)
+  a.to(seq[byte]) == b.to(seq[byte])
 
 # ------------------------------------------------------------------------------
 # Public serialisation helpers
@@ -148,7 +148,7 @@ proc snapAppend*(writer: var RlpWriter; spn: SnapProofNodes) =
   ## the serialised destination data type.
   writer.startList spn.nodes.len
   for w in spn.nodes:
-    writer.appendRawBytes w.to(Blob)
+    writer.appendRawBytes w.to(seq[byte])
 
 # ---------------------
 
@@ -163,10 +163,10 @@ proc snapRead*(
   var first = true
   for w in rlp.items:
     if first:
-      result.accPath = rlp.read(Blob)
+      result.accPath = rlp.read(seq[byte])
       first = false
     else:
-      result.slotPaths.add rlp.read(Blob)
+      result.slotPaths.add rlp.read(seq[byte])
 
 proc snapAppend*(writer: var RlpWriter; stn: SnapTriePaths) =
   ## RLP encoding
@@ -184,7 +184,7 @@ proc notImplemented(name: string) =
 
 method getAccountRange*(
     ctx: SnapWireBase;
-    root: Hash256;
+    root: Hash32;
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
@@ -194,8 +194,8 @@ method getAccountRange*(
 
 method getStorageRanges*(
     ctx: SnapWireBase;
-    root: Hash256;
-    accounts: openArray[Hash256];
+    root: Hash32;
+    accounts: openArray[Hash32];
     origin: openArray[byte];
     limit: openArray[byte];
     replySizeMax: uint64;
@@ -205,18 +205,18 @@ method getStorageRanges*(
 
 method getByteCodes*(
     ctx: SnapWireBase;
-    nodes: openArray[Hash256];
+    nodes: openArray[Hash32];
     replySizeMax: uint64;
-      ): Result[seq[Blob], string]
+      ): Result[seq[seq[byte]], string]
       {.base, gcsafe.} =
   notImplemented("getByteCodes")
 
 method getTrieNodes*(
     ctx: SnapWireBase;
-    root: Hash256;
+    root: Hash32;
     pathGroups: openArray[SnapTriePaths];
     replySizeMax: uint64;
-      ): Result[seq[Blob], string]
+      ): Result[seq[seq[byte]], string]
       {.base, gcsafe.} =
   notImplemented("getTrieNodes")
 

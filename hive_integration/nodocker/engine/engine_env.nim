@@ -23,6 +23,7 @@ import
     core/tx_pool/tx_item,
     core/block_import,
     rpc,
+    sync/handlers,
     beacon/beacon_engine,
     beacon/web3_eth_conv,
     common
@@ -71,10 +72,6 @@ proc envConfig*(conf: ChainConfig): NimbusConf =
   result.networkParams.config = conf
 
 proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): EngineEnv =
-  if chainFile.len > 0:
-    # disable clique if we are using PoW chain
-    conf.networkParams.config.consensusType = ConsensusType.POW
-
   let ctx = newEthContext()
   ctx.am.importPrivateKey(sealerKey).isOkOr:
     echo error
@@ -110,7 +107,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
       quit(QuitFailure)
 
     beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain)
+    serverApi = newServerAPI(chain, txPool)
 
   setupServerAPI(serverApi, server)
   setupEngineAPI(beaconEngine, server)

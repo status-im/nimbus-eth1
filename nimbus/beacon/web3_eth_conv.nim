@@ -9,6 +9,7 @@
 
 import
   std/[typetraits],
+  chronicles,
   web3/primitives as web3types,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -47,20 +48,9 @@ proc `$`*(x: Opt[common.Hash256]): string =
   if x.isNone: "none"
   else: x.get().data.toHex
 
-proc `$`*(x: Opt[Web3Hash]): string =
-  if x.isNone: "none"
-  else: x.get().toHex
-
 proc `$`*(x: Opt[PayloadID]): string =
   if x.isNone: "none"
   else: x.get().toHex
-
-proc `$`*(x: Web3Quantity): string =
-  $distinctBase(x)
-
-proc short*(x: Web3Hash): string =
-  let z = common.Hash32(distinctBase x)
-  short(z)
 
 # ------------------------------------------------------------------------------
 # Web3 defaults
@@ -86,9 +76,6 @@ func u64*(x: Opt[Web3Quantity]): Opt[uint64] =
   if x.isNone: Opt.none(uint64)
   else: Opt.some(uint64 x.get)
 
-func u256*(x: Web3Quantity): UInt256 =
-  u256(x.uint64)
-
 func u256*(x: Web3BlockNumber): UInt256 =
   u256(x.uint64)
 
@@ -101,7 +88,10 @@ func ethTime*(x: Web3Quantity): common.EthTime =
 func ethHash*(x: Web3PrevRandao): common.Hash256 =
   common.Hash32(distinctBase x)
 
-func ethVersionedHash*(x: Web3PrevRandao): common.VersionedHash =
+func ethHash*(x: Web3Hash): common.Hash256 =
+  common.Hash32(distinctBase x)
+
+func ethVersionedHash*(x: Web3Hash): common.VersionedHash =
   common.VersionedHash(distinctBase x)
 
 func ethHash*(x: Opt[Web3Hash]): Opt[common.Hash256] =
@@ -208,10 +198,10 @@ func w3Hash*(x: Opt[common.Hash256]): Opt[BlockHash] =
 func w3Hash*(x: common.BlockHeader): BlockHash =
   BlockHash rlpHash(x).data
 
-func w3Hash*(list: openArray[StorageKey]): seq[Web3Hash] =
-  result = newSeqOfCap[Web3Hash](list.len)
+func w3Hash*(list: openArray[Bytes32]): seq[Bytes32] =
+  result = newSeqOfCap[Bytes32](list.len)
   for x in list:
-    result.add Web3Hash x
+    result.add Bytes32 x
 
 func w3Addr*(x: common.EthAddress): Web3Address =
   Web3Address x
@@ -411,3 +401,5 @@ func ethRequests*(p: ExecutionPayload): Opt[seq[Request]] =
       res.add ethRequest(x)
 
   ok(res)
+
+chronicles.formatIt(Quantity): $(distinctBase it)

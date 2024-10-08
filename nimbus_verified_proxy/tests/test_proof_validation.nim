@@ -16,15 +16,13 @@ suite "Merkle proof of inclusion validation":
     # Valid inclusion proof for account 0xf36f155486299ecaff2d4f5160ed5114c1f66000
     # at execution block 7533830 of goerli network
     let
-      stateRoot = FixedBytes[32].fromHex(
-        "0x4cc43abefcb010e4176e82e44eadaa49a249d258867ba31f5c14d6099790a614"
-      )
-      codeHash = FixedBytes[32].fromHex(
-        "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
-      )
-      storageRoot = FixedBytes[32].fromHex(
-        "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-      )
+      stateRoot =
+        hash32"0x4cc43abefcb010e4176e82e44eadaa49a249d258867ba31f5c14d6099790a614"
+      codeHash =
+        hash32"0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+      storageRoot =
+        hash32"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+
       nonce = Quantity(uint64(71518))
       balance = UInt256.fromHex("3d25780abb5f0a89b7da")
       address =
@@ -76,9 +74,9 @@ suite "Merkle proof of inclusion validation":
 
   test "Validate storage proof":
     let slotValue = UInt256.fromHex("0x25a92a5853702f199bb2d805bba05d67025214a8")
-    let stateRoot = FixedBytes[32].fromHex(
-      "0x99b31961b56190853d6f20b17298c8e3aed0a88860f80d4662fb41712f93491d"
-    )
+    const stateRoot =
+      hash32"0x99b31961b56190853d6f20b17298c8e3aed0a88860f80d4662fb41712f93491d"
+
     let proof = ProofResponse(
       address: Address(hexToByteArray[20]("0x805fe47d1fe7d86496753bb4b36206953c1ae660")),
       accountProof:
@@ -120,13 +118,11 @@ suite "Merkle proof of inclusion validation":
           ),
         ],
       balance: UInt256.fromHex("0x0"),
-      codeHash: FixedBytes[32].fromHex(
-        "0x3b45ab254ec24f2bcb75a922f15031796bc433ea5a4514783705d185321e5f82"
-      ),
+      codeHash:
+        hash32"0x3b45ab254ec24f2bcb75a922f15031796bc433ea5a4514783705d185321e5f82",
       nonce: Quantity(uint64(1)),
-      storageHash: FixedBytes[32].fromHex(
-        "0x7bb85da974b0ee4efcb379f528bcf7e947a55901d5a2c0d38bc9cc16c851e785"
-      ),
+      storageHash:
+        hash32"0x7bb85da974b0ee4efcb379f528bcf7e947a55901d5a2c0d38bc9cc16c851e785",
       storageProof:
         @[
           StorageProof(

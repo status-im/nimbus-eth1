@@ -146,9 +146,17 @@ type
       .}: uint64
 
       verifyStateProofs* {.
-        desc: "Verify state proofs before gossiping them into the portal network",
+        desc:
+          "Verify state proofs before gossiping them into the portal network (Slow: Only used for testing).",
         defaultValue: false,
         name: "verify-state-proofs"
+      .}: bool
+
+      enableGossip* {.
+        desc:
+          "Enable gossipping the state into the portal network. Disable to only build the state without gossiping it.",
+        defaultValue: true,
+        name: "enable-gossip"
       .}: bool
 
       gossipGenesis* {.

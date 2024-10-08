@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ../../nimbus/constants,
+  ../../nimbus/[constants, transaction],
   ../../nimbus/utils/ec_recover,
   ../../nimbus/core/tx_pool/tx_item,
   eth/[common, common/transaction, keys],
@@ -19,35 +19,6 @@ import
 const
   # example from clique, signer: 658bdf435d810c91414ec09147daa6db62406379
   prvKey = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
-
-proc signature(tx: Transaction; key: PrivateKey): (uint64,UInt256,UInt256) =
-  let
-    hashData = tx.txHashNoSignature.data
-    signature = key.sign(SkMessage(hashData)).toRaw
-    v = signature[64].uint64
-
-  result[1] = UInt256.fromBytesBE(signature[0..31])
-  result[2] = UInt256.fromBytesBE(signature[32..63])
-
-  if tx.txType == TxLegacy:
-    if tx.V >= EIP155_CHAIN_ID_OFFSET:
-      # just a guess which does not always work .. see `txModPair()`
-      # see https://eips.ethereum.org/EIPS/eip-155
-      result[0] = (tx.V and not 1'u64) or (not v and 1'u64)
-    else:
-      result[0] = 27 + v
-  else:
-    # currently unsupported, will skip this one .. see `txModPair()`
-    result[0] = 0'u64
-
-
-proc sign(tx: Transaction; key: PrivateKey): Transaction =
-  let (V,R,S) = tx.signature(key)
-  result = tx
-  result.V = V
-  result.R = R
-  result.S = S
-
 
 proc sign(header: BlockHeader; key: PrivateKey): BlockHeader =
   let
@@ -73,14 +44,14 @@ proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
   tx1.gasPrice = (tx0.gasPrice * (100 + priceBump).GasInt + 99.GasInt) div 100
 
   let
-    tx0Signed = tx0.sign(prvTestKey)
-    tx1Signed = tx1.sign(prvTestKey)
+    tx0Signed = tx0.signTransaction(prvTestKey)
+    tx1Signed = tx0.signTransaction(prvTestKey)
   block:
-    let rc = tx0Signed.ecRecover
+    let rc = tx0Signed.recoverSender()
     if rc.isErr or rc.value != testAddress:
       return
   block:
-    let rc = tx1Signed.ecRecover
+    let rc = tx1Signed.recoverSender()
     if rc.isErr or rc.value != testAddress:
       return
   (item,tx0Signed,tx1Signed)

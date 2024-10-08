@@ -10,14 +10,15 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/discoveryv5/routing_table,
-  eth/common/eth_types_rlp,
-  eth/rlp,
+  eth/common/[hashes, headers_rlp, blocks],
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../network/history/
     [history_network, history_content, validation/historical_hashes_accumulator],
   ../../database/content_db,
   ../test_helpers,
   ./test_history_util
+
+from eth/common/eth_types_rlp import rlpHash
 
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
@@ -55,15 +56,15 @@ proc stop(hn: HistoryNode) {.async.} =
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
   return hn.historyNetwork.contentDB.get(contentId).isSome()
 
-proc createEmptyHeaders(fromNum: int, toNum: int): seq[BlockHeader] =
-  var headers: seq[BlockHeader]
+proc createEmptyHeaders(fromNum: int, toNum: int): seq[Header] =
+  var headers: seq[Header]
   for i in fromNum .. toNum:
-    var bh = BlockHeader()
+    var bh = Header()
     bh.number = BlockNumber(i)
     bh.difficulty = u256(i)
     # empty so that we won't care about creating fake block bodies
     bh.ommersHash = EMPTY_UNCLE_HASH
-    bh.transactionsRoot = EMPTY_ROOT_HASH
+    bh.transactionsRoot = emptyRoot
     headers.add(bh)
   return headers
 
@@ -72,8 +73,8 @@ proc headersToContentKV(headersWithProof: seq[BlockHeaderWithProof]): seq[Conten
   for headerWithProof in headersWithProof:
     let
       # TODO: Decoding step could be avoided
-      header = rlp.decode(headerWithProof.header.asSeq(), BlockHeader)
-      headerHash = header.blockHash()
+      header = rlp.decode(headerWithProof.header.asSeq(), Header)
+      headerHash = header.rlpHash()
       blockKey = BlockKey(blockHash: headerHash)
       contentKey =
         encode(ContentKey(contentType: blockHeader, blockHeaderKey: blockKey))
@@ -110,7 +111,7 @@ procSuite "History Content Network":
       historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
       historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
 
-    var selectedHeaders: seq[BlockHeader]
+    var selectedHeaders: seq[Header]
     for i in headersToTest:
       selectedHeaders.add(headers[i])
 
@@ -121,7 +122,7 @@ procSuite "History Content Network":
     # Only node 2 stores the headers (by number)
     for headerWithProof in headersWithProof.get():
       let
-        header = rlp.decode(headerWithProof.header.asSeq(), BlockHeader)
+        header = rlp.decode(headerWithProof.header.asSeq(), Header)
         contentKey = blockHeaderContentKey(header.number)
         encKey = encode(contentKey)
         contentId = toContentId(contentKey)
@@ -258,7 +259,7 @@ procSuite "History Content Network":
     historyNode1.start()
     historyNode2.start()
 
-    var selectedHeaders: seq[BlockHeader]
+    var selectedHeaders: seq[Header]
     for i in headersToTest:
       selectedHeaders.add(headers[i])
 

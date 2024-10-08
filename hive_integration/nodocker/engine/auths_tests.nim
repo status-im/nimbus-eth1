@@ -25,12 +25,12 @@ const
   defaultProtectedHeader     = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
 
 createRpcSigsFromNim(RpcClient):
-  proc engine_exchangeTransitionConfigurationV1(transitionConfiguration: TransitionConfigurationV1): TransitionConfigurationV1
+  proc engine_getClientVersionV1(version: ClientVersionV1): ClientVersionV1
 
-proc base64urlEncode(x: auto): string =
+func base64urlEncode(x: auto): string =
   base64.encode(x, safe = true).replace("=", "")
 
-proc prepareAuthCallToken(secret: string, time: int64): string =
+func prepareAuthCallToken(secret: string, time: int64): string =
   let key = cast[seq[byte]](secret)
   let payload = """{"iat": $1}""" % [$time]
   let token = defaultProtectedHeader & "." & payload.base64urlEncode
@@ -49,10 +49,8 @@ template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecre
   proc procName(env: TestEnv): bool =
     # Default values
     var
-      # All test cases send a simple TransitionConfigurationV1 to check the Authentication mechanism (JWT)
-      tConf = TransitionConfigurationV1(
-        terminalTotalDifficulty: env.engine.ttd
-      )
+      # All test cases send a simple ClientVersionV1 to check the Authentication mechanism (JWT)
+      tVersion   = default(ClientVersionV1)  # handler doesn't check contents
       testSecret = customAuthSecretBytes
       testTime   = getTime().toUnix
 
@@ -66,7 +64,7 @@ template genAuthTest(procName: untyped, timeDriftSeconds: int64, customAuthSecre
     let client = getClient(env, token)
 
     try:
-      discard waitFor client.engine_exchangeTransitionConfigurationV1(tConf)
+      discard waitFor client.engine_getClientVersionV1(tVersion)
       testCond authOk:
         error "Authentication was supposed to fail authentication but passed"
     except CatchableError:

@@ -130,20 +130,18 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     # And exchange the capabilities for a test communication
     web3 = await engineUrl.newWeb3()
     rpcClient = web3.provider
-    data =
-      try:
-        await rpcClient.exchangeCapabilities(
-          @[
-            "engine_exchangeTransitionConfigurationV1", "engine_forkchoiceUpdatedV1",
-            "engine_getPayloadBodiesByHash", "engine_getPayloadBodiesByRangeV1",
-            "engine_getPayloadV1", "engine_newPayloadV1",
-          ]
-        )
-      except CatchableError as exc:
-        error "Error Connecting to the EL Engine API", error = exc.msg
-        @[]
 
-  notice "Communication with the EL Success", data = data
+  try:
+    let data = await rpcClient.exchangeCapabilities(
+      @[
+        "engine_forkchoiceUpdatedV1", "engine_getPayloadBodiesByHash",
+        "engine_getPayloadBodiesByRangeV1", "engine_getPayloadV1", "engine_newPayloadV1",
+      ]
+    )
+    notice "Communication with the EL Success", data = data
+  except CatchableError as exc:
+    error "Error Connecting to the EL Engine API", error = exc.msg
+    quit(QuitFailure)
 
   # Get the latest block number from the EL rest api
   template elBlockNumber(): uint64 =
@@ -162,6 +160,12 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       quit(QuitFailure)
 
   notice "Current block number", number = currentBlockNumber
+
+  # Check for pre-merge situation
+  if currentBlockNumber <= lastEra1Block:
+    notice "Pre-merge, nrpc syncer works post-merge",
+      blocknumber = currentBlockNumber, lastPoWBlock = lastEra1Block
+    quit(QuitSuccess)
 
   # Load the latest state from the CL
   var
@@ -216,16 +220,14 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           )
           debug "Making new payload call for Deneb"
           payloadResponse = await rpcClient.newPayload(
-            payload,
-            versioned_hashes,
-            primitives.FixedBytes[32] forkyBlck.message.parent_root.data,
+            payload, versioned_hashes, forkyBlck.message.parent_root.to(Hash32)
           )
         notice "Payload status", response = payloadResponse
 
         # Load the head hash from the execution payload, for forkchoice
         headHash = forkyBlck.message.body.execution_payload.block_hash
 
-        # Make the forkchoicestate based on the the last 
+        # Make the forkchoicestate based on the the last
         # `new_payload` call and the state received from the EL rest api
         # And generate the PayloadAttributes based on the consensus fork
         let
@@ -248,13 +250,13 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
 
         # Update the finalized hash
         # This is updated after the fcu call is made
-        # So that head - head mod 32 is maintained 
+        # So that head - head mod 32 is maintained
         # i.e finalized have to be mod slots per epoch == 0
         let blknum = forkyBlck.message.body.execution_payload.block_number
         if blknum < finalizedBlck.header.number and blknum mod 32 == 0:
           finalizedHash = headHash
         elif blknum >= finalizedBlck.header.number:
-          # If the real finalized block is crossed, then upate the finalized hash to the real one 
+          # If the real finalized block is crossed, then upate the finalized hash to the real one
           (finalizedBlck, _) = client.getELBlockFromBeaconChain(
             BlockIdent.init(BlockIdentType.Finalized), clConfig
           )

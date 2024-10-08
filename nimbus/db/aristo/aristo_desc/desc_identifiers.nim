@@ -71,16 +71,16 @@ type
     ## on-the-fly.
     ##
     ## This compaction feature nees an abstraction of the hash link object
-    ## which is either a `Hash256` or a `Blob` of length at most 31 bytes.
+    ## which is either a `Hash32` or a `seq[byte]` of length at most 31 bytes.
     ## This leaves two ways of representing an empty/void `HashKey` type.
-    ## It may be available as an empty `Blob` of zero length, or the
-    ## `Hash256` type of the Keccak hash of an empty `Blob` (see constant
+    ## It may be available as an empty `seq[byte]` of zero length, or the
+    ## `Hash32` type of the Keccak hash of an empty `seq[byte]` (see constant
     ## `EMPTY_ROOT_HASH`.)
     ##
     ## For performance, storing blobs as `seq` is avoided, instead storing
     ## their length and sharing the data "space".
     ##
-    buf: array[32, byte] # Either Hash256 or blob data, depending on `len`
+    buf: array[32, byte] # Either Hash32 or blob data, depending on `len`
     len: int8 # length in the case of blobs, or 32 when it's a hash
 
   PathID* = object
@@ -296,24 +296,24 @@ func to*(pid: PathID; T: type NibblesBuf): T =
   else:
     nibbles
 
-func `@`*(pid: PathID): Blob =
-  ## Representation of a `PathID` as a `Blob`. The result is left padded
+func `@`*(pid: PathID): seq[byte] =
+  ## Representation of a `PathID` as a `seq[byte]`. The result is left padded
   ## by a zero LSB if the path length was odd.
   result = pid.pfx.toBytesBE.toSeq
   if pid.length < 63:
     result.setLen((pid.length + 1) shl 1)
 
-func to*(lid: HashKey; T: type Hash256): T =
+func to*(lid: HashKey; T: type Hash32): T =
   ## Returns the `Hash236` key if available, otherwise the Keccak hash of
-  ## the `Blob` version.
+  ## the `seq[byte]` version.
   if lid.len == 32:
-    Hash256(lid.buf)
+    Hash32(lid.buf)
   elif 0 < lid.len:
-    lid.data.keccakHash
+    lid.data.keccak256
   else:
     EMPTY_ROOT_HASH
 
-func to*(key: Hash256; T: type HashKey): T =
+func to*(key: Hash32; T: type HashKey): T =
   ## This is an efficient version of `HashKey.fromBytes(key.data).value`, not
   ## to be confused with `digestTo(HashKey)`.
   if key == EMPTY_ROOT_HASH:
@@ -346,7 +346,7 @@ func digestTo*(data: openArray[byte]; T: type HashKey): T =
   ## 32 bytes. Otherwise it is converted as-is to a `HashKey` type result.
   ##
   ## Note that for calculating a root state (when `data` is a serialised
-  ## vertex), one would use the expression `data.digestTo(HashKey).to(Hash256)`
+  ## vertex), one would use the expression `data.digestTo(HashKey).to(Hash32)`
   ## which would always hash the `data` argument regardless of its length
   ## (and might result in an `EMPTY_ROOT_HASH`.) See the comment at the
   ## definition of the `HashKey` type for an explanation of its usage.
@@ -358,7 +358,7 @@ func digestTo*(data: openArray[byte]; T: type HashKey): T =
     (addr result.data[0]).copyMem(unsafeAddr data[0], data.len)
   else:
     result.len = 32
-    result.buf = data.keccakHash.data
+    result.buf = data.keccak256.data
 
 func normal*(a: PathID): PathID =
   ## Normalise path ID representation

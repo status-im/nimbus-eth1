@@ -16,10 +16,13 @@ import
   ../common,
   ../db/ledger,
   ../core/chain/forked_chain,
+  ../core/tx_pool,
   ../beacon/web3_eth_conv,
+  ../transaction,
   ../transaction/call_evm,
   ../evm/evm_errors,
   ./rpc_types,
+  ./rpc_utils,
   ./filters,
   ./server_api_helpers
 
@@ -27,14 +30,16 @@ type
   ServerAPIRef* = ref object
     com: CommonRef
     chain: ForkedChainRef
+    txPool: TxPoolRef
 
 const
   defaultTag = blockId("latest")
 
-func newServerAPI*(c: ForkedChainRef): ServerAPIRef =
+func newServerAPI*(c: ForkedChainRef, t: TxPoolRef): ServerAPIRef =
   ServerAPIRef(
     com: c.com,
     chain: c,
+    txPool: t
   )
 
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[common.BlockHeader, string] =
@@ -79,7 +84,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       ledger  = api.ledgerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
       address = ethAddr data
-    result = ledger.getBalance(address)
+    ledger.getBalance(address)
 
   server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, blockTag: BlockTag) -> Web3FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
@@ -88,7 +93,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
         raise newException(ValueError, error)
       address = ethAddr data
       value   = ledger.getStorage(address, slot)
-    result = w3FixedBytes value
+    w3FixedBytes value
 
   server.rpc("eth_getTransactionCount") do(data: Web3Address, blockTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.
@@ -97,11 +102,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
         raise newException(ValueError, error)
       address = ethAddr data
       nonce   = ledger.getNonce(address)
-    result = w3Qty nonce
+    w3Qty nonce
 
   server.rpc("eth_blockNumber") do() -> Web3Quantity:
     ## Returns integer of the current block number the client is on.
-    result = w3Qty(api.chain.latestNumber)
+    w3Qty(api.chain.latestNumber)
 
   server.rpc("eth_chainId") do() -> Web3Quantity:
     return w3Qty(distinctBase(api.com.chainId))
@@ -116,7 +121,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       ledger  = api.ledgerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
       address = ethAddr data
-    result = ledger.getCode(address).bytes()
+    ledger.getCode(address).bytes()
 
   server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
@@ -226,6 +231,22 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
         filterOptions
       )
 
+  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
+    ## Creates new message call transaction or a contract creation for signed transactions.
+    ##
+    ## data: the signed transaction data.
+    ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
+    ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
+    let
+      pooledTx = decodePooledTx(txBytes)
+      txHash   = rlpHash(pooledTx)
+
+    api.txPool.add(pooledTx)
+    let res = api.txPool.inPoolAndReason(txHash)
+    if res.isErr:
+      raise newException(ValueError, res.error)
+    txHash.w3Hash
+
   server.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
     ## Executes a new message call immediately without creating a transaction on the block chain.
     ##
@@ -237,4 +258,64 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
                  raise newException(ValueError, "Block not found")
       res    = rpcCallEvm(args, header, api.com).valueOr:
                  raise newException(ValueError, "rpcCallEvm error: " & $error.code)
-    result = res.output
+    res.output
+
+  server.rpc("eth_getTransactionReceipt") do(data: Web3Hash) -> ReceiptObject:
+    ## Returns the receipt of a transaction by transaction hash.
+    ##
+    ## data: Hash of a transaction.
+    ## Returns ReceiptObject or nil when no receipt was found.
+    var
+      idx = 0'u64
+      prevGasUsed = GasInt(0)
+    
+    let 
+      txHash = data.ethHash()
+      (blockhash, txid) = api.chain.txRecords(txHash)
+
+    if blockhash == zeroHash32:
+      # Receipt in database
+      let txDetails = api.chain.db.getTransactionKey(txHash)
+      if txDetails.index < 0:
+        return nil
+
+      let header = api.chain.headerByNumber(txDetails.blockNumber).valueOr:
+        raise newException(ValueError, "Block not found")
+      var tx: Transaction
+      if not api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
+        return nil
+
+      for receipt in api.chain.db.getReceipts(header.receiptsRoot):
+        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+        prevGasUsed = receipt.cumulativeGasUsed
+        if idx == txDetails.index:
+          return populateReceipt(receipt, gasUsed, tx, txDetails.index, header)
+        idx.inc
+    else:
+      # Receipt in memory
+      let blkdesc = api.chain.memoryBlock(blockhash)
+      
+      while idx <= txid:
+        let receipt = blkdesc.receipts[idx]
+        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+        prevGasUsed = receipt.cumulativeGasUsed
+
+        if txid == idx:
+          return populateReceipt(receipt, gasUsed, blkdesc.blk.transactions[txid], txid, blkdesc.blk.header)
+
+        idx.inc
+  
+  server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Web3Quantity:
+    ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
+    ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
+    ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
+    ##
+    ## args: the transaction call object.
+    ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns the amount of gas used.
+    let
+      header   = api.headerFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, "Block not found")
+      gasUsed  = rpcEstimateGas(args, header, api.chain.com, DEFAULT_RPC_GAS_CAP).valueOr:
+        raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
+    w3Qty(gasUsed)

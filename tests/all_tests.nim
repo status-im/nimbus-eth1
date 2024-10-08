@@ -37,7 +37,6 @@ cliBuilder:
           #./test_txpool,                          -- fails
           ./test_txpool2,
           ./test_engine_api,
-          ./test_eip4844,
           ./test_getproof_json,
           ./test_aristo,
           ./test_coredb

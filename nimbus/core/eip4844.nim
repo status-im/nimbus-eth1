@@ -41,7 +41,7 @@ const
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
 proc kzgToVersionedHash*(kzg: kzg.KzgCommitment): VersionedHash =
-  result = sha256.digest(kzg.bytes).data.to(Bytes32)
+  result = sha256.digest(kzg.bytes).to(Hash32)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844

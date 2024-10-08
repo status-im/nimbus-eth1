@@ -43,17 +43,17 @@ const
 type
   MemDbRef = ref object
     ## Database
-    sTab: Table[RootedVertexID,Blob]       ## Structural vertex table making up a trie
-    kMap: Table[RootedVertexID,HashKey]    ## Merkle hash key mapping
-    tUvi: Option[VertexID]           ## Top used vertex ID
-    lSst: Opt[SavedState]            ## Last saved state
+    sTab: Table[RootedVertexID,seq[byte]] ## Structural vertex table making up a trie
+    kMap: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
+    tUvi: Option[VertexID]                ## Top used vertex ID
+    lSst: Opt[SavedState]                 ## Last saved state
 
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
-    mdb: MemDbRef                    ## Database
+    mdb: MemDbRef                         ## Database
 
   MemPutHdlRef = ref object of TypedPutHdlRef
-    sTab: Table[RootedVertexID,Blob]
+    sTab: Table[RootedVertexID,seq[byte]]
     kMap: Table[RootedVertexID,HashKey]
     tUvi: Option[VertexID]
     lSst: Opt[SavedState]

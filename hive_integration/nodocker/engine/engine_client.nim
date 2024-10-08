@@ -159,7 +159,7 @@ proc newPayloadV2*(client: RpcClient,
 proc newPayloadV3*(client: RpcClient,
       payload: ExecutionPayloadV3,
       versionedHashes: seq[VersionedHash],
-      parentBeaconBlockRoot: FixedBytes[32]
+      parentBeaconBlockRoot: Hash32
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
@@ -168,7 +168,7 @@ proc newPayloadV3*(client: RpcClient,
 proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayloadV4,
       versionedHashes: seq[VersionedHash],
-      parentBeaconBlockRoot: FixedBytes[32]
+      parentBeaconBlockRoot: Hash32
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
@@ -189,7 +189,7 @@ proc newPayloadV2*(client: RpcClient,
 proc newPayloadV3*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
-      parentBeaconBlockRoot: Opt[FixedBytes[32]]
+      parentBeaconBlockRoot: Opt[Hash32]
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
@@ -198,7 +198,7 @@ proc newPayloadV3*(client: RpcClient,
 proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
-      parentBeaconBlockRoot: Opt[FixedBytes[32]]
+      parentBeaconBlockRoot: Opt[Hash32]
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
@@ -279,11 +279,6 @@ proc maybeU64(n: Opt[Quantity]): Opt[uint64] =
     return Opt.none(uint64)
   Opt.some(n.get.uint64)
 
-proc maybeU64(n: Opt[Web3BlockNumber]): Opt[uint64] =
-  if n.isNone:
-    return Opt.none(uint64)
-  Opt.some(n.get.uint64)
-
 proc maybeBool(n: Opt[Quantity]): Opt[bool] =
   if n.isNone:
     return Opt.none(bool)
@@ -312,7 +307,7 @@ proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
     coinbase       : ethAddr bc.miner,
     difficulty     : bc.difficulty,
     extraData      : bc.extraData.bytes,
-    mixHash        : ethHash bc.mixHash,
+    mixHash        : Bytes32 bc.mixHash,
     gasLimit       : bc.gasLimit.GasInt,
     gasUsed        : bc.gasUsed.GasInt,
     timestamp      : EthTime bc.timestamp,

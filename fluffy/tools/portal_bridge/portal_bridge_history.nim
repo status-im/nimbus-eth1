@@ -14,8 +14,8 @@ import
   web3/[eth_api, eth_api_types],
   results,
   stew/byteutils,
-  eth/common/[eth_types, eth_types_rlp],
-  eth/keys,
+  eth/common/keys,
+  eth/common/[base, headers_rlp, blocks_rlp],
   eth/p2p/discoveryv5/random2,
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../hive_integration/nodocker/engine/engine_client,
@@ -27,6 +27,7 @@ import
   ./[portal_bridge_conf, portal_bridge_common]
 
 from stew/objects import checkedEnumAssign
+from eth/common/eth_types_rlp import rlpHash
 
 const newHeadPollInterval = 6.seconds # Slot with potential block is every 12s
 
@@ -93,7 +94,7 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
         isHash: false,
         status: status == 1,
         cumulativeGasUsed: cumulativeGasUsed,
-        logsBloom: BloomFilter(receiptObject.logsBloom),
+        logsBloom: Bloom(receiptObject.logsBloom),
         logs: logs,
       )
     )
@@ -102,9 +103,9 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
       Receipt(
         receiptType: receiptType,
         isHash: true,
-        hash: ethHash receiptObject.root.get(),
+        hash: receiptObject.root.get(),
         cumulativeGasUsed: cumulativeGasUsed,
-        logsBloom: BloomFilter(receiptObject.logsBloom),
+        logsBloom: Bloom(receiptObject.logsBloom),
         logs: logs,
       )
     )
@@ -138,9 +139,7 @@ proc getBlockReceipts(
 ## Portal JSON-RPC API helper calls for pushing block and receipts
 
 proc gossipBlockHeader(
-    client: RpcClient,
-    id: common_types.BlockHash | uint64,
-    headerWithProof: BlockHeaderWithProof,
+    client: RpcClient, id: Hash32 | uint64, headerWithProof: BlockHeaderWithProof
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
     contentKey = blockHeaderContentKey(id)
@@ -159,7 +158,7 @@ proc gossipBlockHeader(
 
 proc gossipBlockBody(
     client: RpcClient,
-    hash: common_types.BlockHash,
+    hash: Hash32,
     body: PortalBlockBodyLegacy | PortalBlockBodyShanghai,
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
@@ -178,7 +177,7 @@ proc gossipBlockBody(
   return ok()
 
 proc gossipReceipts(
-    client: RpcClient, hash: common_types.BlockHash, receipts: PortalReceipts
+    client: RpcClient, hash: Hash32, receipts: PortalReceipts
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let
     contentKey = receiptsContentKey(hash)
@@ -238,7 +237,7 @@ proc runLatestLoop(
 
       lastBlockNumber = blockNumber
 
-      let hash = common_types.BlockHash(data: distinctBase(blockObject.hash))
+      let hash = blockObject.hash
       if validate:
         if validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash).isErr():
           error "Block header is invalid"
@@ -408,7 +407,7 @@ proc runBackfillLoopAuditMode(
       (header, body, receipts, _) = db.getBlockTuple(blockNumber).valueOr:
         error "Failed to get block tuple", error, blockNumber
         continue
-      blockHash = header.blockHash()
+      blockHash = header.rlpHash()
 
     var headerSuccess, bodySuccess, receiptsSuccess = false
 
@@ -440,7 +439,7 @@ proc runBackfillLoopAuditMode(
           error "Failed to decode block header content", error
           break headerBlock
 
-      if keccakHash(headerWithProof.header.asSeq()) != blockHash:
+      if keccak256(headerWithProof.header.asSeq()) != blockHash:
         error "Block hash mismatch", blockNumber
         break headerBlock
 

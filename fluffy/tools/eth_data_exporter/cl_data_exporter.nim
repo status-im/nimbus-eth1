@@ -131,7 +131,6 @@ proc exportLCUpdates*(
     withForkyObject(updates[0]):
       when lcDataFork > LightClientDataFork.None:
         let
-          slot = forkyObject.attested_header.beacon.slot
           period = forkyObject.attested_header.beacon.slot.sync_committee_period
           contentKey = encode(updateContentKey(period.uint64, count))
           forkDigest = forkDigestAtEpoch(

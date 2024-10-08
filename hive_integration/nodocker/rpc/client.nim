@@ -53,7 +53,7 @@ func toLogs(list: openArray[LogObject]): seq[Log] =
     result.add Log(
       address: ethAddr x.address,
       data: x.data,
-      topics: toTopics(x.topics)
+      topics: x.topics
     )
 
 proc txReceipt*(client: RpcClient, txHash: common.Hash256): Future[Option[Receipt]] {.async.} =

@@ -13,7 +13,7 @@ import
   unittest2,
   stint,
   stew/byteutils,
-  eth/common/eth_types_rlp,
+  eth/common/headers,
   ../../eth_data/history_data_json_store,
   ../../network/history/[history_content, validation/historical_hashes_accumulator]
 
@@ -33,7 +33,7 @@ suite "Historical Hashes Accumulator Root":
     check blockDataRes.isOk()
     let blockData = blockDataRes.get()
 
-    var headers: seq[BlockHeader]
+    var headers: seq[Header]
     # Len of headers from blockdata + genesis header
     headers.setLen(blockData.len() + 1)
 

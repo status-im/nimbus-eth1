@@ -30,6 +30,9 @@ proc fromJson(T: type UInt256, n: JsonNode): UInt256 =
   else:
     UInt256.fromHex(hex)
 
+template fromJson*(T: type Bytes32, n: JsonNode): Bytes32 =
+  Bytes32(hexToByteArray(n.getStr, 32))
+
 template fromJson*(T: type Hash256, n: JsonNode): Hash256 =
   Hash32(hexToByteArray(n.getStr, 32))
 
@@ -66,7 +69,7 @@ proc fromJson(T: type AccessList, n: JsonNode): AccessList =
 
 proc fromJson(T: type VersionedHashes, list: JsonNode): VersionedHashes =
   for x in list:
-    result.add Bytes32.fromHex(x.getStr)
+    result.add VersionedHash.fromHex(x.getStr)
 
 template required(T: type, nField: string): auto =
   fromJson(T, n[nField])
@@ -109,7 +112,7 @@ proc parseHeader*(n: JsonNode): BlockHeader =
     gasLimit   : required(GasInt, "currentGasLimit"),
     timestamp  : required(EthTime, "currentTimestamp"),
     stateRoot  : emptyRlpHash,
-    mixHash    : omitZero(Hash256, "currentRandom"),
+    mixHash    : omitZero(Bytes32, "currentRandom"),
     baseFeePerGas  : optional(UInt256, "currentBaseFee"),
     withdrawalsRoot: optional(Hash256, "currentWithdrawalsRoot"),
     excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
@@ -144,7 +147,7 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     tx.to = Opt.some(EthAddress.fromHex(rawTo))
 
   let secretKey = required(PrivateKey, "secretKey")
-  signTransaction(tx, secretKey, tx.chainId, false)
+  signTransaction(tx, secretKey, false)
 
 proc parseTx*(txData, index: JsonNode): Transaction =
   let

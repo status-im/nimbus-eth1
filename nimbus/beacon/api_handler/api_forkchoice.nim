@@ -118,9 +118,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     com.syncReqNewHead(header)
 
     # Pass on finalised header
-    if com.haveSyncFinalisedBlockHash():
+    if com.haveSyncFinalisedBlockHash() or true:
       let finalizedBlockHash = ethHash update.finalizedBlockHash
-      if finalizedBlockHash != default(common.Hash256):
+      if finalizedBlockHash != zeroHash32:
         com.syncFinalisedBlockHash(finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)

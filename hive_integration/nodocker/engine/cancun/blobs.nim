@@ -9,9 +9,11 @@
 # according to those terms.
 
 import
-  eth/common/eth_types,
+  eth/common,
+  eth/common/hashes,
   stint,
   kzg4844/kzg,
+  kzg4844/kzg_abi,
   stew/endians2,
   nimcrypto/sha2,
   results,
@@ -138,9 +140,9 @@ proc generateBlob(blobid: BlobID): BlobCommitment =
     doAssert(false, res.error)
   result.commitment = res.get
 
-proc getVersionedHash*(blobid: BlobID, commitmentVersion: byte): Hash256 =
+proc getVersionedHash*(blobid: BlobID, commitmentVersion: byte): Hash32 =
   let res = blobid.generateBlob()
-  result = sha256.digest(res.commitment.bytes)
+  result = Hash32 sha256.digest(res.commitment.bytes).data
   result.data[0] = commitmentVersion
 
 proc blobDataGenerator*(startBlobId: BlobID, blobCount: int): BlobTxWrapData =

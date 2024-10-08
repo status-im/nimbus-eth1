@@ -19,10 +19,10 @@ import
 
 iterator walkPairsImpl*[T](
    db: KvtDbRef;                   # Database with top layer & backend filter
-     ): tuple[key: Blob, data: Blob] =
+     ): tuple[key: seq[byte], data: seq[byte]] =
   ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
   ## are unsorted.
-  var seen: HashSet[Blob]
+  var seen: HashSet[seq[byte]]
   for (key,data) in db.layersWalk seen:
     if data.isValid:
       yield (key,data)

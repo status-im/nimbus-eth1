@@ -28,7 +28,7 @@ type
     epochRecordDeprecated = 0x03
 
   BlockKey = object
-    blockHash: BlockHash
+    blockHash: Hash32
 
   EpochRecordKeyDeprecated = object
     epochHash: Digest

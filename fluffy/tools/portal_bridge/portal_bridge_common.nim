@@ -36,6 +36,18 @@ proc newRpcClientConnect*(url: JsonRpcUrl): RpcClient =
       quit QuitFailure
     client
 
+proc tryReconnect*(client: RpcClient, url: JsonRpcUrl) {.async: (raises: []).} =
+  if url.kind == WsUrl:
+    doAssert client of RpcWebSocketClient
+
+    let wsClient = RpcWebSocketClient(client)
+    if wsClient.transport.isNil:
+      # disconnected
+      try:
+        await wsClient.connect(url.value)
+      except CatchableError as e:
+        warn "Failed to reconnect to JSON-RPC server", error = $e.msg, url = url.value
+
 proc getBlockByNumber*(
     client: RpcClient, blockId: BlockIdentifier, fullTransactions: bool = true
 ): Future[Result[BlockObject, string]] {.async: (raises: []).} =

@@ -11,6 +11,7 @@ import
   std/os,
   stew/io2,
   results,
+  eth/common/blocks,
   ../network/history/validation/historical_hashes_accumulator,
   ../eth_data/era1
 
@@ -58,7 +59,7 @@ proc new*(
 ): Era1DB =
   Era1DB(path: path, network: network, accumulator: accumulator)
 
-proc getEthBlock*(db: Era1DB, blockNumber: uint64): Result[EthBlock, string] =
+proc getEthBlock*(db: Era1DB, blockNumber: uint64): Result[Block, string] =
   let f = ?db.getEra1File(blockNumber.era)
 
   f.getEthBlock(blockNumber)

@@ -174,7 +174,7 @@ proc mergePayloadImpl(
 
 proc mergeAccountRecord*(
     db: AristoDbRef;                   # Database, top layer
-    accPath: Hash256;          # Even nibbled byte path
+    accPath: Hash32;          # Even nibbled byte path
     accRec: AristoAccount;             # Account data
       ): Result[bool,AristoError] =
   ## Merge the  key-value-pair argument `(accKey,accRec)` as an account
@@ -235,8 +235,8 @@ proc mergeGenericData*(
 
 proc mergeStorageData*(
     db: AristoDbRef;                   # Database, top layer
-    accPath: Hash256;                  # Needed for accounts payload
-    stoPath: Hash256;                  # Storage data path (aka key)
+    accPath: Hash32;                   # Needed for accounts payload
+    stoPath: Hash32;                   # Storage data path (aka key)
     stoData: UInt256;                  # Storage data payload value
       ): Result[void,AristoError] =
   ## Store the `stoData` data argument on the storage area addressed by

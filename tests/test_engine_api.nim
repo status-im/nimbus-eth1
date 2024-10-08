@@ -72,7 +72,7 @@ proc setupEnv(): TestEnv =
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain)
+    serverApi = newServerAPI(chain, txPool)
 
   setupServerAPI(serverApi, server)
   setupEngineAPI(beaconEngine, server)

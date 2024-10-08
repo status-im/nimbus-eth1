@@ -9,32 +9,32 @@
 
 import
   std/[sequtils, sugar],
-  eth/common,
+  eth/common/hashes,
   ../../../network/state/[state_content, state_utils, state_gossip],
   ./world_state
 
 type OffersBuilder* = object
   worldState: WorldStateRef
-  blockHash: BlockHash
+  blockHash: Hash32
   accountTrieOffers: seq[AccountTrieOfferWithKey]
   contractTrieOffers: seq[ContractTrieOfferWithKey]
   contractCodeOffers: seq[ContractCodeOfferWithKey]
 
-proc init*(T: type OffersBuilder, worldState: WorldStateRef, blockHash: BlockHash): T =
+proc init*(T: type OffersBuilder, worldState: WorldStateRef, blockHash: Hash32): T =
   T(worldState: worldState, blockHash: blockHash)
 
 proc toTrieProof(proof: seq[seq[byte]]): TrieProof =
   TrieProof.init(proof.map((node) => TrieNode.init(node)))
 
 proc buildAccountTrieNodeOffer(
-    builder: var OffersBuilder, addressHash: content_keys.AddressHash, proof: TrieProof
+    builder: var OffersBuilder, addressHash: Hash32, proof: TrieProof
 ) =
   try:
     let
       path = removeLeafKeyEndNibbles(
         Nibbles.init(addressHash.data, isEven = true), proof[^1]
       )
-      offerKey = AccountTrieNodeKey.init(path, keccakHash(proof[^1].asSeq()))
+      offerKey = AccountTrieNodeKey.init(path, keccak256(proof[^1].asSeq()))
       offerValue = AccountTrieNodeOffer.init(proof, builder.blockHash)
 
     builder.accountTrieOffers.add(offerValue.withKey(offerKey))
@@ -43,7 +43,7 @@ proc buildAccountTrieNodeOffer(
 
 proc buildContractTrieNodeOffer(
     builder: var OffersBuilder,
-    addressHash: content_keys.AddressHash,
+    addressHash: Hash32,
     slotHash: SlotKeyHash,
     storageProof: TrieProof,
     accountProof: TrieProof,
@@ -53,9 +53,8 @@ proc buildContractTrieNodeOffer(
       path = removeLeafKeyEndNibbles(
         Nibbles.init(slotHash.data, isEven = true), storageProof[^1]
       )
-      offerKey = ContractTrieNodeKey.init(
-        addressHash, path, keccakHash(storageProof[^1].asSeq())
-      )
+      offerKey =
+        ContractTrieNodeKey.init(addressHash, path, keccak256(storageProof[^1].asSeq()))
       offerValue =
         ContractTrieNodeOffer.init(storageProof, accountProof, builder.blockHash)
 
@@ -65,14 +64,14 @@ proc buildContractTrieNodeOffer(
 
 proc buildContractCodeOffer(
     builder: var OffersBuilder,
-    addressHash: content_keys.AddressHash,
+    addressHash: Hash32,
     code: seq[byte],
     accountProof: TrieProof,
 ) =
   let
     #bytecode = Bytelist.init(code) # This fails to compile for some reason
     bytecode = Bytecode(code)
-    offerKey = ContractCodeKey.init(addressHash, keccakHash(code))
+    offerKey = ContractCodeKey.init(addressHash, keccak256(code))
     offerValue = ContractCodeOffer.init(bytecode, accountProof, builder.blockHash)
 
   builder.contractCodeOffers.add(offerValue.withKey(offerKey))

@@ -16,8 +16,7 @@ import
   ../../nimbus/transaction,
   ../../nimbus/common/chain_config,
   ../common/helpers,
-  ./types,
-  ./txpriv
+  ./types
 
 export
   helpers
@@ -54,6 +53,16 @@ template fromJson(T: type UInt256, n: JsonNode, field: string): UInt256 =
 
 template fromJson(T: type ChainId, n: JsonNode, field: string): ChainId =
   parseHexOrInt[uint64](n[field].getStr()).ChainId
+
+proc fromJson(T: type Bytes32, n: JsonNode): Bytes32 =
+  var num = n.getStr()
+  num.removePrefix("0x")
+  if num.len < 64:
+    num = repeat('0', 64 - num.len) & num
+  Bytes32(hexToByteArray(num, 32))
+
+proc fromJson(T: type Bytes32, n: JsonNode, field: string): Bytes32 =
+  fromJson(T, n[field])
 
 proc fromJson(T: type Hash256, n: JsonNode): Hash256 =
   var num = n.getStr()
@@ -114,7 +123,7 @@ proc fromJson(T: type seq[Authorization], n: JsonNode, field: string): T =
 proc fromJson(T: type VersionedHashes, n: JsonNode, field: string): VersionedHashes =
   let list = n[field]
   for x in list:
-    result.add Bytes32.fromHex(x.getStr)
+    result.add VersionedHash.fromHex(x.getStr)
 
 template `gas=`(tx: var Transaction, x: GasInt) =
   tx.gasLimit = x
@@ -174,7 +183,7 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   required(ctx.env, BlockNumber, currentNumber)
   required(ctx.env, EthTime, currentTimestamp)
   optional(ctx.env, DifficultyInt, currentDifficulty)
-  optional(ctx.env, Hash256, currentRandom)
+  optional(ctx.env, Bytes32, currentRandom)
   optional(ctx.env, DifficultyInt, parentDifficulty)
   omitZero(ctx.env, EthTime, parentTimestamp)
   optional(ctx.env, UInt256, currentBaseFee)
@@ -219,6 +228,7 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
 
   if n.hasKey("to"):
     tx.to = Opt.some(EthAddress.fromJson(n, "to"))
+  tx.chainId = chainId
 
   case tx.txType
   of TxLegacy:
@@ -253,29 +263,12 @@ proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   if n.hasKey("secretKey"):
     let data = Blob.fromJson(n, "secretKey")
     let secretKey = PrivateKey.fromRaw(data).tryGet
-    signTransaction(tx, secretKey, chainId, eip155)
+    signTransaction(tx, secretKey, eip155)
   else:
     required(tx, uint64, v)
     required(tx, UInt256, r)
     required(tx, UInt256, s)
     tx
-
-proc parseTxLegacy(item: var Rlp): Result[Transaction, string] =
-  try:
-    var tx: Transaction
-    item.decodeTxLegacy(tx)
-    return ok(tx)
-  except RlpError as x:
-    return err(x.msg)
-
-proc parseTxTyped(item: var Rlp): Result[Transaction, string] =
-  try:
-    var tx: Transaction
-    var rr = rlpFromBytes(item.read(Blob))
-    rr.decodeTxTyped(tx)
-    return ok(tx)
-  except RlpError as x:
-    return err(x.msg)
 
 proc parseTxJson(ctx: TransContext, i: int, chainId: ChainId): Result[Transaction, string] =
   try:
@@ -283,6 +276,16 @@ proc parseTxJson(ctx: TransContext, i: int, chainId: ChainId): Result[Transactio
     return ok(parseTx(n, chainId))
   except Exception as x:
     return err(x.msg)
+
+proc readNestedTx(rlp: var Rlp): Result[Transaction, string] =
+  try:
+    ok if rlp.isList:
+      rlp.read(Transaction)
+    else:
+      var rr = rlpFromBytes(rlp.read(seq[byte]))
+      rr.read(Transaction)
+  except RlpError as exc:
+    err(exc.msg)
 
 proc parseTxs*(ctx: TransContext, chainId: ChainId): seq[Result[Transaction, string]] =
   if ctx.txs.txsType == TxsJson:
@@ -296,10 +299,8 @@ proc parseTxs*(ctx: TransContext, chainId: ChainId): seq[Result[Transaction, str
     result = newSeqOfCap[Result[Transaction, string]](ctx.txs.r.listLen)
     var rlp = ctx.txs.r
     for item in rlp:
-      if item.isList:
-        result.add parseTxLegacy(item)
-      else:
-        result.add parseTxTyped(item)
+      result.add rlp.readNestedTx()
+
     return
 
 proc txList*(ctx: TransContext, chainId: ChainId): seq[Transaction] =

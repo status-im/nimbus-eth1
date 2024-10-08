@@ -48,14 +48,14 @@ proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
   doAssert stateDB.rootHash == genesisHeader.stateRoot
 
   doAssert com.db.persistHeader(genesisHeader,
-              com.consensus == ConsensusType.POS)
+              com.proofOfStake(genesisHeader))
   doAssert(com.db.getCanonicalHead().blockHash ==
               genesisHeader.blockHash)
 
   let
     txPool  = TxPoolRef.new(com)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain)
+    serverApi = newServerAPI(chain, txPool)
     rpcServer = newRpcHttpServer(["127.0.0.1:0"])
     rpcClient = newRpcHttpClient()
 

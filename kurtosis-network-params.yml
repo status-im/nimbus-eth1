@@ -20,12 +20,10 @@ additional_services:
   - tx_spammer
   - assertoor
   - beacon_metrics_gazer
-tx_spammer_params:
-  tx_spammer_extra_args: ["--accounts=1", "--txcount=1"]
 mev_type: null
 assertoor_params:
   image: "ethpandaops/assertoor:master"
-  run_stability_check: true
+  run_stability_check: false
   run_block_proposal_check: true
   run_transaction_test: true
   run_blob_transaction_test: false

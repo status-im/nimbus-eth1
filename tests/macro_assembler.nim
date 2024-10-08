@@ -10,7 +10,7 @@
 
 import
   std/[macrocache, strutils],
-  eth/keys,
+  eth/common/[keys, transaction_utils],
   unittest2,
   chronicles,
   stew/byteutils,
@@ -384,9 +384,10 @@ proc createSignedTx(payload: Blob, chainId: ChainId): Transaction =
     to: Opt.some codeAddress,
     value: 500.u256,
     payload: payload,
+    chainId: chainId,
     versionedHashes: @[VersionedHash(EMPTY_UNCLE_HASH), VersionedHash(EMPTY_SHA3)]
   )
-  signTransaction(unsignedTx, privateKey, chainId, false)
+  signTransaction(unsignedTx, privateKey, false)
 
 proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
   let
@@ -395,7 +396,7 @@ proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, com.chainId)
-  let asmResult = testCallEvm(tx, tx.getSender, vmState)
+  let asmResult = testCallEvm(tx, tx.recoverSender().expect("valid signature"), vmState)
   verifyAsmResult(vmState, boa, asmResult)
 
 macro assembler*(list: untyped): untyped =

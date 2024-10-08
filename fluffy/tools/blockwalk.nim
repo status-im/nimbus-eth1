@@ -40,26 +40,20 @@ type BlockWalkConf* = object
   blockHash* {.
     desc: "The block hash from where to start walking the blocks backwards",
     name: "block-hash"
-  .}: BlockHash
+  .}: Hash32
 
-proc parseCmdArg*(T: type BlockHash, p: string): T {.raises: [ValueError].} =
-  var hash: array[32, byte]
-  try:
-    hexToByteArray(p, hash)
-  except ValueError:
-    raise newException(ValueError, "Invalid Hash256")
+proc parseCmdArg*(T: type Hash32, p: string): T {.raises: [ValueError].} =
+  Hash32.fromHex(p)
 
-  return BlockHash(hash)
-
-proc completeCmdArg*(T: type BlockHash, val: string): seq[string] =
+proc completeCmdArg*(T: type Hash32, val: string): seq[string] =
   return @[]
 
-proc walkBlocks(client: RpcClient, startHash: BlockHash) {.async: (raises: []).} =
+proc walkBlocks(client: RpcClient, startHash: Hash32) {.async: (raises: []).} =
   var parentHash = startHash
-  var blockNumber: BlockNumber
+  var blockNumber: Quantity
 
   # Should be 0x0, but block 0 does not exist in the json data file
-  while blockNumber != BlockNumber(0x1):
+  while blockNumber != Quantity(0x1):
     let parentBlockOpt =
       try:
         await client.eth_getBlockByHash(parentHash, false)

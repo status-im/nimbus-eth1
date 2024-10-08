@@ -10,9 +10,8 @@ import
   results,
   unittest2,
   stew/byteutils,
-  eth/common,
-  ../../common/common_utils,
-  ../../network/state/[state_content, state_validation],
+  eth/common/[hashes, headers_rlp],
+  ../../network/state/[state_content, state_validation, state_utils],
   ./state_test_helpers
 
 suite "State Validation - Test Vectors":
@@ -135,8 +134,7 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      let stateRoot =
-        rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+      let stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
 
       block:
         let contentKey = ContentKey
@@ -166,7 +164,7 @@ suite "State Validation - Test Vectors":
 
     for i, testData in testCase:
       let
-        stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
+        stateRoot = Hash32.fromBytes(stateRoots[i].hexToSeqByte())
         contentKey = ContentKey
           .decode(testData.content_key.hexToSeqByte().ContentKeyByteList)
           .get()
@@ -186,8 +184,7 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      let stateRoot =
-        rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+      let stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
 
       let contentKey =
         ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
@@ -206,8 +203,7 @@ suite "State Validation - Test Vectors":
     for i, testData in testCase:
       if i == 2:
         continue # second test case only has root node
-      let stateRoot =
-        rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+      let stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
 
       let contentKey =
         ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
@@ -224,8 +220,7 @@ suite "State Validation - Test Vectors":
         "hash of next node doesn't match the expected" in res.error()
 
     for i, testData in testCase:
-      let stateRoot =
-        rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+      let stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
 
       let contentKey =
         ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
@@ -249,8 +244,7 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      let stateRoot =
-        rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+      let stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
 
       block:
         let contentKey = ContentKey
@@ -278,7 +272,7 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
+      var stateRoot = Hash32.fromBytes(stateRoots[i].hexToSeqByte())
 
       let contentKey =
         ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
@@ -299,8 +293,7 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      let stateRoot =
-        rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+      let stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
 
       block:
         let contentKey = ContentKey
@@ -393,8 +386,7 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      let stateRoot =
-        rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+      let stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
 
       let contentKey =
         ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
@@ -416,7 +408,7 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      var stateRoot = KeccakHash.fromBytes(stateRoots[i].hexToSeqByte())
+      var stateRoot = Hash32.fromBytes(stateRoots[i].hexToSeqByte())
 
       let contentKey =
         ContentKey.decode(testData.content_key.hexToSeqByte().ContentKeyByteList).get()
@@ -437,8 +429,7 @@ suite "State Validation - Test Vectors":
       raiseAssert "Cannot read test vector: " & error
 
     for i, testData in testCase:
-      let stateRoot =
-        rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+      let stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
 
       block:
         let contentKey = ContentKey

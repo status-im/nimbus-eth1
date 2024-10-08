@@ -16,9 +16,8 @@ import
   stew/byteutils,
   web3/[eth_api, eth_api_types],
   results,
-  eth/common/[eth_types, eth_types_rlp],
+  eth/common/[addresses_rlp, hashes_rlp],
   ../../../nimbus/common/chain_config,
-  ../../common/common_utils,
   ../../rpc/rpc_calls/rpc_trace_calls,
   ../../rpc/portal_rpc_client,
   ../../network/state/[state_content, state_gossip],
@@ -27,11 +26,11 @@ import
 
 type BlockData = object
   blockNumber: uint64
-  blockHash: KeccakHash
+  blockHash: Hash32
   miner: EthAddress
   uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
-  parentStateRoot: KeccakHash
-  stateRoot: KeccakHash
+  parentStateRoot: Hash32
+  stateRoot: Hash32
   stateDiffs: seq[TransactionDiff]
 
 type BlockOffersRef = ref object
@@ -73,10 +72,14 @@ proc putLastPersistedBlockNumber(db: DatabaseRef, blockNumber: uint64) {.inline.
 proc runBackfillCollectBlockDataLoop(
     db: DatabaseRef,
     blockDataQueue: AsyncQueue[BlockData],
-    web3Client: RpcClient,
+    web3Url: JsonRpcUrl,
     startBlockNumber: uint64,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill collect block data loop"
+
+  let web3Client = newRpcClientConnect(web3Url)
+  if web3Client of RpcHttpClient:
+    warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
 
   let parentBlock = (
     await web3Client.getBlockByNumber(blockId(startBlockNumber - 1.uint64), false)
@@ -97,11 +100,13 @@ proc runBackfillCollectBlockDataLoop(
         blockId = blockId(currentBlockNumber)
         blockObject = (await web3Client.getBlockByNumber(blockId, false)).valueOr:
           error "Failed to get block", error = error
-          await sleepAsync(1.seconds)
+          await sleepAsync(3.seconds)
+          # We might need to reconnect if using a WebSocket client
+          await web3Client.tryReconnect(web3Url)
           continue
         stateDiffs = (await web3Client.getStateDiffsByBlockNumber(blockId)).valueOr:
           error "Failed to get state diffs", error = error
-          await sleepAsync(1.seconds)
+          await sleepAsync(3.seconds)
           continue
 
       var uncleBlocks: seq[BlockObject]
@@ -110,17 +115,17 @@ proc runBackfillCollectBlockDataLoop(
           await web3Client.getUncleByBlockNumberAndIndex(blockId, i.Quantity)
         ).valueOr:
           error "Failed to get uncle block", error = error
-          await sleepAsync(1.seconds)
+          await sleepAsync(3.seconds)
           continue
         uncleBlocks.add(uncleBlock)
 
       let blockData = BlockData(
         blockNumber: currentBlockNumber,
-        blockHash: KeccakHash.fromBytes(blockObject.hash.bytes()),
+        blockHash: blockObject.hash,
         miner: blockObject.miner.EthAddress,
         uncles: uncleBlocks.mapIt((it.miner.EthAddress, it.number.uint64)),
-        parentStateRoot: KeccakHash.fromBytes(parentStateRoot.bytes()),
-        stateRoot: KeccakHash.fromBytes(blockObject.stateRoot.bytes()),
+        parentStateRoot: parentStateRoot,
+        stateRoot: blockObject.stateRoot,
         stateDiffs: stateDiffs,
       )
       db.putBlockData(currentBlockNumber, blockData)
@@ -136,6 +141,7 @@ proc runBackfillBuildBlockOffersLoop(
     blockDataQueue: AsyncQueue[BlockData],
     blockOffersQueue: AsyncQueue[BlockOffersRef],
     verifyStateProofs: bool,
+    enableGossip: bool,
     gossipGenesis: bool,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill build block offers loop"
@@ -163,7 +169,7 @@ proc runBackfillBuildBlockOffersLoop(
             raiseAssert(e.msg) # Should never happen
       ws.applyGenesisAccounts(genesisAccounts)
 
-      if gossipGenesis:
+      if enableGossip and gossipGenesis:
         let genesisBlockHash =
           hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
 
@@ -213,17 +219,18 @@ proc runBackfillBuildBlockOffersLoop(
       if verifyStateProofs:
         worldState.verifyProofs(blockData.parentStateRoot, blockData.stateRoot)
 
-      var builder = OffersBuilder.init(worldState, blockData.blockHash)
-      builder.buildBlockOffers()
+      if enableGossip:
+        var builder = OffersBuilder.init(worldState, blockData.blockHash)
+        builder.buildBlockOffers()
 
-      await blockOffersQueue.addLast(
-        BlockOffersRef(
-          blockNumber: blockData.blockNumber,
-          accountTrieOffers: builder.getAccountTrieOffers(),
-          contractTrieOffers: builder.getContractTrieOffers(),
-          contractCodeOffers: builder.getContractCodeOffers(),
+        await blockOffersQueue.addLast(
+          BlockOffersRef(
+            blockNumber: blockData.blockNumber,
+            accountTrieOffers: builder.getAccountTrieOffers(),
+            contractTrieOffers: builder.getContractTrieOffers(),
+            contractCodeOffers: builder.getContractCodeOffers(),
+          )
         )
-      )
 
     # After commit of the above db transaction which stores the updated account state
     # then we store the last persisted block number in the database so that we can use it
@@ -253,13 +260,14 @@ proc recursiveCollectOffer(
 
 proc runBackfillGossipBlockOffersLoop(
     blockOffersQueue: AsyncQueue[BlockOffersRef],
-    portalClient: RpcClient,
+    portalRpcUrl: JsonRpcUrl,
     portalNodeId: NodeId,
     verifyGossip: bool,
     workerId: int,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill gossip block offers loop", workerId
 
+  let portalClient = newRpcClientConnect(portalRpcUrl)
   var blockOffers = await blockOffersQueue.popFirst()
 
   while true:
@@ -313,6 +321,8 @@ proc runBackfillGossipBlockOffersLoop(
       await sleepAsync(3.seconds)
       warn "Retrying state gossip for block number: ",
         blockNumber = blockOffers.blockNumber, workerId
+      # We might need to reconnect if using a WebSocket client
+      await portalClient.tryReconnect(portalRpcUrl)
       continue
 
     if verifyGossip:
@@ -350,12 +360,20 @@ proc runBackfillMetricsLoop(
 
   while true:
     await sleepAsync(30.seconds)
-    info "Block data queue metrics: ",
-      nextBlockNumber = blockDataQueue[0].blockNumber,
-      blockDataQueueLen = blockDataQueue.len()
-    info "Block offers queue metrics: ",
-      nextBlockNumber = blockOffersQueue[0].blockNumber,
-      blockOffersQueueLen = blockOffersQueue.len()
+
+    if blockDataQueue.len() > 0:
+      info "Block data queue metrics: ",
+        nextBlockNumber = blockDataQueue[0].blockNumber,
+        blockDataQueueLen = blockDataQueue.len()
+    else:
+      info "Block data queue metrics: ", blockDataQueueLen = blockDataQueue.len()
+
+    if blockOffersQueue.len() > 0:
+      info "Block offers queue metrics: ",
+        nextBlockNumber = blockOffersQueue[0].blockNumber,
+        blockOffersQueueLen = blockOffersQueue.len()
+    else:
+      info "Block offers queue metrics: ", blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
   let
@@ -367,10 +385,7 @@ proc runState*(config: PortalBridgeConf) =
         fatal "Failed to connect to portal client", error = $e.msg
         quit QuitFailure
   info "Connected to portal client with nodeId", nodeId = portalNodeId
-
-  let web3Client = newRpcClientConnect(config.web3UrlState)
-  if web3Client of RpcHttpClient:
-    warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
+  asyncSpawn portalClient.close() # this connection was only used to collect the nodeId
 
   let db = DatabaseRef.init(config.stateDir.string).get()
   defer:
@@ -399,15 +414,16 @@ proc runState*(config: PortalBridgeConf) =
     blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
   asyncSpawn runBackfillCollectBlockDataLoop(
-    db, blockDataQueue, web3Client, config.startBlockNumber
+    db, blockDataQueue, config.web3UrlState, config.startBlockNumber
   )
   asyncSpawn runBackfillBuildBlockOffersLoop(
-    db, blockDataQueue, blockOffersQueue, config.verifyStateProofs, config.gossipGenesis
+    db, blockDataQueue, blockOffersQueue, config.verifyStateProofs, config.enableGossip,
+    config.gossipGenesis,
   )
 
   for workerId in 1 .. config.gossipWorkersCount.int:
     asyncSpawn runBackfillGossipBlockOffersLoop(
-      blockOffersQueue, portalClient, portalNodeId, config.verifyGossip, workerId
+      blockOffersQueue, config.portalRpcUrl, portalNodeId, config.verifyGossip, workerId
     )
 
   asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)

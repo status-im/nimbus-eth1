@@ -29,9 +29,9 @@ type
 proc serialise(
     pyl: LeafPayload;
     getKey: ResolveVidFn;
-      ): Result[Blob,(VertexID,AristoError)] =
-  ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
-  ## account type, otherwise pass the data as is.
+      ): Result[seq[byte],(VertexID,AristoError)] =
+  ## Encode the data payload of the argument `pyl` as RLP `seq[byte]` if it is
+  ## of account type, otherwise pass the data as is.
   ##
   case pyl.pType:
   of RawData:
@@ -48,7 +48,7 @@ proc serialise(
     ok rlp.encode Account(
       nonce:       pyl.account.nonce,
       balance:     pyl.account.balance,
-      storageRoot: key.to(Hash256),
+      storageRoot: key.to(Hash32),
       codeHash:    pyl.account.codeHash)
   of StoData:
     ok rlp.encode pyl.stoData
@@ -65,7 +65,7 @@ func append*(w: var RlpWriter; key: HashKey) =
 
 # ---------------------
 
-proc to*(node: NodeRef; T: type seq[Blob]): T =
+proc to*(node: NodeRef; T: type seq[seq[byte]]): T =
   ## Convert the argument pait `w` to a single or a double item list item of
   ## `<rlp-encoded-node>` type entries. Only in case of a combined extension
   ## and branch vertex argument, there will be a double item list result.
@@ -147,9 +147,9 @@ proc serialise*(
     db: AristoDbRef;
     root: VertexID;
     pyl: LeafPayload;
-      ): Result[Blob,(VertexID,AristoError)] =
-  ## Encode the data payload of the argument `pyl` as RLP `Blob` if it is of
-  ## account type, otherwise pass the data as is.
+      ): Result[seq[byte],(VertexID,AristoError)] =
+  ## Encode the data payload of the argument `pyl` as RLP `seq[byte]` if it is
+  ## of account type, otherwise pass the data as is.
   ##
   proc getKey(vid: VertexID): Result[HashKey,AristoError] =
     ok (?db.getKeyRc((root, vid)))[0]

@@ -12,6 +12,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   nimcrypto/[keccak, hash],
   eth/[rlp, keys, trie/hexary_proof_verification],
+  eth/common/transaction_utils,
   ../nimbus/[constants, transaction, config, evm/state, evm/types, version],
   ../nimbus/db/[ledger, storage_types],
   ../nimbus/sync/protocol,
@@ -139,7 +140,8 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
       gasPrice: 30_000_000_000,
       gasLimit: 70_000,
       value   : 1.u256,
-      to      : some(zeroAddress)
+      to      : some(zeroAddress),
+      chainId : com.chainId,
     )
     unsignedTx2 = Transaction(
       txType  : TxLegacy,
@@ -147,11 +149,12 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
       gasPrice: 30_000_000_100,
       gasLimit: 70_000,
       value   : 2.u256,
-      to      : some(zeroAddress)
+      to      : some(zeroAddress),
+      chainId : com.chainId,
     )
     eip155    = com.isEIP155(com.syncCurrent)
-    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, com.chainId, eip155)
-    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, com.chainId, eip155)
+    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, eip155)
+    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, eip155)
     txs = [signedTx1, signedTx2]
 
   let txRoot = calcTxRoot(txs)
@@ -160,7 +163,7 @@ proc setupEnv(com: CommonRef, signer, ks2: EthAddress, ctx: EthContext): TestEnv
   vmState.receipts = newSeq[Receipt](txs.len)
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in txs:
-    let sender = tx.getSender()
+    let sender = tx.recoverSender().expect("valid signature")
     let rc = vmState.processTransaction(tx, sender, vmHeader)
     doAssert(rc.isOk, "Invalid transaction: " & rc.error)
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
@@ -400,7 +403,7 @@ proc rpcMain*() =
 
       let signedTxBytes = await client.eth_signTransaction(unsignedTx)
       let signedTx = rlp.decode(signedTxBytes, Transaction)
-      check signer == signedTx.getSender() # verified
+      check signer == signedTx.recoverSender().expect("valid signature") # verified
 
       let hashAhex = await client.eth_sendTransaction(unsignedTx)
       let hashBhex = await client.eth_sendRawTransaction(signedTxBytes)

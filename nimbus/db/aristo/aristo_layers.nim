@@ -91,7 +91,7 @@ func layersGetKeyOrVoid*(db: AristoDbRef; rvid: RootedVertexID): HashKey =
   ## Simplified version of `layersGetKey()`
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
-func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash256): Opt[VertexRef] =
+func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash32): Opt[VertexRef] =
   db.top.accLeaves.withValue(accPath, item):
     return Opt.some(item[])
 
@@ -101,7 +101,7 @@ func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash256): Opt[VertexRef] =
 
   Opt.none(VertexRef)
 
-func layersGetStoLeaf*(db: AristoDbRef; mixPath: Hash256): Opt[VertexRef] =
+func layersGetStoLeaf*(db: AristoDbRef; mixPath: Hash32): Opt[VertexRef] =
   db.top.stoLeaves.withValue(mixPath, item):
     return Opt.some(item[])
 
@@ -160,10 +160,10 @@ proc layersUpdateVtx*(
   db.layersPutVtx(rvid, vtx)
   db.layersResKey(rvid)
 
-func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash256; leafVtx: VertexRef) =
+func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash32; leafVtx: VertexRef) =
   db.top.accLeaves[accPath] = leafVtx
 
-func layersPutStoLeaf*(db: AristoDbRef; mixPath: Hash256; leafVtx: VertexRef) =
+func layersPutStoLeaf*(db: AristoDbRef; mixPath: Hash32; leafVtx: VertexRef) =
   db.top.stoLeaves[mixPath] = leafVtx
 
 # ------------------------------------------------------------------------------

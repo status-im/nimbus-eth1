@@ -21,9 +21,9 @@ import
   ssz_serialization,
   metrics,
   faststreams,
+  minilru,
   eth/rlp,
-  eth/p2p/discoveryv5/
-    [protocol, node, enr, routing_table, random2, nodes_verification, lru],
+  eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
@@ -984,6 +984,8 @@ proc offer*(
 ): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
   if len(content) > contentKeysLimit:
     return err("Cannot offer more than 64 content items")
+  if len(content) == 0:
+    return err("Cannot offer empty content list")
 
   let contentList = List[ContentKV, contentKeysLimit].init(content)
   let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)

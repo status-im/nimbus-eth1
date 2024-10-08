@@ -11,7 +11,8 @@
 
 import
   std/[tables, strutils, times, macros],
-  eth/[common, rlp, p2p], stint, stew/[byteutils],
+  eth/[common, rlp, p2p], eth/common/eth_types_json_serialization,
+  stint, stew/[byteutils],
   json_serialization, chronicles,
   json_serialization/stew/results,
   json_serialization/lexer,
@@ -27,7 +28,7 @@ type
     extraData*  : seq[byte]
     gasLimit*   : GasInt
     difficulty* : DifficultyInt
-    mixHash*    : Hash256
+    mixHash*    : Bytes32
     coinbase*   : EthAddress
     alloc*      : GenesisAlloc
     number*     : BlockNumber
@@ -448,7 +449,6 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
   of MainNet:
     const mainNetTTD = parse("58750000000000000000000",UInt256)
     ChainConfig(
-      consensusType:       ConsensusType.POW,
       chainId:             MainNet.ChainId,
       # Genesis (Frontier):                                # 2015-07-30 15:26:13 UTC
       # Frontier Thawing:  200_000.BlockNumber,          # 2015-09-07 21:33:09 UTC
@@ -468,6 +468,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         Opt.some(12_965_000.BlockNumber), # 2021-08-05 12:33:42 UTC
       arrowGlacierBlock:   Opt.some(13_773_000.BlockNumber), # 2021-12-09 19:55:23 UTC
       grayGlacierBlock:    Opt.some(15_050_000.BlockNumber), # 2022-06-30 10:54:04 UTC
+      posBlock:            Opt.some(15_537_394.BlockNumber), # 2022-09-15 05:42:42 UTC
       terminalTotalDifficulty: Opt.some(mainNetTTD),
       shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
       cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC
@@ -475,7 +476,6 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
     ChainConfig(
-      consensusType:       ConsensusType.POW,
       chainId:             SepoliaNet.ChainId,
       homesteadBlock:      Opt.some(0.BlockNumber),
       daoForkSupport:      false,
@@ -497,7 +497,6 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
     )
   of HoleskyNet:
     ChainConfig(
-      consensusType:       ConsensusType.POS,
       chainId:             HoleskyNet.ChainId,
       homesteadBlock:      Opt.some(0.BlockNumber),
       eip150Block:         Opt.some(0.BlockNumber),

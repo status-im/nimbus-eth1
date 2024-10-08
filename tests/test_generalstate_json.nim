@@ -20,6 +20,7 @@ import
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
   eth/trie/trie_defs,
+  eth/common/transaction_utils,
   unittest2,
   stew/byteutils,
   results
@@ -101,7 +102,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     )
 
   var gasUsed: GasInt
-  let sender = ctx.tx.getSender()
+  let sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.mutateStateDB:
     setupStateDB(ctx.pre, db)

@@ -10,9 +10,7 @@ import
   testutils/unittests,
   chronos,
   stew/byteutils,
-  eth/common,
-  eth/p2p/discoveryv5/protocol as discv5_protocol,
-  eth/p2p/discoveryv5/routing_table,
+  eth/common/[addresses, headers_rlp],
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/state/
     [state_content, state_network, state_gossip, state_endpoints, state_utils],
@@ -49,8 +47,7 @@ procSuite "State Endpoints":
         continue
 
       let
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
@@ -76,9 +73,9 @@ procSuite "State Endpoints":
       let
         address =
           if i == 0:
-            EthAddress.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+            addresses.Address.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
           elif i == 3:
-            EthAddress.fromHex("0x1584a2c066b7a455dbd6ae2807a7334e83c35fa5")
+            addresses.Address.fromHex("0x1584a2c066b7a455dbd6ae2807a7334e83c35fa5")
           else:
             raiseAssert("Invalid test case")
         expectedAccount = contentValue.proof.toAccount().get()
@@ -131,7 +128,8 @@ procSuite "State Endpoints":
       block:
         # test non-existant account
         let
-          badAddress = EthAddress.fromHex("0xbadaaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+          badAddress =
+            addresses.Address.fromHex("0xbadaaa39b223fe8d0a0e5c4f27ead9083c756cc2")
           balanceRes =
             await stateNode2.stateNetwork.getBalance(contentValue.blockHash, badAddress)
           nonceRes = await stateNode2.stateNetwork.getTransactionCount(
@@ -172,8 +170,7 @@ procSuite "State Endpoints":
       # seed the account data
       let
         testData = accountTrieTestCase[0]
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
@@ -200,8 +197,7 @@ procSuite "State Endpoints":
       # seed the storage data
       let
         testData = contractTrieTestCase[0]
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         leafData = testData
         contentKeyBytes = leafData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
@@ -225,7 +221,8 @@ procSuite "State Endpoints":
       await stateNode2.waitUntilContentAvailable(toContentId(storageRootKeyBytes))
 
       let
-        address = EthAddress.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+        address =
+          addresses.Address.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
         slot = 2.u256
         badSlot = 3.u256
         expectedSlot = contentValue.storageProof.toSlot().get()
@@ -253,8 +250,7 @@ procSuite "State Endpoints":
         testCase = YamlContractBytecodeKVs.loadFromYaml(bytecodeFile).valueOr:
           raiseAssert "Cannot read test vector: " & error
         testData = testCase[0]
-        stateRoot =
-          rlp.decode(testData.block_header.hexToSeqByte(), BlockHeader).stateRoot
+        stateRoot = rlp.decode(testData.block_header.hexToSeqByte(), Header).stateRoot
         contentKeyBytes = testData.content_key.hexToSeqByte().ContentKeyByteList
         contentKey = ContentKey.decode(contentKeyBytes).get()
         contentId = toContentId(contentKeyBytes)
@@ -277,8 +273,10 @@ procSuite "State Endpoints":
       await stateNode2.waitUntilContentAvailable(contentId)
 
       let
-        address = EthAddress.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-        badAddress = EthAddress.fromHex("0xbadaaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+        address =
+          addresses.Address.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+        badAddress =
+          addresses.Address.fromHex("0xbadaaa39b223fe8d0a0e5c4f27ead9083c756cc2")
         expectedCode = contentValue.code
 
         codeRes = await stateNode2.stateNetwork.getCode(contentValue.blockHash, address)

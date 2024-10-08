@@ -15,6 +15,7 @@ import
   nimcrypto/utils as ncrutils,
   results,
   web3/conversions,
+  eth/common/transaction_utils,
   ./beacon/web3_eth_conv,
   ./common/common,
   ./constants,
@@ -22,7 +23,6 @@ import
   ./db/[core_db, ledger],
   ./evm/[code_bytes, state, types],
   ./evm/tracer/legacy_tracer,
-  ./launcher,
   ./transaction,
   ./utils/utils
 
@@ -32,7 +32,7 @@ when not CoreDbEnableCaptJournal:
 type
   CaptCtxRef = ref object
     db: CoreDbRef               # not `nil`
-    root: common.Hash256
+    root: common.Hash32
     ctx: CoreDbCtxRef           # not `nil`
     cpt: CoreDbCaptRef          # not `nil`
     restore: CoreDbCtxRef       # `nil` unless `ctx` activated
@@ -62,7 +62,7 @@ template safeTracer(info: string; code: untyped) =
 proc init(
     T: type CaptCtxRef;
     com: CommonRef;
-    root: common.Hash256;
+    root: common.Hash32;
       ): T =
   let ctx = block:
     let rc = com.db.ctx.newCtxByKey(root)
@@ -74,7 +74,7 @@ proc init(
 proc init(
     T: type CaptCtxRef;
     com: CommonRef;
-    topHeader: BlockHeader;
+    topHeader: Header;
       ): T
       {.raises: [CatchableError].} =
   T.init(com, com.db.getBlockHeader(topHeader.parentHash).stateRoot)
@@ -112,7 +112,7 @@ proc toJson(receipt: Receipt): JsonNode =
 
 proc dumpReceiptsImpl(
     chainDB: CoreDbRef;
-    header: BlockHeader;
+    header: Header;
       ): JsonNode
       {.raises: [CatchableError].} =
   result = newJArray()
@@ -156,7 +156,7 @@ proc captureAccount(
 
 proc traceTransactionImpl(
     com: CommonRef;
-    header: BlockHeader;
+    header: Header;
     transactions: openArray[Transaction];
     txIndex: uint64;
     tracerFlags: set[TracerFlags] = {};
@@ -187,7 +187,7 @@ proc traceTransactionImpl(
     miner = vmState.coinbase()
 
   for idx, tx in transactions:
-    let sender = tx.getSender
+    let sender = tx.recoverSender().expect("valid signature")
     let recipient = tx.getRecipient(sender)
 
     if idx.uint64 == txIndex:
@@ -242,7 +242,7 @@ proc dumpBlockStateImpl(
     dumpState = false;
       ): JsonNode
       {.raises: [CatchableError].} =
-  template header: BlockHeader = blk.header
+  template header: Header = blk.header
 
   let
     cc = activate CaptCtxRef.init(com, header)
@@ -263,7 +263,7 @@ proc dumpBlockStateImpl(
     stateBefore = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash = true)
 
   for idx, tx in blk.transactions:
-    let sender = tx.getSender
+    let sender = tx.recoverSender().expect("valid signature")
     let recipient = tx.getRecipient(sender)
     before.captureAccount(stateBefore, sender, senderName & $idx)
     before.captureAccount(stateBefore, recipient, recipientName & $idx)
@@ -278,7 +278,7 @@ proc dumpBlockStateImpl(
   var stateAfter = vmState.stateDB
 
   for idx, tx in blk.transactions:
-    let sender = tx.getSender
+    let sender = tx.recoverSender().expect("valid signature")
     let recipient = tx.getRecipient(sender)
     after.captureAccount(stateAfter, sender, senderName & $idx)
     after.captureAccount(stateAfter, recipient, recipientName & $idx)
@@ -310,7 +310,7 @@ proc traceBlockImpl(
     tracerFlags: set[TracerFlags] = {};
       ): JsonNode
       {.raises: [CatchableError].} =
-  template header: BlockHeader = blk.header
+  template header: Header = blk.header
 
   let
     cc = activate CaptCtxRef.init(com, header)
@@ -329,7 +329,7 @@ proc traceBlockImpl(
 
   for tx in blk.transactions:
     let
-      sender = tx.getSender
+      sender = tx.recoverSender().expect("valid signature")
       rc = vmState.processTransaction(tx, sender, header)
     if rc.isOk:
       gasUsed = gasUsed + rc.value
@@ -342,7 +342,7 @@ proc traceBlockImpl(
 
 proc traceTransactionsImpl(
     com: CommonRef;
-    header: BlockHeader;
+    header: Header;
     transactions: openArray[Transaction];
       ): JsonNode
       {.raises: [CatchableError].} =
@@ -350,44 +350,6 @@ proc traceTransactionsImpl(
   for i in 0 ..< transactions.len:
     result.add traceTransactionImpl(
       com, header, transactions, i.uint64, {DisableState})
-
-
-proc dumpDebuggingMetaDataImpl(
-    vmState: BaseVMState;
-    blk: EthBlock;
-    launchDebugger = true;
-      ) {.raises: [CatchableError].} =
-  template header: BlockHeader = blk.header
-
-  let
-    cc = activate CaptCtxRef.init(vmState.com, header)
-    blockNumber = header.number
-    bloom = createBloom(vmState.receipts)
-
-  defer: cc.release()
-
-  let blockSummary = %{
-    "receiptsRoot": %("0x" & toHex(calcReceiptsRoot(vmState.receipts).data)),
-    "stateRoot": %("0x" & toHex(vmState.stateDB.rootHash.data)),
-    "logsBloom": %("0x" & toHex(bloom))
-  }
-
-  var metaData = %{
-    "blockNumber": %blockNumber.toHex,
-    "txTraces": traceTransactionsImpl(vmState.com, header, blk.transactions),
-    "stateDump": dumpBlockStateImpl(vmState.com, blk),
-    "blockTrace": traceBlockImpl(vmState.com, blk, {DisableState}),
-    "receipts": toJson(vmState.receipts),
-    "block": blockSummary
-  }
-
-  metaData.dumpMemoryDB(cc.cpt)
-
-  let jsonFileName = "debug" & $blockNumber & ".json"
-  if launchDebugger:
-    launchPremix(jsonFileName, metaData)
-  else:
-    writeFile(jsonFileName, metaData.pretty())
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -412,13 +374,13 @@ proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) =
     n[k.toHex(false)] = %v
   node["state"] = n
 
-proc dumpReceipts*(chainDB: CoreDbRef, header: BlockHeader): JsonNode =
+proc dumpReceipts*(chainDB: CoreDbRef, header: Header): JsonNode =
   "dumpReceipts".safeTracer:
     result = chainDB.dumpReceiptsImpl header
 
 proc traceTransaction*(
     com: CommonRef;
-    header: BlockHeader;
+    header: Header;
     txs: openArray[Transaction];
     txIndex: uint64;
     tracerFlags: set[TracerFlags] = {};
@@ -436,19 +398,11 @@ proc dumpBlockState*(
 
 proc traceTransactions*(
     com: CommonRef;
-    header: BlockHeader;
+    header: Header;
     transactions: openArray[Transaction];
       ): JsonNode =
   "traceTransactions".safeTracer:
     result = com.traceTransactionsImpl(header, transactions)
-
-proc dumpDebuggingMetaData*(
-    vmState: BaseVMState;
-    blk: EthBlock;
-    launchDebugger = true;
-      ) =
-  "dumpDebuggingMetaData".safeTracer:
-    vmState.dumpDebuggingMetaDataImpl(blk, launchDebugger)
 
 # ------------------------------------------------------------------------------
 # End

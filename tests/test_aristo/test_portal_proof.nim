@@ -24,7 +24,7 @@ import
 
 type
   ProofData = ref object
-    chain: seq[Blob]
+    chain: seq[seq[byte]]
     missing: bool
     error: AristoError
     hike: Hike
@@ -33,7 +33,7 @@ type
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc createPartDb(ps: PartStateRef; data: seq[Blob]; info: static[string]) =
+proc createPartDb(ps: PartStateRef; data: seq[seq[byte]]; info: static[string]) =
   # Set up production MPT
   block:
     let rc = ps.partPut(data, AutomaticPayload)
@@ -54,13 +54,13 @@ proc preLoadAristoDb(jKvp: JsonNode): PartStateRef =
   let ps = PartStateRef.init AristoDbRef.init()
 
   # Collect rlp-encodede node blobs
-  var proof: seq[Blob]
+  var proof: seq[seq[byte]]
   for (k,v) in jKvp.pairs:
     let
       key = hexToSeqByte(k)
       val = hexToSeqByte(v.getStr())
     if key.len == 32:
-      doAssert key == val.keccakHash.data
+      doAssert key == val.keccak256.data
       if val != @[0x80u8]: # Exclude empty item
         proof.add val
 
@@ -83,7 +83,7 @@ proc collectAddresses(node: JsonNode, collect: var HashSet[EthAddress]) =
       discard
 
 
-proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): Blob =
+proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): seq[byte] =
   ## Modified function `aristo_serialise.serialise()`.
   ##
   const info = "payloadAsBlob"
@@ -103,13 +103,13 @@ proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): Blob =
     rlp.encode Account(
       nonce:       pyl.account.nonce,
       balance:     pyl.account.balance,
-      storageRoot: key.to(Hash256),
+      storageRoot: key.to(Hash32),
       codeHash:    pyl.account.codeHash)
   of StoData:
     rlp.encode pyl.stoData
 
 
-func asExtension(b: Blob; path: Hash256): Blob =
+func asExtension(b: seq[byte]; path: Hash32): seq[byte] =
   var node = rlpFromBytes b
   if node.listLen == 17:
     let nibble = NibblesBuf.fromBytes(path.data)[0]
@@ -146,10 +146,10 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
   node.collectAddresses addresses
 
   # Convert addresses to valid paths (not all addresses might work)
-  var sample: Table[Hash256,ProofData]
+  var sample: Table[Hash32,ProofData]
   for a in addresses:
     let
-      path = a.keccakHash
+      path = a.data.keccak256
     var hike: Hike
     let rc = path.hikeUp(VertexID(1), ps.db, Opt.none(VertexRef), hike)
     sample[path] = ProofData(
@@ -178,7 +178,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
       # Proof for missing entries
       let
         rVid = proof.hike.root
-        root = ps.db.getKey((rVid,rVid)).to(Hash256)
+        root = ps.db.getKey((rVid,rVid)).to(Hash32)
         chain = proof.chain
 
       block:
@@ -186,7 +186,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
         check rc.isOk and rc.value.isNone
 
       # Just for completeness (same a above combined into a single function)
-      check proof.chain.partUntwigPathOk(root, path, Opt.none Blob).isOk
+      check proof.chain.partUntwigPathOk(root, path, Opt.none seq[byte]).isOk
 
     elif proof.error == AristoError 0:
       let
@@ -208,7 +208,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
             check rc.value[0] == proof.chain
 
         # Verify proof
-        let root = pq.db.getKey((rVid,rVid)).to(Hash256)
+        let root = pq.db.getKey((rVid,rVid)).to(Hash32)
         block:
           let rc = proof.chain.partUntwigPath(root, path)
           check rc.isOk
@@ -237,7 +237,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
           if rc.isOk and rc.value[1] == true:
             check rc.value[0] == chain
 
-        let root = pq.db.getKey((rVid,rVid)).to(Hash256)
+        let root = pq.db.getKey((rVid,rVid)).to(Hash32)
         block:
           let rc = chain.partUntwigPath(root, path)
           check rc.isOk

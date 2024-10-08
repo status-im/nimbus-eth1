@@ -54,8 +54,8 @@ proc newAristoRdbDbRef(
   ok((AristoDbRef(
       top: LayerRef(vTop: vTop),
       backend: be,
-      accLeaves: LruCache[Hash256, VertexRef].init(ACC_LRU_SIZE),
-      stoLeaves: LruCache[Hash256, VertexRef].init(ACC_LRU_SIZE),
+      accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
+      stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
     ), oCfs))
 
 # ------------------------------------------------------------------------------

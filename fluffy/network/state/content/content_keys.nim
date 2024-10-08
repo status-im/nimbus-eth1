@@ -14,17 +14,13 @@ import
   nimcrypto/[hash, sha2, keccak],
   results,
   stint,
-  eth/common/eth_types,
+  eth/common/hashes,
   ssz_serialization,
   ./nibbles
 
 export ssz_serialization, common_types, hash, results
 
 type
-  NodeHash* = KeccakHash
-  CodeHash* = KeccakHash
-  AddressHash* = KeccakHash
-
   ContentType* = enum
     # Note: Need to add this unused value as a case object with an enum without
     # a 0 valueis not allowed: "low(contentType) must be 0 for discriminant".
@@ -40,16 +36,16 @@ type
 
   AccountTrieNodeKey* = object
     path*: Nibbles
-    nodeHash*: NodeHash
+    nodeHash*: Hash32
 
   ContractTrieNodeKey* = object
-    addressHash*: AddressHash
+    addressHash*: Hash32
     path*: Nibbles
-    nodeHash*: NodeHash
+    nodeHash*: Hash32
 
   ContractCodeKey* = object
-    addressHash*: AddressHash
-    codeHash*: CodeHash
+    addressHash*: Hash32
+    codeHash*: Hash32
 
   ContentKey* = object
     case contentType*: ContentType
@@ -64,32 +60,16 @@ type
 
   ContentKeyType* = AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey
 
-func fromSszBytes*(
-    T: type KeccakHash, data: openArray[byte]
-): T {.raises: [SszError].} =
-  if data.len != sizeof(result):
-    raiseIncorrectSize T
-
-  T.copyFrom(data)
-
-template toSszType*(v: KeccakHash): array[32, byte] =
-  v.data
-
-func init*(
-    T: type AccountTrieNodeKey, path: Nibbles, nodeHash: NodeHash
-): T {.inline.} =
+func init*(T: type AccountTrieNodeKey, path: Nibbles, nodeHash: Hash32): T {.inline.} =
   T(path: path, nodeHash: nodeHash)
 
 func init*(
-    T: type ContractTrieNodeKey,
-    addressHash: AddressHash,
-    path: Nibbles,
-    nodeHash: NodeHash,
+    T: type ContractTrieNodeKey, addressHash: Hash32, path: Nibbles, nodeHash: Hash32
 ): T {.inline.} =
   T(addressHash: addressHash, path: path, nodeHash: nodeHash)
 
 func init*(
-    T: type ContractCodeKey, addressHash: AddressHash, codeHash: CodeHash
+    T: type ContractCodeKey, addressHash: Hash32, codeHash: Hash32
 ): T {.inline.} =
   T(addressHash: addressHash, codeHash: codeHash)
 
