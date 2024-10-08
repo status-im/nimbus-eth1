@@ -173,11 +173,6 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
   trace info, peer, nInvocations=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
 
-  # Update beacon header when needed. For the beacon header, a hash will be
-  # auto-magically made available via RPC. The corresponding header is then
-  # fetched from the current peer.
-  await buddy.headerStagedUpdateBeacon info
-
   if not await buddy.napUnlessSomethingToFetch info:
     #
     # Layout of a triple of linked header chains (see `README.md`)
