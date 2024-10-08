@@ -50,10 +50,10 @@ import
   json_rpc/rpcclient,
   snappy,
   ncli/e2store,
-  ../../premix/[downloader, parser],
   ../network/history/[history_content, validation/historical_hashes_accumulator],
   ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
-  eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter]
+  eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter],
+  eth_data_exporter/[downloader, parser]
 
 from eth/common/eth_types_rlp import rlpHash
 # Need to be selective due to the `Block` type conflict from downloader
@@ -64,7 +64,7 @@ chronicles.formatIt(IoErrorCode):
 
 proc downloadHeader(client: RpcClient, i: uint64): headers.Header =
   try:
-    let jsonHeader = requestHeader(i, some(client))
+    let jsonHeader = requestHeader(i, client)
     parseBlockHeader(jsonHeader)
   except CatchableError as e:
     fatal "Error while requesting BlockHeader", error = e.msg, number = i
@@ -72,13 +72,13 @@ proc downloadHeader(client: RpcClient, i: uint64): headers.Header =
 
 proc downloadBlock(i: uint64, client: RpcClient): downloader.Block =
   try:
-    return requestBlock(i, flags = {DownloadReceipts}, client = some(client))
+    return requestBlock(i, client)
   except CatchableError as e:
     fatal "Error while requesting Block", error = e.msg, number = i
     quit 1
 
 proc writeHeadersToJson(config: ExporterConf, client: RpcClient) =
-  let fh = createAndOpenFile(string config.dataDir, string config.fileName)
+  let fh = createAndOpenFile(string config.dataDir, config.fileName)
 
   try:
     var writer = JsonWriter[DefaultFlavor].init(fh.s, pretty = true)
@@ -101,7 +101,7 @@ proc writeHeadersToJson(config: ExporterConf, client: RpcClient) =
       quit 1
 
 proc writeBlocksToJson(config: ExporterConf, client: RpcClient) =
-  let fh = createAndOpenFile(string config.dataDir, string config.fileName)
+  let fh = createAndOpenFile(string config.dataDir, config.fileName)
 
   try:
     var writer = JsonWriter[DefaultFlavor].init(fh.s, pretty = true)
@@ -208,7 +208,7 @@ proc cmdExportEra1(config: ExporterConf) =
             # TODO: Not sure about the errors that can occur here. But the whole
             # block requests over json-rpc should be reworked here (and can be
             # used in the bridge also then)
-            requestBlock(blockNumber, flags = {DownloadReceipts}, client = some(client))
+            requestBlock(blockNumber, client)
           except CatchableError as e:
             error "Failed retrieving block, skip creation of era1 file",
               blockNumber, era, error = e.msg
