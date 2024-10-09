@@ -111,34 +111,34 @@ suite "Aristo compute":
         let w = db.computeKey((root, root)).expect("no errors")
         check r == w.to(Hash32)
 
-      #   # Check raw node if given, check nor ref against expected value
-      #   if s.isValid:
-      #     let z = db.getVtx((root, root)).toNode(root, db).value.digestTo(HashKey)
-      #     check s == z
+        # Check raw node if given, check nor ref against expected value
+        if s.isValid:
+          let z = db.getVtx((root, root)).toNode(root, db).value.digestTo(HashKey)
+          check s == z
 
-      #   let rc = db.check
-      #   check rc == typeof(rc).ok()
+        let rc = db.check
+        check rc == typeof(rc).ok()
 
-      # # Reverse run deleting entries
-      # var deletedKeys: HashSet[seq[byte]]
-      # for iny, (k, v, r, s) in sample.reversed:
-      #   # Check whether key was already deleted
-      #   if k in deletedKeys:
-      #     continue
-      #   deletedKeys.incl k
+      # Reverse run deleting entries
+      var deletedKeys: HashSet[seq[byte]]
+      for iny, (k, v, r, s) in sample.reversed:
+        # Check whether key was already deleted
+        if k in deletedKeys:
+          continue
+        deletedKeys.incl k
 
-      #   # Check state against expected value
-      #   let w = db.computeKey((root, root)).value.to(Hash32)
+        # Check state against expected value
+        let w = db.computeKey((root, root)).value.to(Hash32)
 
-      #   check r == w
+        check r == w
 
-      #   # Check raw node if given, check nor ref against expected value
-      #   if s.isValid:
-      #     let z = db.getVtx((root, root)).toNode(root, db).value.digestTo(HashKey)
-      #     check s == z
+        # Check raw node if given, check nor ref against expected value
+        if s.isValid:
+          let z = db.getVtx((root, root)).toNode(root, db).value.digestTo(HashKey)
+          check s == z
 
-      #   check:
-      #     db.deleteGenericData(root, k).isOk
+        check:
+          db.deleteGenericData(root, k).isOk
 
-      #   let rc = db.check
-      #   check rc == typeof(rc).ok()
+        let rc = db.check
+        check rc == typeof(rc).ok()
