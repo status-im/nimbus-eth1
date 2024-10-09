@@ -54,21 +54,6 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc headerStagedUpdateBeacon*(
-    buddy: BeaconBuddyRef;
-    info: static[string];
-      ) {.async.} =
-  ## Fetch beacon header if there is an update available
-  let ctx = buddy.ctx
-  if ctx.lhc.final.hash != zeroHash32:
-    const iv = BnRange.new(1u,1u) # dummy interval
-    let rc = await buddy.headersFetchReversed(iv, ctx.lhc.final.hash, info)
-    if rc.isOk and ctx.lhc.final.header.number < rc.value[0].number:
-      ctx.lhc.final.header = rc.value[0]
-      ctx.lhc.final.changed = true
-    ctx.lhc.final.hash = zeroHash32
-
-
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
@@ -104,7 +89,7 @@ proc headersStagedCollect*(
     # the top level linked chain `[D,E]`, then there is the hash available for
     # the top level header to fetch. Otherwise -- with multi-peer mode -- the
     # range of headers is fetched opportunistically using block numbers only.
-    isOpportunistic = uTop + 1 != ctx.layout.dangling
+    isOpportunistic = uTop + 1 < ctx.layout.dangling
 
     # Parent hash for `lhc` below
     topLink = (if isOpportunistic: EMPTY_ROOT_HASH

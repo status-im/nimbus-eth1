@@ -42,8 +42,8 @@ type
   SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe, raises: [].}
     ## Update head for syncing
 
-  SyncFinalisedBlockHashCB* = proc(hash: Hash256) {.gcsafe, raises: [].}
-    ## Ditto
+  ReqBeaconSyncTargetCB* = proc(header: Header) {.gcsafe, raises: [].}
+    ## Ditto (for beacon sync)
 
   NotifyBadBlockCB* = proc(invalid, origin: BlockHeader) {.gcsafe, raises: [].}
     ## Notify engine-API of encountered bad block
@@ -76,7 +76,7 @@ type
       ## Call back function for the sync processor. This function stages
       ## the arguent header to a private aerea for subsequent processing.
 
-    syncFinalisedBlockHash: SyncFinalisedBlockHashCB
+    reqBeaconSyncTargetCB: ReqBeaconSyncTargetCB
       ## Call back function for a sync processor that returns the canonical
       ## header.
 
@@ -339,13 +339,10 @@ proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)
 
-func haveSyncFinalisedBlockHash*(com: CommonRef): bool =
-  not com.syncFinalisedBlockHash.isNil
-
-proc syncFinalisedBlockHash*(com: CommonRef; hash: Hash256) =
+proc reqBeaconSyncTargetCB*(com: CommonRef; header: Header) =
   ## Used by RPC updater
-  if not com.syncFinalisedBlockHash.isNil:
-    com.syncFinalisedBlockHash(hash)
+  if not com.reqBeaconSyncTargetCB.isNil:
+    com.reqBeaconSyncTargetCB(header)
 
 proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
     {.gcsafe, raises: [].} =
@@ -452,9 +449,9 @@ func `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
   ## Activate or reset a call back handler for syncing.
   com.syncReqNewHead = cb
 
-func `syncFinalisedBlockHash=`*(com: CommonRef; cb: SyncFinalisedBlockHashCB) =
+func `reqBeaconSyncTarget=`*(com: CommonRef; cb: ReqBeaconSyncTargetCB) =
   ## Activate or reset a call back handler for syncing.
-  com.syncFinalisedBlockHash = cb
+  com.reqBeaconSyncTargetCB = cb
 
 func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.

@@ -33,8 +33,8 @@ when enableTicker:
         coupler:         ctx.layout.coupler,
         dangling:        ctx.layout.dangling,
         endBn:           ctx.layout.endBn,
-        final:           ctx.lhc.final.header.number,
-        finalUpdateOk:   ctx.lhc.final.hash != zeroHash32,
+        target:          ctx.lhc.target.header.number,
+        newTargetOk:     ctx.lhc.target.changed,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
         hdrStagedTop:    ctx.headersStagedTopKey(),
@@ -51,13 +51,14 @@ when enableTicker:
         reorg:           ctx.pool.nReorg,
         nBuddies:        ctx.pool.nBuddies)
 
-proc updateBeaconHeaderCB(ctx: BeaconCtxRef): SyncFinalisedBlockHashCB =
+proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  return proc(h: Hash32) {.gcsafe, raises: [].} =
+  return proc(h: Header) {.gcsafe, raises: [].} =
     # Rpc checks empty header against a zero hash rather than `emptyRoot`
-    if ctx.lhc.final.hash == zeroHash32:
-      ctx.lhc.final.hash = h
+    if ctx.lhc.target.header.number < h.number:
+      ctx.lhc.target.header = h
+      ctx.lhc.target.changed = true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -109,11 +110,11 @@ proc setupDatabase*(ctx: BeaconCtxRef) =
 
 proc setupRpcMagic*(ctx: BeaconCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.pool.chain.com.syncFinalisedBlockHash = ctx.updateBeaconHeaderCB
+  ctx.pool.chain.com.reqBeaconSyncTarget = ctx.updateBeaconHeaderCB
 
 proc destroyRpcMagic*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
-  ctx.pool.chain.com.syncFinalisedBlockHash = SyncFinalisedBlockHashCB(nil)
+  ctx.pool.chain.com.reqBeaconSyncTarget = ReqBeaconSyncTargetCB(nil)
 
 # ---------
 
