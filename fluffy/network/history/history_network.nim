@@ -11,7 +11,7 @@ import
   results,
   chronos,
   chronicles,
-  eth/[trie, trie/db],
+  eth/trie/ordered_trie,
   eth/common/[hashes, headers_rlp, blocks_rlp, receipts_rlp, transactions_rlp],
   eth/p2p/discoveryv5/[protocol, enr],
   ../../common/common_types,
@@ -163,27 +163,6 @@ func encode*(receipts: seq[Receipt]): seq[byte] =
 # TODO: Failures on validation and perhaps deserialisation should be punished
 # for if/when peer scoring/banning is added.
 
-proc calcRootHash(items: Transactions | PortalReceipts | Withdrawals): Hash32 =
-  var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
-  for i, item in items:
-    try:
-      tr.put(rlp.encode(i.uint), item.asSeq())
-    except RlpError as e:
-      # RlpError should not occur
-      # TODO: trace down why it might raise this
-      raiseAssert(e.msg)
-
-  return tr.rootHash
-
-template calcTxsRoot*(transactions: Transactions): Hash32 =
-  calcRootHash(transactions)
-
-template calcReceiptsRoot*(receipts: PortalReceipts): Hash32 =
-  calcRootHash(receipts)
-
-template calcWithdrawalsRoot*(receipts: Withdrawals): Hash32 =
-  calcRootHash(receipts)
-
 func validateBlockHeader*(header: Header, blockHash: Hash32): Result[void, string] =
   if not (header.rlpHash() == blockHash):
     err("Block header hash does not match")
@@ -217,6 +196,15 @@ func validateBlockHeaderBytes*(
 
   ok(header)
 
+template append*(w: var RlpWriter, v: TransactionByteList) =
+  w.appendRawBytes(v.asSeq)
+
+template append*(w: var RlpWriter, v: WithdrawalByteList) =
+  w.appendRawBytes(v.asSeq)
+
+template append*(w: var RlpWriter, v: ReceiptByteList) =
+  w.appendRawBytes(v.asSeq)
+
 proc validateBlockBody*(
     body: PortalBlockBodyLegacy, header: Header
 ): Result[void, string] =
@@ -225,7 +213,7 @@ proc validateBlockBody*(
   if calculatedOmmersHash != header.ommersHash:
     return err("Invalid ommers hash")
 
-  let calculatedTxsRoot = calcTxsRoot(body.transactions)
+  let calculatedTxsRoot = orderedTrieRoot(body.transactions.asSeq)
   if calculatedTxsRoot != header.txRoot:
     return err(
       "Invalid transactions root: expected " & $header.txRoot & " - got " &
@@ -244,7 +232,7 @@ proc validateBlockBody*(
   if body.uncles.asSeq() != @[byte 0xc0]:
     return err("Invalid ommers hash, uncles list is not empty")
 
-  let calculatedTxsRoot = calcTxsRoot(body.transactions)
+  let calculatedTxsRoot = orderedTrieRoot(body.transactions.asSeq)
   if calculatedTxsRoot != header.txRoot:
     return err(
       "Invalid transactions root: expected " & $header.txRoot & " - got " &
@@ -256,7 +244,7 @@ proc validateBlockBody*(
   doAssert(header.withdrawalsRoot.isSome())
 
   let
-    calculatedWithdrawalsRoot = calcWithdrawalsRoot(body.withdrawals)
+    calculatedWithdrawalsRoot = orderedTrieRoot(body.withdrawals.asSeq)
     headerWithdrawalsRoot = header.withdrawalsRoot.get()
   if calculatedWithdrawalsRoot != headerWithdrawalsRoot:
     return err(
@@ -314,7 +302,7 @@ proc validateBlockBodyBytes*(
 proc validateReceipts*(
     receipts: PortalReceipts, receiptsRoot: Hash32
 ): Result[void, string] =
-  if calcReceiptsRoot(receipts) != receiptsRoot:
+  if orderedTrieRoot(receipts.asSeq) != receiptsRoot:
     err("Unexpected receipt root")
   else:
     ok()

@@ -41,7 +41,7 @@ import
   chronicles,
   chronos,
   confutils,
-  eth/[rlp, trie, trie/db],
+  eth/[rlp, trie/ordered_trie],
   eth/common/keys,
   eth/common/[base, headers_rlp, blocks_rlp],
   beacon_chain/el/[el_manager, engine_api_conversions],
@@ -62,43 +62,24 @@ import
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
-proc calculateTransactionData(
-    items: openArray[TypedTransaction]
-): Hash32 {.raises: [].} =
-  var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
-  for i, t in items:
-    try:
-      let tx = distinctBase(t)
-      tr.put(rlp.encode(uint64 i), tx)
-    except CatchableError as e:
-      # tr.put interface can raise exception
-      raiseAssert(e.msg)
+template append(w: var RlpWriter, t: TypedTransaction) =
+  w.appendRawBytes(distinctBase t)
 
-  return tr.rootHash()
-
-# TODO: Since Capella we can also access ExecutionPayloadHeader and thus
-# could get the Roots through there instead.
-proc calculateWithdrawalsRoot(items: openArray[WithdrawalV1]): Hash32 {.raises: [].} =
-  var tr = initHexaryTrie(newMemoryDB(), isPruning = false)
-  for i, w in items:
-    try:
-      let withdrawal = blocks.Withdrawal(
-        index: distinctBase(w.index),
-        validatorIndex: distinctBase(w.validatorIndex),
-        address: w.address,
-        amount: distinctBase(w.amount),
-      )
-      tr.put(rlp.encode(uint64 i), rlp.encode(withdrawal))
-    except CatchableError as e:
-      raiseAssert(e.msg)
-
-  return tr.rootHash()
+template append(w: var RlpWriter, t: WithdrawalV1) =
+  # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
+  # could get the Roots through there instead.
+  w.append blocks.Withdrawal(
+    index: distinctBase(t.index),
+    validatorIndex: distinctBase(t.validatorIndex),
+    address: t.address,
+    amount: distinctBase(t.amount),
+  )
 
 proc asPortalBlockData*(
     payload: ExecutionPayloadV1
 ): (Hash32, BlockHeaderWithProof, PortalBlockBodyLegacy) =
   let
-    txRoot = calculateTransactionData(payload.transactions)
+    txRoot = orderedTrieRoot(payload.transactions)
 
     header = Header(
       parentHash: payload.parentHash,
@@ -139,8 +120,8 @@ proc asPortalBlockData*(
     payload: ExecutionPayloadV2 | ExecutionPayloadV3 | ExecutionPayloadV4
 ): (Hash32, BlockHeaderWithProof, PortalBlockBodyShanghai) =
   let
-    txRoot = calculateTransactionData(payload.transactions)
-    withdrawalsRoot = Opt.some(calculateWithdrawalsRoot(payload.withdrawals))
+    txRoot = orderedTrieRoot(payload.transactions)
+    withdrawalsRoot = Opt.some(orderedTrieRoot(payload.withdrawals))
 
     # TODO: adjust blobGasUsed & excessBlobGas according to deneb fork!
     header = Header(
