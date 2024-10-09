@@ -50,6 +50,7 @@ EXCLUDED_NIM_PACKAGES := 	\
 	vendor/nimbus-eth2/vendor/nim-libp2p						\
 	vendor/nimbus-eth2/vendor/nim-presto						\
 	vendor/nimbus-eth2/vendor/nim-zxcvbn						\
+	vendor/nimbus-eth2/vendor/nim-minilru						\
   vendor/nimbus-eth2/vendor/nim-kzg4844						\
 	vendor/nimbus-eth2/vendor/nimbus-security-resources \
 	vendor/nimbus-eth2/vendor/NimYAML
