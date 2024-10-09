@@ -115,13 +115,10 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentValueBytes = hexToSeqByte(contentValue)
-      contentId = p.toContentId(key)
+      contentId = p.toContentId(key).valueOr:
+        raise invalidKeyErr()
 
-    if contentId.isSome():
-      p.storeContent(key, contentId.get(), contentValueBytes)
-      return true
-    else:
-      raise invalidKeyErr()
+    p.storeContent(key, contentId, contentValueBytes)
 
   rpcServer.rpc("portal_historyLocalContent") do(contentKey: string) -> string:
     let

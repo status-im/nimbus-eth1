@@ -45,7 +45,6 @@ proc validateTrieProof*(
   if proof.len() == 0:
     return err("proof is empty")
 
-  # TODO: Remove this once the hive tests support passing in state roots from the history network
   if expectedRootHash.isSome():
     if not proof[0].hashEquals(expectedRootHash.get()):
       return err("hash of proof root node doesn't match the expected root hash")

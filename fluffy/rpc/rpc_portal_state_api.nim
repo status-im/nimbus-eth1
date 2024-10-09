@@ -13,7 +13,7 @@ import
   json_serialization/std/tables,
   stew/byteutils,
   ../network/wire/portal_protocol,
-  ../network/state/state_content,
+  ../network/state/[state_content, state_validation],
   ./rpc_types
 
 {.warning[UnusedImport]: off.}
@@ -114,33 +114,37 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     contentKey: string, contentValue: string
   ) -> bool:
     let
-      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentValueBytes = hexToSeqByte(contentValue)
-      decodedKey = ContentKey.decode(key).valueOr:
+      keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      key = ContentKey.decode(keyBytes).valueOr:
         raise invalidKeyErr()
+      contentId = p.toContentId(keyBytes).valueOr:
+        raise invalidKeyErr()
+
+      contentBytes = hexToSeqByte(contentValue)
       valueToStore =
-        case decodedKey.contentType
+        case key.contentType
         of unused:
           raise invalidKeyErr()
         of accountTrieNode:
-          let offerValue = AccountTrieNodeOffer.decode(contentValueBytes).valueOr:
+          let offer = AccountTrieNodeOffer.decode(contentBytes).valueOr:
             raise invalidValueErr
-          offerValue.toRetrievalValue.encode()
+          validateOffer(Opt.none(Hash32), key.accountTrieNodeKey, offer).isOkOr:
+            raise invalidValueErr
+          offer.toRetrievalValue.encode()
         of contractTrieNode:
-          let offerValue = ContractTrieNodeOffer.decode(contentValueBytes).valueOr:
+          let offer = ContractTrieNodeOffer.decode(contentBytes).valueOr:
             raise invalidValueErr
-          offerValue.toRetrievalValue.encode()
+          validateOffer(Opt.none(Hash32), key.contractTrieNodeKey, offer).isOkOr:
+            raise invalidValueErr
+          offer.toRetrievalValue.encode()
         of contractCode:
-          let offerValue = ContractCodeOffer.decode(contentValueBytes).valueOr:
+          let offer = ContractCodeOffer.decode(contentBytes).valueOr:
             raise invalidValueErr
-          offerValue.toRetrievalValue.encode()
+          validateOffer(Opt.none(Hash32), key.contractCodeKey, offer).isOkOr:
+            raise invalidValueErr
+          offer.toRetrievalValue.encode()
 
-    let contentId = p.toContentId(key)
-    if contentId.isSome():
-      p.storeContent(key, contentId.get(), valueToStore)
-      return true
-    else:
-      raise invalidKeyErr()
+    p.storeContent(keyBytes, contentId, valueToStore)
 
   rpcServer.rpc("portal_stateLocalContent") do(contentKey: string) -> string:
     let
