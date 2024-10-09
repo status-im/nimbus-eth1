@@ -13,7 +13,6 @@ import
   chronicles,
   eth/p2p/discoveryv5/[protocol, enr],
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/gossip_processing/light_client_processor,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config],
   "."/[beacon_content, beacon_db, beacon_validation, beacon_chain_historical_summaries]
@@ -21,7 +20,7 @@ import
 export beacon_content, beacon_db
 
 logScope:
-  topics = "beacon_network"
+  topics = "portal_beacon"
 
 type BeaconNetwork* = ref object
   portalProtocol*: PortalProtocol
@@ -29,7 +28,7 @@ type BeaconNetwork* = ref object
   processor*: ref LightClientProcessor
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   forkDigests*: ForkDigests
-  trustedBlockRoot: Opt[Eth2Digest]
+  trustedBlockRoot*: Opt[Eth2Digest]
   processContentLoop: Future[void]
   statusLogLoop: Future[void]
 
@@ -209,12 +208,19 @@ proc new*(
       config = portalConfig,
     )
 
+  let beaconBlockRoot =
+    # TODO: Need to have some form of weak subjectivity check here.
+    if trustedBlockRoot.isNone():
+      beaconDb.getLatestBlockRoot()
+    else:
+      trustedBlockRoot
+
   BeaconNetwork(
     portalProtocol: portalProtocol,
     beaconDb: beaconDb,
     contentQueue: contentQueue,
     forkDigests: forkDigests,
-    trustedBlockRoot: trustedBlockRoot,
+    trustedBlockRoot: beaconBlockRoot,
   )
 
 proc lightClientVerifier(
@@ -395,6 +401,8 @@ proc stop*(n: BeaconNetwork) {.async: (raises: []).} =
     futures.add(n.statusLogLoop.cancelAndWait())
 
   await noCancel(allFutures(futures))
+
+  n.beaconDb.close()
 
   n.processContentLoop = nil
   n.statusLogLoop = nil

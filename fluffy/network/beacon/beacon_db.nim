@@ -34,11 +34,19 @@ type
     getBulkStmt: SqliteStmt[(int64, int64), seq[byte]]
     putStmt: SqliteStmt[(int64, seq[byte]), void]
     delStmt: SqliteStmt[int64, void]
+    keepFromStmt: SqliteStmt[int64, void]
+
+  BootstrapStore = ref object
+    getStmt: SqliteStmt[array[32, byte], seq[byte]]
+    getLatestStmt: SqliteStmt[NoParams, seq[byte]]
+    putStmt: SqliteStmt[(array[32, byte], seq[byte], int64), void]
+    keepFromStmt: SqliteStmt[int64, void]
 
   BeaconDb* = ref object
     backend: SqStoreRef
-    kv: KvStoreRef
+    kv: KvStoreRef # TODO: kv only used for summaries at this point
     dataRadius*: UInt256
+    bootstraps: BootstrapStore
     bestUpdates: BestLightClientUpdateStore
     forkDigests: ForkDigests
     cfg*: RuntimeConfig
@@ -66,15 +74,14 @@ template disposeSafe(s: untyped): untyped =
     s.dispose()
     s = typeof(s)(nil)
 
-proc initBestUpdatesStore(
-    backend: SqStoreRef, name: string
-): KvResult[BestLightClientUpdateStore] =
+proc initBootstrapStore(backend: SqStoreRef, name: string): KvResult[BootstrapStore] =
   ?backend.exec(
     """
     CREATE TABLE IF NOT EXISTS `""" & name &
       """` (
-      `period` INTEGER PRIMARY KEY,  -- `SyncCommitteePeriod`
-      `update` BLOB                  -- `altair.LightClientUpdate` (SSZ)
+      `contentId` BLOB PRIMARY KEY, -- `ContentId`
+      `bootstrap` BLOB,             -- `LightClientBootstrap` (SSZ)
+      `slot` INTEGER UNIQUE         -- `Slot`
     );
   """
   )
@@ -83,11 +90,85 @@ proc initBestUpdatesStore(
     getStmt = backend
       .prepareStmt(
         """
-      SELECT `update`
-      FROM `""" & name &
+        SELECT `bootstrap`
+        FROM `""" & name &
           """`
-      WHERE `period` = ?;
-    """,
+        WHERE `contentId` = ?;
+      """,
+        array[32, byte],
+        seq[byte],
+        managed = false,
+      )
+      .expect("SQL query OK")
+    getLatestStmt = backend
+      .prepareStmt(
+        """
+        SELECT `bootstrap`
+        FROM `""" & name &
+          """`
+        WHERE `slot` = (SELECT MAX(slot) FROM `""" & name &
+          """`);
+      """,
+        NoParams,
+        seq[byte],
+        managed = false,
+      )
+      .expect("SQL query OK")
+    putStmt = backend
+      .prepareStmt(
+        """
+        REPLACE INTO `""" & name &
+          """` (
+        `contentId`, `bootstrap`, `slot`
+        ) VALUES (?, ?, ?);
+      """,
+        (array[32, byte], seq[byte], int64),
+        void,
+        managed = false,
+      )
+      .expect("SQL query OK")
+    keepFromStmt = backend
+      .prepareStmt(
+        """
+        DELETE FROM `""" & name &
+          """`
+        WHERE `slot` < ?;
+      """,
+        int64,
+        void,
+        managed = false,
+      )
+      .expect("SQL query OK")
+
+  ok BootstrapStore(
+    getStmt: getStmt,
+    getLatestStmt: getLatestStmt,
+    putStmt: putStmt,
+    keepFromStmt: keepFromStmt,
+  )
+
+proc initBestUpdateStore(
+    backend: SqStoreRef, name: string
+): KvResult[BestLightClientUpdateStore] =
+  ?backend.exec(
+    """
+    CREATE TABLE IF NOT EXISTS `""" & name &
+      """` (
+      `period` INTEGER PRIMARY KEY,  -- `SyncCommitteePeriod`
+      `update` BLOB                  -- `LightClientUpdate` (SSZ)
+    );
+  """
+  )
+
+  let
+    getStmt = backend
+      .prepareStmt(
+        """
+        SELECT `update`
+        FROM `""" & name &
+          """`
+        WHERE `period` = ?;
+      """,
         int64,
         seq[byte],
         managed = false,
@@ -96,11 +177,11 @@ proc initBestUpdatesStore(
     getBulkStmt = backend
       .prepareStmt(
         """
-      SELECT `update`
-      FROM `""" & name &
+        SELECT `update`
+        FROM `""" & name &
           """`
-      WHERE `period` >= ? AND `period` < ?;
-    """,
+        WHERE `period` >= ? AND `period` < ?;
+      """,
         (int64, int64),
         seq[byte],
         managed = false,
@@ -109,11 +190,11 @@ proc initBestUpdatesStore(
     putStmt = backend
       .prepareStmt(
         """
-      REPLACE INTO `""" & name &
+        REPLACE INTO `""" & name &
           """` (
-        `period`, `update`
-      ) VALUES (?, ?);
-    """,
+          `period`, `update`
+        ) VALUES (?, ?);
+      """,
         (int64, seq[byte]),
         void,
         managed = false,
@@ -122,10 +203,22 @@ proc initBestUpdatesStore(
     delStmt = backend
       .prepareStmt(
         """
-      DELETE FROM `""" & name &
+        DELETE FROM `""" & name &
           """`
-      WHERE `period` = ?;
-    """,
+        WHERE `period` = ?;
+      """,
+        int64,
+        void,
+        managed = false,
+      )
+      .expect("SQL query OK")
+    keepFromStmt = backend
+      .prepareStmt(
+        """
+        DELETE FROM `""" & name &
+          """`
+        WHERE `period` < ?;
+      """,
         int64,
         void,
         managed = false,
@@ -133,14 +226,25 @@ proc initBestUpdatesStore(
       .expect("SQL query OK")
 
   ok BestLightClientUpdateStore(
-    getStmt: getStmt, getBulkStmt: getBulkStmt, putStmt: putStmt, delStmt: delStmt
+    getStmt: getStmt,
+    getBulkStmt: getBulkStmt,
+    putStmt: putStmt,
+    delStmt: delStmt,
+    keepFromStmt: keepFromStmt,
   )
 
-func close*(store: var BestLightClientUpdateStore) =
+func close(store: var BestLightClientUpdateStore) =
   store.getStmt.disposeSafe()
   store.getBulkStmt.disposeSafe()
   store.putStmt.disposeSafe()
   store.delStmt.disposeSafe()
+  store.keepFromStmt.disposeSafe()
+
+func close(store: var BootstrapStore) =
+  store.getStmt.disposeSafe()
+  store.getLatestStmt.disposeSafe()
+  store.putStmt.disposeSafe()
+  store.keepFromStmt.disposeSafe()
 
 proc new*(
     T: type BeaconDb, networkData: NetworkInitData, path: string, inMemory = false
@@ -155,16 +259,23 @@ proc new*(
         SqStoreRef.init(path, "lc").expectDb()
 
     kvStore = kvStore db.openKvStore().expectDb()
-    bestUpdates = initBestUpdatesStore(db, "lcu").expectDb()
+    bootstraps = initBootstrapStore(db, "lc_bootstraps").expectDb()
+    bestUpdates = initBestUpdateStore(db, "lc_best_updates").expectDb()
 
   BeaconDb(
     backend: db,
     kv: kvStore,
     dataRadius: UInt256.high(), # Radius to max to accept all data
+    bootstraps: bootstraps,
     bestUpdates: bestUpdates,
     cfg: networkData.metadata.cfg,
     forkDigests: (newClone networkData.forks)[],
   )
+
+proc close*(db: BeaconDb) =
+  db.bootstraps.close()
+  db.bestUpdates.close()
+  discard db.kv.close()
 
 ## Private KvStoreRef Calls
 proc get(kv: KvStoreRef, key: openArray[byte]): results.Opt[seq[byte]] =
@@ -217,6 +328,42 @@ proc getBestUpdate*(
     res.expect("SQL query OK")
     return decodeLightClientUpdateForked(db.forkDigests, update)
 
+proc getBootstrap*(db: BeaconDb, contentId: ContentId): Opt[seq[byte]] =
+  doAssert distinctBase(db.bootstraps.getStmt) != nil
+
+  var bootstrap: seq[byte]
+  for res in db.bootstraps.getStmt.exec(contentId.toBytesBE(), bootstrap):
+    res.expect("SQL query OK")
+    return ok(bootstrap)
+
+proc getLatestBootstrap*(db: BeaconDb): Opt[ForkedLightClientBootstrap] =
+  doAssert distinctBase(db.bootstraps.getLatestStmt) != nil
+
+  var bootstrap: seq[byte]
+  for res in db.bootstraps.getLatestStmt.exec(bootstrap):
+    res.expect("SQL query OK")
+    let forkedBootstrap = decodeLightClientBootstrapForked(db.forkDigests, bootstrap).valueOr:
+      raiseAssert "Stored bootstrap must be valid"
+    return ok(forkedBootstrap)
+
+proc getLatestBlockRoot*(db: BeaconDb): Opt[Digest] =
+  let bootstrap = db.getLatestBootstrap()
+  if bootstrap.isSome():
+    withForkyBootstrap(bootstrap.value()):
+      when lcDataFork > LightClientDataFork.None:
+        Opt.some(hash_tree_root(forkyBootstrap.header.beacon))
+      else:
+        raiseAssert "Stored bootstrap must >= Altair"
+  else:
+    Opt.none(Digest)
+
+proc putBootstrap*(
+    db: BeaconDb, contentId: ContentId, bootstrap: seq[byte], slot: Slot
+) =
+  db.bootstraps.putStmt.exec((contentId.toBytesBE(), bootstrap, slot.int64)).expect(
+    "SQL query OK"
+  )
+
 proc putBootstrap*(
     db: BeaconDb, blockRoot: Digest, bootstrap: ForkedLightClientBootstrap
 ) =
@@ -231,7 +378,7 @@ proc putBootstrap*(
         )
         encodedBootstrap = encodeBootstrapForked(forkDigest, bootstrap)
 
-      db.put(contentId, encodedBootstrap)
+      db.putBootstrap(contentId, encodedBootstrap, forkyBootstrap.header.beacon.slot)
 
 func putLightClientUpdate*(db: BeaconDb, period: uint64, update: seq[byte]) =
   # Put an encoded ForkedLightClientUpdate in the db.
@@ -288,6 +435,14 @@ proc getLastFinalityUpdate*(db: BeaconDb): Opt[ForkedLightClientFinalityUpdate] 
         raiseAssert "Stored finality update must be valid"
   )
 
+func keepUpdatesFrom*(db: BeaconDb, minPeriod: SyncCommitteePeriod) =
+  let res = db.bestUpdates.keepFromStmt.exec(minPeriod.int64)
+  res.expect("SQL query OK")
+
+func keepBootstrapsFrom*(db: BeaconDb, minSlot: Slot) =
+  let res = db.bootstraps.keepFromStmt.exec(minSlot.int64)
+  res.expect("SQL query OK")
+
 proc createGetHandler*(db: BeaconDb): DbGetHandler =
   return (
     proc(contentKey: ContentKeyByteList, contentId: ContentId): results.Opt[seq[byte]] =
@@ -299,7 +454,7 @@ proc createGetHandler*(db: BeaconDb): DbGetHandler =
       of unused:
         raiseAssert "Should not be used and fail at decoding"
       of lightClientBootstrap:
-        db.get(contentId)
+        db.getBootstrap(contentId)
       of lightClientUpdate:
         let
           # TODO: add validation that startPeriod is not from the future,
@@ -365,7 +520,12 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
       of unused:
         raiseAssert "Should not be used and fail at decoding"
       of lightClientBootstrap:
-        db.put(contentId, content)
+        let bootstrap = decodeLightClientBootstrapForked(db.forkDigests, content).valueOr:
+          return
+
+        withForkyObject(bootstrap):
+          when lcDataFork > LightClientDataFork.None:
+            db.putBootstrap(contentId, content, forkyObject.header.beacon.slot)
       of lightClientUpdate:
         let updates = decodeSsz(content, ForkedLightClientUpdateBytesList).valueOr:
           return
