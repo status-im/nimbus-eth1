@@ -143,11 +143,11 @@ This will store blocks 1 to 10 into a json file located at
 `./user_data_dir/eth-history-data.json`.
 
 3. Run Fluffy and trigger the propagation of data with the
-`portal_history_propagate` JSON-RPC API call:
+`portal_debug_history_propagate` JSON-RPC API call:
 
 ```bash
 ./build/fluffy --rpc --rpc-api:portal,portal_debug
 
 # From another shell
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_history_propagate","params":["./user_data_dir/eth-history-data.json"]}' http://localhost:8545 | jq
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_debug_history_propagate","params":["./user_data_dir/eth-history-data.json"]}' http://localhost:8545 | jq
 ```

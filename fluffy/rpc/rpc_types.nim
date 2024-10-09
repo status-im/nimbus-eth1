@@ -9,12 +9,41 @@
 
 import
   stint,
-  json_rpc/jsonmarshal,
-  stew/[byteutils],
+  json_rpc/[jsonmarshal, errors],
+  stew/byteutils,
   results,
   eth/p2p/discoveryv5/[routing_table, enr, node]
 
 export jsonmarshal, routing_table, enr, node
+
+# Portal Network JSON-RPC errors
+const
+  # These errors are defined in the portal jsonrpc spec: https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
+  ContentNotFoundError* = (code: -39001, msg: "Content not found")
+  ContentNotFoundErrorWithTrace* = (code: -39002, msg: "Content not found")
+  # These errors are used by Fluffy but are not yet in the spec
+  InvalidContentKeyError* = (code: -32602, msg: "Invalid content key")
+  InvalidContentValueError* = (code: -32602, msg: "Invalid content value")
+
+template contentNotFoundErr*(): auto =
+  (ref ApplicationError)(code: ContentNotFoundError.code, msg: ContentNotFoundError.msg)
+
+template contentNotFoundErrWithTrace*(data: typed): auto =
+  (ref ApplicationError)(
+    code: ContentNotFoundErrorWithTrace.code,
+    msg: ContentNotFoundErrorWithTrace.msg,
+    data: data,
+  )
+
+template invalidKeyErr*(): auto =
+  (ref errors.InvalidRequest)(
+    code: InvalidContentKeyError.code, msg: InvalidContentKeyError.msg
+  )
+
+template invalidValueErr*(): auto =
+  (ref errors.InvalidRequest)(
+    code: InvalidContentValueError.code, msg: InvalidContentValueError.msg
+  )
 
 type
   NodeInfo* = object

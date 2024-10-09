@@ -24,14 +24,6 @@ export tables
 # Portal Network JSON-RPC implementation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
-const
-  ContentNotFoundError = (code: -39001, msg: "Content not found")
-  ContentNotFoundErrorWithTrace = (code: -39002, msg: "Content not found")
-
-type ContentInfo = object
-  content: string
-  utpTransfer: bool
-
 ContentInfo.useDefaultSerializationIn JrpcConv
 TraceContentLookupResult.useDefaultSerializationIn JrpcConv
 TraceObject.useDefaultSerializationIn JrpcConv
@@ -39,12 +31,6 @@ NodeMetadata.useDefaultSerializationIn JrpcConv
 TraceResponse.useDefaultSerializationIn JrpcConv
 
 proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
-  let
-    invalidKeyErr =
-      (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
-    invalidValueErr =
-      (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content value")
-
   rpcServer.rpc("portal_stateFindContent") do(
     enr: Record, contentKey: string
   ) -> JsonString:
@@ -97,12 +83,10 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
+        raise invalidKeyErr()
 
       contentResult = (await p.contentLookup(key, contentId)).valueOr:
-        raise (ref ApplicationError)(
-          code: ContentNotFoundError.code, msg: ContentNotFoundError.msg
-        )
+        raise contentNotFoundErr()
 
     return ContentInfo(
       content: contentResult.content.to0xHex(), utpTransfer: contentResult.utpTransfer
@@ -114,7 +98,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
+        raise invalidKeyErr()
 
       res = await p.traceContentLookup(key, contentId)
 
@@ -124,11 +108,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       return res
     else:
       let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
-      raise (ref ApplicationError)(
-        code: ContentNotFoundErrorWithTrace.code,
-        msg: ContentNotFoundErrorWithTrace.msg,
-        data: data,
-      )
+      raise contentNotFoundErrWithTrace(data)
 
   rpcServer.rpc("portal_stateStore") do(
     contentKey: string, contentValue: string
@@ -137,11 +117,11 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentValueBytes = hexToSeqByte(contentValue)
       decodedKey = ContentKey.decode(key).valueOr:
-        raise invalidKeyErr
+        raise invalidKeyErr()
       valueToStore =
         case decodedKey.contentType
         of unused:
-          raise invalidKeyErr
+          raise invalidKeyErr()
         of accountTrieNode:
           let offerValue = AccountTrieNodeOffer.decode(contentValueBytes).valueOr:
             raise invalidValueErr
@@ -160,18 +140,16 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       p.storeContent(key, contentId.get(), valueToStore)
       return true
     else:
-      raise invalidKeyErr
+      raise invalidKeyErr()
 
   rpcServer.rpc("portal_stateLocalContent") do(contentKey: string) -> string:
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
+        raise invalidKeyErr()
 
       contentResult = p.dbGet(key, contentId).valueOr:
-        raise (ref ApplicationError)(
-          code: ContentNotFoundError.code, msg: ContentNotFoundError.msg
-        )
+        raise contentNotFoundErr()
 
     return contentResult.to0xHex()
 
