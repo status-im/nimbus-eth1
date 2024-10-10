@@ -120,8 +120,9 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
 
     block:
       # Set advisory flag telling that a slow/long running process will take
-      # place. This works a bit like `runSingle()` only that in the case here
-      # we might have no peer.
+      # place. So there might be some peers active. If they are waiting for
+      # a message reply, this will most probably time out as all processing
+      # power is usurped by the import task here.
       ctx.pool.importRunningOk = true
       defer: ctx.pool.importRunningOk = false
 
@@ -172,11 +173,6 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
 
   trace info, peer, nInvocations=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
-
-  # Update beacon header when needed. For the beacon header, a hash will be
-  # auto-magically made available via RPC. The corresponding header is then
-  # fetched from the current peer.
-  await buddy.headerStagedUpdateBeacon info
 
   if not await buddy.napUnlessSomethingToFetch info:
     #

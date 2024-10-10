@@ -102,30 +102,31 @@ increasing *C* or decreasing *D* by adding/prepending headers so that the
 linked chain condition is not violated.
 
 Only when the gap open interval *(C,D)* vanishes, the right end *E* can be
-increased to a larger **finalised** block number *F* say. Then
+increased to a larger target block number *T*, say. This block number will
+typically be the **consensus head**. Then
 
 * *C==D* beacuse the open interval *(C,D)* is empty
 * *C==E* because *C* is maximal (see definition of `C` above)
 
 and the header chains *(E,E,E)* (depicted in *(3)* below) can be set to
-*(C,F,F)* as depicted in *(4)* below.
+*(C,T,T)* as depicted in *(4)* below.
 
 Layout before updating of *E*
 
                        C                                                     (3)
                        D
-      0                E                     F
+      0                E                     T
       o----------------o---------------------o---->
       | <-- linked --> |
 
-New layout with moving *D* and *E* to *F*
+New layout with moving *D* and *E* to *T*
 
                                              D'                              (4)
       0                C                     E'
       o----------------o---------------------o---->
       | <-- linked --> | <-- unprocessed --> |
 
-with *D'=F* and *E'=F*.
+with *D'=T* and *E'=T*.
 
 Note that diagram *(3)* is a generalisation of *(2)*.
 
@@ -133,8 +134,8 @@ Note that diagram *(3)* is a generalisation of *(2)*.
 ### Complete a header linked chain:
 
 The header chain is *relatively complete* if it satisfies clause *(3)* above
-for *0 < C*. It is *fully complete* if *E==F*. It should be obvious that the
-latter condition is temporary only on a live system (as *F* is contiuously
+for *0 < C*. It is *fully complete* if *E==T*. It should be obvious that the
+latter condition is temporary only on a live system (as *T* is contiuously
 updated.)
 
 If a *relatively complete* header chain is reached for the first time, the
@@ -262,7 +263,7 @@ be available if *nimbus* is compiled with the additional make flags
 | beacon_coupler     | block height | **C**, *increasing* |
 | beacon_dangling    | block height | **D**               |
 | beacon_end         | block height | **E**, *increasing* |
-| beacon_final       | block height | **F**, *increasing* |
+| beacon_target      | block height | **T**, *increasing* |
 |                            |      |                     |
 | beacon_header_lists_staged | size | # of staged header list records      |
 | beacon_headers_unprocessed | size | # of accumulated header block numbers|

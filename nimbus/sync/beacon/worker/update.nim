@@ -25,21 +25,21 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc updateFinalisedChange(ctx: BeaconCtxRef; info: static[string]): bool =
+proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]): bool =
   ##
   ## Layout (see (3) in README):
   ## ::
-  ##     0             C==D==E                  F
+  ##     0             C==D==E                  T
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> |
   ##
   ## or
   ## ::
-  ##    0==F           C==D==E
+  ##    0==T           C==D==E
   ##     o----------------o-------------------------->
   ##     | <-- linked --> |
   ##
-  ## with `F == final.header.number` or `F == 0`
+  ## with `T == target.header.number` or `T == 0`
   ##
   ## to be updated to
   ## ::
@@ -47,11 +47,11 @@ proc updateFinalisedChange(ctx: BeaconCtxRef; info: static[string]): bool =
   ##     o----------------o---------------------o---->
   ##     | <-- linked --> | <-- unprocessed --> |
   ##
-  var finBn = ctx.lhc.final.header.number
+  var target = ctx.lhc.target.header.number
 
-  # Need: `E < F` and `C == D`
-  if finBn != 0 and finBn <= ctx.layout.endBn:        # violates `E < F`
-    trace info & ": not applicable", E=ctx.layout.endBn.bnStr, F=finBn.bnStr
+  # Need: `E < T` and `C == D`
+  if target != 0 and target <= ctx.layout.endBn:      # violates `E < T`
+    trace info & ": not applicable", E=ctx.layout.endBn.bnStr, T=target.bnStr
     return false
 
   if ctx.layout.coupler != ctx.layout.dangling: # violates `C == D`
@@ -62,19 +62,19 @@ proc updateFinalisedChange(ctx: BeaconCtxRef; info: static[string]): bool =
   # Check consistency: `C == D <= E` for maximal `C` => `D == E`
   doAssert ctx.layout.dangling == ctx.layout.endBn
 
-  let rlpHeader = rlp.encode(ctx.lhc.final.header)
+  let rlpHeader = rlp.encode(ctx.lhc.target.header)
 
   ctx.lhc.layout = LinkedHChainsLayout(
     coupler:        ctx.layout.coupler,
     couplerHash:    ctx.layout.couplerHash,
-    dangling:       finBn,
-    danglingParent: ctx.lhc.final.header.parentHash,
-    endBn:          finBn,
+    dangling:       target,
+    danglingParent: ctx.lhc.target.header.parentHash,
+    endBn:          target,
     endHash:        rlpHeader.keccak256)
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
-  ctx.dbStashHeaders(finBn, @[rlpHeader])
+  ctx.dbStashHeaders(target, @[rlpHeader])
 
   # Save state
   discard ctx.dbStoreLinkedHChainsLayout()
@@ -86,11 +86,14 @@ proc updateFinalisedChange(ctx: BeaconCtxRef; info: static[string]): bool =
   ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
   trace info & ": updated", C=ctx.layout.coupler.bnStr,
-    D=ctx.layout.dangling.bnStr, E=ctx.layout.endBn.bnStr, F=finBn.bnStr
+    uTop=ctx.headersUnprocTop(),
+    D=ctx.layout.dangling.bnStr, E=ctx.layout.endBn.bnStr, T=target.bnStr
   true
 
 
 proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]): bool =
+  ## Merge if `C+1` == `D`
+  ##
   if ctx.lhc.layout.coupler+1 < ctx.lhc.layout.dangling or # gap btw. `C` & `D`
      ctx.lhc.layout.coupler == ctx.lhc.layout.dangling:    # merged already
     return false
@@ -130,9 +133,9 @@ proc updateLinkedHChainsLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Update layout
 
   # Check whether there is something to do regarding beacon node change
-  if ctx.lhc.final.changed:
-    ctx.lhc.final.changed = false
-    result = ctx.updateFinalisedChange info
+  if ctx.lhc.target.changed:
+    ctx.lhc.target.changed = false
+    result = ctx.updateTargetChange info
 
   # Check whether header downloading is done
   if ctx.mergeAdjacentChains info:
