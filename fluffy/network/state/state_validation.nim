@@ -13,10 +13,10 @@ export results, state_content, hashes
 
 from eth/common/eth_types_rlp import rlpHash
 
-proc hashEquals(value: TrieNode | Bytecode, expectedHash: Hash32): bool {.inline.} =
+template hashEquals(value: TrieNode | Bytecode, expectedHash: Hash32): bool =
   keccak256(value.asSeq()) == expectedHash
 
-proc isValidNextNode(
+func isValidNextNode(
     thisNodeRlp: Rlp, rlpIdx: int, nextNode: TrieNode
 ): bool {.raises: RlpError.} =
   let hashOrShortRlp = thisNodeRlp.listElem(rlpIdx)
@@ -36,7 +36,7 @@ proc isValidNextNode(
   nextNode.hashEquals(nextHash)
 
 # TODO: Refactor this function to improve maintainability
-proc validateTrieProof*(
+func validateTrieProof*(
     expectedRootHash: Opt[Hash32],
     path: Nibbles,
     proof: TrieProof,
@@ -117,7 +117,7 @@ proc validateTrieProof*(
   else:
     ok()
 
-proc validateRetrieval*(
+func validateRetrieval*(
     key: AccountTrieNodeKey, value: AccountTrieNodeRetrieval
 ): Result[void, string] =
   if value.node.hashEquals(key.nodeHash):
@@ -125,7 +125,7 @@ proc validateRetrieval*(
   else:
     err("hash of account trie node doesn't match the expected node hash")
 
-proc validateRetrieval*(
+func validateRetrieval*(
     key: ContractTrieNodeKey, value: ContractTrieNodeRetrieval
 ): Result[void, string] =
   if value.node.hashEquals(key.nodeHash):
@@ -133,7 +133,7 @@ proc validateRetrieval*(
   else:
     err("hash of contract trie node doesn't match the expected node hash")
 
-proc validateRetrieval*(
+func validateRetrieval*(
     key: ContractCodeKey, value: ContractCodeRetrieval
 ): Result[void, string] =
   if value.code.hashEquals(key.codeHash):
@@ -141,14 +141,14 @@ proc validateRetrieval*(
   else:
     err("hash of bytecode doesn't match the expected code hash")
 
-proc validateOffer*(
+func validateOffer*(
     trustedStateRoot: Opt[Hash32], key: AccountTrieNodeKey, offer: AccountTrieNodeOffer
 ): Result[void, string] =
   ?validateTrieProof(trustedStateRoot, key.path, offer.proof)
 
   validateRetrieval(key, offer.toRetrievalValue())
 
-proc validateOffer*(
+func validateOffer*(
     trustedStateRoot: Opt[Hash32],
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
@@ -166,7 +166,7 @@ proc validateOffer*(
 
   validateRetrieval(key, offer.toRetrievalValue())
 
-proc validateOffer*(
+func validateOffer*(
     trustedStateRoot: Opt[Hash32], key: ContractCodeKey, offer: ContractCodeOffer
 ): Result[void, string] =
   ?validateTrieProof(
@@ -181,3 +181,47 @@ proc validateOffer*(
     return err("hash of bytecode doesn't match the code hash in the account proof")
 
   validateRetrieval(key, offer.toRetrievalValue())
+
+func validateGetContentKey*(
+    keyBytes: ContentKeyByteList
+): Result[(ContentKey, ContentId), string] =
+  let key = ?ContentKey.decode(keyBytes)
+  ok((key, toContentId(keyBytes)))
+
+func validateRetrieval*(
+    key: ContentKey, contentBytes: seq[byte]
+): Result[void, string] =
+  case key.contentType
+  of unused:
+    raiseAssert("ContentKey contentType: unused")
+  of accountTrieNode:
+    let retrieval = ?AccountTrieNodeRetrieval.decode(contentBytes)
+    ?validateRetrieval(key.accountTrieNodeKey, retrieval)
+  of contractTrieNode:
+    let retrieval = ?ContractTrieNodeRetrieval.decode(contentBytes)
+    ?validateRetrieval(key.contractTrieNodeKey, retrieval)
+  of contractCode:
+    let retrieval = ?ContractCodeRetrieval.decode(contentBytes)
+    ?validateRetrieval(key.contractCodeKey, retrieval)
+
+func validateOfferGetValue*(
+    trustedStateRoot: Opt[Hash32], key: ContentKey, contentBytes: seq[byte]
+): Result[seq[byte], string] =
+  let value =
+    case key.contentType
+    of unused:
+      raiseAssert("ContentKey contentType: unused")
+    of accountTrieNode:
+      let offer = ?AccountTrieNodeOffer.decode(contentBytes)
+      ?validateOffer(trustedStateRoot, key.accountTrieNodeKey, offer)
+      offer.toRetrievalValue.encode()
+    of contractTrieNode:
+      let offer = ?ContractTrieNodeOffer.decode(contentBytes)
+      ?validateOffer(trustedStateRoot, key.contractTrieNodeKey, offer)
+      offer.toRetrievalValue.encode()
+    of contractCode:
+      let offer = ?ContractCodeOffer.decode(contentBytes)
+      ?validateOffer(trustedStateRoot, key.contractCodeKey, offer)
+      offer.toRetrievalValue.encode()
+
+  ok(value)

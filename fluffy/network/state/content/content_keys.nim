@@ -96,9 +96,11 @@ func encode*(contentKey: ContentKey): ContentKeyByteList {.inline.} =
 func decode*(
     T: type ContentKey, contentKey: ContentKeyByteList
 ): Result[T, string] {.inline.} =
-  decodeSsz(contentKey.asSeq(), T)
+  let key = ?decodeSsz(contentKey.asSeq(), T)
+  if key.contentType == unused:
+    return err("ContentKey contentType: unused")
+  ok(key)
 
 func toContentId*(contentKey: ContentKeyByteList): ContentId {.inline.} =
-  # TODO: Should we try to parse the content key here for invalid ones?
   let idHash = sha256.digest(contentKey.asSeq())
   readUintBE[256](idHash.data)

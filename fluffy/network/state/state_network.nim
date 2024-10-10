@@ -11,6 +11,7 @@ import
   results,
   chronos,
   chronicles,
+  eth/common/hashes,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../history/history_network,
@@ -19,7 +20,7 @@ import
   ./state_validation,
   ./state_gossip
 
-export results, state_content
+export results, state_content, hashes
 
 logScope:
   topics = "portal_state"
@@ -47,23 +48,22 @@ proc new*(
     historyNetwork = Opt.none(HistoryNetwork),
     validateStateIsCanonical = true,
 ): T =
-  let cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+  let
+    cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    s = streamManager.registerNewStream(cq)
+    portalProtocol = PortalProtocol.new(
+      baseProtocol,
+      getProtocolId(portalNetwork, PortalSubnetwork.state),
+      toContentIdHandler,
+      createGetHandler(contentDB),
+      createStoreHandler(contentDB, portalConfig.radiusConfig),
+      createRadiusHandler(contentDB),
+      s,
+      bootstrapRecords,
+      config = portalConfig,
+    )
 
-  let s = streamManager.registerNewStream(cq)
-
-  let portalProtocol = PortalProtocol.new(
-    baseProtocol,
-    getProtocolId(portalNetwork, PortalSubnetwork.state),
-    toContentIdHandler,
-    createGetHandler(contentDB),
-    createStoreHandler(contentDB, portalConfig.radiusConfig),
-    createRadiusHandler(contentDB),
-    s,
-    bootstrapRecords,
-    config = portalConfig,
-  )
-
-  return StateNetwork(
+  StateNetwork(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
     contentQueue: cq,
@@ -108,7 +108,7 @@ proc getContent(
 
   n.portalProtocol.storeContent(contentKeyBytes, contentId, contentValueBytes)
 
-  return Opt.some(contentValue)
+  Opt.some(contentValue)
 
 proc getAccountTrieNode*(
     n: StateNetwork, key: AccountTrieNodeKey
@@ -132,11 +132,11 @@ proc getContractCode*(
 proc getStateRootByBlockNumOrHash*(
     n: StateNetwork, blockNumOrHash: uint64 | Hash32
 ): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
-  if n.historyNetwork.isNone():
+  let hn = n.historyNetwork.valueOr:
     warn "History network is not available"
     return Opt.none(Hash32)
 
-  let header = (await n.historyNetwork.get().getVerifiedBlockHeader(blockNumOrHash)).valueOr:
+  let header = (await hn.getVerifiedBlockHeader(blockNumOrHash)).valueOr:
     warn "Failed to get block header from history", blockNumOrHash
     return Opt.none(Hash32)
 
@@ -150,20 +150,20 @@ proc processOffer*(
     contentKey: AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey,
     V: type ContentOfferType,
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-  let contentValue = V.decode(contentValueBytes).valueOr:
-    return err("Unable to decode offered content value")
+  let
+    contentValue = V.decode(contentValueBytes).valueOr:
+      return err("Unable to decode offered content value")
+    validationRes =
+      if n.validateStateIsCanonical:
+        let stateRoot = (await n.getStateRootByBlockNumOrHash(contentValue.blockHash)).valueOr:
+          return err("Failed to get state root by block hash")
+        validateOffer(Opt.some(stateRoot), contentKey, contentValue)
+      else:
+        # Skip state root validation
+        validateOffer(Opt.none(Hash32), contentKey, contentValue)
 
-  let res =
-    if n.validateStateIsCanonical:
-      let stateRoot = (await n.getStateRootByBlockNumOrHash(contentValue.blockHash)).valueOr:
-        return err("Failed to get state root by block hash")
-      validateOffer(Opt.some(stateRoot), contentKey, contentValue)
-    else:
-      # Skip state root validation
-      validateOffer(Opt.none(Hash32), contentKey, contentValue)
-
-  if res.isErr():
-    return err("Offered content failed validation: " & res.error())
+  if validationRes.isErr():
+    return err("Offered content failed validation: " & validationRes.error())
 
   let contentId = n.portalProtocol.toContentId(contentKeyBytes).valueOr:
     return err("Received offered content with invalid content key")
@@ -174,8 +174,7 @@ proc processOffer*(
   debug "Offered content validated successfully", contentKeyBytes
 
   await gossipOffer(
-    n.portalProtocol, maybeSrcNodeId, contentKeyBytes, contentValueBytes, contentKey,
-    contentValue,
+    n.portalProtocol, maybeSrcNodeId, contentKeyBytes, contentValueBytes
   )
 
   ok()
@@ -185,33 +184,33 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
     while true:
       let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
 
-      for i, contentValueBytes in contentValues:
+      for i, contentBytes in contentValues:
         let
           contentKeyBytes = contentKeys[i]
           contentKey = ContentKey.decode(contentKeyBytes).valueOr:
             error "Unable to decode offered content key", contentKeyBytes
             continue
 
-        let offerRes =
-          case contentKey.contentType
-          of unused:
-            error "Received content with unused content type"
-            continue
-          of accountTrieNode:
-            await n.processOffer(
-              srcNodeId, contentKeyBytes, contentValueBytes,
-              contentKey.accountTrieNodeKey, AccountTrieNodeOffer,
-            )
-          of contractTrieNode:
-            await n.processOffer(
-              srcNodeId, contentKeyBytes, contentValueBytes,
-              contentKey.contractTrieNodeKey, ContractTrieNodeOffer,
-            )
-          of contractCode:
-            await n.processOffer(
-              srcNodeId, contentKeyBytes, contentValueBytes, contentKey.contractCodeKey,
-              ContractCodeOffer,
-            )
+          offerRes =
+            case contentKey.contentType
+            of unused:
+              error "Received content with unused content type"
+              continue
+            of accountTrieNode:
+              await n.processOffer(
+                srcNodeId, contentKeyBytes, contentBytes, contentKey.accountTrieNodeKey,
+                AccountTrieNodeOffer,
+              )
+            of contractTrieNode:
+              await n.processOffer(
+                srcNodeId, contentKeyBytes, contentBytes,
+                contentKey.contractTrieNodeKey, ContractTrieNodeOffer,
+              )
+            of contractCode:
+              await n.processOffer(
+                srcNodeId, contentKeyBytes, contentBytes, contentKey.contractCodeKey,
+                ContractCodeOffer,
+              )
         if offerRes.isOk():
           info "Offered content processed successfully", contentKeyBytes
         else:
