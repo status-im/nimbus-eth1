@@ -13,7 +13,6 @@ import
   ./payload_conv,
   chronicles,
   web3/execution_types,
-  ./merge_tracker,
   ./payload_queue,
   ./api_handler/api_utils,
   ../db/core_db,
@@ -27,7 +26,6 @@ export
 type
   BeaconEngineRef* = ref object
     txPool: TxPoolRef
-    merge : MergeTracker
     queue : PayloadQueue
     chain : ForkedChainRef
 
@@ -72,7 +70,7 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc setWithdrawals(ctx: CasperRef, attrs: PayloadAttributes) =
+func setWithdrawals(ctx: CasperRef, attrs: PayloadAttributes) =
   case attrs.version
   of Version.V2, Version.V3:
     ctx.withdrawals = ethWithdrawals attrs.withdrawals.get
@@ -87,7 +85,7 @@ template wrapException(body: untyped): auto =
 
 # setInvalidAncestor is a callback for the downloader to notify us if a bad block
 # is encountered during the async sync.
-proc setInvalidAncestor(ben: BeaconEngineRef,
+func setInvalidAncestor(ben: BeaconEngineRef,
                          invalid, origin: common.BlockHeader) =
   ben.invalidTipsets[origin.blockHash] = invalid
   inc ben.invalidBlocksHits.mgetOrPut(invalid.blockHash, 0)
@@ -96,12 +94,11 @@ proc setInvalidAncestor(ben: BeaconEngineRef,
 # Constructors
 # ------------------------------------------------------------------------------
 
-proc new*(_: type BeaconEngineRef,
+func new*(_: type BeaconEngineRef,
           txPool: TxPoolRef,
           chain: ForkedChainRef): BeaconEngineRef =
   let ben = BeaconEngineRef(
     txPool: txPool,
-    merge : MergeTracker.init(txPool.com.db),
     queue : PayloadQueue(),
     chain : chain,
   )
@@ -116,33 +113,23 @@ proc new*(_: type BeaconEngineRef,
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc reachTTD*(ben: BeaconEngineRef) =
-  ## ReachTTD is called whenever the first NewHead message received
-  ## from the consensus-layer.
-  ben.merge.reachTTD()
-
-proc finalizePoS*(ben: BeaconEngineRef) =
-  ## FinalizePoS is called whenever the first FinalisedBlock message received
-  ## from the consensus-layer.
-  ben.merge.finalizePoS()
-
-proc put*(ben: BeaconEngineRef,
+func put*(ben: BeaconEngineRef,
           hash: common.Hash256, header: common.BlockHeader) =
   ben.queue.put(hash, header)
 
-proc put*(ben: BeaconEngineRef, id: PayloadID,
+func put*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: UInt256, payload: ExecutionPayload,
           blobsBundle: Opt[BlobsBundleV1]) =
   ben.queue.put(id, blockValue, payload, blobsBundle)
 
-proc put*(ben: BeaconEngineRef, id: PayloadID,
+func put*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: UInt256, payload: SomeExecutionPayload,
           blobsBundle: Opt[BlobsBundleV1]) =
   doAssert blobsBundle.isNone == (payload is
     ExecutionPayloadV1 | ExecutionPayloadV2)
   ben.queue.put(id, blockValue, payload, blobsBundle)
 
-proc put*(ben: BeaconEngineRef, id: PayloadID,
+func put*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: UInt256,
           payload: ExecutionPayloadV1 | ExecutionPayloadV2) =
   ben.queue.put(
@@ -157,41 +144,33 @@ func com*(ben: BeaconEngineRef): CommonRef =
 func chain*(ben: BeaconEngineRef): ForkedChainRef =
   ben.chain
 
-func ttdReached*(ben: BeaconEngineRef): bool =
-  ## TTDReached reports whether the chain has left the PoW stage.
-  ben.merge.ttdReached
-
-func posFinalized*(ben: BeaconEngineRef): bool =
-  ## PoSFinalized reports whether the chain has entered the PoS stage.
-  ben.merge.posFinalized
-
-proc get*(ben: BeaconEngineRef, hash: common.Hash256,
+func get*(ben: BeaconEngineRef, hash: common.Hash256,
           header: var common.BlockHeader): bool =
   ben.queue.get(hash, header)
 
-proc get*(ben: BeaconEngineRef, id: PayloadID,
+func get*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayload,
           blobsBundle: var Opt[BlobsBundleV1]): bool =
   ben.queue.get(id, blockValue, payload, blobsBundle)
 
-proc get*(ben: BeaconEngineRef, id: PayloadID,
+func get*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1): bool =
   ben.queue.get(id, blockValue, payload)
 
-proc get*(ben: BeaconEngineRef, id: PayloadID,
+func get*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV2): bool =
   ben.queue.get(id, blockValue, payload)
 
-proc get*(ben: BeaconEngineRef, id: PayloadID,
+func get*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV3,
           blobsBundle: var BlobsBundleV1): bool =
   ben.queue.get(id, blockValue, payload, blobsBundle)
 
-proc get*(ben: BeaconEngineRef, id: PayloadID,
+func get*(ben: BeaconEngineRef, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1OrV2): bool =
   ben.queue.get(id, blockValue, payload)
@@ -251,7 +230,7 @@ proc generatePayload*(ben: BeaconEngineRef,
       blobsBundle: blobsBundle,
       blockValue: bundle.blockValue)
 
-proc setInvalidAncestor*(ben: BeaconEngineRef, header: common.BlockHeader, blockHash: common.Hash256) =
+func setInvalidAncestor*(ben: BeaconEngineRef, header: common.BlockHeader, blockHash: common.Hash256) =
   ben.invalidBlocksHits[blockHash] = 1
   ben.invalidTipsets[blockHash] = header
 
