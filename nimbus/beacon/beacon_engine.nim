@@ -116,19 +116,19 @@ proc put*(ben: BeaconEngineRef,
           hash: Hash32, header: Header) =
   ben.queue.put(hash, header)
 
-func put*(ben: BeaconEngineRef, id: PayloadID,
+proc put*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: UInt256, payload: ExecutionPayload,
           blobsBundle: Opt[BlobsBundleV1]) =
   ben.queue.put(id, blockValue, payload, blobsBundle)
 
-func put*(ben: BeaconEngineRef, id: PayloadID,
+proc put*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: UInt256, payload: SomeExecutionPayload,
           blobsBundle: Opt[BlobsBundleV1]) =
   doAssert blobsBundle.isNone == (payload is
     ExecutionPayloadV1 | ExecutionPayloadV2)
   ben.queue.put(id, blockValue, payload, blobsBundle)
 
-func put*(ben: BeaconEngineRef, id: PayloadID,
+proc put*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: UInt256,
           payload: ExecutionPayloadV1 | ExecutionPayloadV2) =
   ben.queue.put(
@@ -147,29 +147,29 @@ proc get*(ben: BeaconEngineRef, hash: Hash32,
           header: var Header): bool =
   ben.queue.get(hash, header)
 
-func get*(ben: BeaconEngineRef, id: PayloadID,
+proc get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayload,
           blobsBundle: var Opt[BlobsBundleV1]): bool =
   ben.queue.get(id, blockValue, payload, blobsBundle)
 
-func get*(ben: BeaconEngineRef, id: PayloadID,
+proc get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1): bool =
   ben.queue.get(id, blockValue, payload)
 
-func get*(ben: BeaconEngineRef, id: PayloadID,
+proc get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV2): bool =
   ben.queue.get(id, blockValue, payload)
 
-func get*(ben: BeaconEngineRef, id: PayloadID,
+proc get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV3,
           blobsBundle: var BlobsBundleV1): bool =
   ben.queue.get(id, blockValue, payload, blobsBundle)
 
-func get*(ben: BeaconEngineRef, id: PayloadID,
+proc get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1OrV2): bool =
   ben.queue.get(id, blockValue, payload)
@@ -194,10 +194,10 @@ proc generatePayload*(ben: BeaconEngineRef,
 
     pos.prevRandao   = attrs.prevRandao
     pos.timestamp    = ethTime attrs.timestamp
-    pos.feeRecipient = ethAddr attrs.suggestedFeeRecipient
+    pos.feeRecipient = attrs.suggestedFeeRecipient
 
     if attrs.parentBeaconBlockRoot.isSome:
-      pos.parentBeaconBlockRoot = ethHash attrs.parentBeaconBlockRoot.get
+      pos.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
 
     pos.setWithdrawals(attrs)
 

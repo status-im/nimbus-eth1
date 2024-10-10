@@ -12,7 +12,7 @@ import
   manager,
   stew/[io2, byteutils],
   results,
-  eth/keys
+  eth/common/keys
 
 export manager
 

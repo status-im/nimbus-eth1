@@ -155,7 +155,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     notice "Ignoring beacon update to old head",
       blockHash=blockHash.short,
       blockNumber=header.number
-    return validFCU(Opt.none(PayloadID), blockHash)
+    return validFCU(Opt.none(Bytes8), blockHash)
 
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
@@ -200,4 +200,4 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     return validFCU(Opt.some(id), blockHash)
 
-  return validFCU(Opt.none(PayloadID), blockHash)
+  return validFCU(Opt.none(Bytes8), blockHash)

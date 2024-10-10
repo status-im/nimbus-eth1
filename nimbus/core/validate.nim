@@ -38,11 +38,11 @@ const
 
 proc validateHeader(
     com: CommonRef;
-    blk: EthBlock;
-    parentHeader: BlockHeader;
+    blk: Block;
+    parentHeader: Header;
     checkSealOK: bool;
       ): Result[void,string] =
-  template header: BlockHeader = blk.header
+  template header: Header = blk.header
   # TODO this code is used for validating uncles also, though these get passed
   #      an empty body - avoid this by separating header and block validation
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
@@ -55,7 +55,7 @@ proc validateHeader(
       blockNumber < DAOHigh
 
   if header.extraData.len > 32:
-    return err("BlockHeader.extraData larger than 32 bytes")
+    return err("Header.extraData larger than 32 bytes")
 
   if header.gasUsed == 0 and 0 < blk.transactions.len:
     return err("zero gasUsed but transactions present");
@@ -100,8 +100,8 @@ proc validateHeader(
 
   ok()
 
-proc validateUncles(com: CommonRef; header: BlockHeader;
-                    uncles: openArray[BlockHeader];
+proc validateUncles(com: CommonRef; header: Header;
+                    uncles: openArray[Header];
                     checkSealOK: bool): Result[void,string]
                       {.gcsafe, raises: [].} =
   let hasUncles = uncles.len > 0
@@ -117,7 +117,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
     return err("Header suggests block should have uncles but block has none")
 
   # Check for duplicates
-  var uncleSet = HashSet[Hash256]()
+  var uncleSet = HashSet[Hash32]()
   for uncle in uncles:
     let uncleHash = uncle.blockHash
     if uncleHash in uncleSet:
@@ -162,7 +162,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
       return err("uncle block number larger than current block number")
 
     # check uncle against own parent
-    var parent: BlockHeader
+    var parent: Header
     if not chainDB.getBlockHeader(uncle.parentHash,parent):
       return err("Uncle's parent has gone missing")
     if uncle.timestamp <= parent.timestamp:
@@ -174,7 +174,7 @@ proc validateUncles(com: CommonRef; header: BlockHeader;
       return err("Uncle parent not found")
 
     ? com.validateHeader(
-      EthBlock.init(uncle, BlockBody()), uncleParent, checkSealOK)
+      Block.init(uncle, BlockBody()), uncleParent, checkSealOK)
 
   ok()
 
@@ -321,16 +321,16 @@ proc validateTransaction*(
 
 proc validateHeaderAndKinship*(
     com: CommonRef;
-    blk: EthBlock;
-    parent: BlockHeader;
+    blk: Block;
+    parent: Header;
     checkSealOK: bool;
       ): Result[void, string]
       {.gcsafe, raises: [].} =
-  template header: BlockHeader = blk.header
+  template header: Header = blk.header
 
   if header.isGenesis:
     if header.extraData.len > 32:
-      return err("BlockHeader.extraData larger than 32 bytes")
+      return err("Header.extraData larger than 32 bytes")
     return ok()
 
   ? com.validateHeader(blk, parent, checkSealOK)

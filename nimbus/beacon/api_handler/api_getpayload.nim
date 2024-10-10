@@ -9,7 +9,6 @@
 
 import
   std/[typetraits],
-  eth/common,
   ../web3_eth_conv,
   ../beacon_engine,
   web3/execution_types,
@@ -20,7 +19,7 @@ import
 
 proc getPayload*(ben: BeaconEngineRef,
                  expectedVersion: Version,
-                 id: PayloadID): GetPayloadV2Response =
+                 id: Bytes8): GetPayloadV2Response =
   trace "Engine API request received",
     meth = "GetPayload", id
 
@@ -44,7 +43,7 @@ proc getPayload*(ben: BeaconEngineRef,
     blockValue: blockValue
   )
 
-proc getPayloadV3*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV3Response =
+proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
   trace "Engine API request received",
     meth = "GetPayload", id
 
@@ -72,7 +71,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV3Response =
     shouldOverrideBuilder: false
   )
 
-proc getPayloadV4*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV4Response =
+proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
   trace "Engine API request received",
     meth = "GetPayload", id
 

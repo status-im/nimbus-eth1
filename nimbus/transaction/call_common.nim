@@ -43,7 +43,7 @@ type
     value*:        HostValue            # Value sent from sender to recipient.
     input*:        seq[byte]            # Input data.
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
-    versionedHashes*: VersionedHashes   # EIP-4844 (Cancun) blob versioned hashes
+    versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
     noIntrinsic*:  bool                 # Don't charge intrinsic gas.
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
@@ -300,7 +300,7 @@ proc finishRunningComputation(
   elif T is string:
     if c.isError:
       result = c.error.info
-  elif T is Blob:
+  elif T is seq[byte]:
     result = move(c.output)
   else:
     {.error: "Unknown computation output".}

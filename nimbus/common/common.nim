@@ -39,13 +39,13 @@ type
     Syncing
     Synced
 
-  SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe, raises: [].}
+  SyncReqNewHeadCB* = proc(header: Header) {.gcsafe, raises: [].}
     ## Update head for syncing
 
   ReqBeaconSyncTargetCB* = proc(header: Header) {.gcsafe, raises: [].}
     ## Ditto (for beacon sync)
 
-  NotifyBadBlockCB* = proc(invalid, origin: BlockHeader) {.gcsafe, raises: [].}
+  NotifyBadBlockCB* = proc(invalid, origin: Header) {.gcsafe, raises: [].}
     ## Notify engine-API of encountered bad block
 
   CommonRef* = ref object
@@ -56,8 +56,8 @@ type
     config: ChainConfig
 
     # cache of genesis
-    genesisHash: KeccakHash
-    genesisHeader: BlockHeader
+    genesisHash: Hash32
+    genesisHeader: Header
 
     # map block number and ttd and time to
     # HardFork
@@ -84,7 +84,7 @@ type
       ## Allow synchronizer to inform engine-API of bad encountered during sync
       ## progress
 
-    startOfHistory: Hash256
+    startOfHistory: Hash32
       ## This setting is needed for resuming blockwise syncying after
       ## installing a snapshot pivot. The default value for this field is
       ## `GENESIS_PARENT_HASH` to start at the very beginning.
@@ -105,7 +105,7 @@ proc proofOfStake*(com: CommonRef, header: Header): bool {.gcsafe.}
 # Private helper functions
 # ------------------------------------------------------------------------------
 
-func setForkId(com: CommonRef, genesis: BlockHeader) =
+func setForkId(com: CommonRef, genesis: Header) =
   com.genesisHash = genesis.blockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
   com.forkIdCalculator = initForkIdCalculator(
@@ -209,6 +209,7 @@ proc init(com         : CommonRef,
 
   com.initializeDb()
 
+<<<<<<< HEAD
 proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
   if com.config.terminalTotalDifficulty.isNone:
     return false
@@ -219,6 +220,25 @@ proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
       return false
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
+=======
+proc getTd(com: CommonRef, blockHash: Hash32): Opt[DifficultyInt] =
+  var td: DifficultyInt
+  if not com.db.getTd(blockHash, td):
+    # TODO: Is this really ok?
+    Opt.none(DifficultyInt)
+  else:
+    Opt.some(td)
+
+func needTdForHardForkDetermination(com: CommonRef): bool =
+  let t = com.forkTransitionTable.mergeForkTransitionThreshold
+  t.ttdPassed.isNone and t.number.isNone and t.ttd.isSome
+
+proc getTdIfNecessary(com: CommonRef, blockHash: Hash32): Opt[DifficultyInt] =
+  if needTdForHardForkDetermination(com):
+    getTd(com, blockHash)
+  else:
+    Opt.none(DifficultyInt)
+>>>>>>> 361bde8f (remove converters too)
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -288,6 +308,41 @@ func toHardFork*(
     com: CommonRef, forkDeterminer: ForkDeterminationInfo): HardFork =
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
+<<<<<<< HEAD
+=======
+func hardForkTransition(
+    com: CommonRef, forkDeterminer: ForkDeterminationInfo) =
+  ## When consensus type already transitioned to POS,
+  ## the storage can choose not to store TD anymore,
+  ## at that time, TD is no longer needed to find a fork
+  ## TD only needed during transition from POW to POS.
+  ## Same thing happen before London block, TD can be ignored.
+
+  let fork = com.toHardFork(forkDeterminer)
+  com.consensusTransition(fork)
+
+func hardForkTransition*(
+    com: CommonRef,
+    number: BlockNumber,
+    td: Opt[DifficultyInt],
+    time: Opt[EthTime]) =
+  com.hardForkTransition(ForkDeterminationInfo(
+    number: number, time: time, td: td))
+
+proc hardForkTransition*(
+    com: CommonRef,
+    parentHash: Hash32,
+    number: BlockNumber,
+    time: Opt[EthTime]) =
+  com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
+
+proc hardForkTransition*(
+    com: CommonRef, header: Header)
+    {.gcsafe, raises: [].} =
+  com.hardForkTransition(
+    header.parentHash, header.number, Opt.some(header.timestamp))
+
+>>>>>>> 361bde8f (remove converters too)
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
@@ -314,6 +369,20 @@ func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.get
 
+<<<<<<< HEAD
+=======
+proc isBlockAfterTtd*(com: CommonRef, header: Header): bool =
+  if com.config.terminalTotalDifficulty.isNone:
+    return false
+
+  let
+    ttd = com.config.terminalTotalDifficulty.get()
+    ptd = com.db.getScore(header.parentHash).valueOr:
+      return false
+    td  = ptd + header.difficulty
+  ptd >= ttd and td >= ttd
+
+>>>>>>> 361bde8f (remove converters too)
 func isShanghaiOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.shanghaiTime.isSome and t >= com.config.shanghaiTime.get
 
@@ -323,6 +392,7 @@ func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.pragueTime.isSome and t >= com.config.pragueTime.get
 
+<<<<<<< HEAD
 proc proofOfStake*(com: CommonRef, header: Header): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
@@ -332,19 +402,33 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
   else:
     # This costly check is only executed from test suite
     com.isBlockAfterTtd(header)
+=======
+proc consensus*(com: CommonRef, header: Header): ConsensusType =
+  if com.isBlockAfterTtd(header):
+    return ConsensusType.POS
 
-proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
+  return com.config.consensusType
+>>>>>>> 361bde8f (remove converters too)
+
+proc syncReqNewHead*(com: CommonRef; header: Header)
     {.gcsafe, raises: [].} =
   ## Used by RPC updater
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)
 
+<<<<<<< HEAD
 proc reqBeaconSyncTargetCB*(com: CommonRef; header: Header) =
+=======
+func haveSyncFinalisedBlockHash*(com: CommonRef): bool =
+  not com.syncFinalisedBlockHash.isNil
+
+proc syncFinalisedBlockHash*(com: CommonRef; hash: Hash32) =
+>>>>>>> 361bde8f (remove converters too)
   ## Used by RPC updater
   if not com.reqBeaconSyncTargetCB.isNil:
     com.reqBeaconSyncTargetCB(header)
 
-proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
+proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
     {.gcsafe, raises: [].} =
 
   if not com.notifyBadBlock.isNil:
@@ -354,7 +438,7 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
 # Getters
 # ------------------------------------------------------------------------------
 
-func startOfHistory*(com: CommonRef): Hash256 =
+func startOfHistory*(com: CommonRef): Hash32 =
   ## Getter
   com.startOfHistory
 
@@ -368,7 +452,7 @@ func db*(com: CommonRef): CoreDbRef =
 func eip150Block*(com: CommonRef): Opt[BlockNumber] =
   com.config.eip150Block
 
-func eip150Hash*(com: CommonRef): Hash256 =
+func eip150Hash*(com: CommonRef): Hash32 =
   com.config.eip150Hash
 
 func daoForkBlock*(com: CommonRef): Opt[BlockNumber] =
@@ -399,11 +483,11 @@ func chainId*(com: CommonRef): ChainId =
 func networkId*(com: CommonRef): NetworkId =
   com.networkId
 
-func genesisHash*(com: CommonRef): Hash256 =
+func genesisHash*(com: CommonRef): Hash32 =
   ## Getter
   com.genesisHash
 
-func genesisHeader*(com: CommonRef): BlockHeader =
+func genesisHeader*(com: CommonRef): Header =
   ## Getter
   com.genesisHeader
 
@@ -435,7 +519,7 @@ func `syncHighest=`*(com: CommonRef, number: BlockNumber) =
 func `syncState=`*(com: CommonRef, state: SyncState) =
   com.syncState = state
 
-func `startOfHistory=`*(com: CommonRef, val: Hash256) =
+func `startOfHistory=`*(com: CommonRef, val: Hash32) =
   ## Setter
   com.startOfHistory = val
 

@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  eth/common, eth/trie/nibbles, algorithm
+  eth/common/[hashes, addresses], eth/trie/nibbles, algorithm
 
 type
   KeyHash* = array[32, byte]
@@ -23,7 +23,7 @@ type
       storageSlot*: StorageSlot
     of false:
       storageKeys*: MultiKeysRef
-      address*: EthAddress
+      address*: Address
       codeTouched*: bool
 
   MultiKeys* = object
@@ -39,7 +39,7 @@ type
     groups*: array[16, Group]
 
   AccountKey* = object
-    address*: EthAddress
+    address*: Address
     codeTouched*: bool
     storageKeys*: MultiKeysRef
 
@@ -83,7 +83,7 @@ proc newMultiKeys*(keys: openArray[AccountKey]): MultiKeysRef =
   for i, a in keys:
     result.keys[i] = KeyData(
       storageMode: false,
-      hash: keccakHash(a.address).data,
+      hash: keccak256(a.address.data).data,
       address: a.address,
       codeTouched: a.codeTouched,
       storageKeys: a.storageKeys)
@@ -93,20 +93,20 @@ proc newMultiKeys*(keys: openArray[StorageSlot]): MultiKeysRef =
   result = new MultiKeysRef
   result.keys = newSeq[KeyData](keys.len)
   for i, a in keys:
-    result.keys[i] = KeyData(storageMode: true, hash: keccakHash(a).data, storageSlot: a)
+    result.keys[i] = KeyData(storageMode: true, hash: keccak256(a).data, storageSlot: a)
   result.keys.sort(cmpHash)
 
 # never mix storageMode!
-proc add*(m: MultiKeysRef, address: EthAddress, codeTouched: bool, storageKeys = MultiKeysRef(nil)) =
+proc add*(m: MultiKeysRef, address: Address, codeTouched: bool, storageKeys = MultiKeysRef(nil)) =
   m.keys.add KeyData(
     storageMode: false,
-    hash: keccakHash(address).data,
+    hash: keccak256(address.data).data,
     address: address,
     codeTouched: codeTouched,
     storageKeys: storageKeys)
 
 proc add*(m: MultiKeysRef, slot: StorageSlot) =
-  m.keys.add KeyData(storageMode: true, hash: keccakHash(slot).data, storageSlot: slot)
+  m.keys.add KeyData(storageMode: true, hash: keccak256(slot).data, storageSlot: slot)
 
 proc sort*(m: MultiKeysRef) =
   m.keys.sort(cmpHash)

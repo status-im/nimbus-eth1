@@ -11,7 +11,8 @@
 
 import
   std/[tables, strutils, times, macros],
-  eth/[common, rlp, p2p], eth/common/eth_types_json_serialization,
+  eth/[rlp, p2p], eth/common/eth_types_json_serialization,
+  eth/common/[base, hashes, addresses],
   stint, stew/[byteutils],
   json_serialization, chronicles,
   json_serialization/stew/results,
@@ -23,23 +24,23 @@ export
 
 type
   Genesis* = ref object
-    nonce*      : BlockNonce
+    nonce*      : Bytes8
     timestamp*  : EthTime
     extraData*  : seq[byte]
     gasLimit*   : GasInt
     difficulty* : DifficultyInt
     mixHash*    : Bytes32
-    coinbase*   : EthAddress
+    coinbase*   : Address
     alloc*      : GenesisAlloc
     number*     : BlockNumber
     gasUser*    : GasInt
-    parentHash* : Hash256
+    parentHash* : Hash32
     baseFeePerGas*: Opt[UInt256]   # EIP-1559
     blobGasUsed*  : Opt[uint64]    # EIP-4844
     excessBlobGas*: Opt[uint64]    # EIP-4844
-    parentBeaconBlockRoot*: Opt[Hash256]   # EIP-4788
+    parentBeaconBlockRoot*: Opt[Hash32]   # EIP-4788
 
-  GenesisAlloc* = Table[EthAddress, GenesisAccount]
+  GenesisAlloc* = Table[Address, GenesisAccount]
   GenesisStorage* = Table[UInt256, UInt256]
   GenesisAccount* = object
     code*   : seq[byte]
@@ -100,7 +101,7 @@ type
     storage: seq[Slots]
 
   AddressBalance = object
-    address: EthAddress
+    address: Address
     account: GenesisAccount
 
 proc read*(rlp: var Rlp, T: type AddressBalance): T {.gcsafe, raises: [RlpError].}=
@@ -208,15 +209,15 @@ proc readValue(reader: var JsonReader[JGenesis], value: var ChainId)
     {.gcsafe, raises: [SerializationError, IOError].} =
   value = reader.readValue(int).ChainId
 
-proc readValue(reader: var JsonReader[JGenesis], value: var Hash256)
+proc readValue(reader: var JsonReader[JGenesis], value: var Hash32)
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
-    value = Hash256.fromHex(reader.readValue(string))
+    value = Hash32.fromHex(reader.readValue(string))
 
-proc readValue(reader: var JsonReader[JGenesis], value: var BlockNonce)
+proc readValue(reader: var JsonReader[JGenesis], value: var Bytes8)
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
-    value = fromHex[uint64](reader.readValue(string)).toBlockNonce
+    value = fromHex[uint64](reader.readValue(string)).to(Bytes8)
 
 # genesis timestamp is in hex/dec
 proc readValue(reader: var JsonReader[JGenesis], value: var EthTime)
@@ -246,7 +247,7 @@ proc readValue(reader: var JsonReader[JGenesis], value: var seq[byte])
   wrapError:
     value = hexToSeqByte(reader.readValue(string))
 
-proc readValue(reader: var JsonReader[JGenesis], value: var EthAddress)
+proc readValue(reader: var JsonReader[JGenesis], value: var Address)
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
     value = Address.fromHex(reader.readValue(string))
@@ -522,7 +523,7 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
   result = case id
   of MainNet:
     Genesis(
-      nonce: 66.toBlockNonce,
+      nonce: uint64(66).to(Bytes8),
       extraData: hexToSeqByte("0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa"),
       gasLimit: 5000,
       difficulty: 17179869184.u256,
@@ -530,7 +531,7 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
     )
   of SepoliaNet:
     Genesis(
-      nonce: 0.toBlockNonce,
+      nonce: uint64(0).to(Bytes8),
       timestamp: EthTime(0x6159af19),
       extraData: hexToSeqByte("0x5365706f6c69612c20417468656e732c204174746963612c2047726565636521"),
       gasLimit: 0x1c9c380,
@@ -541,7 +542,7 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
     Genesis(
       difficulty: 0x01.u256,
       gasLimit: 0x17D7840,
-      nonce: 0x1234.toBlockNonce,
+      nonce: uint64(0x1234).to(Bytes8),
       timestamp: EthTime(1_695_902_100),
       alloc: decodePrealloc(holeskyAllocData)
     )

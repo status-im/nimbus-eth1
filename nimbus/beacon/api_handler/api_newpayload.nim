@@ -8,9 +8,9 @@
 # those terms.
 
 import
-  eth/common,
   results,
   ../web3_eth_conv,
+  eth/common/hashes,
   ../beacon_engine,
   web3/execution_types,
   ../payload_conv,
@@ -21,7 +21,7 @@ import
 
 func validateVersionedHashed(payload: ExecutionPayload,
                               expected: openArray[Web3Hash]): bool  =
-  var versionedHashes: seq[common.VersionedHash]
+  var versionedHashes: seq[VersionedHash]
   for x in payload.transactions:
     let tx = rlp.decode(distinctBase(x), Transaction)
     versionedHashes.add tx.versionedHashes
@@ -118,8 +118,8 @@ proc newPayload*(ben: BeaconEngineRef,
   validatePayload(apiVersion, version, payload)
   validateVersion(com, timestamp, version, apiVersion)
 
-  var blk = ethBlock(payload, beaconRoot = ethHash beaconRoot)
-  template header: BlockHeader = blk.header
+  var blk = ethBlock(payload, beaconRoot = beaconRoot)
+  template header: Header = blk.header
 
   if apiVersion >= Version.V3:
     if versionedHashes.isNone:
@@ -128,7 +128,7 @@ proc newPayload*(ben: BeaconEngineRef,
     if not validateVersionedHashed(payload, versionedHashes.get):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
 
-  let blockHash = ethHash payload.blockHash
+  let blockHash = payload.blockHash
   header.validateBlockHash(blockHash, version).isOkOr:
     return error
 

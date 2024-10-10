@@ -11,9 +11,9 @@
 {.push raises: [].}
 
 import
+  stint,
+  eth/common/[base, addresses, hashes],
   std/[macros],
-  stew/assign2,
-  eth/common,
   ./evm_errors,
   ./interpreter/utils/utils_numeric
 
@@ -38,10 +38,10 @@ template toStackElem(v: UInt256, elem: EvmStackElement) =
 template toStackElem(v: EvmStackInts, elem: EvmStackElement) =
   elem = v.u256
 
-template toStackElem(v: EthAddress, elem: EvmStackElement) =
+template toStackElem(v: Address, elem: EvmStackElement) =
   elem.initFromBytesBE(v.data)
 
-template toStackElem(v: Hash256, elem: EvmStackElement) =
+template toStackElem(v: Hash32, elem: EvmStackElement) =
   elem.initFromBytesBE(v.data)
 
 template toStackElem(v: openArray[byte], elem: EvmStackElement) =
@@ -51,10 +51,10 @@ template toStackElem(v: openArray[byte], elem: EvmStackElement) =
 template fromStackElem(elem: EvmStackElement, _: type UInt256): UInt256 =
   elem
 
-func fromStackElem(elem: EvmStackElement, _: type EthAddress): EthAddress =
-  elem.to(Bytes32).to(EthAddress)
+func fromStackElem(elem: EvmStackElement, _: type Address): Address =
+  elem.to(Bytes32).to(Address)
 
-template fromStackElem(elem: EvmStackElement, _: type Hash256): Hash256 =
+template fromStackElem(elem: EvmStackElement, _: type Hash32): Hash32 =
   Hash32(elem.toBytesBE())
 
 template fromStackElem(elem: EvmStackElement, _: type EvmStackBytes32): EvmStackBytes32 =
@@ -98,7 +98,7 @@ macro genTupleType(len: static[int], elemType: untyped): untyped =
 # ------------------------------------------------------------------------------
 
 func push*(stack: var EvmStack,
-           value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
+           value: EvmStackInts | UInt256 | Address | Hash32): EvmResultVoid =
   pushAux(stack, value)
 
 func push*(stack: var EvmStack, value: openArray[byte]): EvmResultVoid =
@@ -121,8 +121,8 @@ func popInt*(stack: var EvmStack, numItems: static[int]): auto =
   type T = genTupleType(numItems, UInt256)
   stack.internalPopTuple(T, numItems)
 
-func popAddress*(stack: var EvmStack): EvmResult[EthAddress] =
-  popAux(stack, EthAddress)
+func popAddress*(stack: var EvmStack): EvmResult[Address] =
+  popAux(stack, Address)
 
 func popTopic*(stack: var EvmStack): EvmResult[EvmStackBytes32] =
   popAux(stack, EvmStackBytes32)
@@ -166,12 +166,12 @@ func peekInt*(stack: EvmStack): EvmResult[UInt256] =
   ? ensurePop(stack, 1)
   ok(fromStackElem(stack.values[^1], UInt256))
 
-func peekAddress*(stack: EvmStack): EvmResult[EthAddress] =
+func peekAddress*(stack: EvmStack): EvmResult[Address] =
   ? ensurePop(stack, 1)
-  ok(fromStackElem(stack.values[^1], EthAddress))
+  ok(fromStackElem(stack.values[^1], Address))
 
 func top*(stack: EvmStack,
-          value: EvmStackInts | UInt256 | EthAddress | Hash256): EvmResultVoid =
+          value: EvmStackInts | UInt256 | Address | Hash32): EvmResultVoid =
   if stack.values.len == 0:
     return err(stackErr(StackInsufficient))
   toStackElem(value, stack.values[^1])
@@ -193,7 +193,7 @@ template lsCheck*(stack: EvmStack, expected: int): EvmResultVoid =
   ensurePop(stack, expected)
 
 func lsTop*(stack: EvmStack,
-            value: EvmStackInts | UInt256 | EthAddress | Hash256) =
+            value: EvmStackInts | UInt256 | Address | Hash32) =
   toStackElem(value, stack.values[^1])
 
 func lsTop*(stack: var EvmStack, value: openArray[byte]) =
@@ -202,8 +202,8 @@ func lsTop*(stack: var EvmStack, value: openArray[byte]) =
 func lsPeekInt*(stack: EvmStack, i: BackwardsIndex): UInt256 =
   fromStackElem(stack.values[i], UInt256)
 
-func lsPeekAddress*(stack: EvmStack, i: BackwardsIndex): EthAddress =
-  fromStackElem(stack.values[i], EthAddress)
+func lsPeekAddress*(stack: EvmStack, i: BackwardsIndex): Address =
+  fromStackElem(stack.values[i], Address)
 
 func lsPeekMemRef*(stack: EvmStack, i: BackwardsIndex): int =
   fromStackElem(stack.values[i], UInt256).cleanMemRef
@@ -249,7 +249,7 @@ template unaryWithTop*(stack: EvmStack, unOp): EvmResultVoid =
 
 template unaryAddress*(stack: EvmStack, unOp): EvmResultVoid =
   if stack.values.len >= 1:
-    let address = fromStackElem(stack.values[^1], EthAddress)
+    let address = fromStackElem(stack.values[^1], Address)
     toStackElem(unOp(address), stack.values[^1])
     EvmResultVoid.ok()
   else:

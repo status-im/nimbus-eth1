@@ -15,12 +15,10 @@
 
 import
   std/[tables],
-  ../../../common/common,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
-  ../../chain/forked_chain,
-  eth/keys
+  ../../chain/forked_chain
 
 {.push raises: [].}
 
@@ -29,7 +27,7 @@ type
     ## Diff data, txs changes that apply after changing the head\
     ## insertion point of the block chain
 
-    remTxs*: Table[Hash256,bool] ##\
+    remTxs*: Table[Hash32,bool] ##\
       ## txs to remove
 
 # ------------------------------------------------------------------------------
@@ -38,7 +36,7 @@ type
 
 # core/tx_pool.go(218): func (pool *TxPool) reset(oldHead, newHead ...
 proc headDiff*(xp: TxPoolRef;
-               newHead: BlockHeader, chain: ForkedChainRef): Result[TxHeadDiffRef,TxInfo] =
+               newHead: Header, chain: ForkedChainRef): Result[TxHeadDiffRef,TxInfo] =
   let
     txDiffs = TxHeadDiffRef()
 

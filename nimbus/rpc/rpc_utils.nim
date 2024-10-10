@@ -187,7 +187,7 @@ proc populateBlockObject*(header: Header, chain: CoreDbRef, fullTx: bool, isUncl
   result.mixHash = Hash32 header.mixHash
 
   # discard sizeof(seq[byte]) of extraData and use actual length
-  let size = sizeof(Header) - sizeof(eth_types.Blob) + header.extraData.len
+  let size = sizeof(Header) - sizeof(seq[byte]) + header.extraData.len
   result.size = Quantity(size)
 
   result.gasLimit  = Quantity(header.gasLimit)

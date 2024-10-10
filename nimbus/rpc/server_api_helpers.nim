@@ -15,7 +15,7 @@ import
   ../constants,
   ../transaction
 
-from ../beacon/web3_eth_conv import w3Qty, w3BlockNumber, w3AccessList
+from ../beacon/web3_eth_conv import w3Qty, w3AccessList
 
 proc toWd(wd: eth_types.Withdrawal): WithdrawalObject =
   WithdrawalObject(
@@ -42,7 +42,7 @@ proc populateTransactionObject*(tx: Transaction,
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
   result.blockHash = optionalHash
-  result.blockNumber = w3BlockNumber(optionalNumber)
+  result.blockNumber = w3Qty(optionalNumber)
 
   if (let sender = tx.recoverSender(); sender.isOk):
     result.`from` = sender[]

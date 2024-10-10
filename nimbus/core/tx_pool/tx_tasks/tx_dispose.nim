@@ -19,7 +19,7 @@ import
   ../tx_item,
   ../tx_tabs,
   chronicles,
-  eth/[common, keys],
+  eth/common/[transactions, keys],
   stew/keyed_queue
 
 {.push raises: [].}
@@ -103,7 +103,7 @@ proc disposeItemAndHigherNonces*(xp: TxPoolRef; item: TxItemRef;
           result.inc
 
 
-proc disposeById*(xp: TxPoolRef; itemIDs: openArray[Hash256]; reason: TxInfo)
+proc disposeById*(xp: TxPoolRef; itemIDs: openArray[Hash32]; reason: TxInfo)
     {.gcsafe,raises: [KeyError].}=
   ## Dispose items by item ID wihtout checking whether this makes other items
   ## unusable (e.g. with higher nonces for the same sender.)
