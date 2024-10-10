@@ -37,7 +37,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       node = toNodeWithAddress(enr)
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      (key, contentId) = validateGetContentKey(keyBytes).valueOr:
+      (key, _) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
       foundContent = (await p.findContent(node, keyBytes)).valueOr:
         raise newException(ValueError, $error)
@@ -47,7 +47,6 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       let contentValue = foundContent.content
       validateRetrieval(key, contentValue).isOkOr:
         raise invalidValueErr()
-      p.storeContent(keyBytes, contentId, contentValue)
 
       let res = ContentInfo(
         content: contentValue.to0xHex(), utpTransfer: foundContent.utpTransfer
@@ -66,25 +65,18 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   ) -> string:
     let node = toNodeWithAddress(enr)
 
-    var
-      contentItemsToStore: seq[(ContentKeyByteList, ContentId, seq[byte])]
-      contentItemsToOffer: seq[ContentKV]
-
+    var contentItemsToOffer: seq[ContentKV]
     for contentItem in contentItems:
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentItem[0]))
-        (key, contentId) = validateGetContentKey(keyBytes).valueOr:
+        (key, _) = validateGetContentKey(keyBytes).valueOr:
           raise invalidKeyErr()
         contentBytes = hexToSeqByte(contentItem[1])
-        contentValue = validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
-          raise invalidValueErr()
         contentKV = ContentKV(contentKey: keyBytes, content: contentBytes)
 
-      contentItemsToStore.add((keyBytes, contentId, contentValue))
+      discard validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
+        raise invalidValueErr()
       contentItemsToOffer.add(contentKV)
-
-    for (keyBytes, contentId, contentValue) in contentItemsToStore:
-      p.storeContent(keyBytes, contentId, contentValue)
 
     let offerResult = (await p.offer(node, contentItemsToOffer)).valueOr:
       raise newException(ValueError, $error)
