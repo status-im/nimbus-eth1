@@ -13,8 +13,9 @@ import
   web3/[conversions, execution_types],
   ../beacon/api_handler,
   ../beacon/beacon_engine,
-  ../beacon/web3_eth_conv,
   ../version
+
+from ../beacon/web3_eth_conv import Web3Hash
 
 {.push raises: [].}
 

@@ -9,20 +9,20 @@
 
 import
   std/[typetraits],
-  eth/common,
   results,
-  ../web3_eth_conv,
   ../beacon_engine,
+  eth/common/[headers, hashes, times],
   web3/execution_types,
   ./api_utils,
-  chronicles
+  chronicles,
+  ../web3_eth_conv
 
 {.push gcsafe, raises:[CatchableError].}
 
 template validateVersion(attr, com, apiVersion) =
   let
     version   = attr.version
-    timestamp = ethTime attr.timestamp
+    timestamp = ethTime(attr.timestamp)
 
   if apiVersion == Version.V3:
     if version != apiVersion:
@@ -78,9 +78,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     com   = ben.com
     db    = com.db
     chain = ben.chain
-    blockHash = ethHash update.headBlockHash
+    blockHash = update.headBlockHash
 
-  if blockHash == default(common.Hash256):
+  if blockHash == default(Hash32):
     warn "Forkchoice requested update to zero hash"
     return simpleFCU(PayloadExecutionStatus.invalid)
 
@@ -97,7 +97,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # we cannot resolve the header, so not much to do. This could be extended in
     # the future to resolve from the `eth` network, but it's an unexpected case
     # that should be fixed, not papered over.
-    var header: common.BlockHeader
+    var header: Header
     if not ben.get(blockHash, header):
       warn "Forkchoice requested unknown head",
         hash = blockHash.short
@@ -159,16 +159,16 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
-  let finalizedBlockHash = ethHash update.finalizedBlockHash
-  if finalizedBlockHash != default(common.Hash256):
+  let finalizedBlockHash = update.finalizedBlockHash
+  if finalizedBlockHash != default(Hash32):
     if not ben.chain.isCanonical(finalizedBlockHash):
       warn "Final block not in canonical chain",
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block not canonical")
     db.finalizedHeaderHash(finalizedBlockHash)
 
-  let safeBlockHash = ethHash update.safeBlockHash
-  if safeBlockHash != default(common.Hash256):
+  let safeBlockHash = update.safeBlockHash
+  if safeBlockHash != default(Hash32):
     if not ben.chain.isCanonical(safeBlockHash):
       warn "Safe block not in canonical chain",
         hash=safeBlockHash.short
