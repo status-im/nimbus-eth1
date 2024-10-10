@@ -211,7 +211,9 @@ $(TOOLS): | build deps rocksdb
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
-nimbus: | build deps rocksdb
+nimbus: | build deps rocksdb nimbus_execution_client
+
+nimbus_execution_client:
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
 
@@ -256,11 +258,11 @@ test-evm: | build deps rocksdb
 # deterministic order for debugging info sections - even with
 # "-frandom-seed=...". Striping the binaries should make them identical, though.
 test-reproducibility:
-	+ [ -e build/nimbus ] || $(MAKE) V=0 nimbus; \
-		MD5SUM1=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1) && \
-		rm -rf nimcache/*/nimbus && \
-		$(MAKE) V=0 nimbus && \
-		MD5SUM2=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1) && \
+	+ [ -e build/nimbus_execution_client ] || $(MAKE) V=0 nimbus; \
+		MD5SUM1=$$($(MD5SUM) build/nimbus_execution_client | cut -d ' ' -f 1) && \
+		rm -rf nimcache/*/nimbus_execution_client && \
+		$(MAKE) V=0 nimbus_execution_client && \
+		MD5SUM2=$$($(MD5SUM) build/nimbus_execution_client | cut -d ' ' -f 1) && \
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
