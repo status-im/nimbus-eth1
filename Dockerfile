@@ -21,7 +21,7 @@ ADD . /root/nimbus-eth1
 
 RUN cd /root/nimbus-eth1 \
  && make -j$(nproc) update-from-ci \
- && make -j$(nproc) V=1 LOG_LEVEL=TRACE nimbus
+ && make -j$(nproc) V=1 LOG_LEVEL=TRACE nimbus_execution_client
 
 # --------------------------------- #
 # Starting new image to reduce size #
@@ -37,10 +37,10 @@ RUN ldd --version ldd
 
 RUN rm -f /home/user/nimbus-eth1/build/nimbus
 
-COPY --from=build /root/nimbus-eth1/build/nimbus /home/user/nimbus-eth1/build/nimbus
+COPY --from=build /root/nimbus-eth1/build/nimbus_execution_client /home/user/nimbus-eth1/build/nimbus_execution_client
 
 ENV PATH="/home/user/nimbus-eth1/build:${PATH}"
-ENTRYPOINT ["nimbus"]
+ENTRYPOINT ["nimbus_execution_client"]
 WORKDIR /home/user/nimbus-eth1/build
 
 STOPSIGNAL SIGINT

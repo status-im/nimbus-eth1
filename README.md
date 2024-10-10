@@ -115,7 +115,7 @@ ln -s mingw32-make.exe make.exe
 You can now follow those instructions in the previous section. For example:
 
 ```bash
-make nimbus # build the Nimbus binary
+make nimbus # build the Nimbus execution client binary
 make test # run the test suite
 # etc.
 ```
@@ -326,7 +326,7 @@ cd vendor/nim-rocksdb
 Install Prometheus and Grafana. On Gentoo, it's `emerge prometheus grafana-bin`.
 
 ```bash
-# build Nimbus
+# build Nimbus execution client
 make nimbus
 # the Prometheus daemon will create its data dir in the current dir, so give it its own directory
 mkdir ../my_metrics
@@ -336,7 +336,7 @@ cp -a examples/prometheus.yml ../my_metrics/
 cd ../my_metrics
 prometheus --config.file=prometheus.yml # loads ./prometheus.yml, writes metric data to ./data
 # start a fresh Nimbus sync and export metrics
-rm -rf ~/.cache/nimbus/db; ./build/nimbus --prune:archive --metricsServer
+rm -rf ~/.cache/nimbus/db; ./build/nimbus_execution_client --prune:archive --metricsServer
 ```
 
 Start the Grafana server. On Gentoo it's `/etc/init.d/grafana start`. Go to
