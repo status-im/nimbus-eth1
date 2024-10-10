@@ -110,48 +110,21 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
       raise contentNotFoundErrWithTrace(data)
 
-  rpcServer.rpc("portal_stateStore") do(
-    contentKey: string, contentValue: string
-  ) -> bool:
+  rpcServer.rpc("portal_stateStore") do(contentKey: string, content: string) -> bool:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      key = ContentKey.decode(keyBytes).valueOr:
+      (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      contentId = p.toContentId(keyBytes).valueOr:
-        raise invalidKeyErr()
+      contentBytes = hexToSeqByte(content)
+      contentValue = validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
+        raise invalidValueErr()
 
-      contentBytes = hexToSeqByte(contentValue)
-      valueToStore =
-        case key.contentType
-        of unused:
-          raise invalidKeyErr()
-        of accountTrieNode:
-          let offer = AccountTrieNodeOffer.decode(contentBytes).valueOr:
-            raise invalidValueErr
-          validateOffer(Opt.none(Hash32), key.accountTrieNodeKey, offer).isOkOr:
-            raise invalidValueErr
-          offer.toRetrievalValue.encode()
-        of contractTrieNode:
-          let offer = ContractTrieNodeOffer.decode(contentBytes).valueOr:
-            raise invalidValueErr
-          validateOffer(Opt.none(Hash32), key.contractTrieNodeKey, offer).isOkOr:
-            raise invalidValueErr
-          offer.toRetrievalValue.encode()
-        of contractCode:
-          let offer = ContractCodeOffer.decode(contentBytes).valueOr:
-            raise invalidValueErr
-          validateOffer(Opt.none(Hash32), key.contractCodeKey, offer).isOkOr:
-            raise invalidValueErr
-          offer.toRetrievalValue.encode()
-
-    p.storeContent(keyBytes, contentId, valueToStore)
+    p.storeContent(keyBytes, contentId, contentValue)
 
   rpcServer.rpc("portal_stateLocalContent") do(contentKey: string) -> string:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      key = ContentKey.decode(keyBytes).valueOr:
-        raise invalidKeyErr()
-      contentId = p.toContentId(keyBytes).valueOr:
+      (_, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
 
       contentResult = p.dbGet(keyBytes, contentId).valueOr:
@@ -159,14 +132,12 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     return contentResult.to0xHex()
 
-  rpcServer.rpc("portal_stateGossip") do(
-    contentKey: string, contentValue: string
-  ) -> int:
+  rpcServer.rpc("portal_stateGossip") do(contentKey: string, content: string) -> int:
     let
-      key = hexToSeqByte(contentKey)
-      content = hexToSeqByte(contentValue)
-      contentKeys = ContentKeysList(@[ContentKeyByteList.init(key)])
+      keyBytes = hexToSeqByte(contentKey)
+      contentBytes = hexToSeqByte(content)
+      contentKeys = ContentKeysList(@[ContentKeyByteList.init(keyBytes)])
       numberOfPeers =
-        await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
+        await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[contentBytes])
 
     return numberOfPeers

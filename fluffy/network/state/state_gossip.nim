@@ -93,34 +93,6 @@ proc gossipOffer*(
     srcNodeId: Opt[NodeId],
     keyBytes: ContentKeyByteList,
     offerBytes: seq[byte],
-    key: AccountTrieNodeKey,
-    offer: AccountTrieNodeOffer,
-) {.async: (raises: [CancelledError]).} =
-  let req1Peers = await p.neighborhoodGossip(
-    srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
-  )
-  debug "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
-
-proc gossipOffer*(
-    p: PortalProtocol,
-    srcNodeId: Opt[NodeId],
-    keyBytes: ContentKeyByteList,
-    offerBytes: seq[byte],
-    key: ContractTrieNodeKey,
-    offer: ContractTrieNodeOffer,
-) {.async: (raises: [CancelledError]).} =
-  let req1Peers = await p.neighborhoodGossip(
-    srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
-  )
-  debug "Offered content gossipped successfully with peers", keyBytes, peers = req1Peers
-
-proc gossipOffer*(
-    p: PortalProtocol,
-    srcNodeId: Opt[NodeId],
-    keyBytes: ContentKeyByteList,
-    offerBytes: seq[byte],
-    key: ContractCodeKey,
-    offer: ContractCodeOffer,
 ) {.async: (raises: [CancelledError]).} =
   let peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
@@ -136,7 +108,7 @@ proc recursiveGossipOffer*(
     key: AccountTrieNodeKey,
     offer: AccountTrieNodeOffer,
 ): Future[ContentKeyByteList] {.async: (raises: [CancelledError]).} =
-  await gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
+  await gossipOffer(p, srcNodeId, keyBytes, offerBytes)
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
@@ -161,7 +133,7 @@ proc recursiveGossipOffer*(
     key: ContractTrieNodeKey,
     offer: ContractTrieNodeOffer,
 ): Future[ContentKeyByteList] {.async: (raises: [CancelledError]).} =
-  await gossipOffer(p, srcNodeId, keyBytes, offerBytes, key, offer)
+  await gossipOffer(p, srcNodeId, keyBytes, offerBytes)
 
   # root node, recursive gossip is finished
   if key.path.unpackNibbles().len() == 0:
