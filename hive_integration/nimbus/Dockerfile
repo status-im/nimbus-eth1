@@ -15,8 +15,8 @@ RUN git clone --depth 1 --branch non_blocking_startup https://github.com/status-
  && make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" V=1 update
 
 RUN cd nimbus-eth1 && \
-    make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" nimbus && \
-    mv build/nimbus /usr/bin/
+    make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" nimbus_execution_client && \
+    mv build/nimbus_execution_client /usr/bin/
 
 # --------------------------------- #
 # Starting new image to reduce size #
@@ -28,8 +28,8 @@ RUN apt-get update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-COPY --from=build /usr/bin/nimbus /usr/bin/nimbus
-RUN usr/bin/nimbus --version > /version.txt
+COPY --from=build /usr/bin/nimbus_execution_client /usr/bin/nimbus_execution_client
+RUN usr/bin/nimbus_execution_client --version > /version.txt
 
 # Add genesis mapper script.
 ADD genesis.json /genesis.json

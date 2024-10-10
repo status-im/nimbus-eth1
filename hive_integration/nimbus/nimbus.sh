@@ -3,7 +3,7 @@
 # Startup script to initialize and boot a nimbus instance.
 #
 # This script assumes the following files:
-#  - `nimbus` binary is located in the filesystem root
+#  - `nimbus_execution_client` binary is located in the filesystem root
 #  - `genesis.json` file is located in the filesystem root (mandatory)
 #  - `chain.rlp` file is located in the filesystem root (optional)
 #  - `blocks` folder is located in the filesystem root (optional)
@@ -48,7 +48,7 @@
 # Immediately abort the script on any error encountered
 set -e
 
-nimbus=/usr/bin/nimbus
+nimbus_execution_client=/usr/bin/nimbus_execution_client
 FLAGS="--prune-mode:archive --nat:extip:0.0.0.0"
 
 if [ "$HIVE_LOGLEVEL" != "" ]; then
@@ -86,8 +86,8 @@ set +e
 echo "Loading initial blockchain..."
 if [ -f /chain.rlp ]; then
   CMD="import /chain.rlp"
-  echo "Running nimbus: $nimbus $CMD $FLAGS"
-  $nimbus $CMD $FLAGS
+  echo "Running nimbus execution client: $nimbus_execution_client $CMD $FLAGS"
+  $nimbus_execution_client $CMD $FLAGS
 else
   echo "Warning: chain.rlp not found."
 fi
@@ -95,7 +95,7 @@ fi
 # Load the remainder of the test chain
 echo "Loading remaining individual blocks..."
 if [ -d /blocks ]; then
-  (cd /blocks && cat `ls | sort -n` > blocks.rlp && $nimbus import blocks.rlp $FLAGS)
+  (cd /blocks && cat `ls | sort -n` > blocks.rlp && $nimbus_execution_client import blocks.rlp $FLAGS)
 else
   echo "Warning: blocks folder not found."
 fi
@@ -111,5 +111,5 @@ else
   FLAGS="$FLAGS --engine-api:true --engine-api-address:0.0.0.0 --engine-api-port:8551"
 fi
 
-echo "Running nimbus with flags $FLAGS"
-$nimbus $FLAGS
+echo "Running nimbus execution client with flags $FLAGS"
+$nimbus_execution_client $FLAGS

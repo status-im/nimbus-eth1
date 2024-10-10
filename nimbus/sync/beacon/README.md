@@ -191,7 +191,7 @@ As the syncing process is quite slow, it makes sense to pre-load the database
 from an *Era1* archive (if available) before starting the real sync process.
 The command for importing an *Era1* reproitory would be something like
 
-       ./build/nimbus import \
+       ./build/nimbus_execution_client import \
           --era1-dir:/path/to/main-era1/repo \
           ...
 
@@ -202,7 +202,7 @@ On a system with memory considerably larger than *8GiB* the *nimbus* binary is
 started on the same machine where the beacon node runs with the command
 
 
-       ./build/nimbus \
+       ./build/nimbus_execution_client \
           --network=mainnet \
           --engine-api=true \
           --engine-api-port=8551 \
