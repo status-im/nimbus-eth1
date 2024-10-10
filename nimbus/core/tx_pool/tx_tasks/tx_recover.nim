@@ -18,7 +18,7 @@ import
   ../tx_item,
   ../tx_tabs,
   chronicles,
-  eth/[common, keys],
+  eth/common/[transactions, addresses, keys],
   stew/keyed_queue
 
 {.push raises: [].}
@@ -28,7 +28,7 @@ logScope:
 
 let
   nullSender = block:
-    var rc: EthAddress
+    var rc: Address
     rc
 
 # ------------------------------------------------------------------------------

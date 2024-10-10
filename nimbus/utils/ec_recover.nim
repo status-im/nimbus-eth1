@@ -13,13 +13,14 @@
 ## ==============================
 ##
 ## This module provides caching and direct versions for recovering the
-## `EthAddress` from an extended signature. The caching version reduces
+## `Address` from an extended signature. The caching version reduces
 ## calculation time for the price of maintaing it in a LRU cache.
 
 import
   ../constants,
   ./utils_defs,
-  eth/[common, common/transaction, keys, rlp],
+  eth/common/[keys, eth_types_rlp],
+  eth/rlp,
   stew/keyed_queue,
   results,
   stint
@@ -36,22 +37,22 @@ const
 
 type
   EcKey* = ##\
-    ## Internal key used for the LRU cache (derived from Hash256).
+    ## Internal key used for the LRU cache (derived from Hash32).
     array[32,byte]
 
   EcAddrResult* = ##\
-    ## Typical `EthAddress` result as returned by `ecRecover()` functions.
-    Result[EthAddress,UtilsError]
+    ## Typical `Address` result as returned by `ecRecover()` functions.
+    Result[Address,UtilsError]
 
   EcRecover* = object
     size: uint
-    q: KeyedQueue[EcKey,EthAddress]
+    q: KeyedQueue[EcKey,Address]
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc encodePreSealed(header: BlockHeader): seq[byte] =
+proc encodePreSealed(header: Header): seq[byte] =
   ## Cut sigature off `extraData` header field.
   if header.extraData.len < EXTRA_SEAL:
     return rlp.encode(header)
@@ -60,12 +61,12 @@ proc encodePreSealed(header: BlockHeader): seq[byte] =
   rlpHeader.extraData.setLen(header.extraData.len - EXTRA_SEAL)
   rlp.encode(rlpHeader)
 
-proc hashPreSealed(header: BlockHeader): Hash256 =
+proc hashPreSealed(header: Header): Hash32 =
   ## Returns the hash of a block prior to it being sealed.
-  keccakHash header.encodePreSealed
+  keccak256 header.encodePreSealed
 
 
-proc recoverImpl(rawSig: openArray[byte]; msg: Hash256): EcAddrResult =
+proc recoverImpl(rawSig: openArray[byte]; msg: Hash32): EcAddrResult =
   ## Extract account address from the last 65 bytes of the `extraData` argument
   ## (which is typically the bock header field with the same name.) The second
   ## argument `hash` is used to extract the intermediate public key. Typically,
@@ -91,7 +92,7 @@ proc recoverImpl(rawSig: openArray[byte]; msg: Hash256): EcAddrResult =
 # Public function: straight ecRecover versions
 # ------------------------------------------------------------------------------
 
-proc ecRecover*(header: BlockHeader): EcAddrResult =
+proc ecRecover*(header: Header): EcAddrResult =
   ## Extracts account address from the `extraData` field (last 65 bytes) of
   ## the argument header.
   header.extraData.recoverImpl(header.hashPreSealed)
@@ -122,7 +123,7 @@ proc len*(er: var EcRecover): int =
 # Public functions: caching ecRecover version
 # ------------------------------------------------------------------------------
 
-proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult =
+proc ecRecover*(er: var EcRecover; header: var Header): EcAddrResult =
   ## Extract account address from `extraData` field (last 65 bytes) of the
   ## argument header. The result is kept in a LRU cache to re-purposed for
   ## improved result delivery avoiding calculations.
@@ -137,12 +138,12 @@ proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult =
       return ok(er.q.lruAppend(key, rc.value, er.size.int))
     err(rc.error)
 
-proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult =
+proc ecRecover*(er: var EcRecover; header: Header): EcAddrResult =
   ## Variant of `ecRecover()` for call-by-value header
   var hdr = header
   er.ecRecover(hdr)
 
-proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult =
+proc ecRecover*(er: var EcRecover; hash: Hash32): EcAddrResult =
   ## Variant of `ecRecover()` for hash only. Will only succeed it the
   ## argument hash is uk the LRU queue.
   let rc = er.q.lruFetch(hash.data)
@@ -154,7 +155,7 @@ proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult =
 # Debugging
 # ------------------------------------------------------------------------------
 
-iterator keyItemPairs*(er: var EcRecover): (EcKey,EthAddress) =
+iterator keyItemPairs*(er: var EcRecover): (EcKey,Address) =
   var rc = er.q.first
   while rc.isOk:
     yield (rc.value.key, rc.value.data)

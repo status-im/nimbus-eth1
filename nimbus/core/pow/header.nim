@@ -10,12 +10,12 @@ import
   std/[strformat],
   ./difficulty
 
-export BlockHeader
+export Header
 
-proc hasUncles*(header: BlockHeader): bool = header.ommersHash != EMPTY_UNCLE_HASH
+proc hasUncles*(header: Header): bool = header.ommersHash != EMPTY_UNCLE_HASH
 
-proc `$`*(header: BlockHeader): string =
-  result = &"BlockHeader(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.number} gasLimit: {header.gasLimit})"
+proc `$`*(header: Header): string =
+  result = &"Header(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.number} gasLimit: {header.gasLimit})"
 
 # CalcGasLimit computes the gas limit of the next block after parent. It aims
 # to keep the baseline gas above the provided floor, and increase it towards the

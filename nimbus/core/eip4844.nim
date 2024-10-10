@@ -81,7 +81,7 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   ok()
 
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(parent: BlockHeader): uint64 =
+proc calcExcessBlobGas*(parent: Header): uint64 =
   let
     excessBlobGas = parent.excessBlobGas.get(0'u64)
     blobGasUsed = parent.blobGasUsed.get(0'u64)
@@ -131,7 +131,7 @@ func blobGasUsed(txs: openArray[Transaction]): uint64 =
 
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
-    com: CommonRef, header, parentHeader: BlockHeader,
+    com: CommonRef, header, parentHeader: Header,
     txs: openArray[Transaction]): Result[void, string] {.raises: [].} =
 
   if not com.isCancunOrLater(header.timestamp):

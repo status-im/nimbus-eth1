@@ -11,7 +11,6 @@
 {.used.}
 
 import
-  stew/byteutils,
   stint,
   eth/common/[addresses, hashes, base]
 

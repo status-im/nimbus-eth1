@@ -7,21 +7,21 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 import
-  eth/common
+  eth/common/blocks 
 
 type
   CasperRef* = ref object
-    feeRecipient: EthAddress
+    feeRecipient: Address
     timestamp   : EthTime
     prevRandao  : Bytes32
     withdrawals : seq[Withdrawal] ## EIP-4895
-    beaconRoot  : Hash256 ## EIP-4788
+    beaconRoot  : Hash32 ## EIP-4788
 
 # ------------------------------------------------------------------------------
 # Getters
 # ------------------------------------------------------------------------------
 
-func feeRecipient*(ctx: CasperRef): EthAddress =
+func feeRecipient*(ctx: CasperRef): Address =
   ctx.feeRecipient
 
 func timestamp*(ctx: CasperRef): EthTime =
@@ -33,14 +33,14 @@ func prevRandao*(ctx: CasperRef): Bytes32 =
 proc withdrawals*(ctx: CasperRef): seq[Withdrawal] =
   ctx.withdrawals
 
-func parentBeaconBlockRoot*(ctx: CasperRef): Hash256 =
+func parentBeaconBlockRoot*(ctx: CasperRef): Hash32 =
   ctx.beaconRoot
 
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
 
-proc `feeRecipient=`*(ctx: CasperRef, val: EthAddress) =
+proc `feeRecipient=`*(ctx: CasperRef, val: Address) =
   ctx.feeRecipient = val
 
 proc `timestamp=`*(ctx: CasperRef, val: EthTime) =
@@ -52,5 +52,5 @@ proc `prevRandao=`*(ctx: CasperRef, val: Bytes32) =
 proc `withdrawals=`*(ctx: CasperRef, val: sink seq[Withdrawal]) =
   ctx.withdrawals = system.move(val)
 
-proc `parentBeaconBlockRoot=`*(ctx: CasperRef, val: Hash256) =
+proc `parentBeaconBlockRoot=`*(ctx: CasperRef, val: Hash32) =
   ctx.beaconRoot = val

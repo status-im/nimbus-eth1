@@ -9,7 +9,7 @@
 
 import
   std/[options, typetraits],
-  eth/common,
+  eth/common/blocks,
   ../web3_eth_conv,
   ../beacon_engine,
   web3/execution_types,
@@ -22,10 +22,10 @@ const
   maxBodyRequest = 32
 
 proc getPayloadBodyByHeader(db: CoreDbRef,
-        header: common.BlockHeader,
+        header: Header,
         output: var seq[Opt[ExecutionPayloadBodyV1]]) {.gcsafe, raises:[].} =
 
-  var body: common.BlockBody
+  var body: BlockBody
   if not db.getBlockBody(header, body):
     output.add Opt.none(ExecutionPayloadBodyV1)
     return
@@ -48,7 +48,7 @@ proc getPayloadBodyByHeader(db: CoreDbRef,
     ))
   )
 
-func toPayloadBody(blk: EthBlock): ExecutionPayloadBodyV1 =
+func toPayloadBody(blk: Block): ExecutionPayloadBodyV1 =
   var wds: seq[WithdrawalV1]
   if blk.withdrawals.isSome:
     for w in blk.withdrawals.get:
@@ -71,7 +71,7 @@ proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
 
   for h in hashes:
-    let blk = ben.chain.blockByHash(ethHash h).valueOr:
+    let blk = ben.chain.blockByHash(h).valueOr:
       result.add Opt.none(ExecutionPayloadBodyV1)
       continue
     result.add Opt.some(toPayloadBody(blk))
@@ -93,7 +93,7 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
     
   var
     last = start+count-1
-    header: common.BlockHeader
+    header: Header
 
   if start > ben.chain.latestNumber:
     # requested range beyond the latest known block

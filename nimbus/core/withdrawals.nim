@@ -14,7 +14,7 @@ import results, ../common/common
 
 # https://eips.ethereum.org/EIPS/eip-4895
 proc validateWithdrawals*(
-    com: CommonRef, header: BlockHeader, withdrawals: Opt[seq[Withdrawal]]
+    com: CommonRef, header: Header, withdrawals: Opt[seq[Withdrawal]]
 ): Result[void, string] =
   if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:

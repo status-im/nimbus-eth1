@@ -16,7 +16,6 @@ import
   ../transaction/call_common,
   ../evm/types,
   ../evm/evm_errors,
-  ./rpc_types,
   ../constants
 
 from ../beacon/web3_eth_conv import ethAccessList

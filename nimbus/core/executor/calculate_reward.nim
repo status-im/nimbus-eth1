@@ -9,8 +9,10 @@
 # according to those terms.
 
 import
+  stint,
+  ../../common/evmforks,
+  eth/common/headers,
   ../../db/ledger,
-  ../../common/common,
   ../../evm/state,
   ../../evm/types
 
@@ -46,8 +48,8 @@ const
     eth0, # Prague
   ]
 
-proc calculateReward*(vmState: BaseVMState; account: EthAddress;
-                      number: BlockNumber; uncles: openArray[BlockHeader]) =
+proc calculateReward*(vmState: BaseVMState; account: Address;
+                      number: BlockNumber; uncles: openArray[Header]) =
   let blockReward = BlockRewards[vmState.fork]
   var mainReward = blockReward
 
@@ -65,7 +67,7 @@ proc calculateReward*(vmState: BaseVMState; account: EthAddress;
 
 
 proc calculateReward*(vmState: BaseVMState;
-                      header: BlockHeader; uncles: openArray[BlockHeader]) =
+                      header: Header; uncles: openArray[Header]) =
   vmState.calculateReward(header.coinbase, header.number, uncles)
 
 # End

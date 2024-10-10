@@ -11,11 +11,11 @@
 {.push raises: [].}
 
 import
-  ../../common/common,
+  eth/bloom,
   ../../db/ledger,
   ../../evm/state,
   ../../evm/types,
-  eth/[bloom]
+  ../../common/common
 
 type
   ExecutorError* = object of CatchableError
@@ -23,7 +23,6 @@ type
 
   # TODO: these types need to be removed
   # once eth/bloom and eth/common sync'ed
-  Bloom = common.BloomFilter
   LogsBloom = bloom.BloomFilter
 
 # ------------------------------------------------------------------------------

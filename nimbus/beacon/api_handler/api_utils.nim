@@ -9,9 +9,9 @@
 
 import
   std/[typetraits, strutils],
-  eth/[rlp],
+  eth/rlp,
   json_rpc/errors,
-  nimcrypto/[hash, sha2],
+  nimcrypto/sha2,
   stew/endians2,
   results,
   ../../constants,
@@ -29,9 +29,9 @@ proc update(ctx: var sha256, wd: WithdrawalV1) =
   ctx.update(distinctBase wd.address)
   ctx.update(toBytesBE distinctBase wd.amount)
 
-proc computePayloadId*(blockHash: common.Hash256,
-                       params: PayloadAttributes): PayloadID =
-  var dest: common.Hash256
+proc computePayloadId*(blockHash: common.Hash32,
+                       params: PayloadAttributes): Bytes8 =
+  var dest: common.Hash32
   var ctx: sha256
   ctx.init()
   ctx.update(blockHash.data)
@@ -47,8 +47,8 @@ proc computePayloadId*(blockHash: common.Hash256,
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]
 
-proc validateBlockHash*(header: common.BlockHeader,
-                        gotHash: common.Hash256,
+proc validateBlockHash*(header: common.Header,
+                        gotHash: common.Hash32,
                         version: Version): Result[void, PayloadStatusV1]
                           {.gcsafe, raises: [ValueError].} =
   let wantHash = header.blockHash
@@ -67,8 +67,8 @@ proc validateBlockHash*(header: common.BlockHeader,
 
   return ok()
 
-template toValidHash*(x: common.Hash256): Opt[Web3Hash] =
-  Opt.some(w3Hash x)
+template toValidHash*(x: common.Hash32): Opt[Web3Hash] =
+  Opt.some(x)
 
 proc simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: status)
@@ -87,7 +87,7 @@ proc simpleFCU*(status: PayloadExecutionStatus,
 
 proc invalidFCU*(
     validationError: string,
-    hash = default(common.Hash256)): ForkchoiceUpdatedResponse =
+    hash = default(common.Hash32)): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus:
     PayloadStatusV1(
       status: PayloadExecutionStatus.invalid,
@@ -96,8 +96,8 @@ proc invalidFCU*(
     )
   )
 
-proc validFCU*(id: Opt[PayloadID],
-               validHash: common.Hash256): ForkchoiceUpdatedResponse =
+proc validFCU*(id: Opt[Bytes8],
+               validHash: common.Hash32): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
       status: PayloadExecutionStatus.valid,
@@ -106,20 +106,20 @@ proc validFCU*(id: Opt[PayloadID],
     payloadId: id
   )
 
-proc invalidStatus*(validHash: common.Hash256, msg: string): PayloadStatusV1 =
+proc invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash),
     validationError: Opt.some(msg)
   )
 
-proc invalidStatus*(validHash = default(common.Hash256)): PayloadStatusV1 =
+proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash)
   )
 
-proc acceptedStatus*(validHash: common.Hash256): PayloadStatusV1 =
+proc acceptedStatus*(validHash: common.Hash32): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.accepted,
     latestValidHash: toValidHash(validHash)
@@ -130,7 +130,7 @@ proc acceptedStatus*(): PayloadStatusV1 =
     status: PayloadExecutionStatus.accepted
   )
 
-proc validStatus*(validHash: common.Hash256): PayloadStatusV1 =
+proc validStatus*(validHash: common.Hash32): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash)
@@ -173,28 +173,28 @@ proc tooLargeRequest*(msg: string): ref InvalidRequest =
   )
 
 proc latestValidHash*(db: CoreDbRef,
-                      parent: common.BlockHeader,
-                      ttd: DifficultyInt): common.Hash256 =
+                      parent: common.Header,
+                      ttd: DifficultyInt): common.Hash32 =
   if parent.isGenesis:
-    return default(common.Hash256)
+    return default(common.Hash32)
   let ptd = db.getScore(parent.parentHash).valueOr(0.u256)
   if ptd >= ttd:
     parent.blockHash
   else:
     # If the most recent valid ancestor is a PoW block,
     # latestValidHash MUST be set to ZERO
-    default(common.Hash256)
+    default(common.Hash32)
 
 proc invalidFCU*(validationError: string,
                  com: CommonRef,
-                 header: common.BlockHeader): ForkchoiceUpdatedResponse =
-  var parent: common.BlockHeader
+                 header: common.Header): ForkchoiceUpdatedResponse =
+  var parent: common.Header
   if not com.db.getBlockHeader(header.parentHash, parent):
     return invalidFCU(validationError)
 
   let blockHash = try:
     latestValidHash(com.db, parent, com.ttd.get(high(UInt256)))
   except RlpError:
-    default(common.Hash256)
+    default(common.Hash32)
 
   invalidFCU(validationError, blockHash)

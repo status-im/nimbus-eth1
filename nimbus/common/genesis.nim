@@ -12,7 +12,8 @@
 
 import
   std/tables,
-  eth/[common, eip1559],
+  eth/eip1559,
+  eth/common/[hashes, accounts, headers, addresses],
   ../db/[ledger, core_db],
   ../constants,
   ./chain_config
@@ -24,15 +25,15 @@ import
 
 type
   GenesisAddAccountFn = proc(
-    address: EthAddress; nonce: AccountNonce; balance: UInt256;
+    address: Address; nonce: AccountNonce; balance: UInt256;
     code: openArray[byte]) {.catchRaise.}
 
   GenesisSetStorageFn = proc(
-    address: EthAddress; slot: UInt256; val: UInt256) {.rlpRaise.}
+    address: Address; slot: UInt256; val: UInt256) {.rlpRaise.}
 
   GenesisCommitFn = proc() {.noRaise.}
 
-  GenesisRootHashFn = proc: Hash256 {.noRaise.}
+  GenesisRootHashFn = proc: Hash32 {.noRaise.}
 
   GenesisLedgerRef* = ref object
     ## Exportable ledger DB just for initialising Genesis.
@@ -54,7 +55,7 @@ proc initAccountsLedgerRef(
 
   GenesisLedgerRef(
     addAccount: proc(
-        address: EthAddress;
+        address: Address;
         nonce: AccountNonce;
         balance: UInt256;
         code: openArray[byte];
@@ -64,7 +65,7 @@ proc initAccountsLedgerRef(
       ac.setCode(address, @code),
 
     setStorage: proc(
-        address: EthAddress;
+        address: Address;
         slot: UInt256;
         val: UInt256;
           ) =
@@ -73,7 +74,7 @@ proc initAccountsLedgerRef(
     commit: proc() =
       ac.persist(),
 
-    rootHash: proc(): Hash256 =
+    rootHash: proc(): Hash32 =
       ac.state())
 
 # ------------------------------------------------------------------------------
@@ -89,7 +90,7 @@ proc toGenesisHeader*(
     g: Genesis;
     sdb: GenesisLedgerRef;
     fork: HardFork;
-      ): BlockHeader
+      ): Header
       {.gcsafe, raises: [CatchableError].} =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
   ## of the `db` descriptor argument.
@@ -105,7 +106,7 @@ proc toGenesisHeader*(
 
   sdb.commit()
 
-  result = BlockHeader(
+  result = Header(
     nonce: g.nonce,
     timestamp: g.timestamp,
     extraData: g.extraData,
@@ -137,12 +138,12 @@ proc toGenesisHeader*(
   if fork >= Cancun:
     result.blobGasUsed           = Opt.some g.blobGasUsed.get(0'u64)
     result.excessBlobGas         = Opt.some g.excessBlobGas.get(0'u64)
-    result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(default(Hash256))
+    result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(default(Hash32))
 
 proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;
-    db = CoreDbRef(nil)): BlockHeader
+    db = CoreDbRef(nil)): Header
       {.gcsafe, raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
@@ -154,7 +155,7 @@ proc toGenesisHeader*(
 proc toGenesisHeader*(
     params: NetworkParams;
     db = CoreDbRef(nil)
-      ): BlockHeader
+      ): Header
       {.raises: [CatchableError].} =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.

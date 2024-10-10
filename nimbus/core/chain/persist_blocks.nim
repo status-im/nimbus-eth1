@@ -56,7 +56,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc getVmState(
-    c: ChainRef, header: BlockHeader, storeSlotHash = false
+    c: ChainRef, header: Header, storeSlotHash = false
 ): Result[BaseVMState, string] =
   if not c.vmState.isNil:
     return ok(c.vmState)
@@ -79,7 +79,7 @@ proc purgeOlderBlocksFromHistory(db: CoreDbRef, bn: BlockNumber) =
       blkNum = blkNum - 1
 
 proc persistBlocksImpl(
-    c: ChainRef, blocks: openArray[EthBlock], flags: PersistBlockFlags = {}
+    c: ChainRef, blocks: openArray[Block], flags: PersistBlockFlags = {}
 ): Result[PersistStats, string] =
   let dbTx = c.db.ctx.newTransaction()
   defer:
@@ -99,9 +99,9 @@ proc persistBlocksImpl(
     blks = 0
     txs = 0
     gas = GasInt(0)
-    parentHash: Hash256 # only needed after the first block
+    parentHash: Hash32 # only needed after the first block
   for blk in blocks:
-    template header(): BlockHeader =
+    template header(): Header =
       blk.header
 
     # Full validation means validating the state root at every block and
@@ -126,7 +126,7 @@ proc persistBlocksImpl(
     c.com.hardForkTransition(header)
 
     if blks > 0:
-      template parent(): BlockHeader =
+      template parent(): Header =
         blocks[blks - 1].header
 
       let updated =
@@ -207,7 +207,7 @@ proc persistBlocksImpl(
 # Public `ChainDB` methods
 # ------------------------------------------------------------------------------
 
-proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string] =
+proc insertBlockWithoutSetHead*(c: ChainRef, blk: Block): Result[void, string] =
   discard ?c.persistBlocksImpl([blk], {NoPersistHeader, NoPersistReceipts})
 
   if not c.db.persistHeader(blk.header.blockHash, blk.header, c.com.startOfHistory):
@@ -215,8 +215,8 @@ proc insertBlockWithoutSetHead*(c: ChainRef, blk: EthBlock): Result[void, string
 
   ok()
 
-proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
-  if header.parentHash == default(Hash256):
+proc setCanonical*(c: ChainRef, header: Header): Result[void, string] =
+  if header.parentHash == default(Hash32):
     if not c.db.setHead(header):
       return err("setHead failed")
     return ok()
@@ -228,23 +228,23 @@ proc setCanonical*(c: ChainRef, header: BlockHeader): Result[void, string] =
 
   discard
     ?c.persistBlocksImpl(
-      [EthBlock.init(header, move(body))], {NoPersistHeader, NoPersistTransactions}
+      [Block.init(header, move(body))], {NoPersistHeader, NoPersistTransactions}
     )
 
   if not c.db.setHead(header):
     return err("setHead failed")
   ok()
 
-proc setCanonical*(c: ChainRef, blockHash: Hash256): Result[void, string] =
-  var header: BlockHeader
+proc setCanonical*(c: ChainRef, blockHash: Hash32): Result[void, string] =
+  var header: Header
   if not c.db.getBlockHeader(blockHash, header):
-    debug "Failed to get BlockHeader", hash = blockHash
+    debug "Failed to get Header", hash = blockHash
     return err("Could not get block header")
 
   setCanonical(c, header)
 
 proc persistBlocks*(
-    c: ChainRef, blocks: openArray[EthBlock], flags: PersistBlockFlags = {}
+    c: ChainRef, blocks: openArray[Block], flags: PersistBlockFlags = {}
 ): Result[PersistStats, string] =
   # Run the VM here
   if blocks.len == 0:
