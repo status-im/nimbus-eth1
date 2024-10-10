@@ -185,10 +185,7 @@ func validateOffer*(
 func validateGetContentKey*(
     keyBytes: ContentKeyByteList
 ): Result[(ContentKey, ContentId), string] =
-  let key = ContentKey.decode(keyBytes).valueOr:
-    return err("Unable to decode content key")
-  if key.contentType == unused:
-    return err("ContentKey contentType: unused")
+  let key = ?ContentKey.decode(keyBytes)
   ok((key, toContentId(keyBytes)))
 
 func validateRetrieval*(

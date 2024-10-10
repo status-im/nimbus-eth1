@@ -142,19 +142,6 @@ proc getStateRootByBlockNumOrHash*(
 
   Opt.some(header.stateRoot)
 
-proc getStateRootForValidation(
-    n: StateNetwork, offer: ContentOfferType
-): Future[Result[Opt[Hash32], string]] {.async: (raises: [CancelledError]).} =
-  let maybeStateRoot =
-    if n.validateStateIsCanonical:
-      let stateRoot = (await n.getStateRootByBlockNumOrHash(offer.blockHash)).valueOr:
-        return err("Failed to get state root by block hash")
-      Opt.some(stateRoot)
-    else:
-      # Skip state root validation
-      Opt.none(Hash32)
-  ok(maybeStateRoot)
-
 proc processOffer*(
     n: StateNetwork,
     maybeSrcNodeId: Opt[NodeId],
@@ -166,8 +153,15 @@ proc processOffer*(
   let
     contentValue = V.decode(contentValueBytes).valueOr:
       return err("Unable to decode offered content value")
-    maybeStateRoot = ?(await n.getStateRootForValidation(contentValue))
-    validationRes = validateOffer(maybeStateRoot, contentKey, contentValue)
+    validationRes =
+      if n.validateStateIsCanonical:
+        let stateRoot = (await n.getStateRootByBlockNumOrHash(contentValue.blockHash)).valueOr:
+          return err("Failed to get state root by block hash")
+        validateOffer(Opt.some(stateRoot), contentKey, contentValue)
+      else:
+        # Skip state root validation
+        validateOffer(Opt.none(Hash32), contentKey, contentValue)
+
   if validationRes.isErr():
     return err("Offered content failed validation: " & validationRes.error())
 
