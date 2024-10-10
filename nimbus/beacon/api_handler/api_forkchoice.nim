@@ -104,12 +104,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       return simpleFCU(PayloadExecutionStatus.syncing)
 
     # Header advertised via a past newPayload request. Start syncing to it.
-    # Before we do however, make sure any legacy sync in switched off so we
-    # don't accidentally have 2 cycles running.
-    if not ben.ttdReached():
-      ben.reachTTD()
-      # TODO: cancel downloader
-
     info "Forkchoice requested sync to new head",
       number = header.number,
       hash   = blockHash.short
@@ -167,9 +161,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # chain final and completely in PoS mode.
   let finalizedBlockHash = ethHash update.finalizedBlockHash
   if finalizedBlockHash != default(common.Hash256):
-    if not ben.posFinalized:
-      ben.finalizePoS()
-
     if not ben.chain.isCanonical(finalizedBlockHash):
       warn "Final block not in canonical chain",
         hash=finalizedBlockHash.short
