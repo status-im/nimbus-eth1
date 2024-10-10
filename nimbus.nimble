@@ -37,7 +37,7 @@ binDir = "build"
 
 when declared(namedBin):
   namedBin = {
-    "nimbus/nimbus": "nimbus",
+    "nimbus/nimbus_execution_client": "nimbus_execution_client",
     "fluffy/fluffy": "fluffy",
     "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
@@ -81,20 +81,20 @@ task test_import, "Run block import test":
     echo "Remove directory before running test: " & tmp
     quit(QuitFailure)
 
-  const nimbus = when defined(windows):
-    "build/nimbus.exe"
+  const nimbus_exec_client = when defined(windows):
+    "build/nimbus_execution_client.exe"
   else:
-    "build/nimbus"
+    "build/nimbus_execution_client"
 
-  if not fileExists(nimbus):
-    echo "Build nimbus before running this test"
+  if not fileExists(nimbus_exec_client):
+    echo "Build nimbus execution client before running this test"
     quit(QuitFailure)
 
   # Test that we can resume import
-  exec "build/nimbus import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:1"
-  exec "build/nimbus import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:1023"
+  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:1"
+  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:1023"
   # There should only be 8k blocks
-  exec "build/nimbus import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:10000"
+  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:10000"
 
 task test_evm, "Run EVM tests":
   test "tests", "evm_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
