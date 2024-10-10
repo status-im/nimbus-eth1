@@ -57,17 +57,17 @@ proc get(opt: T8nInput, base  : string): string =
     result.add(" --state.reward " & opt.stReward)
 
 proc get(opt: T8nOutput): string =
-  if opt.alloc:
+  if opt.alloc and not opt.trace:
     result.add(" --output.alloc stdout")
   else:
     result.add(" --output.alloc")
 
-  if opt.result:
+  if opt.result and not opt.trace:
     result.add(" --output.result stdout")
   else:
     result.add(" --output.result")
 
-  if opt.body:
+  if opt.body and not opt.trace:
     result.add(" --output.body stdout")
   else:
     result.add(" --output.body")

@@ -175,7 +175,7 @@ ifeq ($(BOEHM_GC),1)
 NIM_PARAMS += --mm:boehm
 endif
 
-T8N_PARAMS := -d:chronicles_default_output_device=stderr
+T8N_PARAMS := -d:chronicles_default_output_device=stderr -d:use_system_rocksdb
 
 ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace

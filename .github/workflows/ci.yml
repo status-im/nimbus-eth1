@@ -210,7 +210,7 @@ jobs:
           # give us more space
           # find . -type d -name ".git" -exec rm -rf {} +
           find . -type d -name "nimcache" -exec rm -rf {} +
-          mingw32-make ${DEFAULT_MAKE_FLAGS} test
+          mingw32-make ${DEFAULT_MAKE_FLAGS} t8n_test
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
             mingw32-make ${DEFAULT_MAKE_FLAGS}
           fi
@@ -228,7 +228,7 @@ jobs:
           # ./scripts/launch_local_testnet.sh --nodes=3 --stop-at-epoch=7 \
           # --disable-htop --reuse-binaries --run-nimbus-el --dl-eth2 --verbose --kill-old-processes
           # popd
-          env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test
+          env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} t8n_test
 
       - name: Run nimbus-eth1 tests (Macos)
         if: runner.os == 'Macos'
@@ -243,7 +243,7 @@ jobs:
           # ./scripts/launch_local_testnet.sh --nodes=3 --stop-at-epoch=7 \
           # --disable-htop --reuse-binaries --run-nimbus-el --dl-eth2 --verbose --kill-old-processes
           # popd
-          make ${DEFAULT_MAKE_FLAGS} test
+          make ${DEFAULT_MAKE_FLAGS} t8n_test
 
   lint:
     name: "Lint"
