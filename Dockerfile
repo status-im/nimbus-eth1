@@ -21,7 +21,7 @@ ADD . /root/nimbus-eth1
 
 RUN cd /root/nimbus-eth1 \
  && make -j$(nproc) update-from-ci \
- && make -j$(nproc) V=1 LOG_LEVEL=TRACE nimbus_execution_client
+ && make -j$(nproc) V=1 LOG_LEVEL=TRACE nimbus
 
 # --------------------------------- #
 # Starting new image to reduce size #
@@ -35,7 +35,7 @@ RUN apt update && apt -y upgrade
 
 RUN ldd --version ldd
 
-RUN rm -f /home/user/nimbus-eth1/build/nimbus
+RUN rm -f /home/user/nimbus-eth1/build/nimbus_execution_client
 
 COPY --from=build /root/nimbus-eth1/build/nimbus_execution_client /home/user/nimbus-eth1/build/nimbus_execution_client
 
