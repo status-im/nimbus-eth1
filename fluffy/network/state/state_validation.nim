@@ -191,6 +191,22 @@ func validateGetContentKey*(
     return err("ContentKey contentType: unused")
   ok((key, toContentId(keyBytes)))
 
+func validateRetrieval*(
+    key: ContentKey, contentBytes: seq[byte]
+): Result[void, string] =
+  case key.contentType
+  of unused:
+    raiseAssert("ContentKey contentType: unused")
+  of accountTrieNode:
+    let retrieval = ?AccountTrieNodeRetrieval.decode(contentBytes)
+    ?validateRetrieval(key.accountTrieNodeKey, retrieval)
+  of contractTrieNode:
+    let retrieval = ?ContractTrieNodeRetrieval.decode(contentBytes)
+    ?validateRetrieval(key.contractTrieNodeKey, retrieval)
+  of contractCode:
+    let retrieval = ?ContractCodeRetrieval.decode(contentBytes)
+    ?validateRetrieval(key.contractCodeKey, retrieval)
+
 func validateOfferGetValue*(
     trustedStateRoot: Opt[Hash32], key: ContentKey, contentBytes: seq[byte]
 ): Result[seq[byte], string] =
@@ -212,5 +228,3 @@ func validateOfferGetValue*(
       offer.toRetrievalValue.encode()
 
   ok(value)
-
-# TODO: validate retrival value
