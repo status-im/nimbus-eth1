@@ -173,7 +173,7 @@ proc traceToFileStream(path: string, txIndex: int): Stream =
   createDir(file.dir)
   newFileStream(fName, fmWrite)
 
-proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMState) =
+proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMState): bool =
   var tracerFlags = {
     TracerFlags.DisableMemory,
     TracerFlags.DisableStorage,
@@ -186,10 +186,14 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMStat
   if conf.traceNostack: tracerFlags.incl TracerFlags.DisableStack
   if conf.traceReturnData: tracerFlags.excl TracerFlags.DisableReturnData
 
+  var closeStream = true
   let traceMode = conf.traceEnabled.get
   let stream = if traceMode == "stdout":
+                 # don't close stdout or stderr
+                 closeStream = false
                  newFileStream(stdout)
                elif traceMode == "stderr":
+                 closeStream = false
                  newFileStream(stderr)
                elif traceMode.len > 0:
                  traceToFileStream(traceMode, txIndex)
@@ -205,10 +209,11 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMStat
     raise newError(ErrorConfig, "Unable to open tracer stream: " & traceLoc)
 
   vmState.tracer = newJsonTracer(stream, tracerFlags, false)
+  closeStream
 
-proc closeTrace(vmState: BaseVMState) =
+proc closeTrace(vmState: BaseVMState, closeStream: bool) =
   let tracer = JsonTracer(vmState.tracer)
-  if tracer.isNil.not:
+  if tracer.isNil.not and closeStream:
     tracer.close()
 
 proc exec(ctx: var TransContext,
@@ -264,13 +269,14 @@ proc exec(ctx: var TransContext,
       )
       continue
 
+    var closeStream = true
     if conf.traceEnabled.isSome:
-      setupTrace(conf, txIndex, rlpHash(tx), vmState)
+      closeStream = setupTrace(conf, txIndex, rlpHash(tx), vmState)
 
     let rc = vmState.processTransaction(tx, sender, header)
 
     if conf.traceEnabled.isSome:
-      closeTrace(vmState)
+      closeTrace(vmState, closeStream)
 
     if rc.isErr:
       rejected.add RejectedTx(

@@ -21,7 +21,3 @@ createRpcSigsFromNim(RpcClient):
 
   proc portal_debug_historyGossipHeaders(era1File: string): bool
   proc portal_debug_historyGossipBlockContent(era1File: string): bool
-  proc portal_debug_history_storeContent(dataFile: string): bool
-  proc portal_debug_history_propagate(dataFile: string): bool
-  proc portal_debug_history_propagateHeaders(dataFile: string): bool
-  proc portal_debug_history_propagateBlock(dataFile: string, blockHash: string): bool

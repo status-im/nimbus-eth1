@@ -57,17 +57,17 @@ proc get(opt: T8nInput, base  : string): string =
     result.add(" --state.reward " & opt.stReward)
 
 proc get(opt: T8nOutput): string =
-  if opt.alloc:
+  if opt.alloc and not opt.trace:
     result.add(" --output.alloc stdout")
   else:
     result.add(" --output.alloc")
 
-  if opt.result:
+  if opt.result and not opt.trace:
     result.add(" --output.result stdout")
   else:
     result.add(" --output.result")
 
-  if opt.body:
+  if opt.body and not opt.trace:
     result.add(" --output.body stdout")
   else:
     result.add(" --output.body")
@@ -143,6 +143,14 @@ proc notRejectedError(path: string): bool =
     path.endsWith("/error"))
 
 proc runTest(appDir: string, spec: TestSpec): bool =
+  when defined(evmc_enabled):
+    # TODO: test both evm?
+    # skip trace test if evmc_enabled
+    # because the error msg of trace output is
+    # different for nimvm and evmc
+    if spec.output.trace:
+      return true
+
   let base = appDir / spec.base
   let args = spec.input.get(base) & spec.output.get()
   let cmd  = appDir / "t8n" & args

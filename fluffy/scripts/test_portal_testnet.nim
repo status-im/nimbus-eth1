@@ -265,9 +265,22 @@ procSuite "Portal testnet tests":
       discard
         (await clients[0].portal_historyGossip(content.toHex(), contentKey.toHex()))
 
-    # This will fill the first node its db with blocks from the data file. Next,
-    # this node wil offer all these blocks their headers one by one.
-    check (await clients[0].portal_debug_history_propagate(blockDataFile))
+    # Gossiping all block bodies and receipts.
+    for b in blocks(blockData, false):
+      for i, value in b:
+        if i == 0:
+          # Note: Skipping the headers, they are handled above already
+          continue
+        # Only sending non empty data, e.g. empty receipts are not send
+        # TODO: Could do a similar thing for a combination of empty
+        # txs and empty uncles, as then the serialization is always the same.
+        if value[1].len() > 0:
+          let
+            contentKey = history_content.encode(value[0]).asSeq().toHex()
+            contentValue = value[1].toHex()
+
+          discard (await clients[0].portal_historyGossip(contentKey, contentValue))
+
     await clients[0].close()
 
     for i, client in clients:

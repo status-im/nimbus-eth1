@@ -200,11 +200,4 @@ proc newPayload*(ben: BeaconEngineRef,
     let blockHash = latestValidHash(db, parent, ttd)
     return invalidStatus(blockHash, vres.error())
 
-  # We've accepted a valid payload from the beacon client. Mark the local
-  # chain transitions to notify other subsystems (e.g. downloader) of the
-  # behavioral change.
-  if not ben.ttdReached():
-    ben.reachTTD()
-    # TODO: cancel downloader
-
   return validStatus(blockHash)
