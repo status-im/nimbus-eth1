@@ -74,7 +74,8 @@ type
   TargetReqHeader* = object
     ## Beacon state to be implicitely updated by RPC method
     changed*: bool                   ## Set a marker if something has changed
-    header*: Header                  ## Beacon chain, finalised header
+    header*: Header                  ## Beacon chain, target header
+    finHash*: Hash32                 ## Finalised hash (as reported)
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains

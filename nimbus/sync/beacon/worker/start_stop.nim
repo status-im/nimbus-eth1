@@ -54,10 +54,11 @@ when enableTicker:
 proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  return proc(h: Header) {.gcsafe, raises: [].} =
+  return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
     # Rpc checks empty header against a zero hash rather than `emptyRoot`
     if ctx.lhc.target.header.number < h.number:
       ctx.lhc.target.header = h
+      ctx.lhc.target.finHash = f
       ctx.lhc.target.changed = true
 
 # ------------------------------------------------------------------------------
