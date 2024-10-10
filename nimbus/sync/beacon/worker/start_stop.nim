@@ -32,9 +32,10 @@ when enableTicker:
         base:            ctx.dbStateBlockNumber(),
         coupler:         ctx.layout.coupler,
         dangling:        ctx.layout.dangling,
-        endBn:           ctx.layout.endBn,
-        target:          ctx.lhc.target.header.number,
-        newTargetOk:     ctx.lhc.target.changed,
+        final:           ctx.layout.final,
+        head:            ctx.layout.head,
+        target:          ctx.target.consHead.number,
+        targetOk:        ctx.target.final != 0,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
         hdrStagedTop:    ctx.headersStagedTopKey(),
@@ -56,10 +57,12 @@ proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
   ## for the RPC module.
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
     # Rpc checks empty header against a zero hash rather than `emptyRoot`
-    if ctx.lhc.target.header.number < h.number:
-      ctx.lhc.target.header = h
-      ctx.lhc.target.finHash = f
-      ctx.lhc.target.changed = true
+    if not ctx.target.locked:
+      if f != zeroHash32 and ctx.target.consHead.number < h.number:
+        ctx.target.consHead = h
+        ctx.target.final = BlockNumber(0)
+        ctx.target.finalHash = f
+        ctx.target.changed = true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -91,7 +94,7 @@ proc setupDatabase*(ctx: BeaconCtxRef) =
   ctx.blocksUnprocInit()
 
   # Load initial state from database if there is any
-  ctx.dbLoadLinkedHChainsLayout()
+  ctx.dbLoadSyncStateLayout()
 
   # Set blocks batch import value for `persistBlocks()`
   if ctx.pool.nBodiesBatch < nFetchBodiesRequest:

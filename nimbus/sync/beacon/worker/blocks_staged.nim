@@ -233,7 +233,7 @@ proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
   # Remove from queue
   discard ctx.blk.staged.delete qItem.key
 
-  # Execute blocks
+  # FIXME: `persistBlocks()` will be replaced by `importBlock()`
   let stats = ctx.pool.chain.persistBlocks(qItem.data.blocks).valueOr:
     # FIXME: should that be rather an `raiseAssert` here?
     warn info & ": block exec error", B=base.bnStr,
@@ -242,6 +242,7 @@ proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
     doAssert base == ctx.dbStateBlockNumber()
     return false
 
+  # FIXME: might go away with `importBlock()` (rather than `persistBlocks()`)
   trace info & ": imported staged blocks", B=ctx.dbStateBlockNumber.bnStr,
     first=qItem.key.bnStr, stats
 

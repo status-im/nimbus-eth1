@@ -47,26 +47,26 @@ A sequence *@[h(1),h(2),..]* of block headers is called a *linked chain* if
 
 General header linked chains layout diagram
 
-      0                C                     D                E              (1)
+      0                C                     D                H              (1)
       o----------------o---------------------o----------------o--->
       | <-- linked --> | <-- unprocessed --> | <-- linked --> |
 
-Here, the single upper letter symbols *0*, *C*, *D*, *E* denote block numbers.
+Here, the single upper letter symbols *0*, *C*, *D*, *H* denote block numbers.
 For convenience, these letters are also identified with its associated block
 header or the full blocks. Saying *"the header 0"* is short for *"the header
 with block number 0"*.
 
-Meaning of *0*, *C*, *D*, *E*:
+Meaning of *0*, *C*, *D*, *H*:
 
 * *0* -- Genesis, block number number *0*
 * *C* -- coupler, maximal block number of linked chain starting at *0*
-* *D* -- dangling, minimal block number of linked chain ending at *E*
+* *D* -- dangling, minimal block number of linked chain ending at *H*
          with *C <= D*
-* *E* -- end, block number of some finalised block (not necessarily the latest
-         one)
+* *H* -- head, end block number of **consensus head** (not necessarily the
+         latest one as this is moving while processing)
 
-This definition implies *0 <= C <= D <= E* and the state of the header linked
-chains can uniquely be described by the triple of block numbers *(C,D,E)*.
+This definition implies *0 <= C <= D <= H* and the state of the header linked
+chains can uniquely be described by the triple of block numbers *(C,D,H)*.
 
 
 ### Storage of header chains:
@@ -78,7 +78,7 @@ correspond to finalised blocks, e.g. the sub-interval *[0,**base**]* where
 half open interval *(**base**,C]* are always stored on the *beaconHeader*
 column of the *KVT* database.
 
-The block numbers from the interval *[D,E]* also reside on the *beaconHeader*
+The block numbers from the interval *[D,H]* also reside on the *beaconHeader*
 column of the *KVT* database table.
 
 
@@ -89,7 +89,7 @@ Minimal layout on a pristine system
       0                                                                      (2)
       C
       D
-      E
+      H
       o--->
 
 When first initialised, the header linked chains are set to *(0,0,0)*.
@@ -101,32 +101,32 @@ A header chain with an non empty open interval *(C,D)* can be updated only by
 increasing *C* or decreasing *D* by adding/prepending headers so that the
 linked chain condition is not violated.
 
-Only when the gap open interval *(C,D)* vanishes, the right end *E* can be
+Only when the gap open interval *(C,D)* vanishes, the right end *H* can be
 increased to a larger target block number *T*, say. This block number will
 typically be the **consensus head**. Then
 
 * *C==D* beacuse the open interval *(C,D)* is empty
-* *C==E* because *C* is maximal (see definition of `C` above)
+* *C==H* because *C* is maximal (see definition of `C` above)
 
-and the header chains *(E,E,E)* (depicted in *(3)* below) can be set to
+and the header chains *(H,H,H)* (depicted in *(3)* below) can be set to
 *(C,T,T)* as depicted in *(4)* below.
 
-Layout before updating of *E*
+Layout before updating of *H*
 
                        C                                                     (3)
                        D
-      0                E                     T
+      0                H                     T
       o----------------o---------------------o---->
       | <-- linked --> |
 
-New layout with moving *D* and *E* to *T*
+New layout with moving *D* and *H* to *T*
 
                                              D'                              (4)
-      0                C                     E'
+      0                C                     H'
       o----------------o---------------------o---->
       | <-- linked --> | <-- unprocessed --> |
 
-with *D'=T* and *E'=T*.
+with *D'=T* and *H'=T*.
 
 Note that diagram *(3)* is a generalisation of *(2)*.
 
@@ -134,7 +134,7 @@ Note that diagram *(3)* is a generalisation of *(2)*.
 ### Complete a header linked chain:
 
 The header chain is *relatively complete* if it satisfies clause *(3)* above
-for *0 < C*. It is *fully complete* if *E==T*. It should be obvious that the
+for *0 < C*. It is *fully complete* if *H==T*. It should be obvious that the
 latter condition is temporary only on a live system (as *T* is contiuously
 updated.)
 
@@ -146,10 +146,10 @@ database state will be updated incrementally.
 Block chain import/execution
 -----------------------------
 
-The following diagram with a parially imported/executed block chain amends the
+The following diagram with a partially imported/executed block chain amends the
 layout *(1)*:
 
-      0                  B       C                     D                E    (5)
+      0                  B       C                     D                H    (5)
       o------------------o-------o---------------------o----------------o-->
       | <-- imported --> |       |                     |                |
       | <-------  linked ------> | <-- unprocessed --> | <-- linked --> |
@@ -262,7 +262,8 @@ be available if *nimbus* is compiled with the additional make flags
 | beacon_base        | block height | **B**, *increasing* |
 | beacon_coupler     | block height | **C**, *increasing* |
 | beacon_dangling    | block height | **D**               |
-| beacon_end         | block height | **E**, *increasing* |
+| beacon_final       | block height | **F**, *increasing* |
+| beacon_head        | block height | **H**, *increasing* |
 | beacon_target      | block height | **T**, *increasing* |
 |                            |      |                     |
 | beacon_header_lists_staged | size | # of staged header list records      |

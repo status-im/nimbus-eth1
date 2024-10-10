@@ -13,11 +13,10 @@
 import
   pkg/metrics,
   ../../worker_desc,
-  ".."/[db, blocks_staged, headers_staged]
-
+  ".."/[blocks_staged, headers_staged]
 
 declareGauge beacon_base, "" &
-  "Max block number of imported/executed blocks"
+  "Max block number of finalised blocks"
   
 declareGauge beacon_coupler, "" &
   "Max block number for header chain starting at genesis"
@@ -25,7 +24,10 @@ declareGauge beacon_coupler, "" &
 declareGauge beacon_dangling, "" &
   "Starting/min block number for higher up headers chain"
 
-declareGauge beacon_end, "" &
+declareGauge beacon_final, "" &
+  "Max number of finalised block in higher up headers chain"
+
+declareGauge beacon_head, "" &
   "Ending/max block number of higher up headers chain"
 
 declareGauge beacon_target, "" &
@@ -53,8 +55,9 @@ template updateMetricsImpl*(ctx: BeaconCtxRef) =
   metrics.set(beacon_base, ctx.dbStateBlockNumber().int64)
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_dangling, ctx.layout.dangling.int64)
-  metrics.set(beacon_end, ctx.layout.endBn.int64)
-  metrics.set(beacon_target, ctx.lhc.target.header.number.int64)
+  metrics.set(beacon_final, ctx.layout.final.int64)
+  metrics.set(beacon_head, ctx.layout.head.int64)
+  metrics.set(beacon_target, ctx.target.consHead.number.int64)
 
   metrics.set(beacon_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(beacon_headers_unprocessed,

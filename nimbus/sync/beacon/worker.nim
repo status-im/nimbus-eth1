@@ -112,8 +112,8 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
   debug info
 
   # Check for a possible header layout and body request changes
-  discard ctx.updateLinkedHChainsLayout info
-  discard ctx.updateBlockRequests info
+  ctx.updateSyncStateLayout info
+  ctx.updateBlockRequests info
 
   # Execute staged block records.
   if ctx.blocksStagedCanImportOk():
@@ -174,12 +174,16 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
   trace info, peer, nInvocations=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
 
+  # Update consensus header target when needed. It comes with a finalised
+  # header hash where we need to complete the block number.
+  await buddy.headerStagedUpdateTarget info
+
   if not await buddy.napUnlessSomethingToFetch info:
     #
     # Layout of a triple of linked header chains (see `README.md`)
     # ::
-    #   0                C                     D                E
-    #   | <--- [0,C] --> | <----- (C,D) -----> | <-- [D,E] ---> |
+    #   0                C                     D                H
+    #   | <--- [0,C] --> | <----- (C,D) -----> | <-- [D,H] ---> |
     #   o----------------o---------------------o----------------o--->
     #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
     #
@@ -194,7 +198,7 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
     #
     # The block numbers range concurrently taken from `(C,D)` are chosen
     # from the upper range. So exactly one of the actors has a range
-    # `[whatever,D-1]` adjacent to `[D,E]`. Call this actor the lead actor.
+    # `[whatever,D-1]` adjacent to `[D,H]`. Call this actor the lead actor.
     #
     # For the lead actor, headers can be downloaded all by the hashes as
     # the parent hash for the header with block number `D` is known. All
@@ -217,7 +221,7 @@ proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
       if await buddy.headersStagedCollect info:
 
         # * Save updated state and headers
-        # * Decrease the dangling left boundary `D` of the trusted range `[D,E]`
+        # * Decrease the dangling left boundary `D` of the trusted range `[D,H]`
         discard buddy.ctx.headersStagedProcess info
 
     # Fetch bodies and combine them with headers to blocks to be staged. These

@@ -18,7 +18,7 @@ import
   ../../../db/storage_types,
   ../../../common,
   ../worker_desc,
-  ./headers_unproc
+  "."/[blocks_unproc, headers_unproc]
 
 logScope:
   topics = "beacon db"
@@ -43,11 +43,11 @@ formatIt(Hash32):
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc fetchLinkedHChainsLayout(ctx: BeaconCtxRef): Opt[LinkedHChainsLayout] =
+proc fetchSyncStateLayout(ctx: BeaconCtxRef): Opt[SyncStateLayout] =
   let data = ctx.db.ctx.getKvt().get(LhcStateKey.toOpenArray).valueOr:
     return err()
   try:
-    result = ok(rlp.decode(data, LinkedHChainsLayout))
+    result = ok(rlp.decode(data, SyncStateLayout))
   except RlpError:
     return err()
 
@@ -69,10 +69,10 @@ proc fetchSavedState(ctx: BeaconCtxRef): Opt[SavedDbStateSpecs] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc dbStoreLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
+proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef): bool =
   ## Save chain layout to persistent db
   const info = "dbStoreLinkedHChainsLayout"
-  if ctx.layout == ctx.lhc.lastLayout:
+  if ctx.layout == ctx.sst.lastLayout:
     return false
 
   let data = rlp.encode(ctx.layout)
@@ -95,33 +95,40 @@ proc dbStoreLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
   true
 
 
-proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
+proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef) =
   ## Restore chain layout from persistent db
   const info = "dbLoadLinkedHChainsLayout"
 
-  let rc = ctx.fetchLinkedHChainsLayout()
+  let rc = ctx.fetchSyncStateLayout()
   if rc.isOk:
-    ctx.lhc.layout = rc.value
-    let (uMin,uMax) = (rc.value.coupler+1, rc.value.dangling-1)
-    if uMin <= uMax:
-      # Add interval of unprocessed block range `(C,D)` from `README.md`
-      ctx.headersUnprocSet(uMin, uMax)
-    trace info & ": restored layout", C=rc.value.coupler.bnStr,
-      D=rc.value.dangling.bnStr, E=rc.value.endBn.bnStr
+    ctx.sst.layout = rc.value
+
+    # Add interval of unprocessed block range `(B,C]` from `README.md`
+    let base = ctx.db.getSavedStateBlockNumber()
+    ctx.blocksUnprocSet(base+1, ctx.layout.coupler)
+
+    # Add interval of unprocessed header range `(C,D)` from `README.md`
+    ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
+
+    trace info & ": restored layout", B=base.bnStr,
+      C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr,
+      F=ctx.layout.final.bnStr, H=ctx.layout.head.bnStr
+
   else:
     let val = ctx.fetchSavedState().expect "saved states"
-    ctx.lhc.layout = LinkedHChainsLayout(
+    ctx.sst.layout = SyncStateLayout(
       coupler:        val.number,
       couplerHash:    val.hash,
       dangling:       val.number,
       danglingParent: val.parent,
-      endBn:          val.number,
-      endHash:        val.hash)
-    trace info & ": new layout", B=val.number, C=rc.value.coupler.bnStr,
-      D=rc.value.dangling.bnStr, E=rc.value.endBn.bnStr
+      final:          val.number,
+      finalHash:      val.hash,
+      head:           val.number,
+      headHash:       val.hash)
 
-  ctx.lhc.lastLayout = ctx.layout
+    trace info & ": new layout", B="C", C="D", D="F", F="H", H=val.number
 
+  ctx.sst.lastLayout = ctx.layout
 
 # ------------------
 
