@@ -48,23 +48,22 @@ proc new*(
     historyNetwork = Opt.none(HistoryNetwork),
     validateStateIsCanonical = true,
 ): T =
-  let cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+  let
+    cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    s = streamManager.registerNewStream(cq)
+    portalProtocol = PortalProtocol.new(
+      baseProtocol,
+      getProtocolId(portalNetwork, PortalSubnetwork.state),
+      toContentIdHandler,
+      createGetHandler(contentDB),
+      createStoreHandler(contentDB, portalConfig.radiusConfig),
+      createRadiusHandler(contentDB),
+      s,
+      bootstrapRecords,
+      config = portalConfig,
+    )
 
-  let s = streamManager.registerNewStream(cq)
-
-  let portalProtocol = PortalProtocol.new(
-    baseProtocol,
-    getProtocolId(portalNetwork, PortalSubnetwork.state),
-    toContentIdHandler,
-    createGetHandler(contentDB),
-    createStoreHandler(contentDB, portalConfig.radiusConfig),
-    createRadiusHandler(contentDB),
-    s,
-    bootstrapRecords,
-    config = portalConfig,
-  )
-
-  return StateNetwork(
+  StateNetwork(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
     contentQueue: cq,
@@ -109,7 +108,7 @@ proc getContent(
 
   n.portalProtocol.storeContent(contentKeyBytes, contentId, contentValueBytes)
 
-  return Opt.some(contentValue)
+  Opt.some(contentValue)
 
 proc getAccountTrieNode*(
     n: StateNetwork, key: AccountTrieNodeKey

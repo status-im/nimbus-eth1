@@ -16,7 +16,7 @@ import
 
 export results, hashes, accounts, addresses, rlp
 
-func fromBytes*(T: type Hash32, hash: openArray[byte]): T =
+template fromBytes*(T: type Hash32, hash: openArray[byte]): T =
   doAssert(hash.len() == 32)
   Hash32(array[32, byte].initCopyFrom(hash))
 
@@ -69,14 +69,12 @@ func rlpDecodeContractTrieNode*(contractTrieNode: TrieNode): Result[UInt256, str
   except RlpError as e:
     err(e.msg)
 
-func toAccount*(accountProof: TrieProof): Result[Account, string] {.inline.} =
+template toAccount*(accountProof: TrieProof): Result[Account, string] =
   doAssert(accountProof.len() > 0)
-
   rlpDecodeAccountTrieNode(accountProof[^1])
 
-func toSlot*(storageProof: TrieProof): Result[UInt256, string] {.inline.} =
+template toSlot*(storageProof: TrieProof): Result[UInt256, string] =
   doAssert(storageProof.len() > 0)
-
   rlpDecodeContractTrieNode(storageProof[^1])
 
 func removeLeafKeyEndNibbles*(
@@ -93,11 +91,11 @@ func removeLeafKeyEndNibbles*(
 
   unpackedNibbles.dropN(leafPrefix.len()).packNibbles()
 
-func toPath*(hash: Hash32): Nibbles {.inline.} =
+template toPath*(hash: Hash32): Nibbles =
   Nibbles.init(hash.data, isEven = true)
 
-func toPath*(address: Address): Nibbles {.inline.} =
+template toPath*(address: Address): Nibbles =
   keccak256(address.data).toPath()
 
-func toPath*(slotKey: UInt256): Nibbles {.inline.} =
+template toPath*(slotKey: UInt256): Nibbles =
   keccak256(toBytesBE(slotKey)).toPath()

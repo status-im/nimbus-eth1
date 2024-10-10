@@ -98,6 +98,11 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
+      maybeContent = p.dbGet(keyBytes, contentId)
+    if maybeContent.isSome():
+      return ContentInfo(content: maybeContent.get().to0xHex(), utpTransfer: false)
+
+    let
       foundContent = (await p.contentLookup(keyBytes, contentId)).valueOr:
         raise contentNotFoundErr()
       contentValue = foundContent.content
@@ -115,13 +120,17 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      res = await p.traceContentLookup(keyBytes, contentId)
+      maybeContent = p.dbGet(keyBytes, contentId)
+    if maybeContent.isSome():
+      return TraceContentLookupResult(content: maybeContent, utpTransfer: false)
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.
-    let contentValue = res.content.valueOr:
-      let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
-      raise contentNotFoundErrWithTrace(data)
+    let
+      res = await p.traceContentLookup(keyBytes, contentId)
+      contentValue = res.content.valueOr:
+        let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
+        raise contentNotFoundErrWithTrace(data)
 
     validateRetrieval(key, contentValue).isOkOr:
       raise invalidValueErr()
