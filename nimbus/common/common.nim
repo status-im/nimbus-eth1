@@ -209,7 +209,6 @@ proc init(com         : CommonRef,
 
   com.initializeDb()
 
-<<<<<<< HEAD
 proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
   if com.config.terminalTotalDifficulty.isNone:
     return false
@@ -220,25 +219,6 @@ proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
       return false
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
-=======
-proc getTd(com: CommonRef, blockHash: Hash32): Opt[DifficultyInt] =
-  var td: DifficultyInt
-  if not com.db.getTd(blockHash, td):
-    # TODO: Is this really ok?
-    Opt.none(DifficultyInt)
-  else:
-    Opt.some(td)
-
-func needTdForHardForkDetermination(com: CommonRef): bool =
-  let t = com.forkTransitionTable.mergeForkTransitionThreshold
-  t.ttdPassed.isNone and t.number.isNone and t.ttd.isSome
-
-proc getTdIfNecessary(com: CommonRef, blockHash: Hash32): Opt[DifficultyInt] =
-  if needTdForHardForkDetermination(com):
-    getTd(com, blockHash)
-  else:
-    Opt.none(DifficultyInt)
->>>>>>> 361bde8f (remove converters too)
 
 # ------------------------------------------------------------------------------
 # Public constructors
@@ -308,41 +288,6 @@ func toHardFork*(
     com: CommonRef, forkDeterminer: ForkDeterminationInfo): HardFork =
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
-<<<<<<< HEAD
-=======
-func hardForkTransition(
-    com: CommonRef, forkDeterminer: ForkDeterminationInfo) =
-  ## When consensus type already transitioned to POS,
-  ## the storage can choose not to store TD anymore,
-  ## at that time, TD is no longer needed to find a fork
-  ## TD only needed during transition from POW to POS.
-  ## Same thing happen before London block, TD can be ignored.
-
-  let fork = com.toHardFork(forkDeterminer)
-  com.consensusTransition(fork)
-
-func hardForkTransition*(
-    com: CommonRef,
-    number: BlockNumber,
-    td: Opt[DifficultyInt],
-    time: Opt[EthTime]) =
-  com.hardForkTransition(ForkDeterminationInfo(
-    number: number, time: time, td: td))
-
-proc hardForkTransition*(
-    com: CommonRef,
-    parentHash: Hash32,
-    number: BlockNumber,
-    time: Opt[EthTime]) =
-  com.hardForkTransition(number, getTdIfNecessary(com, parentHash), time)
-
-proc hardForkTransition*(
-    com: CommonRef, header: Header)
-    {.gcsafe, raises: [].} =
-  com.hardForkTransition(
-    header.parentHash, header.number, Opt.some(header.timestamp))
-
->>>>>>> 361bde8f (remove converters too)
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
@@ -369,8 +314,6 @@ func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.get
 
-<<<<<<< HEAD
-=======
 proc isBlockAfterTtd*(com: CommonRef, header: Header): bool =
   if com.config.terminalTotalDifficulty.isNone:
     return false
@@ -382,7 +325,6 @@ proc isBlockAfterTtd*(com: CommonRef, header: Header): bool =
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
 
->>>>>>> 361bde8f (remove converters too)
 func isShanghaiOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.shanghaiTime.isSome and t >= com.config.shanghaiTime.get
 
@@ -392,7 +334,6 @@ func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.pragueTime.isSome and t >= com.config.pragueTime.get
 
-<<<<<<< HEAD
 proc proofOfStake*(com: CommonRef, header: Header): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
@@ -402,13 +343,6 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
   else:
     # This costly check is only executed from test suite
     com.isBlockAfterTtd(header)
-=======
-proc consensus*(com: CommonRef, header: Header): ConsensusType =
-  if com.isBlockAfterTtd(header):
-    return ConsensusType.POS
-
-  return com.config.consensusType
->>>>>>> 361bde8f (remove converters too)
 
 proc syncReqNewHead*(com: CommonRef; header: Header)
     {.gcsafe, raises: [].} =
@@ -416,14 +350,7 @@ proc syncReqNewHead*(com: CommonRef; header: Header)
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)
 
-<<<<<<< HEAD
 proc reqBeaconSyncTargetCB*(com: CommonRef; header: Header) =
-=======
-func haveSyncFinalisedBlockHash*(com: CommonRef): bool =
-  not com.syncFinalisedBlockHash.isNil
-
-proc syncFinalisedBlockHash*(com: CommonRef; hash: Hash32) =
->>>>>>> 361bde8f (remove converters too)
   ## Used by RPC updater
   if not com.reqBeaconSyncTargetCB.isNil:
     com.reqBeaconSyncTargetCB(header)

@@ -17,7 +17,7 @@ import
   nimcrypto/sha2,
   ../constants
 
-export receipts, accounts, blocks_rlp, headers_rlp
+export eth_types_rlp
 
 template calcTxRoot*(transactions: openArray[Transaction]): Root =
   orderedTrieRoot(transactions)
