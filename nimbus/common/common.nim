@@ -314,17 +314,6 @@ func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.get
 
-proc isBlockAfterTtd*(com: CommonRef, header: Header): bool =
-  if com.config.terminalTotalDifficulty.isNone:
-    return false
-
-  let
-    ttd = com.config.terminalTotalDifficulty.get()
-    ptd = com.db.getScore(header.parentHash).valueOr:
-      return false
-    td  = ptd + header.difficulty
-  ptd >= ttd and td >= ttd
-
 func isShanghaiOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.shanghaiTime.isSome and t >= com.config.shanghaiTime.get
 
