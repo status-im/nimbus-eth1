@@ -12,7 +12,7 @@
 import
   std/[tables, strutils, times, macros],
   eth/[rlp, p2p], eth/common/eth_types_json_serialization,
-  eth/common/[base, hashes, addresses],
+  eth/common/eth_types_rlp,
   stint, stew/[byteutils],
   json_serialization, chronicles,
   json_serialization/stew/results,
