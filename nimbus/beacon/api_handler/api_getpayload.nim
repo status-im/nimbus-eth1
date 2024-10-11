@@ -79,16 +79,19 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV4Response =
   var payloadGeneric: ExecutionPayload
   var blockValue: UInt256
   var blobsBundle: Opt[BlobsBundleV1]
-  if not ben.get(id, blockValue, payloadGeneric, blobsBundle):
+  var executionRequests: Opt[array[3, seq[byte]]]
+  if not ben.get(id, blockValue, payloadGeneric, blobsBundle, executionRequests):
     raise unknownPayload("Unknown payload")
 
   let version = payloadGeneric.version
-  if version != Version.V4:
-    raise unsupportedFork("getPayloadV4 expect ExecutionPayloadV4 but get ExecutionPayload" & $version)
+  if version != Version.V3:
+    raise unsupportedFork("getPayloadV4 expect ExecutionPayloadV3 but get ExecutionPayload" & $version)
   if blobsBundle.isNone:
     raise unsupportedFork("getPayloadV4 is missing BlobsBundleV1")
+  if executionRequests.isNone:
+    raise unsupportedFork("getPayloadV4 is missing executionRequests")
 
-  let payload = payloadGeneric.V4
+  let payload = payloadGeneric.V3
   let com = ben.com
   if not com.isPragueOrLater(ethTime payload.timestamp):
     raise unsupportedFork("payload timestamp is less than Prague activation")
@@ -97,5 +100,6 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: PayloadID): GetPayloadV4Response =
     executionPayload: payload,
     blockValue: blockValue,
     blobsBundle: blobsBundle.get,
-    shouldOverrideBuilder: false
+    shouldOverrideBuilder: false,
+    executionRequests: executionRequests.get,
   )

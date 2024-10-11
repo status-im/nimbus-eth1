@@ -63,7 +63,7 @@ proc populateTransactionObject*(tx: Transaction,
 
   if tx.txType >= TxEip2930:
     result.chainId = Opt.some(Web3Quantity(tx.chainId))
-    result.accessList = Opt.some(w3AccessList(tx.accessList))
+    result.accessList = Opt.some(tx.accessList)
 
   if tx.txType >= TxEIP4844:
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)

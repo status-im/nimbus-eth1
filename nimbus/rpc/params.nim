@@ -80,7 +80,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     gasPrice:        gasPrice,
     value:           args.value.get(0.u256),
     input:           args.payload(),
-    accessList:      ethAccessList args.accessList,
+    accessList:      args.accessList.get(@[]),
     versionedHashes: args.versionedHashes,
   ))
 

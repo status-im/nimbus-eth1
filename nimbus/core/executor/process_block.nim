@@ -75,13 +75,13 @@ proc procBlkPreamble(
       return err("Mismatched txRoot")
 
   if com.isPragueOrLater(header.timestamp):
-    if header.requestsRoot.isNone or blk.requests.isNone:
-      return err("Post-Prague block header must have requestsRoot/requests")
+    if header.requestsRoot.isNone:
+      return err("Post-Prague block header must have requestsHash")
 
     ?vmState.processParentBlockHash(header.parentHash)
   else:
-    if header.requestsRoot.isSome or blk.requests.isSome:
-      return err("Pre-Prague block header must not have requestsRoot/requests")
+    if header.requestsRoot.isSome:
+      return err("Pre-Prague block header must not have requestsHash")
 
   if com.isCancunOrLater(header.timestamp):
     if header.parentBeaconBlockRoot.isNone:
@@ -179,36 +179,18 @@ proc procBlkEpilogue(
         return err("receiptRoot mismatch")
 
     if header.requestsRoot.isSome:
-      let requestsRoot = calcRequestsRoot(blk.requests.get)
-      if header.requestsRoot.get != requestsRoot:
-        debug "wrong requestsRoot in block",
+      let
+        depositReqs = ?parseDepositLogs(vmState.allLogs)
+        withdrawalReqs = processDequeueWithdrawalRequests(vmState)
+        consolidationReqs = processDequeueConsolidationRequests(vmState)
+        requestsHash = calcRequestsHashInsertType(depositReqs, withdrawalReqs, consolidationReqs)
+
+      if header.requestsRoot.get != requestsHash:
+        debug "wrong requestsHash in block",
           blockNumber = header.number,
-          actual = requestsRoot,
+          actual = requestsHash,
           expected = header.requestsRoot.get
-        return err("requestsRoot mismatch")
-      let depositReqs = ?parseDepositLogs(vmState.allLogs)
-      var expectedDeposits: seq[Request]
-      for req in blk.requests.get:
-        if req.requestType == DepositRequestType:
-          expectedDeposits.add req
-      if depositReqs != expectedDeposits:
-        return err("EIP-6110 deposit requests mismatch")
-
-      let withdrawalReqs = processDequeueWithdrawalRequests(vmState)
-      var expectedWithdrawals: seq[Request]
-      for req in blk.requests.get:
-        if req.requestType == WithdrawalRequestType:
-          expectedWithdrawals.add req
-      if withdrawalReqs != expectedWithdrawals:
-        return err("EIP-7002 withdrawal requests mismatch")
-
-      let consolidationReqs = processDequeueConsolidationRequests(vmState)
-      var expectedConsolidations: seq[Request]
-      for req in blk.requests.get:
-        if req.requestType == ConsolidationRequestType:
-          expectedConsolidations.add req
-      if consolidationReqs != expectedConsolidations:
-        return err("EIP-7251 consolidation requests mismatch")
+        return err("requestsHash mismatch")
 
   ok()
 

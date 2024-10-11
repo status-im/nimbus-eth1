@@ -56,9 +56,10 @@ type
     spec* : BaseSpec
 
   ExecutableData* = object
-    basePayload*: ExecutionPayload
-    beaconRoot* : Opt[common.Hash256]
-    attr*       : PayloadAttributes
+    basePayload* : ExecutionPayload
+    beaconRoot*  : Opt[common.Hash256]
+    executionRequests*: Opt[array[3, seq[byte]]]
+    attr*        : PayloadAttributes
     versionedHashes*: Opt[seq[common.Hash256]]
 
 const

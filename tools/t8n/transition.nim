@@ -321,8 +321,8 @@ proc exec(ctx: var TransContext,
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
 
   var
-    withdrawalReqs: seq[Request]
-    consolidationReqs: seq[Request]
+    withdrawalReqs: seq[byte]
+    consolidationReqs: seq[byte]
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     # Execute EIP-7002 and EIP-7251 before calculating rootHash
@@ -358,25 +358,11 @@ proc exec(ctx: var TransContext,
     var allLogs: seq[Log]
     for rec in result.result.receipts:
       allLogs.add rec.logs
-    let reqs = parseDepositLogs(allLogs).valueOr:
-      raise newError(ErrorEVM, error)
-    result.result.requestsRoot = Opt.some(calcRequestsRoot(reqs))
-    var deposits: seq[DepositRequest]
-    for req in reqs:
-      # all requests produced by parseDepositLogs
-      # should be DepositRequest
-      deposits.add req.deposit
-    result.result.depositRequests = Opt.some(deposits)
-
-    var withdrawals: seq[WithdrawalRequest]
-    for req in withdrawalReqs:
-      withdrawals.add req.withdrawal
-    result.result.withdrawalRequests = Opt.some(withdrawals)
-
-    var consolidations: seq[ConsolidationRequest]
-    for req in consolidationReqs:
-      consolidations.add req.consolidation
-    result.result.consolidationRequests = Opt.some(consolidations)
+    let
+      depositReqs = parseDepositLogs(allLogs).valueOr:
+        raise newError(ErrorEVM, error)
+      requestsHash = calcRequestsHashInsertType(depositReqs, withdrawalReqs, consolidationReqs)
+    result.result.requestsHash = Opt.some(requestsHash)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
