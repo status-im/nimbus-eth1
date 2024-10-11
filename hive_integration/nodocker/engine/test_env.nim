@@ -10,7 +10,7 @@
 
 import
   chronicles,
-  eth/keys,
+  eth/common/keys,
   results,
   json_rpc/rpcclient,
   ../../../nimbus/config,
@@ -202,7 +202,7 @@ proc generateInvalidPayload*(env: TestEnv,
                              payloadField: InvalidPayloadBlockField): ExecutableData =
   env.sender.generateInvalidPayload(data, payloadField)
 
-proc verifyPoWProgress*(env: TestEnv, lastBlockHash: common.Hash256): bool =
+proc verifyPoWProgress*(env: TestEnv, lastBlockHash: Hash32): bool =
   let res = waitFor env.client.verifyPoWProgress(lastBlockHash)
   if res.isErr:
     error "verify PoW Progress error", msg=res.error

@@ -28,7 +28,7 @@ type
     commitment*: kzg.KZGCommitment
 
   BlobTxWrapData* = object
-    hashes*: seq[Hash256]
+    hashes*: seq[Hash32]
     blobs*: seq[kzg.KzgBlob]
     commitments*: seq[kzg.KZGCommitment]
     proofs*: seq[kzg.KzgProof]
@@ -148,7 +148,7 @@ proc getVersionedHash*(blobid: BlobID, commitmentVersion: byte): Hash32 =
 proc blobDataGenerator*(startBlobId: BlobID, blobCount: int): BlobTxWrapData =
   result.blobs = newSeq[kzg.KzgBlob](blobCount)
   result.commitments = newSeq[kzg.KZGCommitment](blobCount)
-  result.hashes = newSeq[Hash256](blobCount)
+  result.hashes = newSeq[Hash32](blobCount)
   result.proofs = newSeq[kzg.KzgProof](blobCount)
 
   for i in 0..<blobCount:

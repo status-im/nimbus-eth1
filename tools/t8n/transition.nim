@@ -117,13 +117,13 @@ proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
       acc.storage[k] = v
     alloc[accAddr] = acc
 
-proc genAddress(tx: Transaction, sender: EthAddress): EthAddress =
+proc genAddress(tx: Transaction, sender: Address): Address =
   if tx.to.isNone:
     result = generateAddress(sender, tx.nonce)
 
 proc toTxReceipt(rec: Receipt,
                  tx: Transaction,
-                 sender: EthAddress,
+                 sender: Address,
                  txIndex: int,
                  gasUsed: GasInt): TxReceipt =
 

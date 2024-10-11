@@ -18,7 +18,7 @@ import
   web3/conversions,
   json_serialization/stew/results,
   eth/common/eth_types_json_serialization,
-  eth/[keys, rlp, p2p],
+  eth/[rlp, p2p],
   ".."/[transaction, evm/state, constants],
   ../db/ledger,
   ./rpc_types, ./rpc_utils, ./oracle,
@@ -32,12 +32,12 @@ import
   ./filters
 
 type
-  BlockHeader = eth_types.BlockHeader
-  Hash256 = eth_types.Hash256
+  Header = eth_types.Header
+  Hash32 = eth_types.Hash32
 
 proc getProof*(
     accDB: LedgerRef,
-    address: EthAddress,
+    address: eth_types.Address,
     slots: seq[UInt256]): ProofResponse =
   let
     acc = accDB.getEthAccount(address)
@@ -56,16 +56,16 @@ proc getProof*(
 
   if accExists:
     ProofResponse(
-          address: w3Addr(address),
+          address: address,
           accountProof: seq[RlpEncodedBytes](accountProof),
           balance: acc.balance,
           nonce: w3Qty(acc.nonce),
-          codeHash: w3Hash(acc.codeHash),
-          storageHash: w3Hash(acc.storageRoot),
+          codeHash: acc.codeHash,
+          storageHash: acc.storageRoot,
           storageProof: storage)
   else:
     ProofResponse(
-          address: w3Addr(address),
+          address: address,
           accountProof: seq[RlpEncodedBytes](accountProof),
           storageProof: storage)
 
@@ -74,7 +74,7 @@ proc setupEthRpc*(
     txPool: TxPoolRef, oracle: Oracle, server: RpcServer) =
 
   let chainDB = com.db
-  proc getStateDB(header: BlockHeader): LedgerRef =
+  proc getStateDB(header:Header): LedgerRef =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
     LedgerRef.init(chainDB, header.stateRoot)
@@ -106,7 +106,7 @@ proc setupEthRpc*(
     ## Returns a list of addresses owned by client.
     result = newSeqOfCap[Web3Address](ctx.am.numAccounts)
     for k in ctx.am.addresses:
-      result.add w3Addr(k)
+      result.add k
 
   server.rpc("eth_blockNumber") do() -> Web3Quantity:
     ## Returns integer of the current block number the client is on.
@@ -120,7 +120,7 @@ proc setupEthRpc*(
     ## Returns integer of the current balance in wei.
     let
       accDB   = stateDBFromTag(quantityTag)
-      address = data.ethAddr
+      address = data
     accDB.getBalance(address)
 
   server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: BlockTag) -> Web3FixedBytes[32]:
@@ -132,7 +132,7 @@ proc setupEthRpc*(
     ## Returns: the value at this storage position.
     let
       accDB   = stateDBFromTag(quantityTag)
-      address = data.ethAddr
+      address = data
       data = accDB.getStorage(address, slot)
     data.w3FixedBytes
 
@@ -143,7 +143,7 @@ proc setupEthRpc*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
     let
-      address = data.ethAddr
+      address = data
       accDB   = stateDBFromTag(quantityTag)
     w3Qty(accDB.getNonce(address))
 
@@ -153,7 +153,7 @@ proc setupEthRpc*(
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
     let
-      blockHash = data.ethHash
+      blockHash = data
       header    = chainDB.getBlockHeader(blockHash)
       txCount   = chainDB.getTransactionCount(header.txRoot)
     Web3Quantity(txCount)
@@ -174,7 +174,7 @@ proc setupEthRpc*(
     ## data: hash of a block.
     ## Returns integer of the number of uncles in this block.
     let
-      blockHash   = data.ethHash
+      blockHash   = data
       header      = chainDB.getBlockHeader(blockHash)
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
     Web3Quantity(unclesCount)
@@ -197,7 +197,7 @@ proc setupEthRpc*(
     ## Returns the code from the given address.
     let
       accDB   = stateDBFromTag(quantityTag)
-      address = data.ethAddr
+      address = data
     accDB.getCode(address).bytes()
 
   template sign(privateKey: PrivateKey, message: string): seq[byte] =
@@ -215,7 +215,7 @@ proc setupEthRpc*(
     ## message: message to sign.
     ## Returns signature.
     let
-      address = data.ethAddr
+      address = data
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -226,7 +226,7 @@ proc setupEthRpc*(
     ## Signs a transaction that can be submitted to the network at a later time using with
     ## eth_sendRawTransaction
     let
-      address = data.`from`.get(w3Address()).ethAddr
+      address = data.`from`.get(w3Address())
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -246,7 +246,7 @@ proc setupEthRpc*(
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
-      address = data.`from`.get(w3Address()).ethAddr
+      address = data.`from`.get(w3Address())
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -278,7 +278,7 @@ proc setupEthRpc*(
       pooledTx = PooledTransaction(tx: signedTx, networkPayload: networkPayload)
 
     txPool.add(pooledTx)
-    rlpHash(signedTx).w3Hash
+    rlpHash(signedTx)
 
   server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
     ## Creates new message call transaction or a contract creation for signed transactions.
@@ -294,7 +294,7 @@ proc setupEthRpc*(
     let res = txPool.inPoolAndReason(txHash)
     if res.isErr:
       raise newException(ValueError, res.error)
-    txHash.w3Hash
+    txHash
 
   server.rpc("eth_call") do(args: TransactionArgs, quantityTag: BlockTag) -> seq[byte]:
     ## Executes a new message call immediately without creating a transaction on the block chain.
@@ -330,8 +330,8 @@ proc setupEthRpc*(
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
     var
-      header: BlockHeader
-      hash = data.ethHash
+      header:Header
+      hash = data
 
     if chainDB.getBlockHeader(hash, header):
       populateBlockObject(header, chainDB, fullTransactions)
@@ -355,7 +355,7 @@ proc setupEthRpc*(
     ##
     ## data: hash of a transaction.
     ## Returns requested transaction information.
-    let txHash = data.ethHash()
+    let txHash = data
     let res = txPool.getItem(txHash)
     if res.isOk:
       return populateTransactionObject(res.get().tx)
@@ -376,8 +376,8 @@ proc setupEthRpc*(
     ## quantity: integer of the transaction index position.
     ## Returns  requested transaction information.
     let index  = uint64(quantity)
-    var header: BlockHeader
-    if not chainDB.getBlockHeader(data.ethHash(), header):
+    var header:Header
+    if not chainDB.getBlockHeader(data, header):
       return nil
 
     var tx: Transaction
@@ -407,7 +407,7 @@ proc setupEthRpc*(
     ## data: hash of a transaction.
     ## Returns transaction receipt.
 
-    let txDetails = chainDB.getTransactionKey(data.ethHash())
+    let txDetails = chainDB.getTransactionKey(data)
     if txDetails.index < 0:
       return nil
 
@@ -434,8 +434,8 @@ proc setupEthRpc*(
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
     let index  = uint64(quantity)
-    var header: BlockHeader
-    if not chainDB.getBlockHeader(data.ethHash(), header):
+    var header:Header
+    if not chainDB.getBlockHeader(data, header):
       return nil
 
     let uncles = chainDB.getUncles(header.ommersHash)
@@ -464,8 +464,8 @@ proc setupEthRpc*(
 
   proc getLogsForBlock(
       chain: CoreDbRef,
-      hash: Hash256,
-      header: BlockHeader,
+      hash: Hash32,
+      header:Header,
       opts: FilterOptions): seq[FilterLog]
         {.gcsafe, raises: [RlpError,BlockNotFound].} =
     if headerBloomFilter(header, opts.address, opts.topics):
@@ -512,7 +512,7 @@ proc setupEthRpc*(
     ## Both of those changes require improvements to the way how we keep our data
     ## in Nimbus.
     if filterOptions.blockHash.isSome():
-      let hash = ethHash filterOptions.blockHash.unsafeGet()
+      let hash = filterOptions.blockHash.unsafeGet()
       let header = chainDB.getBlockHeader(hash)
       return getLogsForBlock(chainDB, hash, header, filterOptions)
     else:
@@ -545,7 +545,7 @@ proc setupEthRpc*(
 
     let
       accDB = stateDBFromTag(quantityTag)
-      address = data.ethAddr
+      address = data
 
     getProof(accDB, address, slots)
 

@@ -31,7 +31,7 @@ import
 
 proc processBlock(
     vmState: BaseVMState;  ## Parent environment of header/body block
-    blk:     EthBlock;  ## Header/body block to add to the blockchain
+    blk:     Block;  ## Header/body block to add to the blockchain
     ): Result[void, string] =
   ## Generalised function to processes `(header,body)` pair for any network,
   ## regardless of PoA or not.
@@ -41,7 +41,7 @@ proc processBlock(
   ## the `poa` descriptor is currently unused and only provided for later
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
-  template header: BlockHeader = blk.header
+  template header: Header = blk.header
   var dbTx = vmState.com.db.ctx.newTransaction()
   defer: dbTx.dispose()
 
@@ -75,7 +75,7 @@ proc processBlock(
 
   ok()
 
-proc getVmState(c: ChainRef, header: BlockHeader):
+proc getVmState(c: ChainRef, header: Header):
                  Result[BaseVMState, void] =
   if c.vmState.isNil.not:
     return ok(c.vmState)
@@ -90,8 +90,8 @@ proc getVmState(c: ChainRef, header: BlockHeader):
 
 # A stripped down version of persistBlocks without validation
 # intended to accepts invalid block
-proc setBlock*(c: ChainRef; blk: EthBlock): Result[void, string] =
-  template header: BlockHeader = blk.header
+proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
+  template header: Header = blk.header
   let dbTx = c.db.ctx.newTransaction()
   defer: dbTx.dispose()
 
