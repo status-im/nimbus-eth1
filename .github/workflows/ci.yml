@@ -39,6 +39,9 @@ jobs:
           - os: macos
             cpu: amd64
             evmc: evmc
+          - os: macos
+            cpu: arm64
+            evmc: evmc
           - os: windows
             cpu: amd64
             evmc: evmc
@@ -50,6 +53,9 @@ jobs:
             evmc: nimvm
           - os: macos
             cpu: amd64
+            evmc: nimvm
+          - os: macos
+            cpu: arm64
             evmc: nimvm
         include:
           - target:
@@ -77,15 +83,15 @@ jobs:
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
             PLATFORM=x64
             GOARCH=amd64
-            USE_MIRACL=0
+          elif [[ '${{ matrix.target.cpu }}' == 'arm64' ]]; then
+            PLATFORM=arm64
+            GOARCH=arm64
           else
             PLATFORM=x86
             GOARCH=386
-            USE_MIRACL=1
           fi
           echo "PLATFORM=${PLATFORM}" >> $GITHUB_ENV
           echo "GOARCH=${GOARCH}" >> $GITHUB_ENV
-          echo "USE_MIRACL=${USE_MIRACL}" >> $GITHUB_ENV
 
           ncpu=''
           case '${{ runner.os }}' in
@@ -219,7 +225,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
-          DEFAULT_MAKE_FLAGS="-j${ncpu} USE_MIRACL=${USE_MIRACL} ENABLE_EVMC=${ENABLE_EVMC}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} all test_import
           build/nimbus --help
           # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
