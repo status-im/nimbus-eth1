@@ -100,13 +100,13 @@ proc readValue*(
     r.raiseUnexpectedValue("Invalid ENR")
 
 proc writeValue*(w: var JsonWriter[JrpcConv], v: NodeId) {.gcsafe, raises: [IOError].} =
-  w.writeValue("0x" & v.toHex())
+  w.writeValue(v.toBytesBE().to0xHex())
 
 proc writeValue*(
     w: var JsonWriter[JrpcConv], v: Opt[NodeId]
 ) {.gcsafe, raises: [IOError].} =
   if v.isSome():
-    w.writeValue("0x" & v.get().toHex())
+    w.writeValue(v.get())
   else:
     w.writeValue("0x")
 
@@ -139,7 +139,8 @@ proc writeValue*(
 ) {.gcsafe, raises: [IOError].} =
   w.beginRecord()
   w.writeField("enrSeq", v.enrSeq)
-  w.writeField("dataRadius", "0x" & v.dataRadius.toHex)
+  # Portal json-rpc specifications allows for dropping leading zeroes.
+  w.writeField("dataRadius", "0x" & v.dataRadius.toHex())
   w.endRecord()
 
 proc readValue*(
