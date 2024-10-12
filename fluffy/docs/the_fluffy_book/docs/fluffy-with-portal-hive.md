@@ -1,4 +1,4 @@
-# Fluffy with Portal-hive
+# Fluffy with Portal hive
 
 Fluffy is one of the Portal clients that is being tested with [hive](https://github.com/ethereum/hive).
 
@@ -39,7 +39,7 @@ create a local development docker image for Fluffy.
 
 To do that follow next steps:
 
-1) Clone and build portal-hive, see above.
+1) Clone and build hive, see above.
 
 2) Build the local development Docker image using the following command:
 ```
@@ -49,7 +49,7 @@ docker build --tag fluffy-dev --file ./fluffy/tools/docker/Dockerfile.portalhive
 3) Modify the `FROM` tag in the portal-hive `Dockerfile` of fluffy at
 `portal-hive/clients/fluffy/Dockerfile` to use the image that was buid in step 2.
 
-4) Run the tests as [usually](fluffy-with-portal-hive.md/#run-the-hive-tests-locally).
+4) Run the tests as [usual](fluffy-with-portal-hive.md/#run-the-hive-tests-locally).
 
 !!! warning
     The `./vendors` dir is dockerignored and cached. If you have to make local
