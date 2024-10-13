@@ -22,7 +22,7 @@ additional_services:
   - beacon_metrics_gazer
 mev_type: null
 assertoor_params:
-  image: "ethpandaops/assertoor:master"
+  image: "ethpandaops/assertoor:latest"
   run_stability_check: false
   run_block_proposal_check: true
   run_transaction_test: true
