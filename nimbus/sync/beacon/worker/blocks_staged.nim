@@ -239,7 +239,7 @@ proc blocksStagedImport*(
   block:
     let imported = ctx.chain.latestNumber()
     if qItem.key != imported + 1:
-      trace info & ": there is a gap",
+      trace info & ": there is a gap L vs. staged",
         B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr
       return false
 
@@ -250,17 +250,13 @@ proc blocksStagedImport*(
     nBlocks = qItem.data.blocks.len
     iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
-  trace info & ": import blocks", iv,
-    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-    F=ctx.layout.final.bnStr, txLevel=ctx.chain.db.level
-
   var maxImport = iv.maxPt
   for n in 0 ..< nBlocks:
     let nBn = qItem.data.blocks[n].header.number
     ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
       warn info & ": import block error", iv,
         B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-        nBn=nBn.bnStr, `error`=error
+        nBn=nBn.bnStr, txLevel=ctx.chain.db.level, `error`=error
       # Restore what is left over below
       maxImport = ctx.chain.latestNumber()
       break
@@ -272,11 +268,6 @@ proc blocksStagedImport*(
         finHash = if nBn < ctx.layout.final: nHash else: ctx.layout.finalHash
 
       doAssert nBn == ctx.chain.latestNumber()
-      trace info & ": import block finalise", n, iv,
-        B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-        F=ctx.layout.final.bnStr, txLevel=ctx.chain.db.level, nHash,
-        finHash=(if finHash == nHash: "nHash" else: "F")
-
       ctx.pool.chain.forkChoice(headHash=nHash, finalizedHash=finHash).isOkOr:
         warn info & ": fork choice error", iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,

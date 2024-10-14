@@ -12,11 +12,15 @@
 
 import
   pkg/metrics,
+  ../../../../core/chain,
   ../../worker_desc,
   ".."/[blocks_staged, headers_staged]
 
 declareGauge beacon_base, "" &
-  "Max block number of finalised blocks"
+  "Max block number of imported finalised blocks"
+
+declareGauge beacon_latest, "" &
+  "Block number of latest imported blocks"
   
 declareGauge beacon_coupler, "" &
   "Max block number for header chain starting at genesis"
@@ -53,6 +57,7 @@ declareGauge beacon_buddies, "" &
 
 template updateMetricsImpl*(ctx: BeaconCtxRef) =
   metrics.set(beacon_base, ctx.chain.baseNumber().int64)
+  metrics.set(beacon_latest, ctx.chain.latestNumber().int64)
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_dangling, ctx.layout.dangling.int64)
   metrics.set(beacon_final, ctx.layout.final.int64)
