@@ -69,30 +69,30 @@ proc fetchSavedState(ctx: BeaconCtxRef): Opt[SavedDbStateSpecs] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef): bool =
+proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; persistent = true) =
   ## Save chain layout to persistent db
-  const info = "dbStoreLinkedHChainsLayout"
+  const info = "dbStoreSyncStateLayout"
   if ctx.layout == ctx.sst.lastLayout:
-    return false
+    return
 
   let data = rlp.encode(ctx.layout)
   ctx.db.ctx.getKvt().put(LhcStateKey.toOpenArray, data).isOkOr:
     raiseAssert info & " put() failed: " & $$error
 
-  # While executing blocks there are frequent save cycles. Otherwise, an
-  # extra save request might help to pick up an interrupted sync session.
-  let txLevel = ctx.db.level()
-  if txLevel == 0:
-    let number = ctx.db.getSavedStateBlockNumber()
-    ctx.db.persistent(number).isOkOr:
-      debug info & ": failed to save persistently", error=($$error)
-      return false
-  else:
-    trace info & ": not saved, tx pending", txLevel
-    return false
+  if persistent:
+    # While executing blocks there are frequent save cycles. Otherwise, an
+    # extra save request might help to pick up an interrupted sync session.
+    let txLevel = ctx.db.level()
+    if txLevel == 0:
+      let number = ctx.db.getSavedStateBlockNumber()
+      ctx.db.persistent(number).isOkOr:
+        debug info & ": failed to save persistently", error=($$error)
+        return
+    else:
+      trace info & ": not saved, tx pending", txLevel
+      return
 
-  trace info & ": saved pesistently on DB"
-  true
+    trace info & ": saved pesistently on DB"
 
 
 proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef) =

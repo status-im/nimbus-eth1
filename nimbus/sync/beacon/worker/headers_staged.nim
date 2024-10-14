@@ -232,7 +232,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs)
     ctx.layout.dangling = iv.minPt
     ctx.layout.danglingParent = qItem.data.parentHash
-    discard ctx.dbStoreSyncStateLayout()
+    ctx.dbStoreSyncStateLayout()
 
     result.inc # count records
 

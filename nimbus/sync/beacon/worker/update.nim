@@ -80,7 +80,7 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
   ctx.dbStashHeaders(target, @[rlpHeader])
 
   # Save state
-  discard ctx.dbStoreSyncStateLayout()
+  ctx.dbStoreSyncStateLayout()
 
   # Update range
   doAssert ctx.headersUnprocTotal() == 0
@@ -125,7 +125,7 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
     headLocked:     ctx.layout.headLocked)
 
   # Save state
-  discard ctx.dbStoreSyncStateLayout()
+  ctx.dbStoreSyncStateLayout()
 
 # ------------------------------------------------------------------------------
 # Public functions
