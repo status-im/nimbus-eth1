@@ -26,6 +26,13 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
+func getNthHash(blk: BlocksForImport; n: int): Hash32 =
+  if n + 1 < blk.blocks.len:
+    blk.blocks[n + 1].header.parentHash
+  else:
+    rlp.encode(blk.blocks[n].header).keccak256
+
+
 proc fetchAndCheck(
     buddy: BeaconBuddyRef;
     ivReq: BnRange;
@@ -218,39 +225,82 @@ proc blocksStagedCollect*(
   return true
 
 
-proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
+proc blocksStagedImport*(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ): Future[bool]
+      {.async.} =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
     return false
 
   # Fetch least record, accept only if it matches the global ledger state
-  let base = ctx.dbStateBlockNumber()
-  if qItem.key != base + 1:
-    trace info & ": there is a gap", B=base.bnStr, stagedBottom=qItem.key.bnStr
-    return false
+  block:
+    let imported = ctx.chain.latestNumber()
+    if qItem.key != imported + 1:
+      trace info & ": there is a gap",
+        B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr
+      return false
 
   # Remove from queue
   discard ctx.blk.staged.delete qItem.key
 
-  # FIXME: `persistBlocks()` will be replaced by `importBlock()`
-  let stats = ctx.pool.chain.persistBlocks(qItem.data.blocks).valueOr:
-    # FIXME: should that be rather an `raiseAssert` here?
-    warn info & ": block exec error", B=base.bnStr,
-      iv=BnRange.new(qItem.key,qItem.key+qItem.data.blocks.len.uint64-1),
-      error=error
-    doAssert base == ctx.dbStateBlockNumber()
-    return false
+  let
+    nBlocks = qItem.data.blocks.len
+    iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
-  # FIXME: might go away with `importBlock()` (rather than `persistBlocks()`)
-  trace info & ": imported staged blocks", B=ctx.dbStateBlockNumber.bnStr,
-    first=qItem.key.bnStr, stats
+  trace info & ": import blocks", iv,
+    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+    F=ctx.layout.final.bnStr, txLevel=ctx.chain.db.level
 
-  # Remove stashed headers
-  for bn in qItem.key ..< qItem.key + qItem.data.blocks.len.uint64:
+  var maxImport = iv.maxPt
+  for n in 0 ..< nBlocks:
+    let nBn = qItem.data.blocks[n].header.number
+    ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
+      warn info & ": import block error", iv,
+        B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+        nBn=nBn.bnStr, `error`=error
+      # Restore what is left over below
+      maxImport = ctx.chain.latestNumber()
+      break
+
+    # Occasionally mark the chain finalized
+    if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
+      let
+        nHash = qItem.data.getNthHash(n)
+        finHash = if nBn < ctx.layout.final: nHash else: ctx.layout.finalHash
+
+      doAssert nBn == ctx.chain.latestNumber()
+      trace info & ": import block finalise", n, iv,
+        B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+        F=ctx.layout.final.bnStr, txLevel=ctx.chain.db.level, nHash,
+        finHash=(if finHash == nHash: "nHash" else: "F")
+
+      ctx.pool.chain.forkChoice(headHash=nHash, finalizedHash=finHash).isOkOr:
+        warn info & ": fork choice error", iv,
+          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+          F=ctx.layout.final.bnStr, txLevel=ctx.chain.db.level, nHash,
+          finHash=(if finHash == nHash: "nHash" else: "F"), `error`=error
+        # Restore what is left over below
+        maxImport = ctx.chain.latestNumber()
+        break
+
+      # Allow pseudo/async thread switch.
+      await sleepAsync asyncThreadSwitchTimeSlot
+
+  # Import probably incomplete, so a partial roll back may be needed
+  if maxImport < iv.maxPt:
+    ctx.blocksUnprocCommit(0, maxImport+1, qItem.data.blocks[^1].header.number)
+
+  # Remove stashed headers for imported blocks
+  for bn in iv.minPt .. maxImport:
     ctx.dbUnstashHeader bn
 
-  true
+  trace info & ": import done", iv,
+    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+    F=ctx.layout.final.bnStr, txLevel=ctx.chain.db.level
+  return true
 
 
 func blocksStagedBottomKey*(ctx: BeaconCtxRef): BlockNumber =

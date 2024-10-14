@@ -29,7 +29,7 @@ when enableTicker:
     ## Legacy stuff, will be probably be superseded by `metrics`
     return proc: auto =
       TickerStats(
-        base:            ctx.dbStateBlockNumber(),
+        base:            ctx.chain.baseNumber(),
         coupler:         ctx.layout.coupler,
         dangling:        ctx.layout.dangling,
         final:           ctx.layout.final,

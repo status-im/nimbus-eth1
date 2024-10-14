@@ -14,6 +14,7 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
   pkg/stew/sorted_set,
+  ../../../core/chain,
   ../worker_desc,
   ./update/metrics,
   "."/[blocks_unproc, db, headers_staged, headers_unproc]
@@ -139,9 +140,9 @@ proc updateSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   # in time.
   if ctx.layout.headLocked:
     # So we have a session
-    let base = ctx.dbStateBlockNumber()
-    if ctx.layout.head <= base:
-      doAssert ctx.layout.head == base
+    let latest= ctx.chain.latestNumber()
+    if ctx.layout.head <= latest:
+      doAssert ctx.layout.head == latest
       ctx.layout.headLocked = false
 
   # Check whether there is something to do regarding beacon node change
@@ -155,17 +156,17 @@ proc updateSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc updateBlockRequests*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update block requests if there staged block queue is empty
-  let base = ctx.dbStateBlockNumber()
-  if base < ctx.layout.coupler:   # so half open interval `(B,C]` is not empty
+  let latest = ctx.chain.latestNumber()
+  if latest < ctx.layout.coupler:   # so half open interval `(L,C]` is not empty
 
-    # One can fill/import/execute blocks by number from `(B,C]`
+    # One can fill/import/execute blocks by number from `(L,C]`
     if ctx.blk.topRequest < ctx.layout.coupler:
       # So there is some space
-      trace info & ": updating", B=base.bnStr, topReq=ctx.blk.topRequest.bnStr,
-        C=ctx.layout.coupler.bnStr
+      trace info & ": updating", L=latest.bnStr,
+        topReq=ctx.blk.topRequest.bnStr, C=ctx.layout.coupler.bnStr
 
       ctx.blocksUnprocCommit(
-        0, max(base, ctx.blk.topRequest) + 1, ctx.layout.coupler)
+        0, max(latest, ctx.blk.topRequest) + 1, ctx.layout.coupler)
       ctx.blk.topRequest = ctx.layout.coupler
 
 

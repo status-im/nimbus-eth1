@@ -66,10 +66,15 @@ type
     ## Layout of a linked header chains defined by the triple `(C,D,H)` as
     ## described in the `README.md` text.
     ## ::
-    ##   0                B       C                     D            F   H
-    ##   o----------------o-------o---------------------o------------o---o--->
+    ##   0          B     L       C                     D            F   H
+    ##   o----------o-----o-------o---------------------o------------o---o--->
     ##   | <- imported -> |       |                     |                |
     ##   | <------ linked ------> | <-- unprocessed --> | <-- linked --> |
+    ##
+    ## Additional positions known but not declared in this descriptor:
+    ## * `B`: base state (from `forked_chain` importer)
+    ## * `L`: last imported block, canonical consensus head
+    ## * `F`: finalised head (from CL)
     ##
     coupler*: BlockNumber            ## Right end `C` of linked chain `[0,C]`
     couplerHash*: Hash32             ## Hash of `C`
@@ -128,7 +133,7 @@ type
     # Blocks import/execution settings for running  `persistBlocks()` with
     # `nBodiesBatch` blocks in each round (minimum value is
     # `nFetchBodiesRequest`.)
-    chain*: ChainRef
+    chain*: ForkedChainRef           ## Database
     importRunningOk*: bool           ## Advisory lock, fetch vs. import
     nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
     blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
@@ -169,6 +174,10 @@ func layout*(ctx: BeaconCtxRef): var SyncStateLayout =
 func target*(ctx: BeaconCtxRef): var SyncStateTarget =
   ## Shortcut
   ctx.sst.target
+
+func chain*(ctx: BeaconCtxRef): ForkedChainRef =
+  ## Getter
+  ctx.pool.chain
 
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter

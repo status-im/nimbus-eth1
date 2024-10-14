@@ -126,13 +126,10 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
       defer: ctx.pool.importRunningOk = false
 
       # Import from staged queue.
-      while ctx.blocksStagedImport info:
+      while await ctx.blocksStagedImport(info):
         ctx.updateMetrics()
 
-        # Allow pseudo/async thread switch
-        await sleepAsync asyncThreadSwitchTimeSlot
-
-  # At the end of the cycle, leave time to refill headers/blocks
+  # At the end of the cycle, leave time to trigger refill headers/blocks
   await sleepAsync daemonWaitInterval
 
   ctx.updateMetrics()

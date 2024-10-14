@@ -52,7 +52,7 @@ declareGauge beacon_buddies, "" &
 
 
 template updateMetricsImpl*(ctx: BeaconCtxRef) =
-  metrics.set(beacon_base, ctx.dbStateBlockNumber().int64)
+  metrics.set(beacon_base, ctx.chain.baseNumber().int64)
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_dangling, ctx.layout.dangling.int64)
   metrics.set(beacon_final, ctx.layout.final.int64)
