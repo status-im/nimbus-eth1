@@ -87,7 +87,8 @@ proc store*(hn: HistoryNode, blockHash: Hash32, receipts: seq[Receipt]) =
   hn.portalProtocol().storeContent(contentKeyBytes, contentId, receipts.encode())
 
 type TestCase = ref object
-  historyNode: HistoryNode
+  historyNode1: HistoryNode
+  historyNode2: HistoryNode
   server: RpcHttpServer
   client: PortalRpcClient
 
@@ -97,19 +98,28 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     localSrvPort = 0 # let the OS choose a port
     ta = initTAddress(localSrvAddress, localSrvPort)
     client = newRpcHttpClient()
-    historyNode = newHistoryNode(rng, 20333)
+    historyNode1 = newHistoryNode(rng, 20333)
+    historyNode2 = newHistoryNode(rng, 20334)
+
+  historyNode1.start()
+  historyNode2.start()
+
+  check:
+    historyNode1.portalProtocol().addNode(historyNode2.localNode()) == Added
+    historyNode2.portalProtocol().addNode(historyNode1.localNode()) == Added
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
   rpcHttpServer.installPortalHistoryApiHandlers(
-    historyNode.historyNetwork.portalProtocol
+    historyNode1.historyNetwork.portalProtocol
   )
   rpcHttpServer.start()
 
   await client.connect(localSrvAddress, rpcHttpServer.localAddress[0].port, false)
 
   return TestCase(
-    historyNode: historyNode,
+    historyNode1: historyNode1,
+    historyNode2: historyNode2,
     server: rpcHttpServer,
     client: PortalRpcClient.init(client),
   )
@@ -117,7 +127,8 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
 proc stop(testCase: TestCase) {.async.} =
   await testCase.server.stop()
   await testCase.server.closeWait()
-  await testCase.historyNode.stop()
+  await testCase.historyNode1.stop()
+  await testCase.historyNode2.stop()
 
 procSuite "Portal RPC Client":
   let rng = newRng()
@@ -138,7 +149,7 @@ procSuite "Portal RPC Client":
 
     # Test content found
     block:
-      tc.historyNode.store(blockHash, blockHeader)
+      tc.historyNode2.store(blockHash, blockHeader)
 
       let blockHeaderRes =
         await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
@@ -148,7 +159,7 @@ procSuite "Portal RPC Client":
 
     # Test content validation failed
     block:
-      tc.historyNode.store(blockHash, Header()) # bad header
+      tc.historyNode1.store(blockHash, Header()) # bad header
 
       let blockHeaderRes =
         await tc.client.historyGetBlockHeader(blockHash, validateContent = true)
@@ -172,10 +183,10 @@ procSuite "Portal RPC Client":
         blockHeaderRes.isErr()
         blockHeaderRes.error() == ContentNotFound
 
-    tc.historyNode.store(blockHash, blockHeader)
-
     # Test content found
     block:
+      tc.historyNode1.store(blockHash, blockHeader)
+
       let blockHeaderRes =
         await tc.client.historyGetBlockHeader(blockHash, validateContent = false)
       check:
@@ -201,8 +212,8 @@ procSuite "Portal RPC Client":
 
     # Test content validation failed
     block:
-      tc.historyNode.store(blockHash, blockHeader)
-      tc.historyNode.store(blockHash, blockBody)
+      tc.historyNode1.store(blockHash, blockHeader)
+      tc.historyNode1.store(blockHash, blockBody)
 
       let blockBodyRes =
         await tc.client.historyGetBlockBody(blockHash, validateContent = true)
@@ -229,8 +240,8 @@ procSuite "Portal RPC Client":
 
     # Test content found
     block:
-      tc.historyNode.store(blockHash, blockHeader)
-      tc.historyNode.store(blockHash, blockBody)
+      tc.historyNode1.store(blockHash, blockHeader)
+      tc.historyNode1.store(blockHash, blockBody)
 
       let blockBodyRes =
         await tc.client.historyGetBlockBody(blockHash, validateContent = false)
@@ -257,8 +268,8 @@ procSuite "Portal RPC Client":
 
     # Test content validation failed
     block:
-      tc.historyNode.store(blockHash, blockHeader)
-      tc.historyNode.store(blockHash, receipts)
+      tc.historyNode1.store(blockHash, blockHeader)
+      tc.historyNode1.store(blockHash, receipts)
 
       let receiptsRes =
         await tc.client.historyGetReceipts(blockHash, validateContent = true)
@@ -285,8 +296,8 @@ procSuite "Portal RPC Client":
 
     # Test content found
     block:
-      tc.historyNode.store(blockHash, blockHeader)
-      tc.historyNode.store(blockHash, receipts)
+      tc.historyNode1.store(blockHash, blockHeader)
+      tc.historyNode1.store(blockHash, receipts)
 
       let receiptsRes =
         await tc.client.historyGetReceipts(blockHash, validateContent = false)

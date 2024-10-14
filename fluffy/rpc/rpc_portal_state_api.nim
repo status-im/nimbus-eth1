@@ -83,9 +83,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     SSZ.encode(offerResult).to0xHex()
 
-  rpcServer.rpc("portal_stateRecursiveFindContent") do(
-    contentKey: string
-  ) -> ContentInfo:
+  rpcServer.rpc("portal_stateGetContent") do(contentKey: string) -> ContentInfo:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
@@ -105,7 +103,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     ContentInfo(content: contentValue.to0xHex(), utpTransfer: foundContent.utpTransfer)
 
-  rpcServer.rpc("portal_stateTraceRecursiveFindContent") do(
+  rpcServer.rpc("portal_stateTraceGetContent") do(
     contentKey: string
   ) -> TraceContentLookupResult:
     let

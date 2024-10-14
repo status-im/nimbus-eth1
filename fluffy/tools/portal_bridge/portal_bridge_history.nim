@@ -422,7 +422,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyRecursiveFindContent(
+              await portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content
@@ -454,7 +454,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyRecursiveFindContent(
+              await portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content
@@ -482,7 +482,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyRecursiveFindContent(
+              await portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content
