@@ -76,9 +76,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     SSZ.encode(offerResult).to0xHex()
 
-  rpcServer.rpc("portal_historyRecursiveFindContent") do(
-    contentKey: string
-  ) -> ContentInfo:
+  rpcServer.rpc("portal_historyGetContent") do(contentKey: string) -> ContentInfo:
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
@@ -91,7 +89,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       content: contentResult.content.to0xHex(), utpTransfer: contentResult.utpTransfer
     )
 
-  rpcServer.rpc("portal_historyTraceRecursiveFindContent") do(
+  rpcServer.rpc("portal_historyTraceGetContent") do(
     contentKey: string
   ) -> TraceContentLookupResult:
     let
