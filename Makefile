@@ -211,11 +211,10 @@ $(TOOLS): | build deps rocksdb
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
-nimbus: | build deps nimbus_execution_client
-
-nimbus_execution_client: rocksdb
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
+execution_client_name = nimbus_execution_client
+nimbus: | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/$(execution_client_name)" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$(execution_client_name) "nimbus/$(execution_client_name).nim"
 
 # symlink
 nimbus.nims:
