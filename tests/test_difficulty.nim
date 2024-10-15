@@ -21,7 +21,7 @@ type
   Tester = object
     parentTimestamp: int64
     parentDifficulty: Uint256
-    parentUncles: Hash256
+    parentUncles: Hash32
     currentTimestamp: int64
     currentBlockNumber: uint64
     currentDifficulty: Uint256
@@ -43,7 +43,7 @@ proc hexOrInt256(data: JsonNode, key: string, hex: static[bool]): Uint256 =
   else:
     parse(data[key].getStr, Uint256)
 
-proc parseHash(data: string): Hash256 =
+proc parseHash(data: string): Hash32 =
   case data
   of "0x00": result = EMPTY_UNCLE_HASH
   of "0x01": result.data[0] = 1.byte
@@ -67,7 +67,7 @@ proc parseTests(testData: JSonNode): Tests =
     t.currentDifficulty = hexOrInt256(data, "currentDifficulty", hex)
     result[title] = t
 
-proc calculator(revision: string, timestamp: EthTime, header: BlockHeader): DifficultyInt =
+proc calculator(revision: string, timestamp: EthTime, header: Header): DifficultyInt =
   case revision
   of "Homestead": result = calcDifficultyHomestead(timestamp, header)
   of "GrayGlacier": result = calcDifficultyGrayGlacier(timestamp, header)
@@ -92,7 +92,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     let tests = parseTests(child)
 
     for title, t in tests:
-      let p = BlockHeader(
+      let p = Header(
         difficulty : t.parentDifficulty,
         timestamp  : EthTime(t.parentTimestamp),
         number     : t.currentBlockNumber - 1,

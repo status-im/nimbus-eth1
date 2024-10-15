@@ -9,10 +9,8 @@
 # according to those terms.
 
 import
-  std/[base64, times, strutils],
+  std/times,
   eth/common,
-  nimcrypto/[hmac],
-  stew/byteutils,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
   web3/engine_api,
@@ -103,8 +101,8 @@ proc runTest(env: TestEnv): Result[void, string] =
     time = getTime().toUnix
     attr = PayloadAttributes(
       timestamp:             w3Qty(time + 1),
-      prevRandao:            w3PrevRandao(),
-      suggestedFeeRecipient: w3Address(),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
     fcuRes = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))

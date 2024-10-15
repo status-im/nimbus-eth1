@@ -134,7 +134,7 @@ proc setupEthRpc*(
       accDB   = stateDBFromTag(quantityTag)
       address = data
       data = accDB.getStorage(address, slot)
-    FixedBytes[32](data.toBytesBE)
+    data.to(Bytes32)
 
   server.rpc("eth_getTransactionCount") do(data: eth_types.Address, quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions sent from an address.

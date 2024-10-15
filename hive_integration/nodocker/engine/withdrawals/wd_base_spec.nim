@@ -160,12 +160,12 @@ proc verifyContractsStorage(ws: WDBaseSpec, env: TestEnv): Result[void, string] 
 
   if latestPayloadNumber >= ws.forkHeight.uint64:
     # Shanghai
-    r.expectStorageEqual(WARM_COINBASE_ADDRESS, FixedBytes[32](100.u256.toBytesBE))    # WARM_STORAGE_READ_COST
-    p.expectStorageEqual(PUSH0_ADDRESS, FixedBytes[32](latestPayloadNumber.u256.toBytesBE)) # tx succeeded
+    r.expectStorageEqual(WARM_COINBASE_ADDRESS, 100.u256.to(Bytes32))    # WARM_STORAGE_READ_COST
+    p.expectStorageEqual(PUSH0_ADDRESS, latestPayloadNumber.u256.to(Bytes32)) # tx succeeded
   else:
     # Pre-Shanghai
-    r.expectStorageEqual(WARM_COINBASE_ADDRESS, FixedBytes[32](2600.u256.toBytesBE)) # COLD_ACCOUNT_ACCESS_COST
-    p.expectStorageEqual(PUSH0_ADDRESS, FixedBytes[32](0.u256.toBytesBE))            # tx must've failed
+    r.expectStorageEqual(WARM_COINBASE_ADDRESS, 2600.u256.to(Bytes32)) # COLD_ACCOUNT_ACCESS_COST
+    p.expectStorageEqual(PUSH0_ADDRESS, 0.u256.to(Bytes32))            # tx must've failed
 
   ok()
 
@@ -217,7 +217,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
 
     # Genesis should not contain `withdrawalsRoot` either
     let r = env.client.latestHeader()
-    r.expectWithdrawalsRoot(Opt.none(common.Hash256))
+    r.expectWithdrawalsRoot(Opt.none(common.Hash32))
   else:
     # Genesis is post shanghai, it should contain EmptyWithdrawalsRoot
     let r = env.client.latestHeader()
@@ -251,8 +251,8 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
-            prevRandao:            w3PrevRandao(),
-            suggestedFeeRecipient: w3Address(),
+            prevRandao:            default(Bytes32),
+            suggestedFeeRecipient: default(Address),
             withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
           ))
         )
@@ -267,8 +267,8 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
-            prevRandao:            w3PrevRandao(),
-            suggestedFeeRecipient: w3Address(),
+            prevRandao:            default(Bytes32),
+            suggestedFeeRecipient: default(Address),
             withdrawals:           Opt.none(seq[WithdrawalV1]),
           ))
         )
@@ -289,7 +289,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         let emptyWithdrawalsList = newSeq[Withdrawal]()
         let customizer = CustomPayloadData(
           withdrawals: Opt.some(emptyWithdrawalsList),
-          parentBeaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
+          parentBeaconRoot: env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
         )
         let payloadPlusWithdrawals = customizer.customizePayload(env.clMock.latestExecutableData).basePayload
         var r = env.client.newPayloadV2(payloadPlusWithdrawals.V1V2)
@@ -309,7 +309,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         let r = env.client.latestHeader()
         #r.ExpectationDescription = "Requested "latest" block expecting block to contain
         #" withdrawalRoot=nil, because (block %d).timestamp < shanghaiTime
-        r.expectWithdrawalsRoot(Opt.none(common.Hash256))
+        r.expectWithdrawalsRoot(Opt.none(common.Hash32))
       return true
     ,
     onForkchoiceBroadcast: proc(): bool =
@@ -339,8 +339,8 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
-            prevRandao:            w3PrevRandao(),
-            suggestedFeeRecipient: w3Address(),
+            prevRandao:            default(Bytes32),
+            suggestedFeeRecipient: default(Address),
             withdrawals:           Opt.none(seq[WithdrawalV1]),
           ))
         )
@@ -379,7 +379,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # be checked first instead of responding `INVALID`
         let customizer = CustomPayloadData(
           removeWithdrawals: true,
-          parentBeaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
+          parentBeaconRoot: env.clMock.latestPayloadAttributes.parentBeaconBlockRoot
         )
         let nilWithdrawalsPayload = customizer.customizePayload(env.clMock.latestExecutableData).basePayload
         let r = env.client.newPayloadV2(nilWithdrawalsPayload.V1V2)
@@ -433,7 +433,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
           var payload = env.clMock.latestExecutedPayload
 
           # Corrupt the hash
-          let randomHash = common.Hash256.randomBytes()
+          let randomHash = common.Hash32.randomBytes()
           payload.blockHash = randomHash
 
           # On engine_newPayloadV2 `INVALID_BLOCK_HASH` is deprecated
@@ -497,7 +497,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
 
       # Check the correct withdrawal root on past blocks
       let r = env.client.headerByNumber(bn)
-      var expectedWithdrawalsRoot: Opt[common.Hash256]
+      var expectedWithdrawalsRoot: Opt[common.Hash32]
       if bn >= ws.forkHeight.uint64:
         let wds = ws.wdHistory.getWithdrawals(bn)
         expectedWithdrawalsRoot = Opt.some(calcWithdrawalsRoot(wds.list))

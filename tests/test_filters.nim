@@ -11,7 +11,6 @@ import
   std/[options, typetraits],
   unittest2,
   eth/[common/eth_types],
-  stew/byteutils,
   ../nimbus/rpc/filters,
   ../nimbus/beacon/web3_eth_conv,
   ./test_block_fixture

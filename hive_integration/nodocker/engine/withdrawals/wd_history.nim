@@ -40,17 +40,17 @@ proc get*(wh: WDHistory, blockNumber: uint64): Result[seq[Withdrawal], string] =
 
 # Gets an account expected value for a given block, taking into account all
 # withdrawals that credited the account.
-func getExpectedAccountBalance*(wh: WDHistory, account: EthAddress, blockNumber: uint64): UInt256 =
+func getExpectedAccountBalance*(wh: WDHistory, account: Address, blockNumber: uint64): UInt256 =
   for b in 0..blockNumber:
     let wds = wh.map.getOrDefault(b)
     if wds.isNil: continue
     for wd in wds.list:
-      if wd.address == account:
+     if wd.address == account:
         result += wd.weiAmount
 
 # Get a list of all addresses that were credited by withdrawals on a given block.
-func getAddressesWithdrawnOnBlock*(wh: WDHistory, blockNumber: uint64): seq[EthAddress] =
-  var addressMap: HashSet[EthAddress]
+func getAddressesWithdrawnOnBlock*(wh: WDHistory, blockNumber: uint64): seq[Address] =
+  var addressMap: HashSet[Address]
   let wds = wh.map.getOrDefault(blockNumber)
   if wds.isNil.not:
     for wd in wds.list:
@@ -68,7 +68,7 @@ func getWithdrawals*(wh: WDHistory, blockNumber: uint64): Withdrawals =
     wds
 
 # Get the withdrawn accounts list until a given block height.
-func getWithdrawnAccounts*(wh: WDHistory, blockHeight: uint64): Table[EthAddress, UInt256] =
+func getWithdrawnAccounts*(wh: WDHistory, blockHeight: uint64): Table[Address, UInt256] =
   for blockNumber in 0..blockHeight:
     let wds = wh.map.getOrDefault(blockNumber)
     if wds.isNil: continue
@@ -97,7 +97,7 @@ proc verifyWithdrawals*(wh: WDHistory, blockNumber: uint64,
               client.storageAt(account, 0.u256, rpcBlock.get)
             else:
               client.storageAt(account, 0.u256)
-    s.expectStorageEqual(account, FixedBytes[32](0.u256.toBytesBE))
+    s.expectStorageEqual(account, 0.u256.to(Bytes32))
   ok()
 
 # Create a new copy of the withdrawals history

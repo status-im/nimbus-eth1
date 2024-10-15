@@ -94,7 +94,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
         raise newException(ValueError, error)
       address = data
       value   = ledger.getStorage(address, slot)
-    FixedBytes[32](value.toBytesBE)
+    value.to(Bytes32)
 
   server.rpc("eth_getTransactionCount") do(data: Address, blockTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.

@@ -300,7 +300,7 @@ proc rpcMain*() =
     test "eth_coinbase":
       let res = await client.eth_coinbase()
       # currently we don't have miner
-      check res == w3Address()
+      check res == default(Address)
 
     test "eth_mining":
       let res = await client.eth_mining()
@@ -336,7 +336,7 @@ proc rpcMain*() =
 
     test "eth_getStorageAt":
       let res = await client.eth_getStorageAt(Hash32.fromHex("0xfff33a3bd36abdbd412707b8e310d6011454a7ae"), 0.u256, blockId(0'u64))
-      check Hash32() == res
+      check default(Hash32) == res
 
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(Hash32.fromHex("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), blockId(0'u64))

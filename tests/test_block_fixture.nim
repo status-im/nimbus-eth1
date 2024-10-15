@@ -17,13 +17,13 @@ var headerRlp = rlpb.listElem(0)
 var bodyRlp = rlpb.listElem(1)
 var receitsRlp = rlpb.listElem(2)
 
-let blockHeader4514995* = headerRlp.read(BlockHeader)
+let blockHeader4514995* = headerRlp.read(Header)
 let blockBody4514995* = bodyRlp.read(BlockBody)
 let receipts4514995* = receitsRlp.read(seq[Receipt])
 
-proc getBlockHeader4514995*(): BlockHeader {.gcsafe.} =
+proc getBlockHeader4514995*(): Header {.gcsafe.} =
   var headerRlp = rlpb.listElem(0)
-  return headerRlp.read(BlockHeader)
+  return headerRlp.read(Header)
 
 proc getBlockBody4514995*(): BlockBody {.gcsafe.} =
   var bodyRlp = rlpb.listElem(1)

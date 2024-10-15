@@ -8,8 +8,8 @@
 import
   std/[strformat, strutils, json, os, tables, macros],
   unittest2, stew/byteutils,
-  eth/[keys, trie],
-  eth/common/transaction_utils,
+  eth/[trie],
+  eth/common/[keys, transaction_utils],
   ../nimbus/common/common,
   ../tools/common/helpers as chp,
   ../nimbus/[evm/computation,
@@ -73,8 +73,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
     com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = conf)
     vmState = BaseVMState.new(
-      BlockHeader(number: 1'u64, stateRoot: emptyRlpHash),
-      BlockHeader(),
+      Header(number: 1'u64, stateRoot: emptyRlpHash),
+      Header(),
       com
     )
 

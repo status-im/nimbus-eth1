@@ -86,7 +86,7 @@ method execute(cs: InvalidMissingAncestorReOrgTest, env: TestEnv): bool =
     onGetPayload: proc(): bool =
       # Insert extraData to ensure we deviate from the main payload, which contains empty extradata
       let customizer = CustomPayloadData(
-        parentHash: Opt.some(ethHash shadow.payloads[^1].blockHash),
+        parentHash: Opt.some(shadow.payloads[^1].blockHash),
         extraData:  Opt.some(@[0x01.byte]),
       )
 
@@ -259,7 +259,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
         # Insert extraData to ensure we deviate from the main payload, which contains empty extradata
         pHash = shadow.payloads[^1].blockHash
         customizer = CustomPayloadData(
-          parentHash: Opt.some(ethHash pHash),
+          parentHash: Opt.some(pHash),
           extraData:  Opt.some(@[0x01.byte]),
         )
         sidePayload = customizer.customizePayload(env.clMock.latestExecutableData)
@@ -336,7 +336,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
         fatal "TEST ISSUE - Secondary Node unable to reatrieve latest header: ", msg=res.error
 
       let head = res.get()
-      testCond head.blockHash == ethHash(shadow.payloads[shadow.n-1].blockHash):
+      testCond head.blockHash == shadow.payloads[shadow.n-1].blockHash:
         fatal "TEST ISSUE - Secondary Node has invalid blockHash",
           got=head.blockHash.short,
           want=shadow.payloads[shadow.n-1].blockHash.short,

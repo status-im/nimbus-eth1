@@ -59,7 +59,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     ## * disableStack: BOOL. Setting this to true will disable stack capture (default = false).
     ## * disableState: BOOL. Setting this to true will disable state trie capture (default = false).
     let
-      txHash = ethHash(data)
+      txHash = data
       txDetails = chainDB.getTransactionKey(txHash)
       header = chainDB.getBlockHeader(txDetails.blockNumber)
       transactions = chainDB.getTransactions(header.txRoot)
@@ -86,7 +86,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     ##
     ## data: Hash of a block.
     var
-      h = data.ethHash
+      h = data
       blk = chainDB.getEthBlock(h)
 
     dumpBlockState(com, blk)
@@ -113,7 +113,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     ## data: Hash of a block.
     ## options: see debug_traceTransaction
     var
-      h = data.ethHash
+      h = data
       header = chainDB.getBlockHeader(h)
       blockHash = chainDB.getBlockHash(header.number)
       body = chainDB.getBlockBody(blockHash)
@@ -151,7 +151,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
 
   rpcsrv.rpc("debug_getRawTransaction") do(data: Hash32) -> seq[byte]:
     ## Returns an EIP-2718 binary-encoded transaction.
-    let txHash = ethHash data
+    let txHash = data
     let res = txPool.getItem(txHash)
     if res.isOk:
       return rlp.encode(res.get().tx)

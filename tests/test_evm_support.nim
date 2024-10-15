@@ -8,9 +8,7 @@
 import
   std/[importutils, sequtils],
   unittest2,
-  stew/byteutils,
-  eth/keys,
-  eth/common/transaction_utils,
+  eth/common/[keys, transaction_utils],
   ../nimbus/common,
   ../nimbus/transaction,
   ../nimbus/evm/types,
@@ -327,7 +325,7 @@ const
 
 proc runTestOverflow() =
   test "GasCall unhandled overflow":
-    let header = BlockHeader(
+    let header = Header(
       stateRoot: EMPTY_ROOT_HASH,
       number: 1150000'u64,
       coinBase: coinbase,

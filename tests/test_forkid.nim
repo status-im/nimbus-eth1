@@ -110,7 +110,7 @@ func calcID(conf: ChainConfig, crc: uint32, time: uint64): ForkID =
 template runGenesisTimeIdTests() =
   let
     time       = 1690475657'u64
-    genesis    = common.BlockHeader(timestamp: time.EthTime)
+    genesis    = common.Header(timestamp: time.EthTime)
     genesisCRC = crc32(0, genesis.blockHash.data)
     cases = [
       # Shanghai active before genesis, skip

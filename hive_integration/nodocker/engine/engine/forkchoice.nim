@@ -53,7 +53,7 @@ method execute(cs: InconsistentForkchoiceTest, env: TestEnv): bool =
       )
 
       if shadow.alt.len > 0:
-        customData.parentHash = Opt.some(ethHash shadow.alt[^1].blockHash)
+        customData.parentHash = Opt.some(shadow.alt[^1].blockHash)
 
       let altPayload = customData.customizePayload(env.clMock.latestExecutableData)
       shadow.alt.add altPayload
@@ -163,8 +163,8 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
         r.expectError()
 
         var payloadAttributes = env.clMock.latestPayloadAttributes
-        payloadAttributes.prevRandao = Hash32()
-        payloadAttributes.suggestedFeeRecipient = w3Address()
+        payloadAttributes.prevRandao = default(Hash32)
+        payloadAttributes.suggestedFeeRecipient = default(Address)
 
         # Test again using PayloadAttributes, should also return INVALID and no PayloadID
         r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(payloadAttributes))

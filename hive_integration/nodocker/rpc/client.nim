@@ -66,7 +66,7 @@ proc txReceipt*(client: RpcClient, txHash: eth_types.Hash32): Future[Option[Rece
     receiptType: LegacyReceipt,
     isHash     : rc.root.isSome,
     status     : rc.status.isSome,
-    hash       : rc.root.get(),
+    hash       : rc.root.get(default(Hash32)),
     cumulativeGasUsed: rc.cumulativeGasUsed.GasInt,
     logsBloom  : rc.logsBloom,
     logs       : toLogs(rc.logs)

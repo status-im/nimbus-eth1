@@ -72,7 +72,7 @@ method execute(cs: BadHashOnNewPayload, env: TestEnv): bool =
     onGetPayload: proc(): bool =
       # Alter hash on the payload and send it to client, should produce an error
       shadow.payload = env.clMock.latestExecutableData
-      var invalidHash = ethHash shadow.payload.blockHash
+      var invalidHash = shadow.payload.blockHash
       invalidHash.data[^1] = byte(255 - invalidHash.data[^1])
       shadow.payload.blockHash = invalidHash
 
@@ -128,7 +128,7 @@ method execute(cs: BadHashOnNewPayload, env: TestEnv): bool =
     # Run test after the new payload has been obtained
     onGetPayload: proc(): bool =
       var customizer = CustomPayloadData(
-        parentHash: Opt.some(ethHash shadow.payload.blockHash),
+        parentHash: Opt.some(shadow.payload.blockHash),
       )
       shadow.payload = customizer.customizePayload(env.clMock.latestExecutableData)
 
