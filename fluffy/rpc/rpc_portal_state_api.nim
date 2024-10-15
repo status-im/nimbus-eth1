@@ -99,7 +99,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     validateRetrieval(key, contentValue).isOkOr:
       raise invalidValueErr()
-    p.storeContent(keyBytes, contentId, contentValue)
+    p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
 
     ContentInfo(content: contentValue.to0xHex(), utpTransfer: foundContent.utpTransfer)
 
@@ -124,7 +124,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     validateRetrieval(key, contentValue).isOkOr:
       raise invalidValueErr()
-    p.storeContent(keyBytes, contentId, contentValue)
+    p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
 
     res
 

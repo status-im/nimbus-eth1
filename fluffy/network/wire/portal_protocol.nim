@@ -151,6 +151,8 @@ type
 
   RadiusCache* = LRUCache[NodeId, UInt256]
 
+  ContentCache = LRUCache[ContentId, seq[byte]]
+
   ContentKV* = object
     contentKey*: ContentKeyByteList
     content*: seq[byte]
@@ -172,6 +174,7 @@ type
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
+    contentCache: ContentCache
     dbGet*: DbGetHandler
     dbPut*: DbStoreHandler
     dataRadius*: DbRadiusHandler
@@ -568,6 +571,7 @@ proc new*(
     ),
     baseProtocol: baseProtocol,
     toContentId: toContentId,
+    contentCache: ContentCache.init(256),
     dbGet: dbGet,
     dbPut: dbPut,
     dataRadius: dbRadius,
@@ -1590,7 +1594,12 @@ proc storeContent*(
     contentKey: ContentKeyByteList,
     contentId: ContentId,
     content: seq[byte],
+    cacheContent = false,
 ): bool {.discardable.} =
+  if cacheContent:
+    # We cache content regardless of whether it is in our radius or not
+    p.contentCache.put(contentId, content)
+
   # Always re-check that the key is still in the node range to make sure only
   # content in range is stored.
   if p.inRange(contentId):
@@ -1599,6 +1608,22 @@ proc storeContent*(
     true
   else:
     false
+
+proc getLocalContent*(
+    p: PortalProtocol, contentKey: ContentKeyByteList, contentId: ContentId
+): Opt[seq[byte]] =
+  # The cache can contain content that is not in our radius
+  let maybeContent = p.contentCache.get(contentId)
+  if maybeContent.isSome():
+    return Opt.some(maybeContent.get())
+
+  # Check first if content is in range, as this is a cheaper operation
+  # than the database lookup.
+  if p.inRange(contentId):
+    doAssert(p.dbGet != nil)
+    p.dbGet(contentKey, contentId)
+  else:
+    Opt.none(seq[byte])
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are
