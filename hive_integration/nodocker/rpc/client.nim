@@ -43,7 +43,7 @@ proc nonceAt*(client: RpcClient, address: Address): Future[AccountNonce] {.async
   let hex = await client.eth_getTransactionCount(address, blockId("latest"))
   result = hex.AccountNonce
 
-func toTopics(list: openArray[Web3Hash]): seq[eth_types.Topic] =
+func toTopics(list: openArray[Hash32]): seq[eth_types.Topic] =
   result = newSeqOfCap[eth_types.Topic](list.len)
   for x in list:
     result.add eth_types.Topic(x)
@@ -66,7 +66,7 @@ proc txReceipt*(client: RpcClient, txHash: eth_types.Hash32): Future[Option[Rece
     receiptType: LegacyReceipt,
     isHash     : rc.root.isSome,
     status     : rc.status.isSome,
-    hash       : rc.root.get(w3Hash()),
+    hash       : rc.root.get(),
     cumulativeGasUsed: rc.cumulativeGasUsed.GasInt,
     logsBloom  : rc.logsBloom,
     logs       : toLogs(rc.logs)

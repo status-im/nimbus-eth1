@@ -137,7 +137,7 @@ method getPayloadAttributes(cust: BasePayloadAttributesCustomizer, basePayloadAt
     customPayloadAttributes.withdrawals = w3Withdrawals cust.withdrawals
 
   if cust.removeBeaconRoot:
-    customPayloadAttributes.parentBeaconBlockRoot = Opt.none(Web3Hash)
+    customPayloadAttributes.parentBeaconBlockRoot = Opt.none(Hash32)
   elif cust.beaconRoot.isSome:
     customPayloadAttributes.parentBeaconBlockRoot = cust.beaconRoot
 
@@ -533,7 +533,7 @@ type
     ExtraVersionedHashes
     InvalidWithdrawals
 
-func scramble(data: Web3Hash): Opt[Hash32] =
+func scramble(data: Hash32): Opt[Hash32] =
   var h = data
   h.data[^1] = byte(255 - h.data[^1])
   Opt.some(h)

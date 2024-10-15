@@ -160,12 +160,12 @@ proc verifyContractsStorage(ws: WDBaseSpec, env: TestEnv): Result[void, string] 
 
   if latestPayloadNumber >= ws.forkHeight.uint64:
     # Shanghai
-    r.expectStorageEqual(WARM_COINBASE_ADDRESS, 100.u256.w3FixedBytes)    # WARM_STORAGE_READ_COST
-    p.expectStorageEqual(PUSH0_ADDRESS, latestPayloadNumber.u256.w3FixedBytes) # tx succeeded
+    r.expectStorageEqual(WARM_COINBASE_ADDRESS, FixedBytes[32](100.u256.toBytesBE))    # WARM_STORAGE_READ_COST
+    p.expectStorageEqual(PUSH0_ADDRESS, FixedBytes[32](latestPayloadNumber.u256.toBytesBE)) # tx succeeded
   else:
     # Pre-Shanghai
-    r.expectStorageEqual(WARM_COINBASE_ADDRESS, 2600.u256.w3FixedBytes) # COLD_ACCOUNT_ACCESS_COST
-    p.expectStorageEqual(PUSH0_ADDRESS, 0.u256.w3FixedBytes)            # tx must've failed
+    r.expectStorageEqual(WARM_COINBASE_ADDRESS, FixedBytes[32](2600.u256.toBytesBE)) # COLD_ACCOUNT_ACCESS_COST
+    p.expectStorageEqual(PUSH0_ADDRESS, FixedBytes[32](0.u256.toBytesBE))            # tx must've failed
 
   ok()
 
@@ -247,7 +247,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # withdrawals before Shanghai
         var r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: w3Hash env.clMock.latestHeader,
+            headBlockHash: env.clMock.latestHeader,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
@@ -263,7 +263,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # (clMock uses V1 by default)
         r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: w3Hash env.clMock.latestHeader,
+            headBlockHash: env.clMock.latestHeader,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
@@ -335,7 +335,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # Shanghai
         let r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: w3Hash env.clMock.latestHeader,
+            headBlockHash: env.clMock.latestHeader,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
@@ -434,7 +434,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
 
           # Corrupt the hash
           let randomHash = common.Hash256.randomBytes()
-          payload.blockHash = w3Hash randomHash
+          payload.blockHash = randomHash
 
           # On engine_newPayloadV2 `INVALID_BLOCK_HASH` is deprecated
           # in favor of reusing `INVALID`

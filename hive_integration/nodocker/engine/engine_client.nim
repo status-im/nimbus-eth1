@@ -203,7 +203,7 @@ proc newPayloadV4*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes, parentBeaconBlockRoot)
 
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
+proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
   for w3tx in list:
     let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
@@ -317,7 +317,7 @@ proc toBlockHeader*(bc: BlockObject): Header =
     parentBeaconBlockRoot: bc.parentBeaconBlockRoot,
   )
 
-func vHashes(x: Opt[seq[Web3Hash]]): seq[VersionedHash] =
+func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
   if x.isNone: return
   else: x.get
 

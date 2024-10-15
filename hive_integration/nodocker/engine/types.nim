@@ -145,7 +145,7 @@ template expectBalanceEqual*(res: untyped, expectedBalance: UInt256) =
   testCond res.get == expectedBalance:
     error "balance mismatch", expect=expectedBalance, get=res.get
 
-template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash) =
+template expectLatestValidHash*(res: untyped, expectedHash: Hash32) =
   testCond res.isOk:
     error "Unexpected error", msg=res.error
   let s = res.get
@@ -243,7 +243,7 @@ template expectHash*(res: untyped, hash: Hash32) =
   testCond s.blockHash == hash:
     error "Unexpected expectHash", expect=hash.short, get=s.blockHash.short
 
-template expectStorageEqual*(res: untyped, expectedValue: Web3FixedBytes[32]) =
+template expectStorageEqual*(res: untyped, expectedValue: FixedBytes[32]) =
   testCond res.isOk:
     error "expectStorageEqual", msg=res.error
   testCond res.get == expectedValue:
@@ -280,7 +280,7 @@ template expectTransactionHash*(res: untyped, expected: Hash32) =
   testCond rec.txHash == expected:
     error "expectTransactionHash", expect=expected.short, get=rec.txHash.short
 
-template expectPayloadParentHash*(res: untyped, expected: Web3Hash) =
+template expectPayloadParentHash*(res: untyped, expected: Hash32) =
   testCond res.isOk:
     error "expectPayloadParentHash", msg=res.error
   let rec = res.get

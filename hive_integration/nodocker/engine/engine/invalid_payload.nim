@@ -166,7 +166,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
 
       var attr = env.clMock.latestPayloadAttributes
       attr.timestamp = w3Qty(shadow.alteredPayload.timestamp, 1)
-      attr.prevRandao = w3Hash()
+      attr.prevRandao = Hash32()
       attr.suggestedFeeRecipient = w3Address()
 
       # Execution specification:

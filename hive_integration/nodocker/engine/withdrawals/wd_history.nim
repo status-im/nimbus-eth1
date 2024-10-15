@@ -97,7 +97,7 @@ proc verifyWithdrawals*(wh: WDHistory, blockNumber: uint64,
               client.storageAt(account, 0.u256, rpcBlock.get)
             else:
               client.storageAt(account, 0.u256)
-    s.expectStorageEqual(account, 0.u256.w3FixedBytes)
+    s.expectStorageEqual(account, FixedBytes[32](0.u256.toBytesBE))
   ok()
 
 # Create a new copy of the withdrawals history

@@ -65,7 +65,7 @@ func toPayloadBody(blk: Block): ExecutionPayloadBodyV1 =
   )
 
 proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
-                             hashes: seq[Web3Hash]):
+                             hashes: seq[Hash32]):
                                seq[Opt[ExecutionPayloadBodyV1]] =
   if hashes.len > maxBodyRequest:
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)

@@ -67,7 +67,7 @@ proc validateBlockHash*(header: common.Header,
 
   return ok()
 
-template toValidHash*(x: common.Hash32): Opt[Web3Hash] =
+template toValidHash*(x: common.Hash32): Opt[Hash32] =
   Opt.some(x)
 
 proc simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =

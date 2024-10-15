@@ -100,7 +100,7 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
           echo sRes.error
           return false
 
-        if val.w3FixedBytes != sRes.value:
+        if FixedBytes[32](val.toBytesBE) != sRes.value:
           echo "storage recieved from account 0x",
             account.toHex,
             " at slot 0x",

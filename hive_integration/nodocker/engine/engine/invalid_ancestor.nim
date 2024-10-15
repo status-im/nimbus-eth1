@@ -374,7 +374,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
         if r.get.status == PayloadExecutionStatus.invalid:
           # We also expect that the client properly returns the LatestValidHash of the block on the
           # side chain that is immediately prior to the invalid payload (or zero if parent is PoW)
-          var lvh: Web3Hash
+          var lvh: Hash32
           if shadow.cAHeight != 0 or cs.invalidIndex != 1:
             # Parent is NOT Proof of Work
             lvh = shadow.payloads[cs.invalidIndex-1].blockHash

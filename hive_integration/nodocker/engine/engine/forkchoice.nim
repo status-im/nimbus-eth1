@@ -114,7 +114,7 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
   testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())
 
   # Generate a random block hash
-  let randomblockHash = Web3Hash.randomBytes()
+  let randomblockHash = Hash32.randomBytes()
 
   if cs.field == HeadBlockHash:
     let fcu = ForkchoiceStateV1(
@@ -163,7 +163,7 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
         r.expectError()
 
         var payloadAttributes = env.clMock.latestPayloadAttributes
-        payloadAttributes.prevRandao = w3Hash()
+        payloadAttributes.prevRandao = Hash32()
         payloadAttributes.suggestedFeeRecipient = w3Address()
 
         # Test again using PayloadAttributes, should also return INVALID and no PayloadID

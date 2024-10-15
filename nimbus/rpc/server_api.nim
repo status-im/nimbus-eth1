@@ -79,7 +79,7 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] 
     return api.chain.blockByNumber(blockNum)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
-  server.rpc("eth_getBalance") do(data: Web3Address, blockTag: BlockTag) -> UInt256:
+  server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:
@@ -87,16 +87,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       address = data
     ledger.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, blockTag: BlockTag) -> Web3FixedBytes[32]:
+  server.rpc("eth_getStorageAt") do(data: Address, slot: UInt256, blockTag: BlockTag) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
       address = data
       value   = ledger.getStorage(address, slot)
-    w3FixedBytes value
+    FixedBytes[32](value.toBytesBE)
 
-  server.rpc("eth_getTransactionCount") do(data: Web3Address, blockTag: BlockTag) -> Web3Quantity:
+  server.rpc("eth_getTransactionCount") do(data: Address, blockTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:
@@ -112,7 +112,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
   server.rpc("eth_chainId") do() -> Web3Quantity:
     return Quantity(distinctBase(api.com.chainId))
 
-  server.rpc("eth_getCode") do(data: Web3Address, blockTag: BlockTag) -> seq[byte]:
+  server.rpc("eth_getCode") do(data: Address, blockTag: BlockTag) -> seq[byte]:
     ## Returns code at a given address.
     ##
     ## data: address
@@ -124,7 +124,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       address = data
     ledger.getCode(address).bytes()
 
-  server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
+  server.rpc("eth_getBlockByHash") do(data: Hash32, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
@@ -232,7 +232,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
         filterOptions
       )
 
-  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
+  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
     ## Creates new message call transaction or a contract creation for signed transactions.
     ##
     ## data: the signed transaction data.
@@ -261,7 +261,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
                  raise newException(ValueError, "rpcCallEvm error: " & $error.code)
     res.output
 
-  server.rpc("eth_getTransactionReceipt") do(data: Web3Hash) -> ReceiptObject:
+  server.rpc("eth_getTransactionReceipt") do(data: Hash32) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.
     ##
     ## data: Hash of a transaction.

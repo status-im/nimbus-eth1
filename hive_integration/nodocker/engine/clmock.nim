@@ -377,7 +377,7 @@ proc getNextPayload(cl: CLMocker): bool =
 
   return true
 
-func versionedHashes(payload: ExecutionPayload): seq[Web3Hash] =
+func versionedHashes(payload: ExecutionPayload): seq[Hash32] =
   result = newSeqOfCap[Hash32](payload.transactions.len)
   for x in payload.transactions:
     let tx = rlp.decode(distinctBase(x), Transaction)
@@ -497,10 +497,10 @@ proc broadcastLatestForkchoice(cl: CLMocker): bool =
   let version = cl.latestExecutedPayload.version
   cl.broadcastForkchoiceUpdated(version, cl.latestForkchoice)
 
-func w3Address(x: int): Web3Address =
+func w3Address(x: int): Address =
   var res: array[20, byte]
   res[^1] = x.byte
-  Web3Address(res)
+  Address(res)
 
 proc makeNextWithdrawals(cl: CLMocker): seq[WithdrawalV1] =
   var

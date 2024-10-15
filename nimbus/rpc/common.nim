@@ -35,7 +35,7 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
     result = conf.agentString
 
-  server.rpc("web3_sha3") do(data: seq[byte]) -> Web3Hash:
+  server.rpc("web3_sha3") do(data: seq[byte]) -> Hash32:
     result = keccak256(data)
 
   server.rpc("net_version") do() -> string:

@@ -98,7 +98,7 @@ proc runTest(env: TestEnv): Result[void, string] =
     client = env.client
     header = ? client.latestHeader()
     update = ForkchoiceStateV1(
-      headBlockHash: w3Hash header.blockHash
+      headBlockHash: header.blockHash
     )
     time = getTime().toUnix
     attr = PayloadAttributes(

@@ -15,7 +15,7 @@ import
   ../beacon/beacon_engine,
   ../version
 
-from ../beacon/web3_eth_conv import Web3Hash
+from ../beacon/web3_eth_conv import Hash32
 
 {.push raises: [].}
 
@@ -53,13 +53,13 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
     return engine.newPayload(Version.V2, payload)
 
   server.rpc("engine_newPayloadV3") do(payload: ExecutionPayload,
-                                       expectedBlobVersionedHashes: Opt[seq[Web3Hash]],
-                                       parentBeaconBlockRoot: Opt[Web3Hash]) -> PayloadStatusV1:
+                                       expectedBlobVersionedHashes: Opt[seq[Hash32]],
+                                       parentBeaconBlockRoot: Opt[Hash32]) -> PayloadStatusV1:
     return engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
   server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
-                                       expectedBlobVersionedHashes: Opt[seq[Web3Hash]],
-                                       parentBeaconBlockRoot: Opt[Web3Hash]) -> PayloadStatusV1:
+                                       expectedBlobVersionedHashes: Opt[seq[Hash32]],
+                                       parentBeaconBlockRoot: Opt[Hash32]) -> PayloadStatusV1:
     return engine.newPayload(Version.V4, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
   server.rpc("engine_getPayloadV1") do(payloadId: Bytes8) -> ExecutionPayloadV1:
@@ -90,7 +90,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
     return engine.forkchoiceUpdated(Version.V3, update, attrs)
 
-  server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Web3Hash]) ->
+  server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
                                                seq[Opt[ExecutionPayloadBodyV1]]:
     return engine.getPayloadBodiesByHash(hashes)
 

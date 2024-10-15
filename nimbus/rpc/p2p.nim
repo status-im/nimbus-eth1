@@ -102,9 +102,9 @@ proc setupEthRpc*(
     ## Returns an integer of the current gas price in wei.
     w3Qty(calculateMedianGasPrice(chainDB).uint64)
 
-  server.rpc("eth_accounts") do() -> seq[Web3Address]:
+  server.rpc("eth_accounts") do() -> seq[eth_types.Address]:
     ## Returns a list of addresses owned by client.
-    result = newSeqOfCap[Web3Address](ctx.am.numAccounts)
+    result = newSeqOfCap[eth_types.Address](ctx.am.numAccounts)
     for k in ctx.am.addresses:
       result.add k
 
@@ -112,7 +112,7 @@ proc setupEthRpc*(
     ## Returns integer of the current block number the client is on.
     w3Qty(chainDB.getCanonicalHead().number)
 
-  server.rpc("eth_getBalance") do(data: Web3Address, quantityTag: BlockTag) -> UInt256:
+  server.rpc("eth_getBalance") do(data: eth_types.Address, quantityTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     ##
     ## data: address to check for balance.
@@ -123,7 +123,7 @@ proc setupEthRpc*(
       address = data
     accDB.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, quantityTag: BlockTag) -> Web3FixedBytes[32]:
+  server.rpc("eth_getStorageAt") do(data: eth_types.Address, slot: UInt256, quantityTag: BlockTag) -> eth_types.FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     ##
     ## data: address of the storage.
@@ -134,9 +134,9 @@ proc setupEthRpc*(
       accDB   = stateDBFromTag(quantityTag)
       address = data
       data = accDB.getStorage(address, slot)
-    data.w3FixedBytes
+    FixedBytes[32](data.toBytesBE)
 
-  server.rpc("eth_getTransactionCount") do(data: Web3Address, quantityTag: BlockTag) -> Web3Quantity:
+  server.rpc("eth_getTransactionCount") do(data: eth_types.Address, quantityTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions sent from an address.
     ##
     ## data: address.
@@ -147,7 +147,7 @@ proc setupEthRpc*(
       accDB   = stateDBFromTag(quantityTag)
     w3Qty(accDB.getNonce(address))
 
-  server.rpc("eth_getBlockTransactionCountByHash") do(data: Web3Hash) -> Web3Quantity:
+  server.rpc("eth_getBlockTransactionCountByHash") do(data: Hash32) -> Web3Quantity:
     ## Returns the number of transactions in a block from a block matching the given block hash.
     ##
     ## data: hash of a block
@@ -168,7 +168,7 @@ proc setupEthRpc*(
       txCount = chainDB.getTransactionCount(header.txRoot)
     Web3Quantity(txCount)
 
-  server.rpc("eth_getUncleCountByBlockHash") do(data: Web3Hash) -> Web3Quantity:
+  server.rpc("eth_getUncleCountByBlockHash") do(data: Hash32) -> Web3Quantity:
     ## Returns the number of uncles in a block from a block matching the given block hash.
     ##
     ## data: hash of a block.
@@ -189,7 +189,7 @@ proc setupEthRpc*(
       unclesCount = chainDB.getUnclesCount(header.ommersHash)
     Web3Quantity(unclesCount)
 
-  server.rpc("eth_getCode") do(data: Web3Address, quantityTag: BlockTag) -> seq[byte]:
+  server.rpc("eth_getCode") do(data: eth_types.Address, quantityTag: BlockTag) -> seq[byte]:
     ## Returns code at a given address.
     ##
     ## data: address
@@ -205,7 +205,7 @@ proc setupEthRpc*(
     let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
     @(sign(privateKey, msgData.toBytes()).toRaw())
 
-  server.rpc("eth_sign") do(data: Web3Address, message: seq[byte]) -> seq[byte]:
+  server.rpc("eth_sign") do(data: eth_types.Address, message: seq[byte]) -> seq[byte]:
     ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
     ## By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature.
     ## This prevents misuse where a malicious DApp can sign arbitrary data (e.g. transaction) and use the signature to impersonate the victim.
@@ -226,7 +226,7 @@ proc setupEthRpc*(
     ## Signs a transaction that can be submitted to the network at a later time using with
     ## eth_sendRawTransaction
     let
-      address = data.`from`.get(w3Address())
+      address = data.`from`.get()
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -239,14 +239,14 @@ proc setupEthRpc*(
       signedTx = signTransaction(tx, acc.privateKey, eip155)
     result    = rlp.encode(signedTx)
 
-  server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Web3Hash:
+  server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Hash32:
     ## Creates new message call transaction or a contract creation, if the data field contains code.
     ##
     ## obj: the transaction object.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
-      address = data.`from`.get(w3Address())
+      address = data.`from`.get()
       acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
@@ -280,7 +280,7 @@ proc setupEthRpc*(
     txPool.add(pooledTx)
     rlpHash(signedTx)
 
-  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
+  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
     ## Creates new message call transaction or a contract creation for signed transactions.
     ##
     ## data: the signed transaction data.
@@ -323,7 +323,7 @@ proc setupEthRpc*(
                    raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
     w3Qty(gasUsed)
 
-  server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
+  server.rpc("eth_getBlockByHash") do(data: Hash32, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
@@ -350,7 +350,7 @@ proc setupEthRpc*(
     except CatchableError:
       nil
 
-  server.rpc("eth_getTransactionByHash") do(data: Web3Hash) -> TransactionObject:
+  server.rpc("eth_getTransactionByHash") do(data: Hash32) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
     ##
     ## data: hash of a transaction.
@@ -369,7 +369,7 @@ proc setupEthRpc*(
     if chainDB.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
       result = populateTransactionObject(tx, Opt.some(header), Opt.some(txDetails.index))
 
-  server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Web3Hash, quantity: Web3Quantity) -> TransactionObject:
+  server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Hash32, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
     ##
     ## data: hash of a block.
@@ -401,7 +401,7 @@ proc setupEthRpc*(
     else:
       nil
 
-  server.rpc("eth_getTransactionReceipt") do(data: Web3Hash) -> ReceiptObject:
+  server.rpc("eth_getTransactionReceipt") do(data: Hash32) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.
     ##
     ## data: hash of a transaction.
@@ -427,7 +427,7 @@ proc setupEthRpc*(
         return populateReceipt(receipt, gasUsed, tx, txDetails.index, header)
       idx.inc
 
-  server.rpc("eth_getUncleByBlockHashAndIndex") do(data: Web3Hash, quantity: Web3Quantity) -> BlockObject:
+  server.rpc("eth_getUncleByBlockHashAndIndex") do(data: Hash32, quantity: Web3Quantity) -> BlockObject:
     ## Returns information about a uncle of a block by hash and uncle index position.
     ##
     ## data: hash of block.
@@ -532,7 +532,7 @@ proc setupEthRpc*(
       )
       return logs
 
-  server.rpc("eth_getProof") do(data: Web3Address, slots: seq[UInt256], quantityTag: BlockTag) -> ProofResponse:
+  server.rpc("eth_getProof") do(data: eth_types.Address, slots: seq[UInt256], quantityTag: BlockTag) -> ProofResponse:
     ## Returns information about an account and storage slots (if the account is a contract
     ## and the slots are requested) along with account and storage proofs which prove the
     ## existence of the values in the state.

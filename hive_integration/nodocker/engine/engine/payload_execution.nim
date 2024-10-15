@@ -349,7 +349,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
 
       # Send the forkchoiceUpdated with a reference to the valid payload on the SYNCING client.
       var
-        random                = w3Hash()
+        random                = Hash32()
         suggestedFeeRecipient = w3Address()
 
       let customizer = BasePayloadAttributesCustomizer(

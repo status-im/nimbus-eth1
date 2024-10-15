@@ -20,7 +20,7 @@ import
 {.push gcsafe, raises:[CatchableError].}
 
 func validateVersionedHashed(payload: ExecutionPayload,
-                              expected: openArray[Web3Hash]): bool  =
+                              expected: openArray[Hash32]): bool  =
   var versionedHashes: seq[VersionedHash]
   for x in payload.transactions:
     let tx = rlp.decode(distinctBase(x), Transaction)
@@ -97,8 +97,8 @@ template validatePayload(apiVersion, version, payload) =
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
-                 versionedHashes = Opt.none(seq[Web3Hash]),
-                 beaconRoot = Opt.none(Web3Hash)): PayloadStatusV1 =
+                 versionedHashes = Opt.none(seq[Hash32]),
+                 beaconRoot = Opt.none(Hash32)): PayloadStatusV1 =
 
   trace "Engine API request received",
     meth = "newPayload",

@@ -20,9 +20,6 @@ type Address = primitives.Address
 
 let allLogs = deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995)
 
-func w3Hash(x: string): Web3Hash =
-  Web3Hash hexToByteArray[32](x)
-
 proc filtersMain*() =
   # All magic numbers and addresses in following tests are confirmed with geth eth_getLogs,
   # responses

@@ -182,7 +182,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if cs.scenario == TransactionReOrgScenarioReOrgOut:
           # Any payload we get should not contain any
           var attr = env.clMock.latestPayloadAttributes
-          attr.prevRandao = Web3Hash.randomBytes()
+          attr.prevRandao = Hash32.randomBytes()
 
           var version = env.engine.version(env.clMock.latestHeader.timestamp)
           let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
@@ -241,7 +241,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
             # impede it from being included in the next payload
             var forkchoiceUpdated = env.clMock.latestForkchoice
             var payloadAttributes = env.clMock.latestPayloadAttributes
-            payloadAttributes.suggestedFeeRecipient = w3Addr EthAddress.randomBytes()
+            payloadAttributes.suggestedFeeRecipient = Address.randomBytes()
 
             var version = env.engine.version(env.clMock.latestHeader.timestamp)
             let f = env.engine.client.forkchoiceUpdated(version, forkchoiceUpdated, Opt.some(payloadAttributes))
@@ -373,7 +373,7 @@ type
     executeSidePayloadOnReOrg*: bool
 
   ShadowCanon = ref object
-    previousHash: Web3Hash
+    previousHash: Hash32
     previousTimestamp: Web3Quantity
     payload: ExecutionPayload
     parentForkchoice: ForkchoiceStateV1
@@ -423,7 +423,7 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
     var pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       onPayloadAttributesGenerated: proc(): bool =
         var attr = env.clMock.latestPayloadAttributes
-        attr.prevRandao = Web3Hash.randomBytes()
+        attr.prevRandao = Hash32.randomBytes()
 
         var version = env.engine.version(env.clMock.latestHeader.timestamp)
         let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))

@@ -24,15 +24,9 @@ export
   primitives
 
 type
-  Web3FixedBytes*[N: static int] = web3Types.FixedBytes[N]
-  Web3Hash*          = web3types.Hash32
-  Web3Address*       = web3types.Address
-  Web3Bloom*         = web3types.FixedBytes[256]
   Web3Quantity*      = web3types.Quantity
-  Web3PrevRandao*    = web3types.FixedBytes[32]
   Web3ExtraData*     = web3types.DynamicBytes[0, 32]
   Web3BlockNumber*   = Quantity
-  Web3Topic*         = Bytes32
   Web3Tx*            = engine_api_types.TypedTransaction
   Web3Blob*          = engine_api_types.Blob
   Web3KZGProof*      = engine_api_types.KZGProof
@@ -53,19 +47,6 @@ proc `$`*(x: Opt[Bytes8]): string =
   else: x.get().toHex
 
 # ------------------------------------------------------------------------------
-# Web3 defaults
-# ------------------------------------------------------------------------------
-
-func w3PrevRandao*(): Web3PrevRandao =
-  discard
-
-func w3Address*(): Web3Address =
-  discard
-
-func w3Hash*(): Web3Hash =
-  discard
-
-# ------------------------------------------------------------------------------
 # Web3 types to Eth types
 # ------------------------------------------------------------------------------
 
@@ -79,50 +60,11 @@ func u64*(x: Opt[Web3Quantity]): Opt[uint64] =
 func u256*(x: Web3BlockNumber): UInt256 =
   u256(x.uint64)
 
-func u256*(x: Web3FixedBytes[32]): UInt256 =
+func u256*(x: common.FixedBytes[32]): UInt256 =
   UInt256.fromBytesBE(x.data)
 
 func ethTime*(x: Web3Quantity): common.EthTime =
   common.EthTime(x)
-
-func ethHash*(x: Web3PrevRandao): common.Hash32 =
-  common.Hash32(distinctBase x)
-
-func ethHash*(x: Web3Hash): common.Hash32 =
-  common.Hash32(distinctBase x)
-
-func ethVersionedHash*(x: Web3Hash): common.VersionedHash =
-  common.VersionedHash(distinctBase x)
-
-func ethHash*(x: Opt[Web3Hash]): Opt[common.Hash32] =
-  if x.isNone: Opt.none(common.Hash32)
-  else: Opt.some(ethHash x.get)
-
-func ethHashes*(list: openArray[Web3Hash]): seq[common.Hash32] =
-  for x in list:
-    result.add ethHash(x)
-
-func ethHashes*(list: Opt[seq[Web3Hash]]): Opt[seq[common.Hash32]] =
-  if list.isNone: Opt.none(seq[common.Hash32])
-  else: Opt.some ethHashes(list.get)
-
-func ethVersionedHashes*(list: openArray[Web3Hash]): seq[common.VersionedHash] =
-  for x in list:
-    result.add ethVersionedHash(x)
-
-func ethAddr*(x: Web3Address): common.Address =
-  Address x
-
-func ethAddr*(x: Opt[Web3Address]): Opt[common.Address] =
-  if x.isNone: Opt.none(common.Address)
-  else: Opt.some(Address x.get)
-
-func ethAddrs*(list: openArray[Web3Address]): seq[common.Address] =
-  for x in list:
-    result.add ethAddr(x)
-
-func ethBloom*(x: Web3Bloom): common.Bloom =
-  common.Bloom distinctBase x
 
 func ethGasInt*(x: Web3Quantity): common.GasInt =
   common.GasInt x
@@ -156,15 +98,11 @@ func ethTxs*(list: openArray[Web3Tx]):
   for x in list:
     result.add ethTx(x)
 
-func storageKeys(list: seq[Web3FixedBytes[32]]): seq[Bytes32] =
-  for x in list:
-    result.add Bytes32(x)
-
 func ethAccessList*(list: openArray[AccessTuple]): common.AccessList =
   for x in list:
     result.add common.AccessPair(
-      address    : ethAddr x.address,
-      storageKeys: storageKeys x.storageKeys,
+      address    : x.address,
+      storageKeys: x.storageKeys,
     )
 
 func ethAccessList*(x: Opt[seq[AccessTuple]]): common.AccessList =
@@ -174,43 +112,6 @@ func ethAccessList*(x: Opt[seq[AccessTuple]]): common.AccessList =
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
 # ------------------------------------------------------------------------------
-
-func w3Hash*(x: common.Hash32): Web3Hash =
-  Web3Hash x.data
-
-func w3Hashes*[T: common.Hash32 | common.VersionedHash](list: openArray[T]): seq[Web3Hash] =
-  for x in list:
-    result.add Web3Hash x.data
-
-func w3Hashes*[T: common.Hash32 | common.VersionedHash](z: Opt[seq[T]]): Opt[seq[Web3Hash]] =
-  if z.isNone: Opt.none(seq[Web3Hash])
-  else:
-    let list = z.get
-    var v = newSeqOfCap[Web3Hash](list.len)
-    for x in list:
-      v.add Web3Hash x.data
-    Opt.some(v)
-
-func w3Hash*(x: Opt[common.Hash32]): Opt[Hash32] =
-  if x.isNone: Opt.none(Hash32)
-  else: Opt.some(Hash32 x.get.data)
-
-func w3Hash*(x: common.Header): Hash32 =
-  rlpHash(x)
-
-func w3Hash*(list: openArray[Bytes32]): seq[Bytes32] =
-  result = newSeqOfCap[Bytes32](list.len)
-  for x in list:
-    result.add Bytes32 x
-
-func w3Addr*(x: common.Address): Web3Address =
-  Web3Address x
-
-func w3Bloom*(x: common.Bloom): Web3Bloom =
-  Web3Bloom x
-
-func w3PrevRandao*(x: common.Hash32): Web3PrevRandao =
-  Web3PrevRandao x.data
 
 func w3Qty*(x: UInt256): Web3Quantity =
   Web3Quantity x.truncate(uint64)
@@ -250,9 +151,6 @@ func w3BlockNumber*(x: uint64): Web3BlockNumber =
 func w3BlockNumber*(x: UInt256): Web3BlockNumber =
   Web3BlockNumber x.truncate(uint64)
 
-func w3FixedBytes*(x: UInt256): Web3FixedBytes[32] =
-  Web3FixedBytes[32](x.toBytesBE)
-
 func w3ExtraData*(x: seq[byte]): Web3ExtraData =
   Web3ExtraData x
 
@@ -260,7 +158,7 @@ func w3Withdrawal*(w: common.Withdrawal): WithdrawalV1 =
   WithdrawalV1(
     index         : Web3Quantity w.index,
     validatorIndex: Web3Quantity w.validatorIndex,
-    address       : Web3Address  w.address,
+    address       : w.address,
     amount        : Web3Quantity w.amount
   )
 
@@ -284,8 +182,8 @@ func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
 
 proc w3AccessTuple*(ac: AccessPair): AccessTuple =
   AccessTuple(
-    address: w3Addr ac.address,
-    storageKeys: w3Hash(ac.storageKeys)
+    address: ac.address,
+    storageKeys: ac.storageKeys
   )
 
 proc w3AccessList*(list: openArray[AccessPair]): seq[AccessTuple] =
@@ -295,10 +193,10 @@ proc w3AccessList*(list: openArray[AccessPair]): seq[AccessTuple] =
 
 func w3DepositRequest*(x: DepositRequest): DepositRequestV1 =
   DepositRequestV1(
-    pubkey: FixedBytes[48](x.pubkey),
-    withdrawalCredentials: FixedBytes[32](x.withdrawalCredentials),
+    pubkey: x.pubkey,
+    withdrawalCredentials: x.withdrawalCredentials,
     amount: w3Qty x.amount,
-    signature: FixedBytes[96](x.signature),
+    signature: x.signature,
     index: w3Qty x.index,
   )
 
@@ -315,8 +213,8 @@ func w3DepositRequests*(reqs: Opt[seq[Request]]): Opt[seq[DepositRequestV1]] =
 
 func w3WithdrawalRequest*(x: WithdrawalRequest): WithdrawalRequestV1 =
   WithdrawalRequestV1(
-    sourceAddress: w3Addr x.sourceAddress,
-    validatorPubkey: FixedBytes[48](x.validatorPubkey),
+    sourceAddress: x.sourceAddress,
+    validatorPubkey: x.validatorPubkey,
     amount: w3Qty x.amount,
   )
 
@@ -333,9 +231,9 @@ func w3WithdrawalRequests*(reqs: Opt[seq[Request]]): Opt[seq[WithdrawalRequestV1
 
 func w3ConsolidationRequest*(x: ConsolidationRequest): ConsolidationRequestV1 =
   ConsolidationRequestV1(
-    sourceAddress: w3Addr x.sourceAddress,
-    sourcePubkey: FixedBytes[48](x.sourcePubkey),
-    targetPubkey: FixedBytes[48](x.targetPubkey),
+    sourceAddress: x.sourceAddress,
+    sourcePubkey: x.sourcePubkey,
+    targetPubkey: x.targetPubkey,
   )
 
 func w3ConsolidationRequests*(reqs: Opt[seq[Request]]): Opt[seq[ConsolidationRequestV1]] =
