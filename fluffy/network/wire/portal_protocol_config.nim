@@ -41,12 +41,16 @@ type
     radiusConfig*: RadiusConfig
     disablePoke*: bool
     maxGossipNodes*: int
+    contentCacheSize*: int
+    disableContentCache*: bool
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
   defaultDisablePoke* = false
-  defaultMaxGossipNodes = 4
+  defaultMaxGossipNodes* = 4
+  defaultContentCacheSize* = 100
+  defaultDisableContentCache* = false
   revalidationTimeout* = chronos.seconds(30)
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
@@ -55,6 +59,8 @@ const
     radiusConfig: defaultRadiusConfig,
     disablePoke: defaultDisablePoke,
     maxGossipNodes: defaultMaxGossipNodes,
+    contentCacheSize: defaultContentCacheSize,
+    disableContentCache: defaultDisableContentCache,
   )
 
 proc init*(
@@ -65,6 +71,8 @@ proc init*(
     radiusConfig: RadiusConfig,
     disablePoke: bool,
     maxGossipNodes: int,
+    contentCacheSize: int,
+    disableContentCache: bool,
 ): T =
   PortalProtocolConfig(
     tableIpLimits:
@@ -73,6 +81,8 @@ proc init*(
     radiusConfig: radiusConfig,
     disablePoke: disablePoke,
     maxGossipNodes: maxGossipNodes,
+    contentCacheSize: contentCacheSize,
+    disableContentCache: disableContentCache,
   )
 
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =
