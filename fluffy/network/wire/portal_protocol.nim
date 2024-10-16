@@ -195,6 +195,7 @@ type
     disablePoke: bool
     pingTimings: Table[NodeId, chronos.Moment]
     maxGossipNodes: int
+    config: PortalProtocolConfig
 
   PortalResult*[T] = Result[T, string]
 
@@ -577,7 +578,8 @@ proc new*(
     ),
     baseProtocol: baseProtocol,
     toContentId: toContentId,
-    contentCache: ContentCache.init(256),
+    contentCache:
+      ContentCache.init(if config.disableContentCache: 0 else: config.contentCacheSize),
     dbGet: dbGet,
     dbPut: dbPut,
     dataRadius: dbRadius,
@@ -588,6 +590,7 @@ proc new*(
     disablePoke: config.disablePoke,
     pingTimings: Table[NodeId, chronos.Moment](),
     maxGossipNodes: config.maxGossipNodes,
+    config: config,
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -1602,7 +1605,7 @@ proc storeContent*(
     content: seq[byte],
     cacheContent = false,
 ): bool {.discardable.} =
-  if cacheContent:
+  if cacheContent and not p.config.disableContentCache:
     # We cache content regardless of whether it is in our radius or not
     p.contentCache.put(contentId, content)
 
