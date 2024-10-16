@@ -20,8 +20,8 @@ type
   #       and we can reduce unecessary conversion further
   nimbus_tx_context* = object
     tx_gas_price*     : evmc_uint256be   # The transaction gas price.
-    tx_origin*        : EthAddress       # The transaction origin account.
-    block_coinbase*   : EthAddress       # The miner of the block.
+    tx_origin*        : Address       # The transaction origin account.
+    block_coinbase*   : Address       # The miner of the block.
     block_number*     : int64            # The block number.
     block_timestamp*  : int64            # The block timestamp.
     block_gas_limit*  : int64            # The block gas limit.
@@ -39,13 +39,13 @@ type
     flags*       : evmc_flags
     depth*       : int32
     gas*         : int64
-    recipient*   : EthAddress
-    sender*      : EthAddress
+    recipient*   : Address
+    sender*      : Address
     input_data*  : ptr byte
     input_size*  : uint
     value*       : evmc_uint256be
     create2_salt*: evmc_bytes32
-    code_address*: EthAddress
+    code_address*: Address
     code*        : ptr byte
     code_size*   : csize_t
 
@@ -57,7 +57,7 @@ type
     output_size*   : uint
     release*       : proc(result: var nimbus_result)
                        {.cdecl, gcsafe, raises: [].}
-    create_address*: EthAddress
+    create_address*: Address
     padding*       : array[4, byte]
 
   nimbus_host_interface* = object
@@ -107,20 +107,20 @@ proc init*(x: typedesc[HostContext], host: ptr nimbus_host_interface, context: e
 proc getTxContext*(ctx: HostContext): nimbus_tx_context =
   ctx.host.get_tx_context(ctx.context)
 
-proc getBlockHash*(ctx: HostContext, number: BlockNumber): Hash256 =
-  Hash256.fromEvmc ctx.host.get_block_hash(ctx.context, number.int64)
+proc getBlockHash*(ctx: HostContext, number: BlockNumber): Hash32 =
+  Hash32.fromEvmc ctx.host.get_block_hash(ctx.context, number.int64)
 
-proc accountExists*(ctx: HostContext, address: EthAddress): bool =
+proc accountExists*(ctx: HostContext, address: Address): bool =
   var address = toEvmc(address)
   ctx.host.account_exists(ctx.context, address.addr)
 
-proc getStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256 =
+proc getStorage*(ctx: HostContext, address: Address, key: UInt256): UInt256 =
   var
     address = toEvmc(address)
     key = toEvmc(key)
   UInt256.fromEvmc ctx.host.get_storage(ctx.context, address.addr, key.addr)
 
-proc setStorage*(ctx: HostContext, address: EthAddress,
+proc setStorage*(ctx: HostContext, address: Address,
                  key, value: UInt256): evmc_storage_status =
   var
     address = toEvmc(address)
@@ -128,19 +128,19 @@ proc setStorage*(ctx: HostContext, address: EthAddress,
     value = toEvmc(value)
   ctx.host.set_storage(ctx.context, address.addr, key.addr, value.addr)
 
-proc getBalance*(ctx: HostContext, address: EthAddress): UInt256 =
+proc getBalance*(ctx: HostContext, address: Address): UInt256 =
   var address = toEvmc(address)
   UInt256.fromEvmc ctx.host.get_balance(ctx.context, address.addr)
 
-proc getCodeSize*(ctx: HostContext, address: EthAddress): uint =
+proc getCodeSize*(ctx: HostContext, address: Address): uint =
   var address = toEvmc(address)
   ctx.host.get_code_size(ctx.context, address.addr)
 
-proc getCodeHash*(ctx: HostContext, address: EthAddress): Hash256 =
+proc getCodeHash*(ctx: HostContext, address: Address): Hash32 =
   var address = toEvmc(address)
-  Hash256.fromEvmc ctx.host.get_code_hash(ctx.context, address.addr)
+  Hash32.fromEvmc ctx.host.get_code_hash(ctx.context, address.addr)
 
-proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[byte] =
+proc copyCode*(ctx: HostContext, address: Address, codeOffset: int = 0): seq[byte] =
   let size = ctx.getCodeSize(address).int
   if size - codeOffset > 0:
     result = newSeq[byte](size - codeOffset)
@@ -149,13 +149,13 @@ proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[
         codeOffset, result[0].addr, result.len)
     doAssert(read == result.len)
 
-proc selfDestruct*(ctx: HostContext, address, beneficiary: EthAddress) =
+proc selfDestruct*(ctx: HostContext, address, beneficiary: Address) =
   var
     address = toEvmc(address)
     beneficiary = toEvmc(beneficiary)
   ctx.host.selfdestruct(ctx.context, address.addr, beneficiary.addr)
 
-proc emitLog*(ctx: HostContext, address: EthAddress, data: openArray[byte],
+proc emitLog*(ctx: HostContext, address: Address, data: openArray[byte],
               topics: ptr evmc_bytes32, topicsCount: int) =
   var address = toEvmc(address)
   ctx.host.emit_log(ctx.context, address.addr, if data.len > 0: data[0].unsafeAddr else: nil,
@@ -165,24 +165,24 @@ proc call*(ctx: HostContext, msg: nimbus_message): nimbus_result =
   ctx.host.call(ctx.context, msg.unsafeAddr)
 
 proc accessAccount*(ctx: HostContext,
-                    address: EthAddress): evmc_access_status =
+                    address: Address): evmc_access_status =
   var address = toEvmc(address)
   ctx.host.access_account(ctx.context, address.addr)
 
-proc accessStorage*(ctx: HostContext, address: EthAddress,
+proc accessStorage*(ctx: HostContext, address: Address,
                     key: UInt256): evmc_access_status =
   var
     address = toEvmc(address)
     key = toEvmc(key)
   ctx.host.access_storage(ctx.context, address.addr, key.addr)
 
-proc getTransientStorage*(ctx: HostContext, address: EthAddress, key: UInt256): UInt256 =
+proc getTransientStorage*(ctx: HostContext, address: Address, key: UInt256): UInt256 =
   var
     address = toEvmc(address)
     key = toEvmc(key)
   UInt256.fromEvmc ctx.host.get_transient_storage(ctx.context, address.addr, key.addr)
 
-proc setTransientStorage*(ctx: HostContext, address: EthAddress,
+proc setTransientStorage*(ctx: HostContext, address: Address,
                  key, value: UInt256) =
   var
     address = toEvmc(address)

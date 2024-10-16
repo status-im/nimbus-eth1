@@ -12,10 +12,10 @@ import stint, json_rpc/[client, jsonmarshal], web3/conversions, web3/eth_api_typ
 export eth_api_types
 
 createRpcSigsFromNim(RpcClient):
-  proc debug_getBalanceByStateRoot(data: Address, stateRoot: Hash256): UInt256
-  proc debug_getTransactionCountByStateRoot(data: Address, stateRoot: Hash256): Quantity
+  proc debug_getBalanceByStateRoot(data: Address, stateRoot: Hash32): UInt256
+  proc debug_getTransactionCountByStateRoot(data: Address, stateRoot: Hash32): Quantity
   proc debug_getStorageAtByStateRoot(
-    data: Address, slot: UInt256, stateRoot: Hash256
+    data: Address, slot: UInt256, stateRoot: Hash32
   ): FixedBytes[32]
 
-  proc debug_getCodeByStateRoot(data: Address, stateRoot: Hash256): seq[byte]
+  proc debug_getCodeByStateRoot(data: Address, stateRoot: Hash32): seq[byte]

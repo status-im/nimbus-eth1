@@ -78,7 +78,7 @@ method execute(cs: ReExecutePayloadTest, env: TestEnv): bool =
 type
   InOrderPayloadExecutionTest* = ref object of EngineSpec
   Shadow = ref object
-    recipient: EthAddress
+    recipient: Address
     amountPerTx: UInt256
     txPerPayload: int
     payloadCount: int
@@ -106,7 +106,7 @@ method execute(cs: InOrderPayloadExecutionTest, env: TestEnv): bool =
   # We will be also verifying that the transactions are correctly interpreted in the canonical chain,
   # prepare a random account to receive funds.
   var shadow = Shadow(
-    recipient: EthAddress.randomBytes(),
+    recipient: Address.randomBytes(),
     amountPerTx: 1000.u256,
     txPerPayload: 20,
     payloadCount: 10,
@@ -218,7 +218,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
   var callbacks = BlockProcessCallbacks(
     # We send the transactions after we got the Payload ID, before the CLMocker gets the prepared Payload
     onPayloadProducerSelected: proc(): bool =
-      let recipient = EthAddress.randomBytes()
+      let recipient = Address.randomBytes()
       let tc = BaseTx(
         recipient:  Opt.some(recipient),
         txType:     cs.txType,
@@ -243,7 +243,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
 
     # Fabricate and send multiple new payloads by changing the PrevRandao field
     for i in 0..<payloadCount:
-      let newPrevRandao = common.Hash256.randomBytes()
+      let newPrevRandao = Hash32.randomBytes()
       let customizer = CustomPayloadData(
         prevRandao: Opt.some(newPrevRandao),
       )
@@ -271,7 +271,7 @@ type
   NewPayloadOnSyncingClientTest* = ref object of EngineSpec
 
   Shadow2 = ref object
-    recipient: EthAddress
+    recipient: Address
     previousPayload: ExecutionPayload
 
 method withMainFork(cs: NewPayloadOnSyncingClientTest, fork: EngineFork): BaseSpec =
@@ -286,7 +286,7 @@ method getName(cs: NewPayloadOnSyncingClientTest): string =
 method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
   var shadow = Shadow2(
     # Set a random transaction recipient
-    recipient: EthAddress.randomBytes(),
+    recipient: Address.randomBytes(),
   )
 
   discard env.addEngine()
@@ -418,7 +418,7 @@ method execute(cs: NewPayloadWithMissingFcUTest, env: TestEnv): bool =
   # Produce blocks on the main client, these payloads will be replayed on the secondary client.
   let pbRes = env.clMock.produceBlocks(5, BlockProcessCallbacks(
     onPayloadProducerSelected: proc(): bool =
-      let recipient = common.EthAddress.randomBytes()
+      let recipient = Address.randomBytes()
       let tc = BaseTx(
         recipient:  Opt.some(recipient),
         txType:     cs.txType,

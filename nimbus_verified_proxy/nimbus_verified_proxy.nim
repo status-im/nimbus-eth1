@@ -12,7 +12,7 @@ import
   chronicles,
   chronos,
   confutils,
-  eth/keys,
+  eth/common/keys,
   json_rpc/rpcproxy,
   beacon_chain/el/[el_manager, engine_api_conversions],
   beacon_chain/gossip_processing/optimistic_processor,

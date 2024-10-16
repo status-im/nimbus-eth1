@@ -29,8 +29,8 @@ type
   TestBlobTxPool* = ref object
     currentBlobID* : BlobID
     currentTxIndex*: int
-    transactions*  : Table[common.Hash256, PooledTransaction]
-    hashesByIndex* : Table[int, common.Hash256]
+    transactions*  : Table[Hash32, PooledTransaction]
+    hashesByIndex* : Table[int, Hash32]
 
 const
   HISTORY_BUFFER_LENGTH* = 8191
@@ -147,7 +147,7 @@ proc beaconRootStorageIndexes*(timestamp: uint64): (UInt256, UInt256) =
 
 type
   BlobWrapData* = object
-    versionedHash*: common.Hash256
+    versionedHash*: Hash32
     blob*         : kzg.KzgBlob
     commitment*   : kzg.KZGCommitment
     proof*        : kzg.KzgProof

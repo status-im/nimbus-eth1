@@ -301,7 +301,7 @@ method withMainFork(cs: PayloadBuildAfterInvalidPayloadTest, fork: EngineFork): 
 method getName(cs: PayloadBuildAfterInvalidPayloadTest): string =
   "Payload Build after New Invalid payload: Invalid " & $cs.invalidField
 
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
+proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
   for w3tx in list:
     let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
@@ -332,7 +332,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
         # Get a payload from the invalid payload producer and invalidate it
         let
           customizer = BasePayloadAttributesCustomizer(
-            prevRandao: Opt.some(default(common.Hash256)),
+            prevRandao: Opt.some(default(Hash32)),
             suggestedFeerecipient: Opt.some(ZeroAddr),
           )
           payloadAttributes = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
@@ -352,7 +352,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
         let basePayload = s.get.executionPayload
         var src = ExecutableData(basePayload: basePayload)
         if versione == Version.V3:
-          src.beaconRoot = Opt.some(default(common.Hash256))
+          src.beaconRoot = Opt.some(default(Hash32))
           src.versionedHashes = Opt.some(collectBlobHashes(basePayload.transactions))
 
         inv_p = env.generateInvalidPayload(src, InvalidStateRoot)

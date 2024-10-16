@@ -19,7 +19,7 @@ type
     map: Table[UInt256, UInt256]
 
   TransientStorage* = object
-    map: Table[EthAddress, StorageTable]
+    map: Table[Address, StorageTable]
 
 #######################################################################
 # Private helpers
@@ -33,13 +33,13 @@ proc mergeAndReset*(a, b: StorageTable) =
 #######################################################################
 
 proc init*(ac: var TransientStorage) =
-  ac.map = Table[EthAddress, StorageTable]()
+  ac.map = Table[Address, StorageTable]()
 
 proc init*(_: type TransientStorage): TransientStorage {.inline.} =
   result.init()
 
 func getStorage*(ac: TransientStorage,
-                 address: EthAddress, slot: UInt256): (bool, UInt256) =
+                 address: Address, slot: UInt256): (bool, UInt256) =
   var table = ac.map.getOrDefault(address)
   if table.isNil:
     return (false, 0.u256)
@@ -50,7 +50,7 @@ func getStorage*(ac: TransientStorage,
     return (false, 0.u256)
 
 proc setStorage*(ac: var TransientStorage,
-                 address: EthAddress, slot, value: UInt256) =
+                 address: Address, slot, value: UInt256) =
   var table = ac.map.getOrDefault(address)
   if table.isNil:
     table = StorageTable()

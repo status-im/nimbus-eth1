@@ -75,12 +75,12 @@ proc procBlkPreamble(
       return err("Mismatched txRoot")
 
   if com.isPragueOrLater(header.timestamp):
-    if header.requestsRoot.isNone or blk.requests.isNone:
+    if header.requestsHash.isNone or blk.requests.isNone:
       return err("Post-Prague block header must have requestsRoot/requests")
 
     ?vmState.processParentBlockHash(header.parentHash)
   else:
-    if header.requestsRoot.isSome or blk.requests.isSome:
+    if header.requestsHash.isSome or blk.requests.isSome:
       return err("Pre-Prague block header must not have requestsRoot/requests")
 
   if com.isCancunOrLater(header.timestamp):
@@ -96,7 +96,7 @@ proc procBlkPreamble(
     if blk.transactions.len == 0:
       return err("Transactions missing from body")
 
-    let collectLogs = header.requestsRoot.isSome and not skipValidation
+    let collectLogs = header.requestsHash.isSome and not skipValidation
     ?processTransactions(vmState, header, blk.transactions, skipReceipts, collectLogs)
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
@@ -178,13 +178,13 @@ proc procBlkEpilogue(
           expected = header.receiptsRoot
         return err("receiptRoot mismatch")
 
-    if header.requestsRoot.isSome:
+    if header.requestsHash.isSome:
       let requestsRoot = calcRequestsRoot(blk.requests.get)
-      if header.requestsRoot.get != requestsRoot:
+      if header.requestsHash.get != requestsRoot:
         debug "wrong requestsRoot in block",
           blockNumber = header.number,
           actual = requestsRoot,
-          expected = header.requestsRoot.get
+          expected = header.requestsHash.get
         return err("requestsRoot mismatch")
       let depositReqs = ?parseDepositLogs(vmState.allLogs)
       var expectedDeposits: seq[Request]

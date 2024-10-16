@@ -23,7 +23,7 @@ import
   ./engine_client,
   ./types
 
-import web3/engine_api_types except Hash256  # conflict with the one from eth/common
+import web3/engine_api_types
 
 # Consensus Layer Client Mock used to sync the Execution Clients once the TTD has been reached
 type
