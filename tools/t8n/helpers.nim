@@ -112,9 +112,9 @@ proc fromJson(T: type Authorization, n: JsonNode): Authorization =
     chainId: fromJson(ChainId, n, "chainId"),
     address: fromJson(Address, n, "address"),
     nonce: fromJson(uint64, n, "nonce"),
-    yParity: fromJson(uint64, n, "yParity"),
-    R: fromJson(UInt256, n, "R"),
-    S: fromJson(UInt256, n, "S"),
+    v: fromJson(uint64, n, "v"),
+    r: fromJson(UInt256, n, "r"),
+    s: fromJson(UInt256, n, "s"),
   )
 
 proc fromJson(T: type seq[Authorization], n: JsonNode, field: string): T =

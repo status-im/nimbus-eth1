@@ -87,7 +87,7 @@ type
 func oaToStr(w: openArray[byte]): string =
   w.toHex.toLowerAscii
 
-func toStr(w: EthAddress): string =
+func toStr(w: Address): string =
   w.toHex
 
 func toStr(w: Hash32): string =
@@ -115,7 +115,7 @@ func `$`*(w: CodeBytesRef): string {.used.} = w.toStr
 func `$`*(e: Elapsed): string = e.Duration.toStr
 func `$`*(l: seq[Log]): string = l.toStr
 func `$`*(b: seq[byte]): string = b.toStr
-func `$$`*(a: EthAddress): string = a.toStr # otherwise collision w/existing `$`
+func `$$`*(a: Address): string = a.toStr # otherwise collision w/existing `$`
 func `$$`*(h: Hash32): string = h.toStr     # otherwise collision w/existing `$`
 
 # ------------------------------------------------------------------------------

@@ -49,8 +49,8 @@ type
   LocalParams = object
     gas:             UInt256
     value:           UInt256
-    codeAddress:     EthAddress
-    sender:          EthAddress
+    codeAddress:     Address
+    sender:          Address
     memInPos:        int
     memInLen:        int
     memOutPos:       int
@@ -58,7 +58,7 @@ type
     flags:           MsgFlags
     memOffset:       int
     memLength:       int
-    contractAddress: EthAddress
+    contractAddress: Address
     gasCallEIP2929:  GasInt
 
 

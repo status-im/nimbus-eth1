@@ -11,25 +11,21 @@
 
 import
   chronicles,
-  ../common/common,
+  eth/common/[addresses, headers],
+  web3/eth_api_types,
   ../transaction/call_common,
   ../evm/types,
-  ../beacon/web3_eth_conv,
   ../evm/evm_errors,
-  ./rpc_types
-
-export
-  web3_eth_conv,
-  rpc_types
+  ../constants
 
 const
-  ZeroAddr = w3Addr ZERO_ADDRESS
+  ZeroAddr = ZERO_ADDRESS
 
-func sender*(args: TransactionArgs): EthAddress =
-  ethAddr args.source.get(ZeroAddr)
+func sender*(args: TransactionArgs): Address =
+  args.source.get(ZeroAddr)
 
-func destination*(args: TransactionArgs): EthAddress =
-  ethAddr args.to.get(ZeroAddr)
+func destination*(args: TransactionArgs): Address =
+  args.to.get(ZeroAddr)
 
 proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
                    globalGasCap: GasInt, baseFee: Opt[UInt256]): EvmResult[CallParams] =
@@ -42,7 +38,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
   # Set default gas & gas price if none were set
   var gasLimit = globalGasCap
   if gasLimit == 0:
-    gasLimit = GasInt(high(uint64) div 2)
+    gasLimit = high(uint64) div 2
 
   if args.gas.isSome:
     gasLimit = GasInt args.gas.get()
@@ -65,9 +61,9 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
       let priorityFee = min(maxPriorityFee, maxFee - baseFee)
       gasPrice = priorityFee + baseFee
 
-  template versionedHashes(args: TransactionArgs): VersionedHashes =
+  template versionedHashes(args: TransactionArgs): seq[VersionedHash] =
     if args.blobVersionedHashes.isSome:
-      ethVersionedHashes args.blobVersionedHashes.get
+      args.blobVersionedHashes.get
     else:
       @[]
 

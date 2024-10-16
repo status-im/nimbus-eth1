@@ -11,9 +11,9 @@
 
 import
   std/[os, json, tables, strutils],
-  stew/byteutils,
   results,
-  eth/[keyfile, common, keys],
+  eth/keyfile,
+  eth/common/[keys, addresses],
   json_serialization
 
 from nimcrypto/utils import burnMem
@@ -25,7 +25,7 @@ type
     unlocked*: bool
 
   AccountsManager* = object
-    accounts: Table[EthAddress, NimbusAccount]
+    accounts: Table[Address, NimbusAccount]
 
 proc init*(_: type AccountsManager): AccountsManager =
   discard
@@ -36,20 +36,20 @@ proc loadKeystores*(am: var AccountsManager, path: string):
     createDir(path)
     for filename in walkDirRec(path):
       var data = Json.loadFile(filename, JsonNode)
-      let address = EthAddress.fromHex(data["address"].getStr())
+      let address = Address.fromHex(data["address"].getStr())
       am.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
   except CatchableError as exc:
     return err("loadKeystrores: " & exc.msg)
 
   ok()
 
-proc getAccount*(am: var AccountsManager, address: EthAddress): Result[NimbusAccount, string] =
+proc getAccount*(am: var AccountsManager, address: Address): Result[NimbusAccount, string] =
   am.accounts.withValue(address, value) do:
     return ok(value[])
   do:
     return err("getAccount: not available " & address.toHex)
 
-proc unlockAccount*(am: var AccountsManager, address: EthAddress, password: string): Result[void, string] =
+proc unlockAccount*(am: var AccountsManager, address: Address, password: string): Result[void, string] =
   let accRes = am.getAccount(address)
   if accRes.isErr:
     return err(accRes.error)
@@ -64,7 +64,7 @@ proc unlockAccount*(am: var AccountsManager, address: EthAddress, password: stri
 
   err($res.error)
 
-proc lockAccount*(am: var AccountsManager, address: EthAddress): Result[void, string] =
+proc lockAccount*(am: var AccountsManager, address: Address): Result[void, string] =
   am.accounts.withValue(address, acc) do:
     acc.unlocked = false
     burnMem(acc.privateKey)
@@ -76,7 +76,7 @@ proc lockAccount*(am: var AccountsManager, address: EthAddress): Result[void, st
 proc numAccounts*(am: AccountsManager): int =
   am.accounts.len
 
-iterator addresses*(am: AccountsManager): EthAddress =
+iterator addresses*(am: AccountsManager): Address =
   for a in am.accounts.keys:
     yield a
 

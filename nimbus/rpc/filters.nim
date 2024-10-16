@@ -7,27 +7,17 @@
 
 import
   std/options,
-  eth/common/[eth_types, eth_types_rlp],
+  eth/common/eth_types_rlp,
+  web3/eth_api_types,
   eth/bloom as bFilter,
   stint,
-  ../beacon/web3_eth_conv,
   ./rpc_types
 
 export rpc_types
 
-type
-  BlockHeader = eth_types.BlockHeader
-
 {.push raises: [].}
 
-proc topicToDigest(t: seq[eth_types.Topic]): seq[Web3Topic] =
-  var resSeq: seq[Web3Topic] = @[]
-  for top in t:
-    let ht = Web3Topic(top)
-    resSeq.add(ht)
-  return resSeq
-
-proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: seq[Receipt]): seq[FilterLog] =
+proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[Receipt]): seq[FilterLog] =
   ## Derive log fields, does not deal with pending log, only the logs with
   ## full data set
   doAssert(len(transactions) == len(receipts))
@@ -43,15 +33,15 @@ proc deriveLogs*(header: BlockHeader, transactions: seq[Transaction], receipts: 
         # level, to keep track about potential re-orgs
         # - in fluffy there is no concept of re-org
         removed: false,
-        logIndex: Opt.some(w3Qty(logIndex)),
+        logIndex: Opt.some(Quantity(logIndex)),
         transactionIndex: Opt.some(Quantity(i)),
-        transactionHash: Opt.some(w3Hash transactions[i].rlpHash),
-        blockHash: Opt.some(w3Hash header.blockHash),
-        blockNumber: Opt.some(w3BlockNumber(header.number)),
-        address: w3Addr log.address,
+        transactionHash: Opt.some(transactions[i].rlpHash),
+        blockHash: Opt.some(header.blockHash),
+        blockNumber: Opt.some(Quantity(header.number)),
+        address: log.address,
         data: log.data,
-        #  TODO topics should probably be kept as Hash256 in receipts
-        topics: topicToDigest(log.topics)
+        #  TODO topics should probably be kept as Hash32 in receipts
+        topics: log.topics
       )
 
       inc logIndex
@@ -68,7 +58,7 @@ func participateInFilter(x: AddressOrList): bool =
   true
 
 proc bloomFilter*(
-    bloom: eth_types.BloomFilter,
+    bloom: Bloom,
     addresses: AddressOrList,
     topics: seq[TopicOrList]): bool =
 
@@ -77,10 +67,10 @@ proc bloomFilter*(
   if addresses.participateInFilter():
     var addrIncluded: bool = false
     if addresses.kind == slkSingle:
-      addrIncluded = bloomFilter.contains(addresses.single.bytes)
+      addrIncluded = bloomFilter.contains(addresses.single.data)
     elif addresses.kind == slkList:
       for address in addresses.list:
-        if bloomFilter.contains(address.bytes):
+        if bloomFilter.contains(address.data):
           addrIncluded = true
           break
     if not addrIncluded:
@@ -93,7 +83,7 @@ proc bloomFilter*(
 
     var topicIncluded = false
     if sub.kind == slkSingle:
-      if bloomFilter.contains(sub.single.bytes):
+      if bloomFilter.contains(sub.single.data):
         topicIncluded = true
     else:
       topicIncluded = sub.list.len == 0
@@ -101,7 +91,7 @@ proc bloomFilter*(
         # This is is quite not obvious, but passing topic as MDigest256 fails, as
         # it does not use internal keccak256 hashing. To achieve desired semantics,
         # we need use digest bare bytes so that they will be properly kec256 hashes
-        if bloomFilter.contains(topic.bytes):
+        if bloomFilter.contains(topic.data):
           topicIncluded = true
           break
 
@@ -111,7 +101,7 @@ proc bloomFilter*(
   return true
 
 proc headerBloomFilter*(
-    header: BlockHeader,
+    header: Header,
     addresses: AddressOrList,
     topics: seq[TopicOrList]): bool =
   return bloomFilter(header.logsBloom, addresses, topics)

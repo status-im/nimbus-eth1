@@ -35,12 +35,12 @@ import
 # and delegated to glue code.
 
 type
-  HostAddress*       = EthAddress        # Mapped to/from evmc_address.
+  HostAddress*       = Address        # Mapped to/from evmc_address.
   HostKey*           = UInt256           # Mapped to/from evmc_bytes32.
   HostValue*         = UInt256           # Mapped to/from evmc_bytes32.
   HostBalance*       = UInt256           # Mapped to/from evmc_uint256be.
   HostSize*          = uint              # Mapped to/from csize_t - unsigned!
-  HostHash*          = Hash256           # Mapped to/from evmc_bytes32.
+  HostHash*          = Hash32           # Mapped to/from evmc_bytes32.
   HostTopic*         = Topic             # Mapped to/from evmc_bytes32.
   HostBlockNumber*   = BlockNumber       # Mapped to/from int64.
   HostGasInt*        = GasInt            # Mapped to/from int64.
@@ -73,17 +73,17 @@ type
 template toEvmc*(n: UInt256): evmc_uint256be =
   cast[evmc_uint256be](n)
 
-template toEvmc*(n: Hash256): evmc_bytes32 =
+template toEvmc*(n: Hash32): evmc_bytes32 =
   evmc_bytes32(bytes: n.data)
 
-template toEvmc*(address: EthAddress): evmc_address =
+template toEvmc*(address: Address): evmc_address =
   evmc_address(bytes: address.data)
 
 template fromEvmc*(n: evmc_uint256be): UInt256 =
   cast[UInt256](n)
 
-template fromEvmc*(address: evmc_address): EthAddress =
-  EthAddress(address.bytes)
+template fromEvmc*(address: evmc_address): Address =
+  Address(address.bytes)
 
 template flip256*(word256: evmc_uint256be): evmc_uint256be =
   cast[evmc_uint256be](UInt256.fromBytesBE(word256.bytes).toBytes(cpuEndian))

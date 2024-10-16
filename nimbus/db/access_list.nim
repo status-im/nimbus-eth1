@@ -18,7 +18,7 @@ type
   SlotSet = HashSet[UInt256]
 
   AccessList* = object
-    slots: Table[EthAddress, SlotSet]
+    slots: Table[Address, SlotSet]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -33,7 +33,7 @@ func toStorageKeys(slots: SlotSet): seq[Bytes32] =
 # ------------------------------------------------------------------------------
 
 proc init*(ac: var AccessList) =
-  ac.slots = Table[EthAddress, SlotSet]()
+  ac.slots = Table[Address, SlotSet]()
 
 proc init*(_: type AccessList): AccessList {.inline.} =
   result.init()
@@ -42,11 +42,11 @@ proc init*(_: type AccessList): AccessList {.inline.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func contains*(ac: AccessList, address: EthAddress): bool {.inline.} =
+func contains*(ac: AccessList, address: Address): bool {.inline.} =
   address in ac.slots
 
 # returnValue: (addressPresent, slotPresent)
-func contains*(ac: var AccessList, address: EthAddress, slot: UInt256): bool =
+func contains*(ac: var AccessList, address: Address, slot: UInt256): bool =
   ac.slots.withValue(address, val):
     result = slot in val[]
 
@@ -54,11 +54,11 @@ proc mergeAndReset*(ac, other: var AccessList) =
   # move values in `other` to `ac`
   ac.slots.mergeAndReset(other.slots)
 
-proc add*(ac: var AccessList, address: EthAddress) =
+proc add*(ac: var AccessList, address: Address) =
   if address notin ac.slots:
     ac.slots[address] = HashSet[UInt256]()
 
-proc add*(ac: var AccessList, address: EthAddress, slot: UInt256) =
+proc add*(ac: var AccessList, address: Address, slot: UInt256) =
   ac.slots.withValue(address, val):
     val[].incl slot
   do:

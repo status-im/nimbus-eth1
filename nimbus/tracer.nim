@@ -126,7 +126,7 @@ proc dumpReceiptsImpl(
 proc captureAccount(
     n: JsonNode;
     db: LedgerRef;
-    address: EthAddress;
+    address: Address;
     name: string;
       ) =
   var jaccount = newJObject()

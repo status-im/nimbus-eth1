@@ -13,8 +13,6 @@ import
   chronicles,
   eth/rlp, stew/io2,
   ./chain,
-  ../common/common,
-  ../utils/utils,
   ../config
 
 proc importRlpBlocks*(blocksRlp: openArray[byte],
@@ -24,14 +22,14 @@ proc importRlpBlocks*(blocksRlp: openArray[byte],
   var
     # the encoded rlp can contains one or more blocks
     rlp = rlpFromBytes(blocksRlp)
-    blk: EthBlock
+    blk: Block
 
   # even though the new imported blocks have block number
   # smaller than head, we keep importing it.
   # it maybe a side chain.
   while rlp.hasData:
     blk = try:
-      rlp.read(EthBlock)
+      rlp.read(Block)
     except RlpError as e:
       # terminate if there was a decoding error
       return err($e.name & ": " & e.msg)
@@ -51,7 +49,7 @@ proc importRlpBlocks*(importFile: string,
   importRlpBlocks(bytes, chain, finalize)
 
 proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
-  var head: BlockHeader
+  var head: Header
   if not com.db.getCanonicalHead(head):
     error "cannot get canonical head from db"
     quit(QuitFailure)

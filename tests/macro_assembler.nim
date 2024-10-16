@@ -267,9 +267,9 @@ proc initVMEnv*(network: string): BaseVMState =
       cdb,
       conf,
       conf.chainId.NetworkId)
-    parent = BlockHeader(stateRoot: EMPTY_ROOT_HASH)
+    parent = Header(stateRoot: EMPTY_ROOT_HASH)
     parentHash = rlpHash(parent)
-    header = BlockHeader(
+    header = Header(
       number: 1'u64,
       stateRoot: EMPTY_ROOT_HASH,
       parentHash: parentHash,
@@ -327,12 +327,12 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
 
   let
     al = com.db.ctx.getAccounts()
-    accPath = codeAddress.keccakHash
+    accPath = keccak256(codeAddress.data)
 
   for kv in boa.storage:
     let key = kv[0].toHex()
     let val = kv[1].toHex()
-    let slotKey = UInt256.fromBytesBE(kv[0]).toBytesBE.keccakHash
+    let slotKey = UInt256.fromBytesBE(kv[0]).toBytesBE.keccak256
     let data = al.slotFetch(accPath, slotKey).valueOr: default(UInt256)
     let actual = data.toBytesBE().toHex
     if val != actual:
@@ -374,7 +374,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
 
   result = true
 
-proc createSignedTx(payload: Blob, chainId: ChainId): Transaction =
+proc createSignedTx(payload: seq[byte], chainId: ChainId): Transaction =
   let privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
   let unsignedTx = Transaction(
     txType: TxEIP4844,

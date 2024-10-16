@@ -24,15 +24,9 @@ export
   primitives
 
 type
-  Web3FixedBytes*[N: static int] = web3Types.FixedBytes[N]
-  Web3Hash*          = web3types.Hash256
-  Web3Address*       = web3types.Address
-  Web3Bloom*         = web3types.FixedBytes[256]
   Web3Quantity*      = web3types.Quantity
-  Web3PrevRandao*    = web3types.FixedBytes[32]
   Web3ExtraData*     = web3types.DynamicBytes[0, 32]
-  Web3BlockNumber*   = web3types.BlockNumber
-  Web3Topic*         = eth_api_types.Topic
+  Web3BlockNumber*   = Quantity
   Web3Tx*            = engine_api_types.TypedTransaction
   Web3Blob*          = engine_api_types.Blob
   Web3KZGProof*      = engine_api_types.KZGProof
@@ -44,26 +38,13 @@ type
 # Pretty printers
 # ------------------------------------------------------------------------------
 
-proc `$`*(x: Opt[common.Hash256]): string =
+proc `$`*(x: Opt[common.Hash32]): string =
   if x.isNone: "none"
   else: x.get().data.toHex
 
-proc `$`*(x: Opt[PayloadID]): string =
+proc `$`*(x: Opt[Bytes8]): string =
   if x.isNone: "none"
   else: x.get().toHex
-
-# ------------------------------------------------------------------------------
-# Web3 defaults
-# ------------------------------------------------------------------------------
-
-func w3PrevRandao*(): Web3PrevRandao =
-  discard
-
-func w3Address*(): Web3Address =
-  discard
-
-func w3Hash*(): Web3Hash =
-  discard
 
 # ------------------------------------------------------------------------------
 # Web3 types to Eth types
@@ -79,61 +60,22 @@ func u64*(x: Opt[Web3Quantity]): Opt[uint64] =
 func u256*(x: Web3BlockNumber): UInt256 =
   u256(x.uint64)
 
-func u256*(x: Web3FixedBytes[32]): UInt256 =
-  UInt256.fromBytesBE(x.bytes)
+func u256*(x: common.FixedBytes[32]): UInt256 =
+  UInt256.fromBytesBE(x.data)
 
 func ethTime*(x: Web3Quantity): common.EthTime =
   common.EthTime(x)
 
-func ethHash*(x: Web3PrevRandao): common.Hash256 =
-  common.Hash32(distinctBase x)
-
-func ethHash*(x: Web3Hash): common.Hash256 =
-  common.Hash32(distinctBase x)
-
-func ethVersionedHash*(x: Web3Hash): common.VersionedHash =
-  common.VersionedHash(distinctBase x)
-
-func ethHash*(x: Opt[Web3Hash]): Opt[common.Hash256] =
-  if x.isNone: Opt.none(common.Hash256)
-  else: Opt.some(ethHash x.get)
-
-func ethHashes*(list: openArray[Web3Hash]): seq[common.Hash256] =
-  for x in list:
-    result.add ethHash(x)
-
-func ethHashes*(list: Opt[seq[Web3Hash]]): Opt[seq[common.Hash256]] =
-  if list.isNone: Opt.none(seq[common.Hash256])
-  else: Opt.some ethHashes(list.get)
-
-func ethVersionedHashes*(list: openArray[Web3Hash]): seq[common.VersionedHash] =
-  for x in list:
-    result.add ethVersionedHash(x)
-
-func ethAddr*(x: Web3Address): common.EthAddress =
-  EthAddress x
-
-func ethAddr*(x: Opt[Web3Address]): Opt[common.EthAddress] =
-  if x.isNone: Opt.none(common.EthAddress)
-  else: Opt.some(EthAddress x.get)
-
-func ethAddrs*(list: openArray[Web3Address]): seq[common.EthAddress] =
-  for x in list:
-    result.add ethAddr(x)
-
-func ethBloom*(x: Web3Bloom): common.BloomFilter =
-  common.BloomFilter distinctBase x
-
 func ethGasInt*(x: Web3Quantity): common.GasInt =
   common.GasInt x
 
-func ethBlob*(x: Web3ExtraData): common.Blob =
-  common.Blob distinctBase x
+func ethBlob*(x: Web3ExtraData): seq[byte] =
+  distinctBase x
 
 func ethWithdrawal*(x: WithdrawalV1): common.Withdrawal =
   result.index = x.index.uint64
   result.validatorIndex = x.validatorIndex.uint64
-  result.address = x.address.EthAddress
+  result.address = x.address.Address
   result.amount = x.amount.uint64
 
 func ethWithdrawals*(list: openArray[WithdrawalV1]):
@@ -159,43 +101,6 @@ func ethTxs*(list: openArray[Web3Tx]):
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
 # ------------------------------------------------------------------------------
-
-func w3Hash*(x: common.Hash256): Web3Hash =
-  Web3Hash x.data
-
-func w3Hashes*[T: common.Hash256 | common.VersionedHash](list: openArray[T]): seq[Web3Hash] =
-  for x in list:
-    result.add Web3Hash x.data
-
-func w3Hashes*[T: common.Hash256 | common.VersionedHash](z: Opt[seq[T]]): Opt[seq[Web3Hash]] =
-  if z.isNone: Opt.none(seq[Web3Hash])
-  else:
-    let list = z.get
-    var v = newSeqOfCap[Web3Hash](list.len)
-    for x in list:
-      v.add Web3Hash x.data
-    Opt.some(v)
-
-func w3Hash*(x: Opt[common.Hash256]): Opt[BlockHash] =
-  if x.isNone: Opt.none(BlockHash)
-  else: Opt.some(BlockHash x.get.data)
-
-func w3Hash*(x: common.BlockHeader): BlockHash =
-  BlockHash rlpHash(x).data
-
-func w3Hash*(list: openArray[Bytes32]): seq[Bytes32] =
-  result = newSeqOfCap[Bytes32](list.len)
-  for x in list:
-    result.add Bytes32 x
-
-func w3Addr*(x: common.EthAddress): Web3Address =
-  Web3Address x
-
-func w3Bloom*(x: common.BloomFilter): Web3Bloom =
-  Web3Bloom x
-
-func w3PrevRandao*(x: common.Hash256): Web3PrevRandao =
-  Web3PrevRandao x.data
 
 func w3Qty*(x: UInt256): Web3Quantity =
   Web3Quantity x.truncate(uint64)
@@ -235,17 +140,14 @@ func w3BlockNumber*(x: uint64): Web3BlockNumber =
 func w3BlockNumber*(x: UInt256): Web3BlockNumber =
   Web3BlockNumber x.truncate(uint64)
 
-func w3FixedBytes*(x: UInt256): Web3FixedBytes[32] =
-  Web3FixedBytes[32](x.toBytesBE)
-
-func w3ExtraData*(x: common.Blob): Web3ExtraData =
+func w3ExtraData*(x: seq[byte]): Web3ExtraData =
   Web3ExtraData x
 
 func w3Withdrawal*(w: common.Withdrawal): WithdrawalV1 =
   WithdrawalV1(
     index         : Web3Quantity w.index,
     validatorIndex: Web3Quantity w.validatorIndex,
-    address       : Web3Address  w.address,
+    address       : w.address,
     amount        : Web3Quantity w.amount
   )
 

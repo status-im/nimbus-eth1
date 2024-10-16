@@ -28,13 +28,13 @@ export
 func pp*(b: seq[byte]): string =
   b.toHex.pp(hex = true)
 
-func pp*(a: EthAddress): string =
+func pp*(a: Address): string =
   a.toHex[32 .. 39]
 
-func pp*(a: Opt[EthAddress]): string =
+func pp*(a: Opt[Address]): string =
   if a.isSome: a.unsafeGet.pp else: "n/a"
 
-func pp*(a: openArray[EthAddress]): string =
+func pp*(a: openArray[Address]): string =
   "[" & a.mapIt(it.pp).join(" ") & "]"
 
 func pp*(a: Bytes8|Bytes32): string =

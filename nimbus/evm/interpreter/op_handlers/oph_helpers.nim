@@ -35,7 +35,7 @@ else:
 # Public
 # ------------------------------------------------------------------------------
 
-proc gasEip2929AccountCheck*(c: Computation; address: EthAddress): GasInt =
+proc gasEip2929AccountCheck*(c: Computation; address: Address): GasInt =
   when defined(evmc_enabled):
     result = if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
                ColdAccountAccessCost
@@ -49,7 +49,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: EthAddress): GasInt =
                else:
                  WarmStorageReadCost
 
-proc gasEip2929AccountCheck*(c: Computation; address: EthAddress, slot: UInt256): GasInt =
+proc gasEip2929AccountCheck*(c: Computation; address: Address, slot: UInt256): GasInt =
   when defined(evmc_enabled):
     result = if c.host.accessStorage(address, slot) == EVMC_ACCESS_COLD:
                ColdSloadCost

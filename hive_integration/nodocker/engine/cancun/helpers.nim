@@ -29,8 +29,8 @@ type
   TestBlobTxPool* = ref object
     currentBlobID* : BlobID
     currentTxIndex*: int
-    transactions*  : Table[common.Hash256, PooledTransaction]
-    hashesByIndex* : Table[int, common.Hash256]
+    transactions*  : Table[Hash32, PooledTransaction]
+    hashesByIndex* : Table[int, Hash32]
 
 const
   HISTORY_BUFFER_LENGTH* = 8191
@@ -62,7 +62,7 @@ proc `==`(a: openArray[AccessTuple], b: openArray[AccessPair]): bool =
     return false
 
   for i in 0..<a.len:
-    if a[i].address != w3Addr b[i].address:
+    if a[i].address != b[i].address:
       return false
     if a[i].storageKeys.len != b[i].storageKeys.len:
       return false
@@ -147,7 +147,7 @@ proc beaconRootStorageIndexes*(timestamp: uint64): (UInt256, UInt256) =
 
 type
   BlobWrapData* = object
-    versionedHash*: common.Hash256
+    versionedHash*: Hash32
     blob*         : kzg.KzgBlob
     commitment*   : kzg.KZGCommitment
     proof*        : kzg.KzgProof

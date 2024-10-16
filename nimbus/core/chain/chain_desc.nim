@@ -88,7 +88,7 @@ func verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
 
-proc currentBlock*(c: ChainRef): BlockHeader
+proc currentBlock*(c: ChainRef): Header
   {.gcsafe, raises: [CatchableError].} =
   ## currentBlock retrieves the current head block of the canonical chain.
   ## Ideally the block should be retrieved from the blockchain's internal cache.

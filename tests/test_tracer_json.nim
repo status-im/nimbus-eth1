@@ -46,7 +46,7 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
       key = hexToSeqByte(k)
       val = hexToSeqByte(v.getStr())
     if key.len == 32:
-      doAssert key == val.keccakHash.data
+      doAssert key == val.keccak256.data
       if val != @[0x80u8]: # Exclude empty item
         proof.add val
     else:

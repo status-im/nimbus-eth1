@@ -36,8 +36,8 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
 
   # Verify that, in a block with transactions, fees are accrued by the suggestedFeeRecipient
   let
-    feeRecipient = EthAddress.randomBytes()
-    txRecipient = EthAddress.randomBytes()
+    feeRecipient = Address.randomBytes()
+    txRecipient = Address.randomBytes()
 
   # Send multiple transactions
   for i in 0..<cs.transactionCount:

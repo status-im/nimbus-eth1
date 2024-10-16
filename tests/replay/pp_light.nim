@@ -123,16 +123,14 @@ func pp*(q: openArray[int]; itemsPerLine: int; lineSep: string): string =
 func pp*(a: Hash32; collapse = true): string =
   if not collapse:
     a.data.toHex
-  elif a == ZERO_HASH256:
-    "ZERO_HASH256"
+  elif a == ZERO_HASH32:
+    "ZERO_HASH32"
   elif a == EMPTY_ROOT_HASH:
     "EMPTY_ROOT_HASH"
   elif a == EMPTY_UNCLE_HASH:
     "EMPTY_UNCLE_HASH"
   elif a == EMPTY_SHA3:
     "EMPTY_SHA3"
-  elif a == ZERO_HASH256:
-    "ZERO_HASH256"
   else:
     "£" & a.data.toHex.join[0..6] & ".." & a.data.toHex.join[56..63]
 

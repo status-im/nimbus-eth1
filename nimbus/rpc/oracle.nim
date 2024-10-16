@@ -40,7 +40,7 @@ type
   # BlockContent represents a single block for processing
   BlockContent = object
     blockNumber: uint64
-    header     : BlockHeader
+    header     : Header
     txs        : seq[Transaction]
     receipts   : seq[Receipt]
 
@@ -178,7 +178,7 @@ proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Re
   else:
     # Resolve block tag.
     let tag = blockId.alias.toLowerAscii
-    var resolved: BlockHeader
+    var resolved: Header
     if tag == "pending":
       try:
         resolved = headerFromTag(oracle.com.db, blockId)

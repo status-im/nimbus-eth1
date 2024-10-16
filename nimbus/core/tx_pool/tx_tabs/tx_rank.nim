@@ -23,17 +23,17 @@ import
 
 type
   TxRank* = ##\
-    ## Order relation, determins how the `EthAddresses` are ranked
+    ## Order relation, determins how the `Addresses` are ranked
     distinct int64
 
   TxRankAddrRef* = ##\
     ## Set of adresses having the same rank.
-    TableRef[EthAddress,TxRank]
+    TableRef[Address,TxRank]
 
   TxRankTab* = object ##\
-    ## Descriptor for `TxRank` <-> `EthAddress` mapping.
+    ## Descriptor for `TxRank` <-> `Address` mapping.
     rankList: SortedSet[TxRank,TxRankAddrRef]
-    addrTab: Table[EthAddress,TxRank]
+    addrTab: Table[Address,TxRank]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -61,7 +61,7 @@ proc clear*(rt: var TxRankTab) =
 # Public functions, base management operations
 # ------------------------------------------------------------------------------
 
-proc insert*(rt: var TxRankTab; rank: TxRank; sender: EthAddress): bool
+proc insert*(rt: var TxRankTab; rank: TxRank; sender: Address): bool
     {.gcsafe,raises: [KeyError].} =
   ## Add or update a new ranked address. This function returns `true` it the
   ## address exists already with the current rank.
@@ -83,7 +83,7 @@ proc insert*(rt: var TxRankTab; rank: TxRank; sender: EthAddress): bool
   var newRankSet: TxRankAddrRef
   let rc = rt.rankList.insert(rank)
   if rc.isOk:
-    newRankSet = newTable[EthAddress,TxRank](1)
+    newRankSet = newTable[Address,TxRank](1)
     rc.value.data = newRankSet
   else:
     newRankSet = rt.rankList.eq(rank).value.data
@@ -93,7 +93,7 @@ proc insert*(rt: var TxRankTab; rank: TxRank; sender: EthAddress): bool
   true
 
 
-proc delete*(rt: var TxRankTab; sender: EthAddress): bool
+proc delete*(rt: var TxRankTab; sender: Address): bool
     {.gcsafe,raises: [KeyError].} =
   ## Delete argument address `sender` from rank table.
   if rt.addrTab.hasKey(sender):
@@ -111,7 +111,7 @@ proc delete*(rt: var TxRankTab; sender: EthAddress): bool
     return true
 
 # ------------------------------------------------------------------------------
-# Public functions: `TxRank` > `EthAddress`
+# Public functions: `TxRank` > `Address`
 # ------------------------------------------------------------------------------
 
 proc len*(rt: var TxRankTab): int =
@@ -139,15 +139,15 @@ proc lt*(rt: var TxRankTab; rank: TxRank):
   rt.rankList.lt(rank)
 
 # ------------------------------------------------------------------------------
-# Public functions: `EthAddress` > `TxRank`
+# Public functions: `Address` > `TxRank`
 # ------------------------------------------------------------------------------
 
 proc nItems*(rt: var TxRankTab): int =
   ## Total number of address items registered
   rt.addrTab.len
 
-proc eq*(rt: var TxRankTab; sender: EthAddress):
-       SortedSetResult[EthAddress,TxRank]
+proc eq*(rt: var TxRankTab; sender: Address):
+       SortedSetResult[Address,TxRank]
     {.gcsafe,raises: [KeyError].} =
   if rt.addrTab.hasKey(sender):
     return toSortedSetResult(key = sender, data = rt.addrTab[sender])

@@ -11,7 +11,8 @@
 import
   std/[times, json, strutils],
   stew/byteutils,
-  eth/[common, common/eth_types, rlp], chronos,
+  eth/rlp,
+  eth/common/eth_types_rlp, chronos,
   json_rpc/[rpcclient, errors, jsonmarshal],
   ../../../nimbus/beacon/web3_eth_conv,
   ./types
@@ -28,8 +29,6 @@ export
   rpcclient
 
 type
-  Hash256 = eth_types.Hash256
-  VersionedHash = engine_api_types.VersionedHash
   FixedBytes[N: static int] = engine_api_types.FixedBytes[N]
 
 template wrapTry(body: untyped) =
@@ -66,24 +65,24 @@ proc forkchoiceUpdatedV3*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
 
-proc getPayloadV1*(client: RpcClient, payloadId: PayloadID): Result[ExecutionPayloadV1, string] =
+proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV1(payloadId)
 
-proc getPayloadV2*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV2Response, string] =
+proc getPayloadV2*(client: RpcClient, payloadId: Bytes8): Result[GetPayloadV2Response, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV2(payloadId)
 
-proc getPayloadV3*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV3Response, string] =
+proc getPayloadV3*(client: RpcClient, payloadId: Bytes8): Result[GetPayloadV3Response, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV3(payloadId)
 
-proc getPayloadV4*(client: RpcClient, payloadId: PayloadID): Result[GetPayloadV4Response, string] =
+proc getPayloadV4*(client: RpcClient, payloadId: Bytes8): Result[GetPayloadV4Response, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV4(payloadId)
 
 proc getPayload*(client: RpcClient,
-                 payloadId: PayloadID,
+                 payloadId: Bytes8,
                  version: Version): Result[GetPayloadResponse, string] =
   if version == Version.V4:
     let x = client.getPayloadV4(payloadId).valueOr:
@@ -207,15 +206,15 @@ proc newPayloadV4*(client: RpcClient,
     client.engine_newPayloadV4(payload, versionedHashes,
       parentBeaconBlockRoot, executionRequests)
 
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[Web3Hash] =
+proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
   for w3tx in list:
     let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
-      result.add w3Hash(common.Hash32(h))
+      result.add h
 
 proc newPayload*(client: RpcClient,
                  payload: ExecutionPayload,
-                 beaconRoot = Opt.none(common.Hash256),
+                 beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(array[3, seq[byte]])
                  ): Result[PayloadStatusV1, string] =
   case payload.version
@@ -228,18 +227,18 @@ proc newPayload*(client: RpcClient,
     let versionedHashes = collectBlobHashes(payload.transactions)
     return client.newPayloadV3(payload.V3,
       versionedHashes,
-      w3Hash beaconRoot.get)
+      beaconRoot.get)
   of Version.V4:
     let versionedHashes = collectBlobHashes(payload.transactions)
     return client.newPayloadV4(payload.V3,
       versionedHashes,
-      w3Hash beaconRoot.get,
+      beaconRoot.get,
       executionRequests.get)
 
 proc newPayload*(client: RpcClient,
                  version: Version,
                  payload: ExecutionPayload,
-                 beaconRoot = Opt.none(common.Hash256),
+                 beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(array[3, seq[byte]])): Result[PayloadStatusV1, string] =
   case version
   of Version.V1: return client.newPayloadV1(payload)
@@ -248,12 +247,12 @@ proc newPayload*(client: RpcClient,
     let versionedHashes = collectBlobHashes(payload.transactions)
     return client.newPayloadV3(payload,
       Opt.some(versionedHashes),
-      w3Hash beaconRoot)
+      beaconRoot)
   of Version.V4:
     let versionedHashes = collectBlobHashes(payload.transactions)
     return client.newPayloadV4(payload,
       Opt.some(versionedHashes),
-      w3Hash beaconRoot,
+      beaconRoot,
       executionRequests)
 
 proc newPayload*(client: RpcClient,
@@ -264,12 +263,12 @@ proc newPayload*(client: RpcClient,
   of Version.V2: return client.newPayloadV2(payload.basePayload)
   of Version.V3:
     return client.newPayloadV3(payload.basePayload,
-      w3Hashes payload.versionedHashes,
-      w3Hash payload.beaconRoot)
+      payload.versionedHashes,
+      payload.beaconRoot)
   of Version.V4:
     return client.newPayloadV4(payload.basePayload,
-      w3Hashes payload.versionedHashes,
-      w3Hash payload.beaconRoot,
+      payload.versionedHashes,
+      payload.beaconRoot,
       payload.executionRequests)
 
 proc exchangeCapabilities*(client: RpcClient,
@@ -278,10 +277,10 @@ proc exchangeCapabilities*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_exchangeCapabilities(methods)
 
-proc toBlockNonce(n: Opt[FixedBytes[8]]): common.BlockNonce =
+proc toBlockNonce(n: Opt[FixedBytes[8]]): Bytes8 =
   if n.isNone:
-    return default(BlockNonce)
-  BlockNonce(n.get.bytes)
+    return default(Bytes8)
+  Bytes8(n.get.data)
 
 proc maybeU64(n: Opt[Quantity]): Opt[uint64] =
   if n.isNone:
@@ -303,36 +302,36 @@ proc maybeInt(n: Opt[Quantity]): Opt[int] =
     return Opt.none(int)
   Opt.some(n.get.int)
 
-proc toBlockHeader*(bc: BlockObject): common.BlockHeader =
-  common.BlockHeader(
-    number         : common.BlockNumber bc.number,
-    parentHash     : ethHash bc.parentHash,
+proc toBlockHeader*(bc: BlockObject): Header =
+  Header(
+    number         : distinctBase(bc.number),
+    parentHash     : bc.parentHash,
     nonce          : toBlockNonce(bc.nonce),
-    ommersHash     : ethHash bc.sha3Uncles,
-    logsBloom      : BloomFilter bc.logsBloom,
-    transactionsRoot : ethHash bc.transactionsRoot,
-    stateRoot      : ethHash bc.stateRoot,
-    receiptsRoot   : ethHash bc.receiptsRoot,
-    coinbase       : ethAddr bc.miner,
+    ommersHash     : bc.sha3Uncles,
+    logsBloom      : bc.logsBloom,
+    transactionsRoot : bc.transactionsRoot,
+    stateRoot      : bc.stateRoot,
+    receiptsRoot   : bc.receiptsRoot,
+    coinbase       : bc.miner,
     difficulty     : bc.difficulty,
-    extraData      : bc.extraData.bytes,
+    extraData      : bc.extraData.data,
     mixHash        : Bytes32 bc.mixHash,
     gasLimit       : bc.gasLimit.GasInt,
     gasUsed        : bc.gasUsed.GasInt,
     timestamp      : EthTime bc.timestamp,
     baseFeePerGas  : bc.baseFeePerGas,
-    withdrawalsRoot: ethHash bc.withdrawalsRoot,
+    withdrawalsRoot: bc.withdrawalsRoot,
     blobGasUsed    : maybeU64(bc.blobGasUsed),
     excessBlobGas  : maybeU64(bc.excessBlobGas),
-    parentBeaconBlockRoot: ethHash bc.parentBeaconBlockRoot,
+    parentBeaconBlockRoot: bc.parentBeaconBlockRoot,
   )
 
-func vHashes(x: Opt[seq[Web3Hash]]): seq[common.VersionedHash] =
+func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
   if x.isNone: return
-  else: ethVersionedHashes(x.get)
+  else: x.get
 
 proc toTransaction(tx: TransactionObject): Transaction =
-  common.Transaction(
+  Transaction(
     txType          : tx.`type`.get(0.Web3Quantity).TxType,
     chainId         : tx.chainId.get(0.Web3Quantity).ChainId,
     nonce           : tx.nonce.AccountNonce,
@@ -340,7 +339,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
     maxFeePerGas    : tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
     gasLimit        : tx.gas.GasInt,
-    to              : ethAddr tx.to,
+    to              : tx.to,
     value           : tx.value,
     payload         : tx.input,
     accessList      : tx.accessList.get(@[]),
@@ -360,7 +359,7 @@ proc toWithdrawal(wd: WithdrawalObject): Withdrawal =
   Withdrawal(
     index: wd.index.uint64,
     validatorIndex: wd.validatorIndex.uint64,
-    address: ethAddr wd.address,
+    address: wd.address,
     amount: wd.amount.uint64,
   )
 
@@ -376,19 +375,19 @@ proc toWithdrawals*(list: Opt[seq[WithdrawalObject]]): Opt[seq[Withdrawal]] =
 
 type
   RPCReceipt* = object
-    txHash*: Hash256
+    txHash*: Hash32
     txIndex*: int
-    blockHash*: Hash256
+    blockHash*: Hash32
     blockNumber*: uint64
-    sender*: EthAddress
-    to*: Opt[EthAddress]
+    sender*: Address
+    to*: Opt[Address]
     cumulativeGasUsed*: GasInt
     gasUsed*: GasInt
-    contractAddress*: Opt[EthAddress]
+    contractAddress*: Opt[Address]
     logs*: seq[LogObject]
     logsBloom*: FixedBytes[256]
     recType*: ReceiptType
-    stateRoot*: Opt[Hash256]
+    stateRoot*: Opt[Hash32]
     status*: Opt[bool]
     effectiveGasPrice*: GasInt
     blobGasUsed*: Opt[uint64]
@@ -396,17 +395,17 @@ type
 
   RPCTx* = object
     txType*: TxType
-    blockHash*: Opt[Hash256] # none if pending
+    blockHash*: Opt[Hash32] # none if pending
     blockNumber*: Opt[uint64]
-    sender*: EthAddress
+    sender*: Address
     gasLimit*: GasInt
     gasPrice*: GasInt
     maxFeePerGas*: GasInt
     maxPriorityFeePerGas*: GasInt
-    hash*: Hash256
+    hash*: Hash32
     payload*: seq[byte]
     nonce*: AccountNonce
-    to*: Opt[EthAddress]
+    to*: Opt[Address]
     txIndex*: Opt[int]
     value*: UInt256
     v*: uint64
@@ -415,23 +414,23 @@ type
     chainId*: Opt[ChainId]
     accessList*: Opt[seq[AccessPair]]
     maxFeePerBlobGas*: Opt[UInt256]
-    versionedHashes*: Opt[VersionedHashes]
+    versionedHashes*: Opt[seq[VersionedHash]]
 
 proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
   RPCReceipt(
-    txHash: ethHash rec.transactionHash,
+    txHash: rec.transactionHash,
     txIndex: rec.transactionIndex.int,
-    blockHash: ethHash rec.blockHash,
+    blockHash: rec.blockHash,
     blockNumber: rec.blockNumber.uint64,
-    sender: ethAddr rec.`from`,
-    to: ethAddr rec.to,
+    sender: rec.`from`,
+    to: rec.to,
     cumulativeGasUsed: rec.cumulativeGasUsed.GasInt,
     gasUsed: rec.gasUsed.GasInt,
-    contractAddress: ethAddr rec.contractAddress,
+    contractAddress: rec.contractAddress,
     logs: rec.logs,
     logsBloom: rec.logsBloom,
     recType: rec.`type`.get(0.Web3Quantity).ReceiptType,
-    stateRoot: ethHash rec.root,
+    stateRoot: rec.root,
     status: maybeBool(rec.status),
     effectiveGasPrice: rec.effectiveGasPrice.GasInt,
     blobGasUsed: maybeU64(rec.blobGasUsed),
@@ -441,17 +440,17 @@ proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
 proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
   RPCTx(
     txType: tx.`type`.get(0.Web3Quantity).TxType,
-    blockHash: ethHash tx.blockHash,
+    blockHash: tx.blockHash,
     blockNumber: maybeU64 tx.blockNumber,
-    sender: ethAddr tx.`from`,
+    sender: tx.`from`,
     gasLimit: tx.gas.GasInt,
     gasPrice: tx.gasPrice.GasInt,
     maxFeePerGas: tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
     maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
-    hash: ethHash tx.hash,
+    hash: tx.hash,
     payload: tx.input,
     nonce: tx.nonce.AccountNonce,
-    to: ethAddr tx.to,
+    to: tx.to,
     txIndex: maybeInt(tx.transactionIndex),
     value: tx.value,
     v: tx.v.uint64,
@@ -463,14 +462,14 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     versionedHashes: if tx.blobVersionedHashes.isSome:
       Opt.some(vHashes tx.blobVersionedHashes)
     else:
-      Opt.none(VersionedHashes),
+      Opt.none(seq[VersionedHash]),
   )
 
 proc waitForTTD*(client: RpcClient,
-      ttd: DifficultyInt): Future[(common.BlockHeader, bool)] {.async.} =
+      ttd: DifficultyInt): Future[(Header, bool)] {.async.} =
   let period = chronos.seconds(5)
   var loop = 0
-  var emptyHeader: common.BlockHeader
+  var emptyHeader: Header
   while loop < 5:
     let bc = await client.eth_getBlockByNumber("latest", false)
     if bc.isNil:
@@ -488,14 +487,14 @@ proc blockNumber*(client: RpcClient): Result[uint64, string] =
     let res = waitFor client.eth_blockNumber()
     return ok(res.uint64)
 
-proc headerByNumber*(client: RpcClient, number: uint64): Result[common.BlockHeader, string] =
+proc headerByNumber*(client: RpcClient, number: uint64): Result[Header, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber(blockId(number), false)
     if res.isNil:
       return err("failed to get blockHeader: " & $number)
     return ok(res.toBlockHeader)
 
-#proc blockByNumber*(client: RpcClient, number: uint64, output: var common.EthBlock): Result[void, string] =
+#proc blockByNumber*(client: RpcClient, number: uint64, output: var Block): Result[void, string] =
 #  wrapTry:
 #    let res = waitFor client.eth_getBlockByNumber(blockId(number), true)
 #    if res.isNil:
@@ -505,33 +504,33 @@ proc headerByNumber*(client: RpcClient, number: uint64): Result[common.BlockHead
 #    output.withdrawals = toWithdrawals(res.withdrawals)
 #    return ok()
 
-proc headerByHash*(client: RpcClient, hash: Hash256): Result[common.BlockHeader, string] =
+proc headerByHash*(client: RpcClient, hash: Hash32): Result[Header, string] =
   wrapTry:
-    let res = waitFor client.eth_getBlockByHash(w3Hash hash, false)
+    let res = waitFor client.eth_getBlockByHash(hash, false)
     if res.isNil:
       return err("failed to get block: " & hash.data.toHex)
     return ok(res.toBlockHeader)
 
-proc latestHeader*(client: RpcClient): Result[common.BlockHeader, string] =
+proc latestHeader*(client: RpcClient): Result[Header, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber(blockId("latest"), false)
     if res.isNil:
       return err("failed to get latest blockHeader")
     return ok(res.toBlockHeader)
 
-proc latestBlock*(client: RpcClient): Result[common.EthBlock, string] =
+proc latestBlock*(client: RpcClient): Result[Block, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber(blockId("latest"), true)
     if res.isNil:
       return err("failed to get latest blockHeader")
-    let output = EthBlock(
+    let output = Block(
       header: toBlockHeader(res),
       transactions: toTransactions(res.transactions),
       withdrawals: toWithdrawals(res.withdrawals),
     )
     return ok(output)
 
-proc namedHeader*(client: RpcClient, name: string): Result[common.BlockHeader, string] =
+proc namedHeader*(client: RpcClient, name: string): Result[Header, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber(name, false)
     if res.isNil:
@@ -539,57 +538,57 @@ proc namedHeader*(client: RpcClient, name: string): Result[common.BlockHeader, s
     return ok(res.toBlockHeader)
 
 proc sendTransaction*(
-    client: RpcClient, tx: common.PooledTransaction): Result[void, string] =
+    client: RpcClient, tx: PooledTransaction): Result[void, string] =
   wrapTry:
     let encodedTx = rlp.encode(tx)
     let res = waitFor client.eth_sendRawTransaction(encodedTx)
     let txHash = rlpHash(tx)
-    let getHash = ethHash res
+    let getHash = res
     if txHash != getHash:
       return err("sendTransaction: tx hash mismatch")
     return ok()
 
-proc balanceAt*(client: RpcClient, address: EthAddress): Result[UInt256, string] =
+proc balanceAt*(client: RpcClient, address: Address): Result[UInt256, string] =
   wrapTry:
-    let res = waitFor client.eth_getBalance(w3Addr(address), blockId("latest"))
+    let res = waitFor client.eth_getBalance(address, blockId("latest"))
     return ok(res)
 
-proc balanceAt*(client: RpcClient, address: EthAddress, number: common.BlockNumber): Result[UInt256, string] =
+proc balanceAt*(client: RpcClient, address: Address, number: eth_types.BlockNumber): Result[UInt256, string] =
   wrapTry:
-    let res = waitFor client.eth_getBalance(w3Addr(address), blockId(number))
+    let res = waitFor client.eth_getBalance(address, blockId(number))
     return ok(res)
 
-proc nonceAt*(client: RpcClient, address: EthAddress): Result[AccountNonce, string] =
+proc nonceAt*(client: RpcClient, address: Address): Result[AccountNonce, string] =
   wrapTry:
-    let res = waitFor client.eth_getTransactionCount(w3Addr(address), blockId("latest"))
+    let res = waitFor client.eth_getTransactionCount(address, blockId("latest"))
     return ok(res.AccountNonce)
 
-proc txReceipt*(client: RpcClient, txHash: Hash256): Result[RPCReceipt, string] =
+proc txReceipt*(client: RpcClient, txHash: Hash32): Result[RPCReceipt, string] =
   wrapTry:
-    let res = waitFor client.eth_getTransactionReceipt(w3Hash txHash)
+    let res = waitFor client.eth_getTransactionReceipt(txHash)
     if res.isNil:
       return err("failed to get receipt: " & txHash.data.toHex)
     return ok(res.toRPCReceipt)
 
-proc txByHash*(client: RpcClient, txHash: Hash256): Result[RPCTx, string] =
+proc txByHash*(client: RpcClient, txHash: Hash32): Result[RPCTx, string] =
   wrapTry:
-    let res = waitFor client.eth_getTransactionByHash(w3Hash txHash)
+    let res = waitFor client.eth_getTransactionByHash(txHash)
     if res.isNil:
       return err("failed to get transaction: " & txHash.data.toHex)
     return ok(res.toRPCTx)
 
-proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256): Result[FixedBytes[32], string] =
+proc storageAt*(client: RpcClient, address: Address, slot: UInt256): Result[FixedBytes[32], string] =
   wrapTry:
-    let res = waitFor client.eth_getStorageAt(w3Addr(address), slot, blockId("latest"))
+    let res = waitFor client.eth_getStorageAt(address, slot, blockId("latest"))
     return ok(res)
 
-proc storageAt*(client: RpcClient, address: EthAddress, slot: UInt256, number: common.BlockNumber): Result[FixedBytes[32], string] =
+proc storageAt*(client: RpcClient, address: Address, slot: UInt256, number: eth_types.BlockNumber): Result[FixedBytes[32], string] =
   wrapTry:
-    let res = waitFor client.eth_getStorageAt(w3Addr(address), slot, blockId(number))
+    let res = waitFor client.eth_getStorageAt(address, slot, blockId(number))
     return ok(res)
 
-proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash256): Future[Result[void, string]] {.async.} =
-  let res = await client.eth_getBlockByHash(w3Hash lastBlockHash, false)
+proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash32): Future[Result[void, string]] {.async.} =
+  let res = await client.eth_getBlockByHash(lastBlockHash, false)
   if res.isNil:
     return err("cannot get block by hash " & lastBlockHash.data.toHex)
 
@@ -628,14 +627,14 @@ type
 TraceOpts.useDefaultSerializationIn JrpcConv
 
 createRpcSigsFromNim(RpcClient):
-  proc debug_traceTransaction(hash: TxHash, opts: TraceOpts): JsonNode
+  proc debug_traceTransaction(hash: Hash32, opts: TraceOpts): JsonNode
 
 proc debugPrevRandaoTransaction*(
     client: RpcClient,
     tx: PooledTransaction,
-    expectedPrevRandao: Hash256): Result[void, string] =
+    expectedPrevRandao: Hash32): Result[void, string] =
   wrapTry:
-    let hash = w3Hash tx.rlpHash
+    let hash = tx.rlpHash
     # we only interested in stack, disable all other elems
     let opts = TraceOpts(
       disableStorage: true,
@@ -669,7 +668,7 @@ proc debugPrevRandaoTransaction*(
 
     return ok()
 
-template expectBalanceEqual*(res: Result[UInt256, string], account: EthAddress,
+template expectBalanceEqual*(res: Result[UInt256, string], account: Address,
                              expectedBalance: UInt256): auto =
   if res.isErr:
     return err(res.error)
@@ -677,7 +676,7 @@ template expectBalanceEqual*(res: Result[UInt256, string], account: EthAddress,
     return err("invalid wd balance at $1, expect $2, get $3" % [
       account.toHex, $expectedBalance, $res.get])
 
-template expectStorageEqual*(res: Result[FixedBytes[32], string], account: EthAddress,
+template expectStorageEqual*(res: Result[FixedBytes[32], string], account: Address,
                              expectedValue: FixedBytes[32]): auto =
   if res.isErr:
     return err(res.error)

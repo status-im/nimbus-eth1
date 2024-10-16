@@ -15,7 +15,6 @@
 {.push raises: [].}
 
 import
-  eth/[keys, rlp],
   stew/sorted_set,
   ../../db/[ledger, core_db],
   ../../common/common,
@@ -41,10 +40,10 @@ type
 
     # Packer results
     blockValue: UInt256
-    stateRoot: Hash256
-    txRoot: Hash256
-    receiptsRoot: Hash256
-    logsBloom: BloomFilter
+    stateRoot: Hash32
+    txRoot: Hash32
+    receiptsRoot: Hash32
+    logsBloom: Bloom
 
   GrabResult = enum
     FetchNextItem
@@ -108,7 +107,7 @@ func baseFee(pst: TxPacker): GasInt =
   else:
     0.GasInt
 
-func feeRecipient(pst: TxPacker): EthAddress =
+func feeRecipient(pst: TxPacker): Address =
   pst.vmState.com.pos.feeRecipient
 
 # ------------------------------------------------------------------------------
@@ -303,14 +302,14 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
   ok(pst)
   # Block chain will roll back automatically
 
-proc assembleHeader*(pst: TxPacker): BlockHeader =
+proc assembleHeader*(pst: TxPacker): Header =
   ## Generate a new header, a child of the cached `head`
   let
     vmState = pst.vmState
     com = vmState.com
     pos = com.pos
 
-  result = BlockHeader(
+  result = Header(
     parentHash:    vmState.parent.blockHash,
     ommersHash:    EMPTY_UNCLE_HASH,
     coinbase:      pos.feeRecipient,
@@ -325,7 +324,7 @@ proc assembleHeader*(pst: TxPacker): BlockHeader =
     timestamp:     pos.timestamp,
     extraData:     @[],
     mixHash:       pos.prevRandao,
-    nonce:         default(BlockNonce),
+    nonce:         default(Bytes8),
     baseFeePerGas: vmState.blockCtx.baseFeePerGas,
     )
 

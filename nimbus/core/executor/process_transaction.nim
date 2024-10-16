@@ -30,7 +30,7 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
+proc eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
   ## Actually, `baseFee` should be 0 for pre-London headers already. But this
   ## function just plays safe. In particular, the `test_general_state_json.nim`
   ## module modifies this block header `baseFee` field unconditionally :(.
@@ -40,7 +40,7 @@ proc eip1559BaseFee(header: BlockHeader; fork: EVMFork): UInt256 =
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
     accTx: LedgerSpRef;
-    header: BlockHeader;
+    header: Header;
     tx: Transaction;
     gasBurned: GasInt;
     priorityFee: GasInt;
@@ -66,8 +66,8 @@ proc commitOrRollbackDependingOnGasUsed(
 proc processTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.recoverSender
-    header:  BlockHeader; ## Header for the block containing the current tx
+    sender:  Address;  ## tx.recoverSender
+    header:  Header; ## Header for the block containing the current tx
       ): Result[GasInt, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
@@ -127,7 +127,7 @@ proc processTransactionImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
+proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
                               Result[void, string] =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
@@ -159,7 +159,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash256):
   statedb.persist(clearEmptyAccount = true)
   ok()
 
-proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash256):
+proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
                               Result[void, string] =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
@@ -240,8 +240,8 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
-    sender:  EthAddress;  ## tx.recoverSender
-    header:  BlockHeader; ## Header for the block containing the current tx
+    sender:  Address;  ## tx.recoverSender
+    header:  Header; ## Header for the block containing the current tx
       ): Result[GasInt,string] =
   vmState.processTransactionImpl(tx, sender, header)
 

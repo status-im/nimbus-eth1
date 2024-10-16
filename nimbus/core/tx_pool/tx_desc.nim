@@ -77,7 +77,7 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc baseFeeGet(com: CommonRef; parent: BlockHeader): Opt[UInt256] =
+proc baseFeeGet(com: CommonRef; parent: Header): Opt[UInt256] =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
 
@@ -94,7 +94,7 @@ proc baseFeeGet(com: CommonRef; parent: BlockHeader): Opt[UInt256] =
     parent.gasUsed,
     parent.baseFeePerGas.get(0.u256))
 
-proc gasLimitsGet(com: CommonRef; parent: BlockHeader): GasInt =
+proc gasLimitsGet(com: CommonRef; parent: Header): GasInt =
   if com.isLondonOrLater(parent.number+1):
     var parentGasLimit = parent.gasLimit
     if not com.isLondonOrLater(parent.number):
@@ -108,7 +108,7 @@ proc gasLimitsGet(com: CommonRef; parent: BlockHeader): GasInt =
       gasFloor = DEFAULT_GAS_LIMIT,
       gasCeil = DEFAULT_GAS_LIMIT)
 
-proc setupVMState(com: CommonRef; parent: BlockHeader): BaseVMState =
+proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
   # do hardfork transition before
   # BaseVMState querying any hardfork/consensus from CommonRef
 
@@ -129,7 +129,7 @@ proc setupVMState(com: CommonRef; parent: BlockHeader): BaseVMState =
     blockCtx = blockCtx,
     com      = com)
 
-proc update(xp: TxPoolRef; parent: BlockHeader) =
+proc update(xp: TxPoolRef; parent: Header) =
   xp.vmState = setupVMState(xp.vmState.com, parent)
 
 # ------------------------------------------------------------------------------
@@ -203,7 +203,7 @@ func gasLimit*(xp: TxPoolRef): GasInt =
 func excessBlobGas*(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
-proc getBalance*(xp: TxPoolRef; account: EthAddress): UInt256 =
+proc getBalance*(xp: TxPoolRef; account: Address): UInt256 =
   ## Wrapper around `vmState.readOnlyStateDB.getBalance()` for a `vmState`
   ## descriptor positioned at the `dh.head`. This might differ from the
   ## `dh.vmState.readOnlyStateDB.getBalance()` which returnes the current
@@ -211,14 +211,14 @@ proc getBalance*(xp: TxPoolRef; account: EthAddress): UInt256 =
   ## procedure.
   xp.vmState.stateDB.getBalance(account)
 
-proc getNonce*(xp: TxPoolRef; account: EthAddress): AccountNonce =
+proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   ## Wrapper around `vmState.readOnlyStateDB.getNonce()` for a `vmState`
   ## descriptor positioned at the `dh.head`. This might differ from the
   ## `dh.vmState.readOnlyStateDB.getNonce()` which returnes the current balance
   ## relative to what has been accumulated by the current packing procedure.
   xp.vmState.stateDB.getNonce(account)
 
-func head*(xp: TxPoolRef): BlockHeader =
+func head*(xp: TxPoolRef): Header =
   ## Getter, cached block chain insertion point. Typocally, this should be the
   ## the same header as retrieved by the `getCanonicalHead()` (unless in the
   ## middle of a mining update.)
@@ -244,7 +244,7 @@ func `pFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.flags = val
 
-proc `head=`*(xp: TxPoolRef; val: BlockHeader)
+proc `head=`*(xp: TxPoolRef; val: Header)
     {.gcsafe,raises: [].} =
   ## Setter, updates descriptor. This setter re-positions the `vmState` and
   ## account caches to a new insertion point on the block chain database.

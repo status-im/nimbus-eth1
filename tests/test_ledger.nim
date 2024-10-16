@@ -10,8 +10,7 @@
 
 import
   std/[strformat, strutils, importutils],
-  eth/keys,
-  eth/common/transaction_utils,
+  eth/common/[keys, transaction_utils],
   stew/byteutils,
   stew/endians2,
   ../nimbus/config,
@@ -49,14 +48,14 @@ type
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc pp*(a: EthAddress): string =
+proc pp*(a: Address): string =
   a.toHex[32 .. 39].toLowerAscii
 
 proc pp*(tx: Transaction): string =
   # "(" & tx.ecRecover.value.pp & "," & $tx.nonce & ")"
   "(" & tx.recoverSender().value().pp & "," & $tx.nonce & ")"
 
-proc pp*(h: KeccakHash): string =
+proc pp*(h: Hash32): string =
   h.data.toHex[52 .. 63].toLowerAscii
 
 proc pp*(tx: Transaction; ledger: LedgerRef): string =
@@ -116,7 +115,7 @@ proc initEnv(): TestEnv =
 
 func makeTx(
     env: var TestEnv,
-    recipient: EthAddress,
+    recipient: Address,
     amount: UInt256,
     payload: openArray[byte] = []): Transaction =
   const
@@ -137,26 +136,26 @@ func makeTx(
   inc env.nonce
   signTransaction(tx, env.vaultKey, eip155 = true)
 
-func initAddr(z: int): EthAddress =
+func initAddr(z: int): Address =
   const L = sizeof(result)
   result.data[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
 
-proc importBlock(env: TestEnv; blk: EthBlock) =
+proc importBlock(env: TestEnv; blk: Block) =
   env.chain.importBlock(blk).isOkOr:
     raiseAssert "persistBlocks() failed at block #" &
       $blk.header.number & " msg: " & error
 
-proc getLedger(com: CommonRef; header: BlockHeader): LedgerRef =
+proc getLedger(com: CommonRef; header: Header): LedgerRef =
   LedgerRef.init(com.db, header.stateRoot)
 
-func getRecipient(tx: Transaction): EthAddress =
+func getRecipient(tx: Transaction): Address =
   tx.to.expect("transaction have no recipient")
 
 # ------------------------------------------------------------------------------
 # Crash test function, finding out about how the transaction framework works ..
 # ------------------------------------------------------------------------------
 
-proc modBalance(ac: LedgerRef, address: EthAddress) =
+proc modBalance(ac: LedgerRef, address: Address) =
   ## This function is crucial for profucing the crash. If must
   ## modify the balance so that the database gets written.
   # ac.blindBalanceSetter(address)
@@ -334,7 +333,7 @@ proc runLedgerTransactionTests(noisy = true) =
           uncles: blk.uncles,
           withdrawals: Opt.some(newSeq[Withdrawal]())
         )
-        env.importBlock(EthBlock.init(blk.header, body))
+        env.importBlock(Block.init(blk.header, body))
 
         check env.xp.smartHead(blk.header, env.chain)
         for tx in body.transactions:
@@ -392,14 +391,14 @@ proc runLedgerTransactionTests(noisy = true) =
 proc runLedgerBasicOperationsTests() =
   suite "Ledger basic operations tests":
     setup:
-      const emptyAcc {.used.} = newAccount()
+      const emptyAcc {.used.} = Account.init()
 
       var
         memDB = newCoreDbRef DefaultDbMemory
         stateDB {.used.} = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
         address {.used.} = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
-        rootHash {.used.} : KeccakHash
+        rootHash {.used.} : Hash32
 
     test "accountExists and isDeadAccount":
       check stateDB.accountExists(address) == false
@@ -519,7 +518,7 @@ proc runLedgerBasicOperationsTests() =
       ac.persist()
       check ac.getCode(addr2) == code
       let
-        key = contractHashKey(keccakHash(code))
+        key = contractHashKey(keccak256(code))
         val = memDB.ctx.getKvt().get(key.toOpenArray).valueOr: EmptyBlob
       check val == code
 

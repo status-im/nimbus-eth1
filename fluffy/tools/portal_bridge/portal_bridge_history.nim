@@ -83,7 +83,7 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
       for topic in log.topics:
         topics.add(eth_types.Topic(topic))
 
-      logs.add(Log(address: ethAddr log.address, data: log.data, topics: topics))
+      logs.add(Log(address: log.address, data: log.data, topics: topics))
 
   let cumulativeGasUsed = receiptObject.cumulativeGasUsed.GasInt
   if receiptObject.status.isSome():
@@ -422,7 +422,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyRecursiveFindContent(
+              await portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content
@@ -454,7 +454,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyRecursiveFindContent(
+              await portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content
@@ -482,7 +482,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyRecursiveFindContent(
+              await portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content

@@ -10,19 +10,19 @@
 {.push raises: [].}
 
 import
-  eth/common/[eth_types, transaction_utils],
-  eth/common/eth_types_rlp,
+  eth/common/[eth_types, eth_types_rlp, transaction_utils],
   web3/eth_api_types,
-  ../beacon/web3_eth_conv,
   ../constants,
   ../transaction
 
+from ../beacon/web3_eth_conv import w3Qty
+
 proc toWd(wd: eth_types.Withdrawal): WithdrawalObject =
   WithdrawalObject(
-    index: w3Qty wd.index,
-    validatorIndex: w3Qty wd.validatorIndex,
-    address: w3Addr wd.address,
-    amount: w3Qty wd.amount,
+    index: Quantity(wd.index),
+    validatorIndex: Quantity wd.validatorIndex,
+    address: wd.address,
+    amount: Quantity wd.amount,
   )
 
 proc toWdList(list: openArray[eth_types.Withdrawal]): seq[WithdrawalObject] =
@@ -36,66 +36,66 @@ func toWdList(x: Opt[seq[eth_types.Withdrawal]]):
   else: Opt.some(toWdList x.get)
 
 proc populateTransactionObject*(tx: Transaction,
-                                optionalHash: Opt[eth_types.Hash256] = Opt.none(eth_types.Hash256),
+                                optionalHash: Opt[eth_types.Hash32] = Opt.none(eth_types.Hash32),
                                 optionalNumber: Opt[eth_types.BlockNumber] = Opt.none(eth_types.BlockNumber),
                                 txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
-  result.blockHash = w3Hash optionalHash
-  result.blockNumber = w3BlockNumber optionalNumber
+  result.blockHash = optionalHash
+  result.blockNumber = w3Qty(optionalNumber)
 
   if (let sender = tx.recoverSender(); sender.isOk):
     result.`from` = sender[]
-  result.gas = w3Qty(tx.gasLimit)
-  result.gasPrice = w3Qty(tx.gasPrice)
-  result.hash = w3Hash tx.rlpHash
+  result.gas = Quantity(tx.gasLimit)
+  result.gasPrice = Quantity(tx.gasPrice)
+  result.hash = tx.rlpHash
   result.input = tx.payload
-  result.nonce = w3Qty(tx.nonce)
-  result.to = Opt.some(w3Addr tx.destination)
+  result.nonce = Quantity(tx.nonce)
+  result.to = Opt.some(tx.destination)
   if txIndex.isSome:
     result.transactionIndex = Opt.some(Quantity(txIndex.get))
   result.value = tx.value
-  result.v = w3Qty(tx.V)
+  result.v = Quantity(tx.V)
   result.r = tx.R
   result.s = tx.S
-  result.maxFeePerGas = Opt.some w3Qty(tx.maxFeePerGas)
-  result.maxPriorityFeePerGas = Opt.some w3Qty(tx.maxPriorityFeePerGas)
+  result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
+  result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
 
   if tx.txType >= TxEip2930:
-    result.chainId = Opt.some(Web3Quantity(tx.chainId))
+    result.chainId = Opt.some(Quantity(tx.chainId))
     result.accessList = Opt.some(tx.accessList)
 
   if tx.txType >= TxEIP4844:
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
-    result.blobVersionedHashes = Opt.some(w3Hashes tx.versionedHashes)
+    result.blobVersionedHashes = Opt.some(tx.versionedHashes)
 
-proc populateBlockObject*(blockHash: eth_types.Hash256,
-                          blk: EthBlock,
+proc populateBlockObject*(blockHash: eth_types.Hash32,
+                          blk: Block,
                           fullTx: bool): BlockObject =
   template header: auto = blk.header
 
   result = BlockObject()
-  result.number = w3BlockNumber(header.number)
-  result.hash = w3Hash blockHash
-  result.parentHash = w3Hash header.parentHash
-  result.nonce = Opt.some(Web3FixedBytes[8] header.nonce)
-  result.sha3Uncles = w3Hash header.ommersHash
-  result.logsBloom = Web3FixedBytes[256] header.logsBloom
-  result.transactionsRoot = w3Hash header.txRoot
-  result.stateRoot = w3Hash header.stateRoot
-  result.receiptsRoot = w3Hash header.receiptsRoot
-  result.miner = w3Addr header.coinbase
+  result.number = Quantity(header.number)
+  result.hash = blockHash
+  result.parentHash = header.parentHash
+  result.nonce = Opt.some(header.nonce)
+  result.sha3Uncles = header.ommersHash
+  result.logsBloom = header.logsBloom
+  result.transactionsRoot = header.txRoot
+  result.stateRoot = header.stateRoot
+  result.receiptsRoot = header.receiptsRoot
+  result.miner = header.coinbase
   result.difficulty = header.difficulty
   result.extraData = HistoricExtraData header.extraData
   result.mixHash = Hash32 header.mixHash
 
   # discard sizeof(seq[byte]) of extraData and use actual length
-  let size = sizeof(eth_types.BlockHeader) - sizeof(eth_types.Blob) + header.extraData.len
+  let size = sizeof(eth_types.Header) - sizeof(eth_api_types.Blob) + header.extraData.len
   result.size = Quantity(size)
 
-  result.gasLimit  = w3Qty(header.gasLimit)
-  result.gasUsed   = w3Qty(header.gasUsed)
-  result.timestamp = w3Qty(header.timestamp)
+  result.gasLimit  = Quantity(header.gasLimit)
+  result.gasUsed   = Quantity(header.gasUsed)
+  result.timestamp = Quantity(header.timestamp)
   result.baseFeePerGas = header.baseFeePerGas
 
   if fullTx:
@@ -107,10 +107,10 @@ proc populateBlockObject*(blockHash: eth_types.Hash256,
   else:
     for i, tx in blk.transactions:
       let txHash = rlpHash(tx)
-      result.transactions.add txOrHash(w3Hash(txHash))
+      result.transactions.add txOrHash(txHash)
 
-  result.withdrawalsRoot = w3Hash header.withdrawalsRoot
+  result.withdrawalsRoot = header.withdrawalsRoot
   result.withdrawals = toWdList blk.withdrawals
-  result.parentBeaconBlockRoot = w3Hash header.parentBeaconBlockRoot
+  result.parentBeaconBlockRoot = header.parentBeaconBlockRoot
   result.blobGasUsed = w3Qty(header.blobGasUsed)
   result.excessBlobGas = w3Qty(header.excessBlobGas)

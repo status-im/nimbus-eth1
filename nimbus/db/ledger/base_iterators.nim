@@ -36,21 +36,21 @@ iterator accounts*(ldg: LedgerRef): Account =
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
-iterator addresses*(ldg: LedgerRef): EthAddress =
+iterator addresses*(ldg: LedgerRef): Address =
   ldg.beginTrackApi LdgAdressesIt
   for w in ldg.ac.addresses():
     yield w
   ldg.ifTrackApi: debug apiTxt, api, elapsed
 
 
-iterator cachedStorage*(ldg: LedgerRef, eAddr: EthAddress): (UInt256,UInt256) =
+iterator cachedStorage*(ldg: LedgerRef, eAddr: Address): (UInt256,UInt256) =
   ldg.beginTrackApi LdgCachedStorageIt
   for w in ldg.ac.cachedStorage(eAddr):
     yield w
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr)
 
 
-iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
+iterator pairs*(ldg: LedgerRef): (Address,Account) =
   ldg.beginTrackApi LdgPairsIt
   for w in ldg.ac.pairs():
     yield w
@@ -59,7 +59,7 @@ iterator pairs*(ldg: LedgerRef): (EthAddress,Account) =
 
 iterator storage*(
     ldg: LedgerRef;
-    eAddr: EthAddress;
+    eAddr: Address;
       ): (UInt256,UInt256) =
   ldg.beginTrackApi LdgStorageIt
   for w in ldg.ac.storage(eAddr):

@@ -8,9 +8,9 @@
 # those terms.
 
 import
-  eth/common,
   results,
   ../web3_eth_conv,
+  eth/common/hashes,
   ../beacon_engine,
   web3/execution_types,
   ../payload_conv,
@@ -20,8 +20,8 @@ import
 {.push gcsafe, raises:[CatchableError].}
 
 func validateVersionedHashed(payload: ExecutionPayload,
-                              expected: openArray[Web3Hash]): bool  =
-  var versionedHashes: seq[common.VersionedHash]
+                              expected: openArray[Hash32]): bool  =
+  var versionedHashes: seq[VersionedHash]
   for x in payload.transactions:
     let tx = rlp.decode(distinctBase(x), Transaction)
     versionedHashes.add tx.versionedHashes
@@ -90,8 +90,8 @@ template validatePayload(apiVersion, version, payload, executionRequests) =
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
-                 versionedHashes = Opt.none(seq[Web3Hash]),
-                 beaconRoot = Opt.none(Web3Hash),
+                 versionedHashes = Opt.none(seq[Hash32]),
+                 beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(array[3, seq[byte]])): PayloadStatusV1 =
 
   trace "Engine API request received",
@@ -114,7 +114,7 @@ proc newPayload*(ben: BeaconEngineRef,
   validateVersion(com, timestamp, version, apiVersion)
 
   var blk = ethBlock(payload, beaconRoot, requestsHash)
-  template header: BlockHeader = blk.header
+  template header: Header = blk.header
 
   if apiVersion >= Version.V3:
     if versionedHashes.isNone:
@@ -123,7 +123,7 @@ proc newPayload*(ben: BeaconEngineRef,
     if not validateVersionedHashed(payload, versionedHashes.get):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
 
-  let blockHash = ethHash payload.blockHash
+  let blockHash = payload.blockHash
   header.validateBlockHash(blockHash, version).isOkOr:
     return error
 
