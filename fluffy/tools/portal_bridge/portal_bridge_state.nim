@@ -27,8 +27,8 @@ import
 type BlockData = object
   blockNumber: uint64
   blockHash: Hash32
-  miner: Address
-  uncles: seq[tuple[miner: Address, blockNumber: uint64]]
+  miner: EthAddress
+  uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
   parentStateRoot: Hash32
   stateRoot: Hash32
   stateDiffs: seq[TransactionDiff]
