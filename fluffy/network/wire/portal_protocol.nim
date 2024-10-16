@@ -1615,7 +1615,7 @@ proc getLocalContent*(
   # The cache can contain content that is not in our radius
   let maybeContent = p.contentCache.get(contentId)
   if maybeContent.isSome():
-    return Opt.some(maybeContent.get())
+    return maybeContent
 
   # Check first if content is in range, as this is a cheaper operation
   # than the database lookup.
