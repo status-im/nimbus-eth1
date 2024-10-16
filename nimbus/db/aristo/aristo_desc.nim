@@ -46,14 +46,6 @@ type
     txUid*: uint                      ## Unique ID among transactions
     level*: int                       ## Stack index for this transaction
 
-  MerkleSignRef* = ref object
-    ## Simple Merkle signature calculatior for key-value lists
-    root*: VertexID                   ## Not accounts tree, e.g. `VertexID(2)`
-    db*: AristoDbRef
-    count*: uint
-    error*: AristoError
-    errKey*: seq[byte]
-
   DudesRef = ref object
     ## List of peers accessing the same database. This list is layzily allocated
     ## and might be kept with a single entry, i.e. so that `{centre} == peers`.

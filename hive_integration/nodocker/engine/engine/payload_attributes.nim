@@ -46,7 +46,7 @@ method execute(cs: InvalidPayloadAttributesTest, env: TestEnv): bool =
       var fcu = env.clMock.latestForkchoice
       if cs.syncing:
         # Setting a random hash will put the client into `SYNCING`
-        fcu.headblockHash = Web3Hash.randomBytes()
+        fcu.headblockHash = Hash32.randomBytes()
       else:
         fcu.headblockHash = env.clMock.latestPayloadBuilt.blockHash
 
@@ -76,7 +76,7 @@ method execute(cs: InvalidPayloadAttributesTest, env: TestEnv): bool =
         # Check that the forkchoice was applied, regardless of the error
         let s = env.engine.client.latestHeader()
         #s.ExpectationDescription = "Forkchoice is applied even on invalid payload attributes"
-        s.expectHash(ethHash fcu.headblockHash)
+        s.expectHash(fcu.headblockHash)
 
       return true
     ))

@@ -136,7 +136,7 @@ method capturePrepare*(ctx: JsonTracer, comp: Computation, depth: int) {.gcsafe.
 
 # Top call frame
 method captureStart*(ctx: JsonTracer, comp: Computation,
-                     sender: EthAddress, to: EthAddress,
+                     sender: Address, to: Address,
                      create: bool, input: openArray[byte],
                      gasLimit: GasInt, value: UInt256) {.gcsafe.} =
   discard

@@ -23,7 +23,7 @@ import
   ./tx_classify,
   ./tx_dispose,
   chronicles,
-  eth/[common, keys],
+  eth/common/[transactions, keys],
   stew/[sorted_set]
 
 {.push raises: [].}
@@ -39,7 +39,7 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc bucketItemsReassignPending*(xp: TxPoolRef; labelFrom: TxItemStatus;
-                                 account: EthAddress; nonceFrom = minNonce)
+                                 account: Address; nonceFrom = minNonce)
     {.gcsafe,raises: [CatchableError].} =
   ## Move all items in bucket `lblFrom` with nonces not less than `nonceFrom`
   ## to the `pending` bucket
@@ -60,10 +60,10 @@ proc bucketUpdateAll*(xp: TxPoolRef): bool
   ## Update all buckets. The function returns `true` if some items were added
   ## to the `staged` bucket.
 
-  # Sort order: `EthAddress` > `AccountNonce` > item.
+  # Sort order: `Address` > `AccountNonce` > item.
   var
     stagedItemsAdded = false
-    stashed: Table[EthAddress,seq[TxItemRef]]
+    stashed: Table[Address,seq[TxItemRef]]
 
   # Prepare
   if 0 < xp.pDoubleCheck.len:

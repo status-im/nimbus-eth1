@@ -122,8 +122,8 @@ proc runBackfillCollectBlockDataLoop(
       let blockData = BlockData(
         blockNumber: currentBlockNumber,
         blockHash: blockObject.hash,
-        miner: blockObject.miner.EthAddress,
-        uncles: uncleBlocks.mapIt((it.miner.EthAddress, it.number.uint64)),
+        miner: blockObject.miner,
+        uncles: uncleBlocks.mapIt((it.miner, it.number.uint64)),
         parentStateRoot: parentStateRoot,
         stateRoot: blockObject.stateRoot,
         stateDiffs: stateDiffs,
@@ -329,8 +329,7 @@ proc runBackfillGossipBlockOffersLoop(
       await sleepAsync(100.milliseconds) # wait for the peers to be updated
       for k, _ in offersMap:
         try:
-          let contentInfo =
-            await portalClient.portal_stateRecursiveFindContent(k.to0xHex())
+          let contentInfo = await portalClient.portal_stateGetContent(k.to0xHex())
           if contentInfo.content.len() == 0:
             error "Found empty contentValue", workerId
             retryGossip = true

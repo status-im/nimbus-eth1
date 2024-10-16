@@ -11,7 +11,7 @@
 import
   std/[json, strutils, sets, tables, options, streams],
   chronicles,
-  eth/keys,
+  eth/common/keys,
   eth/common/transaction_utils,
   stew/byteutils,
   results,
@@ -32,11 +32,11 @@ import
 type
   StateContext = object
     name: string
-    parent: BlockHeader
-    header: BlockHeader
+    parent: Header
+    header: Header
     tx: Transaction
-    expectedHash: Hash256
-    expectedLogs: Hash256
+    expectedHash: Hash32
+    expectedLogs: Hash32
     forkStr: string
     chainConfig: ChainConfig
     index: int
@@ -47,7 +47,7 @@ type
   StateResult = object
     name : string
     pass : bool
-    root : Hash256
+    root : Hash32
     fork : string
     error: string
     state: StateDump
@@ -65,10 +65,10 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
-  keccakHash(toBytes($blockNumber))
+method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
+  keccak256(toBytes($blockNumber))
 
-proc verifyResult(ctx: var StateContext, vmState: BaseVMState, obtainedHash: Hash256) =
+proc verifyResult(ctx: var StateContext, vmState: BaseVMState, obtainedHash: Hash32) =
   ctx.error = ""
   if obtainedHash != ctx.expectedHash:
     ctx.error = "post state root mismatch: got $1, want $2" %
@@ -99,7 +99,7 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
   stdout.write(n.pretty)
   stdout.write("\n")
 
-proc writeRootHashToStderr(stateRoot: Hash256) =
+proc writeRootHashToStderr(stateRoot: Hash32) =
   let stateRoot = %{
     "stateRoot": %(stateRoot)
   }
@@ -209,8 +209,8 @@ proc prepareAndRun(ctx: var StateContext, conf: StateConf): bool =
     inc index
 
   template runSubTest(subTest: JsonNode) =
-    ctx.expectedHash = Hash256.fromJson(subTest["hash"])
-    ctx.expectedLogs = Hash256.fromJson(subTest["logs"])
+    ctx.expectedHash = Hash32.fromJson(subTest["hash"])
+    ctx.expectedLogs = Hash32.fromJson(subTest["logs"])
     ctx.tx = parseTx(txData, subTest["indexes"])
     let res = ctx.runExecution(conf, pre)
     stateRes.add res

@@ -16,13 +16,13 @@ import
   ./engine_client,
   ./types
 
-proc txInPayload*(payload: ExecutionPayload, txHash: common.Hash256): bool =
+proc txInPayload*(payload: ExecutionPayload, txHash: Hash32): bool =
   for txBytes in payload.transactions:
     let currTx = rlp.decode(common.Blob txBytes, Transaction)
     if rlpHash(currTx) == txHash:
       return true
 
-proc checkPrevRandaoValue*(client: RpcClient, expectedPrevRandao: common.Hash256, blockNumber: uint64): bool =
+proc checkPrevRandaoValue*(client: RpcClient, expectedPrevRandao: Hash32, blockNumber: uint64): bool =
   let storageKey = blockNumber.u256
   let r = client.storageAt(prevRandaoContractAddr, storageKey)
   let expected = FixedBytes[32](expectedPrevRandao.data)

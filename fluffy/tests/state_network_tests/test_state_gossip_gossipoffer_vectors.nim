@@ -66,11 +66,7 @@ procSuite "State Gossip - Gossip Offer":
       check not stateNode2.containsId(contentId)
 
       await stateNode1.portalProtocol.gossipOffer(
-        Opt.none(NodeId),
-        contentKeyBytes,
-        contentValueBytes,
-        contentKey.accountTrieNodeKey,
-        contentValue,
+        Opt.none(NodeId), contentKeyBytes, contentValueBytes
       )
 
       # wait for offer to be processed by state node 2
@@ -138,11 +134,7 @@ procSuite "State Gossip - Gossip Offer":
       check not stateNode2.containsId(contentId)
 
       await stateNode1.portalProtocol.gossipOffer(
-        Opt.none(NodeId),
-        contentKeyBytes,
-        contentValueBytes,
-        contentKey.contractTrieNodeKey,
-        contentValue,
+        Opt.none(NodeId), contentKeyBytes, contentValueBytes
       )
 
       # wait for offer to be processed by state node 2
@@ -201,11 +193,7 @@ procSuite "State Gossip - Gossip Offer":
       check not stateNode2.containsId(contentId)
 
       await stateNode1.portalProtocol.gossipOffer(
-        Opt.none(NodeId),
-        contentKeyBytes,
-        contentValueBytes,
-        contentKey.contractCodeKey,
-        contentValue,
+        Opt.none(NodeId), contentKeyBytes, contentValueBytes
       )
 
       # wait for offer to be processed by state node 2

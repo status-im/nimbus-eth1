@@ -17,10 +17,10 @@ import
 const
   evmc_native* {.booldefine.} = false
 
-func toEvmc*(a: EthAddress): evmc_address {.inline.} =
+func toEvmc*(a: Address): evmc_address {.inline.} =
   evmc_address(bytes: a.data)
 
-func toEvmc*(h: Hash256): evmc_bytes32 {.inline.} =
+func toEvmc*(h: Hash32): evmc_bytes32 {.inline.} =
   doAssert sizeof(h) == sizeof(evmc_bytes32)
   evmc_bytes32(bytes: h.data)
 
@@ -48,8 +48,8 @@ func fromEvmc*(T: type, n: evmc_bytes32): T {.inline.} =
   else:
     {.error: "cannot convert unsupported evmc type".}
 
-func fromEvmc*(a: evmc_address): EthAddress {.inline.} =
-  EthAddress(a.bytes)
+func fromEvmc*(a: evmc_address): Address {.inline.} =
+  Address(a.bytes)
 
 when isMainModule:
   import ../constants
@@ -62,7 +62,7 @@ when isMainModule:
   assert(b == fromEvmc(UInt256, eb))
   var h = EMPTY_SHA3
   var eh = toEvmc(h)
-  assert(h == fromEvmc(Hash256, eh))
+  assert(h == fromEvmc(Hash32, eh))
   var s = cast[ContractSalt](EMPTY_ROOT_HASH)
   var es = toEvmc(s)
   assert(s == fromEvmc(ContractSalt, es))

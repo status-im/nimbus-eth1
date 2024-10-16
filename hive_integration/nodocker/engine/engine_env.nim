@@ -10,7 +10,7 @@
 
 import
   std/os,
-  eth/keys,
+  eth/common/keys,
   eth/p2p as eth_p2p,
   chronos,
   json_rpc/[rpcserver, rpcclient],
@@ -173,7 +173,7 @@ proc peer*(env: EngineEnv): Peer =
   for peer in env.node.peers:
     return peer
 
-proc getTxsInPool*(env: EngineEnv, txHashes: openArray[common.Hash256]): seq[Transaction] =
+proc getTxsInPool*(env: EngineEnv, txHashes: openArray[common.Hash32]): seq[Transaction] =
   result = newSeqOfCap[Transaction](txHashes.len)
   for txHash in txHashes:
     let res = env.txPool.getItem(txHash)

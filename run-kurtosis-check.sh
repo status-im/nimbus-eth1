@@ -87,7 +87,7 @@ sed -i "s/el_image: .*/el_image: $new_el_image/" assertoor.yaml
 
 sudo kurtosis run \
   --enclave nimbus-localtestnet \
-  github.com/ethpandaops/ethereum-package \
+  github.com/ethpandaops/ethereum-package@4.3.0 \
   --args-file assertoor.yaml
 
 enclave_dump=$(kurtosis enclave inspect nimbus-localtestnet)

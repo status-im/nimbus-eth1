@@ -68,12 +68,12 @@ proc preLoadAristoDb(jKvp: JsonNode): PartStateRef =
   ps
 
 
-proc collectAddresses(node: JsonNode, collect: var HashSet[EthAddress]) =
+proc collectAddresses(node: JsonNode, collect: var HashSet[Address]) =
   case node.kind:
     of JObject:
       for k,v in node.pairs:
         if k == "address" and v.kind == JString:
-          collect.incl EthAddress.fromHex v.getStr
+          collect.incl Address.fromHex v.getStr
         else:
           v.collectAddresses collect
     of JArray:
@@ -142,7 +142,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
   let ps = node["state"].preLoadAristoDb()
 
   # Collect addresses from json structure
-  var addresses: HashSet[EthAddress]
+  var addresses: HashSet[Address]
   node.collectAddresses addresses
 
   # Convert addresses to valid paths (not all addresses might work)

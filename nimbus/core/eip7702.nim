@@ -16,34 +16,28 @@ import
   stew/assign2,
   eth/common/eth_types,
   eth/common/eth_types_rlp,
-  eth/keys
+  eth/common/keys
 
 const
   DelegationPrefix = [0xef.byte, 0x01, 0x00]
-  Magic = 0x05
 
 const
   PER_AUTH_BASE_COST* = 2500
   PER_EMPTY_ACCOUNT_COST* = 25000
 
-func authority*(auth: Authorization): Opt[EthAddress] =
-  var w = initRlpWriter()
-  w.appendRawBytes([Magic.byte])
-  w.append(auth.chainId.uint64)
-  w.append(auth.address)
-  w.append(auth.nonce)
-  let sigHash = keccak256(w.finish())
+func authority*(auth: Authorization): Opt[Address] =
+  let sigHash = rlpHashForSigning(auth)
 
   var bytes: array[65, byte]
-  assign(bytes.toOpenArray(0, 31), auth.R.toBytesBE())
-  assign(bytes.toOpenArray(32, 63), auth.S.toBytesBE())
-  bytes[64] = auth.y_parity.byte
+  assign(bytes.toOpenArray(0, 31), auth.r.toBytesBE())
+  assign(bytes.toOpenArray(32, 63), auth.s.toBytesBE())
+  bytes[64] = auth.v.byte
 
   let sig = Signature.fromRaw(bytes).valueOr:
-    return Opt.none(EthAddress)
+    return Opt.none(Address)
 
   let pubkey = recover(sig, SkMessage(sigHash.data)).valueOr:
-    return Opt.none(EthAddress)
+    return Opt.none(Address)
 
   ok(pubkey.toCanonicalAddress())
 
@@ -56,15 +50,15 @@ func parseDelegation*(code: CodeBytesRef): bool =
 
   true
 
-func addressToDelegation*(auth: EthAddress): array[23, byte] =
+func addressToDelegation*(auth: Address): array[23, byte] =
   assign(result.toOpenArray(0, 2), DelegationPrefix)
   assign(result.toOpenArray(3, 22), auth.data)
 
-func parseDelegationAddress*(code: CodeBytesRef): Opt[EthAddress] =
+func parseDelegationAddress*(code: CodeBytesRef): Opt[Address] =
   if code.len != 23:
-    return Opt.none(EthAddress)
+    return Opt.none(Address)
 
   if not code.hasPrefix(DelegationPrefix):
-    return Opt.none(EthAddress)
+    return Opt.none(Address)
 
   Opt.some(slice[20](code, 3, 22).to(Address))

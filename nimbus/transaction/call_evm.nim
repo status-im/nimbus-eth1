@@ -16,19 +16,20 @@ import
   ../evm/[types, state, internals],
   ../db/ledger,
   ../transaction,
-  ../common/common,
   ../evm/evm_errors,
   ../rpc/params,
-  ./call_common
+  ./call_common,
+  web3/eth_api_types,
+  ../common/common
 
 export
   call_common
 
 proc rpcCallEvm*(args: TransactionArgs,
-                 header: common.BlockHeader,
+                 header: Header,
                  com: CommonRef): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
-  let topHeader = common.BlockHeader(
+  let topHeader = Header(
     parentHash: header.blockHash,
     timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
@@ -43,7 +44,7 @@ proc rpcCallEvm*(args: TransactionArgs,
   ok(runComputation(params, CallResult))
 
 proc rpcCallEvm*(args: TransactionArgs,
-                 header: common.BlockHeader,
+                 header: Header,
                  com: CommonRef,
                  vmState: BaseVMState): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
@@ -55,10 +56,10 @@ proc rpcCallEvm*(args: TransactionArgs,
   ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(args: TransactionArgs,
-                     header: common.BlockHeader,
+                     header: Header,
                      com: CommonRef, gasCap: GasInt): EvmResult[GasInt] =
   # Binary search the gas requirement, as it may be higher than the amount used
-  let topHeader = common.BlockHeader(
+  let topHeader = Header(
     parentHash: header.blockHash,
     timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
@@ -95,7 +96,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     if args.source.isNone:
       return err(evmErr(EvmInvalidParam))
 
-    let balance = vmState.readOnlyStateDB.getBalance(ethAddr args.source.get)
+    let balance = vmState.readOnlyStateDB.getBalance(args.source.get)
     var available = balance
     if args.value.isSome:
       let value = args.value.get
@@ -149,7 +150,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   ok(hi)
 
-proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, baseFee: GasInt): CallParams =
+proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, baseFee: GasInt): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
@@ -171,7 +172,7 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
   if tx.txType == TxEip7702:
     assign(result.authorizationList, tx.authorizationList)
 
-proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState): CallParams =
+proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): CallParams =
   result = CallParams(
     vmState:      vmState,
     gasPrice:     tx.gasPrice,
@@ -195,14 +196,14 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
     assign(result.authorizationList, tx.authorizationList)
 
 proc txCallEvm*(tx: Transaction,
-                sender: EthAddress,
+                sender: Address,
                 vmState: BaseVMState, baseFee: GasInt): GasInt =
   let
     call = callParamsForTx(tx, sender, vmState, baseFee)
   runComputation(call, GasInt)
 
 proc testCallEvm*(tx: Transaction,
-                  sender: EthAddress,
+                  sender: Address,
                   vmState: BaseVMState): CallResult =
   let call = callParamsForTest(tx, sender, vmState)
   runComputation(call, CallResult)

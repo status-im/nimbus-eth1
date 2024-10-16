@@ -169,16 +169,16 @@ method captureFault*(ctx: LegacyTracer, comp: Computation,
 proc getTracingResult*(ctx: LegacyTracer): JsonNode =
   ctx.trace
 
-iterator tracedAccounts*(ctx: LegacyTracer): EthAddress =
+iterator tracedAccounts*(ctx: LegacyTracer): Address =
   for acc in ctx.accounts:
     yield acc
 
-iterator tracedAccountsPairs*(ctx: LegacyTracer): (int, EthAddress) =
+iterator tracedAccountsPairs*(ctx: LegacyTracer): (int, Address) =
   var idx = 0
   for acc in ctx.accounts:
     yield (idx, acc)
     inc idx
 
-proc removeTracedAccounts*(ctx: LegacyTracer, accounts: varargs[EthAddress]) =
+proc removeTracedAccounts*(ctx: LegacyTracer, accounts: varargs[Address]) =
   for acc in accounts:
     ctx.accounts.excl acc

@@ -28,12 +28,12 @@ import
 type
   TestCtx = object
     name: string
-    parent: BlockHeader
-    header: BlockHeader
+    parent: Header
+    header: Header
     pre: JsonNode
     tx: Transaction
-    expectedHash: Hash256
-    expectedLogs: Hash256
+    expectedHash: Hash32
+    expectedLogs: Hash32
     chainConfig: ChainConfig
     debugMode: bool
     trace: bool
@@ -47,15 +47,15 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash256 =
+method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash32 =
   if blockNumber >= vmState.blockNumber:
-    return default(Hash256)
+    return default(Hash32)
   elif blockNumber < 0:
-    return default(Hash256)
+    return default(Hash32)
   elif blockNumber < vmState.blockNumber - 256:
-    return default(Hash256)
+    return default(Hash32)
   else:
-    return keccakHash(toBytes($blockNumber))
+    return keccak256(toBytes($blockNumber))
 
 func normalizeFileName(x: string): string =
   const invalidChars = ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', ',', ';', '=']
@@ -79,7 +79,7 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success:
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
     com    = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
-    parent = BlockHeader(stateRoot: emptyRlpHash)
+    parent = Header(stateRoot: emptyRlpHash)
     tracer = if ctx.trace:
                newLegacyTracer({})
              else:
@@ -159,8 +159,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
       return
 
   template runSubTest(subTest: JsonNode) =
-    ctx.expectedHash = Hash256.fromJson(subTest["hash"])
-    ctx.expectedLogs = Hash256.fromJson(subTest["logs"])
+    ctx.expectedHash = Hash32.fromJson(subTest["hash"])
+    ctx.expectedLogs = Hash32.fromJson(subTest["logs"])
     ctx.tx = parseTx(txData, subTest["indexes"])
     ctx.testFixtureIndexes(testStatusIMPL)
 

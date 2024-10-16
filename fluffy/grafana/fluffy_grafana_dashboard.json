@@ -537,6 +537,142 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P5354BB48EF90EBE5"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 4,
+        "y": 2
+      },
+      "id": 54,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.2.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "portal_pruning_counter_total{instance=\"${instance}\",container=\"${container}\"}",
+          "interval": "",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Pruning counter",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P5354BB48EF90EBE5"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 6,
+        "y": 2
+      },
+      "id": 55,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.2.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "portal_pruning_deleted_elements{instance=\"${instance}\",container=\"${container}\"}",
+          "interval": "",
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Pruning counter",
+      "type": "stat"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -1865,10 +2001,12 @@
             "type": "prometheus",
             "uid": "P5354BB48EF90EBE5"
           },
+          "editorMode": "code",
           "exemplar": false,
           "expr": "rate(portal_gossip_with_lookup_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "portal_gossip_with_lookup[{{protocol_id}}]",
+          "range": true,
           "refId": "A"
         },
         {
@@ -1876,12 +2014,28 @@
             "type": "prometheus",
             "uid": "P5354BB48EF90EBE5"
           },
+          "editorMode": "code",
           "exemplar": false,
           "expr": "rate(portal_gossip_without_lookup_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
           "legendFormat": "portal_gossip_without_lookup[{{protocol_id}}]",
+          "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "portal_gossip_without_lookup_total{instance=\"${instance}\",container=\"${container}\"} / (portal_gossip_without_lookup_total{instance=\"${instance}\",container=\"${container}\"} + portal_gossip_with_lookup_total{instance=\"${instance}\",container=\"${container}\"})",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "portal_gossip_lookup_ratio[{{protocol_id}}]",
+          "range": true,
+          "refId": "C"
         }
       ],
       "thresholds": [],
@@ -2447,7 +2601,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "portal_pruning_counter_total{instance=\"${instance}\",container=\"${container}\",protocol_id=\"500b\"}",
+          "expr": "portal_pruning_counter_total{instance=\"${instance}\",container=\"${container}\"}",
           "interval": "",
           "legendFormat": "Number of pruning event",
           "range": true,
@@ -2460,7 +2614,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "portal_pruning_deleted_elements{instance=\"${instance}\",container=\"${container}\",protocol_id=\"500b\"}",
+          "expr": "portal_pruning_deleted_elements{instance=\"${instance}\",container=\"${container}\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "Number of elements deleted in pruning event",
@@ -2540,6 +2694,96 @@
       ],
       "title": "log. distance of offered content",
       "type": "bargauge"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P5354BB48EF90EBE5"
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 86
+      },
+      "hiddenSeries": false,
+      "id": 56,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P5354BB48EF90EBE5"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "rate(portal_poke_offers_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
+          "interval": "",
+          "legendFormat": "portal_poke_offers_total[{{protocol_id}}]",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Portal poke offers",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:3811",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:3812",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
     }
   ],
   "refresh": "5s",
@@ -2550,7 +2794,7 @@
     "list": [
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": "metal-01.ih-eu-mda1.nimbus.fluffy",
           "value": "metal-01.ih-eu-mda1.nimbus.fluffy"
         },
@@ -2576,7 +2820,7 @@
       },
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": "nimbus-fluffy-mainnet-master-01",
           "value": "nimbus-fluffy-mainnet-master-01"
         },
@@ -2603,13 +2847,13 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-7d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Nimbus Fluffy Dashboard",
   "uid": "iWQQPuPnkadsf",
-  "version": 11,
+  "version": 16,
   "weekStart": ""
 }

@@ -8,7 +8,6 @@
 # those terms.
 
 import
-  eth/common,
   stint, json_rpc/server, json_rpc/errors,
   eth/p2p, eth/p2p/enode,
   ../config,
@@ -36,8 +35,8 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
     result = conf.agentString
 
-  server.rpc("web3_sha3") do(data: seq[byte]) -> Web3Hash:
-    result = w3Hash(keccakHash(data))
+  server.rpc("web3_sha3") do(data: seq[byte]) -> Hash32:
+    result = keccak256(data)
 
   server.rpc("net_version") do() -> string:
     result = $conf.networkId

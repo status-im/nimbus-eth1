@@ -71,15 +71,14 @@ type
     endBn*: BlockNumber              ## `E`, block num of some finalised block
     endHash*: Hash32                 ## Hash of `E`
 
-  BeaconHeader* = object
+  TargetReqHeader* = object
     ## Beacon state to be implicitely updated by RPC method
     changed*: bool                   ## Set a marker if something has changed
     header*: Header                  ## Beacon chain, finalised header
-    hash*: Hash32                    ## From RPC, hash of finalised header
 
   LinkedHChainsSync* = object
     ## Sync state for linked header chains
-    final*: BeaconHeader             ## Finalised block, see `F` in `README.md`
+    target*: TargetReqHeader         ## Consensus head, see `T` in `README.md`
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: uint64                ## Total of temp. fetched ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet

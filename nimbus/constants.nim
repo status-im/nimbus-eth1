@@ -11,8 +11,8 @@
 {.used.}
 
 import
-  stew/byteutils,
-  eth/common/eth_types
+  stint,
+  eth/common/[addresses, hashes, base]
 
 # proc default(t: typedesc): t = discard -- notused
 
@@ -25,10 +25,10 @@ const
   # Transactions to ZERO_ADDRESS are legitimate transfers to that account, not
   # contract creations.  They are used to "burn" Eth.  People also send Eth to
   # address zero by accident, unrecoverably, due to poor user interface issues.
-  ZERO_ADDRESS* =                           default(EthAddress)
+  ZERO_ADDRESS* =                           default(Address)
 
-  # ZERO_HASH256 is the parent hash of genesis blocks.
-  ZERO_HASH256* =                           default(Hash256)
+  # ZERO_HASH32 is the parent hash of genesis blocks.
+  ZERO_HASH32* =                            default(Hash32)
 
   GAS_LIMIT_ADJUSTMENT_FACTOR* =            1_024
 
@@ -42,10 +42,10 @@ const
   GENESIS_BLOCK_NUMBER* =                   0.BlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
   GENESIS_GAS_LIMIT* =                      3_141_592
-  GENESIS_PARENT_HASH* =                    ZERO_HASH256
+  GENESIS_PARENT_HASH* =                    ZERO_HASH32
   GENESIS_COINBASE* =                       ZERO_ADDRESS
   GENESIS_NONCE* =                          "\x00\x00\x00\x00\x00\x00\x00B"
-  GENESIS_MIX_HASH* =                       ZERO_HASH256
+  GENESIS_MIX_HASH* =                       ZERO_HASH32
   GENESIS_EXTRA_DATA* =                     ""
   GAS_LIMIT_MINIMUM* =                      5000
   GAS_LIMIT_MAXIMUM* =                      int64.high.GasInt # Maximum the gas limit (2^63-1).
@@ -103,7 +103,7 @@ const
   SYSTEM_ADDRESS* = address"0xfffffffffffffffffffffffffffffffffffffffe"
 
   RIPEMD_ADDR* = block:
-    proc initAddress(x: int): EthAddress {.compileTime.} =
+    proc initAddress(x: int): Address {.compileTime.} =
       result.data[19] = x.byte
     initAddress(3)
 

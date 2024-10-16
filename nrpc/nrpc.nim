@@ -260,7 +260,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           (finalizedBlck, _) = client.getELBlockFromBeaconChain(
             BlockIdent.init(BlockIdentType.Finalized), clConfig
           )
-          finalizedHash = finalizedBlck.header.blockHash
+          finalizedHash = finalizedBlck.header.blockHash.asEth2Digest
 
     # Update the current block number from EL rest api
     # Shows that the fcu call has succeeded

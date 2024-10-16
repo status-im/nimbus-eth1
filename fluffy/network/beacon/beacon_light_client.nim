@@ -34,7 +34,6 @@ type
     processor*: ref LightClientProcessor
     manager: LightClientManager
     onFinalizedHeader*, onOptimisticHeader*: LightClientHeaderCallback
-    trustedBlockRoot*: Opt[Eth2Digest]
 
 func getFinalizedHeader*(lightClient: LightClient): ForkedLightClientHeader =
   withForkyStore(lightClient.store[]):
@@ -53,6 +52,9 @@ func getOptimisticHeader*(lightClient: LightClient): ForkedLightClientHeader =
       header
     else:
       default(ForkedLightClientHeader)
+
+func trustedBlockRoot(lightClient: LightClient): Opt[Eth2Digest] =
+  lightClient.network.trustedBlockRoot
 
 proc new*(
     T: type LightClient,
@@ -76,8 +78,9 @@ proc new*(
 
   func getTrustedBlockRoot(): Option[Eth2Digest] =
     # TODO: use Opt in LC processor
-    if lightClient.trustedBlockRoot.isSome():
-      some(lightClient.trustedBlockRoot.value)
+    let trustedBlockRootOpt = lightClient.trustedBlockRoot()
+    if trustedBlockRootOpt.isSome():
+      some(trustedBlockRootOpt.value)
     else:
       none(Eth2Digest)
 
@@ -178,7 +181,8 @@ proc new*(
   )
 
 proc start*(lightClient: LightClient) =
-  info "Starting beacon light client", trusted_block_root = lightClient.trustedBlockRoot
+  info "Starting beacon light client",
+    trusted_block_root = lightClient.trustedBlockRoot()
   lightClient.manager.start()
 
 proc stop*(lightClient: LightClient) {.async: (raises: []).} =

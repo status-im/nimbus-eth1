@@ -53,7 +53,7 @@ method execute(cs: InconsistentForkchoiceTest, env: TestEnv): bool =
       )
 
       if shadow.alt.len > 0:
-        customData.parentHash = Opt.some(ethHash shadow.alt[^1].blockHash)
+        customData.parentHash = Opt.some(shadow.alt[^1].blockHash)
 
       let altPayload = customData.customizePayload(env.clMock.latestExecutableData)
       shadow.alt.add altPayload
@@ -114,7 +114,7 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
   testCond env.clMock.produceBlocks(5, BlockProcessCallbacks())
 
   # Generate a random block hash
-  let randomblockHash = Web3Hash.randomBytes()
+  let randomblockHash = Hash32.randomBytes()
 
   if cs.field == HeadBlockHash:
     let fcu = ForkchoiceStateV1(
@@ -163,8 +163,8 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
         r.expectError()
 
         var payloadAttributes = env.clMock.latestPayloadAttributes
-        payloadAttributes.prevRandao = w3Hash()
-        payloadAttributes.suggestedFeeRecipient = w3Address()
+        payloadAttributes.prevRandao = default(Hash32)
+        payloadAttributes.suggestedFeeRecipient = default(Address)
 
         # Test again using PayloadAttributes, should also return INVALID and no PayloadID
         r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(payloadAttributes))

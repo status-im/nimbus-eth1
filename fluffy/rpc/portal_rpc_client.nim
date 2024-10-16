@@ -48,7 +48,7 @@ func toPortalRpcError(e: ref CatchableError): PortalRpcError =
   else:
     raiseAssert(e.msg)
 
-proc historyLocalContent(
+proc portal_historyLocalContent(
     client: PortalRpcClient, contentKey: string
 ): Future[Result[string, PortalRpcError]] {.async: (raises: []).} =
   try:
@@ -57,12 +57,11 @@ proc historyLocalContent(
   except CatchableError as e:
     err(e.toPortalRpcError())
 
-proc historyRecursiveFindContent(
+proc portal_historyGetContent(
     client: PortalRpcClient, contentKey: string
 ): Future[Result[string, PortalRpcError]] {.async: (raises: []).} =
   try:
-    let contentInfo =
-      await RpcClient(client).portal_historyRecursiveFindContent(contentKey)
+    let contentInfo = await RpcClient(client).portal_historyGetContent(contentKey)
     ok(contentInfo.content)
   except CatchableError as e:
     err(e.toPortalRpcError())
@@ -83,9 +82,9 @@ proc historyGetContent(
     client: PortalRpcClient, contentKey: string
 ): Future[Result[string, PortalRpcError]] {.async: (raises: []).} =
   # Look up the content from the local db before trying to get it from the network
-  let content = (await client.historyLocalContent(contentKey)).valueOr:
+  let content = (await client.portal_historyLocalContent(contentKey)).valueOr:
     if error == ContentNotFound:
-      ?await client.historyRecursiveFindContent(contentKey)
+      ?await client.portal_historyGetContent(contentKey)
     else:
       return err(error)
   ok(content)

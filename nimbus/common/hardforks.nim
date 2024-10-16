@@ -9,7 +9,7 @@
 
 import
   std/[strutils],
-  eth/common,
+  eth/common/[headers],
   stew/endians2,
   json_serialization,
   ../utils/utils,
@@ -86,7 +86,7 @@ func forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
   ForkDeterminationInfo(
     number: n, time: Opt.some(t), td: Opt.none(DifficultyInt))
 
-func forkDeterminationInfo*(header: BlockHeader): ForkDeterminationInfo =
+func forkDeterminationInfo*(header: Header): ForkDeterminationInfo =
   # FIXME-Adam-mightAlsoNeedTTD?
   forkDeterminationInfo(header.number, header.timestamp)
 
@@ -144,7 +144,7 @@ type
     daoForkBlock*       : Opt[BlockNumber]
     daoForkSupport*     : bool
     eip150Block*        : Opt[BlockNumber]
-    eip150Hash*         : Hash256
+    eip150Hash*         : Hash32
     eip155Block*        : Opt[BlockNumber]
     eip158Block*        : Opt[BlockNumber]
     byzantiumBlock*     : Opt[BlockNumber]

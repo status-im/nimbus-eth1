@@ -262,11 +262,7 @@ procSuite "State Endpoints":
       stateNode2.mockStateRootLookup(contentValue.blockHash, stateRoot)
 
       await stateNode1.portalProtocol.gossipOffer(
-        Opt.none(NodeId),
-        contentKeyBytes,
-        contentValueBytes,
-        contentKey.contractCodeKey,
-        contentValue,
+        Opt.none(NodeId), contentKeyBytes, contentValueBytes
       )
 
       # wait for gossip to complete

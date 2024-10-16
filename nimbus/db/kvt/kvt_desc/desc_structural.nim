@@ -14,8 +14,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
-  eth/common
+  std/tables
 
 type
   LayerRef* = ref LayerObj

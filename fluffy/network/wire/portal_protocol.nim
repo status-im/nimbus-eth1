@@ -1590,12 +1590,15 @@ proc storeContent*(
     contentKey: ContentKeyByteList,
     contentId: ContentId,
     content: seq[byte],
-) =
+): bool {.discardable.} =
   # Always re-check that the key is still in the node range to make sure only
   # content in range is stored.
   if p.inRange(contentId):
     doAssert(p.dbPut != nil)
     p.dbPut(contentKey, contentId, content)
+    true
+  else:
+    false
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are

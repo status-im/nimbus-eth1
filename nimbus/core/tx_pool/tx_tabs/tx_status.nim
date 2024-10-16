@@ -29,7 +29,7 @@ type
     ## Per address table. This table is provided as a keyed queue so deletion\
     ## while traversing is supported and predictable.
     size: int                           ## Total number of items
-    addrList: KeyedQueue[EthAddress,TxStatusNonceRef]
+    addrList: KeyedQueue[Address,TxStatusNonceRef]
 
   TxStatusTab* = object ##\
     ## Per status table
@@ -159,7 +159,7 @@ proc eq*(sq: var TxStatusTab; status: TxItemStatus):
   toSortedSetResult(key = status, data = addrData)
 
 # ------------------------------------------------------------------------------
-# Public array ops -- `EthAddress` (level 1)
+# Public array ops -- `Address` (level 1)
 # ------------------------------------------------------------------------------
 
 proc nItems*(addrData: TxStatusSenderRef): int =
@@ -171,15 +171,15 @@ proc nItems*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): int =
     return rc.value.data.nItems
   0
 
-proc eq*(addrData: TxStatusSenderRef; sender: EthAddress):
-       SortedSetResult[EthAddress,TxStatusNonceRef]
+proc eq*(addrData: TxStatusSenderRef; sender: Address):
+       SortedSetResult[Address,TxStatusNonceRef]
     {.gcsafe,raises: [KeyError].} =
   if addrData.addrList.hasKey(sender):
     return toSortedSetResult(key = sender, data = addrData.addrList[sender])
   err(rbNotFound)
 
 proc eq*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef];
-         sender: EthAddress): SortedSetResult[EthAddress,TxStatusNonceRef]
+         sender: Address): SortedSetResult[Address,TxStatusNonceRef]
     {.gcsafe,raises: [KeyError].} =
   if rc.isOk:
     return rc.value.data.eq(sender)
@@ -197,7 +197,7 @@ proc nItems*(nonceData: TxStatusNonceRef): int =
   ## Getter, total number of items in the sub-list
   nonceData.nonceList.len
 
-proc nItems*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]): int =
+proc nItems*(rc: SortedSetResult[Address,TxStatusNonceRef]): int =
   if rc.isOk:
     return rc.value.data.nItems
   0
@@ -207,7 +207,7 @@ proc eq*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
   nonceData.nonceList.eq(nonce)
 
-proc eq*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
+proc eq*(rc: SortedSetResult[Address,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
   if rc.isOk:
     return rc.value.data.eq(nonce)
@@ -218,7 +218,7 @@ proc ge*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
   nonceData.nonceList.ge(nonce)
 
-proc ge*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
+proc ge*(rc: SortedSetResult[Address,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
   if rc.isOk:
     return rc.value.data.ge(nonce)
@@ -229,7 +229,7 @@ proc gt*(nonceData: TxStatusNonceRef; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
   nonceData.nonceList.gt(nonce)
 
-proc gt*(rc: SortedSetResult[EthAddress,TxStatusNonceRef]; nonce: AccountNonce):
+proc gt*(rc: SortedSetResult[Address,TxStatusNonceRef]; nonce: AccountNonce):
        SortedSetResult[AccountNonce,TxItemRef] =
   if rc.isOk:
     return rc.value.data.gt(nonce)

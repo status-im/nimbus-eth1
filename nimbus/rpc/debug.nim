@@ -45,7 +45,7 @@ proc traceOptionsToFlags(options: Opt[TraceOptions]): set[TracerFlags] =
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
   let chainDB = com.db
 
-  rpcsrv.rpc("debug_traceTransaction") do(data: Web3Hash, options: Opt[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceTransaction") do(data: Hash32, options: Opt[TraceOptions]) -> JsonNode:
     ## The traceTransaction debugging method will attempt to run the transaction in the exact
     ## same manner as it was executed on the network. It will replay any transaction that may
     ## have been executed prior to this one before it will finally attempt to execute the
@@ -59,7 +59,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     ## * disableStack: BOOL. Setting this to true will disable stack capture (default = false).
     ## * disableState: BOOL. Setting this to true will disable state trie capture (default = false).
     let
-      txHash = ethHash(data)
+      txHash = data
       txDetails = chainDB.getTransactionKey(txHash)
       header = chainDB.getBlockHeader(txDetails.blockNumber)
       transactions = chainDB.getTransactions(header.txRoot)
@@ -80,13 +80,13 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
 
     dumpBlockState(com, EthBlock.init(move(header), move(body)))
 
-  rpcsrv.rpc("debug_dumpBlockStateByHash") do(data: Web3Hash) -> JsonNode:
+  rpcsrv.rpc("debug_dumpBlockStateByHash") do(data: Hash32) -> JsonNode:
     ## Retrieves the state that corresponds to the block number and returns
     ## a list of accounts (including storage and code).
     ##
     ## data: Hash of a block.
     var
-      h = data.ethHash
+      h = data
       blk = chainDB.getEthBlock(h)
 
     dumpBlockState(com, blk)
@@ -106,14 +106,14 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
 
     traceBlock(com, EthBlock.init(move(header), move(body)), flags)
 
-  rpcsrv.rpc("debug_traceBlockByHash") do(data: Web3Hash, options: Opt[TraceOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceBlockByHash") do(data: Hash32, options: Opt[TraceOptions]) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
     ## that were included included in this block.
     ##
     ## data: Hash of a block.
     ## options: see debug_traceTransaction
     var
-      h = data.ethHash
+      h = data
       header = chainDB.getBlockHeader(h)
       blockHash = chainDB.getBlockHash(header.number)
       body = chainDB.getBlockBody(blockHash)
@@ -149,9 +149,9 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, rpcsrv: RpcServer) =
     for receipt in chainDB.getReceipts(header.receiptsRoot):
       result.add rlp.encode(receipt)
 
-  rpcsrv.rpc("debug_getRawTransaction") do(data: Web3Hash) -> seq[byte]:
+  rpcsrv.rpc("debug_getRawTransaction") do(data: Hash32) -> seq[byte]:
     ## Returns an EIP-2718 binary-encoded transaction.
-    let txHash = ethHash data
+    let txHash = data
     let res = txPool.getItem(txHash)
     if res.isOk:
       return rlp.encode(res.get().tx)

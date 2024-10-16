@@ -54,7 +54,7 @@ method execute(cs: SidechainReOrgTest, env: TestEnv): bool =
     onNewPayloadBroadcast: proc(): bool =
       # At this point the CLMocker has a payload that will result in a specific outcome,
       # we can produce an alternative payload, send it, fcU to it, and verify the changes
-      let alternativePrevRandao = common.Hash256.randomBytes()
+      let alternativePrevRandao = Hash32.randomBytes()
       let timestamp = w3Qty(env.clMock.latestPayloadBuilt.timestamp, 1)
       let customizer = BasePayloadAttributesCustomizer(
         timestamp:  Opt.some(timestamp.uint64),
@@ -134,7 +134,7 @@ method getName(cs: TransactionReOrgTest): string =
     name.add ", " & $cs.scenario
   return name
 
-proc txHash(shadow: ShadowTx): common.Hash256 =
+proc txHash(shadow: ShadowTx): Hash32 =
   if shadow.tx.isNone:
     error "SHADOW TX IS NONE"
     return
@@ -182,7 +182,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if cs.scenario == TransactionReOrgScenarioReOrgOut:
           # Any payload we get should not contain any
           var attr = env.clMock.latestPayloadAttributes
-          attr.prevRandao = Web3Hash.randomBytes()
+          attr.prevRandao = Hash32.randomBytes()
 
           var version = env.engine.version(env.clMock.latestHeader.timestamp)
           let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
@@ -241,7 +241,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
             # impede it from being included in the next payload
             var forkchoiceUpdated = env.clMock.latestForkchoice
             var payloadAttributes = env.clMock.latestPayloadAttributes
-            payloadAttributes.suggestedFeeRecipient = w3Addr EthAddress.randomBytes()
+            payloadAttributes.suggestedFeeRecipient = Address.randomBytes()
 
             var version = env.engine.version(env.clMock.latestHeader.timestamp)
             let f = env.engine.client.forkchoiceUpdated(version, forkchoiceUpdated, Opt.some(payloadAttributes))
@@ -283,7 +283,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           # Transaction is now in the head of the canonical chain, re-org and verify it's removed
           # Get the receipt
           var txt = env.engine.client.txReceipt(shadow.txHash)
-          txt.expectBlockHash(ethHash env.clMock.latestForkchoice.headBlockHash)
+          txt.expectBlockHash(env.clMock.latestForkchoice.headBlockHash)
 
           testCond shadow.payload.parentHash == env.clMock.latestPayloadBuilt.parentHash:
             fatal "Incorrect parent hash for payloads"
@@ -309,14 +309,14 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           s.expectPayloadStatus(PayloadExecutionStatus.valid)
 
           let p = env.engine.client.namedHeader(Head)
-          p.expectHash(ethHash shadow.payload.blockHash)
+          p.expectHash(shadow.payload.blockHash)
 
           txt = env.engine.client.txReceipt(shadow.txHash)
           if cs.scenario == TransactionReOrgScenarioReOrgOut:
             testCond txt.isErr:
               fatal "Receipt was obtained when the tx had been re-org'd out"
           elif cs.scenario in [TransactionReOrgScenarioReOrgDifferentBlock, TransactionReOrgScenarioNewPayloadOnRevert]:
-            txt.expectBlockHash(ethHash shadow.payload.blockHash)
+            txt.expectBlockHash(shadow.payload.blockHash)
 
           # Re-org back
           if cs.scenario == TransactionReOrgScenarioNewPayloadOnRevert:
@@ -329,7 +329,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if shadow.tx.isSome:
           # Now it should be back with main payload
           let txt = env.engine.client.txReceipt(shadow.txHash)
-          txt.expectBlockHash(ethHash env.clMock.latestForkchoice.headBlockHash)
+          txt.expectBlockHash(env.clMock.latestForkchoice.headBlockHash)
 
           if cs.scenario != TransactionReOrgScenarioReOrgBackIn:
             shadow.tx = Opt.none(PooledTransaction)
@@ -373,7 +373,7 @@ type
     executeSidePayloadOnReOrg*: bool
 
   ShadowCanon = ref object
-    previousHash: Web3Hash
+    previousHash: Hash32
     previousTimestamp: Web3Quantity
     payload: ExecutionPayload
     parentForkchoice: ForkchoiceStateV1
@@ -423,7 +423,7 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
     var pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       onPayloadAttributesGenerated: proc(): bool =
         var attr = env.clMock.latestPayloadAttributes
-        attr.prevRandao = Web3Hash.randomBytes()
+        attr.prevRandao = Hash32.randomBytes()
 
         var version = env.engine.version(env.clMock.latestHeader.timestamp)
         let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
@@ -504,7 +504,7 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
 
   # Verify that the client is pointing to the latest payload sent
   let r = env.engine.client.namedHeader(Head)
-  r.expectHash(ethHash env.clMock.latestPayloadBuilt.blockHash)
+  r.expectHash(env.clMock.latestPayloadBuilt.blockHash)
   return true
 
 type
@@ -554,7 +554,7 @@ method execute(cs: ReOrgBackFromSyncingTest, env: TestEnv): bool =
         altParentHash = shadow.payloads[^1].blockHash
 
       let customizer = CustomPayloadData(
-        parentHash: Opt.some(ethHash altParentHash),
+        parentHash: Opt.some(altParentHash),
         extraData:  Opt.some(@[0x01.byte]),
       )
 
@@ -609,7 +609,7 @@ func toSeq(x: string): seq[byte] =
   for z in x:
     result.add z.byte
 
-func ethAddress(a, b: int): EthAddress =
+func ethAddress(a, b: int): Address =
   result[0] = a.byte
   result[1] = b.byte
 
@@ -650,7 +650,7 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
       )
 
       if len(shadow.payloads) > 0:
-        customData.parentHash = Opt.some(ethHash shadow.payloads[^1].blockHash)
+        customData.parentHash = Opt.some(shadow.payloads[^1].blockHash)
 
       let payload = customData.customizePayload(env.clMock.latestExecutableData)
       shadow.payloads.add  payload
@@ -669,7 +669,7 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
   pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
     onGetpayload: proc(): bool =
       var
-        prevRandao            = common.Hash256.randomBytes()
+        prevRandao            = Hash32.randomBytes()
         suggestedFeeRecipient = ethAddress(0x12, 0x34)
 
       let payloadAttributesCustomizer = BasePayloadAttributesCustomizer(
@@ -745,7 +745,7 @@ method execute(cs: SafeReOrgToSideChainTest, env: TestEnv): bool =
         altParentHash = shadow.payloads[^1].blockHash
 
       let customizer = CustomPayloadData(
-        parentHash: Opt.some(ethHash altParentHash),
+        parentHash: Opt.some(altParentHash),
         extraData:  Opt.some(@[0x01.byte]),
       )
 
@@ -756,13 +756,13 @@ method execute(cs: SafeReOrgToSideChainTest, env: TestEnv): bool =
 
   # Verify current state of labels
   let head = env.engine.client.namedHeader(Head)
-  head.expectHash(ethHash env.clMock.latestPayloadBuilt.blockHash)
+  head.expectHash(env.clMock.latestPayloadBuilt.blockHash)
 
   let safe = env.engine.client.namedHeader(Safe)
-  safe.expectHash(ethHash env.clMock.executedPayloadHistory[2].blockHash)
+  safe.expectHash(env.clMock.executedPayloadHistory[2].blockHash)
 
   let finalized = env.engine.client.namedHeader(Finalized)
-  finalized.expectHash(ethHash env.clMock.executedPayloadHistory[1].blockHash)
+  finalized.expectHash(env.clMock.executedPayloadHistory[1].blockHash)
 
   # Re-org the safe/head blocks to point to the alternative side chain
   let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
@@ -783,13 +783,13 @@ method execute(cs: SafeReOrgToSideChainTest, env: TestEnv): bool =
       r.expectPayloadStatus(PayloadExecutionStatus.valid)
 
       let head = env.engine.client.namedHeader(Head)
-      head.expectHash(ethHash shadow.payloads[1].blockHash)
+      head.expectHash(shadow.payloads[1].blockHash)
 
       let safe = env.engine.client.namedHeader(Safe)
-      safe.expectHash(ethHash shadow.payloads[0].blockHash)
+      safe.expectHash(shadow.payloads[0].blockHash)
 
       let finalized = env.engine.client.namedHeader(Finalized)
-      finalized.expectHash(ethHash env.clMock.executedPayloadHistory[1].blockHash)
+      finalized.expectHash(env.clMock.executedPayloadHistory[1].blockHash)
 
       return true
   ))

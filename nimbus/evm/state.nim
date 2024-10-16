@@ -13,7 +13,6 @@
 import
   std/[options, sets, strformat],
   stew/assign2,
-  eth/keys,
   ../db/ledger,
   ../common/[common, evmforks],
   ./interpreter/[op_codes, gas_costs],
@@ -29,7 +28,7 @@ func determineFork(vmState: BaseVMState): EVMFork =
 proc init(
       self:         BaseVMState;
       ac:           LedgerRef,
-      parent:       BlockHeader;
+      parent:       Header;
       blockCtx:     BlockContext;
       com:          CommonRef;
       tracer:       TracerRef,
@@ -46,7 +45,7 @@ proc init(
   self.fork = self.determineFork
   self.gasCosts = self.fork.forkToSchedule
 
-func blockCtx(com: CommonRef, header: BlockHeader):
+func blockCtx(com: CommonRef, header: Header):
                 BlockContext =
   BlockContext(
     timestamp    : header.timestamp,
@@ -71,7 +70,7 @@ proc `$`*(vmState: BaseVMState): string
 
 proc new*(
       T:        type BaseVMState;
-      parent:   BlockHeader;     ## parent header, account sync position
+      parent:   Header;     ## parent header, account sync position
       blockCtx: BlockContext;
       com:      CommonRef;       ## block chain config
       tracer:   TracerRef = nil,
@@ -92,7 +91,7 @@ proc new*(
     tracer   = tracer)
 
 proc reinit*(self:     BaseVMState;     ## Object descriptor
-             parent:   BlockHeader;     ## parent header, account sync pos.
+             parent:   Header;     ## parent header, account sync pos.
              blockCtx: BlockContext;
              linear: bool
              ): bool =
@@ -125,8 +124,8 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   # else: false
 
 proc reinit*(self:   BaseVMState; ## Object descriptor
-             parent: BlockHeader; ## parent header, account sync pos.
-             header: BlockHeader; ## header with tx environment data fields
+             parent: Header; ## parent header, account sync pos.
+             header: Header; ## header with tx environment data fields
              linear: bool
              ): bool =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
@@ -142,12 +141,12 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
     )
 
 proc reinit*(self:      BaseVMState; ## Object descriptor
-             header:    BlockHeader; ## header with tx environment data fields
+             header:    Header; ## header with tx environment data fields
              ): bool =
   ## This is a variant of the `reinit()` function above where the field
-  ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
+  ## `header.parentHash`, is used to fetch the `parent` Header to be
   ## used in the `update()` variant, above.
-  var parent: BlockHeader
+  var parent: Header
   self.com.db.getBlockHeader(header.parentHash, parent) and
     self.reinit(
       parent    = parent,
@@ -156,8 +155,8 @@ proc reinit*(self:      BaseVMState; ## Object descriptor
 
 proc init*(
       self:   BaseVMState;     ## Object descriptor
-      parent: BlockHeader;     ## parent header, account sync position
-      header: BlockHeader;     ## header with tx environment data fields
+      parent: Header;     ## parent header, account sync position
+      header: Header;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
       tracer: TracerRef = nil,
       storeSlotHash = false) =
@@ -177,8 +176,8 @@ proc init*(
 
 proc new*(
       T:      type BaseVMState;
-      parent: BlockHeader;     ## parent header, account sync position
-      header: BlockHeader;     ## header with tx environment data fields
+      parent: Header;     ## parent header, account sync position
+      header: Header;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
       tracer: TracerRef = nil,
       storeSlotHash = false): T =
@@ -198,14 +197,14 @@ proc new*(
 
 proc new*(
       T:      type BaseVMState;
-      header: BlockHeader;     ## header with tx environment data fields
+      header: Header;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
       tracer: TracerRef = nil,
       storeSlotHash = false): EvmResult[T] =
   ## This is a variant of the `new()` constructor above where the field
-  ## `header.parentHash`, is used to fetch the `parent` BlockHeader to be
+  ## `header.parentHash`, is used to fetch the `parent` Header to be
   ## used in the `new()` variant, above.
-  var parent: BlockHeader
+  var parent: Header
   if com.db.getBlockHeader(header.parentHash, parent):
     ok(BaseVMState.new(
       parent = parent,
@@ -218,13 +217,13 @@ proc new*(
 
 proc init*(
       vmState: BaseVMState;
-      header:  BlockHeader;     ## header with tx environment data fields
+      header:  Header;     ## header with tx environment data fields
       com:     CommonRef;       ## block chain config
       tracer:  TracerRef = nil,
       storeSlotHash = false): bool =
   ## Variant of `new()` which does not throw an exception on a dangling
-  ## `BlockHeader` parent hash reference.
-  var parent: BlockHeader
+  ## `Header` parent hash reference.
+  var parent: Header
   if com.db.getBlockHeader(header.parentHash, parent):
     vmState.init(
       parent = parent,
@@ -234,7 +233,7 @@ proc init*(
       storeSlotHash = storeSlotHash)
     return true
 
-func coinbase*(vmState: BaseVMState): EthAddress =
+func coinbase*(vmState: BaseVMState): Address =
   vmState.blockCtx.coinbase
 
 func blockNumber*(vmState: BaseVMState): BlockNumber =
@@ -260,16 +259,16 @@ func baseFeePerGas*(vmState: BaseVMState): UInt256 =
   vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
-    vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.gcsafe, base.} =
+    vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =
   let db = vmState.com.db
   try:
-    var blockHash: Hash256
+    var blockHash: Hash32
     if db.getBlockHash(blockNumber, blockHash):
       blockHash
     else:
-      default(Hash256)
+      default(Hash32)
   except RlpError:
-    default(Hash256)
+    default(Hash32)
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.stateDB)
@@ -308,7 +307,7 @@ proc captureTxEnd*(vmState: BaseVMState, restGas: GasInt) =
     vmState.tracer.captureTxEnd(restGas)
 
 proc captureStart*(vmState: BaseVMState, comp: Computation,
-                   sender: EthAddress, to: EthAddress,
+                   sender: Address, to: Address,
                    create: bool, input: openArray[byte],
                    gasLimit: GasInt, value: UInt256) =
   if vmState.tracingEnabled:
@@ -320,7 +319,7 @@ proc captureEnd*(vmState: BaseVMState, comp: Computation, output: openArray[byte
     vmState.tracer.captureEnd(comp, output, gasUsed, error)
 
 proc captureEnter*(vmState: BaseVMState, comp: Computation, op: Op,
-                   sender: EthAddress, to: EthAddress,
+                   sender: Address, to: Address,
                    input: openArray[byte], gasLimit: GasInt,
                    value: UInt256) =
   if vmState.tracingEnabled:

@@ -21,7 +21,7 @@ import
   ./tx_classify,
   ./tx_recover,
   chronicles,
-  eth/[common, keys],
+  eth/common/[transactions, addresses, keys],
   stew/[keyed_queue, sorted_set],
   ../../eip4844
 
@@ -46,7 +46,7 @@ type
 
   AccountNonceTab = ##\
     ## Temporary sorter table
-    Table[EthAddress,NonceList]
+    Table[Address,NonceList]
 
 logScope:
   topics = "tx-pool add transaction"
@@ -55,7 +55,7 @@ logScope:
 # Private helper
 # ------------------------------------------------------------------------------
 
-proc getItemList(tab: var AccountNonceTab; key: EthAddress): var NonceList
+proc getItemList(tab: var AccountNonceTab; key: Address): var NonceList
     {.gcsafe,raises: [KeyError].} =
   if not tab.hasKey(key):
     tab[key] = NonceList.init

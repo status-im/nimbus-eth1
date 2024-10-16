@@ -18,19 +18,17 @@ type BeaconNode* = ref object
   beaconNetwork*: BeaconNetwork
 
 proc newLCNode*(
-    rng: ref HmacDrbgContext, port: int, networkData: NetworkInitData
+    rng: ref HmacDrbgContext,
+    port: int,
+    networkData: NetworkInitData,
+    trustedBlockRoot: Opt[Digest] = Opt.none(Digest),
 ): BeaconNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = BeaconDb.new(networkData, "", inMemory = true)
     streamManager = StreamManager.new(node)
     network = BeaconNetwork.new(
-      PortalNetwork.none,
-      node,
-      db,
-      streamManager,
-      networkData.forks,
-      Opt.none(Eth2Digest),
+      PortalNetwork.none, node, db, streamManager, networkData.forks, trustedBlockRoot
     )
 
   return BeaconNode(discoveryProtocol: node, beaconNetwork: network)

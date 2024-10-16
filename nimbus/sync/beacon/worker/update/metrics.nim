@@ -28,8 +28,8 @@ declareGauge beacon_dangling, "" &
 declareGauge beacon_end, "" &
   "Ending/max block number of higher up headers chain"
 
-declareGauge beacon_final, "" &
-  "Block number of latest known finalised header"
+declareGauge beacon_target, "" &
+  "Block number of sync target (would be consensus header)"
 
 
 declareGauge beacon_header_lists_staged, "" &
@@ -54,7 +54,7 @@ template updateMetricsImpl*(ctx: BeaconCtxRef) =
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_dangling, ctx.layout.dangling.int64)
   metrics.set(beacon_end, ctx.layout.endBn.int64)
-  metrics.set(beacon_final, ctx.lhc.final.header.number.int64)
+  metrics.set(beacon_target, ctx.lhc.target.header.number.int64)
 
   metrics.set(beacon_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(beacon_headers_unprocessed,

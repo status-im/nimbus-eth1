@@ -39,7 +39,7 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
   engine.connect(sec.node)
 
   var
-    txHashes = newSeq[common.Hash256](step.transactionIndexes.len)
+    txHashes = newSeq[Hash32](step.transactionIndexes.len)
     txs      = newSeq[PooledTransaction](step.transactionIndexes.len)
 
   for i, txIndex in step.transactionIndexes:

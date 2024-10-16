@@ -51,6 +51,7 @@ EXCLUDED_NIM_PACKAGES := 	\
 	vendor/nimbus-eth2/vendor/nim-presto						\
 	vendor/nimbus-eth2/vendor/nim-zxcvbn						\
   vendor/nimbus-eth2/vendor/nim-kzg4844						\
+  vendor/nimbus-eth2/vendor/nim-minilru						\
 	vendor/nimbus-eth2/vendor/nimbus-security-resources \
 	vendor/nimbus-eth2/vendor/NimYAML
 
@@ -174,7 +175,7 @@ ifeq ($(BOEHM_GC),1)
 NIM_PARAMS += --mm:boehm
 endif
 
-T8N_PARAMS := -d:chronicles_default_output_device=stderr
+T8N_PARAMS := -d:chronicles_default_output_device=stderr -d:use_system_rocksdb
 
 ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace
@@ -210,9 +211,10 @@ $(TOOLS): | build deps rocksdb
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
+execution_client_name = nimbus_execution_client
 nimbus: | build deps rocksdb
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus/$@.nim"
+	echo -e $(BUILD_MSG) "build/$(execution_client_name)" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$(execution_client_name) "nimbus/$(execution_client_name).nim"
 
 # symlink
 nimbus.nims:
@@ -255,11 +257,11 @@ test-evm: | build deps rocksdb
 # deterministic order for debugging info sections - even with
 # "-frandom-seed=...". Striping the binaries should make them identical, though.
 test-reproducibility:
-	+ [ -e build/nimbus ] || $(MAKE) V=0 nimbus; \
-		MD5SUM1=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1) && \
-		rm -rf nimcache/*/nimbus && \
+	+ [ -e build/nimbus_execution_client ] || $(MAKE) V=0 nimbus; \
+		MD5SUM1=$$($(MD5SUM) build/nimbus_execution_client | cut -d ' ' -f 1) && \
+		rm -rf nimcache/*/nimbus_execution_client && \
 		$(MAKE) V=0 nimbus && \
-		MD5SUM2=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1) && \
+		MD5SUM2=$$($(MD5SUM) build/nimbus_execution_client | cut -d ' ' -f 1) && \
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 

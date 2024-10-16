@@ -58,7 +58,7 @@ var
   bcCom: CommonRef
 
   # Accounts to be considered local
-  localAccounts: seq[EthAddress]
+  localAccounts: seq[Address]
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -342,7 +342,7 @@ proc runTxPoolTests(noisy = false) =
     block:
       var
         xq = bcCom.toTxPool(txList, noisy = noisy)
-        maxAddr: EthAddress
+        maxAddr: Address
         nAddrItems = 0
 
         nAddrPendingItems = 0

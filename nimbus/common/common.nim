@@ -39,13 +39,13 @@ type
     Syncing
     Synced
 
-  SyncReqNewHeadCB* = proc(header: BlockHeader) {.gcsafe, raises: [].}
+  SyncReqNewHeadCB* = proc(header: Header) {.gcsafe, raises: [].}
     ## Update head for syncing
 
-  SyncFinalisedBlockHashCB* = proc(hash: Hash256) {.gcsafe, raises: [].}
-    ## Ditto
+  ReqBeaconSyncTargetCB* = proc(header: Header) {.gcsafe, raises: [].}
+    ## Ditto (for beacon sync)
 
-  NotifyBadBlockCB* = proc(invalid, origin: BlockHeader) {.gcsafe, raises: [].}
+  NotifyBadBlockCB* = proc(invalid, origin: Header) {.gcsafe, raises: [].}
     ## Notify engine-API of encountered bad block
 
   CommonRef* = ref object
@@ -56,8 +56,8 @@ type
     config: ChainConfig
 
     # cache of genesis
-    genesisHash: KeccakHash
-    genesisHeader: BlockHeader
+    genesisHash: Hash32
+    genesisHeader: Header
 
     # map block number and ttd and time to
     # HardFork
@@ -76,7 +76,7 @@ type
       ## Call back function for the sync processor. This function stages
       ## the arguent header to a private aerea for subsequent processing.
 
-    syncFinalisedBlockHash: SyncFinalisedBlockHashCB
+    reqBeaconSyncTargetCB: ReqBeaconSyncTargetCB
       ## Call back function for a sync processor that returns the canonical
       ## header.
 
@@ -84,7 +84,7 @@ type
       ## Allow synchronizer to inform engine-API of bad encountered during sync
       ## progress
 
-    startOfHistory: Hash256
+    startOfHistory: Hash32
       ## This setting is needed for resuming blockwise syncying after
       ## installing a snapshot pivot. The default value for this field is
       ## `GENESIS_PARENT_HASH` to start at the very beginning.
@@ -105,7 +105,7 @@ proc proofOfStake*(com: CommonRef, header: Header): bool {.gcsafe.}
 # Private helper functions
 # ------------------------------------------------------------------------------
 
-func setForkId(com: CommonRef, genesis: BlockHeader) =
+func setForkId(com: CommonRef, genesis: Header) =
   com.genesisHash = genesis.blockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
   com.forkIdCalculator = initForkIdCalculator(
@@ -182,8 +182,6 @@ proc init(com         : CommonRef,
   com.syncState   = Waiting
   com.pruneHistory= pruneHistory
   com.pos = CasperRef.new
-
-  const TimeZero = EthTime(0)
 
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
@@ -333,21 +331,18 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
     # This costly check is only executed from test suite
     com.isBlockAfterTtd(header)
 
-proc syncReqNewHead*(com: CommonRef; header: BlockHeader)
+proc syncReqNewHead*(com: CommonRef; header: Header)
     {.gcsafe, raises: [].} =
   ## Used by RPC updater
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)
 
-func haveSyncFinalisedBlockHash*(com: CommonRef): bool =
-  not com.syncFinalisedBlockHash.isNil
-
-proc syncFinalisedBlockHash*(com: CommonRef; hash: Hash256) =
+proc reqBeaconSyncTargetCB*(com: CommonRef; header: Header) =
   ## Used by RPC updater
-  if not com.syncFinalisedBlockHash.isNil:
-    com.syncFinalisedBlockHash(hash)
+  if not com.reqBeaconSyncTargetCB.isNil:
+    com.reqBeaconSyncTargetCB(header)
 
-proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
+proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
     {.gcsafe, raises: [].} =
 
   if not com.notifyBadBlock.isNil:
@@ -357,7 +352,7 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: BlockHeader)
 # Getters
 # ------------------------------------------------------------------------------
 
-func startOfHistory*(com: CommonRef): Hash256 =
+func startOfHistory*(com: CommonRef): Hash32 =
   ## Getter
   com.startOfHistory
 
@@ -371,7 +366,7 @@ func db*(com: CommonRef): CoreDbRef =
 func eip150Block*(com: CommonRef): Opt[BlockNumber] =
   com.config.eip150Block
 
-func eip150Hash*(com: CommonRef): Hash256 =
+func eip150Hash*(com: CommonRef): Hash32 =
   com.config.eip150Hash
 
 func daoForkBlock*(com: CommonRef): Opt[BlockNumber] =
@@ -402,11 +397,11 @@ func chainId*(com: CommonRef): ChainId =
 func networkId*(com: CommonRef): NetworkId =
   com.networkId
 
-func genesisHash*(com: CommonRef): Hash256 =
+func genesisHash*(com: CommonRef): Hash32 =
   ## Getter
   com.genesisHash
 
-func genesisHeader*(com: CommonRef): BlockHeader =
+func genesisHeader*(com: CommonRef): Header =
   ## Getter
   com.genesisHeader
 
@@ -438,7 +433,7 @@ func `syncHighest=`*(com: CommonRef, number: BlockNumber) =
 func `syncState=`*(com: CommonRef, state: SyncState) =
   com.syncState = state
 
-func `startOfHistory=`*(com: CommonRef, val: Hash256) =
+func `startOfHistory=`*(com: CommonRef, val: Hash32) =
   ## Setter
   com.startOfHistory = val
 
@@ -452,9 +447,9 @@ func `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
   ## Activate or reset a call back handler for syncing.
   com.syncReqNewHead = cb
 
-func `syncFinalisedBlockHash=`*(com: CommonRef; cb: SyncFinalisedBlockHashCB) =
+func `reqBeaconSyncTarget=`*(com: CommonRef; cb: ReqBeaconSyncTargetCB) =
   ## Activate or reset a call back handler for syncing.
-  com.syncFinalisedBlockHash = cb
+  com.reqBeaconSyncTargetCB = cb
 
 func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.

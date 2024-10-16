@@ -21,7 +21,7 @@ import
     confutils/defs,
     confutils/std/net
   ],
-  eth/[common, net/utils, net/nat, p2p/enode, p2p/discoveryv5/enr],
+  eth/[common, net/nat, p2p/enode, p2p/discoveryv5/enr],
   "../nimbus"/[constants, compile_info],
   ../nimbus/common/chain_config,
   ../nimbus/db/opts

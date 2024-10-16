@@ -16,7 +16,7 @@
 
 import
   ../tx_item,
-  eth/common,
+  eth/common/transaction_utils,
   stew/[keyed_queue, sorted_set],
   results,
   ../../eip4844
@@ -40,7 +40,7 @@ type
     ## while traversing is supported and predictable.
     size: int             ## Total number of items
     baseFee: GasInt     ## For aggregating `effectiveGasTip` => `gasTipSum`
-    addrList: KeyedQueue[EthAddress,TxSenderSchedRef]
+    addrList: KeyedQueue[Address,TxSenderSchedRef]
 
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
@@ -266,7 +266,7 @@ proc `baseFee=`*(gt: var TxSenderTab; val: GasInt) =
     schedData.allList.recalcProfit(val)
 
 # ------------------------------------------------------------------------------
-# Public SortedSet ops -- `EthAddress` (level 0)
+# Public SortedSet ops -- `Address` (level 0)
 # ------------------------------------------------------------------------------
 
 proc len*(gt: var TxSenderTab): int =
@@ -277,7 +277,7 @@ proc nItems*(gt: var TxSenderTab): int =
   gt.size
 
 
-proc rank*(gt: var TxSenderTab; sender: EthAddress): Result[int64,void]
+proc rank*(gt: var TxSenderTab; sender: Address): Result[int64,void]
     {.gcsafe,raises: [KeyError].} =
   ## The *rank* of the `sender` argument address is the
   ## ::
@@ -290,8 +290,8 @@ proc rank*(gt: var TxSenderTab; sender: EthAddress): Result[int64,void]
   err()
 
 
-proc eq*(gt: var TxSenderTab; sender: EthAddress):
-       SortedSetResult[EthAddress,TxSenderSchedRef]
+proc eq*(gt: var TxSenderTab; sender: Address):
+       SortedSetResult[Address,TxSenderSchedRef]
     {.gcsafe,raises: [KeyError].} =
   if gt.addrList.hasKey(sender):
     return toSortedSetResult(key = sender, data = gt.addrList[sender])
@@ -309,7 +309,7 @@ proc nItems*(schedData: TxSenderSchedRef): int =
   ## Getter, total number of items in the sub-list
   schedData.size
 
-proc nItems*(rc: SortedSetResult[EthAddress,TxSenderSchedRef]): int =
+proc nItems*(rc: SortedSetResult[Address,TxSenderSchedRef]): int =
   if rc.isOk:
     return rc.value.data.nItems
   0
@@ -323,7 +323,7 @@ proc eq*(schedData: TxSenderSchedRef; status: TxItemStatus):
     return err(rbNotFound)
   toSortedSetResult(key = status.toSenderSchedule, data = nonceData)
 
-proc eq*(rc: SortedSetResult[EthAddress,TxSenderSchedRef];
+proc eq*(rc: SortedSetResult[Address,TxSenderSchedRef];
          status: TxItemStatus):
            SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
   ## Return by status sub-list
@@ -340,7 +340,7 @@ proc sub*(schedData: TxSenderSchedRef):
     return err(rbNotFound)
   toSortedSetResult(key = txSenderAny, data = nonceData)
 
-proc sub*(rc: SortedSetResult[EthAddress,TxSenderSchedRef]):
+proc sub*(rc: SortedSetResult[Address,TxSenderSchedRef]):
         SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
   ## Return all-entries sub-list
   if rc.isOk:
@@ -362,7 +362,7 @@ proc eq*(schedData: TxSenderSchedRef;
   of txSenderPacked:
     return schedData.eq(txItemPacked)
 
-proc eq*(rc: SortedSetResult[EthAddress,TxSenderSchedRef];
+proc eq*(rc: SortedSetResult[Address,TxSenderSchedRef];
          key: TxSenderSchedule):
            SortedSetResult[TxSenderSchedule,TxSenderNonceRef] =
   if rc.isOk:
@@ -421,7 +421,7 @@ proc gt*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef];
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator accounts*(gt: var TxSenderTab): (EthAddress,int64) =
+iterator accounts*(gt: var TxSenderTab): (Address,int64) =
   ## Sender account traversal, returns the account address and the rank
   ## for that account.
   for p in gt.addrList.nextPairs:

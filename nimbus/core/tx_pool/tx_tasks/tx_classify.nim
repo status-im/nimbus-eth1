@@ -13,14 +13,13 @@
 ##
 
 import
-  ../../../common/common,
   ../../validate,
   ../../eip4844,
   ../tx_desc,
   ../tx_item,
   ../tx_tabs,
   chronicles,
-  eth/keys
+  eth/common/[transactions, keys]
 
 import ../../../transaction
 

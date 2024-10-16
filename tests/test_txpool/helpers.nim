@@ -14,7 +14,7 @@ import
   ../../nimbus/core/tx_pool/tx_tasks/[tx_recover],
   ../replay/[pp, undump_blocks_gz],
   chronicles,
-  eth/[common, keys],
+  eth/common/[transactions, keys],
   stew/[byteutils,keyed_queue, sorted_set],
   stint
 
@@ -79,13 +79,13 @@ proc joinXX(q: seq[string]): string =
 proc toXX[T](s: T): string =
   s.toHex.strip(leading=true,chars={'0'}).toLowerAscii
 
-proc toXX(q: Blob): string =
+proc toXX(q: seq[byte]): string =
   q.mapIt(it.toHex2).join(":")
 
-proc toXX(a: EthAddress): string =
+proc toXX(a: Address): string =
   a.data.mapIt(it.toHex2).joinXX
 
-proc toXX(h: Hash256): string =
+proc toXX(h: Hash32): string =
   h.data.mapIt(it.toHex2).joinXX
 
 proc toXX(v: uint64; r,s: UInt256): string =
@@ -95,7 +95,7 @@ proc toXX(v: uint64; r,s: UInt256): string =
 # Public functions,  pretty printer
 # ------------------------------------------------------------------------------
 
-proc pp*(q: seq[(EthAddress,int)]): string =
+proc pp*(q: seq[(Address,int)]): string =
   "[" & q.mapIt(&"{it[0].pp}:{it[1]:03d}").join(",") & "]"
 
 proc pp*(w: TxItemStatus): string =
@@ -160,7 +160,7 @@ proc pp*(w: TxTabsItemsCount): string =
 # Public functions, other
 # ------------------------------------------------------------------------------
 
-proc toHex*(acc: EthAddress): string =
+proc toHex*(acc: Address): string =
   acc.toHex
 
 proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =

@@ -111,7 +111,7 @@ proc execute*(ws: MaxInitcodeSizeSpec, env: TestEnv): bool =
 
       # Customize the payload to include a tx with an invalid initcode
       let customizer = CustomPayloadData(
-        parentBeaconRoot: ethHash env.clMock.latestPayloadAttributes.parentBeaconBlockRoot,
+        parentBeaconRoot: env.clMock.latestPayloadAttributes.parentBeaconBlockRoot,
         transactions: Opt.some( @[invalidTx.tx] ),
       )
 

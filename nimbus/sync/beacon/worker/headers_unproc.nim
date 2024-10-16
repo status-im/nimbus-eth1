@@ -73,9 +73,15 @@ proc headersUnprocCommit*(
 
 
 
-proc headersUnprocCovered*(ctx: BeaconCtxRef; minPt,maxPt: BlockNumber): uint64 =
+proc headersUnprocCovered*(
+    ctx: BeaconCtxRef;
+    minPt: BlockNumber;
+    maxPt: BlockNumber;
+      ): uint64 =
   ## Check whether range is fully contained
-  ctx.lhc.unprocessed.covered(minPt, maxPt)
+  # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
+  if minPt <= maxPt:
+    return ctx.lhc.unprocessed.covered(minPt, maxPt)
 
 proc headersUnprocCovered*(ctx: BeaconCtxRef; pt: BlockNumber): bool =
   ## Check whether point is contained
@@ -119,7 +125,9 @@ proc headersUnprocSet*(ctx: BeaconCtxRef; iv: BnRange) =
 proc headersUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
   ## Set up new unprocessed range
   ctx.headersUnprocSet()
-  discard ctx.lhc.unprocessed.merge(minPt, maxPt)
+  # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
+  if minPt <= maxPt:
+    discard ctx.lhc.unprocessed.merge(minPt, maxPt)
 
 # ------------------------------------------------------------------------------
 # End

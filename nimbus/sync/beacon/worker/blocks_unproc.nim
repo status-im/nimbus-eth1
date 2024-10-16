@@ -74,7 +74,9 @@ proc blocksUnprocCommit*(
 
 proc blocksUnprocCovered*(ctx: BeaconCtxRef; minPt,maxPt: BlockNumber): uint64 =
   ## Check whether range is fully contained
-  ctx.blk.unprocessed.covered(minPt, maxPt)
+  # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
+  if minPt <= maxPt:
+    return ctx.blk.unprocessed.covered(minPt, maxPt)
 
 proc blocksUnprocCovered*(ctx: BeaconCtxRef; pt: BlockNumber): bool =
   ## Check whether point is contained

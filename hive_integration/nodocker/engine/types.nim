@@ -11,7 +11,7 @@
 import
   std/[typetraits, strutils],
   chronicles,
-  eth/common,
+  eth/common/[hashes],
   nimcrypto/[sysrand, sha2],
   stew/[byteutils, endians2],
   web3/eth_api_types,
@@ -57,9 +57,9 @@ type
 
   ExecutableData* = object
     basePayload*: ExecutionPayload
-    beaconRoot* : Opt[common.Hash256]
+    beaconRoot* : Opt[Hash32]
     attr*       : PayloadAttributes
-    versionedHashes*: Opt[seq[common.Hash256]]
+    versionedHashes*: Opt[seq[Hash32]]
 
 const
   DefaultTimeout* = 60 # seconds
@@ -71,23 +71,23 @@ const
   Finalized* = "finalized"
   Safe*      = "safe"
 
-func toAddress*(x: UInt256): EthAddress =
-  x.to(Bytes32).to(EthAddress)
+func toAddress*(x: UInt256): Address =
+  x.to(Bytes32).to(Address)
 
-const ZeroAddr* = default(EthAddress)
+const ZeroAddr* = default(Address)
 
-func toHash*(x: UInt256): common.Hash256 =
-  common.Hash32(x.toByteArrayBE)
+func toHash*(x: UInt256): Hash32 =
+  Hash32(x.toByteArrayBE)
 
 func timestampToBeaconRoot*(timestamp: Quantity): Hash32 =
   # Generates a deterministic hash from the timestamp
   let h = sha2.sha256.digest(timestamp.uint64.toBytesBE)
   Hash32(h.data)
 
-proc randomBytes*(_: type common.Hash256): common.Hash256 =
+proc randomBytes*(_: type Hash32): Hash32 =
   doAssert randomBytes(result.data) == 32
 
-proc randomBytes*(_: type common.EthAddress): common.EthAddress =
+proc randomBytes*(_: type Address): Address =
   doAssert randomBytes(result) == 20
 
 proc clone*[T](x: T): T =
@@ -103,11 +103,11 @@ template testCond*(expr, body: untyped) =
     body
     return false
 
-proc `==`*(a: Opt[BlockHash], b: Opt[common.Hash256]): bool =
+proc `==`*(a: Opt[Hash32], b: Opt[Hash32]): bool =
   if a.isNone and b.isNone:
     return true
   if a.isSome and b.isSome:
-    return a.get() == b.get().data.BlockHash
+    return a.get() == b.get()
 
 template expectErrorCode*(res: untyped, errCode: int) =
   testCond res.isErr:
@@ -132,7 +132,7 @@ template expectPayload*(res: untyped, payload: ExecutionPayload) =
     testCond x.executionPayload == payload.V3:
       error "getPayloadV3 return mismatch payload"
 
-template expectWithdrawalsRoot*(res: untyped, wdRoot: Opt[common.Hash256]) =
+template expectWithdrawalsRoot*(res: untyped, wdRoot: Opt[Hash32]) =
   testCond res.isOk:
     error "Unexpected error", msg=res.error
   let h = res.get
@@ -145,7 +145,7 @@ template expectBalanceEqual*(res: untyped, expectedBalance: UInt256) =
   testCond res.get == expectedBalance:
     error "balance mismatch", expect=expectedBalance, get=res.get
 
-template expectLatestValidHash*(res: untyped, expectedHash: Web3Hash) =
+template expectLatestValidHash*(res: untyped, expectedHash: Hash32) =
   testCond res.isOk:
     error "Unexpected error", msg=res.error
   let s = res.get
@@ -225,7 +225,7 @@ template expectStatus*(res: untyped, cond: PayloadExecutionStatus) =
   testCond s.status == cond:
     error "Unexpected newPayload status", expect=cond, get=s.status
 
-template expectPayloadID*(res: untyped, id: Opt[PayloadID]) =
+template expectPayloadID*(res: untyped, id: Opt[Bytes8]) =
   testCond res.isOk:
     error "Unexpected expectPayloadID Error", msg=res.error
   let s = res.get()
@@ -236,14 +236,14 @@ template expectError*(res: untyped) =
   testCond res.isErr:
     error "Unexpected expectError, got noerror"
 
-template expectHash*(res: untyped, hash: common.Hash256) =
+template expectHash*(res: untyped, hash: Hash32) =
   testCond res.isOk:
     error "Unexpected expectHash Error", msg=res.error
   let s = res.get()
   testCond s.blockHash == hash:
     error "Unexpected expectHash", expect=hash.short, get=s.blockHash.short
 
-template expectStorageEqual*(res: untyped, expectedValue: Web3FixedBytes[32]) =
+template expectStorageEqual*(res: untyped, expectedValue: FixedBytes[32]) =
   testCond res.isOk:
     error "expectStorageEqual", msg=res.error
   testCond res.get == expectedValue:
@@ -273,21 +273,21 @@ template expectNumber*(res: untyped, expected: uint64) =
   testCond res.get == expected:
     error "expectNumber", expect=expected, get=res.get
 
-template expectTransactionHash*(res: untyped, expected: common.Hash256) =
+template expectTransactionHash*(res: untyped, expected: Hash32) =
   testCond res.isOk:
     error "expectTransactionHash", msg=res.error
   let rec = res.get
   testCond rec.txHash == expected:
     error "expectTransactionHash", expect=expected.short, get=rec.txHash.short
 
-template expectPayloadParentHash*(res: untyped, expected: Web3Hash) =
+template expectPayloadParentHash*(res: untyped, expected: Hash32) =
   testCond res.isOk:
     error "expectPayloadParentHash", msg=res.error
   let rec = res.get
   testCond rec.executionPayload.parentHash == expected:
     error "expectPayloadParentHash", expect=expected.short, get=rec.executionPayload.parentHash.short
 
-template expectBlockHash*(res: untyped, expected: common.Hash256) =
+template expectBlockHash*(res: untyped, expected: Hash32) =
   testCond res.isOk:
     error "expectBlockHash", msg=res.error
   let rec = res.get

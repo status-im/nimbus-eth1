@@ -10,8 +10,8 @@
 
 import
   std/tables,
-  eth/[keys],
-  stew/byteutils, results, unittest2,
+  eth/common/keys,
+  results, unittest2,
   ../nimbus/db/ledger,
   ../nimbus/core/chain,
   ../nimbus/[config, transaction, constants],
@@ -59,7 +59,7 @@ proc privKey(keyHex: string): PrivateKey =
   kRes.get()
 
 func makeTx(
-    t: var TestEnv, recipient: EthAddress, amount: UInt256,
+    t: var TestEnv, recipient: Address, amount: UInt256,
     payload: openArray[byte] = []): Transaction =
   const
     gasLimit = 75000.GasInt

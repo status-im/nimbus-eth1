@@ -100,16 +100,6 @@ iterator blocks*(
     else:
       error "Failed reading block from block data", error = res.error
 
-iterator blocksContent*(
-    blockData: BlockDataTable, verify = false
-): (ContentId, seq[byte], seq[byte]) =
-  for b in blocks(blockData, verify):
-    for value in b:
-      if len(value[1]) > 0:
-        let ckBytes = history_content.encode(value[0])
-        let contentId = history_content.toContentId(ckBytes)
-        yield (contentId, ckBytes.asSeq(), value[1])
-
 func readBlockHeader*(blockData: BlockData): Result[Header, string] =
   var rlp =
     try:

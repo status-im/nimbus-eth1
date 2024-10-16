@@ -11,7 +11,7 @@
 import
   std/[json, tables, strutils],
   stint,
-  eth/common/eth_types,
+  eth/common/[base, addresses, hashes],
   stew/byteutils,
   ../db/ledger
 
@@ -19,23 +19,23 @@ type
   DumpAccount* = ref object
     balance* : UInt256
     nonce*   : AccountNonce
-    root*    : Hash256
-    codeHash*: Hash256
-    code*    : Blob
-    key*     : Hash256
+    root*    : Hash32
+    codeHash*: Hash32
+    code*    : seq[byte]
+    key*     : Hash32
     storage* : Table[UInt256, UInt256]
 
   StateDump* = ref object
-    root*: Hash256
-    accounts*: Table[EthAddress, DumpAccount]
+    root*: Hash32
+    accounts*: Table[Address, DumpAccount]
 
 proc `%`*(x: UInt256): JsonNode =
   %("0x" & x.toHex)
 
-proc `%`*(x: Blob): JsonNode =
+proc `%`*(x: seq[byte]): JsonNode =
   %("0x" & x.toHex)
 
-proc `%`*(x: Hash256): JsonNode =
+proc `%`*(x: Hash32): JsonNode =
   %("0x" & x.data.toHex)
 
 proc `%`*(x: AccountNonce): JsonNode =
@@ -58,7 +58,7 @@ proc `%`*(x: DumpAccount): JsonNode =
   if x.storage.len > 0:
     result["storage"] = %(x.storage)
 
-proc `%`*(x: Table[EthAddress, DumpAccount]): JsonNode =
+proc `%`*(x: Table[Address, DumpAccount]): JsonNode =
   result = newJObject()
   for k, v in x:
     result["0x" & k.toHex] = %(v)
@@ -69,19 +69,19 @@ proc `%`*(x: StateDump): JsonNode =
     "accounts": %(x.accounts)
   }
 
-proc dumpAccount*(db: LedgerRef, acc: EthAddress): DumpAccount =
+proc dumpAccount*(db: LedgerRef, acc: Address): DumpAccount =
   result = DumpAccount(
     balance : db.getBalance(acc),
     nonce   : db.getNonce(acc),
     root    : db.getStorageRoot(acc),
     codeHash: db.getCodeHash(acc),
     code    : db.getCode(acc).bytes(),
-    key     : keccakHash(acc)
+    key     : keccak256(acc.data)
   )
   for k, v in db.cachedStorage(acc):
     result.storage[k] = v
 
-proc dumpAccounts*(db: LedgerRef): Table[EthAddress, DumpAccount] =
+proc dumpAccounts*(db: LedgerRef): Table[Address, DumpAccount] =
   for acc in db.addresses():
     result[acc] = dumpAccount(db, acc)
 
@@ -91,7 +91,7 @@ proc dumpState*(db: LedgerRef): StateDump =
     accounts: dumpAccounts(db)
   )
 
-proc dumpAccounts*(stateDB: LedgerRef, addresses: openArray[EthAddress]): JsonNode =
+proc dumpAccounts*(stateDB: LedgerRef, addresses: openArray[Address]): JsonNode =
   result = newJObject()
   for ac in addresses:
     result[ac.toHex] = %dumpAccount(stateDB, ac)

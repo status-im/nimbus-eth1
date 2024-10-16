@@ -40,7 +40,7 @@ type
     alloc: GenesisAlloc
 
   TestVMState = ref object of BaseVMState
-    blockHashes: Table[uint64, Hash256]
+    blockHashes: Table[uint64, Hash32]
     hashError: string
 
 proc init(_: type Dispatch): Dispatch =
@@ -85,13 +85,13 @@ proc dispatchOutput(ctx: var TransContext, conf: T8NConf, res: ExecOutput) =
     stderr.write(dis.stderr.pretty)
     stderr.write("\n")
 
-proc calcWithdrawalsRoot(w: Opt[seq[Withdrawal]]): Opt[Hash256] =
+proc calcWithdrawalsRoot(w: Opt[seq[Withdrawal]]): Opt[Hash32] =
   if w.isNone:
-    return Opt.none(Hash256)
+    return Opt.none(Hash32)
   Opt.some calcWithdrawalsRoot(w.get)
 
-proc envToHeader(env: EnvStruct): BlockHeader =
-  BlockHeader(
+proc envToHeader(env: EnvStruct): Header =
+  Header(
     coinbase   : env.currentCoinbase,
     difficulty : env.currentDifficulty.get(0.u256),
     mixHash    : env.currentRandom.get(default(Bytes32)),
@@ -117,20 +117,20 @@ proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
       acc.storage[k] = v
     alloc[accAddr] = acc
 
-proc genAddress(tx: Transaction, sender: EthAddress): EthAddress =
+proc genAddress(tx: Transaction, sender: Address): Address =
   if tx.to.isNone:
     result = generateAddress(sender, tx.nonce)
 
 proc toTxReceipt(rec: Receipt,
                  tx: Transaction,
-                 sender: EthAddress,
+                 sender: Address,
                  txIndex: int,
                  gasUsed: GasInt): TxReceipt =
 
   let contractAddress = genAddress(tx, sender)
   TxReceipt(
     txType: tx.txType,
-    root: if rec.isHash: rec.hash else: default(Hash256),
+    root: if rec.isHash: rec.hash else: default(Hash32),
     status: rec.status,
     cumulativeGasUsed: rec.cumulativeGasUsed,
     logsBloom: rec.logsBloom,
@@ -138,11 +138,11 @@ proc toTxReceipt(rec: Receipt,
     transactionHash: rlpHash(tx),
     contractAddress: contractAddress,
     gasUsed: gasUsed,
-    blockHash: default(Hash256),
+    blockHash: default(Hash32),
     transactionIndex: txIndex
   )
 
-proc calcLogsHash(receipts: openArray[Receipt]): Hash256 =
+proc calcLogsHash(receipts: openArray[Receipt]): Hash32 =
   var logs: seq[Log]
   for rec in receipts:
     logs.add rec.logs
@@ -150,7 +150,7 @@ proc calcLogsHash(receipts: openArray[Receipt]): Hash256 =
 
 proc defaultTraceStreamFilename(conf: T8NConf,
                                 txIndex: int,
-                                txHash: Hash256): (string, string) =
+                                txHash: Hash32): (string, string) =
   let
     txHash = "0x" & toLowerAscii($txHash)
     baseDir = if conf.outputBaseDir.len > 0:
@@ -160,7 +160,7 @@ proc defaultTraceStreamFilename(conf: T8NConf,
     fName = "$1/trace-$2-$3.jsonl" % [baseDir, $txIndex, txHash]
   (baseDir, fName)
 
-proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash256): Stream =
+proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash32): Stream =
   let (baseDir, fName) = defaultTraceStreamFilename(conf, txIndex, txHash)
   createDir(baseDir)
   newFileStream(fName, fmWrite)
@@ -173,7 +173,7 @@ proc traceToFileStream(path: string, txIndex: int): Stream =
   createDir(file.dir)
   newFileStream(fName, fmWrite)
 
-proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMState) =
+proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMState): bool =
   var tracerFlags = {
     TracerFlags.DisableMemory,
     TracerFlags.DisableStorage,
@@ -186,10 +186,14 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMSta
   if conf.traceNostack: tracerFlags.incl TracerFlags.DisableStack
   if conf.traceReturnData: tracerFlags.excl TracerFlags.DisableReturnData
 
+  var closeStream = true
   let traceMode = conf.traceEnabled.get
   let stream = if traceMode == "stdout":
+                 # don't close stdout or stderr
+                 closeStream = false
                  newFileStream(stdout)
                elif traceMode == "stderr":
+                 closeStream = false
                  newFileStream(stderr)
                elif traceMode.len > 0:
                  traceToFileStream(traceMode, txIndex)
@@ -205,16 +209,17 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash256, vmState: BaseVMSta
     raise newError(ErrorConfig, "Unable to open tracer stream: " & traceLoc)
 
   vmState.tracer = newJsonTracer(stream, tracerFlags, false)
+  closeStream
 
-proc closeTrace(vmState: BaseVMState) =
+proc closeTrace(vmState: BaseVMState, closeStream: bool) =
   let tracer = JsonTracer(vmState.tracer)
-  if tracer.isNil.not:
+  if tracer.isNil.not and closeStream:
     tracer.close()
 
 proc exec(ctx: var TransContext,
           vmState: BaseVMState,
           stateReward: Option[UInt256],
-          header: BlockHeader,
+          header: Header,
           conf: T8NConf): ExecOutput =
 
   let txList = ctx.parseTxs(vmState.com.chainId)
@@ -242,7 +247,7 @@ proc exec(ctx: var TransContext,
       prevNumber = ctx.env.currentNumber - 1
       prevHash = ctx.env.blockHashes.getOrDefault(prevNumber)
 
-    if prevHash == static(default(Hash256)):
+    if prevHash == static(default(Hash32)):
       raise newError(ErrorConfig, "previous block hash not found for block number: " & $prevNumber)
 
     vmState.processParentBlockHash(prevHash).isOkOr:
@@ -264,13 +269,14 @@ proc exec(ctx: var TransContext,
       )
       continue
 
+    var closeStream = true
     if conf.traceEnabled.isSome:
-      setupTrace(conf, txIndex, rlpHash(tx), vmState)
+      closeStream = setupTrace(conf, txIndex, rlpHash(tx), vmState)
 
     let rc = vmState.processTransaction(tx, sender, header)
 
     if conf.traceEnabled.isSome:
-      closeTrace(vmState)
+      closeTrace(vmState, closeStream)
 
     if rc.isErr:
       rejected.add RejectedTx(
@@ -394,10 +400,10 @@ proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
     for slot, value in acc.storage:
       stateDB.setStorage(accAddr, slot, value)
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash256 =
+method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
-  var h = default(Hash256)
+  var h = default(Hash32)
   if vmState.blockHashes.len == 0:
     vmState.hashError = "getAncestorHash(" &
       $blockNumber & ") invoked, no blockhashes provided"
@@ -465,12 +471,12 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         let n = json.parseFile(conf.inputTxs)
         ctx.parseTxs(n)
 
-    let uncleHash = if ctx.env.parentUncleHash == default(Hash256):
+    let uncleHash = if ctx.env.parentUncleHash == default(Hash32):
                       EMPTY_UNCLE_HASH
                     else:
                       ctx.env.parentUncleHash
 
-    let parent = BlockHeader(
+    let parent = Header(
       stateRoot: emptyRlpHash,
       timestamp: ctx.env.parentTimestamp,
       difficulty: ctx.env.parentDifficulty.get(0.u256),
@@ -502,7 +508,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
         raise newError(ErrorConfig, res.error)
     else:
       # un-set it if it has been set too early
-      ctx.env.parentBeaconBlockRoot = Opt.none(Hash256)
+      ctx.env.parentBeaconBlockRoot = Opt.none(Hash32)
 
     let isMerged = config.terminalTotalDifficulty.isSome and
                    config.terminalTotalDifficulty.value == 0.u256

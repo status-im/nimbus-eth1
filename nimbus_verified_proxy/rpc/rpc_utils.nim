@@ -80,12 +80,12 @@ proc asExecutionData*(payload: SomeExecutionPayload): ExecutionData =
 func toFixedBytes(d: MDigest[256]): FixedBytes[32] =
   FixedBytes[32](d.data)
 
-template asEthHash(hash: BlockHash): etypes.Hash256 =
-  etypes.Hash256(distinctBase(hash))
+template asEthHash(hash: BlockHash): etypes.Hash32 =
+  etypes.Hash32(distinctBase(hash))
 
 proc calculateTransactionData(
     items: openArray[TypedTransaction]
-): (etypes.Hash256, seq[TxOrHash], uint64) =
+): (etypes.Hash32, seq[TxOrHash], uint64) =
   ## returns tuple composed of
   ## - root of transactions trie
   ## - list of transactions hashes
@@ -101,14 +101,14 @@ proc calculateTransactionData(
   let rootHash = tr.state(updateOk = true).expect "hash"
   (rootHash, txHashes, txSize)
 
-func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash256): uint64 =
+func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash32): uint64 =
   let bh = etypes.BlockHeader(
-    parentHash: payload.parentHash.asEthHash,
+    parentHash: payload.parentHash,
     ommersHash: etypes.EMPTY_UNCLE_HASH,
-    coinbase: etypes.EthAddress payload.feeRecipient,
-    stateRoot: payload.stateRoot.asEthHash,
+    coinbase: payload.feeRecipient,
+    stateRoot: payload.stateRoot,
     transactionsRoot: txRoot,
-    receiptsRoot: payload.receiptsRoot.asEthHash,
+    receiptsRoot: payload.receiptsRoot,
     logsBloom: distinctBase(payload.logsBloom).to(Bloom),
     difficulty: default(etypes.DifficultyInt),
     number: payload.blockNumber.distinctBase,

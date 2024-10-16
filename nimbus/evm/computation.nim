@@ -17,12 +17,12 @@ import
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ./evm_errors,
   ./code_bytes,
-  ../common/[common, evmforks],
+  ../common/[evmforks],
   ../utils/utils,
   stew/assign2,
-  stew/byteutils,
+  ../common/common,
+  eth/common/eth_types_rlp,
   chronicles, chronos,
-  eth/[keys],
   sets
 
 export
@@ -51,7 +51,7 @@ const
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc generateContractAddress(c: Computation, salt: ContractSalt): EthAddress =
+proc generateContractAddress(c: Computation, salt: ContractSalt): Address =
   if c.msg.kind == EVMC_CREATE:
     let creationNonce = c.vmState.readOnlyStateDB().getNonce(c.msg.sender)
     result = generateAddress(c.msg.sender, creationNonce)
@@ -62,7 +62,7 @@ proc generateContractAddress(c: Computation, salt: ContractSalt): EthAddress =
 # Public functions
 # ------------------------------------------------------------------------------
 
-template getCoinbase*(c: Computation): EthAddress =
+template getCoinbase*(c: Computation): Address =
   when evmc_enabled:
     c.host.getTxContext().block_coinbase
   else:
@@ -111,7 +111,7 @@ template getChainId*(c: Computation): uint64 =
   else:
     c.vmState.com.chainId.uint64
 
-template getOrigin*(c: Computation): EthAddress =
+template getOrigin*(c: Computation): Address =
   when evmc_enabled:
     c.host.getTxContext().tx_origin
   else:
@@ -141,27 +141,27 @@ template getBlobBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.txCtx.blobBaseFee
 
-proc getBlockHash*(c: Computation, number: BlockNumber): Hash256 =
+proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
   when evmc_enabled:
     let
       blockNumber = BlockNumber c.host.getTxContext().block_number
       ancestorDepth  = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return default(Hash256)
+      return default(Hash32)
     if number >= blockNumber:
-      return default(Hash256)
+      return default(Hash32)
     c.host.getBlockHash(number)
   else:
     let
       blockNumber = c.vmState.blockNumber
       ancestorDepth = blockNumber - number - 1
     if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return default(Hash256)
+      return default(Hash32)
     if number >= blockNumber:
-      return default(Hash256)
+      return default(Hash32)
     c.vmState.getAncestorHash(number)
 
-template accountExists*(c: Computation, address: EthAddress): bool =
+template accountExists*(c: Computation, address: Address): bool =
   when evmc_enabled:
     c.host.accountExists(address)
   else:
@@ -176,36 +176,36 @@ template getStorage*(c: Computation, slot: UInt256): UInt256 =
   else:
     c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
 
-template getBalance*(c: Computation, address: EthAddress): UInt256 =
+template getBalance*(c: Computation, address: Address): UInt256 =
   when evmc_enabled:
     c.host.getBalance(address)
   else:
     c.vmState.readOnlyStateDB.getBalance(address)
 
-template getCodeSize*(c: Computation, address: EthAddress): uint =
+template getCodeSize*(c: Computation, address: Address): uint =
   when evmc_enabled:
     c.host.getCodeSize(address)
   else:
     uint(c.vmState.readOnlyStateDB.getCodeSize(address))
 
-template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
+template getCodeHash*(c: Computation, address: Address): Hash32 =
   when evmc_enabled:
     c.host.getCodeHash(address)
   else:
     let
       db = c.vmState.readOnlyStateDB
     if not db.accountExists(address) or db.isEmptyAccount(address):
-      default(Hash256)
+      default(Hash32)
     else:
       db.getCodeHash(address)
 
-template selfDestruct*(c: Computation, address: EthAddress) =
+template selfDestruct*(c: Computation, address: Address) =
   when evmc_enabled:
     c.host.selfDestruct(c.msg.contractAddress, address)
   else:
     c.execSelfDestruct(address)
 
-template getCode*(c: Computation, address: EthAddress): CodeBytesRef =
+template getCode*(c: Computation, address: Address): CodeBytesRef =
   when evmc_enabled:
     CodeBytesRef.init(c.host.copyCode(address))
   else:
@@ -231,14 +231,14 @@ template resolveCodeSize*(c: Computation, address: EthAddress): uint =
   else:
     uint(c.vmState.readOnlyStateDB.resolveCodeSize(address))
 
-template resolveCodeHash*(c: Computation, address: EthAddress): Hash256 =
+template resolveCodeHash*(c: Computation, address: EthAddress): Hash32 =
   when evmc_enabled:
     c.host.getCodeHash(address)
   else:
     let
       db = c.vmState.readOnlyStateDB
     if not db.accountExists(address) or db.isEmptyAccount(address):
-      default(Hash256)
+      default(Hash32)
     else:
       db.resolveCodeHash(address)
 
@@ -404,7 +404,7 @@ template chainTo*(c: Computation,
     c.continuation = nil
     after
 
-proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
+proc execSelfDestruct*(c: Computation, beneficiary: Address) =
   c.vmState.mutateStateDB:
     let localBalance = c.getBalance(c.msg.contractAddress)
 

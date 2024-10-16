@@ -11,9 +11,10 @@
 
 import
   stint,
-  web3/conversions,
+  web3/[conversions, eth_api_types],
+  eth/common/base,
+  ../common/common,
   json_rpc/rpcserver,
-  ../common,
   ../db/ledger,
   ../core/chain/forked_chain,
   ../core/tx_pool,
@@ -42,7 +43,7 @@ func newServerAPI*(c: ForkedChainRef, t: TxPoolRef): ServerAPIRef =
     txPool: t
   )
 
-proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[common.BlockHeader, string] =
+proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
@@ -50,10 +51,10 @@ proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[common.BlockHe
     else:
       return err("Unsupported block tag " & tag)
   else:
-    let blockNum = common.BlockNumber blockTag.number
+    let blockNum = base.BlockNumber blockTag.number
     return api.chain.headerByNumber(blockNum)
 
-proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[common.BlockHeader, string] =
+proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, string] =
   let blockId = blockTag.get(defaultTag)
   api.headerFromTag(blockId)
 
@@ -65,7 +66,7 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
     # TODO: Replay state?
     err("Block state not ready")
 
-proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, string] =
+proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
@@ -74,44 +75,44 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[EthBlock, strin
     else:
       return err("Unsupported block tag " & tag)
   else:
-    let blockNum = common.BlockNumber blockTag.number
+    let blockNum = base.BlockNumber blockTag.number
     return api.chain.blockByNumber(blockNum)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
-  server.rpc("eth_getBalance") do(data: Web3Address, blockTag: BlockTag) -> UInt256:
+  server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
-      address = ethAddr data
+      address = data
     ledger.getBalance(address)
 
-  server.rpc("eth_getStorageAt") do(data: Web3Address, slot: UInt256, blockTag: BlockTag) -> Web3FixedBytes[32]:
+  server.rpc("eth_getStorageAt") do(data: Address, slot: UInt256, blockTag: BlockTag) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
-      address = ethAddr data
+      address = data
       value   = ledger.getStorage(address, slot)
-    w3FixedBytes value
+    value.to(Bytes32)
 
-  server.rpc("eth_getTransactionCount") do(data: Web3Address, blockTag: BlockTag) -> Web3Quantity:
+  server.rpc("eth_getTransactionCount") do(data: Address, blockTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
-      address = ethAddr data
+      address = data
       nonce   = ledger.getNonce(address)
-    w3Qty nonce
+    Quantity(nonce)
 
   server.rpc("eth_blockNumber") do() -> Web3Quantity:
     ## Returns integer of the current block number the client is on.
-    w3Qty(api.chain.latestNumber)
+    Quantity(api.chain.latestNumber)
 
   server.rpc("eth_chainId") do() -> Web3Quantity:
-    return w3Qty(distinctBase(api.com.chainId))
+    return Quantity(distinctBase(api.com.chainId))
 
-  server.rpc("eth_getCode") do(data: Web3Address, blockTag: BlockTag) -> seq[byte]:
+  server.rpc("eth_getCode") do(data: Address, blockTag: BlockTag) -> seq[byte]:
     ## Returns code at a given address.
     ##
     ## data: address
@@ -120,16 +121,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     let
       ledger  = api.ledgerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
-      address = ethAddr data
+      address = data
     ledger.getCode(address).bytes()
 
-  server.rpc("eth_getBlockByHash") do(data: Web3Hash, fullTransactions: bool) -> BlockObject:
+  server.rpc("eth_getBlockByHash") do(data: Hash32, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
-    let blockHash = data.ethHash
+    let blockHash = data
 
     let blk = api.chain.blockByHash(blockHash).valueOr:
       return nil
@@ -152,9 +153,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     ## Returns SyncObject or false when not syncing.
     if api.com.syncState != Waiting:
       let sync = SyncObject(
-        startingBlock: w3Qty api.com.syncStart,
-        currentBlock : w3Qty api.com.syncCurrent,
-        highestBlock : w3Qty api.com.syncHighest
+        startingBlock: Quantity(api.com.syncStart),
+        currentBlock : Quantity(api.com.syncCurrent),
+        highestBlock : Quantity(api.com.syncHighest)
       )
       return SyncingStatus(syncing: true, syncObject: sync)
     else:
@@ -162,7 +163,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
   proc getLogsForBlock(
       chain: ForkedChainRef,
-      blk: EthBlock,
+      blk: Block,
       opts: FilterOptions): seq[FilterLog]
         {.gcsafe, raises: [RlpError].} =
     if headerBloomFilter(blk.header, opts.address, opts.topics):
@@ -179,8 +180,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
   proc getLogsForRange(
       chain: ForkedChainRef,
-      start: common.BlockNumber,
-      finish: common.BlockNumber,
+      start: base.BlockNumber,
+      finish: base.BlockNumber,
       opts: FilterOptions): seq[FilterLog]
         {.gcsafe, raises: [RlpError].} =
     var
@@ -208,7 +209,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     ## in Nimbus.
     if filterOptions.blockHash.isSome():
       let
-        hash = ethHash filterOptions.blockHash.expect("blockHash")
+        hash = filterOptions.blockHash.expect("blockHash")
         blk = api.chain.blockByHash(hash).valueOr:
           raise newException(ValueError, "Block not found")
       return getLogsForBlock(api.chain, blk, filterOptions)
@@ -231,7 +232,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
         filterOptions
       )
 
-  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Web3Hash:
+  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
     ## Creates new message call transaction or a contract creation for signed transactions.
     ##
     ## data: the signed transaction data.
@@ -245,7 +246,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     let res = api.txPool.inPoolAndReason(txHash)
     if res.isErr:
       raise newException(ValueError, res.error)
-    txHash.w3Hash
+    txHash
 
   server.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
     ## Executes a new message call immediately without creating a transaction on the block chain.
@@ -260,7 +261,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
                  raise newException(ValueError, "rpcCallEvm error: " & $error.code)
     res.output
 
-  server.rpc("eth_getTransactionReceipt") do(data: Web3Hash) -> ReceiptObject:
+  server.rpc("eth_getTransactionReceipt") do(data: Hash32) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.
     ##
     ## data: Hash of a transaction.
@@ -270,7 +271,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       prevGasUsed = GasInt(0)
     
     let 
-      txHash = data.ethHash()
+      txHash = data
       (blockhash, txid) = api.chain.txRecords(txHash)
 
     if blockhash == zeroHash32:
@@ -318,4 +319,4 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
         raise newException(ValueError, "Block not found")
       gasUsed  = rpcEstimateGas(args, header, api.chain.com, DEFAULT_RPC_GAS_CAP).valueOr:
         raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
-    w3Qty(gasUsed)
+    Quantity(gasUsed)

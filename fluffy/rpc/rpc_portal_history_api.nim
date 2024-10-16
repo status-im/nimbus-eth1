@@ -23,14 +23,6 @@ export tables
 # Portal Network JSON-RPC implementation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
-const
-  ContentNotFoundError = (code: -39001, msg: "Content not found")
-  ContentNotFoundErrorWithTrace = (code: -39002, msg: "Content not found")
-
-type ContentInfo = object
-  content: string
-  utpTransfer: bool
-
 ContentInfo.useDefaultSerializationIn JrpcConv
 TraceContentLookupResult.useDefaultSerializationIn JrpcConv
 TraceObject.useDefaultSerializationIn JrpcConv
@@ -38,12 +30,6 @@ NodeMetadata.useDefaultSerializationIn JrpcConv
 TraceResponse.useDefaultSerializationIn JrpcConv
 
 proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
-  let
-    invalidKeyErr =
-      (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
-    invalidValueErr =
-      (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content value")
-
   rpcServer.rpc("portal_historyFindContent") do(
     enr: Record, contentKey: string
   ) -> JsonString:
@@ -90,30 +76,26 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     SSZ.encode(offerResult).to0xHex()
 
-  rpcServer.rpc("portal_historyRecursiveFindContent") do(
-    contentKey: string
-  ) -> ContentInfo:
+  rpcServer.rpc("portal_historyGetContent") do(contentKey: string) -> ContentInfo:
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
+        raise invalidKeyErr()
 
       contentResult = (await p.contentLookup(key, contentId)).valueOr:
-        raise (ref ApplicationError)(
-          code: ContentNotFoundError.code, msg: ContentNotFoundError.msg
-        )
+        raise contentNotFoundErr()
 
     return ContentInfo(
       content: contentResult.content.to0xHex(), utpTransfer: contentResult.utpTransfer
     )
 
-  rpcServer.rpc("portal_historyTraceRecursiveFindContent") do(
+  rpcServer.rpc("portal_historyTraceGetContent") do(
     contentKey: string
   ) -> TraceContentLookupResult:
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
+        raise invalidKeyErr()
 
       res = await p.traceContentLookup(key, contentId)
 
@@ -123,11 +105,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       return res
     else:
       let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
-      raise (ref ApplicationError)(
-        code: ContentNotFoundErrorWithTrace.code,
-        msg: ContentNotFoundErrorWithTrace.msg,
-        data: data,
-      )
+      raise contentNotFoundErrWithTrace(data)
 
   rpcServer.rpc("portal_historyStore") do(
     contentKey: string, contentValue: string
@@ -135,24 +113,19 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentValueBytes = hexToSeqByte(contentValue)
-      contentId = p.toContentId(key)
+      contentId = p.toContentId(key).valueOr:
+        raise invalidKeyErr()
 
-    if contentId.isSome():
-      p.storeContent(key, contentId.get(), contentValueBytes)
-      return true
-    else:
-      raise invalidKeyErr
+    p.storeContent(key, contentId, contentValueBytes)
 
   rpcServer.rpc("portal_historyLocalContent") do(contentKey: string) -> string:
     let
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
-        raise (ref errors.InvalidRequest)(code: -32602, msg: "Invalid content key")
+        raise invalidKeyErr()
 
       contentResult = p.dbGet(key, contentId).valueOr:
-        raise (ref ApplicationError)(
-          code: ContentNotFoundError.code, msg: ContentNotFoundError.msg
-        )
+        raise contentNotFoundErr()
 
     return contentResult.to0xHex()
 

@@ -35,12 +35,12 @@ RUN apt update && apt -y upgrade
 
 RUN ldd --version ldd
 
-RUN rm -f /home/user/nimbus-eth1/build/nimbus
+RUN rm -f /home/user/nimbus-eth1/build/nimbus_execution_client
 
-COPY --from=build /root/nimbus-eth1/build/nimbus /home/user/nimbus-eth1/build/nimbus
+COPY --from=build /root/nimbus-eth1/build/nimbus_execution_client /home/user/nimbus-eth1/build/nimbus_execution_client
 
 ENV PATH="/home/user/nimbus-eth1/build:${PATH}"
-ENTRYPOINT ["nimbus"]
+ENTRYPOINT ["nimbus_execution_client"]
 WORKDIR /home/user/nimbus-eth1/build
 
 STOPSIGNAL SIGINT
