@@ -17,7 +17,7 @@ Make sure you have all needed [prerequisites](./prerequisites.md).
 ### 1. Clone the `nimbus-eth1` repository
 
 ```sh
-git clone git@github.com:status-im/nimbus-eth1.git
+git clone https://github.com/status-im/nimbus-eth1.git
 cd nimbus-eth1
 ```
 

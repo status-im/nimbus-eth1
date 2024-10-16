@@ -6,9 +6,6 @@ on the public network.
 The guide assumes Windows is being used. For Linux/macOS users follow this
 [tutorial](./quick-start.md).
 
-!!! notice
-    Running Fluffy on Windows is more experimental and less tested!
-
 ## Steps
 
 ### Prerequisites
@@ -24,7 +21,7 @@ If you need help installing these tools, you can consult our
 
 ### Build the Fluffy client
 ```bash
-git clone git@github.com:status-im/nimbus-eth1.git
+git clone https://github.com/status-im/nimbus-eth1.git
 cd nimbus-eth1
 mingw32-make fluffy
 
@@ -41,16 +38,13 @@ mingw32-make fluffy
 
 ### Try requesting a execution layer block from the network
 
-The Portal testnet is slowly being filled up with historical data through bridge
-nodes. Because of this, more recent history data is more likely to be available.
-This can be tested by using the `eth_getBlockByHash` JSON-RPC from the
-[execution JSON-RPC API](https://ethereum.github.io/execution-apis/api-documentation/).
+Requesting history content on the Portal network can be easily tested by using the `eth_getBlockByHash` JSON-RPC from the [execution JSON-RPC API](https://ethereum.github.io/execution-apis/api-documentation/).
 
 ```bash
 # Get the hash of a block from your favorite block explorer, e.g.:
-BLOCKHASH=0x34eea44911b19f9aa8c72f69bdcbda3ed933b11a940511b6f3f58a87427231fb # Replace this to the block hash of your choice
+BLOCKHASH=0x55b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286 # Replace this to the block hash of your choice
 # Run this command to get the block:
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["'${BLOCKHASH}'", true]}' http://localhost:8545 | jq
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["'${BLOCKHASH}'", true]}' http://localhost:8545
 ```
 
 ### Update and rebuild the Fluffy client

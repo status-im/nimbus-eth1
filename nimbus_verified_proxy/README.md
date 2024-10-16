@@ -28,7 +28,7 @@ relies on the Ethereum JSON RPC Execution API.
 ### Build the Nimbus Verified Proxy from source
 ```bash
 # Clone the nimbus-eth1 repository
-git clone git@github.com:status-im/nimbus-eth1.git
+git clone https://github.com/status-im/nimbus-eth1.git
 cd nimbus-eth1
 
 # Run the build process
