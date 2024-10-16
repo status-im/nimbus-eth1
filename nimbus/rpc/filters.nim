@@ -40,7 +40,7 @@ proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[R
         blockNumber: Opt.some(Quantity(header.number)),
         address: log.address,
         data: log.data,
-        #  TODO topics should probably be kept as Hash256 in receipts
+        #  TODO topics should probably be kept as Hash32 in receipts
         topics: log.topics
       )
 

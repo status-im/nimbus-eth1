@@ -23,7 +23,7 @@ import
 
   ./test_helpers, ./test_allowed_to_fail
 
-proc initAddress(i: byte): EthAddress = result.data[19] = i
+proc initAddress(i: byte): Address = result.data[19] = i
 
 template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddresses): untyped =
   for test in fixture:

@@ -84,7 +84,7 @@ proc asPortalBlockData*(
     header = Header(
       parentHash: payload.parentHash,
       ommersHash: EMPTY_UNCLE_HASH,
-      coinbase: EthAddress payload.feeRecipient,
+      coinbase: payload.feeRecipient,
       stateRoot: payload.stateRoot,
       transactionsRoot: txRoot,
       receiptsRoot: payload.receiptsRoot,
@@ -127,7 +127,7 @@ proc asPortalBlockData*(
     header = Header(
       parentHash: payload.parentHash,
       ommersHash: EMPTY_UNCLE_HASH,
-      coinbase: EthAddress payload.feeRecipient,
+      coinbase: payload.feeRecipient,
       stateRoot: payload.stateRoot,
       transactionsRoot: txRoot,
       receiptsRoot: payload.receiptsRoot,
@@ -158,7 +158,7 @@ proc asPortalBlockData*(
     Withdrawal(
       index: x.index.uint64,
       validatorIndex: x.validatorIndex.uint64,
-      address: x.address.EthAddress,
+      address: x.address,
       amount: x.amount.uint64,
     )
 

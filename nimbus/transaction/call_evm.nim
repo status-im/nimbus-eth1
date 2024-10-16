@@ -148,7 +148,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   ok(hi)
 
-proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, baseFee: GasInt): CallParams =
+proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, baseFee: GasInt): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
@@ -167,7 +167,7 @@ proc callParamsForTx(tx: Transaction, sender: EthAddress, vmState: BaseVMState, 
   if tx.txType >= TxEip4844:
     result.versionedHashes = tx.versionedHashes
 
-proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState): CallParams =
+proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): CallParams =
   result = CallParams(
     vmState:      vmState,
     gasPrice:     tx.gasPrice,
@@ -188,14 +188,14 @@ proc callParamsForTest(tx: Transaction, sender: EthAddress, vmState: BaseVMState
     result.versionedHashes = tx.versionedHashes
 
 proc txCallEvm*(tx: Transaction,
-                sender: EthAddress,
+                sender: Address,
                 vmState: BaseVMState, baseFee: GasInt): GasInt =
   let
     call = callParamsForTx(tx, sender, vmState, baseFee)
   runComputation(call, GasInt)
 
 proc testCallEvm*(tx: Transaction,
-                  sender: EthAddress,
+                  sender: Address,
                   vmState: BaseVMState): CallResult =
   let call = callParamsForTest(tx, sender, vmState)
   runComputation(call, CallResult)

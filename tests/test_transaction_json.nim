@@ -39,7 +39,7 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
     return
 
   if forkData.len > 0 and "sender" in forkData:
-    let sender = EthAddress.fromHex(forkData["sender"].getStr)
+    let sender = Address.fromHex(forkData["sender"].getStr)
     check "hash" in forkData
     check tx.txHash == forkData["hash"].getStr
     check tx.recoverSender().expect("valid signature") == sender

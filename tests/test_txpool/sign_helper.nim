@@ -60,7 +60,7 @@ proc testKeySign*(header: BlockHeader): BlockHeader =
   ## Sign the header and embed the signature in extra data
   header.sign(prvTestKey)
 
-proc signerFunc*(signer: EthAddress, msg: openArray[byte]):
+proc signerFunc*(signer: Address, msg: openArray[byte]):
                 Result[array[RawSignatureSize, byte], cstring] {.gcsafe.} =
   doAssert(signer == testAddress)
   let

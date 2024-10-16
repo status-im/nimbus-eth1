@@ -62,14 +62,14 @@ proc dumpAccounts*(vmState: BaseVMState): JsonNode =
   %dumpAccounts(vmState.stateDB)
 
 proc debugAccounts*(stateDB: LedgerRef, addresses: openArray[string]): string =
-  var accountList = newSeq[EthAddress]()
+  var accountList = newSeq[Address]()
   for address in addresses:
-    accountList.add EthAddress.fromHex(address)
+    accountList.add Address.fromHex(address)
 
   (%dumpAccounts(stateDB, accountList)).pretty
 
 proc debugAccounts*(vmState: BaseVMState): string =
-  var accountList = newSeq[EthAddress]()
+  var accountList = newSeq[Address]()
   for address in vmState.stateDB.addresses:
     accountList.add address
 

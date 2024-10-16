@@ -186,7 +186,7 @@ proc setupEnv(com: CommonRef, signer, ks2: Address, ctx: EthContext): TestEnv =
     gasUsed     : vmState.cumulativeGasUsed,
     timestamp   : timeStamp
     #extraData:     Blob
-    #mixHash:     Hash256
+    #mixHash:     Hash32
     #nonce:         BlockNonce
     )
 

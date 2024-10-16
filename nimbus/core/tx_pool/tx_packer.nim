@@ -107,7 +107,7 @@ func baseFee(pst: TxPacker): GasInt =
   else:
     0.GasInt
 
-func feeRecipient(pst: TxPacker): EthAddress =
+func feeRecipient(pst: TxPacker): Address =
   pst.vmState.com.pos.feeRecipient
 
 # ------------------------------------------------------------------------------

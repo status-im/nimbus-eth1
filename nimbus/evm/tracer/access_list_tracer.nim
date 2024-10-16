@@ -23,9 +23,9 @@ type
 
 proc new*(T: type AccessListTracer,
           acl: common.AccessList,
-          sender: EthAddress,
-          to: EthAddress,
-          precompiles: openArray[EthAddress]): T =
+          sender: Address,
+          to: Address,
+          precompiles: openArray[Address]): T =
   let act = T()
   act.excl.incl sender
   act.excl.incl to

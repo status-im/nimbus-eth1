@@ -269,8 +269,8 @@ proc setupEthRpc*(
             raise newException(ValueError, "Incorrect number of proofs")
           NetworkPayload(
             blobs: data.blobs.get.mapIt it.NetworkBlob,
-            commitments: data.commitments.get.mapIt eth_types.KzgCommitment(it),
-            proofs: data.proofs.get.mapIt eth_types.KzgProof(it))
+            commitments: data.commitments.get,
+            proofs: data.proofs.get)
         else:
           if data.blobs.isSome or data.commitments.isSome or data.proofs.isSome:
             raise newException(ValueError, "Blobs require EIP-4844 transaction")

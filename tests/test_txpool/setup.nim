@@ -35,12 +35,12 @@ type
   TxEnv = object
     chainId: ChainID
     rng: ref HmacDrbgContext
-    signers: Table[EthAddress, PrivateKey]
-    map: Table[EthAddress, EthAddress]
+    signers: Table[Address, PrivateKey]
+    map: Table[Address, Address]
     txs: seq[Transaction]
 
   Signer = object
-    address: EthAddress
+    address: Address
     signer: PrivateKey
 
 const
@@ -50,7 +50,7 @@ proc initTxEnv(chainId: ChainID): TxEnv =
   result.rng = newRng()
   result.chainId = chainId
 
-proc getSigner(env: var TxEnv, address: EthAddress): Signer =
+proc getSigner(env: var TxEnv, address: Address): Signer =
   env.map.withValue(address, val) do:
     let newAddress = val[]
     return Signer(address: newAddress, signer: env.signers[newAddress])
@@ -65,7 +65,7 @@ proc fillGenesis(env: var TxEnv, param: NetworkParams) =
   const txFile = "tests/test_txpool/transactions.json"
   let n = json.parseFile(txFile)
 
-  var map: Table[EthAddress, UInt256]
+  var map: Table[Address, UInt256]
 
   for z in n:
     let bytes = hexToSeqByte(z.getStr)
@@ -112,7 +112,7 @@ proc toTxPool*(
     com: CommonRef;               ## to be modified, initialisier for `TxPool`
     itList: seq[TxItemRef];       ## import items into new `TxPool` (read only)
     baseFee = 0.GasPrice;         ## initalise with `baseFee` (unless 0)
-    local: seq[EthAddress] = @[]; ## local addresses
+    local: seq[Address] = @[]; ## local addresses
     noisy = true): TxPoolRef =
 
   doAssert not com.isNil
@@ -122,7 +122,7 @@ proc toTxPool*(
   result.maxRejects = itList.len
 
   let noLocals = local.len == 0
-  var localAddr: Table[EthAddress,bool]
+  var localAddr: Table[Address,bool]
   for a in local:
     localAddr[a] = true
 
@@ -145,7 +145,7 @@ proc toTxPool*(
     baseFee = 0.GasPrice;         ## initalise with `baseFee` (unless 0)
     itemsPC = 30;                 ## % number if items befor time gap
     delayMSecs = 200;             ## size of time vap
-    local: seq[EthAddress] = @[]; ## local addresses
+    local: seq[EAddress] = @[]; ## local addresses
     noisy = true): TxPoolRef =
   ## Variant of `toTxPoolFromSeq()` with a time gap between consecutive
   ## items on the `remote` queue
@@ -157,7 +157,7 @@ proc toTxPool*(
   result.maxRejects = itList.len
 
   let noLocals = local.len == 0
-  var localAddr: Table[EthAddress,bool]
+  var localAddr: Table[Address,bool]
   for a in local:
     localAddr[a] = true
 
@@ -209,11 +209,11 @@ proc setItemStatusFromInfo*(xp: TxPoolRef) =
 
 
 proc getBackHeader*(xp: TxPoolRef; nTxs, nAccounts: int):
-                  (BlockHeader, seq[Transaction], seq[EthAddress]) {.inline.} =
+                  (BlockHeader, seq[Transaction], seq[Address]) {.inline.} =
   ## back track the block chain for at least `nTxs` transactions and
   ## `nAccounts` sender accounts
   var
-    accTab: Table[EthAddress,bool]
+    accTab: Table[Address,bool]
     txsLst: seq[Transaction]
     backHash = xp.head.blockHash
     backHeader = xp.head

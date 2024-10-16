@@ -287,7 +287,7 @@ proc installEthApiHandlers*(
     let
       sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
-      balance = (await sn.getBalance(blockNumber, data.EthAddress)).valueOr:
+      balance = (await sn.getBalance(blockNumber, data)).valueOr:
         raise newException(ValueError, "Unable to get balance")
 
     return balance
@@ -312,7 +312,7 @@ proc installEthApiHandlers*(
     let
       sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
-      nonce = (await sn.getTransactionCount(blockNumber, data.EthAddress)).valueOr:
+      nonce = (await sn.getTransactionCount(blockNumber, data)).valueOr:
         raise newException(ValueError, "Unable to get transaction count")
     return nonce.Quantity
 
@@ -337,7 +337,7 @@ proc installEthApiHandlers*(
     let
       sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
-      slotValue = (await sn.getStorageAt(blockNumber, data.EthAddress, slot)).valueOr:
+      slotValue = (await sn.getStorageAt(blockNumber, data, slot)).valueOr:
         raise newException(ValueError, "Unable to get storage slot")
     return FixedBytes[32](slotValue.toBytesBE())
 
@@ -361,7 +361,7 @@ proc installEthApiHandlers*(
     let
       sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
-      bytecode = (await sn.getCode(blockNumber, data.EthAddress)).valueOr:
+      bytecode = (await sn.getCode(blockNumber, data)).valueOr:
         raise newException(ValueError, "Unable to get code")
     return bytecode.asSeq()
 
@@ -388,7 +388,7 @@ proc installEthApiHandlers*(
     let
       sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
-      proofs = (await sn.getProofs(blockNumber, data.EthAddress, slots)).valueOr:
+      proofs = (await sn.getProofs(blockNumber, data, slots)).valueOr:
         raise newException(ValueError, "Unable to get proofs")
 
     var storageProof = newSeqOfCap[StorageProof](slots.len)

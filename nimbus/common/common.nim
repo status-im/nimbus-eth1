@@ -183,8 +183,6 @@ proc init(com         : CommonRef,
   com.pruneHistory= pruneHistory
   com.pos = CasperRef.new
 
-  const TimeZero = EthTime(0)
-
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
   if genesis.isNil.not:

@@ -54,7 +54,7 @@ method execute(cs: SidechainReOrgTest, env: TestEnv): bool =
     onNewPayloadBroadcast: proc(): bool =
       # At this point the CLMocker has a payload that will result in a specific outcome,
       # we can produce an alternative payload, send it, fcU to it, and verify the changes
-      let alternativePrevRandao = common.Hash256.randomBytes()
+      let alternativePrevRandao = Hash32.randomBytes()
       let timestamp = w3Qty(env.clMock.latestPayloadBuilt.timestamp, 1)
       let customizer = BasePayloadAttributesCustomizer(
         timestamp:  Opt.some(timestamp.uint64),
@@ -134,7 +134,7 @@ method getName(cs: TransactionReOrgTest): string =
     name.add ", " & $cs.scenario
   return name
 
-proc txHash(shadow: ShadowTx): common.Hash256 =
+proc txHash(shadow: ShadowTx): Hash32 =
   if shadow.tx.isNone:
     error "SHADOW TX IS NONE"
     return
@@ -669,7 +669,7 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
   pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
     onGetpayload: proc(): bool =
       var
-        prevRandao            = common.Hash256.randomBytes()
+        prevRandao            = Hash32.randomBytes()
         suggestedFeeRecipient = ethAddress(0x12, 0x34)
 
       let payloadAttributesCustomizer = BasePayloadAttributesCustomizer(

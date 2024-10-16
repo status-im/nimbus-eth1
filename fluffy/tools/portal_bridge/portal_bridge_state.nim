@@ -27,8 +27,8 @@ import
 type BlockData = object
   blockNumber: uint64
   blockHash: Hash32
-  miner: EthAddress
-  uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
+  miner: Address
+  uncles: seq[tuple[miner: Address, blockNumber: uint64]]
   parentStateRoot: Hash32
   stateRoot: Hash32
   stateDiffs: seq[TransactionDiff]
@@ -122,8 +122,8 @@ proc runBackfillCollectBlockDataLoop(
       let blockData = BlockData(
         blockNumber: currentBlockNumber,
         blockHash: blockObject.hash,
-        miner: blockObject.miner.EthAddress,
-        uncles: uncleBlocks.mapIt((it.miner.EthAddress, it.number.uint64)),
+        miner: blockObject.miner,
+        uncles: uncleBlocks.mapIt((it.miner, it.number.uint64)),
         parentStateRoot: parentStateRoot,
         stateRoot: blockObject.stateRoot,
         stateDiffs: stateDiffs,

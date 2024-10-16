@@ -55,7 +55,7 @@ type
   CallResult* = object
     error*:           string            # Something if the call failed.
     gasUsed*:         GasInt            # Gas used by the call.
-    contractAddress*: EthAddress        # Created account (when `isCreate`).
+    contractAddress*: Address        # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
     stack*:           EvmStack       # EVM stack on return (for test only).
     memory*:          EvmMemory      # EVM memory on return (for test only).
