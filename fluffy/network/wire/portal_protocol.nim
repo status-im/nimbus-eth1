@@ -195,7 +195,7 @@ type
     disablePoke: bool
     pingTimings: Table[NodeId, chronos.Moment]
     maxGossipNodes: int
-    config: PortalProtocolConfig
+    config*: PortalProtocolConfig
 
   PortalResult*[T] = Result[T, string]
 

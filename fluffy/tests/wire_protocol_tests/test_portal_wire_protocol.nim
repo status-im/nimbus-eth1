@@ -375,3 +375,73 @@ procSuite "Portal Wire Protocol Tests":
 
     await proto1.stop()
     await node1.closeWait()
+
+  asyncTest "Local content - Cache enabled":
+    let (proto1, proto2) = defaultTestSetup(rng)
+
+    # proto1 has no radius so the content won't be stored in the local db
+    proto1.dataRadius = proc(): UInt256 =
+      0.u256
+
+    let
+      contentKey = ContentKeyByteList(@[byte 0x01, 0x02, 0x03])
+      contentId = contentKey.toContentId().get()
+      content = @[byte 0x04, 0x05, 0x06]
+
+    check:
+      proto1.storeContent(contentKey, contentId, content) == false
+      proto2.storeContent(contentKey, contentId, content) == true
+
+      proto1.getLocalContent(contentKey, contentId).isNone()
+      proto2.getLocalContent(contentKey, contentId).get() == content
+
+      proto1.storeContent(contentKey, contentId, content, cacheContent = false) == false
+      proto2.storeContent(contentKey, contentId, content, cacheContent = false) == true
+
+      proto1.getLocalContent(contentKey, contentId).isNone()
+      proto2.getLocalContent(contentKey, contentId).get() == content
+
+      proto1.storeContent(contentKey, contentId, content, cacheContent = true) == false
+      proto2.storeContent(contentKey, contentId, content, cacheContent = true) == true
+
+      proto1.getLocalContent(contentKey, contentId).get() == content
+      proto2.getLocalContent(contentKey, contentId).get() == content
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Local content - Cache disabled":
+    let (proto1, proto2) = defaultTestSetup(rng)
+    proto1.config.disableContentCache = true
+    proto2.config.disableContentCache = true
+
+    # proto1 has no radius so the content won't be stored in the local db
+    proto1.dataRadius = proc(): UInt256 =
+      0.u256
+
+    let
+      contentKey = ContentKeyByteList(@[byte 0x01, 0x02, 0x03])
+      contentId = contentKey.toContentId().get()
+      content = @[byte 0x04, 0x05, 0x06]
+
+    check:
+      proto1.storeContent(contentKey, contentId, content) == false
+      proto2.storeContent(contentKey, contentId, content) == true
+
+      proto1.getLocalContent(contentKey, contentId).isNone()
+      proto2.getLocalContent(contentKey, contentId).get() == content
+
+      proto1.storeContent(contentKey, contentId, content, cacheContent = false) == false
+      proto2.storeContent(contentKey, contentId, content, cacheContent = false) == true
+
+      proto1.getLocalContent(contentKey, contentId).isNone()
+      proto2.getLocalContent(contentKey, contentId).get() == content
+
+      proto1.storeContent(contentKey, contentId, content, cacheContent = true) == false
+      proto2.storeContent(contentKey, contentId, content, cacheContent = true) == true
+
+      proto1.getLocalContent(contentKey, contentId).isNone()
+      proto2.getLocalContent(contentKey, contentId).get() == content
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
