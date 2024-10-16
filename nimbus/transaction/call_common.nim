@@ -18,6 +18,7 @@ import
   ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
+  ../core/eip7702,
   ./host_types
 
 import ../evm/computation except fromEvmc, toEvmc
@@ -44,6 +45,7 @@ type
     input*:        seq[byte]            # Input data.
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
+    authorizationList*: seq[Authorization] # EIP-7702 (Prague)
     noIntrinsic*:  bool                 # Don't charge intrinsic gas.
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
@@ -57,8 +59,8 @@ type
     gasUsed*:         GasInt            # Gas used by the call.
     contractAddress*: Address        # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
-    stack*:           EvmStack       # EVM stack on return (for test only).
-    memory*:          EvmMemory      # EVM memory on return (for test only).
+    stack*:           EvmStack          # EVM stack on return (for test only).
+    memory*:          EvmMemory         # EVM memory on return (for test only).
 
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
@@ -102,6 +104,10 @@ func intrinsicGas*(call: CallParams, vmState: BaseVMState): GasInt {.inline.} =
     for account in call.accessList:
       gas += ACCESS_LIST_ADDRESS_COST
       gas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
+
+  # EIP-7702 intrinsic gas for authorization tuples, regardless of validity or duplication
+  if fork >= FkPrague:
+    gas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
 
   return gas.GasInt
 
@@ -176,7 +182,10 @@ proc setupHost(call: CallParams): TransactionHost =
     else:
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
-      code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
+      if host.vmState.fork >= FkPrague:
+        code = host.vmState.readOnlyStateDB.resolveCode(host.msg.code_address.fromEvmc)
+      else:
+        code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
       if call.input.len > 0:
         host.msg.input_size = call.input.len.csize_t
         # Must copy the data so the `host.msg.input_data` pointer
@@ -185,7 +194,8 @@ proc setupHost(call: CallParams): TransactionHost =
         host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg, code)
+    host.computation = newComputation(vmState, call.sysCall, cMsg, code,
+      authorizationList = call.authorizationList)
 
     host.code = code
 
@@ -198,7 +208,8 @@ proc setupHost(call: CallParams): TransactionHost =
       host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg)
+    host.computation = newComputation(vmState, call.sysCall, cMsg,
+      authorizationList = call.authorizationList)
 
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
