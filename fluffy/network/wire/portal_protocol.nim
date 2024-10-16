@@ -74,6 +74,12 @@ declareCounter portal_gossip_with_lookup,
 declareCounter portal_gossip_without_lookup,
   "Portal wire protocol neighborhood gossip that did not require a node lookup",
   labels = ["protocol_id"]
+declareCounter portal_content_cache_hits,
+  "Portal wire protocol local content lookups that hit the cache",
+  labels = ["protocol_id"]
+declareCounter portal_content_cache_misses,
+  "Portal wire protocol local content lookups that don't hit the cache",
+  labels = ["protocol_id"]
 
 declareCounter portal_poke_offers,
   "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
@@ -1615,7 +1621,10 @@ proc getLocalContent*(
   # The cache can contain content that is not in our radius
   let maybeContent = p.contentCache.get(contentId)
   if maybeContent.isSome():
+    portal_content_cache_hits.inc(labelValues = [$p.protocolId])
     return maybeContent
+
+  portal_content_cache_misses.inc(labelValues = [$p.protocolId])
 
   # Check first if content is in range, as this is a cheaper operation
   # than the database lookup.
