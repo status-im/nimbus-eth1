@@ -8,15 +8,14 @@
 {.push raises: [].}
 
 import
-  std/[strutils, typetraits],
+  std/strutils,
   stint,
   stew/byteutils,
   results,
   chronicles,
   json_rpc/[rpcproxy, rpcserver, rpcclient],
-  eth/common/eth_types as etypes,
-  web3,
-  web3/[primitives, eth_api_types],
+  eth/common/accounts,
+  web3/[primitives, eth_api_types, eth_api],
   beacon_chain/el/el_manager,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
@@ -26,14 +25,8 @@ import
 
 export forks
 
-type
-  FixedBytes[N: static int] = primitives.FixedBytes[N]
-  Address = primitives.Address
-
 logScope:
   topics = "verified_proxy"
-
-proc `==`(x, y: Quantity): bool {.borrow, noSideEffect.}
 
 type
   VerifiedRpcProxy* = ref object
@@ -63,7 +56,7 @@ func parseQuantityTag(blockTag: BlockTag): Result[QuantityTag, string] =
     else:
       return err("Unsupported blockTag: " & tag)
   else:
-    let quantity = blockTag.number.Quantity
+    let quantity = blockTag.number
     return ok(QuantityTag(kind: BlockNumber, blockNumber: quantity))
 
 template checkPreconditions(proxy: VerifiedRpcProxy) =
@@ -197,7 +190,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
     let account = accountResult.get()
 
-    if account.codeHash == etypes.EMPTY_CODE_HASH:
+    if account.codeHash == EMPTY_CODE_HASH:
       # account does not have any code, return empty hex data
       return @[]
 
@@ -233,7 +226,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     return Opt.some(asBlockObject(executionPayload.get()))
 
   lcProxy.proxy.rpc("eth_getBlockByHash") do(
-    blockHash: BlockHash, fullTransactions: bool
+    blockHash: Hash32, fullTransactions: bool
   ) -> Opt[BlockObject]:
     let executionPayload = lcProxy.blockCache.getPayloadByHash(blockHash)
 

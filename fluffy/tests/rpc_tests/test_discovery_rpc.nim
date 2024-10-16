@@ -10,6 +10,7 @@
 import
   chronos,
   testutils/unittests,
+  stew/byteutils,
   json_rpc/rpcserver,
   json_rpc/clients/httpclient,
   stint,
@@ -67,6 +68,6 @@ procSuite "Discovery v5 JSON-RPC API":
 
     check:
       nodeEnr == tc.localDiscovery.localNode.record.toURI()
-      nodeId == "0x" & tc.localDiscovery.localNode.id.toHex()
+      nodeId == tc.localDiscovery.localNode.id.toBytesBE().to0xHex()
 
     waitFor tc.stop()
