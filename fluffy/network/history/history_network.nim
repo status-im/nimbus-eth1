@@ -437,7 +437,9 @@ proc getVerifiedBlockHeader*(
 
     info "Fetched valid block header from the network"
     # Content is valid, it can be stored and propagated to interested peers
-    n.portalProtocol.storeContent(contentKey, contentId, headerContent.content)
+    n.portalProtocol.storeContent(
+      contentKey, contentId, headerContent.content, cacheContent = true
+    )
     n.portalProtocol.triggerPoke(
       headerContent.nodesInterestedInContent, contentKey, headerContent.content
     )
@@ -479,7 +481,7 @@ proc getBlockBody*(
 
     info "Fetched block body from the network"
     # Content is valid, it can be stored and propagated to interested peers
-    n.portalProtocol.storeContent(contentKey, contentId, bodyContent.content)
+    n.portalProtocol.storeContent(contentKey, contentId, bodyContent.content, cacheContent = true)
     n.portalProtocol.triggerPoke(
       bodyContent.nodesInterestedInContent, contentKey, bodyContent.content
     )
@@ -551,7 +553,7 @@ proc getReceipts*(
 
     info "Fetched receipts from the network"
     # Content is valid, it can be stored and propagated to interested peers
-    n.portalProtocol.storeContent(contentKey, contentId, receiptsContent.content)
+    n.portalProtocol.storeContent(contentKey, contentId, receiptsContent.content, cacheContent = true)
     n.portalProtocol.triggerPoke(
       receiptsContent.nodesInterestedInContent, contentKey, receiptsContent.content
     )

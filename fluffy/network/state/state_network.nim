@@ -27,7 +27,6 @@ logScope:
 
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
-  contentDB*: ContentDB
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
   statusLogLoop: Future[void]
@@ -65,7 +64,6 @@ proc new*(
 
   StateNetwork(
     portalProtocol: portalProtocol,
-    contentDB: contentDB,
     contentQueue: cq,
     historyNetwork: historyNetwork,
     validateStateIsCanonical: validateStateIsCanonical,
