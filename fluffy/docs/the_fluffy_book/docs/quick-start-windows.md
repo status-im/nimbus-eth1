@@ -29,14 +29,14 @@ mingw32-make fluffy
 ./build/fluffy --help
 ```
 
-### Run a Fluffy client on the public testnet
+### Run a Fluffy client on the Portal network
 
 ```bash
-# Connect to the Portal testnet bootstrap nodes and enable the JSON-RPC APIs
+# Connect to the Portal bootstrap nodes and enable the JSON-RPC APIs
 ./build/fluffy --rpc
 ```
 
-### Try requesting a execution layer block from the network
+### Try requesting an execution layer block from the network
 
 Requesting history content on the Portal network can be easily tested by using the `eth_getBlockByHash` JSON-RPC from the [execution JSON-RPC API](https://ethereum.github.io/execution-apis/api-documentation/).
 

@@ -16,6 +16,7 @@ To quickly get your Fluffy node up and running, follow the quickstart page:
 
   - [Quickstart for Linux / macOS users](./quick-start.md)
   - [Quickstart for Windows users](./quick-start-windows.md)
+  - [Quickstart for Docker users](./quick-start-docker.md)
 
 # Development status
 The Portal Network is a project still in research phase.
