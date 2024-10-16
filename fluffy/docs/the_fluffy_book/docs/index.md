@@ -21,7 +21,7 @@ To quickly get your Fluffy node up and running, follow the quickstart page:
 The Portal Network is a project still in research phase.
 This client is thus still experimental.
 
-However, the Portal history and Portal beacon sub-networks are already operational and can be tested on the public testnet or in a local testnet.
+However, the Portal history, beacon and state sub-networks are already operational and can be tested on the public network or in a local testnet.
 
 ## Get in touch
 
