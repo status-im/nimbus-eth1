@@ -166,8 +166,8 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
 
       var attr = env.clMock.latestPayloadAttributes
       attr.timestamp = w3Qty(shadow.alteredPayload.timestamp, 1)
-      attr.prevRandao = w3Hash()
-      attr.suggestedFeeRecipient = w3Address()
+      attr.prevRandao = default(Hash32)
+      attr.suggestedFeeRecipient = default(Address)
 
       # Execution specification:
       #  (payloadStatus: (status: INVALID, latestValidHash: null, validationError: errorMessage | null), payloadId: null)
@@ -230,7 +230,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
           s.expectStatusEither([PayloadExecutionStatus.syncing, PayloadExecutionStatus.invalid])
 
       # Finally, attempt to fetch the invalid payload using the JSON-RPC endpoint
-      let p = env.engine.client.headerByHash(ethHash shadow.alteredPayload.blockHash)
+      let p = env.engine.client.headerByHash(shadow.alteredPayload.blockHash)
       p.expectError()
       return true
   ))
@@ -261,7 +261,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
         return true
 
       let customizer = CustomPayloadData(
-        parentHash: Opt.some(ethHash shadow.alteredPayload.blockHash),
+        parentHash: Opt.some(shadow.alteredPayload.blockHash),
       )
 
       let followUpAlteredPayload = customizer.customizePayload(env.clMock.latestExecutableData)

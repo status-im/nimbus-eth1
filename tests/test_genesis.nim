@@ -26,7 +26,7 @@ proc findFilePath(file: string): string =
       if path.fileExists:
         return path
 
-proc makeGenesis(networkId: NetworkId): BlockHeader =
+proc makeGenesis(networkId: NetworkId): Header =
   let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = networkParams(networkId))
   com.genesisHeader
 

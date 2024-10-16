@@ -21,6 +21,8 @@ import
   eth/common/transaction_utils,
   results
 
+from eth/common/eth_types_rlp import rlpHash
+
 {.push raises: [].}
 
 type
@@ -34,9 +36,9 @@ type
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
     tx:        PooledTransaction     ## Transaction data
-    itemID:    Hash256               ## Transaction hash
+    itemID:    Hash32               ## Transaction hash
     timeStamp: Time                  ## Time when added
-    sender:    EthAddress            ## Sender account address
+    sender:    Address            ## Sender account address
     info:      string                ## Whatever
     status:    TxItemStatus          ## Transaction status (setter available)
     reject:    TxInfo                ## Reason for moving to waste basket
@@ -59,7 +61,7 @@ proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
   item.timeStamp = utcTime()
   item.reject = txInfoOk
 
-proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash256;
+proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash32;
           status: TxItemStatus; info: string): Result[T,void] {.gcsafe,raises: [].} =
   ## Create item descriptor.
   let rc = tx.tx.recoverSender()
@@ -93,13 +95,13 @@ proc hash*(item: TxItemRef): Hash =
 # Public functions, transaction getters
 # ------------------------------------------------------------------------------
 
-proc itemID*(tx: Transaction): Hash256 =
+proc itemID*(tx: Transaction): Hash32 =
   ## Getter, transaction ID
   tx.rlpHash
 
-proc itemID*(tx: PooledTransaction): Hash256 =
+proc itemID*(tx: PooledTransaction): Hash32 =
   ## Getter, transaction ID
-  tx.tx.rlpHash
+  tx.rlpHash
 
 # core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
 proc cost*(tx: Transaction): UInt256 =
@@ -129,7 +131,7 @@ proc info*(item: TxItemRef): string =
   ## Getter
   item.info
 
-proc itemID*(item: TxItemRef): Hash256 =
+proc itemID*(item: TxItemRef): Hash32 =
   ## Getter
   item.itemID
 
@@ -137,7 +139,7 @@ proc reject*(item: TxItemRef): TxInfo =
   ## Getter
   item.reject
 
-proc sender*(item: TxItemRef): EthAddress =
+proc sender*(item: TxItemRef): Address =
   ## Getter
   item.sender
 

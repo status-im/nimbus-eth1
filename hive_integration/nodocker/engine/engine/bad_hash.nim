@@ -72,20 +72,20 @@ method execute(cs: BadHashOnNewPayload, env: TestEnv): bool =
     onGetPayload: proc(): bool =
       # Alter hash on the payload and send it to client, should produce an error
       shadow.payload = env.clMock.latestExecutableData
-      var invalidHash = ethHash shadow.payload.blockHash
+      var invalidHash = shadow.payload.blockHash
       invalidHash.data[^1] = byte(255 - invalidHash.data[^1])
-      shadow.payload.blockHash = w3Hash invalidHash
+      shadow.payload.blockHash = invalidHash
 
       if not cs.syncing and cs.sidechain:
         # We alter the payload by setting the parent to a known past block in the
         # canonical chain, which makes this payload a side chain payload, and also an invalid block hash
         # (because we did not update the block hash appropriately)
-        shadow.payload.parentHash = w3Hash env.clMock.latestHeader.parentHash
+        shadow.payload.parentHash = env.clMock.latestHeader.parentHash
       elif cs.syncing:
         # We need to send an fcU to put the client in syncing state.
         let
-          randomHeadBlock = Web3Hash.randomBytes()
-          latestHash = w3Hash env.clMock.latestHeader.blockHash
+          randomHeadBlock = Hash32.randomBytes()
+          latestHash = env.clMock.latestHeader.blockHash
           fcU = ForkchoiceStateV1(
             headblockHash:      randomHeadBlock,
             safeblockHash:      latestHash,
@@ -128,7 +128,7 @@ method execute(cs: BadHashOnNewPayload, env: TestEnv): bool =
     # Run test after the new payload has been obtained
     onGetPayload: proc(): bool =
       var customizer = CustomPayloadData(
-        parentHash: Opt.some(ethHash shadow.payload.blockHash),
+        parentHash: Opt.some(shadow.payload.blockHash),
       )
       shadow.payload = customizer.customizePayload(env.clMock.latestExecutableData)
 
@@ -177,7 +177,7 @@ method execute(cs: ParentHashOnNewPayload, env: TestEnv): bool =
       var payload = env.clMock.latestExecutableData
       if cs.syncing:
         # Parent hash is unknown but also (incorrectly) set as the block hash
-        payload.parentHash = Web3Hash.randomBytes()
+        payload.parentHash = Hash32.randomBytes()
 
       payload.blockHash = payload.parentHash
       # Execution specification::

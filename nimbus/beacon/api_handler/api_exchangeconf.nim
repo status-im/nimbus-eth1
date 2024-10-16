@@ -9,8 +9,7 @@
 
 import
   std/[strutils],
-  eth/common,
-  ../web3_eth_conv,
+  eth/common/[base, headers, hashes],
   ../beacon_engine,
   web3/execution_types,
   chronicles
@@ -40,11 +39,11 @@ proc exchangeConf*(ben: BeaconEngineRef,
       $ttd.get, $conf.terminalTotalDifficulty])
 
   let
-    terminalBlockNumber = common.BlockNumber conf.terminalBlockNumber
-    terminalBlockHash   = ethHash conf.terminalBlockHash
+    terminalBlockNumber = base.BlockNumber conf.terminalBlockNumber
+    terminalBlockHash   = conf.terminalBlockHash
 
-  if terminalBlockHash != default(common.Hash256):
-    var headerHash: common.Hash256
+  if terminalBlockHash != default(Hash32):
+    var headerHash: Hash32
 
     if not db.getBlockHash(terminalBlockNumber, headerHash):
       raise newException(ValueError, "cannot get terminal block hash, number $1" %
@@ -54,22 +53,22 @@ proc exchangeConf*(ben: BeaconEngineRef,
       raise newException(ValueError, "invalid terminal block hash, got $1 want $2" %
         [$terminalBlockHash, $headerHash])
 
-    var header: common.BlockHeader
+    var header: Header
     if not db.getBlockHeader(headerHash, header):
       raise newException(ValueError, "cannot get terminal block header, hash $1" %
         [$terminalBlockHash])
 
     return TransitionConfigurationV1(
       terminalTotalDifficulty: ttd.get,
-      terminalBlockHash      : w3Hash headerHash,
-      terminalBlockNumber    : w3Qty header.number
+      terminalBlockHash      : headerHash,
+      terminalBlockNumber    : Quantity(header.number)
     )
 
   if terminalBlockNumber != 0'u64:
     raise newException(ValueError, "invalid terminal block number: $1" % [
       $terminalBlockNumber])
 
-  if terminalBlockHash != default(common.Hash256):
+  if terminalBlockHash != default(Hash32):
     raise newException(ValueError, "invalid terminal block hash, no terminal header set")
 
   TransitionConfigurationV1(terminalTotalDifficulty: ttd.get)

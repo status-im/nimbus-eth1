@@ -9,7 +9,7 @@
 
 import
   std/[tables, strutils],
-  eth/[common, keys],
+  eth/common/[eth_types_rlp, keys],
   stew/byteutils,
   chronos, stint,
   json_rpc/[rpcclient],
@@ -39,7 +39,7 @@ type
     # This tracks the account nonce of the vault account.
     nonce: AccountNonce
     # Created accounts are tracked in this map.
-    accounts: Table[EthAddress, PrivateKey]
+    accounts: Table[Address, PrivateKey]
 
     rng: ref HmacDrbgContext
     chainId: ChainID
@@ -56,7 +56,7 @@ proc newVault*(chainID: ChainID, gasPrice: GasInt, client: RpcClient): Vault =
   result.client   = client
 
 # generateKey creates a new account key and stores it.
-proc generateKey*(v: Vault): EthAddress =
+proc generateKey*(v: Vault): Address =
   let key = PrivateKey.random(v.rng[])
   let address = toCanonicalAddress(key.toPublicKey)
   v.accounts[address] = key
@@ -68,11 +68,11 @@ proc nextNonce*(v: Vault): AccountNonce =
   inc(v.nonce)
   nonce
 
-proc sendSome(address: EthAddress, amount: UInt256): seq[byte] =
+proc sendSome(address: Address, amount: UInt256): seq[byte] =
   const padding = repeat('\0', 12).toBytes
   # makeshift contract ABI construction
   # https://docs.soliditylang.org/en/develop/abi-spec.html
-  let h = keccakHash("sendSome(address,uint256)".toBytes)
+  let h = keccak256("sendSome(address,uint256)".toBytes)
   result.add h.data[0..3] # first 4 bytes of hash
   result.add padding # left pad address
   result.add address.data
@@ -80,7 +80,7 @@ proc sendSome(address: EthAddress, amount: UInt256): seq[byte] =
   doAssert(result.len == 68) # 4 + 32 + 32
 
 proc makeFundingTx*(
-    v: Vault, recipient: EthAddress, amount: UInt256): PooledTransaction =
+    v: Vault, recipient: Address, amount: UInt256): PooledTransaction =
   let
     unsignedTx = Transaction(
       txType  : TxLegacy,
@@ -97,9 +97,9 @@ proc makeFundingTx*(
     tx: signTransaction(unsignedTx, v.vaultKey))
 
 proc signTx*(v: Vault,
-             sender: EthAddress,
+             sender: Address,
              nonce: AccountNonce,
-             recipient: EthAddress,
+             recipient: Address,
              amount: UInt256,
              gasLimit, gasPrice: GasInt,
              payload: seq[byte] = @[]): PooledTransaction =
@@ -122,7 +122,7 @@ proc signTx*(v: Vault,
 
 # createAccount creates a new account that is funded from the vault contract.
 # It will panic when the account could not be created and funded.
-proc createAccount*(v: Vault, amount: UInt256): Future[EthAddress] {.async.} =
+proc createAccount*(v: Vault, amount: UInt256): Future[Address] {.async.} =
   let address = v.generateKey()
 
   # order the vault to send some ether

@@ -10,8 +10,7 @@
 
 import
   std/[tables],
-  eth/keys,
-  eth/common/transaction_utils,
+  eth/common/[keys, transaction_utils],
   stew/endians2,
   nimcrypto/sha2,
   chronicles,
@@ -25,7 +24,7 @@ from std/sequtils import mapIt
 
 type
   BaseTx* = object of RootObj
-    recipient* : Opt[EthAddress]
+    recipient* : Opt[Address]
     gasLimit*  : GasInt
     amount*    : UInt256
     payload*   : seq[byte]
@@ -46,12 +45,12 @@ type
 
   TestAccount* = object
     key*    : PrivateKey
-    address*: EthAddress
+    address*: Address
     index*  : int
 
   TxSender* = ref object
     accounts: seq[TestAccount]
-    nonceMap: Table[EthAddress, uint64]
+    nonceMap: Table[Address, uint64]
     txSent  : int
     chainId : ChainID
 
@@ -70,7 +69,7 @@ type
     gasPriceOrGasFeeCap*: Opt[GasInt]
     gasTipCap*          : Opt[GasInt]
     gas*                : Opt[GasInt]
-    to*                 : Opt[common.EthAddress]
+    to*                 : Opt[common.Address]
     value*              : Opt[UInt256]
     data*               : Opt[seq[byte]]
     chainId*            : Opt[ChainId]
@@ -82,7 +81,7 @@ const
   gasTipPrice* = 1.gwei
   blobGasPrice* = 1.gwei
 
-func toAddress(key: PrivateKey): EthAddress =
+func toAddress(key: PrivateKey): Address =
   toKeyPair(key).pubkey.toCanonicalAddress()
 
 proc createAccount(idx: int): TestAccount =
@@ -103,12 +102,12 @@ proc createAccounts(sender: TxSender) =
 proc getNextAccount*(sender: TxSender): TestAccount =
   sender.accounts[sender.txSent mod sender.accounts.len]
 
-proc getNextNonce(sender: TxSender, address: EthAddress): uint64 =
+proc getNextNonce(sender: TxSender, address: Address): uint64 =
   let nonce = sender.nonceMap.getOrDefault(address, 0'u64)
   sender.nonceMap[address] = nonce + 1
   nonce
 
-proc getLastNonce(sender: TxSender, address: EthAddress): uint64 =
+proc getLastNonce(sender: TxSender, address: Address): uint64 =
   if sender.nonceMap.hasKey(address):
     return 0
   sender.nonceMap[address] - 1
@@ -441,7 +440,7 @@ proc customizeTransaction*(sender: TxSender,
 
   if baseTx.txType == TxEip4844:
     if modTx.to.isNone:
-      var address: EthAddress
+      var address: Address
       modTx.to = Opt.some(address)
 
   if custTx.signature.isSome:

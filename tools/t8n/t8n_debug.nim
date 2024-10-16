@@ -11,7 +11,7 @@
 import
   std/osproc,
   eth/rlp,
-  eth/common,
+  eth/common/eth_types_rlp,
   web3/conversions,
   web3/engine_api_types,
   ../../nimbus/beacon/web3_eth_conv
@@ -44,7 +44,7 @@ type
 
   BCTHash* = object
     number*: Quantity
-    hash: BlockHash
+    hash: Hash32
 
   BCTHashes* = object
     hashes: seq[BCTHash]
@@ -61,7 +61,7 @@ type
     blockHashes*: BCTHashes
     # ommers
     currentBaseFee*: Opt[UInt256]
-    parentUncleHash*: Opt[BlockHash]
+    parentUncleHash*: Opt[Hash32]
     parentBaseFee*: Opt[UInt256]
     parentGasUsed*: Opt[Quantity]
     parentGasLimit*: Opt[Quantity]
@@ -70,7 +70,7 @@ type
     currentExcessBlobGas*: Opt[Quantity]
     parentBlobGasUsed*: Opt[Quantity]
     parentExcessBlobGas*: Opt[Quantity]
-    parentBeaconBlockRoot*: Opt[BlockHash]
+    parentBeaconBlockRoot*: Opt[Hash32]
 
   BCTInput* = object
     alloc: JsonString
@@ -78,7 +78,7 @@ type
     txsRlp: seq[byte]
 
   BCTResult* = object
-    stateRoot*: BlockHash
+    stateRoot*: Hash32
 
   BCTOutput* = object
     result*: BCTResult
@@ -106,17 +106,17 @@ proc writeValue*(w: var JsonWriter[BCTConv], v: BCTHashes)
     for x in v.hashes:
       w.writeField($x.number, x.hash)
 
-func toBlocks(list: openArray[BCTBlock]): seq[EthBlock] =
-  result = newSeqOfCap[EthBlock](list.len)
+func toBlocks(list: openArray[BCTBlock]): seq[Block] =
+  result = newSeqOfCap[Block](list.len)
   for x in list:
-    result.add rlp.decode(x.rlp, EthBlock)
+    result.add rlp.decode(x.rlp, Block)
 
-proc toBctEnv(parentBlock, currentBlock: EthBlock, hashes: BCTHashes): BCTEnv =
+proc toBctEnv(parentBlock, currentBlock: Block, hashes: BCTHashes): BCTEnv =
   let
     parent = parentBlock.header
     current = currentBlock.header
 
-  result.currentCoinbase   = w3Addr(current.coinbase)
+  result.currentCoinbase   = current.coinbase
   result.currentGasLimit   = w3Qty(current.gasLimit)
   result.currentNumber     = w3Qty(current.number)
   result.currentTimestamp  = Opt.some w3Qty(current.timestamp)
@@ -128,10 +128,10 @@ proc toBctEnv(parentBlock, currentBlock: EthBlock, hashes: BCTHashes): BCTEnv =
   #result.currentBlobGasUsed    = w3Qty(current.blobGasUsed)
   #result.currentExcessBlobGas  = w3Qty(current.excessBlobGas)
 
-  result.parentBeaconBlockRoot = w3Hash(current.parentBeaconBlockRoot)
+  result.parentBeaconBlockRoot = current.parentBeaconBlockRoot
   result.parentDifficulty      = Opt.some parent.difficulty
   result.parentTimestamp       = Opt.some w3Qty(parent.timestamp)
-  result.parentUncleHash       = Opt.some w3Hash(parent.ommersHash)
+  result.parentUncleHash       = Opt.some parent.ommersHash
 
   result.parentBaseFee       = parent.baseFeePerGas
   result.parentGasUsed       = Opt.some w3Qty(parent.gasUsed)
@@ -142,7 +142,7 @@ proc toBctEnv(parentBlock, currentBlock: EthBlock, hashes: BCTHashes): BCTEnv =
   result.blockHashes         = hashes
 
 func toInput(prevAlloc: JsonString,
-             prevBlock, currBlock: EthBlock,
+             prevBlock, currBlock: Block,
              hashes: BCTHashes): string =
   let input = BCTInput(
     alloc: prevAlloc,
@@ -151,16 +151,16 @@ func toInput(prevAlloc: JsonString,
   )
   BCTConv.encode(input)
 
-func collectHashes(genesis: EthBlock, blocks: openArray[EthBlock]): BCTHashes =
+func collectHashes(genesis: Block, blocks: openArray[Block]): BCTHashes =
   result.hashes.add BCTHash(
     number: w3Qty(genesis.header.number),
-    hash: w3Hash(rlpHash(genesis.header)),
+    hash: rlpHash(genesis.header),
   )
 
   for blk in blocks:
     result.hashes.add BCTHash(
       number: w3Qty(blk.header.number),
-      hash: w3Hash(rlpHash(blk.header)),
+      hash: rlpHash(blk.header),
     )
 
 func eth(n: int): UInt256 {.compileTime.} =
@@ -207,7 +207,7 @@ proc BCTMain() =
     for c in bctFile.cases:
       var
         prevAlloc = c.data.pre
-        prevBlock = rlp.decode(c.data.genesisRLP, EthBlock)
+        prevBlock = rlp.decode(c.data.genesisRLP, Block)
 
       let
         blocks = toBlocks(c.data.blocks)
@@ -231,7 +231,7 @@ proc BCTMain() =
 
         let
           parsedOutput = BCTConv.decode(output, BCTOutput, allowUnknownFields = true)
-          stateRoot    = ethHash(parsedOutput.result.stateRoot)
+          stateRoot    = parsedOutput.result.stateRoot
 
         debugEcho "BlockNumber, EXITCODE, resultStateRoot, expectedStateRoot, status: ",
           currBlock.header.number, ", ",

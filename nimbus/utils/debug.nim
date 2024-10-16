@@ -18,18 +18,18 @@ import
   ./utils,
   ./state_dump
 
-proc `$`(bloom: BloomFilter): string =
+proc `$`(bloom: Bloom): string =
   bloom.toHex
 
-proc `$`(nonce: BlockNonce): string =
+proc `$`(nonce: Bytes8): string =
   nonce.toHex
 
-proc `$`(data: Blob): string =
+proc `$`(data: seq[byte]): string =
   if data.len == 0:
     return "zero length"
   data.toHex
 
-proc debug*(h: BlockHeader): string =
+proc debug*(h: Header): string =
   result.add "parentHash     : " & $h.parentHash   & "\n"
   result.add "ommersHash     : " & $h.ommersHash   & "\n"
   result.add "coinbase       : " & $h.coinbase     & "\n"
@@ -145,7 +145,7 @@ proc debug*(tx: PooledTransaction): string =
     result.add " - commitments : " & $tx.networkPayload.commitments.len & "\n"
     result.add " - proofs      : " & $tx.networkPayload.proofs.len & "\n"
 
-proc debugSum*(h: BlockHeader): string =
+proc debugSum*(h: Header): string =
   result.add "txRoot         : " & $h.txRoot      & "\n"
   result.add "ommersHash     : " & $h.ommersHash  & "\n"
   if h.withdrawalsRoot.isSome:
@@ -153,7 +153,7 @@ proc debugSum*(h: BlockHeader): string =
   result.add "sumHash        : " & $sumHash(h)   & "\n"
 
 proc debugSum*(body: BlockBody): string =
-  let ommersHash = keccakHash(rlp.encode(body.uncles))
+  let ommersHash = keccak256(rlp.encode(body.uncles))
   let txRoot = calcTxRoot(body.transactions)
   let wdRoot = if body.withdrawals.isSome:
                  calcWithdrawalsRoot(body.withdrawals.get)

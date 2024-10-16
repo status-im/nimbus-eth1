@@ -9,8 +9,8 @@
 # according to those terms.
 
 import
-  ../../utils/utils,
   ../../common/common,
+  ../../utils/utils,
   ../../constants,
   ../../db/ledger,
   ../../transaction,
@@ -31,7 +31,7 @@ import
 # stateless execution of specific transactions.
 proc processTransactions*(
     vmState: BaseVMState,
-    header: BlockHeader,
+    header: Header,
     transactions: seq[Transaction],
     skipReceipts = false,
     collectLogs = false
@@ -60,9 +60,9 @@ proc processTransactions*(
   ok()
 
 proc procBlkPreamble(
-    vmState: BaseVMState, blk: EthBlock, skipValidation, skipReceipts, skipUncles: bool
+    vmState: BaseVMState, blk: Block, skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
-  template header(): BlockHeader =
+  template header(): Header =
     blk.header
 
   let com = vmState.com
@@ -136,9 +136,9 @@ proc procBlkPreamble(
   ok()
 
 proc procBlkEpilogue(
-    vmState: BaseVMState, blk: EthBlock, skipValidation: bool, skipReceipts: bool
+    vmState: BaseVMState, blk: Block, skipValidation: bool, skipReceipts: bool
 ): Result[void, string] =
-  template header(): BlockHeader =
+  template header(): Header =
     blk.header
 
   # Reward beneficiary
@@ -218,7 +218,7 @@ proc procBlkEpilogue(
 
 proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
-    blk: EthBlock, ## Header/body block to add to the blockchain
+    blk: Block, ## Header/body block to add to the blockchain
     skipValidation: bool = false,
     skipReceipts: bool = false,
     skipUncles: bool = false,

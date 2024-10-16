@@ -31,8 +31,8 @@ type
 
   TestEnv = object
     blocks: seq[BlockDesc]
-    genesisHeader: BlockHeader
-    lastBlockHash: Hash256
+    genesisHeader: Header
+    lastBlockHash: Hash32
     network: string
     pre: JsonNode
 
@@ -58,7 +58,7 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.network = node["network"].getStr
   result.pre = node["pre"]
 
-proc rootExists(db: CoreDbRef; root: Hash256): bool =
+proc rootExists(db: CoreDbRef; root: Hash32): bool =
   let state = db.ctx.getAccounts().state(updateOk=true).valueOr:
     return false
   state == root

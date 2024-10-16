@@ -19,7 +19,7 @@ import
   ./tx_info,
   ./tx_item,
   ./tx_tabs/[tx_sender, tx_rank, tx_status],
-  eth/[common, keys],
+  eth/common/[transactions, addresses],
   stew/[keyed_queue, sorted_set],
   results
 
@@ -40,10 +40,10 @@ type
 
     # ----- primary tables ------
 
-    byRejects*: KeyedQueue[Hash256,TxItemRef] ##\
+    byRejects*: KeyedQueue[Hash32,TxItemRef] ##\
       ## Rejects queue and waste basket, queued by disposal event
 
-    byItemID*: KeyedQueue[Hash256,TxItemRef] ##\
+    byItemID*: KeyedQueue[Hash32,TxItemRef] ##\
       ## Primary table containing all tx items, queued by arrival event
 
     # ----- index tables for byItemID ------
@@ -282,11 +282,11 @@ proc nItems*(xp: TxTabsRef): TxTabsItemsCount =
   result.disposed = xp.byRejects.len
 
 # ------------------------------------------------------------------------------
-# Public iterators, `TxRank` > `(EthAddress,TxStatusNonceRef)`
+# Public iterators, `TxRank` > `(Address,TxStatusNonceRef)`
 # ------------------------------------------------------------------------------
 
 iterator incAccount*(xp: TxTabsRef; bucket: TxItemStatus;
-                     fromRank = TxRank.low): (EthAddress,TxStatusNonceRef)
+                     fromRank = TxRank.low): (Address,TxStatusNonceRef)
         {.gcsafe,raises: [KeyError].} =
   ## Walk accounts with increasing ranks and return a nonce-ordered item list.
   let rcBucket = xp.byStatus.eq(bucket)
@@ -308,7 +308,7 @@ iterator incAccount*(xp: TxTabsRef; bucket: TxItemStatus;
 
 
 iterator decAccount*(xp: TxTabsRef; bucket: TxItemStatus;
-                     fromRank = TxRank.high): (EthAddress,TxStatusNonceRef)
+                     fromRank = TxRank.high): (Address,TxStatusNonceRef)
         {.gcsafe,raises: [KeyError].} =
   ## Walk accounts with decreasing ranks and return the nonce-ordered item list.
   let rcBucket = xp.byStatus.eq(bucket)
@@ -329,7 +329,7 @@ iterator decAccount*(xp: TxTabsRef; bucket: TxItemStatus;
       rcRank = xp.byRank.lt(rank) # potenially modified database
 
 iterator packingOrderAccounts*(xp: TxTabsRef; bucket: TxItemStatus):
-        (EthAddress,TxStatusNonceRef)
+        (Address,TxStatusNonceRef)
     {.gcsafe,raises: [KeyError].} =
   ## Loop over accounts from a particular bucket ordered by
   ## For the `txItemStaged` bucket, this iterator defines the packing order

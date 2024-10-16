@@ -11,20 +11,19 @@ import
   std/[strutils],
   stew/byteutils, stint,
   results,
-  eth/common/eth_types_rlp, chronos,
+  eth/common/transaction_utils, 
+  chronos,
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
   graphql/instruments/query_complexity,
   ../db/[ledger],
-  ../rpc/rpc_types,
   ../rpc/rpc_utils,
   ".."/[transaction, evm/state, config, constants],
-  ../common/common,
   ../transaction/call_evm,
   ../core/[tx_pool, tx_pool/tx_item],
-  ../utils/utils,
-  eth/common/transaction_utils
-
+  ../common/common,
+  web3/eth_api_types
+ 
 from eth/p2p import EthereumNode
 export httpserver
 
@@ -43,17 +42,17 @@ type
     ethWithdrawal   = "Withdrawal"
 
   HeaderNode = ref object of Node
-    header: common.BlockHeader
+    header: Header
 
   AccountNode = ref object of Node
-    address: EthAddress
+    address: Address
     account: Account
     db: LedgerRef
 
   TxNode = ref object of Node
     tx: Transaction
     index: uint64
-    blockNumber: common.BlockNumber
+    blockNumber: base.BlockNumber
     receipt: Receipt
     gasUsed: GasInt
     baseFee: Opt[UInt256]
@@ -81,18 +80,18 @@ type
 {.pragma: apiRaises, raises: [].}
 {.pragma: apiPragma, cdecl, gcsafe, apiRaises.}
 
-proc toHash(n: Node): common.Hash256 {.gcsafe, raises: [ValueError].} =
-  common.Hash256.fromHex(n.stringVal)
+proc toHash(n: Node): Hash32 {.gcsafe, raises: [ValueError].} =
+  Hash32.fromHex(n.stringVal)
 
-proc toBlockNumber(n: Node): common.BlockNumber {.gcsafe, raises: [ValueError].} =
+proc toBlockNumber(n: Node): base.BlockNumber {.gcsafe, raises: [ValueError].} =
   if n.kind == nkInt:
-    result = parse(n.intVal, UInt256, radix = 10).truncate(common.BlockNumber)
+    result = parse(n.intVal, UInt256, radix = 10).truncate(base.BlockNumber)
   elif n.kind == nkString:
-    result = parse(n.stringVal, UInt256, radix = 16).truncate(common.BlockNumber)
+    result = parse(n.stringVal, UInt256, radix = 16).truncate(base.BlockNumber)
   else:
     doAssert(false, "unknown node type: " & $n.kind)
 
-proc headerNode(ctx: GraphqlContextRef, header: common.BlockHeader): Node =
+proc headerNode(ctx: GraphqlContextRef, header: Header): Node =
   HeaderNode(
     kind: nkMap,
     typeName: ctx.ids[ethBlock],
@@ -100,7 +99,7 @@ proc headerNode(ctx: GraphqlContextRef, header: common.BlockHeader): Node =
     header: header
   )
 
-proc accountNode(ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: LedgerRef): Node =
+proc accountNode(ctx: GraphqlContextRef, acc: Account, address: Address, db: LedgerRef): Node =
   AccountNode(
     kind: nkMap,
     typeName: ctx.ids[ethAccount],
@@ -110,7 +109,7 @@ proc accountNode(ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: 
     db: db
   )
 
-proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: uint64, blockNumber: common.BlockNumber, baseFee: Opt[UInt256]): Node =
+proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: uint64, blockNumber: base.BlockNumber, baseFee: Opt[UInt256]): Node =
   TxNode(
     kind: nkMap,
     typeName: ctx.ids[ethTransaction],
@@ -147,7 +146,7 @@ proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
     wd: wd
   )
 
-proc getStateDB(com: CommonRef, header: common.BlockHeader): LedgerRef =
+proc getStateDB(com: CommonRef, header: Header): LedgerRef =
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
   LedgerRef.init(com.db, header.stateRoot)
@@ -158,7 +157,7 @@ proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
   except CatchableError as e:
     err(e.msg)
 
-proc getBlockByNumber(ctx: GraphqlContextRef, number: common.BlockNumber): RespResult =
+proc getBlockByNumber(ctx: GraphqlContextRef, number: base.BlockNumber): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, number)))
   except CatchableError as e:
@@ -170,7 +169,7 @@ proc getBlockByHash(ctx: GraphqlContextRef, hash: Node): RespResult =
   except CatchableError as e:
     err(e.msg)
 
-proc getBlockByHash(ctx: GraphqlContextRef, hash: common.Hash256): RespResult =
+proc getBlockByHash(ctx: GraphqlContextRef, hash: Hash32): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, hash)))
   except CatchableError as e:
@@ -182,7 +181,7 @@ proc getLatestBlock(ctx: GraphqlContextRef): RespResult =
   except CatchableError as e:
     err("can't get latest block: " & e.msg)
 
-proc getTxCount(ctx: GraphqlContextRef, txRoot: common.Hash256): RespResult =
+proc getTxCount(ctx: GraphqlContextRef, txRoot: Hash32): RespResult =
   try:
     ok(resp(getTransactionCount(ctx.chainDB, txRoot)))
   except CatchableError as e:
@@ -231,25 +230,25 @@ proc bigIntNode(x: uint64 | int64): RespResult =
 proc byte32Node(val: UInt256): RespResult =
   ok(Node(kind: nkString, stringVal: "0x" & val.dumpHex, pos: Pos()))
 
-proc resp(hash: common.Hash32 | common.Bytes32): RespResult =
+proc resp(hash: Hash32 | Bytes32): RespResult =
   ok(resp(hash.to0xHex))
 
 proc resp(data: openArray[byte]): RespResult =
   ok(resp("0x" & data.toHex))
 
-proc getTotalDifficulty(ctx: GraphqlContextRef, blockHash: common.Hash256): RespResult =
+proc getTotalDifficulty(ctx: GraphqlContextRef, blockHash: Hash32): RespResult =
   let score = getScore(ctx.chainDB, blockHash).valueOr:
     return err("can't get total difficulty")
 
   bigIntNode(score)
 
-proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: common.Hash256): RespResult =
+proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: Hash32): RespResult =
   try:
     ok(resp(getUnclesCount(ctx.chainDB, ommersHash)))
   except CatchableError as e:
     err("can't get ommers count: " & e.msg)
 
-proc getOmmers(ctx: GraphqlContextRef, ommersHash: common.Hash256): RespResult =
+proc getOmmers(ctx: GraphqlContextRef, ommersHash: Hash32): RespResult =
   try:
     let uncles = getUncles(ctx.chainDB, ommersHash)
     when false:
@@ -264,7 +263,7 @@ proc getOmmers(ctx: GraphqlContextRef, ommersHash: common.Hash256): RespResult =
   except CatchableError as e:
     err("can't get ommers: " & e.msg)
 
-proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: common.Hash256, index: int): RespResult =
+proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: Hash32, index: int): RespResult =
   try:
     let uncles = getUncles(ctx.chainDB, ommersHash)
     if uncles.len == 0:
@@ -275,7 +274,7 @@ proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: common.Hash256, index: int):
   except CatchableError as e:
     err("can't get ommer: " & e.msg)
 
-proc getTxs(ctx: GraphqlContextRef, header: common.BlockHeader): RespResult =
+proc getTxs(ctx: GraphqlContextRef, header: Header): RespResult =
   try:
     let txCount = getTransactionCount(ctx.chainDB, header.txRoot)
     if txCount == 0:
@@ -300,7 +299,7 @@ proc getTxs(ctx: GraphqlContextRef, header: common.BlockHeader): RespResult =
   except CatchableError as e:
     err("can't get transactions: " & e.msg)
 
-proc getWithdrawals(ctx: GraphqlContextRef, header: common.BlockHeader): RespResult =
+proc getWithdrawals(ctx: GraphqlContextRef, header: Header): RespResult =
   try:
     if header.withdrawalsRoot.isSome:
       let wds = getWithdrawals(ctx.chainDB, header.withdrawalsRoot.get)
@@ -313,7 +312,7 @@ proc getWithdrawals(ctx: GraphqlContextRef, header: common.BlockHeader): RespRes
   except CatchableError as e:
     err("can't get transactions: " & e.msg)
 
-proc getTxAt(ctx: GraphqlContextRef, header: common.BlockHeader, index: uint64): RespResult =
+proc getTxAt(ctx: GraphqlContextRef, header: Header, index: uint64): RespResult =
   try:
     var tx: Transaction
     if getTransactionByIndex(ctx.chainDB, header.txRoot, index.uint16, tx):
@@ -337,7 +336,7 @@ proc getTxAt(ctx: GraphqlContextRef, header: common.BlockHeader, index: uint64):
   except RlpError as exc:
     err("can't get transaction by index '" & $index & "': " & exc.msg)
 
-proc getTxByHash(ctx: GraphqlContextRef, hash: common.Hash256): RespResult =
+proc getTxByHash(ctx: GraphqlContextRef, hash: Hash32): RespResult =
   try:
     let (blockNumber, index) = getTransactionKey(ctx.chainDB, hash)
     let header = getBlockHeader(ctx.chainDB, blockNumber)
@@ -345,7 +344,7 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: common.Hash256): RespResult =
   except CatchableError as e:
     err("can't get transaction by hash '" & hash.data.toHex & "': $2" & e.msg)
 
-proc accountNode(ctx: GraphqlContextRef, header: common.BlockHeader, address: EthAddress): RespResult =
+proc accountNode(ctx: GraphqlContextRef, header: Header, address: Address): RespResult =
   try:
     let db = getStateDB(ctx.com, header)
     when false:
@@ -999,7 +998,7 @@ proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   let ctx = GraphqlContextRef(ud)
   let h = HeaderNode(parent)
   try:
-    let address = EthAddress.fromHex(params[0].val.stringVal)
+    let address = Address.fromHex(params[0].val.stringVal)
     ctx.accountNode(h.header, address)
   except ValueError as ex:
     err(ex.msg)
@@ -1055,7 +1054,7 @@ proc toTxArgs(n: Node): TransactionArgs {.gcsafe, raises: [ValueError].} =
   optionalBytes(result.data, n, fData)
 
 proc makeCall(ctx: GraphqlContextRef, args: TransactionArgs,
-              header: common.BlockHeader): RespResult =
+              header: Header): RespResult =
   let res = rpcCallEvm(args, header, ctx.com).valueOr:
               return err("Failed to call rpcCallEvm")
   var map = respMap(ctx.ids[ethCallResult])
@@ -1237,7 +1236,7 @@ const pendingProcs = {
   "estimateGas": pendingEstimateGas
 }
 
-proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): common.BlockNumber =
+proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): base.BlockNumber =
   if number.kind == nkEmpty:
     ctx.com.syncCurrent
   else:
@@ -1246,7 +1245,7 @@ proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): common.BlockNumber =
 proc queryAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   try:
-    let address = EthAddress.fromHex(params[0].val.stringVal)
+    let address = Address.fromHex(params[0].val.stringVal)
     let blockNumber = pickBlockNumber(ctx, params[1].val)
     let hres = getBlockByNumber(ctx, blockNumber)
     if hres.isErr:

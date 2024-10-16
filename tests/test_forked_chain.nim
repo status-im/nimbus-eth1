@@ -39,8 +39,8 @@ proc newCom(env: TestEnv): CommonRef =
       env.conf.networkParams
     )
 
-proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock): EthBlock =
-  template parent(): BlockHeader =
+proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block): Block =
+  template parent(): Header =
     parentBlk.header
 
   var wds = newSeqOfCap[Withdrawal](number.int)
@@ -63,7 +63,7 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock): EthBlock
     withdrawals: Opt.some(move(wds))
   )
 
-  let header = BlockHeader(
+  let header = Header(
     number     : number,
     parentHash : parent.blockHash,
     difficulty : 0.u256,
@@ -80,20 +80,20 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock): EthBlock
     parentBeaconBlockRoot: parent.parentBeaconBlockRoot,
   )
 
-  EthBlock.init(header, body)
+  Block.init(header, body)
 
-proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: EthBlock, extraData: byte): EthBlock =
+proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block, extraData: byte): Block =
   var blk = com.makeBlk(number, parentBlk)
   blk.header.extraData = @[extraData]
   blk
 
-proc headHash(c: CommonRef): Hash256 =
+proc headHash(c: CommonRef): Hash32 =
   c.db.getCanonicalHead().blockHash
 
-func blockHash(x: EthBlock): Hash256 =
+func blockHash(x: Block): Hash32 =
   x.header.blockHash
 
-proc wdWritten(com: CommonRef, blk: EthBlock): int =
+proc wdWritten(com: CommonRef, blk: Block): int =
   if blk.header.withdrawalsRoot.isSome:
     com.db.getWithdrawals(blk.header.withdrawalsRoot.get).len
   else:
@@ -105,7 +105,7 @@ proc forkedChainMain*() =
     let
       cc = env.newCom
       genesisHash = cc.genesisHeader.blockHash
-      genesis = EthBlock.init(cc.genesisHeader, BlockBody())
+      genesis = Block.init(cc.genesisHeader, BlockBody())
 
     let
       blk1 = cc.makeBlk(1, genesis)

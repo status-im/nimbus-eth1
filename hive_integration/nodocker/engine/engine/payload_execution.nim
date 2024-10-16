@@ -184,7 +184,7 @@ method execute(cs: InOrderPayloadExecutionTest, env: TestEnv): bool =
 
   # Head must point to the latest produced payload
   let p = sec.client.latestHeader()
-  p.expectHash(ethHash env.clMock.latestExecutedPayload.blockHash)
+  p.expectHash(env.clMock.latestExecutedPayload.blockHash)
   return true
 
 type
@@ -349,12 +349,12 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
 
       # Send the forkchoiceUpdated with a reference to the valid payload on the SYNCING client.
       var
-        random                = w3Hash()
-        suggestedFeeRecipient = w3Address()
+        random                = default(Hash32)
+        suggestedFeeRecipient = default(Address)
 
       let customizer = BasePayloadAttributesCustomizer(
-        prevRandao: Opt.some(ethHash random),
-        suggestedFeerecipient: Opt.some(ethAddr suggestedFeeRecipient),
+        prevRandao: Opt.some(random),
+        suggestedFeerecipient: Opt.some(suggestedFeeRecipient),
       )
 
       let newAttr = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
@@ -464,5 +464,5 @@ method execute(cs: NewPayloadWithMissingFcUTest, env: TestEnv): bool =
 
   # Now the head should've changed to the latest PoS block
   let s = sec.client.latestHeader()
-  s.expectHash(ethHash fcU.headblockHash)
+  s.expectHash(fcU.headblockHash)
   return true

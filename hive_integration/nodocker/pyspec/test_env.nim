@@ -31,9 +31,9 @@ type
     rpcServer : RpcHttpServer
     rpcClient*: RpcHttpClient
 
-proc genesisHeader(node: JsonNode): BlockHeader =
+proc genesisHeader(node: JsonNode): Header =
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
-  rlp.decode(genesisRLP, EthBlock).header
+  rlp.decode(genesisRLP, Block).header
 
 proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
   let

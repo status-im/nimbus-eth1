@@ -44,21 +44,21 @@ type
     baseFeePerGas*    : Opt[UInt256]
     prevRandao*       : Bytes32
     difficulty*       : UInt256
-    coinbase*         : EthAddress
+    coinbase*         : Address
     excessBlobGas*    : uint64
     parentHash*       : Hash32
 
   TxContext* = object
-    origin*         : EthAddress
+    origin*         : Address
     gasPrice*       : GasInt
-    versionedHashes*: VersionedHashes
+    versionedHashes*: seq[VersionedHash]
     blobBaseFee*    : UInt256
 
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
     stateDB*          : LedgerRef
     gasPool*          : GasInt
-    parent*           : BlockHeader
+    parent*           : Header
     blockCtx*         : BlockContext
     txCtx*            : TxContext
     flags*            : set[VMFlag]
@@ -111,9 +111,9 @@ type
     kind*:             CallKind
     depth*:            int
     gas*:              GasInt
-    sender*:           EthAddress
-    contractAddress*:  EthAddress
-    codeAddress*:      EthAddress
+    sender*:           Address
+    contractAddress*:  Address
+    codeAddress*:      Address
     value*:            UInt256
     data*:             seq[byte]
     flags*:            MsgFlags
@@ -140,7 +140,7 @@ method captureTxEnd*(ctx: TracerRef, restGas: GasInt) {.base, gcsafe.} =
 
 # Top call frame
 method captureStart*(ctx: TracerRef, comp: Computation,
-                     sender: EthAddress, to: EthAddress,
+                     sender: Address, to: Address,
                      create: bool, input: openArray[byte],
                      gasLimit: GasInt, value: UInt256) {.base, gcsafe.} =
   discard
@@ -151,7 +151,7 @@ method captureEnd*(ctx: TracerRef, comp: Computation, output: openArray[byte],
 
 # Rest of call frames
 method captureEnter*(ctx: TracerRef, comp: Computation, op: Op,
-                     sender: EthAddress, to: EthAddress,
+                     sender: Address, to: Address,
                      input: openArray[byte], gasLimit: GasInt,
                      value: UInt256) {.base, gcsafe.} =
   discard

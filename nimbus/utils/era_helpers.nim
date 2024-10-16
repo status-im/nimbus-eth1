@@ -16,7 +16,9 @@ import
   std/[os, strutils],
   stew/io2,
   ../config,
-  ../common/common,
+  utils,
+  eth/common/[hashes, headers, blocks, transactions_rlp],
+  eth/common/transactions as tx_types,
   beacon_chain/era_db,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/[forks, helpers],
@@ -95,20 +97,20 @@ proc loadHistoricalRootsFromEra*(
         )
       )
 
-proc getTxs*(txs: seq[bellatrix.Transaction]): seq[common.Transaction] =
-  var transactions = newSeqOfCap[common.Transaction](txs.len)
+proc getTxs*(txs: seq[bellatrix.Transaction]): seq[tx_types.Transaction] =
+  var transactions = newSeqOfCap[tx_types.Transaction](txs.len)
   for tx in txs:
     try:
-      transactions.add(rlp.decode(tx.asSeq(), common.Transaction))
+      transactions.add(rlp.decode(tx.asSeq(), tx_types.Transaction))
     except RlpError:
       return @[]
   return transactions
 
-proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[common.Withdrawal] =
-  var withdrawals = newSeqOfCap[common.Withdrawal](x.len)
+proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[blocks.Withdrawal] =
+  var withdrawals = newSeqOfCap[blocks.Withdrawal](x.len)
   for w in x:
     withdrawals.add(
-      common.Withdrawal(
+      blocks.Withdrawal(
         index: w.index,
         validatorIndex: w.validator_index,
         address: EthAddress(w.address.data),
@@ -128,12 +130,12 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
         when consensusFork >= ConsensusFork.Capella:
           Opt.some(getWithdrawals(payload.withdrawals.asSeq()))
         else:
-          Opt.none(seq[common.Withdrawal])
+          Opt.none(seq[blocks.Withdrawal])
       withdrawalRoot =
         when consensusFork >= ConsensusFork.Capella:
           Opt.some(calcWithdrawalsRoot(ethWithdrawals.get()))
         else:
-          Opt.none(common.Hash256)
+          Opt.none(Hash32)
       blobGasUsed =
         when consensusFork >= ConsensusFork.Deneb:
           Opt.some(payload.blob_gas_used)
@@ -146,26 +148,26 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
           Opt.none(uint64)
       parentBeaconBlockRoot =
         when consensusFork >= ConsensusFork.Deneb:
-          Opt.some(common.Hash32(blck.parent_root.data))
+          Opt.some(Hash32(blck.parent_root.data))
         else:
-          Opt.none(common.Hash32)
+          Opt.none(Hash32)
 
-      header = BlockHeader(
+      header = Header(
         parentHash: Hash32(payload.parent_hash.data),
         ommersHash: EMPTY_UNCLE_HASH,
         coinbase: EthAddress(payload.fee_recipient.data),
         stateRoot: Root(payload.state_root.data),
         transactionsRoot: calcTxRoot(txs),
         receiptsRoot: Root(payload.receipts_root.data),
-        logsBloom: BloomFilter(payload.logs_bloom.data),
+        logsBloom: Bloom(payload.logs_bloom.data),
         difficulty: 0.u256,
         number: payload.block_number,
         gasLimit: GasInt(payload.gas_limit),
         gasUsed: GasInt(payload.gas_used),
         timestamp: EthTime(payload.timestamp),
         extraData: payload.extra_data.asSeq(),
-        mixHash: Bytes32 payload.prev_randao.data,
-        nonce: default(BlockNonce),
+        mixHash: Bytes32(payload.prev_randao.data),
+        nonce: default(Bytes8),
         baseFeePerGas: Opt.some(payload.base_fee_per_gas),
         withdrawalsRoot: withdrawalRoot,
         blobGasUsed: blobGasUsed,

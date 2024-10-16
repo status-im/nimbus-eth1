@@ -13,7 +13,7 @@ import
   results,
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
-  eth/[common, keys],
+  eth/common/keys,
   chronicles,
   nimcrypto/[ripemd, sha2, utils],
   bncurve/[fields, groups],
@@ -22,7 +22,8 @@ import
   ../core/eip4844,
   ./modexp,
   ./evm_errors,
-  ./computation
+  ./computation,
+  eth/common/[base, addresses]
 
 type
   PrecompileAddresses* = enum
@@ -709,15 +710,15 @@ proc pointEvaluation(c: Computation): EvmResultVoid =
 # Public functions
 # ------------------------------------------------------------------------------
 
-iterator activePrecompiles*(fork: EVMFork): EthAddress =
-  var res: EthAddress
+iterator activePrecompiles*(fork: EVMFork): Address =
+  var res: Address
   let maxPrecompileAddr = getMaxPrecompileAddr(fork)
   for c in PrecompileAddresses.low..maxPrecompileAddr:
     if validPrecompileAddr(c.byte, maxPrecompileAddr.byte):
       res.data[^1] = c.byte
       yield res
 
-func activePrecompilesList*(fork: EVMFork): seq[EthAddress] =
+func activePrecompilesList*(fork: EVMFork): seq[Address] =
   for address in activePrecompiles(fork):
     result.add address
 

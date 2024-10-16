@@ -11,8 +11,7 @@
 import
   std/[tables],
   chronicles,
-  stew/[byteutils],
-  eth/common, chronos,
+  eth/common/eth_types_rlp, chronos,
   json_rpc/rpcclient,
   web3/execution_types,
   ../../../nimbus/beacon/web3_eth_conv,
@@ -45,24 +44,24 @@ type
     # Block Production State
     clients                 : ClientPool
     nextBlockProducer*      : EngineEnv
-    nextFeeRecipient*       : EthAddress
-    nextPayloadID*          : PayloadID
+    nextFeeRecipient*       : Address
+    nextPayloadID*          : Bytes8
     currentPayloadNumber*   : uint64
 
     # Chain History
-    headerHistory           : Table[uint64, common.BlockHeader]
+    headerHistory           : Table[uint64, Header]
 
     # Payload ID History
-    payloadIDHistory        : Table[string, PayloadID]
+    payloadIDHistory        : Table[string, Bytes8]
 
     # PoS Chain History Information
-    prevRandaoHistory*      : Table[uint64, common.Hash256]
+    prevRandaoHistory*      : Table[uint64, Hash32]
     executedPayloadHistory* : Table[uint64, ExecutionPayload]
-    headHashHistory         : seq[BlockHash]
+    headHashHistory         : seq[Hash32]
 
     # Latest broadcasted data using the PoS Engine API
     latestHeadNumber*       : uint64
-    latestHeader*           : common.BlockHeader
+    latestHeader*           : Header
     latestPayloadBuilt*     : ExecutionPayload
     latestBlockValue*       : Opt[UInt256]
     latestBlobsBundle*      : Opt[BlobsBundleV1]
@@ -91,7 +90,7 @@ type
     onFinalizedBlockChange*    : proc(): bool {.gcsafe.}
 
 
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
+proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
   for w3tx in list:
     let tx = ethTx(w3tx)
     for h in tx.versionedHashes:
@@ -100,7 +99,7 @@ proc collectBlobHashes(list: openArray[Web3Tx]): seq[common.Hash256] =
 func latestExecutableData*(cl: CLMocker): ExecutableData =
   ExecutableData(
     basePayload: cl.latestPayloadBuilt,
-    beaconRoot : ethHash cl.latestPayloadAttributes.parentBeaconBlockRoot,
+    beaconRoot : cl.latestPayloadAttributes.parentBeaconBlockRoot,
     attr       : cl.latestPayloadAttributes,
     versionedHashes: Opt.some(collectBlobHashes(cl.latestPayloadBuilt.transactions)),
   )
@@ -159,7 +158,7 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
   cl.headerHistory[header.number] = header
   cl.ttdReached = true
 
-  let headerHash = BlockHash(common.blockHash(cl.latestHeader).data)
+  let headerHash = cl.latestHeader.blockHash
   if cl.slotsToSafe == 0:
     cl.latestForkchoice.safeBlockHash = headerHash
 
@@ -190,7 +189,7 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
   return true
 
 # Check whether a block number is a PoS block
-proc isBlockPoS*(cl: CLMocker, bn: common.BlockNumber): bool =
+proc isBlockPoS*(cl: CLMocker, bn: eth_types.BlockNumber): bool =
   if cl.firstPoSBlockNumber.isNone:
     return false
 
@@ -200,9 +199,9 @@ proc isBlockPoS*(cl: CLMocker, bn: common.BlockNumber): bool =
 
   return true
 
-proc addPayloadID*(cl: CLMocker, eng: EngineEnv, newPayloadID: PayloadID): bool =
+proc addPayloadID*(cl: CLMocker, eng: EngineEnv, newPayloadID: Bytes8): bool =
   # Check if payload ID has been used before
-  var zeroPayloadID: PayloadID
+  var zeroPayloadID: Bytes8
   if cl.payloadIDHistory.getOrDefault(eng.ID(), zeroPayloadID) == newPayloadID:
     error "reused payload ID", ID = newPayloadID.toHex
     return false
@@ -270,7 +269,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 
 proc generatePayloadAttributes(cl: CLMocker) =
   # Generate a random value for the PrevRandao field
-  let nextPrevRandao = common.Hash256.randomBytes()
+  let nextPrevRandao = Hash32.randomBytes()
   let timestamp = Quantity cl.getNextBlockTimestamp.uint64
   cl.latestPayloadAttributes = PayloadAttributes(
     timestamp:             timestamp,
@@ -314,7 +313,7 @@ proc requestNextPayload(cl: CLMocker): bool =
   cl.nextPayloadID = s.payloadID.get()
   return true
 
-proc getPayload(cl: CLMocker, payloadId: PayloadID): Result[GetPayloadResponse, string] =
+proc getPayload(cl: CLMocker, payloadId: Bytes8): Result[GetPayloadResponse, string] =
   let ts = cl.latestPayloadAttributes.timestamp
   let client = cl.nextBlockProducer.client
   if cl.isCancun(ts):
@@ -337,9 +336,9 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestBlobsBundle = x.blobsBundle
   cl.latestShouldOverrideBuilder = x.shouldOverrideBuilder
 
-  let beaconRoot = ethHash cl.latestPayloadAttributes.parentBeaconblockRoot
+  let beaconRoot = cl.latestPayloadAttributes.parentBeaconblockRoot
   let header = blockHeader(cl.latestPayloadBuilt, beaconRoot = beaconRoot)
-  let blockHash = w3Hash header.blockHash
+  let blockHash = header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",
       expected=cl.latestPayloadBuilt.blockHash,
@@ -364,7 +363,7 @@ proc getNextPayload(cl: CLMocker): bool =
       get=cl.latestPayloadAttributes.prevRandao
     return false
 
-  if cl.latestPayloadBuilt.parentHash != BlockHash cl.latestHeader.blockHash.data:
+  if cl.latestPayloadBuilt.parentHash != cl.latestHeader.blockHash:
     error "CLMocker: Incorrect ParentHash on payload built",
       expect=cl.latestPayloadBuilt.parentHash,
       get=cl.latestHeader.blockHash
@@ -378,12 +377,12 @@ proc getNextPayload(cl: CLMocker): bool =
 
   return true
 
-func versionedHashes(payload: ExecutionPayload): seq[Web3Hash] =
-  result = newSeqOfCap[BlockHash](payload.transactions.len)
+func versionedHashes(payload: ExecutionPayload): seq[Hash32] =
+  result = newSeqOfCap[Hash32](payload.transactions.len)
   for x in payload.transactions:
     let tx = rlp.decode(distinctBase(x), Transaction)
     for vs in tx.versionedHashes:
-      result.add w3Hash vs
+      result.add vs
 
 proc broadcastNewPayload(cl: CLMocker,
                          eng: EngineEnv,
@@ -432,7 +431,7 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
       # the blockHash of the payload is valid
       # the payload doesn't extend the canonical chain
       # the payload hasn't been fully validated.
-      let nullHash = w3Hash default(common.Hash256)
+      let nullHash = default(Hash32)
       let latestValidHash = s.latestValidHash.get(nullHash)
       if s.latestValidHash.isSome and latestValidHash != nullHash:
         error "CLMocker: NewPayload returned ACCEPTED status with incorrect LatestValidHash",
@@ -498,10 +497,10 @@ proc broadcastLatestForkchoice(cl: CLMocker): bool =
   let version = cl.latestExecutedPayload.version
   cl.broadcastForkchoiceUpdated(version, cl.latestForkchoice)
 
-func w3Address(x: int): Web3Address =
+func w3Address(x: int): Address =
   var res: array[20, byte]
   res[^1] = x.byte
-  Web3Address(res)
+  Address(res)
 
 proc makeNextWithdrawals(cl: CLMocker): seq[WithdrawalV1] =
   var
@@ -636,7 +635,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     return false
 
   let newHeader = res.get
-  let newHash = w3Hash newHeader.blockHash
+  let newHash = newHeader.blockHash
   if newHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: None of the clients accepted the newly constructed payload",
       hash=newHash.toHex
@@ -661,7 +660,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     return false
 
   # nonce == 0x0000000000000000
-  if newHeader.nonce != default(BlockNonce):
+  if newHeader.nonce != default(Bytes8):
     error "CLMocker: Client produced a new header with incorrect nonce",
       nonce = newHeader.nonce.toHex
     return false

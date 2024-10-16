@@ -23,7 +23,7 @@ export
 # Pre Eip 1559 gas limit validation
 # ------------------------------------------------------------------------------
 
-proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void,string] =
+proc validateGasLimit(header: Header; limit: GasInt): Result[void,string] =
   let diff = if limit > header.gasLimit:
                limit - header.gasLimit
              else:
@@ -42,7 +42,7 @@ proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void,string] =
 # ------------------------------------------------------------------------------
 
 # consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]
-proc calcEip1599BaseFee*(com: CommonRef; parent: BlockHeader): UInt256 =
+proc calcEip1599BaseFee*(com: CommonRef; parent: Header): UInt256 =
   ## calculates the basefee of the header.
 
   # If the current block is the first EIP-1559 block, return the
@@ -54,7 +54,7 @@ proc calcEip1599BaseFee*(com: CommonRef; parent: BlockHeader): UInt256 =
 
 # consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
 proc verifyEip1559Header(com: CommonRef;
-                         parent, header: BlockHeader): Result[void, string]
+                         parent, header: Header): Result[void, string]
                         {.raises: [].} =
   ## Verify that the gas limit remains within allowed bounds
   let limit = if com.isLondonOrLater(parent.number):
@@ -81,7 +81,7 @@ proc verifyEip1559Header(com: CommonRef;
   return ok()
 
 proc validateGasLimitOrBaseFee*(com: CommonRef;
-                                header, parent: BlockHeader): Result[void, string] =
+                                header, parent: Header): Result[void, string] =
 
   if not com.isLondonOrLater(header.number):
     # Verify BaseFee not present before EIP-1559 fork.

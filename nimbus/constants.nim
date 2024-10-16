@@ -11,8 +11,8 @@
 {.used.}
 
 import
-  stew/byteutils,
-  eth/common/eth_types
+  stint,
+  eth/common/[addresses, hashes, base]
 
 # proc default(t: typedesc): t = discard -- notused
 
@@ -25,10 +25,10 @@ const
   # Transactions to ZERO_ADDRESS are legitimate transfers to that account, not
   # contract creations.  They are used to "burn" Eth.  People also send Eth to
   # address zero by accident, unrecoverably, due to poor user interface issues.
-  ZERO_ADDRESS* =                           default(EthAddress)
+  ZERO_ADDRESS* =                           default(Address)
 
   # ZERO_HASH256 is the parent hash of genesis blocks.
-  ZERO_HASH256* =                           default(Hash256)
+  ZERO_HASH256* =                           default(Hash32)
 
   GAS_LIMIT_ADJUSTMENT_FACTOR* =            1_024
 
@@ -103,7 +103,7 @@ const
   SYSTEM_ADDRESS* = address"0xfffffffffffffffffffffffffffffffffffffffe"
 
   RIPEMD_ADDR* = block:
-    proc initAddress(x: int): EthAddress {.compileTime.} =
+    proc initAddress(x: int): Address {.compileTime.} =
       result.data[19] = x.byte
     initAddress(3)
 

@@ -62,7 +62,7 @@ proc `==`(a: openArray[AccessTuple], b: openArray[AccessPair]): bool =
     return false
 
   for i in 0..<a.len:
-    if a[i].address != w3Addr b[i].address:
+    if a[i].address != b[i].address:
       return false
     if a[i].storageKeys.len != b[i].storageKeys.len:
       return false
