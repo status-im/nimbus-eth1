@@ -394,11 +394,55 @@ proc updateHeadIfNecessary(c: ForkedChainRef,
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc init*(
+    T: type ForkedChainRef;
+    com: CommonRef;
+    baseDistance = BaseDistance.uint64;
+    extraValidation = true;
+      ): T =
+  ## Constructor that uses the current database ledger state for initialising.
+  ## This state coincides with the canonical head that would be used for
+  ## setting up the descriptor.
+  ##
+  ## With `ForkedChainRef` based import, the canonical state lives only inside
+  ## a level one database transaction. Thus it will readily be available on the
+  ## running system with tools such as `getCanonicalHead()`. But it will never
+  ## be saved on the database.
+  ##
+  ## This constructor also works well when resuming import after running
+  ## `persistentBlocks()` used for `Era1` or `Era` import.
+  ##
+  let
+    base = com.db.getSavedStateBlockNumber
+  var
+    baseHash: Hash32
+    baseHeader: Header
+  try:
+    baseHash = com.db.getBlockHash(base)
+    baseHeader = com.db.getBlockHeader(baseHash)
+  except BlockNotFound:
+    raiseAssert "Base header missing for #" & $base
+
+  # update global syncStart
+  com.syncStart = baseHeader.number
+
+  T(com:             com,
+    db:              com.db,
+    baseHeader:      baseHeader,
+    cursorHash:      baseHash,
+    baseHash:        baseHash,
+    cursorHeader:    baseHeader,
+    extraValidation: extraValidation,
+    baseDistance:    baseDistance,
+    txRecords:       initTable[Hash256, (Hash256, uint64)]())
+
 proc newForkedChain*(com: CommonRef,
                      baseHeader: Header,
                      baseDistance: uint64 = BaseDistance,
                      extraValidation: bool = true): ForkedChainRef =
-
+  ## This constructor allows to set up the base state which might be needed
+  ## for some particular test or other applications. Otherwise consider
+  ## `init()`.
   let baseHash = baseHeader.blockHash
 
   var chain = ForkedChainRef(
