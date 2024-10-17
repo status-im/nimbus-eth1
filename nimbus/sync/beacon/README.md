@@ -149,17 +149,19 @@ Block chain import/execution
 The following diagram with a partially imported/executed block chain amends the
 layout *(1)*:
 
-      0                  B       C                     D                H    (5)
-      o------------------o-------o---------------------o----------------o-->
+      0            B     L       C                     D                H    (5)
+      o------------o-----o-------o---------------------o----------------o-->
       | <-- imported --> |       |                     |                |
       | <-------  linked ------> | <-- unprocessed --> | <-- linked --> |
 
+where
 
-where *B* is the **base**, i.e. the **base state** block number of the last
-imported/executed block. It also refers to the global state block number of
-the ledger database.
+* *B* is the **base state** stored on the persistent state database. *B* is
+  not addressed directly except upon start up or resuming sync when *B == L*.
+* *L* is the last imported/executed block, typically up to the **canonical
+  consensus head**.
 
-The headers corresponding to the half open interval `(B,C]` will be completed
+The headers corresponding to the half open interval `(L,C]` will be completed
 by fetching block bodies and then import/execute them together with the already
 cached headers.
 
@@ -260,6 +262,7 @@ be available if *nimbus* is compiled with the additional make flags
 |:-------------------|:------------:|:--------------------|
 |                    |              |                     |
 | beacon_base        | block height | **B**, *increasing* |
+| beacon_latest      | block height | **L**, *increasing* |
 | beacon_coupler     | block height | **C**, *increasing* |
 | beacon_dangling    | block height | **D**               |
 | beacon_final       | block height | **F**, *increasing* |
