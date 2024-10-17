@@ -318,29 +318,37 @@ proc validateReceiptsBytes*(
 
   seq[Receipt].fromPortalReceipts(receipts)
 
-## ContentDB helper calls for specific history network types
+## Content helper calls for specific history network types
 
-proc get(db: ContentDB, T: type Header, contentId: ContentId): Opt[T] =
-  let contentFromDB = db.get(contentId)
-  if contentFromDB.isSome():
-    let headerWithProof =
-      try:
-        SSZ.decode(contentFromDB.get(), BlockHeaderWithProof)
-      except SerializationError as e:
-        raiseAssert(e.msg)
-
-    let res = decodeRlp(headerWithProof.header.asSeq(), T)
-    if res.isErr():
-      raiseAssert(res.error)
-    else:
-      Opt.some(res.get())
-  else:
-    Opt.none(T)
-
-proc get(
-    db: ContentDB, T: type BlockBody, contentId: ContentId, header: Header
+proc getContent(
+    n: HistoryNetwork,
+    T: type Header,
+    contentKey: ContentKeyByteList,
+    contentId: ContentId,
 ): Opt[T] =
-  let encoded = db.get(contentId).valueOr:
+  let localContent = n.portalProtocol.getLocalContent(contentKey, contentId).valueOr:
+    return Opt.none(T)
+
+  let headerWithProof =
+    try:
+      SSZ.decode(localContent, BlockHeaderWithProof)
+    except SerializationError as e:
+      raiseAssert(e.msg)
+
+  let res = decodeRlp(headerWithProof.header.asSeq(), T)
+  if res.isErr():
+    raiseAssert(res.error)
+  else:
+    Opt.some(res.get())
+
+proc getContent(
+    n: HistoryNetwork,
+    T: type BlockBody,
+    contentKey: ContentKeyByteList,
+    contentId: ContentId,
+    header: Header,
+): Opt[T] =
+  let localContent = n.portalProtocol.getLocalContent(contentKey, contentId).valueOr:
     return Opt.none(T)
 
   let
@@ -348,38 +356,53 @@ proc get(
     body =
       if isShanghai(chainConfig, timestamp):
         BlockBody.fromPortalBlockBodyOrRaise(
-          decodeSszOrRaise(encoded, PortalBlockBodyShanghai)
+          decodeSszOrRaise(localContent, PortalBlockBodyShanghai)
         )
       elif isPoSBlock(chainConfig, header.number):
         BlockBody.fromPortalBlockBodyOrRaise(
-          decodeSszOrRaise(encoded, PortalBlockBodyLegacy)
+          decodeSszOrRaise(localContent, PortalBlockBodyLegacy)
         )
       else:
         BlockBody.fromPortalBlockBodyOrRaise(
-          decodeSszOrRaise(encoded, PortalBlockBodyLegacy)
+          decodeSszOrRaise(localContent, PortalBlockBodyLegacy)
         )
 
   Opt.some(body)
 
-proc get(db: ContentDB, T: type seq[Receipt], contentId: ContentId): Opt[T] =
-  let contentFromDB = db.getSszDecoded(contentId, PortalReceipts)
-  if contentFromDB.isSome():
-    let res = T.fromPortalReceipts(contentFromDB.get())
-    if res.isErr():
-      raiseAssert(res.error)
-    else:
-      Opt.some(res.get())
-  else:
-    Opt.none(T)
+proc getContent(
+    n: HistoryNetwork,
+    T: type seq[Receipt],
+    contentKey: ContentKeyByteList,
+    contentId: ContentId,
+): Opt[T] =
+  let localContent = n.portalProtocol.getLocalContent(contentKey, contentId).valueOr:
+    return Opt.none(T)
 
-proc get(db: ContentDB, T: type EpochRecord, contentId: ContentId): Opt[T] =
-  db.getSszDecoded(contentId, T)
+  let portalReceipts =
+    try:
+      SSZ.decode(localContent, PortalReceipts)
+    except SerializationError:
+      raiseAssert("Stored data should always be serialized correctly")
 
-proc getContentFromDb(n: HistoryNetwork, T: type, contentId: ContentId): Opt[T] =
-  if n.portalProtocol.inRange(contentId):
-    n.contentDB.get(T, contentId)
+  let res = T.fromPortalReceipts(portalReceipts)
+  if res.isErr():
+    raiseAssert(res.error)
   else:
-    Opt.none(T)
+    Opt.some(res.get())
+
+proc getContent(
+    n: HistoryNetwork,
+    T: type EpochRecord,
+    contentKey: ContentKeyByteList,
+    contentId: ContentId,
+): Opt[T] =
+  let localContent = n.portalProtocol.getLocalContent(contentKey, contentId).valueOr:
+    return Opt.none(T)
+
+  try:
+    Opt.some(SSZ.decode(localContent, T))
+  except SerializationError:
+    raiseAssert("Stored data should always be serialized correctly")
 
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
@@ -412,7 +435,7 @@ proc getVerifiedBlockHeader*(
   # Note: This still requests a BlockHeaderWithProof from the database, as that
   # is what is stored. But the proof doesn't need to be verified as it gets
   # gets verified before storing.
-  let headerFromDb = n.getContentFromDb(Header, contentId)
+  let headerFromDb = n.getContent(Header, contentKey, contentId)
   if headerFromDb.isSome():
     info "Fetched block header from database"
     return headerFromDb
@@ -437,7 +460,9 @@ proc getVerifiedBlockHeader*(
 
     info "Fetched valid block header from the network"
     # Content is valid, it can be stored and propagated to interested peers
-    n.portalProtocol.storeContent(contentKey, contentId, headerContent.content)
+    n.portalProtocol.storeContent(
+      contentKey, contentId, headerContent.content, cacheContent = true
+    )
     n.portalProtocol.triggerPoke(
       headerContent.nodesInterestedInContent, contentKey, headerContent.content
     )
@@ -462,7 +487,7 @@ proc getBlockBody*(
     blockHash
     contentKey
 
-  let bodyFromDb = n.contentDB.get(BlockBody, contentId, header)
+  let bodyFromDb = n.getContent(BlockBody, contentKey, contentId, header)
   if bodyFromDb.isSome():
     info "Fetched block body from database"
     return bodyFromDb
@@ -479,7 +504,9 @@ proc getBlockBody*(
 
     info "Fetched block body from the network"
     # Content is valid, it can be stored and propagated to interested peers
-    n.portalProtocol.storeContent(contentKey, contentId, bodyContent.content)
+    n.portalProtocol.storeContent(
+      contentKey, contentId, bodyContent.content, cacheContent = true
+    )
     n.portalProtocol.triggerPoke(
       bodyContent.nodesInterestedInContent, contentKey, bodyContent.content
     )
@@ -535,7 +562,7 @@ proc getReceipts*(
     blockHash
     contentKey
 
-  let receiptsFromDb = n.getContentFromDb(seq[Receipt], contentId)
+  let receiptsFromDb = n.getContent(seq[Receipt], contentKey, contentId)
   if receiptsFromDb.isSome():
     info "Fetched receipts from database"
     return receiptsFromDb
@@ -551,7 +578,9 @@ proc getReceipts*(
 
     info "Fetched receipts from the network"
     # Content is valid, it can be stored and propagated to interested peers
-    n.portalProtocol.storeContent(contentKey, contentId, receiptsContent.content)
+    n.portalProtocol.storeContent(
+      contentKey, contentId, receiptsContent.content, cacheContent = true
+    )
     n.portalProtocol.triggerPoke(
       receiptsContent.nodesInterestedInContent, contentKey, receiptsContent.content
     )

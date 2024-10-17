@@ -192,9 +192,7 @@ type
     radiusCache: RadiusCache
     offerQueue: AsyncQueue[OfferRequest]
     offerWorkers: seq[Future[void]]
-    disablePoke: bool
     pingTimings: Table[NodeId, chronos.Moment]
-    maxGossipNodes: int
     config*: PortalProtocolConfig
 
   PortalResult*[T] = Result[T, string]
@@ -587,9 +585,7 @@ proc new*(
     stream: stream,
     radiusCache: RadiusCache.init(256),
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
-    disablePoke: config.disablePoke,
     pingTimings: Table[NodeId, chronos.Moment](),
-    maxGossipNodes: config.maxGossipNodes,
     config: config,
   )
 
@@ -1109,7 +1105,7 @@ proc triggerPoke*(
   ## In order to properly test gossip mechanisms (e.g. in Portal Hive),
   ## we need the option to turn off the POKE functionality as it influences
   ## how data moves around the network.
-  if p.disablePoke:
+  if p.config.disablePoke:
     return
   ## Triggers asynchronous offer-accept interaction to provided nodes.
   ## Provided content should be in range of provided nodes.
@@ -1538,9 +1534,9 @@ proc neighborhoodGossip*(
         elif node.id != srcNodeId.get():
           gossipNodes.add(node)
 
-  if gossipNodes.len >= p.maxGossipNodes: # use local nodes for gossip
+  if gossipNodes.len >= p.config.maxGossipNodes: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    let numberOfGossipedNodes = min(gossipNodes.len, p.maxGossipNodes)
+    let numberOfGossipedNodes = min(gossipNodes.len, p.config.maxGossipNodes)
     for node in gossipNodes[0 ..< numberOfGossipedNodes]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
@@ -1548,7 +1544,7 @@ proc neighborhoodGossip*(
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
-    let numberOfGossipedNodes = min(closestNodes.len, p.maxGossipNodes)
+    let numberOfGossipedNodes = min(closestNodes.len, p.config.maxGossipNodes)
     for node in closestNodes[0 ..< numberOfGossipedNodes]:
       # Note: opportunistically not checking if the radius of the node is known
       # and thus if the node is in radius with the content. Reason is, these
@@ -1582,8 +1578,7 @@ proc randomGossip*(
     let contentKV = ContentKV(contentKey: contentKeys[i], content: contentItem)
     discard contentList.add(contentKV)
 
-  const maxGossipNodes = 4
-  let nodes = p.routingTable.randomNodes(maxGossipNodes)
+  let nodes = p.routingTable.randomNodes(p.config.maxGossipNodes)
 
   for node in nodes[0 ..< nodes.len()]:
     let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
