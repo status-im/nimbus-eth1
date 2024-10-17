@@ -54,6 +54,33 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc headerStagedUpdateTarget*(
+    buddy: BeaconBuddyRef;
+    info: static[string];
+      ) {.async.} =
+  ## Fetch finalised beacon header if there is an update available
+  let ctx = buddy.ctx
+  if not ctx.layout.headLocked and
+     ctx.target.final == 0 and
+     ctx.target.finalHash != zeroHash32 and
+     not ctx.target.locked:
+    const iv = BnRange.new(1u,1u) # dummy interval
+
+    ctx.target.locked = true
+    let rc = await buddy.headersFetchReversed(iv, ctx.target.finalHash, info)
+    ctx.target.locked = false
+
+    if rc.isOK:
+      let hash = rlp.encode(rc.value[0]).keccak256
+      if hash != ctx.target.finalHash:
+        # Oops
+        buddy.ctrl.zombie = true
+        trace info & ": finalised header hash mismatch", peer=buddy.peer, hash,
+          expected=ctx.target.finalHash
+      else:
+        ctx.target.final = rc.value[0].number
+
+
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
@@ -86,7 +113,7 @@ proc headersStagedCollect*(
     iv = ctx.headersUnprocFetch(nFetchHeadersBatch).expect "valid interval"
 
     # Check for top header hash. If the range to fetch directly joins below
-    # the top level linked chain `[D,E]`, then there is the hash available for
+    # the top level linked chain `[D,H]`, then there is the hash available for
     # the top level header to fetch. Otherwise -- with multi-peer mode -- the
     # range of headers is fetched opportunistically using block numbers only.
     isOpportunistic = uTop + 1 < ctx.layout.dangling
@@ -158,13 +185,13 @@ proc headersStagedCollect*(
       break
 
   # Store `lhc` chain on the `staged` queue
-  let qItem = ctx.lhc.staged.insert(iv.maxPt).valueOr:
+  let qItem = ctx.hdr.staged.insert(iv.maxPt).valueOr:
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = lhc[]
 
   trace info & ": staged headers", peer,
     topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
-    nStaged=ctx.lhc.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
+    nStaged=ctx.hdr.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
 
   return true
 
@@ -175,7 +202,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
   ## of records processed and saved.
   while true:
     # Fetch largest block
-    let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
+    let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:
       trace info & ": no staged headers", error=error
       break # all done
 
@@ -192,7 +219,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
 
     # Process item from `staged` queue. So it is not needed in the list,
     # anymore.
-    discard ctx.lhc.staged.delete(iv.maxPt)
+    discard ctx.hdr.staged.delete(iv.maxPt)
 
     if qItem.data.hash != ctx.layout.danglingParent:
       # Discard wrong chain and merge back the range into the `unproc` list.
@@ -205,14 +232,14 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs)
     ctx.layout.dangling = iv.minPt
     ctx.layout.danglingParent = qItem.data.parentHash
-    discard ctx.dbStoreLinkedHChainsLayout()
+    ctx.dbStoreSyncStateLayout()
 
     result.inc # count records
 
   trace info & ": staged records saved",
-    nStaged=ctx.lhc.staged.len, nSaved=result
+    nStaged=ctx.hdr.staged.len, nSaved=result
 
-  if headersStagedQueueLengthLwm < ctx.lhc.staged.len:
+  if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true
 
 
@@ -227,14 +254,14 @@ func headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## (downloading deterministically by hashes) and many fast opportunistic
   ## actors filling the staged queue.
   ##
-  if ctx.lhc.staged.len == 0:
+  if ctx.hdr.staged.len == 0:
     # nothing to do
     return
 
   # Update counter
   ctx.pool.nReorg.inc
 
-  let nStaged = ctx.lhc.staged.len
+  let nStaged = ctx.hdr.staged.len
   if headersStagedQueueLengthHwm < nStaged:
     trace info & ": hwm reached, flushing staged queue",
       nStaged, max=headersStagedQueueLengthLwm
@@ -244,32 +271,32 @@ func headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
     # remain.
     for _ in 0 .. nStaged - headersStagedQueueLengthLwm:
       let
-        qItem = ctx.lhc.staged.ge(BlockNumber 0).expect "valid record"
+        qItem = ctx.hdr.staged.ge(BlockNumber 0).expect "valid record"
         key = qItem.key
         nHeaders = qItem.data.revHdrs.len.uint64
       ctx.headersUnprocCommit(0, key - nHeaders + 1, key)
-      discard ctx.lhc.staged.delete key
+      discard ctx.hdr.staged.delete key
 
 
 func headersStagedTopKey*(ctx: BeaconCtxRef): BlockNumber =
   ## Retrieve to staged block number
-  let qItem = ctx.lhc.staged.le(high BlockNumber).valueOr:
+  let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:
     return BlockNumber(0)
   qItem.key
 
 func headersStagedQueueLen*(ctx: BeaconCtxRef): int =
   ## Number of staged records
-  ctx.lhc.staged.len
+  ctx.hdr.staged.len
 
 func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
-  ctx.lhc.staged.len == 0
+  ctx.hdr.staged.len == 0
 
 # ----------------
 
 func headersStagedInit*(ctx: BeaconCtxRef) =
   ## Constructor
-  ctx.lhc.staged = LinkedHChainQueue.init()
+  ctx.hdr.staged = LinkedHChainQueue.init()
 
 # ------------------------------------------------------------------------------
 # End

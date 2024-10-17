@@ -54,39 +54,57 @@ type
 
   # -------------------
 
-  LinkedHChainsLayout* = object
-    ## Layout of a linked header chains defined by the triple `(C,D,E)` as
+  SyncStateTarget* = object
+    ## Beacon state to be implicitely updated by RPC method
+    locked*: bool                    ## Don't update while fetching header
+    changed*: bool                   ## Tell that something has changed
+    consHead*: Header                ## Consensus head
+    final*: BlockNumber              ## Finalised block number
+    finalHash*: Hash32               ## Finalised hash
+
+  SyncStateLayout* = object
+    ## Layout of a linked header chains defined by the triple `(C,D,H)` as
     ## described in the `README.md` text.
     ## ::
-    ##   0                C                     D                E
-    ##   o----------------o---------------------o----------------o--->
-    ##   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
+    ##   0          B     L       C                     D            F   H
+    ##   o----------o-----o-------o---------------------o------------o---o--->
+    ##   | <- imported -> |       |                     |                |
+    ##   | <------ linked ------> | <-- unprocessed --> | <-- linked --> |
+    ##
+    ## Additional positions known but not declared in this descriptor:
+    ## * `B`: base state (from `forked_chain` importer)
+    ## * `L`: last imported block, canonical consensus head
+    ## * `F`: finalised head (from CL)
     ##
     coupler*: BlockNumber            ## Right end `C` of linked chain `[0,C]`
     couplerHash*: Hash32             ## Hash of `C`
 
-    dangling*: BlockNumber           ## Left end `D` of linked chain `[D,E]`
+    dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
     danglingParent*: Hash32          ## Parent hash of `D`
 
-    endBn*: BlockNumber              ## `E`, block num of some finalised block
-    endHash*: Hash32                 ## Hash of `E`
+    final*: BlockNumber              ## Finalised block number `F`
+    finalHash*: Hash32               ## Hash of `F`
 
-  TargetReqHeader* = object
-    ## Beacon state to be implicitely updated by RPC method
-    changed*: bool                   ## Set a marker if something has changed
-    header*: Header                  ## Beacon chain, finalised header
+    head*: BlockNumber               ## `H`, block num of some finalised block
+    headHash*: Hash32                ## Hash of `H`
+    headLocked*: bool                ## No need to update `H` yet
 
-  LinkedHChainsSync* = object
-    ## Sync state for linked header chains
-    target*: TargetReqHeader         ## Consensus head, see `T` in `README.md`
+  SyncState* = object
+    ## Sync state for header and block chains
+    target*: SyncStateTarget         ## Consensus head, see `T` in `README.md`
+    layout*: SyncStateLayout         ## Current header chains layout
+    lastLayout*: SyncStateLayout     ## Previous layout (for delta update)
+
+  # -------------------
+
+  HeaderImportSync* = object
+    ## Header sync staging area
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: uint64                ## Total of temp. fetched ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
-    layout*: LinkedHChainsLayout     ## Current header chains layout
-    lastLayout*: LinkedHChainsLayout ## Previous layout (for delta update)
 
   BlocksImportSync* = object
-    ## Sync state for blocks to import/execute
+    ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: uint64                ## Total of temp. fetched ranges
     topRequest*: BlockNumber         ## Max requested block number
@@ -107,14 +125,15 @@ type
   BeaconCtxData* = object
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
-    lhcSyncState*: LinkedHChainsSync ## Syncing by linked header chains
-    blkSyncState*: BlocksImportSync  ## For importing/executing blocks
+    syncState*: SyncState            ## Save/resume state descriptor
+    hdrSync*: HeaderImportSync       ## Syncing by linked header chains
+    blkSync*: BlocksImportSync       ## For importing/executing blocks
     nextUpdate*: Moment              ## For updating metrics
 
     # Blocks import/execution settings for running  `persistBlocks()` with
     # `nBodiesBatch` blocks in each round (minimum value is
     # `nFetchBodiesRequest`.)
-    chain*: ChainRef
+    chain*: ForkedChainRef           ## Database
     importRunningOk*: bool           ## Advisory lock, fetch vs. import
     nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
     blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
@@ -136,28 +155,33 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func lhc*(ctx: BeaconCtxRef): var LinkedHChainsSync =
+func sst*(ctx: BeaconCtxRef): var SyncState =
   ## Shortcut
-  ctx.pool.lhcSyncState
+  ctx.pool.syncState
+
+func hdr*(ctx: BeaconCtxRef): var HeaderImportSync =
+  ## Shortcut
+  ctx.pool.hdrSync
 
 func blk*(ctx: BeaconCtxRef): var BlocksImportSync =
   ## Shortcut
-  ctx.pool.blkSyncState
+  ctx.pool.blkSync
 
-func layout*(ctx: BeaconCtxRef): var LinkedHChainsLayout =
+func layout*(ctx: BeaconCtxRef): var SyncStateLayout =
   ## Shortcut
-  ctx.pool.lhcSyncState.layout
+  ctx.sst.layout
+
+func target*(ctx: BeaconCtxRef): var SyncStateTarget =
+  ## Shortcut
+  ctx.sst.target
+
+func chain*(ctx: BeaconCtxRef): ForkedChainRef =
+  ## Getter
+  ctx.pool.chain
 
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter
   ctx.pool.chain.db
-
-# ------------------------------------------------------------------------------
-# Public logging/debugging helpers
-# ------------------------------------------------------------------------------
-
-proc `$`*(w: BnRange): string =
-  if w.len == 1: $w.minPt else: $w.minPt & ".." & $w.maxPt
 
 # ------------------------------------------------------------------------------
 # End
