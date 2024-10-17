@@ -69,6 +69,7 @@ type
     latestPayloadAttributes*: PayloadAttributes
     latestExecutedPayload*  : ExecutableData
     latestForkchoice*       : ForkchoiceStateV1
+    latestExecutionRequests*: Opt[array[3, seq[byte]]]
 
     # Merge related
     firstPoSBlockNumber*      : Opt[uint64]
@@ -102,6 +103,7 @@ func latestExecutableData*(cl: CLMocker): ExecutableData =
     beaconRoot : cl.latestPayloadAttributes.parentBeaconBlockRoot,
     attr       : cl.latestPayloadAttributes,
     versionedHashes: Opt.some(collectBlobHashes(cl.latestPayloadBuilt.transactions)),
+    executionRequests: cl.latestExecutionRequests,
   )
 
 func latestPayloadNumber*(h: Table[uint64, ExecutionPayload]): uint64 =
@@ -335,9 +337,11 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestBlockValue = x.blockValue
   cl.latestBlobsBundle = x.blobsBundle
   cl.latestShouldOverrideBuilder = x.shouldOverrideBuilder
+  cl.latestExecutionRequests = x.executionRequests
 
   let beaconRoot = cl.latestPayloadAttributes.parentBeaconblockRoot
-  let header = blockHeader(cl.latestPayloadBuilt, beaconRoot = beaconRoot)
+  let requestsHash = calcRequestsHash(x.executionRequests)
+  let header = blockHeader(cl.latestPayloadBuilt, beaconRoot = beaconRoot, requestsHash)
   let blockHash = header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",
@@ -386,20 +390,23 @@ func versionedHashes(payload: ExecutionPayload): seq[Hash32] =
 
 proc broadcastNewPayload(cl: CLMocker,
                          eng: EngineEnv,
-                         payload: ExecutionPayload): Result[PayloadStatusV1, string] =
-  case payload.version
-  of Version.V1: return eng.client.newPayloadV1(payload.V1)
-  of Version.V2: return eng.client.newPayloadV2(payload.V2)
-  of Version.V3: return eng.client.newPayloadV3(payload.V3,
-    versionedHashes(payload),
+                         payload: ExecutableData): Result[PayloadStatusV1, string] =
+  let version = eng.version(payload.basePayload.timestamp)
+  case version
+  of Version.V1: return eng.client.newPayloadV1(payload.basePayload.V1)
+  of Version.V2: return eng.client.newPayloadV2(payload.basePayload.V2)
+  of Version.V3: return eng.client.newPayloadV3(payload.basePayload.V3,
+    versionedHashes(payload.basePayload),
     cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
-  of Version.V4: return eng.client.newPayloadV4(payload.V4,
-    versionedHashes(payload),
-    cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
+  of Version.V4:    
+    return eng.client.newPayloadV4(payload.basePayload.V3,
+      versionedHashes(payload.basePayload),
+      cl.latestPayloadAttributes.parentBeaconBlockRoot.get,
+      payload.executionRequests.get)
 
 proc broadcastNextNewPayload(cl: CLMocker): bool =
   for eng in cl.clients:
-    let res = cl.broadcastNewPayload(eng, cl.latestPayloadBuilt)
+    let res = cl.broadcastNewPayload(eng, cl.latestExecutedPayload)
     if res.isErr:
       error "CLMocker: broadcastNewPayload Error", msg=res.error
       return false

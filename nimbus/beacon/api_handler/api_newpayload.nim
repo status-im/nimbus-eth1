@@ -68,7 +68,7 @@ template validateVersion(com, timestamp, version, apiVersion) =
       " expect ExecutionPayload" & $apiVersion &
       " but got ExecutionPayload" & $version)
 
-template validatePayload(apiVersion, version, payload) =
+template validatePayload(apiVersion, version, payload, executionRequests) =
   if version >= Version.V2:
     if payload.withdrawals.isNone:
       raise invalidParams("newPayload" & $apiVersion &
@@ -83,22 +83,16 @@ template validatePayload(apiVersion, version, payload) =
         "excessBlobGas is expected from execution payload")
 
   if apiVersion >= Version.V4 or version >= Version.V4:
-    if payload.depositRequests.isNone:
+    if executionRequests.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "depositRequests is expected from execution payload")
-    if payload.withdrawalRequests.isNone:
-      raise invalidParams("newPayload" & $apiVersion &
-        "withdrawalRequests is expected from execution payload")
-    if payload.consolidationRequests.isNone:
-      raise invalidParams("newPayload" & $apiVersion &
-        "consolidationRequests is expected from execution payload")
-
+        "executionRequests is expected from execution payload")
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
-                 beaconRoot = Opt.none(Hash32)): PayloadStatusV1 =
+                 beaconRoot = Opt.none(Hash32),
+                 executionRequests = Opt.none(array[3, seq[byte]])): PayloadStatusV1 =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -114,11 +108,12 @@ proc newPayload*(ben: BeaconEngineRef,
     db  = com.db
     timestamp = ethTime payload.timestamp
     version = payload.version
+    requestsHash = calcRequestsHash(executionRequests)
 
-  validatePayload(apiVersion, version, payload)
+  validatePayload(apiVersion, version, payload, executionRequests)
   validateVersion(com, timestamp, version, apiVersion)
 
-  var blk = ethBlock(payload, beaconRoot = beaconRoot)
+  var blk = ethBlock(payload, beaconRoot, requestsHash)
   template header: Header = blk.header
 
   if apiVersion >= Version.V3:
