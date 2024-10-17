@@ -320,7 +320,7 @@ func calculateNewBase(c: ForkedChainRef,
     max(headHeader.number, c.baseDistance) - c.baseDistance)
 
   # The distance is less than `baseDistance`, don't move the base
-  if targetNumber - c.baseHeader.number <= c.baseDistance:
+  if targetNumber <= c.baseHeader.number + c.baseDistance:
     return BaseDesc(hash: c.baseHash, header: c.baseHeader)
 
   shouldNotKeyError:
