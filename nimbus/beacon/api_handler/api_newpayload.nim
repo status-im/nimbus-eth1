@@ -40,9 +40,9 @@ template validateVersion(com, timestamp, version, apiVersion) =
       raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
 
   if com.isPragueOrLater(timestamp):
-    if version != Version.V4:
+    if version != Version.V3:
       raise invalidParams("if timestamp is Prague or later, " &
-        "payload must be ExecutionPayloadV4, got ExecutionPayload" & $version)
+        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $version)
 
   if apiVersion == Version.V3:
     if not com.isCancunOrLater(timestamp):
