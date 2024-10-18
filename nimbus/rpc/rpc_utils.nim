@@ -131,8 +131,7 @@ proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
 
 proc populateTransactionObject*(tx: Transaction,
                                 optionalHeader: Opt[Header] = Opt.none(Header),
-                                txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject
-    {.gcsafe, raises: [ValidationError].} =
+                                txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
   if optionalHeader.isSome:
@@ -166,7 +165,7 @@ proc populateTransactionObject*(tx: Transaction,
     result.blobVersionedHashes = Opt.some(tx.versionedHashes)
 
 proc populateBlockObject*(header: Header, chain: CoreDbRef, fullTx: bool, isUncle = false): BlockObject
-    {.gcsafe, raises: [CatchableError].} =
+    {.gcsafe, raises: [RlpError].} =
   let blockHash = header.blockHash
   result = BlockObject()
 
