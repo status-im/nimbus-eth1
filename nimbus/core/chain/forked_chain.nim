@@ -687,7 +687,13 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Opt[Block] =
   c.blocks.withValue(blockHash, val) do:
     return Opt.some(val.blk)
   do:
-    return Opt.none(Block)
+    var 
+      header: Header
+      body: BlockBody
+    if c.db.getBlockHeader(blockHash, header) and c.db.getBlockBody(blockHash, body):
+      return ok(Block.init(move(header), move(body)))
+    else:
+      return Opt.none(Block)
 
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.cursorHeader.number:
