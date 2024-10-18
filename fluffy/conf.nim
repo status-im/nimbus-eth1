@@ -302,6 +302,22 @@ type
       name: "force-prune"
     .}: bool
 
+    contentCacheSize* {.
+      hidden,
+      desc:
+        "Size of the in memory local content cache. This is the max number " &
+        "of content values that can be stored in the cache.",
+      defaultValue: defaultPortalProtocolConfig.contentCacheSize,
+      name: "content-cache-size"
+    .}: int
+
+    disableContentCache* {.
+      hidden,
+      desc: "Disable the in memory local content cache",
+      defaultValue: defaultPortalProtocolConfig.disableContentCache,
+      name: "disable-content-cache"
+    .}: bool
+
     disablePoke* {.
       hidden,
       desc: "Disable POKE functionality for gossip mechanisms testing",

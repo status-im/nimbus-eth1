@@ -88,7 +88,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeContent = p.dbGet(keyBytes, contentId)
+      maybeContent = p.getLocalContent(keyBytes, contentId)
     if maybeContent.isSome():
       return ContentInfo(content: maybeContent.get().to0xHex(), utpTransfer: false)
 
@@ -99,7 +99,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     validateRetrieval(key, contentValue).isOkOr:
       raise invalidValueErr()
-    p.storeContent(keyBytes, contentId, contentValue)
+    p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
 
     ContentInfo(content: contentValue.to0xHex(), utpTransfer: foundContent.utpTransfer)
 
@@ -110,7 +110,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeContent = p.dbGet(keyBytes, contentId)
+      maybeContent = p.getLocalContent(keyBytes, contentId)
     if maybeContent.isSome():
       return TraceContentLookupResult(content: maybeContent, utpTransfer: false)
 
@@ -124,7 +124,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     validateRetrieval(key, contentValue).isOkOr:
       raise invalidValueErr()
-    p.storeContent(keyBytes, contentId, contentValue)
+    p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
 
     res
 
@@ -145,7 +145,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       (_, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
 
-      contentResult = p.dbGet(keyBytes, contentId).valueOr:
+      contentResult = p.getLocalContent(keyBytes, contentId).valueOr:
         raise contentNotFoundErr()
 
     contentResult.to0xHex()

@@ -9,21 +9,16 @@ JSON-RPC call `eth_getBlockByHash`:
 
 ```bash
 # Get the hash of a block from your favorite block explorer, e.g.:
-BLOCKHASH=0x34eea44911b19f9aa8c72f69bdcbda3ed933b11a940511b6f3f58a87427231fb # Replace this to the block hash of your choice
+BLOCKHASH=0x55b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286 # Replace this to the block hash of your choice
 # Run this command to get this block:
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["'${BLOCKHASH}'", true]}' http://localhost:8545 | jq
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["'${BLOCKHASH}'", true]}' http://localhost:8545
 ```
-
-!!! note
-    The Portal testnet is slowly being filled up with historical data through
-    bridge nodes. Because of this, more recent history data is more likely to be
-    available.
 
 You can also use our `blockwalk` tool to walk down the blocks one by one:
 ```bash
 make blockwalk
 
-BLOCKHASH=0x34eea44911b19f9aa8c72f69bdcbda3ed933b11a940511b6f3f58a87427231fb # Replace this to the block hash of your choice
+BLOCKHASH=0x55b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286 # Replace this to the block hash of your choice
 ./build/blockwalk --block-hash:${BLOCKHASH}
 ```
 

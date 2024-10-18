@@ -26,7 +26,7 @@ explained in [this guide](https://nimbus.guide/metrics-pretty-pictures.html#prom
 
 A Fluffy specific dashboard can be found [here](https://github.com/status-im/nimbus-eth1/blob/master/fluffy/grafana/fluffy_grafana_dashboard.json).
 
-This is the dashboard used for our Fluffy testnet fleet.
+This is the dashboard used for our Fluffy Portal network fleet.
 In order to use it locally, you will have to remove the
 `{job="nimbus-fluffy-metrics"}` part from the `instance` and `container`
 variables queries in the dashboard settings. Or they can also be changed to a

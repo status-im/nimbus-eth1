@@ -29,12 +29,15 @@ when enableTicker:
     ## Legacy stuff, will be probably be superseded by `metrics`
     return proc: auto =
       TickerStats(
-        base:            ctx.dbStateBlockNumber(),
+        stored:          ctx.db.getSavedStateBlockNumber(),
+        base:            ctx.chain.baseNumber(),
+        latest:          ctx.chain.latestNumber(),
         coupler:         ctx.layout.coupler,
         dangling:        ctx.layout.dangling,
-        endBn:           ctx.layout.endBn,
-        target:          ctx.lhc.target.header.number,
-        newTargetOk:     ctx.lhc.target.changed,
+        final:           ctx.layout.final,
+        head:            ctx.layout.head,
+        target:          ctx.target.consHead.number,
+        targetOk:        ctx.target.final != 0,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
         hdrStagedTop:    ctx.headersStagedTopKey(),
@@ -54,11 +57,14 @@ when enableTicker:
 proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  return proc(h: Header) {.gcsafe, raises: [].} =
+  return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
     # Rpc checks empty header against a zero hash rather than `emptyRoot`
-    if ctx.lhc.target.header.number < h.number:
-      ctx.lhc.target.header = h
-      ctx.lhc.target.changed = true
+    if not ctx.target.locked:
+      if f != zeroHash32 and ctx.target.consHead.number < h.number:
+        ctx.target.consHead = h
+        ctx.target.final = BlockNumber(0)
+        ctx.target.finalHash = f
+        ctx.target.changed = true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -90,7 +96,7 @@ proc setupDatabase*(ctx: BeaconCtxRef) =
   ctx.blocksUnprocInit()
 
   # Load initial state from database if there is any
-  ctx.dbLoadLinkedHChainsLayout()
+  ctx.dbLoadSyncStateLayout()
 
   # Set blocks batch import value for `persistBlocks()`
   if ctx.pool.nBodiesBatch < nFetchBodiesRequest:

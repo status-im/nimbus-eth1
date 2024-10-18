@@ -12,7 +12,7 @@ import
   chronos,
   json_rpc/rpcclient,
   stew/byteutils,
-  eth/keys,
+  eth/common/keys,
   ./utp_test_rpc_client
 
 proc generateBytesHex(rng: var HmacDrbgContext, length: int): string =

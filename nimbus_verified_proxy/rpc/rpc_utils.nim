@@ -8,24 +8,19 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
-  eth/common/eth_types as etypes,
-  eth/rlp,
-  nimcrypto/hash,
+  eth/common/[base_rlp, headers_rlp, blocks, hashes],
   stint,
-  web3,
+  web3/eth_api_types,
   web3/engine_api_types,
   ../../nimbus/db/core_db
 
-type
-  FixedBytes[N: static int] = primitives.FixedBytes[N]
-  Address = primitives.Address
+export eth_api_types, engine_api_types
 
 type ExecutionData* = object
-  parentHash*: BlockHash
+  parentHash*: Hash32
   feeRecipient*: Address
-  stateRoot*: BlockHash
-  receiptsRoot*: BlockHash
+  stateRoot*: Hash32
+  receiptsRoot*: Hash32
   logsBloom*: FixedBytes[256]
   prevRandao*: FixedBytes[32]
   blockNumber*: Quantity
@@ -34,7 +29,7 @@ type ExecutionData* = object
   timestamp*: Quantity
   extraData*: DynamicBytes[0, 32]
   baseFeePerGas*: UInt256
-  blockHash*: BlockHash
+  blockHash*: Hash32
   transactions*: seq[TypedTransaction]
   withdrawals*: seq[WithdrawalV1]
 
@@ -77,15 +72,9 @@ proc asExecutionData*(payload: SomeExecutionPayload): ExecutionData =
       withdrawals: payload.withdrawals,
     )
 
-func toFixedBytes(d: MDigest[256]): FixedBytes[32] =
-  FixedBytes[32](d.data)
-
-template asEthHash(hash: BlockHash): etypes.Hash32 =
-  etypes.Hash32(distinctBase(hash))
-
 proc calculateTransactionData(
     items: openArray[TypedTransaction]
-): (etypes.Hash32, seq[TxOrHash], uint64) =
+): (Hash32, seq[TxOrHash], uint64) =
   ## returns tuple composed of
   ## - root of transactions trie
   ## - list of transactions hashes
@@ -97,30 +86,30 @@ proc calculateTransactionData(
     let tx = distinctBase(t)
     txSize = txSize + uint64(len(tx))
     tr.merge(rlp.encode(uint64 i), tx).expect "merge data"
-    txHashes.add(txOrHash keccakHash(tx))
+    txHashes.add(txOrHash keccak256(tx))
   let rootHash = tr.state(updateOk = true).expect "hash"
   (rootHash, txHashes, txSize)
 
-func blockHeaderSize(payload: ExecutionData, txRoot: etypes.Hash32): uint64 =
-  let bh = etypes.BlockHeader(
+func blockHeaderSize(payload: ExecutionData, txRoot: Hash32): uint64 =
+  let header = Header(
     parentHash: payload.parentHash,
-    ommersHash: etypes.EMPTY_UNCLE_HASH,
+    ommersHash: EMPTY_UNCLE_HASH,
     coinbase: payload.feeRecipient,
     stateRoot: payload.stateRoot,
     transactionsRoot: txRoot,
     receiptsRoot: payload.receiptsRoot,
-    logsBloom: distinctBase(payload.logsBloom).to(Bloom),
-    difficulty: default(etypes.DifficultyInt),
-    number: payload.blockNumber.distinctBase,
+    logsBloom: payload.logsBloom,
+    difficulty: default(DifficultyInt),
+    number: distinctBase(payload.blockNumber),
     gasLimit: distinctBase(payload.gasLimit),
     gasUsed: distinctBase(payload.gasUsed),
     timestamp: payload.timestamp.EthTime,
-    extraData: bytes payload.extraData,
+    extraData: payload.extraData.data,
     mixHash: payload.prevRandao,
-    nonce: default(etypes.BlockNonce),
+    nonce: default(Bytes8),
     baseFeePerGas: Opt.some payload.baseFeePerGas,
   )
-  return uint64(len(rlp.encode(bh)))
+  return uint64(len(rlp.encode(header)))
 
 proc asBlockObject*(p: ExecutionData): BlockObject {.raises: [ValueError].} =
   # TODO: currently we always calculate txHashes as BlockObject does not have
@@ -130,10 +119,10 @@ proc asBlockObject*(p: ExecutionData): BlockObject {.raises: [ValueError].} =
   let headerSize = blockHeaderSize(p, txRoot)
   let blockSize = txSize + headerSize
   BlockObject(
-    number: web3.BlockNumber p.blockNumber,
+    number: p.blockNumber,
     hash: p.blockHash,
     parentHash: p.parentHash,
-    sha3Uncles: etypes.EMPTY_UNCLE_HASH,
+    sha3Uncles: EMPTY_UNCLE_HASH,
     logsBloom: p.logsBloom,
     transactionsRoot: txRoot,
     stateRoot: p.stateRoot,
@@ -144,7 +133,7 @@ proc asBlockObject*(p: ExecutionData): BlockObject {.raises: [ValueError].} =
     gasLimit: p.gasLimit,
     gasUsed: p.gasUsed,
     timestamp: p.timestamp,
-    nonce: Opt.some(default(FixedBytes[8])),
+    nonce: Opt.some(default(Bytes8)),
     size: Quantity(blockSize),
     # TODO: It does not matter what we put here after merge blocks.
     # Other projects like `helios` return `0`, data providers like alchemy return

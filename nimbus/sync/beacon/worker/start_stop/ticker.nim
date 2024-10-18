@@ -26,12 +26,15 @@ type
 
   TickerStats* = object
     ## Full sync state (see `TickerFullStatsUpdater`)
+    stored*: BlockNumber
     base*: BlockNumber
+    latest*: BlockNumber
     coupler*: BlockNumber
     dangling*: BlockNumber
-    endBn*: BlockNumber
+    final*: BlockNumber
+    head*: BlockNumber
     target*: BlockNumber
-    newTargetOk*: bool
+    targetOk*: bool
 
     hdrUnprocTop*: BlockNumber
     nHdrUnprocessed*: uint64
@@ -73,11 +76,14 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
   if data != t.lastStats or
      tickerLogSuppressMax < (now - t.visited):
     let
-      B = if data.base == data.coupler: "C" else: data.base.bnStr
+      S = data.stored.bnStr
+      B = if data.base == data.latest: "L" else: data.base.bnStr
+      L = if data.latest == data.coupler: "C" else: data.latest.bnStr
       C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
-      D = if data.dangling == data.endBn: "E" else: data.dangling.bnStr
-      E = if data.endBn == data.target: "T" else: data.endBn.bnStr
-      T = if data.newTargetOk: "?" & $data.target else: data.target.bnStr
+      D = if data.dangling == data.final: "F" else: data.dangling.bnStr
+      F = if data.final == data.head: "H" else: data.final.bnStr
+      H = if data.head == data.target: "T" else: data.head.bnStr
+      T = if data.targetOk: data.target.bnStr else: "?" & $data.target
 
       hS = if data.nHdrStaged == 0: "n/a"
            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
@@ -91,7 +97,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
            else: data.blkUnprocTop.bnStr & "(" &
                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 
-      reorg = data.reorg
+      rrg = data.reorg
       peers = data.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
@@ -101,7 +107,13 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    info "Sync state", up, peers, B, C, D, E, T, hS, hU, bS, bU, reorg, mem
+    if data.stored == data.base:
+      info "Sync state", up, peers,
+        B, L, C, D, F, H, T, hS, hU, bS, bU, rrg, mem
+    else:
+      info "Sync state", up, peers,
+        S=data.stored.bnStr,
+        B, L, C, D, F, H, T, hS, hU, bS, bU, rrg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages

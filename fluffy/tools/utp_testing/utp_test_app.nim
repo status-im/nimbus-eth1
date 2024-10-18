@@ -17,7 +17,7 @@ import
   eth/p2p/discoveryv5/protocol,
   eth/p2p/discoveryv5/enr,
   eth/utp/[utp_discv5_protocol, utp_router],
-  eth/keys,
+  eth/common/keys,
   ../../rpc/rpc_discovery_api,
   ./utp_rpc_types
 
@@ -46,7 +46,7 @@ proc writeValue*(w: var JsonWriter[JrpcConv], v: Record) {.gcsafe, raises: [IOEr
 proc readValue*(
     r: var JsonReader[JrpcConv], val: var Record
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
-  if not fromURI(val, r.parseString()):
+  val = enr.Record.fromURI(r.parseString()).valueOr:
     r.raiseUnexpectedValue("Invalid ENR")
 
 proc installUtpHandlers(
