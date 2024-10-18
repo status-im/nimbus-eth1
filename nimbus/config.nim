@@ -531,7 +531,7 @@ type
       noValidation* {.
         hidden
         desc: "Disble per-chunk validation"
-        defaultValue: true
+        defaultValue: false
         name: "debug-no-validation".}: bool
 
       storeBodies* {.
