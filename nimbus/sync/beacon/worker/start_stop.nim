@@ -98,7 +98,7 @@ proc setupDatabase*(ctx: BeaconCtxRef) =
   # Load initial state from database if there is any
   ctx.dbLoadSyncStateLayout()
 
-  # Set blocks batch import value for `persistBlocks()`
+  # Set blocks batch import value for block import
   if ctx.pool.nBodiesBatch < nFetchBodiesRequest:
     if ctx.pool.nBodiesBatch == 0:
       ctx.pool.nBodiesBatch = nFetchBodiesBatchDefault

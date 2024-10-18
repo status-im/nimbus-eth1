@@ -62,7 +62,6 @@ proc init*(
   var desc = T()
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.nBodiesBatch = chunkSize
-  # Initalise for `persistBlocks()`
   desc.ctx.pool.chain = chain
   desc
 
