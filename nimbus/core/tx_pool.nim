@@ -500,6 +500,7 @@ proc assembleBlock*(
           blobsBundle.proofs.add p
         for blob in tx.networkPayload.blobs:
           blobsBundle.blobs.add blob
+  blk.header.transactionsRoot = calcTxRoot(blk.txs)
 
   let com = xp.vmState.com
   if com.isShanghaiOrLater(blk.header.timestamp):
