@@ -303,6 +303,15 @@ proc getAccountProof*(ldg: LedgerRef, eAddr: Address): seq[seq[byte]] =
 proc getStorageProof*(ldg: LedgerRef, eAddr: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
   result = ldg.ac.getStorageProof(eAddr, slots)
 
+proc resolveCode*(ldg: LedgerRef, eAddr: Address): CodeBytesRef =
+  ldg.ac.resolveCode(eAddr)
+
+proc resolveCodeHash*(ldg: LedgerRef, eAddr: Address): Hash32  =
+  ldg.ac.resolveCodeHash(eAddr)
+
+proc resolveCodeSize*(ldg: LedgerRef, eAddr: Address): int =
+  ldg.ac.resolveCodeSize(eAddr)
+
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
@@ -326,6 +335,10 @@ proc getTransientStorage*(db: ReadOnlyStateDB,
                           address: Address, slot: UInt256): UInt256 = getTransientStorage(distinctBase db, address, slot)
 proc getAccountProof*(db: ReadOnlyStateDB, address: Address): seq[seq[byte]] = getAccountProof(distinctBase db, address)
 proc getStorageProof*(db: ReadOnlyStateDB, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] = getStorageProof(distinctBase db, address, slots)
+proc resolveCode*(db: ReadOnlyStateDB, eAddr: Address): CodeBytesRef = resolveCode(distinctBase db, eAddr)
+proc resolveCodeHash*(db: ReadOnlyStateDB, eAddr: Address): Hash32  = resolveCodeHash(distinctBase db, eAddr)
+proc resolveCodeSize*(db: ReadOnlyStateDB, eAddr: Address): int = resolveCodeSize(distinctBase db, eAddr)
+
 
 # ------------------------------------------------------------------------------
 # End
