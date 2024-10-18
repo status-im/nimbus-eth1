@@ -1,4 +1,4 @@
-# Fluffy with Portal hive
+# Testing Fluffy with hive
 
 Fluffy is one of the Portal clients that is being tested with [hive](https://github.com/ethereum/hive).
 
@@ -25,8 +25,10 @@ Example commands for running test suites:
 
 # Run portal hive tests from a specific portal hive simulator
 ./hive --sim portal --client fluffy --sim.limit history-interop
+```
 
-# Access results through web-ui:
+Access the results through web-ui:
+
 ```sh
 go build ./cmd/hiveview
 ./hiveview --serve --logdir ./workspace/logs
@@ -35,7 +37,7 @@ go build ./cmd/hiveview
 !!! note
     You can see all the implemented Portal simulators in [https://github.com/ethereum/hive/blob/master/simulators/portal/](https://github.com/ethereum/hive/blob/master/simulators/portal/)
 
-## Build a local development Docker image for portal-hive
+## Build a local development Docker image for hive
 
 To debug & develop Fluffy code against hive tests you might want to
 create a local development Docker image for Fluffy.

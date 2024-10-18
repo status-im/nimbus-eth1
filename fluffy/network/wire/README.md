@@ -14,7 +14,7 @@ protocol check out the
 To run the test suite specifically for the Portal wire protocol, run following
 commands:
 ```sh
-git clone git@github.com:status-im/nimbus-eth1.git
+git clone https://github.com/status-im/nimbus-eth1.git
 cd nimbus-eth1
 
 # To bring the git submodules up to date
@@ -40,7 +40,7 @@ send one of the Portal message types, wait for the response, and then shut down.
 
 ### Example usage
 ```sh
-git clone git@github.com:status-im/nimbus-eth1.git
+git clone https://github.com/status-im/nimbus-eth1.git
 cd nimbus-eth1
 
 # Build the fluffy tools

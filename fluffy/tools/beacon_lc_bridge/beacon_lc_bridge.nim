@@ -117,7 +117,7 @@ proc asPortalBlockData*(
   (payload.blockHash, headerWithProof, body)
 
 proc asPortalBlockData*(
-    payload: ExecutionPayloadV2 | ExecutionPayloadV3 | ExecutionPayloadV4
+    payload: ExecutionPayloadV2 | ExecutionPayloadV3
 ): (Hash32, BlockHeaderWithProof, PortalBlockBodyShanghai) =
   let
     txRoot = orderedTrieRoot(payload.transactions)

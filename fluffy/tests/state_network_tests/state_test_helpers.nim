@@ -142,7 +142,11 @@ proc stop*(sn: StateNode) {.async.} =
   await sn.discoveryProtocol.closeWait()
 
 proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =
-  return sn.stateNetwork.contentDB.get(contentId).isSome()
+  return sn.stateNetwork.portalProtocol
+    # The contentKey parameter isn't used but is required for compatibility
+    # with the dbGet handler inside getLocalContent.
+    .getLocalContent(ContentKeyByteList.init(@[]), contentId)
+    .isSome()
 
 proc mockStateRootLookup*(
     sn: StateNode, blockNumOrHash: uint64 | Hash32, stateRoot: Hash32
@@ -157,7 +161,7 @@ proc mockStateRootLookup*(
     contentId = history_content.toContentId(contentKeyBytes)
 
   sn.portalProtocol().storeContent(
-    contentKeyBytes, contentId, SSZ.encode(blockHeaderWithProof)
+    contentKeyBytes, contentId, SSZ.encode(blockHeaderWithProof), cacheContent = true
   )
 
 proc waitUntilContentAvailable*(sn: StateNode, contentId: ContentId) {.async.} =

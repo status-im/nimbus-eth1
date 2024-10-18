@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import std/tables, web3/primitives, stew/keyed_queue, results, ./rpc/rpc_utils
+import eth/common/hashes, web3/primitives, stew/keyed_queue, results, ./rpc/rpc_utils
 
 ## Cache for payloads received through block gossip and validated by the
 ## consensus light client.
@@ -15,15 +15,14 @@ import std/tables, web3/primitives, stew/keyed_queue, results, ./rpc/rpc_utils
 ## oldest payload is deleted first.
 type BlockCache* = ref object
   max: int
-  blocks: KeyedQueue[BlockHash, ExecutionData]
+  blocks: KeyedQueue[Hash32, ExecutionData]
 
 proc `==`(x, y: Quantity): bool {.borrow, noSideEffect.}
 
 proc new*(T: type BlockCache, max: uint32): T =
   let maxAsInt = int(max)
-  return BlockCache(
-    max: maxAsInt, blocks: KeyedQueue[BlockHash, ExecutionData].init(maxAsInt)
-  )
+  return
+    BlockCache(max: maxAsInt, blocks: KeyedQueue[Hash32, ExecutionData].init(maxAsInt))
 
 func len*(self: BlockCache): int =
   return len(self.blocks)
@@ -54,5 +53,5 @@ proc getByNumber*(self: BlockCache, number: Quantity): Opt[ExecutionData] =
 
   return payloadResult
 
-proc getPayloadByHash*(self: BlockCache, hash: BlockHash): Opt[ExecutionData] =
+proc getPayloadByHash*(self: BlockCache, hash: Hash32): Opt[ExecutionData] =
   return self.blocks.eq(hash)

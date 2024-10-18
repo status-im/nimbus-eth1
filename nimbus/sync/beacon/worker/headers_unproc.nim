@@ -28,7 +28,7 @@ proc headersUnprocFetch*(
   ## `0` is interpreted as `2^64`.
   ##
   let
-    q = ctx.lhc.unprocessed
+    q = ctx.hdr.unprocessed
 
     # Fetch top/right interval with largest block numbers
     jv = q.le().valueOr:
@@ -49,18 +49,18 @@ proc headersUnprocFetch*(
         BnRange.new(jv.maxPt - maxLen + 1, jv.maxPt)
 
   discard q.reduce(iv)
-  ctx.lhc.borrowed += iv.len
+  ctx.hdr.borrowed += iv.len
   ok(iv)
 
 
 proc headersUnprocCommit*(ctx: BeaconCtxRef; borrowed: uint) =
   ## Commit back all processed range
-  ctx.lhc.borrowed -= borrowed
+  ctx.hdr.borrowed -= borrowed
 
 proc headersUnprocCommit*(ctx: BeaconCtxRef; borrowed: uint; retuor: BnRange) =
   ## Merge back unprocessed range `retour`
   ctx.headersUnprocCommit borrowed
-  doAssert ctx.lhc.unprocessed.merge(retuor) == retuor.len
+  doAssert ctx.hdr.unprocessed.merge(retuor) == retuor.len
 
 proc headersUnprocCommit*(
     ctx: BeaconCtxRef;
@@ -69,7 +69,7 @@ proc headersUnprocCommit*(
     rMaxPt: BlockNumber) =
   ## Variant of `headersUnprocCommit()`
   ctx.headersUnprocCommit borrowed
-  doAssert ctx.lhc.unprocessed.merge(rMinPt, rMaxPt) == rMaxPt - rMinPt + 1
+  doAssert ctx.hdr.unprocessed.merge(rMinPt, rMaxPt) == rMaxPt - rMinPt + 1
 
 
 
@@ -81,53 +81,48 @@ proc headersUnprocCovered*(
   ## Check whether range is fully contained
   # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
   if minPt <= maxPt:
-    return ctx.lhc.unprocessed.covered(minPt, maxPt)
+    return ctx.hdr.unprocessed.covered(minPt, maxPt)
 
 proc headersUnprocCovered*(ctx: BeaconCtxRef; pt: BlockNumber): bool =
   ## Check whether point is contained
-  ctx.lhc.unprocessed.covered(pt, pt) == 1
+  ctx.hdr.unprocessed.covered(pt, pt) == 1
 
 
 proc headersUnprocTop*(ctx: BeaconCtxRef): BlockNumber =
-  let iv = ctx.lhc.unprocessed.le().valueOr:
+  let iv = ctx.hdr.unprocessed.le().valueOr:
     return BlockNumber(0)
   iv.maxPt
 
 proc headersUnprocTotal*(ctx: BeaconCtxRef): uint64 =
-  ctx.lhc.unprocessed.total()
+  ctx.hdr.unprocessed.total()
 
 proc headersUnprocBorrowed*(ctx: BeaconCtxRef): uint64 =
-  ctx.lhc.borrowed
+  ctx.hdr.borrowed
 
 proc headersUnprocChunks*(ctx: BeaconCtxRef): int =
-  ctx.lhc.unprocessed.chunks()
+  ctx.hdr.unprocessed.chunks()
 
 proc headersUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
-  ctx.lhc.unprocessed.chunks() == 0
+  ctx.hdr.unprocessed.chunks() == 0
 
 # ------------
 
 proc headersUnprocInit*(ctx: BeaconCtxRef) =
   ## Constructor
-  ctx.lhc.unprocessed = BnRangeSet.init()
+  ctx.hdr.unprocessed = BnRangeSet.init()
 
 
 proc headersUnprocSet*(ctx: BeaconCtxRef) =
   ## Clear
-  ctx.lhc.unprocessed.clear()
-  ctx.lhc.borrowed = 0u
-
-proc headersUnprocSet*(ctx: BeaconCtxRef; iv: BnRange) =
-  ## Set up new unprocessed range
-  ctx.headersUnprocSet()
-  discard ctx.lhc.unprocessed.merge(iv)
+  ctx.hdr.unprocessed.clear()
+  ctx.hdr.borrowed = 0u
 
 proc headersUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
   ## Set up new unprocessed range
   ctx.headersUnprocSet()
   # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
   if minPt <= maxPt:
-    discard ctx.lhc.unprocessed.merge(minPt, maxPt)
+    discard ctx.hdr.unprocessed.merge(minPt, maxPt)
 
 # ------------------------------------------------------------------------------
 # End

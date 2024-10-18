@@ -79,9 +79,9 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
   var logs: seq[Log]
   if receiptObject.logs.len > 0:
     for log in receiptObject.logs:
-      var topics: seq[eth_types.Topic]
+      var topics: seq[Topic]
       for topic in log.topics:
-        topics.add(eth_types.Topic(topic))
+        topics.add(Topic(topic))
 
       logs.add(Log(address: log.address, data: log.data, topics: topics))
 

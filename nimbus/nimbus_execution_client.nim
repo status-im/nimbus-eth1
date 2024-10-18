@@ -42,9 +42,8 @@ proc basicServices(nimbus: NimbusNode,
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
-  let head = com.db.getCanonicalHead()
-  nimbus.chainRef = newForkedChain(com, head)
-  doAssert nimbus.txPool.smartHead(head, nimbus.chainRef)
+  nimbus.chainRef = ForkedChainRef.init(com)
+  doAssert nimbus.txPool.smartHead(nimbus.chainRef.latestHeader,nimbus.chainRef)
 
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
 

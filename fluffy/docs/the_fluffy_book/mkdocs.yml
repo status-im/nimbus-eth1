@@ -84,6 +84,6 @@ nav:
       - 'run-local-testnet.md'
       - 'testnet-history-network.md'
       - 'testnet-beacon-network.md'
-    - 'fluffy-with-portal-hive.md'
+    - 'fluffy-with-hive.md'
     - 'protocol-interop-testing.md'
     - 'eth-data-exporter.md'

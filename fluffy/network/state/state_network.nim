@@ -27,7 +27,6 @@ logScope:
 
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
-  contentDB*: ContentDB
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoop: Future[void]
   statusLogLoop: Future[void]
@@ -65,7 +64,6 @@ proc new*(
 
   StateNetwork(
     portalProtocol: portalProtocol,
-    contentDB: contentDB,
     contentQueue: cq,
     historyNetwork: historyNetwork,
     validateStateIsCanonical: validateStateIsCanonical,
@@ -79,16 +77,15 @@ proc getContent(
   let
     contentKeyBytes = key.toContentKey().encode()
     contentId = contentKeyBytes.toContentId()
+    maybeLocalContent = n.portalProtocol.getLocalContent(contentKeyBytes, contentId)
 
-  if n.portalProtocol.inRange(contentId):
-    let contentFromDB = n.contentDB.get(contentId)
-    if contentFromDB.isSome():
-      let contentValue = V.decode(contentFromDB.get()).valueOr:
-        error "Unable to decode state content value from database"
-        return Opt.none(V)
+  if maybeLocalContent.isSome():
+    let contentValue = V.decode(maybeLocalContent.get()).valueOr:
+      error "Unable to decode state local content value"
+      return Opt.none(V)
 
-      info "Fetched state content value from database"
-      return Opt.some(contentValue)
+    info "Fetched state local content value"
+    return Opt.some(contentValue)
 
   let
     contentLookupResult = (
@@ -106,7 +103,9 @@ proc getContent(
     warn "Validation of retrieved state content failed"
     return Opt.none(V)
 
-  n.portalProtocol.storeContent(contentKeyBytes, contentId, contentValueBytes)
+  n.portalProtocol.storeContent(
+    contentKeyBytes, contentId, contentValueBytes, cacheContent = true
+  )
 
   Opt.some(contentValue)
 

@@ -15,10 +15,9 @@ import
   pkg/eth/[common, rlp],
   pkg/stew/[byteutils, interval_set, sorted_set],
   pkg/results,
-  ../../../db/storage_types,
-  ../../../common,
+  "../../.."/[common, core/chain, db/storage_types],
   ../worker_desc,
-  ./headers_unproc
+  "."/[blocks_unproc, headers_unproc]
 
 logScope:
   topics = "beacon db"
@@ -43,37 +42,24 @@ formatIt(Hash32):
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc fetchLinkedHChainsLayout(ctx: BeaconCtxRef): Opt[LinkedHChainsLayout] =
+proc fetchSyncStateLayout(ctx: BeaconCtxRef): Opt[SyncStateLayout] =
   let data = ctx.db.ctx.getKvt().get(LhcStateKey.toOpenArray).valueOr:
     return err()
   try:
-    result = ok(rlp.decode(data, LinkedHChainsLayout))
+    return ok(rlp.decode(data, SyncStateLayout))
   except RlpError:
-    return err()
-
-
-proc fetchSavedState(ctx: BeaconCtxRef): Opt[SavedDbStateSpecs] =
-  let db = ctx.db
-  var val: SavedDbStateSpecs
-  val.number = db.getSavedStateBlockNumber()
-
-  if db.getBlockHash(val.number, val.hash):
-    var header: Header
-    if db.getBlockHeader(val.hash, header):
-      val.parent = header.parentHash
-      return ok(val)
-
+    discard
   err()
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc dbStoreLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
+proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef) =
   ## Save chain layout to persistent db
-  const info = "dbStoreLinkedHChainsLayout"
-  if ctx.layout == ctx.lhc.lastLayout:
-    return false
+  const info = "dbStoreSyncStateLayout"
+  if ctx.layout == ctx.sst.lastLayout:
+    return
 
   let data = rlp.encode(ctx.layout)
   ctx.db.ctx.getKvt().put(LhcStateKey.toOpenArray, data).isOkOr:
@@ -86,42 +72,54 @@ proc dbStoreLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
     let number = ctx.db.getSavedStateBlockNumber()
     ctx.db.persistent(number).isOkOr:
       debug info & ": failed to save persistently", error=($$error)
-      return false
+      return
   else:
     trace info & ": not saved, tx pending", txLevel
-    return false
+    return
 
   trace info & ": saved pesistently on DB"
-  true
 
 
-proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
+proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef) =
   ## Restore chain layout from persistent db
   const info = "dbLoadLinkedHChainsLayout"
 
-  let rc = ctx.fetchLinkedHChainsLayout()
+  let
+    rc = ctx.fetchSyncStateLayout()
+    latest = ctx.chain.latestNumber()
+
   if rc.isOk:
-    ctx.lhc.layout = rc.value
-    let (uMin,uMax) = (rc.value.coupler+1, rc.value.dangling-1)
-    if uMin <= uMax:
-      # Add interval of unprocessed block range `(C,D)` from `README.md`
-      ctx.headersUnprocSet(uMin, uMax)
-    trace info & ": restored layout", C=rc.value.coupler.bnStr,
-      D=rc.value.dangling.bnStr, E=rc.value.endBn.bnStr
+    ctx.sst.layout = rc.value
+
+    # Add interval of unprocessed block range `(L,C]` from `README.md`
+    ctx.blocksUnprocSet(latest+1, ctx.layout.coupler)
+    ctx.blk.topRequest = ctx.layout.coupler
+
+    # Add interval of unprocessed header range `(C,D)` from `README.md`
+    ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
+
+    trace info & ": restored layout", L=latest.bnStr,
+      C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr,
+      F=ctx.layout.final.bnStr, H=ctx.layout.head.bnStr
+
   else:
-    let val = ctx.fetchSavedState().expect "saved states"
-    ctx.lhc.layout = LinkedHChainsLayout(
-      coupler:        val.number,
-      couplerHash:    val.hash,
-      dangling:       val.number,
-      danglingParent: val.parent,
-      endBn:          val.number,
-      endHash:        val.hash)
-    trace info & ": new layout", B=val.number, C=rc.value.coupler.bnStr,
-      D=rc.value.dangling.bnStr, E=rc.value.endBn.bnStr
+    let
+      latestHash = ctx.chain.latestHash()
+      latestParent = ctx.chain.latestHeader.parentHash
 
-  ctx.lhc.lastLayout = ctx.layout
+    ctx.sst.layout = SyncStateLayout(
+      coupler:        latest,
+      couplerHash:    latestHash,
+      dangling:       latest,
+      danglingParent: latestParent,
+      final:          latest,
+      finalHash:      latestHash,
+      head:           latest,
+      headHash:       latestHash)
 
+    trace info & ": new layout", L="C", C="D", D="F", F="H", H=latest.bnStr
+
+  ctx.sst.lastLayout = ctx.layout
 
 # ------------------
 
@@ -169,13 +167,6 @@ proc dbPeekParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
 proc dbUnstashHeader*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
   discard ctx.db.ctx.getKvt().del(beaconHeaderKey(bn).toOpenArray)
-
-# ------------------
-
-proc dbStateBlockNumber*(ctx: BeaconCtxRef): BlockNumber =
-  ## Currently only a wrapper around the function returning the current
-  ## database state block number
-  ctx.db.getSavedStateBlockNumber()
 
 # ------------------------------------------------------------------------------
 # End

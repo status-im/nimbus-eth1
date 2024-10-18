@@ -200,7 +200,7 @@ proc run*(
           try:
             headerCallback(cstring(Json.encode(forkyHeader)), 0)
           except SerializationError as e:
-            notice "finalizedHeaderCallback exception"
+            error "finalizedHeaderCallback exception", error = e.msg
 
   proc onOptimisticHeader(
       lightClient: LightClient, optimisticHeader: ForkedLightClientHeader
@@ -212,7 +212,7 @@ proc run*(
           try:
             headerCallback(cstring(Json.encode(forkyHeader)), 1)
           except SerializationError as e:
-            notice "optimisticHeaderCallback exception"
+            error "optimisticHeaderCallback exception", error = e.msg
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader

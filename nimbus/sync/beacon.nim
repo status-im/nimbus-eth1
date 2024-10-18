@@ -63,7 +63,7 @@ proc init*(
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.nBodiesBatch = chunkSize
   # Initalise for `persistBlocks()`
-  desc.ctx.pool.chain = chain.com.newChain()
+  desc.ctx.pool.chain = chain
   desc
 
 proc start*(ctx: BeaconSyncRef) =

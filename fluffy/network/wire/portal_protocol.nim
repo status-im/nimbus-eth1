@@ -74,6 +74,12 @@ declareCounter portal_gossip_with_lookup,
 declareCounter portal_gossip_without_lookup,
   "Portal wire protocol neighborhood gossip that did not require a node lookup",
   labels = ["protocol_id"]
+declareCounter portal_content_cache_hits,
+  "Portal wire protocol local content lookups that hit the cache",
+  labels = ["protocol_id"]
+declareCounter portal_content_cache_misses,
+  "Portal wire protocol local content lookups that don't hit the cache",
+  labels = ["protocol_id"]
 
 declareCounter portal_poke_offers,
   "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
@@ -151,6 +157,8 @@ type
 
   RadiusCache* = LRUCache[NodeId, UInt256]
 
+  ContentCache = LRUCache[ContentId, seq[byte]]
+
   ContentKV* = object
     contentKey*: ContentKeyByteList
     content*: seq[byte]
@@ -172,6 +180,7 @@ type
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
+    contentCache: ContentCache
     dbGet*: DbGetHandler
     dbPut*: DbStoreHandler
     dataRadius*: DbRadiusHandler
@@ -183,9 +192,8 @@ type
     radiusCache: RadiusCache
     offerQueue: AsyncQueue[OfferRequest]
     offerWorkers: seq[Future[void]]
-    disablePoke: bool
     pingTimings: Table[NodeId, chronos.Moment]
-    maxGossipNodes: int
+    config*: PortalProtocolConfig
 
   PortalResult*[T] = Result[T, string]
 
@@ -568,6 +576,8 @@ proc new*(
     ),
     baseProtocol: baseProtocol,
     toContentId: toContentId,
+    contentCache:
+      ContentCache.init(if config.disableContentCache: 0 else: config.contentCacheSize),
     dbGet: dbGet,
     dbPut: dbPut,
     dataRadius: dbRadius,
@@ -575,9 +585,8 @@ proc new*(
     stream: stream,
     radiusCache: RadiusCache.init(256),
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
-    disablePoke: config.disablePoke,
     pingTimings: Table[NodeId, chronos.Moment](),
-    maxGossipNodes: config.maxGossipNodes,
+    config: config,
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -1096,7 +1105,7 @@ proc triggerPoke*(
   ## In order to properly test gossip mechanisms (e.g. in Portal Hive),
   ## we need the option to turn off the POKE functionality as it influences
   ## how data moves around the network.
-  if p.disablePoke:
+  if p.config.disablePoke:
     return
   ## Triggers asynchronous offer-accept interaction to provided nodes.
   ## Provided content should be in range of provided nodes.
@@ -1525,9 +1534,9 @@ proc neighborhoodGossip*(
         elif node.id != srcNodeId.get():
           gossipNodes.add(node)
 
-  if gossipNodes.len >= p.maxGossipNodes: # use local nodes for gossip
+  if gossipNodes.len >= p.config.maxGossipNodes: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    let numberOfGossipedNodes = min(gossipNodes.len, p.maxGossipNodes)
+    let numberOfGossipedNodes = min(gossipNodes.len, p.config.maxGossipNodes)
     for node in gossipNodes[0 ..< numberOfGossipedNodes]:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
@@ -1535,7 +1544,7 @@ proc neighborhoodGossip*(
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
     let closestNodes = await p.lookup(NodeId(contentId))
-    let numberOfGossipedNodes = min(closestNodes.len, p.maxGossipNodes)
+    let numberOfGossipedNodes = min(closestNodes.len, p.config.maxGossipNodes)
     for node in closestNodes[0 ..< numberOfGossipedNodes]:
       # Note: opportunistically not checking if the radius of the node is known
       # and thus if the node is in radius with the content. Reason is, these
@@ -1569,8 +1578,7 @@ proc randomGossip*(
     let contentKV = ContentKV(contentKey: contentKeys[i], content: contentItem)
     discard contentList.add(contentKV)
 
-  const maxGossipNodes = 4
-  let nodes = p.routingTable.randomNodes(maxGossipNodes)
+  let nodes = p.routingTable.randomNodes(p.config.maxGossipNodes)
 
   for node in nodes[0 ..< nodes.len()]:
     let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
@@ -1590,7 +1598,12 @@ proc storeContent*(
     contentKey: ContentKeyByteList,
     contentId: ContentId,
     content: seq[byte],
+    cacheContent = false,
 ): bool {.discardable.} =
+  if cacheContent and not p.config.disableContentCache:
+    # We cache content regardless of whether it is in our radius or not
+    p.contentCache.put(contentId, content)
+
   # Always re-check that the key is still in the node range to make sure only
   # content in range is stored.
   if p.inRange(contentId):
@@ -1599,6 +1612,25 @@ proc storeContent*(
     true
   else:
     false
+
+proc getLocalContent*(
+    p: PortalProtocol, contentKey: ContentKeyByteList, contentId: ContentId
+): Opt[seq[byte]] =
+  # The cache can contain content that is not in our radius
+  let maybeContent = p.contentCache.get(contentId)
+  if maybeContent.isSome():
+    portal_content_cache_hits.inc(labelValues = [$p.protocolId])
+    return maybeContent
+
+  portal_content_cache_misses.inc(labelValues = [$p.protocolId])
+
+  # Check first if content is in range, as this is a cheaper operation
+  # than the database lookup.
+  if p.inRange(contentId):
+    doAssert(p.dbGet != nil)
+    p.dbGet(contentKey, contentId)
+  else:
+    Opt.none(seq[byte])
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are
