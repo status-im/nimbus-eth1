@@ -104,6 +104,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	update \
 	nimbus \
 	nimbus_execution_client \
+	nimbus_unified \
 	fluffy \
 	nimbus_verified_proxy \
 	libverifproxy \
@@ -366,6 +367,12 @@ ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif
 
+# Nimbus unified related targets
+
+# builds the unified client
+nimbus_unified: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "nimbus_unified/$@.nim"
 # Note about building Nimbus as a library:
 #
 # There were `wrappers`, `wrappers-static`, `libnimbus.so` and `libnimbus.a`
