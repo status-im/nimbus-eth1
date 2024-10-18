@@ -146,7 +146,7 @@ func validateOffer*(
 ): Result[void, string] =
   ?validateTrieProof(trustedStateRoot, key.path, offer.proof)
 
-  validateRetrieval(key, offer.toRetrievalValue())
+  validateRetrieval(key, offer.toRetrieval())
 
 func validateOffer*(
     trustedStateRoot: Opt[Hash32],
@@ -164,7 +164,7 @@ func validateOffer*(
 
   ?validateTrieProof(Opt.some(account.storageRoot), key.path, offer.storageProof)
 
-  validateRetrieval(key, offer.toRetrievalValue())
+  validateRetrieval(key, offer.toRetrieval())
 
 func validateOffer*(
     trustedStateRoot: Opt[Hash32], key: ContractCodeKey, offer: ContractCodeOffer
@@ -180,7 +180,7 @@ func validateOffer*(
   if not offer.code.hashEquals(account.codeHash):
     return err("hash of bytecode doesn't match the code hash in the account proof")
 
-  validateRetrieval(key, offer.toRetrievalValue())
+  validateRetrieval(key, offer.toRetrieval())
 
 func validateGetContentKey*(
     keyBytes: ContentKeyByteList
@@ -214,14 +214,14 @@ func validateOfferGetValue*(
     of accountTrieNode:
       let offer = ?AccountTrieNodeOffer.decode(contentBytes)
       ?validateOffer(trustedStateRoot, key.accountTrieNodeKey, offer)
-      offer.toRetrievalValue.encode()
+      offer.toRetrieval.encode()
     of contractTrieNode:
       let offer = ?ContractTrieNodeOffer.decode(contentBytes)
       ?validateOffer(trustedStateRoot, key.contractTrieNodeKey, offer)
-      offer.toRetrievalValue.encode()
+      offer.toRetrieval.encode()
     of contractCode:
       let offer = ?ContractCodeOffer.decode(contentBytes)
       ?validateOffer(trustedStateRoot, key.contractCodeKey, offer)
-      offer.toRetrievalValue.encode()
+      offer.toRetrieval.encode()
 
   ok(value)

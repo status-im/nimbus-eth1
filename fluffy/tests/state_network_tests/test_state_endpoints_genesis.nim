@@ -41,7 +41,7 @@ suite "State Endpoints - Genesis JSON Files":
     # store the account leaf node
     let contentKey = key.toContentKey().encode()
     stateNode.portalProtocol.storeContent(
-      contentKey, contentKey.toContentId(), offer.toRetrievalValue().encode()
+      contentKey, contentKey.toContentId(), offer.toRetrieval().encode()
     )
 
     # store the account parent nodes / all remaining nodes
@@ -52,7 +52,7 @@ suite "State Endpoints - Genesis JSON Files":
     stateNode.portalProtocol.storeContent(
       parentContentKey,
       parentContentKey.toContentId(),
-      parent.offer.toRetrievalValue().encode(),
+      parent.offer.toRetrieval().encode(),
     )
 
     for i in proof.low ..< proof.high - 1:
@@ -62,7 +62,7 @@ suite "State Endpoints - Genesis JSON Files":
       stateNode.portalProtocol.storeContent(
         parentContentKey,
         parentContentKey.toContentId(),
-        parent.offer.toRetrievalValue().encode(),
+        parent.offer.toRetrieval().encode(),
       )
 
   proc setupCodeInDb(
@@ -101,7 +101,7 @@ suite "State Endpoints - Genesis JSON Files":
     # store the contract storage leaf node
     let contentKey = key.toContentKey().encode()
     stateNode.portalProtocol.storeContent(
-      contentKey, contentKey.toContentId(), offer.toRetrievalValue().encode()
+      contentKey, contentKey.toContentId(), offer.toRetrieval().encode()
     )
 
     # store the remaining contract storage nodes
@@ -112,7 +112,7 @@ suite "State Endpoints - Genesis JSON Files":
     stateNode.portalProtocol.storeContent(
       parentContentKey,
       parentContentKey.toContentId(),
-      parent.offer.toRetrievalValue().encode(),
+      parent.offer.toRetrieval().encode(),
     )
 
     for i in storageProof.low ..< storageProof.high - 1:
@@ -122,7 +122,7 @@ suite "State Endpoints - Genesis JSON Files":
       stateNode.portalProtocol.storeContent(
         parentContentKey,
         parentContentKey.toContentId(),
-        parent.offer.toRetrievalValue().encode(),
+        parent.offer.toRetrieval().encode(),
       )
 
   asyncTest "Test getBalance, getTransactionCount, getStorageAt and getCode using JSON files":
