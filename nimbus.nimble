@@ -40,6 +40,7 @@ when declared(namedBin):
     "nimbus/nimbus_execution_client": "nimbus_execution_client",
     "fluffy/fluffy": "fluffy",
     "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
+    "nimbus_unified":"nimbus_unified"
   }.toTable()
 
 import std/os
@@ -129,3 +130,9 @@ task nimbus_verified_proxy, "Build Nimbus verified proxy":
 
 task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
   test "nimbus_verified_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+
+
+## nimbus unified tasks
+
+task nimbus_unified, "Build nimbus unified":
+  buildBinary "nimbus_unified", "nimbus_unified/", "-d:chronicles_log_level=TRACE"
