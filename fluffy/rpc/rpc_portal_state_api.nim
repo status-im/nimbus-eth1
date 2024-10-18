@@ -74,7 +74,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         contentBytes = hexToSeqByte(contentItem[1])
         contentKV = ContentKV(contentKey: keyBytes, content: contentBytes)
 
-      discard validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
+      discard validateOfferGetRetrieval(key, contentBytes).valueOr:
         raise invalidValueErr()
       contentItemsToOffer.add(contentKV)
 
@@ -83,7 +83,9 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     SSZ.encode(offerResult).to0xHex()
 
-  rpcServer.rpc("portal_stateGetContent") do(contentKey: string) -> ContentInfo:
+  rpcServer.rpc("portal_stateGetContent") do(
+    contentKey: string, parentContent: Opt[string]
+  ) -> ContentInfo:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
@@ -97,14 +99,22 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         raise contentNotFoundErr()
       contentValue = foundContent.content
 
-    validateRetrieval(key, contentValue).isOkOr:
-      raise invalidValueErr()
-    p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
+    if parentContent.isSome():
+      let
+        parentContentBytes = hexToSeqByte(parentContent.get())
+        offerBytes = validateRetrievalGetOffer(key, contentValue, parentContentBytes).valueOr:
+          raise invalidValueErr()
+      p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
+      p.triggerPoke(foundContent.nodesInterestedInContent, keyBytes, offerBytes)
+    else:
+      validateRetrieval(key, contentValue).isOkOr:
+        raise invalidValueErr()
+      p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
 
     ContentInfo(content: contentValue.to0xHex(), utpTransfer: foundContent.utpTransfer)
 
   rpcServer.rpc("portal_stateTraceGetContent") do(
-    contentKey: string
+    contentKey: string, parentContent: Opt[string]
   ) -> TraceContentLookupResult:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
@@ -134,7 +144,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
       contentBytes = hexToSeqByte(content)
-      contentValue = validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
+      contentValue = validateOfferGetRetrieval(key, contentBytes).valueOr:
         raise invalidValueErr()
 
     p.storeContent(keyBytes, contentId, contentValue)
@@ -156,7 +166,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
       contentBytes = hexToSeqByte(content)
-      contentValue = validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
+      contentValue = validateOfferGetRetrieval(key, contentBytes).valueOr:
         raise invalidValueErr()
 
     p.storeContent(keyBytes, contentId, contentValue)

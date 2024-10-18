@@ -182,6 +182,9 @@ func validateOffer*(
 
   validateRetrieval(key, offer.toRetrieval())
 
+# Local validations that check the structure of the content keys and values.
+# None of the validations below check if the data is canonical or not
+
 func validateGetContentKey*(
     keyBytes: ContentKeyByteList
 ): Result[(ContentKey, ContentId), string] =
@@ -204,24 +207,52 @@ func validateRetrieval*(
     let retrieval = ?ContractCodeRetrieval.decode(contentBytes)
     validateRetrieval(key.contractCodeKey, retrieval)
 
-func validateOfferGetValue*(
-    trustedStateRoot: Opt[Hash32], key: ContentKey, contentBytes: seq[byte]
+func validateRetrievalGetOffer*(
+    key: ContentKey, contentBytes: seq[byte], parentContentBytes: seq[byte]
 ): Result[seq[byte], string] =
-  let value =
-    case key.contentType
-    of unused:
-      raiseAssert("ContentKey contentType: unused")
-    of accountTrieNode:
-      let offer = ?AccountTrieNodeOffer.decode(contentBytes)
-      ?validateOffer(trustedStateRoot, key.accountTrieNodeKey, offer)
-      offer.toRetrieval.encode()
-    of contractTrieNode:
-      let offer = ?ContractTrieNodeOffer.decode(contentBytes)
-      ?validateOffer(trustedStateRoot, key.contractTrieNodeKey, offer)
-      offer.toRetrieval.encode()
-    of contractCode:
-      let offer = ?ContractCodeOffer.decode(contentBytes)
-      ?validateOffer(trustedStateRoot, key.contractCodeKey, offer)
-      offer.toRetrieval.encode()
+  case key.contentType
+  of unused:
+    raiseAssert("ContentKey contentType: unused")
+  of accountTrieNode:
+    let
+      retrieval = ?AccountTrieNodeRetrieval.decode(contentBytes)
+      parentOffer = ?AccountTrieNodeOffer.decode(parentContentBytes)
+      offer = retrieval.toOffer(parentOffer)
+    ?validateRetrieval(key.accountTrieNodeKey, retrieval)
+    ?validateOffer(Opt.none(Hash32), key.accountTrieNodeKey, offer)
+    ok(offer.encode())
+  of contractTrieNode:
+    let
+      retrieval = ?ContractTrieNodeRetrieval.decode(contentBytes)
+      parentOffer = ?ContractTrieNodeOffer.decode(parentContentBytes)
+      offer = retrieval.toOffer(parentOffer)
+    ?validateRetrieval(key.contractTrieNodeKey, retrieval)
+    ?validateOffer(Opt.none(Hash32), key.contractTrieNodeKey, offer)
+    ok(offer.encode())
+  of contractCode:
+    let
+      retrieval = ?ContractCodeRetrieval.decode(contentBytes)
+      parentOffer = ?ContractCodeOffer.decode(parentContentBytes)
+      offer = retrieval.toOffer(parentOffer)
+    ?validateRetrieval(key.contractCodeKey, retrieval)
+    ?validateOffer(Opt.none(Hash32), key.contractCodeKey, offer)
+    ok(offer.encode())
 
-  ok(value)
+func validateOfferGetRetrieval*(
+    key: ContentKey, contentBytes: seq[byte]
+): Result[seq[byte], string] =
+  case key.contentType
+  of unused:
+    raiseAssert("ContentKey contentType: unused")
+  of accountTrieNode:
+    let offer = ?AccountTrieNodeOffer.decode(contentBytes)
+    ?validateOffer(Opt.none(Hash32), key.accountTrieNodeKey, offer)
+    ok(offer.toRetrieval.encode())
+  of contractTrieNode:
+    let offer = ?ContractTrieNodeOffer.decode(contentBytes)
+    ?validateOffer(Opt.none(Hash32), key.contractTrieNodeKey, offer)
+    ok(offer.toRetrieval.encode())
+  of contractCode:
+    let offer = ?ContractCodeOffer.decode(contentBytes)
+    ?validateOffer(Opt.none(Hash32), key.contractCodeKey, offer)
+    ok(offer.toRetrieval.encode())
