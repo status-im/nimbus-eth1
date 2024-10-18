@@ -12,33 +12,37 @@
 import
   ./web3_eth_conv,
   web3/execution_types,
-  ../utils/utils,
-  eth/common/eth_types_rlp
+  eth/common/eth_types_rlp,
+  eth/trie/ordered_trie
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func wdRoot(list: openArray[WithdrawalV1]): Hash32
-             {.gcsafe, raises:[].} =
-  {.noSideEffect.}:
-    calcWithdrawalsRoot(ethWithdrawals list)
+template append(w: var RlpWriter, t: TypedTransaction) =
+  w.appendRawBytes(distinctBase t)
 
-func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[Hash32]
-             {.gcsafe, raises:[].} =
-  {.noSideEffect.}:
-    if x.isNone: Opt.none(Hash32)
-    else: Opt.some(wdRoot x.get)
+template append(w: var RlpWriter, t: WithdrawalV1) =
+  w.append blocks.Withdrawal(
+    index: distinctBase(t.index),
+    validatorIndex: distinctBase(t.validatorIndex),
+    address: t.address,
+    amount: distinctBase(t.amount),
+  )
 
-func txRoot(list: openArray[Web3Tx]): Hash32
-             {.gcsafe, raises:[RlpError].} =
-  {.noSideEffect.}:
-    calcTxRoot(ethTxs(list))
+func wdRoot(list: openArray[WithdrawalV1]): Hash32 =
+  orderedTrieRoot(list)
+
+func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[Hash32] =
+  if x.isNone: Opt.none(Hash32)
+  else: Opt.some(wdRoot x.get)
+
+func txRoot(list: openArray[Web3Tx]): Hash32 =
+  orderedTrieRoot(list)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-{.push gcsafe, raises:[].}
 
 func executionPayload*(blk: Block): ExecutionPayload =
   ExecutionPayload(
@@ -81,9 +85,9 @@ func executionPayloadV1V2*(blk: Block): ExecutionPayloadV1OrV2 =
   )
 
 func blockHeader*(p: ExecutionPayload,
-                  beaconRoot: Opt[Hash32],
+                  parentBeaconBlockRoot: Opt[Hash32],
                   requestsHash: Opt[Hash32]):
-                    Header {.gcsafe, raises:[RlpError].} =
+                    Header =
   Header(
     parentHash     : p.parentHash,
     ommersHash     : EMPTY_UNCLE_HASH,
@@ -104,7 +108,7 @@ func blockHeader*(p: ExecutionPayload,
     withdrawalsRoot: wdRoot p.withdrawals,
     blobGasUsed    : u64(p.blobGasUsed),
     excessBlobGas  : u64(p.excessBlobGas),
-    parentBeaconBlockRoot: beaconRoot,
+    parentBeaconBlockRoot: parentBeaconBlockRoot,
     requestsHash   : requestsHash,
   )
 
@@ -117,11 +121,11 @@ func blockBody*(p: ExecutionPayload):
   )
 
 func ethBlock*(p: ExecutionPayload,
-               beaconRoot: Opt[Hash32],
+               parentBeaconBlockRoot: Opt[Hash32],
                requestsHash: Opt[Hash32]):
                  Block {.gcsafe, raises:[RlpError].} =
   Block(
-    header      : blockHeader(p, beaconRoot, requestsHash),
+    header      : blockHeader(p, parentBeaconBlockRoot, requestsHash),
     uncles      : @[],
     transactions: ethTxs p.transactions,
     withdrawals : ethWithdrawals p.withdrawals,

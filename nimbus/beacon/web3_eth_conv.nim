@@ -75,7 +75,7 @@ func ethBlob*(x: Web3ExtraData): seq[byte] =
 func ethWithdrawal*(x: WithdrawalV1): common.Withdrawal =
   result.index = x.index.uint64
   result.validatorIndex = x.validatorIndex.uint64
-  result.address = x.address.Address
+  result.address = x.address
   result.amount = x.amount.uint64
 
 func ethWithdrawals*(list: openArray[WithdrawalV1]):
