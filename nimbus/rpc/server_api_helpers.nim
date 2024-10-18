@@ -15,7 +15,7 @@ import
   ../constants,
   ../transaction
 
-from ../beacon/web3_eth_conv import w3Qty, w3AccessList
+from ../beacon/web3_eth_conv import w3Qty
 
 proc toWd(wd: eth_types.Withdrawal): WithdrawalObject =
   WithdrawalObject(
@@ -63,7 +63,7 @@ proc populateTransactionObject*(tx: Transaction,
 
   if tx.txType >= TxEip2930:
     result.chainId = Opt.some(Quantity(tx.chainId))
-    result.accessList = Opt.some(w3AccessList(tx.accessList))
+    result.accessList = Opt.some(tx.accessList)
 
   if tx.txType >= TxEIP4844:
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)

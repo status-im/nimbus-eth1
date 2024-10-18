@@ -482,11 +482,5 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["currentExcessBlobGas"] = @@(x.currentExcessBlobGas)
   if x.blobGasUsed.isSome:
     result["blobGasUsed"] = @@(x.blobGasUsed)
-  if x.requestsRoot.isSome:
-    result["requestsRoot"] = @@(x.requestsRoot)
-  if x.depositRequests.isSome:
-    result["depositRequests"] = @@(x.depositRequests)
-  if x.withdrawalRequests.isSome:
-    result["withdrawalRequests"] = @@(x.withdrawalRequests)
-  if x.consolidationRequests.isSome:
-    result["consolidationRequests"] = @@(x.consolidationRequests)
+  if x.requestsHash.isSome:
+    result["requestsHash"] = @@(x.requestsHash)

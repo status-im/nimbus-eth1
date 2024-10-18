@@ -165,13 +165,14 @@ proc newPayloadV3*(client: RpcClient,
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
 
 proc newPayloadV4*(client: RpcClient,
-      payload: ExecutionPayloadV4,
+      payload: ExecutionPayloadV3,
       versionedHashes: seq[VersionedHash],
-      parentBeaconBlockRoot: Hash32
-      ):
+      parentBeaconBlockRoot: Hash32,
+      executionRequests: array[3, seq[byte]]):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
-    client.engine_newPayloadV4(payload, versionedHashes, parentBeaconBlockRoot)
+    client.engine_newPayloadV4(payload, versionedHashes,
+      parentBeaconBlockRoot, executionRequests)
 
 proc newPayloadV1*(client: RpcClient,
       payload: ExecutionPayload):
@@ -197,11 +198,13 @@ proc newPayloadV3*(client: RpcClient,
 proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
-      parentBeaconBlockRoot: Opt[Hash32]
+      parentBeaconBlockRoot: Opt[Hash32],
+      executionRequests: Opt[array[3, seq[byte]]]
       ):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
-    client.engine_newPayloadV4(payload, versionedHashes, parentBeaconBlockRoot)
+    client.engine_newPayloadV4(payload, versionedHashes,
+      parentBeaconBlockRoot, executionRequests)
 
 proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
   for w3tx in list:
@@ -211,7 +214,9 @@ proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
 
 proc newPayload*(client: RpcClient,
                  payload: ExecutionPayload,
-                 beaconRoot = Opt.none(Hash32)): Result[PayloadStatusV1, string] =
+                 beaconRoot = Opt.none(Hash32),
+                 executionRequests = Opt.none(array[3, seq[byte]])
+                 ): Result[PayloadStatusV1, string] =
   case payload.version
   of Version.V1: return client.newPayloadV1(payload.V1)
   of Version.V2: return client.newPayloadV2(payload.V2)
@@ -225,14 +230,16 @@ proc newPayload*(client: RpcClient,
       beaconRoot.get)
   of Version.V4:
     let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV4(payload.V4,
+    return client.newPayloadV4(payload.V3,
       versionedHashes,
-      beaconRoot.get)
+      beaconRoot.get,
+      executionRequests.get)
 
 proc newPayload*(client: RpcClient,
                  version: Version,
                  payload: ExecutionPayload,
-                 beaconRoot = Opt.none(Hash32)): Result[PayloadStatusV1, string] =
+                 beaconRoot = Opt.none(Hash32),
+                 executionRequests = Opt.none(array[3, seq[byte]])): Result[PayloadStatusV1, string] =
   case version
   of Version.V1: return client.newPayloadV1(payload)
   of Version.V2: return client.newPayloadV2(payload)
@@ -245,7 +252,8 @@ proc newPayload*(client: RpcClient,
     let versionedHashes = collectBlobHashes(payload.transactions)
     return client.newPayloadV4(payload,
       Opt.some(versionedHashes),
-      beaconRoot)
+      beaconRoot,
+      executionRequests)
 
 proc newPayload*(client: RpcClient,
                  version: Version,
@@ -260,7 +268,8 @@ proc newPayload*(client: RpcClient,
   of Version.V4:
     return client.newPayloadV4(payload.basePayload,
       payload.versionedHashes,
-      payload.beaconRoot)
+      payload.beaconRoot,
+      payload.executionRequests)
 
 proc exchangeCapabilities*(client: RpcClient,
       methods: seq[string]):
@@ -333,7 +342,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     to              : tx.to,
     value           : tx.value,
     payload         : tx.input,
-    accessList      : ethAccessList(tx.accessList),
+    accessList      : tx.accessList.get(@[]),
     maxFeePerBlobGas: tx.maxFeePerBlobGas.get(0.u256),
     versionedHashes : vHashes(tx.blobVersionedHashes),
     V               : tx.v.uint64,
@@ -403,7 +412,7 @@ type
     r*: UInt256
     s*: UInt256
     chainId*: Opt[ChainId]
-    accessList*: Opt[seq[AccessTuple]]
+    accessList*: Opt[seq[AccessPair]]
     maxFeePerBlobGas*: Opt[UInt256]
     versionedHashes*: Opt[seq[VersionedHash]]
 

@@ -36,6 +36,7 @@ type
     payload: ExecutionPayload
     blockValue: UInt256
     blobsBundle: Opt[BlobsBundleV1]
+    executionRequests: Opt[array[3, seq[byte]]]
 
   HeaderItem = object
     hash: Hash32
@@ -78,6 +79,14 @@ proc put*(api: var PayloadQueue, id: Bytes8,
     payload: payload, blockValue: blockValue, blobsBundle: blobsBundle))
 
 proc put*(api: var PayloadQueue, id: Bytes8,
+          blockValue: UInt256, payload: ExecutionPayload,
+          blobsBundle: Opt[BlobsBundleV1],
+          executionRequests: Opt[array[3, seq[byte]]]) =
+  api.payloadQueue.put(PayloadItem(id: id,
+    payload: payload, blockValue: blockValue,
+    blobsBundle: blobsBundle, executionRequests: executionRequests))
+
+proc put*(api: var PayloadQueue, id: Bytes8,
           blockValue: UInt256, payload: SomeExecutionPayload,
           blobsBundle: Opt[BlobsBundleV1]) =
   doAssert blobsBundle.isNone == (payload is
@@ -114,6 +123,20 @@ proc get*(api: PayloadQueue, id: Bytes8,
   false
 
 proc get*(api: PayloadQueue, id: Bytes8,
+          blockValue: var UInt256,
+          payload: var ExecutionPayload,
+          blobsBundle: var Opt[BlobsBundleV1],
+          executionRequests: var Opt[array[3, seq[byte]]]): bool =
+  for x in api.payloadQueue:
+    if x.id == id:
+      payload = x.payload
+      blockValue = x.blockValue
+      blobsBundle = x.blobsBundle
+      executionRequests = x.executionRequests
+      return true
+  false
+
+proc get*(api: PayloadQueue, id: PayloadID,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1): bool =
   var

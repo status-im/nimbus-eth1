@@ -93,7 +93,6 @@ proc fetchAndCheck(
       blk.blocks[offset + n].transactions = bodies[n].transactions
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
-      blk.blocks[offset + n].requests     = bodies[n].requests
 
   return offset < blk.blocks.len.uint64
 
