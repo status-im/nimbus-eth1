@@ -16,7 +16,7 @@
 
 import
   stew/sorted_set,
-  ../../db/[ledger, core_db],
+  ../../db/ledger,
   ../../common/common,
   ../../utils/utils,
   ../../constants,
@@ -34,14 +34,12 @@ type
     # Packer state
     vmState: BaseVMState
     txDB: TxTabsRef
-    tr: CoreDbMptRef
     cleanState: bool
     numBlobPerBlock: int
 
     # Packer results
     blockValue: UInt256
     stateRoot: Hash32
-    txRoot: Hash32
     receiptsRoot: Hash32
     logsBloom: Bloom
 
@@ -161,10 +159,6 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt)
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
-  # Update txRoot
-  pst.tr.merge(rlp.encode(inx.uint64), rlp.encode(item.tx)).isOkOr:
-    raiseAssert "runTxCommit(): merge failed, " & $$error
-
   # Add the item to the `packed` bucket. This implicitely increases the
   # receipts index `inx` at the next visit of this function.
   discard pst.txDB.reassign(item,txItemPacked)
@@ -182,10 +176,8 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string]
   let packer = TxPacker(
     vmState: xp.vmState,
     txDB: xp.txDB,
-    tr: AristoDbMemory.newCoreDbRef().ctx.getGeneric(clearData=true),
     numBlobPerBlock: 0,
     blockValue: 0.u256,
-    txRoot: EMPTY_ROOT_HASH,
     stateRoot: xp.vmState.parent.stateRoot,
   )
 
@@ -267,8 +259,6 @@ proc vmExecCommit(pst: var TxPacker) =
 
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
-  pst.txRoot = pst.tr.state(updateOk=true).valueOr:
-    raiseAssert "vmExecCommit(): state() failed " & $$error
   pst.stateRoot = vmState.stateDB.rootHash
 
 
@@ -314,7 +304,6 @@ proc assembleHeader*(pst: TxPacker): Header =
     ommersHash:    EMPTY_UNCLE_HASH,
     coinbase:      pos.feeRecipient,
     stateRoot:     pst.stateRoot,
-    transactionsRoot: pst.txRoot,
     receiptsRoot:  pst.receiptsRoot,
     logsBloom:     pst.logsBloom,
     difficulty:    UInt256.zero(),
