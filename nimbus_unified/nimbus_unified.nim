@@ -96,8 +96,14 @@ proc monitor*(tasksList: var NimbusTasks, config: NimbusConfig) =
   info "monitoring tasks"
 
   while true:
-    info "nothing new"
-    sleep(5000)
+    info "checking tasks ... "
+
+    # -check an atomic (to be created when needed) if it s required to shutdown
+    #   this will atomic flag solves:
+          # - non responding thread
+          # - thread that required shutdown
+
+    sleep(cNimbusTaskTimeoutMs)
 
 ## create running workers
 proc startTasks*(tasksList: var NimbusTasks, configs: NimbusConfig) =
@@ -116,6 +122,8 @@ proc startTasks*(tasksList: var NimbusTasks, configs: NimbusConfig) =
     "Consensus Layer", cNimbusTaskTimeoutMs, consensusLayerHandler, paramsConsensus
   )
 
+# ------
+
 when isMainModule:
   info "Starting Nimbus"
   ## TODO
@@ -129,7 +137,7 @@ when isMainModule:
   let nimbusConfigs = NimbusConfig()
   var tasksList: NimbusTasks = NimbusTasks.new
 
-  ## next code snippet requires a conf.nim file (eg: beacon_lc_bridge_conf.nim)
+  ## this code snippet requires a conf.nim file (eg: beacon_lc_bridge_conf.nim)
   #   var config = makeBannerAndConfig("Nimbus client ", NimbusConfig)
   #   setupLogging(config.logLevel, config.logStdout, config.logFile)
 
@@ -150,9 +158,7 @@ when isMainModule:
     tasksList.joinTasks()
     notice "Shutting down now"
     quit(0)
-
   setControlCHook(controlCHandler)
 
-  while true:
-    info "looping"
-    sleep(2000)
+  #start monitoring
+  tasksList.monitor(nimbusConfigs)
