@@ -5,31 +5,18 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/[atomics, os, tables], chronicles, beacon_chain/nimbus_binary_common
-
-## Exceptions
-type NimbusTasksError* = object of CatchableError
-
-#task shutdown flag
-var isShutDownRequired*: Atomic[bool]
-isShutDownRequired.store(false)
-
-## Configuration
-## TODO: implement a json (or other format like yaml) config reader for config reading (file config scenarios)
-##  or extract from other nimbus components
-## TODO: implement a command line reader to read arguments
-type NimbusConfig* = object
-  configTable: Table[string, string]
-
-## Nimbus workers arguments (thread arguments)
-type TaskParameters* = object
-  name*: string
-  configs*: string
-    # TODO: replace this with the extracted configs from NimbusConfig needed by the worker
+import
+  std/[atomics, os],
+  chronicles,
+  consensus/consensus_wrapper,
+  execution/execution_wrapper
 
 ## Constants
 const cNimbusMaxTasks* = 5
 const cNimbusTaskTimeoutMs* = 5000
+
+## Exceptions
+type NimbusTasksError* = object of CatchableError
 
 ## Task and associated task information
 type NimbusTask* = ref object
@@ -37,7 +24,7 @@ type NimbusTask* = ref object
   timeoutMs*: uint32
   threadHandler*: Thread[TaskParameters]
 
-## Task scheduler and manager
+## Task manager
 type NimbusTasks* = ref object
   taskList*: array[cNimbusMaxTasks, NimbusTask]
 
@@ -53,8 +40,7 @@ logScope:
 proc executionLayerHandler(parameters: TaskParameters) {.thread.} =
   info "Started task:", task = parameters.name
   while true:
-    sleep(3000)
-    info "exec"
+    executionWrapper(parameters)
     if isShutDownRequired.load() == true:
       break
   info "\tExiting task;", task = parameters.name
@@ -62,14 +48,10 @@ proc executionLayerHandler(parameters: TaskParameters) {.thread.} =
 ## Consensus Layer handler
 proc consensusLayerHandler(parameters: TaskParameters) {.thread.} =
   info "Started task:", task = parameters.name
-  while true:
-    sleep(3000)
-    info "exec"
-    if isShutDownRequired.load() == true:
-      break
+  consensusWrapper(parameters)
   info "\tExiting task:", task = parameters.name
 
-## Waits for tasks to finish
+## Waits for tasks to finish (joinThreads)
 proc joinTasks(tasks: var NimbusTasks) =
   for i in 0 .. cNimbusMaxTasks - 1:
     if not tasks.taskList[i].isNil:
