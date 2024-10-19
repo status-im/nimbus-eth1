@@ -24,13 +24,11 @@
 import
   ../aristo,
   ./memory_only,
-  base_iterators_persistent,
   ./backend/aristo_rocksdb,
   ../opts
 
 export
-  memory_only,
-  base_iterators_persistent
+  memory_only
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol

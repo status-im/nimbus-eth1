@@ -90,19 +90,6 @@ iterator walkPairsImpl*[T](
     if rvid.vid notin seen:
       yield (rvid,vtx)
 
-iterator replicateImpl*[T](
-   db: AristoDbRef;                   # Database with top layer & backend filter
-     ): tuple[rvid: RootedVertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
-  ## Variant of `walkPairsImpl()` for legacy applications.
-  for (rvid,vtx) in walkPairsImpl[T](db):
-    let node = block:
-      let rc = vtx.toNode(rvid.root, db)
-      if rc.isOk:
-        rc.value
-      else:
-        NodeRef(nil)
-    yield (rvid, db.getKey rvid, vtx, node)
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
