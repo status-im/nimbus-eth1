@@ -13,7 +13,6 @@ import
   ../nimbus/constants,
   ../nimbus/core/chain,
   ./config,
-  ../nimbus/db/core_db/persistent,
   ../nimbus/utils/era_helpers,
   kzg4844/kzg,
   web3,

@@ -44,8 +44,7 @@ type
     Immediate
     KeepConnection
 
-  RpcAuthHook* = proc(request: HttpRequestRef): Future[HttpResponseRef]
-                  {.gcsafe, async: (raises: [CatchableError]).}
+  RpcAuthHook* = HttpAuthHook
 
   RpcHandlerProc* = proc(request: HttpRequestRef): Future[RpcHandlerResult]
                       {.async: (raises: []).}
@@ -69,6 +68,7 @@ func defaultRpcHttpServerParams(): RpcHttpServerParams =
     backlogSize: 100,
     httpHeadersTimeout: 10.seconds,
     maxHeadersSize: 64 * 1024,
+    # Needs to accomodate a large block and all its blobs, with json overhead
     maxRequestBodySize: 16 * 1024 * 1024,
   )
 
