@@ -68,8 +68,8 @@ func defaultRpcHttpServerParams(): RpcHttpServerParams =
     bufferSize: 4096,
     backlogSize: 100,
     httpHeadersTimeout: 10.seconds,
-    maxHeadersSize: 8192,
-    maxRequestBodySize: 2 * 1024 * 1024,
+    maxHeadersSize: 64 * 1024,
+    maxRequestBodySize: 16 * 1024 * 1024,
   )
 
 proc resolvedAddress(address: string): Result[TransportAddress, string] =
