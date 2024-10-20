@@ -203,6 +203,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
   if pst.numBlobPerBlock + item.tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
     return ContinueWithNextAccount
   pst.numBlobPerBlock += item.tx.versionedHashes.len
+  vmState.blobGasUsed += item.tx.getTotalBlobGas
 
   # Verify we have enough gas in gasPool
   if vmState.gasPool < item.tx.gasLimit:
