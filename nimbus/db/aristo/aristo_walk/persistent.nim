@@ -59,14 +59,6 @@ iterator walkPairs*[T: RdbBackendRef](
   for (rvid,vtx) in walkPairsImpl[T](db):
     yield (rvid,vtx)
 
-iterator replicate*[T: RdbBackendRef](
-   _: type T;
-   db: AristoDbRef;
-    ): tuple[rvid: RootedVertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
-  ## Variant of `walkPairsImpl()` for legacy applications.
-  for (rvid,key,vtx,node) in replicateImpl[T](db):
-   yield (rvid,key,vtx,node)
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

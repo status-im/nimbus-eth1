@@ -84,7 +84,7 @@ template wrapException(body: untyped): auto =
 
 # setInvalidAncestor is a callback for the downloader to notify us if a bad block
 # is encountered during the async sync.
-proc setInvalidAncestor(ben: BeaconEngineRef,
+func setInvalidAncestor(ben: BeaconEngineRef,
                          invalid, origin: Header) =
   ben.invalidTipsets[origin.blockHash] = invalid
   inc ben.invalidBlocksHits.mgetOrPut(invalid.blockHash, 0)
@@ -112,23 +112,23 @@ func new*(_: type BeaconEngineRef,
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc put*(ben: BeaconEngineRef,
+func put*(ben: BeaconEngineRef,
           hash: Hash32, header: Header) =
   ben.queue.put(hash, header)
 
-proc put*(ben: BeaconEngineRef, id: Bytes8,
+func put*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: UInt256, payload: ExecutionPayload,
           blobsBundle: Opt[BlobsBundleV1]) =
   ben.queue.put(id, blockValue, payload, blobsBundle)
 
-proc put*(ben: BeaconEngineRef, id: Bytes8,
+func put*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: UInt256, payload: SomeExecutionPayload,
           blobsBundle: Opt[BlobsBundleV1]) =
   doAssert blobsBundle.isNone == (payload is
     ExecutionPayloadV1 | ExecutionPayloadV2)
   ben.queue.put(id, blockValue, payload, blobsBundle)
 
-proc put*(ben: BeaconEngineRef, id: Bytes8,
+func put*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: UInt256,
           payload: ExecutionPayloadV1 | ExecutionPayloadV2) =
   ben.queue.put(
@@ -143,17 +143,17 @@ func com*(ben: BeaconEngineRef): CommonRef =
 func chain*(ben: BeaconEngineRef): ForkedChainRef =
   ben.chain
 
-proc get*(ben: BeaconEngineRef, hash: Hash32,
+func get*(ben: BeaconEngineRef, hash: Hash32,
           header: var Header): bool =
   ben.queue.get(hash, header)
 
-proc get*(ben: BeaconEngineRef, id: Bytes8,
+func get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayload,
           blobsBundle: var Opt[BlobsBundleV1]): bool =
   ben.queue.get(id, blockValue, payload, blobsBundle)
 
-proc get*(ben: BeaconEngineRef, id: Bytes8,
+func get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayload,
           blobsBundle: var Opt[BlobsBundleV1],
@@ -165,18 +165,18 @@ func get*(ben: BeaconEngineRef, id: PayloadID,
           payload: var ExecutionPayloadV1): bool =
   ben.queue.get(id, blockValue, payload)
 
-proc get*(ben: BeaconEngineRef, id: Bytes8,
+func get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV2): bool =
   ben.queue.get(id, blockValue, payload)
 
-proc get*(ben: BeaconEngineRef, id: Bytes8,
+func get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV3,
           blobsBundle: var BlobsBundleV1): bool =
   ben.queue.get(id, blockValue, payload, blobsBundle)
 
-proc get*(ben: BeaconEngineRef, id: Bytes8,
+func get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1OrV2): bool =
   ben.queue.get(id, blockValue, payload)
@@ -236,7 +236,7 @@ proc generatePayload*(ben: BeaconEngineRef,
       blobsBundle: blobsBundle,
       blockValue: bundle.blockValue)
 
-proc setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32) =
+func setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32) =
   ben.invalidBlocksHits[blockHash] = 1
   ben.invalidTipsets[blockHash] = header
 
