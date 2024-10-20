@@ -140,7 +140,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     )
     notice "Communication with the EL Success", data = data
   except CatchableError as exc:
-    error "Error Connecting to the EL Engine API", error = exc.msg
+    error "Error connecting to the EL Engine API", error = exc.msg
     quit(QuitFailure)
 
   # Get the latest block number from the EL rest api
@@ -209,16 +209,13 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
         # Thus calls will be same for Bellatrix and Capella forks
         # And for Deneb, we will pass the versioned hashes
         when consensusFork <= ConsensusFork.Capella:
-          debug "Making new payload call for Bellatrix/Capella"
           payloadResponse = await rpcClient.newPayload(payload)
         elif consensusFork >= ConsensusFork.Deneb:
           # Calculate the versioned hashes from the kzg commitments
-          debug "Generating the versioned hashes for Deneb"
           let versioned_hashes = mapIt(
             forkyBlck.message.body.blob_kzg_commitments,
             engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
           )
-          debug "Making new payload call for Deneb"
           payloadResponse = await rpcClient.newPayload(
             payload, versioned_hashes, forkyBlck.message.parent_root.to(Hash32)
           )
