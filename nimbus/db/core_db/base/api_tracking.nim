@@ -87,7 +87,6 @@ type
     MptMergeFn          = "mpt/merge"
     MptProofFn          = "mpt/proof"
     MptPairsIt          = "mpt/pairs"
-    MptReplicateIt      = "mpt/replicate"
     MptStateFn          = "mpt/state"
 
     TxCommitFn          = "commit"

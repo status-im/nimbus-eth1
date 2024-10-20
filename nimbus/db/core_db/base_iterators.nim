@@ -15,7 +15,6 @@ import
   eth/common,
   ../../errors,
   ../aristo as use_ari,
-  ../aristo/[aristo_walk, aristo_serialise],
   ../kvt as use_kvt,
   ../kvt/[kvt_init/memory_only, kvt_walk],
   ./base/[api_tracking, base_config, base_desc]
@@ -24,11 +23,8 @@ when CoreDbEnableApiJumpTable:
   discard
 else:
   import
-    ../aristo/[aristo_desc, aristo_path, aristo_tx],
+    ../aristo/[aristo_desc, aristo_path],
     ../kvt/[kvt_desc, kvt_tx]
-
-include
-  ./backend/aristo_replicate
 
 when CoreDbEnableApiTracking:
   import
@@ -40,6 +36,44 @@ when CoreDbEnableApiTracking:
 
 # Annotation helper(s)
 {.pragma: apiRaise, gcsafe, raises: [CoreDbApiError].}
+
+template valueOrApiError[U,V](rc: Result[U,V]; info: static[string]): U =
+  rc.valueOr: raise (ref CoreDbApiError)(msg: info)
+
+template dbType(dsc: CoreDbKvtRef | CoreDbMptRef | CoreDbAccRef): CoreDbType =
+  dsc.distinctBase.parent.dbType
+
+# ---------------
+
+template kvt(dsc: CoreDbKvtRef): KvtDbRef =
+  dsc.distinctBase.kvt
+
+template call(api: KvtApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+  when CoreDbEnableApiJumpTable:
+    api.fn(args)
+  else:
+    fn(args)
+
+template call(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
+  kvt.distinctBase.parent.kvtApi.call(fn, args)
+
+# ---------------
+
+template mpt(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
+  dsc.distinctBase.mpt
+
+template call(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+  when CoreDbEnableApiJumpTable:
+    api.fn(args)
+  else:
+    fn(args)
+
+template call(
+    acc: CoreDbAccRef | CoreDbMptRef;
+    fn: untyped;
+    args: varArgs[untyped];
+      ): untyped =
+  acc.distinctBase.parent.ariApi.call(fn, args)
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -88,21 +122,6 @@ iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash32): (seq[byte], UInt256) =
     raiseAssert: "Unsupported database type: " & $acc.dbType
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed
-
-iterator replicate*(mpt: CoreDbMptRef): (seq[byte], seq[byte]) {.apiRaise.} =
-  ## Low level trie dump, only supported for non persistent `CoreDbMptRef`
-  ##
-  mpt.setTrackNewApi MptReplicateIt
-  case mpt.dbType:
-  of AristoDbMemory:
-    for k,v in aristoReplicate[use_ari.MemBackendRef](mpt):
-      yield (k,v)
-  of AristoDbVoid:
-    for k,v in aristoReplicate[use_ari.VoidBackendRef](mpt):
-      yield (k,v)
-  of Ooops, AristoDbRocks:
-    raiseAssert: "Unsupported database type: " & $mpt.dbType
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End
