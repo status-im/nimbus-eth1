@@ -31,7 +31,7 @@ const
   HookOK = HttpResponseRef(nil)
 
 proc httpCors*(allowedOrigins: seq[Uri]): RpcAuthHook =
-  proc handler(req: HttpRequestRef): Future[HttpResponseRef] {.async.} =
+  proc handler(req: HttpRequestRef): Future[HttpResponseRef] {.async: (raises: [CatchableError]).} =
     let origins = req.headers.getList("Origin")
     let everyOriginAllowed = allowedOrigins.len == 0
 
