@@ -12,7 +12,8 @@ import
   chronicles,
   eth/common/eth_types_rlp,
   ./engine_spec,
-  ../../../../nimbus/transaction
+  ../../../../nimbus/transaction,
+  web3/conversions
 
 type
   SuggestedFeeRecipientTest* = ref object of EngineSpec

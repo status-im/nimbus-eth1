@@ -659,7 +659,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     if header.excessBlobGas.isNone:
       raise newException(ValueError, "excessBlobGas missing from latest header")
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get) * header.blobGasUsed.get.u256
+      getBlobBaseFee(header.excessBlobGas.get, header.targetBlobsPerBlock) * header.blobGasUsed.get.u256
     if blobBaseFee > high(uint64).u256:
       raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
     return w3Qty blobBaseFee.truncate(uint64)

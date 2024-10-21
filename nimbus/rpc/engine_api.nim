@@ -60,9 +60,10 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32],
-                                       executionRequests: Opt[array[3, seq[byte]]]) -> PayloadStatusV1:
+                                       executionRequests: Opt[array[3, seq[byte]]],
+                                       targetBlobsPerBlock: Opt[Quantity]) -> PayloadStatusV1:
     return engine.newPayload(Version.V4, payload,
-      expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
+      expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests, targetBlobsPerBlock)
 
   server.rpc("engine_getPayloadV1") do(payloadId: Bytes8) -> ExecutionPayloadV1:
     return engine.getPayload(Version.V1, payloadId).executionPayload.V1
@@ -91,6 +92,10 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_forkchoiceUpdatedV3") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
     return engine.forkchoiceUpdated(Version.V3, update, attrs)
+
+  server.rpc("engine_forkchoiceUpdatedV4") do(update: ForkchoiceStateV1,
+                    attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
+    return engine.forkchoiceUpdated(Version.V4, update, attrs)
 
   server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
                                                seq[Opt[ExecutionPayloadBodyV1]]:

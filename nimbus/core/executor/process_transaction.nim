@@ -86,9 +86,11 @@ proc processTransactionImpl(
   vmState.gasPool -= tx.gasLimit
 
   let blobGasUsed = tx.getTotalBlobGas
-  if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-    return err("blobGasUsed " & $blobGasUsed &
-      " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+  if header.targetBlobsPerBlock.isNone:
+    # Per EIP-7742: any logic related to MAX_BLOB_GAS_PER_BLOCK can be deprecated.
+    if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+      return err("blobGasUsed " & $blobGasUsed &
+        " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
   vmState.blobGasUsed += blobGasUsed
 
   # Actually, the eip-1559 reference does not mention an early exit.
@@ -98,7 +100,10 @@ proc processTransactionImpl(
   # of the `processTransaction()` function. So there is no `return err()`
   # statement, here.
   let
-    txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, fork)
+    txRes = roDB.validateTransaction(tx,
+      sender, header.gasLimit,
+      baseFee256, excessBlobGas,
+      header.targetBlobsPerBlock, fork)
     res = if txRes.isOk:
       # EIP-1153
       vmState.stateDB.clearTransientStorage()

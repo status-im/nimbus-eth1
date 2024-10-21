@@ -86,7 +86,8 @@ func executionPayloadV1V2*(blk: Block): ExecutionPayloadV1OrV2 =
 
 func blockHeader*(p: ExecutionPayload,
                   parentBeaconBlockRoot: Opt[Hash32],
-                  requestsHash: Opt[Hash32]):
+                  requestsHash: Opt[Hash32],
+                  targetBlobsPerBlock: Opt[Quantity]):
                     Header =
   Header(
     parentHash     : p.parentHash,
@@ -110,6 +111,7 @@ func blockHeader*(p: ExecutionPayload,
     excessBlobGas  : u64(p.excessBlobGas),
     parentBeaconBlockRoot: parentBeaconBlockRoot,
     requestsHash   : requestsHash,
+    targetBlobsPerBlock: u64(targetBlobsPerBlock),
   )
 
 func blockBody*(p: ExecutionPayload):
@@ -122,10 +124,11 @@ func blockBody*(p: ExecutionPayload):
 
 func ethBlock*(p: ExecutionPayload,
                parentBeaconBlockRoot: Opt[Hash32],
-               requestsHash: Opt[Hash32]):
+               requestsHash: Opt[Hash32],
+               targetBlobsPerBlock: Opt[Quantity]):
                  Block {.gcsafe, raises:[RlpError].} =
   Block(
-    header      : blockHeader(p, parentBeaconBlockRoot, requestsHash),
+    header      : blockHeader(p, parentBeaconBlockRoot, requestsHash, targetBlobsPerBlock),
     uncles      : @[],
     transactions: ethTxs p.transactions,
     withdrawals : ethWithdrawals p.withdrawals,

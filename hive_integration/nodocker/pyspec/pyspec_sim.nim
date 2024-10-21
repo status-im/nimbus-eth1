@@ -141,6 +141,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
       # failed
       break
 
+    # TODO: version based on timestamp
     latestVersion = payload.payload.version
 
     let res = env.rpcClient.newPayload(latestVersion, payload.payload)

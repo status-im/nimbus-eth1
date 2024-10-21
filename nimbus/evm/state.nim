@@ -56,6 +56,7 @@ func blockCtx(com: CommonRef, header: Header):
     coinbase     : header.coinbase,
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash   : header.parentHash,
+    targetBlobsPerBlock: header.targetBlobsPerBlock,
   )
 
 # --------------

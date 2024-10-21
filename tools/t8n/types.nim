@@ -53,6 +53,7 @@ type
     parentExcessBlobGas*: Opt[uint64]
     parentBeaconBlockRoot*: Opt[Hash32]
     depositContractAddress*: Opt[Address]
+    currentTargetBlobsPerBlock*: Opt[uint64]
 
   TxObject* = object
     `type`*: Opt[uint64]

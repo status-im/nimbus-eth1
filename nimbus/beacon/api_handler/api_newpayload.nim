@@ -88,7 +88,8 @@ proc newPayload*(ben: BeaconEngineRef,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(array[3, seq[byte]])): PayloadStatusV1 =
+                 executionRequests = Opt.none(array[3, seq[byte]]),
+                 targetBlobsPerBlock = Opt.none(Quantity)): PayloadStatusV1 =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -97,12 +98,17 @@ proc newPayload*(ben: BeaconEngineRef,
 
   if apiVersion >= Version.V3:
     if beaconRoot.isNone:
-      raise invalidParams("newPayloadV3 expect beaconRoot but got none")
+      raise invalidParams("newPayloadV" & $apiVersion &
+        ": expect beaconRoot but got none")
 
   if apiVersion >= Version.V4:
     if executionRequests.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        ": executionRequests is expected from execution payload")
+        ": expect executionRequests but got none")
+
+    if targetBlobsPerBlock.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": expect targetBlobsPerBlock but got none")
 
   let
     com = ben.com
@@ -114,7 +120,7 @@ proc newPayload*(ben: BeaconEngineRef,
   validatePayload(apiVersion, version, payload)
   validateVersion(com, timestamp, version, apiVersion)
 
-  var blk = ethBlock(payload, beaconRoot, requestsHash)
+  var blk = ethBlock(payload, beaconRoot, requestsHash, targetBlobsPerBlock)
   template header: Header = blk.header
 
   if apiVersion >= Version.V3:

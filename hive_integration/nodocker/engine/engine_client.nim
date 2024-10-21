@@ -69,6 +69,13 @@ proc forkchoiceUpdatedV3*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
 
+proc forkchoiceUpdatedV4*(client: RpcClient,
+      update: ForkchoiceStateV1,
+      payloadAttributes = Opt.none(PayloadAttributes)):
+        Result[ForkchoiceUpdatedResponse, string] =
+  wrapTrySimpleRes:
+    client.engine_forkchoiceUpdatedV4(update, payloadAttributes)
+
 proc forkchoiceUpdated*(client: RpcClient,
                         version: Version,
                         update: ForkchoiceStateV1,
@@ -78,7 +85,7 @@ proc forkchoiceUpdated*(client: RpcClient,
   of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
   of Version.V2: return client.forkchoiceUpdatedV2(update, attr)
   of Version.V3: return client.forkchoiceUpdatedV3(update, attr)
-  of Version.V4: discard
+  of Version.V4: return client.forkchoiceUpdatedV4(update, attr)
 
 proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
@@ -163,11 +170,12 @@ proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayloadV3,
       versionedHashes: seq[VersionedHash],
       parentBeaconBlockRoot: Hash32,
-      executionRequests: array[3, seq[byte]]):
+      executionRequests: array[3, seq[byte]],
+      targetBlobsPerBlock: Quantity):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes,
-      parentBeaconBlockRoot, executionRequests)
+      parentBeaconBlockRoot, executionRequests, targetBlobsPerBlock)
 
 proc newPayloadV1*(client: RpcClient,
       payload: ExecutionPayload):
@@ -194,11 +202,12 @@ proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
       parentBeaconBlockRoot: Opt[Hash32],
-      executionRequests: Opt[array[3, seq[byte]]]):
-        Result[PayloadStatusV1, string] =
+      executionRequests: Opt[array[3, seq[byte]]],
+      targetBlobsPerBlock: Opt[Quantity]
+      ): Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes,
-      parentBeaconBlockRoot, executionRequests)
+      parentBeaconBlockRoot, executionRequests, targetBlobsPerBlock)
 
 proc newPayload*(client: RpcClient,
                  version: Version,
@@ -214,7 +223,8 @@ proc newPayload*(client: RpcClient,
     return client.newPayloadV4(payload.basePayload,
       payload.versionedHashes,
       payload.beaconRoot,
-      payload.executionRequests)
+      payload.executionRequests,
+      payload.targetBlobsPerBlock)
 
 proc exchangeCapabilities*(client: RpcClient,
       methods: seq[string]):

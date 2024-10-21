@@ -141,8 +141,8 @@ func get*(ben: BeaconEngineRef, id: Bytes8,
 # Public functions
 # ------------------------------------------------------------------------------
 proc generateExecutionBundle*(ben: BeaconEngineRef,
-                      attrs: PayloadAttributes):
-                         Result[ExecutionBundle, string] =
+                              attrs: PayloadAttributes):
+                                Result[ExecutionBundle, string] =
   wrapException:
     let
       xp  = ben.txPool
@@ -155,6 +155,16 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
 
     if attrs.parentBeaconBlockRoot.isSome:
       pos.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
+
+    if attrs.targetBlobsPerBlock.isSome:
+      pos.targetBlobsPerBlock = uint64(attrs.targetBlobsPerBlock.get)
+    else:
+      pos.targetBlobsPerBlock = 0'u64
+
+    if attrs.maxBlobsPerBlock.isSome:
+      pos.maxBlobsPerBlock = uint64(attrs.maxBlobsPerBlock.get)
+    else:
+      pos.maxBlobsPerBlock = 0'u64
 
     pos.setWithdrawals(attrs)
 

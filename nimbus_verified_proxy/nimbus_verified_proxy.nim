@@ -146,6 +146,7 @@ proc run*(
                 executionPayload(payload.asEngineExecutionPayload()),
                 parentBeaconBlockRoot = Opt.none(Hash32),
                 requestsHash = Opt.none(Hash32),
+                targetBlobsPerBlock = Opt.none(Quantity)
               )
               blockCache.add(populateBlockObject(blk.header.rlpHash, blk, 0.u256, true))
             except RlpError as exc:

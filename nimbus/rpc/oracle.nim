@@ -99,9 +99,9 @@ func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
 proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float64]): ProcessedFees =
   result = ProcessedFees(
     baseFee: bc.header.baseFeePerGas.get(0.u256),
-    blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64)),
+    blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64), bc.header.targetBlobsPerBlock),
     nextBaseFee: calcBaseFee(oracle.com, bc),
-    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header)),
+    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header, Opt.none(uint64)), Opt.none(uint64)),
     gasUsedRatio: float64(bc.header.gasUsed) / float64(bc.header.gasLimit),
     blobGasUsedRatio: float64(bc.header.blobGasUsed.get(0'u64)) / float64(MAX_BLOB_GAS_PER_BLOCK)
   )

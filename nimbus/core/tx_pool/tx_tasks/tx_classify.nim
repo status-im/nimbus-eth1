@@ -112,11 +112,12 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   if item.tx.txType >= TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.targetBlobsPerBlock)
     if item.tx.maxFeePerBlobGas < blobGasPrice:
       debug "invalid tx: maxFeePerBlobGas smaller than blobGasPrice",
         maxFeePerBlobGas=item.tx.maxFeePerBlobGas,
-        blobGasPrice=blobGasPrice
+        blobGasPrice=blobGasPrice,
+        targetBlobsPerBlock=xp.targetBlobsPerBlock
       return false
   true
 
