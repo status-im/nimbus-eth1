@@ -14,7 +14,7 @@ import
   pkg/[chronicles, chronos, eth/p2p, results],
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
-  ./beacon/[worker, worker_desc],
+  ./beacon/[worker, worker_desc, worker/db],
   "."/[sync_desc, sync_sched, protocol]
 
 logScope:
@@ -65,12 +65,17 @@ proc init*(
   desc.ctx.pool.chain = chain
   desc
 
-proc start*(ctx: BeaconSyncRef) =
-  ## Beacon Sync always begin with stop mode
-  doAssert ctx.startSync()      # Initialize subsystems
+proc start*(desc: BeaconSyncRef; resumeOnly = false): bool =
+  ## Start beacon sync. If `resumeOnly` is set `true` the syncer will only
+  ## start up if it can resume work, e.g. after being previously interrupted.
+  if resumeOnly:
+    desc.ctx.dbLoadSyncStateLayout()
+    if not desc.ctx.layout.headLocked:
+      return false
+  desc.startSync()
 
-proc stop*(ctx: BeaconSyncRef) =
-  ctx.stopSync()
+proc stop*(desc: BeaconSyncRef) =
+  desc.stopSync()
 
 # ------------------------------------------------------------------------------
 # End
