@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[os, exitprocs],
+  std/os,
   beacon_chain/nimbus_binary_common,
   beacon_chain/spec/forks,
   beacon_chain/[beacon_chain_db, trusted_node_sync],
@@ -22,22 +22,11 @@ export nimbus_configs
 logScope:
   topics = "Consensus layer"
 
-## Copy paste from nimbus_beacon_node.nim Copied due to the fact that nimbus_beacon_node
-## contains the programMain.
+## following procedures are copies from nimbus_beacon_node.nim.
 ## TODO: extract from that file into a common file
-var gPidFile: string
-
-#TODO: Investigate why the commented code triggers GC violation
-proc createPidFile(filename: string) {.raises: [IOError].} =
-  # writeFile filename, $os.getCurrentProcessId()
-  writeFile filename, "222"
-  # gPidFile = filename
-  # addExitProc proc() {.noconv.} =
-  #   ## TODO: changed from original file, fixes dprecation warning
-  #   discard io2.removeFile(gPidFile)
 
 ## runs beacon node
-## adpated from nimbus-eth2
+## adapted from nimbus-eth2
 proc doRunBeaconNode(
     config: var BeaconNodeConf, rng: ref HmacDrbgContext
 ) {.raises: [CatchableError].} =
@@ -58,8 +47,6 @@ proc doRunBeaconNode(
   ignoreDeprecatedOption optimistic
   ignoreDeprecatedOption validatorMonitorTotals
   ignoreDeprecatedOption web3ForcePolling
-
-  createPidFile(config.dataDir.string / "beacon_node.pid")
 
   config.createDumpDirs()
 
@@ -146,6 +133,7 @@ proc doRunTrustedNodeSync(
 proc consensusWrapper*(parameters: TaskParameters) {.raises: [CatchableError].} =
   let rng = HmacDrbgContext.new()
   var config = parameters.beaconNodeConfigs
+
   try:
     doRunBeaconNode(config, rng)
   except CatchableError as e:

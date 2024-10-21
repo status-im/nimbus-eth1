@@ -6,8 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[atomics, os],
+  std/[atomics, os, exitprocs],
   chronicles,
+  stew/io2,
   consensus/consensus_wrapper,
   execution/execution_wrapper,
   beacon_chain/[conf, conf_common],
@@ -61,6 +62,16 @@ proc joinTasks(tasks: var NimbusTasks) =
 
   info "\tAll tasks finished"
 
+#TODO: Investigate if this is really needed? and for what purpose?
+var gPidFile: string
+proc createPidFile(filename: string) {.raises: [IOError].} =
+  writeFile filename, $os.getCurrentProcessId()
+  gPidFile = filename
+  addExitProc (
+    proc() =
+      discard io2.removeFile(filename)
+  )
+
 # ----
 
 # ------------------------------------------------------------------------------
@@ -88,7 +99,6 @@ proc addNewTask*(
 
   if currentIndex < 0:
     raise newException(NimbusTasksError, "No free slots on Nimbus Tasks")
-
   createThread(tasks.taskList[currentIndex].threadHandler, taskHandler, parameters)
   info "Created task:", task = tasks.taskList[currentIndex].name
 
@@ -109,7 +119,7 @@ proc monitor*(tasksList: var NimbusTasks, config: NimbusConfig) =
 ## create running workers
 proc startTasks*(
     tasksList: var NimbusTasks, configs: NimbusConfig, beaconConfigs: var BeaconNodeConf
-) =
+) {.raises: [CatchableError].} =
   let
 
     # TODO: extract configs for each task from NimbusConfig
@@ -174,6 +184,6 @@ when isMainModule:
     quit(0)
 
   setControlCHook(controlCHandler)
-
+  createPidFile(beaconNodeConfig.databaseDir.string / "unified.pid")
   #start monitoring
   tasksList.monitor(nimbusConfigs)
