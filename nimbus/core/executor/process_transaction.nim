@@ -88,9 +88,11 @@ proc processTransactionImpl(
   vmState.gasPool -= tx.gasLimit
 
   let blobGasUsed = tx.getTotalBlobGas
-  if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-    return err("blobGasUsed " & $blobGasUsed &
-      " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+  if header.targetBlobCount.isNone:
+    # Per EIP-7742: any logic related to MAX_BLOB_GAS_PER_BLOCK can be deprecated.
+    if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+      return err("blobGasUsed " & $blobGasUsed &
+        " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
   vmState.blobGasUsed += blobGasUsed
 
   # Actually, the eip-1559 reference does not mention an early exit.

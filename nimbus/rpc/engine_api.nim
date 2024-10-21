@@ -92,6 +92,10 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
     return engine.forkchoiceUpdated(Version.V3, update, attrs)
 
+  server.rpc("engine_forkchoiceUpdatedV4") do(update: ForkchoiceStateV1,
+                    attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
+    return engine.forkchoiceUpdated(Version.V4, update, attrs)
+
   server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
                                                seq[Opt[ExecutionPayloadBodyV1]]:
     return engine.getPayloadBodiesByHash(hashes)

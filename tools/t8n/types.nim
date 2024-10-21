@@ -53,6 +53,7 @@ type
     parentBlobGasUsed*: Opt[uint64]
     parentExcessBlobGas*: Opt[uint64]
     parentBeaconBlockRoot*: Opt[Hash32]
+    currentTargetBlobCount*: Opt[uint64]
 
   TxsType* = enum
     TxsNone
