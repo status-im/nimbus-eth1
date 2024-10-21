@@ -16,7 +16,9 @@ import
   ./state_network,
   ./state_utils
 
-export results, state_network
+from eth/common/eth_types_rlp import rlpHash
+
+export results, state_network, hashes, addresses
 
 logScope:
   topics = "portal_state"
@@ -72,7 +74,10 @@ proc getNextNodeHash(
     raiseAssert(e.msg)
 
 proc getAccountProof(
-    n: StateNetwork, stateRoot: Hash32, address: Address
+    n: StateNetwork,
+    stateRoot: Hash32,
+    address: Address,
+    maybeBlockHash: Opt[Hash32], # required for poke
 ): Future[Result[(TrieProof, bool), string]] {.async: (raises: [CancelledError]).} =
   let nibbles = address.toPath().unpackNibbles()
 
@@ -81,14 +86,25 @@ proc getAccountProof(
     key = AccountTrieNodeKey.init(Nibbles.empty(), stateRoot)
     proof = TrieProof.empty()
 
-  while nibblesIdx < nibbles.len():
-    let accountTrieNode = (await n.getAccountTrieNode(key)).valueOr:
-      return err("Failed to get account trie node when building account proof")
+    # Construct the parent offer which is used to provide the data needed to
+    # implement poke after the account trie node has been retrieved
+    maybeParentOffer =
+      if maybeBlockHash.isSome():
+        Opt.some(AccountTrieNodeOffer.init(proof, maybeBlockHash.get()))
+      else:
+        Opt.none(AccountTrieNodeOffer)
 
+  while nibblesIdx < nibbles.len():
     let
+      accountTrieNode = (await n.getAccountTrieNode(key, maybeParentOffer)).valueOr:
+        return err("Failed to get account trie node when building account proof")
       trieNode = accountTrieNode.node
       added = proof.add(trieNode)
     doAssert(added)
+
+    if maybeParentOffer.isSome():
+      let added = maybeParentOffer.get().proof.add(trieNode)
+      doAssert(added)
 
     let (nextPath, nextNodeHash) = trieNode.getNextNodeHash(nibbles, nibblesIdx).valueOr:
       break
@@ -99,7 +115,12 @@ proc getAccountProof(
   ok((proof, nibblesIdx == nibbles.len()))
 
 proc getStorageProof(
-    n: StateNetwork, storageRoot: Hash32, address: Address, slotKey: UInt256
+    n: StateNetwork,
+    storageRoot: Hash32,
+    address: Address,
+    slotKey: UInt256,
+    maybeBlockHash: Opt[Hash32],
+    maybeAccProof: Opt[TrieProof],
 ): Future[Result[(TrieProof, bool), string]] {.async: (raises: [CancelledError]).} =
   let nibbles = slotKey.toPath().unpackNibbles()
 
@@ -109,14 +130,28 @@ proc getStorageProof(
     key = ContractTrieNodeKey.init(addressHash, Nibbles.empty(), storageRoot)
     proof = TrieProof.empty()
 
-  while nibblesIdx < nibbles.len():
-    let contractTrieNode = (await n.getContractTrieNode(key)).valueOr:
-      return err("Failed to get contract trie node when building account proof")
+    # Construct the parent offer which is used to provide the data needed to
+    # implement poke after the contract trie node has been retrieved
+    maybeParentOffer =
+      if maybeBlockHash.isSome():
+        doAssert maybeAccProof.isSome()
+        Opt.some(
+          ContractTrieNodeOffer.init(proof, maybeAccProof.get(), maybeBlockHash.get())
+        )
+      else:
+        Opt.none(ContractTrieNodeOffer)
 
+  while nibblesIdx < nibbles.len():
     let
+      contractTrieNode = (await n.getContractTrieNode(key, maybeParentOffer)).valueOr:
+        return err("Failed to get contract trie node when building storage proof")
       trieNode = contractTrieNode.node
       added = proof.add(trieNode)
     doAssert(added)
+
+    if maybeParentOffer.isSome():
+      let added = maybeParentOffer.get().storageProof.add(trieNode)
+      doAssert(added)
 
     let (nextPath, nextNodeHash) = trieNode.getNextNodeHash(nibbles, nibblesIdx).valueOr:
       break
@@ -127,9 +162,11 @@ proc getStorageProof(
   ok((proof, nibblesIdx == nibbles.len()))
 
 proc getAccount(
-    n: StateNetwork, stateRoot: Hash32, address: Address
+    n: StateNetwork, stateRoot: Hash32, address: Address, maybeBlockHash: Opt[Hash32]
 ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
-  let (accountProof, exists) = (await n.getAccountProof(stateRoot, address)).valueOr:
+  let (accountProof, exists) = (
+    await n.getAccountProof(stateRoot, address, maybeBlockHash)
+  ).valueOr:
     warn "Failed to get account proof", error = error
     return Opt.none(Account)
 
@@ -145,39 +182,64 @@ proc getAccount(
   Opt.some(account)
 
 proc getBalanceByStateRoot*(
-    n: StateNetwork, stateRoot: Hash32, address: Address
+    n: StateNetwork,
+    stateRoot: Hash32,
+    address: Address,
+    maybeBlockHash = Opt.none(Hash32),
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-  let account = (await n.getAccount(stateRoot, address)).valueOr:
+  let account = (await n.getAccount(stateRoot, address, maybeBlockHash)).valueOr:
     return Opt.none(UInt256)
 
   Opt.some(account.balance)
 
 proc getTransactionCountByStateRoot*(
-    n: StateNetwork, stateRoot: Hash32, address: Address
+    n: StateNetwork,
+    stateRoot: Hash32,
+    address: Address,
+    maybeBlockHash = Opt.none(Hash32),
 ): Future[Opt[AccountNonce]] {.async: (raises: [CancelledError]).} =
-  let account = (await n.getAccount(stateRoot, address)).valueOr:
+  let account = (await n.getAccount(stateRoot, address, maybeBlockHash)).valueOr:
     return Opt.none(AccountNonce)
 
   Opt.some(account.nonce)
 
 proc getStorageAtByStateRoot*(
-    n: StateNetwork, stateRoot: Hash32, address: Address, slotKey: UInt256
+    n: StateNetwork,
+    stateRoot: Hash32,
+    address: Address,
+    slotKey: UInt256,
+    maybeBlockHash = Opt.none(Hash32),
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-  let account = (await n.getAccount(stateRoot, address)).valueOr:
+  let (accountProof, exists) = (
+    await n.getAccountProof(stateRoot, address, maybeBlockHash)
+  ).valueOr:
+    warn "Failed to get account proof", error = error
     return Opt.none(UInt256)
+
+  let account =
+    if exists:
+      accountProof.toAccount().valueOr:
+        error "Failed to get account from accountProof"
+        return Opt.none(UInt256)
+    else:
+      info "Account doesn't exist, returning default account"
+      # return an empty account if the account doesn't exist
+      EMPTY_ACCOUNT
 
   if account.storageRoot == EMPTY_ROOT_HASH:
     info "Storage doesn't exist, returning default storage value"
     # return zero if the storage doesn't exist
     return Opt.some(0.u256)
 
-  let (storageProof, exists) = (
-    await n.getStorageProof(account.storageRoot, address, slotKey)
+  let (storageProof, slotExists) = (
+    await n.getStorageProof(
+      account.storageRoot, address, slotKey, maybeBlockHash, Opt.some(accountProof)
+    )
   ).valueOr:
     warn "Failed to get storage proof", error = error
     return Opt.none(UInt256)
 
-  if not exists:
+  if not slotExists:
     info "Slot doesn't exist, returning default storage value"
     # return zero if the slot doesn't exist
     return Opt.some(0.u256)
@@ -189,10 +251,26 @@ proc getStorageAtByStateRoot*(
   Opt.some(slotValue)
 
 proc getCodeByStateRoot*(
-    n: StateNetwork, stateRoot: Hash32, address: Address
+    n: StateNetwork,
+    stateRoot: Hash32,
+    address: Address,
+    maybeBlockHash = Opt.none(Hash32),
 ): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
-  let account = (await n.getAccount(stateRoot, address)).valueOr:
+  let (accountProof, exists) = (
+    await n.getAccountProof(stateRoot, address, maybeBlockHash)
+  ).valueOr:
+    warn "Failed to get account proof", error = error
     return Opt.none(Bytecode)
+
+  let account =
+    if exists:
+      accountProof.toAccount().valueOr:
+        error "Failed to get account from accountProof"
+        return Opt.none(Bytecode)
+    else:
+      info "Account doesn't exist, returning default account"
+      # return an empty account if the account doesn't exist
+      EMPTY_ACCOUNT
 
   if account.codeHash == EMPTY_CODE_HASH:
     info "Code doesn't exist, returning default code value"
@@ -201,7 +279,14 @@ proc getCodeByStateRoot*(
 
   let
     contractCodeKey = ContractCodeKey.init(keccak256(address.data), account.codeHash)
-    contractCodeRetrieval = (await n.getContractCode(contractCodeKey)).valueOr:
+    maybeParentOffer =
+      if maybeBlockHash.isSome():
+        Opt.some(
+          ContractCodeOffer.init(Bytecode.empty(), accountProof, maybeBlockHash.get())
+        )
+      else:
+        Opt.none(ContractCodeOffer)
+    contractCodeRetrieval = (await n.getContractCode(contractCodeKey, maybeParentOffer)).valueOr:
       warn "Failed to get contract code"
       return Opt.none(Bytecode)
 
@@ -214,10 +299,16 @@ type Proofs* = ref object
   slotProofs*: seq[TrieProof]
 
 proc getProofsByStateRoot*(
-    n: StateNetwork, stateRoot: Hash32, address: Address, slotKeys: seq[UInt256]
+    n: StateNetwork,
+    stateRoot: Hash32,
+    address: Address,
+    slotKeys: seq[UInt256],
+    maybeBlockHash = Opt.none(Hash32),
 ): Future[Opt[Proofs]] {.async: (raises: [CancelledError]).} =
   let
-    (accountProof, accountExists) = (await n.getAccountProof(stateRoot, address)).valueOr:
+    (accountProof, accountExists) = (
+      await n.getAccountProof(stateRoot, address, maybeBlockHash)
+    ).valueOr:
       warn "Failed to get account proof", error = error
       return Opt.none(Proofs)
     account =
@@ -241,7 +332,9 @@ proc getProofsByStateRoot*(
 
     let
       (storageProof, slotExists) = (
-        await n.getStorageProof(account.storageRoot, address, slotKey)
+        await n.getStorageProof(
+          account.storageRoot, address, slotKey, maybeBlockHash, Opt.some(accountProof)
+        )
       ).valueOr:
         warn "Failed to get storage proof", error = error
         return Opt.none(Proofs)
@@ -265,41 +358,45 @@ proc getProofsByStateRoot*(
 proc getBalance*(
     n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-  let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
-    warn "Failed to get state root by block number or hash", blockNumOrHash
+  let header = (await n.getBlockHeaderByBlockNumOrHash(blockNumOrHash)).valueOr:
+    warn "Failed to get block header by block number or hash", blockNumOrHash
     return Opt.none(UInt256)
 
-  await n.getBalanceByStateRoot(stateRoot, address)
+  await n.getBalanceByStateRoot(header.stateRoot, address, Opt.some(header.rlpHash()))
 
 # Used by: eth_getTransactionCount
 proc getTransactionCount*(
     n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address
 ): Future[Opt[AccountNonce]] {.async: (raises: [CancelledError]).} =
-  let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
-    warn "Failed to get state root by block number or hash", blockNumOrHash
+  let header = (await n.getBlockHeaderByBlockNumOrHash(blockNumOrHash)).valueOr:
+    warn "Failed to get block header by block number or hash", blockNumOrHash
     return Opt.none(AccountNonce)
 
-  await n.getTransactionCountByStateRoot(stateRoot, address)
+  await n.getTransactionCountByStateRoot(
+    header.stateRoot, address, Opt.some(header.rlpHash())
+  )
 
 # Used by: eth_getStorageAt
 proc getStorageAt*(
     n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address, slotKey: UInt256
 ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-  let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
-    warn "Failed to get state root by block number or hash", blockNumOrHash
+  let header = (await n.getBlockHeaderByBlockNumOrHash(blockNumOrHash)).valueOr:
+    warn "Failed to get block header by block number or hash", blockNumOrHash
     return Opt.none(UInt256)
 
-  await n.getStorageAtByStateRoot(stateRoot, address, slotKey)
+  await n.getStorageAtByStateRoot(
+    header.stateRoot, address, slotKey, Opt.some(header.rlpHash())
+  )
 
 # Used by: eth_getCode
 proc getCode*(
     n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address
 ): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
-  let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
-    warn "Failed to get state root by block number or hash", blockNumOrHash
+  let header = (await n.getBlockHeaderByBlockNumOrHash(blockNumOrHash)).valueOr:
+    warn "Failed to get block header by block number or hash", blockNumOrHash
     return Opt.none(Bytecode)
 
-  await n.getCodeByStateRoot(stateRoot, address)
+  await n.getCodeByStateRoot(header.stateRoot, address, Opt.some(header.rlpHash()))
 
 # Used by: eth_getProof
 proc getProofs*(
@@ -308,8 +405,10 @@ proc getProofs*(
     address: Address,
     slotKeys: seq[UInt256],
 ): Future[Opt[Proofs]] {.async: (raises: [CancelledError]).} =
-  let stateRoot = (await n.getStateRootByBlockNumOrHash(blockNumOrHash)).valueOr:
-    warn "Failed to get state root by block number or hash", blockNumOrHash
+  let header = (await n.getBlockHeaderByBlockNumOrHash(blockNumOrHash)).valueOr:
+    warn "Failed to get block header by block number or hash", blockNumOrHash
     return Opt.none(Proofs)
 
-  await n.getProofsByStateRoot(stateRoot, address, slotKeys)
+  await n.getProofsByStateRoot(
+    header.stateRoot, address, slotKeys, Opt.some(header.rlpHash())
+  )
