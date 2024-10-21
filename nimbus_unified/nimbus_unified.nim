@@ -9,7 +9,9 @@ import
   std/[atomics, os],
   chronicles,
   consensus/consensus_wrapper,
-  execution/execution_wrapper
+  execution/execution_wrapper,
+  beacon_chain/[conf, conf_common],
+  beacon_chain/[beacon_chain_db]
 
 ## Constants
 const cNimbusMaxTasks* = 5
@@ -69,7 +71,6 @@ proc joinTasks(tasks: var NimbusTasks) =
 ## Note that thread handler passed by argument needs to have the signature: proc foobar(NimbusParameters)
 proc addNewTask*(
     tasks: var NimbusTasks,
-    name: string,
     timeout: uint32,
     taskHandler: proc(config: TaskParameters) {.thread.},
     parameters: var TaskParameters,
@@ -79,10 +80,10 @@ proc addNewTask*(
   for i in 0 .. cNimbusMaxTasks - 1:
     if tasks.taskList[i].isNil:
       tasks.taskList[i] = NimbusTask.new
-      tasks.taskList[i].name = name
+      tasks.taskList[i].name = parameters.name
       tasks.taskList[i].timeoutMs = timeout
       currentIndex = i
-      parameters.name = name
+      parameters.name = parameters.name
       break
 
   if currentIndex < 0:
@@ -100,48 +101,61 @@ proc monitor*(tasksList: var NimbusTasks, config: NimbusConfig) =
 
     # -check an atomic (to be created when needed) if it s required to shutdown
     #   this will atomic flag solves:
-          # - non responding thread
-          # - thread that required shutdown
+    # - non responding thread
+    # - thread that required shutdown
 
     sleep(cNimbusTaskTimeoutMs)
 
 ## create running workers
-proc startTasks*(tasksList: var NimbusTasks, configs: NimbusConfig) =
-  # TODO: extract configs for each task from NimbusConfig
-  # or extract them somewhere else and passs them here
-  var
-    paramsExecution: TaskParameters =
-      TaskParameters(configs: "task configs extracted from NimbusConfig go here")
-    paramsConsensus: TaskParameters =
-      TaskParameters(configs: "task configs extracted from NimbusConfig go here")
+proc startTasks*(
+    tasksList: var NimbusTasks, configs: NimbusConfig, beaconConfigs: var BeaconNodeConf
+) =
+  let
 
-  tasksList.addNewTask(
-    "Execution Layer", cNimbusTaskTimeoutMs, executionLayerHandler, paramsExecution
-  )
-  tasksList.addNewTask(
-    "Consensus Layer", cNimbusTaskTimeoutMs, consensusLayerHandler, paramsConsensus
-  )
+    # TODO: extract configs for each task from NimbusConfig
+    # or extract them somewhere else and passs them here
+    execName = "Execution Layer"
+    consName = "Consensus Layer"
+  var
+    paramsExecution: TaskParameters = TaskParameters(
+      name: execName,
+      configs: "task configs extracted from NimbusConfig go here",
+      beaconNodeConfigs: beaconConfigs,
+    )
+    paramsConsensus: TaskParameters = TaskParameters(
+      name: execName,
+      configs: "task configs extracted from NimbusConfig go here",
+      beaconNodeConfigs: beaconConfigs,
+    )
+
+  tasksList.addNewTask(cNimbusTaskTimeoutMs, executionLayerHandler, paramsExecution)
+  tasksList.addNewTask(cNimbusTaskTimeoutMs, consensusLayerHandler, paramsConsensus)
 
 # ------
 
 when isMainModule:
   info "Starting Nimbus"
   ## TODO
-  ## - make banner and config
   ## - file limits
   ## - check if we have permissions to create data folder if needed
   ## - setup logging
-
-  # TODO - read configuration
-  # TODO - implement config reader for all components
+  ## - read configuration
+  ## - implement config reader for all components
   let nimbusConfigs = NimbusConfig()
   var tasksList: NimbusTasks = NimbusTasks.new
 
-  ## this code snippet requires a conf.nim file (eg: beacon_lc_bridge_conf.nim)
-  #   var config = makeBannerAndConfig("Nimbus client ", NimbusConfig)
-  #   setupLogging(config.logLevel, config.logStdout, config.logFile)
+  ##TODO: this is an adapted call os the vars required by makeBannerAndConfig
+  ##these values need to be read from some config file
+  const SPEC_VERSION = "1.5.0-alpha.8"
+  const copyrights = "status"
+  const nimBanner = "nimbus"
+  const clientId = "beacon node"
+  var beaconNodeConfig = makeBannerAndConfig(
+    clientId, copyrights, nimBanner, SPEC_VERSION, [], BeaconNodeConf
+  ).valueOr:
+    quit(0)
 
-  tasksList.startTasks(nimbusConfigs)
+  tasksList.startTasks(nimbusConfigs, beaconNodeConfig)
 
   ## Graceful shutdown by handling of Ctrl+C signal
   proc controlCHandler() {.noconv.} =
@@ -158,6 +172,7 @@ when isMainModule:
     tasksList.joinTasks()
     notice "Shutting down now"
     quit(0)
+
   setControlCHook(controlCHandler)
 
   #start monitoring

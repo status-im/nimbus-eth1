@@ -20,6 +20,7 @@ type NimbusConfig* = object
 type TaskParameters* = object
   name*: string
   configs*: string
+  beaconNodeConfigs*: BeaconNodeConf
     # TODO: replace this with the extracted configs from NimbusConfig needed by the worker
 
 ## Task shutdown flag
