@@ -8,10 +8,14 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  std/[json, strutils, tables],
+  std/[strutils, tables],
   stew/byteutils,
   stint,
+  json_serialization,
+  json_serialization/stew/results,
   eth/common/eth_types_rlp,
   eth/common/keys,
   eth/common/blocks,
@@ -23,7 +27,26 @@ import
 export
   helpers
 
-proc parseHexOrInt[T](x: string): T =
+createJsonFlavor T8Conv,
+  automaticObjectSerialization = false,
+  requireAllFields = false,
+  omitOptionalFields = true, # Skip optional fields==none in Writer
+  allowUnknownFields = true,
+  skipNullFields = true      # Skip optional fields==null in Reader
+
+AccessPair.useDefaultSerializationIn T8Conv
+Withdrawal.useDefaultSerializationIn T8Conv
+Ommer.useDefaultSerializationIn T8Conv
+Authorization.useDefaultSerializationIn T8Conv
+TxObject.useDefaultSerializationIn T8Conv
+
+template wrapValueError(body: untyped) =
+  try:
+    body
+  except ValueError as exc:
+    r.raiseUnexpectedValue(exc.msg)
+
+proc parseHexOrInt[T](x: string): T {.raises: [ValueError].} =
   when T is UInt256:
     if x.startsWith("0x"):
       UInt256.fromHex(x)
@@ -35,249 +58,221 @@ proc parseHexOrInt[T](x: string): T =
     else:
       parseInt(x).T
 
-proc fromJson(T: type Address, n: JsonNode, field: string): Address =
-  try:
-    Address.fromHex(n[field].getStr())
-  except ValueError:
-    raise newError(ErrorJson, "malformed Eth address " & n[field].getStr)
+proc parsePaddedHex[T](r: var JsonReader[T8Conv], val: var T)
+       {.raises: [IOError, ValueError, JsonReaderError].} =
+  var data = r.parseString()
+  data.removePrefix("0x")
+  const
+    valLen = sizeof(T)
+    hexLen = valLen*2
+  if data.len < hexLen:
+    data = repeat('0', hexLen - data.len) & data
+  if data.len > hexLen:
+    r.raiseUnexpectedValue("hex string is longer than expected: " & $hexLen & " get: " & $data.len)
+  val = T(hexToByteArray(data, valLen))
 
-template fromJson(T: type seq[byte], n: JsonNode, field: string): seq[byte] =
-  hexToSeqByte(n[field].getStr())
+proc readValue*(r: var JsonReader[T8Conv], val: var Address)
+       {.raises: [IOError, JsonReaderError].} =
+  wrapValueError:
+    r.parsePaddedHex(val)
 
-proc fromJson(T: type uint64, n: JsonNode, field: string): uint64 =
-  if n[field].kind == JInt:
-    n[field].getInt().uint64
+proc readValue*(r: var JsonReader[T8Conv], val: var Bytes32)
+       {.raises: [IOError, JsonReaderError].} =
+  wrapValueError:
+    r.parsePaddedHex(val)
+
+proc readValue*(r: var JsonReader[T8Conv], val: var Hash32)
+       {.raises: [IOError, JsonReaderError].} =
+  wrapValueError:
+    r.parsePaddedHex(val)
+
+proc readValue*(r: var JsonReader[T8Conv], val: var UInt256)
+       {.raises: [IOError, JsonReaderError].} =
+  wrapValueError:
+    val = parseHexOrInt[UInt256](r.parseString())
+
+proc readValue*(r: var JsonReader[T8Conv], val: var uint64)
+       {.raises: [IOError, JsonReaderError].} =
+  let tok = r.tokKind
+  if tok == JsonValueKind.Number:
+    val = r.parseInt(uint64)
   else:
-    parseHexOrInt[uint64](n[field].getStr())
+    wrapValueError:
+      val = parseHexOrInt[uint64](r.parseString())
 
-template fromJson(T: type UInt256, n: JsonNode, field: string): UInt256 =
-  parseHexOrInt[UInt256](n[field].getStr())
+proc readValue*(r: var JsonReader[T8Conv], val: var ChainId)
+       {.raises: [IOError, JsonReaderError].} =
+  wrapValueError:
+    val = parseHexOrInt[uint64](r.parseString()).ChainId
 
-template fromJson(T: type ChainId, n: JsonNode, field: string): ChainId =
-  parseHexOrInt[uint64](n[field].getStr()).ChainId
+proc readValue*(r: var JsonReader[T8Conv], val: var EthTime)
+       {.raises: [IOError, JsonReaderError].} =
+  wrapValueError:
+    val = parseHexOrInt[uint64](r.parseString()).EthTime
 
-proc fromJson(T: type Bytes32, n: JsonNode): Bytes32 =
-  var num = n.getStr()
-  num.removePrefix("0x")
-  if num.len < 64:
-    num = repeat('0', 64 - num.len) & num
-  Bytes32(hexToByteArray(num, 32))
+proc readValue*(r: var JsonReader[T8Conv], val: var seq[byte])
+       {.raises: [IOError, JsonReaderError].} =
+  wrapValueError:
+    val = hexToSeqByte(r.parseString())
 
-proc fromJson(T: type Bytes32, n: JsonNode, field: string): Bytes32 =
-  fromJson(T, n[field])
+proc readValue*(r: var JsonReader[T8Conv], val: var GenesisStorage)
+       {.raises: [IOError, SerializationError].} =
+  r.parseObjectCustomKey:
+    let slot = r.readValue(UInt256)
+  do:
+    val[slot] = r.readValue(UInt256)
 
-proc fromJson(T: type Hash32, n: JsonNode): Hash32 =
-  var num = n.getStr()
-  num.removePrefix("0x")
-  if num.len < 64:
-    num = repeat('0', 64 - num.len) & num
-  Hash32(hexToByteArray(num, 32))
+proc readValue*(r: var JsonReader[T8Conv], val: var GenesisAccount)
+       {.raises: [IOError, SerializationError].} =
+  var balanceParsed = false
+  r.parseObject(key):
+    case key
+    of "code"   : r.readValue(val.code)
+    of "nonce"  : r.readValue(val.nonce)
+    of "balance":
+      r.readValue(val.balance)
+      balanceParsed = true
+    of "storage": r.readValue(val.storage)
+    else: discard r.readValue(JsonString)
+  if not balanceParsed:
+    r.raiseUnexpectedValue("GenesisAccount: balance required")
 
-proc fromJson(T: type Hash32, n: JsonNode, field: string): Hash32 =
-  fromJson(T, n[field])
+proc readValue*(r: var JsonReader[T8Conv], val: var GenesisAlloc)
+       {.raises: [IOError, SerializationError].} =
+  r.parseObjectCustomKey:
+    let address = r.readValue(Address)
+  do:
+    val[address] = r.readValue(GenesisAccount)
 
-template fromJson(T: type EthTime, n: JsonNode, field: string): EthTime =
-  EthTime(parseHexOrInt[uint64](n[field].getStr()))
+proc readValue*(r: var JsonReader[T8Conv], val: var Table[uint64, Hash32])
+       {.raises: [IOError, SerializationError].} =
+  wrapValueError:
+    r.parseObjectCustomKey:
+      let number = parseHexOrInt[uint64](r.parseString())
+    do:
+      val[number] = r.readValue(Hash32)
 
-proc fromJson(T: type AccessList, n: JsonNode, field: string): AccessList =
-  let z = n[field]
-  if z.kind == JNull:
-    return
+proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
+       {.raises: [IOError, SerializationError].} =
+  var
+    currentCoinbaseParsed = false
+    currentGasLimitParsed = false
+    currentNumberParsed = false
+    currentTimestampParsed = false
 
-  for x in z:
-    var ap = AccessPair(
-      address: Address.fromJson(x, "address")
-    )
-    let sks = x["storageKeys"]
-    for sk in sks:
-      ap.storageKeys.add Bytes32.fromHex(sk.getStr())
-    result.add ap
+  r.parseObject(key):
+    case key
+    of "currentCoinbase":
+      r.readValue(val.currentCoinbase)
+      currentCoinbaseParsed = true
+    of "currentGasLimit":
+      r.readValue(val.currentGasLimit)
+      currentGasLimitParsed = true
+    of "currentNumber":
+      r.readValue(val.currentNumber)
+      currentNumberParsed = true
+    of "currentTimestamp":
+      r.readValue(val.currentTimestamp)
+      currentTimestampParsed = true
+    of "currentDifficulty": r.readValue(val.currentDifficulty)
+    of "currentRandom": r.readValue(val.currentRandom)
+    of "parentDifficulty": r.readValue(val.parentDifficulty)
+    of "parentTimestamp": r.readValue(val.parentTimestamp)
+    of "currentBaseFee": r.readValue(val.currentBaseFee)
+    of "parentUncleHash": r.readValue(val.parentUncleHash)
+    of "parentBaseFee": r.readValue(val.parentBaseFee)
+    of "parentGasUsed": r.readValue(val.parentGasUsed)
+    of "parentGasLimit": r.readValue(val.parentGasLimit)
+    of "currentBlobGasUsed": r.readValue(val.currentBlobGasUsed)
+    of "currentExcessBlobGas": r.readValue(val.currentExcessBlobGas)
+    of "parentBlobGasUsed": r.readValue(val.parentBlobGasUsed)
+    of "parentExcessBlobGas": r.readValue(val.parentExcessBlobGas)
+    of "parentBeaconBlockRoot": r.readValue(val.parentBeaconBlockRoot)
+    of "blockHashes": r.readValue(val.blockHashes)
+    of "ommers": r.readValue(val.ommers)
+    of "withdrawals": r.readValue(val.withdrawals)
+    else: discard r.readValue(JsonString)
 
-proc fromJson(T: type Ommer, n: JsonNode): Ommer =
-  Ommer(
-    delta: fromJson(uint64, n, "delta"),
-    address: fromJson(Address, n, "address")
-  )
+  if not currentCoinbaseParsed:
+    r.raiseUnexpectedValue("env: currentCoinbase required")
+  if not currentGasLimitParsed:
+    r.raiseUnexpectedValue("env: currentGasLimit required")
+  if not currentNumberParsed:
+    r.raiseUnexpectedValue("env: currentNumber required")
+  if not currentTimestampParsed:
+    r.raiseUnexpectedValue("env: currentTimestamp required")
 
-proc fromJson(T: type Withdrawal, n: JsonNode): Withdrawal =
-  Withdrawal(
-    index: fromJson(uint64, n, "index"),
-    validatorIndex: fromJson(uint64, n, "validatorIndex"),
-    address: fromJson(Address, n, "address"),
-    amount: fromJson(uint64, n, "amount")
-  )
+proc readValue*(r: var JsonReader[T8Conv], val: var TransContext)
+       {.raises: [IOError, SerializationError].} =
+  r.parseObject(key):
+    case key
+    of "alloc"  : r.readValue(val.alloc)
+    of "env"    : r.readValue(val.env)
+    of "txs"    : r.readValue(val.txsJson)
+    of "txsRlp" : r.readValue(val.txsRlp)
 
-proc fromJson(T: type Authorization, n: JsonNode): Authorization =
-  Authorization(
-    chainId: fromJson(ChainId, n, "chainId"),
-    address: fromJson(Address, n, "address"),
-    nonce: fromJson(uint64, n, "nonce"),
-    v: fromJson(uint64, n, "v"),
-    r: fromJson(UInt256, n, "r"),
-    s: fromJson(UInt256, n, "s"),
-  )
+proc parseTxJson(txo: TxObject, chainId: ChainID): Result[Transaction, string] =
+  template required(field) =
+    const fName = astToStr(oField)
+    if txo.field.isNone:
+      return err("missing required field '" & fName & "' in transaction")
+    tx.field = txo.field.get
 
-proc fromJson(T: type seq[Authorization], n: JsonNode, field: string): T =
-  let list = n[field]
-  for x in list:
-    result.add Authorization.fromJson(x)
+  template required(field, alias) =
+    const fName = astToStr(oField)
+    if txo.field.isNone:
+      return err("missing required field '" & fName & "' in transaction")
+    tx.alias = txo.field.get
 
-proc fromJson(T: type seq[VersionedHash], n: JsonNode, field: string): T =
-  let list = n[field]
-  for x in list:
-    result.add VersionedHash.fromHex(x.getStr)
+  template optional(field) =
+    if txo.field.isSome:
+      tx.field = txo.field.get
 
-template `gas=`(tx: var Transaction, x: GasInt) =
-  tx.gasLimit = x
-
-template `input=`(tx: var Transaction, x: seq[byte]) =
-  tx.payload = x
-
-template `v=`(tx: var Transaction, x: uint64) =
-  tx.V = x
-
-template `r=`(tx: var Transaction, x: UInt256) =
-  tx.R = x
-
-template `s=`(tx: var Transaction, x: UInt256) =
-  tx.S = x
-
-template `blobVersionedHashes=`(tx: var Transaction, x: seq[VersionedHash]) =
-  tx.versionedHashes = x
-
-template required(o: untyped, T: type, oField: untyped) =
-  const fName = astToStr(oField)
-  if not n.hasKey(fName):
-    raise newError(ErrorJson, "missing required field '" & fName & "' in transaction")
-  o.oField = T.fromJson(n, fName)
-
-template omitZero(o: untyped, T: type, oField: untyped) =
-  const fName = astToStr(oField)
-  if n.hasKey(fName):
-    o.oField = T.fromJson(n, fName)
-
-template optional(o: untyped, T: type, oField: untyped) =
-  const fName = astToStr(oField)
-  if n.hasKey(fName) and n[fName].kind != JNull:
-    o.oField = Opt.some(T.fromJson(n, fName))
-
-proc parseAlloc*(ctx: var TransContext, n: JsonNode) =
-  for accAddr, acc in n:
-    let address = Address.fromHex(accAddr)
-    var ga = GenesisAccount()
-    if acc.hasKey("code"):
-      ga.code = seq[byte].fromJson(acc, "code")
-    if acc.hasKey("nonce"):
-      ga.nonce = AccountNonce.fromJson(acc, "nonce")
-    if acc.hasKey("balance"):
-      ga.balance = UInt256.fromJson(acc, "balance")
-    else:
-      raise newError(ErrorJson, "GenesisAlloc: balance required")
-    if acc.hasKey("storage"):
-      let storage = acc["storage"]
-      for k, v in storage:
-        ga.storage[UInt256.fromHex(k)] = UInt256.fromHex(v.getStr())
-    ctx.alloc[address] = ga
-
-proc parseEnv*(ctx: var TransContext, n: JsonNode) =
-  required(ctx.env, Address, currentCoinbase)
-  required(ctx.env, GasInt, currentGasLimit)
-  required(ctx.env, BlockNumber, currentNumber)
-  required(ctx.env, EthTime, currentTimestamp)
-  optional(ctx.env, DifficultyInt, currentDifficulty)
-  optional(ctx.env, Bytes32, currentRandom)
-  optional(ctx.env, DifficultyInt, parentDifficulty)
-  omitZero(ctx.env, EthTime, parentTimestamp)
-  optional(ctx.env, UInt256, currentBaseFee)
-  omitZero(ctx.env, Hash32, parentUncleHash)
-  optional(ctx.env, UInt256, parentBaseFee)
-  optional(ctx.env, GasInt, parentGasUsed)
-  optional(ctx.env, GasInt, parentGasLimit)
-  optional(ctx.env, uint64, currentBlobGasUsed)
-  optional(ctx.env, uint64, currentExcessBlobGas)
-  optional(ctx.env, uint64, parentBlobGasUsed)
-  optional(ctx.env, uint64, parentExcessBlobGas)
-  optional(ctx.env, Hash32, parentBeaconBlockRoot)
-
-  if n.hasKey("blockHashes"):
-    let w = n["blockHashes"]
-    for k, v in w:
-      ctx.env.blockHashes[parseHexOrInt[uint64](k)] = Hash32.fromHex(v.getStr())
-
-  if n.hasKey("ommers"):
-    let w = n["ommers"]
-    for v in w:
-      ctx.env.ommers.add Ommer.fromJson(v)
-
-  if n.hasKey("withdrawals"):
-    let w = n["withdrawals"]
-    var withdrawals: seq[Withdrawal]
-    for v in w:
-      withdrawals.add Withdrawal.fromJson(v)
-    ctx.env.withdrawals = Opt.some(withdrawals)
-
-proc parseTx(n: JsonNode, chainId: ChainID): Transaction =
   var tx: Transaction
-  if not n.hasKey("type"):
-    tx.txType = TxLegacy
-  else:
-    tx.txType = uint64.fromJson(n, "type").TxType
-
-  required(tx, AccountNonce, nonce)
-  required(tx, GasInt, gas)
-  required(tx, UInt256, value)
-  required(tx, seq[byte], input)
-
-  if n.hasKey("to"):
-    tx.to = Opt.some(Address.fromJson(n, "to"))
+  tx.txType = txo.`type`.get(0'u64).TxType
+  required(nonce)
+  required(gas, gasLimit)
+  required(value)
+  required(input, payload)
+  tx.to = txo.to
   tx.chainId = chainId
 
   case tx.txType
   of TxLegacy:
-    required(tx, GasInt, gasPrice)
+    required(gasPrice)
   of TxEip2930:
-    required(tx, GasInt, gasPrice)
-    required(tx, ChainId, chainId)
-    omitZero(tx, AccessList, accessList)
+    required(gasPrice)
+    required(chainId)
+    optional(accessList)
   of TxEip1559:
-    required(tx, ChainId, chainId)
-    required(tx, GasInt, maxPriorityFeePerGas)
-    required(tx, GasInt, maxFeePerGas)
-    omitZero(tx, AccessList, accessList)
+    required(chainId)
+    required(maxPriorityFeePerGas)
+    required(maxFeePerGas)
+    optional(accessList)
   of TxEip4844:
-    required(tx, ChainId, chainId)
-    required(tx, GasInt, maxPriorityFeePerGas)
-    required(tx, GasInt, maxFeePerGas)
-    omitZero(tx, AccessList, accessList)
-    required(tx, UInt256, maxFeePerBlobGas)
-    required(tx, seq[VersionedHash], blobVersionedHashes)
+    required(chainId)
+    required(maxPriorityFeePerGas)
+    required(maxFeePerGas)
+    optional(accessList)
+    required(maxFeePerBlobGas)
+    required(blobVersionedHashes, versionedHashes)
   of TxEip7702:
-    required(tx, ChainId, chainId)
-    required(tx, GasInt, maxPriorityFeePerGas)
-    required(tx, GasInt, maxFeePerGas)
-    omitZero(tx, AccessList, accessList)
-    required(tx, seq[Authorization], authorizationList)
+    required(chainId)
+    required(maxPriorityFeePerGas)
+    required(maxFeePerGas)
+    optional(accessList)
+    required(authorizationList)
 
-  var eip155 = true
-  if n.hasKey("protected"):
-    eip155 = n["protected"].bval
-
-  if n.hasKey("secretKey"):
-    let data = seq[byte].fromJson(n, "secretKey")
-    let secretKey = PrivateKey.fromRaw(data).tryGet
-    signTransaction(tx, secretKey, eip155)
+  let eip155 = txo.protected.get(true)
+  if txo.secretKey.isSome:
+    let secretKey = PrivateKey.fromRaw(txo.secretKey.get).valueOr:
+      return err($error)
+    ok(signTransaction(tx, secretKey, eip155))
   else:
-    required(tx, uint64, v)
-    required(tx, UInt256, r)
-    required(tx, UInt256, s)
-    tx
-
-proc parseTxJson(ctx: TransContext, i: int, chainId: ChainId): Result[Transaction, string] =
-  try:
-    let n = ctx.txs.n[i]
-    return ok(parseTx(n, chainId))
-  except Exception as x:
-    return err(x.msg)
+    required(v, V)
+    required(r, R)
+    required(s, S)
+    ok(tx)
 
 proc readNestedTx(rlp: var Rlp): Result[Transaction, string] =
   try:
@@ -289,54 +284,62 @@ proc readNestedTx(rlp: var Rlp): Result[Transaction, string] =
   except RlpError as exc:
     err(exc.msg)
 
-proc parseTxs*(ctx: TransContext, chainId: ChainId): seq[Result[Transaction, string]] =
-  if ctx.txs.txsType == TxsJson:
-    let len = ctx.txs.n.len
-    result = newSeqOfCap[Result[Transaction, string]](len)
-    for i in 0 ..< len:
-      result.add ctx.parseTxJson(i, chainId)
-    return
+proc parseTxs*(ctx: var TransContext, chainId: ChainId)
+                {.raises: [T8NError, RlpError].} =
+  var numTxs = ctx.txsJson.len
+  var rlp: Rlp
 
-  if ctx.txs.txsType == TxsRlp:
-    result = newSeqOfCap[Result[Transaction, string]](ctx.txs.r.listLen)
-    var rlp = ctx.txs.r
+  if ctx.txsRlp.len > 0:
+    rlp = rlpFromBytes(ctx.txsRlp)
+    if rlp.isList.not:
+      raise newError(ErrorRlp, "RLP Transaction list should be a list")
+    numTxs += rlp.listLen
+
+  ctx.txList = newSeqOfCap[Result[Transaction, string]](numTxs)
+  for tx in ctx.txsJson:
+    ctx.txList.add parseTxJson(tx, chainId)
+
+  if ctx.txsRlp.len > 0:
     for item in rlp:
-      result.add rlp.readNestedTx()
+      ctx.txList.add rlp.readNestedTx()
 
-    return
-
-proc txList*(ctx: TransContext, chainId: ChainId): seq[Transaction] =
-  let list = ctx.parseTxs(chainId)
-  for txRes in list:
+proc filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
+  for txRes in ctx.txList:
     if txRes.isOk:
       result.add txRes.get
 
-proc parseTxs*(ctx: var TransContext, txs: JsonNode) =
-  if txs.kind == JNull:
-    return
-  if txs.kind != JArray:
-    raise newError(ErrorJson,
-      "Transaction list should be a JSON array, got=" & $txs.kind)
-  ctx.txs = TxsList(
-    txsType: TxsJson,
-    n: txs)
+template wrapException(procName: string, body) =
+  try:
+    body
+  except SerializationError as exc:
+    debugEcho "procName: ", procName
+    raise newError(ErrorJson, exc.msg)
+  except IOError as exc:
+    debugEcho "procName: ", procName
+    raise newError(ErrorJson, exc.msg)
 
-proc parseTxsRlp*(ctx: var TransContext, hexData: string) =
-  let bytes = hexToSeqByte(hexData)
-  ctx.txs = TxsList(
-    txsType: TxsRlp,
-    r: rlpFromBytes(bytes)
-  )
-  if ctx.txs.r.isList.not:
-    raise newError(ErrorRlp, "RLP Transaction list should be a list")
+proc parseTxsJson*(ctx: var TransContext, jsonFile: string) {.raises: [T8NError].} =
+  wrapException("parseTxsJson"):
+    ctx.txsJson = T8Conv.loadFile(jsonFile, seq[TxObject])
 
-proc parseInputFromStdin*(ctx: var TransContext) =
-  let data = stdin.readAll()
-  let n = json.parseJson(data)
-  if n.hasKey("alloc"): ctx.parseAlloc(n["alloc"])
-  if n.hasKey("env"): ctx.parseEnv(n["env"])
-  if n.hasKey("txs"): ctx.parseTxs(n["txs"])
-  if n.hasKey("txsRlp"): ctx.parseTxsRlp(n["txsRlp"].getStr())
+proc parseAlloc*(ctx: var TransContext, allocFile: string) {.raises: [T8NError].} =
+  wrapException("parseAlloc"):
+    ctx.alloc = T8Conv.loadFile(allocFile, GenesisAlloc)
+
+proc parseEnv*(ctx: var TransContext, envFile: string) {.raises: [T8NError].} =
+  wrapException("parseEnv"):
+    ctx.env = T8Conv.loadFile(envFile, EnvStruct)
+
+proc parseTxsRlp*(ctx: var TransContext, hexData: string) {.raises: [ValueError].} =
+  ctx.txsRlp = hexToSeqByte(hexData)
+
+proc parseInputFromStdin*(ctx: var TransContext) {.raises: [T8NError].} =
+  wrapException("parseInputFromStdin"):
+    let jsonData = stdin.readAll()
+    ctx = T8Conv.decode(jsonData, TransContext)
+
+import
+  std/json
 
 template stripLeadingZeros(value: string): string =
   var cidx = 0
@@ -425,29 +428,6 @@ proc `@@`(x: RejectedTx): JsonNode =
   %{
     "index": %(x.index),
     "error": %(x.error)
-  }
-
-proc `@@`(x: DepositRequest): JsonNode =
-  %{
-    "pubkey": @@(x.pubkey),
-    "withdrawalCredentials": @@(x.withdrawalCredentials),
-    "amount": @@(x.amount),
-    "signature": @@(x.signature),
-    "index": @@(x.index),
-  }
-
-proc `@@`(x: WithdrawalRequest): JsonNode =
-  %{
-    "sourceAddress": @@(x.sourceAddress),
-    "validatorPubkey": @@(x.validatorPubkey),
-    "amount": @@(x.amount),
-  }
-
-proc `@@`(x: ConsolidationRequest): JsonNode =
-  %{
-    "sourceAddress": @@(x.sourceAddress),
-    "sourcePubkey": @@(x.sourcePubkey),
-    "targetPubkey": @@(x.targetPubkey),
   }
 
 proc `@@`[T](x: seq[T]): JsonNode =

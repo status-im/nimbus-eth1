@@ -9,10 +9,9 @@
 # according to those terms.
 
 import
-  std/[tables, json],
+  std/[tables],
   eth/common/blocks,
   eth/common/receipts,
-  eth/rlp,
   results,
   stint,
   ../../nimbus/common/chain_config,
@@ -54,21 +53,35 @@ type
     parentExcessBlobGas*: Opt[uint64]
     parentBeaconBlockRoot*: Opt[Hash32]
 
-  TxsType* = enum
-    TxsNone
-    TxsRlp
-    TxsJson
+  TxObject* = object
+    `type`*: Opt[uint64]
+    nonce* : Opt[AccountNonce]
+    gas*   : Opt[GasInt]
+    value* : Opt[UInt256]
+    input* : Opt[seq[byte]]
+    to*    : Opt[Address]
+    v*     : Opt[uint64]
+    r*     : Opt[UInt256]
+    s*     : Opt[UInt256]
+    gasPrice*  : Opt[GasInt]
+    chainId*   : Opt[ChainId]
+    accessList*: Opt[AccessList]
+    protected* : Opt[bool]
+    secretKey* : Opt[seq[byte]]
+    maxPriorityFeePerGas*: Opt[GasInt]
+    maxFeePerGas*        : Opt[GasInt]
+    maxFeePerBlobGas*    : Opt[UInt256]
+    blobVersionedHashes* : Opt[seq[Hash32]]
+    authorizationList*   : Opt[seq[Authorization]]
 
-  TxsList* = object
-    case txsType*: TxsType
-    of TxsRlp: r*: Rlp
-    of TxsJson: n*: JsonNode
-    else: discard
+  TxList* = seq[Result[Transaction, string]]
 
   TransContext* = object
-    alloc*: GenesisAlloc
-    txs*: TxsList
-    env*: EnvStruct
+    alloc*  : GenesisAlloc
+    txsRlp* : seq[byte]
+    txsJson*: seq[TxObject]
+    txList* : TxList
+    env*    : EnvStruct
 
   RejectedTx* = object
     index*: int

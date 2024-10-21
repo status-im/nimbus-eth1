@@ -64,7 +64,7 @@ proc dispatch(dis: var Dispatch, baseDir, fName, name: string, obj: JsonNode) =
                  fName
     writeFile(path, obj.pretty)
 
-proc dispatchOutput(ctx: var TransContext, conf: T8NConf, res: ExecOutput) =
+proc dispatchOutput(ctx: TransContext, conf: T8NConf, res: ExecOutput) =
   var dis = Dispatch.init()
   createDir(conf.outputBaseDir)
 
@@ -72,7 +72,7 @@ proc dispatchOutput(ctx: var TransContext, conf: T8NConf, res: ExecOutput) =
   dis.dispatch(conf.outputBaseDir, conf.outputResult, "result", @@(res.result))
 
   let chainId = conf.stateChainId.ChainId
-  let txList = ctx.txList(chainId)
+  let txList = ctx.filterGoodTransactions()
 
   let body = @@(rlp.encode(txList))
   dis.dispatch(conf.outputBaseDir, conf.outputBody, "body", body)
@@ -216,16 +216,14 @@ proc closeTrace(vmState: BaseVMState, closeStream: bool) =
   if tracer.isNil.not and closeStream:
     tracer.close()
 
-proc exec(ctx: var TransContext,
+proc exec(ctx: TransContext,
           vmState: BaseVMState,
           stateReward: Option[UInt256],
           header: Header,
           conf: T8NConf): ExecOutput =
 
-  let txList = ctx.parseTxs(vmState.com.chainId)
-
   var
-    receipts = newSeqOfCap[TxReceipt](txList.len)
+    receipts = newSeqOfCap[TxReceipt](ctx.txList.len)
     rejected = newSeq[RejectedTx]()
     includedTx = newSeq[Transaction]()
 
@@ -234,7 +232,7 @@ proc exec(ctx: var TransContext,
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
-  vmState.receipts = newSeqOfCap[Receipt](txList.len)
+  vmState.receipts = newSeqOfCap[Receipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
@@ -253,7 +251,7 @@ proc exec(ctx: var TransContext,
     vmState.processParentBlockHash(prevHash).isOkOr:
       raise newError(ErrorConfig, error)
 
-  for txIndex, txRes in txList:
+  for txIndex, txRes in ctx.txList:
     if txRes.isErr:
       rejected.add RejectedTx(
         index: txIndex,
@@ -442,20 +440,17 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       ctx.parseInputFromStdin()
 
     if conf.inputAlloc != stdinSelector and conf.inputAlloc.len > 0:
-      let n = json.parseFile(conf.inputAlloc)
-      ctx.parseAlloc(n)
+      ctx.parseAlloc(conf.inputAlloc)
 
     if conf.inputEnv != stdinSelector and conf.inputEnv.len > 0:
-      let n = json.parseFile(conf.inputEnv)
-      ctx.parseEnv(n)
+      ctx.parseEnv(conf.inputEnv)
 
     if conf.inputTxs != stdinSelector and conf.inputTxs.len > 0:
       if conf.inputTxs.endsWith(".rlp"):
         let data = readFile(conf.inputTxs)
         ctx.parseTxsRlp(data.strip(chars={'"'}))
       else:
-        let n = json.parseFile(conf.inputTxs)
-        ctx.parseTxs(n)
+        ctx.parseTxsJson(conf.inputTxs)
 
     let uncleHash = if ctx.env.parentUncleHash == default(Hash32):
                       EMPTY_UNCLE_HASH
@@ -546,6 +541,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       db.setupAlloc(ctx.alloc)
       db.persist(clearEmptyAccount = false)
 
+    ctx.parseTxs(com.chainId)
     let res = exec(ctx, vmState, conf.stateReward, header, conf)
 
     if vmState.hashError.len > 0:
