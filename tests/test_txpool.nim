@@ -659,7 +659,7 @@ proc runTxPackerTests(noisy = true) =
     # After we wired ForkedChainRef with TxPool, we can
     # try to enable these test
 
-    block:
+    #[block:
       var
         xq = bcCom.toTxPool(txList, ntBaseFee,
                            local = localAccounts,
@@ -858,7 +858,7 @@ proc runTxPackerTests(noisy = true) =
             # necessarily binary equal.
             check hdr.blockHash == xq.chain.com.db.getCanonicalHead.blockHash
           else:
-            check canonicalHead == xq.chain.com.db.getCanonicalHead
+            check canonicalHead == xq.chain.com.db.getCanonicalHead]#
 
 # ------------------------------------------------------------------------------
 # Main function(s)
