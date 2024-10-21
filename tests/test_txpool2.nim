@@ -11,7 +11,8 @@
 import
   std/[tables, math],
   eth/common/keys,
-  results, unittest2,
+  results,
+  unittest2,
   ../hive_integration/nodocker/engine/tx_sender,
   ../nimbus/db/ledger,
   ../nimbus/core/chain,
@@ -31,15 +32,14 @@ const
   repoDir = [".", "customgenesis"]
   genesisFile = "merge.json"
 
-type
-  TestEnv = object
-    nonce   : uint64
-    chainId : ChainId
-    vaultKey: PrivateKey
-    conf    : NimbusConf
-    com     : CommonRef
-    chain   : ForkedChainRef
-    xp      : TxPoolRef
+type TestEnv = object
+  nonce: uint64
+  chainId: ChainId
+  vaultKey: PrivateKey
+  conf: NimbusConf
+  com: CommonRef
+  chain: ForkedChainRef
+  xp: TxPoolRef
 
 const
   # signerKeyHex = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
@@ -47,9 +47,9 @@ const
   recipient = address"0000000000000000000000000000000000000318"
   feeRecipient = address"0000000000000000000000000000000000000212"
   contractCode = evmByteCode:
-    PrevRandao    # VAL
-    Push1 "0x11"  # KEY
-    Sstore        # OP
+    PrevRandao # VAL
+    Push1 "0x11" # KEY
+    Sstore # OP
     Stop
 
 proc privKey(keyHex: string): PrivateKey =
@@ -61,63 +61,56 @@ proc privKey(keyHex: string): PrivateKey =
   kRes.get()
 
 func makeTx(
-    t: var TestEnv, recipient: Address, amount: UInt256,
-    payload: openArray[byte] = []): Transaction =
+    t: var TestEnv, recipient: Address, amount: UInt256, payload: openArray[byte] = []
+): Transaction =
   const
     gasLimit = 75000.GasInt
     gasPrice = 30.gwei
 
   let tx = Transaction(
-    txType  : TxLegacy,
-    chainId : t.chainId,
-    nonce   : AccountNonce(t.nonce),
+    txType: TxLegacy,
+    chainId: t.chainId,
+    nonce: AccountNonce(t.nonce),
     gasPrice: gasPrice,
     gasLimit: gasLimit,
-    to      : Opt.some(recipient),
-    value   : amount,
-    payload : @payload
+    to: Opt.some(recipient),
+    value: amount,
+    payload: @payload,
   )
 
   inc t.nonce
   signTransaction(tx, t.vaultKey, eip155 = true)
 
 proc createPooledTransactionWithBlob(
-    t: var TestEnv, recipient: Address, amount: UInt256): PooledTransaction =
+    t: var TestEnv, recipient: Address, amount: UInt256
+): PooledTransaction =
   # Create the transaction
-
   let
     tc = BlobTx(
-      recipient:  Opt.some(recipient),
-      gasLimit:   100000.GasInt,
-      gasTip:     GasInt(10 ^ 9),
-      gasFee:     GasInt(10 ^ 9),
+      recipient: Opt.some(recipient),
+      gasLimit: 100000.GasInt,
+      gasTip: GasInt(10 ^ 9),
+      gasFee: GasInt(10 ^ 9),
       blobGasFee: u256(1),
-      blobCount:  2,
-      blobID:     0,
+      blobCount: 1,
+      blobID: 1,
     )
-    params = MakeTxParams(
-      chainId: t.chainId,
-      key: t.vaultKey,
-      nonce: t.nonce,
-    )
+    params = MakeTxParams(chainId: t.chainId, key: t.vaultKey, nonce: t.nonce)
+
   inc t.nonce
   params.makeTx(tc)
 
-func signTxWithNonce(
-    t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
+func signTxWithNonce(t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
   var tx = tx
   tx.nonce = nonce
   signTransaction(tx, t.vaultKey, eip155 = true)
 
 proc initEnv(envFork: HardFork): TestEnv =
-  var
-    conf = makeConfig(@[
-      "--custom-network:" & genesisFile.findFilePath(baseDir,repoDir).value
-    ])
-
-  conf.networkParams.genesis.alloc[recipient] = GenesisAccount(
-    code: contractCode
+  var conf = makeConfig(
+    @["--custom-network:" & genesisFile.findFilePath(baseDir, repoDir).value]
   )
+
+  conf.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
 
   if envFork >= MergeFork:
     conf.networkParams.config.mergeForkBlock = Opt.some(0'u64)
@@ -128,15 +121,10 @@ proc initEnv(envFork: HardFork): TestEnv =
 
   if envFork >= Cancun:
     conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
-    let res = loadKzgTrustedSetup()
-    check res.isOk
 
   let
-    com = CommonRef.new(
-      newCoreDbRef DefaultDbMemory,
-      conf.networkId,
-      conf.networkParams
-    )
+    com =
+      CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
     chain = newForkedChain(com, com.genesisHeader)
 
   result = TestEnv(
@@ -146,7 +134,7 @@ proc initEnv(envFork: HardFork): TestEnv =
     xp: TxPoolRef.new(com),
     vaultKey: privKey(vaultKeyHex),
     chainId: conf.networkParams.config.chainId,
-    nonce: 0'u64
+    nonce: 0'u64,
   )
 
 const
@@ -155,8 +143,7 @@ const
   prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
 
 proc runTxPoolPosTest() =
-  var
-    env = initEnv(MergeFork)
+  var env = initEnv(MergeFork)
 
   var
     tx = env.makeTx(recipient, amount)
@@ -185,10 +172,7 @@ proc runTxPoolPosTest() =
         return
 
       blk = r.get.blk
-      body = BlockBody(
-        transactions: blk.txs,
-        uncles: blk.uncles
-      )
+      body = BlockBody(transactions: blk.txs, uncles: blk.uncles)
       check blk.txs.len == 1
 
     test "PoS persistBlocks":
@@ -208,8 +192,7 @@ proc runTxPoolPosTest() =
       check not bal.isZero
 
 proc runTxPoolBlobhashTest() =
-  var
-    env = initEnv(Cancun)
+  var env = initEnv(Cancun)
 
   var
     tx1 = env.createPooledTransactionWithBlob(recipient, amount)
@@ -242,14 +225,15 @@ proc runTxPoolBlobhashTest() =
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles,
-        withdrawals: Opt.some(newSeq[Withdrawal]())
+        withdrawals: Opt.some(newSeq[Withdrawal]()),
       )
       check blk.txs.len == 2
 
       let
         gasUsed1 = xp.vmState.receipts[0].cumulativeGasUsed
         gasUsed2 = xp.vmState.receipts[1].cumulativeGasUsed - gasUsed1
-        blockValue = gasUsed1.u256 * tx1.tx.effectiveGasTip(blk.header.baseFeePerGas).u256 +
+        blockValue =
+          gasUsed1.u256 * tx1.tx.effectiveGasTip(blk.header.baseFeePerGas).u256 +
           gasUsed2.u256 * tx2.tx.effectiveGasTip(blk.header.baseFeePerGas).u256
 
       check blockValue == bundle.blockValue
@@ -273,7 +257,7 @@ proc runTxPoolBlobhashTest() =
     test "add tx with nonce too low":
       let
         tx3 = env.makeTx(recipient, amount)
-        tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce-2))
+        tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce - 2))
         xp = env.xp
 
       check xp.smartHead(blk.header, chain)
@@ -301,20 +285,20 @@ proc runTxHeadDelta(noisy = true) =
       # setTraceLevel()
 
       block:
-        for n in 0..<numBlocks:
-
-          for tn in 0..<txPerblock:
+        for n in 0 ..< numBlocks:
+          for tn in 0 ..< txPerblock:
             let tx = env.makeTx(recipient, amount)
             xp.add(PooledTransaction(tx: tx))
 
-          noisy.say "***", "txDB",
+          noisy.say "***",
+            "txDB",
             &" n={n}",
             # pending/staged/packed : total/disposed
             &" stats={xp.nItems.pp}"
 
           timestamp = timestamp + 1
           com.pos.prevRandao = prevRandao
-          com.pos.timestamp  = timestamp
+          com.pos.timestamp = timestamp
           com.pos.feeRecipient = feeRecipient
 
           let r = xp.assembleBlock()
@@ -324,9 +308,7 @@ proc runTxHeadDelta(noisy = true) =
             return
 
           let blk = r.get.blk
-          let body = BlockBody(
-            transactions: blk.txs,
-            uncles: blk.uncles)
+          let body = BlockBody(transactions: blk.txs, uncles: blk.uncles)
 
           # Commit to block chain
           check chain.importBlock(EthBlock.init(blk.header, body)).isOk
@@ -409,10 +391,11 @@ proc runGetBlockBodyTest() =
       check env.chain.forkChoice(currHash, currHash).isOk
 
 proc txPool2Main*() =
-  const
-    noisy = defined(debug)
+  const noisy = defined(debug)
 
-  #setErrorLevel() # mute logger
+  assert loadKzgTrustedSetup().isOk, "Failed to load KZG trusted setup"
+
+  setErrorLevel() # mute logger
 
   runTxPoolPosTest()
   runTxPoolBlobhashTest()
