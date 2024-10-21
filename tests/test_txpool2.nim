@@ -9,11 +9,13 @@
 # according to those terms.
 
 import
-  std/tables,
+  std/[tables, math],
   eth/common/keys,
   results, unittest2,
+  ../hive_integration/nodocker/engine/tx_sender,
   ../nimbus/db/ledger,
   ../nimbus/core/chain,
+  ../nimbus/core/eip4844,
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
   ../nimbus/core/tx_pool/tx_desc,
@@ -79,6 +81,28 @@ func makeTx(
   inc t.nonce
   signTransaction(tx, t.vaultKey, eip155 = true)
 
+proc createPooledTransactionWithBlob(
+    t: var TestEnv, recipient: Address, amount: UInt256): PooledTransaction =
+  # Create the transaction
+
+  let
+    tc = BlobTx(
+      recipient:  Opt.some(recipient),
+      gasLimit:   100000.GasInt,
+      gasTip:     GasInt(10 ^ 9),
+      gasFee:     GasInt(10 ^ 9),
+      blobGasFee: u256(1),
+      blobCount:  2,
+      blobID:     0,
+    )
+    params = MakeTxParams(
+      chainId: t.chainId,
+      key: t.vaultKey,
+      nonce: t.nonce,
+    )
+  inc t.nonce
+  params.makeTx(tc)
+
 func signTxWithNonce(
     t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
   var tx = tx
@@ -104,6 +128,8 @@ proc initEnv(envFork: HardFork): TestEnv =
 
   if envFork >= Cancun:
     conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
+    let res = loadKzgTrustedSetup()
+    check res.isOk
 
   let
     com = CommonRef.new(
@@ -186,8 +212,8 @@ proc runTxPoolBlobhashTest() =
     env = initEnv(Cancun)
 
   var
-    tx1 = env.makeTx(recipient, amount)
-    tx2 = env.makeTx(recipient, amount)
+    tx1 = env.createPooledTransactionWithBlob(recipient, amount)
+    tx2 = env.createPooledTransactionWithBlob(recipient, amount)
     xp = env.xp
     com = env.com
     chain = env.chain
@@ -196,8 +222,8 @@ proc runTxPoolBlobhashTest() =
 
   suite "Test TxPool with blobhash block":
     test "TxPool jobCommit":
-      xp.add(PooledTransaction(tx: tx1))
-      xp.add(PooledTransaction(tx: tx2))
+      xp.add(tx1)
+      xp.add(tx2)
       check xp.nItems.total == 2
 
     test "TxPool ethBlock":
@@ -223,8 +249,8 @@ proc runTxPoolBlobhashTest() =
       let
         gasUsed1 = xp.vmState.receipts[0].cumulativeGasUsed
         gasUsed2 = xp.vmState.receipts[1].cumulativeGasUsed - gasUsed1
-        blockValue = gasUsed1.u256 * tx1.effectiveGasTip(blk.header.baseFeePerGas).u256 +
-          gasUsed2.u256 * tx2.effectiveGasTip(blk.header.baseFeePerGas).u256
+        blockValue = gasUsed1.u256 * tx1.tx.effectiveGasTip(blk.header.baseFeePerGas).u256 +
+          gasUsed2.u256 * tx2.tx.effectiveGasTip(blk.header.baseFeePerGas).u256
 
       check blockValue == bundle.blockValue
 
@@ -386,7 +412,7 @@ proc txPool2Main*() =
   const
     noisy = defined(debug)
 
-  setErrorLevel() # mute logger
+  #setErrorLevel() # mute logger
 
   runTxPoolPosTest()
   runTxPoolBlobhashTest()
