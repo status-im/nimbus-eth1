@@ -110,17 +110,13 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
         nimbus.ethNode.peerPool,
         nimbus.chainRef,
         nimbus.txPool)
-    #of ProtocolFlag.Snap:
-    #  nimbus.ethNode.addSnapHandlerCapability(
-    #    nimbus.ethNode.peerPool,
-    #    nimbus.chainRef)
   # Cannot do without minimal `eth` capability
   if ProtocolFlag.Eth notin protocols:
     nimbus.ethNode.addEthHandlerCapability(
       nimbus.ethNode.peerPool,
       nimbus.chainRef)
 
-  # Always start syncer -- will throttle itself unless needed
+  # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(
     nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.beaconChunkSize)
 
@@ -225,7 +221,11 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupRpc(nimbus, conf, com, protocols)
 
     if conf.maxPeers > 0:
-      nimbus.beaconSyncRef.start
+      # Not starting syncer if there is definitely no way to run it. This
+      # avoids polling (i.e. waiting for instructions) and some logging.
+      let resumeOnly = not conf.engineApiServerEnabled()
+      if not nimbus.beaconSyncRef.start(resumeOnly):
+        nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
     if nimbus.state == NimbusState.Starting:
       # it might have been set to "Stopping" with Ctrl+C
