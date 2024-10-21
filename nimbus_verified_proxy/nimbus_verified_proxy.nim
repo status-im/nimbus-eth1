@@ -8,24 +8,25 @@
 {.push raises: [].}
 
 import
-  std/[json, os, strutils],
+  std/[os, strutils],
   chronicles,
   chronos,
   confutils,
-  eth/common/keys,
+  eth/common/[keys, eth_types_rlp],
   json_rpc/rpcproxy,
   beacon_chain/el/[el_manager, engine_api_conversions],
   beacon_chain/gossip_processing/optimistic_processor,
+  beacon_chain/networking/network_metadata,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
-  ../nimbus/rpc/cors,
-  "."/rpc/[rpc_eth_api, rpc_utils],
+  ../nimbus/rpc/[cors, server_api_helpers],
+  ../nimbus/beacon/payload_conv,
+  ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./block_cache
 
-from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
 type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
@@ -130,7 +131,7 @@ proc run*(
 
     optimisticHandler = proc(
         signedBlock: ForkedSignedBeaconBlock
-    ): Future[void] {.async: (raises: [CancelledError]).} =
+    ) {.async: (raises: [CancelledError]).} =
       notice "New LC optimistic block",
         opt = signedBlock.toBlockId(), wallSlot = getBeaconTime().slotOrZero
       withBlck(signedBlock):
@@ -139,10 +140,16 @@ proc run*(
             template payload(): auto =
               forkyBlck.message.body
 
-            blockCache.add(asExecutionData(payload.asEngineExecutionPayload()))
-        else:
-          discard
-      return
+            try:
+              # TODO parentBeaconBlockRoot / requestsHash
+              let blk = ethBlock(
+                executionPayload(payload.asEngineExecutionPayload()),
+                parentBeaconBlockRoot = Opt.none(Hash32),
+                requestsHash = Opt.none(Hash32),
+              )
+              blockCache.add(populateBlockObject(blk.header.rlpHash, blk, true))
+            except RlpError as exc:
+              debug "Invalid block received", err = exc.msg
 
     optimisticProcessor = initOptimisticProcessor(getBeaconTime, optimisticHandler)
 

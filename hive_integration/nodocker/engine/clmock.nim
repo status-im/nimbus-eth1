@@ -339,9 +339,9 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestShouldOverrideBuilder = x.shouldOverrideBuilder
   cl.latestExecutionRequests = x.executionRequests
 
-  let beaconRoot = cl.latestPayloadAttributes.parentBeaconblockRoot
+  let parentBeaconblockRoot = cl.latestPayloadAttributes.parentBeaconblockRoot
   let requestsHash = calcRequestsHash(x.executionRequests)
-  let header = blockHeader(cl.latestPayloadBuilt, beaconRoot = beaconRoot, requestsHash)
+  let header = blockHeader(cl.latestPayloadBuilt, parentBeaconblockRoot = parentBeaconblockRoot, requestsHash)
   let blockHash = header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",
@@ -398,7 +398,7 @@ proc broadcastNewPayload(cl: CLMocker,
   of Version.V3: return eng.client.newPayloadV3(payload.basePayload.V3,
     versionedHashes(payload.basePayload),
     cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
-  of Version.V4:    
+  of Version.V4:
     return eng.client.newPayloadV4(payload.basePayload.V3,
       versionedHashes(payload.basePayload),
       cl.latestPayloadAttributes.parentBeaconBlockRoot.get,
