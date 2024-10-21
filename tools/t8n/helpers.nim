@@ -198,6 +198,7 @@ proc parseEnv*(ctx: var TransContext, n: JsonNode) =
   optional(ctx.env, uint64, parentBlobGasUsed)
   optional(ctx.env, uint64, parentExcessBlobGas)
   optional(ctx.env, Hash32, parentBeaconBlockRoot)
+  optional(ctx.env, uint64, currentTargetBlobCount)
 
   if n.hasKey("blockHashes"):
     let w = n["blockHashes"]

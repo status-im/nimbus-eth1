@@ -76,7 +76,7 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit
     tx = item.tx.eip1559TxNormalization(baseFee.truncate(GasInt))
-    excessBlobGas = calcExcessBlobGas(vmState.parent)
+    excessBlobGas = vmState.blockCtx.excessBlobGas
 
   roDB.validateTransaction(
     tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
