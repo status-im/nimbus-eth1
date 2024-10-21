@@ -232,11 +232,13 @@ proc runTxPoolBlobhashTest() =
       let
         gasUsed1 = xp.vmState.receipts[0].cumulativeGasUsed
         gasUsed2 = xp.vmState.receipts[1].cumulativeGasUsed - gasUsed1
+        totalBlobGasUsed = tx1.tx.getTotalBlobGas + tx2.tx.getTotalBlobGas
         blockValue =
           gasUsed1.u256 * tx1.tx.effectiveGasTip(blk.header.baseFeePerGas).u256 +
           gasUsed2.u256 * tx2.tx.effectiveGasTip(blk.header.baseFeePerGas).u256
 
       check blockValue == bundle.blockValue
+      check totalBlobGasUsed == blk.header.blobGasUsed.get()
 
     test "Blobhash persistBlocks":
       let rr = chain.importBlock(EthBlock.init(blk.header, body))
