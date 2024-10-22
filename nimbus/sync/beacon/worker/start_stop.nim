@@ -58,9 +58,12 @@ proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
-    # Rpc checks empty header against a zero hash rather than `emptyRoot`
+    # Check whether there is an update running (otherwise take next upate)
     if not ctx.target.locked:
-      if f != zeroHash32 and ctx.target.consHead.number < h.number:
+      # Rpc checks empty header against a zero hash rather than `emptyRoot`
+      if f != zeroHash32 and
+         ctx.layout.head < h.number and
+         ctx.target.consHead.number < h.number:
         ctx.target.consHead = h
         ctx.target.final = BlockNumber(0)
         ctx.target.finalHash = f

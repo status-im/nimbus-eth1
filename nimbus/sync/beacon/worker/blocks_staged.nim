@@ -240,6 +240,7 @@ proc blocksStagedImport*(
     if qItem.key != imported + 1:
       trace info & ": there is a gap L vs. staged",
         B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr
+      doAssert imported < qItem.key
       return false
 
   # Remove from queue

@@ -59,7 +59,9 @@ proc headerStagedUpdateTarget*(
     info: static[string];
       ) {.async.} =
   ## Fetch finalised beacon header if there is an update available
-  let ctx = buddy.ctx
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
   if not ctx.layout.headLocked and
      ctx.target.final == 0 and
      ctx.target.finalHash != zeroHash32 and
@@ -75,7 +77,7 @@ proc headerStagedUpdateTarget*(
       if hash != ctx.target.finalHash:
         # Oops
         buddy.ctrl.zombie = true
-        trace info & ": finalised header hash mismatch", peer=buddy.peer, hash,
+        trace info & ": finalised header hash mismatch", peer, hash,
           expected=ctx.target.finalHash
       else:
         ctx.target.final = rc.value[0].number

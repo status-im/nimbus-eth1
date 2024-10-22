@@ -146,7 +146,9 @@ proc updateSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
       ctx.layout.headLocked = false
 
   # Check whether there is something to do regarding beacon node change
-  if not ctx.layout.headLocked and ctx.target.changed and ctx.target.final != 0:
+  if not ctx.layout.headLocked and         # there was an active import request
+     ctx.target.changed and                # and there is a new target from CL
+     ctx.target.final != 0:                # .. ditto
     ctx.target.changed = false
     ctx.updateTargetChange info
 

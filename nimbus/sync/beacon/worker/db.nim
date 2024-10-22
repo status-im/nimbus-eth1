@@ -106,10 +106,17 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef) =
       couplerHash:    latestHash,
       dangling:       latest,
       danglingParent: latestParent,
+      # There is no need to record a separate finalised head `F` as its only
+      # use is to serve as second argument in `forkChoice()` when committing
+      # a batch of imported blocks. Currently, there are no blocks to fetch
+      # and import. The system must wait for instructions and update the fields
+      # `final` and `head` while the latter will be increased so that import
+      # can start.
       final:          latest,
       finalHash:      latestHash,
       head:           latest,
-      headHash:       latestHash)
+      headHash:       latestHash,
+      headLocked:     false)
 
     trace info & ": new layout", L="C", C="D", D="F", F="H", H=latest.bnStr
 
