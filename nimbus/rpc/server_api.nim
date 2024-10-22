@@ -163,16 +163,18 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
   proc getLogsForBlock(
       chain: ForkedChainRef,
-      blk: Block,
+      header: Header,
       opts: FilterOptions): seq[FilterLog]
         {.gcsafe, raises: [RlpError].} =
-    if headerBloomFilter(blk.header, opts.address, opts.topics):
-      let receipts = chain.db.getReceipts(blk.header.receiptsRoot)
+    if headerBloomFilter(header, opts.address, opts.topics):
+      let
+        receipts = chain.db.getReceipts(header.receiptsRoot)
+        txs = chain.db.getTransactions(header.txRoot)
       # Note: this will hit assertion error if number of block transactions
       # do not match block receipts.
       # Although this is fine as number of receipts should always match number
       # of transactions
-      let logs = deriveLogs(blk.header, blk.transactions, receipts)
+      let logs = deriveLogs(header, txs, receipts)
       let filteredLogs = filterLogs(logs, opts.address, opts.topics)
       return filteredLogs
     else:
@@ -190,9 +192,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
     while blockNum <= finish:
       let
-        blk = chain.blockByNumber(blockNum).valueOr:
+        header = chain.headerByNumber(blockNum).valueOr:
                 return logs
-        filtered = chain.getLogsForBlock(blk, opts)
+        filtered = chain.getLogsForBlock(header, opts)
       logs.add(filtered)
       blockNum = blockNum + 1
     return logs
@@ -210,9 +212,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     if filterOptions.blockHash.isSome():
       let
         hash = filterOptions.blockHash.expect("blockHash")
-        blk = api.chain.blockByHash(hash).valueOr:
+        header = api.chain.headerByHash(hash).valueOr:
           raise newException(ValueError, "Block not found")
-      return getLogsForBlock(api.chain, blk, filterOptions)
+      return getLogsForBlock(api.chain, header, filterOptions)
     else:
       # TODO: do something smarter with tags. It would be the best if
       # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
@@ -269,8 +271,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     var
       idx = 0'u64
       prevGasUsed = GasInt(0)
-    
-    let 
+
+    let
       txHash = data
       (blockhash, txid) = api.chain.txRecords(txHash)
 
@@ -295,7 +297,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
     else:
       # Receipt in memory
       let blkdesc = api.chain.memoryBlock(blockhash)
-      
+
       while idx <= txid:
         let receipt = blkdesc.receipts[idx]
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
@@ -305,7 +307,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
           return populateReceipt(receipt, gasUsed, blkdesc.blk.transactions[txid], txid, blkdesc.blk.header)
 
         idx.inc
-  
+
   server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Web3Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
