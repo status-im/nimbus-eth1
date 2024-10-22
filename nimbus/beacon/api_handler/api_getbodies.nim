@@ -23,7 +23,7 @@ const
 
 proc getPayloadBodyByHeader(db: CoreDbRef,
         header: Header,
-        output: var seq[Opt[ExecutionPayloadBodyV1]]) {.gcsafe, raises:[].} =
+        output: var seq[Opt[ExecutionPayloadBodyV1]]) {.raises:[].} =
 
   var body: BlockBody
   if not db.getBlockBody(header, body):
@@ -48,7 +48,7 @@ proc getPayloadBodyByHeader(db: CoreDbRef,
     ))
   )
 
-func toPayloadBody(blk: Block): ExecutionPayloadBodyV1 =
+func toPayloadBody(blk: Block): ExecutionPayloadBodyV1 {.raises:[].}  =
   var wds: seq[WithdrawalV1]
   if blk.withdrawals.isSome:
     for w in blk.withdrawals.get:
@@ -90,7 +90,7 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
 
   let
     db = ben.com.db
-    
+
   var
     last = start+count-1
     header: Header
