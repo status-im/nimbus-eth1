@@ -148,10 +148,18 @@ proc updateSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
     let latest= ctx.chain.latestNumber()
     if ctx.layout.head <= latest:
       doAssert ctx.layout.head == latest
+      if ctx.pool.stopAfterTarget:
+        # Update, so it can be followed nicely
+        ctx.updateMetrics()
+        # There is nothing to do anymore
+        ctx.shutdownRequest = true
+        return
       ctx.layout.headLocked = false
+
 
   # Check whether there is something to do regarding beacon node change
   if not ctx.layout.headLocked and         # there was an active import request
+     not ctx.pool.stopAfterTarget and      # which was not a single trick pony
      ctx.target.changed and                # and there is a new target from CL
      ctx.target.final != 0:                # .. ditto
     ctx.target.changed = false

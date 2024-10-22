@@ -75,6 +75,7 @@ proc start*(desc: BeaconSyncRef; resumeOnly = false): bool =
     if not desc.ctx.dbLoadSyncStateAvailable():
       debug "RunSetup: nothing to do"
       return false
+    desc.ctx.pool.stopAfterTarget = true
   desc.startSync()
 
 proc stop*(desc: BeaconSyncRef) =

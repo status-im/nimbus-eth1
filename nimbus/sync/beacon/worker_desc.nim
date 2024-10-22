@@ -129,6 +129,7 @@ type
     hdrSync*: HeaderImportSync       ## Syncing by linked header chains
     blkSync*: BlocksImportSync       ## For importing/executing blocks
     nextUpdate*: Moment              ## For updating metrics
+    stopAfterTarget*: bool           ## No not recalibrate target (from RPC)
 
     # Blocks import/execution settings for importing with
     # `nBodiesBatch` blocks in each round (minimum value is
