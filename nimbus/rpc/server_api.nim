@@ -322,3 +322,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
       gasUsed  = rpcEstimateGas(args, header, api.chain.com, DEFAULT_RPC_GAS_CAP).valueOr:
         raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
     Quantity(gasUsed)
+
+  server.rpc("eth_gasPrice") do() -> Web3Quantity:
+    ## Returns an integer of the current gas price in wei.
+    w3Qty(calculateMedianGasPrice(chainDB).uint64)
+
+  
