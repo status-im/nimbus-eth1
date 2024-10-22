@@ -53,7 +53,7 @@ func installRPC(server: RpcServer,
   setupCommonRpc(nimbus.ethNode, conf, server)
 
   if RpcFlag.Eth in flags:
-    setupServerAPI(serverApi, server)
+    setupServerAPI(serverApi, server, nimbus.ctx)
 
   #  # Tracer is currently disabled
   # if RpcFlag.Debug in flags:

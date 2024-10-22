@@ -10,9 +10,11 @@
 {.push raises: [].}
 
 import
+  std/[sequtils, strutils],
   stint,
   web3/[conversions, eth_api_types],
   eth/common/base,
+  stew/byteutils,
   ../common/common,
   json_rpc/rpcserver,
   ../db/ledger,
@@ -78,7 +80,7 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] 
     let blockNum = base.BlockNumber blockTag.number
     return api.chain.blockByNumber(blockNum)
 
-proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
+proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
@@ -325,6 +327,132 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer) =
 
   server.rpc("eth_gasPrice") do() -> Web3Quantity:
     ## Returns an integer of the current gas price in wei.
-    w3Qty(calculateMedianGasPrice(chainDB).uint64)
+    w3Qty(calculateMedianGasPrice(api.com.db).uint64)
 
+  server.rpc("eth_accounts") do() -> seq[eth_types.Address]:
+    ## Returns a list of addresses owned by client.
+    result = newSeqOfCap[eth_types.Address](ctx.am.numAccounts)
+    for k in ctx.am.addresses:
+      result.add k
   
+  server.rpc("eth_getBlockTransactionCountByHash") do(data: Hash32) -> Web3Quantity:
+    ## Returns the number of transactions in a block from a block matching the given block hash.
+    ##
+    ## data: hash of a block
+    ## Returns integer of the number of transactions in this block.
+    let blk = api.chain.blockByHash(data).valueOr:
+      raise newException(ValueError, "Block not found")
+
+    Web3Quantity(blk.transactions.len)
+
+  server.rpc("eth_getBlockTransactionCountByNumber") do(blockTag: BlockTag) -> Web3Quantity:
+    ## Returns the number of transactions in a block from a block matching the given block number.
+    ##
+    ## blockTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns integer of the number of transactions in this block.
+    let blk = api.blockFromTag(blockTag).valueOr:
+      raise newException(ValueError, "Block not found")
+
+    Web3Quantity(blk.transactions.len)
+
+  server.rpc("eth_getUncleCountByBlockHash") do(data: Hash32) -> Web3Quantity:
+    ## Returns the number of uncles in a block from a block matching the given block hash.
+    ##
+    ## data: hash of a block.
+    ## Returns integer of the number of uncles in this block.
+    let blk = api.chain.blockByHash(data).valueOr:
+      raise newException(ValueError, "Block not found")
+
+    Web3Quantity(blk.uncles.len)
+
+  server.rpc("eth_getUncleCountByBlockNumber") do(blockTag: BlockTag) -> Web3Quantity:
+    ## Returns the number of uncles in a block from a block matching the given block number.
+    ##
+    ## blockTag: integer of a block number, or the string "latest", see the default block parameter.
+    ## Returns integer of the number of uncles in this block.
+    let blk = api.blockFromTag(blockTag).valueOr:
+      raise newException(ValueError, "Block not found")
+
+    Web3Quantity(blk.uncles.len)
+
+  template sign(privateKey: PrivateKey, message: string): seq[byte] =
+    # message length encoded as ASCII representation of decimal
+    let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
+    @(sign(privateKey, msgData.toBytes()).toRaw())
+
+  server.rpc("eth_sign") do(data: eth_types.Address, message: seq[byte]) -> seq[byte]:
+    ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
+    ## By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature.
+    ## This prevents misuse where a malicious DApp can sign arbitrary data (e.g. transaction) and use the signature to impersonate the victim.
+    ## Note the address to sign with must be unlocked.
+    ##
+    ## data: address.
+    ## message: message to sign.
+    ## Returns signature.
+    let
+      address = data
+      acc     = ctx.am.getAccount(address).tryGet()
+
+    if not acc.unlocked:
+      raise newException(ValueError, "Account locked, please unlock it first")
+    sign(acc.privateKey, cast[string](message))
+
+  server.rpc("eth_signTransaction") do(data: TransactionArgs) -> seq[byte]:
+    ## Signs a transaction that can be submitted to the network at a later time using with
+    ## eth_sendRawTransaction
+    let
+      address = data.`from`.get()
+      acc     = ctx.am.getAccount(address).tryGet()
+
+    if not acc.unlocked:
+      raise newException(ValueError, "Account locked, please unlock it first")
+
+    let
+      accDB    = api.ledgerFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, "Latest Block not found")
+      tx       = unsignedTx(data, api.chain.db, accDB.getNonce(address) + 1, api.com.chainId)
+      eip155   = api.com.isEIP155(api.chain.latestNumber)
+      signedTx = signTransaction(tx, acc.privateKey, eip155)
+    result    = rlp.encode(signedTx)
+
+  server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Hash32:
+    ## Creates new message call transaction or a contract creation, if the data field contains code.
+    ##
+    ## obj: the transaction object.
+    ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
+    ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
+    let
+      address = data.`from`.get()
+      acc     = ctx.am.getAccount(address).tryGet()
+
+    if not acc.unlocked:
+      raise newException(ValueError, "Account locked, please unlock it first")
+
+    let
+      accDB    = api.ledgerFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, "Latest Block not found")
+      tx       = unsignedTx(data, api.chain.db, accDB.getNonce(address) + 1, api.com.chainId)
+      eip155   = api.com.isEIP155(api.chain.latestNumber)
+      signedTx = signTransaction(tx, acc.privateKey, eip155)
+      networkPayload =
+        if signedTx.txType == TxEip4844:
+          if data.blobs.isNone or data.commitments.isNone or data.proofs.isNone:
+            raise newException(ValueError, "EIP-4844 transaction needs blobs")
+          if data.blobs.get.len != signedTx.versionedHashes.len:
+            raise newException(ValueError, "Incorrect number of blobs")
+          if data.commitments.get.len != signedTx.versionedHashes.len:
+            raise newException(ValueError, "Incorrect number of commitments")
+          if data.proofs.get.len != signedTx.versionedHashes.len:
+            raise newException(ValueError, "Incorrect number of proofs")
+          NetworkPayload(
+            blobs: data.blobs.get.mapIt it.NetworkBlob,
+            commitments: data.commitments.get,
+            proofs: data.proofs.get)
+        else:
+          if data.blobs.isSome or data.commitments.isSome or data.proofs.isSome:
+            raise newException(ValueError, "Blobs require EIP-4844 transaction")
+          nil
+      pooledTx = PooledTransaction(tx: signedTx, networkPayload: networkPayload)
+
+    api.txPool.add(pooledTx)
+    rlpHash(signedTx)
