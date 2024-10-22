@@ -160,7 +160,7 @@ func get*(ben: BeaconEngineRef, id: Bytes8,
           executionRequests: var Opt[array[3, seq[byte]]]): bool =
   ben.queue.get(id, blockValue, payload, blobsBundle, executionRequests)
 
-func get*(ben: BeaconEngineRef, id: PayloadID,
+func get*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1): bool =
   ben.queue.get(id, blockValue, payload)

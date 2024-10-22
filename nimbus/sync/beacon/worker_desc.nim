@@ -130,7 +130,7 @@ type
     blkSync*: BlocksImportSync       ## For importing/executing blocks
     nextUpdate*: Moment              ## For updating metrics
 
-    # Blocks import/execution settings for running  `persistBlocks()` with
+    # Blocks import/execution settings for importing with
     # `nBodiesBatch` blocks in each round (minimum value is
     # `nFetchBodiesRequest`.)
     chain*: ForkedChainRef           ## Database

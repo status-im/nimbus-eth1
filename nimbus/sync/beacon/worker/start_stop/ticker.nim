@@ -18,7 +18,7 @@ import
   ../helpers
 
 logScope:
-  topics = "ticker"
+  topics = "beacon ticker"
 
 type
   TickerStatsUpdater* = proc: TickerStats {.gcsafe, raises: [].}
@@ -76,7 +76,6 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
   if data != t.lastStats or
      tickerLogSuppressMax < (now - t.visited):
     let
-      S = data.stored.bnStr
       B = if data.base == data.latest: "L" else: data.base.bnStr
       L = if data.latest == data.coupler: "C" else: data.latest.bnStr
       C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
@@ -108,10 +107,10 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.visited = now
 
     if data.stored == data.base:
-      info "Sync state", up, peers,
+      debug "Sync state", up, peers,
         B, L, C, D, F, H, T, hS, hU, bS, bU, rrg, mem
     else:
-      info "Sync state", up, peers,
+      debug "Sync state", up, peers,
         S=data.stored.bnStr,
         B, L, C, D, F, H, T, hS, hU, bS, bU, rrg, mem
 

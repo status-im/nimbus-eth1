@@ -12,7 +12,7 @@
 import
   std/[algorithm, sequtils, sets, tables],
   results,
-  ".."/[aristo_desc, aristo_get, aristo_init, aristo_layers, aristo_utils]
+  ".."/[aristo_desc, aristo_init, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public generic iterators

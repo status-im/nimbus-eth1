@@ -136,7 +136,7 @@ proc get*(api: PayloadQueue, id: Bytes8,
       return true
   false
 
-proc get*(api: PayloadQueue, id: PayloadID,
+proc get*(api: PayloadQueue, id: Bytes8,
           blockValue: var UInt256,
           payload: var ExecutionPayloadV1): bool =
   var
