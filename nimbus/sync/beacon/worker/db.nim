@@ -67,7 +67,13 @@ proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
     trace info & ": sync state not saved, tx pending", txLevel
     return
 
-  trace info & ": saved sync state pesistently"
+  trace info & ": saved sync state persistently"
+
+
+proc dbLoadSyncStateAvailable*(ctx: BeaconCtxRef): bool =
+  ## Check whether `dbLoadSyncStateLayout()` would load a saved state
+  let rc = ctx.fetchSyncStateLayout()
+  rc.isOk and ctx.chain.latestNumber() < rc.value.head
 
 
 proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
@@ -76,7 +82,9 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
     rc = ctx.fetchSyncStateLayout()
     latest = ctx.chain.latestNumber()
 
-  if rc.isOk:
+  # If there was a manual import after a previous sync, then saved state
+  # might be outdated, i.e. `rc.value.head < latest`
+  if rc.isOk and latest < rc.value.head:
     ctx.sst.layout = rc.value
 
     # Add interval of unprocessed block range `(L,C]` from `README.md`

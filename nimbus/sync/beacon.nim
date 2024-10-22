@@ -69,8 +69,7 @@ proc start*(desc: BeaconSyncRef; resumeOnly = false): bool =
   ## Start beacon sync. If `resumeOnly` is set `true` the syncer will only
   ## start up if it can resume work, e.g. after being previously interrupted.
   if resumeOnly:
-    desc.ctx.dbLoadSyncStateLayout "RunSetup"
-    if not desc.ctx.layout.headLocked:
+    if not desc.ctx.dbLoadSyncStateAvailable():
       debug "RunSetup: nothing to do"
       return false
   desc.startSync()
