@@ -74,7 +74,7 @@ func checkInStaticContext*(c: Computation): EvmResultVoid =
 
   ok()
 
-proc gasEip7702CodeCheck*(c: Computation; address: EthAddress): GasInt =
+proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
   let code = when defined(evmc_enabled):
                CodeBytesRef.init(c.host.copyCode(address))
              else:

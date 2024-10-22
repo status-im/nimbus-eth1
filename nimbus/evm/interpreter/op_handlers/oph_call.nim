@@ -62,7 +62,7 @@ type
     contractAddress: Address
     gasCallEIPs:     GasInt
 
-proc gasCallEIP2929(c: Computation, address: EthAddress): GasInt =
+proc gasCallEIP2929(c: Computation, address: Address): GasInt =
   when evmc_enabled:
     if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
       return ColdAccountAccessCost - WarmStorageReadCost

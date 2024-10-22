@@ -22,7 +22,8 @@ import
   ../common/common,
   eth/common/eth_types_rlp,
   chronicles, chronos,
-  sets
+  sets,
+  stew/assign2
 
 export
   common
@@ -224,30 +225,30 @@ template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
     c.vmState.readOnlyStateDB.
       getTransientStorage(c.msg.contractAddress, slot)
 
-template resolveCodeSize*(c: Computation, address: EthAddress): uint =
+template resolveCodeSize*(c: Computation, address: Address): uint =
   when evmc_enabled:
     c.host.getCodeSize(address)
   else:
     uint(c.vmState.readOnlyStateDB.resolveCodeSize(address))
 
-template resolveCodeHash*(c: Computation, address: EthAddress): Hash256 =
+template resolveCodeHash*(c: Computation, address: Address): Hash32=
   when evmc_enabled:
     c.host.getCodeHash(address)
   else:
     let
       db = c.vmState.readOnlyStateDB
     if not db.accountExists(address) or db.isEmptyAccount(address):
-      default(Hash256)
+      default(Hash32)
     else:
       db.resolveCodeHash(address)
 
-template resolveCode*(c: Computation, address: EthAddress): CodeBytesRef =
+template resolveCode*(c: Computation, address: Address): CodeBytesRef =
   when evmc_enabled:
     CodeBytesRef.init(c.host.copyCode(address))
   else:
     c.vmState.readOnlyStateDB.resolveCode(address)
-    
-proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,                     
+
+proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
                      salt: ContractSalt = ZERO_CONTRACTSALT,
                      authorizationList: openArray[Authorization] = []): Computation =
   new result

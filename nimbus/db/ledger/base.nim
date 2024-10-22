@@ -303,13 +303,13 @@ proc getAccountProof*(ldg: LedgerRef, eAddr: Address): seq[seq[byte]] =
 proc getStorageProof*(ldg: LedgerRef, eAddr: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
   result = ldg.ac.getStorageProof(eAddr, slots)
 
-proc resolveCode*(ldg: LedgerRef, eAddr: EthAddress): CodeBytesRef =
+proc resolveCode*(ldg: LedgerRef, eAddr: Address): CodeBytesRef =
   ldg.ac.resolveCode(eAddr)
 
-proc resolveCodeHash*(ldg: LedgerRef, eAddr: EthAddress): Hash256  =
+proc resolveCodeHash*(ldg: LedgerRef, eAddr: Address): Hash32 =
   ldg.ac.resolveCodeHash(eAddr)
 
-proc resolveCodeSize*(ldg: LedgerRef, eAddr: EthAddress): int =
+proc resolveCodeSize*(ldg: LedgerRef, eAddr: Address): int =
   ldg.ac.resolveCodeSize(eAddr)
 
 # ------------------------------------------------------------------------------
