@@ -395,7 +395,7 @@ proc runGetBlockBodyTest() =
 proc txPool2Main*() =
   const noisy = defined(debug)
 
-  assert loadKzgTrustedSetup().isOk, "Failed to load KZG trusted setup"
+  loadKzgTrustedSetup().expect("Failed to load KZG trusted setup")
 
   setErrorLevel() # mute logger
 

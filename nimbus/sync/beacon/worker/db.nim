@@ -25,12 +25,6 @@ logScope:
 const
   LhcStateKey = 1.beaconStateKey
 
-type
-  SavedDbStateSpecs = tuple
-    number: BlockNumber
-    hash: Hash32
-    parent: Hash32
-
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
 # ------------------------------------------------------------------------------

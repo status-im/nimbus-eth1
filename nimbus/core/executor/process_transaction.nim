@@ -13,8 +13,6 @@
 import
   std/strformat,
   results,
-  stew/arrayops,
-  stew/endians2,
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,

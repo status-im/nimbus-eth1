@@ -434,7 +434,7 @@ proc init*(
     cursorHeader:    baseHeader,
     extraValidation: extraValidation,
     baseDistance:    baseDistance,
-    txRecords:       initTable[Hash256, (Hash256, uint64)]())
+    txRecords:       initTable[Hash32, (Hash32, uint64)]())
 
 proc newForkedChain*(com: CommonRef,
                      baseHeader: Header,
@@ -687,7 +687,7 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Opt[Block] =
   c.blocks.withValue(blockHash, val) do:
     return Opt.some(val.blk)
   do:
-    var 
+    var
       header: Header
       body: BlockBody
     if c.db.getBlockHeader(blockHash, header) and c.db.getBlockBody(blockHash, body):
@@ -700,7 +700,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
     return err("Requested block number not exists: " & $number)
 
   if number < c.baseHeader.number:
-    var 
+    var
       header: Header
       body: BlockBody
     if c.db.getBlockHeader(number, header) and c.db.getBlockBody(header, body):

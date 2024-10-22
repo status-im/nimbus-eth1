@@ -76,7 +76,6 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
   if data != t.lastStats or
      tickerLogSuppressMax < (now - t.visited):
     let
-      S = data.stored.bnStr
       B = if data.base == data.latest: "L" else: data.base.bnStr
       L = if data.latest == data.coupler: "C" else: data.latest.bnStr
       C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
