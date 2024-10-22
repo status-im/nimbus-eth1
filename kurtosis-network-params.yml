@@ -20,11 +20,12 @@ additional_services:
   - tx_spammer
   - assertoor
   - beacon_metrics_gazer
+  - blob_spammer
 mev_type: null
 assertoor_params:
   image: "ethpandaops/assertoor:latest"
   run_stability_check: false
   run_block_proposal_check: true
   run_transaction_test: true
-  run_blob_transaction_test: false
+  run_blob_transaction_test: true
   run_opcodes_transaction_test: true
