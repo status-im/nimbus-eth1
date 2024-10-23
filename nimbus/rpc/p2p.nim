@@ -358,7 +358,7 @@ proc setupEthRpc*(
     let txHash = data
     let res = txPool.getItem(txHash)
     if res.isOk:
-      return populateTransactionObject(res.get().tx)
+      return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
 
     let txDetails = chainDB.getTransactionKey(txHash)
     if txDetails.index < 0:
@@ -367,7 +367,7 @@ proc setupEthRpc*(
     let header = chainDB.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
     if chainDB.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
-      result = populateTransactionObject(tx, Opt.some(header), Opt.some(txDetails.index))
+      result = populateTransactionObject(tx, Opt.some(header.blockHash), Opt.some(txDetails.index))
 
   server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Hash32, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.

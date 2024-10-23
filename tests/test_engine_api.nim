@@ -72,7 +72,7 @@ proc setupEnv(): TestEnv =
     beaconEngine = BeaconEngineRef.new(txPool, chain)
     serverApi = newServerAPI(chain, txPool)
 
-  setupServerAPI(serverApi, server)
+  setupServerAPI(serverApi, server, newEthContext())
   setupEngineAPI(beaconEngine, server)
 
   server.start()
