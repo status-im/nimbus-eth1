@@ -196,6 +196,7 @@ proc run(
       portalConfig: portalProtocolConfig,
       dataDir: string config.dataDir,
       storageCapacity: config.storageCapacityMB * 1_000_000,
+      contentRequestRetries: config.contentRequestRetries,
     )
 
     node = PortalNode.new(
