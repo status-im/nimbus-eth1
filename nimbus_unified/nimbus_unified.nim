@@ -15,11 +15,9 @@ import
   beacon_chain/[beacon_chain_db]
 
 ## Constants
+## TODO: evaluate the proposed timeouts with team
 const cNimbusMaxTasks* = 5
 const cNimbusTaskTimeoutMs* = 5000
-
-## Exceptions
-type NimbusTasksError* = object of CatchableError
 
 ## Task and associated task information
 type NimbusTask* = ref object
@@ -99,7 +97,12 @@ proc addNewTask*(
 
   if currentIndex < 0:
     raise newException(NimbusTasksError, "No free slots on Nimbus Tasks")
-  createThread(tasks.taskList[currentIndex].threadHandler, taskHandler, parameters)
+  try:
+    createThread(tasks.taskList[currentIndex].threadHandler, taskHandler, parameters)
+  except CatchableError as e:
+    # TODO: joinThreads
+    fatal "error creating task (thread)", msg=e.msg
+
   info "Created task:", task = tasks.taskList[currentIndex].name
 
 ## Task monitoring
@@ -109,8 +112,8 @@ proc monitor*(tasksList: var NimbusTasks, config: NimbusConfig) =
   while true:
     info "checking tasks ... "
 
-    # -check an atomic (to be created when needed) if it s required to shutdown
-    #   this will atomic flag solves:
+    # -check tasks flag (to be created when needed) if it's required to shutdown
+    #   this atomic flag solves:
     # - non responding thread
     # - thread that required shutdown
 
@@ -123,7 +126,8 @@ proc startTasks*(
   let
 
     # TODO: extract configs for each task from NimbusConfig
-    # or extract them somewhere else and passs them here
+    # or extract them somewhere else and passs them here.
+    # check nimbus_configs annotations.
     execName = "Execution Layer"
     consName = "Consensus Layer"
   var
@@ -149,7 +153,7 @@ when isMainModule:
   ## - file limits
   ## - check if we have permissions to create data folder if needed
   ## - setup logging
-  ## - read configuration
+  ## - read configuration (check nimbus_configs file anottations)
   ## - implement config reader for all components
   let nimbusConfigs = NimbusConfig()
   var tasksList: NimbusTasks = NimbusTasks.new
@@ -168,6 +172,7 @@ when isMainModule:
   tasksList.startTasks(nimbusConfigs, beaconNodeConfig)
 
   ## Graceful shutdown by handling of Ctrl+C signal
+  ## TODO: we might need to declare it per thread
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
