@@ -8,8 +8,10 @@
 [![Status: #nimbus-general](https://img.shields.io/badge/status-nimbus--general-orange.svg)](https://join.status.im/nimbus-general)
 
 
+# NOTE - whole document to be concluded...
+
 # description
-Nimbus Unified combines Ethereum execution and consensus layer functionalities, featuring a fully integrated beacon node), validator duties, and execution layer support. This setup allows the Nimbus client to handle both Ethereum consensus (Eth2) and execution (Eth1) tasks within a single package.
+Nimbus Unified combines Ethereum execution and consensus layer functionalities, featuring a fully integrated beacon node, validator duties, and execution layer support. This setup allows the Nimbus client to handle both Ethereum consensus (Eth2) and execution (Eth1) tasks within a single package.
 
 --> meh, requires  improvement
 # documentation
@@ -45,4 +47,4 @@ or
 
 * Apache License, Version 2.0: [LICENSE-APACHEv2](LICENSE-APACHEv2) or https://www.apache.org/licenses/LICENSE-2.0
 
-at your option. These files may not be copied, modified, or distributed except according to those terms.
+These files may not be copied, modified, or distributed except according to those terms.

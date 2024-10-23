@@ -23,7 +23,7 @@ logScope:
   topics = "Consensus layer"
 
 ## following procedures are copies from nimbus_beacon_node.nim.
-## TODO: extract from that file into a common file
+## TODO: if possible, extract from that file into a common file
 
 ## runs beacon node
 ## adapted from nimbus-eth2
@@ -62,6 +62,7 @@ proc doRunBeaconNode(
   #   except Exception as exc:
   #     raiseAssert exc.msg # TODO fix metrics
 
+## adapted/copied from nimbus-eth2
 proc fetchGenesisState(
     metadata: Eth2NetworkMetadata,
     genesisState = none(InputFile),
@@ -96,6 +97,7 @@ proc fetchGenesisState(
   else:
     nil
 
+## adapted/copied from nimbus-eth2
 proc doRunTrustedNodeSync(
     db: BeaconChainDB,
     metadata: Eth2NetworkMetadata,
@@ -138,7 +140,7 @@ proc consensusWrapper*(parameters: TaskParameters) {.raises: [CatchableError].} 
     doRunBeaconNode(config, rng)
   except CatchableError as e:
     fatal "error", message = e.msg
-    quit 1
+    # TODO: we need to create an dedicated atomic asking task manager to join threads
 
   let
     metadata = loadEth2Network(config)
@@ -149,16 +151,18 @@ proc consensusWrapper*(parameters: TaskParameters) {.raises: [CatchableError].} 
     waitFor(
       db.doRunTrustedNodeSync(
         metadata, config.databaseDir, config.eraDir, "http://127.0.0.1:5052",
-        config.stateId, config.lcTrustedBlockRoot, config.backfillBlocks, config.reindex,
-        config.downloadDepositSnapshot, genesisState,
+        config.stateId, config.lcTrustedBlockRoot, config.backfillBlocks,
+        config.reindex, config.downloadDepositSnapshot, genesisState,
       )
     )
   except CatchableError as e:
-    fatal "error", message = e.msg
-    quit 1
+    # TODO: we need to create an dedicated atomic asking task manager to join threads
+    fatal "error", message = e.MsgSource
 
   db.close()
 
+  # TODO: nice to start creating some binary launch scripts
+  
   # --web3-url=http://127.0.0.1:8551 --jwt-secret=/tmp/jwtsecret --log-level=TRACE
   #  --network=${NETWORK} \
   #   --data-dir="${DATA_DIR}" \
