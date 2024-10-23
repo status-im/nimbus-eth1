@@ -35,7 +35,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     client = newRpcHttpClient()
 
   let rpcHttpServer = RpcHttpServer.new()
-  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
 
   rpcHttpServer.installDiscoveryApiHandlers(localDiscoveryNode)
 
