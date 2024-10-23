@@ -38,9 +38,9 @@ type
 
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
-    buddiesMax*: int            ## Max number of buddies
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
+    shutdownRequest*: bool      ## Request the scheduler to terminate
     pool*: S                    ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------
