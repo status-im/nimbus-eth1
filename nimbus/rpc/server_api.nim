@@ -26,8 +26,7 @@ import
   ../evm/evm_errors,
   ./rpc_types,
   ./rpc_utils,
-  ./filters,
-  ./server_api_helpers
+  ./filters
 
 type
   ServerAPIRef* = ref object
@@ -456,3 +455,27 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
     api.txPool.add(pooledTx)
     rlpHash(signedTx)
+
+  server.rpc("eth_getTransactionByHash") do(data: Hash32) -> TransactionObject:
+    ## Returns the information about a transaction requested by transaction hash.
+    ##
+    ## data: hash of a transaction.
+    ## Returns requested transaction information.
+    let txHash = data
+    let res = api.txPool.getItem(txHash)
+    if res.isOk:
+      return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
+
+    let txDetails = api.chain.db.getTransactionKey(txHash)
+    if txDetails.index < 0:
+      let
+        (blockHash, txid) = api.chain.txRecords(txHash)
+        tx = api.chain.memoryTransaction(txHash).valueOr:
+          return nil
+      return populateTransactionObject(tx, Opt.some(blockHash), Opt.some(txid))
+
+
+    let header = api.chain.db.getBlockHeader(txDetails.blockNumber)
+    var tx: Transaction
+    if api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
+      result = populateTransactionObject(tx, Opt.some(header.blockHash), Opt.some(txDetails.index))

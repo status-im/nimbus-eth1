@@ -638,6 +638,12 @@ func txRecords*(c: ForkedChainRef, txHash: Hash32): (Hash32, uint64) =
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
   c.blocks.getOrDefault(blockHash)
 
+func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[Transaction] =
+  let (blockHash, index) = c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
+  c.blocks.withValue(blockHash, val) do:
+    return Opt.some(val.blk.transactions[index])
+  return Opt.none(Transaction)
+
 proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
