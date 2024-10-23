@@ -68,13 +68,10 @@ createJsonFlavor JGenesis,
   allowUnknownFields = true,
   skipNullFields = true
 
-template derefType(T: type): untyped =
-  typeof(T()[])
-
 NetworkParams.useDefaultReaderIn JGenesis
 GenesisAccount.useDefaultReaderIn JGenesis
-derefType(Genesis).useDefaultReaderIn JGenesis
-derefType(ChainConfig).useDefaultReaderIn JGenesis
+Genesis.useDefaultReaderIn JGenesis
+ChainConfig.useDefaultReaderIn JGenesis
 
 # ------------------------------------------------------------------------------
 # Private helper functions
