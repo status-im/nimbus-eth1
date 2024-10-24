@@ -14,7 +14,6 @@ import
   results,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/altair,
   ../../network/beacon/beacon_content,
   ../../eth_data/yaml_utils,
   "."/light_client_test_data

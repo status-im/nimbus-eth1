@@ -16,7 +16,6 @@ import
   results,
   ssz_serialization,
   beacon_chain/db_limits,
-  beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/spec/forks,
   beacon_chain/spec/forks_light_client,
   ./beacon_content,

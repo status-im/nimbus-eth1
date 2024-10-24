@@ -10,7 +10,6 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/altair,
   # Test helpers
   beacon_chain /../ tests/testblockutil,
   beacon_chain /../ tests/mocking/mock_genesis,
