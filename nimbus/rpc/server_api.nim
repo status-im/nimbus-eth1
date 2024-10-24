@@ -99,21 +99,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   server.rpc("eth_getTransactionCount") do(data: Address, blockTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "pending":
-      var nonce = 0'u64
-      for (_, txItem) in api.txPool.okPairs:
-        if txItem.sender == data:
-          nonce = max(nonce, txItem.tx.nonce)
-      return Quantity(nonce)
-    else:
-      let
-        ledger  = api.ledgerFromTag(blockTag).valueOr:
-          raise newException(ValueError, error)
-        address = data
-        nonce   = ledger.getNonce(address)
-      return Quantity(nonce)
+    let
+      ledger  = api.ledgerFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
+      address = data
+      nonce   = ledger.getNonce(address)
+    Quantity(nonce)
 
   server.rpc("eth_blockNumber") do() -> Web3Quantity:
     ## Returns integer of the current block number the client is on.
