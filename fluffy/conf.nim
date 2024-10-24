@@ -305,9 +305,9 @@ type
     contentRequestRetries* {.
       hidden,
       desc: "Max number of retries when requesting content over the network.",
-      defaultValue: 3,
-      name: "content-request-retries"
-    .}: int
+      defaultValue: 1,
+      name: "debug-content-request-retries"
+    .}: uint
 
     contentCacheSize* {.
       hidden,
