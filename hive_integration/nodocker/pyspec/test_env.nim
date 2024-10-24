@@ -59,7 +59,7 @@ proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
     rpcServer = newRpcHttpServer(["127.0.0.1:0"])
     rpcClient = newRpcHttpClient()
 
-  setupServerAPI(serverApi, rpcServer)
+  setupServerAPI(serverApi, rpcServer, newEthContext())
   setupEngineAPI(beaconEngine, rpcServer)
 
   rpcServer.start()
