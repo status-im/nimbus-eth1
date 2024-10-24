@@ -24,6 +24,7 @@ import
   ../transaction,
   ../transaction/call_evm,
   ../evm/evm_errors,
+  ../core/eip4844,
   ./rpc_types,
   ./rpc_utils,
   ./filters
@@ -43,6 +44,40 @@ func newServerAPI*(c: ForkedChainRef, t: TxPoolRef): ServerAPIRef =
     chain: c,
     txPool: t
   )
+
+proc getProof*(
+    accDB: LedgerRef,
+    address: eth_types.Address,
+    slots: seq[UInt256]): ProofResponse =
+  let
+    acc = accDB.getEthAccount(address)
+    accExists = accDB.accountExists(address)
+    accountProof = accDB.getAccountProof(address)
+    slotProofs = accDB.getStorageProof(address, slots)
+
+  var storage = newSeqOfCap[StorageProof](slots.len)
+
+  for i, slotKey in slots:
+    let slotValue = accDB.getStorage(address, slotKey)
+    storage.add(StorageProof(
+        key: slotKey,
+        value: slotValue,
+        proof: seq[RlpEncodedBytes](slotProofs[i])))
+
+  if accExists:
+    ProofResponse(
+          address: address,
+          accountProof: seq[RlpEncodedBytes](accountProof),
+          balance: acc.balance,
+          nonce: w3Qty(acc.nonce),
+          codeHash: acc.codeHash,
+          storageHash: acc.storageRoot,
+          storageProof: storage)
+  else:
+    ProofResponse(
+          address: address,
+          accountProof: seq[RlpEncodedBytes](accountProof),
+          storageProof: storage)
 
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
   if blockTag.kind == bidAlias:
@@ -480,3 +515,101 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     var tx: Transaction
     if api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
       result = populateTransactionObject(tx, Opt.some(header.blockHash), Opt.some(txDetails.index))
+
+  server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Hash32, quantity: Web3Quantity) -> TransactionObject:
+    ## Returns information about a transaction by block hash and transaction index position.
+    ##
+    ## data: hash of a block.
+    ## quantity: integer of the transaction index position.
+    ## Returns  requested transaction information.
+    let index  = uint64(quantity)
+    let blk = api.chain.blockByHash(data).valueOr:
+      raise newException(ValueError, "Block not found")
+
+    populateTransactionObject(blk.transactions[index], Opt.some(blk.header), Opt.some(index))
+
+  server.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: BlockTag, quantity: Web3Quantity) -> TransactionObject:
+    ## Returns information about a transaction by block number and transaction index position.
+    ##
+    ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+    ## quantity: the transaction index position.
+    ## NOTE : "pending" blockTag is not supported.
+    let index  = uint64(quantity)
+    let blk = api.blockFromTag(quantityTag).valueOr:
+      raise newException(ValueError, "Block not found")
+
+    populateTransactionObject(blk.transactions[index], Opt.some(blk.header), Opt.some(index))
+
+  server.rpc("eth_getProof") do(data: eth_types.Address, slots: seq[UInt256], quantityTag: BlockTag) -> ProofResponse:
+    ## Returns information about an account and storage slots (if the account is a contract
+    ## and the slots are requested) along with account and storage proofs which prove the
+    ## existence of the values in the state.
+    ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
+    ##
+    ## data: address of the account.
+    ## slots: integers of the positions in the storage to return with storage proofs.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+    ## Returns: the proof response containing the account, account proof and storage proof
+    let
+      accDB = api.ledgerFromTag(quantityTag).valueOr:
+        raise newException(ValueError, "Block not found")
+
+    getProof(accDB, data, slots)
+
+  server.rpc("eth_getBlockReceipts") do(quantityTag: BlockTag) -> Opt[seq[ReceiptObject]]:
+    ## Returns the receipts of a block.
+    let 
+      header = api.headerFromTag(quantityTag).valueOr:
+        raise newException(ValueError, "Block not found")
+      blkHash = header.blockHash
+
+    var
+      prevGasUsed = GasInt(0)
+      receipts: seq[Receipt]
+      recs: seq[ReceiptObject]
+      txs: seq[Transaction]
+      index = 0'u64
+
+    if api.chain.haveBlockAndState(blkHash):
+      let blkdesc = api.chain.memoryBlock(blkHash)
+      receipts = blkdesc.receipts
+      txs = blkdesc.blk.transactions
+    else:
+      for receipt in api.chain.db.getReceipts(header.receiptsRoot):
+        receipts.add receipt
+      txs = api.chain.db.getTransactions(header.txRoot)
+
+    try:
+      for receipt in receipts:
+        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+        prevGasUsed = receipt.cumulativeGasUsed
+        recs.add populateReceipt(receipt, gasUsed, txs[index], index, header)
+        inc index
+      return Opt.some(recs)
+    except CatchableError:
+      return Opt.none(seq[ReceiptObject])
+
+  server.rpc("eth_createAccessList") do(args: TransactionArgs, quantityTag: BlockTag) -> AccessListResult:
+    ## Generates an access list for a transaction.
+    try:
+      let
+        header = api.headerFromTag(quantityTag).valueOr:
+          raise newException(ValueError, "Block not found")
+      return createAccessList(header, api.com, args)
+    except CatchableError as exc:
+      return AccessListResult(
+        error: Opt.some("createAccessList error: " & exc.msg),
+      )
+
+  server.rpc("eth_blobBaseFee") do() -> Web3Quantity:
+    ## Returns the base fee per blob gas in wei.
+    let header = api.headerFromTag(blockId("latest")).valueOr:
+      raise newException(ValueError, "Block not found")
+    if header.blobGasUsed.isNone:
+      raise newException(ValueError, "blobGasUsed missing from latest header")
+    if header.excessBlobGas.isNone:
+      raise newException(ValueError, "excessBlobGas missing from latest header")
+    let blobBaseFee = getBlobBaseFee(header.excessBlobGas.get) * header.blobGasUsed.get.u256
+    if blobBaseFee > high(uint64).u256:
+      raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
+    return w3Qty blobBaseFee.truncate(uint64)
