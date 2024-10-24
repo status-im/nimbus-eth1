@@ -164,7 +164,7 @@ proc validateBlock(c: ForkedChainRef,
 
   ok()
 
-proc replaySegment(c: ForkedChainRef, target: Hash32) =
+proc replaySegment*(c: ForkedChainRef, target: Hash32) =
   # Replay from base+1 to target block
   var
     prevHash = target

@@ -99,12 +99,21 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   server.rpc("eth_getTransactionCount") do(data: Address, blockTag: BlockTag) -> Web3Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.
-    let
-      ledger  = api.ledgerFromTag(blockTag).valueOr:
-        raise newException(ValueError, error)
-      address = data
-      nonce   = ledger.getNonce(address)
-    Quantity(nonce)
+    let tag = blockTag.alias.toLowerAscii
+    case tag
+    of "pending":
+      var nonce = 0'u64
+      for (_, txItem) in api.txPool.okPairs:
+        if txItem.sender == data:
+          nonce = max(nonce, txItem.tx.nonce)
+      return Quantity(nonce)
+    else:
+      let
+        ledger  = api.ledgerFromTag(blockTag).valueOr:
+          raise newException(ValueError, error)
+        address = data
+        nonce   = ledger.getNonce(address)
+      return Quantity(nonce)
 
   server.rpc("eth_blockNumber") do() -> Web3Quantity:
     ## Returns integer of the current block number the client is on.
@@ -320,6 +329,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       header   = api.headerFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Block not found")
+      #TODO: change 0 to configureable gas cap
       gasUsed  = rpcEstimateGas(args, header, api.chain.com, DEFAULT_RPC_GAS_CAP).valueOr:
         raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
     Quantity(gasUsed)
