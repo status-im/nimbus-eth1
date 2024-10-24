@@ -109,7 +109,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     historyNode2.portalProtocol().addNode(historyNode1.localNode()) == Added
 
   let rpcHttpServer = RpcHttpServer.new()
-  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
   rpcHttpServer.installPortalHistoryApiHandlers(
     historyNode1.historyNetwork.portalProtocol
   )

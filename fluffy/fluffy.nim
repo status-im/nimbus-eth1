@@ -294,9 +294,8 @@ proc run(
       let
         ta = initTAddress(config.rpcAddress, config.rpcPort)
         rpcHttpServer = RpcHttpServer.new()
-      # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
-      # that reach that limit (in hex, for gossip method).
-      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+      # 16mb to comfortably fit 2-3mb blocks + blobs + json overhead
+      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
       setupRpcServer(rpcHttpServer)
 
       Opt.some(rpcHttpServer)
