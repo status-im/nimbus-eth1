@@ -191,6 +191,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
     of "blockHashes": r.readValue(val.blockHashes)
     of "ommers": r.readValue(val.ommers)
     of "withdrawals": r.readValue(val.withdrawals)
+    of "currentTargetBlobCount": r.readValue(val.currentTargetBlobCount)
     else: discard r.readValue(JsonString)
 
   if not currentCoinbaseParsed:

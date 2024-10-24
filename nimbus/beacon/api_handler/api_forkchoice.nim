@@ -24,7 +24,14 @@ template validateVersion(attr, com, apiVersion) =
     version   = attr.version
     timestamp = ethTime(attr.timestamp)
 
-  if apiVersion == Version.V3:
+  if apiVersion == Version.V4:
+    if version != apiVersion:
+      raise invalidAttr("forkChoiceUpdatedV4 expect PayloadAttributesV4" &
+      " but got PayloadAttributes" & $version)
+    if not com.isPragueOrLater(timestamp):
+      raise unsupportedFork(
+        "forkchoiceUpdatedV4 get invalid payloadAttributes timestamp")
+  elif apiVersion == Version.V3:
     if version != apiVersion:
       raise invalidAttr("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
       " but got PayloadAttributes" & $version)
@@ -32,7 +39,14 @@ template validateVersion(attr, com, apiVersion) =
       raise unsupportedFork(
         "forkchoiceUpdatedV3 get invalid payloadAttributes timestamp")
   else:
-    if com.isCancunOrLater(timestamp):
+    if com.isPragueOrLater(timestamp):
+      if version < Version.V4:
+        raise unsupportedFork("forkChoiceUpdated" & $apiVersion &
+          " doesn't support payloadAttributes" & $version)
+      if version > Version.V4:
+        raise invalidAttr("forkChoiceUpdated" & $apiVersion &
+          " doesn't support PayloadAttributes" & $version)
+    elif com.isCancunOrLater(timestamp):
       if version < Version.V3:
         raise unsupportedFork("forkChoiceUpdated" & $apiVersion &
           " doesn't support payloadAttributes" & $version)
@@ -52,9 +66,13 @@ template validateVersion(attr, com, apiVersion) =
           " payloadAttributes must be PayloadAttributesV1")
 
 template validateHeaderTimestamp(header, com, apiVersion) =
+  if com.isPragueOrLater(header.timestamp):
+    if apiVersion != Version.V4:
+      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
+          " doesn't support head block with timestamp >= Prague")
   # See fCUV3 specification No.2 bullet iii
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/cancun.md#specification-1
-  if com.isCancunOrLater(header.timestamp):
+  elif com.isCancunOrLater(header.timestamp):
     if apiVersion != Version.V3:
       raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support head block with timestamp >= Cancun")

@@ -81,15 +81,25 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   ok()
 
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(parent: Header): uint64 =
+proc calcExcessBlobGas*(parent: Header; targetBlobCount: Opt[uint64]): uint64 =
   let
     excessBlobGas = parent.excessBlobGas.get(0'u64)
     blobGasUsed = parent.blobGasUsed.get(0'u64)
 
-  if excessBlobGas + blobGasUsed < TARGET_BLOB_GAS_PER_BLOCK:
-    0'u64
+  if targetBlobCount.isNone:
+    if excessBlobGas + blobGasUsed < TARGET_BLOB_GAS_PER_BLOCK:
+      0'u64
+    else:
+      excessBlobGas + blobGasUsed - TARGET_BLOB_GAS_PER_BLOCK
   else:
-    excessBlobGas + blobGasUsed - TARGET_BLOB_GAS_PER_BLOCK
+    # Per EIP-7742: any reference to TARGET_BLOB_GAS_PER_BLOCK from EIP-4844
+    # can be derived by taking the target_blob_count from the CL and
+    # multiplying by GAS_PER_BLOB as given in EIP-4844.
+    let targetBlobGasPerBlock = targetBlobCount.get * GAS_PER_BLOB
+    if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
+      0'u64
+    else:
+      excessBlobGas + blobGasUsed - targetBlobGasPerBlock
 
 # fakeExponential approximates factor * e ** (num / denom) using a taylor expansion
 # as described in the EIP-4844 spec.
@@ -153,10 +163,12 @@ func validateEip4844Header*(
     headerBlobGasUsed = header.blobGasUsed.get()
     blobGasUsed = blobGasUsed(txs)
     headerExcessBlobGas = header.excessBlobGas.get
-    excessBlobGas = calcExcessBlobGas(parentHeader)
+    excessBlobGas = calcExcessBlobGas(parentHeader, header.targetBlobCount)
 
-  if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-    return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+  if header.targetBlobCount.isNone:
+    # Per EIP-7742: any logic related to MAX_BLOB_GAS_PER_BLOCK can be deprecated.
+    if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+      return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
 
   if headerBlobGasUsed != blobGasUsed:
     return err("calculated blobGas not equal header.blobGasUsed")

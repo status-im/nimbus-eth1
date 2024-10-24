@@ -350,7 +350,7 @@ proc exec(ctx: TransContext,
     if ctx.env.currentExcessBlobGas.isSome:
       result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
     elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
-      result.result.currentExcessBlobGas = Opt.some calcExcessBlobGas(vmState.parent)
+      result.result.currentExcessBlobGas = Opt.some calcExcessBlobGas(vmState.parent, ctx.env.currentTargetBlobCount)
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     var allLogs: seq[Log]
@@ -491,6 +491,10 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # un-set it if it has been set too early
       ctx.env.parentBeaconBlockRoot = Opt.none(Hash32)
 
+    if com.isPragueOrLater(ctx.env.currentTimestamp):
+      if ctx.env.currentTargetBlobCount.isNone:
+        raise newError(ErrorConfig, "Prague config but missing 'currentTargetBlobCount' in env section")
+
     let isMerged = config.terminalTotalDifficulty.isSome and
                    config.terminalTotalDifficulty.value == 0.u256
     if isMerged:
@@ -521,7 +525,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # If it is not explicitly defined, but we have the parent values, we try
       # to calculate it ourselves.
       if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
-        ctx.env.currentExcessBlobGas = Opt.some calcExcessBlobGas(parent)
+        ctx.env.currentExcessBlobGas = Opt.some calcExcessBlobGas(parent, ctx.env.currentTargetBlobCount)
 
     let header  = envToHeader(ctx.env)
 

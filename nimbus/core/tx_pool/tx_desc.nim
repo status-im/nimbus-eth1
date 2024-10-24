@@ -112,7 +112,12 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
   # do hardfork transition before
   # BaseVMState querying any hardfork/consensus from CommonRef
 
-  let pos = com.pos
+  let
+    pos = com.pos
+    targetBlobCount = if com.isPragueOrLater(pos.timestamp):
+                        Opt.some(pos.targetBlobCount)
+                      else:
+                        Opt.none(uint64)
 
   let blockCtx = BlockContext(
     timestamp    : pos.timestamp,
@@ -121,7 +126,7 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
     prevRandao   : pos.prevRandao,
     difficulty   : UInt256.zero(),
     coinbase     : pos.feeRecipient,
-    excessBlobGas: calcExcessBlobGas(parent),
+    excessBlobGas: calcExcessBlobGas(parent, targetBlobCount),
   )
 
   BaseVMState.new(

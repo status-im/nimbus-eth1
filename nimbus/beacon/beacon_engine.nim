@@ -206,6 +206,12 @@ proc generatePayload*(ben: BeaconEngineRef,
     if attrs.parentBeaconBlockRoot.isSome:
       pos.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
 
+    if attrs.targetBlobCount.isSome:
+      pos.targetBlobCount = uint64(attrs.targetBlobCount.get)
+
+    if attrs.maximumBlobCount.isSome:
+      pos.maximumBlobCount = uint64(attrs.maximumBlobCount.get)
+
     pos.setWithdrawals(attrs)
 
     if headBlock.blockHash != xp.head.blockHash:

@@ -73,7 +73,7 @@ proc verifyPayload(step: NewPayloads,
       excessBlobGas: Opt.some(parentExcessBlobGas),
       blobGasUsed: Opt.some(parentBlobGasUsed)
     )
-    expectedExcessBlobGas = calcExcessBlobGas(parent)
+    expectedExcessBlobGas = calcExcessBlobGas(parent, Opt.none(uint64))
 
   if com.isCancunOrLater(payload.timestamp.EthTime):
     if payload.excessBlobGas.isNone:
