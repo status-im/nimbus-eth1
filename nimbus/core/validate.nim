@@ -14,7 +14,7 @@ import
   std/[sequtils, sets, strformat],
   ../db/ledger,
   ".."/[transaction, common/common],
-  ".."/[errors],
+  ".."/[errors, constants],
   ../utils/utils,
   "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
@@ -205,6 +205,9 @@ proc validateTxBasic*(
     if tx.txType == TxEip4844 and fork < FkCancun:
       return err("invalid tx: Eip4844 Tx type detected before Cancun")
 
+    if tx.txType == TxEip7702 and fork < FkPrague:
+      return err("invalid tx: Eip7702 Tx type detected before Prague")
+
   if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
     return err("invalid tx: initcode size exceeds maximum")
 
@@ -228,7 +231,7 @@ proc validateTxBasic*(
         return err("invalid tx: access list storage keys len exceeds MAX_ACCESS_LIST_STORAGE_KEYS. " &
           &"index={i}, len={acl.storageKeys.len}")
 
-  if tx.txType >= TxEip4844:
+  if tx.txType == TxEip4844:
     if tx.to.isNone:
       return err("invalid tx: destination must be not empty")
 
@@ -242,6 +245,19 @@ proc validateTxBasic*(
       if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
         return err("invalid tx: one of blobVersionedHash has invalid version. " &
           &"get={bv.data[0].int}, expect={VERSIONED_HASH_VERSION_KZG.int}")
+
+  if tx.txType == TxEip7702:
+    if tx.authorizationList.len == 0:
+      return err("invalid tx: authorization list must not empty")
+
+    const SECP256K1halfN = SECPK1_N div 2
+
+    for auth in tx.authorizationList:
+      if auth.v > 1'u64:
+        return err("invalid tx: auth.v must be 0 or 1")
+
+      if auth.s > SECP256K1halfN:
+        return err("invalid tx: auth.s must be <= SECP256K1N/2")
 
   ok()
 
@@ -306,7 +322,7 @@ proc validateTransaction*(
   if codeHash != EMPTY_CODE_HASH:
     return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeHash={codeHash.data.toHex}")
 
-  if tx.txType >= TxEip4844:
+  if tx.txType == TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
     let blobGasPrice = getBlobBaseFee(excessBlobGas)
     if tx.maxFeePerBlobGas < blobGasPrice:

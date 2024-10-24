@@ -93,6 +93,7 @@ type
       parent*, child*:      Computation
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     sysCall*:               bool
+    authorizationList*:     seq[Authorization]
 
   Error* = ref object
     evmcStatus*: evmc_status_code
