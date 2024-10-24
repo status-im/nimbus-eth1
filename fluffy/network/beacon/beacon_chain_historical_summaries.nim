@@ -15,12 +15,7 @@
 
 {.push raises: [].}
 
-import
-  stew/arrayops,
-  results,
-  beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/capella,
-  ../../common/common_types
+import stew/arrayops, results, beacon_chain/spec/forks, ../../common/common_types
 
 export results
 

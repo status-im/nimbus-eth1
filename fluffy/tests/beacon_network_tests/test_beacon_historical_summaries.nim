@@ -12,7 +12,6 @@
 import
   unittest2,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/capella,
   # Test helpers
   beacon_chain /../ tests/testblockutil,
   beacon_chain /../ tests/mocking/mock_genesis,

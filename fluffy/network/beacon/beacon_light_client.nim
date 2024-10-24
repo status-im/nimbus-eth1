@@ -11,7 +11,6 @@ import
   chronicles,
   eth/p2p/discoveryv5/random2,
   beacon_chain/gossip_processing/light_client_processor,
-  beacon_chain/spec/datatypes/altair,
   beacon_chain/beacon_clock,
   "."/[beacon_init_loader, beacon_network, beacon_light_client_manager]
 
