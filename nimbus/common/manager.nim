@@ -36,10 +36,14 @@ proc loadKeystores*(am: var AccountsManager, path: string):
     createDir(path)
     for filename in walkDirRec(path):
       var data = Json.loadFile(filename, JsonNode)
+      if data.kind != JObject:
+        return err("expect json object of keystore data: " & filename)
+      if not data.hasKey("address"):
+        return err("no 'address' field in keystore data: " & filename)
       let address = Address.fromHex(data["address"].getStr())
       am.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
   except CatchableError as exc:
-    return err("loadKeystrores: " & exc.msg)
+    return err("loadKeystores: " & exc.msg)
 
   ok()
 
