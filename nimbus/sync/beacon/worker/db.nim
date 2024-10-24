@@ -70,6 +70,17 @@ proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   trace info & ": saved sync state persistently"
 
 
+proc dbClearSyncState*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Clear saved state. This function might not succeed (see comments on
+  ## function `dbStoreSyncStateLayout()`) in which case the state is only
+  ## locally deleted but might not be saved permanently.
+  ##
+  if ctx.db.ctx.getKvt().del(LhcStateKey.toOpenArray).isOk:
+    let number = ctx.db.getSavedStateBlockNumber()
+    ctx.db.persistent(number).isOkOr:
+      debug info & ": failed to clear persistent sync state", error=($$error)
+
+
 proc dbLoadSyncStateAvailable*(ctx: BeaconCtxRef): bool =
   ## Check whether `dbLoadSyncStateLayout()` would load a saved state
   let rc = ctx.fetchSyncStateLayout()

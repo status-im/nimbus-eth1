@@ -118,7 +118,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(
-    nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.beaconChunkSize)
+    nimbus.ethNode, nimbus.chainRef, conf.maxPeers,
+    conf.beaconSyncReset, conf.beaconChunkSize)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()

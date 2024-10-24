@@ -57,12 +57,15 @@ proc init*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    chunkSize: int;
+    beaconSyncReset = false;
+    chunkSize = 0;
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.nBodiesBatch = chunkSize
   desc.ctx.pool.chain = chain
+  if beaconSyncReset:
+    desc.ctx.dbClearSyncState "RunInit"
   desc
 
 proc start*(desc: BeaconSyncRef; resumeOnly = false): bool =
