@@ -36,6 +36,7 @@ type
     portalConfig*: PortalProtocolConfig
     dataDir*: string
     storageCapacity*: uint64
+    contentRequestRetries*: int
 
   PortalNode* = ref object
     state*: PortalNodeState
@@ -136,6 +137,7 @@ proc new*(
             accumulator,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
+            contentRequestRetries = config.contentRequestRetries,
           )
         )
       else:
@@ -153,6 +155,7 @@ proc new*(
             portalConfig = config.portalConfig,
             historyNetwork = historyNetwork,
             not config.disableStateRootValidation,
+            contentRequestRetries = config.contentRequestRetries,
           )
         )
       else:
