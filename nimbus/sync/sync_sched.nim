@@ -401,8 +401,6 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   # Add peer entry
   discard dsc.buddies.lruAppend(peer.key, buddy, dsc.buddiesMax)
 
-  # trace "Running peer worker", peer, nPeers,
-  #   nWorkers=dsc.buddies.len, maxWorkers
   asyncSpawn buddy.workerLoop()
 
 
@@ -431,8 +429,6 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
   else:
     rc.value.worker.ctrl.stopped = true # in case it is hanging somewhere
     dsc.buddies.del peer.key
-    # trace "Disconnected buddy", peer, nPeers,
-    #   nWorkers=dsc.buddies.len, maxWorkers
 
 # ------------------------------------------------------------------------------
 # Public functions
