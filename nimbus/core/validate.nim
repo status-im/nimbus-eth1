@@ -184,7 +184,7 @@ proc validateUncles(com: CommonRef; header: Header;
 # Public function, extracted from executor
 # ------------------------------------------------------------------------------
 
-proc validateLegacySignature(tx: Transaction, fork: EVMFork): bool =
+proc validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
   var
     vMin = 27'u64
     vMax = 28'u64
@@ -206,7 +206,7 @@ proc validateLegacySignature(tx: Transaction, fork: EVMFork): bool =
 
   isValid
 
-proc validateEip2930Signature(tx: Transaction): bool =
+proc validateEip2930SignatureForm(tx: Transaction): bool =
   var isValid = tx.V == 0'u64 or tx.V == 1'u64
   isValid = isValid and tx.S >= UInt256.one
   isValid = isValid and tx.S < SECPK1_N
@@ -260,11 +260,11 @@ proc validateTxBasic*(
           &"index={i}, len={acl.storageKeys.len}")
 
   if tx.txType == TxLegacy:
-    if not validateLegacySignature(tx, fork):
-      return err("invalid tx: invalid legacy signature")
+    if not validateLegacySignatureForm(tx, fork):
+      return err("invalid tx: invalid legacy signature form")
   else:
-    if not validateEip2930Signature(tx):
-      return err("invalid tx: invalid post EIP-2930 signature")
+    if not validateEip2930SignatureForm(tx):
+      return err("invalid tx: invalid post EIP-2930 signature form")
 
   if tx.txType >= TxEip4844:
     if tx.to.isNone:
@@ -286,10 +286,10 @@ proc validateTxBasic*(
 proc validateTransaction*(
     roDB:     ReadOnlyStateDB; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
-    sender:   Address;      ## tx.recoverSender
+    sender:   Address;         ## tx.recoverSender
     maxLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
-    excessBlobGas: uint64;    ## excessBlobGas from parent block header
+    excessBlobGas: uint64;     ## excessBlobGas from parent block header
     fork:     EVMFork): Result[void, string] =
 
   ? validateTxBasic(tx, fork)
