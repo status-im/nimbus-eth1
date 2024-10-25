@@ -190,7 +190,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidAttr(error)
 
     let id = computePayloadId(blockHash, attrs)
-    ben.put(id, bundle.blockValue, bundle.executionPayload, bundle.blobsBundle)
+    ben.put(id,
+      bundle.blockValue,
+      bundle.executionPayload,
+      bundle.blobsBundle,
+      bundle.executionRequests)
 
     info "Created payload for sealing",
       id = id.toHex,

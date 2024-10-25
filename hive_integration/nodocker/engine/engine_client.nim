@@ -92,6 +92,7 @@ proc getPayload*(client: RpcClient,
       blockValue: Opt.some(x.blockValue),
       blobsBundle: Opt.some(x.blobsBundle),
       shouldOverrideBuilder: Opt.some(x.shouldOverrideBuilder),
+      executionRequests: Opt.some(x.executionRequests),
     ))
   elif version == Version.V3:
     let x = client.getPayloadV3(payloadId).valueOr:

@@ -122,6 +122,12 @@ func put*(ben: BeaconEngineRef, id: Bytes8,
   ben.queue.put(id, blockValue, payload, blobsBundle)
 
 func put*(ben: BeaconEngineRef, id: Bytes8,
+          blockValue: UInt256, payload: ExecutionPayload,
+          blobsBundle: Opt[BlobsBundleV1],
+          executionRequests: Opt[array[3, seq[byte]]]) =
+  ben.queue.put(id, blockValue, payload, blobsBundle, executionRequests)
+
+func put*(ben: BeaconEngineRef, id: Bytes8,
           blockValue: UInt256, payload: SomeExecutionPayload,
           blobsBundle: Opt[BlobsBundleV1]) =
   doAssert blobsBundle.isNone == (payload is
@@ -185,14 +191,15 @@ func get*(ben: BeaconEngineRef, id: Bytes8,
 # Public functions
 # ------------------------------------------------------------------------------
 
-type ExecutionPayloadAndBlobsBundle* = object
+type AssembledExecutionPayload* = object
   executionPayload*: ExecutionPayload
   blobsBundle*: Opt[BlobsBundleV1]
   blockValue*: UInt256
+  executionRequests*: Opt[array[3, seq[byte]]]
 
 proc generatePayload*(ben: BeaconEngineRef,
                       attrs: PayloadAttributes):
-                         Result[ExecutionPayloadAndBlobsBundle, string] =
+                         Result[AssembledExecutionPayload, string] =
   wrapException:
     let
       xp  = ben.txPool
@@ -231,10 +238,11 @@ proc generatePayload*(ben: BeaconEngineRef,
         proofs: blobData.proofs.mapIt it.Web3KZGProof,
         blobs: blobData.blobs.mapIt it.Web3Blob)
 
-    ok ExecutionPayloadAndBlobsBundle(
+    ok AssembledExecutionPayload(
       executionPayload: executionPayload(bundle.blk),
       blobsBundle: blobsBundle,
-      blockValue: bundle.blockValue)
+      blockValue: bundle.blockValue,
+      executionRequests: bundle.executionRequests)
 
 func setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32) =
   ben.invalidBlocksHits[blockHash] = 1

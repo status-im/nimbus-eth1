@@ -53,9 +53,22 @@ proc setupClient(port: Port): RpcHttpClient =
   waitFor client.connect("127.0.0.1", port, false)
   return client
 
-proc setupEnv(): TestEnv =
+proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
+  doAssert(envFork >= MergeFork)
+
   let
     conf  = setupConfig()
+
+  if envFork >= Shanghai:
+    conf.networkParams.config.shanghaiTime = Opt.some(0.EthTime)
+
+  if envFork >= Cancun:
+    conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
+
+  if envFork >= Prague:
+    conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
+
+  let
     com   = setupCom(conf)
     head  = com.db.getCanonicalHead()
     chain = newForkedChain(com, head)
@@ -91,7 +104,7 @@ proc close(env: TestEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
 
-proc runTest(env: TestEnv): Result[void, string] =
+proc runBasicCycleTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
@@ -116,14 +129,56 @@ proc runTest(env: TestEnv): Result[void, string] =
 
   if bn != 1:
     return err("Expect returned block number: 1, got: " & $bn)
-  
+
+  ok()
+
+proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceStateV1(
+      headBlockHash: header.blockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+      parentBeaconBlockRoot: Opt.some(default(Hash32))
+    )
+    fcuRes = ? client.forkchoiceUpdated(Version.V3, update, Opt.some(attr))
+    payload = ? client.getPayload(fcuRes.payloadId.get, Version.V4)
+    res = ? client.newPayload(Version.V4,
+      payload.executionPayload,
+      Opt.some(default(Hash32)),
+      payload.executionRequests)
+
+  if res.status != PayloadExecutionStatus.valid:
+    return err("res.status should equals to PayloadExecutionStatus.valid")
+
+  if res.latestValidHash.isNone or
+     res.latestValidHash.get != payload.executionPayload.blockHash:
+    return err("lastestValidHash mismatch")
+
+  if res.validationError.isSome:
+    return err("validationError should empty")
+
   ok()
 
 proc engineApiMain*() =
   suite "Engine API":
     test "Basic cycle":
       let env = setupEnv()
-      let res = env.runTest()
+      let res = env.runBasicCycleTest()
+      if res.isErr:
+        debugEcho "FAILED TO EXECUTE TEST: ", res.error
+      check res.isOk
+      env.close()
+
+    test "newPayloadV4":
+      let env = setupEnv(Prague)
+      let res = env.runNewPayloadV4Test()
       if res.isErr:
         debugEcho "FAILED TO EXECUTE TEST: ", res.error
       check res.isOk

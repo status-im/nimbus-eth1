@@ -152,6 +152,16 @@ proc procBlkEpilogue(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
       clearCache = true)
 
+  var
+    withdrawalReqs: seq[byte]
+    consolidationReqs: seq[byte]
+
+  if header.requestsHash.isSome:
+    # Execute EIP-7002 and EIP-7251 before calculating stateRoot
+    # because they will alter the state
+    withdrawalReqs = processDequeueWithdrawalRequests(vmState)
+    consolidationReqs = processDequeueConsolidationRequests(vmState)
+
   if not skipValidation:
     let stateDB = vmState.stateDB
     if header.stateRoot != stateDB.rootHash:
@@ -181,8 +191,6 @@ proc procBlkEpilogue(
     if header.requestsHash.isSome:
       let
         depositReqs = ?parseDepositLogs(vmState.allLogs)
-        withdrawalReqs = processDequeueWithdrawalRequests(vmState)
-        consolidationReqs = processDequeueConsolidationRequests(vmState)
         requestsHash = calcRequestsHashInsertType(depositReqs, withdrawalReqs, consolidationReqs)
 
       if header.requestsHash.get != requestsHash:
