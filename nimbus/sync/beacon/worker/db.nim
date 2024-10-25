@@ -84,7 +84,13 @@ proc dbClearSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 proc dbLoadSyncStateAvailable*(ctx: BeaconCtxRef): bool =
   ## Check whether `dbLoadSyncStateLayout()` would load a saved state
   let rc = ctx.fetchSyncStateLayout()
-  rc.isOk and ctx.chain.latestNumber() < rc.value.head
+  rc.isOk and
+    # The base number is the least record of the FCU chains. So the finalised
+    # entry must not be smaller.
+    ctx.chain.baseNumber() <= rc.value.final and
+    # If the latest FCU number is not larger than the head, there is nothing
+    # to do (might also happen after a manual import.)
+    ctx.chain.latestNumber() < rc.value.head
 
 
 proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
@@ -93,9 +99,10 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
     rc = ctx.fetchSyncStateLayout()
     latest = ctx.chain.latestNumber()
 
-  # If there was a manual import after a previous sync, then saved state
-  # might be outdated, i.e. `rc.value.head < latest`
-  if rc.isOk and latest < rc.value.head:
+  # See `dbLoadSyncStateAvailable()` for comments
+  if rc.isOk and
+     ctx.chain.baseNumber() <= rc.value.final and
+     latest < rc.value.head:
     ctx.sst.layout = rc.value
 
     # Add interval of unprocessed block range `(L,C]` from `README.md`
