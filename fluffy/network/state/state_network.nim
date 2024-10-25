@@ -47,7 +47,7 @@ proc new*(
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     historyNetwork = Opt.none(HistoryNetwork),
     validateStateIsCanonical = true,
-    contentRequestRetries = 3,
+    contentRequestRetries = 1,
 ): T =
   let
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)

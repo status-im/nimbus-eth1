@@ -408,7 +408,7 @@ proc getContent(
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
 
-# TODO: Currently doing 3 retries on lookups but only when the validation fails.
+# TODO: Currently doing retries on lookups but only when the validation fails.
 # This is to avoid nodes that provide garbage from blocking us with getting the
 # requested data. Might want to also do that on a failed lookup, as perhaps this
 # could occur when being really unlucky with nodes timing out on requests.
@@ -664,7 +664,7 @@ proc new*(
     historicalRoots: HistoricalRoots = loadHistoricalRoots(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
-    contentRequestRetries = 3,
+    contentRequestRetries = 1,
 ): T =
   let
     contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
