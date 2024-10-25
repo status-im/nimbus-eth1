@@ -302,6 +302,13 @@ type
       name: "force-prune"
     .}: bool
 
+    contentRequestRetries* {.
+      hidden,
+      desc: "Max number of retries when requesting content over the network.",
+      defaultValue: 1,
+      name: "debug-content-request-retries"
+    .}: uint
+
     contentCacheSize* {.
       hidden,
       desc:

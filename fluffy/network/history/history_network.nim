@@ -39,6 +39,7 @@ type
     historicalRoots*: HistoricalRoots
     processContentLoop: Future[void]
     statusLogLoop: Future[void]
+    contentRequestRetries: int
 
   Block* = (Header, BlockBody)
 
@@ -407,8 +408,7 @@ proc getContent(
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
 
-const requestRetries = 4
-# TODO: Currently doing 4 retries on lookups but only when the validation fails.
+# TODO: Currently doing retries on lookups but only when the validation fails.
 # This is to avoid nodes that provide garbage from blocking us with getting the
 # requested data. Might want to also do that on a failed lookup, as perhaps this
 # could occur when being really unlucky with nodes timing out on requests.
@@ -440,7 +440,7 @@ proc getVerifiedBlockHeader*(
     info "Fetched block header from database"
     return headerFromDb
 
-  for i in 0 ..< requestRetries:
+  for i in 0 ..< (1 + n.contentRequestRetries):
     let
       headerContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching block header with proof from the network"
@@ -469,7 +469,7 @@ proc getVerifiedBlockHeader*(
 
     return Opt.some(header)
 
-  # Headers were requested `requestRetries` times and all failed on validation
+  # Headers were requested `1 + requestRetries` times and all failed on validation
   return Opt.none(Header)
 
 proc getBlockBody*(
@@ -492,7 +492,7 @@ proc getBlockBody*(
     info "Fetched block body from database"
     return bodyFromDb
 
-  for i in 0 ..< requestRetries:
+  for i in 0 ..< (1 + n.contentRequestRetries):
     let
       bodyContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching block body from the network"
@@ -513,7 +513,7 @@ proc getBlockBody*(
 
     return Opt.some(body)
 
-  # Bodies were requested `requestRetries` times and all failed on validation
+  # Bodies were requested `1 + requestRetries` times and all failed on validation
   return Opt.none(BlockBody)
 
 proc getBlock*(
@@ -567,7 +567,7 @@ proc getReceipts*(
     info "Fetched receipts from database"
     return receiptsFromDb
 
-  for i in 0 ..< requestRetries:
+  for i in 0 ..< (1 + n.contentRequestRetries):
     let
       receiptsContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         warn "Failed fetching receipts from the network"
@@ -586,6 +586,9 @@ proc getReceipts*(
     )
 
     return Opt.some(receipts)
+
+  # Receipts were requested `1 + requestRetries` times and all failed on validation
+  return Opt.none(seq[Receipt])
 
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKey: ContentKeyByteList
@@ -661,6 +664,7 @@ proc new*(
     historicalRoots: HistoricalRoots = loadHistoricalRoots(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
+    contentRequestRetries = 1,
 ): T =
   let
     contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -685,6 +689,7 @@ proc new*(
     contentQueue: contentQueue,
     accumulator: accumulator,
     historicalRoots: historicalRoots,
+    contentRequestRetries: contentRequestRetries,
   )
 
 proc validateContent(
