@@ -86,6 +86,7 @@ const
   defaultPort              = 30303
   defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
+  # https://github.com/ethereum/execution-apis/blob/main/src/engine/authentication.md#jwt-specifications
   defaultEngineApiPort     = 8551
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
