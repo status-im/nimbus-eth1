@@ -15,7 +15,9 @@ import
   ../../../core/chain,
   ../../protocol,
   ../worker_desc,
-  "."/[blocks_staged, blocks_unproc, db, headers_staged, headers_unproc]
+  ./blocks_staged/staged_queue,
+  ./headers_staged/staged_queue,
+  "."/[blocks_unproc, db, headers_unproc]
 
 when enableTicker:
   import ./start_stop/ticker
@@ -41,13 +43,13 @@ when enableTicker:
         targetOk:        ctx.target.final != 0,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
-        hdrStagedTop:    ctx.headersStagedTopKey(),
+        hdrStagedTop:    ctx.headersStagedQueueTopKey(),
         hdrUnprocTop:    ctx.headersUnprocTop(),
         nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
         nHdrUnprocFragm: ctx.headersUnprocChunks(),
 
         nBlkStaged:      ctx.blocksStagedQueueLen(),
-        blkStagedBottom: ctx.blocksStagedBottomKey(),
+        blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
         blkUnprocTop:    ctx.blk.topRequest,
         nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
         nBlkUnprocFragm: ctx.blocksUnprocChunks(),
@@ -94,8 +96,8 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   ## Initalise database related stuff
 
   # Initialise up queues and lists
-  ctx.headersStagedInit()
-  ctx.blocksStagedInit()
+  ctx.headersStagedQueueInit()
+  ctx.blocksStagedQueueInit()
   ctx.headersUnprocInit()
   ctx.blocksUnprocInit()
 

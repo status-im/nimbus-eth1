@@ -116,15 +116,12 @@ proc runDaemon*(ctx: BeaconCtxRef; info: static[string]) {.async.} =
 
       # Import from staged queue.
       while await ctx.blocksStagedImport(info):
-        ctx.updateMetrics()
         if not ctx.daemon:
           # Implied by external sync shutdown?
           return
 
   # At the end of the cycle, leave time to trigger refill headers/blocks
   await sleepAsync daemonWaitInterval
-
-  ctx.updateMetrics()
 
 
 proc runPool*(

@@ -17,6 +17,7 @@ import
   ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
+  ./update/metrics,
   "."/[blocks_unproc, db]
 
 # ------------------------------------------------------------------------------
@@ -261,6 +262,9 @@ proc blocksStagedImport*(
       maxImport = ctx.chain.latestNumber()
       break
 
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
+
     # Occasionally mark the chain finalized
     if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
       let
@@ -287,30 +291,12 @@ proc blocksStagedImport*(
   for bn in iv.minPt .. maxImport:
     ctx.dbUnstashHeader bn
 
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
+
   trace info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
     L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
   return true
-
-
-func blocksStagedBottomKey*(ctx: BeaconCtxRef): BlockNumber =
-  ## Retrieve to staged block number
-  let qItem = ctx.blk.staged.ge(0).valueOr:
-    return high(BlockNumber)
-  qItem.key
-
-func blocksStagedQueueLen*(ctx: BeaconCtxRef): int =
-  ## Number of staged records
-  ctx.blk.staged.len
-
-func blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
-  ## `true` iff no data are on the queue.
-  ctx.blk.staged.len == 0
-
-# ----------------
-
-func blocksStagedInit*(ctx: BeaconCtxRef) =
-  ## Constructor
-  ctx.blk.staged = StagedBlocksQueue.init()
 
 # ------------------------------------------------------------------------------
 # End

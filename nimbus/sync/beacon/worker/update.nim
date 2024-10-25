@@ -17,7 +17,8 @@ import
   ../../../core/chain,
   ../worker_desc,
   ./update/metrics,
-  "."/[blocks_unproc, db, headers_staged, headers_unproc]
+  ./headers_staged/staged_queue,
+  "."/[blocks_unproc, db, headers_unproc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -91,6 +92,9 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
     uTop=ctx.headersUnprocTop(),
     D=ctx.layout.dangling.bnStr, H=ctx.layout.head.bnStr, T=target.bnStr
 
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
+
 
 proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
   ## Merge if `C+1` == `D`
@@ -125,6 +129,9 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
 
   # Save state
   ctx.dbStoreSyncStateLayout info
+
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -168,13 +175,6 @@ proc updateBlockRequests*(ctx: BeaconCtxRef; info: static[string]) =
       ctx.blocksUnprocCommit(
         0, max(latest, ctx.blk.topRequest) + 1, ctx.layout.coupler)
       ctx.blk.topRequest = ctx.layout.coupler
-
-
-proc updateMetrics*(ctx: BeaconCtxRef) =
-  let now = Moment.now()
-  if ctx.pool.nextUpdate < now:
-    ctx.updateMetricsImpl()
-    ctx.pool.nextUpdate = now + metricsUpdateInterval
 
 # ------------------------------------------------------------------------------
 # End
