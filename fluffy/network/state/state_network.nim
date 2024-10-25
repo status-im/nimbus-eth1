@@ -90,32 +90,39 @@ proc getContent(
     info "Fetched state local content value"
     return Opt.some(contentValue)
 
-  for i in 0 ..< (1 + n.contentRequestRetries):
-    let
-      contentLookupResult = (
-        await n.portalProtocol.contentLookup(contentKeyBytes, contentId)
-      ).valueOr:
-        warn "Failed fetching state content from the network"
-        return Opt.none(V)
-      contentValueBytes = contentLookupResult.content
-
-    let contentValue = V.decode(contentValueBytes).valueOr:
+  # Define the state content validation closure
+  proc stateContentValidator(
+      contentKey: ContentKeyByteList, content: seq[byte]
+  ): bool {.raises: [], gcsafe.} =
+    let contentValue = V.decode(content).valueOr:
       warn "Unable to decode state content value from content lookup"
-      continue
+      return false
 
-    validateRetrieval(key, contentValue).isOkOr:
+    if validateRetrieval(key, contentValue).isOk():
+      true
+    else:
       warn "Validation of retrieved state content failed"
-      continue
+      false
 
-    info "Fetched valid state content from the network"
-    n.portalProtocol.storeContent(
-      contentKeyBytes, contentId, contentValueBytes, cacheContent = true
-    )
+  let
+    contentLookupResult = (
+      await n.portalProtocol.contentLookup(
+        contentKeyBytes, contentId, stateContentValidator
+      )
+    ).valueOr:
+      warn "Failed fetching state content from the network"
+      return Opt.none(V)
+    contentValueBytes = contentLookupResult.content
 
-    return Opt.some(contentValue)
+  info "Fetched valid state content from the network"
+  n.portalProtocol.storeContent(
+    contentKeyBytes, contentId, contentValueBytes, cacheContent = true
+  )
 
-  # Content was requested `1 + requestRetries` times and all failed on validation
-  Opt.none(V)
+  let contentValue = V.decode(contentValueBytes).valueOr:
+    raiseAssert("Content should already have been validated")
+
+  return Opt.some(contentValue)
 
 proc getAccountTrieNode*(
     n: StateNetwork, key: AccountTrieNodeKey

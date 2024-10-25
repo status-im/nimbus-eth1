@@ -153,15 +153,19 @@ type
 
   DbRadiusHandler* = proc(): UInt256 {.raises: [], gcsafe.}
 
+  ContentValidationHandler* = proc(
+    contentKey: ContentKeyByteList, content: seq[byte]
+  ): bool {.raises: [], gcsafe.}
+
   PortalProtocolId* = array[2, byte]
 
   RadiusCache* = LRUCache[NodeId, UInt256]
 
-  ContentCache = LRUCache[ContentId, seq[byte]]
-
   ContentKV* = object
     contentKey*: ContentKeyByteList
     content*: seq[byte]
+
+  ContentCache = LRUCache[ContentId, seq[byte]]
 
   OfferRequestType = enum
     Direct
@@ -1125,11 +1129,19 @@ proc triggerPoke*(
       # Offer queue is full, do not start more offer-accept interactions
       return
 
+proc defaultContentValidator(
+    contentKey: ContentKeyByteList, content: seq[byte]
+): bool {.raises: [], gcsafe.} =
+  true
+
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
 proc contentLookup*(
-    p: PortalProtocol, target: ContentKeyByteList, targetId: UInt256
+    p: PortalProtocol,
+    target: ContentKeyByteList,
+    targetId: UInt256,
+    validationHandler: ContentValidationHandler = defaultContentValidator,
 ): Future[Opt[ContentLookupResult]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
@@ -1212,17 +1224,21 @@ proc contentLookup*(
             if closestNodes.len > BUCKET_SIZE:
               closestNodes.del(closestNodes.high())
       of Content:
-        # cancel any pending queries as the content has been found
-        for f in pendingQueries:
-          f.cancelSoon()
-        portal_lookup_content_requests.observe(
-          requestAmount, labelValues = [$p.protocolId]
-        )
-        return Opt.some(
-          ContentLookupResult.init(
-            content.content, content.utpTransfer, nodesWithoutContent
+        if validationHandler(target, content.content):
+          # cancel any pending queries as the content has been found
+          for f in pendingQueries:
+            f.cancelSoon()
+          portal_lookup_content_requests.observe(
+            requestAmount, labelValues = [$p.protocolId]
           )
-        )
+          return Opt.some(
+            ContentLookupResult.init(
+              content.content, content.utpTransfer, nodesWithoutContent
+            )
+          )
+        else:
+          # TODO: What should we do if the validation fails?
+          discard
     else:
       # TODO: Should we do something with the node that failed responding our
       # query?
