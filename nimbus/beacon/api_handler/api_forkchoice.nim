@@ -197,7 +197,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       hash = bundle.executionPayload.blockHash.short,
       txs = bundle.executionPayload.transactions.len,
       gasUsed = bundle.executionPayload.gasUsed,
-      blobGasUsed = bundle.executionPayload.blobGasUsed,
+      blobGasUsed = bundle.executionPayload.blobGasUsed.get(),
       id = id.toHex,
       attrs = attrs
 
