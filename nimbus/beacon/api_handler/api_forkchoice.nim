@@ -200,4 +200,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     return validFCU(Opt.some(id), blockHash)
 
+  info "Forkchoice updated to new head",
+    requested = header.number,
+    hash = blockHash.short,
+    head = ben.chain.latestNumber
+
   return validFCU(Opt.none(Bytes8), blockHash)
