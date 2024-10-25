@@ -78,10 +78,15 @@ proc headerStagedUpdateTarget*(
         trace info & ": finalised header hash mismatch", peer, hash,
           expected=ctx.target.finalHash
       else:
-        ctx.target.final = rc.value[0].number
+        let final = rc.value[0].number
+        if final < ctx.chain.baseNumber():
+          trace info & ": finalised number too low", peer,
+            B=ctx.chain.baseNumber.bnStr, finalised=rc.value[0].number.bnStr
+        else:
+          ctx.target.final = final
 
-        # Update, so it can be followed nicely
-        ctx.updateMetrics()
+          # Update, so it can be followed nicely
+          ctx.updateMetrics()
 
 
 proc headersStagedCollect*(
