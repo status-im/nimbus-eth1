@@ -200,6 +200,7 @@ proc newPayload*(ben: BeaconEngineRef,
     hash = blockHash.short, 
     parent = header.parentHash.short,
     txs = blk.transactions.len,
-    gasUsed = header.gasUsed
+    gasUsed = header.gasUsed,
+    blobGas = header.blobGasUsed
 
   return validStatus(blockHash)
