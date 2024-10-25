@@ -83,9 +83,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     SSZ.encode(offerResult).to0xHex()
 
-  rpcServer.rpc("portal_stateGetContent") do(
-    contentKey: string, parentContent: Opt[string]
-  ) -> ContentInfo:
+  rpcServer.rpc("portal_stateGetContent") do(contentKey: string) -> ContentInfo:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
@@ -99,22 +97,14 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         raise contentNotFoundErr()
       contentValue = foundContent.content
 
-    if parentContent.isSome():
-      let
-        parentContentBytes = hexToSeqByte(parentContent.get())
-        offerBytes = validateRetrievalGetOffer(key, contentValue, parentContentBytes).valueOr:
-          raise invalidValueErr()
-      p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
-      p.triggerPoke(foundContent.nodesInterestedInContent, keyBytes, offerBytes)
-    else:
-      validateRetrieval(key, contentValue).isOkOr:
-        raise invalidValueErr()
-      p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
+    validateRetrieval(key, contentValue).isOkOr:
+      raise invalidValueErr()
+    p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
 
     ContentInfo(content: contentValue.to0xHex(), utpTransfer: foundContent.utpTransfer)
 
   rpcServer.rpc("portal_stateTraceGetContent") do(
-    contentKey: string, parentContent: Opt[string]
+    contentKey: string
   ) -> TraceContentLookupResult:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
