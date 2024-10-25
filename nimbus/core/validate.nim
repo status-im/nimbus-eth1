@@ -13,8 +13,10 @@
 import
   std/[sequtils, sets, strformat],
   ../db/ledger,
-  ".."/[transaction, common/common],
-  ".."/[errors],
+  ../common/common,
+  ../transaction/call_types,
+  ../errors,
+  ../transaction,
   ../utils/utils,
   "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
@@ -182,6 +184,35 @@ proc validateUncles(com: CommonRef; header: Header;
 # Public function, extracted from executor
 # ------------------------------------------------------------------------------
 
+proc validateLegacySignature(tx: Transaction, fork: EVMFork): bool =
+  var
+    vMin = 27'u64
+    vMax = 28'u64
+
+  if tx.V >= EIP155_CHAIN_ID_OFFSET:
+    let chainId = (tx.V - EIP155_CHAIN_ID_OFFSET) div 2
+    vMin = 35 + (2 * chainId)
+    vMax = vMin + 1
+
+  var isValid = tx.R >= UInt256.one
+  isValid = isValid and tx.S >= UInt256.one
+  isValid = isValid and tx.V >= vMin
+  isValid = isValid and tx.V <= vMax
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+
+  if fork >= FkHomestead:
+    isValid = isValid and tx.S < SECPK1_N div 2
+
+  isValid
+
+proc validateEip2930Signature(tx: Transaction): bool =
+  var isValid = tx.V == 0'u64 or tx.V == 1'u64
+  isValid = isValid and tx.S >= UInt256.one
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+  isValid
+
 func gasCost*(tx: Transaction): UInt256 =
   if tx.txType >= TxEip4844:
     tx.gasLimit.u256 * tx.maxFeePerGas.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas
@@ -227,6 +258,13 @@ proc validateTxBasic*(
       if acl.storageKeys.len > MAX_ACCESS_LIST_STORAGE_KEYS:
         return err("invalid tx: access list storage keys len exceeds MAX_ACCESS_LIST_STORAGE_KEYS. " &
           &"index={i}, len={acl.storageKeys.len}")
+
+  if tx.txType == TxLegacy:
+    if not validateLegacySignature(tx, fork):
+      return err("invalid tx: invalid legacy signature")
+  else:
+    if not validateEip2930Signature(tx):
+      return err("invalid tx: invalid post EIP-2930 signature")
 
   if tx.txType >= TxEip4844:
     if tx.to.isNone:
