@@ -43,7 +43,7 @@ const
   workerIdleWaitInterval* = chronos.seconds(10)
     ## Sleep some time in multi-mode if there is nothing to do
 
-  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(10)
+  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
 
   # ----------------------

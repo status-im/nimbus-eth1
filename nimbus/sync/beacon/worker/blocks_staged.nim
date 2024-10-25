@@ -262,6 +262,13 @@ proc blocksStagedImport*(
       maxImport = ctx.chain.latestNumber()
       break
 
+    # Allow pseudo/async thread switch.
+    await sleepAsync asyncThreadSwitchTimeSlot
+    if not ctx.daemon:
+      # Shutdown?
+      maxImport = ctx.chain.latestNumber()
+      break
+
     # Update, so it can be followed nicely
     ctx.updateMetrics()
 
@@ -282,6 +289,9 @@ proc blocksStagedImport*(
 
       # Allow pseudo/async thread switch.
       await sleepAsync asyncThreadSwitchTimeSlot
+      if not ctx.daemon:
+        maxImport = ctx.chain.latestNumber()
+        break
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:
