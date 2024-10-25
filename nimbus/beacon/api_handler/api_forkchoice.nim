@@ -196,7 +196,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       id = id.toHex,
       hash = bundle.executionPayload.blockHash.short,
       number = bundle.executionPayload.blockNumber,
-      attr = attrs
+      txs = bundle.executionPayload.transactions.len,
+      gasUsed = bundle.executionPayload.gasUsed,
+      attrs = attrs
 
     return validFCU(Opt.some(id), blockHash)
 

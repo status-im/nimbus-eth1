@@ -195,7 +195,11 @@ proc newPayload*(ben: BeaconEngineRef,
     let blockHash = latestValidHash(db, parent, ttd)
     return invalidStatus(blockHash, vres.error())
 
-  info "New Payload Received And Validated",
-    number = header.number, hash = blockHash.short, parent = header.parentHash.short
+  info "New payload received and validated",
+    number = header.number, 
+    hash = blockHash.short, 
+    parent = header.parentHash.short,
+    txs = blk.transactions.len,
+    gasUsed = header.gasUsed
 
   return validStatus(blockHash)

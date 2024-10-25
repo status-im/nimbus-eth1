@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  chronicles,
   std/tables,
   ../../common,
   ../../db/core_db,
@@ -212,6 +213,7 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
 
   shouldNotKeyError:
     var prevHash = target
+    var count = 0'u64
     while prevHash != c.baseHash:
       let blk =  c.blocks[prevHash]
       c.db.persistTransactions(header.number, header.txRoot, blk.blk.transactions)
@@ -224,6 +226,11 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
       for tx in blk.blk.transactions:
         c.txRecords.del(rlpHash(tx))
       prevHash = header.parentHash
+      count.inc
+
+    info "Finalized blocks persisted",
+      numberOfBlocks = count,
+      last=target.short
 
 func updateBase(c: ForkedChainRef,
                 newBaseHash: Hash32,
