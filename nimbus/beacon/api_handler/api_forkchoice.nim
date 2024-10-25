@@ -192,12 +192,12 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let id = computePayloadId(blockHash, attrs)
     ben.put(id, bundle.blockValue, bundle.executionPayload, bundle.blobsBundle)
 
-    info "Created payload for sealing",
-      id = id.toHex,
-      hash = bundle.executionPayload.blockHash.short,
+    info "Created payload for block proposal",
       number = bundle.executionPayload.blockNumber,
+      hash = bundle.executionPayload.blockHash.short,
       txs = bundle.executionPayload.transactions.len,
       gasUsed = bundle.executionPayload.gasUsed,
+      id = id.toHex,
       attrs = attrs
 
     return validFCU(Opt.some(id), blockHash)
