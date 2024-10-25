@@ -9,45 +9,10 @@ import
   ./[constants, errors],
   ./common/evmforks,
   ./evm/interpreter/gas_costs,
+  ./transaction/call_types,
   eth/common/[addresses, keys, transactions, transactions_rlp, transaction_utils]
 
 export addresses, keys, transactions
-
-proc toWordSize(size: GasInt): GasInt =
-  # Round input to the nearest bigger multiple of 32
-  # tx validation will ensure the value is not too big
-  if size > GasInt.high-31:
-    return (GasInt.high shr 5) + 1
-
-  (size + 31) shr 5
-
-func intrinsicGas*(data: openArray[byte], fork: EVMFork): GasInt =
-  result = GasInt(gasFees[fork][GasTransaction])
-  for i in data:
-    if i == 0:
-      result += GasInt(gasFees[fork][GasTXDataZero])
-    else:
-      result += GasInt(gasFees[fork][GasTXDataNonZero])
-
-proc intrinsicGas*(tx: Transaction, fork: EVMFork): GasInt =
-  # Compute the baseline gas cost for this transaction.  This is the amount
-  # of gas needed to send this transaction (but that is not actually used
-  # for computation)
-  result = tx.payload.intrinsicGas(fork)
-
-  if tx.contractCreation:
-    result += GasInt(gasFees[fork][GasTXCreate])
-    if fork >= FkShanghai:
-      # cannot use wordCount here, it will raise unlisted exception
-      let numWords = toWordSize(GasInt tx.payload.len)
-      result += GasInt(gasFees[fork][GasInitcodeWord]) * numWords
-
-  if tx.txType > TxLegacy:
-    result += GasInt(tx.accessList.len) * ACCESS_LIST_ADDRESS_COST
-    var numKeys = 0
-    for n in tx.accessList:
-      inc(numKeys, n.storageKeys.len)
-    result += GasInt(numKeys) * ACCESS_LIST_STORAGE_KEY_COST
 
 proc validateTxLegacy(tx: Transaction, fork: EVMFork) =
   var
