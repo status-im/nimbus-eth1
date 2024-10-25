@@ -33,6 +33,7 @@ type
     dangling*: BlockNumber
     final*: BlockNumber
     head*: BlockNumber
+    headOk*: bool
     target*: BlockNumber
     targetOk*: bool
 
@@ -79,20 +80,25 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
       B = if data.base == data.latest: "L" else: data.base.bnStr
       L = if data.latest == data.coupler: "C" else: data.latest.bnStr
       C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
-      D = if data.dangling == data.final: "F" else: data.dangling.bnStr
+      D = if data.dangling == data.final: "F"
+          elif data.dangling == data.head: "H"
+          else: data.dangling.bnStr
       F = if data.final == data.head: "H" else: data.final.bnStr
-      H = if data.head == data.target: "T" else: data.head.bnStr
+      H = if data.headOk:
+            if data.head == data.target: "T" else: data.head.bnStr
+          else:
+            if data.head == data.target: "?T" else: "?" & $data.head
       T = if data.targetOk: data.target.bnStr else: "?" & $data.target
 
       hS = if data.nHdrStaged == 0: "n/a"
            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
-      hU = if data.nHdrUnprocFragm == 0: "n/a"
+      hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
            else: data.hdrUnprocTop.bnStr & "(" &
                  data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
 
       bS = if data.nBlkStaged == 0: "n/a"
            else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
-      bU = if data.nBlkUnprocFragm == 0: "n/a"
+      bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
            else: data.blkUnprocTop.bnStr & "(" &
                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 
@@ -121,12 +127,13 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
 proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 
 proc runLogTicker(t: TickerRef) {.gcsafe.} =
-  t.prettyPrint(t)
-  t.setLogTicker(Moment.fromNow(tickerLogInterval))
+  if not t.statsCb.isNil:
+    t.prettyPrint(t)
+    t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 proc setLogTicker(t: TickerRef; at: Moment) =
   if t.statsCb.isNil:
-    debug "Stopped", nBuddies=t.lastStats.nBuddies
+    debug "Ticker stopped"
   else:
     # Store the `runLogTicker()` in a closure to avoid some garbage collection
     # memory corruption issues that might occur otherwise.

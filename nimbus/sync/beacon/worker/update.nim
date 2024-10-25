@@ -19,9 +19,6 @@ import
   ./update/metrics,
   "."/[blocks_unproc, db, headers_staged, headers_unproc]
 
-logScope:
-  topics = "beacon update"
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -51,12 +48,13 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
   var target = ctx.target.consHead.number
 
   # Need: `H < T` and `C == D`
-  if target != 0 and target <= ctx.layout.head:      # violates `H < T`
-    trace info & ": not applicable", H=ctx.layout.head.bnStr, T=target.bnStr
+  if target != 0 and target <= ctx.layout.head: # violates `H < T`
+    trace info & ": update not applicable",
+      H=ctx.layout.head.bnStr, T=target.bnStr
     return
 
   if ctx.layout.coupler != ctx.layout.dangling: # violates `C == D`
-    trace info & ": not applicable",
+    trace info & ": update not applicable",
       C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr
     return
 
@@ -78,10 +76,10 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
-  ctx.dbStashHeaders(target, @[rlpHeader])
+  ctx.dbStashHeaders(target, @[rlpHeader], info)
 
   # Save state
-  ctx.dbStoreSyncStateLayout()
+  ctx.dbStoreSyncStateLayout info
 
   # Update range
   doAssert ctx.headersUnprocTotal() == 0
@@ -89,7 +87,7 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.headersStagedQueueIsEmpty()
   ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
-  trace info & ": updated", C=ctx.layout.coupler.bnStr,
+  trace info & ": updated sync state", C=ctx.layout.coupler.bnStr,
     uTop=ctx.headersUnprocTop(),
     D=ctx.layout.dangling.bnStr, H=ctx.layout.head.bnStr, T=target.bnStr
 
@@ -110,7 +108,7 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
     raiseAssert info & ": hashes do not match" &
       " C=" & ctx.layout.coupler.bnStr & " D=" & $ctx.layout.dangling.bnStr
 
-  trace info & ": merging", C=ctx.layout.coupler.bnStr,
+  trace info & ": merging adjacent chains", C=ctx.layout.coupler.bnStr,
     D=ctx.layout.dangling.bnStr
 
   # Merge adjacent linked chains
@@ -126,7 +124,7 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
     headLocked:     ctx.layout.headLocked)
 
   # Save state
-  ctx.dbStoreSyncStateLayout()
+  ctx.dbStoreSyncStateLayout info
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -164,7 +162,7 @@ proc updateBlockRequests*(ctx: BeaconCtxRef; info: static[string]) =
     # One can fill/import/execute blocks by number from `(L,C]`
     if ctx.blk.topRequest < ctx.layout.coupler:
       # So there is some space
-      trace info & ": updating", L=latest.bnStr,
+      trace info & ": updating block requests", L=latest.bnStr,
         topReq=ctx.blk.topRequest.bnStr, C=ctx.layout.coupler.bnStr
 
       ctx.blocksUnprocCommit(

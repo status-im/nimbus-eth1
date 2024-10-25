@@ -36,6 +36,7 @@ when enableTicker:
         dangling:        ctx.layout.dangling,
         final:           ctx.layout.final,
         head:            ctx.layout.head,
+        headOk:          ctx.layout.headLocked,
         target:          ctx.target.consHead.number,
         targetOk:        ctx.target.final != 0,
 
@@ -89,7 +90,7 @@ else:
 
 # ---------
 
-proc setupDatabase*(ctx: BeaconCtxRef) =
+proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   ## Initalise database related stuff
 
   # Initialise up queues and lists
@@ -99,7 +100,7 @@ proc setupDatabase*(ctx: BeaconCtxRef) =
   ctx.blocksUnprocInit()
 
   # Load initial state from database if there is any
-  ctx.dbLoadSyncStateLayout()
+  ctx.dbLoadSyncStateLayout info
 
   # Set blocks batch import value for block import
   if ctx.pool.nBodiesBatch < nFetchBodiesRequest:

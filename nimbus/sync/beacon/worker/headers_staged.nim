@@ -20,9 +20,6 @@ import
   ./headers_staged/[headers, linked_hchain],
   ./headers_unproc
 
-logScope:
-  topics = "beacon headers"
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -231,14 +228,14 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
       break
 
     # Store headers on database
-    ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs)
+    ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs, info)
     ctx.layout.dangling = iv.minPt
     ctx.layout.danglingParent = qItem.data.parentHash
-    ctx.dbStoreSyncStateLayout()
+    ctx.dbStoreSyncStateLayout info
 
     result.inc # count records
 
-  trace info & ": staged records saved",
+  trace info & ": staged header lists saved",
     nStaged=ctx.hdr.staged.len, nSaved=result
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
