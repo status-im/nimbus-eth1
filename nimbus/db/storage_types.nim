@@ -70,11 +70,6 @@ func contractHashKey*(h: Hash32): DbKey {.inline.} =
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-func transitionStatusKey*(): DbKey =
-  # POW->POS Transition Status
-  result.data[0] = byte ord(transitionStatus)
-  result.dataEndPos = uint8 1
-
 func safeHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(safeHash)
   result.dataEndPos = uint8 1
