@@ -24,27 +24,27 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc orDefault(db: AristoDbRef): AristoDbRef =
+func orDefault(db: AristoDbRef): AristoDbRef =
   if db.isNil: AristoDbRef(top: LayerRef.init()) else: db
 
 # --------------------------
 
-proc toHex(w: VertexID): string =
+func toHex(w: VertexID): string =
   w.uint64.toHex
 
-proc toHexLsb(w: int8): string =
+func toHexLsb(w: int8): string =
   $"0123456789abcdef"[w and 15]
 
-proc sortedKeys(tab: Table): seq =
+func sortedKeys(tab: Table): seq =
   tab.keys.toSeq.sorted
 
-proc sortedKeys(pPrf: HashSet): seq =
+func sortedKeys(pPrf: HashSet): seq =
   pPrf.toSeq.sorted
 
-proc toPfx(indent: int; offset = 0): string =
+func toPfx(indent: int; offset = 0): string =
   if 0 < indent+offset: "\n" & " ".repeat(indent+offset) else: ""
 
-proc squeeze(s: string; hex = false; ignLen = false): string =
+func squeeze(s: string; hex = false; ignLen = false): string =
   ## For long strings print `begin..end` only
   if hex:
     let n = (s.len + 1) div 2
@@ -59,7 +59,7 @@ proc squeeze(s: string; hex = false; ignLen = false): string =
       result &= "..(" & $s.len & ")"
     result &= ".." & s[s.len-16 .. ^1]
 
-proc stripZeros(a: string; toExp = false): string =
+func stripZeros(a: string; toExp = false): string =
   if 0 < a.len:
     result = a.strip(leading=true, trailing=false, chars={'0'})
     if result.len == 0:
@@ -79,7 +79,7 @@ proc stripZeros(a: string; toExp = false): string =
 
 # ---------------------
 
-proc ppKeyOk(
+func ppKeyOk(
     db: AristoDbRef;
     key: HashKey;
     rvid: RootedVertexID;
@@ -92,7 +92,7 @@ proc ppKeyOk(
       return
     db.xMap[key] = rvid
 
-proc ppVid(vid: VertexID; pfx = true): string =
+func ppVid(vid: VertexID; pfx = true): string =
   if pfx:
     result = "$"
   if vid.isValid:
@@ -100,26 +100,16 @@ proc ppVid(vid: VertexID; pfx = true): string =
   else:
     result &= "ø"
 
-proc ppVid(sid: StorageID; pfx = true): string =
+func ppVid(sid: StorageID; pfx = true): string =
   if sid.isValid or not sid.vid.isValid:
     sid.vid.ppVid(pfx)
   else:
     (if pfx: "$" else: "") & "®" & sid.vid.ppVid(false)
 
-proc ppVid(rvid: RootedVertexID; pfx = true): string =
+func ppVid(rvid: RootedVertexID; pfx = true): string =
   if pfx:
     result = "$"
   result &= ppVid(rvid.root, pfx=false) & ":" & ppVid(rvid.vid, pfx=false)
-
-proc ppVids(vids: HashSet[RootedVertexID]): string =
-  result = "{"
-  if vids.len == 0:
-    result &= "}"
-  else:
-    for vid in vids.toSeq.sorted:
-      result &= ppVid(vid)
-      result &= ","
-    result[^1] = '}'
 
 func ppCodeHash(h: Hash32): string =
   result = "¢"
@@ -130,7 +120,7 @@ func ppCodeHash(h: Hash32): string =
   else:
     result &= h.data.toHex.squeeze(hex=true,ignLen=true)
 
-proc ppVidList(vLst: openArray[VertexID]): string =
+func ppVidList(vLst: openArray[VertexID]): string =
   result = "["
   if vLst.len <= 250:
     result &= vLst.mapIt(it.ppVid).join(",")
@@ -163,16 +153,16 @@ proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
       let tag = if key.len < 32: "[#" & $key.len & "]" else: ""
       result &= @(key.data).toHex.squeeze(hex=true,ignLen=true) & tag
 
-proc ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
+func ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
   let pfx = lty.path.to(NibblesBuf)
   "@" & lty.root.ppVid(pfx=false) & ":" &
     ($pfx).squeeze(hex=true,ignLen=(pfx.len==64))
 
-proc ppPathPfx(pfx: NibblesBuf): string =
+func ppPathPfx(pfx: NibblesBuf): string =
   let s = $pfx
   if s.len < 20: s else: s[0 .. 5] & ".." & s[s.len-8 .. ^1] & ":" & $s.len
 
-proc ppNibble(n: int8): string =
+func ppNibble(n: int8): string =
   if n < 0: "ø" elif n < 10: $n else: n.toHexLsb
 
 proc ppEthAccount(a: Account, db: AristoDbRef): string =
@@ -182,13 +172,13 @@ proc ppEthAccount(a: Account, db: AristoDbRef): string =
   result &= a.codeHash.ppCodeHash & ","
   result &= a.storageRoot.to(HashKey).ppKey(db) & ")"
 
-proc ppAriAccount(a: AristoAccount): string =
+func ppAriAccount(a: AristoAccount): string =
   result = "("
   result &= ($a.nonce).stripZeros(toExp=true) & ","
   result &= ($a.balance).stripZeros(toExp=true) & ","
   result &= a.codeHash.ppCodeHash & ")"
 
-proc ppPayload(p: LeafPayload, db: AristoDbRef): string =
+func ppPayload(p: LeafPayload, db: AristoDbRef): string =
   case p.pType:
   of RawData:
     result &= p.rawBlob.toHex.squeeze(hex=true)
@@ -197,7 +187,7 @@ proc ppPayload(p: LeafPayload, db: AristoDbRef): string =
   of StoData:
     result = ($p.stoData).squeeze
 
-proc ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
+func ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
   if not nd.isValid:
     result = "ø"
   else:
@@ -263,7 +253,7 @@ proc ppNode(
     result &= ")"
 
 
-proc ppXTab[T: VertexRef|NodeRef](
+func ppXTab[T: VertexRef|NodeRef](
     tab: Table[RootedVertexID,T];
     db: AristoDbRef;
     indent = 4;
@@ -494,7 +484,7 @@ proc ppLayer(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc pp*(w: Hash32; codeHashOk: bool): string =
+func pp*(w: Hash32; codeHashOk: bool): string =
   if codeHashOk:
     w.ppCodeHash
   elif w == EMPTY_ROOT_HASH:
@@ -504,7 +494,7 @@ proc pp*(w: Hash32; codeHashOk: bool): string =
   else:
     w.data.toHex.squeeze(hex=true,ignLen=true)
 
-proc pp*(n: NibblesBuf): string =
+func pp*(n: NibblesBuf): string =
   n.ppPathPfx()
 
 proc pp*(w: HashKey; db = AristoDbRef(nil)): string =
@@ -516,34 +506,34 @@ proc pp*(w: Hash32; db = AristoDbRef(nil)): string =
 proc pp*(w: openArray[HashKey]; db = AristoDbRef(nil)): string =
   "[" & @w.mapIt(it.ppKey(db.orDefault)).join(",") & "]"
 
-proc pp*(lty: LeafTie, db = AristoDbRef(nil)): string =
+func pp*(lty: LeafTie, db = AristoDbRef(nil)): string =
   lty.ppLeafTie(db.orDefault)
 
 proc pp*(a: Account, db = AristoDbRef(nil)): string =
   a.ppEthAccount(db.orDefault)
 
-proc pp*(vid: VertexID): string =
+func pp*(vid: VertexID): string =
   vid.ppVid
 
-proc pp*(rvid: RootedVertexID): string =
+func pp*(rvid: RootedVertexID): string =
   rvid.ppVid
 
-proc pp*(vLst: openArray[VertexID]): string =
+func pp*(vLst: openArray[VertexID]): string =
   vLst.ppVidList
 
-proc pp*(p: LeafPayload, db = AristoDbRef(nil)): string =
+func pp*(p: LeafPayload, db = AristoDbRef(nil)): string =
   p.ppPayload(db.orDefault)
 
-proc pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
+func pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
   nd.ppVtx(db.orDefault, default(RootedVertexID))
 
 proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
   nd.ppNode(db.orDefault, default(RootedVertexID))
 
-proc pp*(e: (VertexID,AristoError)): string =
+func pp*(e: (VertexID,AristoError)): string =
   "(" & e[0].pp & "," & $e[1] & ")"
 
-proc pp*[T](rc: Result[T,(VertexID,AristoError)]): string =
+func pp*[T](rc: Result[T,(VertexID,AristoError)]): string =
   if rc.isOk:
     result = "ok("
     when T isnot void:
@@ -552,7 +542,7 @@ proc pp*[T](rc: Result[T,(VertexID,AristoError)]): string =
   else:
     result = "err(" & rc.error.pp & ")"
 
-proc pp*(
+func pp*(
     sTab: Table[RootedVertexID,VertexRef];
     db = AristoDbRef(nil);
     indent = 4;
@@ -587,7 +577,7 @@ proc pp*(hike: Hike; db = AristoDbRef(nil); indent = 4): string =
   result &= pfx & "(" & hike.tail.ppPathPfx & ")"
   result &= "]"
 
-proc pp*[T: NodeRef|VertexRef|HashKey](
+func pp*[T: NodeRef|VertexRef|HashKey](
     q: seq[(HashKey,T)];
     db = AristoDbRef(nil);
     indent = 4;
@@ -601,7 +591,7 @@ proc pp*[T: NodeRef|VertexRef|HashKey](
   "{" & q.mapIt("(" & it[0].ppKey(db) & "," & it[1].ppT & ")")
          .join("," & indent.toPfx(1)) & "}"
 
-proc pp*[T: NodeRef|VertexRef|HashKey](
+func pp*[T: NodeRef|VertexRef|HashKey](
     t: Table[HashKey,T];
     db = AristoDbRef(nil);
     indent = 4;
@@ -648,7 +638,7 @@ proc pp*[T: HashKey](
   "{" & flat.mapIt("(" & it[0].ppT & "," & it[1].pp & ")")
             .join("," & indent.toPfx(1)) & "}"
 
-proc pp*[T: HashKey](
+func pp*[T: HashKey](
     t: TableRef[HashKey,T];
     db = AristoDbRef(nil);
     indent = 4;
@@ -664,13 +654,13 @@ proc pp*(
 
 # ---------------------
 
-proc pp*(tx: AristoTxRef): string =
+func pp*(tx: AristoTxRef): string =
   result = "(uid=" & $tx.txUid & ",level=" & $tx.level
   if not tx.parent.isNil:
     result &= ", par=" & $tx.parent.txUid
   result &= ")"
 
-proc pp*(wp: VidVtxPair; db: AristoDbRef): string =
+func pp*(wp: VidVtxPair; db: AristoDbRef): string =
   "(" & wp.vid.pp & "," & wp.vtx.pp(db) & ")"
 
 

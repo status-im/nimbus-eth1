@@ -179,7 +179,6 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
       let
         rVid = proof.hike.root
         root = ps.db.getKey((rVid,rVid)).to(Hash32)
-        chain = proof.chain
 
       block:
         let rc = proof.chain.partUntwigPath(root, path)

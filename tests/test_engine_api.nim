@@ -108,10 +108,11 @@ proc runTest(env: TestEnv): Result[void, string] =
     fcuRes = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
     payload = ? client.getPayload(fcuRes.payloadId.get, Version.V1)
     npRes = ? client.newPayload(Version.V1, payload.executionPayload)
-    res = ? client.forkchoiceUpdated(Version.V1, ForkchoiceStateV1(
-      headBlockHash: npRes.latestValidHash.get
-    ))
-    bn = ? client.blockNumber()
+
+  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceStateV1(
+    headBlockHash: npRes.latestValidHash.get
+  ))
+  let bn = ? client.blockNumber()
 
   if bn != 1:
     return err("Expect returned block number: 1, got: " & $bn)
