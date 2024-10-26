@@ -170,7 +170,7 @@ proc init(com         : CommonRef,
           config      : ChainConfig,
           genesis     : Genesis,
           pruneHistory: bool,
-            ) {.gcsafe, raises: [CatchableError].} =
+            ) =
 
   config.daoCheck()
 
@@ -196,8 +196,7 @@ proc init(com         : CommonRef,
 
     # Must not overwrite the global state on the single state DB
     if not db.getBlockHeader(0.BlockNumber, com.genesisHeader):
-      com.genesisHeader = toGenesisHeader(genesis,
-        fork, com.db)
+      com.genesisHeader = toGenesisHeader(genesis, fork, com.db)
 
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
@@ -228,8 +227,7 @@ proc new*(
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     pruneHistory = false;
-      ): CommonRef
-      {.gcsafe, raises: [CatchableError].} =
+      ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
   ## empty data base also initialized with genesis block
@@ -247,8 +245,7 @@ proc new*(
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     pruneHistory = false;
-      ): CommonRef
-      {.gcsafe, raises: [CatchableError].} =
+      ): CommonRef =
 
   ## There is no genesis data present
   ## Mainly used for testing without genesis

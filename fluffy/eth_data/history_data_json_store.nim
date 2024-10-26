@@ -156,10 +156,7 @@ proc getGenesisHeader*(id: NetworkId = MainNet): Header =
       debugEcho getCurrentException()[]
       raise (ref Defect)(msg: "Network parameters should be valid")
 
-  try:
-    toGenesisHeader(params)
-  except RlpError, CatchableError:
-    raise (ref Defect)(msg: "Genesis should be valid")
+  toGenesisHeader(params)
 
 # Reading JSON Portal content and content keys
 
