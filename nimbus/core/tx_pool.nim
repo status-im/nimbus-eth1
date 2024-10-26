@@ -460,15 +460,16 @@ func com*(xp: TxPoolRef): CommonRef =
   ## Getter
   xp.vmState.com
 
-type EthBlockAndBlobsBundle* = object
+type AssembledBlock* = object
   blk*: EthBlock
   blobsBundle*: Opt[BlobsBundle]
   blockValue*: UInt256
+  executionRequests*: Opt[array[3, seq[byte]]]
 
 proc assembleBlock*(
     xp: TxPoolRef,
     someBaseFee: bool = false
-): Result[EthBlockAndBlobsBundle, string] {.gcsafe,raises: [CatchableError].} =
+): Result[AssembledBlock, string] {.gcsafe,raises: [CatchableError].} =
   ## Getter, retrieves a packed block ready for mining and signing depending
   ## on the internally cached block chain head, the txs in the pool and some
   ## tuning parameters. The following block header fields are left
@@ -520,10 +521,17 @@ proc assembleBlock*(
     # make sure baseFee always has something
     blk.header.baseFeePerGas = Opt.some(blk.header.baseFeePerGas.get(0.u256))
 
-  ok EthBlockAndBlobsBundle(
+  let executionRequestsOpt =
+    if com.isPragueOrLater(blk.header.timestamp):
+      Opt.some(pst.executionRequests)
+    else:
+      Opt.none(array[3, seq[byte]])
+
+  ok AssembledBlock(
     blk: blk,
     blobsBundle: blobsBundleOpt,
-    blockValue: pst.blockValue)
+    blockValue: pst.blockValue,
+    executionRequests: executionRequestsOpt)
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {

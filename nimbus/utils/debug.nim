@@ -56,6 +56,8 @@ proc debug*(h: Header): string =
     result.add "excessBlobGas  : " & $h.excessBlobGas.get() & "\n"
   if h.parentBeaconBlockRoot.isSome:
     result.add "beaconRoot     : " & $h.parentBeaconBlockRoot.get() & "\n"
+  if h.requestsHash.isSome:
+    result.add "requestsHash   : " & $h.requestsHash.get() & "\n"
   result.add "blockHash      : " & $blockHash(h) & "\n"
 
 proc dumpAccounts*(vmState: BaseVMState): JsonNode =

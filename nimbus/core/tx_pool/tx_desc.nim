@@ -122,6 +122,7 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
     difficulty   : UInt256.zero(),
     coinbase     : pos.feeRecipient,
     excessBlobGas: calcExcessBlobGas(parent),
+    parentHash   : parent.blockHash,
   )
 
   BaseVMState.new(

@@ -34,58 +34,54 @@ func validateVersionedHashed(payload: ExecutionPayload,
       return false
   true
 
-template validateVersion(com, timestamp, version, apiVersion) =
+template validateVersion(com, timestamp, payloadVersion, apiVersion) =
   if apiVersion == Version.V4:
     if not com.isPragueOrLater(timestamp):
       raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
 
   if com.isPragueOrLater(timestamp):
-    if version != Version.V3:
+    if payloadVersion != Version.V3:
       raise invalidParams("if timestamp is Prague or later, " &
-        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $version)
+        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
 
   if apiVersion == Version.V3:
     if not com.isCancunOrLater(timestamp):
       raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
 
   if com.isCancunOrLater(timestamp):
-    if version != Version.V3:
+    if payloadVersion != Version.V3:
       raise invalidParams("if timestamp is Cancun or later, " &
-        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $version)
+        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
 
   elif com.isShanghaiOrLater(timestamp):
-    if version != Version.V2:
+    if payloadVersion != Version.V2:
       raise invalidParams("if timestamp is Shanghai or later, " &
-        "payload must be ExecutionPayloadV2, got ExecutionPayload" & $version)
+        "payload must be ExecutionPayloadV2, got ExecutionPayload" & $payloadVersion)
 
-  elif version != Version.V1:
+  elif payloadVersion != Version.V1:
     raise invalidParams("if timestamp is earlier than Shanghai, " &
-      "payload must be ExecutionPayloadV1, got ExecutionPayload" & $version)
+      "payload must be ExecutionPayloadV1, got ExecutionPayload" & $payloadVersion)
 
-  if apiVersion >= Version.V3:
-    if version != apiVersion:
+  if apiVersion == Version.V3 or apiVersion == Version.V4:
+    # both newPayloadV3 and newPayloadV4 expect ExecutionPayloadV3
+    if payloadVersion != Version.V3:
       raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayload" & $apiVersion &
-      " but got ExecutionPayload" & $version)
+      " expect ExecutionPayload3" &
+      " but got ExecutionPayload" & $payloadVersion)
 
-template validatePayload(apiVersion, version, payload, executionRequests) =
-  if version >= Version.V2:
+template validatePayload(apiVersion, payloadVersion, payload) =
+  if payloadVersion >= Version.V2:
     if payload.withdrawals.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "withdrawals is expected from execution payload")
 
-  if apiVersion >= Version.V3 or version >= Version.V3:
+  if apiVersion >= Version.V3 or payloadVersion >= Version.V3:
     if payload.blobGasUsed.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "blobGasUsed is expected from execution payload")
     if payload.excessBlobGas.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
-
-  if apiVersion >= Version.V4 or version >= Version.V4:
-    if executionRequests.isNone:
-      raise invalidParams("newPayload" & $apiVersion &
-        "executionRequests is expected from execution payload")
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
@@ -103,6 +99,11 @@ proc newPayload*(ben: BeaconEngineRef,
     if beaconRoot.isNone:
       raise invalidParams("newPayloadV3 expect beaconRoot but got none")
 
+  if apiVersion >= Version.V4:
+    if executionRequests.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": executionRequests is expected from execution payload")
+
   let
     com = ben.com
     db  = com.db
@@ -110,7 +111,7 @@ proc newPayload*(ben: BeaconEngineRef,
     version = payload.version
     requestsHash = calcRequestsHash(executionRequests)
 
-  validatePayload(apiVersion, version, payload, executionRequests)
+  validatePayload(apiVersion, version, payload)
   validateVersion(com, timestamp, version, apiVersion)
 
   var blk = ethBlock(payload, beaconRoot, requestsHash)

@@ -26,6 +26,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../eip4844,
+  ../eip6110,
   "."/[tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
   tx_tasks/[tx_bucket]
 
@@ -42,6 +43,9 @@ type
     stateRoot: Hash32
     receiptsRoot: Hash32
     logsBloom: Bloom
+    withdrawalReqs: seq[byte]
+    consolidationReqs: seq[byte]
+    depositReqs: seq[byte]
 
   GrabResult = enum
     FetchNextItem
@@ -187,6 +191,11 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string]
     xp.vmState.processBeaconBlockRoot(beaconRoot).isOkOr:
       return err(error)
 
+  # EIP-2935
+  if xp.nextFork >= FkPrague:
+    xp.vmState.processParentBlockHash(xp.vmState.blockCtx.parentHash).isOkOr:
+      return err(error)
+
   ok(packer)
 
 proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
@@ -203,7 +212,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
   if pst.numBlobPerBlock + item.tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
     return ContinueWithNextAccount
   pst.numBlobPerBlock += item.tx.versionedHashes.len
-  
+
   let blobGasUsed = item.tx.getTotalBlobGas
   if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
     return ContinueWithNextAccount
@@ -245,7 +254,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
 
   FetchNextItem
 
-proc vmExecCommit(pst: var TxPacker) =
+proc vmExecCommit(pst: var TxPacker): Result[void, string] =
   let
     vmState = pst.vmState
     stateDB = vmState.stateDB
@@ -254,6 +263,12 @@ proc vmExecCommit(pst: var TxPacker) =
   if vmState.fork >= FkShanghai:
     for withdrawal in vmState.com.pos.withdrawals:
       stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
+
+  # EIP-6110, EIP-7002, EIP-7251
+  if vmState.fork >= FkPrague:
+    pst.withdrawalReqs = processDequeueWithdrawalRequests(vmState)
+    pst.consolidationReqs = processDequeueConsolidationRequests(vmState)
+    pst.depositReqs = ?parseDepositLogs(vmState.allLogs)
 
   # Finish up, then vmState.stateDB.rootHash may be accessed
   stateDB.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
@@ -265,7 +280,7 @@ proc vmExecCommit(pst: var TxPacker) =
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
   pst.stateRoot = vmState.stateDB.rootHash
-
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -293,7 +308,7 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
           if rc == ContinueWithNextAccount:
             break account # continue with next account
 
-  pst.vmExecCommit()
+  ?pst.vmExecCommit()
   ok(pst)
   # Block chain will roll back automatically
 
@@ -305,7 +320,7 @@ proc assembleHeader*(pst: TxPacker): Header =
     pos = com.pos
 
   result = Header(
-    parentHash:    vmState.parent.blockHash,
+    parentHash:    vmState.blockCtx.parentHash,
     ommersHash:    EMPTY_UNCLE_HASH,
     coinbase:      pos.feeRecipient,
     stateRoot:     pst.stateRoot,
@@ -330,8 +345,24 @@ proc assembleHeader*(pst: TxPacker): Header =
     result.blobGasUsed = Opt.some vmState.blobGasUsed
     result.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
+  if com.isPragueOrLater(pos.timestamp):
+    let requestsHash = calcRequestsHashInsertType(pst.depositReqs,
+      pst.withdrawalReqs, pst.consolidationReqs)
+    result.requestsHash = Opt.some(requestsHash)
+
 func blockValue*(pst: TxPacker): UInt256 =
   pst.blockValue
+
+func executionRequests*(pst: TxPacker): array[3, seq[byte]] =
+  result[0] = newSeqOfCap[byte](pst.depositReqs.len+1)
+  result[0].add 0x00.byte
+  result[0].add pst.depositReqs
+  result[1] = newSeqOfCap[byte](pst.withdrawalReqs.len+1)
+  result[1].add 0x01.byte
+  result[1].add pst.withdrawalReqs
+  result[2] = newSeqOfCap[byte](pst.consolidationReqs.len+1)
+  result[2].add 0x02.byte
+  result[2].add pst.consolidationReqs
 
 # ------------------------------------------------------------------------------
 # End
