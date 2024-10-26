@@ -18,6 +18,7 @@ import
     net
   ],
   pkg/[
+    chronos/transports/common,
     chronicles,
     confutils,
     confutils/defs,
@@ -85,12 +86,15 @@ const
   defaultPort              = 30303
   defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
-  defaultEngineApiPort     = 8550
-  defaultListenAddress      = (static parseIpAddress("0.0.0.0"))
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#jwt-specifications
+  defaultEngineApiPort     = 8551
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
-  defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
+
+let
+  defaultListenAddress      = getAutoAddress(Port(0)).toIpAddress()
+  defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
 
 # `when` around an option doesn't work with confutils; it fails to compile.
 # Workaround that by setting the `ignore` pragma on EVMC-specific options.
