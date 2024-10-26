@@ -282,5 +282,5 @@ when isMainModule:
   setLogLevel(conf.logLevel)
 
   case conf.cmd
-  of NRpcCmd.`external_sync`:
+  of NRpcCmd.`sync`:
     waitFor syncToEngineApi(conf)
