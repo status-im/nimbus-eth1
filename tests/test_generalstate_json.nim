@@ -121,7 +121,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   coinbaseStateClearing(vmState, miner)
 
   block post:
-    let obtainedHash = vmState.readOnlyStateDB.rootHash
+    let obtainedHash = vmState.readOnlyStateDB.getStateRoot()
     check obtainedHash == ctx.expectedHash
     let logEntries = vmState.getAndClearLogEntries()
     let actualLogsHash = rlpHash(logEntries)

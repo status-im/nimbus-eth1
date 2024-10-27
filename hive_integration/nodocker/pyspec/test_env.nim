@@ -40,12 +40,12 @@ proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
     memDB = newCoreDbRef DefaultDbMemory
     genesisHeader = node.genesisHeader
     com = CommonRef.new(memDB, conf)
-    stateDB = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+    stateDB = LedgerRef.init(memDB)
     chain = newForkedChain(com, genesisHeader)
 
   setupStateDB(node["pre"], stateDB)
   stateDB.persist()
-  doAssert stateDB.rootHash == genesisHeader.stateRoot
+  doAssert stateDB.getStateRoot == genesisHeader.stateRoot
 
   doAssert com.db.persistHeader(genesisHeader,
               com.proofOfStake(genesisHeader))

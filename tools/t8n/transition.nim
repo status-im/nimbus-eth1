@@ -323,14 +323,14 @@ proc exec(ctx: TransContext,
     consolidationReqs: seq[byte]
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
-    # Execute EIP-7002 and EIP-7251 before calculating rootHash
+    # Execute EIP-7002 and EIP-7251 before calculating stateRoot
     withdrawalReqs = processDequeueWithdrawalRequests(vmState)
     consolidationReqs = processDequeueConsolidationRequests(vmState)
 
   let stateDB = vmState.stateDB
   stateDB.postState(result.alloc)
   result.result = ExecutionResult(
-    stateRoot   : stateDB.rootHash,
+    stateRoot   : stateDB.getStateRoot(),
     txRoot      : includedTx.calcTxRoot,
     receiptsRoot: calcReceiptsRoot(vmState.receipts),
     logsHash    : calcLogsHash(vmState.receipts),

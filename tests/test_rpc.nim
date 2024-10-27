@@ -170,13 +170,13 @@ proc setupEnv(com: CommonRef, signer, ks2: Address, ctx: EthContext): TestEnv =
     timeStamp   = date.toTime.toUnix.EthTime
     difficulty  = com.calcDifficulty(timeStamp, parent)
 
-  # call persist() before we get the rootHash
+  # call persist() before we get the stateRoot
   vmState.stateDB.persist()
 
   var header = Header(
     parentHash  : parentHash,
     #coinbase*:      Address
-    stateRoot   : vmState.stateDB.rootHash,
+    stateRoot   : vmState.stateDB.getStateRoot(),
     txRoot      : txRoot,
     receiptsRoot : receiptsRoot,
     bloom       : createBloom(vmState.receipts),

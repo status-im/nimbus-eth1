@@ -77,7 +77,7 @@ proc setupEthRpc*(
   proc getStateDB(header:Header): LedgerRef =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
-    LedgerRef.init(chainDB, header.stateRoot)
+    LedgerRef.init(chainDB)
 
   proc stateDBFromTag(quantityTag: BlockTag, readOnly = true): LedgerRef
       {.gcsafe, raises: [CatchableError].} =

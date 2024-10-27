@@ -61,7 +61,6 @@ type
     LdgPersistFn               = "persist"
     LdgRipemdSpecialFn         = "ripemdSpecial"
     LdgRollbackFn              = "rollback"
-    LdgRootHashFn              = "rootHash"
     LdgSafeDisposeFn           = "safeDispose"
     LdgSelfDestruct6780Fn      = "selfDestruct6780"
     LdgSelfDestructFn          = "selfDestruct"

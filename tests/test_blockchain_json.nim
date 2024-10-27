@@ -59,7 +59,7 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.pre = node["pre"]
 
 proc rootExists(db: CoreDbRef; root: Hash32): bool =
-  let state = db.ctx.getAccounts().state(updateOk=true).valueOr:
+  let state = db.ctx.getAccounts().stateRoot(updateOk=true).valueOr:
     return false
   state == root
 
@@ -67,7 +67,7 @@ proc executeCase(node: JsonNode): bool =
   let
     env     = parseEnv(node)
     memDB   = newCoreDbRef DefaultDbMemory
-    stateDB = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+    stateDB = LedgerRef.init(memDB)
     config  = getChainConfig(env.network)
     com     = CommonRef.new(memDB, config)
 

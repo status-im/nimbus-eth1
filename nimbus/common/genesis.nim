@@ -32,7 +32,7 @@ proc toGenesisHeader*(
   ##
   ## The function returns the `Genesis` block header.
   ##
-  let ac = LedgerRef.init(db, EMPTY_ROOT_HASH)
+  let ac = LedgerRef.init(db)
 
   for address, account in g.alloc:
     ac.setNonce(address, account.nonce)
@@ -52,7 +52,7 @@ proc toGenesisHeader*(
     difficulty: g.difficulty,
     mixHash: g.mixHash,
     coinbase: g.coinbase,
-    stateRoot: ac.state(),
+    stateRoot: ac.getStateRoot(),
     parentHash: GENESIS_PARENT_HASH,
     transactionsRoot: EMPTY_ROOT_HASH,
     receiptsRoot: EMPTY_ROOT_HASH,

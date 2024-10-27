@@ -69,7 +69,7 @@ proc setupStateDB(genAccounts: GenesisAlloc, stateDB: LedgerRef): Hash32 =
 
   stateDB.persist()
 
-  stateDB.rootHash
+  stateDB.getStateRoot()
 
 proc checkProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
@@ -129,9 +129,9 @@ proc getProofJsonMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           coreDb = newCoreDbRef(DefaultDbMemory)
-          accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
+          accountsCache = LedgerRef.init(coreDb)
           stateRootHash = setupStateDB(accounts, accountsCache)
-          accountDb = LedgerRef.init(coreDb, stateRootHash)
+          accountDb = LedgerRef.init(coreDb)
 
         checkProofsForExistingLeafs(accounts, accountDb, stateRootHash)
 
@@ -141,9 +141,9 @@ proc getProofJsonMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           coreDb = newCoreDbRef(DefaultDbMemory)
-          accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
+          accountsCache = LedgerRef.init(coreDb)
           stateRootHash = setupStateDB(accounts, accountsCache)
-          accountDb = LedgerRef.init(coreDb, stateRootHash)
+          accountDb = LedgerRef.init(coreDb)
 
         checkProofsForMissingLeafs(accounts, accountDb, stateRootHash)
 

@@ -196,27 +196,27 @@ proc traceTransactionImpl(
       before.captureAccount(stateDb, recipient, recipientName)
       before.captureAccount(stateDb, miner, minerName)
       stateDb.persist()
-      stateDiff["beforeRoot"] = %(stateDb.rootHash.toHex)
-      discard com.db.ctx.getAccounts.state(updateOk=true) # lazy hashing!
-      stateCtx = CaptCtxRef.init(com, stateDb.rootHash)
+      stateDiff["beforeRoot"] = %(stateDb.getStateRoot().toHex)
+      discard com.db.ctx.getAccounts.stateRoot(updateOk=true) # lazy hashing!
+      stateCtx = CaptCtxRef.init(com, stateDb.getStateRoot())
 
     let rc = vmState.processTransaction(tx, sender, header)
     gasUsed = if rc.isOk: rc.value else: 0
 
     if idx.uint64 == txIndex:
-      discard com.db.ctx.getAccounts.state(updateOk=true) # lazy hashing!
+      discard com.db.ctx.getAccounts.stateRoot(updateOk=true) # lazy hashing!
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, miner, minerName)
       tracerInst.removeTracedAccounts(sender, recipient, miner)
       stateDb.persist()
-      stateDiff["afterRoot"] = %(stateDb.rootHash.toHex)
+      stateDiff["afterRoot"] = %(stateDb.getStateRoot().toHex)
       break
 
   # internal transactions:
   let
     cx = activate stateCtx
-    ldgBefore = LedgerRef.init(com.db, cx.root, storeSlotHash = true)
+    ldgBefore = LedgerRef.init(com.db, storeSlotHash = true)
   defer: cx.release()
 
   for idx, acc in tracedAccountsPairs(tracerInst):
@@ -260,7 +260,7 @@ proc dumpBlockStateImpl(
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash = true)
+    stateBefore = LedgerRef.init(com.db, storeSlotHash = true)
 
   for idx, tx in blk.transactions:
     let sender = tx.recoverSender().expect("valid signature")

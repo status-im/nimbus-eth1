@@ -274,9 +274,9 @@ proc setTransientStorage*(
   ldg.ac.setTransientStorage(eAddr, slot, val)
   ldg.ifTrackApi: debug apiTxt, api, elapsed, eAddr=($$eAddr), slot, val
 
-proc state*(ldg: LedgerRef): Hash32 =
+proc getStateRoot*(ldg: LedgerRef): Hash32 =
   ldg.beginTrackApi LdgStateFn
-  result = ldg.ac.state()
+  result = ldg.ac.getStateRoot()
   ldg.ifTrackApi: debug apiTxt, api, elapsed, result
 
 proc subBalance*(ldg: LedgerRef, eAddr: Address, delta: UInt256) =
@@ -288,9 +288,6 @@ proc getAccessList*(ldg: LedgerRef): AccessList =
   ldg.beginTrackApi LdgGetAccessListFn
   result = ldg.ac.getAccessList()
   ldg.ifTrackApi: debug apiTxt, api, elapsed
-
-proc rootHash*(ldg: LedgerRef): Hash32 =
-  ldg.state()
 
 proc getEthAccount*(ldg: LedgerRef, eAddr: Address): Account =
   ldg.beginTrackApi LdgGetAthAccountFn
@@ -307,7 +304,7 @@ proc getStorageProof*(ldg: LedgerRef, eAddr: Address, slots: openArray[UInt256])
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
 
-proc rootHash*(db: ReadOnlyStateDB): Hash32 {.borrow.}
+proc getStateRoot*(db: ReadOnlyStateDB): Hash32 {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: Address): Hash32 = getCodeHash(distinctBase db, address)
 proc getStorageRoot*(db: ReadOnlyStateDB, address: Address): Hash32 = getStorageRoot(distinctBase db, address)
 proc getBalance*(db: ReadOnlyStateDB, address: Address): UInt256 = getBalance(distinctBase db, address)

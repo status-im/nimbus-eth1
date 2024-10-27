@@ -11,7 +11,7 @@ import
   std/[strutils],
   stew/byteutils, stint,
   results,
-  eth/common/transaction_utils, 
+  eth/common/transaction_utils,
   chronos,
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
@@ -23,7 +23,7 @@ import
   ../core/[tx_pool, tx_pool/tx_item],
   ../common/common,
   web3/eth_api_types
- 
+
 from eth/p2p import EthereumNode
 export httpserver
 
@@ -146,10 +146,11 @@ proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
     wd: wd
   )
 
-proc getStateDB(com: CommonRef, header: Header): LedgerRef =
+proc getStateDB(com: CommonRef, header: Header): LedgerRef  {.deprecated: "LedgerRef does not support loading a particular state".} =
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
-  LedgerRef.init(com.db, header.stateRoot)
+  # TODO the ledger initialized here refers to the base, not the given header!
+  LedgerRef.init(com.db)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
   try:

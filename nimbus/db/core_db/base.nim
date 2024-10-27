@@ -655,7 +655,7 @@ proc hasPath*(
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash32] =
+proc stateRoot*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
   ## column (if available.)
   ##
@@ -664,7 +664,7 @@ proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash32] =
   ##
   acc.setTrackNewApi AccStateFn
   result = block:
-    let rc = acc.call(fetchAccountState, acc.mpt, updateOk)
+    let rc = acc.call(fetchAccountStateRoot, acc.mpt, updateOk)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -786,7 +786,7 @@ proc slotState*(
   ##
   acc.setTrackNewApi AccSlotStateFn
   result = block:
-    let rc = acc.call(fetchStorageState, acc.mpt, accPath, updateOk)
+    let rc = acc.call(fetchStorageRoot, acc.mpt, accPath, updateOk)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -839,7 +839,7 @@ proc recast*(
   ## hash (see `slotState()` above) is currently unavailable.
   ##
   acc.setTrackNewApi AccRecastFn
-  let rc = acc.call(fetchStorageState, acc.mpt, accPath, updateOk)
+  let rc = acc.call(fetchStorageRoot, acc.mpt, accPath, updateOk)
   result = block:
     if rc.isOk:
       ok Account(

@@ -150,8 +150,7 @@ proc resetCoreDbAccount(ac: AccountsLedgerRef, acc: AccountRef) =
   acc.statement.codeHash = emptyEthAccount.codeHash
 
 # The AccountsLedgerRef is modeled after TrieDatabase for it's transaction style
-proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
-           root: Hash32, storeSlotHash: bool): AccountsLedgerRef =
+proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef, storeSlotHash: bool): AccountsLedgerRef =
   new result
   result.ledger = db.ctx.getAccounts()
   result.kvt = db.ctx.getKvt()
@@ -164,14 +163,13 @@ proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef,
 proc init*(x: typedesc[AccountsLedgerRef], db: CoreDbRef): AccountsLedgerRef =
   init(x, db, EMPTY_ROOT_HASH)
 
-# Renamed `rootHash()` => `state()`
-proc state*(ac: AccountsLedgerRef): Hash32 =
+proc getStateRoot*(ac: AccountsLedgerRef): Hash32 =
   const info = "state(): "
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
-  ac.ledger.state(updateOk=true).valueOr:
+  ac.ledger.stateRoot(updateOk=true).valueOr:
     raiseAssert info & $$error
 
 proc isTopLevelClean*(ac: AccountsLedgerRef): bool =
@@ -897,7 +895,7 @@ proc getStorageProof*(ac: AccountsLedgerRef, address: Address, slots: openArray[
 
   storageProof
 
-proc state*(db: ReadOnlyStateDB): Hash32 {.borrow.}
+proc getStateRoot*(db: ReadOnlyStateDB): Hash32 {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: Address): Hash32 = getCodeHash(distinctBase db, address)
 proc getStorageRoot*(db: ReadOnlyStateDB, address: Address): Hash32 = getStorageRoot(distinctBase db, address)
 proc getBalance*(db: ReadOnlyStateDB, address: Address): UInt256 = getBalance(distinctBase db, address)

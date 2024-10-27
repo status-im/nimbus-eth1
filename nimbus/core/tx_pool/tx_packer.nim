@@ -144,8 +144,8 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt)
   pst.blockValue += reward
 
   # Save accounts via persist() is not needed unless the fork is smaller
-  # than `FkByzantium` in which case, the `rootHash()` function is called
-  # by `makeReceipt()`. As the `rootHash()` function asserts unconditionally
+  # than `FkByzantium` in which case, the `getStateRoot()` function is called
+  # by `makeReceipt()`. As the `getStateRoot()` function asserts unconditionally
   # that the account cache has been saved, the `persist()` call is
   # obligatory here.
   if vmState.fork < FkByzantium:
@@ -270,7 +270,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
     pst.consolidationReqs = processDequeueConsolidationRequests(vmState)
     pst.depositReqs = ?parseDepositLogs(vmState.allLogs)
 
-  # Finish up, then vmState.stateDB.rootHash may be accessed
+  # Finish up, then vmState.stateDB.stateRoot may be accessed
   stateDB.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Update flexi-array, set proper length
@@ -279,7 +279,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
 
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
-  pst.stateRoot = vmState.stateDB.rootHash
+  pst.stateRoot = vmState.stateDB.getStateRoot()
   ok()
 
 # ------------------------------------------------------------------------------
