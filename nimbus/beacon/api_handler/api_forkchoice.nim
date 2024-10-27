@@ -196,12 +196,22 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       bundle.blobsBundle,
       bundle.executionRequests)
 
-    info "Created payload for sealing",
-      id = id.toHex,
-      hash = bundle.executionPayload.blockHash.short,
+    info "Created payload for block proposal",
       number = bundle.executionPayload.blockNumber,
-      attr = attrs
+      hash = bundle.executionPayload.blockHash.short,
+      txs = bundle.executionPayload.transactions.len,
+      gasUsed = bundle.executionPayload.gasUsed,
+      blobGasUsed = bundle.executionPayload.blobGasUsed.get(Quantity(0)),
+      id = id.toHex,
+      attrs = attrs
 
     return validFCU(Opt.some(id), blockHash)
+
+  info "Fork choice updated",
+    requested = header.number,
+    hash = blockHash.short,
+    head = ben.chain.latestNumber,
+    base = ben.chain.baseNumber,
+    baseHash = ben.chain.baseHash.short
 
   return validFCU(Opt.none(Bytes8), blockHash)
