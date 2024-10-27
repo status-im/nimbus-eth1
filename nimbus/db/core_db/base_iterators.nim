@@ -40,7 +40,7 @@ when CoreDbEnableApiTracking:
 template valueOrApiError[U,V](rc: Result[U,V]; info: static[string]): U =
   rc.valueOr: raise (ref CoreDbApiError)(msg: info)
 
-template dbType(dsc: CoreDbKvtRef | CoreDbMptRef | CoreDbAccRef): CoreDbType =
+template dbType(dsc: CoreDbKvtRef | CoreDbAccRef): CoreDbType =
   dsc.distinctBase.parent.dbType
 
 # ---------------
@@ -59,7 +59,7 @@ template call(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
 
 # ---------------
 
-template mpt(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
+template mpt(dsc: CoreDbAccRef): AristoDbRef =
   dsc.distinctBase.mpt
 
 template call(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
@@ -69,7 +69,7 @@ template call(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
     fn(args)
 
 template call(
-    acc: CoreDbAccRef | CoreDbMptRef;
+    acc: CoreDbAccRef;
     fn: untyped;
     args: varArgs[untyped];
       ): untyped =
@@ -98,21 +98,7 @@ iterator pairs*(kvt: CoreDbKvtRef): (seq[byte], seq[byte]) {.apiRaise.} =
     raiseAssert: "Unsupported database type: " & $kvt.dbType
   kvt.ifTrackNewApi: debug logTxt, api, elapsed
 
-iterator pairs*(mpt: CoreDbMptRef): (seq[byte], seq[byte]) =
-  ## Trie traversal, only supported for `CoreDbMptRef`
-  ##
-  mpt.setTrackNewApi MptPairsIt
-  case mpt.dbType:
-  of AristoDbMemory, AristoDbRocks, AristoDbVoid:
-    for (path,data) in mpt.mpt.rightPairsGeneric CoreDbVidGeneric:
-      yield (mpt.call(pathAsBlob, path), data)
-  of Ooops:
-    raiseAssert: "Unsupported database type: " & $mpt.dbType
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed
-
 iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash32): (seq[byte], UInt256) =
-  ## Trie traversal, only supported for `CoreDbMptRef`
-  ##
   acc.setTrackNewApi AccSlotPairsIt
   case acc.dbType:
   of AristoDbMemory, AristoDbRocks, AristoDbVoid:
