@@ -28,10 +28,8 @@ export AccountsLedgerRef, base, base_config, base_iterators
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc init*(
-    _: type LedgerRef, db: CoreDbRef, root: Hash32, storeSlotHash: bool = false
-): LedgerRef =
-  LedgerRef(ac: AccountsLedgerRef.init(db, root, storeSlotHash)).bless(db)
+proc init*(_: type LedgerRef, db: CoreDbRef, storeSlotHash: bool = false): LedgerRef =
+  LedgerRef(ac: AccountsLedgerRef.init(db, storeSlotHash)).bless(db)
 
 # ------------------------------------------------------------------------------
 # End

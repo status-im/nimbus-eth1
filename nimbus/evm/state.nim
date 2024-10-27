@@ -84,7 +84,7 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac       = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash),
+    ac       = LedgerRef.init(com.db, storeSlotHash),
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -96,12 +96,12 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
              linear: bool
              ): bool =
   ## Re-initialise state descriptor. The `LedgerRef` database is
-  ## re-initilaise only if its `rootHash` doe not point to `parent.stateRoot`,
+  ## re-initilaise only if its `getStateRoot()` doe not point to `parent.stateRoot`,
   ## already. Accumulated state data are reset. When linear, we assume that
   ## the state recently processed the parent block.
   ##
   ## This function returns `true` unless the `LedgerRef` database could be
-  ## queries about its `rootHash`, i.e. `isTopLevelClean` evaluated `true`. If
+  ## queries about its `getStateRoot()`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
   if self.stateDB.isTopLevelClean:
@@ -109,8 +109,8 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
       tracer = self.tracer
       com    = self.com
       db     = com.db
-      ac     = if linear or self.stateDB.rootHash == parent.stateRoot: self.stateDB
-               else: LedgerRef.init(db, parent.stateRoot, self.stateDB.ac.storeSlotHash)
+      ac     = if linear or self.stateDB.getStateRoot() == parent.stateRoot: self.stateDB
+               else: LedgerRef.init(db, self.stateDB.ac.storeSlotHash)
       flags  = self.flags
     self[].reset
     self.init(
@@ -168,7 +168,7 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac       = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash),
+    ac       = LedgerRef.init(com.db, storeSlotHash),
     parent   = parent,
     blockCtx = com.blockCtx(header),
     com      = com,

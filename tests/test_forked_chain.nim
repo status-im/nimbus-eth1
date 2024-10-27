@@ -52,7 +52,7 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block): Block =
       amount: 1,
     )
 
-  let ledger = LedgerRef.init(com.db, parent.stateRoot)
+  let ledger = LedgerRef.init(com.db)
   for wd in wds:
     ledger.addBalance(wd.address, wd.weiAmount)
 
@@ -69,7 +69,7 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block): Block =
     difficulty : 0.u256,
     timestamp  : parent.timestamp + 1,
     gasLimit   : parent.gasLimit,
-    stateRoot  : ledger.state,
+    stateRoot  : ledger.getStateRoot(),
     transactionsRoot     : parent.txRoot,
     baseFeePerGas  : parent.baseFeePerGas,
     receiptsRoot   : parent.receiptsRoot,

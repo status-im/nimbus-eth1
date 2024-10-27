@@ -261,7 +261,7 @@ proc jLogger(
 func to(w: AristoApiProfNames; T: type TracePfx): T =
   case w:
   of AristoApiProfFetchAccountRecordFn,
-     AristoApiProfFetchAccountStateFn,
+     AristoApiProfFetchAccountStateRootFn,
      AristoApiProfDeleteAccountRecordFn,
      AristoApiProfMergeAccountRecordFn:
     return TrpAccounts
@@ -272,7 +272,7 @@ func to(w: AristoApiProfNames; T: type TracePfx): T =
      AristoApiProfMergeGenericDataFn:
     return TrpGeneric
   of AristoApiProfFetchStorageDataFn,
-     AristoApiProfFetchStorageStateFn,
+     AristoApiProfFetchStorageRootFn,
      AristoApiProfDeleteStorageDataFn,
      AristoApiProfDeleteStorageTreeFn,
      AristoApiProfMergeStorageDataFn:
@@ -490,17 +490,17 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
         debug logTxt $info, level, accPath, accRec
       ok accRec
 
-  tracerApi.fetchAccountState =
+  tracerApi.fetchAccountStateRoot =
     proc(mpt: AristoDbRef;
          updateOk: bool;
         ): Result[Hash32,AristoError] =
-      const info = AristoApiProfFetchAccountStateFn
+      const info = AristoApiProfFetchAccountStateRootFn
 
       when CoreDbNoisyCaptJournal:
         let level = tr.topLevel()
 
       # Find entry on DB
-      let state = api.fetchAccountState(mpt, updateOk).valueOr:
+      let state = api.fetchAccountStateRoot(mpt, updateOk).valueOr:
         when CoreDbNoisyCaptJournal:
           debug logTxt $info, level, updateOk, error
         tr.jLogger logRecord(info, TrqFind, error)
@@ -546,7 +546,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
         let level = tr.topLevel()
 
       # Find entry on DB
-      let state = api.fetchAccountState(mpt, updateOk).valueOr:
+      let state = api.fetchAccountStateRoot(mpt, updateOk).valueOr:
         when CoreDbNoisyCaptJournal:
           debug logTxt $info, level, root, updateOk, error
         tr.jLogger(root, logRecord(info, TrqFind, error))
@@ -581,18 +581,18 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
         debug logTxt $info, level, accPath, stoPath, stoData
       ok stoData
 
-  tracerApi.fetchStorageState =
+  tracerApi.fetchStorageRoot =
     proc(mpt: AristoDbRef;
          accPath: Hash32;
          updateOk: bool;
         ): Result[Hash32,AristoError] =
-      const info = AristoApiProfFetchStorageStateFn
+      const info = AristoApiProfFetchStorageRootFn
 
       when CoreDbNoisyCaptJournal:
         let level = tr.topLevel()
 
       # Find entry on DB
-      let state = api.fetchStorageState(mpt, accPath, updateOk).valueOr:
+      let state = api.fetchStorageRoot(mpt, accPath, updateOk).valueOr:
         when CoreDbNoisyCaptJournal:
           debug logTxt $info, level, accPath, updateOk, error
         tr.jLogger(accPath, logRecord(info, TrqFind, error))

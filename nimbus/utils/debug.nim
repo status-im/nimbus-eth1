@@ -76,7 +76,7 @@ proc debugAccounts*(vmState: BaseVMState): string =
     accountList.add address
 
   let res = %{
-    "rootHash": %($vmState.readOnlyStateDB.rootHash),
+    "stateRoot": %($vmState.readOnlyStateDB.getStateRoot()),
     "accounts": %dumpAccounts(vmState.stateDB, accountList),
   }
 
@@ -94,7 +94,7 @@ proc debug*(vms: BaseVMState): string =
   result.add "excessBlobGas    : " & $vms.blockCtx.excessBlobGas & "\n"
   result.add "flags            : " & $vms.flags               & "\n"
   result.add "receipts.len     : " & $vms.receipts.len        & "\n"
-  result.add "stateDB.root     : " & $vms.stateDB.rootHash    & "\n"
+  result.add "stateDB.root     : " & $vms.stateDB.getStateRoot() & "\n"
   result.add "cumulativeGasUsed: " & $vms.cumulativeGasUsed   & "\n"
   result.add "tx.origin        : " & $vms.txCtx.origin        & "\n"
   result.add "tx.gasPrice      : " & $vms.txCtx.gasPrice      & "\n"

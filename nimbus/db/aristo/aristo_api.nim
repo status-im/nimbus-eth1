@@ -114,7 +114,7 @@ type
         {.noRaise.}
       ## Fetch an account record from the database indexed by `accPath`.
 
-  AristoApiFetchAccountStateFn* =
+  AristoApiFetchAccountStateRootFn* =
     proc(db: AristoDbRef;
          updateOk: bool;
         ): Result[Hash32,AristoError]
@@ -149,7 +149,7 @@ type
       ## For a storage tree related to account `accPath`, fetch the data
       ## record from the database indexed by `stoPath`.
 
-  AristoApiFetchStorageStateFn* =
+  AristoApiFetchStorageRootFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
          updateOk: bool;
@@ -496,11 +496,11 @@ type
     fetchLastSavedState*: AristoApiFetchLastSavedStateFn
 
     fetchAccountRecord*: AristoApiFetchAccountRecordFn
-    fetchAccountState*: AristoApiFetchAccountStateFn
+    fetchAccountStateRoot*: AristoApiFetchAccountStateRootFn
     fetchGenericData*: AristoApiFetchGenericDataFn
     fetchGenericState*: AristoApiFetchGenericStateFn
     fetchStorageData*: AristoApiFetchStorageDataFn
-    fetchStorageState*: AristoApiFetchStorageStateFn
+    fetchStorageRoot*: AristoApiFetchStorageRootFn
 
     findTx*: AristoApiFindTxFn
     finish*: AristoApiFinishFn
@@ -550,11 +550,11 @@ type
     AristoApiProfFetchLastSavedStateFn  = "fetchLastSavedState"
 
     AristoApiProfFetchAccountRecordFn   = "fetchAccountRecord"
-    AristoApiProfFetchAccountStateFn    = "fetchAccountState"
+    AristoApiProfFetchAccountStateRootFn = "fetchAccountStateRoot"
     AristoApiProfFetchGenericDataFn     = "fetchGenericData"
     AristoApiProfFetchGenericStateFn    = "fetchGenericState"
     AristoApiProfFetchStorageDataFn     = "fetchStorageData"
-    AristoApiProfFetchStorageStateFn    = "fetchStorageState"
+    AristoApiProfFetchStorageRootFn     = "fetchStorageRoot"
 
     AristoApiProfFindTxFn               = "findTx"
     AristoApiProfFinishFn               = "finish"
@@ -622,11 +622,11 @@ when AutoValidateApiHooks:
     doAssert not api.fetchLastSavedState.isNil
 
     doAssert not api.fetchAccountRecord.isNil
-    doAssert not api.fetchAccountState.isNil
+    doAssert not api.fetchAccountStateRoot.isNil
     doAssert not api.fetchGenericData.isNil
     doAssert not api.fetchGenericState.isNil
     doAssert not api.fetchStorageData.isNil
-    doAssert not api.fetchStorageState.isNil
+    doAssert not api.fetchStorageRoot.isNil
 
     doAssert not api.findTx.isNil
     doAssert not api.finish.isNil
@@ -698,11 +698,11 @@ func init*(api: var AristoApiObj) =
   api.fetchLastSavedState = fetchLastSavedState
 
   api.fetchAccountRecord = fetchAccountRecord
-  api.fetchAccountState = fetchAccountState
+  api.fetchAccountStateRoot = fetchAccountStateRoot
   api.fetchGenericData = fetchGenericData
   api.fetchGenericState = fetchGenericState
   api.fetchStorageData = fetchStorageData
-  api.fetchStorageState = fetchStorageState
+  api.fetchStorageRoot = fetchStorageRoot
 
   api.findTx = findTx
   api.finish = finish
@@ -756,11 +756,11 @@ func dup*(api: AristoApiRef): AristoApiRef =
 
     fetchLastSavedState:  api.fetchLastSavedState,
     fetchAccountRecord:   api.fetchAccountRecord,
-    fetchAccountState:    api.fetchAccountState,
+    fetchAccountStateRoot: api.fetchAccountStateRoot,
     fetchGenericData:     api.fetchGenericData,
     fetchGenericState:    api.fetchGenericState,
     fetchStorageData:     api.fetchStorageData,
-    fetchStorageState:    api.fetchStorageState,
+    fetchStorageRoot:     api.fetchStorageRoot,
 
     findTx:               api.findTx,
     finish:               api.finish,
@@ -865,10 +865,10 @@ func init*(
       AristoApiProfFetchAccountRecordFn.profileRunner:
         result = api.fetchAccountRecord(a, b)
 
-  profApi.fetchAccountState =
+  profApi.fetchAccountStateRoot =
     proc(a: AristoDbRef; b: bool): auto =
-      AristoApiProfFetchAccountStateFn.profileRunner:
-        result = api.fetchAccountState(a, b)
+      AristoApiProfFetchAccountStateRootFn.profileRunner:
+        result = api.fetchAccountStateRoot(a, b)
 
   profApi.fetchGenericData =
     proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
@@ -885,10 +885,10 @@ func init*(
       AristoApiProfFetchStorageDataFn.profileRunner:
         result = api.fetchStorageData(a, b, stoPath)
 
-  profApi.fetchStorageState =
+  profApi.fetchStorageRoot =
     proc(a: AristoDbRef; b: Hash32; c: bool): auto =
-      AristoApiProfFetchStorageStateFn.profileRunner:
-        result = api.fetchStorageState(a, b, c)
+      AristoApiProfFetchStorageRootFn.profileRunner:
+        result = api.fetchStorageRoot(a, b, c)
 
   profApi.findTx =
     proc(a: AristoDbRef; b: RootedVertexID; c: HashKey): auto =

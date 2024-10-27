@@ -163,13 +163,13 @@ proc procBlkEpilogue(
     consolidationReqs = processDequeueConsolidationRequests(vmState)
 
   if not skipValidation:
-    let stateDB = vmState.stateDB
-    if header.stateRoot != stateDB.rootHash:
+    let stateRoot = vmState.stateDB.getStateRoot()
+    if header.stateRoot != stateRoot:
       # TODO replace logging with better error
       debug "wrong state root in block",
         blockNumber = header.number,
         expected = header.stateRoot,
-        actual = stateDB.rootHash,
+        actual = stateRoot,
         arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
       return err("stateRoot mismatch")
 

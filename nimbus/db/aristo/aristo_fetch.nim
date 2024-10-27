@@ -244,7 +244,7 @@ proc fetchAccountRecord*(
 
   ok leafVtx.lData.account
 
-proc fetchAccountState*(
+proc fetchAccountStateRoot*(
     db: AristoDbRef;
     updateOk: bool;
       ): Result[Hash32,AristoError] =
@@ -302,7 +302,7 @@ proc fetchStorageData*(
   ##
   db.retrieveStoragePayload(accPath, stoPath)
 
-proc fetchStorageState*(
+proc fetchStorageRoot*(
     db: AristoDbRef;
     accPath: Hash32;
     updateOk: bool;

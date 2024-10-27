@@ -33,7 +33,7 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
     # db.persist is an important step when using `db/ledger`
     # it will affect the account storage's location
     # during the next call to `getComittedStorage`
-    # and the result of rootHash
+    # and the result of getStateRoot
 
     # do not clear cache, we need the cache when constructing
     # post state

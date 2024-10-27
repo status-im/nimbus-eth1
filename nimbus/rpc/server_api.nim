@@ -61,7 +61,7 @@ proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, s
 proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, string] =
   let header = ?api.headerFromTag(blockTag)
   if api.chain.stateReady(header):
-    ok(LedgerRef.init(api.com.db, header.stateRoot))
+    ok(LedgerRef.init(api.com.db))
   else:
     # TODO: Replay state?
     err("Block state not ready")
