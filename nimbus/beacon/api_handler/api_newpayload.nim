@@ -12,7 +12,7 @@ import
   ../web3_eth_conv,
   eth/common/hashes,
   ../beacon_engine,
-  web3/execution_types,
+  web3/[execution_types, primitives],
   ../payload_conv,
   ./api_utils,
   chronicles
@@ -201,6 +201,6 @@ proc newPayload*(ben: BeaconEngineRef,
     parent = header.parentHash.short,
     txs = blk.transactions.len,
     gasUsed = header.gasUsed,
-    blobGas = header.blobGasUsed.get()
+    blobGas = header.blobGasUsed.get(0'u64)
 
   return validStatus(blockHash)

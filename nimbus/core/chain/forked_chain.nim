@@ -228,9 +228,11 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
       prevHash = header.parentHash
       count.inc
 
-    notice "Finalized blocks persisted to Database",
+    notice "Finalized blocks persisted to",
       numberOfBlocks = count,
-      last=target.short
+      last = target.short,
+      baseNumber = c.baseHeader.number,
+      baseHash = c.baseHash.short
 
 func updateBase(c: ForkedChainRef,
                 newBaseHash: Hash32,
@@ -626,6 +628,9 @@ func latestHash*(c: ForkedChainRef): Hash32 =
 
 func baseNumber*(c: ForkedChainRef): BlockNumber =
   c.baseHeader.number
+
+func baseHash*(c: ForkedChainRef): Hash32 =
+  c.baseHash
 
 func txRecords*(c: ForkedChainRef, txHash: Hash32): (Hash32, uint64) =
   c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))

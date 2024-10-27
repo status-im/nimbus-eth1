@@ -197,7 +197,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       hash = bundle.executionPayload.blockHash.short,
       txs = bundle.executionPayload.transactions.len,
       gasUsed = bundle.executionPayload.gasUsed,
-      blobGasUsed = bundle.executionPayload.blobGasUsed.get(),
+      blobGasUsed = bundle.executionPayload.blobGasUsed.get(Quantity(0)),
       id = id.toHex,
       attrs = attrs
 
@@ -206,6 +206,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   info "Forkchoice updated to new head",
     requested = header.number,
     hash = blockHash.short,
-    head = ben.chain.latestNumber
+    head = ben.chain.latestNumber,
+    base = ben.chain.baseNumber,
+    baseHash = ben.chain.baseHash.short
 
   return validFCU(Opt.none(Bytes8), blockHash)
