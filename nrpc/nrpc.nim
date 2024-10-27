@@ -194,7 +194,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           finalizedBlockHash: finalizedHash.asBlockHash,
         )
         payloadAttributes =
-          when consensusFork == ConsensusFork.Bellatrix:
+          when consensusFork <= ConsensusFork.Bellatrix:
             Opt.none(PayloadAttributesV1)
           elif consensusFork == ConsensusFork.Capella:
             Opt.none(PayloadAttributesV2)
@@ -202,7 +202,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             consensusFork == ConsensusFork.Electra:
             Opt.none(PayloadAttributesV3)
           else:
-            doAssert(false, "Unsupported consensus fork")
+            static: doAssert(false, "Unsupported consensus fork")
             Opt.none(PayloadAttributesV3)
 
       # Make the forkchoiceUpdated call based, after loading attributes based on the consensus fork
@@ -272,7 +272,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             versionedHashes = versioned_hashes,
             executionRequests = execution_requests
         else:
-          doAssert(false, "Unsupported consensus fork")
+          static: doAssert(false, "Unsupported consensus fork")
 
         info "newPayload Request sent",
           blockNumber = int(payload.blockNumber), response = payloadResponse.status
