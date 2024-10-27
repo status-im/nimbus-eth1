@@ -198,13 +198,17 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             Opt.none(PayloadAttributesV1)
           elif consensusFork == ConsensusFork.Capella:
             Opt.none(PayloadAttributesV2)
+          elif consensusFork == ConsensusFork.Deneb or
+            consensusFork == ConsensusFork.Electra:
+            Opt.none(PayloadAttributesV3)
           else:
-            Opt.none(PayloadAttributesV3) # For Deneb
+            doAssert(false, "Unsupported consensus fork")
+            Opt.none(PayloadAttributesV3)
 
       # Make the forkchoiceUpdated call based, after loading attributes based on the consensus fork
       let fcuResponse = await rpcClient.forkchoiceUpdated(state, payloadAttributes)
-      debug "Forkchoice Updated", state = state, response = fcuResponse
-      info "Forkchoice Update Sent", response = fcuResponse.payloadStatus.status
+      debug "forkchoiceUpdated", state = state, response = fcuResponse
+      info "forkchoiceUpdated Request sent", response = fcuResponse.payloadStatus.status
 
   while running and currentBlockNumber < headBlck.header.number:
     var isAvailable = false
@@ -230,7 +234,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
         when consensusFork <= ConsensusFork.Capella:
           payloadResponse = await rpcClient.newPayload(payload)
           debug "Payload status", response = payloadResponse, payload = payload
-        elif consensusFork >= ConsensusFork.Deneb:
+        elif consensusFork == ConsensusFork.Deneb:
           # Calculate the versioned hashes from the kzg commitments
           let versioned_hashes = mapIt(
             forkyBlck.message.body.blob_kzg_commitments,
@@ -239,14 +243,43 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           payloadResponse = await rpcClient.newPayload(
             payload, versioned_hashes, forkyBlck.message.parent_root.to(Hash32)
           )
-          debug "Payload status", response = payloadResponse, payload = payload, versionedHashes = versioned_hashes
-        
-        info "Payload Sent", blockNumber = int(payload.blockNumber), response = payloadResponse.status
+          debug "Payload status",
+            response = payloadResponse,
+            payload = payload,
+            versionedHashes = versioned_hashes
+        elif consensusFork == ConsensusFork.Electra:
+          # Calculate the versioned hashes from the kzg commitments
+          let versioned_hashes = mapIt(
+            forkyBlck.message.body.blob_kzg_commitments,
+            engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
+          )
+          # Execution Requests for Electra
+          let execution_requests = [
+            SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
+            SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
+            SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),
+          ]
+          # TODO: Update to `newPayload()` once nim-web3 is updated
+          payloadResponse = await rpcClient.engine_newPayloadV4(
+            payload,
+            versioned_hashes,
+            forkyBlck.message.parent_root.to(Hash32),
+            execution_requests,
+          )
+          debug "Payload status",
+            response = payloadResponse,
+            payload = payload,
+            versionedHashes = versioned_hashes,
+            executionRequests = execution_requests
+        else:
+          doAssert(false, "Unsupported consensus fork")
+
+        info "newPayload Request sent",
+          blockNumber = int(payload.blockNumber), response = payloadResponse.status
 
         # Load the head hash from the execution payload, for forkchoice
         headHash = forkyBlck.message.body.execution_payload.block_hash
 
-        
         # Update the finalized hash
         # This is updated after the fcu call is made
         # So that head - head mod 32 is maintained
@@ -255,7 +288,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
         if blknum < finalizedBlck.header.number and blknum mod 32 == 0:
           finalizedHash = headHash
           # Make the forkchoicestate based on the the last
-          # `new_payload` call and the state received from the EL rest api
+          # `new_payload` call and the state received from the EL JSON-RPC API
           # And generate the PayloadAttributes based on the consensus fork
           sendFCU(curBlck)
         elif blknum >= finalizedBlck.header.number:
@@ -270,8 +303,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     currentBlockNumber = elBlockNumber()
     (headBlck, _) =
       client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
-      
-  # FCU call for the last remaining payloads
+
+  # fcU call for the last remaining payloads
   sendFCU(curBlck)
 
 when isMainModule:
