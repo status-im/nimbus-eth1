@@ -228,7 +228,7 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
       prevHash = header.parentHash
       count.inc
 
-    notice "Finalized blocks persisted to",
+    notice "Finalized blocks persisted",
       numberOfBlocks = count,
       last = target.short,
       baseNumber = c.baseHeader.number,
