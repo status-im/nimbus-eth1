@@ -26,6 +26,8 @@ import
   ./db/core_db/persistent,
   ./sync/handlers
 
+from beacon_chain/nimbus_binary_common import setupFileLimits
+
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
 
@@ -168,6 +170,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     let logFile = string conf.logFile.get()
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(logFile, fmAppend)
+
+  setupFileLimits()
 
   info "Launching execution client",
       version = FullVersionStr,

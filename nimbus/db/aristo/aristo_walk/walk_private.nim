@@ -20,6 +20,7 @@ import
 
 iterator walkVtxBeImpl*[T](
     db: AristoDbRef;                   # Database with optional backend filter
+    kinds: set[VertexType];
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Generic iterator
   when T is VoidBackendRef:
@@ -32,7 +33,7 @@ iterator walkVtxBeImpl*[T](
     if not db.balancer.isNil:
       filter.sTab = db.balancer.sTab # copy table
 
-    for (rvid,vtx) in db.backend.T.walkVtx:
+    for (rvid,vtx) in db.backend.T.walkVtx(kinds):
       if filter.sTab.hasKey rvid:
         let fVtx = filter.sTab.getOrVoid rvid
         if fVtx.isValid:
@@ -41,9 +42,11 @@ iterator walkVtxBeImpl*[T](
       else:
         yield (rvid,vtx)
 
-  for rvid in filter.sTab.keys.toSeq.sorted:
+  for rvid in filter.sTab.keys:
     let vtx = filter.sTab.getOrVoid rvid
     if vtx.isValid:
+      if vtx.vType notin kinds:
+        continue
       yield (rvid,vtx)
 
 

@@ -288,6 +288,17 @@ proc deblobify(
 
   ok()
 
+proc deblobifyType*(record: openArray[byte]; T: type VertexRef):
+    Result[VertexType, AristoError] =
+  if record.len < 3:                                  # minimum `Leaf` record
+    return err(DeblobVtxTooShort)
+
+  ok case record[^1] shr 6:
+  of 2: Branch
+  of 3: Leaf
+  else:
+    return err(DeblobUnknown)
+
 proc deblobify*(
     record: openArray[byte];
     T: type VertexRef;

@@ -16,7 +16,7 @@ import
   unittest2,
   ../../nimbus/db/aristo/[
     aristo_check, aristo_compute, aristo_delete, aristo_get, aristo_merge, aristo_desc,
-    aristo_utils, aristo_serialise, aristo_init,
+    aristo_utils, aristo_serialise, aristo_init, aristo_tx/tx_stow,
   ]
 
 func x(s: string): seq[byte] =
@@ -148,3 +148,16 @@ suite "Aristo compute":
 
         let rc = db.check
         check rc == typeof(rc).ok()
+
+  test "Pre-computed key":
+    # TODO use mainnet genesis in this test?
+    let
+      db = AristoDbRef.init MemBackendRef
+      root = VertexID(2)
+
+    for inx, (k, v, r, s) in samples[^1]:
+      check:
+        db.mergeGenericData(root, keccak256(k).data, v) == Result[bool, AristoError].ok(true)
+
+    check db.txStow(1, true).isOk()
+    check db.computeKeys(root).isOk()

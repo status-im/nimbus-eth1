@@ -309,9 +309,10 @@ proc dup*(db: RdbBackendRef): RdbBackendRef =
 
 iterator walkVtx*(
     be: RdbBackendRef;
+    kinds = {Branch, Leaf};
       ): tuple[evid: RootedVertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (rvid, vtx) in be.rdb.walkVtx:
+  for (rvid, vtx) in be.rdb.walkVtx(kinds):
     yield (rvid, vtx)
 
 iterator walkKey*(
