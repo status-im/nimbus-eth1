@@ -8,6 +8,7 @@
 {.used.}
 
 import
+  std/os,
   unittest2,
   stew/byteutils,
   stew/io2,
@@ -42,132 +43,154 @@ suite "Beacon Content Keys and Values - Test Vectors":
     genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
-  test "LightClientBootstrap":
-    const file = testVectorDir & "bootstrap.yaml"
-    let
-      c = YamlPortalContent.loadFromYaml(file).valueOr:
-        raiseAssert "Invalid test vector file: " & error
+  for path in walkDirRec(testVectorDir, yieldFilter = {pcDir}):
+    test "LightClientBootstrap":
+      let
+        file = path / "bootstrap.yaml"
+        c = YamlPortalContent.loadFromYaml(file).valueOr:
+          raiseAssert "Invalid test vector file: " & error
 
-      contentKeyEncoded = c.content_key.hexToSeqByte()
-      contentValueEncoded = c.content_value.hexToSeqByte()
+        contentKeyEncoded = c.content_key.hexToSeqByte()
+        contentValueEncoded = c.content_value.hexToSeqByte()
 
-      # Decode content and content key
-      contentKey = decodeSsz(contentKeyEncoded, ContentKey)
-      contentValue =
-        decodeLightClientBootstrapForked(forkDigests[], contentValueEncoded)
-    check:
-      contentKey.isOk()
-      contentValue.isOk()
+        # Decode content and content key
+        contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+        contentValue =
+          decodeLightClientBootstrapForked(forkDigests[], contentValueEncoded)
+      check:
+        contentKey.isOk()
+        contentValue.isOk()
 
-    let bootstrap = contentValue.value()
-    let key = contentKey.value()
+      let bootstrap = contentValue.value()
+      let key = contentKey.value()
 
-    withForkyObject(bootstrap):
-      when lcDataFork > LightClientDataFork.None:
-        let blockRoot = hash_tree_root(forkyObject.header.beacon)
-        check blockRoot == key.lightClientBootstrapKey.blockHash
+      withForkyObject(bootstrap):
+        when lcDataFork > LightClientDataFork.None:
+          let blockRoot = hash_tree_root(forkyObject.header.beacon)
+          check blockRoot == key.lightClientBootstrapKey.blockHash
 
-    # re-encode content and content key
-    let encoded = encodeForkedLightClientObject(bootstrap, forkDigests.capella)
+          # Getting the forkDigest here is not great, ideally we can use `atConsensusFork`
+          # but it turns out that the `LightClientDataFork` is not the same as the
+          # `ConsensusFork`.
+          let forkDigest = forkDigestAtEpoch(
+            forkDigests[], epoch(forkyObject.header.beacon.slot), metadata.cfg
+          )
 
-    check encoded == contentValueEncoded
-    check encode(key).asSeq() == contentKeyEncoded
+          # re-encode content and content key
+          let encoded = encodeForkedLightClientObject(bootstrap, forkDigest)
 
-  test "LightClientUpdates":
-    const file = testVectorDir & "updates.yaml"
-    let
-      c = YamlPortalContent.loadFromYaml(file).valueOr:
-        raiseAssert "Invalid test vector file: " & error
+          check encoded.toHex() == contentValueEncoded.toHex()
+          check encode(key).asSeq() == contentKeyEncoded
 
-      contentKeyEncoded = c.content_key.hexToSeqByte()
-      contentValueEncoded = c.content_value.hexToSeqByte()
+    test "LightClientUpdates":
+      let
+        file = path / "updates.yaml"
+        c = YamlPortalContent.loadFromYaml(file).valueOr:
+          raiseAssert "Invalid test vector file: " & error
 
-      # Decode content and content key
-      contentKey = decodeSsz(contentKeyEncoded, ContentKey)
-      contentValue = decodeLightClientUpdatesByRange(forkDigests[], contentValueEncoded)
-    check:
-      contentKey.isOk()
-      contentValue.isOk()
+        contentKeyEncoded = c.content_key.hexToSeqByte()
+        contentValueEncoded = c.content_value.hexToSeqByte()
 
-    let updates = contentValue.value()
-    let key = contentKey.value()
+        # Decode content and content key
+        contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+        contentValue =
+          decodeLightClientUpdatesByRange(forkDigests[], contentValueEncoded)
+      check:
+        contentKey.isOk()
+        contentValue.isOk()
 
-    check key.lightClientUpdateKey.count == uint64(updates.len())
+      let updates = contentValue.value()
+      let key = contentKey.value()
 
-    for i, update in updates:
+      check key.lightClientUpdateKey.count == uint64(updates.len())
+
+      for i, update in updates:
+        withForkyObject(update):
+          when lcDataFork > LightClientDataFork.None:
+            check forkyObject.finalized_header.beacon.slot div
+              (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD) ==
+              key.lightClientUpdateKey.startPeriod + uint64(i)
+
+            let forkDigest = forkDigestAtEpoch(
+              forkDigests[],
+              epoch(forkyObject.attested_header.beacon.slot),
+              metadata.cfg,
+            )
+
+            # re-encode content and content key
+            let encoded = encodeLightClientUpdatesForked(forkDigest, updates.asSeq())
+
+            check encoded.toHex() == contentValueEncoded.toHex()
+            check encode(key).asSeq() == contentKeyEncoded
+
+    test "LightClientFinalityUpdate":
+      let
+        file = path / "finality_update.yaml"
+        c = YamlPortalContent.loadFromYaml(file).valueOr:
+          raiseAssert "Invalid test vector file: " & error
+
+        contentKeyEncoded = c.content_key.hexToSeqByte()
+        contentValueEncoded = c.content_value.hexToSeqByte()
+
+        # Decode content and content key
+        contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+        contentValue =
+          decodeLightClientFinalityUpdateForked(forkDigests[], contentValueEncoded)
+
+      check:
+        contentKey.isOk()
+        contentValue.isOk()
+
+      let update = contentValue.value()
+      let key = contentKey.value()
       withForkyObject(update):
         when lcDataFork > LightClientDataFork.None:
-          check forkyObject.finalized_header.beacon.slot div
-            (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD) ==
-            key.lightClientUpdateKey.startPeriod + uint64(i)
+          check forkyObject.finalized_header.beacon.slot ==
+            key.lightClientFinalityUpdateKey.finalizedSlot
 
-    # re-encode content and content key
-    let encoded = encodeLightClientUpdatesForked(forkDigests.capella, updates.asSeq())
+          let forkDigest = forkDigestAtEpoch(
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), metadata.cfg
+          )
 
-    check encoded == contentValueEncoded
-    check encode(key).asSeq() == contentKeyEncoded
+          # re-encode content and content key
+          let encoded = encodeForkedLightClientObject(update, forkDigest)
 
-  test "LightClientFinalityUpdate":
-    const file = testVectorDir & "finality_update.yaml"
-    let
-      c = YamlPortalContent.loadFromYaml(file).valueOr:
-        raiseAssert "Invalid test vector file: " & error
+          check encoded.toHex() == contentValueEncoded.toHex()
+          check encode(key).asSeq() == contentKeyEncoded
 
-      contentKeyEncoded = c.content_key.hexToSeqByte()
-      contentValueEncoded = c.content_value.hexToSeqByte()
+    test "LightClientOptimisticUpdate":
+      let
+        file = path / "optimistic_update.yaml"
+        c = YamlPortalContent.loadFromYaml(file).valueOr:
+          raiseAssert "Invalid test vector file: " & error
 
-      # Decode content and content key
-      contentKey = decodeSsz(contentKeyEncoded, ContentKey)
-      contentValue =
-        decodeLightClientFinalityUpdateForked(forkDigests[], contentValueEncoded)
+        contentKeyEncoded = c.content_key.hexToSeqByte()
+        contentValueEncoded = c.content_value.hexToSeqByte()
 
-    check:
-      contentKey.isOk()
-      contentValue.isOk()
+        # Decode content and content key
+        contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+        contentValue =
+          decodeLightClientOptimisticUpdateForked(forkDigests[], contentValueEncoded)
 
-    let update = contentValue.value()
-    let key = contentKey.value()
-    withForkyObject(update):
-      when lcDataFork > LightClientDataFork.None:
-        check forkyObject.finalized_header.beacon.slot ==
-          key.lightClientFinalityUpdateKey.finalizedSlot
+      check:
+        contentKey.isOk()
+        contentValue.isOk()
 
-    # re-encode content and content key
-    let encoded = encodeForkedLightClientObject(update, forkDigests.capella)
+      let update = contentValue.value()
+      let key = contentKey.value()
+      withForkyObject(update):
+        when lcDataFork > LightClientDataFork.None:
+          check forkyObject.signature_slot ==
+            key.lightClientOptimisticUpdateKey.optimisticSlot
 
-    check encoded == contentValueEncoded
-    check encode(key).asSeq() == contentKeyEncoded
+          let forkDigest = forkDigestAtEpoch(
+            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), metadata.cfg
+          )
+          # re-encode content and content key
+          let encoded = encodeForkedLightClientObject(update, forkDigest)
 
-  test "LightClientOptimisticUpdate":
-    const file = testVectorDir & "optimistic_update.yaml"
-    let
-      c = YamlPortalContent.loadFromYaml(file).valueOr:
-        raiseAssert "Invalid test vector file: " & error
-
-      contentKeyEncoded = c.content_key.hexToSeqByte()
-      contentValueEncoded = c.content_value.hexToSeqByte()
-
-      # Decode content and content key
-      contentKey = decodeSsz(contentKeyEncoded, ContentKey)
-      contentValue =
-        decodeLightClientOptimisticUpdateForked(forkDigests[], contentValueEncoded)
-
-    check:
-      contentKey.isOk()
-      contentValue.isOk()
-
-    let update = contentValue.value()
-    let key = contentKey.value()
-    withForkyObject(update):
-      when lcDataFork > LightClientDataFork.None:
-        check forkyObject.signature_slot ==
-          key.lightClientOptimisticUpdateKey.optimisticSlot
-
-    # re-encode content and content key
-    let encoded = encodeForkedLightClientObject(update, forkDigests.capella)
-
-    check encoded == contentValueEncoded
-    check encode(key).asSeq() == contentKeyEncoded
+          check encoded.toHex() == contentValueEncoded.toHex()
+          check encode(key).asSeq() == contentKeyEncoded
 
 suite "Beacon Content Keys and Values":
   # TODO: These tests are less useful now and should instead be altered to
