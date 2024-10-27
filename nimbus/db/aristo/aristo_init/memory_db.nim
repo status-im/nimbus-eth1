@@ -244,6 +244,7 @@ proc dup*(db: MemBackendRef): MemBackendRef =
 
 iterator walkVtx*(
     be: MemBackendRef;
+    kinds = {Branch, Leaf};
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
   for n,rvid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
@@ -254,7 +255,8 @@ iterator walkVtx*(
         when extraTraceMessages:
           debug logTxt "walkVtxFn() skip", n, rvid, error=rc.error
       else:
-        yield (rvid, rc.value)
+        if rc.value.vType in kinds:
+          yield (rvid, rc.value)
 
 iterator walkKey*(
     be: MemBackendRef;

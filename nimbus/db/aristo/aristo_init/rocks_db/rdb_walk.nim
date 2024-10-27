@@ -72,7 +72,8 @@ iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: seq[byte]] =
         yield (rvid, val)
 
 
-iterator walkVtx*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: VertexRef] =
+iterator walkVtx*(
+    rdb: RdbInst, kinds: set[VertexType]): tuple[rvid: RootedVertexID, data: VertexRef] =
   ## Walk over key-value pairs of the vertex column of the database.
   ##
   ## Non-decodable entries are are ignored.
@@ -87,28 +88,36 @@ iterator walkVtx*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: VertexRef] =
     rit.seekToFirst()
     var key: RootedVertexID
     var value: VertexRef
-    while rit.isValid():
-      var valid = true
-      rit.key(
-        proc(data: openArray[byte]) =
-          key = deblobify(data, RootedVertexID).valueOr:
-            valid = false
-            default(RootedVertexID)
-      )
-      if not valid:
-        continue
+    var valid: bool
 
-      rit.value(
-        proc(data: openArray[byte]) =
-          value = deblobify(data, VertexRef).valueOr:
-            valid = false
-            default(VertexRef)
-      )
-      if not valid:
-        continue
+    proc readKey(data: openArray[byte]) =
+      key = deblobify(data, RootedVertexID).valueOr:
+        valid = false
+        default(RootedVertexID)
+
+    proc readValue(data: openArray[byte]) =
+      let vType = deblobifyType(data, VertexRef).valueOr:
+        valid = false
+        return
+
+      if vType notin kinds:
+        valid = false
+        return
+
+      value = deblobify(data, VertexRef).valueOr:
+        valid = false
+        default(VertexRef)
+
+    while rit.isValid():
+      valid = true
+      rit.value(readValue)
+
+      if valid:
+        rit.key(readKey)
+        if valid:
+          yield (key, value)
 
       rit.next()
-      yield (key, value)
     rit.close()
 
 # ------------------------------------------------------------------------------

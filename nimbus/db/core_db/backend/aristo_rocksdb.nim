@@ -11,12 +11,13 @@
 {.push raises: [].}
 
 import
+  chronicles,
   eth/common,
   rocksdb,
   results,
   ../../aristo,
   ../../aristo/aristo_init/rocks_db as use_ari,
-  ../../aristo/[aristo_desc, aristo_walk/persistent],
+  ../../aristo/[aristo_desc, aristo_compute, aristo_walk/persistent],
   ../../kvt,
   ../../kvt/kvt_persistent as use_kvt,
   ../../kvt/kvt_init/rocks_db/rdb_init,
@@ -65,7 +66,7 @@ proc toRocksDb*(
   tableOpts.indexType = IndexType.twoLevelIndexSearch
   tableOpts.pinTopLevelIndexAndFilter = true
   tableOpts.cacheIndexAndFilterBlocksWithHighPriority = true
-  tableOpts.partitionFilters = true # TODO do we need this?
+  tableOpts.partitionFilters = true # Ribbon filter partitioning
 
   # This option adds a small hash index to each data block, presumably speeding
   # up Get queries (but again not range queries) - takes up space, apparently
@@ -116,8 +117,8 @@ proc toRocksDb*(
   cfOpts.maxBytesForLevelBase = cfOpts.writeBufferSize
 
   # Reduce number of files when the database grows
-  cfOpts.targetFileSizeBase = cfOpts.writeBufferSize div 4
-  cfOpts.targetFileSizeMultiplier = 4
+  cfOpts.targetFileSizeBase = cfOpts.writeBufferSize
+  cfOpts.targetFileSizeMultiplier = 8
 
   let dbOpts = defaultDbOptions(autoClose = true)
   dbOpts.maxOpenFiles = opts.maxOpenFiles
@@ -141,7 +142,9 @@ proc toRocksDb*(
     else:
       cfOpts.writeBufferSize
 
-  dbOpts.maxTotalWalSize = 2 * writeBufferSize
+  # The larger the value, the fewer files will be created but the longer the
+  # startup time (because this much data must be replayed)
+  dbOpts.maxTotalWalSize = 3 * writeBufferSize + 1024*1024
 
   dbOpts.keepLogFileNum = 16 # No point keeping 1000 log files around...
 
@@ -162,6 +165,13 @@ proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
       raiseAssert aristoFail & ": " & $error
     kdb = KvtDbRef.init(use_kvt.RdbBackendRef, adb, oCfs).valueOr:
       raiseAssert kvtFail & ": " & $error
+
+  if opts.rdbKeyCacheSize > 0:
+    # Make sure key cache isn't empty
+    adb.computeKeys(VertexID(1)).isOkOr:
+      fatal "Cannot compute root keys", msg=error
+      quit(QuitFailure)
+
   AristoDbRocks.create(kdb, adb)
 
 proc newAristoDualRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
