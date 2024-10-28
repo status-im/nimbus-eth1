@@ -42,6 +42,40 @@ proc fetchSyncStateLayout(ctx: BeaconCtxRef): Opt[SyncStateLayout] =
     discard
   err()
 
+
+proc deleteStaleHeadersAndState(
+    ctx: BeaconCtxRef;
+    upTo: BlockNumber;
+    info: static[string];
+      ) =
+  ## Delete stale headers and state
+  let
+    kvt = ctx.db.ctx.getKvt()
+    stateNum = ctx.db.getSavedStateBlockNumber() # for persisting
+
+  var bn = upTo
+  while 0 < bn and kvt.hasKey(beaconHeaderKey(bn).toOpenArray):
+    discard kvt.del(beaconHeaderKey(bn).toOpenArray)
+    bn.dec
+
+    # Occasionallly persist the deleted headers. This will succeed if
+    # this function is called early enough after restart when there is
+    # no database transaction pending.
+    if (upTo - bn) mod 8192 == 0:
+      ctx.db.persistent(stateNum).isOkOr:
+        debug info & ": cannot persist deleted headers", error=($$error)
+        # So be it, stop here.
+        return
+
+  # Delete persistent state, there will be no use of it anymore
+  discard kvt.del(LhcStateKey.toOpenArray)
+  ctx.db.persistent(stateNum).isOkOr:
+    debug info & ": cannot persist deleted headers", error=($$error)
+    return
+
+  if bn < upTo:
+    debug info & ": deleted stale headers and state", iv=BnRange.new(bn+1,upTo)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -109,6 +143,22 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
       headLocked:     false)
 
     trace info & ": new sync state", L="C", C="D", D="F", F="H", H=latest.bnStr
+
+    if rc.isOk:
+      # Some stored headers might have become stale, so delete them. Even
+      # though it is not critical, stale headers just stay on the database
+      # forever occupying space without purpose. Also, delete the state record.
+      # After deleting headers, the state record becomes stale as well.
+      if rc.value.head <= latest:
+        # After manual import, the `latest` state might be ahead of the old
+        # `head` which leaves a gap `(rc.value.head,latest)` of missing headers.
+        # So the `deleteStaleHeadersAndState()` clean up routine needs to start
+        # at the `head` and work backwards.
+        ctx.deleteStaleHeadersAndState(rc.value.head, info)
+      else:
+        # Delete stale headers with block numbers starting at to `latest` wile
+        # working backwards.
+        ctx.deleteStaleHeadersAndState(latest, info)
 
   ctx.sst.lastLayout = ctx.layout
 
