@@ -314,7 +314,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
     if blockhash == zeroHash32:
       # Receipt in database
-      let txDetails = api.chain.db.getTransactionKey(txHash)
+      let txDetails = api.chain.db.getTransactionKey(data)
       if txDetails.index < 0:
         return nil
 
@@ -508,13 +508,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
         (blockHash, txid) = api.chain.txRecords(txHash)
         tx = api.chain.memoryTransaction(txHash).valueOr:
           return nil
-      return populateTransactionObject(tx, Opt.some(blockHash), Opt.some(txid))
-
+      return populateTransactionObject(tx, Opt.some(blockHash), Opt.some(txid)) # TODO: include block number
 
     let header = api.chain.db.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
     if api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
-      result = populateTransactionObject(tx, Opt.some(header.blockHash), Opt.some(txDetails.index))
+      result = populateTransactionObject(tx, Opt.some(header.blockHash), Opt.some(header.number), Opt.some(txDetails.index))
 
   server.rpc("eth_getTransactionByBlockHashAndIndex") do(data: Hash32, quantity: Web3Quantity) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
@@ -524,7 +523,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## Returns  requested transaction information.
     let index  = uint64(quantity)
     let blk = api.chain.blockByHash(data).valueOr:
-      raise newException(ValueError, "Block not found")
+      return nil
+
+    if index >= uint64(blk.transactions.len):
+      return nil
 
     populateTransactionObject(blk.transactions[index], Opt.some(blk.header), Opt.some(index))
 
@@ -536,7 +538,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## NOTE : "pending" blockTag is not supported.
     let index  = uint64(quantity)
     let blk = api.blockFromTag(quantityTag).valueOr:
-      raise newException(ValueError, "Block not found")
+      return nil
+
+    if index >= uint64(blk.transactions.len):
+      return nil
 
     populateTransactionObject(blk.transactions[index], Opt.some(blk.header), Opt.some(index))
 
