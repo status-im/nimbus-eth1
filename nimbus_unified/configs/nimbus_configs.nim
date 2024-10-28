@@ -21,7 +21,7 @@ type NimbusConfig* = object
 type TaskParameters* = object
   name*: string
   configs*: string
-  beaconNodeConfigs*: BeaconNodeConf #
+  beaconNodeConfigs*: BeaconNodeConf
 
 ## Task shutdown flag
 ##
