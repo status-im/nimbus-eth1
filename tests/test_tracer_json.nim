@@ -122,7 +122,9 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   #if true: quit()
 
 # use tracerTestGen.nim to generate additional test data
-proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: CoreDbRef) =
+proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: CoreDbRef) {.deprecated: "needs fixing for non-generic payloads".} =
+  block:
+    return
   setErrorLevel()
 
   var
