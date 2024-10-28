@@ -43,7 +43,7 @@ proc fetchAndCheck(
 
   # While assembling a `LinkedHChainRef`, verify that the `revHeaders` list
   # was sound, i.e. contiguous, linked, etc.
-  if not revHeaders.extendLinkedHChain(buddy, ivReq.maxPt, lhc, info):
+  if not revHeaders.extendLinkedHChain(buddy, ivReq.maxPt, lhc):
     return false
 
   return true
@@ -169,7 +169,8 @@ proc headersStagedCollect*(
         if 0 < buddy.only.nHdrRespErrors and buddy.ctrl.stopped:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
-        trace info & ": completely failed", peer, iv, ivReq, isOpportunistic,
+        trace info & ": current header list discarded", peer, iv, ivReq,
+          isOpportunistic,
           ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nHdrRespErrors
         ctx.headersUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
@@ -205,7 +206,7 @@ proc headersStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = lhc[]
 
-  trace info & ": staged headers", peer,
+  trace info & ": staged header list", peer,
     topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
     nStaged=ctx.hdr.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
 
@@ -217,16 +218,15 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
   ## chains layout and the persistent tables. The function returns the number
   ## of records processed and saved.
   while true:
-    # Fetch largest block
+    # Fetch list with largest block numbers
     let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:
-      trace info & ": no staged headers", error=error
       break # all done
 
     let
       dangling = ctx.layout.dangling
       iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint64 + 1, qItem.key)
     if iv.maxPt+1 < dangling:
-      trace info & ": there is a gap", iv, D=dangling.bnStr, nSaved=result
+      trace info & ": there is a gap", iv, D=dangling.bnStr, nStashed=result
       break # there is a gap -- come back later
 
     # Overlap must not happen
@@ -243,8 +243,8 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     if qItem.data.hash != ctx.layout.danglingParent:
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
-      trace info & ": discarding staged record",
-        iv, D=dangling.bnStr, lap=result
+      trace info & ": discarding staged header list", iv, D=dangling.bnStr,
+        nStashed=result, nDiscarded=qItem.data.revHdrs.len
       break
 
     # Store headers on database
@@ -253,10 +253,10 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     ctx.layout.danglingParent = qItem.data.parentHash
     ctx.dbStoreSyncStateLayout info
 
-    result.inc # count records
+    result += qItem.data.revHdrs.len # count headers
 
-  trace info & ": staged header lists saved",
-    nStaged=ctx.hdr.staged.len, nSaved=result
+  trace info & ": consecutive headers stashed",
+    nListsLeft=ctx.hdr.staged.len, nStashed=result
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true

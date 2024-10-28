@@ -13,12 +13,12 @@
 import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
-  pkg/stew/sorted_set,
+  pkg/stew/[byteutils, sorted_set],
   ../../../core/chain,
   ../worker_desc,
   ./update/metrics,
   ./headers_staged/staged_queue,
-  "."/[blocks_unproc, db, headers_unproc]
+  "."/[blocks_unproc, db, headers_unproc, helpers]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -88,7 +88,7 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.headersStagedQueueIsEmpty()
   ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
-  trace info & ": updated sync state", C=ctx.layout.coupler.bnStr,
+  trace info & ": updated sync state/new target", C=ctx.layout.coupler.bnStr,
     uTop=ctx.headersUnprocTop(),
     D=ctx.layout.dangling.bnStr, H=ctx.layout.head.bnStr, T=target.bnStr
 
@@ -109,10 +109,15 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
   # Verify adjacent chains
   if ctx.layout.couplerHash != ctx.layout.danglingParent:
     # FIXME: Oops -- any better idea than to defect?
-    raiseAssert info & ": hashes do not match" &
-      " C=" & ctx.layout.coupler.bnStr & " D=" & $ctx.layout.dangling.bnStr
+    raiseAssert info & ": header chains C-D joining hashes do not match" &
+      " L=" & ctx.chain.latestNumber().bnStr &
+      " lHash=" & ctx.chain.latestHash.short &
+      " C=" & ctx.layout.coupler.bnStr &
+      " cHash=" & ctx.layout.couplerHash.short &
+      " D=" & $ctx.layout.dangling.bnStr &
+      " dParent=" & ctx.layout.danglingParent.short
 
-  trace info & ": merging adjacent chains", C=ctx.layout.coupler.bnStr,
+  trace info & ": merging adjacent header chains", C=ctx.layout.coupler.bnStr,
     D=ctx.layout.dangling.bnStr
 
   # Merge adjacent linked chains
@@ -148,8 +153,8 @@ proc updateSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
     let latest= ctx.chain.latestNumber()
     if ctx.layout.head <= latest:
       doAssert ctx.layout.head == latest
+      trace info & ": ready for accepting new target", L="H", H=latest.bnStr
       ctx.layout.headLocked = false
-
 
   # Check whether there is something to do regarding beacon node change
   if not ctx.layout.headLocked and         # there was an active import request

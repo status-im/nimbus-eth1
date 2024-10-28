@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
-  pkg/stew/[byteutils, interval_set, sorted_set],
+  pkg/stew/[interval_set, sorted_set],
   pkg/results,
   "../../.."/[common, core/chain, db/storage_types],
   ../worker_desc,
@@ -21,13 +21,6 @@ import
 
 const
   LhcStateKey = 1.beaconStateKey
-
-# ------------------------------------------------------------------------------
-# Private debugging & logging helpers
-# ------------------------------------------------------------------------------
-
-formatIt(Hash32):
-  it.data.toHex
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -63,18 +56,18 @@ proc deleteStaleHeadersAndState(
     # no database transaction pending.
     if (upTo - bn) mod 8192 == 0:
       ctx.db.persistent(stateNum).isOkOr:
-        debug info & ": cannot persist deleted headers", error=($$error)
+        debug info & ": cannot persist deleted sync headers", error=($$error)
         # So be it, stop here.
         return
 
   # Delete persistent state, there will be no use of it anymore
   discard kvt.del(LhcStateKey.toOpenArray)
   ctx.db.persistent(stateNum).isOkOr:
-    debug info & ": cannot persist deleted headers", error=($$error)
+    debug info & ": cannot persist deleted sync headers", error=($$error)
     return
 
   if bn < upTo:
-    debug info & ": deleted stale headers and state", iv=BnRange.new(bn+1,upTo)
+    debug info & ": deleted stale sync headers", iv=BnRange.new(bn+1,upTo)
 
 # ------------------------------------------------------------------------------
 # Public functions
