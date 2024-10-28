@@ -15,8 +15,16 @@ import
   stew/byteutils,
   unittest2,
   ../../nimbus/db/aristo/[
-    aristo_check, aristo_compute, aristo_delete, aristo_get, aristo_merge, aristo_desc,
-    aristo_utils, aristo_serialise, aristo_init, aristo_tx/tx_stow,
+    aristo_check,
+    aristo_compute,
+    aristo_delete,
+    aristo_get,
+    aristo_merge,
+    aristo_desc,
+    aristo_utils,
+    aristo_serialise,
+    aristo_init,
+    aristo_tx/tx_stow,
   ]
 
 func x(s: string): seq[byte] =
@@ -25,79 +33,48 @@ func k(s: string): HashKey =
   HashKey.fromBytes(s.x).value
 
 let samples = [
-  # From InvalidBlocks/bc4895-withdrawals/twoIdenticalIndex.json
-  @[
-    (
-      "80".x,
-      "da808094c94f5374fce5edbc8e2a8697c15331677e6ebf0b822710".x,
-      hash32"27f166f1d7c789251299535cb176ba34116e44894476a7886fe5d73d9be5c973",
-      VOID_HASH_KEY,
-    ),
-    (
-      "01".x,
-      "da028094c94f5374fce5edbc8e2a8697c15331677e6ebf0b822710".x,
-      hash32"81eac5f476f48feb289af40ee764015f6b49036760438ea45df90d5342b6ae61",
-      VOID_HASH_KEY,
-    ),
-    (
-      "02".x,
-      "da018094c94f5374fce5edbc8e2a8697c15331677e6ebf0b822710".x,
-      hash32"463769ae507fcc6d6231c8888425191c5622f330fdd4b78a7b24c4521137b573",
-      VOID_HASH_KEY,
-    ),
-    (
-      "03".x,
-      "da028094c94f5374fce5edbc8e2a8697c15331677e6ebf0b822710".x,
-      hash32"a95b9a7b58a6b3cb4001eb0be67951c5517141cb0183a255b5cae027a7b10b36",
-      VOID_HASH_KEY,
-    ),
-  ],
-
   # Somew on-the-fly provided stuff
   @[
+    # Create leaf node
     (
-      "0000".x,
-      "0000".x,
-      hash32"69a4785bd4f5a1590e329138d4248b6f887fa37e41bfc510a55f21b44f98be61",
-      "c783200000820000".k,
+      hash32"0000000000000000000000000000000000000000000000000000000000000001",
+      AristoAccount(balance: 0.u256, codeHash: EMPTY_CODE_HASH),
+      hash32"69b5c560f84dde1ecb0584976f4ebbe78e34bb6f32410777309a8693424bb563",
+    ),
+    # Overwrite existing leaf
+    (
+      hash32"0000000000000000000000000000000000000000000000000000000000000001",
+      AristoAccount(balance: 1.u256, codeHash: EMPTY_CODE_HASH),
+      hash32"5ce3c539427b494d97d1fc89080118370f173d29c7dec55a292e6c00a08c4465",
+    ),
+    # Split leaf node with extension
+    (
+      hash32"0000000000000000000000000000000000000000000000000000000000000002",
+      AristoAccount(balance: 1.u256, codeHash: EMPTY_CODE_HASH),
+      hash32"6f28eee5fe67fba78c5bb42cbf6303574c4139ad97631002e07466d2f98c0d35",
     ),
     (
-      "0000".x,
-      "0001".x,
-      hash32"910fa1155b667666abe7b4b1cb4864c1dc91c57c9528e1c5f5f9f95e003afece",
-      "c783200000820001".k,
+      hash32"0000000000000000000000000000000000000000000000000000000000000003",
+      AristoAccount(balance: 0.u256, codeHash: EMPTY_CODE_HASH),
+      hash32"5dacbc38677935c135b911e8c786444e4dc297db1f0c77775ce47ffb8ce81dca",
+    ),
+    # Split extension
+    (
+      hash32"0100000000000000000000000000000000000000000000000000000000000000",
+      AristoAccount(balance: 1.u256, codeHash: EMPTY_CODE_HASH),
+      hash32"57dd53adbbd1969204c0b3435df8c22e0aadadad50871ce7ab4d802b77da2dd3",
     ),
     (
-      "0001".x,
-      "0001".x,
-      hash32"d082d2bfe8586142d6f40df0245e56365043819e51e2c9799c660558eeea0db5",
-      "dd821000d9c420820001c420820001808080808080808080808080808080".k,
+      hash32"0100000000000000000000000000000000000000000000000000000000000001",
+      AristoAccount(balance: 2.u256, codeHash: EMPTY_CODE_HASH),
+      hash32"67ebbac82cc2a55e0758299f63b785fbd3d1f17197b99c78ffd79d73d3026827",
     ),
     (
-      "0002".x,
-      "0000".x,
-      hash32"d56ea5154fbad18e0ff1eaeafa2310d0879b59adf189c12ff1b2701e54db07b2",
-      VOID_HASH_KEY,
+      hash32"0200000000000000000000000000000000000000000000000000000000000000",
+      AristoAccount(balance: 3.u256, codeHash: EMPTY_CODE_HASH),
+      hash32"e7d6a8f7fb3e936eff91a5f62b96177817f2f45a105b729ab54819a99a353325",
     ),
-    (
-      "0100".x,
-      "0100".x,
-      hash32"d1c0699fe7928a536e0183c6400ae34eb1174ce6b21f9d117b061385034743ad",
-      VOID_HASH_KEY,
-    ),
-    (
-      "0101".x,
-      "0101".x,
-      hash32"74ddb98cb56e2dd7e8fa090b9ce740c3de589b72403b20136af75fb6168b1d19",
-      VOID_HASH_KEY,
-    ),
-    (
-      "0200".x,
-      "0200".x,
-      hash32"2e777f06ab2de1a460a8412b8691f10fdcb162077ab5cbb1865636668bcb6471",
-      VOID_HASH_KEY,
-    ),
-  ],
+  ]
 ]
 
 suite "Aristo compute":
@@ -105,29 +82,24 @@ suite "Aristo compute":
     test "Add and delete entries " & $n:
       let
         db = AristoDbRef.init VoidBackendRef
-        root = VertexID(2)
+        root = VertexID(1)
 
-      for inx, (k, v, r, s) in sample:
-        checkpoint("k = " & k.toHex & ", v = " & v.toHex())
+      for (k, v, r) in sample:
+        checkpoint("k = " & k.toHex & ", v = " & $v)
 
         check:
-          db.mergeGenericData(root, k, v) == Result[bool, AristoError].ok(true)
+          db.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
 
         # Check state against expected value
         let w = db.computeKey((root, root)).expect("no errors")
         check r == w.to(Hash32)
 
-        # Check raw node if given, check nor ref against expected value
-        if s.isValid:
-          let z = db.getVtx((root, root)).toNode(root, db).value.digestTo(HashKey)
-          check s == z
-
         let rc = db.check
         check rc == typeof(rc).ok()
 
       # Reverse run deleting entries
-      var deletedKeys: HashSet[seq[byte]]
-      for iny, (k, v, r, s) in sample.reversed:
+      var deletedKeys: HashSet[Hash32]
+      for iny, (k, v, r) in sample.reversed:
         # Check whether key was already deleted
         if k in deletedKeys:
           continue
@@ -138,13 +110,8 @@ suite "Aristo compute":
 
         check r == w
 
-        # Check raw node if given, check nor ref against expected value
-        if s.isValid:
-          let z = db.getVtx((root, root)).toNode(root, db).value.digestTo(HashKey)
-          check s == z
-
         check:
-          db.deleteGenericData(root, k).isOk
+          db.deleteAccountRecord(k).isOk
 
         let rc = db.check
         check rc == typeof(rc).ok()
@@ -153,11 +120,15 @@ suite "Aristo compute":
     # TODO use mainnet genesis in this test?
     let
       db = AristoDbRef.init MemBackendRef
-      root = VertexID(2)
+      root = VertexID(1)
 
-    for inx, (k, v, r, s) in samples[^1]:
+    for (k, v, r) in samples[^1]:
       check:
-        db.mergeGenericData(root, keccak256(k).data, v) == Result[bool, AristoError].ok(true)
+        db.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
 
     check db.txStow(1, true).isOk()
+
     check db.computeKeys(root).isOk()
+
+    let w = db.computeKey((root, root)).value.to(Hash32)
+    check w == samples[^1][^1][2]

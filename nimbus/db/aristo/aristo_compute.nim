@@ -367,7 +367,7 @@ proc computeLeafKeysImpl(
           nonce: vtx.lData.account.nonce,
           balance: vtx.lData.account.balance,
           # Accounts with storage filtered out above
-          storageRoot: default(Hash32),
+          storageRoot: EMPTY_ROOT_HASH,
           codeHash: vtx.lData.account.codeHash,
         )
         writer2.finish()
