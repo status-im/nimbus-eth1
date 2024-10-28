@@ -101,15 +101,6 @@ proc runDaemon*(ctx: BeaconCtxRef; info: static[string]) {.async.} =
   ##
   # Check for a possible header layout and body request changes
   ctx.updateSyncStateLayout info
-
-  # Stop here if there is a termination request
-  if ctx.shutdownRequest:
-    # Log termination state
-    info info & ": beacon sync is terminating",
-      B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
-    return
-
-  # Check for body request changes
   ctx.updateBlockRequests info
 
   # Execute staged block records.

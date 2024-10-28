@@ -370,14 +370,6 @@ type
       defaultValueDesc: $ProtocolFlag.Eth
       name: "protocols" .}: seq[string]
 
-    beaconSyncReset* {.
-      desc: "Clear saved beacon sync state before starting"
-      longDesc:
-        "Clearing the saved state after a previously interrupted beacon " &
-        "sync run will imply a new sync target from the CL node"
-      defaultValue: false
-      name: "beacon-sync-reset" .}: bool
-
     beaconChunkSize* {.
       hidden
       desc: "Number of blocks per database transaction for beacon sync"

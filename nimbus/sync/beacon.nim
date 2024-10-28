@@ -57,25 +57,15 @@ proc init*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    beaconSyncReset = false;
     chunkSize = 0;
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.nBodiesBatch = chunkSize
   desc.ctx.pool.chain = chain
-  if beaconSyncReset:
-    desc.ctx.dbClearSyncState "RunInit"
   desc
 
-proc start*(desc: BeaconSyncRef; resumeOnly = false): bool =
-  ## Start beacon sync. If `resumeOnly` is set `true` the syncer will only
-  ## start up if it can resume work, e.g. after being previously interrupted.
-  if resumeOnly:
-    if not desc.ctx.dbLoadSyncStateAvailable():
-      debug "RunSetup: nothing to do"
-      return false
-    desc.ctx.pool.stopAfterTarget = true
+proc start*(desc: BeaconSyncRef): bool =
   desc.startSync()
 
 proc stop*(desc: BeaconSyncRef) =

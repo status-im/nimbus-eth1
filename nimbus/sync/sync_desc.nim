@@ -40,7 +40,6 @@ type
     ## Shared state among all syncing peer workers (aka buddies.)
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
-    shutdownRequest*: bool      ## Request the scheduler to terminate
     pool*: S                    ## Shared context for all worker peers
 
 # ------------------------------------------------------------------------------

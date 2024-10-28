@@ -72,10 +72,6 @@
 ## *buddy.ctx.daemon*
 ##   Activate `runDaemon()` background job if set `true`(default is `false`.)
 ##
-## *buddy.ctx.shutdownRequest*
-##   Request internal shutdown. This has the same effect a calling `stopSync()`
-##   from outside.
-##
 ##
 ## Additional import files needed when using this template:
 ## * eth/[common, p2p]
@@ -172,7 +168,6 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
     # Gracefully shut down async services
     dsc.runCtrl = shutdown
     dsc.ctx.daemon = false
-    dsc.ctx.shutdownRequest = false
 
     # Wait for workers and daemon to have terminated
     while 0 < dsc.buddies.len:
@@ -216,7 +211,7 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
 
       await dsc.ctx.runDaemon()
 
-      if not dsc.ctx.daemon or dsc.ctx.shutdownRequest:
+      if not dsc.ctx.daemon:
         break
 
       # Enforce minimum time spend on this loop so we never each 100% cpu load
@@ -229,9 +224,6 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
       # End while
 
   dsc.daemonRunning = false
-
-  if dsc.ctx.shutdownRequest:
-    dsc.terminate()
 
 
 proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
@@ -247,7 +239,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
     buddy.isRunning = true
 
     proc isShutdown(): bool =
-      dsc.runCtrl != running or ctx.shutdownRequest
+      dsc.runCtrl != running
 
     proc isActive(): bool =
       worker.ctrl.running and not isShutdown()
@@ -330,9 +322,6 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
   # Note that `runStart()` was dispatched in `onPeerConnected()`
   worker.runStop()
   buddy.isRunning = false
-
-  if ctx.shutdownRequest:
-    dsc.terminate()
 
 
 proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
