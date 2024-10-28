@@ -43,7 +43,6 @@ type
 
   PayloadType* = enum
     ## Type of leaf data.
-    RawData                          ## Generic data
     AccountData                      ## `Aristo account` with vertex IDs links
     StoData                          ## Slot storage data
 
@@ -58,10 +57,7 @@ type
   LeafPayload* = object
     ## The payload type depends on the sub-tree used. The `VertexID(1)` rooted
     ## sub-tree only has `AccountData` type payload, stoID-based have StoData
-    ## while generic have RawData
     case pType*: PayloadType
-    of RawData:
-      rawBlob*: seq[byte]            ## Opaque data, default value
     of AccountData:
       account*: AristoAccount
       stoID*: StorageID              ## Storage vertex ID (if any)
@@ -157,9 +153,6 @@ proc `==`*(a, b: LeafPayload): bool =
     if a.pType != b.pType:
       return false
     case a.pType:
-    of RawData:
-      if a.rawBlob != b.rawBlob:
-        return false
     of AccountData:
       if a.account != b.account or
          a.stoID != b.stoID:
@@ -208,10 +201,6 @@ proc `==`*(a, b: NodeRef): bool =
 func dup*(pld: LeafPayload): LeafPayload =
   ## Duplicate payload.
   case pld.pType:
-  of RawData:
-    LeafPayload(
-      pType:    RawData,
-      rawBlob:  pld.rawBlob)
   of AccountData:
     LeafPayload(
       pType:   AccountData,
