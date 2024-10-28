@@ -128,15 +128,6 @@ proc configurationMain*() =
       let cx = cc.getWsFlags()
       check { RpcFlag.Eth, RpcFlag.Debug } == cx
 
-    test "protocols":
-      let conf = makeTestConfig()
-      let flags = conf.getProtocolFlags()
-      check ProtocolFlag.Eth in flags
-
-      let bb = makeConfig(@["--protocols:eth"])
-      let bx = bb.getProtocolFlags()
-      check ProtocolFlag.Eth in bx
-
     test "bootstrap-node and bootstrap-file":
       let conf = makeTestConfig()
       let bootnodes = conf.getBootNodes()

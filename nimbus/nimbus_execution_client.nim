@@ -63,7 +63,7 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
       quit(QuitFailure)
 
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              com: CommonRef, protocols: set[ProtocolFlag]) =
+              com: CommonRef) =
   ## Creating P2P Server
   let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
   if kpres.isErr:
@@ -104,19 +104,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     bindIp = conf.listenAddress,
     rng = nimbus.ctx.rng)
 
-  # Add protocol capabilities based on protocol flags
-  for w in protocols:
-    case w: # handle all possibilities
-    of ProtocolFlag.Eth:
-      nimbus.ethNode.addEthHandlerCapability(
-        nimbus.ethNode.peerPool,
-        nimbus.chainRef,
-        nimbus.txPool)
-  # Cannot do without minimal `eth` capability
-  if ProtocolFlag.Eth notin protocols:
-    nimbus.ethNode.addEthHandlerCapability(
-      nimbus.ethNode.peerPool,
-      nimbus.chainRef)
+  # Add protocol capabilities
+  nimbus.ethNode.addEthHandlerCapability(
+    nimbus.ethNode.peerPool, nimbus.chainRef, nimbus.txPool)
 
   # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(
@@ -217,12 +207,10 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   else:
-    let protocols = conf.getProtocolFlags()
-
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
-    setupP2P(nimbus, conf, com, protocols)
-    setupRpc(nimbus, conf, com, protocols)
+    setupP2P(nimbus, conf, com)
+    setupRpc(nimbus, conf, com)
 
     if conf.maxPeers > 0:
       # Not starting syncer if there is definitely no way to run it. This
