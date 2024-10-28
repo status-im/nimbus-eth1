@@ -117,11 +117,6 @@ type
     noCommand
     `import`
 
-  ProtocolFlag* {.pure.} = enum
-    ## Protocol flags
-    Eth                           ## enable eth subprotocol
-    #Snap                          ## enable snap sub-protocol
-
   RpcFlag* {.pure.} = enum
     ## RPC flags
     Eth                           ## enable eth_ set of RPC API
@@ -365,14 +360,6 @@ type
       defaultValue: NimbusIdent
       defaultValueDesc: $NimbusIdent
       name: "agent-string" .}: string
-
-    protocols {.
-      desc: "Enable specific set of server protocols (available: Eth, " &
-            " None.) This will not affect the sync mode"
-            # " Snap, None.) This will not affect the sync mode"
-      defaultValue: @[]
-      defaultValueDesc: $ProtocolFlag.Eth
-      name: "protocols" .}: seq[string]
 
     beaconChunkSize* {.
       hidden
@@ -670,23 +657,6 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
     except CatchableError:
       error "Failed to parse network name or id", network
       quit QuitFailure
-
-proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
-  if conf.protocols.len == 0:
-    return {ProtocolFlag.Eth}
-
-  var noneOk = false
-  for item in repeatingList(conf.protocols):
-    case item.toLowerAscii()
-    of "eth": result.incl ProtocolFlag.Eth
-    # of "snap": result.incl ProtocolFlag.Snap
-    of "none": noneOk = true
-    else:
-      error "Unknown protocol", name=item
-      quit QuitFailure
-  if noneOk and 0 < result.len:
-    error "Setting none contradicts wire protocols", names = $result
-    quit QuitFailure
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
