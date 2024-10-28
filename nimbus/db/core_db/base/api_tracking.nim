@@ -23,7 +23,7 @@ type
     ## Needed for local `$` as it would be ambiguous for `Duration`
 
   CoreDbApiTrackRef* =
-    CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
+    CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbAccRef |
     CoreDbTxRef
 
   CoreDbFnInx* = enum
@@ -78,16 +78,6 @@ type
     KvtLenFn            = "len"
     KvtPairsIt          = "pairs"
     KvtPutFn            = "put"
-
-    MptDeleteFn         = "mpt/delete"
-    MptFetchFn          = "mpt/fetch"
-    MptFetchOrEmptyFn   = "mpt/fetchOrEmpty"
-    MptForgetFn         = "mpt/forget"
-    MptHasPathFn        = "mpt/hasPath"
-    MptMergeFn          = "mpt/merge"
-    MptProofFn          = "mpt/proof"
-    MptPairsIt          = "mpt/pairs"
-    MptStateFn          = "mpt/state"
 
     TxCommitFn          = "commit"
     TxDisposeFn         = "dispose"
@@ -152,7 +142,6 @@ func toStr(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
 func toStr(rc: CoreDbRc[CoreDbKvtRef]): string = rc.toStr "kvt"
 func toStr(rc: CoreDbRc[CoreDbTxRef]): string = rc.toStr "tx"
 func toStr(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
-func toStr(rc: CoreDbRc[CoreDbMptRef]): string = rc.toStr "mpt"
 func toStr(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"
 
 # ------------------------------------------------------------------------------
