@@ -14,7 +14,7 @@ import
   pkg/chronos
 
 const
-  enableTicker* = true
+  enableTicker* = false
     ## Log regular status updates similar to metrics. Great for debugging.
 
   runsThisManyPeersOnly* = 8
@@ -43,7 +43,7 @@ const
   workerIdleWaitInterval* = chronos.seconds(10)
     ## Sleep some time in multi-mode if there is nothing to do
 
-  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(10)
+  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
 
   # ----------------------

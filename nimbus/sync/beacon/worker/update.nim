@@ -17,10 +17,8 @@ import
   ../../../core/chain,
   ../worker_desc,
   ./update/metrics,
-  "."/[blocks_unproc, db, headers_staged, headers_unproc]
-
-logScope:
-  topics = "beacon update"
+  ./headers_staged/staged_queue,
+  "."/[blocks_unproc, db, headers_unproc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -51,12 +49,13 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
   var target = ctx.target.consHead.number
 
   # Need: `H < T` and `C == D`
-  if target != 0 and target <= ctx.layout.head:      # violates `H < T`
-    trace info & ": not applicable", H=ctx.layout.head.bnStr, T=target.bnStr
+  if target != 0 and target <= ctx.layout.head: # violates `H < T`
+    trace info & ": update not applicable",
+      H=ctx.layout.head.bnStr, T=target.bnStr
     return
 
   if ctx.layout.coupler != ctx.layout.dangling: # violates `C == D`
-    trace info & ": not applicable",
+    trace info & ": update not applicable",
       C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr
     return
 
@@ -78,10 +77,10 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
-  ctx.dbStashHeaders(target, @[rlpHeader])
+  ctx.dbStashHeaders(target, @[rlpHeader], info)
 
   # Save state
-  ctx.dbStoreSyncStateLayout()
+  ctx.dbStoreSyncStateLayout info
 
   # Update range
   doAssert ctx.headersUnprocTotal() == 0
@@ -89,9 +88,12 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.headersStagedQueueIsEmpty()
   ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
-  trace info & ": updated", C=ctx.layout.coupler.bnStr,
+  trace info & ": updated sync state", C=ctx.layout.coupler.bnStr,
     uTop=ctx.headersUnprocTop(),
     D=ctx.layout.dangling.bnStr, H=ctx.layout.head.bnStr, T=target.bnStr
+
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
 
 
 proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
@@ -110,7 +112,7 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
     raiseAssert info & ": hashes do not match" &
       " C=" & ctx.layout.coupler.bnStr & " D=" & $ctx.layout.dangling.bnStr
 
-  trace info & ": merging", C=ctx.layout.coupler.bnStr,
+  trace info & ": merging adjacent chains", C=ctx.layout.coupler.bnStr,
     D=ctx.layout.dangling.bnStr
 
   # Merge adjacent linked chains
@@ -126,7 +128,10 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
     headLocked:     ctx.layout.headLocked)
 
   # Save state
-  ctx.dbStoreSyncStateLayout()
+  ctx.dbStoreSyncStateLayout info
+
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -145,8 +150,11 @@ proc updateSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
       doAssert ctx.layout.head == latest
       ctx.layout.headLocked = false
 
+
   # Check whether there is something to do regarding beacon node change
-  if not ctx.layout.headLocked and ctx.target.changed and ctx.target.final != 0:
+  if not ctx.layout.headLocked and         # there was an active import request
+     ctx.target.changed and                # and there is a new target from CL
+     ctx.target.final != 0:                # .. ditto
     ctx.target.changed = false
     ctx.updateTargetChange info
 
@@ -162,19 +170,12 @@ proc updateBlockRequests*(ctx: BeaconCtxRef; info: static[string]) =
     # One can fill/import/execute blocks by number from `(L,C]`
     if ctx.blk.topRequest < ctx.layout.coupler:
       # So there is some space
-      trace info & ": updating", L=latest.bnStr,
+      trace info & ": updating block requests", L=latest.bnStr,
         topReq=ctx.blk.topRequest.bnStr, C=ctx.layout.coupler.bnStr
 
       ctx.blocksUnprocCommit(
         0, max(latest, ctx.blk.topRequest) + 1, ctx.layout.coupler)
       ctx.blk.topRequest = ctx.layout.coupler
-
-
-proc updateMetrics*(ctx: BeaconCtxRef) =
-  let now = Moment.now()
-  if ctx.pool.nextUpdate < now:
-    ctx.updateMetricsImpl()
-    ctx.pool.nextUpdate = now + metricsUpdateInterval
 
 # ------------------------------------------------------------------------------
 # End

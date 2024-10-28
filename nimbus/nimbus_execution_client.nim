@@ -224,11 +224,10 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, com, protocols)
     setupRpc(nimbus, conf, com, protocols)
 
-    if conf.maxPeers > 0:
+    if conf.maxPeers > 0 and conf.engineApiServerEnabled():
       # Not starting syncer if there is definitely no way to run it. This
       # avoids polling (i.e. waiting for instructions) and some logging.
-      let resumeOnly = not conf.engineApiServerEnabled()
-      if not nimbus.beaconSyncRef.start(resumeOnly):
+      if not nimbus.beaconSyncRef.start():
         nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
     if nimbus.state == NimbusState.Starting:

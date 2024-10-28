@@ -11,10 +11,12 @@
 {.push raises:[].}
 
 import
-  pkg/metrics,
+  pkg/[chronos, metrics],
   ../../../../core/chain,
   ../../worker_desc,
-  ".."/[blocks_staged, headers_staged]
+  ../blocks_staged/staged_queue,
+  ../headers_staged/staged_queue,
+  ".."/[blocks_unproc, headers_unproc]
 
 declareGauge beacon_base, "" &
   "Max block number of imported finalised blocks"
@@ -55,7 +57,7 @@ declareGauge beacon_buddies, "" &
   "Number of currently active worker instances"
 
 
-template updateMetricsImpl*(ctx: BeaconCtxRef) =
+template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(beacon_base, ctx.chain.baseNumber().int64)
   metrics.set(beacon_latest, ctx.chain.latestNumber().int64)
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
@@ -73,5 +75,13 @@ template updateMetricsImpl*(ctx: BeaconCtxRef) =
               (ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed()).int64)
 
   metrics.set(beacon_buddies, ctx.pool.nBuddies)
+
+# ---------------
+
+proc updateMetrics*(ctx: BeaconCtxRef) =
+  let now = Moment.now()
+  if ctx.pool.nextUpdate < now:
+    ctx.updateMetricsImpl()
+    ctx.pool.nextUpdate = now + metricsUpdateInterval
 
 # End

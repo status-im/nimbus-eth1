@@ -138,7 +138,7 @@ type
     nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
     blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
 
-    # Info stuff, no functional contribution
+    # Info & debugging stuff, no functional contribution
     nReorg*: int                     ## Number of reorg invocations (info only)
 
     # Debugging stuff
