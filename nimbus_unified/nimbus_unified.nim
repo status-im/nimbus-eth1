@@ -12,7 +12,8 @@ import
   consensus/consensus_wrapper,
   execution/execution_wrapper,
   beacon_chain/[conf, conf_common],
-  beacon_chain/[beacon_chain_db]
+  beacon_chain/[beacon_chain_db],
+  beacon_chain/validators/keystore_management
 
 ## Constants
 ## TODO: evaluate the proposed timeouts with team
@@ -60,15 +61,14 @@ proc joinTasks(tasks: var NimbusTasks) =
 
   info "\tAll tasks finished"
 
-#TODO: Investigate if this is really needed? and for what purpose?
-var gPidFile: string
-proc createPidFile(filename: string) {.raises: [IOError].} =
-  writeFile filename, $os.getCurrentProcessId()
-  gPidFile = filename
-  addExitProc (
-    proc() =
-      discard io2.removeFile(filename)
-  )
+# var gPidFile: string
+# proc createPidFile(filename: string) {.raises: [IOError].} =
+#   writeFile filename, $os.getCurrentProcessId()
+#   gPidFile = filename
+#   addExitProc (
+#     proc() =
+#       discard io2.removeFile(filename)
+#   )
 
 # ----
 
@@ -101,7 +101,7 @@ proc addNewTask*(
     createThread(tasks.taskList[currentIndex].threadHandler, taskHandler, parameters)
   except CatchableError as e:
     # TODO: joinThreads
-    fatal "error creating task (thread)", msg=e.msg
+    fatal "error creating task (thread)", msg = e.msg
 
   info "Created task:", task = tasks.taskList[currentIndex].name
 
@@ -151,7 +151,6 @@ when isMainModule:
   info "Starting Nimbus"
   ## TODO
   ## - file limits
-  ## - check if we have permissions to create data folder if needed
   ## - setup logging
   ## - read configuration (check nimbus_configs file anottations)
   ## - implement config reader for all components
@@ -163,12 +162,19 @@ when isMainModule:
   const SPEC_VERSION = "1.5.0-alpha.8"
   const copyrights = "status"
   const nimBanner = "nimbus"
-  const clientId = "beacon node"
+  const clientId = "nimbus unified"
   var beaconNodeConfig = makeBannerAndConfig(
     clientId, copyrights, nimBanner, SPEC_VERSION, [], BeaconNodeConf
   ).valueOr:
-    quit(0)
+    stderr.write error
+    quit QuitFailure
 
+  if not (checkAndCreateDataDir(string(beaconNodeConfig.dataDir))):
+    # We are unable to access/create data folder or data folder's
+    # permissions are insecure.
+    quit QuitFailure
+
+  # create and start tasks
   tasksList.startTasks(nimbusConfigs, beaconNodeConfig)
 
   ## Graceful shutdown by handling of Ctrl+C signal
@@ -189,6 +195,6 @@ when isMainModule:
     quit(0)
 
   setControlCHook(controlCHandler)
-  createPidFile(beaconNodeConfig.databaseDir.string / "unified.pid")
+  # createPidFile(beaconNodeConfig.databaseDir.string / "unified.pid")
   #start monitoring
   tasksList.monitor(nimbusConfigs)

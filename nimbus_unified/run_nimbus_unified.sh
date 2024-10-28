@@ -20,7 +20,4 @@ exec build/nimbus_unified \
 --data-dir=build/data/shared_holesky_0 \
 --tcp-port=9000 \
 --udp-port=9000 \
---rest-port=5052 \
---web3-url=http://127.0.0.1:8551 \
---jwt-secret=/tmp/jwtsecret \
 --log-level=TRACE
