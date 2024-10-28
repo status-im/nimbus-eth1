@@ -81,7 +81,9 @@ proc headerStagedUpdateTarget*(
         let final = rc.value[0].number
         if final < ctx.chain.baseNumber():
           trace info & ": finalised number too low", peer,
-            B=ctx.chain.baseNumber.bnStr, finalised=rc.value[0].number.bnStr
+            B=ctx.chain.baseNumber.bnStr, finalised=final.bnStr,
+            delta=(ctx.chain.baseNumber - final)
+          ctx.target.reset
         else:
           ctx.target.final = final
 
