@@ -13,6 +13,8 @@ import
   ./host_types, evmc/evmc,
   ".."/[evm/types, evm/computation, evm/state_transactions]
 
+export evmc
+
 proc evmcReleaseResult(result: var evmc_result) {.cdecl.} =
   dealloc(result.output_data)
 
@@ -85,7 +87,7 @@ proc evmcSetOption(vm: ptr evmc_vm, name, value: cstring): evmc_set_option_resul
 proc evmcDestroy(vm: ptr evmc_vm) {.cdecl.} =
   GC_unref(cast[ref evmc_vm](vm))
 
-proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, exportc.} =
+proc evmc_create_nimbus_evm*(): ptr evmc_vm {.cdecl, exportc.} =
   ## Entry point to the Nimbus EVM, using an EVMC compatible interface.
   ## This is an exported C function.  EVMC specifies the function must
   ## have this name format when exported from a shared library.
