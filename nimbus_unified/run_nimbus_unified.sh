@@ -17,7 +17,7 @@
 #unified
 exec build/nimbus_unified \
 --network=holesky \
---data-dir=build/data/shared_holesky_0 \
+--data-dir="build/data/shared_holesky_0" \
 --tcp-port=9000 \
 --udp-port=9000 \
 --log-level=TRACE

@@ -41,10 +41,7 @@ logScope:
 ## Execution Layer handler
 proc executionLayerHandler(parameters: TaskParameters) {.thread.} =
   info "Started task:", task = parameters.name
-  while true:
-    executionWrapper(parameters)
-    if isShutDownRequired.load() == true:
-      break
+  executionWrapper(parameters)
   info "\tExiting task;", task = parameters.name
 
 ## Consensus Layer handler
@@ -55,20 +52,21 @@ proc consensusLayerHandler(parameters: TaskParameters) {.thread.} =
 
 ## Waits for tasks to finish (joinThreads)
 proc joinTasks(tasks: var NimbusTasks) =
+  warn "Waiting all tasks to finish ... "
   for i in 0 .. cNimbusMaxTasks - 1:
     if not tasks.taskList[i].isNil:
       joinThread(tasks.taskList[i].threadHandler)
 
-  info "\tAll tasks finished"
+  notice "All tasks finished correctly"
 
-# var gPidFile: string
-# proc createPidFile(filename: string) {.raises: [IOError].} =
-#   writeFile filename, $os.getCurrentProcessId()
-#   gPidFile = filename
-#   addExitProc (
-#     proc() =
-#       discard io2.removeFile(filename)
-#   )
+var gPidFile: string
+proc createPidFile(filename: string) {.raises: [IOError].} =
+  writeFile filename, $os.getCurrentProcessId()
+  gPidFile = filename
+  addExitProc (
+    proc() =
+      discard io2.removeFile(filename)
+  )
 
 # ----
 
@@ -107,17 +105,15 @@ proc addNewTask*(
 
 ## Task monitoring
 proc monitor*(tasksList: var NimbusTasks, config: NimbusConfig) =
-  info "monitoring tasks"
+  info "started task monitoring"
 
   while true:
     info "checking tasks ... "
-
-    # -check tasks flag (to be created when needed) if it's required to shutdown
-    #   this atomic flag solves:
-    # - non responding thread
-    # - thread that required shutdown
-
+    if isShutDownRequired.load() == true:
+      break
     sleep(cNimbusTaskTimeoutMs)
+
+  tasksList.joinTasks()
 
 ## create running workers
 proc startTasks*(
@@ -159,7 +155,7 @@ when isMainModule:
 
   ##TODO: this is an adapted call os the vars required by makeBannerAndConfig
   ##these values need to be read from some config file
-  const SPEC_VERSION = "1.5.0-alpha.8"
+  const SPEC_VERSION = "tbd"
   const copyrights = "status"
   const nimBanner = "nimbus"
   const clientId = "nimbus unified"
@@ -169,13 +165,16 @@ when isMainModule:
     stderr.write error
     quit QuitFailure
 
-  if not (checkAndCreateDataDir(string(beaconNodeConfig.dataDir))):
+  #TODO: if we don't add the "db" program crashes on
+  if not(checkAndCreateDataDir(string(beaconNodeConfig.dataDir/"db"))):
     # We are unable to access/create data folder or data folder's
     # permissions are insecure.
     quit QuitFailure
 
-  # create and start tasks
-  tasksList.startTasks(nimbusConfigs, beaconNodeConfig)
+  # TODO: data directory is not created(build/data/shared_holesky_0/db/)
+  # and "createPidFile" throws an exception
+  # solution: manually create the directory
+  createPidFile(beaconNodeConfig.databaseDir.string / "unified.pid")
 
   ## Graceful shutdown by handling of Ctrl+C signal
   ## TODO: we might need to declare it per thread
@@ -195,6 +194,9 @@ when isMainModule:
     quit(0)
 
   setControlCHook(controlCHandler)
-  # createPidFile(beaconNodeConfig.databaseDir.string / "unified.pid")
+
+  #create and start tasks
+  tasksList.startTasks(nimbusConfigs, beaconNodeConfig)
+
   #start monitoring
   tasksList.monitor(nimbusConfigs)

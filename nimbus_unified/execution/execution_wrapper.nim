@@ -12,13 +12,15 @@ export nimbus_configs
 logScope:
   topics = "Execution layer"
 
+const cTempExecutionTimeoutMs = 5000
 proc executionWrapper*(parameters: TaskParameters) =
   info "Execution wrapper:", worker = parameters.name
 
   while true:
-    sleep(2000)
+    sleep(cTempExecutionTimeoutMs)
     info "looping execution"
     if isShutDownRequired.load() == true:
       break
 
+  isShutDownRequired.store(true)
   warn "\tExiting execution:", worker = parameters.name
