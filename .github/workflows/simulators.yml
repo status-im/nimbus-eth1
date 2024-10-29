@@ -43,7 +43,7 @@ jobs:
         run: |
           ncpu=$(nproc)
           make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries update-from-ci
-          make -j${ncpu} deps
+          make -j${ncpu} deps rocksdb
 
       - name: Run Simulators
         run: |
@@ -84,7 +84,7 @@ jobs:
         run: |
           ncpu=$(sysctl -n hw.ncpu)
           make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries update-from-ci
-          make -j${ncpu} deps
+          make -j${ncpu} deps rocksdb
 
       - name: Run Simulators
         run: |
