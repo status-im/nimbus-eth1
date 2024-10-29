@@ -197,8 +197,8 @@ proc newPayload*(ben: BeaconEngineRef,
     return invalidStatus(blockHash, vres.error())
 
   info "New payload received and validated",
-    number = header.number, 
-    hash = blockHash.short, 
+    number = header.number,
+    hash = blockHash.short,
     parent = header.parentHash.short,
     txs = blk.transactions.len,
     gasUsed = header.gasUsed,

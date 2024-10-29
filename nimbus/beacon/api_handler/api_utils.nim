@@ -48,10 +48,10 @@ proc computePayloadId*(blockHash: common.Hash32,
   (distinctBase result)[0..7] = dest.data[0..7]
 
 proc validateBlockHash*(header: common.Header,
-                        gotHash: common.Hash32,
+                        wantHash: common.Hash32,
                         version: Version): Result[void, PayloadStatusV1]
                           {.gcsafe, raises: [ValueError].} =
-  let wantHash = header.blockHash
+  let gotHash = header.blockHash
   if wantHash != gotHash:
     let status = if version == Version.V1:
                    PayloadExecutionStatus.invalid_block_hash
