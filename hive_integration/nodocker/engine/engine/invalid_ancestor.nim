@@ -193,7 +193,8 @@ method getName(cs: InvalidMissingAncestorReOrgSyncTest): string =
     $cs.invalidField, $cs.emptyTransactions, $cs.reOrgFromCanonical, $cs.invalidIndex]
 
 func blockHeader(ex: ExecutableData): common.BlockHeader =
-  blockHeader(ex.basePayload, ex.beaconRoot)
+  let requestsHash = calcRequestsHash(ex.executionRequests)
+  blockHeader(ex.basePayload, ex.beaconRoot, requestsHash)
 
 func blockBody(ex: ExecutableData): common.BlockBody =
   blockBody(ex.basePayload)
