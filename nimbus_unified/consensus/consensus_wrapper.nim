@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
+  std/[os, atomics],
   beacon_chain/nimbus_binary_common,
   beacon_chain/spec/forks,
   beacon_chain/[beacon_chain_db, trusted_node_sync],
@@ -133,45 +133,20 @@ proc doRunTrustedNodeSync(
 
 ## Consensus wrapper
 proc consensusWrapper*(parameters: TaskParameters) {.raises: [CatchableError].} =
+  # Single RNG instance for the application - will be seeded on construction
+  # and avoid using system resources (such as urandom) after that
   let rng = HmacDrbgContext.new()
   var config = parameters.beaconNodeConfigs
+
+  setupFileLimits()
+
+  #TODO: Another FC unsafe procedure
+  # setupLogging(config.logLevel, config.logStdout, config.logFile)
 
   try:
     doRunBeaconNode(config, rng)
   except CatchableError as e:
     fatal "error", message = e.msg
-    # TODO: we need to create an dedicated atomic asking task manager to join threads
 
-  let
-    metadata = loadEth2Network(config)
-    db = BeaconChainDB.new(config.databaseDir, metadata.cfg, inMemory = false)
-    genesisState = waitFor fetchGenesisState(metadata)
-
-  try:
-    waitFor(
-      db.doRunTrustedNodeSync(
-        metadata, config.databaseDir, config.eraDir, "http://127.0.0.1:5052",
-        config.stateId, config.lcTrustedBlockRoot, config.backfillBlocks,
-        config.reindex, config.downloadDepositSnapshot, genesisState,
-      )
-    )
-  except CatchableError as e:
-    # TODO: we need to create an dedicated atomic asking task manager to join threads
-    fatal "error", message = e.MsgSource
-
-  db.close()
-
-  # TODO: nice to start creating some binary launch scripts
-  
-  # --web3-url=http://127.0.0.1:8551 --jwt-secret=/tmp/jwtsecret --log-level=TRACE
-  #  --network=${NETWORK} \
-  #   --data-dir="${DATA_DIR}" \
-  #   --tcp-port=$(( ${BASE_P2P_PORT} + ${NODE_ID} )) \
-  #   --udp-port=$(( ${BASE_P2P_PORT} + ${NODE_ID} )) \
-  #   --rest \
-  #   --rest-port=$(( ${BASE_REST_PORT} + ${NODE_ID} )) \
-  #   --metrics \
-  #   ${WEB3_URL_ARG} ${EXTRA_ARGS} \
-  #   "$@"
-
+  isShutDownRequired.store(true)
   warn "\tExiting consensus wrapper"
