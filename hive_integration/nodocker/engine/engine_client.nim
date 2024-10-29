@@ -633,7 +633,7 @@ createRpcSigsFromNim(RpcClient):
 proc debugPrevRandaoTransaction*(
     client: RpcClient,
     tx: PooledTransaction,
-    expectedPrevRandao: Hash32): Result[void, string] =
+    expectedPrevRandao: Bytes32): Result[void, string] =
   wrapTry:
     let hash = tx.rlpHash
     # we only interested in stack, disable all other elems
@@ -660,7 +660,7 @@ proc debugPrevRandaoTransaction*(
       if stack.len < 1:
         return err("Invalid stack after PREVRANDAO operation")
 
-      let stackHash = Hash32(hextoByteArray[32](stack[0].getStr))
+      let stackHash = Bytes32(hextoByteArray[32](stack[0].getStr))
       if stackHash != expectedPrevRandao:
         return err("Invalid stack after PREVRANDAO operation $1 != $2" % [stackHash.data.toHex, expectedPrevRandao.data.toHex])
 

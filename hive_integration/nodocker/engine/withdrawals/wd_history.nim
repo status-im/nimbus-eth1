@@ -12,7 +12,6 @@ import
   std/[tables, sets, strutils],
   eth/common/eth_types as common,
   json_rpc/[rpcclient],
-  stew/byteutils,
   results,
   ../engine_client,
   ../../../../nimbus/utils/utils,

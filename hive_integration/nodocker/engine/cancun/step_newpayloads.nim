@@ -69,7 +69,7 @@ proc verifyPayload(step: NewPayloads,
       parentBlobGasUsed = prevPayload.blobGasUsed.get.uint64
 
   let
-    parent = common.BlockHeader(
+    parent = Header(
       excessBlobGas: Opt.some(parentExcessBlobGas),
       blobGasUsed: Opt.some(parentBlobGasUsed)
     )

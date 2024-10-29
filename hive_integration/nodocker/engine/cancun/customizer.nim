@@ -277,7 +277,7 @@ method getVersionedHashes(cust: ExtraVersionedHash,
   for i, h in baseVersionedHashes:
     v[i] = h
 
-  var extraHash = common.Hash32.randomBytes()
+  var extraHash = Hash32.randomBytes()
   extraHash.data[0] = VERSIONED_HASH_VERSION_KZG
   v[^1] = extraHash
   Opt.some(v)
@@ -586,7 +586,7 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
   of InvalidPrevRandao:
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.
-    let randomHash = common.Hash32.randomBytes()
+    let randomHash = Hash32.randomBytes()
     customPayloadMod = CustomPayloadData(
       prevRandao: Opt.some(Bytes32 randomHash.data),
     )

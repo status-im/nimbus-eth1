@@ -85,11 +85,14 @@ func timestampToBeaconRoot*(timestamp: Quantity): Hash32 =
   let h = sha2.sha256.digest(timestamp.uint64.toBytesBE)
   Hash32(h.data)
 
+proc randomBytes*(_: type Bytes32): Bytes32 =
+  doAssert randomBytes(result.data) == 32
+  
 proc randomBytes*(_: type Hash32): Hash32 =
   doAssert randomBytes(result.data) == 32
 
 proc randomBytes*(_: type Address): Address =
-  doAssert randomBytes(result) == 20
+  doAssert randomBytes(result.data) == 20
 
 proc clone*[T](x: T): T =
   result = T()
