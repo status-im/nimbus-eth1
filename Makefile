@@ -105,6 +105,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	deps \
 	update \
 	nimbus \
+	nimbus_execution_client \
 	fluffy \
 	nimbus_verified_proxy \
 	libverifproxy \
@@ -157,7 +158,7 @@ GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submod
 else # "variables.mk" was included. Business as usual until the end of this file.
 
 # default target, because it's the first one that doesn't start with '.'
-all: | $(TOOLS) nimbus
+all: | $(TOOLS) nimbus_execution_client
 
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
@@ -210,11 +211,12 @@ $(TOOLS): | build deps rocksdb
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
-# a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
-execution_client_name = nimbus_execution_client
-nimbus: | build deps rocksdb
-	echo -e $(BUILD_MSG) "build/$(execution_client_name)" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$(execution_client_name) "nimbus/$(execution_client_name).nim"
+nimbus_execution_client: | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "nimbus/nimbus_execution_client.nim"
+
+nimbus: nimbus_execution_client
+	echo "The nimbus target is deprecated and will soon change meaning, use 'nimbus_execution_client' instead"
 
 # symlink
 nimbus.nims:
@@ -244,7 +246,7 @@ test: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_rocksdb $(NIM_PARAMS) nimbus.nims
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
-test_import: nimbus
+test_import: nimbus_execution_client
 	$(ENV_SCRIPT) nim test_import $(NIM_PARAMS) nimbus.nims
 
 # builds and runs an EVM-related subset of the nimbus test suite
@@ -257,10 +259,10 @@ test-evm: | build deps rocksdb
 # deterministic order for debugging info sections - even with
 # "-frandom-seed=...". Striping the binaries should make them identical, though.
 test-reproducibility:
-	+ [ -e build/nimbus_execution_client ] || $(MAKE) V=0 nimbus; \
+	+ [ -e build/nimbus_execution_client ] || $(MAKE) V=0 nimbus_execution_client; \
 		MD5SUM1=$$($(MD5SUM) build/nimbus_execution_client | cut -d ' ' -f 1) && \
 		rm -rf nimcache/*/nimbus_execution_client && \
-		$(MAKE) V=0 nimbus && \
+		$(MAKE) V=0 nimbus_execution_client && \
 		MD5SUM2=$$($(MD5SUM) build/nimbus_execution_client | cut -d ' ' -f 1) && \
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
@@ -359,7 +361,7 @@ txparse: | build deps
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus,nimbus_execution_client,fluffy,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)
