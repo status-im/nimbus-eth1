@@ -341,12 +341,12 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       now = Moment.now()
       ttz = zombie.value.zombified + zombieTimeToLinger
     if ttz < Moment.now():
-      trace "Reconnecting zombie peer ignored", peer,
+      if dsc.ctx.noisyLog: trace "Reconnecting zombie peer ignored", peer,
         nPeers, nWorkers=dsc.buddies.len, maxWorkers, canRequeue=(now-ttz)
       return
     # Zombie can be removed from the database
     dsc.buddies.del peer.key
-    trace "Zombie peer timeout, ready for requeing", peer,
+    if dsc.ctx.noisyLog: trace "Zombie peer timeout, ready for requeing", peer,
       nPeers, nWorkers=dsc.buddies.len, maxWorkers
 
   # Initialise worker for this peer
@@ -357,7 +357,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       ctrl: BuddyCtrlRef(),
       peer: peer))
   if not buddy.worker.runStart():
-    trace "Ignoring useless peer", peer, nPeers,
+    if dsc.ctx.noisyLog: trace "Ignoring useless peer", peer, nPeers,
       nWorkers=dsc.buddies.len, maxWorkers
     buddy.worker.ctrl.zombie = true
     return
@@ -373,7 +373,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       leastVal = dsc.buddies.shift.value # unqueue first/least item
       oldest = leastVal.data.worker
     if oldest.isNil:
-      trace "Dequeuing zombie peer",
+      if dsc.ctx.noisyLog: trace "Dequeuing zombie peer",
         # Fake `Peer` pretty print for `oldest`
         oldest=("Node[" & $leastVal.key.address & "]"),
         since=leastVal.data.zombified, nPeers, nWorkers=dsc.buddies.len,
@@ -382,8 +382,8 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     else:
       # This could happen if there are idle entries in the table, i.e.
       # somehow hanging runners.
-      trace "Peer table full! Dequeuing least used entry", oldest,
-        nPeers, nWorkers=dsc.buddies.len, maxWorkers
+      if dsc.ctx.noisyLog: trace "Peer table full! Dequeuing least used entry",
+        oldest, nPeers, nWorkers=dsc.buddies.len, maxWorkers
       # Setting to `zombie` will trigger the worker to terminate (if any.)
       oldest.ctrl.zombie = true
 
@@ -400,12 +400,12 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
     nWorkers = dsc.buddies.len
     rc = dsc.buddies.eq peer.key
   if rc.isErr:
-    debug "Disconnected, unregistered peer", peer, nPeers, nWorkers, maxWorkers
-    discard
+    if dsc.ctx.noisyLog: debug "Disconnected, unregistered peer", peer,
+      nPeers, nWorkers, maxWorkers
   elif rc.value.worker.isNil:
     # Re-visiting zombie
-    trace "Ignore zombie", peer, nPeers, nWorkers, maxWorkers
-    discard
+    if dsc.ctx.noisyLog: trace "Ignore zombie", peer,
+      nPeers, nWorkers, maxWorkers
   elif rc.value.worker.ctrl.zombie:
     # Don't disconnect, leave them fall out of the LRU cache. The effect is,
     # that reconnecting might be blocked, for a while. For few peers cases,
@@ -414,7 +414,8 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
     rc.value.worker = nil
     rc.value.dsc = nil
     rc.value.zombified = Moment.now()
-    trace "Disconnected, zombie", peer, nPeers, nWorkers, maxWorkers
+    if dsc.ctx.noisyLog: trace "Disconnected, zombie", peer,
+      nPeers, nWorkers, maxWorkers
   else:
     rc.value.worker.ctrl.stopped = true # in case it is hanging somewhere
     dsc.buddies.del peer.key

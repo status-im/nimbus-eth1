@@ -87,6 +87,12 @@ proc headerStagedUpdateTarget*(
         else:
           ctx.target.final = final
 
+          # Activate running (unless done yet)
+          if ctx.hibernate:
+            ctx.hibernate = false
+            trace info & ": activated syncer", peer,
+              finalised=final.bnStr, head=ctx.layout.head.bnStr
+
           # Update, so it can be followed nicely
           ctx.updateMetrics()
 

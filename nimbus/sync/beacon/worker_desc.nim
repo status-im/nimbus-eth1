@@ -145,7 +145,7 @@ type
     # `nFetchBodiesRequest`.)
     chain*: ForkedChainRef           ## Core database, FCU support
     stash*: KvtCache                 ## Temporary header and state table
-    importRunningOk*: bool           ## Advisory lock, fetch vs. import
+    blockImportOk*: bool             ## Don't fetch data while block importing
     nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
     blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
 
@@ -197,6 +197,22 @@ func stash*(ctx: BeaconCtxRef): var KvtCache =
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter
   ctx.pool.chain.db
+
+# -----
+
+func hibernate*(ctx: BeaconCtxRef): bool =
+  ## Getter, re-interpretation of the daemon flag for reduced service mode
+  # No need for running the daemon with reduced service mode. So it is
+  # convenient to use this flag for indicating this.
+  not ctx.daemon
+
+proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
+  ## Setter
+  ctx.daemon = not val
+
+  # Control some error messages on the scheduler (e.g. zombie/banned-peer
+  # reconnection attempts, LRU flushing out oldest peer etc.)
+  ctx.noisyLog = not val
 
 # ------------------------------------------------------------------------------
 # End

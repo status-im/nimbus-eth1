@@ -97,17 +97,26 @@ proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
       raiseAssert info & " persistent() failed: " & $$error
 
 
-proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Restore chain layout from persistent db
+proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
+  ## Restore chain layout from persistent db. It returns `true` if a previous
+  ## state could be loaded, and `false` if a new state was created.
   let
     rc = ctx.fetchSyncStateLayout()
     latest = ctx.chain.latestNumber()
 
-  # See `dbLoadSyncStateAvailable()` for comments
+  # If there was a manual import after a previous sync, then saved state
+  # might be outdated.
   if rc.isOk and
+     # The base number is the least record of the FCU chains/tree. So the
+     # finalised entry must not be smaller.
      ctx.chain.baseNumber() <= rc.value.final and
+     # If the latest FCU number is not larger than the head, there is nothing
+     # to do (might also happen after a manual import.)
      latest < rc.value.head:
+
+    # Assign saved sync state
     ctx.sst.layout = rc.value
+    ctx.sst.lastLayout = rc.value
 
     # Add interval of unprocessed block range `(L,C]` from `README.md`
     ctx.blocksUnprocSet(latest+1, ctx.layout.coupler)
@@ -119,6 +128,8 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
     trace info & ": restored sync state", L=latest.bnStr,
       C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr,
       F=ctx.layout.final.bnStr, H=ctx.layout.head.bnStr
+
+    true
 
   else:
     let
@@ -142,7 +153,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
       headHash:       latestHash,
       headLocked:     false)
 
-    trace info & ": new sync state", L="C", C="D", D="F", F="H", H=latest.bnStr
+    ctx.sst.lastLayout = ctx.layout
 
     if rc.isOk:
       # Some stored headers might have become stale, so delete them. Even
@@ -160,7 +171,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
         # working backwards.
         ctx.deleteStaleHeadersAndState(latest, info)
 
-  ctx.sst.lastLayout = ctx.layout
+    false
 
 # ------------------
 
