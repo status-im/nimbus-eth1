@@ -346,23 +346,17 @@ proc assembleHeader*(pst: TxPacker): Header =
     result.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
   if com.isPragueOrLater(pos.timestamp):
-    let requestsHash = calcRequestsHashInsertType(pst.depositReqs,
+    let requestsHash = calcRequestsHash(pst.depositReqs,
       pst.withdrawalReqs, pst.consolidationReqs)
     result.requestsHash = Opt.some(requestsHash)
 
 func blockValue*(pst: TxPacker): UInt256 =
   pst.blockValue
 
-func executionRequests*(pst: TxPacker): array[3, seq[byte]] =
-  result[0] = newSeqOfCap[byte](pst.depositReqs.len+1)
-  result[0].add 0x00.byte
-  result[0].add pst.depositReqs
-  result[1] = newSeqOfCap[byte](pst.withdrawalReqs.len+1)
-  result[1].add 0x01.byte
-  result[1].add pst.withdrawalReqs
-  result[2] = newSeqOfCap[byte](pst.consolidationReqs.len+1)
-  result[2].add 0x02.byte
-  result[2].add pst.consolidationReqs
+func executionRequests*(pst: var TxPacker): array[3, seq[byte]] =
+  result[0] = move(pst.depositReqs)
+  result[1] = move(pst.withdrawalReqs)
+  result[2] = move(pst.consolidationReqs)
 
 # ------------------------------------------------------------------------------
 # End

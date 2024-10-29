@@ -482,7 +482,7 @@ proc assembleBlock*(
   ## Note that this getter runs *ad hoc* all the txs through the VM in
   ## order to build the block.
 
-  let pst = xp.packerVmExec().valueOr:       # updates vmState
+  var pst = xp.packerVmExec().valueOr:       # updates vmState
     return err(error)
 
   var blk = EthBlock(
