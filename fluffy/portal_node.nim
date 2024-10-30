@@ -118,6 +118,8 @@ proc new*(
             beaconDb,
             streamManager,
             networkData.forks,
+            networkData.clock.getBeaconTimeFn(),
+            networkData.metadata.cfg,
             config.trustedBlockRoot,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
