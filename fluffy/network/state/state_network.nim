@@ -27,9 +27,9 @@ logScope:
   topics = "portal_state"
 
 declareCounter state_network_offers_success,
-  "Portal state network offers successfully validated"
+  "Portal state network offers successfully validated", labels = ["protocol_id"]
 declareCounter state_network_offers_failed,
-  "Portal state network offers which failed validation"
+  "Portal state network offers which failed validation", labels = ["protocol_id"]
 
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
@@ -224,10 +224,10 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
               )
 
         if offerRes.isOk():
-          state_network_offers_success.inc()
+          state_network_offers_success.inc(labelValues = [$n.portalProtocol.protocolId])
           debug "Received offered content validated successfully", contentKeyBytes
         else:
-          state_network_offers_failed.inc()
+          state_network_offers_failed.inc(labelValues = [$n.portalProtocol.protocolId])
           error "Received offered content failed validation",
             contentKeyBytes, error = offerRes.error()
   except CancelledError:
