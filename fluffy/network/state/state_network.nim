@@ -33,6 +33,9 @@ type StateNetwork* = ref object
   historyNetwork: Opt[HistoryNetwork]
   validateStateIsCanonical: bool
   contentRequestRetries: int
+  offersTotalCount: int
+  offersSuccessCount: int
+  offersFailedCount: int
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -70,6 +73,9 @@ proc new*(
     historyNetwork: historyNetwork,
     validateStateIsCanonical: validateStateIsCanonical,
     contentRequestRetries: contentRequestRetries,
+    offersTotalCount: 0,
+    offersSuccessCount: 0,
+    offersFailedCount: 0,
   )
 
 proc getContent(
@@ -218,9 +224,13 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
                 srcNodeId, contentKeyBytes, contentBytes, contentKey.contractCodeKey,
                 ContractCodeOffer,
               )
+
+        inc n.offersTotalCount
         if offerRes.isOk():
-          info "Offered content processed successfully", contentKeyBytes
+          inc n.offersSuccessCount
+          debug "Offered content processed successfully", contentKeyBytes
         else:
+          inc n.offersFailedCount
           error "Offered content processing failed",
             contentKeyBytes, error = offerRes.error()
   except CancelledError:
@@ -230,7 +240,10 @@ proc statusLogLoop(n: StateNetwork) {.async: (raises: []).} =
   try:
     while true:
       info "State network status",
-        routingTableNodes = n.portalProtocol.routingTable.len()
+        routingTableNodes = n.portalProtocol.routingTable.len(),
+        offersTotalCount = n.offersTotalCount,
+        offersSuccessCount = n.offersSuccessCount,
+        offersFailedCount = n.offersFailedCount
 
       await sleepAsync(60.seconds)
   except CancelledError:
