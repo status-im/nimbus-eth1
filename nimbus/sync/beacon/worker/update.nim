@@ -138,6 +138,21 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
   # Update, so it can be followed nicely
   ctx.updateMetrics()
 
+
+proc updateTargetReached(ctx: BeaconCtxRef; info: static[string]) =
+  # Open up layout for update
+  ctx.layout.headLocked = false
+
+  # Clean up target bucket and await a new target.
+  ctx.target.reset
+  ctx.hibernate = true
+
+  let
+    latest {.used.} = ctx.chain.latestNumber()
+    head {.used.} = ctx.layout.head
+  trace info & ": hibernating, awaiting new sync target",
+    L=(if head == latest: "H" else: latest.bnStr), H=head.bnStr
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -148,13 +163,11 @@ proc updateSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   # Check whether the target has been reached. In that case, unlock the
   # consensus head `H` from the current layout so that it can be updated
   # in time.
-  if ctx.layout.headLocked:
-    # So we have a session
-    let latest= ctx.chain.latestNumber()
-    if ctx.layout.head <= latest:
-      doAssert ctx.layout.head == latest
-      trace info & ": ready for accepting new target", L="H", H=latest.bnStr
-      ctx.layout.headLocked = false
+  if ctx.layout.headLocked and                    # there is an active session
+     ctx.layout.head <= ctx.chain.latestNumber(): # and target has been reached
+    # Note that `latest` might exceed the `head`. This will happen when the
+    # engine API got some request to execute and import subsequent blocks.
+    ctx.updateTargetReached info
 
   # Check whether there is something to do regarding beacon node change
   if not ctx.layout.headLocked and         # there was an active import request
