@@ -378,9 +378,7 @@ proc onEpoch(n: BeaconNetwork, wallTime: BeaconTime, wallEpoch: Epoch) =
 proc onPeriod(n: BeaconNetwork, wallTime: BeaconTime, wallPeriod: SyncCommitteePeriod) =
   debug "Period transition", period = shortLog(wallPeriod)
 
-  n.beaconDb.keepUpdatesFrom(
-    SyncCommitteePeriod(wallPeriod - n.cfg.defaultLightClientDataMaxPeriods())
-  )
+  n.beaconDb.keepUpdatesFrom(wallPeriod - n.cfg.defaultLightClientDataMaxPeriods())
 
 proc onEpochLoop(n: BeaconNetwork) {.async: (raises: []).} =
   try:
