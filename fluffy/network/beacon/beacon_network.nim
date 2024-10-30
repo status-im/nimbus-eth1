@@ -357,7 +357,7 @@ proc validateContent(
 
       debug "Received offered content validated successfully", contentKey
     else:
-      error "Received offered content failed validation",
+      debug "Received offered content failed validation",
         contentKey, error = validation.error
       return false
 
