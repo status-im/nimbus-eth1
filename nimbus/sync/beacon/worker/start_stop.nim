@@ -15,7 +15,9 @@ import
   ../../../core/chain,
   ../../protocol,
   ../worker_desc,
-  "."/[blocks_staged, blocks_unproc, db, headers_staged, headers_unproc]
+  ./blocks_staged/staged_queue,
+  ./headers_staged/staged_queue,
+  "."/[blocks_unproc, db, headers_unproc]
 
 when enableTicker:
   import ./start_stop/ticker
@@ -36,17 +38,18 @@ when enableTicker:
         dangling:        ctx.layout.dangling,
         final:           ctx.layout.final,
         head:            ctx.layout.head,
+        headOk:          ctx.layout.headLocked,
         target:          ctx.target.consHead.number,
         targetOk:        ctx.target.final != 0,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
-        hdrStagedTop:    ctx.headersStagedTopKey(),
+        hdrStagedTop:    ctx.headersStagedQueueTopKey(),
         hdrUnprocTop:    ctx.headersUnprocTop(),
         nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
         nHdrUnprocFragm: ctx.headersUnprocChunks(),
 
         nBlkStaged:      ctx.blocksStagedQueueLen(),
-        blkStagedBottom: ctx.blocksStagedBottomKey(),
+        blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
         blkUnprocTop:    ctx.blk.topRequest,
         nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
         nBlkUnprocFragm: ctx.blocksUnprocChunks(),
@@ -58,9 +61,12 @@ proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
-    # Rpc checks empty header against a zero hash rather than `emptyRoot`
+    # Check whether there is an update running (otherwise take next upate)
     if not ctx.target.locked:
-      if f != zeroHash32 and ctx.target.consHead.number < h.number:
+      # Rpc checks empty header against a zero hash rather than `emptyRoot`
+      if f != zeroHash32 and
+         ctx.layout.head < h.number and
+         ctx.target.consHead.number < h.number:
         ctx.target.consHead = h
         ctx.target.final = BlockNumber(0)
         ctx.target.finalHash = f
@@ -86,17 +92,17 @@ else:
 
 # ---------
 
-proc setupDatabase*(ctx: BeaconCtxRef) =
+proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   ## Initalise database related stuff
 
   # Initialise up queues and lists
-  ctx.headersStagedInit()
-  ctx.blocksStagedInit()
+  ctx.headersStagedQueueInit()
+  ctx.blocksStagedQueueInit()
   ctx.headersUnprocInit()
   ctx.blocksUnprocInit()
 
   # Load initial state from database if there is any
-  ctx.dbLoadSyncStateLayout()
+  ctx.dbLoadSyncStateLayout info
 
   # Set blocks batch import value for block import
   if ctx.pool.nBodiesBatch < nFetchBodiesRequest:

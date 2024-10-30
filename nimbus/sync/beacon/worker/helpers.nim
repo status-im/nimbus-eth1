@@ -30,7 +30,9 @@ func bnStr*(w: Interval[BlockNumber,uint64]): string =
   if w.len == 1: w.minPt.bnStr else: w.minPt.bnStr & ".." & w.maxPt.bnStr
 
 func toStr*(a: chronos.Duration): string =
-  a.toString 2
+  var s = a.toString 2
+  if s.len == 0: s="0"
+  s
 
 
 proc `$`*(w: Interval[BlockNumber,uint64]): string =

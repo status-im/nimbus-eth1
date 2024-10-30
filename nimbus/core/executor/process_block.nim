@@ -191,7 +191,7 @@ proc procBlkEpilogue(
     if header.requestsHash.isSome:
       let
         depositReqs = ?parseDepositLogs(vmState.allLogs)
-        requestsHash = calcRequestsHashInsertType(depositReqs, withdrawalReqs, consolidationReqs)
+        requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",

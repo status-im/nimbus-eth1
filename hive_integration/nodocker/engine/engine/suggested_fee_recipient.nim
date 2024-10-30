@@ -9,8 +9,8 @@
 # according to those terms.
 
 import
-  std/strutils,
   chronicles,
+  eth/common/eth_types_rlp,
   ./engine_spec,
   ../../../../nimbus/transaction
 
@@ -62,8 +62,8 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
 
   let blockIncluded = r.get
 
-  testCond blockIncluded.txs.len == cs.transactionCount:
-    error "expect transactions", get=blockIncluded.txs.len, expect=cs.transactionCount
+  testCond blockIncluded.transactions.len == cs.transactionCount:
+    error "expect transactions", get=blockIncluded.transactions.len, expect=cs.transactionCount
 
   testCond feeRecipient == blockIncluded.header.coinbase:
     error "expect coinbase",
@@ -71,7 +71,7 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
       expect=feeRecipient
 
   var feeRecipientFees = 0.u256
-  for tx in blockIncluded.txs:
+  for tx in blockIncluded.transactions:
     let effGasTip = tx.effectiveGasTip(blockIncluded.header.baseFeePerGas)
 
     let r = env.engine.client.txReceipt(tx.rlpHash)

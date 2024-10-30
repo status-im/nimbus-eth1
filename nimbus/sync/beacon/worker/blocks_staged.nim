@@ -17,10 +17,8 @@ import
   ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
+  ./update/metrics,
   "."/[blocks_unproc, db]
-
-logScope:
-  topics = "beacon blocks"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -116,6 +114,7 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
 
   false
 
+
 func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
@@ -182,7 +181,7 @@ proc blocksStagedCollect*(
         if 0 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
-        trace info & ": completely failed", peer, iv, ivReq,
+        trace info & ": list completely failed", peer, iv, ivReq,
           ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nBdyRespErrors
         ctx.blocksUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
@@ -192,7 +191,7 @@ proc blocksStagedCollect*(
 
       # So there were some bodies downloaded already. Turn back unused data
       # and proceed with staging.
-      trace info & ": partially failed", peer, iv, ivReq,
+      trace info & ": list partially failed", peer, iv, ivReq,
         unused=BnRange.new(ivBottom,iv.maxPt)
       # There is some left over to store back
       ctx.blocksUnprocCommit(iv.len, ivBottom, iv.maxPt)
@@ -240,6 +239,7 @@ proc blocksStagedImport*(
     if qItem.key != imported + 1:
       trace info & ": there is a gap L vs. staged",
         B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr
+      doAssert imported < qItem.key
       return false
 
   # Remove from queue
@@ -249,35 +249,49 @@ proc blocksStagedImport*(
     nBlocks = qItem.data.blocks.len
     iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
+  trace info & ": import blocks ..", iv, nBlocks,
+    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
+
   var maxImport = iv.maxPt
   for n in 0 ..< nBlocks:
     let nBn = qItem.data.blocks[n].header.number
     ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
-      warn info & ": import block error", iv,
-        B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-        nBn=nBn.bnStr, txLevel=ctx.chain.db.level, `error`=error
+      warn info & ": import block error", iv, B=ctx.chain.baseNumber.bnStr,
+        L=ctx.chain.latestNumber.bnStr, nBn=nBn.bnStr, `error`=error
       # Restore what is left over below
       maxImport = ctx.chain.latestNumber()
       break
 
+    # Allow pseudo/async thread switch.
+    await sleepAsync asyncThreadSwitchTimeSlot
+    if not ctx.daemon:
+      # Shutdown?
+      maxImport = ctx.chain.latestNumber()
+      break
+
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
+
     # Occasionally mark the chain finalized
     if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
       let
-        nHash = qItem.data.getNthHash(n)
-        finHash = if nBn < ctx.layout.final: nHash else: ctx.layout.finalHash
+        nthHash = qItem.data.getNthHash(n)
+        finHash = if nBn < ctx.layout.final: nthHash else: ctx.layout.finalHash
 
       doAssert nBn == ctx.chain.latestNumber()
-      ctx.pool.chain.forkChoice(headHash=nHash, finalizedHash=finHash).isOkOr:
-        warn info & ": fork choice error", iv,
-          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          F=ctx.layout.final.bnStr, txLevel=ctx.chain.db.level, nHash,
-          finHash=(if finHash == nHash: "nHash" else: "F"), `error`=error
+      ctx.pool.chain.forkChoice(headHash=nthHash, finalizedHash=finHash).isOkOr:
+        warn info & ": fork choice error", n, iv, B=ctx.chain.baseNumber.bnStr,
+          L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr, nthHash,
+          finHash=(if finHash == nthHash: "nHash" else: "F"), `error`=error
         # Restore what is left over below
         maxImport = ctx.chain.latestNumber()
         break
 
       # Allow pseudo/async thread switch.
       await sleepAsync asyncThreadSwitchTimeSlot
+      if not ctx.daemon:
+        maxImport = ctx.chain.latestNumber()
+        break
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:
@@ -287,31 +301,12 @@ proc blocksStagedImport*(
   for bn in iv.minPt .. maxImport:
     ctx.dbUnstashHeader bn
 
-  trace info & ": import done", iv,
-    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-    F=ctx.layout.final.bnStr, txLevel=ctx.chain.db.level
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
+
+  trace info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
+    L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
   return true
-
-
-func blocksStagedBottomKey*(ctx: BeaconCtxRef): BlockNumber =
-  ## Retrieve to staged block number
-  let qItem = ctx.blk.staged.ge(0).valueOr:
-    return high(BlockNumber)
-  qItem.key
-
-func blocksStagedQueueLen*(ctx: BeaconCtxRef): int =
-  ## Number of staged records
-  ctx.blk.staged.len
-
-func blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
-  ## `true` iff no data are on the queue.
-  ctx.blk.staged.len == 0
-
-# ----------------
-
-func blocksStagedInit*(ctx: BeaconCtxRef) =
-  ## Constructor
-  ctx.blk.staged = StagedBlocksQueue.init()
 
 # ------------------------------------------------------------------------------
 # End

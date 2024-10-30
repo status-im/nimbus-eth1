@@ -68,7 +68,7 @@ method execute(cs: InvalidPayloadAttributesTest, env: TestEnv): bool =
         # If we are SYNCING, the outcome should be SYNCING regardless of the validity of the payload atttributes
         let r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(attr))
         r.expectPayloadStatus(PayloadExecutionStatus.syncing)
-        r.expectPayloadID(Opt.none(PayloadID))
+        r.expectPayloadID(Opt.none(Bytes8))
       else:
         let r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(attr))
         r.expectErrorCode(engineApiInvalidPayloadAttributes)

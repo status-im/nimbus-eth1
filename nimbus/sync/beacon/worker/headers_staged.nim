@@ -17,11 +17,9 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../common,
   ../worker_desc,
+  ./update/metrics,
   ./headers_staged/[headers, linked_hchain],
   ./headers_unproc
-
-logScope:
-  topics = "beacon headers"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -59,7 +57,9 @@ proc headerStagedUpdateTarget*(
     info: static[string];
       ) {.async.} =
   ## Fetch finalised beacon header if there is an update available
-  let ctx = buddy.ctx
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
   if not ctx.layout.headLocked and
      ctx.target.final == 0 and
      ctx.target.finalHash != zeroHash32 and
@@ -75,10 +75,18 @@ proc headerStagedUpdateTarget*(
       if hash != ctx.target.finalHash:
         # Oops
         buddy.ctrl.zombie = true
-        trace info & ": finalised header hash mismatch", peer=buddy.peer, hash,
+        trace info & ": finalised header hash mismatch", peer, hash,
           expected=ctx.target.finalHash
       else:
-        ctx.target.final = rc.value[0].number
+        let final = rc.value[0].number
+        if final < ctx.chain.baseNumber():
+          trace info & ": finalised number too low", peer,
+            B=ctx.chain.baseNumber.bnStr, finalised=rc.value[0].number.bnStr
+        else:
+          ctx.target.final = final
+
+          # Update, so it can be followed nicely
+          ctx.updateMetrics()
 
 
 proc headersStagedCollect*(
@@ -221,6 +229,9 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # anymore.
     discard ctx.hdr.staged.delete(iv.maxPt)
 
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
+
     if qItem.data.hash != ctx.layout.danglingParent:
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
@@ -229,21 +240,24 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
       break
 
     # Store headers on database
-    ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs)
+    ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs, info)
     ctx.layout.dangling = iv.minPt
     ctx.layout.danglingParent = qItem.data.parentHash
-    ctx.dbStoreSyncStateLayout()
+    ctx.dbStoreSyncStateLayout info
 
     result.inc # count records
 
-  trace info & ": staged records saved",
+  trace info & ": staged header lists saved",
     nStaged=ctx.hdr.staged.len, nSaved=result
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true
 
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
 
-func headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
+
+proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention. The effect is that all concurrent peers
   ## finish up their current work and run this function here (which might
   ## do nothing.) This stopping should be enough in most cases to re-organise
@@ -277,26 +291,8 @@ func headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
       ctx.headersUnprocCommit(0, key - nHeaders + 1, key)
       discard ctx.hdr.staged.delete key
 
-
-func headersStagedTopKey*(ctx: BeaconCtxRef): BlockNumber =
-  ## Retrieve to staged block number
-  let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:
-    return BlockNumber(0)
-  qItem.key
-
-func headersStagedQueueLen*(ctx: BeaconCtxRef): int =
-  ## Number of staged records
-  ctx.hdr.staged.len
-
-func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
-  ## `true` iff no data are on the queue.
-  ctx.hdr.staged.len == 0
-
-# ----------------
-
-func headersStagedInit*(ctx: BeaconCtxRef) =
-  ## Constructor
-  ctx.hdr.staged = LinkedHChainQueue.init()
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # End

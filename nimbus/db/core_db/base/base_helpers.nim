@@ -40,7 +40,7 @@ proc bless*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
     ctx.validate
   ctx
 
-proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbMptRef | CoreDbTxRef): auto =
+proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbTxRef): auto =
   dsc.ctx = ctx
   when CoreDbAutoValidateDescriptors:
     dsc.validate
@@ -80,7 +80,7 @@ func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
 # Public Aristo helpers
 # ------------------------------------------------------------------------------
 
-template mpt*(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
+template mpt*(dsc: CoreDbAccRef): AristoDbRef =
   CoreDbCtxRef(dsc).mpt
 
 template mpt*(tx: CoreDbTxRef): AristoDbRef =
@@ -98,7 +98,7 @@ template call*(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped 
     fn(args)
 
 template call*(
-    acc: CoreDbAccRef | CoreDbMptRef;
+    acc: CoreDbAccRef;
     fn: untyped;
     args: varArgs[untyped];
       ): untyped =

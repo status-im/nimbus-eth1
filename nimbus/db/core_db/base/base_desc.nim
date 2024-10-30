@@ -26,9 +26,6 @@ const
   CoreDbPersistentTypes* = {AristoDbRocks}
     ## List of persistent DB types (currently only a single one)
 
-  CoreDbVidGeneric* = VertexID(2)
-    ## Generic `MPT` root vertex ID for calculating Merkle hashes
-
 type
   CoreDbProfListRef* = AristoDbProfListRef
     ## Borrowed from `aristo_profile`, only used in profiling mode
@@ -82,7 +79,7 @@ type
       tracerHook*: RootRef        ## Debugging/tracing
 
   CoreDbCtxRef* = ref object
-    ## Shared context for `CoreDbMptRef`, `CoreDbAccRef`, `CoreDbKvtRef`
+    ## Shared context for `CoreDbAccRef`, `CoreDbKvtRef`
     parent*: CoreDbRef
     mpt*: AristoDbRef           ## `Aristo` database
     kvt*: KvtDbRef              ## `KVT` key-value table
@@ -92,9 +89,6 @@ type
 
   CoreDbAccRef* = distinct CoreDbCtxRef
     ## Similar to `CoreDbKvtRef`, only dealing with `Aristo` accounts
-
-  CoreDbMptRef* = distinct CoreDbCtxRef
-    ## Generic MPT
 
   CoreDbTxRef* = ref object
     ## Transaction descriptor

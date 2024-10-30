@@ -19,9 +19,6 @@ import
   ../worker_desc,
   "."/[blocks_unproc, headers_unproc]
 
-logScope:
-  topics = "beacon db"
-
 const
   LhcStateKey = 1.beaconStateKey
 
@@ -49,9 +46,8 @@ proc fetchSyncStateLayout(ctx: BeaconCtxRef): Opt[SyncStateLayout] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef) =
+proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Save chain layout to persistent db
-  const info = "dbStoreSyncStateLayout"
   if ctx.layout == ctx.sst.lastLayout:
     return
 
@@ -65,24 +61,25 @@ proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef) =
   if txLevel == 0:
     let number = ctx.db.getSavedStateBlockNumber()
     ctx.db.persistent(number).isOkOr:
-      debug info & ": failed to save persistently", error=($$error)
+      debug info & ": failed to save sync state persistently", error=($$error)
       return
   else:
-    trace info & ": not saved, tx pending", txLevel
+    trace info & ": sync state not saved, tx pending", txLevel
     return
 
-  trace info & ": saved pesistently on DB"
+  trace info & ": saved sync state persistently"
 
 
-proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef) =
+proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Restore chain layout from persistent db
-  const info = "dbLoadLinkedHChainsLayout"
-
   let
     rc = ctx.fetchSyncStateLayout()
     latest = ctx.chain.latestNumber()
 
-  if rc.isOk:
+  # See `dbLoadSyncStateAvailable()` for comments
+  if rc.isOk and
+     ctx.chain.baseNumber() <= rc.value.final and
+     latest < rc.value.head:
     ctx.sst.layout = rc.value
 
     # Add interval of unprocessed block range `(L,C]` from `README.md`
@@ -92,7 +89,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef) =
     # Add interval of unprocessed header range `(C,D)` from `README.md`
     ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
-    trace info & ": restored layout", L=latest.bnStr,
+    trace info & ": restored sync state", L=latest.bnStr,
       C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr,
       F=ctx.layout.final.bnStr, H=ctx.layout.head.bnStr
 
@@ -106,12 +103,19 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef) =
       couplerHash:    latestHash,
       dangling:       latest,
       danglingParent: latestParent,
+      # There is no need to record a separate finalised head `F` as its only
+      # use is to serve as second argument in `forkChoice()` when committing
+      # a batch of imported blocks. Currently, there are no blocks to fetch
+      # and import. The system must wait for instructions and update the fields
+      # `final` and `head` while the latter will be increased so that import
+      # can start.
       final:          latest,
       finalHash:      latestHash,
       head:           latest,
-      headHash:       latestHash)
+      headHash:       latestHash,
+      headLocked:     false)
 
-    trace info & ": new layout", L="C", C="D", D="F", F="H", H=latest.bnStr
+    trace info & ": new sync state", L="C", C="D", D="F", F="H", H=latest.bnStr
 
   ctx.sst.lastLayout = ctx.layout
 
@@ -121,6 +125,7 @@ proc dbStashHeaders*(
     ctx: BeaconCtxRef;
     first: BlockNumber;
     revBlobs: openArray[seq[byte]];
+    info: static[string];
       ) =
   ## Temporarily store header chain to persistent db (oblivious of the chain
   ## layout.) The headers should not be stashed if they are imepreted and
@@ -133,7 +138,6 @@ proc dbStashHeaders*(
   ##    #(first+1) -- revBlobs[^2]
   ##    ..
   ##
-  const info = "dbStashHeaders"
   let
     kvt = ctx.db.ctx.getKvt()
     last = first + revBlobs.len.uint64 - 1

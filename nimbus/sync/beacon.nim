@@ -18,7 +18,7 @@ import
   "."/[sync_desc, sync_sched, protocol]
 
 logScope:
-  topics = "beacon"
+  topics = "beacon sync"
 
 type
   BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
@@ -28,25 +28,25 @@ type
 # ------------------------------------------------------------------------------
 
 proc runSetup(ctx: BeaconCtxRef): bool =
-  worker.setup(ctx)
+  worker.setup(ctx, "RunSetup")
 
 proc runRelease(ctx: BeaconCtxRef) =
-  worker.release(ctx)
+  worker.release(ctx, "RunRelease")
 
 proc runDaemon(ctx: BeaconCtxRef) {.async.} =
-  await worker.runDaemon(ctx)
+  await worker.runDaemon(ctx, "RunDaemon")
 
 proc runStart(buddy: BeaconBuddyRef): bool =
-  worker.start(buddy)
+  worker.start(buddy, "RunStart")
 
 proc runStop(buddy: BeaconBuddyRef) =
-  worker.stop(buddy)
+  worker.stop(buddy, "RunStop")
 
 proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
-  worker.runPool(buddy, last, laps)
+  worker.runPool(buddy, last, laps, "RunPool")
 
 proc runPeer(buddy: BeaconBuddyRef) {.async.} =
-  await worker.runPeer(buddy)
+  await worker.runPeer(buddy, "RunPeer")
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -57,7 +57,7 @@ proc init*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    chunkSize: int;
+    chunkSize = 0;
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
@@ -65,13 +65,7 @@ proc init*(
   desc.ctx.pool.chain = chain
   desc
 
-proc start*(desc: BeaconSyncRef; resumeOnly = false): bool =
-  ## Start beacon sync. If `resumeOnly` is set `true` the syncer will only
-  ## start up if it can resume work, e.g. after being previously interrupted.
-  if resumeOnly:
-    desc.ctx.dbLoadSyncStateLayout()
-    if not desc.ctx.layout.headLocked:
-      return false
+proc start*(desc: BeaconSyncRef): bool =
   desc.startSync()
 
 proc stop*(desc: BeaconSyncRef) =

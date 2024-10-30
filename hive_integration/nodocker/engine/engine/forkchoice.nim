@@ -12,7 +12,8 @@ import
   std/strutils,
   chronicles,
   ./engine_spec,
-  ../cancun/customizer
+  ../cancun/customizer,
+  ../../../../nimbus/utils/utils
 
 type
   ForkchoiceStateField* = enum
@@ -163,7 +164,7 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
         r.expectError()
 
         var payloadAttributes = env.clMock.latestPayloadAttributes
-        payloadAttributes.prevRandao = default(Hash32)
+        payloadAttributes.prevRandao = default(Bytes32)
         payloadAttributes.suggestedFeeRecipient = default(Address)
 
         # Test again using PayloadAttributes, should also return INVALID and no PayloadID

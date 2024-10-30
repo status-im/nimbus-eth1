@@ -166,7 +166,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
 
       var attr = env.clMock.latestPayloadAttributes
       attr.timestamp = w3Qty(shadow.alteredPayload.timestamp, 1)
-      attr.prevRandao = default(Hash32)
+      attr.prevRandao = default(Bytes32)
       attr.suggestedFeeRecipient = default(Address)
 
       # Execution specification:
@@ -332,7 +332,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
         # Get a payload from the invalid payload producer and invalidate it
         let
           customizer = BasePayloadAttributesCustomizer(
-            prevRandao: Opt.some(default(Hash32)),
+            prevRandao: Opt.some(default(Bytes32)),
             suggestedFeerecipient: Opt.some(ZeroAddr),
           )
           payloadAttributes = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)

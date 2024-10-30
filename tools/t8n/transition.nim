@@ -359,7 +359,7 @@ proc exec(ctx: TransContext,
     let
       depositReqs = parseDepositLogs(allLogs).valueOr:
         raise newError(ErrorEVM, error)
-      requestsHash = calcRequestsHashInsertType(depositReqs, withdrawalReqs, consolidationReqs)
+      requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
     result.result.requestsHash = Opt.some(requestsHash)
 
 template wrapException(body: untyped) =

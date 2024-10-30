@@ -14,6 +14,8 @@ import
   json_rpc/rpcclient,
   json_rpc/rpcserver,
   web3/engine_api,
+  web3/conversions,
+  web3/execution_types,
   unittest2
 
 import
@@ -166,6 +168,38 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
 
   ok()
 
+type
+  NewPayloadV4Params* = object
+    payload*: ExecutionPayload
+    expectedBlobVersionedHashes*: Opt[seq[Hash32]]
+    parentBeaconBlockRoot*: Opt[Hash32]
+    executionRequests*: Opt[array[3, seq[byte]]]
+
+NewPayloadV4Params.useDefaultSerializationIn JrpcConv
+
+const paramsFile = "tests/engine_api/newPayloadV4_invalid_blockhash.json"
+
+proc newPayloadV4ParamsTest(env: TestEnv): Result[void, string] =
+  let
+    client = env.client
+    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    res = ? client.newPayloadV4(
+      params.payload,
+      params.expectedBlobVersionedHashes,
+      params.parentBeaconBlockRoot,
+      params.executionRequests)
+
+  if res.status != PayloadExecutionStatus.syncing:
+    return err("res.status should equals to PayloadExecutionStatus.syncing")
+
+  if res.latestValidHash.isSome:
+    return err("lastestValidHash should empty")
+
+  if res.validationError.isSome:
+    return err("validationError should empty")
+
+  ok()
+
 proc engineApiMain*() =
   suite "Engine API":
     test "Basic cycle":
@@ -175,10 +209,18 @@ proc engineApiMain*() =
         debugEcho "FAILED TO EXECUTE TEST: ", res.error
       check res.isOk
       env.close()
-
+    
     test "newPayloadV4":
       let env = setupEnv(Prague)
       let res = env.runNewPayloadV4Test()
+      if res.isErr:
+        debugEcho "FAILED TO EXECUTE TEST: ", res.error
+      check res.isOk
+      env.close()
+
+    test "newPayloadV4 params":
+      let env = setupEnv(Prague)
+      let res = env.newPayloadV4ParamsTest()
       if res.isErr:
         debugEcho "FAILED TO EXECUTE TEST: ", res.error
       check res.isOk
