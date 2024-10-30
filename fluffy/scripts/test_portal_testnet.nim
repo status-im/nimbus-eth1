@@ -280,6 +280,7 @@ procSuite "Portal testnet tests":
             contentValue = value[1].toHex()
 
           discard (await clients[0].portal_historyGossip(contentKey, contentValue))
+          await sleepAsync(10.milliseconds)
 
     await clients[0].close()
 
