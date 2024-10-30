@@ -23,7 +23,7 @@
 ## *runRelease(ctx: CtxRef[S])*
 ##   Global clean up, done with all the worker peers.
 ##
-## *runDaemon(ctx: CtxRef[S]) {.async.}*
+## *runDaemon(ctx: CtxRef[S]) {.async: (raises: []).}*
 ##   Global background job that will be re-started as long as the variable
 ##   `ctx.daemon` is set `true`. If that job was stopped due to re-setting
 ##   `ctx.daemon` to `false`, it will be restarted next after it was reset
@@ -56,7 +56,7 @@
 ##   Note that this function does *not* run in `async` mode.
 ##
 ##
-## *runPeer(buddy: BuddyRef[S,W]) {.async.}*
+## *runPeer(buddy: BuddyRef[S,W]) {.async: (raises: []).}*
 ##   This peer worker method is repeatedly invoked (exactly one per peer) while
 ##   the `buddy.ctrl.poolMode` flag is set `false`.
 ##
@@ -198,7 +198,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
     dsc.runCtrl = terminated
 
 
-proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
+proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   mixin runDaemon
 
   if dsc.ctx.daemon and dsc.runCtrl == running:
@@ -220,13 +220,16 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
         elapsed = Moment.now() - startMoment
         suspend = if execLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
                   else: execLoopTimeElapsedMin - elapsed
-      await sleepAsync suspend
+      try:
+        await sleepAsync suspend
+      except CancelledError:
+        break # stop on error (must not end up in busy-loop)
       # End while
 
   dsc.daemonRunning = false
 
 
-proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
+proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
   mixin runPeer, runPool, runStop
   let
     dsc = buddy.dsc
@@ -257,7 +260,12 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
         # clear to run as the only activated instance.
         dsc.monitorLock = true
         while 0 < dsc.activeMulti:
-          await sleepAsync execLoopPollingTime
+          try:
+            await sleepAsync execLoopPollingTime
+          except CancelledError:
+            # must not end up in busy-loop
+            dsc.monitorLock = false
+            break taskExecLoop
           if not isActive():
             dsc.monitorLock = false
             break taskExecLoop
@@ -316,7 +324,10 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
         elapsed = Moment.now() - startMoment
         suspend = if execLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
                   else: execLoopTimeElapsedMin - elapsed
-      await sleepAsync suspend
+      try:
+        await sleepAsync suspend
+      except CancelledError:
+        break # stop on error (must not end up in busy-loop)
       # End while
 
   # Note that `runStart()` was dispatched in `onPeerConnected()`

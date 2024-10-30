@@ -43,7 +43,7 @@ proc fetchAndCheck(
     ivReq: BnRange;
     blk: ref BlocksForImport; # update in place
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async: (raises: []).} =
 
   let
     ctx = buddy.ctx
@@ -148,7 +148,7 @@ func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
 proc blocksStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async: (raises: []).} =
   ## Collect bodies and stage them.
   ##
   if buddy.ctx.blocksUnprocIsEmpty():
@@ -204,7 +204,8 @@ proc blocksStagedCollect*(
         ctx.blocksUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.
-        await sleepAsync asyncThreadSwitchTimeSlot
+        try: await sleepAsync asyncThreadSwitchTimeSlot
+        except CancelledError: discard
         return false
 
       # So there were some bodies downloaded already. Turn back unused data
@@ -245,7 +246,7 @@ proc blocksStagedImport*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): Future[bool]
-      {.async.} =
+      {.async: (raises: []).} =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -284,7 +285,8 @@ proc blocksStagedImport*(
         break importLoop
 
       # Allow pseudo/async thread switch.
-      await sleepAsync asyncThreadSwitchTimeSlot
+      try: await sleepAsync asyncThreadSwitchTimeSlot
+      except CancelledError: discard
       if not ctx.daemon:
         # Shutdown?
         maxImport = ctx.chain.latestNumber()
@@ -311,7 +313,8 @@ proc blocksStagedImport*(
           break importLoop
 
         # Allow pseudo/async thread switch.
-        await sleepAsync asyncThreadSwitchTimeSlot
+        try: await sleepAsync asyncThreadSwitchTimeSlot
+        except CancelledError: discard
         if not ctx.daemon:
           maxImport = ctx.chain.latestNumber()
           break importLoop
