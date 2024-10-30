@@ -189,8 +189,14 @@ proc blocksStagedCollect*(
 
     # Fetch and extend staging record
     if not await buddy.fetchAndCheck(ivReq, blk, info):
+
+      # Throw away first time block fetch data. Keep other data for a
+      # partially assembled list.
       if nBlkBlocks == 0:
-        if 0 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped:
+        buddy.only.nBdyRespErrors.inc
+
+        if (1 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped) or
+           fetchBodiesReqThresholdCount < buddy.only.nBdyRespErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
         trace info & ": current block list discarded", peer, iv, ivReq,

@@ -163,10 +163,13 @@ proc headersStagedCollect*(
     # Fetch and extend chain record
     if not await buddy.fetchAndCheck(ivReq, lhc, info):
 
-      # Throw away opportunistic data (or first time header fetch.) Turn back
-      # unused data.
+      # Throw away opportunistic data (or first time header fetch.) Keep
+      # other data for a partially assembled list.
       if isOpportunistic or nLhcHeaders == 0:
-        if 0 < buddy.only.nHdrRespErrors and buddy.ctrl.stopped:
+        buddy.only.nHdrRespErrors.inc
+
+        if (0 < buddy.only.nHdrRespErrors and buddy.ctrl.stopped) or
+           fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
         trace info & ": current header list discarded", peer, iv, ivReq,
