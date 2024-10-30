@@ -30,7 +30,7 @@ proc fetchAndCheck(
     ivReq: BnRange;
     lhc: ref LinkedHChain; # update in place
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async, raises: [].} =
   ## Collect single header chain from the peer and stash it on the `staged`
   ## queue. Returns the length of the stashed chain of headers.
   ##
@@ -55,7 +55,7 @@ proc fetchAndCheck(
 proc headerStagedUpdateTarget*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ) {.async.} =
+      ) {.async, raises: [].} =
   ## Fetch finalised beacon header if there is an update available
   let
     ctx = buddy.ctx
@@ -100,7 +100,7 @@ proc headerStagedUpdateTarget*(
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async, raises: [].} =
   ## Collect a batch of chained headers totalling to at most `nHeaders`
   ## headers. Fetch the headers from the the peer and stash it blockwise on
   ## the `staged` queue. The function returns `true` it stashed a header

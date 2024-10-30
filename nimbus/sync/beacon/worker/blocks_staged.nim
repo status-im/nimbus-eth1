@@ -43,7 +43,7 @@ proc fetchAndCheck(
     ivReq: BnRange;
     blk: ref BlocksForImport; # update in place
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async, raises: [].} =
 
   let
     ctx = buddy.ctx
@@ -148,7 +148,7 @@ func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
 proc blocksStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async, raises: [].} =
   ## Collect bodies and stage them.
   ##
   if buddy.ctx.blocksUnprocIsEmpty():
@@ -245,7 +245,7 @@ proc blocksStagedImport*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): Future[bool]
-      {.async.} =
+      {.async, raises: [].} =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:

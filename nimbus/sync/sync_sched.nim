@@ -23,7 +23,7 @@
 ## *runRelease(ctx: CtxRef[S])*
 ##   Global clean up, done with all the worker peers.
 ##
-## *runDaemon(ctx: CtxRef[S]) {.async.}*
+## *runDaemon(ctx: CtxRef[S]) {.async, raises: [].}*
 ##   Global background job that will be re-started as long as the variable
 ##   `ctx.daemon` is set `true`. If that job was stopped due to re-setting
 ##   `ctx.daemon` to `false`, it will be restarted next after it was reset
@@ -56,7 +56,7 @@
 ##   Note that this function does *not* run in `async` mode.
 ##
 ##
-## *runPeer(buddy: BuddyRef[S,W]) {.async.}*
+## *runPeer(buddy: BuddyRef[S,W]) {.async, raises: [].}*
 ##   This peer worker method is repeatedly invoked (exactly one per peer) while
 ##   the `buddy.ctrl.poolMode` flag is set `false`.
 ##
@@ -198,7 +198,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
     dsc.runCtrl = terminated
 
 
-proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
+proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async, raises: [].} =
   mixin runDaemon
 
   if dsc.ctx.daemon and dsc.runCtrl == running:
@@ -226,7 +226,7 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   dsc.daemonRunning = false
 
 
-proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async.} =
+proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async, raises: [].} =
   mixin runPeer, runPool, runStop
   let
     dsc = buddy.dsc

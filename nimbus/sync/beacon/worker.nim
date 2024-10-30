@@ -32,7 +32,9 @@ proc bodiesToFetchOk(buddy: BeaconBuddyRef): bool =
     buddy.ctrl.running and
     not buddy.ctx.poolMode
 
-proc napUnlessSomethingToFetch(buddy: BeaconBuddyRef): Future[bool] {.async.} =
+proc napUnlessSomethingToFetch(
+    buddy: BeaconBuddyRef;
+      ): Future[bool] {.async, raises: [].} =
   ## When idle, save cpu cycles waiting for something to do.
   if buddy.ctx.pool.blockImportOk or             # currently importing blocks
      buddy.ctx.hibernate or                      # not activated yet?
@@ -90,7 +92,10 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc runDaemon*(ctx: BeaconCtxRef; info: static[string]) {.async.} =
+proc runDaemon*(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ) {.async, raises: [].} =
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true`. If that job was stopped due to re-setting
   ## `ctx.daemon` to `false`, it will be restarted next after it was reset
@@ -152,7 +157,10 @@ proc runPool*(
   true # stop
 
 
-proc runPeer*(buddy: BeaconBuddyRef; info: static[string]) {.async.} =
+proc runPeer*(
+    buddy: BeaconBuddyRef;
+    info: static[string];
+      ) {.async, raises: [].} =
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##

@@ -38,7 +38,7 @@ proc headersFetchReversed*(
     topHash: Hash32;
     info: static[string];
       ): Future[Result[seq[Header],void]]
-      {.async.} =
+      {.async, raises: [].} =
   ## Get a list of headers in reverse order.
   let
     peer = buddy.peer

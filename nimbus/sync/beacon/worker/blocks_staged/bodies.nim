@@ -32,7 +32,7 @@ proc bodiesFetch*(
     blockHashes: seq[Hash32];
     info: static[string];
       ): Future[Result[seq[BlockBody],void]]
-      {.async.} =
+      {.async, raises: [].} =
   ## Fetch bodies from the network.
   let
     peer = buddy.peer
