@@ -57,17 +57,10 @@ proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
 
   # While executing blocks there are frequent save cycles. Otherwise, an
   # extra save request might help to pick up an interrupted sync session.
-  let txLevel = ctx.db.level()
-  if txLevel == 0:
+  if ctx.db.level() == 0 and ctx.stash.len == 0:
     let number = ctx.db.getSavedStateBlockNumber()
     ctx.db.persistent(number).isOkOr:
-      debug info & ": failed to save sync state persistently", error=($$error)
-      return
-  else:
-    trace info & ": sync state not saved, tx pending", txLevel
-    return
-
-  trace info & ": saved sync state persistently"
+      raiseAssert info & " persistent() failed: " & $$error
 
 
 proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
@@ -139,15 +132,28 @@ proc dbStashHeaders*(
   ##    ..
   ##
   let
-    kvt = ctx.db.ctx.getKvt()
+    txLevel = ctx.db.level()
     last = first + revBlobs.len.uint64 - 1
-  for n,data in revBlobs:
-    let key = beaconHeaderKey(last - n.uint64)
-    kvt.put(key.toOpenArray, data).isOkOr:
-      raiseAssert info & ": put() failed: " & $$error
+  if 0 < txLevel:
+    # Need to cache it because FCU has blocked writing through to disk.
+    for n,data in revBlobs:
+      ctx.stash[last - n.uint64] = data
+  else:
+    let kvt = ctx.db.ctx.getKvt()
+    for n,data in revBlobs:
+      let key = beaconHeaderKey(last - n.uint64)
+      kvt.put(key.toOpenArray, data).isOkOr:
+        raiseAssert info & ": put() failed: " & $$error
 
 proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
+  # Try cache first
+  ctx.stash.withValue(num, val):
+    try:
+      return ok(rlp.decode(val[], Header))
+    except RlpError:
+      discard
+  # Use persistent storage next
   let
     key = beaconHeaderKey(num)
     rc = ctx.db.ctx.getKvt().get(key.toOpenArray)
@@ -164,6 +170,9 @@ proc dbPeekParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
 
 proc dbUnstashHeader*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
+  ctx.stash.withValue(bn, val):
+    ctx.stash.del bn
+    return
   discard ctx.db.ctx.getKvt().del(beaconHeaderKey(bn).toOpenArray)
 
 # ------------------------------------------------------------------------------
