@@ -561,7 +561,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       return nil
 
     populateTransactionObject(
-      blk.transactions[index], Opt.some(blk.header), Opt.some(index)
+      blk.transactions[index], Opt.some(data), Opt.some(blk.header.number), Opt.some(index)
     )
 
   server.rpc("eth_getTransactionByBlockNumberAndIndex") do(
@@ -580,7 +580,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       return nil
 
     populateTransactionObject(
-      blk.transactions[index], Opt.some(blk.header), Opt.some(index)
+      blk.transactions[index], Opt.some(blk.header.blockHash), Opt.some(blk.header.number), Opt.some(index)
     )
 
   server.rpc("eth_getProof") do(
