@@ -138,8 +138,6 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     Push1 "0x04"        # RETURN LEN
     Push1 "0x1C"        # RETURN OFFSET at 28
     Return
-  
-  #info "ByteCode", typeofcode=typeof(code)
 
   let
     vmHeader = Header(parentHash: parentHash, gasLimit: 5_000_000)
@@ -214,8 +212,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
 
   var header = Header(
     parentHash  : parentHash,
-    #coinbase*:      Address
-    stateRoot   : vmState.stateDB.rootHash,
+    stateRoot   : vmState.stateDB.getStateRoot,
     transactionsRoot   : txRoot,
     receiptsRoot : calcReceiptsRoot(vmState.receipts),
     logsBloom       : createBloom(vmState.receipts),
@@ -224,22 +221,23 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     gasLimit    : vmState.cumulativeGasUsed + 1_000_000,
     gasUsed     : vmState.cumulativeGasUsed,
     timestamp   : timeStamp
-    #extraData:     Blob
-    #mixHash:     Hash32
-    #nonce:         BlockNonce
     )
+
+  doAssert com.db.persistHeader(header,
+    com.pos.isNil, com.startOfHistory)
 
   let uncles = [header]
   header.ommersHash = com.db.persistUncles(uncles)
 
   doAssert com.db.persistHeader(header,
     com.pos.isNil, com.startOfHistory)
+    
+  com.db.persistFixtureBlock()
 
   com.db.persistent(header.number).isOkOr:
     echo "Failed to save state: ", $error
     quit(QuitFailure)
-    
-  com.db.persistFixtureBlock()
+
   result = TestEnv(
     txHash: signedTx1.rlpHash,
     blockHash: header.blockHash
@@ -309,15 +307,6 @@ proc rpcMain*() =
       let peerCount = ethNode.peerPool.connectedNodes.len
       check res == w3Qty(peerCount)
 
-    # test "eth_protocolVersion":
-    #   let res = await client.eth_protocolVersion()
-    #   # Use a hard-coded number instead of the same expression as the client,
-    #   # so that bugs introduced via that expression are detected.  Using the
-    #   # same expression as the client can hide issues when the value is wrong
-    #   # in both places.  When the expected value genuinely changes, it'll be
-    #   # obvious.  Just change this number.
-    #   check res == $ethVersion
-
     test "eth_chainId":
       let res = await client.eth_chainId()
       check res == w3Qty(distinctBase(com.chainId))
@@ -331,21 +320,6 @@ proc rpcMain*() =
         check com.syncStart == res.syncObject.startingBlock.uint64
         check com.syncCurrent == res.syncObject.currentBlock.uint64
         check com.syncHighest == res.syncObject.highestBlock.uint64
-
-    # test "eth_coinbase":
-    #   let res = await client.eth_coinbase()
-    #   # currently we don't have miner
-    #   check res == default(Address)
-
-    # test "eth_mining":
-    #   let res = await client.eth_mining()
-    #   # currently we don't have miner
-    #   check res == false
-
-    # test "eth_hashrate":
-    #   let res = await client.eth_hashrate()
-    #   # currently we don't have miner
-    #   check res == w3Qty(0'u64)
 
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
@@ -369,9 +343,9 @@ proc rpcMain*() =
       let c = await client.eth_getBalance(Address.fromHex("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), blockId(1'u64))
       check c == UInt256.fromHex("0x3635c9adc5dea00000")
 
-    # test "eth_getStorageAt":
-    #   let res = await client.eth_getStorageAt(Address.fromHex("0xfff33a3bd36abdbd412707b8e310d6011454a7ae"), 0.u256, blockId(0'u64))
-    #   check FixedBytes[32] default(Hash32).data == res
+    test "eth_getStorageAt":
+      let res = await client.eth_getStorageAt(Address.fromHex("0xfff33a3bd36abdbd412707b8e310d6011454a7ae"), 0.u256, blockId(1'u64))
+      check FixedBytes[32](zeroHash32.data) == res
 
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(Address.fromHex("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), blockId(1'u64))
@@ -499,6 +473,8 @@ proc rpcMain*() =
       let res2 = await client.eth_getTransactionByBlockNumberAndIndex("latest", w3Qty(3'u64))
       check res2.isNil
 
+    # TODO: Solved with Issue #2700
+
     # test "eth_getBlockReceipts":
     #     let recs = await client.eth_getBlockReceipts(blockId(1'u64))
     #     check recs.isSome
@@ -516,24 +492,24 @@ proc rpcMain*() =
     #   let res2 = await client.eth_getTransactionReceipt(env.blockHash)
     #   check res2.isNil
 
-    # test "eth_getUncleByBlockHashAndIndex":
-    #   let res = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, w3Qty(0'u64))
-    #   check res.isNil.not
-    #   check res.number == w3BlockNumber(1'u64)
+    test "eth_getUncleByBlockHashAndIndex":
+      let res = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, w3Qty(0'u64))
+      check res.isNil.not
+      check res.number == w3BlockNumber(1'u64)
 
-    #   let res2 = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, w3Qty(1'u64))
-    #   check res2.isNil
+      let res2 = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, w3Qty(1'u64))
+      check res2.isNil
 
-    #   let res3 = await client.eth_getUncleByBlockHashAndIndex(env.txHash, w3Qty(0'u64))
-    #   check res3.isNil
+      let res3 = await client.eth_getUncleByBlockHashAndIndex(env.txHash, w3Qty(0'u64))
+      check res3.isNil
 
-    # test "eth_getUncleByBlockNumberAndIndex":
-    #   let res = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(0'u64))
-    #   check res.isNil.not
-    #   check res.number == w3BlockNumber(1'u64)
+    test "eth_getUncleByBlockNumberAndIndex":
+      let res = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(0'u64))
+      check res.isNil.not
+      check res.number == w3BlockNumber(1'u64)
 
-    #   let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(1'u64))
-    #   check res2.isNil
+      let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(1'u64))
+      check res2.isNil
 
     test "eth_getLogs by blockhash, no filters":
       let testHeader = getBlockHeader4514995()
@@ -554,29 +530,6 @@ proc rpcMain*() =
           l.blockHash.get() == testHash
           l.logIndex.get() == w3Qty(i.uint64)
         inc i
-
-    # test "eth_getLogs by blockNumber, no filters":
-    #   let testHeader = getBlockHeader4514995()
-    #   let testHash = testHeader.blockHash
-    #   let fBlock = blockId(testHeader.number)
-    #   let tBlock = blockId(testHeader.number)
-    #   let filterOptions = FilterOptions(
-    #     fromBlock: Opt.some(fBlock),
-    #     toBlock: Opt.some(tBlock),
-    #     blockHash: Opt.none(Hash32),
-    #   )
-    #   let logs = await client.eth_getLogs(filterOptions)
-
-    #   check:
-    #     len(logs) == 54
-
-    #   var i = 0
-    #   for l in logs:
-    #     check:
-    #       l.blockHash.isSome()
-    #       l.blockHash.unsafeGet() == testHash
-    #       l.logIndex.unsafeGet() == w3Qty(i.uint64)
-    #     inc i
 
     test "eth_getLogs by blockhash, filter logs at specific positions":
       let testHeader = getBlockHeader4514995()

@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[strutils, algorithm],
+  std/[sequtils, strutils, algorithm],
   ./rpc_types,
   ./params,
   ../db/core_db,
@@ -170,7 +170,9 @@ proc populateTransactionObject*(tx: Transaction,
 
 proc populateBlockObject*(blockHash: eth_types.Hash32,
                           blk: Block,
-                          fullTx: bool): BlockObject =
+                          totalDifficulty: UInt256,
+                          fullTx: bool,
+                          isUncle = false): BlockObject =
   template header: auto = blk.header
 
   result = BlockObject()
@@ -196,17 +198,21 @@ proc populateBlockObject*(blockHash: eth_types.Hash32,
   result.gasUsed   = Quantity(header.gasUsed)
   result.timestamp = Quantity(header.timestamp)
   result.baseFeePerGas = header.baseFeePerGas
+  result.totalDifficulty = totalDifficulty
 
-  if fullTx:
-    for i, tx in blk.transactions:
-      let txObj = populateTransactionObject(tx,
-        Opt.some(blockHash),
-        Opt.some(header.number), Opt.some(i.uint64))
-      result.transactions.add txOrHash(txObj)
-  else:
-    for i, tx in blk.transactions:
-      let txHash = rlpHash(tx)
-      result.transactions.add txOrHash(txHash)
+  if not isUncle:
+    result.uncles = blk.uncles.mapit(it.blockHash)
+
+    if fullTx:
+      for i, tx in blk.transactions:
+        let txObj = populateTransactionObject(tx,
+          Opt.some(blockHash),
+          Opt.some(header.number), Opt.some(i.uint64))
+        result.transactions.add txOrHash(txObj)
+    else:
+      for i, tx in blk.transactions:
+        let txHash = rlpHash(tx)
+        result.transactions.add txOrHash(txHash)
 
   result.withdrawalsRoot = header.withdrawalsRoot
   result.withdrawals = toWdList blk.withdrawals

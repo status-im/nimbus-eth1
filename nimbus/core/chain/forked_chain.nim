@@ -635,6 +635,9 @@ func baseHash*(c: ForkedChainRef): Hash32 =
 func txRecords*(c: ForkedChainRef, txHash: Hash32): (Hash32, uint64) =
   c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
 
+func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
+  c.blocks.hasKey(blockHash)
+
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
   c.blocks.getOrDefault(blockHash)
 
