@@ -29,37 +29,6 @@ import
   ../common/common,
   web3/eth_api_types
 
-const
-  defaultTag = blockId("latest")
-
-proc headerFromTag*(chain: CoreDbRef, blockId: BlockTag): Header
-    {.gcsafe, raises: [CatchableError].} =
-
-  if blockId.kind == bidAlias:
-    let tag = blockId.alias.toLowerAscii
-    case tag
-    of "latest": result = chain.getCanonicalHead()
-    of "earliest": result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
-    of "safe": result = chain.safeHeader()
-    of "finalized": result = chain.finalizedHeader()
-    of "pending":
-      #TODO: Implement get pending block
-      # We currently fall back to `latest` so that the `tx-spammer` in
-      # `ethpandaops/ethereum-package` can make progress. A real
-      # implementation is still required that takes into account any
-      # pending transactions that have not yet been bundled into a block.
-      result = chain.getCanonicalHead()
-    else:
-      raise newException(ValueError, "Unsupported block tag " & tag)
-  else:
-    let blockNum = blockId.number.uint64
-    result = chain.getBlockHeader(blockNum)
-
-proc headerFromTag*(chain: CoreDbRef, blockTag: Opt[BlockTag]): Header
-    {.gcsafe, raises: [CatchableError].} =
-  let blockId = blockTag.get(defaultTag)
-  chain.headerFromTag(blockId)
-
 proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
     {.gcsafe, raises: [CatchableError].} =
   var prices  = newSeqOfCap[GasInt](64)
@@ -90,31 +59,36 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
 
 proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce, chainId: ChainId): Transaction
     {.gcsafe, raises: [CatchableError].} =
+
+  var res: Transaction
+
   if tx.to.isSome:
-    result.to = Opt.some(tx.to.get)
+    res.to = Opt.some(tx.to.get)
 
   if tx.gas.isSome:
-    result.gasLimit = tx.gas.get.GasInt
+    res.gasLimit = tx.gas.get.GasInt
   else:
-    result.gasLimit = 90000.GasInt
+    res.gasLimit = 90000.GasInt
 
   if tx.gasPrice.isSome:
-    result.gasPrice = tx.gasPrice.get.GasInt
+    res.gasPrice = tx.gasPrice.get.GasInt
   else:
-    result.gasPrice = calculateMedianGasPrice(chain)
+    res.gasPrice = calculateMedianGasPrice(chain)
 
   if tx.value.isSome:
-    result.value = tx.value.get
+    res.value = tx.value.get
   else:
-    result.value = 0.u256
+    res.value = 0.u256
 
   if tx.nonce.isSome:
-    result.nonce = tx.nonce.get.AccountNonce
+    res.nonce = tx.nonce.get.AccountNonce
   else:
-    result.nonce = defaultNonce
+    res.nonce = defaultNonce
 
-  result.payload = tx.payload
-  result.chainId = chainId
+  res.payload = tx.payload
+  res.chainId = chainId
+
+  return res
 
 proc toWd(wd: Withdrawal): WithdrawalObject =
   WithdrawalObject(
@@ -125,9 +99,10 @@ proc toWd(wd: Withdrawal): WithdrawalObject =
   )
 
 proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
-  result = newSeqOfCap[WithdrawalObject](list.len)
+  var res = newSeqOfCap[WithdrawalObject](list.len)
   for x in list:
-    result.add toWd(x)
+    res.add toWd(x)
+  return res
 
 func toWdList(x: Opt[seq[eth_types.Withdrawal]]):
                      Opt[seq[WithdrawalObject]] =
@@ -138,105 +113,109 @@ proc populateTransactionObject*(tx: Transaction,
                                 optionalHash: Opt[eth_types.Hash32] = Opt.none(eth_types.Hash32),
                                 optionalNumber: Opt[eth_types.BlockNumber] = Opt.none(eth_types.BlockNumber),
                                 txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
-  result = TransactionObject()
-  result.`type` = Opt.some Quantity(tx.txType)
-  result.blockHash = optionalHash
-  result.blockNumber = w3Qty(optionalNumber)
+  var res = TransactionObject()
+  res.`type` = Opt.some Quantity(tx.txType)
+  res.blockHash = optionalHash
+  res.blockNumber = w3Qty(optionalNumber)
 
   if (let sender = tx.recoverSender(); sender.isOk):
-    result.`from` = sender[]
-  result.gas = Quantity(tx.gasLimit)
-  result.gasPrice = Quantity(tx.gasPrice)
-  result.hash = tx.rlpHash
-  result.input = tx.payload
-  result.nonce = Quantity(tx.nonce)
-  result.to = Opt.some(tx.destination)
+    res.`from` = sender[]
+  res.gas = Quantity(tx.gasLimit)
+  res.gasPrice = Quantity(tx.gasPrice)
+  res.hash = tx.rlpHash
+  res.input = tx.payload
+  res.nonce = Quantity(tx.nonce)
+  res.to = Opt.some(tx.destination)
   if txIndex.isSome:
-    result.transactionIndex = Opt.some(Quantity(txIndex.get))
-  result.value = tx.value
-  result.v = Quantity(tx.V)
-  result.r = tx.R
-  result.s = tx.S
-  result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
-  result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
+    res.transactionIndex = Opt.some(Quantity(txIndex.get))
+  res.value = tx.value
+  res.v = Quantity(tx.V)
+  res.r = tx.R
+  res.s = tx.S
+  res.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
+  res.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
 
   if tx.txType >= TxEip2930:
-    result.chainId = Opt.some(Quantity(tx.chainId))
-    result.accessList = Opt.some(tx.accessList)
+    res.chainId = Opt.some(Quantity(tx.chainId))
+    res.accessList = Opt.some(tx.accessList)
 
   if tx.txType >= TxEIP4844:
-    result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
-    result.blobVersionedHashes = Opt.some(tx.versionedHashes)
+    res.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
+    res.blobVersionedHashes = Opt.some(tx.versionedHashes)
 
-proc populateBlockObject*(blockHash: eth_types.Hash32,
+  return res
+
+proc populateBlockObject*(blockHash: Hash32,
                           blk: Block,
                           totalDifficulty: UInt256,
                           fullTx: bool,
                           isUncle = false): BlockObject =
   template header: auto = blk.header
 
-  result = BlockObject()
-  result.number = Quantity(header.number)
-  result.hash = blockHash
-  result.parentHash = header.parentHash
-  result.nonce = Opt.some(header.nonce)
-  result.sha3Uncles = header.ommersHash
-  result.logsBloom = header.logsBloom
-  result.transactionsRoot = header.txRoot
-  result.stateRoot = header.stateRoot
-  result.receiptsRoot = header.receiptsRoot
-  result.miner = header.coinbase
-  result.difficulty = header.difficulty
-  result.extraData = HistoricExtraData header.extraData
-  result.mixHash = Hash32 header.mixHash
+  var res = BlockObject()
+  res.number = Quantity(header.number)
+  res.hash = blockHash
+  res.parentHash = header.parentHash
+  res.nonce = Opt.some(header.nonce)
+  res.sha3Uncles = header.ommersHash
+  res.logsBloom = header.logsBloom
+  res.transactionsRoot = header.txRoot
+  res.stateRoot = header.stateRoot
+  res.receiptsRoot = header.receiptsRoot
+  res.miner = header.coinbase
+  res.difficulty = header.difficulty
+  res.extraData = HistoricExtraData header.extraData
+  res.mixHash = Hash32 header.mixHash
 
   # discard sizeof(seq[byte]) of extraData and use actual length
-  let size = sizeof(eth_types.Header) - sizeof(eth_api_types.Blob) + header.extraData.len
-  result.size = Quantity(size)
+  let size = sizeof(Header) - sizeof(seq[byte]) + header.extraData.len
+  res.size = Quantity(size)
 
-  result.gasLimit  = Quantity(header.gasLimit)
-  result.gasUsed   = Quantity(header.gasUsed)
-  result.timestamp = Quantity(header.timestamp)
-  result.baseFeePerGas = header.baseFeePerGas
-  result.totalDifficulty = totalDifficulty
+  res.gasLimit  = Quantity(header.gasLimit)
+  res.gasUsed   = Quantity(header.gasUsed)
+  res.timestamp = Quantity(header.timestamp)
+  res.baseFeePerGas = header.baseFeePerGas
+  res.totalDifficulty = totalDifficulty
 
   if not isUncle:
-    result.uncles = blk.uncles.mapit(it.blockHash)
+    res.uncles = blk.uncles.mapit(it.blockHash)
 
     if fullTx:
       for i, tx in blk.transactions:
         let txObj = populateTransactionObject(tx,
           Opt.some(blockHash),
           Opt.some(header.number), Opt.some(i.uint64))
-        result.transactions.add txOrHash(txObj)
+        res.transactions.add txOrHash(txObj)
     else:
       for i, tx in blk.transactions:
         let txHash = rlpHash(tx)
-        result.transactions.add txOrHash(txHash)
+        res.transactions.add txOrHash(txHash)
 
-  result.withdrawalsRoot = header.withdrawalsRoot
-  result.withdrawals = toWdList blk.withdrawals
-  result.parentBeaconBlockRoot = header.parentBeaconBlockRoot
-  result.blobGasUsed = w3Qty(header.blobGasUsed)
-  result.excessBlobGas = w3Qty(header.excessBlobGas)
+  res.withdrawalsRoot = header.withdrawalsRoot
+  res.withdrawals = toWdList blk.withdrawals
+  res.parentBeaconBlockRoot = header.parentBeaconBlockRoot
+  res.blobGasUsed = w3Qty(header.blobGasUsed)
+  res.excessBlobGas = w3Qty(header.excessBlobGas)
+
+  return res
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header): ReceiptObject =
   let sender = tx.recoverSender()
-  result = ReceiptObject()
-  result.transactionHash = tx.rlpHash
-  result.transactionIndex = Quantity(txIndex)
-  result.blockHash = header.blockHash
-  result.blockNumber = Quantity(header.number)
+  var res = ReceiptObject()
+  res.transactionHash = tx.rlpHash
+  res.transactionIndex = Quantity(txIndex)
+  res.blockHash = header.blockHash
+  res.blockNumber = Quantity(header.number)
   if sender.isSome():
-    result.`from` = sender.get()
-  result.to = Opt.some(tx.destination)
-  result.cumulativeGasUsed = Quantity(receipt.cumulativeGasUsed)
-  result.gasUsed = Quantity(gasUsed)
-  result.`type` = Opt.some Quantity(receipt.receiptType)
+    res.`from` = sender.get()
+  res.to = Opt.some(tx.destination)
+  res.cumulativeGasUsed = Quantity(receipt.cumulativeGasUsed)
+  res.gasUsed = Quantity(gasUsed)
+  res.`type` = Opt.some Quantity(receipt.receiptType)
 
   if tx.contractCreation and sender.isSome:
-    result.contractAddress = Opt.some(tx.creationAddress(sender[]))
+    res.contractAddress = Opt.some(tx.creationAddress(sender[]))
 
   for log in receipt.logs:
     # TODO: Work everywhere with either `Hash32` as topic or `array[32, byte]`
@@ -248,36 +227,38 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
       removed: false,
       # TODO: Not sure what is difference between logIndex and TxIndex and how
       # to calculate it.
-      logIndex: Opt.some(result.transactionIndex),
+      logIndex: Opt.some(res.transactionIndex),
       # Note: the next 4 fields cause a lot of duplication of data, but the spec
       # is what it is. Not sure if other clients actually add this.
-      transactionIndex: Opt.some(result.transactionIndex),
-      transactionHash: Opt.some(result.transactionHash),
-      blockHash: Opt.some(result.blockHash),
-      blockNumber: Opt.some(result.blockNumber),
+      transactionIndex: Opt.some(res.transactionIndex),
+      transactionHash: Opt.some(res.transactionHash),
+      blockHash: Opt.some(res.blockHash),
+      blockNumber: Opt.some(res.blockNumber),
       # The actual fields
       address: log.address,
       data: log.data,
       topics: topics
     )
-    result.logs.add(logObject)
+    res.logs.add(logObject)
 
-  result.logsBloom = FixedBytes[256] receipt.logsBloom
+  res.logsBloom = FixedBytes[256] receipt.logsBloom
 
   # post-transaction stateroot (pre Byzantium).
   if receipt.hasStateRoot:
-    result.root = Opt.some(receipt.stateRoot)
+    res.root = Opt.some(receipt.stateRoot)
   else:
     # 1 = success, 0 = failure.
-    result.status = Opt.some(Quantity(receipt.status.uint64))
+    res.status = Opt.some(Quantity(receipt.status.uint64))
 
   let baseFeePerGas = header.baseFeePerGas.get(0.u256)
   let normTx = eip1559TxNormalization(tx, baseFeePerGas.truncate(GasInt))
-  result.effectiveGasPrice = Quantity(normTx.gasPrice)
+  res.effectiveGasPrice = Quantity(normTx.gasPrice)
 
   if tx.txType == TxEip4844:
-    result.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    result.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
+    res.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
+    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
+
+  return res
 
 proc createAccessList*(header: Header,
                        com: CommonRef,
