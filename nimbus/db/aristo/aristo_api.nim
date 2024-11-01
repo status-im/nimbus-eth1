@@ -105,7 +105,7 @@ type
     proc(db: AristoDbRef;
          accPath: Hash32;
          stoPath: Hash32;
-        ): Result[Uint256,AristoError]
+        ): Result[UInt256,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, fetch the data
       ## record from the database indexed by `stoPath`.
@@ -816,7 +816,7 @@ func init*(
         result = api.mergeAccountRecord(a, b, c)
 
   profApi.mergeStorageData =
-    proc(a: AristoDbRef; b, c: Hash32, d: Uint256): auto =
+    proc(a: AristoDbRef; b, c: Hash32, d: UInt256): auto =
       AristoApiProfMergeStorageDataFn.profileRunner:
         result = api.mergeStorageData(a, b, c, d)
 

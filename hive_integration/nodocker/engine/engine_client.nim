@@ -660,7 +660,7 @@ proc debugPrevRandaoTransaction*(
       if stack.len < 1:
         return err("Invalid stack after PREVRANDAO operation")
 
-      let stackHash = Bytes32(hextoByteArray[32](stack[0].getStr))
+      let stackHash = Bytes32(hexToByteArray[32](stack[0].getStr))
       if stackHash != expectedPrevRandao:
         return err("Invalid stack after PREVRANDAO operation $1 != $2" % [stackHash.data.toHex, expectedPrevRandao.data.toHex])
 

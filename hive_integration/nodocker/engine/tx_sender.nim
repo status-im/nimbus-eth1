@@ -52,10 +52,10 @@ type
     accounts: seq[TestAccount]
     nonceMap: Table[Address, uint64]
     txSent  : int
-    chainId : ChainID
+    chainId : ChainId
 
   MakeTxParams* = object
-    chainId*: ChainID
+    chainId*: ChainId
     key*    : PrivateKey
     nonce*  : AccountNonce
 
@@ -128,7 +128,7 @@ proc getTxType(tc: BaseTx, nonce: uint64): TxType =
     if nonce mod 2 == 0:
       TxLegacy
     else:
-      TxEIP1559
+      TxEip1559
   else:
     tc.txType.get
 
@@ -157,7 +157,7 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
   of TxEip1559:
     PooledTransaction(
       tx: Transaction(
-        txType  : TxEIP1559,
+        txType  : TxEip1559,
         nonce   : params.nonce,
         gasLimit: tc.gasLimit,
         maxFeePerGas: gasFeeCap,
@@ -182,7 +182,7 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
 
     PooledTransaction(
       tx: Transaction(
-        txType  : TxEIP4844,
+        txType  : TxEip4844,
         nonce   : params.nonce,
         chainId : params.chainId,
         maxFeePerGas: gasFeeCap,
@@ -433,7 +433,7 @@ proc customizeTransaction*(sender: TxSender,
 
   if baseTx.txType in {TxEip1559, TxEip4844}:
     if custTx.gasPriceOrGasFeeCap.isSome:
-      modTx.maxFeePErGas = custTx.gasPriceOrGasFeeCap.get.GasInt
+      modTx.maxFeePerGas = custTx.gasPriceOrGasFeeCap.get.GasInt
 
     if custTx.gasTipCap.isSome:
       modTx.maxPriorityFeePerGas = custTx.gasTipCap.get.GasInt

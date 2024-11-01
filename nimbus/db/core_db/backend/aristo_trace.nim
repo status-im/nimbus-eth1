@@ -340,7 +340,7 @@ func logRecord(
 func logRecord(
     info: AristoApiProfNames;
     req: TraceRequest;
-    sto: Uint256;
+    sto: UInt256;
       ): TraceDataItemRef =
   TraceDataItemRef(
     pfx:    info.to(TracePfx),
@@ -507,7 +507,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
     proc(mpt: AristoDbRef;
          accPath: Hash32;
          stoPath: Hash32;
-        ): Result[Uint256,AristoError] =
+        ): Result[UInt256,AristoError] =
       const info = AristoApiProfFetchStorageDataFn
 
       when CoreDbNoisyCaptJournal:

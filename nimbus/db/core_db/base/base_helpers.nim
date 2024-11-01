@@ -58,13 +58,13 @@ template ctx*(kvt: CoreDbKvtRef): CoreDbCtxRef =
 
 # ---------------
 
-template call*(api: KvtApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(api: KvtApiRef; fn: untyped; args: varargs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
   else:
     fn(args)
 
-template call*(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(kvt: CoreDbKvtRef; fn: untyped; args: varargs[untyped]): untyped =
   CoreDbCtxRef(kvt).parent.kvtApi.call(fn, args)
 
 # ---------------
@@ -91,7 +91,7 @@ template ctx*(acc: CoreDbAccRef): CoreDbCtxRef =
 
 # ---------------
 
-template call*(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(api: AristoApiRef; fn: untyped; args: varargs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
   else:
@@ -100,7 +100,7 @@ template call*(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped 
 template call*(
     acc: CoreDbAccRef;
     fn: untyped;
-    args: varArgs[untyped];
+    args: varargs[untyped];
       ): untyped =
   CoreDbCtxRef(acc).parent.ariApi.call(fn, args)
 
