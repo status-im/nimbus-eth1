@@ -471,7 +471,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       tx = unsignedTx(data, api.chain.db, accDB.getNonce(address) + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
       signedTx = signTransaction(tx, acc.privateKey, eip155)
-    result = rlp.encode(signedTx)
+    return rlp.encode(signedTx)
 
   server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Hash32:
     ## Creates new message call transaction or a contract creation, if the data field contains code.
@@ -538,7 +538,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let header = api.chain.db.getBlockHeader(txDetails.blockNumber)
     var tx: Transaction
     if api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
-      result = populateTransactionObject(
+      return populateTransactionObject(
         tx,
         Opt.some(header.blockHash),
         Opt.some(header.number),

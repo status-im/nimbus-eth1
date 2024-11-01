@@ -178,7 +178,7 @@ proc populateBlockObject*(blockHash: Hash32,
   res.totalDifficulty = totalDifficulty
 
   if not isUncle:
-    res.uncles = blk.uncles.mapit(it.blockHash)
+    res.uncles = blk.uncles.mapIt(it.blockHash)
 
     if fullTx:
       for i, tx in blk.transactions:
