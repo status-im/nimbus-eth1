@@ -71,9 +71,7 @@ proc dispatchOutput(ctx: TransContext, conf: T8NConf, res: ExecOutput) =
   dis.dispatch(conf.outputBaseDir, conf.outputAlloc, "alloc", @@(res.alloc))
   dis.dispatch(conf.outputBaseDir, conf.outputResult, "result", @@(res.result))
 
-  let chainId = conf.stateChainId.ChainId
   let txList = ctx.filterGoodTransactions()
-
   let body = @@(rlp.encode(txList))
   dis.dispatch(conf.outputBaseDir, conf.outputBody, "body", body)
 

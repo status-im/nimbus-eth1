@@ -275,8 +275,8 @@ proc generatePayloadAttributes(cl: CLMocker) =
   let timestamp = Quantity cl.getNextBlockTimestamp.uint64
   cl.latestPayloadAttributes = PayloadAttributes(
     timestamp:             timestamp,
-    prevRandao:            FixedBytes[32] nextPrevRandao.data,
-    suggestedFeeRecipient: Address cl.nextFeeRecipient,
+    prevRandao:            nextPrevRandao,
+    suggestedFeeRecipient: cl.nextFeeRecipient,
   )
 
   if cl.isShanghai(timestamp):
@@ -311,8 +311,8 @@ proc requestNextPayload(cl: CLMocker): bool =
       head=cl.latestForkchoice.headBlockHash
     return false
 
-  doAssert s.payLoadID.isSome
-  cl.nextPayloadID = s.payloadID.get()
+  doAssert s.payloadId.isSome
+  cl.nextPayloadID = s.payloadId.get()
   return true
 
 proc getPayload(cl: CLMocker, payloadId: Bytes8): Result[GetPayloadResponse, string] =
@@ -339,9 +339,9 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestShouldOverrideBuilder = x.shouldOverrideBuilder
   cl.latestExecutionRequests = x.executionRequests
 
-  let parentBeaconblockRoot = cl.latestPayloadAttributes.parentBeaconblockRoot
+  let parentBeaconBlockRoot = cl.latestPayloadAttributes.parentBeaconBlockRoot
   let requestsHash = calcRequestsHash(x.executionRequests)
-  let header = blockHeader(cl.latestPayloadBuilt, parentBeaconblockRoot = parentBeaconblockRoot, requestsHash)
+  let header = blockHeader(cl.latestPayloadBuilt, parentBeaconBlockRoot, requestsHash)
   let blockHash = header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",
@@ -493,9 +493,9 @@ proc broadcastForkchoiceUpdated*(cl: CLMocker,
         msg=s.payloadStatus.validationError.get
       return false
 
-    if s.payloadID.isSome:
+    if s.payloadId.isSome:
       error "CLMocker: Expected empty PayloadID",
-        msg=s.payloadID.get.toHex
+        msg=s.payloadId.get.toHex
       return false
 
   return true

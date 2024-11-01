@@ -157,9 +157,9 @@ proc verifyBlobBundle(step: NewPayloads,
     return false
 
   for i, blobData in blobDataInPayload:
-    let bundleCommitment = blobBundle.commitments[i].bytes
-    let bundleBlob = blobBundle.blobs[i].bytes
-    let bundleProof = blobBundle.proofs[i].bytes
+    let bundleCommitment = blobBundle.commitments[i].data
+    let bundleBlob = blobBundle.blobs[i].data
+    let bundleProof = blobBundle.proofs[i].data
 
     if bundleCommitment != blobData.commitment.bytes:
       error "KZG mismatch at index of the bundle", index=i
@@ -235,8 +235,8 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
             r.expectNoError(step.expectationDescription)
             r.expectPayloadStatus(expectedStatus)
 
-            if r.get().payloadID.isSome:
-              testCond env.clMock.addPayloadID(env.engine, r.get().payloadID.get())
+            if r.get().payloadId.isSome:
+              testCond env.clMock.addPayloadID(env.engine, r.get().payloadId.get())
 
         return true
       ,

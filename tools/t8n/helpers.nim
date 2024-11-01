@@ -211,7 +211,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var TransContext)
     of "txs"    : r.readValue(val.txsJson)
     of "txsRlp" : r.readValue(val.txsRlp)
 
-proc parseTxJson(txo: TxObject, chainId: ChainID): Result[Transaction, string] =
+proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   template required(field) =
     const fName = astToStr(oField)
     if txo.field.isNone:
@@ -308,33 +308,31 @@ proc filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
     if txRes.isOk:
       result.add txRes.get
 
-template wrapException(procName: string, body) =
+template wrapException(body) =
   try:
     body
   except SerializationError as exc:
-    debugEcho "procName: ", procName
     raise newError(ErrorJson, exc.msg)
   except IOError as exc:
-    debugEcho "procName: ", procName
     raise newError(ErrorJson, exc.msg)
 
 proc parseTxsJson*(ctx: var TransContext, jsonFile: string) {.raises: [T8NError].} =
-  wrapException("parseTxsJson"):
+  wrapException:
     ctx.txsJson = T8Conv.loadFile(jsonFile, seq[TxObject])
 
 proc parseAlloc*(ctx: var TransContext, allocFile: string) {.raises: [T8NError].} =
-  wrapException("parseAlloc"):
+  wrapException:
     ctx.alloc = T8Conv.loadFile(allocFile, GenesisAlloc)
 
 proc parseEnv*(ctx: var TransContext, envFile: string) {.raises: [T8NError].} =
-  wrapException("parseEnv"):
+  wrapException:
     ctx.env = T8Conv.loadFile(envFile, EnvStruct)
 
 proc parseTxsRlp*(ctx: var TransContext, hexData: string) {.raises: [ValueError].} =
   ctx.txsRlp = hexToSeqByte(hexData)
 
 proc parseInputFromStdin*(ctx: var TransContext) {.raises: [T8NError].} =
-  wrapException("parseInputFromStdin"):
+  wrapException:
     let jsonData = stdin.readAll()
     ctx = T8Conv.decode(jsonData, TransContext)
 

@@ -114,7 +114,7 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
       let version = env.engine.version(env.clMock.latestHeader.timestamp)
       let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
       r.expectNoError()
-      testCond env.clMock.addPayloadID(env.engine, r.get.payloadID.get)
+      testCond env.clMock.addPayloadID(env.engine, r.get.payloadId.get)
       return true
   ))
   testCond pbRes

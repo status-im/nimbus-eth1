@@ -78,11 +78,11 @@ method execute(cs: InconsistentForkchoiceTest, env: TestEnv): bool =
 
   case cs.field
   of HeadBlockHash:
-    inconsistentFcU.headblockHash = shadow.alt[len(shadow.alt)-1].blockHash
+    inconsistentFcU.headBlockHash = shadow.alt[len(shadow.alt)-1].blockHash
   of SafeBlockHash:
-    inconsistentFcU.safeblockHash = shadow.alt[len(shadow.canon)-2].blockHash
+    inconsistentFcU.safeBlockHash = shadow.alt[len(shadow.canon)-2].blockHash
   of FinalizedBlockHash:
-    inconsistentFcU.finalizedblockHash = shadow.alt[len(shadow.canon)-3].blockHash
+    inconsistentFcU.finalizedBlockHash = shadow.alt[len(shadow.canon)-3].blockHash
 
   let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
   var r = env.engine.client.forkchoiceUpdated(version, inconsistentFcU)
@@ -119,15 +119,15 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
 
   if cs.field == HeadBlockHash:
     let fcu = ForkchoiceStateV1(
-      headblockHash:      randomblockHash,
-      safeblockHash:      env.clMock.latestForkchoice.safeblockHash,
-      finalizedblockHash: env.clMock.latestForkchoice.finalizedblockHash,
+      headBlockHash:      randomblockHash,
+      safeBlockHash:      env.clMock.latestForkchoice.safeBlockHash,
+      finalizedBlockHash: env.clMock.latestForkchoice.finalizedBlockHash,
     )
 
     info "forkchoiceStateUnknownHeadHash",
-      head=fcu.headblockHash.short,
-      safe=fcu.safeblockHash.short,
-      final=fcu.finalizedblockHash.short
+      head=fcu.headBlockHash.short,
+      safe=fcu.safeBlockHash.short,
+      final=fcu.finalizedBlockHash.short
 
     # Execution specification::
     # - (payloadStatus: (status: SYNCING, latestValidHash: null, validationError: null), payloadId: null)
@@ -143,21 +143,21 @@ method execute(cs: ForkchoiceUpdatedUnknownBlockHashTest, env: TestEnv): bool =
     # Test again using PayloadAttributes, should also return SYNCING and no PayloadID
     r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(payloadAttributes))
     r.expectPayloadStatus(PayloadExecutionStatus.syncing)
-    r.expectPayloadID(Opt.none(PayloadID))
+    r.expectPayloadID(Opt.none(Bytes8))
   else:
     let pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       # Run test after a new payload has been broadcast
       onNewPayloadBroadcast: proc(): bool =
         var fcu = ForkchoiceStateV1(
-          headblockHash:      env.clMock.latestExecutedPayload.blockHash,
-          safeblockHash:      env.clMock.latestForkchoice.safeblockHash,
-          finalizedblockHash: env.clMock.latestForkchoice.finalizedblockHash,
+          headBlockHash:      env.clMock.latestExecutedPayload.blockHash,
+          safeBlockHash:      env.clMock.latestForkchoice.safeBlockHash,
+          finalizedBlockHash: env.clMock.latestForkchoice.finalizedBlockHash,
         )
 
         if cs.field == SafeBlockHash:
-          fcu.safeblockHash = randomblockHash
+          fcu.safeBlockHash = randomblockHash
         elif cs.field == FinalizedBlockHash:
-          fcu.finalizedblockHash = randomblockHash
+          fcu.finalizedBlockHash = randomblockHash
 
         let version = env.engine.version(env.clMock.latestExecutedPayload.timestamp)
         var r = env.engine.client.forkchoiceUpdated(version, fcu)

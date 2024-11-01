@@ -192,11 +192,11 @@ method getName(cs: InvalidMissingAncestorReOrgSyncTest): string =
   "Invalid Missing Ancestor Syncing ReOrg, $1, EmptyTxs=$2, CanonicalReOrg=$3, Invalid P$4" % [
     $cs.invalidField, $cs.emptyTransactions, $cs.reOrgFromCanonical, $cs.invalidIndex]
 
-func blockHeader(ex: ExecutableData): common.BlockHeader =
+func blockHeader(ex: ExecutableData): Header =
   let requestsHash = calcRequestsHash(ex.executionRequests)
   blockHeader(ex.basePayload, ex.beaconRoot, requestsHash)
 
-func blockBody(ex: ExecutableData): common.BlockBody =
+func blockBody(ex: ExecutableData): BlockBody =
   blockBody(ex.basePayload)
 
 method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
