@@ -15,7 +15,11 @@
 import
   pkg/chronos,
   pkg/eth/common,
-  pkg/stew/interval_set
+  pkg/stew/interval_set,
+  ../../../utils/utils
+
+export
+  short
 
 func bnStr*(w: BlockNumber): string =
   "#" & $w

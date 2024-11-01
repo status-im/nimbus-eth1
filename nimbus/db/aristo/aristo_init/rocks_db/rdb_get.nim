@@ -103,7 +103,7 @@ proc getKey*(
       ): Result[HashKey,(AristoError,string)] =
   # Try LRU cache first
   var rc = rdb.rdKeyLru.get(rvid.vid)
-  if rc.isOK:
+  if rc.isOk:
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
     return ok(move(rc.value))
 
@@ -144,7 +144,7 @@ proc getVtx*(
     else:
       rdb.rdVtxLru.get(rvid.vid)
 
-  if rc.isOK:
+  if rc.isOk:
     rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
     return ok(move(rc.value))
 

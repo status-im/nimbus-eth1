@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
-  pkg/stew/[byteutils, interval_set, sorted_set],
+  pkg/stew/[interval_set, sorted_set],
   pkg/results,
   "../../.."/[common, core/chain, db/storage_types],
   ../worker_desc,
@@ -21,13 +21,6 @@ import
 
 const
   LhcStateKey = 1.beaconStateKey
-
-# ------------------------------------------------------------------------------
-# Private debugging & logging helpers
-# ------------------------------------------------------------------------------
-
-formatIt(Hash32):
-  it.data.toHex
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -41,6 +34,40 @@ proc fetchSyncStateLayout(ctx: BeaconCtxRef): Opt[SyncStateLayout] =
   except RlpError:
     discard
   err()
+
+
+proc deleteStaleHeadersAndState(
+    ctx: BeaconCtxRef;
+    upTo: BlockNumber;
+    info: static[string];
+      ) =
+  ## Delete stale headers and state
+  let
+    kvt = ctx.db.ctx.getKvt()
+    stateNum = ctx.db.getSavedStateBlockNumber() # for persisting
+
+  var bn = upTo
+  while 0 < bn and kvt.hasKey(beaconHeaderKey(bn).toOpenArray):
+    discard kvt.del(beaconHeaderKey(bn).toOpenArray)
+    bn.dec
+
+    # Occasionallly persist the deleted headers. This will succeed if
+    # this function is called early enough after restart when there is
+    # no database transaction pending.
+    if (upTo - bn) mod 8192 == 0:
+      ctx.db.persistent(stateNum).isOkOr:
+        debug info & ": cannot persist deleted sync headers", error=($$error)
+        # So be it, stop here.
+        return
+
+  # Delete persistent state, there will be no use of it anymore
+  discard kvt.del(LhcStateKey.toOpenArray)
+  ctx.db.persistent(stateNum).isOkOr:
+    debug info & ": cannot persist deleted sync headers", error=($$error)
+    return
+
+  if bn < upTo:
+    debug info & ": deleted stale sync headers", iv=BnRange.new(bn+1,upTo)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -57,30 +84,32 @@ proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
 
   # While executing blocks there are frequent save cycles. Otherwise, an
   # extra save request might help to pick up an interrupted sync session.
-  let txLevel = ctx.db.level()
-  if txLevel == 0:
+  if ctx.db.level() == 0 and ctx.stash.len == 0:
     let number = ctx.db.getSavedStateBlockNumber()
     ctx.db.persistent(number).isOkOr:
-      debug info & ": failed to save sync state persistently", error=($$error)
-      return
-  else:
-    trace info & ": sync state not saved, tx pending", txLevel
-    return
-
-  trace info & ": saved sync state persistently"
+      raiseAssert info & " persistent() failed: " & $$error
 
 
-proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Restore chain layout from persistent db
+proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
+  ## Restore chain layout from persistent db. It returns `true` if a previous
+  ## state could be loaded, and `false` if a new state was created.
   let
     rc = ctx.fetchSyncStateLayout()
     latest = ctx.chain.latestNumber()
 
-  # See `dbLoadSyncStateAvailable()` for comments
+  # If there was a manual import after a previous sync, then saved state
+  # might be outdated.
   if rc.isOk and
+     # The base number is the least record of the FCU chains/tree. So the
+     # finalised entry must not be smaller.
      ctx.chain.baseNumber() <= rc.value.final and
+     # If the latest FCU number is not larger than the head, there is nothing
+     # to do (might also happen after a manual import.)
      latest < rc.value.head:
+
+    # Assign saved sync state
     ctx.sst.layout = rc.value
+    ctx.sst.lastLayout = rc.value
 
     # Add interval of unprocessed block range `(L,C]` from `README.md`
     ctx.blocksUnprocSet(latest+1, ctx.layout.coupler)
@@ -92,6 +121,8 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
     trace info & ": restored sync state", L=latest.bnStr,
       C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr,
       F=ctx.layout.final.bnStr, H=ctx.layout.head.bnStr
+
+    true
 
   else:
     let
@@ -115,9 +146,25 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
       headHash:       latestHash,
       headLocked:     false)
 
-    trace info & ": new sync state", L="C", C="D", D="F", F="H", H=latest.bnStr
+    ctx.sst.lastLayout = ctx.layout
 
-  ctx.sst.lastLayout = ctx.layout
+    if rc.isOk:
+      # Some stored headers might have become stale, so delete them. Even
+      # though it is not critical, stale headers just stay on the database
+      # forever occupying space without purpose. Also, delete the state record.
+      # After deleting headers, the state record becomes stale as well.
+      if rc.value.head <= latest:
+        # After manual import, the `latest` state might be ahead of the old
+        # `head` which leaves a gap `(rc.value.head,latest)` of missing headers.
+        # So the `deleteStaleHeadersAndState()` clean up routine needs to start
+        # at the `head` and work backwards.
+        ctx.deleteStaleHeadersAndState(rc.value.head, info)
+      else:
+        # Delete stale headers with block numbers starting at to `latest` wile
+        # working backwards.
+        ctx.deleteStaleHeadersAndState(latest, info)
+
+    false
 
 # ------------------
 
@@ -139,15 +186,28 @@ proc dbStashHeaders*(
   ##    ..
   ##
   let
-    kvt = ctx.db.ctx.getKvt()
+    txLevel = ctx.db.level()
     last = first + revBlobs.len.uint64 - 1
-  for n,data in revBlobs:
-    let key = beaconHeaderKey(last - n.uint64)
-    kvt.put(key.toOpenArray, data).isOkOr:
-      raiseAssert info & ": put() failed: " & $$error
+  if 0 < txLevel:
+    # Need to cache it because FCU has blocked writing through to disk.
+    for n,data in revBlobs:
+      ctx.stash[last - n.uint64] = data
+  else:
+    let kvt = ctx.db.ctx.getKvt()
+    for n,data in revBlobs:
+      let key = beaconHeaderKey(last - n.uint64)
+      kvt.put(key.toOpenArray, data).isOkOr:
+        raiseAssert info & ": put() failed: " & $$error
 
 proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
+  # Try cache first
+  ctx.stash.withValue(num, val):
+    try:
+      return ok(rlp.decode(val[], Header))
+    except RlpError:
+      discard
+  # Use persistent storage next
   let
     key = beaconHeaderKey(num)
     rc = ctx.db.ctx.getKvt().get(key.toOpenArray)
@@ -164,6 +224,9 @@ proc dbPeekParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
 
 proc dbUnstashHeader*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
+  ctx.stash.withValue(bn, val):
+    ctx.stash.del bn
+    return
   discard ctx.db.ctx.getKvt().del(beaconHeaderKey(bn).toOpenArray)
 
 # ------------------------------------------------------------------------------

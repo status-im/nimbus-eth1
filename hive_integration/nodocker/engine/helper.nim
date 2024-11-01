@@ -18,7 +18,7 @@ import
 
 proc txInPayload*(payload: ExecutionPayload, txHash: Hash32): bool =
   for txBytes in payload.transactions:
-    let currTx = rlp.decode(common.Blob txBytes, Transaction)
+    let currTx = rlp.decode(seq[byte](txBytes), Transaction)
     if rlpHash(currTx) == txHash:
       return true
 

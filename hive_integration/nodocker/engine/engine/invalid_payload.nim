@@ -346,7 +346,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
 
         let
           versione = env.engine.version(payloadAttributes.timestamp)
-          s = invalidPayloadProducer.client.getPayload(r.get.payloadID.get, versione)
+          s = invalidPayloadProducer.client.getPayload(r.get.payloadId.get, versione)
         s.expectNoError()
 
         let basePayload = s.get.executionPayload
@@ -363,11 +363,11 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
         r = env.engine.client.newPayload(version, inv_p)
 
       r.expectStatus(PayloadExecutionStatus.invalid)
-      r.expectLatestValidHash(env.clMock.latestForkchoice.headblockHash)
+      r.expectLatestValidHash(env.clMock.latestForkchoice.headBlockHash)
 
       let s = sec.client.newPayload(version, inv_p)
       s.expectStatus(PayloadExecutionStatus.invalid)
-      s.expectLatestValidHash(env.clMock.latestForkchoice.headblockHash)
+      s.expectLatestValidHash(env.clMock.latestForkchoice.headBlockHash)
 
       # Let the block production continue.
       # At this point the selected payload producer will

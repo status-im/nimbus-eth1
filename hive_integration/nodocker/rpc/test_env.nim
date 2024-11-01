@@ -34,7 +34,7 @@ type
 const
   initPath = "hive_integration" / "nodocker" / "rpc" / "init"
   gasPrice* = 30.gwei
-  chainID*  = ChainID(7)
+  chainID*  = ChainId(7)
 
 proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
   if string(conf.importKey).len > 0:

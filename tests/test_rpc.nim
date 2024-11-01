@@ -269,7 +269,7 @@ proc rpcMain*() =
 
     test "web3_clientVersion":
       let res = await client.web3_clientVersion()
-      check res == NimbusIdent
+      check res == ClientId
 
     test "web3_sha3":
       let data = @(NimbusName.toOpenArrayByte(0, NimbusName.len-1))
