@@ -19,15 +19,15 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template append(w: var RlpWriter, t: TypedTransaction) =
-  w.appendRawBytes(distinctBase t)
+template append(w: var RlpWriter, typedTransaction: TypedTransaction) =
+  w.appendRawBytes(distinctBase typedTransaction)
 
-template append(w: var RlpWriter, t: WithdrawalV1) =
+template append(w: var RlpWriter, withdrawalV1: WithdrawalV1) =
   w.append blocks.Withdrawal(
-    index: distinctBase(t.index),
-    validatorIndex: distinctBase(t.validatorIndex),
-    address: t.address,
-    amount: distinctBase(t.amount),
+    index: distinctBase(withdrawalV1.index),
+    validatorIndex: distinctBase(withdrawalV1.validatorIndex),
+    address: withdrawalV1.address,
+    amount: distinctBase(withdrawalV1.amount),
   )
 
 func wdRoot(list: openArray[WithdrawalV1]): Hash32 =
