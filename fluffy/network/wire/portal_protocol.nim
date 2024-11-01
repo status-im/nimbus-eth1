@@ -319,7 +319,7 @@ func inRange(
   let distance = p.distance(nodeId, contentId)
   distance <= nodeRadius
 
-proc inRange*(p: PortalProtocol, contentId: ContentId): bool =
+template inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius(), contentId)
 
 func truncateEnrs(
