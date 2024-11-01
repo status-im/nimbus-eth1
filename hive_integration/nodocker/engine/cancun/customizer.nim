@@ -539,11 +539,6 @@ func scramble(data: Hash32): Opt[Hash32] =
   h.data[^1] = byte(255 - h.data[^1])
   Opt.some(h)
 
-func scramble(data: Bytes32): Opt[Hash32] =
-  var h = Hash32 data
-  h.data[0] = byte(255 - h.data[0])
-  Opt.some(h)
-
 # This function generates an invalid payload by taking a base payload and modifying the specified field such that it ends up being invalid.
 # One small consideration is that the payload needs to contain transactions and specially transactions using the PREVRANDAO opcode for all the fields to be compatible with this function.
 proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadField: InvalidPayloadBlockField): ExecutableData =

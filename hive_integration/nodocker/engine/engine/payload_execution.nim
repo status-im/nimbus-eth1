@@ -169,7 +169,7 @@ method execute(cs: InOrderPayloadExecutionTest, env: TestEnv): bool =
   version = sec.version(env.clMock.latestExecutedPayload.timestamp)
   s = sec.client.forkchoiceUpdated(version, fcU)
   s.expectPayloadStatus(PayloadExecutionStatus.valid)
-  s.expectLatestValidHash(fcU.headblockHash)
+  s.expectLatestValidHash(fcU.headBlockHash)
   s.expectNoValidationError()
 
   # At this point we should have our funded account balance equal to the expected value.
@@ -460,9 +460,9 @@ method execute(cs: NewPayloadWithMissingFcUTest, env: TestEnv): bool =
   let version = sec.version(env.clMock.latestHeader.timestamp)
   let p = sec.client.forkchoiceUpdated(version, fcU)
   p.expectPayloadStatus(PayloadExecutionStatus.valid)
-  p.expectLatestValidHash(fcU.headblockHash)
+  p.expectLatestValidHash(fcU.headBlockHash)
 
   # Now the head should've changed to the latest PoS block
   let s = sec.client.latestHeader()
-  s.expectHash(fcU.headblockHash)
+  s.expectHash(fcU.headBlockHash)
   return true

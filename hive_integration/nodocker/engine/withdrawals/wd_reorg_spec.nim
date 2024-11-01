@@ -40,7 +40,7 @@ type
     nextIndex   : int
     wdHistory   : WDHistory
     sidechain   : Table[uint64, ExecutionPayload]
-    payloadId   : PayloadID
+    payloadId   : Bytes8
     height      : uint64
     attr        : Opt[PayloadAttributes]
 
@@ -180,9 +180,9 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         let r = sec.client.forkchoiceUpdated(fcState, attr)
         r.expectNoError()
         r.expectPayloadStatus(PayloadExecutionStatus.valid)
-        testCond r.get().payloadID.isSome:
+        testCond r.get().payloadId.isSome:
           error "Unable to get a payload ID on the sidechain"
-        sidechain.payloadId = r.get().payloadID.get()
+        sidechain.payloadId = r.get().payloadId.get()
 
       return true
     ,
@@ -247,7 +247,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       let r = sec.client.forkchoiceUpdatedV2(fcState, Opt.some(attr))
       r.expectPayloadStatus(PayloadExecutionStatus.valid)
 
-      let p = sec.client.getPayloadV2(r.get().payloadID.get)
+      let p = sec.client.getPayloadV2(r.get().payloadId.get)
       p.expectNoError()
 
       let z = p.get()

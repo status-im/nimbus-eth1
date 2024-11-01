@@ -70,7 +70,7 @@ proc headerStagedUpdateTarget*(
     let rc = await buddy.headersFetchReversed(iv, ctx.target.finalHash, info)
     ctx.target.locked = false
 
-    if rc.isOK:
+    if rc.isOk:
       let hash = rlp.encode(rc.value[0]).keccak256
       if hash != ctx.target.finalHash:
         # Oops

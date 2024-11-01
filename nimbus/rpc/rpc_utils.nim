@@ -160,7 +160,7 @@ proc populateTransactionObject*(tx: Transaction,
     result.chainId = Opt.some(Quantity(tx.chainId))
     result.accessList = Opt.some(tx.accessList)
 
-  if tx.txType >= TxEIP4844:
+  if tx.txType >= TxEip4844:
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
     result.blobVersionedHashes = Opt.some(tx.versionedHashes)
 

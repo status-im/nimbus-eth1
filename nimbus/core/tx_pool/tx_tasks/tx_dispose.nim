@@ -109,7 +109,7 @@ proc disposeById*(xp: TxPoolRef; itemIDs: openArray[Hash32]; reason: TxInfo)
   ## unusable (e.g. with higher nonces for the same sender.)
   for itemID in itemIDs:
     let rcItem = xp.txDB.byItemID.eq(itemID)
-    if rcItem.isOK:
+    if rcItem.isOk:
       discard xp.txDB.dispose(rcItem.value, reason)
 
 # ------------------------------------------------------------------------------
