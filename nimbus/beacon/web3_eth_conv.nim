@@ -29,8 +29,8 @@ type
   Web3BlockNumber*   = Quantity
   Web3Tx*            = engine_api_types.TypedTransaction
   Web3Blob*          = engine_api_types.Blob
-  Web3KZGProof*      = engine_api_types.KZGProof
-  Web3KZGCommitment* = engine_api_types.KZGCommitment
+  Web3KZGProof*      = engine_api_types.KzgProof
+  Web3KZGCommitment* = engine_api_types.KzgCommitment
 
 {.push gcsafe, raises:[].}
 
