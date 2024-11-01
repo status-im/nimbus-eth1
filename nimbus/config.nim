@@ -11,6 +11,7 @@
 import
   std/[
     options,
+    strformat,
     strutils,
     times,
     os,
@@ -31,17 +32,6 @@ import
 
 export net, defs
 
-const
-  # TODO: fix this agent-string format to match other
-  # eth clients format
-  NimbusIdent* = "$# v$# [$#: $#, $#, $#]" % [
-    NimbusName,
-    NimbusVersion,
-    hostOS,
-    hostCPU,
-    VmName,
-    GitRevision
-  ]
 
 let
   # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
@@ -50,16 +40,16 @@ let
     " Status Research & Development GmbH"
 
   # e.g.:
-  # Nimbus v0.1.0 [windows: amd64, rocksdb, evmc, dda8914f]
+  # nimbus/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2021 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
-    NimbusIdent,
+    ClientId,
     NimbusCopyright,
   ]
 
-  NimbusHeader* = "$#\p\p$#" % [
+  NimbusHeader* = "$#\p\pNim version $#" % [
     NimbusBuild,
-    version.NimVersion
+    NimVersion
   ]
 
 func defaultDataDir*(): string =
@@ -357,8 +347,8 @@ type
 
     agentString* {.
       desc: "Node agent string which is used as identifier in network"
-      defaultValue: NimbusIdent
-      defaultValueDesc: $NimbusIdent
+      defaultValue: ClientId
+      defaultValueDesc: $ClientId
       name: "agent-string" .}: string
 
     beaconChunkSize* {.

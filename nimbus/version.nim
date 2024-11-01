@@ -7,8 +7,8 @@
 # those terms.
 
 import
-  std/[strutils, os, sequtils],
-  stew/byteutils
+  std/[strformat, strutils, os, sequtils],
+  stew/byteutils, ./compile_info
 
 const
   sourcePath  = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
@@ -59,6 +59,6 @@ const
 
   GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
-  NimVersion* = "Nim version " & $NimMajor & "." & $NimMinor & "." & $NimPatch
-
   FullVersionStr* = "v" & NimbusVersion & "-" & GitRevision
+
+  ClientId* = &"{NimbusName}/{FullVersionStr}/{hostOS}-{hostCPU}/Nim-{NimVersion}/{VmName}"
