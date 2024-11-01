@@ -79,50 +79,14 @@ proc persistFixtureBlock(chainDB: CoreDbRef) =
   chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
   chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
 
-type
-  Env* = ref object
-    com    : CommonRef
-    server : RpcHttpServer
-    client : RpcHttpClient
-    chain  : ForkedChainRef
-
-
 proc setupClient(port: Port): RpcHttpClient =
   let client = newRpcHttpClient()
   waitFor client.connect("127.0.0.1", port, false)
   return client
 
-proc setupNimbus(ctx: EthContext, com: CommonRef): Env =
-  let
-    chain = ForkedChainRef.init(com)
-    txPool = TxPoolRef.new(com)
-
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  doAssert txPool.smartHead(chain.latestHeader, chain)
-
-  let
-    server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
-      quit(QuitFailure)
-    serverApi = newServerAPI(chain, txPool)
-
-  setupServerAPI(serverApi, server, ctx)
-
-  server.start()
-
-  let
-    client = setupClient(server.localAddress[0].port)
-
-  Env(
-    com    : com,
-    server : server,
-    client : client,
-    chain  : chain,
-  )
-
-proc close(env: Env) =
-  waitFor env.client.close()
-  waitFor env.server.closeWait()
+proc close(client: RpcHttpClient, server: RpcHttpServer) =
+  waitFor client.close()
+  waitFor server.closeWait()
 
 proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
   var
@@ -272,17 +236,30 @@ proc rpcMain*() =
       debugEcho unlock.error
     doAssert(unlock.isOk)
 
-    let env = setupEnv(signer, ks2, ctx, com)
-    let nimbus = setupNimbus(ctx, com)
-    setupCommonRpc(ethNode, conf, nimbus.server)
+    let 
+      env = setupEnv(signer, ks2, ctx, com)
+      chain = ForkedChainRef.init(com)
+      txPool = TxPoolRef.new(com)
+
+    # txPool must be informed of active head
+    # so it can know the latest account state
+    doAssert txPool.smartHead(chain.latestHeader, chain)
+
+    let
+      server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
+        quit(QuitFailure)
+      serverApi = newServerAPI(chain, txPool)
+
+    setupServerAPI(serverApi, server, ctx)
+    setupCommonRpc(ethNode, conf, server)
+
+    server.start()
+    let client = setupClient(server.localAddress[0].port)
+
     # disable POS/post Merge feature
-    nimbus.com.setTTD Opt.none(DifficultyInt)
-
-    template client(): RpcHttpClient =
-      nimbus.client
+    com.setTTD Opt.none(DifficultyInt)
 
 
-    # TODO: add more tests here
     test "web3_clientVersion":
       let res = await client.web3_clientVersion()
       check res == NimbusIdent
@@ -712,7 +689,7 @@ proc rpcMain*() =
           storageProof.len() == 1
           verifySlotProof(proofResponse.storageHash, storageProof[0]).isValid()
 
-    nimbus.close()
+    close(client, server)
 
 proc setErrorLevel* =
   discard
