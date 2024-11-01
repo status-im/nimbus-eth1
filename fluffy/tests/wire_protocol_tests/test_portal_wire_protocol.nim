@@ -50,6 +50,7 @@ proc initPortalProtocol(
       toContentId,
       createGetHandler(db),
       createStoreHandler(db, defaultRadiusConfig),
+      createContainsHandler(db),
       createRadiusHandler(db),
       stream,
       bootstrapRecords = bootstrapRecords,
@@ -346,6 +347,7 @@ procSuite "Portal Wire Protocol Tests":
         toContentId,
         createGetHandler(db),
         createStoreHandler(db, defaultRadiusConfig),
+        createContainsHandler(db),
         createRadiusHandler(db),
         stream,
       )

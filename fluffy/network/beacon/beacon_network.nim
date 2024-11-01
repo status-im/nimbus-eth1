@@ -208,6 +208,7 @@ proc new*(
       toContentIdHandler,
       createGetHandler(beaconDb),
       createStoreHandler(beaconDb),
+      createContainsHandler(beaconDb),
       createRadiusHandler(beaconDb),
       stream,
       bootstrapRecords,

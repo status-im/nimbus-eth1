@@ -24,29 +24,39 @@ suite "Content Database":
         "", uint32.high, RadiusConfig(kind: Dynamic), testId, inMemory = true
       )
       key = ContentId(UInt256.high()) # Some key
-      dbGet = db.createGetHandler()
 
     block:
-      let val = dbGet(ContentKeyByteList.init(@[]), key)
+      var val = Opt.none(seq[byte])
+      proc onData(data: openArray[byte]) =
+        val = Opt.some(@data)
 
       check:
+        db.get(key, onData) == false
         val.isNone()
         db.contains(key) == false
 
     block:
       discard db.putAndPrune(key, [byte 0, 1, 2, 3])
-      let val = dbGet(ContentKeyByteList.init(@[]), key)
+
+      var val = Opt.none(seq[byte])
+      proc onData(data: openArray[byte]) =
+        val = Opt.some(@data)
 
       check:
+        db.get(key, onData) == true
         val.isSome()
         val.get() == [byte 0, 1, 2, 3]
         db.contains(key) == true
 
     block:
       db.del(key)
-      let val = dbGet(ContentKeyByteList.init(@[]), key)
+
+      var val = Opt.none(seq[byte])
+      proc onData(data: openArray[byte]) =
+        val = Opt.some(@data)
 
       check:
+        db.get(key, onData) == false
         val.isNone()
         db.contains(key) == false
 

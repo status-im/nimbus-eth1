@@ -151,6 +151,10 @@ type
     contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
   ) {.raises: [], gcsafe.}
 
+  DbContainsHandler* = proc(contentKey: ContentKeyByteList, contentId: ContentId): bool {.
+    raises: [], gcsafe
+  .}
+
   DbRadiusHandler* = proc(): UInt256 {.raises: [], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
@@ -183,6 +187,7 @@ type
     contentCache: ContentCache
     dbGet*: DbGetHandler
     dbPut*: DbStoreHandler
+    dbContains*: DbContainsHandler
     dataRadius*: DbRadiusHandler
     bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
@@ -474,7 +479,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       )
 
       if p.inRange(contentId):
-        if p.dbGet(contentKey, contentId).isErr:
+        if not p.dbContains(contentKey, contentId):
           contentKeysBitList.setBit(i)
           discard contentKeys.add(contentKey)
     else:
@@ -561,6 +566,7 @@ proc new*(
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
     dbPut: DbStoreHandler,
+    dbContains: DbContainsHandler,
     dbRadius: DbRadiusHandler,
     stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
@@ -580,6 +586,7 @@ proc new*(
       ContentCache.init(if config.disableContentCache: 0 else: config.contentCacheSize),
     dbGet: dbGet,
     dbPut: dbPut,
+    dbContains: dbContains,
     dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
@@ -1627,7 +1634,6 @@ proc getLocalContent*(
   # Check first if content is in range, as this is a cheaper operation
   # than the database lookup.
   if p.inRange(contentId):
-    doAssert(p.dbGet != nil)
     p.dbGet(contentKey, contentId)
   else:
     Opt.none(seq[byte])

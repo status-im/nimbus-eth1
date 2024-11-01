@@ -497,6 +497,12 @@ proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =
         db.put(contentId, content)
   )
 
+proc createContainsHandler*(db: ContentDB): DbContainsHandler =
+  return (
+    proc(contentKey: ContentKeyByteList, contentId: ContentId): bool =
+      db.contains(contentId)
+  )
+
 proc createRadiusHandler*(db: ContentDB): DbRadiusHandler =
   return (
     proc(): UInt256 {.raises: [], gcsafe.} =
