@@ -287,16 +287,16 @@ proc close*(db: ContentDB) =
 
 ## Private ContentDB calls
 
-proc get(db: ContentDB, key: openArray[byte], onData: DataProc): bool =
+template get(db: ContentDB, key: openArray[byte], onData: DataProc): bool =
   db.kv.get(key, onData).expectDb()
 
-proc put(db: ContentDB, key, value: openArray[byte]) =
+template put(db: ContentDB, key, value: openArray[byte]) =
   db.kv.put(key, value).expectDb()
 
-proc contains(db: ContentDB, key: openArray[byte]): bool =
+template contains(db: ContentDB, key: openArray[byte]): bool =
   db.kv.contains(key).expectDb()
 
-proc del(db: ContentDB, key: openArray[byte]) =
+template del(db: ContentDB, key: openArray[byte]) =
   # TODO: Do we want to return the bool here too?
   discard db.kv.del(key).expectDb()
 
