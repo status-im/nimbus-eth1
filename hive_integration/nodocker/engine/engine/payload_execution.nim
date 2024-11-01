@@ -243,7 +243,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
 
     # Fabricate and send multiple new payloads by changing the PrevRandao field
     for i in 0..<payloadCount:
-      let newPrevRandao = Hash32.randomBytes()
+      let newPrevRandao = Bytes32.randomBytes()
       let customizer = CustomPayloadData(
         prevRandao: Opt.some(newPrevRandao),
       )
@@ -349,7 +349,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
 
       # Send the forkchoiceUpdated with a reference to the valid payload on the SYNCING client.
       var
-        random                = default(Hash32)
+        random                = default(Bytes32)
         suggestedFeeRecipient = default(Address)
 
       let customizer = BasePayloadAttributesCustomizer(

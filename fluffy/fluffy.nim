@@ -28,7 +28,7 @@ import
   ./rpc/[
     rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_common_api,
     rpc_portal_history_api, rpc_portal_beacon_api, rpc_portal_state_api,
-    rpc_portal_debug_history_api,
+    rpc_portal_nimbus_beacon_api, rpc_portal_debug_history_api,
   ],
   ./database/content_db,
   ./portal_node,
@@ -273,6 +273,7 @@ proc run(
           rpcServer.installPortalBeaconApiHandlers(
             node.beaconNetwork.value.portalProtocol
           )
+          rpcServer.installPortalNimbusBeaconApiHandlers(node.beaconNetwork.value)
         if node.stateNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
             node.stateNetwork.value.portalProtocol, PortalSubnetwork.state

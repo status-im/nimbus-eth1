@@ -54,7 +54,7 @@ method execute(cs: SidechainReOrgTest, env: TestEnv): bool =
     onNewPayloadBroadcast: proc(): bool =
       # At this point the CLMocker has a payload that will result in a specific outcome,
       # we can produce an alternative payload, send it, fcU to it, and verify the changes
-      let alternativePrevRandao = Hash32.randomBytes()
+      let alternativePrevRandao = Bytes32.randomBytes()
       let timestamp = w3Qty(env.clMock.latestPayloadBuilt.timestamp, 1)
       let customizer = BasePayloadAttributesCustomizer(
         timestamp:  Opt.some(timestamp.uint64),
@@ -105,7 +105,7 @@ method execute(cs: SidechainReOrgTest, env: TestEnv): bool =
 
 # Test performing a re-org that involves removing or modifying a transaction
 type
-  TransactionReOrgScenario = enum
+  TransactionReOrgScenario* = enum
     TransactionNoScenario
     TransactionReOrgScenarioReOrgOut            = "Re-Org Out"
     TransactionReOrgScenarioReOrgBackIn         = "Re-Org Back In"
@@ -154,7 +154,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
 
   # Send a transaction on each payload of the canonical chain
   shadow.sendTransaction = proc(i: int): PooledTransaction {.gcsafe.} =
-    let sstoreContractAddr = hexToByteArray[20]("0000000000000000000000000000000000000317")
+    let sstoreContractAddr = address"0000000000000000000000000000000000000317"
     var data: array[32, byte]
     data[^1] = i.byte
     info "transactionReorg", idx=i
@@ -182,7 +182,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
         if cs.scenario == TransactionReOrgScenarioReOrgOut:
           # Any payload we get should not contain any
           var attr = env.clMock.latestPayloadAttributes
-          attr.prevRandao = Hash32.randomBytes()
+          attr.prevRandao = Bytes32.randomBytes()
 
           var version = env.engine.version(env.clMock.latestHeader.timestamp)
           let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
@@ -423,7 +423,7 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
     var pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
       onPayloadAttributesGenerated: proc(): bool =
         var attr = env.clMock.latestPayloadAttributes
-        attr.prevRandao = Hash32.randomBytes()
+        attr.prevRandao = Bytes32.randomBytes()
 
         var version = env.engine.version(env.clMock.latestHeader.timestamp)
         let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
@@ -610,8 +610,8 @@ func toSeq(x: string): seq[byte] =
     result.add z.byte
 
 func ethAddress(a, b: int): Address =
-  result[0] = a.byte
-  result[1] = b.byte
+  result.data[0] = a.byte
+  result.data[1] = b.byte
 
 # Test that performs a re-org to a previously validated payload on a side chain.
 method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool =
@@ -669,7 +669,7 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
   pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
     onGetpayload: proc(): bool =
       var
-        prevRandao            = Hash32.randomBytes()
+        prevRandao            = Bytes32.randomBytes()
         suggestedFeeRecipient = ethAddress(0x12, 0x34)
 
       let payloadAttributesCustomizer = BasePayloadAttributesCustomizer(

@@ -20,7 +20,8 @@ import
   ../engine_client,
   ../types,
   ../base_spec,
-  ../../../../nimbus/beacon/web3_eth_conv
+  ../../../../nimbus/beacon/web3_eth_conv,
+  ../../../../nimbus/utils/utils
 
 # Withdrawals re-org spec:
 # Specifies a withdrawals test where the withdrawals re-org can happen

@@ -55,7 +55,7 @@ type
     payloadIDHistory        : Table[string, Bytes8]
 
     # PoS Chain History Information
-    prevRandaoHistory*      : Table[uint64, Hash32]
+    prevRandaoHistory*      : Table[uint64, Bytes32]
     executedPayloadHistory* : Table[uint64, ExecutionPayload]
     headHashHistory         : seq[Hash32]
 
@@ -271,7 +271,7 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 
 proc generatePayloadAttributes(cl: CLMocker) =
   # Generate a random value for the PrevRandao field
-  let nextPrevRandao = Hash32.randomBytes()
+  let nextPrevRandao = Bytes32.randomBytes()
   let timestamp = Quantity cl.getNextBlockTimestamp.uint64
   cl.latestPayloadAttributes = PayloadAttributes(
     timestamp:             timestamp,
@@ -660,7 +660,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     return false
 
   # mixHash == prevRandao
-  if newHeader.mixHash != Bytes32 cl.prevRandaoHistory[cl.latestHeadNumber]:
+  if newHeader.mixHash != cl.prevRandaoHistory[cl.latestHeadNumber]:
     error "CLMocker: Client produced a new header with incorrect mixHash",
       get = newHeader.mixHash,
       expect = cl.prevRandaoHistory[cl.latestHeadNumber]

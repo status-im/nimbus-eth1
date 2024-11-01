@@ -11,6 +11,7 @@
 import
   std/[
     options,
+    strformat,
     strutils,
     times,
     os,
@@ -31,17 +32,6 @@ import
 
 export net, defs
 
-const
-  # TODO: fix this agent-string format to match other
-  # eth clients format
-  NimbusIdent* = "$# v$# [$#: $#, $#, $#]" % [
-    NimbusName,
-    NimbusVersion,
-    hostOS,
-    hostCPU,
-    VmName,
-    GitRevision
-  ]
 
 let
   # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
@@ -50,16 +40,16 @@ let
     " Status Research & Development GmbH"
 
   # e.g.:
-  # Nimbus v0.1.0 [windows: amd64, rocksdb, evmc, dda8914f]
+  # nimbus/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2021 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
-    NimbusIdent,
+    ClientId,
     NimbusCopyright,
   ]
 
-  NimbusHeader* = "$#\p\p$#" % [
+  NimbusHeader* = "$#\p\pNim version $#" % [
     NimbusBuild,
-    version.NimVersion
+    NimVersion
   ]
 
 func defaultDataDir*(): string =
@@ -116,11 +106,6 @@ type
   NimbusCmd* {.pure.} = enum
     noCommand
     `import`
-
-  ProtocolFlag* {.pure.} = enum
-    ## Protocol flags
-    Eth                           ## enable eth subprotocol
-    #Snap                          ## enable snap sub-protocol
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -362,17 +347,9 @@ type
 
     agentString* {.
       desc: "Node agent string which is used as identifier in network"
-      defaultValue: NimbusIdent
-      defaultValueDesc: $NimbusIdent
+      defaultValue: ClientId
+      defaultValueDesc: $ClientId
       name: "agent-string" .}: string
-
-    protocols {.
-      desc: "Enable specific set of server protocols (available: Eth, " &
-            " None.) This will not affect the sync mode"
-            # " Snap, None.) This will not affect the sync mode"
-      defaultValue: @[]
-      defaultValueDesc: $ProtocolFlag.Eth
-      name: "protocols" .}: seq[string]
 
     beaconChunkSize* {.
       hidden
@@ -670,23 +647,6 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
     except CatchableError:
       error "Failed to parse network name or id", network
       quit QuitFailure
-
-proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
-  if conf.protocols.len == 0:
-    return {ProtocolFlag.Eth}
-
-  var noneOk = false
-  for item in repeatingList(conf.protocols):
-    case item.toLowerAscii()
-    of "eth": result.incl ProtocolFlag.Eth
-    # of "snap": result.incl ProtocolFlag.Snap
-    of "none": noneOk = true
-    else:
-      error "Unknown protocol", name=item
-      quit QuitFailure
-  if noneOk and 0 < result.len:
-    error "Setting none contradicts wire protocols", names = $result
-    quit QuitFailure
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
