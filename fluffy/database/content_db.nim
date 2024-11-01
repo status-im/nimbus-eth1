@@ -285,21 +285,10 @@ proc close*(db: ContentDB) =
   db.largestDistanceStmt.disposeSafe()
   discard db.kv.close()
 
-## Private KvStoreRef Calls
-
-proc get(kv: KvStoreRef, key: openArray[byte]): Opt[seq[byte]] =
-  var res: Opt[seq[byte]]
-  proc onData(data: openArray[byte]) =
-    res = Opt.some(@data)
-
-  discard kv.get(key, onData).expectDb()
-
-  return res
-
 ## Private ContentDB calls
 
-proc get(db: ContentDB, key: openArray[byte]): Opt[seq[byte]] =
-  db.kv.get(key)
+proc get(db: ContentDB, key: openArray[byte], onData: DataProc): bool =
+  db.kv.get(key, onData).expectDb()
 
 proc put(db: ContentDB, key, value: openArray[byte]) =
   db.kv.put(key, value).expectDb()
@@ -321,9 +310,9 @@ proc del(db: ContentDB, key: openArray[byte]) =
 # checked with the Radius/distance of the node anyhow. So lets see how we end up
 # using this mostly in the code.
 
-proc get*(db: ContentDB, key: ContentId): Opt[seq[byte]] =
+proc get*(db: ContentDB, key: ContentId, onData: DataProc): bool =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
-  db.get(key.toBytesBE())
+  db.get(key.toBytesBE(), onData)
 
 proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
   db.put(key.toBytesBE(), value)
@@ -468,10 +457,14 @@ proc adjustRadius(
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
     proc(contentKey: ContentKeyByteList, contentId: ContentId): Opt[seq[byte]] =
-      let content = db.get(contentId).valueOr:
-        return Opt.none(seq[byte])
+      var res = Opt.none(seq[byte])
 
-      ok(content)
+      proc onData(data: openArray[byte]) =
+        res = Opt.some(@data)
+
+      discard db.get(contentId, onData)
+
+      ensureMove(res)
   )
 
 proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =

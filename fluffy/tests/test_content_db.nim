@@ -24,9 +24,10 @@ suite "Content Database":
         "", uint32.high, RadiusConfig(kind: Dynamic), testId, inMemory = true
       )
       key = ContentId(UInt256.high()) # Some key
+      dbGet = db.createGetHandler()
 
     block:
-      let val = db.get(key)
+      let val = dbGet(ContentKeyByteList.init(@[]), key)
 
       check:
         val.isNone()
@@ -34,7 +35,7 @@ suite "Content Database":
 
     block:
       discard db.putAndPrune(key, [byte 0, 1, 2, 3])
-      let val = db.get(key)
+      let val = dbGet(ContentKeyByteList.init(@[]), key)
 
       check:
         val.isSome()
@@ -43,7 +44,7 @@ suite "Content Database":
 
     block:
       db.del(key)
-      let val = db.get(key)
+      let val = dbGet(ContentKeyByteList.init(@[]), key)
 
       check:
         val.isNone()
@@ -137,9 +138,9 @@ suite "Content Database":
       # With the current settings the 2 furthest elements will be deleted,
       # i.e key 30 and 40. The furthest non deleted one will have key 20.
       pr10.distanceOfFurthestElement == thirdFurthest
-      db.get(furthestElement).isNone()
-      db.get(secondFurthest).isNone()
-      db.get(thirdFurthest).isSome()
+      not db.contains(furthestElement)
+      not db.contains(secondFurthest)
+      db.contains(thirdFurthest)
 
   test "ContentDB force pruning":
     const
