@@ -88,6 +88,13 @@ proc close(client: RpcHttpClient, server: RpcHttpServer) =
   waitFor client.close()
   waitFor server.closeWait()
 
+
+# NOTE : The setup of the environment should have been done through the
+# `ForkedChainRef`, however the `ForkedChainRef` is does not persist blocks to the db
+# unless the base distance is reached. This is not the case for the tests, so we
+# have to manually persist the blocks to the db.
+# Main goal of the tests to check the RPC calls, can serve data persisted in the db
+# as data from memory blocks are easily tested via kurtosis or other tests 
 proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
   var
     acc = ctx.am.getAccount(signer).tryGet()

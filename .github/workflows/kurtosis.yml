@@ -83,7 +83,7 @@ jobs:
         cat kurtosis-network-params.yml | envsubst > assertoor.yaml
         sed -i "s/el_image: .*/el_image: localtestnet/" assertoor.yaml
 
-        kurtosis run github.com/ethpandaops/ethereum-package@4.3.0 --enclave assertoor-${{ github.run_id }} --args-file assertoor.yaml
+        kurtosis run github.com/ethpandaops/ethereum-package --enclave assertoor-${{ github.run_id }} --args-file assertoor.yaml
 
         enclave_dump=$(kurtosis enclave inspect assertoor-${{ github.run_id }})
 
