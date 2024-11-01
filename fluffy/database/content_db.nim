@@ -296,16 +296,6 @@ proc get(kv: KvStoreRef, key: openArray[byte]): Opt[seq[byte]] =
 
   return res
 
-proc getSszDecoded(kv: KvStoreRef, key: openArray[byte], T: type auto): Opt[T] =
-  let res = kv.get(key)
-  if res.isSome():
-    try:
-      Opt.some(SSZ.decode(res.get(), T))
-    except SerializationError:
-      raiseAssert("Stored data should always be serialized correctly")
-  else:
-    Opt.none(T)
-
 ## Private ContentDB calls
 
 proc get(db: ContentDB, key: openArray[byte]): Opt[seq[byte]] =
@@ -320,9 +310,6 @@ proc contains(db: ContentDB, key: openArray[byte]): bool =
 proc del(db: ContentDB, key: openArray[byte]) =
   # TODO: Do we want to return the bool here too?
   discard db.kv.del(key).expectDb()
-
-proc getSszDecoded(db: ContentDB, key: openArray[byte], T: type auto): Opt[T] =
-  db.kv.getSszDecoded(key, T)
 
 ## Public ContentId based ContentDB calls
 
@@ -346,9 +333,6 @@ proc contains*(db: ContentDB, key: ContentId): bool =
 
 proc del*(db: ContentDB, key: ContentId) =
   db.del(key.toBytesBE())
-
-proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Opt[T] =
-  db.getSszDecoded(key.toBytesBE(), T)
 
 ## Pruning related calls
 
