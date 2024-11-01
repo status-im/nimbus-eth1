@@ -57,16 +57,19 @@ when enableTicker:
         reorg:           ctx.pool.nReorg,
         nBuddies:        ctx.pool.nBuddies)
 
+
 proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
+
     # Check whether there is an update running (otherwise take next upate)
-    if not ctx.target.locked:
-      # Rpc checks empty header against a zero hash rather than `emptyRoot`
-      if f != zeroHash32 and
-         ctx.layout.head < h.number and
-         ctx.target.consHead.number < h.number:
+    if not ctx.target.locked and                 # ignore if currently updating
+       ctx.target.final == 0 and                 # ignore if complete already
+       f != zeroHash32 and                       # finalised hash is set
+       ctx.layout.head < h.number and            # update is advancing
+       ctx.target.consHead.number < h.number:    # .. ditto
+
         ctx.target.consHead = h
         ctx.target.final = BlockNumber(0)
         ctx.target.finalHash = f
@@ -101,8 +104,13 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.headersUnprocInit()
   ctx.blocksUnprocInit()
 
-  # Load initial state from database if there is any
-  ctx.dbLoadSyncStateLayout info
+  # Load initial state from database if there is any. If the loader returns
+  # `true`, then the syncer will resume from previous sync in which case the
+  # system becomes fully active. Otherwise there is some polling only waiting
+  # for a new target so there is reduced service (aka `hibernate`.).
+  ctx.hibernate = not ctx.dbLoadSyncStateLayout info
+  if ctx.hibernate:
+    trace info & ": hibernating", latest=ctx.chain.latestNumber.bnStr
 
   # Set blocks batch import value for block import
   if ctx.pool.nBodiesBatch < nFetchBodiesRequest:

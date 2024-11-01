@@ -34,12 +34,14 @@ proc bodiesToFetchOk(buddy: BeaconBuddyRef): bool =
 
 proc napUnlessSomethingToFetch(buddy: BeaconBuddyRef): Future[bool] {.async.} =
   ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.pool.importRunningOk or
-     not (buddy.headersToFetchOk() or
+  if buddy.ctx.pool.blockImportOk or             # currently importing blocks
+     buddy.ctx.hibernate or                      # not activated yet?
+     not (buddy.headersToFetchOk() or            # something on TODO list
           buddy.bodiesToFetchOk()):
     await sleepAsync workerIdleWaitInterval
     return true
-  return false
+  else:
+    return false
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -54,9 +56,6 @@ proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
 
   # Debugging stuff, might be an empty template
   ctx.setupTicker()
-
-  # Enable background daemon
-  ctx.daemon = true
   true
 
 proc release*(ctx: BeaconCtxRef; info: static[string]) =
@@ -70,20 +69,20 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
   let peer = buddy.peer
 
   if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
-    debug info & ": peers limit reached", peer
+    if not buddy.ctx.hibernate: debug info & ": peers limit reached", peer
     return false
 
   if not buddy.startBuddy():
-    debug info & ": failed", peer
+    if not buddy.ctx.hibernate: debug info & ": failed", peer
     return false
 
-  debug info & ": new peer", peer
+  if not buddy.ctx.hibernate: debug info & ": new peer", peer
   true
 
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
-  debug info & ": release peer", peer=buddy.peer,
-    nInvocations=buddy.only.nMultiLoop,
+  if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
+    ctrl=buddy.ctrl.state, nInvocations=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 
@@ -98,8 +97,14 @@ proc runDaemon*(ctx: BeaconCtxRef; info: static[string]) {.async.} =
   ## as `true` not before there is some activity on the `runPool()`,
   ## `runSingle()`, or `runMulti()` functions.
   ##
+  ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
+  ## first usable request from the CL (via RPC) stumbles in.
+  ##
   # Check for a possible header layout and body request changes
   ctx.updateSyncStateLayout info
+  if ctx.hibernate:
+    return
+
   ctx.updateBlockRequests info
 
   # Execute staged block records.
@@ -110,8 +115,8 @@ proc runDaemon*(ctx: BeaconCtxRef; info: static[string]) {.async.} =
       # place. So there might be some peers active. If they are waiting for
       # a message reply, this will most probably time out as all processing
       # power is usurped by the import task here.
-      ctx.pool.importRunningOk = true
-      defer: ctx.pool.importRunningOk = false
+      ctx.pool.blockImportOk = true
+      defer: ctx.pool.blockImportOk = false
 
       # Import from staged queue.
       while await ctx.blocksStagedImport(info):
