@@ -69,7 +69,7 @@ method execute(cs: ReExecutePayloadTest, env: TestEnv): bool =
   for i in start..lastBlock:
     doAssert env.clMock.executedPayloadHistory.hasKey(i)
     let payload = env.clMock.executedPayloadHistory[i]
-    let r = env.engine.client.newPayload(payload)
+    let r = env.engine.newPayload(payload)
     r.expectStatus(PayloadExecutionStatus.valid)
     r.expectLatestValidHash(payload.blockHash)
 
@@ -152,8 +152,8 @@ method execute(cs: InOrderPayloadExecutionTest, env: TestEnv): bool =
     finalizedblockHash: env.clMock.latestExecutedPayload.blockHash,
   )
 
-  var version = sec.version(env.clMock.latestExecutedPayload.timestamp)
-  var s = sec.client.forkchoiceUpdated(version, fcU)
+  var timeVer = env.clMock.latestExecutedPayload.timestamp
+  var s = sec.forkchoiceUpdated(timeVer, fcU)
   s.expectPayloadStatus(PayloadExecutionStatus.syncing)
   s.expectLatestValidHash()
   s.expectNoValidationError()
@@ -162,12 +162,12 @@ method execute(cs: InOrderPayloadExecutionTest, env: TestEnv): bool =
   let start = env.clMock.firstPoSBlockNumber.get
   for k in start..env.clMock.latestExecutedPayload.blockNumber.uint64:
     let payload = env.clMock.executedPayloadHistory[k]
-    let s = sec.client.newPayload(payload)
+    let s = sec.newPayload(payload)
     s.expectStatus(PayloadExecutionStatus.valid)
     s.expectLatestValidHash(payload.blockHash)
 
-  version = sec.version(env.clMock.latestExecutedPayload.timestamp)
-  s = sec.client.forkchoiceUpdated(version, fcU)
+  timeVer = env.clMock.latestExecutedPayload.timestamp
+  s = sec.forkchoiceUpdated(timeVer, fcU)
   s.expectPayloadStatus(PayloadExecutionStatus.valid)
   s.expectLatestValidHash(fcU.headBlockHash)
   s.expectNoValidationError()
@@ -248,8 +248,7 @@ method execute(cs: MultiplePayloadsExtendingCanonicalChainTest, env: TestEnv): b
         prevRandao: Opt.some(newPrevRandao),
       )
       let newPayload = customizer.customizePayload(basePayload)
-      let version = env.engine.version(newPayload.timestamp)
-      let r = env.engine.client.newPayload(version, newPayload)
+      let r = env.engine.newPayload(newPayload)
       r.expectStatus(PayloadExecutionStatus.valid)
       r.expectLatestValidHash(newPayload.blockHash)
     return true
@@ -272,7 +271,7 @@ type
 
   Shadow2 = ref object
     recipient: Address
-    previousPayload: ExecutionPayload
+    previousPayload: ExecutableData
 
 method withMainFork(cs: NewPayloadOnSyncingClientTest, fork: EngineFork): BaseSpec =
   var res = cs.clone()
@@ -320,11 +319,11 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
       return true
   ))
   testCond true
-  shadow.previousPayload = env.clMock.latestPayloadBuilt
+  shadow.previousPayload = env.clMock.latestExecutedPayload
 
   # Send the fcU to set it to syncing mode
-  let version = env.engine.version(env.clMock.latestHeader.timestamp)
-  let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
+  let timeVer = env.clMock.latestHeader.timestamp
+  let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice)
   r.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
   pbRes = env.clMock.produceSingleBlock(BlockProcessCallbacks(
@@ -343,7 +342,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
     # Run test after the new payload has been obtained
     onGetPayload: proc(): bool =
       # Send the new payload from the second client to the first, it won't be able to validate it
-      let r = env.engine.client.newPayload(env.clMock.latestPayloadBuilt)
+      let r = env.engine.newPayload(env.clMock.latestExecutedPayload)
       r.expectStatusEither([PayloadExecutionStatus.accepted, PayloadExecutionStatus.syncing])
       r.expectLatestValidHash()
 
@@ -364,18 +363,18 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
         finalizedblockHash: env.clMock.latestPayloadBuilt.blockHash,
       )
 
-      var version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
-      var s = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(newAttr))
+      var timeVer = env.clMock.latestPayloadBuilt.timestamp
+      var s = env.engine.forkchoiceUpdated(timeVer, fcu, Opt.some(newAttr))
       s.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
       # Send the previous payload to be able to continue
-      var p = env.engine.client.newPayload(shadow.previousPayload)
+      var p = env.engine.newPayload(shadow.previousPayload)
       p.expectStatus(PayloadExecutionStatus.valid)
       p.expectLatestValidHash(shadow.previousPayload.blockHash)
 
       # Send the new payload again
 
-      p = env.engine.client.newPayload(env.clMock.latestPayloadBuilt)
+      p = env.engine.newPayload(env.clMock.latestExecutedPayload)
       p.expectStatus(PayloadExecutionStatus.valid)
       p.expectLatestValidHash(env.clMock.latestPayloadBuilt.blockHash)
 
@@ -384,8 +383,8 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
         safeblockHash:      env.clMock.latestPayloadBuilt.blockHash,
         finalizedblockHash: env.clMock.latestPayloadBuilt.blockHash,
       )
-      version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
-      s = env.engine.client.forkchoiceUpdated(version, fcu)
+      timeVer = env.clMock.latestPayloadBuilt.timestamp
+      s = env.engine.forkchoiceUpdated(timeVer, fcu)
       s.expectPayloadStatus(PayloadExecutionStatus.valid)
 
       return true
@@ -443,7 +442,7 @@ method execute(cs: NewPayloadWithMissingFcUTest, env: TestEnv): bool =
   # Send each payload in the correct order but skip the ForkchoiceUpdated for each
   for i in start..env.clMock.latestHeadNumber.uint64:
     let payload = env.clMock.executedPayloadHistory[i]
-    let p = sec.client.newPayload(payload)
+    let p = sec.newPayload(payload)
     p.expectStatus(PayloadExecutionStatus.valid)
     p.expectLatestValidHash(payload.blockHash)
 
@@ -457,8 +456,8 @@ method execute(cs: NewPayloadWithMissingFcUTest, env: TestEnv): bool =
     safeblockHash:      env.clMock.executedPayloadHistory[env.clMock.latestHeadNumber.uint64-1].blockHash,
     finalizedblockHash: env.clMock.executedPayloadHistory[env.clMock.latestHeadNumber.uint64-2].blockHash,
   )
-  let version = sec.version(env.clMock.latestHeader.timestamp)
-  let p = sec.client.forkchoiceUpdated(version, fcU)
+  let timeVer = env.clMock.latestHeader.timestamp
+  let p = sec.forkchoiceUpdated(timeVer, fcU)
   p.expectPayloadStatus(PayloadExecutionStatus.valid)
   p.expectLatestValidHash(fcU.headBlockHash)
 

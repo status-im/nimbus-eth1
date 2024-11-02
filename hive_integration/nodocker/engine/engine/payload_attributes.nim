@@ -63,14 +63,14 @@ method execute(cs: InvalidPayloadAttributesTest, env: TestEnv): bool =
       # 2) Apply forkchoiceState
       # 3) Check payloadAttributes, if invalid respond with error: code: Invalid payload attributes
       # 4) Start payload build process and respond with VALID
-      let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
+      let timeVer = env.clMock.latestPayloadBuilt.timestamp
       if cs.syncing:
         # If we are SYNCING, the outcome should be SYNCING regardless of the validity of the payload atttributes
-        let r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(attr))
+        let r = env.engine.forkchoiceUpdated(timeVer, fcu, attr)
         r.expectPayloadStatus(PayloadExecutionStatus.syncing)
         r.expectPayloadID(Opt.none(Bytes8))
       else:
-        let r = env.engine.client.forkchoiceUpdated(version, fcu, Opt.some(attr))
+        let r = env.engine.forkchoiceUpdated(timeVer, fcu, attr)
         r.expectErrorCode(engineApiInvalidPayloadAttributes)
 
         # Check that the forkchoice was applied, regardless of the error

@@ -91,8 +91,8 @@ method execute(cs: BadHashOnNewPayload, env: TestEnv): bool =
             safeblockHash:      latestHash,
             finalizedblockHash: latestHash,
           )
-          version = env.engine.version(env.clMock.latestHeader.timestamp)
-          r = env.engine.client.forkchoiceUpdated(version, fcU)
+          timeVer = env.clMock.latestHeader.timestamp
+          r = env.engine.forkchoiceUpdated(timeVer, fcU)
 
         r.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
@@ -111,7 +111,7 @@ method execute(cs: BadHashOnNewPayload, env: TestEnv): bool =
       # Starting from Shanghai, INVALID should be returned instead (https:#githucs.com/ethereum/execution-apis/pull/338)
       let
         version = env.engine.version(shadow.payload.timestamp)
-        r = env.engine.client.newPayload(version, shadow.payload)
+        r = env.engine.newPayload(shadow.payload)
 
       if version >= Version.V2:
         r.expectStatus(PayloadExecutionStatus.invalid)
@@ -136,8 +136,7 @@ method execute(cs: BadHashOnNewPayload, env: TestEnv): bool =
       # or INVALID (client still has the payload and can verify that this payload is incorrectly building on top of it),
       # but a VALID response is incorrect.
       let
-        version = env.engine.version(shadow.payload.timestamp)
-        r = env.engine.client.newPayload(version, shadow.payload)
+        r = env.engine.newPayload(shadow.payload)
       r.expectStatusEither([PayloadExecutionStatus.accepted, PayloadExecutionStatus.invalid, PayloadExecutionStatus.syncing])
       return true
   ))
@@ -185,7 +184,7 @@ method execute(cs: ParentHashOnNewPayload, env: TestEnv): bool =
       # Starting from Shanghai, INVALID should be returned instead (https:#githucs.com/ethereum/execution-apis/pull/338)
       let
         version = env.engine.version(payload.timestamp)
-        r = env.engine.client.newPayload(version, payload)
+        r = env.engine.newPayload(payload)
 
       if version >= Version.V2:
         r.expectStatus(PayloadExecutionStatus.invalid)

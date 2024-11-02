@@ -98,8 +98,8 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
     ))
 
     ## This block is now unknown to the main client, sending an fcU will set it to cs.syncing mode
-    let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
-    let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
+    let timeVer = env.clMock.latestPayloadBuilt.timestamp
+    let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice)
     r.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
   let shadow = InvalidPayloadShadow(
@@ -132,8 +132,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
           shadow.nilLatestValidHash = true
 
       # Depending on the field we modified, we expect a different status
-      var version = env.engine.version(shadow.alteredPayload.timestamp)
-      let r = env.engine.client.newPayload(version, shadow.alteredPayload)
+      let r = env.engine.newPayload(shadow.alteredPayload)
       if cs.syncing or cs.invalidField == InvalidParentHash:
         # Execution specification::
         # (status: ACCEPTED, latestValidHash: null, validationError: null) if the following conditions are met:
@@ -172,8 +171,8 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
       # Execution specification:
       #  (payloadStatus: (status: INVALID, latestValidHash: null, validationError: errorMessage | null), payloadId: null)
       #  obtained from the Payload validation process if the payload is deemed INVALID
-      version = env.engine.version(shadow.alteredPayload.timestamp)
-      let s = env.engine.client.forkchoiceUpdated(version, fcState, Opt.some(attr))
+      var timeVer = shadow.alteredPayload.timestamp
+      let s = env.engine.forkchoiceUpdated(timeVer, fcState, Opt.some(attr))
       if not cs.syncing:
         # Execution specification:
         #  (payloadStatus: (status: INVALID, latestValidHash: null, validationError: errorMessage | null), payloadId: null)
@@ -185,22 +184,21 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
         s.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
         # When we send the previous payload, the client must now be capable of determining that the invalid payload is actually invalid
-        let version = env.engine.version(env.clMock.latestExecutedPayload.timestamp)
-        let p = env.engine.client.newPayload(version, env.clMock.latestExecutedPayload)
+        let p = env.engine.newPayload(env.clMock.latestExecutedPayload)
 
         p.expectStatus(PayloadExecutionStatus.valid)
         p.expectLatestValidHash(env.clMock.latestExecutedPayload.blockHash)
 
         # Another option here could be to send an fcU to the previous payload,
         # but this does not seem like something the CL would do.
-        #s = env.engine.client.forkchoiceUpdated(ForkchoiceStateV1(
+        #s = env.engine.forkchoiceUpdated(ForkchoiceStateV1(
         #  headblockHash:      previousPayload.blockHash,
         #  safeblockHash:      previousPayload.blockHash,
         #  finalizedblockHash: previousPayload.blockHash,
         #), nil)
         #s.expectPayloadStatus(Valid)
 
-        let q = env.engine.client.newPayload(version, shadow.alteredPayload)
+        let q = env.engine.newPayload(shadow.alteredPayload)
         if cs.invalidField == InvalidParentHash:
           # There is no invalid parentHash, if this value is incorrect,
           # it is assumed that the block is missing and we need to sync.
@@ -224,8 +222,8 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
         # Try sending the fcU again, this time we should get the proper invalid response.
         # At this moment the response should be INVALID
         if cs.invalidField != InvalidParentHash:
-          let version = env.engine.version(shadow.alteredPayload.timestamp)
-          let s = env.engine.client.forkchoiceUpdated(version, fcState)
+          let timeVer = shadow.alteredPayload.timestamp
+          let s = env.engine.forkchoiceUpdated(timeVer, fcState)
           # Note: syncing is acceptable here as long as the block produced after this test is produced successfully
           s.expectStatusEither([PayloadExecutionStatus.syncing, PayloadExecutionStatus.invalid])
 
@@ -238,12 +236,12 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
 
   if cs.syncing:
     # Send the valid payload and its corresponding forkchoiceUpdated
-    let version = env.engine.version(env.clMock.latestExecutedPayload.timestamp)
-    let r = env.engine.client.newPayload(version, env.clMock.latestExecutedPayload)
+    let r = env.engine.newPayload(env.clMock.latestExecutedPayload)
     r.expectStatus(PayloadExecutionStatus.valid)
     r.expectLatestValidHash(env.clMock.latestExecutedPayload.blockHash)
 
-    let s = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
+    let timeVer = env.clMock.latestExecutedPayload.timestamp
+    let s = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice)
     s.expectPayloadStatus(PayloadExecutionStatus.valid)
     s.expectLatestValidHash(env.clMock.latestExecutedPayload.blockHash)
 
@@ -273,8 +271,7 @@ method execute(cs: InvalidPayloadTestCase, env: TestEnv): bool =
       # or syncing (parent payload is thrown out and also client assumes that the parent is part of canonical chain)
       # or INVALID (client still has the payload and can verify that this payload is incorrectly building on top of it),
       # but a VALID response is incorrect.
-      let version = env.engine.version(followUpAlteredPayload.timestamp)
-      let r = env.engine.client.newPayload(version, followUpAlteredPayload)
+      let r = env.engine.newPayload(followUpAlteredPayload)
       r.expectStatusEither([PayloadExecutionStatus.accepted, PayloadExecutionStatus.invalid, PayloadExecutionStatus.syncing])
       if r.get.status in [PayloadExecutionStatus.accepted, PayloadExecutionStatus.syncing]:
         r.expectLatestValidHash()
@@ -336,8 +333,8 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
             suggestedFeerecipient: Opt.some(ZeroAddr),
           )
           payloadAttributes = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
-          version = env.engine.version(env.clMock.latestHeader.timestamp)
-          r = invalidPayloadProducer.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(payloadAttributes))
+          timeVer = env.clMock.latestHeader.timestamp
+          r = invalidPayloadProducer.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, Opt.some(payloadAttributes))
 
         r.expectPayloadStatus(PayloadExecutionStatus.valid)
         # Wait for the payload to be produced by the EL
@@ -346,7 +343,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
 
         let
           versione = env.engine.version(payloadAttributes.timestamp)
-          s = invalidPayloadProducer.client.getPayload(r.get.payloadId.get, versione)
+          s = invalidPayloadProducer.client.getPayload(versione, r.get.payloadId.get)
         s.expectNoError()
 
         let basePayload = s.get.executionPayload
@@ -359,13 +356,12 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
 
       # Broadcast the invalid payload
       let
-        version = env.engine.version(inv_p.timestamp)
-        r = env.engine.client.newPayload(version, inv_p)
+        r = env.engine.newPayload(inv_p)
 
       r.expectStatus(PayloadExecutionStatus.invalid)
       r.expectLatestValidHash(env.clMock.latestForkchoice.headBlockHash)
 
-      let s = sec.client.newPayload(version, inv_p)
+      let s = sec.newPayload(inv_p)
       s.expectStatus(PayloadExecutionStatus.invalid)
       s.expectLatestValidHash(env.clMock.latestForkchoice.headBlockHash)
 

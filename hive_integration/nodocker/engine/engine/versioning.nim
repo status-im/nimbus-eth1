@@ -59,7 +59,7 @@ method execute(cs: ForkchoiceUpdatedOnPayloadRequestTest, env: TestEnv): bool =
 
       cs.forkchoiceUpdatedCustomizer.setEngineAPIVersionResolver(env.engine.com)
       let version = cs.forkchoiceUpdatedCustomizer.forkchoiceUpdatedVersion(env.clMock.latestHeader.timestamp.uint64)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
+      let r = env.engine.forkchoiceUpdated(version, env.clMock.latestForkchoice, attr)
       #r.ExpectationDescription = cs.Expectation
       if expectedError != 0:
         r.expectErrorCode(expectedError)

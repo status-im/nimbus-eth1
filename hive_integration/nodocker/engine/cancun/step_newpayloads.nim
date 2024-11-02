@@ -228,7 +228,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
           if step.fcUOnPayloadRequest.getExpectInvalidStatus():
             expectedStatus = PayloadExecutionStatus.invalid
 
-          let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState, Opt.some(payloadAttributes))
+          let r = env.engine.forkchoiceUpdated(version, forkchoiceState, payloadAttributes)
           if expectedError != 0:
             r.expectErrorCode(expectedError, step.expectationDescription)
           else:
@@ -258,7 +258,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
           let period = chronos.seconds(step.getPayloadDelay)
           waitFor sleepAsync(period)
 
-          let r = env.engine.client.getPayload(payloadID, version)
+          let r = env.engine.getPayload(version, payloadID)
           if expectedError != 0:
             r.expectErrorCode(expectedError, step.expectationDescription)
           else:
@@ -310,7 +310,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
           if step.newPayloadCustomizer.getExpectInvalidStatus():
             expectedStatus = PayloadExecutionStatus.invalid
 
-          let r = env.client.newPayload(version, payload)
+          let r = env.engine.newPayload(version, payload)
           if expectedError != 0:
             r.expectErrorCode(expectedError, step.expectationDescription)
           else:
@@ -332,7 +332,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
 
           forkchoiceState.headBlockHash = env.clMock.latestPayloadBuilt.blockHash
 
-          let r = env.engine.client.forkchoiceUpdated(version, forkchoiceState)
+          let r = env.engine.forkchoiceUpdated(version, forkchoiceState)
           if expectedError != 0:
             r.expectErrorCode(expectedError, step.expectationDescription)
           else:

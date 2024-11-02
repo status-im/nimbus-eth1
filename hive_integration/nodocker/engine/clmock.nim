@@ -56,7 +56,7 @@ type
 
     # PoS Chain History Information
     prevRandaoHistory*      : Table[uint64, Bytes32]
-    executedPayloadHistory* : Table[uint64, ExecutionPayload]
+    executedPayloadHistory* : Table[uint64, ExecutableData]
     headHashHistory         : seq[Hash32]
 
     # Latest broadcasted data using the PoS Engine API
@@ -91,11 +91,7 @@ type
     onFinalizedBlockChange*    : proc(): bool {.gcsafe.}
 
 
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
-  for w3tx in list:
-    let tx = ethTx(w3tx)
-    for h in tx.versionedHashes:
-      result.add h
+
 
 func latestExecutableData*(cl: CLMocker): ExecutableData =
   ExecutableData(
@@ -237,6 +233,10 @@ func isCancun(cl: CLMocker, timestamp: Quantity): bool =
   let ts = EthTime(timestamp.uint64)
   cl.com.isCancunOrLater(ts)
 
+func isPrague(cl: CLMocker, timestamp: Quantity): bool =
+  let ts = EthTime(timestamp.uint64)
+  cl.com.isPragueOrLater(ts)
+
 # Picks the next payload producer from the set of clients registered
 proc pickNextPayloadProducer(cl: CLMocker): bool =
   doAssert cl.clients.len != 0
@@ -287,6 +287,8 @@ proc generatePayloadAttributes(cl: CLMocker) =
     let beaconRoot = timestampToBeaconRoot(timestamp)
     cl.latestPayloadAttributes.parentBeaconBlockRoot = Opt.some(beaconRoot)
 
+  #if cl.isPrague(timestamp):
+
   # Save random value
   let number = cl.latestHeader.number + 1
   cl.prevRandaoHistory[number] = nextPrevRandao
@@ -318,12 +320,14 @@ proc requestNextPayload(cl: CLMocker): bool =
 proc getPayload(cl: CLMocker, payloadId: Bytes8): Result[GetPayloadResponse, string] =
   let ts = cl.latestPayloadAttributes.timestamp
   let client = cl.nextBlockProducer.client
-  if cl.isCancun(ts):
-    client.getPayload(payloadId, Version.V3)
+  if cl.isPrague(ts):
+    client.getPayload(Version.V4, payloadId)
+  elif cl.isCancun(ts):
+    client.getPayload(Version.V3, payloadId)
   elif cl.isShanghai(ts):
-    client.getPayload(payloadId, Version.V2)
+    client.getPayload(Version.V2, payloadId)
   else:
-    client.getPayload(payloadId, Version.V1)
+    client.getPayload(Version.V1, payloadId)
 
 proc getNextPayload(cl: CLMocker): bool =
   let res = cl.getPayload(cl.nextPayloadID)
@@ -381,28 +385,17 @@ proc getNextPayload(cl: CLMocker): bool =
 
   return true
 
-func versionedHashes(payload: ExecutionPayload): seq[Hash32] =
-  result = newSeqOfCap[Hash32](payload.transactions.len)
-  for x in payload.transactions:
-    let tx = rlp.decode(distinctBase(x), Transaction)
-    for vs in tx.versionedHashes:
-      result.add vs
+#func versionedHashes(payload: ExecutionPayload): seq[Hash32] =
+#  result = newSeqOfCap[Hash32](payload.transactions.len)
+#  for x in payload.transactions:
+#    let tx = rlp.decode(distinctBase(x), Transaction)
+#    for vs in tx.versionedHashes:
+#      result.add vs
 
 proc broadcastNewPayload(cl: CLMocker,
                          eng: EngineEnv,
                          payload: ExecutableData): Result[PayloadStatusV1, string] =
-  let version = eng.version(payload.basePayload.timestamp)
-  case version
-  of Version.V1: return eng.client.newPayloadV1(payload.basePayload.V1)
-  of Version.V2: return eng.client.newPayloadV2(payload.basePayload.V2)
-  of Version.V3: return eng.client.newPayloadV3(payload.basePayload.V3,
-    versionedHashes(payload.basePayload),
-    cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
-  of Version.V4:
-    return eng.client.newPayloadV4(payload.basePayload.V3,
-      versionedHashes(payload.basePayload),
-      cl.latestPayloadAttributes.parentBeaconBlockRoot.get,
-      payload.executionRequests.get)
+  eng.newPayload(payload)
 
 proc broadcastNextNewPayload(cl: CLMocker): bool =
   for eng in cl.clients:
@@ -456,21 +449,19 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
 
   cl.latestExecutedPayload = cl.latestExecutableData()
   let number = uint64 cl.latestPayloadBuilt.blockNumber
-  cl.executedPayloadHistory[number] = cl.latestPayloadBuilt
+  cl.executedPayloadHistory[number] = cl.latestExecutedPayload
   return true
 
 proc broadcastForkchoiceUpdated(cl: CLMocker,
                                 eng: EngineEnv,
-                                version: Version,
                                 update: ForkchoiceStateV1):
                                   Result[ForkchoiceUpdatedResponse, string] =
+  let version = eng.version(cl.latestExecutedPayload.basePayload.timestamp)
   eng.client.forkchoiceUpdated(version, update, Opt.none(PayloadAttributes))
 
-proc broadcastForkchoiceUpdated*(cl: CLMocker,
-                                 version: Version,
-                                 update: ForkchoiceStateV1): bool =
+proc broadcastLatestForkchoice*(cl: CLMocker): bool =
   for eng in cl.clients:
-    let res = cl.broadcastForkchoiceUpdated(eng, version, update)
+    let res = cl.broadcastForkchoiceUpdated(eng, cl.latestForkchoice)
     if res.isErr:
       error "CLMocker: broadcastForkchoiceUpdated Error", msg=res.error
       return false
@@ -499,10 +490,6 @@ proc broadcastForkchoiceUpdated*(cl: CLMocker,
       return false
 
   return true
-
-proc broadcastLatestForkchoice(cl: CLMocker): bool =
-  let version = cl.latestExecutedPayload.version
-  cl.broadcastForkchoiceUpdated(version, cl.latestForkchoice)
 
 func w3Address(x: int): Address =
   var res: array[20, byte]

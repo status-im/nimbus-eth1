@@ -111,8 +111,8 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
         attr.parentBeaconBlockRoot = Opt.some(newBeaconRoot)
 
       # Request the payload with the modified attributes and add the payload ID to the list of known IDs
-      let version = env.engine.version(env.clMock.latestHeader.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
+      let timeVer = env.clMock.latestHeader.timestamp
+      let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, Opt.some(attr))
       r.expectNoError()
       testCond env.clMock.addPayloadID(env.engine, r.get.payloadId.get)
       return true
