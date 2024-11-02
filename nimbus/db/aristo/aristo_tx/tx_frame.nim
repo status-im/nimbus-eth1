@@ -178,7 +178,7 @@ iterator txFrameWalk*(tx: AristoTxRef): (int,AristoTxRef,LayerRef,AristoError) =
       yield (0,tx,db.top,AristoError(0))
 
     # Walk down the transaction stack
-    for level in (tx.level-1).countDown(1):
+    for level in (tx.level-1).countdown(1):
       tx = tx.parent
       if tx.isNil or tx.level != level:
         yield (-1,tx,LayerRef(nil),TxStackGarbled)

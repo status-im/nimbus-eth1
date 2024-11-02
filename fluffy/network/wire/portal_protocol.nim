@@ -155,9 +155,9 @@ type
 
   PortalProtocolId* = array[2, byte]
 
-  RadiusCache* = LRUCache[NodeId, UInt256]
+  RadiusCache* = LruCache[NodeId, UInt256]
 
-  ContentCache = LRUCache[ContentId, seq[byte]]
+  ContentCache = LruCache[ContentId, seq[byte]]
 
   ContentKV* = object
     contentKey*: ContentKeyByteList

@@ -783,14 +783,14 @@ proc txAccessList(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
 
 proc txMaxFeePerBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType < TxEIP4844:
+  if tx.tx.txType < TxEip4844:
     ok(respNull())
   else:
     longNode(tx.tx.maxFeePerBlobGas)
 
 proc txVersionedHashes(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType < TxEIP4844:
+  if tx.tx.txType < TxEip4844:
     ok(respNull())
   else:
     var list = respList()

@@ -18,11 +18,8 @@ import
     aristo_check,
     aristo_compute,
     aristo_delete,
-    aristo_get,
     aristo_merge,
     aristo_desc,
-    aristo_utils,
-    aristo_serialise,
     aristo_init,
     aristo_tx/tx_stow,
   ]

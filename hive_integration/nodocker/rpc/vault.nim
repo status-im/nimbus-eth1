@@ -42,12 +42,12 @@ type
     accounts: Table[Address, PrivateKey]
 
     rng: ref HmacDrbgContext
-    chainId: ChainID
+    chainId: ChainId
     gasPrice: GasInt
     vaultKey: PrivateKey
     client:   RpcClient
 
-proc newVault*(chainID: ChainID, gasPrice: GasInt, client: RpcClient): Vault =
+proc newVault*(chainID: ChainId, gasPrice: GasInt, client: RpcClient): Vault =
   new(result)
   result.rng      = newRng()
   result.chainId  = chainID

@@ -715,7 +715,7 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode] =
 
   # Bootstrap nodes provided as ENRs
   for enr in conf.bootstrapEnrs:
-    let enode = Enode.fromEnr(enr).valueOr:
+    let enode = ENode.fromEnr(enr).valueOr:
       fatal "Invalid bootstrap ENR provided", error
       quit 1
 
@@ -730,7 +730,7 @@ proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
 
   # Static peers provided as ENRs
   for enr in conf.staticPeersEnrs:
-    let enode = Enode.fromEnr(enr).valueOr:
+    let enode = ENode.fromEnr(enr).valueOr:
       fatal "Invalid static peer ENR provided", error
       quit 1
 

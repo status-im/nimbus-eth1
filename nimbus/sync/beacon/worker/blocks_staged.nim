@@ -18,7 +18,14 @@ import
   ../worker_desc,
   ./blocks_staged/bodies,
   ./update/metrics,
-  "."/[blocks_unproc, db]
+  "."/[blocks_unproc, db, helpers]
+
+# ------------------------------------------------------------------------------
+# Private debugging & logging helpers
+# ------------------------------------------------------------------------------
+
+formatIt(Hash32):
+  it.data.short
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -50,11 +57,16 @@ proc fetchAndCheck(
   blk.blocks.setLen(offset + ivReq.len)
   var blockHash = newSeq[Hash32](ivReq.len)
   for n in 1u ..< ivReq.len:
-    let header = ctx.dbPeekHeader(ivReq.minPt + n).expect "stashed header"
+    let header = ctx.dbPeekHeader(ivReq.minPt + n).valueOr:
+      # There is nothing one can do here
+      raiseAssert info & " stashed header missing: n=" & $n &
+        " ivReq=" & $ivReq & " nth=" & (ivReq.minPt + n).bnStr
     blockHash[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
-  blk.blocks[offset].header =
-    ctx.dbPeekHeader(ivReq.minPt).expect "stashed header"
+  blk.blocks[offset].header = ctx.dbPeekHeader(ivReq.minPt).valueOr:
+    # There is nothing one can do here
+    raiseAssert info & " stashed header missing: n=0" &
+      " ivReq=" & $ivReq & " nth=" & ivReq.minPt.bnStr
   blockHash[ivReq.len - 1] =
     rlp.encode(blk.blocks[offset + ivReq.len - 1].header).keccak256
 
@@ -177,11 +189,17 @@ proc blocksStagedCollect*(
 
     # Fetch and extend staging record
     if not await buddy.fetchAndCheck(ivReq, blk, info):
+
+      # Throw away first time block fetch data. Keep other data for a
+      # partially assembled list.
       if nBlkBlocks == 0:
-        if 0 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped:
+        buddy.only.nBdyRespErrors.inc
+
+        if (1 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped) or
+           fetchBodiesReqThresholdCount < buddy.only.nBdyRespErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
-        trace info & ": list completely failed", peer, iv, ivReq,
+        trace info & ": current block list discarded", peer, iv, ivReq,
           ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nBdyRespErrors
         ctx.blocksUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
@@ -238,7 +256,8 @@ proc blocksStagedImport*(
     let imported = ctx.chain.latestNumber()
     if qItem.key != imported + 1:
       trace info & ": there is a gap L vs. staged",
-        B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr
+        B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr,
+        C=ctx.layout.coupler.bnStr
       doAssert imported < qItem.key
       return false
 
@@ -253,45 +272,49 @@ proc blocksStagedImport*(
     B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
 
   var maxImport = iv.maxPt
-  for n in 0 ..< nBlocks:
-    let nBn = qItem.data.blocks[n].header.number
-    ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
-      warn info & ": import block error", iv, B=ctx.chain.baseNumber.bnStr,
-        L=ctx.chain.latestNumber.bnStr, nBn=nBn.bnStr, `error`=error
-      # Restore what is left over below
-      maxImport = ctx.chain.latestNumber()
-      break
-
-    # Allow pseudo/async thread switch.
-    await sleepAsync asyncThreadSwitchTimeSlot
-    if not ctx.daemon:
-      # Shutdown?
-      maxImport = ctx.chain.latestNumber()
-      break
-
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
-
-    # Occasionally mark the chain finalized
-    if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
-      let
-        nthHash = qItem.data.getNthHash(n)
-        finHash = if nBn < ctx.layout.final: nthHash else: ctx.layout.finalHash
-
-      doAssert nBn == ctx.chain.latestNumber()
-      ctx.pool.chain.forkChoice(headHash=nthHash, finalizedHash=finHash).isOkOr:
-        warn info & ": fork choice error", n, iv, B=ctx.chain.baseNumber.bnStr,
-          L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr, nthHash,
-          finHash=(if finHash == nthHash: "nHash" else: "F"), `error`=error
+  block importLoop:
+    for n in 0 ..< nBlocks:
+      let nBn = qItem.data.blocks[n].header.number
+      ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
+        warn info & ": import block error", n, iv,
+          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n), `error`=error
         # Restore what is left over below
         maxImport = ctx.chain.latestNumber()
-        break
+        break importLoop
 
       # Allow pseudo/async thread switch.
       await sleepAsync asyncThreadSwitchTimeSlot
       if not ctx.daemon:
+        # Shutdown?
         maxImport = ctx.chain.latestNumber()
-        break
+        break importLoop
+
+      # Update, so it can be followed nicely
+      ctx.updateMetrics()
+
+      # Occasionally mark the chain finalized
+      if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
+        let
+          nthHash = qItem.data.getNthHash(n)
+          finHash = if nBn < ctx.layout.final: nthHash
+                    else: ctx.layout.finalHash
+
+        doAssert nBn == ctx.chain.latestNumber()
+        ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
+          warn info & ": fork choice error", n, iv,
+            B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+            F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash,
+            finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
+          # Restore what is left over below
+          maxImport = ctx.chain.latestNumber()
+          break importLoop
+
+        # Allow pseudo/async thread switch.
+        await sleepAsync asyncThreadSwitchTimeSlot
+        if not ctx.daemon:
+          maxImport = ctx.chain.latestNumber()
+          break importLoop
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:

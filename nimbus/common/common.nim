@@ -125,7 +125,13 @@ proc initializeDb(com: CommonRef) =
   proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
     kvt.hasKeyRc(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin kvt:
-    info "Writing genesis to DB"
+    info "Writing genesis to DB",
+      blockHash = com.genesisHeader.rlpHash,
+      stateRoot = com.genesisHeader.stateRoot,
+      difficulty = com.genesisHeader.difficulty,
+      gasLimit = com.genesisHeader.gasLimit,
+      timestamp = com.genesisHeader.timestamp,
+      nonce = com.genesisHeader.nonce
     doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
     doAssert(com.db.persistHeader(com.genesisHeader,

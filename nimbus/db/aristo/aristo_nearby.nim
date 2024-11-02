@@ -65,7 +65,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
   ## Find the greatest index for an argument branch `vtx` link with index
   ## less or equal the argument `nibble`.
   if vtx.vType == Branch:
-    for n in maxInx.countDown 0:
+    for n in maxInx.countdown 0:
       if vtx.bVid[n].isValid:
         return n
   -1
@@ -400,7 +400,7 @@ iterator rightPairs*(
   var hike: Hike
   discard start.hikeUp(db, Opt.none(VertexRef), hike)
   var rc = hike.right db
-  while rc.isOK:
+  while rc.isOk:
     hike = rc.value
     let (key, pyl) = hike.toLeafTiePayload
     yield (key, pyl)
@@ -486,7 +486,7 @@ iterator leftPairs*(
   discard start.hikeUp(db, Opt.none(VertexRef), hike)
 
   var rc = hike.left db
-  while rc.isOK:
+  while rc.isOk:
     hike = rc.value
     let (key, pyl) = hike.toLeafTiePayload
     yield (key, pyl)

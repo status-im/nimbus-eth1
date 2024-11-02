@@ -12,7 +12,6 @@
 
 import
   pkg/eth/[common, p2p, rlp],
-  pkg/stew/byteutils,
   ../../../../common,
   ../../worker_desc
 
@@ -25,7 +24,6 @@ proc extendLinkedHChain*(
   buddy: BeaconBuddyRef;
   topNumber: BlockNumber;
   lhc: ref LinkedHChain; # update in place
-  info: static[string];
     ): bool =
   ## Returns sort of `lhc[] += rev[]` where `lhc[]` is updated in place.
 

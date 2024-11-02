@@ -540,7 +540,7 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
       difficulty: 0x01.u256,
       gasLimit: 0x17D7840,
       nonce: uint64(0x1234).to(Bytes8),
-      timestamp: EthTime(1_695_902_100),
+      timestamp: EthTime(0x65156994),
       alloc: decodePrealloc(holeskyAllocData)
     )
   else:

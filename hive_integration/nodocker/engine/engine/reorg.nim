@@ -71,7 +71,7 @@ method execute(cs: SidechainReOrgTest, env: TestEnv): bool =
       waitFor sleepAsync(period)
 
       version = env.engine.version(attr.timestamp)
-      let g = env.engine.client.getPayload(r.get.payloadID.get, version)
+      let g = env.engine.client.getPayload(r.get.payloadId.get, version)
       g.expectNoError()
 
       let alternativePayload = g.get.executionPayload
@@ -187,11 +187,11 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           var version = env.engine.version(env.clMock.latestHeader.timestamp)
           let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
           r.expectNoError()
-          testCond r.get.payloadID.isSome:
+          testCond r.get.payloadId.isSome:
             fatal "No payload ID returned by forkchoiceUpdated"
 
           version = env.engine.version(attr.timestamp)
-          let g = env.engine.client.getPayload(r.get.payloadID.get, version)
+          let g = env.engine.client.getPayload(r.get.payloadId.get, version)
           g.expectNoError()
           shadow.payload = g.get.executionPayload
 
@@ -252,7 +252,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
             waitFor sleepAsync(period)
 
             version = env.engine.version(env.clMock.latestPayloadAttributes.timestamp)
-            let g = env.engine.client.getPayload(f.get.payloadID.get, version)
+            let g = env.engine.client.getPayload(f.get.payloadId.get, version)
             g.expectNoError()
 
             let payload = g.get.executionPayload
@@ -428,11 +428,11 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
         var version = env.engine.version(env.clMock.latestHeader.timestamp)
         let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
         r.expectNoError()
-        testCond r.get.payloadID.isSome:
+        testCond r.get.payloadId.isSome:
           fatal "No payload ID returned by forkchoiceUpdated"
 
         version = env.engine.version(attr.timestamp)
-        let g = env.engine.client.getPayload(r.get.payloadID.get, version)
+        let g = env.engine.client.getPayload(r.get.payloadId.get, version)
         g.expectNoError()
 
         shadow.payload = g.get.executionPayload
@@ -692,7 +692,7 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
       r.expectLatestValidHash(reOrgPayload.blockHash)
 
       version = env.engine.version(newPayloadAttributes.timestamp)
-      let p = env.engine.client.getPayload(r.get.payloadID.get, version)
+      let p = env.engine.client.getPayload(r.get.payloadId.get, version)
       p.expectPayloadParentHash(reOrgPayload.blockHash)
 
       let payload = p.get.executionPayload

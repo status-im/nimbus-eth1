@@ -134,7 +134,7 @@ type
   BlobWrapData* = object
     versionedHash*: Hash32
     blob*         : kzg.KzgBlob
-    commitment*   : kzg.KZGCommitment
+    commitment*   : kzg.KzgCommitment
     proof*        : kzg.KzgProof
 
   BlobData* = ref object
@@ -149,7 +149,7 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
     # Unmarshal the tx from the payload, which should be the minimal version
     # of the blob transaction
     let txData = rlp.decode(distinctBase binaryTx, Transaction)
-    if txData.txType != TxEIP4844:
+    if txData.txType != TxEip4844:
       continue
 
     let txHash = rlpHash(txData)
