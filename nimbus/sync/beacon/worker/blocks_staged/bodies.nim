@@ -45,7 +45,7 @@ proc bodiesFetch*(
   var resp: Option[blockBodiesObj]
   try:
     resp = await peer.getBlockBodies(blockHashes)
-  except TransportError as e:
+  except EthP2PError as e:
     buddy.fetchRegisterError()
     `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
       error=($e.name), msg=e.msg, nRespErrors=buddy.only.nBdyRespErrors

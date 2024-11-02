@@ -74,7 +74,7 @@ proc headersFetchReversed*(
     # reliably be used in a `withTimeout()` directive. It would rather crash
     # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
     resp = await peer.getBlockHeaders(req)
-  except TransportError as e:
+  except EthP2PError as e:
     buddy.registerError()
     `info` info & " error", peer, ivReq, nReq=req.maxResults, useHash,
       elapsed=(Moment.now() - start).toStr, error=($e.name), msg=e.msg,
