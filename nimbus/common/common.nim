@@ -15,7 +15,7 @@ import
   ../core/casper,
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils, ec_recover],
-  ".."/[constants, errors],
+  ".."/[constants, errors, version],
   "."/[chain_config, evmforks, genesis, hardforks]
 
 export
@@ -94,6 +94,9 @@ type
 
     pruneHistory: bool
       ## Must not not set for a full node, might go away some time
+
+    extraData: string
+      ## Value of extraData field when building block
 
 # ------------------------------------------------------------------------------
 # Forward declarations
@@ -175,8 +178,7 @@ proc init(com         : CommonRef,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
-          pruneHistory: bool,
-            ) =
+          pruneHistory: bool) =
 
   config.daoCheck()
 
@@ -187,7 +189,8 @@ proc init(com         : CommonRef,
   com.syncProgress= SyncProgress()
   com.syncState   = Waiting
   com.pruneHistory= pruneHistory
-  com.pos = CasperRef.new
+  com.pos         = CasperRef.new
+  com.extraData   = ShortClientId
 
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
@@ -420,6 +423,9 @@ func syncHighest*(com: CommonRef): BlockNumber =
 func syncState*(com: CommonRef): SyncState =
   com.syncState
 
+func extraData*(com: CommonRef): string =
+  com.extraData
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
@@ -457,6 +463,9 @@ func `reqBeaconSyncTarget=`*(com: CommonRef; cb: ReqBeaconSyncTargetCB) =
 func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.
   com.notifyBadBlock = cb
+
+func `extraData=`*(com: CommonRef, val: string) =
+  com.extraData = val
 
 # ------------------------------------------------------------------------------
 # End

@@ -62,3 +62,6 @@ const
   FullVersionStr* = "v" & NimbusVersion & "-" & GitRevision
 
   ClientId* = &"{NimbusName}/{FullVersionStr}/{hostOS}-{hostCPU}/Nim-{NimVersion}/{VmName}"
+
+  ShortClientId* = NimbusName & "/" & FullVersionStr
+  

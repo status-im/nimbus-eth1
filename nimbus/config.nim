@@ -84,7 +84,7 @@ const
 
 let
   defaultListenAddress      = getAutoAddress(Port(0)).toIpAddress()
-  defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
+  defaultListenAddressDesc  = $defaultListenAddress & ", meaning all network interfaces"
 
 # `when` around an option doesn't work with confutils; it fails to compile.
 # Workaround that by setting the `ignore` pragma on EVMC-specific options.
@@ -178,6 +178,12 @@ type
       defaultValue: none(string)
       defaultValueDesc: "Baked in trusted setup"
       name: "trusted-setup-file" .}: Option[string]
+
+    extraData* {.
+      desc: "Value of extraData field when assemble a block(max 32 bytes)"
+      defaultValue: ShortClientId
+      defaultValueDesc: $ShortClientId
+      name: "extra-data" .}: string
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"

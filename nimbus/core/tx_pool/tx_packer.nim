@@ -16,6 +16,7 @@
 
 import
   stew/sorted_set,
+  stew/byteutils,
   ../../db/ledger,
   ../../common/common,
   ../../utils/utils,
@@ -312,6 +313,12 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
   ok(pst)
   # Block chain will roll back automatically
 
+func getExtraData(com: CommonRef): seq[byte] =
+  if com.extraData.len > 32:
+    @(com.extraData.toBytes[0..<32])
+  else:
+    com.extraData.toBytes
+
 proc assembleHeader*(pst: TxPacker): Header =
   ## Generate a new header, a child of the cached `head`
   let
@@ -331,7 +338,7 @@ proc assembleHeader*(pst: TxPacker): Header =
     gasLimit:      vmState.blockCtx.gasLimit,
     gasUsed:       vmState.cumulativeGasUsed,
     timestamp:     pos.timestamp,
-    extraData:     @[],
+    extraData:     getExtraData(com),
     mixHash:       pos.prevRandao,
     nonce:         default(Bytes8),
     baseFeePerGas: vmState.blockCtx.baseFeePerGas,

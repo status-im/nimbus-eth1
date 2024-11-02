@@ -200,6 +200,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     networkId = conf.networkId,
     params = conf.networkParams)
 
+  com.extraData = conf.extraData
+
   defer:
     com.db.finish()
 
