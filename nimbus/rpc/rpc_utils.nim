@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, strutils, algorithm],
+  std/[sequtils, algorithm],
   ./rpc_types,
   ./params,
   ../db/core_db,
