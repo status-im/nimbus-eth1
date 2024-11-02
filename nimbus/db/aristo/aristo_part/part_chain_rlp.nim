@@ -37,7 +37,7 @@ proc chainRlpNodes*(
       ): Result[void,AristoError] =
   ## Inspired by the `getBranchAux()` function from `hexary.nim`
   let
-    key = ? db.computeKey rvid
+    _ = ? db.computeKey rvid
     (vtx,_) = ? db.getVtxRc rvid
     node = vtx.toNode(rvid.root, db).valueOr:
       return err(PartChnNodeConvError)

@@ -156,8 +156,6 @@ proc runPeer*(buddy: BeaconBuddyRef; info: static[string]) {.async.} =
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##
-  let peer = buddy.peer
-
   if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging

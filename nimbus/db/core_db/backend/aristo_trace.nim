@@ -232,21 +232,6 @@ proc jLogger(
 
 proc jLogger(
     tr: TraceRecorderRef;
-    root: VertexID;
-    path: openArray[byte];
-    ti: TraceDataItemRef;
-      ) =
-  tr.jLogger(@[root.byte] & @path, ti)
-
-proc jLogger(
-    tr: TraceRecorderRef;
-    root: VertexID;
-    ti: TraceDataItemRef;
-      ) =
-  tr.jLogger(@[root.byte], ti)
-
-proc jLogger(
-    tr: TraceRecorderRef;
     accPath: Hash32;
     stoPath: Hash32;
     ti: TraceDataItemRef;

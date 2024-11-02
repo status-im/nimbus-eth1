@@ -13,7 +13,6 @@ import
   stew/[byteutils],
   json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/[
-    config,
     constants,
     transaction,
     db/ledger,

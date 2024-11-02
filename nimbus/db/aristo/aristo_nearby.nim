@@ -21,7 +21,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, typetraits],
+  std/[tables],
   eth/common,
   results,
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_path]

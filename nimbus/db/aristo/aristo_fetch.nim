@@ -96,19 +96,6 @@ proc retrieveMerkleHash(
       key
   ok key.to(Hash32)
 
-
-proc hasPayload(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
-  let error = db.retrieveLeaf(root, path).errorOr:
-    return ok(true)
-
-  if error == FetchPathNotFound:
-    return ok(false)
-  err(error)
-
 proc hasAccountPayload(
     db: AristoDbRef;
     accPath: Hash32;

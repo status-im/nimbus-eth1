@@ -13,7 +13,7 @@ import
   eth/common,
   stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_hike, aristo_layers, aristo_merge,
+    aristo_debug, aristo_desc, aristo_hike, aristo_layers,
     aristo_tx],
   ../replay/pp,
   "."/[undump_accounts, undump_desc, undump_storages, test_samples_xx]
