@@ -439,17 +439,6 @@ iterator rightPairsAccount*(
   for (lty,pyl) in db.rightPairs LeafTie(root: VertexID(1), path: start):
     yield (lty.path, pyl.account)
 
-iterator rightPairsGeneric*(
-    db: AristoDbRef;                    # Database layer
-    root: VertexID;                     # Generic root (different from VertexID)
-    start = low(PathID);                # Before or at first value
-      ): (PathID,seq[byte]) =
-  ## Variant of `rightPairs()` for a generic tree
-  # Verify that `root` is neither from an accounts tree nor a strorage tree.
-  if VertexID(1) < root and root.distinctBase < LEAST_FREE_VID:
-    for (lty,pyl) in db.rightPairs LeafTie(root: VertexID(1), path: start):
-        yield (lty.path, pyl.rawBlob)
-
 iterator rightPairsStorage*(
     db: AristoDbRef;                    # Database layer
     accPath: Hash32;                    # Account the storage data belong to

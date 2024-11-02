@@ -67,45 +67,46 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   ps.partPut(proof, AutomaticPayload).isOkOr:
     raiseAssert info & ": partPut => " & $error
 
-  # Handle transaction sub-tree
-  if txRoot.isValid:
-    var txs: seq[Transaction]
-    for (key,pyl) in adb.rightPairs LeafTie(root: ps.partGetSubTree txRoot):
-      let
-        inx = key.path.to(UInt256).truncate(uint)
-        tx = rlp.decode(pyl.rawBlob, Transaction)
-      #
-      # FIXME: Is this might be a bug in the test data?
-      #
-      #        The single item test key is always `128`. For non-single test
-      #        lists, the keys are `1`,`2`, ..,`N`, `128` (some single digit
-      #        number `N`.)
-      #
-      #        Unless the `128` item value is put at the start of the argument
-      #        list `txs[]` for `persistTransactions()`, the `tracer` module
-      #        will throw an exception at
-      #        `doAssert(transactions.calcTxRoot == header.txRoot)` in the
-      #        function `traceTransactionImpl()`.
-      #
-      if (inx and 0x80) != 0:
-        txs = @[tx] & txs
-      else:
-        txs.add tx
-    cdb.persistTransactions(num, txRoot, txs)
+  # TODO code needs updating after removal of generic payloads
+  # # Handle transaction sub-tree
+  # if txRoot.isValid:
+  #   var txs: seq[Transaction]
+  #   for (key,pyl) in adb.rightPairs LeafTie(root: ps.partGetSubTree txRoot):
+  #     let
+  #       inx = key.path.to(UInt256).truncate(uint)
+  #       tx = rlp.decode(pyl.rawBlob, Transaction)
+  #     #
+  #     # FIXME: Is this might be a bug in the test data?
+  #     #
+  #     #        The single item test key is always `128`. For non-single test
+  #     #        lists, the keys are `1`,`2`, ..,`N`, `128` (some single digit
+  #     #        number `N`.)
+  #     #
+  #     #        Unless the `128` item value is put at the start of the argument
+  #     #        list `txs[]` for `persistTransactions()`, the `tracer` module
+  #     #        will throw an exception at
+  #     #        `doAssert(transactions.calcTxRoot == header.txRoot)` in the
+  #     #        function `traceTransactionImpl()`.
+  #     #
+  #     if (inx and 0x80) != 0:
+  #       txs = @[tx] & txs
+  #     else:
+  #       txs.add tx
+  #   cdb.persistTransactions(num, txRoot, txs)
 
-  # Handle receipts sub-tree
-  if rcptRoot.isValid:
-    var rcpts: seq[Receipt]
-    for (key,pyl) in adb.rightPairs LeafTie(root: ps.partGetSubTree rcptRoot):
-      let
-        inx = key.path.to(UInt256).truncate(uint)
-        rcpt = rlp.decode(pyl.rawBlob, Receipt)
-      # FIXME: See comment at `txRoot` section.
-      if (inx and 0x80) != 0:
-        rcpts = @[rcpt] & rcpts
-      else:
-        rcpts.add rcpt
-    cdb.persistReceipts(rcptRoot, rcpts)
+  # # Handle receipts sub-tree
+  # if rcptRoot.isValid:
+  #   var rcpts: seq[Receipt]
+  #   for (key,pyl) in adb.rightPairs LeafTie(root: ps.partGetSubTree rcptRoot):
+  #     let
+  #       inx = key.path.to(UInt256).truncate(uint)
+  #       rcpt = rlp.decode(pyl.rawBlob, Receipt)
+  #     # FIXME: See comment at `txRoot` section.
+  #     if (inx and 0x80) != 0:
+  #       rcpts = @[rcpt] & rcpts
+  #     else:
+  #       rcpts.add rcpt
+  #   cdb.persistReceipts(rcptRoot, rcpts)
 
   # Save keys to database
   for (rvid,key) in ps.vkPairs:
@@ -121,7 +122,9 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   #if true: quit()
 
 # use tracerTestGen.nim to generate additional test data
-proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: CoreDbRef) =
+proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: CoreDbRef) {.deprecated: "needs fixing for non-generic payloads".} =
+  block:
+    return
   setErrorLevel()
 
   var

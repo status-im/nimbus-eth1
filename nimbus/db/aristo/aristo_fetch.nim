@@ -23,18 +23,6 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-func mustBeGeneric(
-    root: VertexID;
-      ): Result[void,AristoError] =
-  ## Verify that `root` is neither from an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(FetchRootVidMissing)
-  elif root == VertexID(1):
-    return err(FetchAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(FetchStoRootNotAccepted)
-  ok()
-
 proc retrieveLeaf(
     db: AristoDbRef;
     root: VertexID;
@@ -259,38 +247,6 @@ proc hasPathAccount*(
   ## on the database.
   ##
   db.hasAccountPayload(accPath)
-
-proc fetchGenericData*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[seq[byte],AristoError] =
-  ## For a generic sub-tree starting at `root`, fetch the data record
-  ## indexed by `path`.
-  ##
-  ? root.mustBeGeneric()
-  let pyl = ? db.retrieveLeaf(root, path)
-  assert pyl.lData.pType == RawData   # debugging only
-  ok pyl.lData.rawBlob
-
-proc fetchGenericState*(
-    db: AristoDbRef;
-    root: VertexID;
-    updateOk: bool;
-      ): Result[Hash32,AristoError] =
-  ## Fetch the Merkle hash of the argument `root`.
-  db.retrieveMerkleHash(root, updateOk)
-
-proc hasPathGeneric*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
-  ## For a generic sub-tree starting at `root` and indexed by `path`, query
-  ## whether this record exists on the database.
-  ##
-  ? root.mustBeGeneric()
-  db.hasPayload(root, path)
 
 proc fetchStorageData*(
     db: AristoDbRef;

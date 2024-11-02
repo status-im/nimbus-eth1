@@ -15,7 +15,6 @@ import unittest2, ../../nimbus/db/aristo/aristo_blobify
 suite "Aristo blobify":
   test "VertexRef roundtrip":
     let
-      leafRawData = VertexRef(vType: Leaf, lData: LeafPayload(pType: RawData))
       leafAccount = VertexRef(vType: Leaf, lData: LeafPayload(pType: AccountData))
       leafStoData =
         VertexRef(vType: Leaf, lData: LeafPayload(pType: StoData, stoData: 42.u256))
@@ -65,7 +64,6 @@ suite "Aristo blobify":
       )
 
     check:
-      deblobify(blobify(leafRawData), VertexRef)[] == leafRawData
       deblobify(blobify(leafAccount), VertexRef)[] == leafAccount
       deblobify(blobify(leafStoData), VertexRef)[] == leafStoData
       deblobify(blobify(branch), VertexRef)[] == branch

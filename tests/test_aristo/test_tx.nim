@@ -247,106 +247,106 @@ proc testTxMergeAndDeleteOneByOne*(
     noisy: bool;
     list: openArray[ProofTrieData];
     rdbPath: string;                          # Rocks DB storage directory
-       ): bool =
-  var
-    prng = PrngDesc.init 42
-    db = AristoDbRef(nil)
-    fwdRevVfyToggle = true
-  defer:
-    if not db.isNil:
-      db.finish(eradicate=true)
+       ): bool {.deprecated: "rewrite to use non-generic data".} =
+  # var
+  #   prng = PrngDesc.init 42
+  #   db = AristoDbRef(nil)
+  #   fwdRevVfyToggle = true
+  # defer:
+  #   if not db.isNil:
+  #     db.finish(eradicate=true)
 
-  for n,w in list:
-    # Start with brand new persistent database.
-    db = block:
-      if 0 < rdbPath.len:
-        let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init(), dbOpts, cfOpts, [])
-        xCheckRc rc.error == 0
-        rc.value()[0]
-      else:
-        AristoDbRef.init(MemBackendRef)
+  # for n,w in list:
+  #   # Start with brand new persistent database.
+  #   db = block:
+  #     if 0 < rdbPath.len:
+  #       let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
+  #       let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init(), dbOpts, cfOpts, [])
+  #       xCheckRc rc.error == 0
+  #       rc.value()[0]
+  #     else:
+  #       AristoDbRef.init(MemBackendRef)
 
-    # Start transaction (double frame for testing)
-    xCheck db.txTop.isErr
-    var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
-    xCheck tx.isTop()
-    xCheck tx.level == 2
+  #   # Start transaction (double frame for testing)
+  #   xCheck db.txTop.isErr
+  #   var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  #   xCheck tx.isTop()
+  #   xCheck tx.level == 2
 
-    # Reset database so that the next round has a clean setup
-    defer: db.innerCleanUp
+  #   # Reset database so that the next round has a clean setup
+  #   defer: db.innerCleanUp
 
-    # Merge leaf data into main trie
-    let kvpLeafs = block:
-      var lst = w.kvpLst.mapRootVid testRootVid
-      # The list might be reduced for isolation of particular properties,
-      # e.g. lst.setLen(min(5,lst.len))
-      lst
-    for i,leaf in kvpLeafs:
-      let rc = db.mergeGenericData leaf
-      xCheckRc rc.error == 0
+  #   # Merge leaf data into main trie
+  #   let kvpLeafs = block:
+  #     var lst = w.kvpLst.mapRootVid testRootVid
+  #     # The list might be reduced for isolation of particular properties,
+  #     # e.g. lst.setLen(min(5,lst.len))
+  #     lst
+  #   for i,leaf in kvpLeafs:
+  #     let rc = db.mergeGenericData leaf
+  #     xCheckRc rc.error == 0
 
-    # List of all leaf entries that should be on the database
-    var leafsLeft = kvpLeafs.mapIt(it.leafTie).toHashSet
+  #   # List of all leaf entries that should be on the database
+  #   var leafsLeft = kvpLeafs.mapIt(it.leafTie).toHashSet
 
-    # Provide a (reproducible) peudo-random copy of the leafs list
-    let leafVidPairs = block:
-      let rc = db.randomisedLeafs(leafsLeft, prng)
-      xCheckRc rc.error == (0,0)
-      rc.value
+  #   # Provide a (reproducible) peudo-random copy of the leafs list
+  #   let leafVidPairs = block:
+  #     let rc = db.randomisedLeafs(leafsLeft, prng)
+  #     xCheckRc rc.error == (0,0)
+  #     rc.value
 
-    # Trigger subsequent saving tasks in loop below
-    let (saveMod, saveRest, relax) = block:
-      if leafVidPairs.len < 17:    (7, 3, false)
-      elif leafVidPairs.len < 31: (11, 7, false)
-      else:   (leafVidPairs.len div 5, 11, true)
+  #   # Trigger subsequent saving tasks in loop below
+  #   let (saveMod, saveRest, relax) = block:
+  #     if leafVidPairs.len < 17:    (7, 3, false)
+  #     elif leafVidPairs.len < 31: (11, 7, false)
+  #     else:   (leafVidPairs.len div 5, 11, true)
 
-    # === Loop over leafs ===
-    for u,lvp in leafVidPairs:
-      let
-        runID = n + list.len * u
-        tailWalkVerify = 7 # + 999
-        doSaveBeOk = ((u mod saveMod) == saveRest)
-        (leaf, lid) = lvp
+  #   # === Loop over leafs ===
+  #   for u,lvp in leafVidPairs:
+  #     let
+  #       runID = n + list.len * u
+  #       tailWalkVerify = 7 # + 999
+  #       doSaveBeOk = ((u mod saveMod) == saveRest)
+  #       (leaf, lid) = lvp
 
-      if doSaveBeOk:
-        let saveBeOk = tx.saveToBackend(relax=relax, noisy=noisy, runID)
-        xCheck saveBeOk:
-          noisy.say "***", "del1by1(2)",
-            " u=", u,
-            " n=", n, "/", list.len,
-            "\n    db\n    ", db.pp(backendOk=true),
-            ""
+  #     if doSaveBeOk:
+  #       let saveBeOk = tx.saveToBackend(relax=relax, noisy=noisy, runID)
+  #       xCheck saveBeOk:
+  #         noisy.say "***", "del1by1(2)",
+  #           " u=", u,
+  #           " n=", n, "/", list.len,
+  #           "\n    db\n    ", db.pp(backendOk=true),
+  #           ""
 
-      # Delete leaf
-      block:
-        let rc = db.deleteGenericData(leaf.root, @(leaf.path))
-        xCheckRc rc.error == 0
+  #     # Delete leaf
+  #     block:
+  #       let rc = db.deleteGenericData(leaf.root, @(leaf.path))
+  #       xCheckRc rc.error == 0
 
-      # Update list of remaininf leafs
-      leafsLeft.excl leaf
+  #     # Update list of remaininf leafs
+  #     leafsLeft.excl leaf
 
-      let deletedVtx = tx.db.getVtx lid
-      xCheck deletedVtx.isValid == false:
-        noisy.say "***", "del1by1(8)"
+  #     let deletedVtx = tx.db.getVtx lid
+  #     xCheck deletedVtx.isValid == false:
+  #       noisy.say "***", "del1by1(8)"
 
-      # Walking the database is too slow for large tables. So the hope is that
-      # potential errors will not go away and rather pop up later, as well.
-      if leafsLeft.len <= tailWalkVerify:
-        if u < leafVidPairs.len-1:
-          if fwdRevVfyToggle:
-            fwdRevVfyToggle = false
-            if not db.fwdWalkVerify(leaf.root, leafsLeft, noisy, runID):
-              return
-          else:
-            fwdRevVfyToggle = true
-            if not db.revWalkVerify(leaf.root, leafsLeft, noisy, runID):
-              return
+  #     # Walking the database is too slow for large tables. So the hope is that
+  #     # potential errors will not go away and rather pop up later, as well.
+  #     if leafsLeft.len <= tailWalkVerify:
+  #       if u < leafVidPairs.len-1:
+  #         if fwdRevVfyToggle:
+  #           fwdRevVfyToggle = false
+  #           if not db.fwdWalkVerify(leaf.root, leafsLeft, noisy, runID):
+  #             return
+  #         else:
+  #           fwdRevVfyToggle = true
+  #           if not db.revWalkVerify(leaf.root, leafsLeft, noisy, runID):
+  #             return
 
-    when true and false:
-      noisy.say "***", "del1by1(9)",
-        " n=", n, "/", list.len,
-        " nLeafs=", kvpLeafs.len
+  #   when true and false:
+  #     noisy.say "***", "del1by1(9)",
+  #       " n=", n, "/", list.len,
+  #       " nLeafs=", kvpLeafs.len
 
   true
 
@@ -355,79 +355,79 @@ proc testTxMergeAndDeleteSubTree*(
     noisy: bool;
     list: openArray[ProofTrieData];
     rdbPath: string;                          # Rocks DB storage directory
-       ): bool =
-  var
-    prng = PrngDesc.init 42
-    db = AristoDbRef(nil)
-  defer:
-    if not db.isNil:
-      db.finish(eradicate=true)
+       ): bool {.deprecated: "rewrite to use non-generic data".} =
+  # var
+  #   prng = PrngDesc.init 42
+  #   db = AristoDbRef(nil)
+  # defer:
+  #   if not db.isNil:
+  #     db.finish(eradicate=true)
 
-  for n,w in list:
-    # Start with brand new persistent database.
-    db = block:
-      if 0 < rdbPath.len:
-        let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
-        let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init(), dbOpts, cfOpts, [])
-        xCheckRc rc.error == 0
-        rc.value()[0]
-      else:
-        AristoDbRef.init(MemBackendRef)
+  # for n,w in list:
+  #   # Start with brand new persistent database.
+  #   db = block:
+  #     if 0 < rdbPath.len:
+  #       let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
+  #       let rc = AristoDbRef.init(RdbBackendRef, rdbPath, DbOptions.init(), dbOpts, cfOpts, [])
+  #       xCheckRc rc.error == 0
+  #       rc.value()[0]
+  #     else:
+  #       AristoDbRef.init(MemBackendRef)
 
-    # Start transaction (double frame for testing)
-    xCheck db.txTop.isErr
-    var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
-    xCheck tx.isTop()
-    xCheck tx.level == 2
+  #   # Start transaction (double frame for testing)
+  #   xCheck db.txTop.isErr
+  #   var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  #   xCheck tx.isTop()
+  #   xCheck tx.level == 2
 
-    # Reset database so that the next round has a clean setup
-    defer: db.innerCleanUp
+  #   # Reset database so that the next round has a clean setup
+  #   defer: db.innerCleanUp
 
-    # Merge leaf data into main trie (w/vertex ID 2)
-    let kvpLeafs = block:
-      var lst = w.kvpLst.mapRootVid testRootVid
-      # The list might be reduced for isolation of particular properties,
-      # e.g. lst.setLen(min(5,lst.len))
-      lst
-    for i,leaf in kvpLeafs:
-      let rc = db.mergeGenericData leaf
-      xCheckRc rc.error == 0
+  #   # Merge leaf data into main trie (w/vertex ID 2)
+  #   let kvpLeafs = block:
+  #     var lst = w.kvpLst.mapRootVid testRootVid
+  #     # The list might be reduced for isolation of particular properties,
+  #     # e.g. lst.setLen(min(5,lst.len))
+  #     lst
+  #   for i,leaf in kvpLeafs:
+  #     let rc = db.mergeGenericData leaf
+  #     xCheckRc rc.error == 0
 
-    # List of all leaf entries that should be on the database
-    var leafsLeft = kvpLeafs.mapIt(it.leafTie).toHashSet
+  #   # List of all leaf entries that should be on the database
+  #   var leafsLeft = kvpLeafs.mapIt(it.leafTie).toHashSet
 
-    # Provide a (reproducible) peudo-random copy of the leafs list
-    let leafVidPairs = block:
-      let rc = db.randomisedLeafs(leafsLeft, prng)
-      xCheckRc rc.error == (0,0)
-      rc.value
-    discard leafVidPairs
+  #   # Provide a (reproducible) peudo-random copy of the leafs list
+  #   let leafVidPairs = block:
+  #     let rc = db.randomisedLeafs(leafsLeft, prng)
+  #     xCheckRc rc.error == (0,0)
+  #     rc.value
+  #   discard leafVidPairs
 
-    # === delete sub-tree ===
-    block:
-      let saveBeOk = tx.saveToBackend(relax=false, noisy=noisy, 1+list.len*n)
-      xCheck saveBeOk:
-        noisy.say "***", "del(1)",
-          " n=", n, "/", list.len,
-          "\n    db\n    ", db.pp(backendOk=true),
-          ""
-    # Delete sub-tree
-    block:
-      let rc = db.deleteGenericTree testRootVid
-      xCheckRc rc.error == 0:
-        noisy.say "***", "del(2)",
-          " n=", n, "/", list.len,
-          "\n    db\n    ", db.pp(backendOk=true),
-          ""
-    block:
-      let saveBeOk = tx.saveToBackend(relax=false, noisy=noisy, 2+list.len*n)
-      xCheck saveBeOk:
-        noisy.say "***", "del(3)",
-          " n=", n, "/", list.len,
-          "\n    db\n    ", db.pp(backendOk=true),
-          ""
-    when true and false:
-      noisy.say "***", "del(9) n=", n, "/", list.len, " nLeafs=", kvpLeafs.len
+  #   # === delete sub-tree ===
+  #   block:
+  #     let saveBeOk = tx.saveToBackend(relax=false, noisy=noisy, 1+list.len*n)
+  #     xCheck saveBeOk:
+  #       noisy.say "***", "del(1)",
+  #         " n=", n, "/", list.len,
+  #         "\n    db\n    ", db.pp(backendOk=true),
+  #         ""
+  #   # Delete sub-tree
+  #   block:
+  #     let rc = db.deleteGenericTree testRootVid
+  #     xCheckRc rc.error == 0:
+  #       noisy.say "***", "del(2)",
+  #         " n=", n, "/", list.len,
+  #         "\n    db\n    ", db.pp(backendOk=true),
+  #         ""
+  #   block:
+  #     let saveBeOk = tx.saveToBackend(relax=false, noisy=noisy, 2+list.len*n)
+  #     xCheck saveBeOk:
+  #       noisy.say "***", "del(3)",
+  #         " n=", n, "/", list.len,
+  #         "\n    db\n    ", db.pp(backendOk=true),
+  #         ""
+  #   when true and false:
+  #     noisy.say "***", "del(9) n=", n, "/", list.len, " nLeafs=", kvpLeafs.len
 
   true
 

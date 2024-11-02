@@ -366,37 +366,6 @@ proc partReRoot*(
 # Public merge functions on partial tree database
 # ------------------------------------------------------------------------------
 
-proc partMergeGenericData*(
-    ps: PartStateRef;
-    root: VertexID;                    # MPT state root
-    path: openArray[byte];             # Leaf item to add to the database
-    data: openArray[byte];             # Raw data payload value
-      ): Result[bool,AristoError] =
-  ## ..
-  let mergeError = block:
-    # Opportunistically try whether it just works
-    let rc = ps.db.mergeGenericData(root, path, data)
-    if rc.isOk or rc.error != GetVtxNotFound:
-      return rc
-    rc.error
-
-  # Otherwise clean the way removing blind link and retry
-  let
-    ctx = ps.ctxMergeBegin(root, path).valueOr:
-      let ctxErr = if error == PartCtxNotAvailable: mergeError else: error
-      return err(ctxErr)
-    rc = ps.db.mergeGenericData(root, path, data)
-
-  # Evaluate result => commit/rollback
-  if rc.isErr:
-    ? ctx.ctxMergeRollback()
-    return rc
-  if not ? ctx.ctxMergeCommit():
-    return err(PartVtxSlotWasNotModified)
-
-  ok(rc.value)
-
-
 proc partMergeAccountRecord*(
     ps: PartStateRef;
     accPath: Hash32;                  # Even nibbled byte path
