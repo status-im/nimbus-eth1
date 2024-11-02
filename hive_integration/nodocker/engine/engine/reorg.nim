@@ -184,7 +184,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
           attr.prevRandao = Bytes32.randomBytes()
 
           var timeVer = env.clMock.latestHeader.timestamp
-          let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, Opt.some(attr))
+          let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, attr)
           r.expectNoError()
           testCond r.get.payloadId.isSome:
             fatal "No payload ID returned by forkchoiceUpdated"
@@ -242,7 +242,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
             payloadAttributes.suggestedFeeRecipient = Address.randomBytes()
 
             var timeVer = Quantity env.clMock.latestHeader.timestamp
-            let f = env.engine.forkchoiceUpdated(timeVer, forkchoiceUpdated, Opt.some(payloadAttributes))
+            let f = env.engine.forkchoiceUpdated(timeVer, forkchoiceUpdated, payloadAttributes)
             f.expectPayloadStatus(PayloadExecutionStatus.valid)
 
             # Wait a second for the client to prepare the payload with the included transaction
@@ -424,7 +424,7 @@ method execute(cs: ReOrgBackToCanonicalTest, env: TestEnv): bool =
         attr.prevRandao = Bytes32.randomBytes()
 
         var timeVer = Quantity env.clMock.latestHeader.timestamp
-        let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, Opt.some(attr))
+        let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, attr)
         r.expectNoError()
         testCond r.get.payloadId.isSome:
           fatal "No payload ID returned by forkchoiceUpdated"
@@ -682,7 +682,7 @@ method execute(cs: ReOrgPrevValidatedPayloadOnSideChainTest, env: TestEnv): bool
       )
 
       var timeVer = reOrgPayload.timestamp
-      let r = env.engine.forkchoiceUpdated(timeVer, fcu, Opt.some(newPayloadAttributes))
+      let r = env.engine.forkchoiceUpdated(timeVer, fcu, newPayloadAttributes)
       r.expectPayloadStatus(PayloadExecutionStatus.valid)
       r.expectLatestValidHash(reOrgPayload.blockHash)
 

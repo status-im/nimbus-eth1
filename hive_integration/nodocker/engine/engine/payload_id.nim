@@ -112,7 +112,7 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
 
       # Request the payload with the modified attributes and add the payload ID to the list of known IDs
       let timeVer = env.clMock.latestHeader.timestamp
-      let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, Opt.some(attr))
+      let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, attr)
       r.expectNoError()
       testCond env.clMock.addPayloadID(env.engine, r.get.payloadId.get)
       return true

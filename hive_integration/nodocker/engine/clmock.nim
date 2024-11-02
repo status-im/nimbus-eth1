@@ -385,21 +385,9 @@ proc getNextPayload(cl: CLMocker): bool =
 
   return true
 
-#func versionedHashes(payload: ExecutionPayload): seq[Hash32] =
-#  result = newSeqOfCap[Hash32](payload.transactions.len)
-#  for x in payload.transactions:
-#    let tx = rlp.decode(distinctBase(x), Transaction)
-#    for vs in tx.versionedHashes:
-#      result.add vs
-
-proc broadcastNewPayload(cl: CLMocker,
-                         eng: EngineEnv,
-                         payload: ExecutableData): Result[PayloadStatusV1, string] =
-  eng.newPayload(payload)
-
 proc broadcastNextNewPayload(cl: CLMocker): bool =
   for eng in cl.clients:
-    let res = cl.broadcastNewPayload(eng, cl.latestExecutedPayload)
+    let res = eng.newPayload(cl.latestExecutedPayload)
     if res.isErr:
       error "CLMocker: broadcastNewPayload Error", msg=res.error
       return false

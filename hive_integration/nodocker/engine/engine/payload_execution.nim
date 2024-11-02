@@ -364,7 +364,7 @@ method execute(cs: NewPayloadOnSyncingClientTest, env: TestEnv): bool =
       )
 
       var timeVer = env.clMock.latestPayloadBuilt.timestamp
-      var s = env.engine.forkchoiceUpdated(timeVer, fcu, Opt.some(newAttr))
+      var s = env.engine.forkchoiceUpdated(timeVer, fcu, newAttr)
       s.expectPayloadStatus(PayloadExecutionStatus.syncing)
 
       # Send the previous payload to be able to continue

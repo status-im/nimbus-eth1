@@ -334,7 +334,7 @@ method execute(cs: PayloadBuildAfterInvalidPayloadTest, env: TestEnv): bool =
           )
           payloadAttributes = customizer.getPayloadAttributes(env.clMock.latestPayloadAttributes)
           timeVer = env.clMock.latestHeader.timestamp
-          r = invalidPayloadProducer.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, Opt.some(payloadAttributes))
+          r = invalidPayloadProducer.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, payloadAttributes)
 
         r.expectPayloadStatus(PayloadExecutionStatus.valid)
         # Wait for the payload to be produced by the EL
