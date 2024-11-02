@@ -121,8 +121,8 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
     fcuRes = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
-    payload = ? client.getPayload(fcuRes.payloadId.get, Version.V1)
-    npRes = ? client.newPayload(Version.V1, payload.executionPayload)
+    payload = ? client.getPayload(Version.V1, fcuRes.payloadId.get)
+    npRes = ? client.newPayloadV1(payload.executionPayload)
 
   discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceStateV1(
     headBlockHash: npRes.latestValidHash.get
@@ -150,10 +150,10 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
       parentBeaconBlockRoot: Opt.some(default(Hash32))
     )
     fcuRes = ? client.forkchoiceUpdated(Version.V3, update, Opt.some(attr))
-    payload = ? client.getPayload(fcuRes.payloadId.get, Version.V4)
-    res = ? client.newPayload(Version.V4,
-      payload.executionPayload,
-      Opt.some(default(Hash32)),
+    payload = ? client.getPayload(Version.V4, fcuRes.payloadId.get)
+    res = ? client.newPayloadV4(payload.executionPayload,
+      Opt.some(default(seq[Hash32])),
+      attr.parentBeaconBlockRoot,
       payload.executionRequests)
 
   if res.status != PayloadExecutionStatus.valid:
@@ -209,7 +209,7 @@ proc engineApiMain*() =
         debugEcho "FAILED TO EXECUTE TEST: ", res.error
       check res.isOk
       env.close()
-    
+
     test "newPayloadV4":
       let env = setupEnv(Prague)
       let res = env.runNewPayloadV4Test()
