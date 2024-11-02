@@ -15,7 +15,7 @@ import
   eth/[rlp, trie/trie_defs, trie/hexary_proof_verification],
   ../nimbus/db/[ledger, core_db],
   ../nimbus/common/chain_config,
-  ../nimbus/rpc/p2p
+  ../nimbus/rpc/server_api
 
 type
   Hash32 = eth_types.Hash32

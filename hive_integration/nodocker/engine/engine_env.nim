@@ -109,7 +109,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     beaconEngine = BeaconEngineRef.new(txPool, chain)
     serverApi = newServerAPI(chain, txPool)
 
-  setupServerAPI(serverApi, server)
+  setupServerAPI(serverApi, server, ctx)
   setupEngineAPI(beaconEngine, server)
   # temporary disabled
   #setupDebugRpc(com, txPool, server)

@@ -192,6 +192,11 @@ proc newPayload*(ben: BeaconEngineRef,
     hash = blockHash, number = header.number
   let vres = ben.chain.importBlock(blk)
   if vres.isErr:
+    warn "Error importing block",
+      number = header.number,
+      hash = blockHash.short,
+      parent = header.parentHash.short, 
+      error = vres.error()
     ben.setInvalidAncestor(header, blockHash)
     let blockHash = latestValidHash(db, parent, ttd)
     return invalidStatus(blockHash, vres.error())
