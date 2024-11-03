@@ -200,6 +200,11 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     networkId = conf.networkId,
     params = conf.networkParams)
 
+  if conf.extraData.len > 32:
+    warn "ExtraData exceeds 32 bytes limit",
+      extraData=conf.extraData
+      len=conf.extraData.len
+    
   com.extraData = conf.extraData
 
   defer:

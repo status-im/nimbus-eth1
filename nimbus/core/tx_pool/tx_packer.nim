@@ -315,7 +315,7 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
 
 func getExtraData(com: CommonRef): seq[byte] =
   if com.extraData.len > 32:
-    @(com.extraData.toBytes[0..<32])
+    com.extraData.toBytes[0..<32]
   else:
     com.extraData.toBytes
 
