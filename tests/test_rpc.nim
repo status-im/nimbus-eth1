@@ -93,7 +93,7 @@ proc close(client: RpcHttpClient, server: RpcHttpServer) =
 # unless the base distance is reached. This is not the case for the tests, so we
 # have to manually persist the blocks to the db.
 # Main goal of the tests to check the RPC calls, can serve data persisted in the db
-# as data from memory blocks are easily tested via kurtosis or other tests 
+# as data from memory blocks are easily tested via kurtosis or other tests
 proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
   var
     acc = ctx.am.getAccount(signer).tryGet()
@@ -201,7 +201,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
 
   doAssert com.db.persistHeader(header,
     com.pos.isNil, com.startOfHistory)
-    
+
   com.db.persistFixtureBlock()
 
   com.db.persistent(header.number).isOkOr:
@@ -212,7 +212,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     txHash: signedTx1.rlpHash,
     blockHash: header.blockHash
     )
-  
+
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
@@ -242,7 +242,7 @@ proc rpcMain*() =
       debugEcho unlock.error
     doAssert(unlock.isOk)
 
-    let 
+    let
       env = setupEnv(signer, ks2, ctx, com)
       chain = ForkedChainRef.init(com)
       txPool = TxPoolRef.new(com)
@@ -370,7 +370,7 @@ proc rpcMain*() =
       let msgData  = "\x19Ethereum Signed Message:\n" & $msg.len & msg
       let msgDataBytes = @(msgData.toOpenArrayByte(0, msgData.len-1))
       let msgHash = await client.web3_sha3(msgDataBytes)
-      let pubkey = recover(sig, SkMessage(msgHash.bytes)).tryGet()
+      let pubkey = recover(sig, SkMessage(msgHash.data)).tryGet()
       let recoveredAddr = pubkey.toCanonicalAddress()
       check recoveredAddr == signer # verified
 

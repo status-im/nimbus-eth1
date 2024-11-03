@@ -348,7 +348,6 @@ proc runLedgerTransactionTests(noisy = true) =
         env.txi.add n
 
     test &"Run {env.txi.len} two-step trials with rollback":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()
@@ -356,7 +355,6 @@ proc runLedgerTransactionTests(noisy = true) =
         env.runTrial2ok(ledger, n)
 
     test &"Run {env.txi.len} three-step trials with rollback":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()
@@ -365,7 +363,6 @@ proc runLedgerTransactionTests(noisy = true) =
 
     test &"Run {env.txi.len} three-step trials with extra db frame rollback" &
         " throwing Exceptions":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()
@@ -373,7 +370,6 @@ proc runLedgerTransactionTests(noisy = true) =
         env.runTrial3Survive(ledger, n, noisy)
 
     test &"Run {env.txi.len} tree-step trials without rollback":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()
@@ -381,7 +377,6 @@ proc runLedgerTransactionTests(noisy = true) =
         env.runTrial3(ledger, n, rollback = false)
 
     test &"Run {env.txi.len} four-step trials with rollback and db frames":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()

@@ -224,7 +224,7 @@ proc dbPeekParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
 
 proc dbUnstashHeader*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
-  ctx.stash.withValue(bn, val):
+  ctx.stash.withValue(bn, _):
     ctx.stash.del bn
     return
   discard ctx.db.ctx.getKvt().del(beaconHeaderKey(bn).toOpenArray)

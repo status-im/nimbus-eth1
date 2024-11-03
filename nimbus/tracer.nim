@@ -246,7 +246,6 @@ proc dumpBlockStateImpl(
 
   let
     cc = activate CaptCtxRef.init(com, header)
-    parent = com.db.getBlockHeader(header.parentHash)
 
     # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}

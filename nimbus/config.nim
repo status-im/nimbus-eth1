@@ -11,7 +11,6 @@
 import
   std/[
     options,
-    strformat,
     strutils,
     times,
     os,
