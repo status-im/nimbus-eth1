@@ -169,11 +169,11 @@ type
 
   # Caches content fetched from the network during lookups.
   # Content outside our radius is also cached in order to improve performance
-  # of queries when we frequently lookup data outside our radius.
+  # of queries which may lookup data outside our radius.
   ContentCache = LruCache[ContentId, seq[byte]]
 
   # Caches the most recently received content/offers.
-  # Content is only stored in this cache if it is within our radius and similarly
+  # Content is only stored in this cache if it falls within our radius and similarly
   # the cache is only checked if the content id is within our radius.
   OfferCache = LruCache[ContentId, seq[byte]]
 
@@ -540,7 +540,6 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       )
 
       if p.inRange(contentId):
-
         # Checking the offer cache first to reduce the load on the database
         # for the case when the offer already exists and it was recently accepted
         if not p.offerCache.contains(contentId) and
@@ -1666,44 +1665,6 @@ proc randomGossipDiscardPeers*(
     content: seq[seq[byte]],
 ): Future[void] {.async: (raises: [CancelledError]).} =
   discard await p.randomGossip(srcNodeId, contentKeys, content)
-
-proc storeContent*(
-    p: PortalProtocol,
-    contentKey: ContentKeyByteList,
-    contentId: ContentId,
-    content: seq[byte],
-    cacheContent = false,
-): bool {.discardable.} =
-  if cacheContent and not p.config.disableContentCache:
-    # We cache content regardless of whether it is in our radius or not
-    p.contentCache.put(contentId, content)
-
-  # Always re-check that the key is still in the node range to make sure only
-  # content in range is stored.
-  if p.inRange(contentId):
-    doAssert(p.dbPut != nil)
-    p.dbPut(contentKey, contentId, content)
-    true
-  else:
-    false
-
-proc getLocalContent*(
-    p: PortalProtocol, contentKey: ContentKeyByteList, contentId: ContentId
-): Opt[seq[byte]] =
-  # The cache can contain content that is not in our radius
-  let maybeContent = p.contentCache.get(contentId)
-  if maybeContent.isSome():
-    portal_content_cache_hits.inc(labelValues = [$p.protocolId])
-    return maybeContent
-
-  portal_content_cache_misses.inc(labelValues = [$p.protocolId])
-
-  # Check first if content is in range, as this is a cheaper operation
-  # than the database lookup.
-  if p.inRange(contentId):
-    p.dbGet(contentKey, contentId)
-  else:
-    Opt.none(seq[byte])
 
 proc seedTable*(p: PortalProtocol) =
   ## Seed the table with specifically provided Portal bootstrap nodes. These are
