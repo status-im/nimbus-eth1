@@ -391,20 +391,6 @@ proc getContent(
   else:
     Opt.some(res.get())
 
-proc getContent(
-    n: HistoryNetwork,
-    T: type EpochRecord,
-    contentKey: ContentKeyByteList,
-    contentId: ContentId,
-): Opt[T] =
-  let localContent = n.portalProtocol.getLocalContent(contentKey, contentId).valueOr:
-    return Opt.none(T)
-
-  try:
-    Opt.some(SSZ.decode(localContent, T))
-  except SerializationError:
-    raiseAssert("Stored data should always be serialized correctly")
-
 ## Public API to get the history network specific types, either from database
 ## or through a lookup on the Portal Network
 
