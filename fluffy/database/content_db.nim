@@ -457,14 +457,15 @@ proc adjustRadius(
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
     proc(contentKey: ContentKeyByteList, contentId: ContentId): Opt[seq[byte]] =
-      var res = Opt.none(seq[byte])
+      var res: seq[byte]
 
       proc onData(data: openArray[byte]) =
-        res = Opt.some(@data)
+        res = @data
 
-      discard db.get(contentId, onData)
-
-      ensureMove(res)
+      if db.get(contentId, onData):
+        Opt.some(res)
+      else:
+        Opt.none(seq[byte])
   )
 
 proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =
