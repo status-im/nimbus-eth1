@@ -21,7 +21,7 @@ type
     canonicalHeadHash = 4
     slotHashToSlot = 5
     contractHash = 6
-    transitionStatus = 7
+    dataDirId = 7
     safeHash = 8
     finalizedHash = 9
     beaconState = 10
@@ -59,6 +59,10 @@ func canonicalHeadHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(canonicalHeadHash)
   result.dataEndPos = 1
 
+func dataDirIdKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(dataDirId)
+  result.dataEndPos = 1
+  
 func slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
   result.data[0] = byte ord(slotHashToSlot)
