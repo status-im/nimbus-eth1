@@ -15,7 +15,7 @@ import
   results,
   stew/byteutils,
   eth/common/keys,
-  eth/common/[base, headers_rlp, blocks_rlp],
+  eth/common/[base, headers_rlp, blocks_rlp, receipts],
   eth/p2p/discoveryv5/random2,
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../hive_integration/nodocker/engine/engine_client,
@@ -79,9 +79,9 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
   var logs: seq[Log]
   if receiptObject.logs.len > 0:
     for log in receiptObject.logs:
-      var topics: seq[Topic]
+      var topics: seq[receipts.Topic]
       for topic in log.topics:
-        topics.add(Topic(topic))
+        topics.add(topic)
 
       logs.add(Log(address: log.address, data: log.data, topics: topics))
 
