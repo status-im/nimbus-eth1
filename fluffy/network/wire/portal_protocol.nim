@@ -484,7 +484,6 @@ proc handleFindContent(
     int64(logDistance), labelValues = [$p.protocolId]
   )
 
-  # Check first if content is in range, as this is a cheaper operation
   let contentResult = p.getLocalContent(fc.contentKey, contentId)
   if contentResult.isOk():
     let content = contentResult.get()
@@ -657,7 +656,7 @@ proc new*(
     radiusCache: RadiusCache.init(256),
     offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
     offerCache:
-      OfferCache.init(if config.disableContentCache: 0 else: config.contentCacheSize),
+      OfferCache.init(if config.disableOfferCache: 0 else: config.offerCacheSize),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
   )
