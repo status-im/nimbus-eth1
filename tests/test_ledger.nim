@@ -14,7 +14,6 @@ import
   stew/byteutils,
   stew/endians2,
   ../nimbus/config,
-  ../nimbus/db/ledger,
   ../nimbus/db/storage_types,
   ../nimbus/common/common,
   ../nimbus/core/chain,
@@ -22,7 +21,7 @@ import
   ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
-  ../nimbus/db/ledger/backend/accounts_ledger {.all.}, # import all private symbols
+  ../nimbus/db/ledger {.all.}, # import all private symbols
   unittest2
 
 const

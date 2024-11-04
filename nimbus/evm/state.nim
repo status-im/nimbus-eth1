@@ -110,7 +110,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
       com    = self.com
       db     = com.db
       ac     = if linear or self.stateDB.getStateRoot() == parent.stateRoot: self.stateDB
-               else: LedgerRef.init(db, self.stateDB.ac.storeSlotHash)
+               else: LedgerRef.init(db, self.stateDB.storeSlotHash)
       flags  = self.flags
     self[].reset
     self.init(
