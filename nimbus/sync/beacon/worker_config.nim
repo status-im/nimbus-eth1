@@ -92,8 +92,8 @@ const
   nFetchBodiesRequest* = 128
     ## Similar to `nFetchHeadersRequest`
 
-  fetchBodiesReqThresholdZombie* = chronos.seconds(2)
-  fetchBodiesReqThresholdCount* = 3
+  fetchBodiesReqThresholdZombie* = chronos.seconds(4)
+  fetchBodiesReqThresholdCount* = 5
     ## Similar to `fetchHeadersReqThreshold*`
 
   fetchBodiesReqMinResponsePC* = 10

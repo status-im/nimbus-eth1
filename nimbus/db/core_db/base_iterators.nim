@@ -48,13 +48,13 @@ template dbType(dsc: CoreDbKvtRef | CoreDbAccRef): CoreDbType =
 template kvt(dsc: CoreDbKvtRef): KvtDbRef =
   dsc.distinctBase.kvt
 
-template call(api: KvtApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call(api: KvtApiRef; fn: untyped; args: varargs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
   else:
     fn(args)
 
-template call(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call(kvt: CoreDbKvtRef; fn: untyped; args: varargs[untyped]): untyped =
   kvt.distinctBase.parent.kvtApi.call(fn, args)
 
 # ---------------
@@ -62,7 +62,7 @@ template call(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
 template mpt(dsc: CoreDbAccRef): AristoDbRef =
   dsc.distinctBase.mpt
 
-template call(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call(api: AristoApiRef; fn: untyped; args: varargs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
   else:
@@ -71,7 +71,7 @@ template call(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
 template call(
     acc: CoreDbAccRef;
     fn: untyped;
-    args: varArgs[untyped];
+    args: varargs[untyped];
       ): untyped =
   acc.distinctBase.parent.ariApi.call(fn, args)
 

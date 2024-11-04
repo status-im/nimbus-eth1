@@ -20,11 +20,11 @@ import
 type
   Tester = object
     parentTimestamp: int64
-    parentDifficulty: Uint256
+    parentDifficulty: UInt256
     parentUncles: Hash32
     currentTimestamp: int64
     currentBlockNumber: uint64
-    currentDifficulty: Uint256
+    currentDifficulty: UInt256
 
   Tests = Table[string, Tester]
 
@@ -37,11 +37,11 @@ proc hexOrInt64(data: JsonNode, key: string, hex: static[bool]): int64 =
   else:
     int64(parseInt data[key].getStr)
 
-proc hexOrInt256(data: JsonNode, key: string, hex: static[bool]): Uint256 =
+proc hexOrInt256(data: JsonNode, key: string, hex: static[bool]): UInt256 =
   when hex:
     UInt256.fromHex data[key].getStr
   else:
-    parse(data[key].getStr, Uint256)
+    parse(data[key].getStr, UInt256)
 
 proc parseHash(data: string): Hash32 =
   case data
@@ -50,7 +50,7 @@ proc parseHash(data: string): Hash32 =
   else:
     doAssert(false, "invalid uncle hash")
 
-proc parseTests(testData: JSonNode): Tests =
+proc parseTests(testData: JsonNode): Tests =
   const hex = true
   result = Table[string, Tester]()
   var t: Tester
@@ -115,7 +115,7 @@ template runTest() =
 
   for fname in filenames:
     let filename = fname
-    test fname.subStr(inputPath.len + 1):
+    test fname.substr(inputPath.len + 1):
       let fixtures = parseJson(readFile(filename))
       testFixture(fixtures, testStatusIMPL)
 

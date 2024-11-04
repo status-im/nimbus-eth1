@@ -52,6 +52,16 @@ type
     ## Block request item sorted by least block number (i.e. from `blocks[0]`.)
     blocks*: seq[EthBlock]           ## List of blocks for import
 
+  KvtCache* = Table[BlockNumber,seq[byte]]
+    ## This cache type is intended for holding block headers that cannot be
+    ## reliably saved persistently. This is the situation after blocks are
+    ## imported as the FCU handlers always maintain a positive transaction
+    ## level and in some instances the current transaction is flushed and
+    ## re-opened.
+    ##
+    ## The number of block headers to hold in memory after block import has
+    ## started is the distance to the new `canonical execution head`.
+
   # -------------------
 
   SyncStateTarget* = object
@@ -133,8 +143,9 @@ type
     # Blocks import/execution settings for importing with
     # `nBodiesBatch` blocks in each round (minimum value is
     # `nFetchBodiesRequest`.)
-    chain*: ForkedChainRef           ## Database
-    importRunningOk*: bool           ## Advisory lock, fetch vs. import
+    chain*: ForkedChainRef           ## Core database, FCU support
+    stash*: KvtCache                 ## Temporary header and state table
+    blockImportOk*: bool             ## Don't fetch data while block importing
     nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
     blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
 
@@ -179,9 +190,29 @@ func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.chain
 
+func stash*(ctx: BeaconCtxRef): var KvtCache =
+  ## Getter
+  ctx.pool.stash
+
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter
   ctx.pool.chain.db
+
+# -----
+
+func hibernate*(ctx: BeaconCtxRef): bool =
+  ## Getter, re-interpretation of the daemon flag for reduced service mode
+  # No need for running the daemon with reduced service mode. So it is
+  # convenient to use this flag for indicating this.
+  not ctx.daemon
+
+proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
+  ## Setter
+  ctx.daemon = not val
+
+  # Control some error messages on the scheduler (e.g. zombie/banned-peer
+  # reconnection attempts, LRU flushing out oldest peer etc.)
+  ctx.noisyLog = not val
 
 # ------------------------------------------------------------------------------
 # End

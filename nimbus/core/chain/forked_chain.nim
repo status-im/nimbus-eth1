@@ -164,7 +164,7 @@ proc validateBlock(c: ForkedChainRef,
 
   ok()
 
-proc replaySegment(c: ForkedChainRef, target: Hash32) =
+proc replaySegment*(c: ForkedChainRef, target: Hash32) =
   # Replay from base+1 to target block
   var
     prevHash = target
@@ -635,8 +635,17 @@ func baseHash*(c: ForkedChainRef): Hash32 =
 func txRecords*(c: ForkedChainRef, txHash: Hash32): (Hash32, uint64) =
   c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
 
+func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
+  c.blocks.hasKey(blockHash)
+
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
   c.blocks.getOrDefault(blockHash)
+
+func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[Transaction] =
+  let (blockHash, index) = c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
+  c.blocks.withValue(blockHash, val) do:
+    return Opt.some(val.blk.transactions[index])
+  return Opt.none(Transaction)
 
 proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:

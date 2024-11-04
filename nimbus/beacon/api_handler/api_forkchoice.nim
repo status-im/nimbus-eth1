@@ -185,23 +185,19 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let attrs = attrsOpt.get()
     validateVersion(attrs, com, apiVersion)
 
-    let bundle = ben.generatePayload(attrs).valueOr:
+    let bundle = ben.generateExecutionBundle(attrs).valueOr:
       error "Failed to create sealing payload", err = error
       raise invalidAttr(error)
 
     let id = computePayloadId(blockHash, attrs)
-    ben.put(id,
-      bundle.blockValue,
-      bundle.executionPayload,
-      bundle.blobsBundle,
-      bundle.executionRequests)
+    ben.put(id, bundle)
 
     info "Created payload for block proposal",
-      number = bundle.executionPayload.blockNumber,
-      hash = bundle.executionPayload.blockHash.short,
-      txs = bundle.executionPayload.transactions.len,
-      gasUsed = bundle.executionPayload.gasUsed,
-      blobGasUsed = bundle.executionPayload.blobGasUsed.get(Quantity(0)),
+      number = bundle.payload.blockNumber,
+      hash = bundle.payload.blockHash.short,
+      txs = bundle.payload.transactions.len,
+      gasUsed = bundle.payload.gasUsed,
+      blobGasUsed = bundle.payload.blobGasUsed.get(Quantity(0)),
       id = id.toHex,
       attrs = attrs
 

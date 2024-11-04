@@ -12,7 +12,6 @@ import
   stint,
   chronicles,
   chronos,
-  stew/byteutils,
   web3/eth_api_types,
   ./wd_history,
   ../test_env,

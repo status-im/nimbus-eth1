@@ -202,37 +202,6 @@ proc mergeAccountRecord*(
 
   ok true
 
-proc mergeGenericData*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # MPT state root
-    path: openArray[byte];             # Leaf item to add to the database
-    data: openArray[byte];             # Raw data payload value
-      ): Result[bool,AristoError] =
-  ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
-  ## `root` greater than `VertexID(1)` and smaller than `LEAST_FREE_VID`.
-  ##
-  ## On success, the function returns `true` if the `data` argument was merged
-  ## into the database ot updated, and `false` if it was on the database
-  ## already.
-  ##
-  # Verify that `root` is neither an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(MergeRootVidMissing)
-  elif root == VertexID(1):
-    return err(MergeAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(MergeStoRootNotAccepted)
-
-  let
-    pyl = LeafPayload(pType: RawData, rawBlob: @data)
-
-  discard db.mergePayloadImpl(root, path, Opt.none(VertexRef), pyl).valueOr:
-    if error == MergeNoAction:
-      return ok false
-    return err error
-
-  ok true
-
 proc mergeStorageData*(
     db: AristoDbRef;                   # Database, top layer
     accPath: Hash32;                   # Needed for accounts payload

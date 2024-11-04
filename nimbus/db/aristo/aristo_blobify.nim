@@ -124,10 +124,6 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 
 proc blobifyTo*(pyl: LeafPayload, data: var seq[byte]) =
   case pyl.pType
-  of RawData:
-    data &= pyl.rawBlob
-    data &= [0x10.byte]
-
   of AccountData:
     # `lens` holds `len-1` since `mask` filters out the zero-length case (which
     # allows saving 1 bit per length)
@@ -248,45 +244,42 @@ proc deblobify(
     pyl: var LeafPayload;
       ): Result[void,AristoError] =
   if data.len == 0:
-    pyl = LeafPayload(pType: RawData)
-    return ok()
+    return err(DeblobVtxTooShort)
 
   let mask = data[^1]
-  if (mask and 0x10) > 0: # unstructured payload
-    pyl = LeafPayload(pType: RawData, rawBlob: data[0 .. ^2])
-    return ok()
-
   if (mask and 0x20) > 0: # Slot storage data
     pyl = LeafPayload(
       pType: StoData,
       stoData: ?deblobify(data.toOpenArray(0, data.len - 2), UInt256))
-    return ok()
+    ok()
+  elif (mask and 0xf0) == 0: # Only account fields set
+    pyl = LeafPayload(pType: AccountData)
+    var
+      start = 0
+      lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
 
-  pyl = LeafPayload(pType: AccountData)
-  var
-    start = 0
-    lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
+    if (mask and 0x01) > 0:
+      let len = lens and 0b111
+      pyl.account.nonce = ? load64(data, start, int(len + 1))
 
-  if (mask and 0x01) > 0:
-    let len = lens and 0b111
-    pyl.account.nonce = ? load64(data, start, int(len + 1))
+    if (mask and 0x02) > 0:
+      let len = (lens shr 3) and 0b11111
+      pyl.account.balance = ? load256(data, start, int(len + 1))
 
-  if (mask and 0x02) > 0:
-    let len = (lens shr 3) and 0b11111
-    pyl.account.balance = ? load256(data, start, int(len + 1))
+    if (mask and 0x04) > 0:
+      let len = (lens shr 8) and 0b111
+      pyl.stoID = (true, VertexID(? load64(data, start, int(len + 1))))
 
-  if (mask and 0x04) > 0:
-    let len = (lens shr 8) and 0b111
-    pyl.stoID = (true, VertexID(? load64(data, start, int(len + 1))))
+    if (mask and 0x08) > 0:
+      if data.len() < start + 32:
+        return err(DeblobCodeLenUnsupported)
+      discard pyl.account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
+    else:
+      pyl.account.codeHash = EMPTY_CODE_HASH
 
-  if (mask and 0x08) > 0:
-    if data.len() < start + 32:
-      return err(DeblobCodeLenUnsupported)
-    discard pyl.account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
+    ok()
   else:
-    pyl.account.codeHash = EMPTY_CODE_HASH
-
-  ok()
+    err(DeblobUnknown)
 
 proc deblobifyType*(record: openArray[byte]; T: type VertexRef):
     Result[VertexType, AristoError] =

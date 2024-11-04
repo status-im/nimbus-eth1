@@ -180,8 +180,6 @@ func ppAriAccount(a: AristoAccount): string =
 
 func ppPayload(p: LeafPayload, db: AristoDbRef): string =
   case p.pType:
-  of RawData:
-    result &= p.rawBlob.toHex.squeeze(hex=true)
   of AccountData:
     result = "(" & p.account.ppAriAccount() & "," & p.stoID.ppVid & ")"
   of StoData:

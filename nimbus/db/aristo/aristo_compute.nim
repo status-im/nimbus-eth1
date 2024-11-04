@@ -249,8 +249,6 @@ proc computeKeyImpl(
             storageRoot: skey.to(Hash32),
             codeHash: vtx.lData.account.codeHash,
           )
-        of RawData:
-          vtx.lData.rawBlob
         of StoData:
           # TODO avoid memory allocation when encoding storage data
           rlp.encode(vtx.lData.stoData)
@@ -371,8 +369,6 @@ proc computeLeafKeysImpl(
           codeHash: vtx.lData.account.codeHash,
         )
         writer2.finish()
-      of RawData:
-        vtx.lData.rawBlob
       of StoData:
         writer2.clear()
         writer2.append(vtx.lData.stoData)
