@@ -17,6 +17,7 @@ import
   metrics,
   metrics/chronicles_support,
   kzg4844/kzg,
+  stew/byteutils,
   ./rpc,
   ./version,
   ./constants,
@@ -159,15 +160,18 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   let
     kvt = db.ctx.getKvt()
     calculatedId = calcHash(conf.networkId, conf.networkParams)
-    dataDirIdBytes = kvt.getOrEmpty(dataDirIdKey().toOpenArray).valueOr:
+    dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
       # an empty database
+      info "Writing data dir ID", ID=calculatedId
       kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
-        fatal "Cannot write data dir ID"
+        fatal "Cannot write data dir ID", ID=calculatedId
         quit(QuitFailure)
-      return    
+      return
 
   if calculatedId.data != dataDirIdBytes:
-    fatal "Data dir already initialized with other network configuration"
+    fatal "Data dir already initialized with other network configuration",
+      get=dataDirIdBytes.toHex,
+      expected=calculatedId
     quit(QuitFailure)
 
 proc run(nimbus: NimbusNode, conf: NimbusConf) =
