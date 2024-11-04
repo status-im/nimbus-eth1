@@ -64,6 +64,7 @@ proc new*(
       toContentIdHandler,
       createGetHandler(contentDB),
       createStoreHandler(contentDB, portalConfig.radiusConfig),
+      createContainsHandler(contentDB),
       createRadiusHandler(contentDB),
       s,
       bootstrapRecords,

@@ -57,7 +57,7 @@ proc stop(hn: HistoryNode) {.async.} =
   await hn.discoveryProtocol.closeWait()
 
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
-  return hn.historyNetwork.contentDB.get(contentId).isSome()
+  return hn.historyNetwork.contentDB.contains(contentId)
 
 proc store*(hn: HistoryNode, blockHash: Hash32, blockHeader: Header) =
   let

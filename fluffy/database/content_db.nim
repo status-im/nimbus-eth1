@@ -285,44 +285,20 @@ proc close*(db: ContentDB) =
   db.largestDistanceStmt.disposeSafe()
   discard db.kv.close()
 
-## Private KvStoreRef Calls
-
-proc get(kv: KvStoreRef, key: openArray[byte]): Opt[seq[byte]] =
-  var res: Opt[seq[byte]]
-  proc onData(data: openArray[byte]) =
-    res = Opt.some(@data)
-
-  discard kv.get(key, onData).expectDb()
-
-  return res
-
-proc getSszDecoded(kv: KvStoreRef, key: openArray[byte], T: type auto): Opt[T] =
-  let res = kv.get(key)
-  if res.isSome():
-    try:
-      Opt.some(SSZ.decode(res.get(), T))
-    except SerializationError:
-      raiseAssert("Stored data should always be serialized correctly")
-  else:
-    Opt.none(T)
-
 ## Private ContentDB calls
 
-proc get(db: ContentDB, key: openArray[byte]): Opt[seq[byte]] =
-  db.kv.get(key)
+template get(db: ContentDB, key: openArray[byte], onData: DataProc): bool =
+  db.kv.get(key, onData).expectDb()
 
-proc put(db: ContentDB, key, value: openArray[byte]) =
+template put(db: ContentDB, key, value: openArray[byte]) =
   db.kv.put(key, value).expectDb()
 
-proc contains(db: ContentDB, key: openArray[byte]): bool =
+template contains(db: ContentDB, key: openArray[byte]): bool =
   db.kv.contains(key).expectDb()
 
-proc del(db: ContentDB, key: openArray[byte]) =
+template del(db: ContentDB, key: openArray[byte]) =
   # TODO: Do we want to return the bool here too?
   discard db.kv.del(key).expectDb()
-
-proc getSszDecoded(db: ContentDB, key: openArray[byte], T: type auto): Opt[T] =
-  db.kv.getSszDecoded(key, T)
 
 ## Public ContentId based ContentDB calls
 
@@ -334,9 +310,9 @@ proc getSszDecoded(db: ContentDB, key: openArray[byte], T: type auto): Opt[T] =
 # checked with the Radius/distance of the node anyhow. So lets see how we end up
 # using this mostly in the code.
 
-proc get*(db: ContentDB, key: ContentId): Opt[seq[byte]] =
+proc get*(db: ContentDB, key: ContentId, onData: DataProc): bool =
   # TODO: Here it is unfortunate that ContentId is a uint256 instead of Digest256.
-  db.get(key.toBytesBE())
+  db.get(key.toBytesBE(), onData)
 
 proc put*(db: ContentDB, key: ContentId, value: openArray[byte]) =
   db.put(key.toBytesBE(), value)
@@ -346,9 +322,6 @@ proc contains*(db: ContentDB, key: ContentId): bool =
 
 proc del*(db: ContentDB, key: ContentId) =
   db.del(key.toBytesBE())
-
-proc getSszDecoded*(db: ContentDB, key: ContentId, T: type auto): Opt[T] =
-  db.getSszDecoded(key.toBytesBE(), T)
 
 ## Pruning related calls
 
@@ -484,10 +457,15 @@ proc adjustRadius(
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
     proc(contentKey: ContentKeyByteList, contentId: ContentId): Opt[seq[byte]] =
-      let content = db.get(contentId).valueOr:
-        return Opt.none(seq[byte])
+      var res: seq[byte]
 
-      ok(content)
+      proc onData(data: openArray[byte]) =
+        res = @data
+
+      if db.get(contentId, onData):
+        Opt.some(res)
+      else:
+        Opt.none(seq[byte])
   )
 
 proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =
@@ -518,6 +496,12 @@ proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =
         # If the radius is static, it may never be adjusted, database capacity
         # is disabled and no pruning is ever done.
         db.put(contentId, content)
+  )
+
+proc createContainsHandler*(db: ContentDB): DbContainsHandler =
+  return (
+    proc(contentKey: ContentKeyByteList, contentId: ContentId): bool =
+      db.contains(contentId)
   )
 
 proc createRadiusHandler*(db: ContentDB): DbRadiusHandler =

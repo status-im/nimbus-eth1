@@ -26,26 +26,37 @@ suite "Content Database":
       key = ContentId(UInt256.high()) # Some key
 
     block:
-      let val = db.get(key)
+      var val = Opt.none(seq[byte])
+      proc onData(data: openArray[byte]) =
+        val = Opt.some(@data)
 
       check:
+        db.get(key, onData) == false
         val.isNone()
         db.contains(key) == false
 
     block:
       discard db.putAndPrune(key, [byte 0, 1, 2, 3])
-      let val = db.get(key)
+
+      var val = Opt.none(seq[byte])
+      proc onData(data: openArray[byte]) =
+        val = Opt.some(@data)
 
       check:
+        db.get(key, onData) == true
         val.isSome()
         val.get() == [byte 0, 1, 2, 3]
         db.contains(key) == true
 
     block:
       db.del(key)
-      let val = db.get(key)
+
+      var val = Opt.none(seq[byte])
+      proc onData(data: openArray[byte]) =
+        val = Opt.some(@data)
 
       check:
+        db.get(key, onData) == false
         val.isNone()
         db.contains(key) == false
 
@@ -137,9 +148,9 @@ suite "Content Database":
       # With the current settings the 2 furthest elements will be deleted,
       # i.e key 30 and 40. The furthest non deleted one will have key 20.
       pr10.distanceOfFurthestElement == thirdFurthest
-      db.get(furthestElement).isNone()
-      db.get(secondFurthest).isNone()
-      db.get(thirdFurthest).isSome()
+      not db.contains(furthestElement)
+      not db.contains(secondFurthest)
+      db.contains(thirdFurthest)
 
   test "ContentDB force pruning":
     const
