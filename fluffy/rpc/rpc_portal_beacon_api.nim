@@ -116,7 +116,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       contentId = p.toContentId(key).valueOr:
         raise invalidKeyErr()
 
-    p.storeContent(key, contentId, contentValueBytes)
+    p.storeContent(key, contentId, contentValueBytes, cacheOffer = true)
 
   rpcServer.rpc("portal_beaconLocalContent") do(contentKey: string) -> string:
     let
