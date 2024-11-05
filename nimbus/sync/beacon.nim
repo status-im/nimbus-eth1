@@ -33,7 +33,7 @@ proc runSetup(ctx: BeaconCtxRef): bool =
 proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx, "RunRelease")
 
-proc runDaemon(ctx: BeaconCtxRef) {.async.} =
+proc runDaemon(ctx: BeaconCtxRef) {.async: (raises: []).} =
   await worker.runDaemon(ctx, "RunDaemon")
 
 proc runStart(buddy: BeaconBuddyRef): bool =
@@ -45,7 +45,7 @@ proc runStop(buddy: BeaconBuddyRef) =
 proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "RunPool")
 
-proc runPeer(buddy: BeaconBuddyRef) {.async.} =
+proc runPeer(buddy: BeaconBuddyRef) {.async: (raises: []).} =
   await worker.runPeer(buddy, "RunPeer")
 
 # ------------------------------------------------------------------------------

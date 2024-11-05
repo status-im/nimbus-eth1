@@ -32,7 +32,7 @@ proc bodiesFetch*(
     blockHashes: seq[Hash32];
     info: static[string];
       ): Future[Result[seq[BlockBody],void]]
-      {.async.} =
+      {.async: (raises: []).} =
   ## Fetch bodies from the network.
   let
     peer = buddy.peer
@@ -45,7 +45,7 @@ proc bodiesFetch*(
   var resp: Option[blockBodiesObj]
   try:
     resp = await peer.getBlockBodies(blockHashes)
-  except EthP2PError as e:
+  except CatchableError as e:
     buddy.fetchRegisterError()
     `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
       error=($e.name), msg=e.msg, nRespErrors=buddy.only.nBdyRespErrors
