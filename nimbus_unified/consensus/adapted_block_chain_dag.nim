@@ -47,7 +47,7 @@ logScope: topics = "chaindag"
 # declareGauge beacon_pending_deposits, "Number of pending deposits (state.eth1_data.deposit_count - state.eth1_deposit_index)" # On block
 # declareGauge beacon_processed_deposits_total, "Number of total deposits included on chain" # On block
 
-declareCounter beacon_dag_state_replay_seconds, "Time spent replaying states"
+# declareCounter beacon_dag_state_replay_seconds, "Time spent replaying states"
 
 const
   EPOCHS_PER_STATE_SNAPSHOT* = 32
@@ -1861,10 +1861,11 @@ proc updateState*(
   # ...and make sure to load the state cache, if it exists
   loadStateCache(dag, cache, bsi.bid, getStateField(state, slot).epoch)
 
-  let
-    assignDur = assignTick - startTick
-    replayDur = Moment.now() - assignTick
-  beacon_dag_state_replay_seconds.inc(replayDur.toFloatSeconds)
+
+  # let
+  #   assignDur = assignTick - startTick
+  #   replayDur = Moment.now() - assignTick
+  # beacon_dag_state_replay_seconds.inc(replayDur.toFloatSeconds)
 
   # TODO https://github.com/status-im/nim-chronicles/issues/108
   if (assignDur + replayDur) >= MinSignificantProcessingDuration:

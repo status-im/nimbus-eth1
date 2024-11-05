@@ -130,7 +130,9 @@ if not defined(windows):
 --opt:speed
 --excessiveStackTrace:on
 # enable metric collection
---define:metrics
+when not defined(unified):
+  --define:metrics
+
 # for heap-usage-by-instance-type metrics and object base-type strings
 --define:nimTypeNames
 --styleCheck:usages
