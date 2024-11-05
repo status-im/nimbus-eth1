@@ -1,169 +1,199 @@
 Beacon Sync
 ===========
 
-According to the merge-first
-[glossary](https://notes.status.im/nimbus-merge-first-el?both=#Glossary),
-a beacon sync is a "*Sync method that relies on devp2p and eth/6x to fetch
-headers and bodies backwards then apply these in the forward direction to the
-head state*".
+Some definition of terms, and a suggestion of how a beacon sync can be encoded
+providing pseudo code is provided by
+[Beacon Sync](https://notes.status.im/nimbus-merge-first-el?both=#Beacon-sync).
 
-This [glossary](https://notes.status.im/nimbus-merge-first-el?both=#Glossary)
-is used as a naming template for relevant entities described here. When
-referred to, names from the glossary are printed **bold**.
+In the following, the data domain the Beacon Sync acts upon is explored and
+presented. This leads to an implementation description without the help of
+pseudo code but rather provides a definition of the sync and domain state
+at critical moments.
 
-Syncing blocks is performed in two overlapping phases
-
-* loading header chains and stashing them into a separate database table,
-* removing headers from the stashed headers chain, fetching the block bodies
-  the headers refer to and importing/executing them via `persistentBlocks()`.
-
-So this beacon syncer slightly differs from the definition in the
-[glossary](https://notes.status.im/nimbus-merge-first-el?both=#Glossary) in
-that only headers are stashed on the database table and the block bodies are
-fetched in the *forward* direction.
-
-The reason for that behavioural change is that the block bodies are addressed
-by the hash of the block headers for fetching. They cannot be fully verified
-upon arrival on the cheap (e.g. by a payload hash.) They will be validated not
-before imported/executed. So potentially corrupt blocks will be discarded.
-They will automatically be re-fetched with other missing blocks in the
-*forward* direction.
+For handling block chain imports and related actions, abstraction methods
+from the `forked_chain` module will be used (abbreviated **FC**.) The **FC**
+entities **base** and **latest** from this module are always printed **bold**.
 
 
-Header chains
--------------
+Sync Logic Outline
+------------------
 
-The header chains are the triple of
+Here is a simplification of the sync process intended to provide a mental
+outline of how it works.
 
-* a consecutively linked chain of headers starting starting at Genesis
-* followed by a sequence of missing headers
-* followed by a consecutively linked chain of headers ending up at a
-  finalised block header (earlier received from the consensus layer)
+In the following block chain layouts, a left position always stands for an
+ancestor of a right one.
 
-A sequence *@[h(1),h(2),..]* of block headers is called a *linked chain* if
+        0------C1                                                            (1)
 
-* block numbers join without gaps, i.e. *h(n).number+1 == h(n+1).number*
-* parent hashes match, i.e. *h(n).hash == h(n+1).parentHash*
+        0--------L1                                                          (2)
+                 \_______H1
 
-General header linked chains layout diagram
+        0------------------C2                                                (3)
 
-      0                C                     D                H              (1)
-      o----------------o---------------------o----------------o--->
-      | <-- linked --> | <-- unprocessed --> | <-- linked --> |
-
-Here, the single upper letter symbols *0*, *C*, *D*, *H* denote block numbers.
-For convenience, these letters are also identified with its associated block
-header or the full blocks. Saying *"the header 0"* is short for *"the header
-with block number 0"*.
-
-Meaning of *0*, *C*, *D*, *H*:
-
-* *0* -- Genesis, block number number *0*
-* *C* -- coupler, maximal block number of linked chain starting at *0*
-* *D* -- dangling, minimal block number of linked chain ending at *H*
-         with *C <= D*
-* *H* -- head, end block number of **consensus head** (not necessarily the
-         latest one as this is moving while processing)
-
-This definition implies *0 <= C <= D <= H* and the state of the header linked
-chains can uniquely be described by the triple of block numbers *(C,D,H)*.
-
-
-### Storage of header chains:
-
-Some block numbers from the closed interval (including end points) *[0,C]* may
-correspond to finalised blocks, e.g. the sub-interval *[0,**base**]* where
-**base** is the block number of the ledger state. The headers for
-*[0,**base**]* are stored in the persistent state database. The headers for the
-half open interval *(**base**,C]* are always stored on the *beaconHeader*
-column of the *KVT* database.
-
-The block numbers from the interval *[D,H]* also reside on the *beaconHeader*
-column of the *KVT* database table.
-
-
-### Header linked chains initialisation:
-
-Minimal layout on a pristine system
-
-      0                                                                      (2)
-      C
-      D
-      H
-      o--->
-
-When first initialised, the header linked chains are set to *(0,0,0)*.
-
-
-### Updating a header linked chains:
-
-A header chain with an non empty open interval *(C,D)* can be updated only by
-increasing *C* or decreasing *D* by adding/prepending headers so that the
-linked chain condition is not violated.
-
-Only when the gap open interval *(C,D)* vanishes, the right end *H* can be
-increased to a larger target block number *T*, say. This block number will
-typically be the **consensus head**. Then
-
-* *C==D* beacuse the open interval *(C,D)* is empty
-* *C==H* because *C* is maximal (see definition of `C` above)
-
-and the header chains *(H,H,H)* (depicted in *(3)* below) can be set to
-*(C,T,T)* as depicted in *(4)* below.
-
-Layout before updating of *H*
-
-                       C                                                     (3)
-                       D
-      0                H                     T
-      o----------------o---------------------o---->
-      | <-- linked --> |
-
-New layout with moving *D* and *H* to *T*
-
-                                             D'                              (4)
-      0                C                     H'
-      o----------------o---------------------o---->
-      | <-- linked --> | <-- unprocessed --> |
-
-with *D'=T* and *H'=T*.
-
-Note that diagram *(3)* is a generalisation of *(2)*.
-
-
-### Complete a header linked chain:
-
-The header chain is *relatively complete* if it satisfies clause *(3)* above
-for *0 < C*. It is *fully complete* if *H==T*. It should be obvious that the
-latter condition is temporary only on a live system (as *T* is contiuously
-updated.)
-
-If a *relatively complete* header chain is reached for the first time, the
-execution layer can start running an importer in the background
-compiling/executing blocks (starting from block number *#1*.) So the ledger
-database state will be updated incrementally.
-
-Block chain import/execution
------------------------------
-
-The following diagram with a partially imported/executed block chain amends the
-layout *(1)*:
-
-      0            B     L       C                     D                H    (5)
-      o------------o-----o-------o---------------------o----------------o-->
-      | <-- imported --> |       |                     |                |
-      | <-------  linked ------> | <-- unprocessed --> | <-- linked --> |
+        0--------------------L2                                              (4)
+                            \________H2
 
 where
 
-* *B* is the **base state** stored on the persistent state database. *B* is
-  not addressed directly except upon start up or resuming sync when *B == L*.
-* *L* is the last imported/executed block, typically up to the **canonical
-  consensus head**.
+* *0* is genesis
+* *C1*, *C2* are the *latest* (aka cursor) entities from the **FC** module
+* *L1*, *L2*, are updated *latest* entities from the **FC** module
+* *H1*, *H2* are block headers (or blocks) that are used as sync targets
 
-The headers corresponding to the half open interval `(L,C]` will be completed
-by fetching block bodies and then import/execute them together with the already
-cached headers.
+At stage *(1)*, there is a chain of imported blocks *[0,C1]* (written as
+compact interval of block numbers.)
+
+At stage *(2)*, there is a sync request to advance up until block *H1* which
+is then fetched from the network along with its ancestors way back until there
+is an ancestor within the chain of imported blocks *[0,L1]*. The chain *[0,L1]*
+is what the *[0,C1]* has morphed into when the chain of blocks ending at *H1*
+finds its ancestor.
+
+At stage *(3)* all blocks recently fetched have now been imported via **FC**.
+In addition to that, there might have been additional imports from other
+entities (e.g. `newPayload`) which has advanced *H1* further to *C2*.
+
+Stage *(3)* has become similar to stage *(1)* with *C1* renamed as *C2*, ditto
+for the symbols *L2* and *H2* for stage *(4)*.
+
+
+Implementation, The Gory Details
+--------------------------------
+
+### Description of Sync State
+
+The following diagram depicts a most general state view of the sync and the
+*FC* modules and at a given point of time
+
+        0            C       L                                               (5)
+        o------------o-------o
+        | <--- imported ---> |
+                     Y                     D                H
+                     o---------------------o----------------o
+                     | <-- unprocessed --> | <-- linked --> |
+
+where
+
+* *C* -- coupler, cached **base** entity of the **FC** module, reported at
+         the time when *H* was set. This determines the maximal way back length
+         of the *linked* ancestor chain starting at *H*.
+
+* *Y* -- has the same block number as *C* and is often, but not necessarily
+         equal to *C* (for notation *C~Y* see clause *(6)* below.)
+
+* *L* -- **latest**, current value of this entity of the **FC** module (i.e.
+         now, when looked up)
+
+* *D* -- dangling, least block number of the linked chain in progress ending
+         at *H*. This variable is used to record the download state eventually
+         reaching *Y* (for notation *D<<H* see clause *(6)* below.)
+
+* *H* -- head, sync target which typically is the value of a *sync to new head*
+         request (via RPC)
+
+The internal sync state (as opposed to the general state also including **FC**)
+is defined by the triple *(C,D,H)*. Other parameters *L* and *Y* mentioned in
+*(5)* are considered ephemeral to the sync state. They are always used by its
+latest value and are not cached by the syncer.
+
+There are two order releations and some derivatives used to describe relations
+beween headers or blocks.
+
+        For blocks or headers A and B, A is said less or equal B if the      (6)
+        block numbers are less or equal. Notation: A <= B.
+
+        For blocks or headers A and B, A is said ancestor of, or equal to
+        B if B is linked to A following up the lineage of parentHash fields
+        of the block headers. Notation: A << B.
+
+        The relate notation A ~ B stands for A <= B <= A which is posh for
+        saying that A and B have the same block numer.
+
+        The compact interval notation [A,B] stands for the set {X|A<<X<<B}
+        and the half open interval notation stands for [A,B]-{A} (i.e. the
+        interval without the left end point.)
+     
+Note that *A<<B* implies *A<=B*. Boundary conditions that hold for the
+clause *(5)* diagram are
+
+        C ~ Y,  C in [0,L],  D in [Y,H]                                      (7)
+
+
+### Sync Processing
+
+Sync starts at an idle state
+
+        0                 H  L                                               (8)
+        o-----------------o--o
+        | <--- imported ---> |
+
+where *H<=L* (*H* needs only be known by its block number.) The state
+parameters *C* and *D* are irrelevant here.
+
+Following, there will be a request to advance *H* to a new position as
+indicated in the diagram below
+
+        0            C                                                       (9)
+        o------------o-------o
+        | <--- imported ---> |                              D
+                     Y                                      H
+                     o--------------------------------------o
+                     | <----------- unprocessed ----------> |
+
+with a new sync state *(C,D,H)*. The parameter *C* in clause *(9)* is set
+as the **base** entity of the **FC** module. *Y* is only known by its block
+number, *Y~C*. The parameter *D* is set to the download start position *H*.
+
+The syncer then fetches the header chain *(Y,H]* from the network. For the
+syncer state *(C,D,H)*, while iteratively fetching headers, only the parameter
+*D* will change each time a new header was fetched.
+
+Having finished dowlnoading *(Y,H]* one might end up with a situation
+
+        0             B  Z   L                                              (10)
+        o-------------o--o---o
+        | <--- imported ---> |
+                     Y   Z                                  H
+                     o---o----------------------------------o
+                     | <-------------- linked ------------> |
+
+where *Z* is in the intersection of *[B,L]\*(Y,H]* with *B* the current
+**base** entity of the **FC** logic. It is only known that *0<<B<<L*
+although in many cases *B==C* holds.
+
+If there is no such *Z* then *(Y,H]* is discarded and sync processing restarts
+at clause *(8)* by resetting the sync state (e.g. to *(0,0,0)*.)
+
+Otherwise assume *Z* is the one with the largest block number of the
+intersection *[B,L]\*(Y,H]*. Then the headers *(Z,H]* will be completed to
+a lineage of blocks by downloading block bodies.
+
+        0                Z                                                  (11)
+        o----------------o---o
+        | <--- imported ---> |
+                         Z                                  H
+                         o----------------------------------o
+                         | <------------ blocks ----------> |
+
+The blocks *(Z,H]* will then be imported. While this happens, the internal
+state of the **FC** might change/reset so that further import becomes
+impossible. Even when starting import, the block *Z* might not be in *[0,L]*
+anymore due to some internal reset of the **FC** logic. In any of those
+cases, sync processing restarts at clause *(8)* by resetting the sync state.
+
+Otherwise the block import will end up at
+
+        0                Z                                  H   L           (12)
+        o----------------o----------------------------------o---o
+        | <--- imported --------------------------------------> |
+
+with *H<<L* for *L* the current value of the **latest** entity of the **FC**
+module. In many cases, *H==L* but there are other actors running that might
+import blocks quickly after importing *H* so that *H* is seen as ancestor,
+different from *L* when this stage is formally done with.
+
+Now clause *(12)* is equivalent to clause *(8)*.
 
 
 Running the sync process for *MainNet*
