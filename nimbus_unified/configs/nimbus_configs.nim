@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/[atomics, tables], beacon_chain/nimbus_binary_common
+import std/[os, atomics, tables], beacon_chain/nimbus_binary_common
 
 ## Exceptions
 type NimbusTasksError* = object of CatchableError
@@ -37,3 +37,15 @@ type TaskParameters* = object
 ## With this we avoid the overhead of locks
 var isShutDownRequired*: Atomic[bool]
 isShutDownRequired.store(false)
+
+# TODO: move this into config.nim file once we have the file in place
+proc defaultDataDir*(): string =
+  let dataDir =
+    when defined(windows):
+      "AppData" / "Roaming" / "Nimbus_unified"
+    elif defined(macosx):
+      "Library" / "Application Support" / "Nimbus_unified"
+    else:
+      ".cache" / "nimbus_unified"
+
+  getHomeDir() / dataDir

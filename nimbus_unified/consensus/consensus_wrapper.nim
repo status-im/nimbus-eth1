@@ -2351,7 +2351,9 @@ proc doRunBeaconNode(config: var BeaconNodeConf, rng: ref HmacDrbgContext) {.rai
 
   # Nim GC metrics (for the main thread) will be collected in onSecond(), but
   # we disable piggy-backing on other metrics here.
-  setSystemMetricsAutomaticUpdate(false)
+
+  #TODO: reactivate once we have metrics defined
+  # setSystemMetricsAutomaticUpdate(false)
 
   # There are no managed event loops in here, to do a graceful shutdown, but
   # letting the default Ctrl+C handler exit is safe, since we only read from
