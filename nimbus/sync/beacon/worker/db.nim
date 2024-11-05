@@ -75,9 +75,6 @@ proc deleteStaleHeadersAndState(
 
 proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Save chain layout to persistent db
-  if ctx.layout == ctx.sst.lastLayout:
-    return
-
   let data = rlp.encode(ctx.layout)
   ctx.db.ctx.getKvt().put(LhcStateKey.toOpenArray, data).isOkOr:
     raiseAssert info & " put() failed: " & $$error
@@ -109,7 +106,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
 
     # Assign saved sync state
     ctx.sst.layout = rc.value
-    ctx.sst.lastLayout = rc.value
 
     # Add interval of unprocessed block range `(L,C]` from `README.md`
     ctx.blocksUnprocSet(latest+1, ctx.layout.coupler)
@@ -125,28 +121,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
     true
 
   else:
-    let
-      latestHash = ctx.chain.latestHash()
-      latestParent = ctx.chain.latestHeader.parentHash
-
-    ctx.sst.layout = SyncStateLayout(
-      coupler:        latest,
-      couplerHash:    latestHash,
-      dangling:       latest,
-      danglingParent: latestParent,
-      # There is no need to record a separate finalised head `F` as its only
-      # use is to serve as second argument in `forkChoice()` when committing
-      # a batch of imported blocks. Currently, there are no blocks to fetch
-      # and import. The system must wait for instructions and update the fields
-      # `final` and `head` while the latter will be increased so that import
-      # can start.
-      final:          latest,
-      finalHash:      latestHash,
-      head:           latest,
-      headHash:       latestHash,
-      headLocked:     false)
-
-    ctx.sst.lastLayout = ctx.layout
+    ctx.sst.layout = SyncStateLayout()
 
     if rc.isOk:
       # Some stored headers might have become stale, so delete them. Even
@@ -160,13 +135,18 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
         # at the `head` and work backwards.
         ctx.deleteStaleHeadersAndState(rc.value.head, info)
       else:
-        # Delete stale headers with block numbers starting at to `latest` wile
+        # Delete stale headers with block numbers starting at to `latest` while
         # working backwards.
         ctx.deleteStaleHeadersAndState(latest, info)
 
     false
 
 # ------------------
+
+proc dbClearHeaders*(ctx: BeaconCtxRef) =
+  ## Clear stashed in-memory headers
+  ctx.stash.clear
+
 
 proc dbStashHeaders*(
     ctx: BeaconCtxRef;

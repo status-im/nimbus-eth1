@@ -74,36 +74,31 @@ type
 
   SyncStateLayout* = object
     ## Layout of a linked header chains defined by the triple `(C,D,H)` as
-    ## described in the `README.md` text.
+    ## described in claue *(5)* of the `README.md` text.
     ## ::
-    ##   0          B     L       C                     D            F   H
-    ##   o----------o-----o-------o---------------------o------------o---o--->
-    ##   | <- imported -> |       |                     |                |
-    ##   | <------ linked ------> | <-- unprocessed --> | <-- linked --> |
+    ##   0            C       L
+    ##   o------------o-------o
+    ##   | <--- imported ---> |
+    ##                Y                     D                H
+    ##                o---------------------o----------------o
+    ##                | <-- unprocessed --> | <-- linked --> |
     ##
     ## Additional positions known but not declared in this descriptor:
-    ## * `B`: base state (from `forked_chain` importer)
-    ## * `L`: last imported block, canonical consensus head
-    ## * `F`: finalised head (from CL)
+    ## * `L`: `latest` (aka cursor) parameter from `FC` logic
     ##
     coupler*: BlockNumber            ## Right end `C` of linked chain `[0,C]`
-    couplerHash*: Hash32             ## Hash of `C`
-
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
-    danglingParent*: Hash32          ## Parent hash of `D`
 
     final*: BlockNumber              ## Finalised block number `F`
     finalHash*: Hash32               ## Hash of `F`
 
     head*: BlockNumber               ## `H`, block num of some finalised block
-    headHash*: Hash32                ## Hash of `H`
     headLocked*: bool                ## No need to update `H` yet
 
   SyncState* = object
     ## Sync state for header and block chains
     target*: SyncStateTarget         ## Consensus head, see `T` in `README.md`
     layout*: SyncStateLayout         ## Current header chains layout
-    lastLayout*: SyncStateLayout     ## Previous layout (for delta update)
 
   # -------------------
 

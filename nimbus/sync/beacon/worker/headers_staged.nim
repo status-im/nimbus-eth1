@@ -136,7 +136,8 @@ proc headersStagedCollect*(
 
     # Parent hash for `lhc` below
     topLink = (if isOpportunistic: EMPTY_ROOT_HASH
-               else: ctx.layout.danglingParent)
+               else: ctx.dbPeekParentHash(ctx.layout.dangling).expect "Hash32")
+
   var
     # This value is used for splitting the interval `iv` into
     # `[iv.minPt, somePt] + [somePt+1, ivTop] + already-collected` where the
@@ -244,7 +245,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # Update, so it can be followed nicely
     ctx.updateMetrics()
 
-    if qItem.data.hash != ctx.layout.danglingParent:
+    if qItem.data.hash != ctx.dbPeekParentHash(dangling).expect "Hash32":
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
       trace info & ": discarding staged header list", iv, D=dangling.bnStr,
@@ -254,7 +255,6 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # Store headers on database
     ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs, info)
     ctx.layout.dangling = iv.minPt
-    ctx.layout.danglingParent = qItem.data.parentHash
     ctx.dbStoreSyncStateLayout info
 
     result += qItem.data.revHdrs.len # count headers
