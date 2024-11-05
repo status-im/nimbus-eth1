@@ -79,7 +79,8 @@ proc withRetries[A](
       if tries > numRetries:
         # if we reached max number of retries fail
         let msg =
-          "Call failed with msg: " & exc.msg & ", for node with idx: " & $nodeIdx
+          "Call failed with msg: " & exc.msg & ", for node with idx: " & $nodeIdx &
+          ", after " & $tries & " retries."
         raise newException(ValueError, msg)
 
     inc tries
@@ -94,7 +95,7 @@ proc retryUntil[A](
     f: FutureCallback[A], c: CheckCallback[A], checkFailMessage: string, nodeIdx: int
 ): Future[A] =
   # some reasonable limits, which will cause waits as: 1, 2, 4, 8, 16, 32 seconds
-  return withRetries(f, c, 2, seconds(1), checkFailMessage, nodeIdx)
+  return withRetries(f, c, 3, seconds(1), checkFailMessage, nodeIdx)
 
 # Note:
 # When doing json-rpc requests following `RpcPostError` can occur:
