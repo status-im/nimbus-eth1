@@ -175,24 +175,6 @@ func verifyAccumulatorProof*(
   else:
     err("Cannot verify post merge header with accumulator proof")
 
-func verifyHeader*(
-    a: FinishedHistoricalHashesAccumulator, header: Header, proof: BlockHeaderProof
-): Result[void, string] =
-  case proof.proofType
-  of BlockHeaderProofType.historicalHashesAccumulatorProof:
-    a.verifyAccumulatorProof(header, proof.historicalHashesAccumulatorProof)
-  of BlockHeaderProofType.none:
-    if header.isPreMerge():
-      err("Pre merge header requires HistoricalHashesAccumulatorProof")
-    else:
-      # TODO:
-      # Currently there is no proof solution for verifying headers post-merge.
-      # Skipping canonical verification will allow for nodes to push block data
-      # that is not part of the canonical chain.
-      # For now we accept this flaw as the focus lies on testing data
-      # availability up to the head of the chain.
-      ok()
-
 func buildProof*(
     header: Header, epochRecord: EpochRecord | EpochRecordCached
 ): Result[HistoricalHashesAccumulatorProof, string] =

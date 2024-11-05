@@ -20,7 +20,7 @@ import
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../hive_integration/nodocker/engine/engine_client,
   ../../rpc/portal_rpc_client,
-  ../../network/history/[history_content, history_network],
+  ../../network/history/[history_content, history_type_conversions, history_validation],
   ../../network_metadata,
   ../../eth_data/[era1, history_data_ssz_e2s, history_data_seeding],
   ../../database/era1_db,
@@ -239,7 +239,7 @@ proc runLatestLoop(
 
       let hash = blockObject.hash
       if validate:
-        if validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash).isErr():
+        if validateHeaderBytes(headerWithProof.header.asSeq(), hash).isErr():
           error "Block header is invalid"
           continue
         if validateBlockBody(body, ethBlock.header).isErr():
