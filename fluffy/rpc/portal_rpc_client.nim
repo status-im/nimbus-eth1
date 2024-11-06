@@ -13,7 +13,7 @@ import
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   json_rpc/rpcclient,
   ../common/common_types,
-  ../network/history/[history_content, history_network],
+  ../network/history/[history_content, history_type_conversions, history_validation],
   ./rpc_calls/[rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls]
 
 export rpcclient, rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls, results
@@ -110,7 +110,7 @@ proc historyGetBlockHeader*(
     headerBytes = headerWithProof.header.asSeq()
 
   if validateContent:
-    validateBlockHeaderBytes(headerBytes, blockHash).valueOrErr(ContentValidationFailed)
+    validateHeaderBytes(headerBytes, blockHash).valueOrErr(ContentValidationFailed)
   else:
     decodeRlp(headerBytes, Header).valueOrErr(InvalidContentValue)
 
@@ -132,7 +132,7 @@ proc historyGetBlockBody*(
       ContentValidationFailed
     )
   else:
-    decodeBlockBodyBytes(content.toBytes()).valueOrErr(InvalidContentValue)
+    fromPortalBlockBodyBytes(content.toBytes()).valueOrErr(InvalidContentValue)
 
 proc historyGetReceipts*(
     client: PortalRpcClient, blockHash: Hash32, validateContent = true

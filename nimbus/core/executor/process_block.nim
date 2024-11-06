@@ -171,7 +171,8 @@ proc procBlkEpilogue(
         expected = header.stateRoot,
         actual = stateRoot,
         arrivedFrom = vmState.parent.stateRoot
-      return err("stateRoot mismatch")
+      return err("stateRoot mismatch, expect: " &
+        $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
       let bloom = createBloom(vmState.receipts)

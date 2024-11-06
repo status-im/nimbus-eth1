@@ -17,7 +17,7 @@ import
   eth/common/headers_rlp,
   ../../common/common_types,
   ../../eth_data/history_data_json_store,
-  ../../network/history/history_network
+  ../../network/history/[history_type_conversions, history_validation]
 
 const
   dataFile = "./fluffy/tests/blocks/mainnet_blocks_selected.json"
@@ -51,12 +51,12 @@ suite "History Content Values Validation":
       )
 
   test "Valid Header":
-    check validateBlockHeaderBytes(blockHeaderBytes, blockHash).isOk()
+    check validateHeaderBytes(blockHeaderBytes, blockHash).isOk()
 
   test "Malformed Header":
     let malformedBytes = blockHeaderBytes[10 .. blockHeaderBytes.high]
 
-    check validateBlockHeaderBytes(malformedBytes, blockHash).isErr()
+    check validateHeaderBytes(malformedBytes, blockHash).isErr()
 
   test "Invalid Header - Different gasUsed":
     var modifiedHeader = blockHeader
@@ -65,7 +65,7 @@ suite "History Content Values Validation":
 
     let modifiedHeaderBytes = rlp.encode(modifiedHeader)
 
-    check validateBlockHeaderBytes(modifiedHeaderBytes, blockHash).isErr()
+    check validateHeaderBytes(modifiedHeaderBytes, blockHash).isErr()
 
   test "Valid Block Body":
     check validateBlockBodyBytes(blockBodyBytes, blockHeader).isOk()
