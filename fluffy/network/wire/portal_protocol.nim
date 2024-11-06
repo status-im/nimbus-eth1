@@ -1142,10 +1142,26 @@ proc contentLookup*(
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
-  var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
+  var closestNodes =
+    p.routingTable.neighbours(targetId, p.routingTable.len(), seenOnly = false)
+
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
+
+  proc nodesCmp(x, y: Node): int =
+    let
+      xRadius = p.radiusCache.get(x.id)
+      yRadius = p.radiusCache.get(y.id)
+
+    if xRadius.isSome() and p.inRange(x.id, xRadius.unsafeGet(), targetId):
+      -1
+    elif yRadius.isSome() and p.inRange(y.id, yRadius.unsafeGet(), targetId):
+      1
+    else:
+      0
+
+  closestNodes.sort(nodesCmp)
 
   var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
