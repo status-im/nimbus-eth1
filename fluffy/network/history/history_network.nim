@@ -136,7 +136,7 @@ proc getVerifiedBlockHeader*(
   # gets verified before storing.
   let localContent = n.getLocalContent(Header, contentKey, contentId)
   if localContent.isSome():
-    info "Fetched block header locally"
+    debug "Fetched block header locally"
     return localContent
 
   for i in 0 ..< (1 + n.contentRequestRetries):
@@ -149,7 +149,7 @@ proc getVerifiedBlockHeader*(
         warn "Validation of block header failed", error = error
         continue
 
-    info "Fetched valid block header from the network"
+    debug "Fetched valid block header from the network"
     # Content is valid, it can be stored and propagated to interested peers
     n.portalProtocol.storeContent(
       contentKey, contentId, headerContent.content, cacheContent = true
@@ -180,7 +180,7 @@ proc getBlockBody*(
 
   let localContent = n.getLocalContent(BlockBody, contentKey, contentId, header)
   if localContent.isSome():
-    info "Fetched block body locally"
+    debug "Fetched block body locally"
     return localContent
 
   for i in 0 ..< (1 + n.contentRequestRetries):
@@ -193,7 +193,7 @@ proc getBlockBody*(
         warn "Validation of block body failed", error
         continue
 
-    info "Fetched block body from the network"
+    debug "Fetched block body from the network"
     # Content is valid, it can be stored and propagated to interested peers
     n.portalProtocol.storeContent(
       contentKey, contentId, bodyContent.content, cacheContent = true
@@ -255,7 +255,7 @@ proc getReceipts*(
 
   let localContent = n.getLocalContent(seq[Receipt], contentKey, contentId)
   if localContent.isSome():
-    info "Fetched receipts locally"
+    debug "Fetched receipts locally"
     return localContent
 
   for i in 0 ..< (1 + n.contentRequestRetries):
@@ -267,7 +267,7 @@ proc getReceipts*(
         warn "Validation of receipts failed", error
         continue
 
-    info "Fetched receipts from the network"
+    debug "Fetched receipts from the network"
     # Content is valid, it can be stored and propagated to interested peers
     n.portalProtocol.storeContent(
       contentKey, contentId, receiptsContent.content, cacheContent = true
@@ -367,14 +367,14 @@ proc validateContent(
     let res = await n.validateContent(contentItem, contentKey)
     if res.isOk():
       let contentId = n.portalProtocol.toContentId(contentKey).valueOr:
-        error "Received offered content with invalid content key", contentKey
+        warn "Received offered content with invalid content key", contentKey
         return false
 
       n.portalProtocol.storeContent(contentKey, contentId, contentItem)
 
       debug "Received offered content validated successfully", contentKey
     else:
-      error "Received offered content failed validation", contentKey, error = res.error
+      debug "Received offered content failed validation", contentKey, error = res.error
       return false
 
   return true
