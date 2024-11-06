@@ -19,7 +19,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../network/history/
-    [history_network, history_content, validation/historical_hashes_accumulator],
+    [history_network, history_content, history_type_conversions, history_validation],
   ../../database/content_db,
   ../../rpc/[portal_rpc_client, rpc_portal_history_api],
   ../test_helpers

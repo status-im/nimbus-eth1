@@ -16,7 +16,7 @@ import
   eth/p2p/discoveryv5/routing_table,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../../nimbus/common/chain_config,
-  ../../network/history/[history_content, history_network],
+  ../../network/history/[history_content, history_network, history_validation],
   ../../network/state/[state_content, state_utils, state_network],
   ../../eth_data/yaml_utils,
   ../../database/content_db,
