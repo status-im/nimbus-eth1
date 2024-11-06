@@ -985,9 +985,9 @@ proc offer(
 
     return ok(m.contentKeys)
   else:
-    warn "Offer failed due to accept request failure ",
+    debug "Offer failed due to accept request failure ",
       error = acceptMessageResponse.error
-    return err("No accept response")
+    return err("No or invalid accept response: " & acceptMessageResponse.error)
 
 proc offer*(
     p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
