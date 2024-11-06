@@ -494,7 +494,7 @@ proc getUncles*(
     ommersHash: Hash32;
       ): Result[seq[Header], string] =
   const info = "getUncles()"
-  if ommersHash != EMPTY_UNCLE_HASH:
+  if ommersHash == EMPTY_UNCLE_HASH:
     return ok(default(seq[Header]))
 
   wrapRlpException info:
