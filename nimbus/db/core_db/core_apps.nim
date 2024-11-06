@@ -749,7 +749,7 @@ proc persistHeader*(
       score = db.getScore(blockHash).valueOr:
         return err("cannot load score")
     if score <= canonScore:
-      return err("score >= canonScore")
+      return ok()
 
   db.setAsCanonicalChainHead(blockHash, header)
 
