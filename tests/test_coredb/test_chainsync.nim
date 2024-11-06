@@ -19,8 +19,7 @@ import
   ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
 
-when CoreDbEnableProfiling or
-     LedgerEnableApiProfiling:
+when CoreDbEnableProfiling:
   import
     std/sequtils
 
@@ -32,12 +31,6 @@ when CoreDbEnableProfiling:
     aristoProfData: AristoDbProfListRef
     kvtProfData: KvtDbProfListRef
     cdbProfData: CoreDbProfListRef
-
-when LedgerEnableApiProfiling:
-  import
-    ../../nimbus/db/ledger/base/base_helpers
-  var
-    ldgProfData: LedgerProfListRef
 
 const
   EnableExtraLoggingControl = true
@@ -125,11 +118,6 @@ proc test_chainSyncProfilingPrint*(
       else: ""
     discard info
     var blurb: seq[string]
-    when LedgerEnableApiProfiling:
-      blurb.add ldgProfData.profilingPrinter(
-        names = LedgerFnInx.toSeq.mapIt($it),
-        header = "Ledger profiling results" & info,
-        indent)
     when CoreDbEnableProfiling:
       blurb.add cdbProfData.profilingPrinter(
         names = CoreDbFnInx.toSeq.mapIt($it),
@@ -192,8 +180,6 @@ proc test_chainSync*(
     aristoProfData = com.db.ariApi.AristoApiProfRef.data
     kvtProfData = com.db.kvtApi.KvtApiProfRef.data
     cdbProfData = com.db.profTab
-  when LedgerEnableApiProfiling:
-    ldgProfData = com.db.ldgProfData()
 
   # This will enable printing the `era1` covered block ranges (if any)
   undump_blocks_era1.noisy = noisy

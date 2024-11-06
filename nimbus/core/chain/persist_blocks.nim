@@ -12,7 +12,6 @@
 
 import
   results,
-  ../../db/ledger,
   ../../evm/state,
   ../../evm/types,
   ../executor,
