@@ -432,7 +432,6 @@ proc init*(
   except BlockNotFound:
     raiseAssert "Base header missing for #" & $base
 
-  debugEcho "BASE HASH: ", baseHash
   # update global syncStart
   com.syncStart = baseHeader.number
 
