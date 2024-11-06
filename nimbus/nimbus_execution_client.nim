@@ -17,6 +17,7 @@ import
   metrics,
   metrics/chronicles_support,
   kzg4844/kzg,
+  stew/byteutils,
   ./rpc,
   ./version,
   ./constants,
@@ -24,7 +25,9 @@ import
   ./nimbus_import,
   ./core/eip4844,
   ./db/core_db/persistent,
-  ./sync/handlers
+  ./db/storage_types,
+  ./sync/handlers,
+  ./common/chain_config_hash
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
 
@@ -153,6 +156,24 @@ proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
     nimbus.metricsServer = res.get
     waitFor nimbus.metricsServer.start()
 
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
+  let
+    kvt = db.ctx.getKvt()
+    calculatedId = calcHash(conf.networkId, conf.networkParams)
+    dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
+      # an empty database
+      info "Writing data dir ID", ID=calculatedId
+      kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
+        fatal "Cannot write data dir ID", ID=calculatedId
+        quit(QuitFailure)
+      return
+
+  if calculatedId.data != dataDirIdBytes:
+    fatal "Data dir already initialized with other network configuration",
+      get=dataDirIdBytes.toHex,
+      expected=calculatedId
+    quit(QuitFailure)
+
 proc run(nimbus: NimbusNode, conf: NimbusConf) =
   ## logging
   setLogLevel(conf.logLevel)
@@ -192,6 +213,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         string conf.dataDir,
         conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
+  preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
 
   let com = CommonRef.new(
