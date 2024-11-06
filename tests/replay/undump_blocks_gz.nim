@@ -47,8 +47,8 @@ proc dumpBlocksBeginNl*(db: CoreDbRef;
                        headers: openArray[Header]): string =
   if headers[0].number == 1'u64:
     let
-      h0 = db.getBlockHeader(0'u64)
-      b0 = db.getBlockBody(h0.blockHash)
+      h0 = db.getBlockHeader(0'u64).expect("header exists")
+      b0 = db.getBlockBody(h0.blockHash).expect("block body exists")
     result = "" &
       dumpBlocksBegin(@[h0]) & "\n" &
       dumpBlocksListNl(h0,b0) &

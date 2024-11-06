@@ -124,11 +124,12 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   if apiVersion == Version.V1:
     let blockNumber = header.number
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
-      var
-        td, ptd: DifficultyInt
+      let
+        td  = db.getScore(blockHash)
+        ptd = db.getScore(header.parentHash)
         ttd = com.ttd.get(high(UInt256))
 
-      if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
+      if td.isNone or (blockNumber > 0'u64 and ptd.isNone):
         error "TDs unavailable for TTD check",
           number = blockNumber,
           hash = blockHash.short,
@@ -137,12 +138,12 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
           ptd = ptd
         return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
 
-      if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
+      if td.get < ttd or (blockNumber > 0'u64 and ptd.get > ttd):
         notice "Refusing beacon update to pre-merge",
           number = blockNumber,
           hash = blockHash.short,
           diff = header.difficulty,
-          ptd = ptd,
+          ptd = ptd.get,
           ttd = ttd
 
         return invalidFCU("Refusing beacon update to pre-merge")

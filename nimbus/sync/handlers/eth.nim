@@ -58,27 +58,33 @@ proc notImplemented(name: string) {.used.} =
 
 proc successorHeader(db: CoreDbRef,
                      h: Header,
-                     output: var Header,
-                     skip = 0'u): bool =
+                     skip = 0'u): Opt[Header] =
   let offset = 1 + skip.BlockNumber
   if h.number <= (not 0.BlockNumber) - offset:
-    result = db.getBlockHeader(h.number + offset, output)
+    let header = db.getBlockHeader(h.number + offset).valueOr:
+      return Opt.none(Header)
+    return Opt.some(header)
+  Opt.none(Header)
 
 proc ancestorHeader(db: CoreDbRef,
                      h: Header,
-                     output: var Header,
-                     skip = 0'u): bool =
+                     skip = 0'u): Opt[Header] =
   let offset = 1 + skip.BlockNumber
   if h.number >= offset:
-    result = db.getBlockHeader(h.number - offset, output)
+    let header = db.getBlockHeader(h.number - offset).valueOr:
+      return Opt.none(Header)
+    return Opt.some(header)
+  Opt.none(Header)
 
 proc blockHeader(db: CoreDbRef,
-                 b: BlockHashOrNumber,
-                 output: var Header): bool =
-  if b.isHash:
-    db.getBlockHeader(b.hash, output)
-  else:
-    db.getBlockHeader(b.number, output)
+                 b: BlockHashOrNumber): Opt[Header] =
+  let header = if b.isHash:
+                 db.getBlockHeader(b.hash).valueOr:
+                   return Opt.none(Header)
+               else:
+                 db.getBlockHeader(b.number).valueOr:
+                   return Opt.none(Header)
+  Opt.some(header)
 
 # ------------------------------------------------------------------------------
 # Private functions: peers related functions
@@ -292,45 +298,37 @@ proc new*(_: type EthWireRef,
 
 method getStatus*(ctx: EthWireRef): Result[EthState, string]
     {.gcsafe.} =
-  try:
-    let
-      db = ctx.db
-      com = ctx.chain.com
-      bestBlock = db.getCanonicalHead()
-      forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
+  let
+    db = ctx.db
+    com = ctx.chain.com
+    bestBlock = ?db.getCanonicalHead()
+    forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
-    return ok(EthState(
-      totalDifficulty: db.headTotalDifficulty,
-      genesisHash: com.genesisHash,
-      bestBlockHash: bestBlock.blockHash,
-      forkId: ChainForkId(
-        forkHash: forkId.crc.toBytesBE,
-        forkNext: forkId.nextFork
-      )
-    ))
-  except EVMError as exc:
-    # TODO: Why an EVM Error in database?
-    return err(exc.msg)
-  except RlpError as exc:
-    return err(exc.msg)
+  return ok(EthState(
+    totalDifficulty: db.headTotalDifficulty,
+    genesisHash: com.genesisHash,
+    bestBlockHash: bestBlock.blockHash,
+    forkId: ChainForkId(
+      forkHash: forkId.crc.toBytesBE,
+      forkNext: forkId.nextFork
+    )
+  ))
 
 method getReceipts*(ctx: EthWireRef,
                     hashes: openArray[Hash32]):
                       Result[seq[seq[Receipt]], string]
     {.gcsafe.} =
-  try:
-    let db = ctx.db
-    var header: Header
-    var list: seq[seq[Receipt]]
-    for blockHash in hashes:
-      if db.getBlockHeader(blockHash, header):
-        list.add db.getReceipts(header.receiptsRoot)
-      else:
-        list.add @[]
-        trace "handlers.getReceipts: blockHeader not found", blockHash
-    return ok(list)
-  except RlpError as exc:
-    return err(exc.msg)
+  let db = ctx.db
+  var list: seq[seq[Receipt]]
+  for blockHash in hashes:
+    let header = db.getBlockHeader(blockHash).valueOr:
+      list.add @[]
+      trace "handlers.getReceipts: blockHeader not found", blockHash
+      continue
+    let receiptList = ?db.getReceipts(header.receiptsRoot)
+    list.add receiptList
+
+  return ok(list)
 
 method getPooledTxs*(ctx: EthWireRef,
                      hashes: openArray[Hash32]):
@@ -356,39 +354,35 @@ method getBlockBodies*(ctx: EthWireRef,
                         Result[seq[BlockBody], string]
     {.gcsafe.} =
   let db = ctx.db
-  var body: BlockBody
   var list: seq[BlockBody]
   for blockHash in hashes:
-    if db.getBlockBody(blockHash, body):
-      list.add body
-    else:
+    let body = db.getBlockBody(blockHash).valueOr:
       list.add BlockBody()
       trace "handlers.getBlockBodies: blockBody not found", blockHash
+      continue
+    list.add body
+
   return ok(list)
 
 method getBlockHeaders*(ctx: EthWireRef,
                         req: EthBlocksRequest):
                           Result[seq[Header], string]
     {.gcsafe.} =
-  try:
-    let db = ctx.db
-    var foundBlock: Header
-    var list = newSeqOfCap[Header](req.maxResults)
-
-    if db.blockHeader(req.startBlock, foundBlock):
-      list.add foundBlock
-
-      while uint64(list.len) < req.maxResults:
-        if not req.reverse:
-          if not db.successorHeader(foundBlock, foundBlock, req.skip):
-            break
-        else:
-          if not db.ancestorHeader(foundBlock, foundBlock, req.skip):
-            break
-        list.add foundBlock
+  let db = ctx.db
+  var list = newSeqOfCap[Header](req.maxResults)
+  var foundBlock = db.blockHeader(req.startBlock).valueOr:
     return ok(list)
-  except RlpError as exc:
-    return err(exc.msg)
+  list.add foundBlock
+
+  while uint64(list.len) < req.maxResults:
+    if not req.reverse:
+      foundBlock = db.successorHeader(foundBlock, req.skip).valueOr:
+        break
+    else:
+      foundBlock = db.ancestorHeader(foundBlock, req.skip).valueOr:
+        break
+    list.add foundBlock
+  return ok(list)
 
 method handleAnnouncedTxs*(ctx: EthWireRef,
                            peer: Peer,

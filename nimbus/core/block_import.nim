@@ -49,9 +49,8 @@ proc importRlpBlocks*(importFile: string,
   importRlpBlocks(bytes, chain, finalize)
 
 proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
-  var head: Header
-  if not com.db.getCanonicalHead(head):
-    error "cannot get canonical head from db"
+  let head = com.db.getCanonicalHead().valueOr:
+    error "cannot get canonical head from db", msg=error
     quit(QuitFailure)
 
   let chain = newForkedChain(com, head, baseDistance = 0)

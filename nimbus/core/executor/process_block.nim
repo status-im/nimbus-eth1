@@ -170,7 +170,7 @@ proc procBlkEpilogue(
         blockNumber = header.number,
         expected = header.stateRoot,
         actual = stateRoot,
-        arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
+        arrivedFrom = vmState.parent.stateRoot
       return err("stateRoot mismatch")
 
     if not skipReceipts:

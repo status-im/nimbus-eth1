@@ -72,7 +72,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   let
     com   = setupCom(conf)
-    head  = com.db.getCanonicalHead()
+    head  = com.db.getCanonicalHead().expect("canonical head exists")
     chain = newForkedChain(com, head)
     txPool = TxPoolRef.new(com)
 

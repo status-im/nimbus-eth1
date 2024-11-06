@@ -86,7 +86,7 @@ proc setupEnv*(): TestEnv =
 
   manageAccounts(ethCtx, conf)
 
-  let head = com.db.getCanonicalHead()
+  let head = com.db.getCanonicalHead().expect("canonical head exists")
   let chainRef = newForkedChain(com, head)
   let txPool = TxPoolRef.new(com)
 

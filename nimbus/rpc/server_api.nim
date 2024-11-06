@@ -41,11 +41,9 @@ func newServerAPI*(c: ForkedChainRef, t: TxPoolRef): ServerAPIRef =
   ServerAPIRef(com: c.com, chain: c, txPool: t)
 
 proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32): UInt256 =
-  var totalDifficulty: UInt256
-  if api.com.db.getTd(blockHash, totalDifficulty):
-    return totalDifficulty
-  else:
+  let totalDifficulty = api.com.db.getScore(blockHash).valueOr:
     return api.com.db.headTotalDifficulty()
+  return totalDifficulty
 
 proc getProof*(
     accDB: LedgerRef, address: eth_types.Address, slots: seq[UInt256]
@@ -216,17 +214,18 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   proc getLogsForBlock(
       chain: ForkedChainRef, header: Header, opts: FilterOptions
-  ): seq[FilterLog] {.gcsafe, raises: [RlpError].} =
+  ): seq[FilterLog] {.gcsafe, raises: [].} =
     if headerBloomFilter(header, opts.address, opts.topics):
       let (receipts, txs) =
         if api.chain.isInMemory(header.blockHash):
           let blk = api.chain.memoryBlock(header.blockHash)
           (blk.receipts, blk.blk.transactions)
         else:
-          (
-            chain.db.getReceipts(header.receiptsRoot),
-            chain.db.getTransactions(header.txRoot),
-          )
+          let rcs = chain.db.getReceipts(header.receiptsRoot).valueOr:
+            return @[]
+          let txs = chain.db.getTransactions(header.txRoot).valueOr:
+            return @[]
+          (rcs, txs)
       # Note: this will hit assertion error if number of block transactions
       # do not match block receipts.
       # Although this is fine as number of receipts should always match number
@@ -242,7 +241,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       start: base.BlockNumber,
       finish: base.BlockNumber,
       opts: FilterOptions,
-  ): seq[FilterLog] {.gcsafe, raises: [RlpError].} =
+  ): seq[FilterLog] {.gcsafe, raises: [].} =
     var
       logs = newSeq[FilterLog]()
       blockNum = start
@@ -331,19 +330,19 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
     if blockhash == zeroHash32:
       # Receipt in database
-      let txDetails = api.chain.db.getTransactionKey(data)
+      let txDetails = api.chain.db.getTransactionKey(data).valueOr:
+        raise newException(ValueError, "TransactionKey not found")
       if txDetails.index < 0:
         return nil
 
       let header = api.chain.headerByNumber(txDetails.blockNumber).valueOr:
         raise newException(ValueError, "Block not found")
-      var tx: Transaction
-      if not api.chain.db.getTransactionByIndex(
-        header.txRoot, uint16(txDetails.index), tx
-      ):
+      let tx = api.chain.db.getTransactionByIndex(
+                 header.txRoot, uint16(txDetails.index)).valueOr:
         return nil
-
-      for receipt in api.chain.db.getReceipts(header.receiptsRoot):
+      let receipts = api.chain.db.getReceipts(header.receiptsRoot).valueOr:
+        return nil
+      for receipt in receipts:
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
         prevGasUsed = receipt.cumulativeGasUsed
         if idx == txDetails.index:
@@ -526,7 +525,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     if res.isOk:
       return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
 
-    let txDetails = api.chain.db.getTransactionKey(txHash)
+    let txDetails = api.chain.db.getTransactionKey(txHash).valueOr:
+      return nil
     if txDetails.index < 0:
       let
         (blockHash, txid) = api.chain.txRecords(txHash)
@@ -535,15 +535,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       return populateTransactionObject(tx, Opt.some(blockHash), Opt.some(txid))
         # TODO: include block number
 
-    let header = api.chain.db.getBlockHeader(txDetails.blockNumber)
-    var tx: Transaction
-    if api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index), tx):
-      return populateTransactionObject(
-        tx,
-        Opt.some(header.blockHash),
-        Opt.some(header.number),
-        Opt.some(txDetails.index),
-      )
+    let header = api.chain.db.getBlockHeader(txDetails.blockNumber).valueOr:
+      return nil
+    let tx = api.chain.db.getTransactionByIndex(header.txRoot, uint16(txDetails.index)).valueOr:
+      return nil
+    return populateTransactionObject(
+      tx,
+      Opt.some(header.blockHash),
+      Opt.some(header.number),
+      Opt.some(txDetails.index.uint64),
+    )
 
   server.rpc("eth_getTransactionByBlockHashAndIndex") do(
     data: Hash32, quantity: Web3Quantity
@@ -621,9 +622,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       receipts = blkdesc.receipts
       txs = blkdesc.blk.transactions
     else:
-      for receipt in api.chain.db.getReceipts(header.receiptsRoot):
+      let receiptList = api.chain.db.getReceipts(header.receiptsRoot).valueOr:
+        return Opt.none(seq[ReceiptObject])
+      for receipt in receiptList:
         receipts.add receipt
-      txs = api.chain.db.getTransactions(header.txRoot)
+      txs = api.chain.db.getTransactions(header.txRoot).valueOr:
+        return Opt.none(seq[ReceiptObject])
 
     try:
       for receipt in receipts:

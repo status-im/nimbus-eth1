@@ -390,7 +390,7 @@ proc setHead(xp: TxPoolRef; val: Header)
 # ------------------------------------------------------------------------------
 
 proc new*(T: type TxPoolRef; com: CommonRef): T
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Constructor, returns a new tx-pool descriptor.
   new result
   result.init(com)
