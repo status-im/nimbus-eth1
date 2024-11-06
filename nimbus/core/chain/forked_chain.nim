@@ -432,6 +432,7 @@ proc init*(
   except BlockNotFound:
     raiseAssert "Base header missing for #" & $base
 
+  debugEcho "BASE HASH: ", baseHash
   # update global syncStart
   com.syncStart = baseHeader.number
 
@@ -749,6 +750,9 @@ func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
         prevHash = item.blk.header.parentHash
 
 func isCanonical*(c: ForkedChainRef, blockHash: Hash32): bool =
+  if blockHash == c.baseHash:
+    return true
+
   shouldNotKeyError:
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:
