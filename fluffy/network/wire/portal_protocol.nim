@@ -47,7 +47,7 @@ declareHistogram portal_lookup_node_requests,
   labels = ["protocol_id"],
   buckets = requestBuckets
 declareHistogram portal_lookup_content_requests,
-  "Portal wire protocol amount of requests per node lookup",
+  "Portal wire protocol amount of requests per content lookup",
   labels = ["protocol_id"],
   buckets = requestBuckets
 declareCounter portal_lookup_content_failures,
@@ -1139,16 +1139,18 @@ proc contentLookup*(
     p: PortalProtocol, target: ContentKeyByteList, targetId: UInt256
 ): Future[Opt[ContentLookupResult]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
-  ## target. Maximum value for n is `BUCKET_SIZE`.
+  ## target.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
   var closestNodes =
-    p.routingTable.neighbours(targetId, p.routingTable.len(), seenOnly = false)
+    p.routingTable.neighbours(targetId, BUCKET_SIZE * 2, seenOnly = false)
 
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
 
+  # Sort closestNodes so that nodes that are in range of the target content
+  # are queried first
   proc nodesCmp(x, y: Node): int =
     let
       xRadius = p.radiusCache.get(x.id)
