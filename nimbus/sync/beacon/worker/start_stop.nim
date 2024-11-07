@@ -58,21 +58,17 @@ when enableTicker:
         nBuddies:        ctx.pool.nBuddies)
 
 
-proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
+proc updateBeaconHeaderCB(ctx: BeaconCtxRef): SyncReqNewHeadCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
+  return proc(h: Header) {.gcsafe, raises: [].} =
 
     # Check whether there is an update running (otherwise take next upate)
     if not ctx.target.locked and                 # ignore if currently updating
-       ctx.target.final == 0 and                 # ignore if complete already
-       f != zeroHash32 and                       # finalised hash is set
        ctx.layout.head < h.number and            # update is advancing
        ctx.target.consHead.number < h.number:    # .. ditto
 
         ctx.target.consHead = h
-        ctx.target.final = BlockNumber(0)
-        ctx.target.finalHash = f
         ctx.target.changed = true
 
 # ------------------------------------------------------------------------------
@@ -130,11 +126,11 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc setupRpcMagic*(ctx: BeaconCtxRef) =
   ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.pool.chain.com.reqBeaconSyncTarget = ctx.updateBeaconHeaderCB
+  ctx.pool.chain.com.syncReqNewHead = ctx.updateBeaconHeaderCB
 
 proc destroyRpcMagic*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
-  ctx.pool.chain.com.reqBeaconSyncTarget = ReqBeaconSyncTargetCB(nil)
+  ctx.pool.chain.com.syncReqNewHead = SyncReqNewHeadCB(nil)
 
 # ---------
 

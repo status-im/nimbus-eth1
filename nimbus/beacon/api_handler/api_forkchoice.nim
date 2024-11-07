@@ -110,7 +110,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     # Update sync header (if any)
     com.syncReqNewHead(header)
-    com.reqBeaconSyncTargetCB(header, update.finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)
 

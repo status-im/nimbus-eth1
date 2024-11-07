@@ -264,6 +264,10 @@ proc delayPayloadImport*(ben: BeaconEngineRef, header: Header): PayloadStatusV1 
   # at a later time.
   ben.put(blockHash, header)
 
+  info "delayPayloadImport requested sync to new head",
+    number = header.number,
+    hash   = blockHash.short
+
   # Although we don't want to trigger a sync, if there is one already in
   # progress, try to extend it with the current payload request to relieve
   # some strain from the forkchoice update.

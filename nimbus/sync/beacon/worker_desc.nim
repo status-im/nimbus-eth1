@@ -69,8 +69,6 @@ type
     locked*: bool                    ## Don't update while fetching header
     changed*: bool                   ## Tell that something has changed
     consHead*: Header                ## Consensus head
-    final*: BlockNumber              ## Finalised block number
-    finalHash*: Hash32               ## Finalised hash
 
   SyncStateLayout* = object
     ## Layout of a linked header chains defined by the triple `(C,D,H)` as
@@ -91,9 +89,6 @@ type
 
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
     danglingParent*: Hash32          ## Parent hash of `D`
-
-    final*: BlockNumber              ## Finalised block number `F`
-    finalHash*: Hash32               ## Hash of `F`
 
     head*: BlockNumber               ## `H`, block num of some finalised block
     headHash*: Hash32                ## Hash of `H`

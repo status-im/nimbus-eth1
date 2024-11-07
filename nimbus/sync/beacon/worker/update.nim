@@ -69,8 +69,6 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
     couplerHash:    ctx.layout.couplerHash,
     dangling:       target,
     danglingParent: ctx.target.consHead.parentHash,
-    final:          ctx.target.final,
-    finalHash:      ctx.target.finalHash,
     head:           target,
     headHash:       rlpHeader.keccak256,
     headLocked:     true)
@@ -126,8 +124,6 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
     couplerHash:    ctx.layout.headHash,
     dangling:       ctx.layout.head,               # `D`
     danglingParent: ctx.dbPeekParentHash(ctx.layout.head).expect "Hash32",
-    final:          ctx.layout.final,              # `F`
-    finalHash:      ctx.layout.finalHash,
     head:           ctx.layout.head,               # `H`
     headHash:       ctx.layout.headHash,
     headLocked:     ctx.layout.headLocked)
@@ -171,8 +167,7 @@ proc updateSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Check whether there is something to do regarding beacon node change
   if not ctx.layout.headLocked and         # there was an active import request
-     ctx.target.changed and                # and there is a new target from CL
-     ctx.target.final != 0:                # .. ditto
+     ctx.target.changed:                   # and there is a new target from CL
     ctx.target.changed = false
     ctx.updateTargetChange info
 

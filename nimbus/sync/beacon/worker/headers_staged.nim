@@ -52,51 +52,6 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc headerStagedUpdateTarget*(
-    buddy: BeaconBuddyRef;
-    info: static[string];
-      ) {.async: (raises: []).} =
-  ## Fetch finalised beacon header if there is an update available
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-  if not ctx.layout.headLocked and
-     ctx.target.final == 0 and
-     ctx.target.finalHash != zeroHash32 and
-     not ctx.target.locked:
-    const iv = BnRange.new(1u,1u) # dummy interval
-
-    ctx.target.locked = true
-    let rc = await buddy.headersFetchReversed(iv, ctx.target.finalHash, info)
-    ctx.target.locked = false
-
-    if rc.isOk:
-      let hash = rlp.encode(rc.value[0]).keccak256
-      if hash != ctx.target.finalHash:
-        # Oops
-        buddy.ctrl.zombie = true
-        trace info & ": finalised header hash mismatch", peer, hash,
-          expected=ctx.target.finalHash
-      else:
-        let final = rc.value[0].number
-        if final < ctx.chain.baseNumber():
-          trace info & ": finalised number too low", peer,
-            B=ctx.chain.baseNumber.bnStr, finalised=final.bnStr,
-            delta=(ctx.chain.baseNumber - final)
-          ctx.target.reset
-        else:
-          ctx.target.final = final
-
-          # Activate running (unless done yet)
-          if ctx.hibernate:
-            ctx.hibernate = false
-            trace info & ": activated syncer", peer,
-              finalised=final.bnStr, head=ctx.layout.head.bnStr
-
-          # Update, so it can be followed nicely
-          ctx.updateMetrics()
-
-
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
