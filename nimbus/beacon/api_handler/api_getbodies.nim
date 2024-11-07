@@ -25,8 +25,7 @@ proc getPayloadBodyByHeader(db: CoreDbRef,
         header: Header,
         output: var seq[Opt[ExecutionPayloadBodyV1]]) {.raises:[].} =
 
-  var body: BlockBody
-  if not db.getBlockBody(header, body):
+  let body = db.getBlockBody(header).valueOr:
     output.add Opt.none(ExecutionPayloadBodyV1)
     return
 
@@ -93,7 +92,6 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
 
   var
     last = start+count-1
-    header: Header
 
   if start > ben.chain.latestNumber:
     # requested range beyond the latest known block
@@ -104,7 +102,7 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
 
   # get bodies from database
   for bn in start..ben.chain.baseNumber:
-    if not db.getBlockHeader(bn, header):
+    let header = db.getBlockHeader(bn).valueOr:
       result.add Opt.none(ExecutionPayloadBodyV1)
       continue
     db.getPayloadBodyByHeader(header, result)

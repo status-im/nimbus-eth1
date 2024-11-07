@@ -46,10 +46,10 @@ proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
   stateDB.persist()
   doAssert stateDB.getStateRoot == genesisHeader.stateRoot
 
-  doAssert com.db.persistHeader(genesisHeader,
-              com.proofOfStake(genesisHeader))
-  doAssert(com.db.getCanonicalHead().blockHash ==
-              genesisHeader.blockHash)
+  com.db.persistHeader(genesisHeader,
+    com.proofOfStake(genesisHeader)).expect("persistHeader no error")
+  let head = com.db.getCanonicalHead().expect("canonical head exists")
+  doAssert(head.blockHash == genesisHeader.blockHash)
 
   let
     txPool  = TxPoolRef.new(com)

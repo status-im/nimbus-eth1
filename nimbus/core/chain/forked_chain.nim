@@ -89,11 +89,10 @@ proc processBlock(c: ForkedChainRef,
   # We still need to write header to database
   # because validateUncles still need it
   let blockHash = header.blockHash()
-  if not c.db.persistHeader(
-        blockHash,
-        header,
-        c.com.startOfHistory):
-    return err("Could not persist header")
+  ?c.db.persistHeader(
+     blockHash,
+     header,
+     c.com.startOfHistory)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result
@@ -423,14 +422,8 @@ proc init*(
   ##
   let
     base = com.db.getSavedStateBlockNumber
-  var
-    baseHash: Hash32
-    baseHeader: Header
-  try:
-    baseHash = com.db.getBlockHash(base)
-    baseHeader = com.db.getBlockHeader(baseHash)
-  except BlockNotFound:
-    raiseAssert "Base header missing for #" & $base
+    baseHash = com.db.getBlockHash(base).expect("baseHash exists")
+    baseHeader = com.db.getBlockHeader(baseHash).expect("base header exists")
 
   # update global syncStart
   com.syncStart = baseHeader.number
@@ -453,8 +446,7 @@ proc newForkedChain*(com: CommonRef,
   ## for some particular test or other applications. Otherwise consider
   ## `init()`.
   let baseHash = baseHeader.blockHash
-
-  var chain = ForkedChainRef(
+  let chain = ForkedChainRef(
     com: com,
     db : com.db,
     baseHeader  : baseHeader,
@@ -652,16 +644,12 @@ proc latestBlock*(c: ForkedChainRef): Block =
     return val.blk
   do:
     # This can happen if block pointed by cursorHash is not loaded yet
-    try:
-      result = c.db.getEthBlock(c.cursorHash)
-      c.blocks[c.cursorHash] = BlockDesc(
-        blk: result,
-        receipts: c.db.getReceipts(result.header.receiptsRoot),
-      )
-    except BlockNotFound:
-      doAssert(false, "Block should exists in database")
-    except RlpError:
-      doAssert(false, "Receipts should exists in database")
+    result = c.db.getEthBlock(c.cursorHash).expect("cursorBlock exists")
+    c.blocks[c.cursorHash] = BlockDesc(
+      blk: result,
+      receipts: c.db.getReceipts(result.header.receiptsRoot).
+        expect("receipts exists"),
+    )
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.cursorHeader.number:
@@ -674,11 +662,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
     return ok(c.baseHeader)
 
   if number < c.baseHeader.number:
-    var header: Header
-    if c.db.getBlockHeader(number, header):
-      return ok(header)
-    else:
-      return err("Failed to get header with number: " & $number)
+    return c.db.getBlockHeader(number)
 
   shouldNotKeyError:
     var prevHash = c.cursorHeader.parentHash
@@ -696,38 +680,23 @@ proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string]
   do:
     if c.baseHash == blockHash:
       return ok(c.baseHeader)
-    var header: Header
-    if c.db.getBlockHeader(blockHash, header):
-      return ok(header)
-    return err("Failed to get header with hash: " & $blockHash)
+    return c.db.getBlockHeader(blockHash)
 
-proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Opt[Block] =
+proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
   # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
   c.blocks.withValue(blockHash, val) do:
-    return Opt.some(val.blk)
+    return ok(val.blk)
   do:
-    var
-      header: Header
-      body: BlockBody
-    if c.db.getBlockHeader(blockHash, header) and c.db.getBlockBody(blockHash, body):
-      return ok(Block.init(move(header), move(body)))
-    else:
-      return Opt.none(Block)
+    return c.db.getEthBlock(blockHash)
 
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.cursorHeader.number:
     return err("Requested block number not exists: " & $number)
 
   if number < c.baseHeader.number:
-    var
-      header: Header
-      body: BlockBody
-    if c.db.getBlockHeader(number, header) and c.db.getBlockBody(header, body):
-      return ok(Block.init(move(header), move(body)))
-    else:
-      return err("Failed to get block with number: " & $number)
+    return c.db.getEthBlock(number)
 
   shouldNotKeyError:
     var prevHash = c.cursorHash
@@ -782,5 +751,6 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
 
   # canonical chain in database should have a marker
   # and the marker is block number
-  var canonHash: common.Hash32
-  c.db.getBlockHash(blockNumber, canonHash) and canonHash == blockHash
+  let canonHash = c.db.getBlockHash(blockNumber).valueOr:
+    return false
+  canonHash == blockHash

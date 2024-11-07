@@ -102,18 +102,14 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
     _ = vmState.parent.stateRoot # Check point
   ? vmState.processBlock(blk)
 
-  if not c.db.persistHeader(
-      header, c.com.proofOfStake(header), c.com.startOfHistory):
-    return err("Could not persist header")
+  ? c.db.persistHeader(
+      header, c.com.proofOfStake(header), c.com.startOfHistory)
 
-  try:
-    c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
-    c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
+  c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
+  c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
 
-    if blk.withdrawals.isSome:
-      c.db.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
-  except CatchableError as exc:
-    return err(exc.msg)
+  if blk.withdrawals.isSome:
+    c.db.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result

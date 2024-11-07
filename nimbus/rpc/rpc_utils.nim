@@ -29,10 +29,11 @@ import
   ../common/common,
   web3/eth_api_types
 
-proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
-    {.gcsafe, raises: [CatchableError].} =
+proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt {.raises: [RlpError].} =
+  const minGasPrice = 30_000_000_000.GasInt
   var prices  = newSeqOfCap[GasInt](64)
-  let header = chain.getCanonicalHead()
+  let header = chain.getCanonicalHead().valueOr:
+    return minGasPrice
   for encodedTx in chain.getBlockTransactionData(header.txRoot):
     let tx = decodeTx(encodedTx)
     prices.add(tx.gasPrice)
@@ -53,8 +54,7 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt
   # For compatibility with `ethpandaops/ethereum-package`, set this to a
   # sane minimum for compatibility to unblock testing.
   # Note: When this is fixed, update `tests/graphql/queries.toml` and
-  # re-enable the "query.gasPrice" test case (remove `skip = true`).
-  const minGasPrice = 30_000_000_000.GasInt
+  # re-enable the "query.gasPrice" test case (remove `skip = true`).  
   result = max(result, minGasPrice)
 
 proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce, chainId: ChainId): Transaction

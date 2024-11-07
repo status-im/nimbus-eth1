@@ -98,7 +98,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
   var
     acc = ctx.am.getAccount(signer).tryGet()
     blockNumber = 1'u64
-    parent = com.db.getCanonicalHead()
+    parent = com.db.getCanonicalHead().expect("canonicalHead exists")
     parentHash = parent.blockHash
 
   let code = evmByteCode:
@@ -193,14 +193,14 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     timestamp   : timeStamp
     )
 
-  doAssert com.db.persistHeader(header,
-    com.pos.isNil, com.startOfHistory)
+  com.db.persistHeader(header,
+    com.pos.isNil, com.startOfHistory).expect("persistHeader not error")
 
   let uncles = [header]
   header.ommersHash = com.db.persistUncles(uncles)
 
-  doAssert com.db.persistHeader(header,
-    com.pos.isNil, com.startOfHistory)
+  com.db.persistHeader(header,
+    com.pos.isNil, com.startOfHistory).expect("persistHeader not error")
 
   com.db.persistFixtureBlock()
 
@@ -335,7 +335,7 @@ proc rpcMain*() =
       check res == w3Qty(0'u64)
 
     test "eth_getBlockTransactionCountByHash":
-      let hash = com.db.getBlockHash(0'u64)
+      let hash = com.db.getBlockHash(0'u64).expect("block hash exists")
       let res = await client.eth_getBlockTransactionCountByHash(hash)
       check res == w3Qty(0'u64)
 
@@ -344,7 +344,7 @@ proc rpcMain*() =
       check res == w3Qty(0'u64)
 
     test "eth_getUncleCountByBlockHash":
-      let hash = com.db.getBlockHash(0'u64)
+      let hash = com.db.getBlockHash(0'u64).expect("block hash exists")
       let res = await client.eth_getUncleCountByBlockHash(hash)
       check res == w3Qty(0'u64)
 

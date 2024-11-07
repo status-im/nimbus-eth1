@@ -196,6 +196,13 @@ func setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32
 # bad ancestor. If yes, it constructs the payload failure response to return.
 proc checkInvalidAncestor*(ben: BeaconEngineRef,
                            check, head: Hash32): Opt[PayloadStatusV1] =
+  proc latestValidHash(db: CoreDbRef, invalid: auto): Hash32 =
+    let parent = db.getBlockHeader(invalid.parentHash).valueOr:
+      return invalid.parentHash      
+    if parent.difficulty != 0.u256:
+      return default(Hash32)
+    invalid.parentHash
+  
   # If the hash to check is unknown, return valid
   ben.invalidTipsets.withValue(check, invalid) do:
     # If the bad hash was hit too many times, evict it and try to reprocess in
@@ -236,16 +243,9 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 
       ben.invalidTipsets[head] = invalid[]
 
-    var lastValid = invalid.parentHash
-
     # If the last valid hash is the terminal pow block, return 0x0 for latest valid hash
-    var header: Header
-    if ben.com.db.getBlockHeader(invalid.parentHash, header):
-      if header.difficulty != 0.u256:
-        lastValid = default(Hash32)
-
+    let lastValid = latestValidHash(ben.com.db, invalid)
     return Opt.some invalidStatus(lastValid, "links to previously rejected block")
-
   do:
     return Opt.none(PayloadStatusV1)
 

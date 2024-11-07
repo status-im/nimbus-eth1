@@ -16,7 +16,7 @@ import
   results,
   ./test_helpers,
   ../nimbus/db/aristo,
-  ../nimbus/db/aristo/[aristo_desc, aristo_layers, aristo_nearby, aristo_part],
+  ../nimbus/db/aristo/[aristo_desc, aristo_layers, aristo_part],
   ../nimbus/db/aristo/aristo_part/part_debug,
   ../nimbus/db/kvt/kvt_utils,
   ../nimbus/[tracer, evm/types],
@@ -141,7 +141,7 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   # Some hack for `Aristo` using the `snap` protocol proof-loader
   memoryDB.preLoadAristoDb(state, blockNumber)
 
-  var blk = com.db.getEthBlock(blockNumber)
+  var blk = com.db.getEthBlock(blockNumber).expect("eth block exists")
 
   let txTraces = traceTransactions(com, blk.header, blk.transactions)
   let stateDump = dumpBlockState(com, blk)

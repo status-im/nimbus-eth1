@@ -88,14 +88,15 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block, extraData: b
   blk
 
 proc headHash(c: CommonRef): Hash32 =
-  c.db.getCanonicalHead().blockHash
+  c.db.getCanonicalHead().expect("canonical head exists").blockHash
 
 func blockHash(x: Block): Hash32 =
   x.header.blockHash
 
 proc wdWritten(com: CommonRef, blk: Block): int =
   if blk.header.withdrawalsRoot.isSome:
-    com.db.getWithdrawals(blk.header.withdrawalsRoot.get).len
+    com.db.getWithdrawals(blk.header.withdrawalsRoot.get).
+      expect("withdrawals exists").len
   else:
     0
 

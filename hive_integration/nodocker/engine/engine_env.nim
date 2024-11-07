@@ -82,7 +82,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let
     node  = setupEthNode(conf, ctx)
     com   = makeCom(conf)
-    head  = com.db.getCanonicalHead()
+    head  = com.db.getCanonicalHead().expect("canonical head exists")
     chain = newForkedChain(com, head)
 
   let txPool = TxPoolRef.new(com)

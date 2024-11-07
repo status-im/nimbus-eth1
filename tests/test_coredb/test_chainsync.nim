@@ -203,7 +203,7 @@ proc test_chainSync*(
   for w in files.undumpBlocks(least = start):
     let (fromBlock, toBlock) = (w[0].header.number, w[^1].header.number)
     if fromBlock == 0'u64:
-      xCheck w[0].header == com.db.getBlockHeader(0'u64)
+      xCheck w[0].header == com.db.getBlockHeader(0'u64).expect("block header exists")
       continue
 
     # Process groups of blocks ...

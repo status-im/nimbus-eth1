@@ -137,36 +137,27 @@ proc initializeDb(com: CommonRef) =
       nonce = com.genesisHeader.nonce
     doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
-    doAssert(com.db.persistHeader(com.genesisHeader,
+    com.db.persistHeader(com.genesisHeader,
       com.proofOfStake(com.genesisHeader),
-      startOfHistory=com.genesisHeader.parentHash),
-      "can persist genesis header")
+      startOfHistory=com.genesisHeader.parentHash).
+      expect("can persist genesis header")
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
   # The database must at least contain the base and head pointers - the base
   # is implicitly considered finalized
   let
     baseNum = com.db.getSavedStateBlockNumber()
-    base =
-      try:
-        com.db.getBlockHeader(baseNum)
-      except BlockNotFound as exc:
-        fatal "Cannot load base block header",
-          baseNum, err = exc.msg
-        quit 1
-    finalized =
-      try:
-        com.db.finalizedHeader()
-      except BlockNotFound:
-        debug "No finalized block stored in database, reverting to base"
-        base
-    head =
-      try:
-        com.db.getCanonicalHead()
-      except EVMError as exc:
-        fatal "Cannot load canonical block header",
-          err = exc.msg
-        quit 1
+    base = com.db.getBlockHeader(baseNum).valueOr:
+      fatal "Cannot load base block header",
+        baseNum, err = error
+      quit 1
+    finalized = com.db.finalizedHeader().valueOr:
+      debug "No finalized block stored in database, reverting to base"
+      base
+    head = com.db.getCanonicalHead().valueOr:
+      fatal "Cannot load canonical block header",
+        err = error
+      quit 1
 
   info "Database initialized",
     base = (base.blockHash, base.number),
@@ -204,8 +195,8 @@ proc init(com         : CommonRef,
       fork = toHardFork(com.forkTransitionTable, forkDeterminer)
 
     # Must not overwrite the global state on the single state DB
-    if not db.getBlockHeader(0.BlockNumber, com.genesisHeader):
-      com.genesisHeader = toGenesisHeader(genesis, fork, com.db)
+    com.genesisHeader = db.getBlockHeader(0.BlockNumber).valueOr:
+      toGenesisHeader(genesis, fork, com.db)
 
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
