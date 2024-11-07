@@ -336,7 +336,7 @@ proc runBackfillGossipBlockOffersLoop(
             break
         except CatchableError as e:
           warn "Failed to find content with key: ",
-            contentKey = k, error = e.msg, workerId
+            contentKey = k.to0xHex(), error = e.msg, workerId
           retryGossip = true
           break
 
@@ -348,6 +348,9 @@ proc runBackfillGossipBlockOffersLoop(
 
     if blockOffers.blockNumber mod 1000 == 0:
       info "Finished gossiping offers for block number: ",
+        workerId, blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
+    else:
+      debug "Finished gossiping offers for block number: ",
         workerId, blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
 
     blockOffers = await blockOffersQueue.popFirst()
