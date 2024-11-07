@@ -1142,8 +1142,7 @@ proc contentLookup*(
   ## target.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
-  var closestNodes =
-    p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
+  var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
 
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
