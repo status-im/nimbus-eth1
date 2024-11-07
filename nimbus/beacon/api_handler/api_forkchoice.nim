@@ -177,7 +177,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     db.safeHeaderHash(safeBlockHash)
 
   chain.forkChoice(blockHash, finalizedBlockHash).isOkOr:
-    return invalidFCU(error, com, header)
+    return invalidFCU(error, chain, header)
 
   # If payload generation was requested, create a new block to be potentially
   # sealed by the beacon client. The payload will be requested later, and we

@@ -13,39 +13,12 @@ import
   ../web3_eth_conv,
   ../beacon_engine,
   web3/execution_types,
-  ../../db/core_db,
   ./api_utils
 
 {.push gcsafe, raises:[CatchableError].}
 
 const
   maxBodyRequest = 32
-
-proc getPayloadBodyByHeader(db: CoreDbRef,
-        header: Header,
-        output: var seq[Opt[ExecutionPayloadBodyV1]]) {.raises:[].} =
-
-  let body = db.getBlockBody(header).valueOr:
-    output.add Opt.none(ExecutionPayloadBodyV1)
-    return
-
-  let txs = w3Txs body.transactions
-  var wds: seq[WithdrawalV1]
-  if body.withdrawals.isSome:
-    for w in body.withdrawals.get:
-      wds.add w3Withdrawal(w)
-
-  output.add(
-    Opt.some(ExecutionPayloadBodyV1(
-      transactions: txs,
-      # pre Shanghai block return null withdrawals
-      # post Shanghai block return at least empty slice
-      withdrawals: if header.withdrawalsRoot.isSome:
-                     Opt.some(wds)
-                   else:
-                     Opt.none(seq[WithdrawalV1])
-    ))
-  )
 
 func toPayloadBody(blk: Block): ExecutionPayloadBodyV1 {.raises:[].}  =
   var wds: seq[WithdrawalV1]
@@ -87,9 +60,6 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
   if count > maxBodyRequest:
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
 
-  let
-    db = ben.com.db
-
   var
     last = start+count-1
 
@@ -102,10 +72,10 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
 
   # get bodies from database
   for bn in start..ben.chain.baseNumber:
-    let header = db.getBlockHeader(bn).valueOr:
+    let blk = ben.chain.blockByNumber(bn).valueOr:
       result.add Opt.none(ExecutionPayloadBodyV1)
       continue
-    db.getPayloadBodyByHeader(header, result)
+    result.add Opt.some(blk.toPayloadBody)
 
   if last > ben.chain.baseNumber:
     let blocks = ben.chain.blockFromBaseTo(last)

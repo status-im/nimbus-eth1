@@ -9,15 +9,14 @@
 
 import
   std/[sequtils, tables],
-  ./web3_eth_conv,
-  ./payload_conv,
+  eth/common/[hashes, headers],
   chronicles,
   web3/execution_types,
+  ./web3_eth_conv,
+  ./payload_conv,
   ./payload_queue,
   ./api_handler/api_utils,
-  ../db/core_db,
-  ../core/[tx_pool, casper, chain],
-  eth/common/[hashes, headers]
+  ../core/[tx_pool, casper, chain]
 
 export
   chain,
@@ -178,8 +177,8 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
     if bundle.blobsBundle.isSome:
       template blobData: untyped = bundle.blobsBundle.get
       blobsBundle = Opt.some BlobsBundleV1(
-        commitments: blobData.commitments.mapIt it.Web3KZGCommitment,
-        proofs: blobData.proofs.mapIt it.Web3KZGProof,
+        commitments: blobData.commitments,
+        proofs: blobData.proofs,
         blobs: blobData.blobs.mapIt it.Web3Blob)
 
     ok ExecutionBundle(
@@ -196,13 +195,13 @@ func setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32
 # bad ancestor. If yes, it constructs the payload failure response to return.
 proc checkInvalidAncestor*(ben: BeaconEngineRef,
                            check, head: Hash32): Opt[PayloadStatusV1] =
-  proc latestValidHash(db: CoreDbRef, invalid: auto): Hash32 =
-    let parent = db.getBlockHeader(invalid.parentHash).valueOr:
-      return invalid.parentHash      
+  proc latestValidHash(chain: ForkedChainRef, invalid: auto): Hash32 =
+    let parent = chain.headerByHash(invalid.parentHash).valueOr:
+      return invalid.parentHash
     if parent.difficulty != 0.u256:
       return default(Hash32)
     invalid.parentHash
-  
+
   # If the hash to check is unknown, return valid
   ben.invalidTipsets.withValue(check, invalid) do:
     # If the bad hash was hit too many times, evict it and try to reprocess in
@@ -244,7 +243,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
       ben.invalidTipsets[head] = invalid[]
 
     # If the last valid hash is the terminal pow block, return 0x0 for latest valid hash
-    let lastValid = latestValidHash(ben.com.db, invalid)
+    let lastValid = latestValidHash(ben.chain, invalid)
     return Opt.some invalidStatus(lastValid, "links to previously rejected block")
   do:
     return Opt.none(PayloadStatusV1)

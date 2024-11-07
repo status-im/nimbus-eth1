@@ -61,7 +61,7 @@ proc newChain*(com: CommonRef): ChainRef =
     com: com,
     extraValidation: extraValidation,
   )
-  
+
 # ------------------------------------------------------------------------------
 # Public `Chain` getters
 # ------------------------------------------------------------------------------
@@ -84,12 +84,6 @@ func extraValidation*(c: ChainRef): bool =
 func verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
-
-proc currentBlock*(c: ChainRef): Result[Header, string] =
-  ## currentBlock retrieves the current head block of the canonical chain.
-  ## Ideally the block should be retrieved from the blockchain's internal cache.
-  ## but now it's enough to retrieve it from database
-  c.db.getCanonicalHead()
 
 # ------------------------------------------------------------------------------
 # Public `Chain` setters

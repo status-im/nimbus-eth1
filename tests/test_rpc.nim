@@ -433,14 +433,14 @@ proc rpcMain*() =
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)
       check res.isNil.not
-      check res.blockNumber.get() == w3BlockNumber(1'u64)
+      check res.blockNumber.get() == w3Qty(1'u64)
       let res2 = await client.eth_getTransactionByHash(env.blockHash)
       check res2.isNil
 
     test "eth_getTransactionByBlockHashAndIndex":
       let res = await client.eth_getTransactionByBlockHashAndIndex(env.blockHash, w3Qty(0'u64))
       check res.isNil.not
-      check res.blockNumber.get() == w3BlockNumber(1'u64)
+      check res.blockNumber.get() == w3Qty(1'u64)
 
       let res2 = await client.eth_getTransactionByBlockHashAndIndex(env.blockHash, w3Qty(3'u64))
       check res2.isNil
@@ -451,7 +451,7 @@ proc rpcMain*() =
     test "eth_getTransactionByBlockNumberAndIndex":
       let res = await client.eth_getTransactionByBlockNumberAndIndex("latest", w3Qty(1'u64))
       check res.isNil.not
-      check res.blockNumber.get() == w3BlockNumber(1'u64)
+      check res.blockNumber.get() == w3Qty(1'u64)
 
       let res2 = await client.eth_getTransactionByBlockNumberAndIndex("latest", w3Qty(3'u64))
       check res2.isNil
@@ -470,7 +470,7 @@ proc rpcMain*() =
     # test "eth_getTransactionReceipt":
     #   let res = await client.eth_getTransactionReceipt(env.txHash)
     #   check res.isNil.not
-    #   check res.blockNumber == w3BlockNumber(1'u64)
+    #   check res.blockNumber == w3Qty(1'u64)
 
     #   let res2 = await client.eth_getTransactionReceipt(env.blockHash)
     #   check res2.isNil
@@ -478,7 +478,7 @@ proc rpcMain*() =
     test "eth_getUncleByBlockHashAndIndex":
       let res = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, w3Qty(0'u64))
       check res.isNil.not
-      check res.number == w3BlockNumber(1'u64)
+      check res.number == w3Qty(1'u64)
 
       let res2 = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, w3Qty(1'u64))
       check res2.isNil
@@ -489,7 +489,7 @@ proc rpcMain*() =
     test "eth_getUncleByBlockNumberAndIndex":
       let res = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(0'u64))
       check res.isNil.not
-      check res.number == w3BlockNumber(1'u64)
+      check res.number == w3Qty(1'u64)
 
       let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(1'u64))
       check res2.isNil
