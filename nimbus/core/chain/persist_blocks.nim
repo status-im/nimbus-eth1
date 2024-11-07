@@ -198,30 +198,6 @@ proc persistBlocksImpl(
 
   ok((blks, txs, gas))
 
-# ------------------------------------------------------------------------------
-# Public `ChainDB` methods
-# ------------------------------------------------------------------------------
-
-proc insertBlockWithoutSetHead*(c: ChainRef, blk: Block): Result[void, string] =
-  discard ?c.persistBlocksImpl([blk], {NoPersistHeader, NoPersistReceipts})
-  c.db.persistHeader(blk.header.blockHash, blk.header, c.com.startOfHistory)
-  
-proc setCanonical*(c: ChainRef, header: Header): Result[void, string] =
-  if header.parentHash == default(Hash32):
-    return c.db.setHead(header)
-      
-  var body = ?c.db.getBlockBody(header)    
-  discard
-    ?c.persistBlocksImpl(
-      [Block.init(header, move(body))], {NoPersistHeader, NoPersistTransactions}
-    )
-
-  c.db.setHead(header)
-    
-proc setCanonical*(c: ChainRef, blockHash: Hash32): Result[void, string] =
-  let header = ?c.db.getBlockHeader(blockHash)
-  setCanonical(c, header)
-
 proc persistBlocks*(
     c: ChainRef, blocks: openArray[Block], flags: PersistBlockFlags = {}
 ): Result[PersistStats, string] =

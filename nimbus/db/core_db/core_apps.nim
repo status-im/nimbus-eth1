@@ -69,33 +69,6 @@ template wrapRlpException(info: static[string]; code: untyped) =
     return err(info & ": " & e.msg)
 
 # ------------------------------------------------------------------------------
-# Private iterators
-# ------------------------------------------------------------------------------
-
-proc findNewAncestors(
-    db: CoreDbRef;
-    header: Header;
-      ): Result[seq[Header], string] =
-  ## Returns the chain leading up from the given header until the first
-  ## ancestor it has in common with our canonical chain.
-  var
-    h = header
-    res = newSeq[Header]()
-  while true:
-    let orig = ?db.getBlockHeader(h.number)
-    if orig.rlpHash == h.rlpHash:
-      break
-
-    res.add(h)
-
-    if h.parentHash == GENESIS_PARENT_HASH:
-      break
-    else:
-      h = ?db.getBlockHeader(h.parentHash)
-
-  ok(res)
-
-# ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
 
@@ -173,108 +146,6 @@ iterator getReceipts*(
       if data.len == 0:
         break body
       yield rlp.decode(data, Receipt)
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc removeTransactionFromCanonicalChain(
-    db: CoreDbRef;
-    transactionHash: Hash32;
-      ) =
-  ## Removes the transaction specified by the given hash from the canonical
-  ## chain.
-  db.ctx.getKvt.del(transactionHashToBlockKey(transactionHash).toOpenArray).isOkOr:
-    warn "removeTransactionFromCanonicalChain",
-      transactionHash, error=($$error)
-
-proc setAsCanonicalChainHead(
-    db: CoreDbRef;
-    headerHash: Hash32;
-    header: Header;
-      ): Result[void, string] =
-  ## Sets the header as the canonical chain HEAD.
-  # TODO This code handles reorgs - this should be moved elsewhere because we'll
-  #      be handling reorgs mainly in-memory
-  if header.number == 0 or
-      db.getCanonicalHeaderHash().valueOr(default(Hash32)) != header.parentHash:
-    var newCanonicalHeaders = ?db.findNewAncestors(header)
-    reverse(newCanonicalHeaders)
-    for h in newCanonicalHeaders:
-      let
-        oldHash = ?db.getBlockHash(h.number)
-        oldHeader = ?db.getBlockHeader(oldHash)
-      for txHash in db.getBlockTransactionHashes(oldHeader):
-        db.removeTransactionFromCanonicalChain(txHash)
-        # TODO re-add txn to internal pending pool (only if local sender)
-
-    for h in newCanonicalHeaders:
-      # TODO don't recompute block hash
-      db.addBlockNumberToHashLookup(h.number, h.blockHash)
-
-  let canonicalHeadHash = canonicalHeadHashKey()
-  db.ctx.getKvt.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
-    return err($$error)
-  ok()
-
-proc markCanonicalChain(
-    db: CoreDbRef;
-    header: Header;
-    headerHash: Hash32;
-      ): Result[void, string] =
-  ## mark this chain as canonical by adding block number to hash lookup
-  ## down to forking point
-  const
-    info = "markCanonicalChain()"
-  var
-    currHash = headerHash
-    currHeader = header
-
-  # mark current header as canonical
-  let
-    kvt = db.ctx.getKvt()
-    key = blockNumberToHashKey(currHeader.number)
-  kvt.put(key.toOpenArray, rlp.encode(currHash)).isOkOr:
-    return err($$error)
-
-  # it is a genesis block, done
-  if currHeader.parentHash == default(Hash32):
-    return ok()
-
-  # mark ancestor blocks as canonical too
-  currHash = currHeader.parentHash
-  currHeader = ?db.getBlockHeader(currHeader.parentHash)
-
-  template rlpDecodeOrZero(data: openArray[byte]): Hash32 =
-    try:
-      rlp.decode(data, Hash32)
-    except RlpError as exc:
-      warn info, key, error=exc.msg
-      default(Hash32)
-
-  while currHash != default(Hash32):
-    let key = blockNumberToHashKey(currHeader.number)
-    let data = kvt.getOrEmpty(key.toOpenArray).valueOr:
-      return err($$error)
-    if data.len == 0:
-      # not marked, mark it
-      kvt.put(key.toOpenArray, rlp.encode(currHash)).isOkOr:
-        return err($$error)
-    elif rlpDecodeOrZero(data) != currHash:
-      # replace prev chain
-      kvt.put(key.toOpenArray, rlp.encode(currHash)).isOkOr:
-        return err($$error)
-    else:
-      # forking point, done
-      break
-
-    if currHeader.parentHash == default(Hash32):
-      break
-
-    currHash = currHeader.parentHash
-    currHeader = ?db.getBlockHeader(currHeader.parentHash)
-
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -632,9 +503,6 @@ proc setHead*(
     db: CoreDbRef;
     blockHash: Hash32;
       ): Result[void, string] =
-  let header = ?db.getBlockHeader(blockHash)
-  ?db.markCanonicalChain(header, blockHash)
-
   let canonicalHeadHash = canonicalHeadHashKey()
   db.ctx.getKvt.put(canonicalHeadHash.toOpenArray, rlp.encode(blockHash)).isOkOr:
     return err($$error)
@@ -650,7 +518,6 @@ proc setHead*(
   if writeHeader:
     kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
       return err($$error)
-  ?db.markCanonicalChain(header, headerHash)
   let canonicalHeadHash = canonicalHeadHashKey()
   kvt.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
     return err($$error)
@@ -751,7 +618,7 @@ proc persistHeader*(
     if score <= canonScore:
       return ok()
 
-  db.setAsCanonicalChainHead(blockHash, header)
+  db.setHead(blockHash)
 
 proc persistHeader*(
     db: CoreDbRef;

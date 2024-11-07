@@ -9,6 +9,7 @@
 
 import
   std/[typetraits, strutils],
+  web3/execution_types,
   json_rpc/errors,
   nimcrypto/sha2,
   stew/endians2,
@@ -17,7 +18,7 @@ import
   ../../db/core_db,
   ../../utils/utils,
   ../../common/common,
-  web3/execution_types,
+  ../../core/chain,
   ../web3_eth_conv
 
 {.push gcsafe, raises:[].}
@@ -185,12 +186,12 @@ proc latestValidHash*(db: CoreDbRef,
     default(Hash32)
 
 proc invalidFCU*(validationError: string,
-                 com: CommonRef,
-                 header: common.Header): ForkchoiceUpdatedResponse =
-  let parent = com.db.getBlockHeader(header.parentHash).valueOr:
+                 chain: ForkedChainRef,
+                 header: Header): ForkchoiceUpdatedResponse =
+  let parent = chain.headerByHash(header.parentHash).valueOr:
     return invalidFCU(validationError)
 
   let blockHash =
-    latestValidHash(com.db, parent, com.ttd.get(high(UInt256)))
+    latestValidHash(chain.db, parent, chain.com.ttd.get(high(UInt256)))
 
   invalidFCU(validationError, blockHash)
