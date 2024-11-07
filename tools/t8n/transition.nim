@@ -150,7 +150,7 @@ proc defaultTraceStreamFilename(conf: T8NConf,
                                 txIndex: int,
                                 txHash: Hash32): (string, string) =
   let
-    txHash = "0x" & toLowerAscii($txHash)
+    txHash = toLowerAscii($txHash)
     baseDir = if conf.outputBaseDir.len > 0:
                 conf.outputBaseDir
               else:
@@ -355,10 +355,11 @@ proc exec(ctx: TransContext,
     for rec in result.result.receipts:
       allLogs.add rec.logs
     let
-      depositReqs = parseDepositLogs(allLogs).valueOr:
+      depositReqs = parseDepositLogs(allLogs, vmState.com.depositContractAddress).valueOr:
         raise newError(ErrorEVM, error)
       requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
     result.result.requestsHash = Opt.some(requestsHash)
+    result.result.requests = Opt.some([depositReqs, withdrawalReqs, consolidationReqs])
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -424,11 +425,6 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
       raise newError(ErrorConfig, "either one of input is needeed(alloc, txs, or env)")
 
-    let config = parseChainConfig(conf.stateFork)
-    config.chainId = conf.stateChainId.ChainId
-
-    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
-
     # We need to load three things: alloc, env and transactions.
     # May be either in stdin input or in files.
 
@@ -446,7 +442,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputTxs != stdinSelector and conf.inputTxs.len > 0:
       if conf.inputTxs.endsWith(".rlp"):
         let data = readFile(conf.inputTxs)
-        ctx.parseTxsRlp(data.strip(chars={'"'}))
+        ctx.parseTxsRlp(data.strip(chars={'"', ' ', '\r', '\n', '\t'}))
       else:
         ctx.parseTxsJson(conf.inputTxs)
 
@@ -464,6 +460,12 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       blobGasUsed: ctx.env.parentBlobGasUsed,
       excessBlobGas: ctx.env.parentExcessBlobGas,
     )
+
+    let config = parseChainConfig(conf.stateFork)
+    config.depositContractAddress = ctx.env.depositContractAddress
+    config.chainId = conf.stateChainId.ChainId
+
+    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
 
     # Sanity check, to not `panic` in state_transition
     if com.isLondonOrLater(ctx.env.currentNumber):

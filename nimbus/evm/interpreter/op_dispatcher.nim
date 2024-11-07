@@ -37,6 +37,7 @@ template handleStopDirective(cpt: VmCpt, tracingEnabled: bool) =
     if not cpt.code.atEnd():
       # we only trace `REAL STOP` and ignore `FAKE STOP`
       cpt.opIndex = cpt.traceOpCodeStarted(Stop)
+      ?cpt.opcodeGasCost(Stop, 0, tracingEnabled, reason = $Stop)
       cpt.traceOpCodeEnded(Stop, cpt.opIndex)
 
 template handleFixedGasCostsDirective(

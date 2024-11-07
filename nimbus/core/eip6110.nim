@@ -14,8 +14,7 @@ import
   eth/common/receipts,
   stew/assign2,
   stew/arrayops,
-  results,
-  ../constants
+  results
 
 # -----------------------------------------------------------------------------
 # Private helpers
@@ -71,14 +70,13 @@ func depositLogToRequest(data: openArray[byte]): DepositRequest =
 # Public functions
 # -----------------------------------------------------------------------------
 
-func parseDepositLogs*(logs: openArray[Log]): Result[seq[byte], string] =
-  var res = newSeq[byte](logs.len*depositRequestSize)
+func parseDepositLogs*(logs: openArray[Log], depositContractAddress: Address): Result[seq[byte], string] =
+  var res = newSeqOfCap[byte](logs.len*depositRequestSize)
   for i, log in logs:
-    if log.address == DEPOSIT_CONTRACT_ADDRESS:
-      if log.data.len != 576:
-        return err("deposit wrong length: want 576, have " & $log.data.len)
-    let offset = i*depositRequestSize
-    assign(res.toOpenArray(offset, offset+depositRequestSize-1),
-      depositLogToRequest(log.data))
+    if log.address != depositContractAddress:
+      continue
+    if log.data.len != 576:
+      return err("deposit wrong length: want 576, have " & $log.data.len)
+    res.add depositLogToRequest(log.data)
 
   ok(move(res))

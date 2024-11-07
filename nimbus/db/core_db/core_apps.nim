@@ -14,7 +14,7 @@
 {.push gcsafe, raises: [].}
 
 import
-  std/[algorithm, sequtils],
+  std/[sequtils],
   chronicles,
   eth/[common, rlp],
   stew/byteutils,

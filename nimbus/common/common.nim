@@ -328,6 +328,9 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
     # This costly check is only executed from test suite
     com.isBlockAfterTtd(header)
 
+func depositContractAddress*(com: CommonRef): Address =
+  com.config.depositContractAddress.get(default(Address))
+
 proc syncReqNewHead*(com: CommonRef; header: Header)
     {.gcsafe, raises: [].} =
   ## Used by RPC updater

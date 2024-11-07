@@ -20,6 +20,7 @@ type
     inEnv   : string
     stFork  : string
     stReward: string
+    chainid : string
 
   T8nOutput = object
     alloc : bool
@@ -39,13 +40,15 @@ type
     path: string
     error: string
 
-proc t8nInput(alloc, txs, env, fork, reward: string): T8nInput =
+proc t8nInput(alloc, txs, env, fork: string;
+              reward = "0"; chainid = ""): T8nInput =
   T8nInput(
     inAlloc : alloc,
     inTxs   : txs,
     inEnv   : env,
     stFork  : fork,
-    stReward: reward
+    stReward: reward,
+    chainid : chainid,
   )
 
 proc get(opt: T8nInput, base  : string): string =
@@ -55,6 +58,8 @@ proc get(opt: T8nInput, base  : string): string =
   result.add(" --state.fork "  & opt.stFork)
   if opt.stReward.len > 0:
     result.add(" --state.reward " & opt.stReward)
+  if opt.chainid.len > 0:
+    result.add(" --state.chainid " & opt.chainid)
 
 proc get(opt: T8nOutput): string =
   if opt.alloc and not opt.trace:
@@ -164,15 +169,20 @@ proc runTest(appDir: string, spec: TestSpec): bool =
 
   if spec.expOut.len > 0:
     if spec.expOut.endsWith(".json"):
-      let path = base / spec.expOut
-      let want = json.parseFile(path)
-      let have = json.parseJson(res)
-      var jsc = JsonComparator()
-      if not jsc.cmp(want, have, "root") and notRejectedError(jsc.path):
-        echo "test $1: output wrong, have \n$2\nwant\n$3\n" %
-          [spec.name, have.pretty, want.pretty]
-        echo "path: $1, error: $2" %
-          [jsc.path, jsc.error]
+      let path = base / spec.expOut      
+      try:
+        let want = json.parseFile(path)
+        let have = json.parseJson(res)
+        var jsc = JsonComparator()
+        if not jsc.cmp(want, have, "root") and notRejectedError(jsc.path):
+          echo "test $1: output wrong, have \n$2\nwant\n$3\n" %
+            [spec.name, have.pretty, want.pretty]
+          echo "path: $1, error: $2" %
+            [jsc.path, jsc.error]
+          return false
+      except JsonParsingError as exc:
+        echo "test $1: ERROR: $2" % [spec.name, exc.msg]
+        echo "test $1: OUTPUT: $2" % [spec.name, res]
         return false
     else:
       # compare as regular text
@@ -460,7 +470,7 @@ const
       name  : "Revert In Create In Init Create2",
       base  : "testdata/00-512",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0", "0"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -469,7 +479,7 @@ const
       name  : "Revert In Create In Init",
       base  : "testdata/00-513",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0", "0"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -478,7 +488,7 @@ const
       name  : "Init collision 3",
       base  : "testdata/00-514",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0", "0"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -496,7 +506,7 @@ const
       name  : "GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideLast_Frontier",
       base  : "testdata/00-516",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Frontier", "5000000000000000000",
+        "alloc.json", "txs.rlp", "env.json", "Frontier", "5000000000000000000", "0"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -608,6 +618,33 @@ const
       ),
       output: T8nOutput(result: true),
       expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "Different --state.chainid and tx.chainid",
+      base  : "testdata/00-525",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague",
+      ),
+      output: T8nOutput(result: true),
+      expOut: "exp1.json",
+    ),
+    TestSpec(
+      name  : "Prague execution requests",
+      base  : "testdata/00-525",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(result: true),
+      expOut: "exp2.json",
+    ),
+    TestSpec(
+      name  : "Prague depositContractAddress",
+      base  : "testdata/00-525",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env_dca.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(result: true),
+      expOut: "exp3.json",
     ),
   ]
 

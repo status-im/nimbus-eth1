@@ -191,7 +191,7 @@ proc procBlkEpilogue(
 
     if header.requestsHash.isSome:
       let
-        depositReqs = ?parseDepositLogs(vmState.allLogs)
+        depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
         requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
 
       if header.requestsHash.get != requestsHash:

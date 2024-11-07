@@ -191,6 +191,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
     of "blockHashes": r.readValue(val.blockHashes)
     of "ommers": r.readValue(val.ommers)
     of "withdrawals": r.readValue(val.withdrawals)
+    of "depositContractAddress": r.readValue(val.depositContractAddress)
     else: discard r.readValue(JsonString)
 
   if not currentCoinbaseParsed:
@@ -235,10 +236,10 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   required(value)
   required(input, payload)
   tx.to = txo.to
-  tx.chainId = chainId
 
   case tx.txType
   of TxLegacy:
+    tx.chainId = chainId
     required(gasPrice)
   of TxEip2930:
     required(gasPrice)
@@ -263,6 +264,9 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     optional(accessList)
     required(authorizationList)
 
+  if tx.chainId != chainId:
+    return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
+
   let eip155 = txo.protected.get(true)
   if txo.secretKey.isSome:
     let secretKey = PrivateKey.fromRaw(txo.secretKey.get).valueOr:
@@ -274,13 +278,17 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     required(s, S)
     ok(tx)
 
-proc readNestedTx(rlp: var Rlp): Result[Transaction, string] =
+proc readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
   try:
-    ok if rlp.isList:
+    let tx = if rlp.isList:
       rlp.read(Transaction)
     else:
       var rr = rlpFromBytes(rlp.read(seq[byte]))
       rr.read(Transaction)
+    if tx.chainId == chainId:
+      ok(tx)
+    else:
+      err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
   except RlpError as exc:
     err(exc.msg)
 
@@ -301,7 +309,7 @@ proc parseTxs*(ctx: var TransContext, chainId: ChainId)
 
   if ctx.txsRlp.len > 0:
     for item in rlp:
-      ctx.txList.add rlp.readNestedTx()
+      ctx.txList.add rlp.readNestedTx(chainId)
 
 proc filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
   for txRes in ctx.txList:
@@ -433,6 +441,11 @@ proc `@@`[T](x: seq[T]): JsonNode =
   for c in x:
     result.add @@(c)
 
+proc `@@`[N, T](x: array[N, T]): JsonNode =
+  result = newJArray()
+  for c in x:
+    result.add @@(c)
+
 proc `@@`[T](x: Opt[T]): JsonNode =
   if x.isNone:
     newJNull()
@@ -462,3 +475,5 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["blobGasUsed"] = @@(x.blobGasUsed)
   if x.requestsHash.isSome:
     result["requestsHash"] = @@(x.requestsHash)
+  if x.requests.isSome:
+    result["requests"] = @@(x.requests)
