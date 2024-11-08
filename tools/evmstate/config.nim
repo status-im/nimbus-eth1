@@ -79,8 +79,10 @@ type
       argument }: string
 
 const
-  Copyright = "Copyright (c) 2022 Status Research & Development GmbH"
-  Version   = "Nimbus-evmstate 0.1.0"
+  Copyright = "Copyright (c) 2022-" &
+    CompileDate.split('-')[0] &
+    " Status Research & Development GmbH"
+  Version   = "Nimbus-evmstate 0.1.2"
 
 proc init*(_: type StateConf, cmdLine = commandLineParams()): StateConf =
   {.push warning[ProveInit]: off.}
