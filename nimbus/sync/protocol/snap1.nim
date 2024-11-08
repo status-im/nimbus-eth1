@@ -12,9 +12,6 @@
 ## This module implements Ethereum Snapshot Protocol version 1, `snap/1`.
 ## Specification:
 ##   `snap/1 <https://github.com/ethereum/devp2p/blob/master/caps/snap.md>`_
-##
-## Use NIM command line optipn `-d:p2pProtocolDebug` for dumping the
-## generated driver code (just to have it stored somewhere lest one forgets.)
 
 import
   std/options,
