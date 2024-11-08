@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[os, options],
+  std/[os, options, strutils],
   confutils, confutils/defs
 
 export
