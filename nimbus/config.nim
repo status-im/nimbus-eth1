@@ -32,10 +32,10 @@ import
 export net, defs
 
 
-let
+const
   # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
   NimbusCopyright* = "Copyright (c) 2018-" &
-    $(now().utc.year) &
+    CompileDate.split('-')[0] &
     " Status Research & Development GmbH"
 
   # e.g.:
