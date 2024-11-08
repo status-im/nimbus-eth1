@@ -167,8 +167,9 @@ proc traceToFileStream(path: string, txIndex: int): Stream =
   # replace whatever `.ext` to `-${txIndex}.jsonl`
   let
     file = path.splitFile
-    fName = "$1/$2-$3.jsonl" % [file.dir, file.name, $txIndex]
-  createDir(file.dir)
+    folder = if file.dir.len == 0: "." else: file.dir
+    fName = "$1/$2-$3.jsonl" % [folder, file.name, $txIndex]
+  if file.dir.len > 0: createDir(file.dir)
   newFileStream(fName, fmWrite)
 
 proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMState): bool =
