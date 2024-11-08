@@ -269,7 +269,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
   if vmState.fork >= FkPrague:
     pst.withdrawalReqs = processDequeueWithdrawalRequests(vmState)
     pst.consolidationReqs = processDequeueConsolidationRequests(vmState)
-    pst.depositReqs = ?parseDepositLogs(vmState.allLogs)
+    pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
 
   # Finish up, then vmState.stateDB.stateRoot may be accessed
   stateDB.persist(clearEmptyAccount = vmState.fork >= FkSpurious)

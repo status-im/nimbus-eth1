@@ -445,7 +445,9 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
 
   result = case id
   of MainNet:
-    const mainNetTTD = parse("58750000000000000000000",UInt256)
+    const
+      mainNetTTD = parse("58750000000000000000000",UInt256)
+      MAINNET_DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cbb839cbe05303d7705fa"
     ChainConfig(
       chainId:             MainNet.ChainId,
       # Genesis (Frontier):                                # 2015-07-30 15:26:13 UTC
@@ -470,6 +472,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: Opt.some(mainNetTTD),
       shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
       cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC
+      depositContractAddress: Opt.some(MAINNET_DEPOSIT_CONTRACT_ADDRESS),
     )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
