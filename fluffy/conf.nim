@@ -316,14 +316,30 @@ type
         "Size of the in memory local content cache. This is the max number " &
         "of content values that can be stored in the cache.",
       defaultValue: defaultPortalProtocolConfig.contentCacheSize,
-      name: "content-cache-size"
+      name: "debug-content-cache-size"
     .}: int
 
     disableContentCache* {.
       hidden,
       desc: "Disable the in memory local content cache",
       defaultValue: defaultPortalProtocolConfig.disableContentCache,
-      name: "disable-content-cache"
+      name: "debug-disable-content-cache"
+    .}: bool
+
+    offerCacheSize* {.
+      hidden,
+      desc:
+        "Size of the in memory local offer cache. This is the max number " &
+        "of content values that can be stored in the cache.",
+      defaultValue: defaultPortalProtocolConfig.offerCacheSize,
+      name: "debug-offer-cache-size"
+    .}: int
+
+    disableOfferCache* {.
+      hidden,
+      desc: "Disable the in memory local offer cache",
+      defaultValue: defaultPortalProtocolConfig.disableOfferCache,
+      name: "debug-disable-offer-cache"
     .}: bool
 
     disablePoke* {.

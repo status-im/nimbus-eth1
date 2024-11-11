@@ -137,7 +137,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       contentValue = validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
         raise invalidValueErr()
 
-    p.storeContent(keyBytes, contentId, contentValue)
+    p.storeContent(keyBytes, contentId, contentValue, cacheOffer = true)
 
   rpcServer.rpc("portal_stateLocalContent") do(contentKey: string) -> string:
     let
@@ -159,7 +159,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       contentValue = validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
         raise invalidValueErr()
 
-    p.storeContent(keyBytes, contentId, contentValue)
+    p.storeContent(keyBytes, contentId, contentValue, cacheOffer = true)
 
     await p.neighborhoodGossip(
       Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[contentBytes]

@@ -183,7 +183,7 @@ proc run(
     portalProtocolConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
       config.disablePoke, config.maxGossipNodes, config.contentCacheSize,
-      config.disableContentCache,
+      config.disableContentCache, config.offerCacheSize, config.disableOfferCache,
     )
 
     portalNodeConfig = PortalNodeConfig(
