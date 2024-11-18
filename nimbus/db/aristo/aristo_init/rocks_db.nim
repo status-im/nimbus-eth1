@@ -143,24 +143,12 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putVtx(rvid, vtx).isOkOr:
+        db.rdb.putVtx(rvid, vtx, key).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
-            vid:  error[0],
-            code: error[1],
-            info: error[2])
-
-proc putKeyFn(db: RdbBackendRef): PutKeyFn =
-  result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID, key: HashKey) =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        db.rdb.putKey(rvid, key).isOkOr:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  KeyPfx,
             vid:  error[0],
             code: error[1],
             info: error[2])
@@ -273,7 +261,6 @@ proc rocksDbBackend*(
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
-  db.putKeyFn = putKeyFn db
   db.putTuvFn = putTuvFn db
   db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
@@ -320,9 +307,7 @@ iterator walkKey*(
       ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
   for (rvid, data) in be.rdb.walkKey:
-    let lid = HashKey.fromBytes(data).valueOr:
-      continue
-    yield (rvid, lid)
+    yield (rvid, data)
 
 # ------------------------------------------------------------------------------
 # End

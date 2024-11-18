@@ -118,7 +118,7 @@ proc toRocksDb*(
 
   # Reduce number of files when the database grows
   cfOpts.targetFileSizeBase = cfOpts.writeBufferSize
-  cfOpts.targetFileSizeMultiplier = 8
+  cfOpts.targetFileSizeMultiplier = 6
 
   let dbOpts = defaultDbOptions(autoClose = true)
   dbOpts.maxOpenFiles = opts.maxOpenFiles

@@ -12,8 +12,7 @@
 
 import
   eth/common,
-  ".."/[aristo_desc, aristo_get, aristo_layers],
-  ./delete_helpers
+  ".."/[aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private heplers
@@ -34,7 +33,7 @@ proc delSubTreeNow(
       if vtx.bVid[n].isValid:
         ? db.delSubTreeNow((rvid.root,vtx.bVid[n]))
 
-  db.disposeOfVtx(rvid)
+  db.layersResVtx(rvid)
 
   ok()
 
@@ -64,7 +63,7 @@ proc delStoTreeNow(
     let stoPath = Hash32((stoPath & vtx.pfx).getBytes())
     db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
 
-  db.disposeOfVtx(rvid)
+  db.layersResVtx(rvid)
 
   ok()
 

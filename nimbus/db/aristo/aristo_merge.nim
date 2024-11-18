@@ -60,16 +60,18 @@ proc mergePayloadImpl(
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
       return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil)
-    steps: ArrayBuf[NibblesBuf.high + 1, VertexID]
+    vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
+    vtxs: ArrayBuf[NibblesBuf.high + 1, VertexRef]
 
   template resetKeys() =
     # Reset cached hashes of touched verticies
-    for i in 1..steps.len:
-      db.layersResKey((root, steps[^i]))
+    for i in 2..vids.len:
+      db.layersResKey((root, vids[^i]), vtxs[^i])
 
   while path.len > 0:
     # Clear existing merkle keys along the traversal path
-    steps.add cur
+    vids.add cur
+    vtxs.add vtx
 
     let n = path.sharedPrefixLen(vtx.pfx)
     case vtx.vType

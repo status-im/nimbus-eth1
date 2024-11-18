@@ -113,19 +113,17 @@ proc getKey*(
   # A threadvar is used to avoid allocating an environment for onData
   var res{.threadvar.}: Opt[HashKey]
   let onData = proc(data: openArray[byte]) =
-    res = HashKey.fromBytes(data)
+    res = data.deblobify(HashKey)
 
-  let gotData = rdb.keyCol.get(rvid.blobify().data(), onData).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
      const errSym = RdbBeDriverGetKeyError
      when extraTraceMessages:
        trace logTxt "getKey", rvid, error=errSym, info=error
      return err((errSym,error))
 
   # Correct result if needed
-  if not gotData:
+  if not gotData or res.isNone():
     res.ok(VOID_HASH_KEY)
-  elif res.isErr():
-    return err((RdbHashKeyExpected,"")) # Parsing failed
 
   # Update cache and return
   rdb.rdKeyLru.put(rvid.vid, res.value())

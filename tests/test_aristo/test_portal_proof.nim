@@ -40,8 +40,9 @@ proc createPartDb(ps: PartStateRef; data: seq[seq[byte]]; info: static[string]) 
     if rc.isErr: raiseAssert info & ": partPut => " & $rc.error
 
   # Save keys to database
-  for (rvid,key) in ps.vkPairs:
-    ps.db.layersPutKey(rvid, key)
+  # TODO support for partial databases
+  # for (rvid,key) in ps.vkPairs:
+  #   ps.db.layersPutKey(rvid, key)
 
   # Make sure all is OK
   block:

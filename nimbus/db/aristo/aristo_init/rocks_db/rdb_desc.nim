@@ -40,7 +40,6 @@ type
   RdbInst* = object
     admCol*: ColFamilyReadWrite        ## Admin column family handler
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
-    keyCol*: ColFamilyReadWrite        ## Hash key column family handler
     session*: WriteBatchRef            ## For batched `put()`
 
     # Note that the key type `VertexID` for LRU caches requires that there is
@@ -68,7 +67,6 @@ type
     ## Column family symbols/handles and names used on the database
     AdmCF = "AriAdm"                   ## Admin column family name
     VtxCF = "AriVtx"                   ## Vertex column family name
-    KeyCF = "AriKey"                   ## Hash key column family name
 
   RdbLruCounter* = array[bool, Atomic[uint64]]
 

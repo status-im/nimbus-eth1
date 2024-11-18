@@ -63,8 +63,13 @@ suite "Aristo blobify":
         ],
       )
 
+      key = HashKey.fromBytes(rlp.encode([10'u64]))[]
+
     check:
-      deblobify(blobify(leafAccount), VertexRef)[] == leafAccount
-      deblobify(blobify(leafStoData), VertexRef)[] == leafStoData
-      deblobify(blobify(branch), VertexRef)[] == branch
-      deblobify(blobify(extension), VertexRef)[] == extension
+      deblobify(blobify(leafAccount, key), VertexRef)[] == leafAccount
+      deblobify(blobify(leafStoData, key), VertexRef)[] == leafStoData
+      deblobify(blobify(branch, key), VertexRef)[] == branch
+      deblobify(blobify(extension, key), VertexRef)[] == extension
+
+      deblobify(blobify(branch, key), HashKey)[] == key
+      deblobify(blobify(extension, key), HashKey)[] == key
