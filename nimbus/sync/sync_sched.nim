@@ -161,7 +161,7 @@ proc key(peer: Peer): ENode =
 # ------------------------------------------------------------------------------
 
 proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
-  ## Reqest termination and wait
+  ## Request termination and wait for sub-tasks to finish
   mixin runRelease
 
   if dsc.runCtrl == running:
@@ -175,15 +175,20 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
         if w.data.isRunning:
           w.data.worker.ctrl.stopped = true
           # Activate async job so it can finish
-          try: waitFor sleepAsync termWaitPollingTime
-          except CancelledError: discard
+          try:
+            waitFor sleepAsync termWaitPollingTime
+          except CancelledError:
+            trace "Shutdown: peer timeout was cancelled",
+              peer=w.data.worker.peer, nWorkers=dsc.buddies.len
         else:
           dsc.buddies.del w.key # this is OK to delete
 
     while dsc.daemonRunning:
       # Activate async job so it can finish
-      try: waitFor sleepAsync termWaitPollingTime
-      except CancelledError: discard
+      try:
+        waitFor sleepAsync termWaitPollingTime
+      except CancelledError:
+        trace "Shutdown: daemon timeout was cancelled", nWorkers=dsc.buddies.len
 
     # Final shutdown
     dsc.ctx.runRelease()
@@ -223,7 +228,11 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
       try:
         await sleepAsync suspend
       except CancelledError:
-        break # stop on error (must not end up in busy-loop)
+        # Stop on error (must not end up in busy-loop). If the activation flag
+        # `dsc.ctx.daemon` remains `true`, the deamon will be re-started from
+        # the worker loop in due time.
+        trace "Deamon loop timeout was cancelled", nWorkers=dsc.buddies.len
+        break
       # End while
 
   dsc.daemonRunning = false
@@ -327,6 +336,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
       try:
         await sleepAsync suspend
       except CancelledError:
+        trace "Peer loop timeout was cancelled", peer, nWorkers=dsc.buddies.len
         break # stop on error (must not end up in busy-loop)
       # End while
 
