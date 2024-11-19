@@ -17,7 +17,7 @@ import
   pkg/results,
   "../../.."/[common, core/chain, db/storage_types],
   ../worker_desc,
-  "."/[blocks_unproc, headers_unproc]
+  ./headers_unproc
 
 const
   LhcStateKey = 1.beaconStateKey
@@ -103,14 +103,13 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
 
      # If the latest FCU number is not larger than the head, there is nothing
      # to do (might also happen after a manual import.)
-     latest < rc.value.head:
+     latest < rc.value.head and
+
+     # Can only resume a header download. Blocks need to be set up from scratch.
+     rc.value.lastState == collectingHeaders:
 
     # Assign saved sync state
     ctx.sst.layout = rc.value
-
-    # Add interval of unprocessed block range `(L,C]` from `README.md`
-    ctx.blocksUnprocSet(latest+1, ctx.layout.coupler)
-    ctx.blk.topRequest = ctx.layout.coupler
 
     # Add interval of unprocessed header range `(C,D)` from `README.md`
     ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
@@ -122,23 +121,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
     true
 
   else:
-    let
-      latestHash = ctx.chain.latestHash()
-      latestParent = ctx.chain.latestHeader.parentHash
-
-    ctx.sst.layout = SyncStateLayout(
-      coupler:        latest,
-      dangling:       latest,
-      # There is no need to record a separate finalised head `F` as its only
-      # use is to serve as second argument in `forkChoice()` when committing
-      # a batch of imported blocks. Currently, there are no blocks to fetch
-      # and import. The system must wait for instructions and update the fields
-      # `final` and `head` while the latter will be increased so that import
-      # can start.
-      final:          latest,
-      finalHash:      latestHash,
-      head:           latest,
-      headLocked:     false)
+    ctx.sst.layout = SyncStateLayout() # empty layout
 
     if rc.isOk:
       # Some stored headers might have become stale, so delete them. Even

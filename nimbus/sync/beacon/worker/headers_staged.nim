@@ -60,7 +60,7 @@ proc headerStagedUpdateTarget*(
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  if not ctx.layout.headLocked and
+  if ctx.layout.lastState == idleSyncState and
      ctx.target.final == 0 and
      ctx.target.finalHash != zeroHash32 and
      not ctx.target.locked:
@@ -121,6 +121,7 @@ proc headersStagedCollect*(
     # Parent hash for `lhc` below
     topLink = if isOpportunistic: EMPTY_ROOT_HASH
               else: ctx.dbHeaderParentHash(ctx.layout.dangling).expect "Hash32"
+
   var
     # This value is used for splitting the interval `iv` into
     # `[iv.minPt, somePt] + [somePt+1, ivTop] + already-collected` where the

@@ -36,7 +36,7 @@ when enableTicker:
         coupler:         ctx.layout.coupler,
         dangling:        ctx.layout.dangling,
         head:            ctx.layout.head,
-        headOk:          ctx.layout.headLocked,
+        headOk:          ctx.layout.lastState != idleSyncState,
         target:          ctx.target.consHead.number,
         targetOk:        ctx.target.final != 0,
 
