@@ -134,7 +134,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
       coupler:        latest,
       couplerHash:    latestHash,
       dangling:       latest,
-      danglingParent: latestParent,
       # There is no need to record a separate finalised head `F` as its only
       # use is to serve as second argument in `forkChoice()` when committing
       # a batch of imported blocks. Currently, there are no blocks to fetch

@@ -88,13 +88,9 @@ type
     ##
     coupler*: BlockNumber            ## Right end `C` of linked chain `[0,C]`
     couplerHash*: Hash32             ## Hash of `C`
-
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
-    danglingParent*: Hash32          ## Parent hash of `D`
-
     final*: BlockNumber              ## Finalised block number `F`
     finalHash*: Hash32               ## Hash of `F`
-
     head*: BlockNumber               ## `H`, block num of some finalised block
     headHash*: Hash32                ## Hash of `H`
     headLocked*: bool                ## No need to update `H` yet

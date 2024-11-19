@@ -68,7 +68,6 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
     coupler:        ctx.layout.coupler,
     couplerHash:    ctx.layout.couplerHash,
     dangling:       target,
-    danglingParent: ctx.target.consHead.parentHash,
     final:          ctx.target.final,
     finalHash:      ctx.target.finalHash,
     head:           target,
@@ -107,15 +106,14 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.layout.coupler+1 == ctx.layout.dangling
 
   # Verify adjacent chains
-  if ctx.layout.couplerHash != ctx.layout.danglingParent:
+  if ctx.layout.couplerHash != ctx.dbHeaderParentHash(ctx.layout.dangling).expect "Hash32":
     # FIXME: Oops -- any better idea than to defect?
     raiseAssert info & ": header chains C-D joining hashes do not match" &
       " L=" & ctx.chain.latestNumber().bnStr &
       " lHash=" & ctx.chain.latestHash.short &
       " C=" & ctx.layout.coupler.bnStr &
       " cHash=" & ctx.layout.couplerHash.short &
-      " D=" & $ctx.layout.dangling.bnStr &
-      " dParent=" & ctx.layout.danglingParent.short
+      " D=" & $ctx.layout.dangling.bnStr
 
   trace info & ": merging adjacent header chains", C=ctx.layout.coupler.bnStr,
     D=ctx.layout.dangling.bnStr
@@ -125,7 +123,6 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
     coupler:        ctx.layout.head,               # `C`
     couplerHash:    ctx.layout.headHash,
     dangling:       ctx.layout.head,               # `D`
-    danglingParent: ctx.dbHeaderParentHash(ctx.layout.head).expect "Hash32",
     final:          ctx.layout.final,              # `F`
     finalHash:      ctx.layout.finalHash,
     head:           ctx.layout.head,               # `H`
