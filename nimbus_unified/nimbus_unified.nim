@@ -13,7 +13,8 @@ import
   execution/execution_wrapper,
   beacon_chain/[conf, conf_common],
   beacon_chain/[beacon_chain_db],
-  beacon_chain/validators/keystore_management
+  beacon_chain/validators/keystore_management,
+  version
 
 ## Constants
 ## TODO: evaluate the proposed timeouts with team
@@ -144,29 +145,22 @@ proc startTasks*(
 # ------
 
 when isMainModule:
-  info "Starting Nimbus"
-  ## TODO
-  ## - file limits
-  ## - setup logging
-  ## - read configuration (check nimbus_configs file anottations)
+  notice "Starting Nimbus"
+
   ## - implement config reader for all components
   let nimbusConfigs = NimbusConfig()
   var tasksList: NimbusTasks = NimbusTasks.new
 
   ##TODO: this is an adapted call os the vars required by makeBannerAndConfig
   ##these values need to be read from some config file
-  const SPEC_VERSION = "tbd"
-  const copyrights = "status"
-  const nimBanner = "nimbus"
-  const clientId = "nimbus unified"
   var beaconNodeConfig = makeBannerAndConfig(
-    clientId, copyrights, nimBanner, SPEC_VERSION, [], BeaconNodeConf
+    clientName, copyrightBanner, nimBanner, versionAsStr, [], BeaconNodeConf
   ).valueOr:
     stderr.write error
     quit QuitFailure
 
   #TODO: if we don't add the "db" program crashes on
-  if not(checkAndCreateDataDir(string(beaconNodeConfig.dataDir/"db"))):
+  if not (checkAndCreateDataDir(string(beaconNodeConfig.dataDir / "db"))):
     # We are unable to access/create data folder or data folder's
     # permissions are insecure.
     quit QuitFailure
