@@ -252,7 +252,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
       break
 
     # Store headers on database
-    ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs, info)
+    ctx.dbHeadersStash(iv.minPt, qItem.data.revHdrs, info)
     ctx.layout.dangling = iv.minPt
     ctx.layout.danglingParent = qItem.data.parentHash
     ctx.dbStoreSyncStateLayout info

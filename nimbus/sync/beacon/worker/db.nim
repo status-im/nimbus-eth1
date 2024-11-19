@@ -103,6 +103,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
      # The base number is the least record of the FCU chains/tree. So the
      # finalised entry must not be smaller.
      ctx.chain.baseNumber() <= rc.value.final and
+
      # If the latest FCU number is not larger than the head, there is nothing
      # to do (might also happen after a manual import.)
      latest < rc.value.head:
@@ -160,7 +161,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
         # at the `head` and work backwards.
         ctx.deleteStaleHeadersAndState(rc.value.head, info)
       else:
-        # Delete stale headers with block numbers starting at to `latest` wile
+        # Delete stale headers with block numbers starting at to `latest` while
         # working backwards.
         ctx.deleteStaleHeadersAndState(latest, info)
 
@@ -168,7 +169,11 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
 
 # ------------------
 
-proc dbStashHeaders*(
+proc dbHeadersClear*(ctx: BeaconCtxRef) =
+  ## Clear stashed in-memory headers
+  ctx.stash.clear
+
+proc dbHeadersStash*(
     ctx: BeaconCtxRef;
     first: BlockNumber;
     revBlobs: openArray[seq[byte]];
@@ -199,7 +204,7 @@ proc dbStashHeaders*(
       kvt.put(key.toOpenArray, data).isOkOr:
         raiseAssert info & ": put() failed: " & $$error
 
-proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
+proc dbHeaderPeek*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
   # Try cache first
   ctx.stash.withValue(num, val):
@@ -218,11 +223,11 @@ proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
       discard
   err()
 
-proc dbPeekParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
+proc dbHeaderParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
   ## Retrieve some stashed parent hash.
-  ok (? ctx.dbPeekHeader num).parentHash
+  ok (? ctx.dbHeaderPeek num).parentHash
 
-proc dbUnstashHeader*(ctx: BeaconCtxRef; bn: BlockNumber) =
+proc dbHeaderUnstash*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
   ctx.stash.withValue(bn, _):
     ctx.stash.del bn

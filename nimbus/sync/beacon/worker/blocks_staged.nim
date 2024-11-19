@@ -57,13 +57,13 @@ proc fetchAndCheck(
   blk.blocks.setLen(offset + ivReq.len)
   var blockHash = newSeq[Hash32](ivReq.len)
   for n in 1u ..< ivReq.len:
-    let header = ctx.dbPeekHeader(ivReq.minPt + n).valueOr:
+    let header = ctx.dbHeaderPeek(ivReq.minPt + n).valueOr:
       # There is nothing one can do here
       raiseAssert info & " stashed header missing: n=" & $n &
         " ivReq=" & $ivReq & " nth=" & (ivReq.minPt + n).bnStr
     blockHash[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
-  blk.blocks[offset].header = ctx.dbPeekHeader(ivReq.minPt).valueOr:
+  blk.blocks[offset].header = ctx.dbHeaderPeek(ivReq.minPt).valueOr:
     # There is nothing one can do here
     raiseAssert info & " stashed header missing: n=0" &
       " ivReq=" & $ivReq & " nth=" & ivReq.minPt.bnStr
@@ -325,7 +325,7 @@ proc blocksStagedImport*(
 
   # Remove stashed headers for imported blocks
   for bn in iv.minPt .. maxImport:
-    ctx.dbUnstashHeader bn
+    ctx.dbHeaderUnstash bn
 
   # Update, so it can be followed nicely
   ctx.updateMetrics()

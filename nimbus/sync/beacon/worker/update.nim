@@ -77,7 +77,7 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
-  ctx.dbStashHeaders(target, @[rlpHeader], info)
+  ctx.dbHeadersStash(target, @[rlpHeader], info)
 
   # Save state
   ctx.dbStoreSyncStateLayout info
@@ -125,7 +125,7 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
     coupler:        ctx.layout.head,               # `C`
     couplerHash:    ctx.layout.headHash,
     dangling:       ctx.layout.head,               # `D`
-    danglingParent: ctx.dbPeekParentHash(ctx.layout.head).expect "Hash32",
+    danglingParent: ctx.dbHeaderParentHash(ctx.layout.head).expect "Hash32",
     final:          ctx.layout.final,              # `F`
     finalHash:      ctx.layout.finalHash,
     head:           ctx.layout.head,               # `H`
