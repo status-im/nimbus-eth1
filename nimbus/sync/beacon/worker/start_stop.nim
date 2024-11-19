@@ -31,12 +31,10 @@ when enableTicker:
     ## Legacy stuff, will be probably be superseded by `metrics`
     return proc: auto =
       TickerStats(
-        stored:          ctx.db.getSavedStateBlockNumber(),
         base:            ctx.chain.baseNumber(),
         latest:          ctx.chain.latestNumber(),
         coupler:         ctx.layout.coupler,
         dangling:        ctx.layout.dangling,
-        final:           ctx.layout.final,
         head:            ctx.layout.head,
         headOk:          ctx.layout.headLocked,
         target:          ctx.target.consHead.number,
@@ -50,7 +48,7 @@ when enableTicker:
 
         nBlkStaged:      ctx.blocksStagedQueueLen(),
         blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
-        blkUnprocTop:    ctx.blk.topRequest,
+        blkUnprocBottom: ctx.blocksUnprocBottom(),
         nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
         nBlkUnprocFragm: ctx.blocksUnprocChunks(),
 

@@ -83,11 +83,6 @@ proc blocksUnprocCovered*(ctx: BeaconCtxRef; pt: BlockNumber): bool =
   ctx.blk.unprocessed.covered(pt, pt) == 1
 
 
-proc blocksUnprocTop*(ctx: BeaconCtxRef): BlockNumber =
-  let iv = ctx.blk.unprocessed.le().valueOr:
-    return BlockNumber(0)
-  iv.maxPt
-
 proc blocksUnprocBottom*(ctx: BeaconCtxRef): BlockNumber =
   let iv = ctx.blk.unprocessed.ge().valueOr:
     return high(BlockNumber)

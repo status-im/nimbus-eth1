@@ -26,12 +26,10 @@ type
 
   TickerStats* = object
     ## Full sync state (see `TickerFullStatsUpdater`)
-    stored*: BlockNumber
     base*: BlockNumber
     latest*: BlockNumber
     coupler*: BlockNumber
     dangling*: BlockNumber
-    final*: BlockNumber
     head*: BlockNumber
     headOk*: bool
     target*: BlockNumber
@@ -43,7 +41,7 @@ type
     nHdrStaged*: int
     hdrStagedTop*: BlockNumber
 
-    blkUnprocTop*: BlockNumber
+    blkUnprocBottom*: BlockNumber
     nBlkUnprocessed*: uint64
     nBlkUnprocFragm*: int
     nBlkStaged*: int
@@ -80,10 +78,8 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
       B = if data.base == data.latest: "L" else: data.base.bnStr
       L = if data.latest == data.coupler: "C" else: data.latest.bnStr
       C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
-      D = if data.dangling == data.final: "F"
-          elif data.dangling == data.head: "H"
+      D = if data.dangling == data.head: "H"
           else: data.dangling.bnStr
-      F = if data.final == data.head: "H" else: data.final.bnStr
       H = if data.headOk:
             if data.head == data.target: "T" else: data.head.bnStr
           else:
@@ -99,7 +95,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
       bS = if data.nBlkStaged == 0: "n/a"
            else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
       bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
-           else: data.blkUnprocTop.bnStr & "(" &
+           else: data.blkUnprocBottom.bnStr & "(" &
                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 
       rrg = data.reorg
@@ -112,13 +108,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    if data.stored == data.base:
-      debug "Sync state", up, peers,
-        B, L, C, D, F, H, T, hS, hU, bS, bU, rrg, mem
-    else:
-      debug "Sync state", up, peers,
-        S=data.stored.bnStr,
-        B, L, C, D, F, H, T, hS, hU, bS, bU, rrg, mem
+    debug "Sync state", up, peers, B, L, C, D, H, T, hS, hU, bS, bU, rrg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages

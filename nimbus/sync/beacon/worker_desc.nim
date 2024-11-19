@@ -88,10 +88,13 @@ type
     ##
     coupler*: BlockNumber            ## Right end `C` of linked chain `[0,C]`
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
-    final*: BlockNumber              ## Finalised block number `F`
-    finalHash*: Hash32               ## Hash of `F`
     head*: BlockNumber               ## `H`, block num of some finalised block
     headLocked*: bool                ## No need to update `H` yet
+
+    # Legacy entries, will be removed some time. This is currently needed
+    # for importing blocks into `FC` the support of which will be deprecated.
+    final*: BlockNumber              ## Finalised block number `F`
+    finalHash*: Hash32               ## Hash of `F`
 
   SyncState* = object
     ## Sync state for header and block chains

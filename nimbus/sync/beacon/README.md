@@ -295,7 +295,6 @@ be available if *nimbus* is compiled with the additional make flags
 | beacon_latest      | block height | **L**, *increasing* |
 | beacon_coupler     | block height | **C**, *increasing* |
 | beacon_dangling    | block height | **D**               |
-| beacon_final       | block height | **F**, *increasing* |
 | beacon_head        | block height | **H**, *increasing* |
 | beacon_target      | block height | **T**, *increasing* |
 |                            |      |                     |

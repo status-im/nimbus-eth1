@@ -194,7 +194,7 @@ proc headersStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = lhc[]
 
-  trace info & ": staged header list", peer,
+  trace info & ": staged a list of headers", peer,
     topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
     nStaged=ctx.hdr.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
 
@@ -242,7 +242,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
 
     result += qItem.data.revHdrs.len # count headers
 
-  trace info & ": consecutive headers stashed",
+  trace info & ": stashed consecutive headers",
     nListsLeft=ctx.hdr.staged.len, nStashed=result
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:

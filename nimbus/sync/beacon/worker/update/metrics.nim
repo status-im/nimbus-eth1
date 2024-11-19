@@ -30,9 +30,6 @@ declareGauge beacon_coupler, "" &
 declareGauge beacon_dangling, "" &
   "Starting/min block number for higher up headers chain"
 
-declareGauge beacon_final, "" &
-  "Max number of finalised block in higher up headers chain"
-
 declareGauge beacon_head, "" &
   "Ending/max block number of higher up headers chain"
 
@@ -62,7 +59,6 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(beacon_latest, ctx.chain.latestNumber().int64)
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_dangling, ctx.layout.dangling.int64)
-  metrics.set(beacon_final, ctx.layout.final.int64)
   metrics.set(beacon_head, ctx.layout.head.int64)
   metrics.set(beacon_target, ctx.target.consHead.number.int64)
 
