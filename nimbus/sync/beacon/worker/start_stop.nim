@@ -17,7 +17,7 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  "."/[blocks_unproc, db, headers_unproc]
+  "."/[blocks_unproc, db, headers_unproc, update]
 
 when enableTicker:
   import ./start_stop/ticker
@@ -58,7 +58,10 @@ when enableTicker:
         nBuddies:        ctx.pool.nBuddies)
 
 
-proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
+proc updateBeaconHeaderCB(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ): ReqBeaconSyncTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
@@ -70,10 +73,22 @@ proc updateBeaconHeaderCB(ctx: BeaconCtxRef): ReqBeaconSyncTargetCB =
        ctx.layout.head < h.number and            # update is advancing
        ctx.target.consHead.number < h.number:    # .. ditto
 
-        ctx.target.consHead = h
-        ctx.target.final = BlockNumber(0)
-        ctx.target.finalHash = f
-        ctx.target.changed = true
+      ctx.target.consHead = h
+      ctx.target.finalHash = f
+      ctx.target.changed = true
+
+      # Check whether `FC` knows about the finalised block already.
+      #
+      # On a full node, all blocks before the current state are stored on the
+      # database which is also accessed by `FC`. So one can already decude here
+      # whether `FC` id capable of handling that finalised block (the number of
+      # must be at least the `base` from `FC`.)
+      #
+      # Otherwise the block header will need to be fetched from a peer when
+      # available and checked there (see `headerStagedUpdateTarget()`.)
+      #
+      let finHdr = ctx.chain.headerByHash(f).valueOr: return
+      ctx.updateFinalBlockHeader(finHdr, f, info)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -128,9 +143,9 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
     ctx.pool.blocksStagedQuLenMax = blocksStagedQueueLenMaxDefault
 
 
-proc setupRpcMagic*(ctx: BeaconCtxRef) =
+proc setupRpcMagic*(ctx: BeaconCtxRef; info: static[string]) =
   ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.pool.chain.com.reqBeaconSyncTarget = ctx.updateBeaconHeaderCB
+  ctx.pool.chain.com.reqBeaconSyncTarget = ctx.updateBeaconHeaderCB info
 
 proc destroyRpcMagic*(ctx: BeaconCtxRef) =
   ## Helper for `release()`

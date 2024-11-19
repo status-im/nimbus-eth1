@@ -19,7 +19,7 @@ import
   ../worker_desc,
   ./update/metrics,
   ./headers_staged/[headers, linked_hchain],
-  ./headers_unproc
+  "."/[headers_unproc, update]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -78,23 +78,7 @@ proc headerStagedUpdateTarget*(
         trace info & ": finalised header hash mismatch", peer, hash,
           expected=ctx.target.finalHash
       else:
-        let final = rc.value[0].number
-        if final < ctx.chain.baseNumber():
-          trace info & ": finalised number too low", peer,
-            B=ctx.chain.baseNumber.bnStr, finalised=final.bnStr,
-            delta=(ctx.chain.baseNumber - final)
-          ctx.target.reset
-        else:
-          ctx.target.final = final
-
-          # Activate running (unless done yet)
-          if ctx.hibernate:
-            ctx.hibernate = false
-            trace info & ": activated syncer", peer,
-              finalised=final.bnStr, head=ctx.layout.head.bnStr
-
-          # Update, so it can be followed nicely
-          ctx.updateMetrics()
+        ctx.updateFinalBlockHeader(rc.value[0], ctx.target.finalHash, info)
 
 
 proc headersStagedCollect*(

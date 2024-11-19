@@ -54,7 +54,7 @@ proc napUnlessSomethingToFetch(
 
 proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Global set up
-  ctx.setupRpcMagic()
+  ctx.setupRpcMagic info
 
   # Load initial state from database if there is any
   ctx.setupDatabase info

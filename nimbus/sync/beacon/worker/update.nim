@@ -186,6 +186,38 @@ proc updateBlockRequests*(ctx: BeaconCtxRef; info: static[string]) =
         0, max(latest, ctx.blk.topRequest) + 1, ctx.layout.coupler)
       ctx.blk.topRequest = ctx.layout.coupler
 
+
+proc updateFinalBlockHeader*(
+    ctx: BeaconCtxRef;
+    finHdr: Header;
+    finHash: Hash32;
+    info: static[string];
+      ) =
+  ## Update the finalised header cache. If the finalised header is acceptable,
+  ## the syncer will be activated from hibernation if necessary.
+  ##
+  let
+    base = ctx.chain.baseNumber()
+    final = finHdr.number
+  if final < base:
+    trace info & ": finalised number too low",
+      B=base.bnStr, finalised=final.bnStr, delta=(base - final)
+
+    ctx.target.reset
+
+  else:
+    ctx.target.final = final
+    ctx.target.finalHash = finHash
+
+    # Activate running (unless done yet)
+    if ctx.hibernate:
+      ctx.hibernate = false
+      trace info & ": activated syncer",
+        finalised=final.bnStr, head=ctx.layout.head.bnStr
+
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
