@@ -132,7 +132,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
 
     ctx.sst.layout = SyncStateLayout(
       coupler:        latest,
-      couplerHash:    latestHash,
       dangling:       latest,
       # There is no need to record a separate finalised head `F` as its only
       # use is to serve as second argument in `forkChoice()` when committing
@@ -143,7 +142,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
       final:          latest,
       finalHash:      latestHash,
       head:           latest,
-      headHash:       latestHash,
       headLocked:     false)
 
     ctx.sst.lastLayout = ctx.layout

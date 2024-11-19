@@ -62,21 +62,17 @@ proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]) =
   # Check consistency: `C == D <= H` for maximal `C` => `D == H`
   doAssert ctx.layout.dangling == ctx.layout.head
 
-  let rlpHeader = rlp.encode(ctx.target.consHead)
-
   ctx.sst.layout = SyncStateLayout(
     coupler:        ctx.layout.coupler,
-    couplerHash:    ctx.layout.couplerHash,
     dangling:       target,
     final:          ctx.target.final,
     finalHash:      ctx.target.finalHash,
     head:           target,
-    headHash:       rlpHeader.keccak256,
     headLocked:     true)
 
   # Save this header on the database so it needs not be fetched again from
   # somewhere else.
-  ctx.dbHeadersStash(target, @[rlpHeader], info)
+  ctx.dbHeadersStash(target, @[rlp.encode(ctx.target.consHead)], info)
 
   # Save state
   ctx.dbStoreSyncStateLayout info
@@ -106,13 +102,13 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.layout.coupler+1 == ctx.layout.dangling
 
   # Verify adjacent chains
-  if ctx.layout.couplerHash != ctx.dbHeaderParentHash(ctx.layout.dangling).expect "Hash32":
+  if ctx.layout.coupler.rlpHash != ctx.dbHeaderParentHash(ctx.layout.dangling).expect "Hash32":
     # FIXME: Oops -- any better idea than to defect?
     raiseAssert info & ": header chains C-D joining hashes do not match" &
       " L=" & ctx.chain.latestNumber().bnStr &
       " lHash=" & ctx.chain.latestHash.short &
       " C=" & ctx.layout.coupler.bnStr &
-      " cHash=" & ctx.layout.couplerHash.short &
+      " cHash=" & ctx.layout.coupler.rlpHash.short &
       " D=" & $ctx.layout.dangling.bnStr
 
   trace info & ": merging adjacent header chains", C=ctx.layout.coupler.bnStr,
@@ -121,12 +117,10 @@ proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]) =
   # Merge adjacent linked chains
   ctx.sst.layout = SyncStateLayout(
     coupler:        ctx.layout.head,               # `C`
-    couplerHash:    ctx.layout.headHash,
     dangling:       ctx.layout.head,               # `D`
     final:          ctx.layout.final,              # `F`
     finalHash:      ctx.layout.finalHash,
     head:           ctx.layout.head,               # `H`
-    headHash:       ctx.layout.headHash,
     headLocked:     ctx.layout.headLocked)
 
   # Save state
