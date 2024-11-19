@@ -12,6 +12,7 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
+  stew/byteutils,
   ./network_metadata,
   ./eth_data/history_data_ssz_e2s,
   ./database/content_db,
