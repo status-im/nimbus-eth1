@@ -75,9 +75,6 @@ proc deleteStaleHeadersAndState(
 
 proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Save chain layout to persistent db
-  if ctx.layout == ctx.sst.lastLayout:
-    return
-
   let data = rlp.encode(ctx.layout)
   ctx.db.ctx.getKvt().put(LhcStateKey.toOpenArray, data).isOkOr:
     raiseAssert info & " put() failed: " & $$error
@@ -110,7 +107,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
 
     # Assign saved sync state
     ctx.sst.layout = rc.value
-    ctx.sst.lastLayout = rc.value
 
     # Add interval of unprocessed block range `(L,C]` from `README.md`
     ctx.blocksUnprocSet(latest+1, ctx.layout.coupler)
@@ -143,8 +139,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
       finalHash:      latestHash,
       head:           latest,
       headLocked:     false)
-
-    ctx.sst.lastLayout = ctx.layout
 
     if rc.isOk:
       # Some stored headers might have become stale, so delete them. Even

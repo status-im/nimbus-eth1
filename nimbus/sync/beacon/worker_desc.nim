@@ -97,7 +97,6 @@ type
     ## Sync state for header and block chains
     target*: SyncStateTarget         ## Consensus head, see `T` in `README.md`
     layout*: SyncStateLayout         ## Current header chains layout
-    lastLayout*: SyncStateLayout     ## Previous layout (for delta update)
 
   # -------------------
 
