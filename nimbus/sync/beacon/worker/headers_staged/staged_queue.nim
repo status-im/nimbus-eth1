@@ -31,6 +31,10 @@ func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
 
 # ----------------
 
+func headersStagedQueueClear*(ctx: BeaconCtxRef) =
+  ## Clear queue
+  ctx.hdr.staged.clear
+
 func headersStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.hdr.staged = LinkedHChainQueue.init()

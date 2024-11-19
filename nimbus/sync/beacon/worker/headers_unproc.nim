@@ -112,14 +112,14 @@ proc headersUnprocInit*(ctx: BeaconCtxRef) =
   ctx.hdr.unprocessed = BnRangeSet.init()
 
 
-proc headersUnprocSet*(ctx: BeaconCtxRef) =
+proc headersUnprocClear*(ctx: BeaconCtxRef) =
   ## Clear
   ctx.hdr.unprocessed.clear()
   ctx.hdr.borrowed = 0u
 
 proc headersUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
   ## Set up new unprocessed range
-  ctx.headersUnprocSet()
+  ctx.headersUnprocClear()
   # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
   if minPt <= maxPt:
     discard ctx.hdr.unprocessed.merge(minPt, maxPt)
