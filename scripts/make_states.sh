@@ -29,7 +29,7 @@ mkdir -p "$DATA_DIR"
 
 while true;
 do
-  "$SCRIPT_DIR/../build/nimbus" import \
+  "$SCRIPT_DIR/../build/nimbus_execution_client" import \
     --data-dir:"${DATA_DIR}" \
     --era1-dir:"${ERA_DIR}" \
     --era-dir:"${ERA1_DIR}" \

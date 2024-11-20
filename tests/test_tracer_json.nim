@@ -108,9 +108,9 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   #       rcpts.add rcpt
   #   cdb.persistReceipts(rcptRoot, rcpts)
 
-  # Save keys to database
-  for (rvid,key) in ps.vkPairs:
-    adb.layersPutKey(rvid, key)
+  # # Save keys to database
+  # for (rvid,key) in ps.vkPairs:
+  #   adb.layersPutKey(rvid, key)
 
   ps.check().isOkOr:
     raiseAssert info & ": check => " & $error

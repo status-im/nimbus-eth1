@@ -18,7 +18,7 @@ import
   std/typetraits,
   eth/common,
   results,
-  ./aristo_delete/[delete_helpers, delete_subtree],
+  ./aristo_delete/delete_subtree,
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ proc deleteImpl(
   if lf.vtx.vType != Leaf:
     return err(DelLeafExpexted)
 
-  db.disposeOfVtx((hike.root, lf.vid))
+  db.layersResVtx((hike.root, lf.vid))
 
   if hike.legs.len == 1:
     # This was the last node in the trie, meaning we don't have any branches or
@@ -75,8 +75,8 @@ proc deleteImpl(
 
   # Clear all Merkle hash keys up to the root key
   for n in 0 .. hike.legs.len - 2:
-    let vid = hike.legs[n].wp.vid
-    db.layersResKey((hike.root, vid))
+    let wp = hike.legs[n].wp
+    db.layersResKey((hike.root, wp.vid), wp.vtx)
 
   if 0 <= nbl:
     # Branch has only one entry - move that entry to where the branch was and
@@ -89,7 +89,7 @@ proc deleteImpl(
     if not nxt.isValid:
       return err(DelVidStaleVtx)
 
-    db.disposeOfVtx((hike.root, vid))
+    db.layersResVtx((hike.root, vid))
 
     let vtx =
       case nxt.vType

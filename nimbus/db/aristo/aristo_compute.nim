@@ -120,14 +120,18 @@ proc flush(batch: var WriteBatch, db: AristoDbRef): Result[void, AristoError] =
     batch.writer = nil
   ok()
 
-proc putKey(
-    batch: var WriteBatch, db: AristoDbRef, rvid: RootedVertexID, key: HashKey
+proc putVtx(
+    batch: var WriteBatch,
+    db: AristoDbRef,
+    rvid: RootedVertexID,
+    vtx: VertexRef,
+    key: HashKey,
 ): Result[void, AristoError] =
   if batch.writer == nil:
     doAssert db.backend != nil, "source data is from the backend"
     batch.writer = ?db.backend.putBegFn()
 
-  db.backend.putKeyFn(batch.writer, rvid, key)
+  db.backend.putVtxFn(batch.writer, rvid, vtx, key)
   batch.count += 1
 
   ok()
@@ -150,6 +154,7 @@ func leave(batch: var WriteBatch, nibble: int) =
 proc putKeyAtLevel(
     db: AristoDbRef,
     rvid: RootedVertexID,
+    vtx: VertexRef,
     key: HashKey,
     level: int,
     batch: var WriteBatch,
@@ -159,10 +164,8 @@ proc putKeyAtLevel(
   ## set (vertex data may have been committed to disk without computing the
   ## corresponding hash!)
 
-  # Only put computed keys in the database which keeps churn down by focusing on
-  # the ones that do not change!
   if level == -2:
-    ?batch.putKey(db, rvid, key)
+    ?batch.putVtx(db, rvid, vtx, key)
 
     if batch.count mod batchSize == 0:
       ?batch.flush(db)
@@ -172,6 +175,7 @@ proc putKeyAtLevel(
       else:
         debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
   else:
+    db.deltaAtLevel(level).sTab[rvid] = vtx
     db.deltaAtLevel(level).kMap[rvid] = key
 
   ok()
@@ -215,11 +219,11 @@ proc computeKeyImpl(
   # empty state
   if bloom == nil or bloom[].query(uint64(rvid.vid)):
     db.getKeyRc(rvid).isErrOr:
+
       # Value cached either in layers or database
       return ok value
 
   let (vtx, vl) = ?db.getVtxRc(rvid, {GetVtxFlag.PeekCache})
-
   # Top-most level of all the verticies this hash compution depends on
   var level = vl
 
@@ -279,8 +283,9 @@ proc computeKeyImpl(
   # likely to live in an in-memory layer since any leaf change will lead to the
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
-  ?db.putKeyAtLevel(rvid, key, level, batch)
 
+  if vtx.vType != Leaf:
+    ?db.putKeyAtLevel(rvid, vtx, key, level, batch)
   ok (key, level)
 
 proc computeKeyImpl(
@@ -308,16 +313,11 @@ proc computeKey*(
   ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
   ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
   ## 32 byte value.
-
   computeKeyImpl(db, rvid, nil)
 
 proc computeLeafKeysImpl(
     T: type, db: AristoDbRef, root: VertexID
 ): Result[void, AristoError] =
-  for x in T.walkKeyBe(db):
-    debug "Skipping leaf key computation, cache is not empty"
-    return ok()
-
   # Key computation function that works by iterating over the entries in the
   # database (instead of traversing trie using point lookups) - due to how
   # rocksdb is organised, this cache-friendly traversal order turns out to be
@@ -326,6 +326,27 @@ proc computeLeafKeysImpl(
   # branches whose children were computed in the previous round one "layer"
   # at a time until the the number of successfully computed nodes grows low.
   # TODO progress indicator
+
+  block:
+    if db.getKeyUbe((root, root)).isOk():
+      return ok() # Fast path for when the root is in the database already
+
+    # Smoke check to see if we can find lots of branch nodes with keys already
+    var branches, found: int
+    for (rvid, vtx) in T.walkVtxBe(db, {Branch}):
+      branches += 1
+
+      if db.getKeyUbe(rvid).isOk:
+        found += 1
+
+      # 10% found on the initial sample.. good enough? Some more randomness
+      # here would maybe make sense
+      if branches > 1000:
+        if found * 10 > branches:
+          return ok()
+        break
+
+
   info "Writing key cache (this may take a while)"
 
   var batch: WriteBatch
@@ -340,13 +361,18 @@ proc computeLeafKeysImpl(
     # Reuse rlp writers to avoid superfluous memory allocations
     writer = initRlpWriter()
     writer2 = initRlpWriter()
+    writer3 = initRlpWriter()
     level = 0
+    leaves = 0
 
-  # Start with leaves - at the time of writing, this is roughly 3/4 of the
-  # of the entries in the database on mainnet - the ratio roughly corresponds to
-  # the fill ratio of the deepest branch nodes as nodes close to the MPT root
-  # don't come in significant numbers
-
+  # Load leaves into bloom filter so we can quickly skip over branch nodes where
+  # we know the lookup will fail.
+  # At the time of writing, this is roughly 3/4 of the of the entries in the
+  # database on mainnet - the ratio roughly corresponds to the fill ratio of the
+  # deepest branch nodes as nodes close to the MPT root don't come in
+  # significant numbers
+  # Leaf keys are not computed to save space - instead, if they are needed they
+  # are computed from the leaf data.
   for (rvid, vtx) in T.walkVtxBe(db, {Leaf}):
     if vtx.lData.pType == AccountData and vtx.lData.stoID.isValid:
       # Accounts whose key depends on the storage trie typically will not yet
@@ -355,44 +381,14 @@ proc computeLeafKeysImpl(
       # be computed and then top up during regular trie traversal.
       continue
 
-    writer.clear()
-
-    let key = writer.encodeLeaf(vtx.pfx):
-      case vtx.lData.pType
-      of AccountData:
-        writer2.clear()
-        writer2.append Account(
-          nonce: vtx.lData.account.nonce,
-          balance: vtx.lData.account.balance,
-          # Accounts with storage filtered out above
-          storageRoot: EMPTY_ROOT_HASH,
-          codeHash: vtx.lData.account.codeHash,
-        )
-        writer2.finish()
-      of StoData:
-        writer2.clear()
-        writer2.append(vtx.lData.stoData)
-        writer2.finish()
-
-    ?batch.putKey(db, rvid, key)
-
-    if batch.count mod batchSize == 0:
-      ?batch.flush(db)
-
-      if batch.count mod (batchSize * 100) == 0:
-        info "Writing leaves", keys = batch.count, level
-      else:
-        debug "Writing leaves", keys = batch.count, level
-
     bloom.insert(uint64(rvid.vid))
+    leaves += 1
 
-  let leaves = batch.count
-
-  # The leaves have been written - we'll now proceed to branches expecting
-  # diminishing returns for each layer - not only beacuse there are fewer nodes
-  # closer to the root in the trie but also because leaves we skipped over lead
-  # larger and larger branch gaps and the advantage of iterating in disk order
-  # is lost
+  # The leaves have been loaded into the bloom filter - we'll now proceed to
+  # branches expecting diminishing returns for each layer - not only beacuse
+  # there are fewer nodes closer to the root in the trie but also because leaves
+  # we skipped over lead larger and larger branch gaps and the advantage of
+  # iterating in disk order is lost
   var lastRound = leaves
 
   level += 1
@@ -400,12 +396,17 @@ proc computeLeafKeysImpl(
   # 16*16 looks like "2 levels of MPT" but in reality, the branch nodes close
   # to the leaves are sparse - on average about 4 nodes per branch on mainnet -
   # meaning that we'll do 3-4 levels of branch depending on the network
+  var branches = 0
   while lastRound > (leaves div (16 * 16)):
     info "Starting branch layer", keys = batch.count, lastRound, level
     var round = 0
+    branches = 0
+
     for (rvid, vtx) in T.walkVtxBe(db, {Branch}):
+      branches += 1
+
       if vtx.pfx.len > 0:
-        # TODO there shouldn't be many of these - is it worth the lookup?
+        # TODO there shouldn't be many extension nodes - is it worth the lookup?
         continue
 
       if level > 1:
@@ -427,14 +428,50 @@ proc computeLeafKeysImpl(
         let key = writer.encodeBranch:
           let vid = vtx.bVid[n]
           if vid.isValid:
-            let bkey = db.getKeyUbe((rvid.root, vid)).valueOr:
-              # False positive on the bloom filter lookup
-              break branchKey
-            bkey
+            let bkeyOpt =
+              if level == 1: # No leaf keys in database
+                Result[HashKey, AristoError].err(GetKeyNotFound)
+              else:
+                db.getKeyUbe((rvid.root, vid))
+            bkeyOpt.valueOr:
+              let bvtx = db.getVtxUbe((rvid.root, vid)).valueOr:
+                # Incomplete database?
+                break branchKey
+
+              if bvtx == nil or (
+                bvtx.vType == Leaf and bvtx.lData.pType == AccountData and
+                bvtx.lData.stoID.isValid
+              ):
+                # It's unlikely storage root key has been computed already, so
+                # skip
+                # TODO maybe worth revisting - a not insignificant number of
+                #      contracts have only a leaf storage slot so for those we
+                #      could trivially compute account storage root..
+                break branchKey
+              case bvtx.vType
+              of Leaf:
+                writer2.clear()
+
+                writer2.encodeLeaf(bvtx.pfx):
+                  writer3.clear()
+                  case bvtx.lData.pType
+                  of AccountData:
+                    writer3.append Account(
+                      nonce: bvtx.lData.account.nonce,
+                      balance: bvtx.lData.account.balance,
+                      # Accounts with storage filtered out above
+                      storageRoot: EMPTY_ROOT_HASH,
+                      codeHash: bvtx.lData.account.codeHash,
+                    )
+                  of StoData:
+                    writer3.append(bvtx.lData.stoData)
+                  writer3.finish()
+              of Branch:
+                break branchKey
           else:
             VOID_HASH_KEY
 
-        ?batch.putKey(db, rvid, key)
+        ?batch.putVtx(db, rvid, vtx, key)
 
         if batch.count mod batchSize == 0:
           ?batch.flush(db)
@@ -452,7 +489,7 @@ proc computeLeafKeysImpl(
   ?batch.flush(db)
 
   info "Key cache base written",
-    keys = batch.count, lastRound, leaves, branches = batch.count - leaves
+    keys = batch.count, lastRound, leaves, branches
 
   let rc = computeKeyImpl(db, (root, root), addr bloom)
   if rc.isOk() or rc.error() == GetVtxNotFound:
@@ -470,6 +507,7 @@ proc computeKeys*(db: AristoDbRef, root: VertexID): Result[void, AristoError] =
   ##
   ## This implementation speeds up the inital seeding of the cache by traversing
   ## the full state in on-disk order and computing hashes bottom-up instead.
+
   case db.backend.kind
   of BackendMemory:
     MemBackendRef.computeLeafKeysImpl db, root

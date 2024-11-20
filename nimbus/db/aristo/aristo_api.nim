@@ -510,7 +510,6 @@ type
     AristoApiProfBeGetTuvFn             = "be/getTuv"
     AristoApiProfBeGetLstFn             = "be/getLst"
     AristoApiProfBePutVtxFn             = "be/putVtx"
-    AristoApiProfBePutKeyFn             = "be/putKey"
     AristoApiProfBePutTuvFn             = "be/putTuv"
     AristoApiProfBePutLstFn             = "be/putLst"
     AristoApiProfBePutEndFn             = "be/putEnd"
@@ -557,8 +556,6 @@ when AutoValidateApiHooks:
 
     doAssert not api.partAccountTwig.isNil
     doAssert not api.partStorageTwig.isNil
-    doAssert not api.partUntwigGeneric.isNil
-    doAssert not api.partUntwigGenericOk.isNil
     doAssert not api.partUntwigPath.isNil
     doAssert not api.partUntwigPathOk.isNil
 
@@ -909,12 +906,6 @@ func init*(
         AristoApiProfBePutVtxFn.profileRunner:
           be.putVtxFn(a, b, c)
     data.list[AristoApiProfBePutVtxFn.ord].masked = true
-
-    beDup.putKeyFn =
-      proc(a: PutHdlRef; b: RootedVertexID, c: HashKey) =
-        AristoApiProfBePutKeyFn.profileRunner:
-          be.putKeyFn(a, b, c)
-    data.list[AristoApiProfBePutKeyFn.ord].masked = true
 
     beDup.putTuvFn =
       proc(a: PutHdlRef; b: VertexID) =
