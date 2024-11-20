@@ -2414,15 +2414,8 @@ proc doRunBeaconNode(config: var BeaconNodeConf, rng: ref HmacDrbgContext) {.rai
 
 ## Consensus wrapper
 proc consensusWrapper*(parameters: TaskParameters) {.raises: [CatchableError].} =
-  # Single RNG instance for the application - will be seeded on construction
-  # and avoid using system resources (such as urandom) after that
   let rng = HmacDrbgContext.new()
   var config = parameters.beaconNodeConfigs
-
-  setupFileLimits()
-
-  #TODO: Another FC unsafe procedure
-  # setupLogging(config.logLevel, config.logStdout, config.logFile)
 
   try:
     doRunBeaconNode(config, rng)
