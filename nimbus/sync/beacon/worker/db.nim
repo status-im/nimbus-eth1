@@ -100,9 +100,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
   # If there was a manual import after a previous sync, then saved state
   # might be outdated.
   if rc.isOk and
-     # The base number is the least record of the FCU chains/tree. So the
-     # finalised entry must not be smaller.
-     ctx.chain.baseNumber() <= rc.value.final and
      # If the latest FCU number is not larger than the head, there is nothing
      # to do (might also happen after a manual import.)
      latest < rc.value.head:
@@ -134,14 +131,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
       couplerHash:    latestHash,
       dangling:       latest,
       danglingParent: latestParent,
-      # There is no need to record a separate finalised head `F` as its only
-      # use is to serve as second argument in `forkChoice()` when committing
-      # a batch of imported blocks. Currently, there are no blocks to fetch
-      # and import. The system must wait for instructions and update the fields
-      # `final` and `head` while the latter will be increased so that import
-      # can start.
-      final:          latest,
-      finalHash:      latestHash,
       head:           latest,
       headHash:       latestHash,
       headLocked:     false)

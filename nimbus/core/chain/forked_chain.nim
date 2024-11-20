@@ -158,8 +158,9 @@ proc validateBlock(c: ForkedChainRef,
   if updateCursor:
     c.updateCursor(blk, move(res.value))
 
+  let blockHash = blk.header.blockHash
   for i, tx in blk.transactions:
-    c.txRecords[rlpHash(tx)] = (blk.header.blockHash, uint64(i))
+    c.txRecords[rlpHash(tx)] = (blockHash, uint64(i))
 
   ok()
 
@@ -318,6 +319,19 @@ func canonicalChain(c: ForkedChainRef,
   err("Block hash not in canonical chain")
 
 func calculateNewBase(c: ForkedChainRef,
+               headHash: Hash32,
+               targetNumber: BlockNumber): BaseDesc =
+  shouldNotKeyError:
+    var prevHash = headHash
+    while prevHash != c.baseHash:
+      var header = c.blocks[prevHash].blk.header
+      if header.number == targetNumber:
+        return BaseDesc(hash: prevHash, header: move(header))
+      prevHash = header.parentHash
+
+  doAssert(false, "Unreachable code")
+
+func calculateNewBase(c: ForkedChainRef,
                finalizedHeader: Header,
                headHash: Hash32,
                headHeader: Header): BaseDesc =
@@ -331,15 +345,7 @@ func calculateNewBase(c: ForkedChainRef,
   if targetNumber <= c.baseHeader.number + c.baseDistance:
     return BaseDesc(hash: c.baseHash, header: c.baseHeader)
 
-  shouldNotKeyError:
-    var prevHash = headHash
-    while prevHash != c.baseHash:
-      var header = c.blocks[prevHash].blk.header
-      if header.number == targetNumber:
-        return BaseDesc(hash: prevHash, header: move(header))
-      prevHash = header.parentHash
-
-  doAssert(false, "Unreachable code")
+  c.calculateNewBase(headHash, targetNumber)
 
 func trimCanonicalChain(c: ForkedChainRef,
                         head: CanonicalDesc,
@@ -492,6 +498,34 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 
   c.replaySegment(header.parentHash)
   c.validateBlock(c.cursorHeader, blk)
+
+proc importBlockBlindly*(c: ForkedChainRef, blk: Block): Result[void, string] =
+  ?c.importBlock(blk)
+
+  if blk.header.number <= c.baseHeader.number:
+    return ok()
+
+  let distanceFromBase = blk.header.number - c.baseHeader.number
+  # finalizerThreshold is baseDistance + 25% of baseDistancce capped at 32.
+  let finalizerThreshold = c.baseDistance + max(1'u64, min(c.baseDistance div 4'u64, 32'u64))
+  if distanceFromBase < finalizerThreshold:
+    return ok()
+
+  # Move the base forward `baseDistance` blocks,
+  # and keep finalizerThreshold-baseDistance blocks in memory.
+  let targetNumber = c.baseHeader.number + c.baseDistance
+  let newBase = c.calculateNewBase(c.cursorHash, targetNumber)
+
+  c.replaySegment(newBase.hash)
+  c.writeBaggage(newBase.hash)
+  c.stagingTx.commit()
+  c.stagingTx = nil
+
+  # Update base forward to newBase.
+  c.updateBase(newBase.hash, newBase.header, c.cursorHash)
+  c.db.persistent(newBase.header.number).isOkOr:
+    return err("Failed to save state: " & $$error)
+  ok()
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
