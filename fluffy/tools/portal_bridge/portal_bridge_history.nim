@@ -140,7 +140,7 @@ proc getBlockReceipts(
 
 proc gossipBlockHeader(
     client: RpcClient, id: Hash32 | uint64, headerWithProof: BlockHeaderWithProof
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = blockHeaderContentKey(id)
     encodedContentKeyHex = contentKey.encode.asSeq().toHex()
@@ -154,13 +154,13 @@ proc gossipBlockHeader(
         return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
 
   info "Block header gossiped", peers, contentKey = encodedContentKeyHex
-  return ok()
+  ok()
 
 proc gossipBlockBody(
     client: RpcClient,
     hash: Hash32,
     body: PortalBlockBodyLegacy | PortalBlockBodyShanghai,
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = blockBodyContentKey(hash)
     encodedContentKeyHex = contentKey.encode.asSeq().toHex()
@@ -174,11 +174,11 @@ proc gossipBlockBody(
         return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
 
   info "Block body gossiped", peers, contentKey = encodedContentKeyHex
-  return ok()
+  ok()
 
 proc gossipReceipts(
     client: RpcClient, hash: Hash32, receipts: PortalReceipts
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = receiptsContentKey(hash)
     encodedContentKeyHex = contentKey.encode.asSeq().toHex()
@@ -285,7 +285,7 @@ proc gossipHeadersWithProof(
     era1File: string,
     epochRecordFile: Opt[string] = Opt.none(string),
     verifyEra = false,
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let f = ?Era1File.open(era1File)
 
   if verifyEra:
@@ -296,54 +296,72 @@ proc gossipHeadersWithProof(
   # UX hassle it adds to provide the accumulator ssz files.
   let epochRecord =
     if epochRecordFile.isNone:
+      info "Building accumulator from era1 file", era1File
       ?f.buildAccumulator()
     else:
       ?readEpochRecordCached(epochRecordFile.get())
 
-  for (contentKey, contentValue) in f.headersWithProof(epochRecord):
-    let peers =
-      try:
-        await portalClient.portal_historyGossip(
-          contentKey.asSeq.toHex(), contentValue.toHex()
-        )
-      except CatchableError as e:
-        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
-    info "Block header gossiped", peers, contentKey
+  info "Gossip headers from era1 file", era1File
 
+  for blockHeader in f.era1BlockHeaders:
+    doAssert blockHeader.isPreMerge()
+
+    let
+      headerWithProof = buildHeaderWithProof(blockHeader, epochRecord).valueOr:
+        raiseAssert "Failed to build header with proof: " & $blockHeader.number
+      blockHash = blockHeader.rlpHash()
+
+    # gossip block header by hash
+    ?(await portalClient.gossipBlockHeader(blockHash, headerWithProof))
+    # gossip block header by number
+    ?(await portalClient.gossipBlockHeader(blockHeader.number, headerWithProof))
+
+  info "Succesfully gossiped headers from era1 file", era1File
   ok()
 
 proc gossipBlockContent(
     portalClient: RpcClient, era1File: string, verifyEra = false
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let f = ?Era1File.open(era1File)
 
   if verifyEra:
     let _ = ?f.verify()
 
-  for (contentKey, contentValue) in f.blockContent():
-    let peers =
-      try:
-        await portalClient.portal_historyGossip(
-          contentKey.asSeq.toHex(), contentValue.toHex()
-        )
-      except CatchableError as e:
-        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
-    info "Block content gossiped", peers, contentKey
+  info "Gossip bodies and receipts from era1 file", era1File
 
+  for (header, body, receipts, _) in f.era1BlockTuples:
+    let blockHash = header.rlpHash()
+
+    # gossip block body
+    ?(
+      await portalClient.gossipBlockBody(
+        blockHash, PortalBlockBodyLegacy.fromBlockBody(body)
+      )
+    )
+
+    # gossip receipts
+    ?(
+      await portalClient.gossipReceipts(
+        blockHash, PortalReceipts.fromReceipts(receipts)
+      )
+    )
+
+  info "Succesfully gossiped bodies and receipts from era1 file", era1File
   ok()
 
 proc runBackfillLoop(
-    portalClient: RpcClient, web3Client: RpcClient, era1Dir: string
+    portalClient: RpcClient,
+    web3Client: RpcClient,
+    era1Dir: string,
+    startEra: uint64,
+    endEra: uint64,
 ) {.async: (raises: [CancelledError]).} =
-  let
-    rng = newRng()
-    accumulator = loadAccumulator()
-  while true:
+  let accumulator = loadAccumulator()
+
+  for era in startEra .. endEra:
     let
-      # Grab a random era1 to backfill
-      era = rng[].rand(int(era(network_metadata.mergeBlockNumber - 1)))
       root = accumulator.historicalEpochs[era]
-      eraFile = era1Dir / era1FileName("mainnet", Era1(era), Digest(data: root))
+      era1File = era1Dir / era1FileName("mainnet", Era1(era), Digest(data: root))
 
     # Note:
     # There are two design options here:
@@ -360,39 +378,35 @@ proc runBackfillLoop(
     # new era1 can be gossiped (might need another custom json-rpc that checks
     # the offer queue)
     when false:
-      info "Gossip headers from era1 file", eraFile
+      info "Gossip headers from era1 file", era1File
       let headerRes =
         try:
-          await portalClient.portal_debug_historyGossipHeaders(eraFile)
+          await portalClient.portal_debug_historyGossipHeaders(era1File)
         except CatchableError as e:
           error "JSON-RPC portal_debug_historyGossipHeaders failed", error = e.msg
           false
 
       if headerRes:
-        info "Gossip block content from era1 file", eraFile
+        info "Gossip block content from era1 file", era1File
         let res =
           try:
-            await portalClient.portal_debug_historyGossipBlockContent(eraFile)
+            await portalClient.portal_debug_historyGossipBlockContent(era1File)
           except CatchableError as e:
             error "JSON-RPC portal_debug_historyGossipBlockContent failed",
               error = e.msg
             false
         if res:
-          error "Failed to gossip block content from era1 file", eraFile
+          error "Failed to gossip block content from era1 file", era1File
       else:
-        error "Failed to gossip headers from era1 file", eraFile
+        error "Failed to gossip headers from era1 file", era1File
     else:
-      info "Gossip headers from era1 file", eraFile
-      (await portalClient.gossipHeadersWithProof(eraFile)).isOkOr:
-        error "Failed to gossip headers from era1 file", error, eraFile
+      (await portalClient.gossipHeadersWithProof(era1File)).isOkOr:
+        error "Failed to gossip headers from era1 file", error, era1File
         continue
 
-      info "Gossip block content from era1 file", eraFile
-      (await portalClient.gossipBlockContent(eraFile)).isOkOr:
-        error "Failed to gossip block content from era1 file", error, eraFile
+      (await portalClient.gossipBlockContent(era1File)).isOkOr:
+        error "Failed to gossip block content from era1 file", error, era1File
         continue
-
-      info "Succesfully gossiped era1 file", eraFile
 
 proc runBackfillLoopAuditMode(
     portalClient: RpcClient, web3Client: RpcClient, era1Dir: string
@@ -548,7 +562,9 @@ proc runHistory*(config: PortalBridgeConf) =
         portalClient, web3Client, config.era1Dir.string
       )
     else:
-      asyncSpawn runBackfillLoop(portalClient, web3Client, config.era1Dir.string)
+      asyncSpawn runBackfillLoop(
+        portalClient, web3Client, config.era1Dir.string, config.startEra, config.endEra
+      )
 
   while true:
     poll()
