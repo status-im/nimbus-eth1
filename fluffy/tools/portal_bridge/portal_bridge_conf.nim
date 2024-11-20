@@ -12,6 +12,8 @@ import
   confutils,
   confutils/std/net,
   nimcrypto/hash,
+  ../../network_metadata,
+  ../../eth_data/era1,
   ../../[conf, logging]
 
 export net
@@ -35,6 +37,8 @@ proc defaultPortalBridgeStateDir*(): string =
     defaultDataDir() / "Bridge" / "State"
   else:
     defaultDataDir() / "bridge" / "state"
+
+const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
 type
   TrustedDigest* = MDigest[32 * 8]
@@ -116,6 +120,13 @@ type
         defaultValue: false,
         name: "backfill"
       .}: bool
+
+      startEra* {.desc: "The era to start from", defaultValue: 0, name: "start-era".}:
+        uint64
+
+      endEra* {.
+        desc: "The era to stop at", defaultValue: defaultEndEra, name: "end-era"
+      .}: uint64
 
       audit* {.
         desc:
