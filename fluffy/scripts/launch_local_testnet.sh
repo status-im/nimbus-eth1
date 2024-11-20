@@ -342,9 +342,9 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --metrics \
     --metrics-address="127.0.0.1" \
     --metrics-port="$(( BASE_METRICS_PORT + NUM_NODE ))" \
-    --table-ip-limit=1024 \
-    --bucket-ip-limit=24 \
-    --bits-per-hop=1 \
+    --debug-table-ip-limit=1024 \
+    --debug-bucket-ip-limit=24 \
+    --debug-bits-per-hop=1 \
     --portal-subnetworks="${PORTAL_SUBNETWORKS}" \
     --disable-state-root-validation="${DISABLE_STATE_ROOT_VALIDATION}" \
     ${TRUSTED_BLOCK_ROOT_ARG} \

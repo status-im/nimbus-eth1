@@ -125,20 +125,6 @@ const
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
-  # These are the concurrent offers per Portal wire protocol that is running.
-  # Using the `offerQueue` allows for limiting the amount of offers send and
-  # thus how many streams can be started.
-  # TODO:
-  # More thought needs to go into this as it is currently on a per network
-  # basis. Keep it simple like that? Or limit it better at the stream transport
-  # level? In the latter case, this might still need to be checked/blocked at
-  # the very start of sending the offer, because blocking/waiting too long
-  # between the received accept message and actually starting the stream and
-  # sending data could give issues due to timeouts on the other side.
-  # And then there are still limits to be applied also for FindContent and the
-  # incoming directions.
-  concurrentOffers = 50
-
 type
   ToContentIdHandler* =
     proc(contentKey: ContentKeyByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
@@ -591,7 +577,7 @@ proc new*(
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
     radiusCache: RadiusCache.init(256),
-    offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
+    offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
   )
@@ -1758,7 +1744,19 @@ proc start*(p: PortalProtocol) =
   p.refreshLoop = refreshLoop(p)
   p.revalidateLoop = revalidateLoop(p)
 
-  for i in 0 ..< concurrentOffers:
+  # These are the concurrent offers per Portal wire protocol that is running.
+  # Using the `offerQueue` allows for limiting the amount of offers send and
+  # thus how many streams can be started.
+  # TODO:
+  # More thought needs to go into this as it is currently on a per network
+  # basis. Keep it simple like that? Or limit it better at the stream transport
+  # level? In the latter case, this might still need to be checked/blocked at
+  # the very start of sending the offer, because blocking/waiting too long
+  # between the received accept message and actually starting the stream and
+  # sending data could give issues due to timeouts on the other side.
+  # And then there are still limits to be applied also for FindContent and the
+  # incoming directions.
+  for i in 0 ..< p.config.maxConcurrentOffers:
     p.offerWorkers.add(offerWorker(p))
 
 proc stop*(p: PortalProtocol) {.async: (raises: []).} =
