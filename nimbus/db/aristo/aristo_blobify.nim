@@ -68,10 +68,12 @@ proc deblobify*[T: uint64|VertexID](data: openArray[byte], _: type T): Result[T,
   if data.len < 1 or data.len > 8:
     return err(Deblob64LenUnsupported)
 
-  var tmp: array[8, byte]
-  discard tmp.toOpenArray(8 - data.len, 7).copyFrom(data)
+  var tmp = 0'u64
+  let start = 8 - data.len
+  for i in 0..<data.len:
+    tmp += uint64(data[i]) shl (8*(7-(i + start)))
 
-  ok T(uint64.fromBytesBE(tmp))
+  ok T(tmp)
 
 proc deblobify*(data: openArray[byte], _: type UInt256): Result[UInt256,AristoError] =
   if data.len < 1 or data.len > 32:
