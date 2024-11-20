@@ -54,12 +54,10 @@ proc toNode*(
 
   of Branch:
     let node = NodeRef(vtx: vtx.dup())
-    for n in 0 .. 15:
-      let vid = vtx.bVid[n]
-      if vid.isValid:
-        let key = db.computeKey((root, vid)).valueOr:
-          return err(@[vid])
-        node.key[n] = key
+    for n, subvid in vtx.pairs():
+      let key = db.computeKey((root, subvid)).valueOr:
+        return err(@[subvid])
+      node.key[n] = key
     return ok node
 
 iterator subVids*(vtx: VertexRef): VertexID =
@@ -71,9 +69,8 @@ iterator subVids*(vtx: VertexRef): VertexID =
       if stoID.isValid:
         yield stoID.vid
   of Branch:
-    for vid in vtx.bVid:
-      if vid.isValid:
-        yield vid
+    for _, subvid in vtx.pairs():
+      yield subvid
 
 iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
   ## Simolar to `subVids()` but for nodes
@@ -84,10 +81,8 @@ iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
       if stoID.isValid:
         yield (stoID.vid, node.key[0])
   of Branch:
-    for n in 0 .. 15:
-      let vid = node.vtx.bVid[n]
-      if vid.isValid:
-        yield (vid,node.key[n])
+    for n, subvid in node.vtx.pairs():
+      yield (subvid,node.key[n])
 
 # ------------------------------------------------------------------------------
 # End

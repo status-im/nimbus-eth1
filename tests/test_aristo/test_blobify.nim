@@ -10,60 +10,33 @@
 
 {.used.}
 
-import unittest2, ../../nimbus/db/aristo/aristo_blobify
+import unittest2, std/sequtils, ../../nimbus/db/aristo/aristo_blobify
 
 suite "Aristo blobify":
   test "VertexRef roundtrip":
     let
-      leafAccount = VertexRef(vType: Leaf, lData: LeafPayload(pType: AccountData))
-      leafStoData =
-        VertexRef(vType: Leaf, lData: LeafPayload(pType: StoData, stoData: 42.u256))
-      branch = VertexRef(
-        vType: Branch,
-        bVid: [
-          VertexID(0),
-          VertexID(1),
-          VertexID(0),
-          VertexID(0),
-          VertexID(4),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-        ],
+      leafAccount = VertexRef(
+        vType: Leaf,
+        pfx: NibblesBuf.nibble(1),
+        lData: LeafPayload(
+          pType: AccountData, account: AristoAccount(nonce: 100, balance: 123.u256)
+        ),
       )
+      leafStoData = VertexRef(
+        vType: Leaf,
+        pfx: NibblesBuf.nibble(3),
+        lData: LeafPayload(pType: StoData, stoData: 42.u256),
+      )
+      branch = VertexRef(vType: Branch, startVid: VertexID(0x334452), used: 0x43'u16)
 
       extension = VertexRef(
         vType: Branch,
         pfx: NibblesBuf.nibble(2),
-        bVid: [
-          VertexID(0),
-          VertexID(0),
-          VertexID(2),
-          VertexID(0),
-          VertexID(0),
-          VertexID(5),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-        ],
+        startVid: VertexID(0x55),
+        used: 0x12'u16,
       )
 
-      key = HashKey.fromBytes(rlp.encode([10'u64]))[]
+      key = HashKey.fromBytes(repeat(0x34'u8, 32))[]
 
     check:
       deblobify(blobify(leafAccount, key), VertexRef)[] == leafAccount

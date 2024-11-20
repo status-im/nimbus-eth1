@@ -57,7 +57,7 @@ proc branchNibbleMin*(vtx: VertexRef; minInx: int8): int8 =
   ## greater or equal the argument `nibble`.
   if vtx.vType == Branch:
     for n in minInx .. 15:
-      if vtx.bVid[n].isValid:
+      if vtx.bVid(uint8 n).isValid:
         return n
   -1
 
@@ -66,7 +66,7 @@ proc branchNibbleMax*(vtx: VertexRef; maxInx: int8): int8 =
   ## less or equal the argument `nibble`.
   if vtx.vType == Branch:
     for n in maxInx.countdown 0:
-      if vtx.bVid[n].isValid:
+      if vtx.bVid(uint8 n).isValid:
         return n
   -1
 
@@ -112,7 +112,7 @@ proc complete(
       else:
         leg.nibble = vtx.branchNibbleMax 15
       if 0 <= leg.nibble:
-        vid = vtx.bVid[leg.nibble]
+        vid = vtx.bVid(uint8 leg.nibble)
         vtx = db.getVtx (hike.root, vid)
         if vtx.isValid:
           uHike.legs.add leg
@@ -225,7 +225,7 @@ proc finalise(
     if 0 <= top.nibble and top.nibble == top.wp.vtx.branchBorderNibble:
       # Check the following up vertex
       let
-        vid = top.wp.vtx.bVid[top.nibble]
+        vid = top.wp.vtx.bVid(uint8 top.nibble)
         vtx = db.getVtx (hike.root, vid)
       if not vtx.isValid:
         return err((vid,NearbyDanglingLink))
@@ -298,7 +298,7 @@ proc nearbyNext(
 
     # Look ahead checking next vertex
     if start:
-      let vid = top.wp.vtx.bVid[top.nibble]
+      let vid = top.wp.vtx.bVid(uint8 top.nibble)
       if not vid.isValid:
         return err((top.wp.vid,NearbyDanglingLink)) # error
 
@@ -322,7 +322,7 @@ proc nearbyNext(
     if 0 <= n:
       uHike.legs[^1].nibble = n
       return uHike.complete(
-        step.wp.vtx.bVid[n], db, hikeLenMax, doLeast=moveRight)
+        step.wp.vtx.bVid(uint8 n), db, hikeLenMax, doLeast=moveRight)
 
     if start:
       # Retry without look ahead
@@ -550,7 +550,7 @@ proc rightMissing*(
   if top.wp.vtx.vType != Branch or top.nibble < 0:
     return err(NearbyBranchError)
 
-  let vid = top.wp.vtx.bVid[top.nibble]
+  let vid = top.wp.vtx.bVid(uint8 top.nibble)
   if not vid.isValid:
     return err(NearbyDanglingLink) # error
 

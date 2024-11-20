@@ -383,6 +383,12 @@ func hash*(a: HashKey): Hash =
   ## Table/KeyedQueue mixin
   hash(a.data)
 
+func append*(w: var RlpWriter; key: HashKey) =
+  if 1 < key.len and key.len < 32:
+    w.appendRawBytes key.data
+  else:
+    w.append key.data
+
 # ------------------------------------------------------------------------------
 # Miscellaneous helpers
 # ------------------------------------------------------------------------------

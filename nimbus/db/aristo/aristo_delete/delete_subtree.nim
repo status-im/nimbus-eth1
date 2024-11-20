@@ -29,9 +29,8 @@ proc delSubTreeNow(
     return err(error)
 
   if vtx.vType == Branch:
-    for n in 0..15:
-      if vtx.bVid[n].isValid:
-        ? db.delSubTreeNow((rvid.root,vtx.bVid[n]))
+    for _, subvid in vtx.pairs():
+      ? db.delSubTreeNow((rvid.root, subvid))
 
   db.layersResVtx(rvid)
 
@@ -53,11 +52,10 @@ proc delStoTreeNow(
 
   case vtx.vType
   of Branch:
-    for i in 0..15:
-      if vtx.bVid[i].isValid:
-        ? db.delStoTreeNow(
-          (rvid.root, vtx.bVid[i]), accPath,
-          stoPath & vtx.pfx & NibblesBuf.nibble(byte i))
+    for n, subvid in vtx.pairs():
+      ? db.delStoTreeNow(
+        (rvid.root, subvid), accPath,
+        stoPath & vtx.pfx & NibblesBuf.nibble(n))
 
   of Leaf:
     let stoPath = Hash32((stoPath & vtx.pfx).getBytes())

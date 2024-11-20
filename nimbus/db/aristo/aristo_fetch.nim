@@ -83,7 +83,7 @@ proc retrieveMerkleHash(
       ): Result[Hash32,AristoError] =
   let key =
     db.computeKey((root, root)).valueOr:
-      if error == GetVtxNotFound:
+      if error in [GetVtxNotFound, GetKeyNotFound]:
         return ok(EMPTY_ROOT_HASH)
       return err(error)
 

@@ -92,10 +92,10 @@ proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): seq[byte] =
   of AccountData:
     let key = block:
       if pyl.stoID.isValid:
-        let rc = ps.db.getKeyRc (VertexID(1),pyl.stoID.vid)
+        let rc = ps.db.getKeyRc((VertexID(1),pyl.stoID.vid), {})
         if rc.isErr:
           raiseAssert info & ": getKey => " & $rc.error
-        rc.value[0]
+        rc.value[0][0]
       else:
         VOID_HASH_KEY
 

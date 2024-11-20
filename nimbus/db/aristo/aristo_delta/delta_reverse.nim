@@ -35,9 +35,9 @@ proc revSubTree(
         return err((rvid.vid,rc.error))
 
     key = block:
-      let rc = db.getKeyUbe rvid
+      let rc = db.getKeyUbe(rvid, {})
       if rc.isOk:
-        rc.value
+        rc.value[0]
       elif rc.error == GetKeyNotFound:
         VOID_HASH_KEY
       else:
@@ -89,9 +89,9 @@ proc revFilter*(
 
   # Calculate reverse changes for the `kMap[]` structural table.
   for rvid in filter.kMap.keys:
-    let rc = db.getKeyUbe rvid
+    let rc = db.getKeyUbe(rvid, {})
     if rc.isOk:
-      rev.kMap[rvid] = rc.value
+      rev.kMap[rvid] = rc.value[0]
     elif rc.error == GetKeyNotFound:
       rev.kMap[rvid] = VOID_HASH_KEY
     else:

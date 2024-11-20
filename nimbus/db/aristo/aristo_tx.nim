@@ -159,8 +159,8 @@ proc findTx*(
 
   # Try `(vid,key)` on unfiltered backend
   block:
-    let beKey = db.getKeyUbe(rvid).valueOr: VOID_HASH_KEY
-    if beKey == key:
+    let beKey = db.getKeyUbe(rvid, {}).valueOr: (VOID_HASH_KEY, nil)
+    if beKey[0] == key:
       return ok(-2)
 
   err(TxNotFound)

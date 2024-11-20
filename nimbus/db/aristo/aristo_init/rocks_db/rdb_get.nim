@@ -22,25 +22,21 @@ import
   ./rdb_desc,
   std/concurrency/atomics
 
-const
-  extraTraceMessages = false
-    ## Enable additional logging noise
+const extraTraceMessages = false ## Enable additional logging noise
 
 when extraTraceMessages:
-  import
-    chronicles
+  import chronicles
 
   logScope:
     topics = "aristo-rocksdb"
 
 when defined(metrics):
-  import
-    metrics
-  
+  import metrics
+
   type
     RdbVtxLruCounter = ref object of Counter
     RdbKeyLruCounter = ref object of Counter
-  
+
   var
     rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
       "aristo_rdb_vtx_lru_total",
@@ -50,10 +46,10 @@ when defined(metrics):
     rdbKeyLruStatsMetric {.used.} = RdbKeyLruCounter.newCollector(
       "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
     )
-  
+
   method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
     let timestamp = collector.now()
-  
+
     # We don't care about synchronization between each type of metric or between
     # the metrics thread and others since small differences like this don't matter
     for state in RdbStateType:
@@ -66,10 +62,10 @@ when defined(metrics):
             labelValues = [$state, $vtype, $ord(hit)],
             timestamp = timestamp,
           )
-  
+
   method collect*(collector: RdbKeyLruCounter, output: MetricHandler) =
     let timestamp = collector.now()
-  
+
     for state in RdbStateType:
       for hit in [false, true]:
         output(
@@ -84,16 +80,16 @@ when defined(metrics):
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[seq[byte],(AristoError,string)] =
+proc getAdm*(rdb: RdbInst, xid: AdminTabID): Result[seq[byte], (AristoError, string)] =
   var res: seq[byte]
   let onData = proc(data: openArray[byte]) =
     res = @data
 
   let gotData = rdb.admCol.get(xid.toOpenArray, onData).valueOr:
-     const errSym = RdbBeDriverGetAdmError
-     when extraTraceMessages:
-       trace logTxt "getAdm", xid, error=errSym, info=error
-     return err((errSym,error))
+    const errSym = RdbBeDriverGetAdmError
+    when extraTraceMessages:
+      trace logTxt "getAdm", xid, error = errSym, info = error
+    return err((errSym, error))
 
   # Correct result if needed
   if not gotData:
@@ -101,43 +97,64 @@ proc getAdm*(rdb: RdbInst; xid: AdminTabID): Result[seq[byte],(AristoError,strin
   ok move(res)
 
 proc getKey*(
-    rdb: var RdbInst;
-    rvid: RootedVertexID;
-      ): Result[HashKey,(AristoError,string)] =
-  # Try LRU cache first
-  var rc = rdb.rdKeyLru.get(rvid.vid)
-  if rc.isOk:
-    rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-    return ok(move(rc.value))
+    rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
+): Result[(HashKey, VertexRef), (AristoError, string)] =
+  block:
+    # Try LRU cache first
+    let rc =
+      if GetVtxFlag.PeekCache in flags:
+        rdb.rdKeyLru.peek(rvid.vid)
+      else:
+        rdb.rdKeyLru.get(rvid.vid)
 
-  rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+    if rc.isOk:
+      rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+      return ok((rc.value, nil))
+
+    rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+
+  block:
+    # We don't store keys for leaves, no need to hit the database
+    let rc = rdb.rdVtxLru.peek(rvid.vid)
+    if rc.isOk():
+      if rc.value().vType == Leaf:
+        return ok((VOID_HASH_KEY, rc.value()))
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
-  var res{.threadvar.}: Opt[HashKey]
+  var res {.threadvar.}: Opt[HashKey]
+  var vtx {.threadvar.}: Result[VertexRef, AristoError]
+
   let onData = proc(data: openArray[byte]) =
     res = data.deblobify(HashKey)
+    if res.isSome():
+      reset(vtx)
+    else:
+      vtx = data.deblobify(VertexRef)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
-     const errSym = RdbBeDriverGetKeyError
-     when extraTraceMessages:
-       trace logTxt "getKey", rvid, error=errSym, info=error
-     return err((errSym,error))
+    const errSym = RdbBeDriverGetKeyError
+    when extraTraceMessages:
+      trace logTxt "getKey", rvid, error = errSym, info = error
+    return err((errSym, error))
 
-  # Correct result if needed
-  if not gotData or res.isNone():
-    res.ok(VOID_HASH_KEY)
+  if not gotData:
+    return ok((VOID_HASH_KEY, nil))
 
-  # Update cache and return
-  rdb.rdKeyLru.put(rvid.vid, res.value())
+  # Update cache and return - in peek mode, avoid evicting cache items
+  if res.isSome() and
+      (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+    rdb.rdKeyLru.put(rvid.vid, res.value())
 
-  ok res.value()
+  if vtx.isOk() and
+      (GetVtxFlag.PeekCache notin flags or rdb.rdVtxLru.len < rdb.rdVtxLru.capacity):
+    rdb.rdVtxLru.put(rvid.vid, vtx.value())
+
+  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(nil))
 
 proc getVtx*(
-    rdb: var RdbInst;
-    rvid: RootedVertexID;
-    flags: set[GetVtxFlag];
-      ): Result[VertexRef,(AristoError,string)] =
+    rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
+): Result[VertexRef, (AristoError, string)] =
   # Try LRU cache first
   var rc =
     if GetVtxFlag.PeekCache in flags:
@@ -151,15 +168,15 @@ proc getVtx*(
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
-  var res {.threadvar.}: Result[VertexRef,AristoError]
+  var res {.threadvar.}: Result[VertexRef, AristoError]
   let onData = proc(data: openArray[byte]) =
     res = data.deblobify(VertexRef)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
     when extraTraceMessages:
-      trace logTxt "getVtx", vid, error=errSym, info=error
-    return err((errSym,error))
+      trace logTxt "getVtx", vid, error = errSym, info = error
+    return err((errSym, error))
 
   if not gotData:
     # As a hack, we count missing data as leaf nodes
