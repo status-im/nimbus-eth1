@@ -232,7 +232,7 @@ type
         "the same machines. The option might be removed/adjusted in the future",
       defaultValue: defaultPortalProtocolConfig.tableIpLimits.tableIpLimit,
       defaultValueDesc: $defaultTableIpLimitDesc,
-      name: "table-ip-limit"
+      name: "debug-table-ip-limit"
     .}: uint
 
     bucketIpLimit* {.
@@ -243,7 +243,7 @@ type
         "the same machines. The option might be removed/adjusted in the future",
       defaultValue: defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit,
       defaultValueDesc: $defaultBucketIpLimitDesc,
-      name: "bucket-ip-limit"
+      name: "debug-bucket-ip-limit"
     .}: uint
 
     bitsPerHop* {.
@@ -251,7 +251,7 @@ type
       desc: "Kademlia's b variable, increase for less hops per lookup",
       defaultValue: defaultPortalProtocolConfig.bitsPerHop,
       defaultValueDesc: $defaultBitsPerHopDesc,
-      name: "bits-per-hop"
+      name: "debug-bits-per-hop"
     .}: int
 
     maxGossipNodes* {.
@@ -259,7 +259,14 @@ type
       desc: "The maximum number of nodes to send content to during gossip",
       defaultValue: defaultPortalProtocolConfig.maxGossipNodes,
       defaultValueDesc: $defaultMaxGossipNodesDesc,
-      name: "max-gossip-nodes"
+      name: "debug-max-gossip-nodes"
+    .}: int
+
+    maxConcurrentOffers* {.
+      hidden,
+      desc: "The maximum number of offers to send concurrently",
+      defaultValue: defaultPortalProtocolConfig.maxConcurrentOffers,
+      name: "debug-max-concurrent-offers"
     .}: int
 
     radiusConfig* {.
@@ -316,14 +323,14 @@ type
         "Size of the in memory local content cache. This is the max number " &
         "of content values that can be stored in the cache.",
       defaultValue: defaultPortalProtocolConfig.contentCacheSize,
-      name: "content-cache-size"
+      name: "debug-content-cache-size"
     .}: int
 
     disableContentCache* {.
       hidden,
       desc: "Disable the in memory local content cache",
       defaultValue: defaultPortalProtocolConfig.disableContentCache,
-      name: "disable-content-cache"
+      name: "debug-disable-content-cache"
     .}: bool
 
     disablePoke* {.
