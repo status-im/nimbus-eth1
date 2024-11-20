@@ -145,33 +145,31 @@ proc startTasks*(
 # ------
 
 when isMainModule:
-  notice "Starting Nimbus"
-
+  info "Starting Nimbus"
+  ## TODO
+  ## - file limits
+  ## - setup logging
+  ## - read configuration (check nimbus_configs file anottations)
   ## - implement config reader for all components
   let nimbusConfigs = NimbusConfig()
   var tasksList: NimbusTasks = NimbusTasks.new
 
-  ##TODO: this is an adapted call os the vars required by makeBannerAndConfig
-  ##these values need to be read from some config file
   var beaconNodeConfig = makeBannerAndConfig(
-    clientName, copyrightBanner, nimBanner, versionAsStr, [], BeaconNodeConf
+    clientId, copyrights, nimBanner, SPEC_VERSION, [], BeaconNodeConf
   ).valueOr:
     stderr.write error
     quit QuitFailure
 
-  #TODO: if we don't add the "db" program crashes on
-  if not (checkAndCreateDataDir(string(beaconNodeConfig.dataDir / "db"))):
-    # We are unable to access/create data folder or data folder's
-    # permissions are insecure.
+  if not (checkAndCreateDataDir(string(beaconNodeConfig.dataDir))):
     quit QuitFailure
 
-  # TODO: data directory is not created(build/data/shared_holesky_0/db/)
-  # and "createPidFile" throws an exception
-  # solution: manually create the directory
+  setupFileLimits()
+
+  setupLogging(config.logLevel, config.logStdout, config.logFile)
+
   createPidFile(beaconNodeConfig.databaseDir.string / "unified.pid")
 
   ## Graceful shutdown by handling of Ctrl+C signal
-  ## TODO: we might need to declare it per thread
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
