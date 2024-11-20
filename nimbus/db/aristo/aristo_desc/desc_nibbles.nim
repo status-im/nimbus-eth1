@@ -78,9 +78,9 @@ func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf {.noinit.} =
   result.iend = e.int8
 
 func replaceSuffix*(r: NibblesBuf, suffix: NibblesBuf): NibblesBuf =
-  for i in 0..<r.len - suffix.len:
+  for i in 0 ..< r.len - suffix.len:
     result[i] = r[i]
-  for i in 0..<suffix.len:
+  for i in 0 ..< suffix.len:
     result[i + r.len - suffix.len] = suffix[i]
   result.iend = min(64, r.len + suffix.len).int8
 
@@ -122,28 +122,33 @@ func startsWith*(lhs, rhs: NibblesBuf): bool =
 
 func fromHexPrefix*(
     T: type NibblesBuf, r: openArray[byte]
-): tuple[isLeaf: bool, nibbles: NibblesBuf] =
+): tuple[isLeaf: bool, nibbles: NibblesBuf] {.noinit.} =
+  result.nibbles.ibegin = 0
+
   if r.len > 0:
     result.isLeaf = (r[0] and 0x20) != 0
     let hasOddLen = (r[0] and 0x10) != 0
 
-    var i = 0'i8
-    if hasOddLen:
-      result.nibbles[0] = r[0] and 0x0f
-      i += 1
+    result.nibbles.iend =
+      if hasOddLen:
+        result.nibbles.bytes[0] = r[0] shl 4
 
-    for j in 1 ..< r.len:
-      if i >= 64:
-        break
-      result.nibbles[i] = r[j] shr 4
-      result.nibbles[i + 1] = r[j] and 0x0f
-      i += 2
+        let bytes = min(31, r.len - 1)
+        for j in 0 ..< bytes:
+          result.nibbles.bytes[j] = result.nibbles.bytes[j] or r[j + 1] shr 4
+          result.nibbles.bytes[j + 1] = r[j + 1] shl 4
 
-    result.nibbles.iend = i
+        int8(bytes) * 2 + 1
+      else:
+        let bytes = min(32, r.len - 1)
+        assign(result.nibbles.bytes.toOpenArray(0, bytes - 1), r.toOpenArray(1, bytes))
+        int8(bytes) * 2
   else:
     result.isLeaf = false
+    result.nibbles.iend = 0
 
 func `&`*(a, b: NibblesBuf): NibblesBuf {.noinit.} =
+  result.ibegin = 0
   for i in 0 ..< a.len:
     result[i] = a[i]
 
