@@ -340,7 +340,10 @@ proc validateContent(
     n.validateHistoricalSummaries(summariesWithProof)
 
 proc validateContent(
-    n: BeaconNetwork, srcNodeId: Opt[NodeId], contentKeys: ContentKeysList, contentItems: seq[seq[byte]]
+    n: BeaconNetwork,
+    srcNodeId: Opt[NodeId],
+    contentKeys: ContentKeysList,
+    contentItems: seq[seq[byte]],
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   # content passed here can have less items then contentKeys, but not more.
   for i, contentItem in contentItems:

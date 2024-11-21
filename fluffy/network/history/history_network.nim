@@ -359,7 +359,10 @@ proc new*(
   )
 
 proc validateContent(
-    n: HistoryNetwork, srcNodeId: Opt[NodeId], contentKeys: ContentKeysList, contentItems: seq[seq[byte]]
+    n: HistoryNetwork,
+    srcNodeId: Opt[NodeId],
+    contentKeys: ContentKeysList,
+    contentItems: seq[seq[byte]],
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   # content passed here can have less items then contentKeys, but not more.
   for i, contentItem in contentItems:
@@ -374,7 +377,8 @@ proc validateContent(
 
       debug "Received offered content validated successfully", srcNodeId, contentKey
     else:
-      debug "Received offered content failed validation", srcNodeId, contentKey, error = res.error
+      debug "Received offered content failed validation",
+        srcNodeId, contentKey, error = res.error
       return false
 
   return true

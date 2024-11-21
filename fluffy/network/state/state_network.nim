@@ -226,7 +226,8 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
 
         if offerRes.isOk():
           state_network_offers_success.inc(labelValues = [$n.portalProtocol.protocolId])
-          debug "Received offered content validated successfully", srcNodeId, contentKeyBytes
+          debug "Received offered content validated successfully",
+            srcNodeId, contentKeyBytes
         else:
           state_network_offers_failed.inc(labelValues = [$n.portalProtocol.protocolId])
           error "Received offered content failed validation",
