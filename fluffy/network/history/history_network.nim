@@ -359,7 +359,10 @@ proc new*(
   )
 
 proc validateContent(
-    n: HistoryNetwork, contentKeys: ContentKeysList, contentItems: seq[seq[byte]]
+    n: HistoryNetwork,
+    srcNodeId: Opt[NodeId],
+    contentKeys: ContentKeysList,
+    contentItems: seq[seq[byte]],
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   # content passed here can have less items then contentKeys, but not more.
   for i, contentItem in contentItems:
@@ -367,14 +370,15 @@ proc validateContent(
     let res = await n.validateContent(contentItem, contentKey)
     if res.isOk():
       let contentId = n.portalProtocol.toContentId(contentKey).valueOr:
-        warn "Received offered content with invalid content key", contentKey
+        warn "Received offered content with invalid content key", srcNodeId, contentKey
         return false
 
       n.portalProtocol.storeContent(contentKey, contentId, contentItem)
 
-      debug "Received offered content validated successfully", contentKey
+      debug "Received offered content validated successfully", srcNodeId, contentKey
     else:
-      debug "Received offered content failed validation", contentKey, error = res.error
+      debug "Received offered content failed validation",
+        srcNodeId, contentKey, error = res.error
       return false
 
   return true
@@ -388,7 +392,7 @@ proc processContentLoop(n: HistoryNetwork) {.async: (raises: []).} =
       # dropped and not gossiped around.
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
-      if await n.validateContent(contentKeys, contentItems):
+      if await n.validateContent(srcNodeId, contentKeys, contentItems):
         asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
           srcNodeId, contentKeys, contentItems
         )
