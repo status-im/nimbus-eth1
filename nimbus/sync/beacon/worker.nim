@@ -54,7 +54,7 @@ proc napUnlessSomethingToFetch(
 
 proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Global set up
-  ctx.setupRpcMagic()
+  ctx.setupRpcMagic info
 
   # Load initial state from database if there is any
   ctx.setupDatabase info
@@ -109,11 +109,9 @@ proc runDaemon*(
   ## first usable request from the CL (via RPC) stumbles in.
   ##
   # Check for a possible header layout and body request changes
-  ctx.updateSyncStateLayout info
+  ctx.updateSyncState info
   if ctx.hibernate:
     return
-
-  ctx.updateBlockRequests info
 
   # Execute staged block records.
   if ctx.blocksStagedCanImportOk():

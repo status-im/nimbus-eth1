@@ -19,7 +19,7 @@ import
   ../worker_desc,
   ./update/metrics,
   ./headers_staged/[headers, linked_hchain],
-  ./headers_unproc
+  "."/[headers_unproc, update]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -60,7 +60,7 @@ proc headerStagedUpdateTarget*(
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  if not ctx.layout.headLocked and
+  if ctx.layout.lastState == idleSyncState and
      ctx.target.final == 0 and
      ctx.target.finalHash != zeroHash32 and
      not ctx.target.locked:
@@ -78,23 +78,7 @@ proc headerStagedUpdateTarget*(
         trace info & ": finalised header hash mismatch", peer, hash,
           expected=ctx.target.finalHash
       else:
-        let final = rc.value[0].number
-        if final < ctx.chain.baseNumber():
-          trace info & ": finalised number too low", peer,
-            B=ctx.chain.baseNumber.bnStr, finalised=final.bnStr,
-            delta=(ctx.chain.baseNumber - final)
-          ctx.target.reset
-        else:
-          ctx.target.final = final
-
-          # Activate running (unless done yet)
-          if ctx.hibernate:
-            ctx.hibernate = false
-            trace info & ": activated syncer", peer,
-              finalised=final.bnStr, head=ctx.layout.head.bnStr
-
-          # Update, so it can be followed nicely
-          ctx.updateMetrics()
+        ctx.updateFinalBlockHeader(rc.value[0], ctx.target.finalHash, info)
 
 
 proc headersStagedCollect*(
@@ -135,8 +119,9 @@ proc headersStagedCollect*(
     isOpportunistic = uTop + 1 < ctx.layout.dangling
 
     # Parent hash for `lhc` below
-    topLink = (if isOpportunistic: EMPTY_ROOT_HASH
-               else: ctx.layout.danglingParent)
+    topLink = if isOpportunistic: EMPTY_ROOT_HASH
+              else: ctx.dbHeaderParentHash(ctx.layout.dangling).expect "Hash32"
+
   var
     # This value is used for splitting the interval `iv` into
     # `[iv.minPt, somePt] + [somePt+1, ivTop] + already-collected` where the
@@ -210,7 +195,7 @@ proc headersStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = lhc[]
 
-  trace info & ": staged header list", peer,
+  trace info & ": staged a list of headers", peer,
     topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
     nStaged=ctx.hdr.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
 
@@ -244,7 +229,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # Update, so it can be followed nicely
     ctx.updateMetrics()
 
-    if qItem.data.hash != ctx.layout.danglingParent:
+    if qItem.data.hash != ctx.dbHeaderParentHash(dangling).expect "Hash32":
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
       trace info & ": discarding staged header list", iv, D=dangling.bnStr,
@@ -252,14 +237,13 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
       break
 
     # Store headers on database
-    ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs, info)
+    ctx.dbHeadersStash(iv.minPt, qItem.data.revHdrs, info)
     ctx.layout.dangling = iv.minPt
-    ctx.layout.danglingParent = qItem.data.parentHash
     ctx.dbStoreSyncStateLayout info
 
     result += qItem.data.revHdrs.len # count headers
 
-  trace info & ": consecutive headers stashed",
+  trace info & ": stashed consecutive headers",
     nListsLeft=ctx.hdr.staged.len, nStashed=result
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:

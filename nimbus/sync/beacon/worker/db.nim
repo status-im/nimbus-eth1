@@ -17,7 +17,7 @@ import
   pkg/results,
   "../../.."/[common, core/chain, db/storage_types],
   ../worker_desc,
-  "."/[blocks_unproc, headers_unproc]
+  ./headers_unproc
 
 const
   LhcStateKey = 1.beaconStateKey
@@ -75,9 +75,6 @@ proc deleteStaleHeadersAndState(
 
 proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Save chain layout to persistent db
-  if ctx.layout == ctx.sst.lastLayout:
-    return
-
   let data = rlp.encode(ctx.layout)
   ctx.db.ctx.getKvt().put(LhcStateKey.toOpenArray, data).isOkOr:
     raiseAssert info & " put() failed: " & $$error
@@ -103,17 +100,16 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
      # The base number is the least record of the FCU chains/tree. So the
      # finalised entry must not be smaller.
      ctx.chain.baseNumber() <= rc.value.final and
+
      # If the latest FCU number is not larger than the head, there is nothing
      # to do (might also happen after a manual import.)
-     latest < rc.value.head:
+     latest < rc.value.head and
+
+     # Can only resume a header download. Blocks need to be set up from scratch.
+     rc.value.lastState == collectingHeaders:
 
     # Assign saved sync state
     ctx.sst.layout = rc.value
-    ctx.sst.lastLayout = rc.value
-
-    # Add interval of unprocessed block range `(L,C]` from `README.md`
-    ctx.blocksUnprocSet(latest+1, ctx.layout.coupler)
-    ctx.blk.topRequest = ctx.layout.coupler
 
     # Add interval of unprocessed header range `(C,D)` from `README.md`
     ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
@@ -125,28 +121,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
     true
 
   else:
-    let
-      latestHash = ctx.chain.latestHash()
-      latestParent = ctx.chain.latestHeader.parentHash
-
-    ctx.sst.layout = SyncStateLayout(
-      coupler:        latest,
-      couplerHash:    latestHash,
-      dangling:       latest,
-      danglingParent: latestParent,
-      # There is no need to record a separate finalised head `F` as its only
-      # use is to serve as second argument in `forkChoice()` when committing
-      # a batch of imported blocks. Currently, there are no blocks to fetch
-      # and import. The system must wait for instructions and update the fields
-      # `final` and `head` while the latter will be increased so that import
-      # can start.
-      final:          latest,
-      finalHash:      latestHash,
-      head:           latest,
-      headHash:       latestHash,
-      headLocked:     false)
-
-    ctx.sst.lastLayout = ctx.layout
+    ctx.sst.layout = SyncStateLayout() # empty layout
 
     if rc.isOk:
       # Some stored headers might have become stale, so delete them. Even
@@ -160,7 +135,7 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
         # at the `head` and work backwards.
         ctx.deleteStaleHeadersAndState(rc.value.head, info)
       else:
-        # Delete stale headers with block numbers starting at to `latest` wile
+        # Delete stale headers with block numbers starting at to `latest` while
         # working backwards.
         ctx.deleteStaleHeadersAndState(latest, info)
 
@@ -168,7 +143,11 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
 
 # ------------------
 
-proc dbStashHeaders*(
+proc dbHeadersClear*(ctx: BeaconCtxRef) =
+  ## Clear stashed in-memory headers
+  ctx.stash.clear
+
+proc dbHeadersStash*(
     ctx: BeaconCtxRef;
     first: BlockNumber;
     revBlobs: openArray[seq[byte]];
@@ -199,7 +178,7 @@ proc dbStashHeaders*(
       kvt.put(key.toOpenArray, data).isOkOr:
         raiseAssert info & ": put() failed: " & $$error
 
-proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
+proc dbHeaderPeek*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
   # Try cache first
   ctx.stash.withValue(num, val):
@@ -218,11 +197,11 @@ proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
       discard
   err()
 
-proc dbPeekParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
+proc dbHeaderParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
   ## Retrieve some stashed parent hash.
-  ok (? ctx.dbPeekHeader num).parentHash
+  ok (? ctx.dbHeaderPeek num).parentHash
 
-proc dbUnstashHeader*(ctx: BeaconCtxRef; bn: BlockNumber) =
+proc dbHeaderUnstash*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
   ctx.stash.withValue(bn, _):
     ctx.stash.del bn
