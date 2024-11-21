@@ -232,7 +232,7 @@ type
         "the same machines. The option might be removed/adjusted in the future",
       defaultValue: defaultPortalProtocolConfig.tableIpLimits.tableIpLimit,
       defaultValueDesc: $defaultTableIpLimitDesc,
-      name: "debug-table-ip-limit"
+      name: "table-ip-limit"
     .}: uint
 
     bucketIpLimit* {.
@@ -243,7 +243,7 @@ type
         "the same machines. The option might be removed/adjusted in the future",
       defaultValue: defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit,
       defaultValueDesc: $defaultBucketIpLimitDesc,
-      name: "debug-bucket-ip-limit"
+      name: "bucket-ip-limit"
     .}: uint
 
     bitsPerHop* {.
@@ -251,7 +251,7 @@ type
       desc: "Kademlia's b variable, increase for less hops per lookup",
       defaultValue: defaultPortalProtocolConfig.bitsPerHop,
       defaultValueDesc: $defaultBitsPerHopDesc,
-      name: "debug-bits-per-hop"
+      name: "bits-per-hop"
     .}: int
 
     maxGossipNodes* {.
