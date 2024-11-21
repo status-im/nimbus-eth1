@@ -141,6 +141,13 @@ type
         defaultValueDesc: defaultEra1DataDir(),
         name: "era1-dir"
       .}: InputDir
+
+      gossipConcurrency* {.
+        desc:
+          "The number of concurrent gossip workers for gossiping content into the portal network",
+        defaultValue: 50,
+        name: "gossip-concurrency"
+      .}: int
     of PortalBridgeCmd.state:
       web3UrlState* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
         JsonRpcUrl
