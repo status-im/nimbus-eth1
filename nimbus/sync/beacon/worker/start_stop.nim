@@ -122,8 +122,6 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   # system becomes fully active. Otherwise there is some polling only waiting
   # for a new target so there is reduced service (aka `hibernate`.).
   ctx.hibernate = not ctx.dbLoadSyncStateLayout info
-  if ctx.hibernate:
-    trace info & ": hibernating", latest=ctx.chain.latestNumber.bnStr
 
   # Set blocks batch import value for block import
   if ctx.pool.nBodiesBatch < nFetchBodiesRequest:
