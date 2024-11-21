@@ -13,7 +13,7 @@
 import
   eth/common,
   results,
-  ".."/[aristo_desc, aristo_get, aristo_utils, aristo_compute, aristo_serialise]
+  ".."/[aristo_desc, aristo_get, aristo_utils, aristo_serialise]
 
 const
   ChainRlpNodesNoEntry* = {
