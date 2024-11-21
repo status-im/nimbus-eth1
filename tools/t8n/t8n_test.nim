@@ -169,7 +169,7 @@ proc runTest(appDir: string, spec: TestSpec): bool =
 
   if spec.expOut.len > 0:
     if spec.expOut.endsWith(".json"):
-      let path = base / spec.expOut      
+      let path = base / spec.expOut
       try:
         let want = json.parseFile(path)
         let have = json.parseJson(res)
@@ -470,7 +470,7 @@ const
       name  : "Revert In Create In Init Create2",
       base  : "testdata/00-512",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Berlin", "0", "0"
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -479,7 +479,7 @@ const
       name  : "Revert In Create In Init",
       base  : "testdata/00-513",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Berlin", "0", "0"
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -488,7 +488,7 @@ const
       name  : "Init collision 3",
       base  : "testdata/00-514",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Berlin", "0", "0"
+        "alloc.json", "txs.rlp", "env.json", "Berlin", "0"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -506,7 +506,7 @@ const
       name  : "GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideLast_Frontier",
       base  : "testdata/00-516",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Frontier", "5000000000000000000", "0"
+        "alloc.json", "txs.rlp", "env.json", "Frontier", "5000000000000000000"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",

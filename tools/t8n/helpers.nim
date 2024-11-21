@@ -264,7 +264,8 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     optional(accessList)
     required(authorizationList)
 
-  if tx.chainId != chainId:
+  # Ignore chainId if txType == TxLegacy
+  if tx.txType > TxLegacy and tx.chainId != chainId:
     return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
 
   let eip155 = txo.protected.get(true)
@@ -285,10 +286,10 @@ proc readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
     else:
       var rr = rlpFromBytes(rlp.read(seq[byte]))
       rr.read(Transaction)
-    if tx.chainId == chainId:
-      ok(tx)
-    else:
-      err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
+    # Ignore chainId if txType == TxLegacy
+    if tx.txType > TxLegacy and tx.chainId != chainId:
+      return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
+    ok(tx)
   except RlpError as exc:
     err(exc.msg)
 
