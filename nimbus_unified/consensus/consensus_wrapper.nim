@@ -2412,15 +2412,42 @@ proc doRunBeaconNode(config: var BeaconNodeConf, rng: ref HmacDrbgContext) {.rai
 
 ## --end copy paste file from nimbus-eth2/nimbus_beacon_node.nim
 
+proc handleStartingOption(config: var BeaconNodeConf) {.raises: [CatchableError].} =
+  let rng = HmacDrbgContext.new()
+
+  # More options can be added, might be out of scope given that they exist in eth2
+  case config.cmd
+  of BNSStartUpCmd.noCommand: doRunBeaconNode(config, rng)
+  of BNSStartUpCmd.trustedNodeSync:
+      if config.blockId.isSome():
+      error "--blockId option has been removed - use --state-id instead!"
+      quit 1
+
+    let
+      metadata = loadEth2Network(config)
+      db = BeaconChainDB.new(config.databaseDir, metadata.cfg, inMemory = false)
+      genesisState = waitFor fetchGenesisState(metadata)
+    waitFor db.doRunTrustedNodeSync(
+      config.databaseDir,
+      config.eraDir,
+      config.trustedNodeUrl,
+      config.stateId,
+      config.lcTrustedBlockRoot,
+      config.backfillBlocks,
+      config.reindex,
+      config.downloadDepositSnapshot,
+      genesisState)
+    db.close()
+
 ## Consensus wrapper
 proc consensusWrapper*(parameters: TaskParameters) {.raises: [CatchableError].} =
-  let rng = HmacDrbgContext.new()
-  var config = parameters.beaconNodeConfigs
 
-  try:
+  var config = parameters.beaconNodeConfigs
+    try:
     doRunBeaconNode(config, rng)
   except CatchableError as e:
     fatal "error", message = e.msg
+    isShutDownRequired.store(true)
 
   isShutDownRequired.store(true)
   warn "\tExiting consensus wrapper"
