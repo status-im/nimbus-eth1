@@ -12,7 +12,6 @@ import
   std/[
     options,
     strutils,
-    times,
     os,
     uri,
     net

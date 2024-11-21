@@ -63,17 +63,16 @@ func u256*(x: FixedBytes[32]): UInt256 =
 func ethTime*(x: Web3Quantity): EthTime =
   EthTime(x)
 
-func ethGasInt*(x: Web3Quantity): GasInt =
-  GasInt x
-
 func ethBlob*(x: Web3ExtraData): seq[byte] =
   distinctBase x
 
-func ethWithdrawal*(x: WithdrawalV1): common.Withdrawal =
-  result.index = x.index.uint64
-  result.validatorIndex = x.validatorIndex.uint64
-  result.address = x.address
-  result.amount = x.amount.uint64
+func ethWithdrawal*(x: WithdrawalV1): Withdrawal =
+  Withdrawal(
+    index: x.index.uint64,
+    validatorIndex: x.validatorIndex.uint64,
+    address: x.address,
+    amount: x.amount.uint64,
+  )
 
 func ethWithdrawals*(list: openArray[WithdrawalV1]):
                        seq[Withdrawal] =
@@ -94,6 +93,27 @@ func ethTxs*(list: openArray[Web3Tx]):
   result = newSeqOfCap[common.Transaction](list.len)
   for x in list:
     result.add ethTx(x)
+
+func ethAuth*(x: AuthorizationObject): Authorization =
+  Authorization(
+    chainId: ChainId x.chainId,
+    address: x.address,
+    nonce: distinctBase x.nonce,
+    v: distinctBase x.v,
+    r: x.r,
+    s: x.s,
+  )
+
+func ethAuthList*(list: openArray[AuthorizationObject]):
+                       seq[Authorization] =
+  result = newSeqOfCap[Authorization](list.len)
+  for x in list:
+    result.add ethAuth(x)
+
+func ethAuthList*(x: Opt[seq[AuthorizationObject]]):
+                       Opt[seq[Authorization]] =
+  if x.isNone: Opt.none(seq[Authorization])
+  else: Opt.some(ethAuthList x.get)
 
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
