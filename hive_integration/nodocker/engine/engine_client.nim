@@ -269,11 +269,16 @@ proc toBlockHeader*(bc: BlockObject): Header =
     blobGasUsed    : maybeU64(bc.blobGasUsed),
     excessBlobGas  : maybeU64(bc.excessBlobGas),
     parentBeaconBlockRoot: bc.parentBeaconBlockRoot,
+    requestsHash   : bc.requestsHash,
   )
 
 func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
   if x.isNone: return
   else: x.get
+
+func authList(x: Opt[seq[AuthorizationObject]]): seq[Authorization] =
+  if x.isNone: return
+  else: ethAuthList x.get
 
 proc toTransaction(tx: TransactionObject): Transaction =
   Transaction(
@@ -293,6 +298,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     V               : tx.v.uint64,
     R               : tx.r,
     S               : tx.s,
+    authorizationList: authList(tx.authorizationList),
   )
 
 proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
@@ -360,6 +366,7 @@ type
     accessList*: Opt[seq[AccessPair]]
     maxFeePerBlobGas*: Opt[UInt256]
     versionedHashes*: Opt[seq[VersionedHash]]
+    authorizationList*: Opt[seq[Authorization]]
 
 proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
   RPCReceipt(
@@ -408,6 +415,7 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
       Opt.some(vHashes tx.blobVersionedHashes)
     else:
       Opt.none(seq[VersionedHash]),
+    authorizationList: ethAuthList(tx.authorizationList),
   )
 
 proc waitForTTD*(client: RpcClient,
