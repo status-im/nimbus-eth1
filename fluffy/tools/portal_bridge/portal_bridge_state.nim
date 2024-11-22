@@ -263,6 +263,7 @@ proc runBackfillGossipBlockOffersLoop(
     portalRpcUrl: JsonRpcUrl,
     portalNodeId: NodeId,
     verifyGossip: bool,
+    skipGossipForExisting: bool,
     workerId: int,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill gossip block offers loop", workerId
@@ -304,18 +305,29 @@ proc runBackfillGossipBlockOffersLoop(
 
     var retryGossip = false
     for k, v in offersMap:
-      try:
-        let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
-        if numPeers > 0:
-          debug "Offer successfully gossipped to peers: ", numPeers, workerId
-        elif numPeers == 0:
-          warn "Offer gossipped to no peers", workerId
+      var gossipContent = true
+      if skipGossipForExisting:
+        try:
+          let contentInfo = await portalClient.portal_stateGetContent(k.to0xHex())
+          if contentInfo.content.len() > 0:
+            gossipContent = false
+        except CatchableError as e:
+          warn "Failed to find content with key: ",
+            contentKey = k.to0xHex(), error = e.msg, workerId
+
+      if gossipContent:
+        try:
+          let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
+          if numPeers > 0:
+            debug "Offer successfully gossipped to peers: ", numPeers, workerId
+          elif numPeers == 0:
+            warn "Offer gossipped to no peers", workerId
+            retryGossip = true
+            break
+        except CatchableError as e:
+          error "Failed to gossip offer to peers", error = e.msg, workerId
           retryGossip = true
           break
-      except CatchableError as e:
-        error "Failed to gossip offer to peers", error = e.msg, workerId
-        retryGossip = true
-        break
 
     if retryGossip:
       await sleepAsync(3.seconds)
@@ -425,7 +437,8 @@ proc runState*(config: PortalBridgeConf) =
 
   for workerId in 1 .. config.gossipWorkersCount.int:
     asyncSpawn runBackfillGossipBlockOffersLoop(
-      blockOffersQueue, config.portalRpcUrl, portalNodeId, config.verifyGossip, workerId
+      blockOffersQueue, config.portalRpcUrl, portalNodeId, config.verifyGossip,
+      config.skipGossipForExisting, workerId,
     )
 
   asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)
