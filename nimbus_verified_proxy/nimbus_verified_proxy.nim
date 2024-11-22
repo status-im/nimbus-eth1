@@ -147,7 +147,7 @@ proc run*(
                 parentBeaconBlockRoot = Opt.none(Hash32),
                 requestsHash = Opt.none(Hash32),
               )
-              blockCache.add(populateBlockObject(blk.header.rlpHash, blk, true))
+              blockCache.add(populateBlockObject(blk.header.rlpHash, blk, 0.u256, true))
             except RlpError as exc:
               debug "Invalid block received", err = exc.msg
 
