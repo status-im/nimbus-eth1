@@ -420,5 +420,21 @@ proc forkedChainMain*() =
       check chain.headerByNumber(5).expect("OK").number == 5
       check chain.headerByNumber(5).expect("OK").blockHash == blk5.blockHash
 
+    test "Import after Replay Segment":
+      let com = env.newCom()
+      var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
+
+      check chain.importBlock(blk1).isOk
+      check chain.importBlock(blk2).isOk
+      check chain.importBlock(blk3).isOk
+      check chain.importBlock(blk4).isOk
+      check chain.importBlock(blk5).isOk
+
+      chain.replaySegment(blk2.header.blockHash)
+      chain.replaySegment(blk5.header.blockHash)
+
+      check chain.importBlock(blk6).isOk
+      check chain.importBlock(blk7).isOk
+
 when isMainModule:
   forkedChainMain()
