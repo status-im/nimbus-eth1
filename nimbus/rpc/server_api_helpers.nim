@@ -10,6 +10,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   eth/common/[eth_types, eth_types_rlp, transaction_utils],
   web3/eth_api_types,
   ../constants,
@@ -17,7 +18,7 @@ import
 
 from ../beacon/web3_eth_conv import w3Qty
 
-proc toWd(wd: eth_types.Withdrawal): WithdrawalObject =
+proc toWd(wd: Withdrawal): WithdrawalObject =
   WithdrawalObject(
     index: Quantity(wd.index),
     validatorIndex: Quantity wd.validatorIndex,
@@ -25,15 +26,30 @@ proc toWd(wd: eth_types.Withdrawal): WithdrawalObject =
     amount: Quantity wd.amount,
   )
 
-proc toWdList(list: openArray[eth_types.Withdrawal]): seq[WithdrawalObject] =
+proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
   result = newSeqOfCap[WithdrawalObject](list.len)
   for x in list:
     result.add toWd(x)
 
-func toWdList(x: Opt[seq[eth_types.Withdrawal]]):
+func toWdList(x: Opt[seq[Withdrawal]]):
                      Opt[seq[WithdrawalObject]] =
   if x.isNone: Opt.none(seq[WithdrawalObject])
   else: Opt.some(toWdList x.get)
+
+func toAuth*(x: Authorization): AuthorizationObject =
+  AuthorizationObject(
+    chainId: Quantity(x.chainId),
+    address: x.address,
+    nonce: Quantity(x.nonce),
+    v: Quantity(x.v),
+    r: x.r,
+    s: x.s,
+  )
+
+proc toAuthList(list: openArray[Authorization]): seq[AuthorizationObject] =
+  result = newSeqOfCap[AuthorizationObject](list.len)
+  for x in list:
+    result.add toAuth(x)
 
 proc populateTransactionObject*(tx: Transaction,
                                 optionalHash: Opt[eth_types.Hash32] = Opt.none(eth_types.Hash32),
@@ -69,9 +85,14 @@ proc populateTransactionObject*(tx: Transaction,
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
     result.blobVersionedHashes = Opt.some(tx.versionedHashes)
 
+  if tx.txType >= TxEip7702:
+    result.authorizationList = Opt.some(toAuthList(tx.authorizationList))
+
 proc populateBlockObject*(blockHash: eth_types.Hash32,
                           blk: Block,
-                          fullTx: bool): BlockObject =
+                          totalDifficulty: UInt256,
+                          fullTx: bool,
+                          withUncles: bool = false): BlockObject =
   template header: auto = blk.header
 
   result = BlockObject()
@@ -97,6 +118,10 @@ proc populateBlockObject*(blockHash: eth_types.Hash32,
   result.gasUsed   = Quantity(header.gasUsed)
   result.timestamp = Quantity(header.timestamp)
   result.baseFeePerGas = header.baseFeePerGas
+  result.totalDifficulty = totalDifficulty
+
+  if not withUncles:
+    result.uncles = blk.uncles.mapIt(it.blockHash)
 
   if fullTx:
     for i, tx in blk.transactions:
@@ -114,3 +139,4 @@ proc populateBlockObject*(blockHash: eth_types.Hash32,
   result.parentBeaconBlockRoot = header.parentBeaconBlockRoot
   result.blobGasUsed = w3Qty(header.blobGasUsed)
   result.excessBlobGas = w3Qty(header.excessBlobGas)
+  result.requestsHash = header.requestsHash

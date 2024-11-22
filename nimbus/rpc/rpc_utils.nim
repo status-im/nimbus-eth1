@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, algorithm],
+  std/[algorithm],
   ./rpc_types,
   ./params,
   ../db/core_db,
@@ -54,7 +54,7 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt {.raises: [RlpError].} =
   # For compatibility with `ethpandaops/ethereum-package`, set this to a
   # sane minimum for compatibility to unblock testing.
   # Note: When this is fixed, update `tests/graphql/queries.toml` and
-  # re-enable the "query.gasPrice" test case (remove `skip = true`).  
+  # re-enable the "query.gasPrice" test case (remove `skip = true`).
   result = max(result, minGasPrice)
 
 proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce, chainId: ChainId): Transaction
@@ -87,115 +87,6 @@ proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNon
 
   res.payload = tx.payload
   res.chainId = chainId
-
-  return res
-
-proc toWd(wd: Withdrawal): WithdrawalObject =
-  WithdrawalObject(
-    index: Quantity wd.index,
-    validatorIndex: Quantity wd.validatorIndex,
-    address: wd.address,
-    amount: Quantity wd.amount,
-  )
-
-proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
-  var res = newSeqOfCap[WithdrawalObject](list.len)
-  for x in list:
-    res.add toWd(x)
-  return res
-
-func toWdList(x: Opt[seq[eth_types.Withdrawal]]):
-                     Opt[seq[WithdrawalObject]] =
-  if x.isNone: Opt.none(seq[WithdrawalObject])
-  else: Opt.some(toWdList x.get)
-
-proc populateTransactionObject*(tx: Transaction,
-                                optionalHash: Opt[eth_types.Hash32] = Opt.none(eth_types.Hash32),
-                                optionalNumber: Opt[eth_types.BlockNumber] = Opt.none(eth_types.BlockNumber),
-                                txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
-  var res = TransactionObject()
-  res.`type` = Opt.some Quantity(tx.txType)
-  res.blockHash = optionalHash
-  res.blockNumber = w3Qty(optionalNumber)
-
-  if (let sender = tx.recoverSender(); sender.isOk):
-    res.`from` = sender[]
-  res.gas = Quantity(tx.gasLimit)
-  res.gasPrice = Quantity(tx.gasPrice)
-  res.hash = tx.rlpHash
-  res.input = tx.payload
-  res.nonce = Quantity(tx.nonce)
-  res.to = Opt.some(tx.destination)
-  if txIndex.isSome:
-    res.transactionIndex = Opt.some(Quantity(txIndex.get))
-  res.value = tx.value
-  res.v = Quantity(tx.V)
-  res.r = tx.R
-  res.s = tx.S
-  res.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
-  res.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
-
-  if tx.txType >= TxEip2930:
-    res.chainId = Opt.some(Quantity(tx.chainId))
-    res.accessList = Opt.some(tx.accessList)
-
-  if tx.txType >= TxEip4844:
-    res.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
-    res.blobVersionedHashes = Opt.some(tx.versionedHashes)
-
-  return res
-
-proc populateBlockObject*(blockHash: Hash32,
-                          blk: Block,
-                          totalDifficulty: UInt256,
-                          fullTx: bool,
-                          isUncle = false): BlockObject =
-  template header: auto = blk.header
-
-  var res = BlockObject()
-  res.number = Quantity(header.number)
-  res.hash = blockHash
-  res.parentHash = header.parentHash
-  res.nonce = Opt.some(header.nonce)
-  res.sha3Uncles = header.ommersHash
-  res.logsBloom = header.logsBloom
-  res.transactionsRoot = header.txRoot
-  res.stateRoot = header.stateRoot
-  res.receiptsRoot = header.receiptsRoot
-  res.miner = header.coinbase
-  res.difficulty = header.difficulty
-  res.extraData = HistoricExtraData header.extraData
-  res.mixHash = Hash32 header.mixHash
-
-  # discard sizeof(seq[byte]) of extraData and use actual length
-  let size = sizeof(Header) - sizeof(seq[byte]) + header.extraData.len
-  res.size = Quantity(size)
-
-  res.gasLimit  = Quantity(header.gasLimit)
-  res.gasUsed   = Quantity(header.gasUsed)
-  res.timestamp = Quantity(header.timestamp)
-  res.baseFeePerGas = header.baseFeePerGas
-  res.totalDifficulty = totalDifficulty
-
-  if not isUncle:
-    res.uncles = blk.uncles.mapIt(it.blockHash)
-
-    if fullTx:
-      for i, tx in blk.transactions:
-        let txObj = populateTransactionObject(tx,
-          Opt.some(blockHash),
-          Opt.some(header.number), Opt.some(i.uint64))
-        res.transactions.add txOrHash(txObj)
-    else:
-      for i, tx in blk.transactions:
-        let txHash = rlpHash(tx)
-        res.transactions.add txOrHash(txHash)
-
-  res.withdrawalsRoot = header.withdrawalsRoot
-  res.withdrawals = toWdList blk.withdrawals
-  res.parentBeaconBlockRoot = header.parentBeaconBlockRoot
-  res.blobGasUsed = w3Qty(header.blobGasUsed)
-  res.excessBlobGas = w3Qty(header.excessBlobGas)
 
   return res
 
