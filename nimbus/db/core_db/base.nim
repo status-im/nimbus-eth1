@@ -530,21 +530,17 @@ proc hasPath*(
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc stateRoot*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash32] =
+proc getStateRoot*(acc: CoreDbAccRef): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
   ## column (if available.)
-  ##
-  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
-  ## database will be updated first (if needed, at all).
-  ##
   acc.setTrackNewApi AccStateFn
   result = block:
-    let rc = acc.call(fetchAccountStateRoot, acc.mpt, updateOk)
+    let rc = acc.call(fetchStateRoot, acc.mpt)
     if rc.isOk:
       ok(rc.value)
     else:
       err(rc.error.toError $api)
-  acc.ifTrackNewApi: debug logTxt, api, elapsed, updateOK, result
+  acc.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 # ------------ storage ---------------
 
@@ -647,36 +643,32 @@ proc slotMerge*(
     debug logTxt, api, elapsed, accPath=($$accPath),
             stoPath=($$stoPath), stoData, result
 
-proc slotState*(
+proc slotStorageRoot*(
     acc: CoreDbAccRef;
     accPath: Hash32;
-    updateOk = false;
       ):  CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the storage data
   ## column (if available) related to the account  indexed by the key
   ## `accPath`.`.
   ##
-  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
-  ## database will be updated first (if needed, at all).
-  ##
-  acc.setTrackNewApi AccSlotStateFn
+  acc.setTrackNewApi AccSlotStorageRootFn
   result = block:
-    let rc = acc.call(fetchStorageRoot, acc.mpt, accPath, updateOk)
+    let rc = acc.call(fetchStorageRoot, acc.mpt, accPath)
     if rc.isOk:
       ok(rc.value)
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), updateOk, result
+    debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc slotStateEmpty*(
+proc slotStorageEmpty*(
     acc: CoreDbAccRef;
     accPath: Hash32;
       ):  CoreDbRc[bool] =
   ## This function returns `true` if the storage data column is empty or
   ## missing.
   ##
-  acc.setTrackNewApi AccSlotStateEmptyFn
+  acc.setTrackNewApi AccSlotStorageEmptyFn
   result = block:
     let rc = acc.call(hasStorageData, acc.mpt, accPath)
     if rc.isOk:
@@ -686,12 +678,12 @@ proc slotStateEmpty*(
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc slotStateEmptyOrVoid*(
+proc slotStorageEmptyOrVoid*(
     acc: CoreDbAccRef;
     accPath: Hash32;
       ): bool =
-  ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
-  acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
+  ## Convenience wrapper, returns `true` where `slotStorageEmpty()` would fail.
+  acc.setTrackNewApi AccSlotStorageEmptyOrVoidFn
   result = block:
     let rc = acc.call(hasStorageData, acc.mpt, accPath)
     if rc.isOk:
@@ -707,14 +699,13 @@ proc recast*(
     acc: CoreDbAccRef;
     accPath: Hash32;
     accRec: CoreDbAccount;
-    updateOk = false;
       ): CoreDbRc[Account] =
   ## Complete the argument `accRec` to the portable Ethereum representation
   ## of an account statement. This conversion may fail if the storage colState
-  ## hash (see `slotState()` above) is currently unavailable.
+  ## hash (see `slotStorageRoot()` above) is currently unavailable.
   ##
   acc.setTrackNewApi AccRecastFn
-  let rc = acc.call(fetchStorageRoot, acc.mpt, accPath, updateOk)
+  let rc = acc.call(fetchStorageRoot, acc.mpt, accPath)
   result = block:
     if rc.isOk:
       ok Account(
@@ -725,8 +716,8 @@ proc recast*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    let slotState = if rc.isOk: $$(rc.value) else: "n/a"
-    debug logTxt, api, elapsed, accPath=($$accPath), slotState, result
+    let storageRoot = if rc.isOk: $$(rc.value) else: "n/a"
+    debug logTxt, api, elapsed, accPath=($$accPath), storageRoot, result
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
