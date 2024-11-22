@@ -322,17 +322,17 @@ utp-test: | build deps
 # Nimbus Verified Proxy related targets
 
 # Builds the nimbus_verified_proxy
-nimbus_verified_proxy: | build deps
+nimbus_verified_proxy: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim nimbus_verified_proxy $(NIM_PARAMS) nimbus.nims
 
 # builds and runs the nimbus_verified_proxy test suite
-nimbus-verified-proxy-test: | build deps
+nimbus-verified-proxy-test: | build deps rocksdb
 	$(ENV_SCRIPT) nim nimbus_verified_proxy_test $(NIM_PARAMS) nimbus.nims
 
 # Shared library for verified proxy
 
-libverifproxy: | build deps
+libverifproxy: | build deps rocksdb
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim --version && \
 		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(VERIF_PROXY_SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim

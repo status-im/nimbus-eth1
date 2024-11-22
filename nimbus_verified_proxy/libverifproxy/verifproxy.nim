@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[atomics, json, os, strutils, net],
+  std/[atomics, json, strutils, net],
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf
 
