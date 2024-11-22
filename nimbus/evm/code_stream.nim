@@ -53,14 +53,19 @@ func readVmWord*(c: var CodeStream, n: static int): UInt256 =
 func len*(c: CodeStream): int =
   len(c.code)
 
-func next*(c: var CodeStream): Op {.inline.} =
-  # The extra >= 0 check helps eliminate `IndexDefect` from the optimized code
-  # which keeps this hotspot in the EVM small, code-size-wise
-  if c.pc >= 0 and c.pc < c.code.len:
-    result = Op(c.code.bytes[c.pc])
-    inc c.pc
+template next*(c: var CodeStream): Op =
+  # Retrieve the next opcode (or stop) - this is a hot spot in the interpreter
+  # and must be kept small for performance
+  let
+    # uint: range checked manually -> benefit from smaller codegen
+    pc = uint(c.pc)
+    bytes {.cursor.} = c.code.bytes
+  if pc < uint(bytes.len):
+    let op = Op(bytes[pc])
+    c.pc = cast[int](pc + 1)
+    op
   else:
-    result = Op.Stop
+    Op.Stop
 
 iterator items*(c: var CodeStream): Op =
   var nextOpcode = c.next()
