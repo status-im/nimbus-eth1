@@ -646,13 +646,14 @@ proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
   do:
-    # This can happen if block pointed by cursorHash is not loaded yet
     result = c.db.getEthBlock(c.cursorHash).expect("cursorBlock exists")
-    c.blocks[c.cursorHash] = BlockDesc(
-      blk: result,
-      receipts: c.db.getReceipts(result.header.receiptsRoot).
-        expect("receipts exists"),
-    )
+    if c.cursorHash != c.baseHash:
+      # This can happen if the block pointed to by cursorHash is not loaded yet
+      c.blocks[c.cursorHash] = BlockDesc(
+        blk: result,
+        receipts: c.db.getReceipts(result.header.receiptsRoot).
+          expect("receipts exists"),
+      )
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.cursorHeader.number:
