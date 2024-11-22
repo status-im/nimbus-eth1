@@ -280,7 +280,7 @@ proc toBlockHeader*(bc: BlockObject): Header =
     excessBlobGas  : maybeU64(bc.excessBlobGas),
     parentBeaconBlockRoot: bc.parentBeaconBlockRoot,
     requestsHash   : bc.requestsHash,
-    targetBlobsPerBlock: bc.targetBlobsPerBlock,
+    targetBlobsPerBlock: maybeU64(bc.targetBlobsPerBlock),
   )
 
 func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
