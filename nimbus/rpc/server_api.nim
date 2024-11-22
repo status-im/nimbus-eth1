@@ -28,7 +28,6 @@ import
   ../core/eip4844,
   ./rpc_types,
   ./rpc_utils,
-  ./server_api_helpers,
   ./filters
 
 type ServerAPIRef* = ref object

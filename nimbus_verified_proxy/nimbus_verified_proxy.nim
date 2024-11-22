@@ -21,7 +21,7 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
-  ../nimbus/rpc/[cors, server_api_helpers],
+  ../nimbus/rpc/[cors, rpc_utils],
   ../nimbus/beacon/payload_conv,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
