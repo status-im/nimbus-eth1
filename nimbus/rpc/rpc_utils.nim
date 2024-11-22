@@ -212,6 +212,7 @@ proc populateBlockObject*(blockHash: eth_types.Hash32,
   result.blobGasUsed = w3Qty(header.blobGasUsed)
   result.excessBlobGas = w3Qty(header.excessBlobGas)
   result.requestsHash = header.requestsHash
+  result.targetBlobsPerBlock = header.targetBlobsPerBlock
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header): ReceiptObject =
