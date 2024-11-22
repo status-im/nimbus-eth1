@@ -114,9 +114,9 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
     # Add interval of unprocessed header range `(C,D)` from `README.md`
     ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
 
-    trace info & ": restored sync state", L=latest.bnStr,
+    trace info & ": restored syncer state", L=latest.bnStr,
       C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr,
-      F=ctx.layout.final.bnStr, H=ctx.layout.head.bnStr
+      H=ctx.layout.head.bnStr
 
     true
 

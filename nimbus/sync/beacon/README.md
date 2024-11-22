@@ -66,8 +66,8 @@ Implementation, The Gory Details
 The following diagram depicts a most general state view of the sync and the
 *FC* modules and at a given point of time
 
-        0                    L                                               (5)
-        o--------------------o
+        0         B          L                                               (5)
+        o---------o----------o
         | <--- imported ---> |
                      C                     D                H
                      o---------------------o----------------o
@@ -75,8 +75,12 @@ The following diagram depicts a most general state view of the sync and the
 
 where
 
+* *B* -- **base**, current value of this entity (with the same name) of the
+         **FC** module (i.e. the current value when looked up.)
+
 * *C* -- coupler, parent of the left endpoint of the chain of headers or blocks
-         to be fetched and imported.
+         to be fetched and imported. The block number of *C* is somewhere
+		 between the ones of *B* and *C* inclusive.
 
 * *L* -- **latest**, current value of this entity (with the same name) of the
          **FC** module (i.e. the current value when looked up.) *L* need not

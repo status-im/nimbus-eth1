@@ -255,11 +255,10 @@ proc blocksStagedImport*(
   # Fetch least record, accept only if it matches the global ledger state
   block:
     let imported = ctx.chain.latestNumber()
-    if qItem.key != imported + 1:
+    if imported + 1 < qItem.key:
       trace info & ": there is a gap L vs. staged",
         B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr,
         C=ctx.layout.coupler.bnStr
-      doAssert imported < qItem.key
       return false
 
   # Remove from queue
@@ -275,7 +274,21 @@ proc blocksStagedImport*(
   var maxImport = iv.maxPt
   block importLoop:
     for n in 0 ..< nBlocks:
+      # It is known that `key <= imported + 1`. This means that some blocks
+      # potentally overlap with what is already known by `FC` (e.g. due to
+      # concurrently running `importBlock()` by a `newPayload` RPC requests.)
+      #
+      # It is not left to `FC` to ignore this record. Passing a block before
+      # the `base` (which also might have changed) is responded by `FC` with
+      # an error. This would cause throwing away all `nBlocks` rather than
+      # ignoring the first some.
+      #
       let nBn = qItem.data.blocks[n].header.number
+      if nBn <= ctx.chain.baseNumber:
+        trace info & ": ignoring block <= base", n, iv,
+          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n)
+        continue
       ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
         warn info & ": import block error", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,

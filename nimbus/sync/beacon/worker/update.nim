@@ -121,8 +121,7 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
 
   ctx.hibernate = true
 
-  trace info & ": hibernating, awaiting sync target",
-    L=ctx.chain.latestNumber.bnStr
+  trace info & ": suspending syncer", L=ctx.chain.latestNumber.bnStr
 
   # Update, so it can be followed nicely
   ctx.updateMetrics()
@@ -327,7 +326,7 @@ proc updateFinalBlockHeader*(
     b = ctx.chain.baseNumber()
     f = finHdr.number
   if f < b:
-    trace info & ": finalised number too low",
+    trace info & ": finalised block # too low",
       B=b.bnStr, finalised=f.bnStr, delta=(b - f)
 
     ctx.target.reset
@@ -339,7 +338,7 @@ proc updateFinalBlockHeader*(
     # Activate running (unless done yet)
     if ctx.hibernate:
       ctx.hibernate = false
-      trace info & ": activated syncer",
+      trace info & ": activating syncer", B=b.bnStr,
         finalised=f.bnStr, head=ctx.target.consHead.bnStr
 
     # Update, so it can be followed nicely
