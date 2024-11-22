@@ -20,7 +20,6 @@ import
   ../../[aristo_blobify, aristo_desc],
   ../init_common,
   ./rdb_desc,
-  metrics,
   std/concurrency/atomics
 
 const
@@ -34,48 +33,52 @@ when extraTraceMessages:
   logScope:
     topics = "aristo-rocksdb"
 
-type
-  RdbVtxLruCounter = ref object of Counter
-  RdbKeyLruCounter = ref object of Counter
-
-var
-  rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
-    "aristo_rdb_vtx_lru_total",
-    "Vertex LRU lookup (hit/miss, world/account, branch/leaf)",
-    labels = ["state", "vtype", "hit"],
-  )
-  rdbKeyLruStatsMetric {.used.} = RdbKeyLruCounter.newCollector(
-    "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
-  )
-
-method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
-  let timestamp = collector.now()
-
-  # We don't care about synchronization between each type of metric or between
-  # the metrics thread and others since small differences like this don't matter
-  for state in RdbStateType:
-    for vtype in VertexType:
+when defined(metrics):
+  import
+    metrics
+  
+  type
+    RdbVtxLruCounter = ref object of Counter
+    RdbKeyLruCounter = ref object of Counter
+  
+  var
+    rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
+      "aristo_rdb_vtx_lru_total",
+      "Vertex LRU lookup (hit/miss, world/account, branch/leaf)",
+      labels = ["state", "vtype", "hit"],
+    )
+    rdbKeyLruStatsMetric {.used.} = RdbKeyLruCounter.newCollector(
+      "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
+    )
+  
+  method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
+    let timestamp = collector.now()
+  
+    # We don't care about synchronization between each type of metric or between
+    # the metrics thread and others since small differences like this don't matter
+    for state in RdbStateType:
+      for vtype in VertexType:
+        for hit in [false, true]:
+          output(
+            name = "aristo_rdb_vtx_lru_total",
+            value = float64(rdbVtxLruStats[state][vtype].get(hit)),
+            labels = ["state", "vtype", "hit"],
+            labelValues = [$state, $vtype, $ord(hit)],
+            timestamp = timestamp,
+          )
+  
+  method collect*(collector: RdbKeyLruCounter, output: MetricHandler) =
+    let timestamp = collector.now()
+  
+    for state in RdbStateType:
       for hit in [false, true]:
         output(
-          name = "aristo_rdb_vtx_lru_total",
-          value = float64(rdbVtxLruStats[state][vtype].get(hit)),
-          labels = ["state", "vtype", "hit"],
-          labelValues = [$state, $vtype, $ord(hit)],
+          name = "aristo_rdb_key_lru_total",
+          value = float64(rdbKeyLruStats[state].get(hit)),
+          labels = ["state", "hit"],
+          labelValues = [$state, $ord(hit)],
           timestamp = timestamp,
         )
-
-method collect*(collector: RdbKeyLruCounter, output: MetricHandler) =
-  let timestamp = collector.now()
-
-  for state in RdbStateType:
-    for hit in [false, true]:
-      output(
-        name = "aristo_rdb_key_lru_total",
-        value = float64(rdbKeyLruStats[state].get(hit)),
-        labels = ["state", "hit"],
-        labelValues = [$state, $ord(hit)],
-        timestamp = timestamp,
-      )
 
 # ------------------------------------------------------------------------------
 # Public functions
