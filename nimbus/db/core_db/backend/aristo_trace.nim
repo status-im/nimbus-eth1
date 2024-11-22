@@ -243,7 +243,7 @@ proc jLogger(
 func to(w: AristoApiProfNames; T: type TracePfx): T =
   case w:
   of AristoApiProfFetchAccountRecordFn,
-     AristoApiProfFetchAccountStateRootFn,
+     AristoApiProfFetchStateRootFn,
      AristoApiProfDeleteAccountRecordFn,
      AristoApiProfMergeAccountRecordFn:
     return TrpAccounts
@@ -466,26 +466,25 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
         debug logTxt $info, level, accPath, accRec
       ok accRec
 
-  tracerApi.fetchAccountStateRoot =
+  tracerApi.fetchStateRoot =
     proc(mpt: AristoDbRef;
-         updateOk: bool;
         ): Result[Hash32,AristoError] =
-      const info = AristoApiProfFetchAccountStateRootFn
+      const info = AristoApiProfFetchStateRootFn
 
       when CoreDbNoisyCaptJournal:
         let level = tr.topLevel()
 
       # Find entry on DB
-      let state = api.fetchAccountStateRoot(mpt, updateOk).valueOr:
+      let state = api.fetchStateRoot(mpt).valueOr:
         when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, updateOk, error
+          debug logTxt $info, level, error
         tr.jLogger logRecord(info, TrqFind, error)
         return err(error)
 
       tr.jLogger logRecord(info, TrqFind, state)
 
       when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, updateOk, state
+        debug logTxt $info, level, state
       ok state
 
   tracerApi.fetchStorageData =
@@ -514,7 +513,6 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
   tracerApi.fetchStorageRoot =
     proc(mpt: AristoDbRef;
          accPath: Hash32;
-         updateOk: bool;
         ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchStorageRootFn
 
@@ -522,16 +520,16 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
         let level = tr.topLevel()
 
       # Find entry on DB
-      let state = api.fetchStorageRoot(mpt, accPath, updateOk).valueOr:
+      let state = api.fetchStorageRoot(mpt, accPath).valueOr:
         when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, accPath, updateOk, error
+          debug logTxt $info, level, accPath, error
         tr.jLogger(accPath, logRecord(info, TrqFind, error))
         return err(error)
 
       tr.jLogger(accPath, logRecord(info, TrqFind, state))
 
       when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, accPath, updateOk, state
+        debug logTxt $info, level, accPath, state
       ok state
 
   tracerApi.deleteAccountRecord =

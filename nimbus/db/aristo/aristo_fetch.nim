@@ -80,20 +80,13 @@ proc retrieveAccountLeaf(
 proc retrieveMerkleHash(
     db: AristoDbRef;
     root: VertexID;
-    updateOk: bool;
       ): Result[Hash32,AristoError] =
   let key =
-    if updateOk:
-      db.computeKey((root, root)).valueOr:
-        if error == GetVtxNotFound:
-          return ok(EMPTY_ROOT_HASH)
-        return err(error)
-    else:
-      let (key, _) = db.getKeyRc((root, root)).valueOr:
-        if error == GetKeyNotFound:
-          return ok(EMPTY_ROOT_HASH) # empty sub-tree
-        return err(error)
-      key
+    db.computeKey((root, root)).valueOr:
+      if error == GetVtxNotFound:
+        return ok(EMPTY_ROOT_HASH)
+      return err(error)
+
   ok key.to(Hash32)
 
 proc hasAccountPayload(
@@ -219,12 +212,11 @@ proc fetchAccountRecord*(
 
   ok leafVtx.lData.account
 
-proc fetchAccountStateRoot*(
+proc fetchStateRoot*(
     db: AristoDbRef;
-    updateOk: bool;
       ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the account root.
-  db.retrieveMerkleHash(VertexID(1), updateOk)
+  db.retrieveMerkleHash(VertexID(1))
 
 proc hasPathAccount*(
     db: AristoDbRef;
@@ -248,14 +240,13 @@ proc fetchStorageData*(
 proc fetchStorageRoot*(
     db: AristoDbRef;
     accPath: Hash32;
-    updateOk: bool;
       ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
   let stoID = db.fetchStorageIdImpl(accPath).valueOr:
     if error == FetchPathNotFound:
       return ok(EMPTY_ROOT_HASH) # no sub-tree
     return err(error)
-  db.retrieveMerkleHash(stoID, updateOk)
+  db.retrieveMerkleHash(stoID)
 
 proc hasPathStorage*(
     db: AristoDbRef;

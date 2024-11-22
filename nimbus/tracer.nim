@@ -189,14 +189,14 @@ proc traceTransactionImpl(
       before.captureAccount(stateDb, miner, minerName)
       stateDb.persist()
       stateDiff["beforeRoot"] = %(stateDb.getStateRoot().toHex)
-      discard com.db.ctx.getAccounts.stateRoot(updateOk=true) # lazy hashing!
+      discard com.db.ctx.getAccounts.getStateRoot() # lazy hashing!
       stateCtx = CaptCtxRef.init(com, stateDb.getStateRoot())
 
     let rc = vmState.processTransaction(tx, sender, header)
     gasUsed = if rc.isOk: rc.value else: 0
 
     if idx.uint64 == txIndex:
-      discard com.db.ctx.getAccounts.stateRoot(updateOk=true) # lazy hashing!
+      discard com.db.ctx.getAccounts.getStateRoot() # lazy hashing!
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, miner, minerName)

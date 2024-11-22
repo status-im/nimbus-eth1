@@ -371,13 +371,11 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbRef): LedgerRef =
   init(x, db, false)
 
 proc getStateRoot*(ac: LedgerRef): Hash32 =
-  const info = "state(): "
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
-  ac.ledger.stateRoot(updateOk=true).valueOr:
-    raiseAssert info & $$error
+  ac.ledger.getStateRoot().expect("working database")
 
 proc isTopLevelClean*(ac: LedgerRef): bool =
   ## Getter, returns `true` if all pending data have been commited.
@@ -514,7 +512,7 @@ proc contractCollision*(ac: LedgerRef, address: Address): bool =
     return
   acc.statement.nonce != 0 or
     acc.statement.codeHash != EMPTY_CODE_HASH or
-      not ac.ledger.slotStateEmptyOrVoid(acc.toAccountKey)
+      not ac.ledger.slotStorageEmptyOrVoid(acc.toAccountKey)
 
 proc accountExists*(ac: LedgerRef, address: Address): bool =
   let acc = ac.getAccount(address, false)
@@ -600,7 +598,7 @@ proc clearStorage*(ac: LedgerRef, address: Address) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
 
-  let empty = ac.ledger.slotStateEmpty(acc.toAccountKey).valueOr: return
+  let empty = ac.ledger.slotStorageEmpty(acc.toAccountKey).valueOr: return
   if not empty:
     # need to clear the storage from the database first
     let acc = ac.makeDirty(address, cloneStorage = false)
@@ -733,14 +731,14 @@ iterator accounts*(ac: LedgerRef): Account =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for _, acc in ac.savePoint.cache:
     yield ac.ledger.recast(
-      acc.toAccountKey, acc.statement, updateOk=true).value
+      acc.toAccountKey, acc.statement).value
 
 iterator pairs*(ac: LedgerRef): (Address, Account) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, acc in ac.savePoint.cache:
     yield (address, ac.ledger.recast(
-      acc.toAccountKey, acc.statement, updateOk=true).value)
+      acc.toAccountKey, acc.statement).value)
 
 iterator storage*(
     ac: LedgerRef;
@@ -771,7 +769,7 @@ proc getStorageRoot*(ac: LedgerRef, address: Address): Hash32 =
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
-  else: ac.ledger.slotState(acc.toAccountKey).valueOr: EMPTY_ROOT_HASH
+  else: ac.ledger.slotStorageRoot(acc.toAccountKey).valueOr: EMPTY_ROOT_HASH
 
 proc update(wd: var WitnessData, acc: AccountRef) =
   # once the code is touched make sure it doesn't get reset back to false in another update

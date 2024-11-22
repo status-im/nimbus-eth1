@@ -45,9 +45,9 @@ type
     AccSlotHasPathFn    = "slotHasPath"
     AccSlotMergeFn      = "slotMerge"
     AccSlotProofFn      = "slotProof"
-    AccSlotStateFn      = "slotState"
-    AccSlotStateEmptyFn = "slotStateEmpty"
-    AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
+    AccSlotStorageRootFn = "slotStorageRoot"
+    AccSlotStorageEmptyFn = "slotStorageEmpty"
+    AccSlotStorageEmptyOrVoidFn = "slotStorageEmptyOrVoid"
     AccSlotPairsIt      = "slotPairs"
 
     BaseFinishFn        = "finish"
