@@ -98,7 +98,7 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
   # used for R and S
   if maxPos >= 64:
     # Copy message data to buffer
-    bytes[0..(maxPos-64)] = data[64..maxPos]
+    assign(bytes.toOpenArray(0, (maxPos-64)), data.toOpenArray(64, maxPos))
 
   let sig = Signature.fromRaw(bytes).valueOr:
     return err(prcErr(PrcInvalidSig))
@@ -324,7 +324,7 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 
   # Padding data
   let len = min(c.msg.data.len, 96) - 1
-  input[0..len] = c.msg.data[0..len]
+  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
   var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
   var fr = ? getFR(input.toOpenArray(64, 95))
   var apo = (p1 * fr).toAffine()
