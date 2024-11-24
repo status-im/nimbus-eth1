@@ -451,9 +451,9 @@ func traceError*(c: Computation) =
 func prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)
 
-func opcodeGasCost*(
+template opcodeGasCost*(
     c: Computation, op: Op, gasCost: static GasInt, tracingEnabled: static bool,
-    reason: static string): EvmResultVoid {.inline.} =
+    reason: static string): EvmResultVoid =
   # Special case of the opcodeGasCost function used for fixed-gas opcodes - since
   # the parameters are known at compile time, we inline and specialize it
   when tracingEnabled:
@@ -465,16 +465,17 @@ func opcodeGasCost*(
       c.msg.depth + 1)
   c.gasMeter.consumeGas(gasCost, reason)
 
-func opcodeGasCost*(
+template opcodeGasCost*(
     c: Computation, op: Op, gasCost: GasInt, reason: static string): EvmResultVoid =
+  let cost = gasCost
   if c.vmState.tracingEnabled:
     c.vmState.captureGasCost(
       c,
       op,
-      gasCost,
+      cost,
       c.gasMeter.gasRemaining,
       c.msg.depth + 1)
-  c.gasMeter.consumeGas(gasCost, reason)
+  c.gasMeter.consumeGas(cost, reason)
 
 # ------------------------------------------------------------------------------
 # End

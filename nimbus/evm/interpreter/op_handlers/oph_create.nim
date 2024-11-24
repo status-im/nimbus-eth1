@@ -78,7 +78,7 @@ else:
         c.stack.lsTop child.msg.contractAddress
       elif not child.error.burnsGas: # Means return was `REVERT`.
         # From create, only use `outputData` if child returned with `REVERT`.
-        c.returnData = child.output
+        c.returnData = move(child.output)
       ok()
 
 
