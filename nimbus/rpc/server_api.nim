@@ -229,7 +229,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       # do not match block receipts.
       # Although this is fine as number of receipts should always match number
       # of transactions
-      let logs = deriveLogs(header, txs, receipts)
+      let logs = deriveLogs(header, txs, receipts).valueOr:
+        return @[]
       let filteredLogs = filterLogs(logs, opts.address, opts.topics)
       return filteredLogs
     else:

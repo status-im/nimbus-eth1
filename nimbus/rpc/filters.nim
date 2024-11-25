@@ -6,6 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  chronicles,
   std/options,
   eth/common/eth_types_rlp,
   web3/eth_api_types,
@@ -17,10 +18,13 @@ export rpc_types
 
 {.push raises: [].}
 
-proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[Receipt]): seq[FilterLog] =
+proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[Receipt]): Opt[seq[FilterLog]] =
   ## Derive log fields, does not deal with pending log, only the logs with
   ## full data set
-  doAssert(len(transactions) == len(receipts))
+  if len(transactions) == len(receipts):
+    warn "Transactions and receipts length mismatch",
+      txs = transactions.len, receipts = receipts.len
+    return Opt.none(seq[FilterLog])
 
   var resLogs: seq[FilterLog] = @[]
   var logIndex = 0'u64
@@ -47,7 +51,7 @@ proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[R
       inc logIndex
       resLogs.add(filterLog)
 
-  return resLogs
+  return Opt.some(resLogs)
 
 func participateInFilter(x: AddressOrList): bool =
   if x.kind == slkNull:
