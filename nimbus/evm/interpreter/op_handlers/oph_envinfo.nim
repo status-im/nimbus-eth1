@@ -157,8 +157,7 @@ proc extCodeSizeEIP2929Op(cpt: VmCpt): EvmResultVoid =
 proc extCodeSizeEIP7702Op(cpt: VmCpt): EvmResultVoid =
   ## 0x3b, Get size of an account's code (EIP-7702)
   template ecsEIP7702(address): auto =
-    let gasCost = cpt.gasEip2929AccountCheck(address) +
-                  cpt.gasEip7702CodeCheck(address)
+    let gasCost = cpt.gasEip2929AccountCheck(address)
     ? cpt.opcodeGasCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP7702")
     cpt.resolveCodeSize(address)
 
@@ -267,8 +266,7 @@ proc extCodeHashEIP2929Op(cpt: VmCpt): EvmResultVoid =
 proc extCodeHashEIP7702Op(cpt: VmCpt): EvmResultVoid =
   ## 0x3f, Returns the keccak256 hash of a contract’s code (EIP-7702)
   template echEIP7702(address): auto =
-    let gasCost = cpt.gasEip2929AccountCheck(address) +
-                  cpt.gasEip7702CodeCheck(address)
+    let gasCost = cpt.gasEip2929AccountCheck(address)
     ? cpt.opcodeGasCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP7702")
     cpt.resolveCodeHash(address)
   cpt.stack.unaryAddress(echEIP7702)
