@@ -191,6 +191,7 @@ proc procBlkEpilogue(
         # TODO replace logging with better error
         debug "wrong receiptRoot in block",
           blockNumber = header.number,
+          parentHash = header.parentHash.short,
           blockHash = header.blockHash.short,
           actual = receiptsRoot,
           expected = header.receiptsRoot
@@ -204,6 +205,8 @@ proc procBlkEpilogue(
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",
           blockNumber = header.number,
+          parentHash = header.parentHash.short,
+          blockHash = header.blockHash.short,
           actual = requestsHash,
           expected = header.requestsHash.get
         return err("requestsHash mismatch")
