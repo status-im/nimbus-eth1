@@ -45,6 +45,7 @@ const
   defaultTableIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.tableIpLimit
   defaultBucketIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit
   defaultBitsPerHopDesc* = $defaultPortalProtocolConfig.bitsPerHop
+  defaultAlphaDesc* = $defaultPortalProtocolConfig.alpha
   defaultMaxGossipNodesDesc* = $defaultPortalProtocolConfig.maxGossipNodes
   defaultRpcApis* = @["eth", "portal"]
   defaultRpcApisDesc* = "eth,portal"
@@ -252,6 +253,14 @@ type
       defaultValue: defaultPortalProtocolConfig.bitsPerHop,
       defaultValueDesc: $defaultBitsPerHopDesc,
       name: "bits-per-hop"
+    .}: int
+
+    alpha* {.
+      hidden,
+      desc: "The Kademlia concurrency factor",
+      defaultValue: defaultPortalProtocolConfig.alpha,
+      defaultValueDesc: $defaultAlphaDesc,
+      name: "debug-alpha"
     .}: int
 
     maxGossipNodes* {.

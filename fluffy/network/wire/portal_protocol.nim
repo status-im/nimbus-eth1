@@ -116,7 +116,6 @@ logScope:
   topics = "portal_wire"
 
 const
-  alpha = 3 ## Kademlia concurrency factor
   enrsResultLimit* = 32 ## Maximum amount of ENRs in the total Nodes messages
   ## that will be processed
   refreshInterval = 5.minutes ## Interval of launching a random query to
@@ -1035,14 +1034,15 @@ proc lookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](p.config.alpha)
   var requestAmount = 0'i64
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -1156,17 +1156,18 @@ proc contentLookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries =
-    newSeqOfCap[Future[PortalResult[FoundContent]].Raising([CancelledError])](alpha)
+  var pendingQueries = newSeqOfCap[
+    Future[PortalResult[FoundContent]].Raising([CancelledError])
+  ](p.config.alpha)
   var requestAmount = 0'i64
 
   var nodesWithoutContent: seq[Node] = newSeq[Node]()
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.findContent(n, target))
@@ -1277,8 +1278,9 @@ proc traceContentLookup*(
     metadata["0x" & $cn.id] =
       NodeMetadata(enr: cn.record, distance: p.distance(cn.id, targetId))
 
-  var pendingQueries =
-    newSeqOfCap[Future[PortalResult[FoundContent]].Raising([CancelledError])](alpha)
+  var pendingQueries = newSeqOfCap[
+    Future[PortalResult[FoundContent]].Raising([CancelledError])
+  ](p.config.alpha)
   var pendingNodes = newSeq[Node]()
   var requestAmount = 0'i64
 
@@ -1286,9 +1288,9 @@ proc traceContentLookup*(
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.findContent(n, target))
@@ -1439,11 +1441,12 @@ proc query*(
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](p.config.alpha)
 
   while true:
     var i = 0
-    while i < min(queryBuffer.len, k) and pendingQueries.len < alpha:
+    while i < min(queryBuffer.len, k) and pendingQueries.len < p.config.alpha:
       let n = queryBuffer[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
