@@ -38,7 +38,7 @@ type
 
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
-    buddiesMax*: int            ## Max number of buddies
+    noisyLog*: bool             ## Hold back `trace` and `debug` msgs if `false`
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
     pool*: S                    ## Shared context for all worker peers

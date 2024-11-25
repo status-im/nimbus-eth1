@@ -93,58 +93,59 @@ proc testMergeProofAndKvpList*(
     list: openArray[ProofTrieData];
     rdbPath: string;                         # Rocks DB storage directory
     idPfx = "";
-      ): bool =
-  var
-    ps = PartStateRef(nil)
-    tx = AristoTxRef(nil)
-    rootKey: Hash32
-  defer:
-    if not ps.isNil:
-      ps.db.finish(eradicate=true)
+      ): bool {.deprecated.} =
+  # TODO update for non-generic data
+  # var
+  #   ps = PartStateRef(nil)
+  #   tx = AristoTxRef(nil)
+  #   rootKey: Hash32
+  # defer:
+  #   if not ps.isNil:
+  #     ps.db.finish(eradicate=true)
 
-  for n,w in list:
+  # for n,w in list:
 
-    # Start new database upon request
-    if w.root != rootKey or w.proof.len == 0:
-      ps.innerCleanUp()
-      let db = block:
-        # New DB with disabled filter slots management
-        if 0 < rdbPath.len:
-          let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
-          let rc = AristoDbRef.init(RdbBackendRef, rdbPath,  DbOptions.init(), dbOpts, cfOpts, [])
-          xCheckRc rc.error == 0
-          rc.value()[0]
-        else:
-          AristoDbRef.init(MemBackendRef)
-      ps = PartStateRef.init(db)
+  #   # Start new database upon request
+  #   if w.root != rootKey or w.proof.len == 0:
+  #     ps.innerCleanUp()
+  #     let db = block:
+  #       # New DB with disabled filter slots management
+  #       if 0 < rdbPath.len:
+  #         let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
+  #         let rc = AristoDbRef.init(RdbBackendRef, rdbPath,  DbOptions.init(), dbOpts, cfOpts, [])
+  #         xCheckRc rc.error == 0
+  #         rc.value()[0]
+  #       else:
+  #         AristoDbRef.init(MemBackendRef)
+  #     ps = PartStateRef.init(db)
 
-      # Start transaction (double frame for testing)
-      tx = ps.db.txBegin().value.to(AristoDbRef).txBegin().value
-      xCheck tx.isTop()
+  #     # Start transaction (double frame for testing)
+  #     tx = ps.db.txBegin().value.to(AristoDbRef).txBegin().value
+  #     xCheck tx.isTop()
 
-      # Update root
-      rootKey = w.root
+  #     # Update root
+  #     rootKey = w.root
 
-    if 0 < w.proof.len:
-      let rc = ps.partPut(w.proof, ForceGenericPayload)
-      xCheckRc rc.error == 0
+  #   if 0 < w.proof.len:
+  #     let rc = ps.partPut(w.proof, ForceGenericPayload)
+  #     xCheckRc rc.error == 0
 
-    block:
-      let rc = ps.check()
-      xCheckRc rc.error == (0,0)
+  #   block:
+  #     let rc = ps.check()
+  #     xCheckRc rc.error == (0,0)
 
-    for ltp in w.kvpLst:
-      block:
-        let rc = ps.partMergeGenericData(
-          testRootVid, @(ltp.leafTie.path), ltp.payload.rawBlob)
-        xCheckRc rc.error == 0
-      block:
-        let rc = ps.check()
-        xCheckRc rc.error == (0,0)
+  #   for ltp in w.kvpLst:
+  #     block:
+  #       let rc = ps.partMergeGenericData(
+  #         testRootVid, @(ltp.leafTie.path), ltp.payload.rawBlob)
+  #       xCheckRc rc.error == 0
+  #     block:
+  #       let rc = ps.check()
+  #       xCheckRc rc.error == (0,0)
 
-    block:
-      let saveBeOk = tx.saveToBackend(noisy=noisy, debugID=n)
-      xCheck saveBeOk
+  #   block:
+  #     let saveBeOk = tx.saveToBackend(noisy=noisy, debugID=n)
+  #     xCheck saveBeOk
 
   true
 

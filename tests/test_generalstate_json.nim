@@ -155,7 +155,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
       ctx.chainConfig = getChainConfig(forkName)
     except ValueError as ex:
       debugEcho ex.msg
-      testStatusIMPL = TestStatus.Failed
+      testStatusIMPL = TestStatus.FAILED
       return
 
   template runSubTest(subTest: JsonNode) =

@@ -54,7 +54,19 @@ proc stop(hn: HistoryNode) {.async.} =
   await hn.discoveryProtocol.closeWait()
 
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
-  return hn.historyNetwork.contentDB.get(contentId).isSome()
+  hn.historyNetwork.contentDB.contains(contentId)
+
+proc checkContainsIdWithRetry(
+    historyNode: HistoryNode, id: ContentId
+) {.async: (raises: [CancelledError]).} =
+  var res = false
+  for i in 0 .. 50:
+    res = historyNode.containsId(id)
+    if res:
+      break
+    await sleepAsync(10.milliseconds)
+
+  check res
 
 proc createEmptyHeaders(fromNum: int, toNum: int): seq[Header] =
   var headers: seq[Header]
@@ -216,17 +228,10 @@ procSuite "History Content Network":
       while not historyNode2.historyNetwork.contentQueue.empty():
         await sleepAsync(1.milliseconds)
 
-      # Note: It seems something changed in chronos, causing different behavior.
-      # Seems that validateContent called through processContentLoop used to
-      # run immediatly in case of a "non async shortpath". This is no longer the
-      # case and causes the content not yet to be validated and thus stored at
-      # this step. Add an await here so that the store can happen.
-      await sleepAsync(100.milliseconds)
-
       for i, contentKV in contentKVs:
         let id = toContentId(contentKV.contentKey)
         if i < len(contentKVs) - 1:
-          check historyNode2.containsId(id) == true
+          await historyNode2.checkContainsIdWithRetry(id)
         else:
           check historyNode2.containsId(id) == false
 
@@ -283,11 +288,9 @@ procSuite "History Content Network":
     while not historyNode2.historyNetwork.contentQueue.empty():
       await sleepAsync(1.milliseconds)
 
-    await sleepAsync(100.milliseconds)
-
     for contentKV in contentKVs:
       let id = toContentId(contentKV.contentKey)
-      check historyNode2.containsId(id) == true
+      await historyNode2.checkContainsIdWithRetry(id)
 
     await historyNode1.stop()
     await historyNode2.stop()

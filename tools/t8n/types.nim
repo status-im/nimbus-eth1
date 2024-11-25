@@ -52,6 +52,7 @@ type
     parentBlobGasUsed*: Opt[uint64]
     parentExcessBlobGas*: Opt[uint64]
     parentBeaconBlockRoot*: Opt[Hash32]
+    depositContractAddress*: Opt[Address]
 
   TxObject* = object
     `type`*: Opt[uint64]
@@ -117,6 +118,7 @@ type
     blobGasUsed*: Opt[uint64]
     currentExcessBlobGas*: Opt[uint64]
     requestsHash*: Opt[Hash32]
+    requests*: Opt[array[3, seq[byte]]]
 
 const
   ErrorEVM*              = 2.T8NExitCode

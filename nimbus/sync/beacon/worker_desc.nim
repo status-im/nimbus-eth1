@@ -52,7 +52,23 @@ type
     ## Block request item sorted by least block number (i.e. from `blocks[0]`.)
     blocks*: seq[EthBlock]           ## List of blocks for import
 
+  KvtCache* = Table[BlockNumber,seq[byte]]
+    ## This cache type is intended for holding block headers that cannot be
+    ## reliably saved persistently. This is the situation after blocks are
+    ## imported as the FCU handlers always maintain a positive transaction
+    ## level and in some instances the current transaction is flushed and
+    ## re-opened.
+    ##
+    ## The number of block headers to hold in memory after block import has
+    ## started is the distance to the new `canonical execution head`.
+
   # -------------------
+
+  SyncLayoutState* = enum
+    idleSyncState = 0                ## see clause *(8)*, *(12)* of `README.md`
+    collectingHeaders                ## see clauses *(5)*, *(9)* of `README.md`
+    finishedHeaders                  ## see clause *(10)* of `README.md`
+    processingBlocks                 ## see clause *(11)* of `README.md`
 
   SyncStateTarget* = object
     ## Beacon state to be implicitely updated by RPC method
@@ -64,36 +80,33 @@ type
 
   SyncStateLayout* = object
     ## Layout of a linked header chains defined by the triple `(C,D,H)` as
-    ## described in the `README.md` text.
+    ## described in clause *(5)* of the `README.md` text.
     ## ::
-    ##   0          B     L       C                     D            F   H
-    ##   o----------o-----o-------o---------------------o------------o---o--->
-    ##   | <- imported -> |       |                     |                |
-    ##   | <------ linked ------> | <-- unprocessed --> | <-- linked --> |
+    ##   0         B          L
+    ##   o---------o----------o
+    ##   | <--- imported ---> |
+    ##                C                     D                H
+    ##                o---------------------o----------------o
+    ##                | <-- unprocessed --> | <-- linked --> |
     ##
     ## Additional positions known but not declared in this descriptor:
-    ## * `B`: base state (from `forked_chain` importer)
-    ## * `L`: last imported block, canonical consensus head
-    ## * `F`: finalised head (from CL)
+    ## * `B`: `base` parameter from `FC` logic
+    ## * `L`: `latest` (aka cursor) parameter from `FC` logic
     ##
-    coupler*: BlockNumber            ## Right end `C` of linked chain `[0,C]`
-    couplerHash*: Hash32             ## Hash of `C`
-
+    coupler*: BlockNumber            ## Bottom end `C` of full chain `(C,H]`
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
-    danglingParent*: Hash32          ## Parent hash of `D`
+    head*: BlockNumber               ## `H`, block num of some finalised block
+    lastState*: SyncLayoutState      ## Last known layout state
 
+    # Legacy entries, will be removed some time. This is currently needed
+    # for importing blocks into `FC` the support of which will be deprecated.
     final*: BlockNumber              ## Finalised block number `F`
     finalHash*: Hash32               ## Hash of `F`
-
-    head*: BlockNumber               ## `H`, block num of some finalised block
-    headHash*: Hash32                ## Hash of `H`
-    headLocked*: bool                ## No need to update `H` yet
 
   SyncState* = object
     ## Sync state for header and block chains
     target*: SyncStateTarget         ## Consensus head, see `T` in `README.md`
     layout*: SyncStateLayout         ## Current header chains layout
-    lastLayout*: SyncStateLayout     ## Previous layout (for delta update)
 
   # -------------------
 
@@ -107,7 +120,6 @@ type
     ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: uint64                ## Total of temp. fetched ranges
-    topRequest*: BlockNumber         ## Max requested block number
     staged*: StagedBlocksQueue       ## Blocks ready for import
 
   # -------------------
@@ -133,12 +145,13 @@ type
     # Blocks import/execution settings for importing with
     # `nBodiesBatch` blocks in each round (minimum value is
     # `nFetchBodiesRequest`.)
-    chain*: ForkedChainRef           ## Database
-    importRunningOk*: bool           ## Advisory lock, fetch vs. import
+    chain*: ForkedChainRef           ## Core database, FCU support
+    stash*: KvtCache                 ## Temporary header and state table
+    blockImportOk*: bool             ## Don't fetch data while block importing
     nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
     blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
 
-    # Info stuff, no functional contribution
+    # Info & debugging stuff, no functional contribution
     nReorg*: int                     ## Number of reorg invocations (info only)
 
     # Debugging stuff
@@ -179,9 +192,29 @@ func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.chain
 
+func stash*(ctx: BeaconCtxRef): var KvtCache =
+  ## Getter
+  ctx.pool.stash
+
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter
   ctx.pool.chain.db
+
+# -----
+
+func hibernate*(ctx: BeaconCtxRef): bool =
+  ## Getter, re-interpretation of the daemon flag for reduced service mode
+  # No need for running the daemon with reduced service mode. So it is
+  # convenient to use this flag for indicating this.
+  not ctx.daemon
+
+proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
+  ## Setter
+  ctx.daemon = not val
+
+  # Control some error messages on the scheduler (e.g. zombie/banned-peer
+  # reconnection attempts, LRU flushing out oldest peer etc.)
+  ctx.noisyLog = not val
 
 # ------------------------------------------------------------------------------
 # End

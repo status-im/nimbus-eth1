@@ -29,7 +29,9 @@ import
     common
   ],
   ../../../tests/test_helpers,
-  web3/execution_types
+  web3/execution_types,
+  ./engine_client,
+  ./types
 
 from ./node import setBlock
 
@@ -80,7 +82,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let
     node  = setupEthNode(conf, ctx)
     com   = makeCom(conf)
-    head  = com.db.getCanonicalHead()
+    head  = com.db.getCanonicalHead().expect("canonical head exists")
     chain = newForkedChain(com, head)
 
   let txPool = TxPoolRef.new(com)
@@ -109,7 +111,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     beaconEngine = BeaconEngineRef.new(txPool, chain)
     serverApi = newServerAPI(chain, txPool)
 
-  setupServerAPI(serverApi, server)
+  setupServerAPI(serverApi, server, ctx)
   setupEngineAPI(beaconEngine, server)
   # temporary disabled
   #setupDebugRpc(com, txPool, server)
@@ -186,7 +188,9 @@ proc numTxsInPool*(env: EngineEnv): int =
   env.txPool.numTxs
 
 func version*(env: EngineEnv, time: EthTime): Version =
-  if env.com.isCancunOrLater(time):
+  if env.com.isPragueOrLater(time):
+    Version.V4
+  elif env.com.isCancunOrLater(time):
     Version.V3
   elif env.com.isShanghaiOrLater(time):
     Version.V2
@@ -203,3 +207,54 @@ proc setBlock*(env: EngineEnv, blk: common.EthBlock): bool =
   # env.chain.setBlock(blk).isOk()
   debugEcho "TODO: fix setBlock"
   false
+
+proc newPayload*(env: EngineEnv,
+                 payload: ExecutableData): Result[PayloadStatusV1, string] =
+  let version = env.version(payload.basePayload.timestamp)
+  env.client.newPayload(version, payload)
+
+proc newPayload*(env: EngineEnv,
+                 version: Version,
+                 payload: ExecutableData): Result[PayloadStatusV1, string] =
+  env.client.newPayload(version, payload)
+
+proc getPayload*(env: EngineEnv,
+                 timestamp: uint64 | Web3Quantity | EthTime,
+                 payloadId: Bytes8): Result[GetPayloadResponse, string] =
+  let version = env.version(timestamp)
+  env.client.getPayload(version, payloadId)
+
+proc getPayload*(env: EngineEnv,
+                 version: Version,
+                 payloadId: Bytes8): Result[GetPayloadResponse, string] =
+  env.client.getPayload(version, payloadId)
+
+proc forkchoiceUpdated*(env: EngineEnv,
+                        timestamp: uint64 | Web3Quantity | EthTime,
+                        update: ForkchoiceStateV1,
+                        attr = Opt.none(PayloadAttributes)):
+                          Result[ForkchoiceUpdatedResponse, string] =
+  let version = env.version(timestamp)
+  env.client.forkchoiceUpdated(version, update, attr)
+
+proc forkchoiceUpdated*(env: EngineEnv,
+                        timestamp: uint64 | Web3Quantity | EthTime,
+                        update: ForkchoiceStateV1,
+                        attr: PayloadAttributes):
+                          Result[ForkchoiceUpdatedResponse, string] =
+  let version = env.version(timestamp)
+  env.client.forkchoiceUpdated(version, update, Opt.some(attr))
+
+proc forkchoiceUpdated*(env: EngineEnv,
+                        version: Version,
+                        update: ForkchoiceStateV1,
+                        attr = Opt.none(PayloadAttributes)):
+                          Result[ForkchoiceUpdatedResponse, string] =
+  env.client.forkchoiceUpdated(version, update, attr)
+
+proc forkchoiceUpdated*(env: EngineEnv,
+                        version: Version,
+                        update: ForkchoiceStateV1,
+                        attr: PayloadAttributes):
+                          Result[ForkchoiceUpdatedResponse, string] =
+  env.client.forkchoiceUpdated(version, update, Opt.some(attr))

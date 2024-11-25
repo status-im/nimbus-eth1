@@ -15,7 +15,7 @@ import
   ../core/casper,
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils, ec_recover],
-  ".."/[constants, errors],
+  ".."/[constants, errors, version],
   "."/[chain_config, evmforks, genesis, hardforks]
 
 export
@@ -95,6 +95,9 @@ type
     pruneHistory: bool
       ## Must not not set for a full node, might go away some time
 
+    extraData: string
+      ## Value of extraData field when building block
+
 # ------------------------------------------------------------------------------
 # Forward declarations
 # ------------------------------------------------------------------------------
@@ -125,39 +128,36 @@ proc initializeDb(com: CommonRef) =
   proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
     kvt.hasKeyRc(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin kvt:
-    info "Writing genesis to DB"
+    info "Writing genesis to DB",
+      blockHash = com.genesisHeader.rlpHash,
+      stateRoot = com.genesisHeader.stateRoot,
+      difficulty = com.genesisHeader.difficulty,
+      gasLimit = com.genesisHeader.gasLimit,
+      timestamp = com.genesisHeader.timestamp,
+      nonce = com.genesisHeader.nonce
     doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
-    doAssert(com.db.persistHeader(com.genesisHeader,
+    com.db.persistHeader(com.genesisHeader,
       com.proofOfStake(com.genesisHeader),
-      startOfHistory=com.genesisHeader.parentHash),
-      "can persist genesis header")
+      startOfHistory=com.genesisHeader.parentHash).
+      expect("can persist genesis header")
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)
 
   # The database must at least contain the base and head pointers - the base
   # is implicitly considered finalized
   let
     baseNum = com.db.getSavedStateBlockNumber()
-    base =
-      try:
-        com.db.getBlockHeader(baseNum)
-      except BlockNotFound as exc:
-        fatal "Cannot load base block header",
-          baseNum, err = exc.msg
-        quit 1
-    finalized =
-      try:
-        com.db.finalizedHeader()
-      except BlockNotFound:
-        debug "No finalized block stored in database, reverting to base"
-        base
-    head =
-      try:
-        com.db.getCanonicalHead()
-      except EVMError as exc:
-        fatal "Cannot load canonical block header",
-          err = exc.msg
-        quit 1
+    base = com.db.getBlockHeader(baseNum).valueOr:
+      fatal "Cannot load base block header",
+        baseNum, err = error
+      quit 1
+    finalized = com.db.finalizedHeader().valueOr:
+      debug "No finalized block stored in database, reverting to base"
+      base
+    head = com.db.getCanonicalHead().valueOr:
+      fatal "Cannot load canonical block header",
+        err = error
+      quit 1
 
   info "Database initialized",
     base = (base.blockHash, base.number),
@@ -169,8 +169,7 @@ proc init(com         : CommonRef,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
-          pruneHistory: bool,
-            ) =
+          pruneHistory: bool) =
 
   config.daoCheck()
 
@@ -181,7 +180,8 @@ proc init(com         : CommonRef,
   com.syncProgress= SyncProgress()
   com.syncState   = Waiting
   com.pruneHistory= pruneHistory
-  com.pos = CasperRef.new
+  com.pos         = CasperRef.new
+  com.extraData   = ShortClientId
 
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
@@ -195,8 +195,8 @@ proc init(com         : CommonRef,
       fork = toHardFork(com.forkTransitionTable, forkDeterminer)
 
     # Must not overwrite the global state on the single state DB
-    if not db.getBlockHeader(0.BlockNumber, com.genesisHeader):
-      com.genesisHeader = toGenesisHeader(genesis, fork, com.db)
+    com.genesisHeader = db.getBlockHeader(0.BlockNumber).valueOr:
+      toGenesisHeader(genesis, fork, com.db)
 
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
@@ -328,6 +328,9 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
     # This costly check is only executed from test suite
     com.isBlockAfterTtd(header)
 
+func depositContractAddress*(com: CommonRef): Address =
+  com.config.depositContractAddress.get(default(Address))
+
 proc syncReqNewHead*(com: CommonRef; header: Header)
     {.gcsafe, raises: [].} =
   ## Used by RPC updater
@@ -414,6 +417,9 @@ func syncHighest*(com: CommonRef): BlockNumber =
 func syncState*(com: CommonRef): SyncState =
   com.syncState
 
+func extraData*(com: CommonRef): string =
+  com.extraData
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
@@ -451,6 +457,9 @@ func `reqBeaconSyncTarget=`*(com: CommonRef; cb: ReqBeaconSyncTargetCB) =
 func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.
   com.notifyBadBlock = cb
+
+func `extraData=`*(com: CommonRef, val: string) =
+  com.extraData = val
 
 # ------------------------------------------------------------------------------
 # End

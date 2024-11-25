@@ -170,8 +170,9 @@ proc procBlkEpilogue(
         blockNumber = header.number,
         expected = header.stateRoot,
         actual = stateRoot,
-        arrivedFrom = vmState.com.db.getCanonicalHead().stateRoot
-      return err("stateRoot mismatch")
+        arrivedFrom = vmState.parent.stateRoot
+      return err("stateRoot mismatch, expect: " &
+        $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
       let bloom = createBloom(vmState.receipts)
@@ -190,8 +191,8 @@ proc procBlkEpilogue(
 
     if header.requestsHash.isSome:
       let
-        depositReqs = ?parseDepositLogs(vmState.allLogs)
-        requestsHash = calcRequestsHashInsertType(depositReqs, withdrawalReqs, consolidationReqs)
+        depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
+        requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",

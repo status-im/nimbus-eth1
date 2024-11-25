@@ -50,6 +50,7 @@ proc initPortalProtocol(
       toContentId,
       createGetHandler(db),
       createStoreHandler(db, defaultRadiusConfig),
+      createContainsHandler(db),
       createRadiusHandler(db),
       stream,
       bootstrapRecords = bootstrapRecords,
@@ -346,6 +347,7 @@ procSuite "Portal Wire Protocol Tests":
         toContentId,
         createGetHandler(db),
         createStoreHandler(db, defaultRadiusConfig),
+        createContainsHandler(db),
         createRadiusHandler(db),
         stream,
       )
@@ -364,10 +366,10 @@ procSuite "Portal Wire Protocol Tests":
     # Index 2 should be still be in database and its distance should be <=
     # updated radius
     check:
-      db.get((distances[0] xor proto1.localNode.id)).isNone()
-      db.get((distances[1] xor proto1.localNode.id)).isNone()
-      db.get((distances[2] xor proto1.localNode.id)).isNone()
-      db.get((distances[3] xor proto1.localNode.id)).isSome()
+      not db.contains((distances[0] xor proto1.localNode.id))
+      not db.contains((distances[1] xor proto1.localNode.id))
+      not db.contains((distances[2] xor proto1.localNode.id))
+      db.contains((distances[3] xor proto1.localNode.id))
       # The radius has been updated and is lower than the maximum start value.
       proto1.dataRadius() < UInt256.high
       # Yet higher than or equal to the furthest non deleted element.

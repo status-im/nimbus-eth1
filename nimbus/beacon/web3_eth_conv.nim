@@ -26,11 +26,8 @@ export
 type
   Web3Quantity*      = web3types.Quantity
   Web3ExtraData*     = web3types.DynamicBytes[0, 32]
-  Web3BlockNumber*   = Quantity
   Web3Tx*            = engine_api_types.TypedTransaction
   Web3Blob*          = engine_api_types.Blob
-  Web3KZGProof*      = engine_api_types.KZGProof
-  Web3KZGCommitment* = engine_api_types.KZGCommitment
 
 {.push gcsafe, raises:[].}
 
@@ -57,36 +54,35 @@ func u64*(x: Opt[Web3Quantity]): Opt[uint64] =
   if x.isNone: Opt.none(uint64)
   else: Opt.some(uint64 x.get)
 
-func u256*(x: Web3BlockNumber): UInt256 =
+func u256*(x: Web3Quantity): UInt256 =
   u256(x.uint64)
 
-func u256*(x: common.FixedBytes[32]): UInt256 =
+func u256*(x: FixedBytes[32]): UInt256 =
   UInt256.fromBytesBE(x.data)
 
-func ethTime*(x: Web3Quantity): common.EthTime =
-  common.EthTime(x)
-
-func ethGasInt*(x: Web3Quantity): common.GasInt =
-  common.GasInt x
+func ethTime*(x: Web3Quantity): EthTime =
+  EthTime(x)
 
 func ethBlob*(x: Web3ExtraData): seq[byte] =
   distinctBase x
 
-func ethWithdrawal*(x: WithdrawalV1): common.Withdrawal =
-  result.index = x.index.uint64
-  result.validatorIndex = x.validatorIndex.uint64
-  result.address = x.address
-  result.amount = x.amount.uint64
+func ethWithdrawal*(x: WithdrawalV1): Withdrawal =
+  Withdrawal(
+    index: x.index.uint64,
+    validatorIndex: x.validatorIndex.uint64,
+    address: x.address,
+    amount: x.amount.uint64,
+  )
 
 func ethWithdrawals*(list: openArray[WithdrawalV1]):
-                       seq[common.Withdrawal] =
-  result = newSeqOfCap[common.Withdrawal](list.len)
+                       seq[Withdrawal] =
+  result = newSeqOfCap[Withdrawal](list.len)
   for x in list:
     result.add ethWithdrawal(x)
 
 func ethWithdrawals*(x: Opt[seq[WithdrawalV1]]):
-                       Opt[seq[common.Withdrawal]] =
-  if x.isNone: Opt.none(seq[common.Withdrawal])
+                       Opt[seq[Withdrawal]] =
+  if x.isNone: Opt.none(seq[Withdrawal])
   else: Opt.some(ethWithdrawals x.get)
 
 func ethTx*(x: Web3Tx): common.Transaction {.gcsafe, raises:[RlpError].} =
@@ -98,6 +94,27 @@ func ethTxs*(list: openArray[Web3Tx]):
   for x in list:
     result.add ethTx(x)
 
+func ethAuth*(x: AuthorizationObject): Authorization =
+  Authorization(
+    chainId: ChainId x.chainId,
+    address: x.address,
+    nonce: distinctBase x.nonce,
+    v: distinctBase x.v,
+    r: x.r,
+    s: x.s,
+  )
+
+func ethAuthList*(list: openArray[AuthorizationObject]):
+                       seq[Authorization] =
+  result = newSeqOfCap[Authorization](list.len)
+  for x in list:
+    result.add ethAuth(x)
+
+func ethAuthList*(x: Opt[seq[AuthorizationObject]]):
+                       Opt[seq[Authorization]] =
+  if x.isNone: Opt.none(seq[Authorization])
+  else: Opt.some(ethAuthList x.get)
+
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
 # ------------------------------------------------------------------------------
@@ -105,10 +122,10 @@ func ethTxs*(list: openArray[Web3Tx]):
 func w3Qty*(x: UInt256): Web3Quantity =
   Web3Quantity x.truncate(uint64)
 
-func w3Qty*(x: common.EthTime): Web3Quantity =
+func w3Qty*(x: EthTime): Web3Quantity =
   Web3Quantity x.uint64
 
-func w3Qty*(x: common.EthTime, y: int): Web3Quantity =
+func w3Qty*(x: EthTime, y: int): Web3Quantity =
   Web3Quantity(x + y.EthTime)
 
 func w3Qty*(x: Web3Quantity, y: int): Web3Quantity =
@@ -129,16 +146,6 @@ func w3Qty*(x: uint64): Web3Quantity =
 
 func w3Qty*(x: int64): Web3Quantity =
   Web3Quantity(x)
-
-func w3BlockNumber*(x: Opt[uint64]): Opt[Web3BlockNumber] =
-  if x.isNone: Opt.none(Web3BlockNumber)
-  else: Opt.some(Web3BlockNumber x.get)
-
-func w3BlockNumber*(x: uint64): Web3BlockNumber =
-  Web3BlockNumber(x)
-
-func w3BlockNumber*(x: UInt256): Web3BlockNumber =
-  Web3BlockNumber x.truncate(uint64)
 
 func w3ExtraData*(x: seq[byte]): Web3ExtraData =
   Web3ExtraData x

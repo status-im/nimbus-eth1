@@ -176,6 +176,7 @@ type
 
     terminalTotalDifficulty*: Opt[UInt256]
     terminalTotalDifficultyPassed*: Opt[bool]
+    depositContractAddress*: Opt[Address]
 
   # These are used for checking that the values of the fields
   # are in a valid order.

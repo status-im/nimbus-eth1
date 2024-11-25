@@ -60,16 +60,18 @@ proc mergePayloadImpl(
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
       return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil)
-    steps: ArrayBuf[NibblesBuf.high + 1, VertexID]
+    vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
+    vtxs: ArrayBuf[NibblesBuf.high + 1, VertexRef]
 
   template resetKeys() =
     # Reset cached hashes of touched verticies
-    for i in 1..steps.len:
-      db.layersResKey((root, steps[^i]))
+    for i in 2..vids.len:
+      db.layersResKey((root, vids[^i]), vtxs[^i])
 
   while path.len > 0:
     # Clear existing merkle keys along the traversal path
-    steps.add cur
+    vids.add cur
+    vtxs.add vtx
 
     let n = path.sharedPrefixLen(vtx.pfx)
     case vtx.vType
@@ -199,37 +201,6 @@ proc mergeAccountRecord*(
     let otherPath = Hash32(getBytes(
       NibblesBuf.fromBytes(accPath.data).replaceSuffix(updated[1].pfx)))
     db.layersPutAccLeaf(otherPath, updated[2])
-
-  ok true
-
-proc mergeGenericData*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # MPT state root
-    path: openArray[byte];             # Leaf item to add to the database
-    data: openArray[byte];             # Raw data payload value
-      ): Result[bool,AristoError] =
-  ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
-  ## `root` greater than `VertexID(1)` and smaller than `LEAST_FREE_VID`.
-  ##
-  ## On success, the function returns `true` if the `data` argument was merged
-  ## into the database ot updated, and `false` if it was on the database
-  ## already.
-  ##
-  # Verify that `root` is neither an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(MergeRootVidMissing)
-  elif root == VertexID(1):
-    return err(MergeAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(MergeStoRootNotAccepted)
-
-  let
-    pyl = LeafPayload(pType: RawData, rawBlob: @data)
-
-  discard db.mergePayloadImpl(root, path, Opt.none(VertexRef), pyl).valueOr:
-    if error == MergeNoAction:
-      return ok false
-    return err error
 
   ok true
 

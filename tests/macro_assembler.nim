@@ -377,7 +377,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
 proc createSignedTx(payload: seq[byte], chainId: ChainId): Transaction =
   let privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
   let unsignedTx = Transaction(
-    txType: TxEIP4844,
+    txType: TxEip4844,
     nonce: 0,
     gasPrice: 1.GasInt,
     gasLimit: 500_000_000.GasInt,

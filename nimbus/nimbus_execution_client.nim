@@ -17,6 +17,7 @@ import
   metrics,
   metrics/chronicles_support,
   kzg4844/kzg,
+  stew/byteutils,
   ./rpc,
   ./version,
   ./constants,
@@ -24,7 +25,9 @@ import
   ./nimbus_import,
   ./core/eip4844,
   ./db/core_db/persistent,
-  ./sync/handlers
+  ./db/storage_types,
+  ./sync/handlers,
+  ./common/chain_config_hash
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
 
@@ -63,7 +66,7 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
       quit(QuitFailure)
 
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              com: CommonRef, protocols: set[ProtocolFlag]) =
+              com: CommonRef) =
   ## Creating P2P Server
   let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
   if kpres.isErr:
@@ -104,19 +107,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     bindIp = conf.listenAddress,
     rng = nimbus.ctx.rng)
 
-  # Add protocol capabilities based on protocol flags
-  for w in protocols:
-    case w: # handle all possibilities
-    of ProtocolFlag.Eth:
-      nimbus.ethNode.addEthHandlerCapability(
-        nimbus.ethNode.peerPool,
-        nimbus.chainRef,
-        nimbus.txPool)
-  # Cannot do without minimal `eth` capability
-  if ProtocolFlag.Eth notin protocols:
-    nimbus.ethNode.addEthHandlerCapability(
-      nimbus.ethNode.peerPool,
-      nimbus.chainRef)
+  # Add protocol capabilities
+  nimbus.ethNode.addEthHandlerCapability(
+    nimbus.ethNode.peerPool, nimbus.chainRef, nimbus.txPool)
 
   # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(
@@ -163,6 +156,24 @@ proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
     nimbus.metricsServer = res.get
     waitFor nimbus.metricsServer.start()
 
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
+  let
+    kvt = db.ctx.getKvt()
+    calculatedId = calcHash(conf.networkId, conf.networkParams)
+    dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
+      # an empty database
+      info "Writing data dir ID", ID=calculatedId
+      kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
+        fatal "Cannot write data dir ID", ID=calculatedId
+        quit(QuitFailure)
+      return
+
+  if calculatedId.data != dataDirIdBytes:
+    fatal "Data dir already initialized with other network configuration",
+      get=dataDirIdBytes.toHex,
+      expected=calculatedId
+    quit(QuitFailure)
+
 proc run(nimbus: NimbusNode, conf: NimbusConf) =
   ## logging
   setLogLevel(conf.logLevel)
@@ -202,6 +213,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         string conf.dataDir,
         conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
+  preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
 
   let com = CommonRef.new(
@@ -210,6 +222,13 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     networkId = conf.networkId,
     params = conf.networkParams)
 
+  if conf.extraData.len > 32:
+    warn "ExtraData exceeds 32 bytes limit, truncate",
+      extraData=conf.extraData,
+      len=conf.extraData.len
+
+  com.extraData = conf.extraData
+
   defer:
     com.db.finish()
 
@@ -217,18 +236,15 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   else:
-    let protocols = conf.getProtocolFlags()
-
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
-    setupP2P(nimbus, conf, com, protocols)
-    setupRpc(nimbus, conf, com, protocols)
+    setupP2P(nimbus, conf, com)
+    setupRpc(nimbus, conf, com)
 
-    if conf.maxPeers > 0:
+    if conf.maxPeers > 0 and conf.engineApiServerEnabled():
       # Not starting syncer if there is definitely no way to run it. This
       # avoids polling (i.e. waiting for instructions) and some logging.
-      let resumeOnly = not conf.engineApiServerEnabled()
-      if not nimbus.beaconSyncRef.start(resumeOnly):
+      if not nimbus.beaconSyncRef.start():
         nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
     if nimbus.state == NimbusState.Starting:

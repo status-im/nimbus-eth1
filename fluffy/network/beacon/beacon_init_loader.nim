@@ -14,6 +14,8 @@ import
   beacon_chain/beacon_clock,
   beacon_chain/conf
 
+export beacon_clock, network_metadata
+
 type NetworkInitData* = object
   clock*: BeaconClock
   metadata*: Eth2NetworkMetadata

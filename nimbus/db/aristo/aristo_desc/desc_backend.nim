@@ -52,15 +52,9 @@ type
       ## Generic transaction initialisation function
 
   PutVtxFn* =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef)
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey)
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function, `VertexRef(nil)`
-        ## values indicate that records should be deleted.
-
-  PutKeyFn* =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID, key: HashKey)
-      {.gcsafe, raises: [].}
-        ## Generic backend database bulk storage function, `VOID_HASH_KEY`
         ## values indicate that records should be deleted.
 
   PutTuvFn* =
@@ -100,7 +94,6 @@ type
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
-    putKeyFn*: PutKeyFn              ## Bulk store vertex hashes
     putTuvFn*: PutTuvFn              ## Store top used vertex ID
     putLstFn*: PutLstFn              ## Store saved state
     putEndFn*: PutEndFn              ## Commit bulk store session
@@ -115,7 +108,6 @@ proc init*(trg: var BackendObj; src: BackendObj) =
 
   trg.putBegFn = src.putBegFn
   trg.putVtxFn = src.putVtxFn
-  trg.putKeyFn = src.putKeyFn
   trg.putTuvFn = src.putTuvFn
   trg.putLstFn = src.putLstFn
   trg.putEndFn = src.putEndFn

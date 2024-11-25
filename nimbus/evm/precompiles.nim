@@ -98,7 +98,7 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
   # used for R and S
   if maxPos >= 64:
     # Copy message data to buffer
-    bytes[0..(maxPos-64)] = data[64..maxPos]
+    assign(bytes.toOpenArray(0, (maxPos-64)), data.toOpenArray(64, maxPos))
 
   let sig = Signature.fromRaw(bytes).valueOr:
     return err(prcErr(PrcInvalidSig))
@@ -301,18 +301,18 @@ func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 
   var
     input: array[128, byte]
-    output: array[64, byte]
   # Padding data
   let len = min(c.msg.data.len, 128) - 1
   input[0..len] = c.msg.data[0..len]
   var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
   var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
   var apo = (p1 + p2).toAffine()
+
+  c.output.setLen(64)
   if isSome(apo):
     # we can discard here because we supply proper buffer
-    discard apo.get().toBytes(output)
+    discard apo.get().toBytes(c.output)
 
-  assign(c.output, output)
   ok()
 
 func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
@@ -321,19 +321,19 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 
   var
     input: array[96, byte]
-    output: array[64, byte]
 
   # Padding data
   let len = min(c.msg.data.len, 96) - 1
-  input[0..len] = c.msg.data[0..len]
+  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
   var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
   var fr = ? getFR(input.toOpenArray(64, 95))
   var apo = (p1 * fr).toAffine()
+
+  c.output.setLen(64)
   if isSome(apo):
     # we can discard here because we supply buffer of proper size
-    discard apo.get().toBytes(output)
+    discard apo.get().toBytes(c.output)
 
-  assign(c.output, output)
   ok()
 
 func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
@@ -348,10 +348,10 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
                  GasECPairingBaseIstanbul + numPoints * GasECPairingPerPointIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
 
-  var output: array[32, byte]
+  c.output.setLen(32)
   if msglen == 0:
     # we can discard here because we supply buffer of proper size
-    discard BNU256.one().toBytes(output)
+    discard BNU256.one().toBytes(c.output)
   else:
     # Calculate number of pairing pairs
     let count = msglen div 192
@@ -369,9 +369,8 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
 
     if acc == FQ12.one():
       # we can discard here because we supply buffer of proper size
-      discard BNU256.one().toBytes(output)
+      discard BNU256.one().toBytes(c.output)
 
-  assign(c.output, output)
   ok()
 
 func blake2bf(c: Computation): EvmResultVoid =
@@ -382,11 +381,9 @@ func blake2bf(c: Computation): EvmResultVoid =
     let gasFee = GasInt(beLoad32(input, 0))
     ? c.gasMeter.consumeGas(gasFee, reason="blake2bf Precompile")
 
-  var output: array[64, byte]
-  if not blake2b_F(input, output):
+  c.output.setLen(64)
+  if not blake2b_F(input, c.output):
     return err(prcErr(PrcInvalidParam))
-  else:
-    assign(c.output, output)
   ok()
 
 func blsG1Add(c: Computation): EvmResultVoid =
@@ -407,7 +404,7 @@ func blsG1Add(c: Computation): EvmResultVoid =
 
   a.add b
 
-  c.output = newSeq[byte](128)
+  c.output.setLen(128)
   if not encodePoint(a, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
@@ -431,7 +428,7 @@ func blsG1Mul(c: Computation): EvmResultVoid =
 
   a.mul(scalar)
 
-  c.output = newSeq[byte](128)
+  c.output.setLen(128)
   if not encodePoint(a, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
@@ -504,7 +501,7 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
     else:
       acc.add(p)
 
-  c.output = newSeq[byte](128)
+  c.output.setLen(128)
   if not encodePoint(acc, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
@@ -527,7 +524,7 @@ func blsG2Add(c: Computation): EvmResultVoid =
 
   a.add b
 
-  c.output = newSeq[byte](256)
+  c.output.setLen(256)
   if not encodePoint(a, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
@@ -551,7 +548,7 @@ func blsG2Mul(c: Computation): EvmResultVoid =
 
   a.mul(scalar)
 
-  c.output = newSeq[byte](256)
+  c.output.setLen(256)
   if not encodePoint(a, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
@@ -593,7 +590,7 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
     else:
       acc.add(p)
 
-  c.output = newSeq[byte](256)
+  c.output.setLen(256)
   if not encodePoint(acc, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
@@ -643,7 +640,7 @@ func blsPairing(c: Computation): EvmResultVoid =
     else:
       acc.mul(millerLoop(g1, g2))
 
-  c.output = newSeq[byte](32)
+  c.output.setLen(32)
   if acc.check():
     c.output[^1] = 1.byte
   ok()
@@ -663,7 +660,7 @@ func blsMapG1(c: Computation): EvmResultVoid =
 
   let p = fe.mapFPToG1()
 
-  c.output = newSeq[byte](128)
+  c.output.setLen(128)
   if not encodePoint(p, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
@@ -683,7 +680,7 @@ func blsMapG2(c: Computation): EvmResultVoid =
 
   let p = fe.mapFPToG2()
 
-  c.output = newSeq[byte](256)
+  c.output.setLen(256)
   if not encodePoint(p, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()

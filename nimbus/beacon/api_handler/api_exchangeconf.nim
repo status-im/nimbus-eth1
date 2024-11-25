@@ -43,20 +43,17 @@ proc exchangeConf*(ben: BeaconEngineRef,
     terminalBlockHash   = conf.terminalBlockHash
 
   if terminalBlockHash != default(Hash32):
-    var headerHash: Hash32
-
-    if not db.getBlockHash(terminalBlockNumber, headerHash):
-      raise newException(ValueError, "cannot get terminal block hash, number $1" %
-        [$terminalBlockNumber])
+    let headerHash = db.getBlockHash(terminalBlockNumber).valueOr:
+      raise newException(ValueError, "cannot get terminal block hash, number $1, msg: $2" %
+        [$terminalBlockNumber, error])
 
     if terminalBlockHash != headerHash:
       raise newException(ValueError, "invalid terminal block hash, got $1 want $2" %
         [$terminalBlockHash, $headerHash])
 
-    var header: Header
-    if not db.getBlockHeader(headerHash, header):
-      raise newException(ValueError, "cannot get terminal block header, hash $1" %
-        [$terminalBlockHash])
+    let header = db.getBlockHeader(headerHash).valueOr:
+      raise newException(ValueError, "cannot get terminal block header, hash $1, msg: $2" %
+        [$terminalBlockHash, error])
 
     return TransitionConfigurationV1(
       terminalTotalDifficulty: ttd.get,

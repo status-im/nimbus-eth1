@@ -21,7 +21,7 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
-  ../nimbus/rpc/[cors, server_api_helpers],
+  ../nimbus/rpc/[cors, rpc_utils],
   ../nimbus/beacon/payload_conv,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
@@ -147,7 +147,7 @@ proc run*(
                 parentBeaconBlockRoot = Opt.none(Hash32),
                 requestsHash = Opt.none(Hash32),
               )
-              blockCache.add(populateBlockObject(blk.header.rlpHash, blk, true))
+              blockCache.add(populateBlockObject(blk.header.rlpHash, blk, 0.u256, true))
             except RlpError as exc:
               debug "Invalid block received", err = exc.msg
 

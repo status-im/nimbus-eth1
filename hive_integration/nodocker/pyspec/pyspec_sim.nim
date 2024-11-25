@@ -20,6 +20,7 @@ import
   ../../../nimbus/beacon/payload_conv,
   ../../../nimbus/core/eip4844,
   ../engine/engine_client,
+  ../engine/types,
   ./test_env
 
 const
@@ -35,8 +36,7 @@ const
 type
   Payload = object
     badBlock: bool
-    payload: ExecutionPayload
-    beaconRoot: Opt[Hash32]
+    payload: ExecutableData
 
 proc getPayload(node: JsonNode): Payload  =
   try:
@@ -45,8 +45,10 @@ proc getPayload(node: JsonNode): Payload  =
       blk = rlp.decode(rlpBytes, EthBlock)
     Payload(
       badBlock: false,
-      payload: executionPayload(blk),
-      beaconRoot: blk.header.parentBeaconBlockRoot,
+      payload: ExecutableData(
+        basePayload: executionPayload(blk),
+        beaconRoot: blk.header.parentBeaconBlockRoot,
+      )
     )
   except RlpError:
     Payload(
@@ -141,7 +143,7 @@ proc runTest(node: JsonNode, network: string): TestStatus =
 
     latestVersion = payload.payload.version
 
-    let res = env.rpcClient.newPayload(payload.payload, payload.beaconRoot)
+    let res = env.rpcClient.newPayload(latestVersion, payload.payload)
     if res.isErr:
       result = TestStatus.Failed
       echo "unable to send block ",

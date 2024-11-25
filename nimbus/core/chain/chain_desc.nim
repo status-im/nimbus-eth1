@@ -55,15 +55,12 @@ func newChain*(com: CommonRef,
 proc newChain*(com: CommonRef): ChainRef =
   ## Constructor for the `Chain` descriptor object. All sub-object descriptors
   ## are initialised with defaults. So is extra block chain validation
-  try:
-    let header = com.db.getCanonicalHead()
-    let extraValidation = com.proofOfStake(header)
-    return ChainRef(
-      com: com,
-      extraValidation: extraValidation,
-    )
-  except CatchableError:
-    doAssert(false, "no canonical head")
+  let header = com.db.getCanonicalHead().expect("canonical head exists")
+  let extraValidation = com.proofOfStake(header)
+  return ChainRef(
+    com: com,
+    extraValidation: extraValidation,
+  )
 
 # ------------------------------------------------------------------------------
 # Public `Chain` getters
@@ -87,13 +84,6 @@ func extraValidation*(c: ChainRef): bool =
 func verifyFrom*(c: ChainRef): BlockNumber =
   ## Getter
   c.verifyFrom
-
-proc currentBlock*(c: ChainRef): Header
-  {.gcsafe, raises: [CatchableError].} =
-  ## currentBlock retrieves the current head block of the canonical chain.
-  ## Ideally the block should be retrieved from the blockchain's internal cache.
-  ## but now it's enough to retrieve it from database
-  c.db.getCanonicalHead()
 
 # ------------------------------------------------------------------------------
 # Public `Chain` setters

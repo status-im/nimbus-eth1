@@ -13,7 +13,7 @@ import
   eth/common,
   stew/endians2,
   ../../nimbus/db/aristo/[
-    aristo_debug, aristo_desc, aristo_hike, aristo_layers, aristo_merge,
+    aristo_debug, aristo_desc, aristo_hike, aristo_layers,
     aristo_tx],
   ../replay/pp,
   "."/[undump_accounts, undump_desc, undump_storages, test_samples_xx]
@@ -160,15 +160,16 @@ func to*(ua: seq[UndumpAccounts]; T: type seq[ProofTrieData]): T =
     let thisRoot = w.root
     if rootKey != thisRoot:
       (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
-    if 0 < w.data.accounts.len:
-      result.add ProofTrieData(
-        root:   rootKey,
-        proof:  cast[seq[seq[byte]]](w.data.proof),
-        kvpLst: w.data.accounts.mapIt(LeafTiePayload(
-          leafTie: LeafTie(
-            root:  rootVid,
-            path:  it.accKey.to(PathID)),
-          payload: LeafPayload(pType: RawData, rawBlob: it.accBlob))))
+    # TODO rewrite as account leaves
+    # if 0 < w.data.accounts.len:
+    #   result.add ProofTrieData(
+    #     root:   rootKey,
+    #     proof:  cast[seq[seq[byte]]](w.data.proof),
+    #     kvpLst: w.data.accounts.mapIt(LeafTiePayload(
+    #       leafTie: LeafTie(
+    #         root:  rootVid,
+    #         path:  it.accKey.to(PathID)),
+    #       payload: LeafPayload(pType: RawData, rawBlob: it.accBlob))))
 
 func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
   var (rootKey, rootVid) = (default(Hash32), VertexID(0))
@@ -177,15 +178,17 @@ func to*(us: seq[UndumpStorages]; T: type seq[ProofTrieData]): T =
       let thisRoot = w.account.storageRoot
       if rootKey != thisRoot:
         (rootKey, rootVid) = (thisRoot, VertexID(rootVid.uint64 + 1))
-      if 0 < w.data.len:
-        result.add ProofTrieData(
-          root:   thisRoot,
-          id:     n + 1,
-          kvpLst: w.data.mapIt(LeafTiePayload(
-            leafTie: LeafTie(
-              root:  rootVid,
-              path:  it.slotHash.to(PathID)),
-            payload: LeafPayload(pType: RawData, rawBlob: it.slotData))))
+      # TODO rewrite as account leaves
+
+      # if 0 < w.data.len:
+      #   result.add ProofTrieData(
+      #     root:   thisRoot,
+      #     id:     n + 1,
+      #     kvpLst: w.data.mapIt(LeafTiePayload(
+      #       leafTie: LeafTie(
+      #         root:  rootVid,
+      #         path:  it.slotHash.to(PathID)),
+      #       payload: LeafPayload(pType: RawData, rawBlob: it.slotData))))
     if 0 < result.len:
       result[^1].proof = cast[seq[seq[byte]]](s.data.proof)
 
@@ -217,14 +220,6 @@ proc schedStow*(
 
 # ------------------
 
-proc mergeGenericData*(
-    db: AristoDbRef;                   # Database, top layer
-    leaf: LeafTiePayload;              # Leaf item to add to the database
-      ): Result[bool,AristoError] =
-  ## Variant of `mergeGenericData()`.
-  db.mergeGenericData(
-    leaf.leafTie.root, @(leaf.leafTie.path), leaf.payload.rawBlob)
-
 proc mergeList*(
     db: AristoDbRef;                   # Database, top layer
     leafs: openArray[LeafTiePayload];  # Leaf items to add to the database
@@ -235,17 +230,18 @@ proc mergeList*(
   for n,w in leafs:
     noisy.say "*** mergeList",
       " n=", n, "/", leafs.len
-    let rc = db.mergeGenericData w
-    noisy.say "*** mergeList",
-      " n=", n, "/", leafs.len,
-      " rc=", (if rc.isOk: "ok" else: $rc.error),
-      "\n    -------------\n"
-    if rc.isErr:
-      return (n,dups,rc.error)
-    elif rc.value:
-      merged.inc
-    else:
-      dups.inc
+    # TODO refactor to not use generic data
+    # let rc = db.mergeGenericData w
+    # noisy.say "*** mergeList",
+    #   " n=", n, "/", leafs.len,
+    #   " rc=", (if rc.isOk: "ok" else: $rc.error),
+    #   "\n    -------------\n"
+    # if rc.isErr:
+    #   return (n,dups,rc.error)
+    # elif rc.value:
+    #   merged.inc
+    # else:
+    #   dups.inc
 
   (merged, dups, AristoError(0))
 

@@ -40,8 +40,9 @@ proc createPartDb(ps: PartStateRef; data: seq[seq[byte]]; info: static[string]) 
     if rc.isErr: raiseAssert info & ": partPut => " & $rc.error
 
   # Save keys to database
-  for (rvid,key) in ps.vkPairs:
-    ps.db.layersPutKey(rvid, key)
+  # TODO support for partial databases
+  # for (rvid,key) in ps.vkPairs:
+  #   ps.db.layersPutKey(rvid, key)
 
   # Make sure all is OK
   block:
@@ -88,8 +89,6 @@ proc payloadAsBlob(pyl: LeafPayload; ps: PartStateRef): seq[byte] =
   ##
   const info = "payloadAsBlob"
   case pyl.pType:
-  of RawData:
-    pyl.rawBlob
   of AccountData:
     let key = block:
       if pyl.stoID.isValid:
@@ -135,7 +134,10 @@ when false:
 # Private test functions
 # ------------------------------------------------------------------------------
 
-proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) =
+proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) {.deprecated: "need to be rewritten to use non-generic data".} =
+  block: # TODO remove after rewrite
+    skip
+    return
   const info = "testCreateProofTwig"
 
   # Create partial database

@@ -14,7 +14,6 @@ import
   stew/byteutils,
   stew/endians2,
   ../nimbus/config,
-  ../nimbus/db/ledger,
   ../nimbus/db/storage_types,
   ../nimbus/common/common,
   ../nimbus/core/chain,
@@ -22,7 +21,7 @@ import
   ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
-  ../nimbus/db/ledger/backend/accounts_ledger {.all.}, # import all private symbols
+  ../nimbus/db/ledger {.all.}, # import all private symbols
   unittest2
 
 const
@@ -339,8 +338,9 @@ proc runLedgerTransactionTests(noisy = true) =
         for tx in body.transactions:
           env.txs.add tx
 
+    let head = env.xdb.getCanonicalHead().expect("canonicalHead exists")
     test &"Collect unique recipient addresses from {env.txs.len} txs," &
-        &" head=#{env.xdb.getCanonicalHead.number}":
+        &" head=#{head.number}":
       # since we generate our own transactions instead of replaying
       # from testnet blocks, the recipients already unique.
       for n,tx in env.txs:
@@ -348,7 +348,6 @@ proc runLedgerTransactionTests(noisy = true) =
         env.txi.add n
 
     test &"Run {env.txi.len} two-step trials with rollback":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()
@@ -356,7 +355,6 @@ proc runLedgerTransactionTests(noisy = true) =
         env.runTrial2ok(ledger, n)
 
     test &"Run {env.txi.len} three-step trials with rollback":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()
@@ -365,7 +363,6 @@ proc runLedgerTransactionTests(noisy = true) =
 
     test &"Run {env.txi.len} three-step trials with extra db frame rollback" &
         " throwing Exceptions":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()
@@ -373,7 +370,6 @@ proc runLedgerTransactionTests(noisy = true) =
         env.runTrial3Survive(ledger, n, noisy)
 
     test &"Run {env.txi.len} tree-step trials without rollback":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()
@@ -381,7 +377,6 @@ proc runLedgerTransactionTests(noisy = true) =
         env.runTrial3(ledger, n, rollback = false)
 
     test &"Run {env.txi.len} four-step trials with rollback and db frames":
-      let head = env.xdb.getCanonicalHead()
       for n in env.txi:
         let dbTx = env.xdb.ctx.newTransaction()
         defer: dbTx.dispose()

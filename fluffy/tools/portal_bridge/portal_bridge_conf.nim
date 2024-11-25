@@ -12,6 +12,8 @@ import
   confutils,
   confutils/std/net,
   nimcrypto/hash,
+  ../../network_metadata,
+  ../../eth_data/era1,
   ../../[conf, logging]
 
 export net
@@ -35,6 +37,8 @@ proc defaultPortalBridgeStateDir*(): string =
     defaultDataDir() / "Bridge" / "State"
   else:
     defaultDataDir() / "bridge" / "state"
+
+const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
 type
   TrustedDigest* = MDigest[32 * 8]
@@ -117,6 +121,13 @@ type
         name: "backfill"
       .}: bool
 
+      startEra* {.desc: "The era to start from", defaultValue: 0, name: "start-era".}:
+        uint64
+
+      endEra* {.
+        desc: "The era to stop at", defaultValue: defaultEndEra, name: "end-era"
+      .}: uint64
+
       audit* {.
         desc:
           "Run pre-merge backfill in audit mode, which will only gossip content that if failed to fetch from the network",
@@ -130,6 +141,13 @@ type
         defaultValueDesc: defaultEra1DataDir(),
         name: "era1-dir"
       .}: InputDir
+
+      gossipConcurrency* {.
+        desc:
+          "The number of concurrent gossip workers for gossiping content into the portal network",
+        defaultValue: 50,
+        name: "gossip-concurrency"
+      .}: int
     of PortalBridgeCmd.state:
       web3UrlState* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
         JsonRpcUrl
@@ -171,6 +189,13 @@ type
           "Enable verifying that the state was successfully gossipped by fetching it from the network",
         defaultValue: false,
         name: "verify-gossip"
+      .}: bool
+
+      skipGossipForExisting* {.
+        desc:
+          "Enable skipping gossip of each content value which is successfully fetched from the network",
+        defaultValue: true,
+        name: "skip-gossip-for-existing"
       .}: bool
 
       gossipWorkersCount* {.

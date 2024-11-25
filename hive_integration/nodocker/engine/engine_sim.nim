@@ -17,11 +17,11 @@ import
   ../../../nimbus/core/eip4844
 
 import
-  # ./engine_tests,
+  ./engine_tests,
   ./auths_tests,
-  ./exchange_cap_tests#,
-  #./withdrawal_tests,
-  #./cancun_tests
+  ./exchange_cap_tests,
+  ./withdrawal_tests,
+  ./cancun_tests
 
 proc combineTests(): seq[TestDesc] =
   #result.add wdTestList

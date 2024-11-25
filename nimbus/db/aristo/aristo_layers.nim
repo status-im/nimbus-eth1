@@ -81,9 +81,14 @@ func layersGetKey*(db: AristoDbRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   db.top.kMap.withValue(rvid, item):
     return Opt.some((item[], 0))
 
+  if rvid in db.top.sTab:
+    return Opt.some((VOID_HASH_KEY, 0))
+
   for i, w in enumerate(db.rstack):
     w.kMap.withValue(rvid, item):
       return ok((item[], i + 1))
+    if rvid in w.sTab:
+      return Opt.some((VOID_HASH_KEY, i + 1))
 
   Opt.none((HashKey, int))
 
@@ -122,6 +127,7 @@ func layersPutVtx*(
       ) =
   ## Store a (potentally empty) vertex on the top layer
   db.top.sTab[rvid] = vtx
+  db.top.kMap.del(rvid)
 
 func layersResVtx*(
     db: AristoDbRef;
@@ -135,30 +141,22 @@ func layersResVtx*(
 func layersPutKey*(
     db: AristoDbRef;
     rvid: RootedVertexID;
+    vtx: VertexRef,
     key: HashKey;
       ) =
   ## Store a (potentally void) hash key on the top layer
+  db.top.sTab[rvid] = vtx
   db.top.kMap[rvid] = key
 
-
-func layersResKey*(db: AristoDbRef; rvid: RootedVertexID) =
+func layersResKey*(db: AristoDbRef; rvid: RootedVertexID, vtx: VertexRef) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutKey(rvid, VOID_HASH_KEY)
+  db.layersPutVtx(rvid, vtx)
 
 func layersResKeys*(db: AristoDbRef; hike: Hike) =
   ## Reset all cached keys along the given hike
   for i in 1..hike.legs.len:
-    db.layersResKey((hike.root, hike.legs[^i].wp.vid))
-
-proc layersUpdateVtx*(
-    db: AristoDbRef;                   # Database, top layer
-    rvid: RootedVertexID;
-    vtx: VertexRef;                    # Vertex to add
-      ) =
-  ## Update a vertex at `rvid` and reset its associated key entry
-  db.layersPutVtx(rvid, vtx)
-  db.layersResKey(rvid)
+    db.layersResKey((hike.root, hike.legs[^i].wp.vid), hike.legs[^i].wp.vtx)
 
 func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash32; leafVtx: VertexRef) =
   db.top.accLeaves[accPath] = leafVtx
@@ -187,6 +185,7 @@ func layersMergeOnto*(src: LayerRef; trg: var LayerObj) =
 
   for (vid,vtx) in src.sTab.pairs:
     trg.sTab[vid] = vtx
+    trg.kMap.del vid
   for (vid,key) in src.kMap.pairs:
     trg.kMap[vid] = key
   trg.vTop = src.vTop
@@ -215,6 +214,7 @@ func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
   for n in 1 ..< layers.len:
     for (vid,vtx) in layers[n].sTab.pairs:
       result.sTab[vid] = vtx
+      result.kMap.del vid
     for (vid,key) in layers[n].kMap.pairs:
       result.kMap[vid] = key
     for (accPath,vtx) in layers[n].accLeaves.pairs:

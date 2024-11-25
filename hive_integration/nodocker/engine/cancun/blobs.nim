@@ -25,12 +25,12 @@ type
 
   BlobCommitment* = object
     blob*: kzg.KzgBlob
-    commitment*: kzg.KZGCommitment
+    commitment*: kzg.KzgCommitment
 
   BlobTxWrapData* = object
     hashes*: seq[Hash32]
     blobs*: seq[kzg.KzgBlob]
-    commitments*: seq[kzg.KZGCommitment]
+    commitments*: seq[kzg.KzgCommitment]
     proofs*: seq[kzg.KzgProof]
 
 func getBlobList*(startId: BlobID, count: int): BlobIDs =
@@ -147,7 +147,7 @@ proc getVersionedHash*(blobid: BlobID, commitmentVersion: byte): Hash32 =
 
 proc blobDataGenerator*(startBlobId: BlobID, blobCount: int): BlobTxWrapData =
   result.blobs = newSeq[kzg.KzgBlob](blobCount)
-  result.commitments = newSeq[kzg.KZGCommitment](blobCount)
+  result.commitments = newSeq[kzg.KzgCommitment](blobCount)
   result.hashes = newSeq[Hash32](blobCount)
   result.proofs = newSeq[kzg.KzgProof](blobCount)
 

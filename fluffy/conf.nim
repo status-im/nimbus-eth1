@@ -99,7 +99,8 @@ type
 
     portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {PortalSubnetwork.history, PortalSubnetwork.state},
+      defaultValue:
+        {PortalSubnetwork.history, PortalSubnetwork.state, PortalSubnetwork.beacon},
       name: "portal-subnetworks"
     .}: set[PortalSubnetwork]
 
@@ -258,7 +259,14 @@ type
       desc: "The maximum number of nodes to send content to during gossip",
       defaultValue: defaultPortalProtocolConfig.maxGossipNodes,
       defaultValueDesc: $defaultMaxGossipNodesDesc,
-      name: "max-gossip-nodes"
+      name: "debug-max-gossip-nodes"
+    .}: int
+
+    maxConcurrentOffers* {.
+      hidden,
+      desc: "The maximum number of offers to send concurrently",
+      defaultValue: defaultPortalProtocolConfig.maxConcurrentOffers,
+      name: "debug-max-concurrent-offers"
     .}: int
 
     radiusConfig* {.
@@ -315,14 +323,14 @@ type
         "Size of the in memory local content cache. This is the max number " &
         "of content values that can be stored in the cache.",
       defaultValue: defaultPortalProtocolConfig.contentCacheSize,
-      name: "content-cache-size"
+      name: "debug-content-cache-size"
     .}: int
 
     disableContentCache* {.
       hidden,
       desc: "Disable the in memory local content cache",
       defaultValue: defaultPortalProtocolConfig.disableContentCache,
-      name: "disable-content-cache"
+      name: "debug-disable-content-cache"
     .}: bool
 
     disablePoke* {.

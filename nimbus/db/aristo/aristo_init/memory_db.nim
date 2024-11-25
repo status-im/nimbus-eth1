@@ -44,7 +44,6 @@ type
   MemDbRef = ref object
     ## Database
     sTab: Table[RootedVertexID,seq[byte]] ## Structural vertex table making up a trie
-    kMap: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     tUvi: Option[VertexID]                ## Top used vertex ID
     lSst: Opt[SavedState]                 ## Last saved state
 
@@ -54,7 +53,6 @@ type
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[RootedVertexID,seq[byte]]
-    kMap: Table[RootedVertexID,HashKey]
     tUvi: Option[VertexID]
     lSst: Opt[SavedState]
 
@@ -100,9 +98,12 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
     proc(rvid: RootedVertexID): Result[HashKey,AristoError] =
-      let key = db.mdb.kMap.getOrVoid rvid
-      if key.isValid:
-        return ok key
+      let data = db.mdb.sTab.getOrDefault(rvid, EmptyBlob)
+      if 0 < data.len:
+        let key = data.deblobify(HashKey).valueOr:
+          return err(GetKeyNotFound)
+        if key.isValid:
+          return ok(key)
       err(GetKeyNotFound)
 
 proc getTuvFn(db: MemBackendRef): GetTuvFn =
@@ -129,20 +130,13 @@ proc putBegFn(db: MemBackendRef): PutBegFn =
 
 proc putVtxFn(db: MemBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vtx.isValid:
-          hdl.sTab[rvid] = vtx.blobify()
+          hdl.sTab[rvid] = vtx.blobify(key)
         else:
           hdl.sTab[rvid] = EmptyBlob
-
-proc putKeyFn(db: MemBackendRef): PutKeyFn =
-  result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID, key: HashKey) =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        hdl.kMap[rvid] = key
 
 proc putTuvFn(db: MemBackendRef): PutTuvFn =
   result =
@@ -186,12 +180,6 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.mdb.sTab.del vid
 
-      for (vid,key) in hdl.kMap.pairs:
-        if key.isValid:
-          db.mdb.kMap[vid] = key
-        else:
-          db.mdb.kMap.del vid
-
       let tuv = hdl.tUvi.get(otherwise = VertexID(0))
       if tuv.isValid:
         db.mdb.tUvi = some(tuv)
@@ -224,7 +212,6 @@ proc memoryBackend*(): BackendRef =
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
-  db.putKeyFn = putKeyFn db
   db.putTuvFn = putTuvFn db
   db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
@@ -262,11 +249,15 @@ iterator walkKey*(
     be: MemBackendRef;
       ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Iteration over the Markle hash sub-table.
-  for rvid in be.mdb.kMap.keys.toSeq.mapIt(it).sorted:
-    let key = be.mdb.kMap.getOrVoid(rvid)
-    if key.isValid:
-      yield (rvid, key)
-
+  for n,rvid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
+    let data = be.mdb.sTab.getOrDefault(rvid, EmptyBlob)
+    if 0 < data.len:
+      let rc = data.deblobify HashKey
+      if rc.isNone:
+        when extraTraceMessages:
+          debug logTxt "walkKeyFn() skip", n, rvid
+      else:
+        yield (rvid, rc.value)
 
 # ------------------------------------------------------------------------------
 # End

@@ -16,6 +16,7 @@
 
 import
   stew/sorted_set,
+  stew/byteutils,
   ../../db/ledger,
   ../../common/common,
   ../../utils/utils,
@@ -268,7 +269,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
   if vmState.fork >= FkPrague:
     pst.withdrawalReqs = processDequeueWithdrawalRequests(vmState)
     pst.consolidationReqs = processDequeueConsolidationRequests(vmState)
-    pst.depositReqs = ?parseDepositLogs(vmState.allLogs)
+    pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
 
   # Finish up, then vmState.stateDB.stateRoot may be accessed
   stateDB.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
@@ -312,6 +313,12 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
   ok(pst)
   # Block chain will roll back automatically
 
+func getExtraData(com: CommonRef): seq[byte] =
+  if com.extraData.len > 32:
+    com.extraData.toBytes[0..<32]
+  else:
+    com.extraData.toBytes
+
 proc assembleHeader*(pst: TxPacker): Header =
   ## Generate a new header, a child of the cached `head`
   let
@@ -331,7 +338,7 @@ proc assembleHeader*(pst: TxPacker): Header =
     gasLimit:      vmState.blockCtx.gasLimit,
     gasUsed:       vmState.cumulativeGasUsed,
     timestamp:     pos.timestamp,
-    extraData:     @[],
+    extraData:     getExtraData(com),
     mixHash:       pos.prevRandao,
     nonce:         default(Bytes8),
     baseFeePerGas: vmState.blockCtx.baseFeePerGas,
@@ -346,23 +353,17 @@ proc assembleHeader*(pst: TxPacker): Header =
     result.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
   if com.isPragueOrLater(pos.timestamp):
-    let requestsHash = calcRequestsHashInsertType(pst.depositReqs,
+    let requestsHash = calcRequestsHash(pst.depositReqs,
       pst.withdrawalReqs, pst.consolidationReqs)
     result.requestsHash = Opt.some(requestsHash)
 
 func blockValue*(pst: TxPacker): UInt256 =
   pst.blockValue
 
-func executionRequests*(pst: TxPacker): array[3, seq[byte]] =
-  result[0] = newSeqOfCap[byte](pst.depositReqs.len+1)
-  result[0].add 0x00.byte
-  result[0].add pst.depositReqs
-  result[1] = newSeqOfCap[byte](pst.withdrawalReqs.len+1)
-  result[1].add 0x01.byte
-  result[1].add pst.withdrawalReqs
-  result[2] = newSeqOfCap[byte](pst.consolidationReqs.len+1)
-  result[2].add 0x02.byte
-  result[2].add pst.consolidationReqs
+func executionRequests*(pst: var TxPacker): array[3, seq[byte]] =
+  result[0] = move(pst.depositReqs)
+  result[1] = move(pst.withdrawalReqs)
+  result[2] = move(pst.consolidationReqs)
 
 # ------------------------------------------------------------------------------
 # End

@@ -16,7 +16,7 @@
 import
   eth/common,
   results,
-  "."/[aristo_constants, aristo_desc, aristo_get, aristo_layers]
+  "."/[aristo_desc, aristo_compute]
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
@@ -26,8 +26,6 @@ proc toNode*(
     vtx: VertexRef;                    # Vertex to convert
     root: VertexID;                    # Sub-tree root the `vtx` belongs to
     db: AristoDbRef;                   # Database
-    stopEarly = true;                  # Full list of missing links if `false`
-    beKeyOk = true;                    # Allow fetching DB backend keys
       ): Result[NodeRef,seq[VertexID]] =
   ## Convert argument the vertex `vtx` to a node type. Missing Merkle hash
   ## keys are searched for on the argument database `db`.
@@ -40,19 +38,6 @@ proc toNode*(
   ## only from the cache layer. This does not affect a link key for a payload
   ## storage root.
   ##
-  proc getKey(db: AristoDbRef; rvid: RootedVertexID; beOk: bool): HashKey =
-    block body:
-      let key = db.layersGetKey(rvid).valueOr:
-        break body
-      if key[0].isValid:
-        return key[0]
-      else:
-        return VOID_HASH_KEY
-    if beOk:
-      let rc = db.getKeyBE rvid
-      if rc.isOk:
-        return rc.value[0]
-    VOID_HASH_KEY
 
   case vtx.vType:
   of Leaf:
@@ -61,29 +46,21 @@ proc toNode*(
     if vtx.lData.pType == AccountData:
       let stoID = vtx.lData.stoID
       if stoID.isValid:
-        let key = db.getKey (stoID.vid, stoID.vid)
-        if not key.isValid:
+        let key = db.computeKey((stoID.vid, stoID.vid)).valueOr:
           return err(@[stoID.vid])
+
         node.key[0] = key
     return ok node
 
   of Branch:
     let node = NodeRef(vtx: vtx.dup())
-    var missing: seq[VertexID]
     for n in 0 .. 15:
       let vid = vtx.bVid[n]
       if vid.isValid:
-        let key = db.getKey((root, vid), beOk=beKeyOk)
-        if key.isValid:
-          node.key[n] = key
-        elif stopEarly:
+        let key = db.computeKey((root, vid)).valueOr:
           return err(@[vid])
-        else:
-          missing.add vid
-    if 0 < missing.len:
-      return err(missing)
+        node.key[n] = key
     return ok node
-
 
 iterator subVids*(vtx: VertexRef): VertexID =
   ## Returns the list of all sub-vertex IDs for the argument `vtx`.

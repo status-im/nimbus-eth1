@@ -16,8 +16,7 @@ import
   ../../../nimbus/common,
   ../../../nimbus/config,
   ../../../nimbus/rpc,
-  ../../../nimbus/rpc/oracle,
-  ../../../nimbus/rpc/p2p,
+  ../../../nimbus/rpc/server_api,
   ../../../nimbus/utils/utils,
   ../../../nimbus/core/[chain, tx_pool],
   ../../../tests/test_helpers,
@@ -35,7 +34,7 @@ type
 const
   initPath = "hive_integration" / "nodocker" / "rpc" / "init"
   gasPrice* = 30.gwei
-  chainID*  = ChainID(7)
+  chainID*  = ChainId(7)
 
 proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
   if string(conf.importKey).len > 0:
@@ -46,11 +45,14 @@ proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
 
 proc setupRpcServer(ctx: EthContext, com: CommonRef,
                     ethNode: EthereumNode, txPool: TxPoolRef,
-                    conf: NimbusConf): RpcServer  =
-  let rpcServer = newRpcHttpServer([initTAddress(conf.httpAddress, conf.httpPort)])
-  let oracle = Oracle.new(com)
+                    conf: NimbusConf, chain: ForkedChainRef): RpcServer  =
+  let 
+    rpcServer = newRpcHttpServer([initTAddress(conf.httpAddress, conf.httpPort)])
+    serverApi = newServerAPI(chain, txPool)
+
+  
   setupCommonRpc(ethNode, conf, rpcServer)
-  setupEthRpc(ethNode, ctx, com, txPool, oracle, rpcServer)
+  setupServerAPI(serverApi, rpcServer, ctx)
 
   rpcServer.start()
   rpcServer
@@ -84,7 +86,7 @@ proc setupEnv*(): TestEnv =
 
   manageAccounts(ethCtx, conf)
 
-  let head = com.db.getCanonicalHead()
+  let head = com.db.getCanonicalHead().expect("canonical head exists")
   let chainRef = newForkedChain(com, head)
   let txPool = TxPoolRef.new(com)
 
@@ -92,7 +94,7 @@ proc setupEnv*(): TestEnv =
   # so it can know the latest account state
   doAssert txPool.smartHead(head, chainRef)
 
-  let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf)
+  let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf, chainRef)
   let rpcClient = newRpcHttpClient()
   waitFor rpcClient.connect("127.0.0.1", Port(8545), false)
   let stopServer = stopRpcHttpServer

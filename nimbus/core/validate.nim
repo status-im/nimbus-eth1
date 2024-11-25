@@ -15,7 +15,6 @@ import
   ../db/ledger,
   ../common/common,
   ../transaction/call_types,
-  ../errors,
   ../transaction,
   ../utils/utils,
   "."/[dao, eip4844, gaslimit, withdrawals],
@@ -127,18 +126,11 @@ proc validateUncles(com: CommonRef; header: Header;
     else:
       uncleSet.incl uncleHash
 
-  let chainDB = com.db
-  let recentAncestorHashes = try:
-    chainDB.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
-  except CatchableError as err:
-    return err("Block not present in database")
-
-  let recentUncleHashes = try:
-    chainDB.getUncleHashes(recentAncestorHashes)
-  except CatchableError as err:
-    return err("Ancenstors not present in database")
-
-  let blockHash = header.blockHash
+  let
+    chainDB = com.db
+    recentAncestorHashes = ?chainDB.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
+    recentUncleHashes = ?chainDB.getUncleHashes(recentAncestorHashes)
+    blockHash = header.blockHash
 
   for uncle in uncles:
     let uncleHash = uncle.blockHash
@@ -164,17 +156,11 @@ proc validateUncles(com: CommonRef; header: Header;
       return err("uncle block number larger than current block number")
 
     # check uncle against own parent
-    var parent: Header
-    if not chainDB.getBlockHeader(uncle.parentHash,parent):
-      return err("Uncle's parent has gone missing")
+    let parent = ?chainDB.getBlockHeader(uncle.parentHash)
     if uncle.timestamp <= parent.timestamp:
       return err("Uncle's parent must me older")
 
-    let uncleParent = try:
-      chainDB.getBlockHeader(uncle.parentHash)
-    except BlockNotFound:
-      return err("Uncle parent not found")
-
+    let uncleParent = ?chainDB.getBlockHeader(uncle.parentHash)
     ? com.validateHeader(
       Block.init(uncle, BlockBody()), uncleParent, checkSealOK)
 

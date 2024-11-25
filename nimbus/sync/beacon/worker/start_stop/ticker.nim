@@ -26,13 +26,12 @@ type
 
   TickerStats* = object
     ## Full sync state (see `TickerFullStatsUpdater`)
-    stored*: BlockNumber
     base*: BlockNumber
     latest*: BlockNumber
     coupler*: BlockNumber
     dangling*: BlockNumber
-    final*: BlockNumber
     head*: BlockNumber
+    headOk*: bool
     target*: BlockNumber
     targetOk*: bool
 
@@ -42,7 +41,7 @@ type
     nHdrStaged*: int
     hdrStagedTop*: BlockNumber
 
-    blkUnprocTop*: BlockNumber
+    blkUnprocBottom*: BlockNumber
     nBlkUnprocessed*: uint64
     nBlkUnprocFragm*: int
     nBlkStaged*: int
@@ -79,21 +78,24 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
       B = if data.base == data.latest: "L" else: data.base.bnStr
       L = if data.latest == data.coupler: "C" else: data.latest.bnStr
       C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
-      D = if data.dangling == data.final: "F" else: data.dangling.bnStr
-      F = if data.final == data.head: "H" else: data.final.bnStr
-      H = if data.head == data.target: "T" else: data.head.bnStr
+      D = if data.dangling == data.head: "H"
+          else: data.dangling.bnStr
+      H = if data.headOk:
+            if data.head == data.target: "T" else: data.head.bnStr
+          else:
+            if data.head == data.target: "?T" else: "?" & $data.head
       T = if data.targetOk: data.target.bnStr else: "?" & $data.target
 
       hS = if data.nHdrStaged == 0: "n/a"
            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
-      hU = if data.nHdrUnprocFragm == 0: "n/a"
+      hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
            else: data.hdrUnprocTop.bnStr & "(" &
                  data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
 
       bS = if data.nBlkStaged == 0: "n/a"
            else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
-      bU = if data.nBlkUnprocFragm == 0: "n/a"
-           else: data.blkUnprocTop.bnStr & "(" &
+      bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
+           else: data.blkUnprocBottom.bnStr & "(" &
                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 
       rrg = data.reorg
@@ -106,13 +108,7 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     t.lastStats = data
     t.visited = now
 
-    if data.stored == data.base:
-      debug "Sync state", up, peers,
-        B, L, C, D, F, H, T, hS, hU, bS, bU, rrg, mem
-    else:
-      debug "Sync state", up, peers,
-        S=data.stored.bnStr,
-        B, L, C, D, F, H, T, hS, hU, bS, bU, rrg, mem
+    debug "Sync state", up, peers, B, L, C, D, H, T, hS, hU, bS, bU, rrg, mem
 
 # ------------------------------------------------------------------------------
 # Private functions: ticking log messages
@@ -121,12 +117,13 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
 proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
 
 proc runLogTicker(t: TickerRef) {.gcsafe.} =
-  t.prettyPrint(t)
-  t.setLogTicker(Moment.fromNow(tickerLogInterval))
+  if not t.statsCb.isNil:
+    t.prettyPrint(t)
+    t.setLogTicker(Moment.fromNow(tickerLogInterval))
 
 proc setLogTicker(t: TickerRef; at: Moment) =
   if t.statsCb.isNil:
-    debug "Stopped", nBuddies=t.lastStats.nBuddies
+    debug "Ticker stopped"
   else:
     # Store the `runLogTicker()` in a closure to avoid some garbage collection
     # memory corruption issues that might occur otherwise.

@@ -140,8 +140,6 @@ proc initImpl(
     raiseAssert initFailed & " cannot initialise AdmCF descriptor: " & error
   rdb.vtxCol = baseDb.getColFamily($VtxCF).valueOr:
     raiseAssert initFailed & " cannot initialise VtxCF descriptor: " & error
-  rdb.keyCol = baseDb.getColFamily($KeyCF).valueOr:
-    raiseAssert initFailed & " cannot initialise KeyCF descriptor: " & error
 
   ok(guestCFs.mapIt(baseDb.getColFamily(it.name).expect("loaded cf")))
 

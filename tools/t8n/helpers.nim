@@ -191,6 +191,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
     of "blockHashes": r.readValue(val.blockHashes)
     of "ommers": r.readValue(val.ommers)
     of "withdrawals": r.readValue(val.withdrawals)
+    of "depositContractAddress": r.readValue(val.depositContractAddress)
     else: discard r.readValue(JsonString)
 
   if not currentCoinbaseParsed:
@@ -211,7 +212,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var TransContext)
     of "txs"    : r.readValue(val.txsJson)
     of "txsRlp" : r.readValue(val.txsRlp)
 
-proc parseTxJson(txo: TxObject, chainId: ChainID): Result[Transaction, string] =
+proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   template required(field) =
     const fName = astToStr(oField)
     if txo.field.isNone:
@@ -235,10 +236,10 @@ proc parseTxJson(txo: TxObject, chainId: ChainID): Result[Transaction, string] =
   required(value)
   required(input, payload)
   tx.to = txo.to
-  tx.chainId = chainId
 
   case tx.txType
   of TxLegacy:
+    tx.chainId = chainId
     required(gasPrice)
   of TxEip2930:
     required(gasPrice)
@@ -263,6 +264,10 @@ proc parseTxJson(txo: TxObject, chainId: ChainID): Result[Transaction, string] =
     optional(accessList)
     required(authorizationList)
 
+  # Ignore chainId if txType == TxLegacy
+  if tx.txType > TxLegacy and tx.chainId != chainId:
+    return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
+
   let eip155 = txo.protected.get(true)
   if txo.secretKey.isSome:
     let secretKey = PrivateKey.fromRaw(txo.secretKey.get).valueOr:
@@ -274,13 +279,17 @@ proc parseTxJson(txo: TxObject, chainId: ChainID): Result[Transaction, string] =
     required(s, S)
     ok(tx)
 
-proc readNestedTx(rlp: var Rlp): Result[Transaction, string] =
+proc readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
   try:
-    ok if rlp.isList:
+    let tx = if rlp.isList:
       rlp.read(Transaction)
     else:
       var rr = rlpFromBytes(rlp.read(seq[byte]))
       rr.read(Transaction)
+    # Ignore chainId if txType == TxLegacy
+    if tx.txType > TxLegacy and tx.chainId != chainId:
+      return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
+    ok(tx)
   except RlpError as exc:
     err(exc.msg)
 
@@ -301,40 +310,38 @@ proc parseTxs*(ctx: var TransContext, chainId: ChainId)
 
   if ctx.txsRlp.len > 0:
     for item in rlp:
-      ctx.txList.add rlp.readNestedTx()
+      ctx.txList.add rlp.readNestedTx(chainId)
 
 proc filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
   for txRes in ctx.txList:
     if txRes.isOk:
       result.add txRes.get
 
-template wrapException(procName: string, body) =
+template wrapException(body) =
   try:
     body
   except SerializationError as exc:
-    debugEcho "procName: ", procName
     raise newError(ErrorJson, exc.msg)
   except IOError as exc:
-    debugEcho "procName: ", procName
     raise newError(ErrorJson, exc.msg)
 
 proc parseTxsJson*(ctx: var TransContext, jsonFile: string) {.raises: [T8NError].} =
-  wrapException("parseTxsJson"):
+  wrapException:
     ctx.txsJson = T8Conv.loadFile(jsonFile, seq[TxObject])
 
 proc parseAlloc*(ctx: var TransContext, allocFile: string) {.raises: [T8NError].} =
-  wrapException("parseAlloc"):
+  wrapException:
     ctx.alloc = T8Conv.loadFile(allocFile, GenesisAlloc)
 
 proc parseEnv*(ctx: var TransContext, envFile: string) {.raises: [T8NError].} =
-  wrapException("parseEnv"):
+  wrapException:
     ctx.env = T8Conv.loadFile(envFile, EnvStruct)
 
 proc parseTxsRlp*(ctx: var TransContext, hexData: string) {.raises: [ValueError].} =
   ctx.txsRlp = hexToSeqByte(hexData)
 
 proc parseInputFromStdin*(ctx: var TransContext) {.raises: [T8NError].} =
-  wrapException("parseInputFromStdin"):
+  wrapException:
     let jsonData = stdin.readAll()
     ctx = T8Conv.decode(jsonData, TransContext)
 
@@ -435,6 +442,11 @@ proc `@@`[T](x: seq[T]): JsonNode =
   for c in x:
     result.add @@(c)
 
+proc `@@`[N, T](x: array[N, T]): JsonNode =
+  result = newJArray()
+  for c in x:
+    result.add @@(c)
+
 proc `@@`[T](x: Opt[T]): JsonNode =
   if x.isNone:
     newJNull()
@@ -464,3 +476,5 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["blobGasUsed"] = @@(x.blobGasUsed)
   if x.requestsHash.isSome:
     result["requestsHash"] = @@(x.requestsHash)
+  if x.requests.isSome:
+    result["requests"] = @@(x.requests)

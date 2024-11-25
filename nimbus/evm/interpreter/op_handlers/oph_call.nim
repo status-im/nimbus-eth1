@@ -203,10 +203,10 @@ else:
         c.gasMeter.refundGas(child.gasMeter.gasRefunded)
         c.stack.lsTop(1)
 
-      c.returnData = child.output
       let actualOutputSize = min(memLen, child.output.len)
       if actualOutputSize > 0:
         ? c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
+      c.returnData = move(child.output)
       ok()
 
 # ------------------------------------------------------------------------------

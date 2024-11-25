@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises:[].}
+
 import
   std/[times, json, strutils],
   stew/byteutils,
@@ -38,6 +40,8 @@ template wrapTry(body: untyped) =
     return err(e.msg)
   except JsonRpcError as ex:
     return err(ex.msg)
+  except CatchableError as ex:
+    return err(ex.msg)
 
 template wrapTrySimpleRes(body: untyped) =
   wrapTry:
@@ -65,6 +69,17 @@ proc forkchoiceUpdatedV3*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
 
+proc forkchoiceUpdated*(client: RpcClient,
+                        version: Version,
+                        update: ForkchoiceStateV1,
+                        attr = Opt.none(PayloadAttributes)):
+                          Result[ForkchoiceUpdatedResponse, string] =
+  case version
+  of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
+  of Version.V2: return client.forkchoiceUpdatedV2(update, attr)
+  of Version.V3: return client.forkchoiceUpdatedV3(update, attr)
+  of Version.V4: discard
+
 proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
     client.engine_getPayloadV1(payloadId)
@@ -82,8 +97,8 @@ proc getPayloadV4*(client: RpcClient, payloadId: Bytes8): Result[GetPayloadV4Res
     client.engine_getPayloadV4(payloadId)
 
 proc getPayload*(client: RpcClient,
-                 payloadId: Bytes8,
-                 version: Version): Result[GetPayloadResponse, string] =
+                 version: Version,
+                 payloadId: Bytes8): Result[GetPayloadResponse, string] =
   if version == Version.V4:
     let x = client.getPayloadV4(payloadId).valueOr:
       return err(error)
@@ -116,27 +131,6 @@ proc getPayload*(client: RpcClient,
     ok(GetPayloadResponse(
       executionPayload: executionPayload(x),
     ))
-
-proc forkchoiceUpdated*(client: RpcClient,
-                        update: ForkchoiceStateV1,
-                        attr: PayloadAttributes):
-                          Result[ForkchoiceUpdatedResponse, string] =
-  case attr.version
-  of Version.V1: return client.forkchoiceUpdatedV1(update, Opt.some attr.V1)
-  of Version.V2: return client.forkchoiceUpdatedV2(update, Opt.some attr)
-  of Version.V3: return client.forkchoiceUpdatedV3(update, Opt.some attr)
-  of Version.V4: discard
-
-proc forkchoiceUpdated*(client: RpcClient,
-                        version: Version,
-                        update: ForkchoiceStateV1,
-                        attr = Opt.none(PayloadAttributes)):
-                          Result[ForkchoiceUpdatedResponse, string] =
-  case version
-  of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
-  of Version.V2: return client.forkchoiceUpdatedV2(update, attr)
-  of Version.V3: return client.forkchoiceUpdatedV3(update, attr)
-  of Version.V4: discard
 
 proc newPayloadV1*(client: RpcClient,
       payload: ExecutionPayloadV1):
@@ -200,61 +194,11 @@ proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
       parentBeaconBlockRoot: Opt[Hash32],
-      executionRequests: Opt[array[3, seq[byte]]]
-      ):
+      executionRequests: Opt[array[3, seq[byte]]]):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes,
       parentBeaconBlockRoot, executionRequests)
-
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
-  for w3tx in list:
-    let tx = ethTx(w3tx)
-    for h in tx.versionedHashes:
-      result.add h
-
-proc newPayload*(client: RpcClient,
-                 payload: ExecutionPayload,
-                 beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(array[3, seq[byte]])
-                 ): Result[PayloadStatusV1, string] =
-  case payload.version
-  of Version.V1: return client.newPayloadV1(payload.V1)
-  of Version.V2: return client.newPayloadV2(payload.V2)
-  of Version.V3:
-    if beaconRoot.isNone:
-      # fallback
-      return client.newPayloadV2(payload.V2)
-    let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV3(payload.V3,
-      versionedHashes,
-      beaconRoot.get)
-  of Version.V4:
-    let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV4(payload.V3,
-      versionedHashes,
-      beaconRoot.get,
-      executionRequests.get)
-
-proc newPayload*(client: RpcClient,
-                 version: Version,
-                 payload: ExecutionPayload,
-                 beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(array[3, seq[byte]])): Result[PayloadStatusV1, string] =
-  case version
-  of Version.V1: return client.newPayloadV1(payload)
-  of Version.V2: return client.newPayloadV2(payload)
-  of Version.V3:
-    let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV3(payload,
-      Opt.some(versionedHashes),
-      beaconRoot)
-  of Version.V4:
-    let versionedHashes = collectBlobHashes(payload.transactions)
-    return client.newPayloadV4(payload,
-      Opt.some(versionedHashes),
-      beaconRoot,
-      executionRequests)
 
 proc newPayload*(client: RpcClient,
                  version: Version,
@@ -325,11 +269,16 @@ proc toBlockHeader*(bc: BlockObject): Header =
     blobGasUsed    : maybeU64(bc.blobGasUsed),
     excessBlobGas  : maybeU64(bc.excessBlobGas),
     parentBeaconBlockRoot: bc.parentBeaconBlockRoot,
+    requestsHash   : bc.requestsHash,
   )
 
 func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
   if x.isNone: return
   else: x.get
+
+func authList(x: Opt[seq[AuthorizationObject]]): seq[Authorization] =
+  if x.isNone: return
+  else: ethAuthList x.get
 
 proc toTransaction(tx: TransactionObject): Transaction =
   Transaction(
@@ -349,6 +298,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     V               : tx.v.uint64,
     R               : tx.r,
     S               : tx.s,
+    authorizationList: authList(tx.authorizationList),
   )
 
 proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
@@ -416,6 +366,7 @@ type
     accessList*: Opt[seq[AccessPair]]
     maxFeePerBlobGas*: Opt[UInt256]
     versionedHashes*: Opt[seq[VersionedHash]]
+    authorizationList*: Opt[seq[Authorization]]
 
 proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
   RPCReceipt(
@@ -464,6 +415,7 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
       Opt.some(vHashes tx.blobVersionedHashes)
     else:
       Opt.none(seq[VersionedHash]),
+    authorizationList: ethAuthList(tx.authorizationList),
   )
 
 proc waitForTTD*(client: RpcClient,
@@ -494,16 +446,6 @@ proc headerByNumber*(client: RpcClient, number: uint64): Result[Header, string] 
     if res.isNil:
       return err("failed to get blockHeader: " & $number)
     return ok(res.toBlockHeader)
-
-#proc blockByNumber*(client: RpcClient, number: uint64, output: var Block): Result[void, string] =
-#  wrapTry:
-#    let res = waitFor client.eth_getBlockByNumber(blockId(number), true)
-#    if res.isNil:
-#      return err("failed to get block: " & $number)
-#    output.header = toBlockHeader(res)
-#    output.txs = toTransactions(res.transactions)
-#    output.withdrawals = toWithdrawals(res.withdrawals)
-#    return ok()
 
 proc headerByHash*(client: RpcClient, hash: Hash32): Result[Header, string] =
   wrapTry:
@@ -633,7 +575,7 @@ createRpcSigsFromNim(RpcClient):
 proc debugPrevRandaoTransaction*(
     client: RpcClient,
     tx: PooledTransaction,
-    expectedPrevRandao: Hash32): Result[void, string] =
+    expectedPrevRandao: Bytes32): Result[void, string] =
   wrapTry:
     let hash = tx.rlpHash
     # we only interested in stack, disable all other elems
@@ -660,7 +602,7 @@ proc debugPrevRandaoTransaction*(
       if stack.len < 1:
         return err("Invalid stack after PREVRANDAO operation")
 
-      let stackHash = Hash32(hextoByteArray[32](stack[0].getStr))
+      let stackHash = Bytes32(hexToByteArray[32](stack[0].getStr))
       if stackHash != expectedPrevRandao:
         return err("Invalid stack after PREVRANDAO operation $1 != $2" % [stackHash.data.toHex, expectedPrevRandao.data.toHex])
 

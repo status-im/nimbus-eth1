@@ -11,6 +11,7 @@ import
   results,
   chronos,
   chronicles,
+  metrics,
   eth/common/hashes,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
@@ -24,6 +25,11 @@ export results, state_content, hashes
 
 logScope:
   topics = "portal_state"
+
+declareCounter state_network_offers_success,
+  "Portal state network offers successfully validated", labels = ["protocol_id"]
+declareCounter state_network_offers_failed,
+  "Portal state network offers which failed validation", labels = ["protocol_id"]
 
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
@@ -58,6 +64,7 @@ proc new*(
       toContentIdHandler,
       createGetHandler(contentDB),
       createStoreHandler(contentDB, portalConfig.radiusConfig),
+      createContainsHandler(contentDB),
       createRadiusHandler(contentDB),
       s,
       bootstrapRecords,
@@ -84,8 +91,7 @@ proc getContent(
 
   if maybeLocalContent.isSome():
     let contentValue = V.decode(maybeLocalContent.get()).valueOr:
-      error "Unable to decode state local content value"
-      return Opt.none(V)
+      raiseAssert("Unable to decode state local content value")
 
     info "Fetched state local content value"
     return Opt.some(contentValue)
@@ -100,11 +106,11 @@ proc getContent(
       contentValueBytes = contentLookupResult.content
 
     let contentValue = V.decode(contentValueBytes).valueOr:
-      warn "Unable to decode state content value from content lookup"
+      error "Unable to decode state content value from content lookup"
       continue
 
     validateRetrieval(key, contentValue).isOkOr:
-      warn "Validation of retrieved state content failed"
+      error "Validation of retrieved state content failed"
       continue
 
     info "Fetched valid state content from the network"
@@ -178,7 +184,6 @@ proc processOffer*(
   n.portalProtocol.storeContent(
     contentKeyBytes, contentId, contentValue.toRetrievalValue().encode()
   )
-  debug "Offered content validated successfully", contentKeyBytes
 
   await gossipOffer(
     n.portalProtocol, maybeSrcNodeId, contentKeyBytes, contentValueBytes
@@ -218,11 +223,15 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
                 srcNodeId, contentKeyBytes, contentBytes, contentKey.contractCodeKey,
                 ContractCodeOffer,
               )
+
         if offerRes.isOk():
-          info "Offered content processed successfully", contentKeyBytes
+          state_network_offers_success.inc(labelValues = [$n.portalProtocol.protocolId])
+          debug "Received offered content validated successfully",
+            srcNodeId, contentKeyBytes
         else:
-          error "Offered content processing failed",
-            contentKeyBytes, error = offerRes.error()
+          state_network_offers_failed.inc(labelValues = [$n.portalProtocol.protocolId])
+          error "Received offered content failed validation",
+            srcNodeId, contentKeyBytes, error = offerRes.error()
   except CancelledError:
     trace "processContentLoop canceled"
 

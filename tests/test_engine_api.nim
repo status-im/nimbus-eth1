@@ -14,6 +14,8 @@ import
   json_rpc/rpcclient,
   json_rpc/rpcserver,
   web3/engine_api,
+  web3/conversions,
+  web3/execution_types,
   unittest2
 
 import
@@ -26,16 +28,31 @@ import
   ../hive_integration/nodocker/engine/engine_client
 
 type
-  TestEnv* = ref object
+  TestEnv = ref object
     com    : CommonRef
     server : RpcHttpServer
     client : RpcHttpClient
     chain  : ForkedChainRef
 
-const
-  genesisFile = "tests/customgenesis/engine_api_genesis.json"
+  NewPayloadV4Params* = object
+    payload*: ExecutionPayload
+    expectedBlobVersionedHashes*: Opt[seq[Hash32]]
+    parentBeaconBlockRoot*: Opt[Hash32]
+    executionRequests*: Opt[array[3, seq[byte]]]
 
-proc setupConfig(): NimbusConf =
+  TestSpec = object
+    name: string
+    fork: HardFork
+    genesisFile: string
+    testProc: proc(env: TestEnv): Result[void, string]
+
+NewPayloadV4Params.useDefaultSerializationIn JrpcConv
+
+const
+  defaultGenesisFile = "tests/customgenesis/engine_api_genesis.json"
+  mekongGenesisFile = "tests/customgenesis/mekong.json"
+
+proc setupConfig(genesisFile: string): NimbusConf =
   makeConfig(@[
     "--custom-network:" & genesisFile,
     "--listen-address: 127.0.0.1",
@@ -53,11 +70,12 @@ proc setupClient(port: Port): RpcHttpClient =
   waitFor client.connect("127.0.0.1", port, false)
   return client
 
-proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
+proc setupEnv(envFork: HardFork = MergeFork,
+              genesisFile: string = defaultGenesisFile): TestEnv =
   doAssert(envFork >= MergeFork)
 
   let
-    conf  = setupConfig()
+    conf  = setupConfig(genesisFile)
 
   if envFork >= Shanghai:
     conf.networkParams.config.shanghaiTime = Opt.some(0.EthTime)
@@ -70,8 +88,8 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   let
     com   = setupCom(conf)
-    head  = com.db.getCanonicalHead()
-    chain = newForkedChain(com, head)
+    head  = com.db.getCanonicalHead().expect("canonical head exists")
+    chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(com)
 
   # txPool must be informed of active head
@@ -85,7 +103,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     beaconEngine = BeaconEngineRef.new(txPool, chain)
     serverApi = newServerAPI(chain, txPool)
 
-  setupServerAPI(serverApi, server)
+  setupServerAPI(serverApi, server, newEthContext())
   setupEngineAPI(beaconEngine, server)
 
   server.start()
@@ -119,8 +137,8 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
     fcuRes = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
-    payload = ? client.getPayload(fcuRes.payloadId.get, Version.V1)
-    npRes = ? client.newPayload(Version.V1, payload.executionPayload)
+    payload = ? client.getPayload(Version.V1, fcuRes.payloadId.get)
+    npRes = ? client.newPayloadV1(payload.executionPayload)
 
   discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceStateV1(
     headBlockHash: npRes.latestValidHash.get
@@ -148,10 +166,10 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
       parentBeaconBlockRoot: Opt.some(default(Hash32))
     )
     fcuRes = ? client.forkchoiceUpdated(Version.V3, update, Opt.some(attr))
-    payload = ? client.getPayload(fcuRes.payloadId.get, Version.V4)
-    res = ? client.newPayload(Version.V4,
-      payload.executionPayload,
-      Opt.some(default(Hash32)),
+    payload = ? client.getPayload(Version.V4, fcuRes.payloadId.get)
+    res = ? client.newPayloadV4(payload.executionPayload,
+      Opt.some(default(seq[Hash32])),
+      attr.parentBeaconBlockRoot,
       payload.executionRequests)
 
   if res.status != PayloadExecutionStatus.valid:
@@ -166,23 +184,99 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc newPayloadV4ParamsTest(env: TestEnv): Result[void, string] =
+  const
+    paramsFile = "tests/engine_api/newPayloadV4_invalid_blockhash.json"
+
+  let
+    client = env.client
+    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    res = ? client.newPayloadV4(
+      params.payload,
+      params.expectedBlobVersionedHashes,
+      params.parentBeaconBlockRoot,
+      params.executionRequests)
+
+  if res.status != PayloadExecutionStatus.syncing:
+    return err("res.status should equals to PayloadExecutionStatus.syncing")
+
+  if res.latestValidHash.isSome:
+    return err("lastestValidHash should empty")
+
+  if res.validationError.isSome:
+    return err("validationError should empty")
+
+  ok()
+
+proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
+  const
+    paramsFile = "tests/engine_api/genesis_base_canonical.json"
+
+  let
+    client = env.client
+    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    res = ? client.newPayloadV3(
+      params.payload,
+      params.expectedBlobVersionedHashes,
+      params.parentBeaconBlockRoot)
+
+  if res.status != PayloadExecutionStatus.valid:
+    return err("res.status should equals to PayloadExecutionStatus.valid")
+
+  if res.latestValidHash.isNone:
+    return err("lastestValidHash should not empty")
+
+  let
+    update = ForkchoiceStateV1(
+      headBlockHash: params.payload.blockHash,
+      safeBlockHash: params.payload.parentHash,
+      finalizedBlockHash: params.payload.parentHash,
+    )
+    fcuRes = ? client.forkchoiceUpdated(Version.V3, update)
+
+  if fcuRes.payloadStatus.status != PayloadExecutionStatus.valid:
+    return err("fcuRes.payloadStatus.status should equals to PayloadExecutionStatus.valid")
+
+  ok()
+
+const testList = [
+  TestSpec(
+    name: "Basic cycle",
+    fork: MergeFork,
+    testProc: runBasicCycleTest
+  ),
+  TestSpec(
+    name: "newPayloadV4",
+    fork: Prague,
+    testProc: runNewPayloadV4Test
+  ),
+  TestSpec(
+    name: "newPayloadV4 params",
+    fork: Prague,
+    testProc: newPayloadV4ParamsTest
+  ),
+  TestSpec(
+    name: "Genesis block hash should canonical",
+    fork: Cancun,
+    testProc: genesisShouldCanonicalTest,
+    genesisFile: mekongGenesisFile
+  ),
+  ]
+
 proc engineApiMain*() =
   suite "Engine API":
-    test "Basic cycle":
-      let env = setupEnv()
-      let res = env.runBasicCycleTest()
-      if res.isErr:
-        debugEcho "FAILED TO EXECUTE TEST: ", res.error
-      check res.isOk
-      env.close()
-
-    test "newPayloadV4":
-      let env = setupEnv(Prague)
-      let res = env.runNewPayloadV4Test()
-      if res.isErr:
-        debugEcho "FAILED TO EXECUTE TEST: ", res.error
-      check res.isOk
-      env.close()
+    for z in testList:
+      test z.name:
+        let genesisFile = if z.genesisFile.len > 0:
+                            z.genesisFile
+                          else:
+                            defaultGenesisFile
+        let env = setupEnv(z.fork, genesisFile)
+        let res = z.testProc(env)
+        if res.isErr:
+          debugEcho "FAILED TO EXECUTE ", z.name, ": ", res.error
+        check res.isOk
+        env.close()
 
 when isMainModule:
   engineApiMain()

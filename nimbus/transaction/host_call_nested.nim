@@ -32,7 +32,7 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
     gas: GasInt m.gas,
     sender: m.sender.fromEvmc,
     value: m.value.fromEvmc,
-    data: @(makeOpenArray(m.inputData, m.inputSize.int))
+    data: @(makeOpenArray(m.input_data, m.input_size.int))
   )
   return newComputation(host.vmState, false, childMsg,
                         cast[ContractSalt](m.create2_salt))
@@ -68,7 +68,7 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
                      else:
                        host.computation.msg.contractAddress,
     value: m.value.fromEvmc,
-    data: @(makeOpenArray(m.inputData, m.inputSize.int)),
+    data: @(makeOpenArray(m.input_data, m.input_size.int)),
     flags: m.flags,
   )
   return newComputation(host.vmState, false, childMsg)

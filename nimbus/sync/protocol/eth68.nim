@@ -12,9 +12,6 @@
 ## This module implements Ethereum Wire Protocol version 67, `eth/67`.
 ## Specification:
 ##   `eth/68 <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
-##
-## Use NIM command line optipn `-d:p2pProtocolDebug` for dumping the
-## generated driver code (just to have it stored somewhere lest one forgets.)
 
 import
   stint,

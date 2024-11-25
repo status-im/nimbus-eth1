@@ -20,6 +20,7 @@ import
   ./replay/pp,
   ./test_aristo/test_blobify,
   ./test_aristo/test_merge_proof,
+  ./test_aristo/test_nibbles,
   ./test_aristo/test_portal_proof,
   ./test_aristo/test_compute,
   ./test_aristo/[

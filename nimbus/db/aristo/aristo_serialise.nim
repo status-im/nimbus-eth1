@@ -34,8 +34,6 @@ proc serialise(
   ## of account type, otherwise pass the data as is.
   ##
   case pyl.pType:
-  of RawData:
-    ok pyl.rawBlob
   of AccountData:
     let key = block:
       if pyl.stoID.isValid:

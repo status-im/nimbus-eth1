@@ -9,18 +9,18 @@
 
 import
   std/[sequtils, tables],
-  ./web3_eth_conv,
-  ./payload_conv,
+  eth/common/[hashes, headers],
   chronicles,
   web3/execution_types,
+  ./web3_eth_conv,
+  ./payload_conv,
   ./payload_queue,
   ./api_handler/api_utils,
-  ../db/core_db,
-  ../core/[tx_pool, casper, chain],
-  eth/common/[hashes, headers]
+  ../core/[tx_pool, casper, chain]
 
 export
-  chain
+  chain,
+  ExecutionBundle
 
 type
   BeaconEngineRef* = ref object
@@ -117,28 +117,8 @@ func put*(ben: BeaconEngineRef,
   ben.queue.put(hash, header)
 
 func put*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: UInt256, payload: ExecutionPayload,
-          blobsBundle: Opt[BlobsBundleV1]) =
-  ben.queue.put(id, blockValue, payload, blobsBundle)
-
-func put*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: UInt256, payload: ExecutionPayload,
-          blobsBundle: Opt[BlobsBundleV1],
-          executionRequests: Opt[array[3, seq[byte]]]) =
-  ben.queue.put(id, blockValue, payload, blobsBundle, executionRequests)
-
-func put*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: UInt256, payload: SomeExecutionPayload,
-          blobsBundle: Opt[BlobsBundleV1]) =
-  doAssert blobsBundle.isNone == (payload is
-    ExecutionPayloadV1 | ExecutionPayloadV2)
-  ben.queue.put(id, blockValue, payload, blobsBundle)
-
-func put*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: UInt256,
-          payload: ExecutionPayloadV1 | ExecutionPayloadV2) =
-  ben.queue.put(
-    id, blockValue, payload, blobsBundle = Opt.none(BlobsBundleV1))
+          payload: ExecutionBundle) =
+  ben.queue.put(id, payload)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -154,52 +134,15 @@ func get*(ben: BeaconEngineRef, hash: Hash32,
   ben.queue.get(hash, header)
 
 func get*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: var UInt256,
-          payload: var ExecutionPayload,
-          blobsBundle: var Opt[BlobsBundleV1]): bool =
-  ben.queue.get(id, blockValue, payload, blobsBundle)
-
-func get*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: var UInt256,
-          payload: var ExecutionPayload,
-          blobsBundle: var Opt[BlobsBundleV1],
-          executionRequests: var Opt[array[3, seq[byte]]]): bool =
-  ben.queue.get(id, blockValue, payload, blobsBundle, executionRequests)
-
-func get*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: var UInt256,
-          payload: var ExecutionPayloadV1): bool =
-  ben.queue.get(id, blockValue, payload)
-
-func get*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: var UInt256,
-          payload: var ExecutionPayloadV2): bool =
-  ben.queue.get(id, blockValue, payload)
-
-func get*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: var UInt256,
-          payload: var ExecutionPayloadV3,
-          blobsBundle: var BlobsBundleV1): bool =
-  ben.queue.get(id, blockValue, payload, blobsBundle)
-
-func get*(ben: BeaconEngineRef, id: Bytes8,
-          blockValue: var UInt256,
-          payload: var ExecutionPayloadV1OrV2): bool =
-  ben.queue.get(id, blockValue, payload)
+          payload: var ExecutionBundle): bool =
+  ben.queue.get(id, payload)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-type AssembledExecutionPayload* = object
-  executionPayload*: ExecutionPayload
-  blobsBundle*: Opt[BlobsBundleV1]
-  blockValue*: UInt256
-  executionRequests*: Opt[array[3, seq[byte]]]
-
-proc generatePayload*(ben: BeaconEngineRef,
+proc generateExecutionBundle*(ben: BeaconEngineRef,
                       attrs: PayloadAttributes):
-                         Result[AssembledExecutionPayload, string] =
+                         Result[ExecutionBundle, string] =
   wrapException:
     let
       xp  = ben.txPool
@@ -234,12 +177,12 @@ proc generatePayload*(ben: BeaconEngineRef,
     if bundle.blobsBundle.isSome:
       template blobData: untyped = bundle.blobsBundle.get
       blobsBundle = Opt.some BlobsBundleV1(
-        commitments: blobData.commitments.mapIt it.Web3KZGCommitment,
-        proofs: blobData.proofs.mapIt it.Web3KZGProof,
+        commitments: blobData.commitments,
+        proofs: blobData.proofs,
         blobs: blobData.blobs.mapIt it.Web3Blob)
 
-    ok AssembledExecutionPayload(
-      executionPayload: executionPayload(bundle.blk),
+    ok ExecutionBundle(
+      payload: executionPayload(bundle.blk),
       blobsBundle: blobsBundle,
       blockValue: bundle.blockValue,
       executionRequests: bundle.executionRequests)
@@ -252,6 +195,13 @@ func setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32
 # bad ancestor. If yes, it constructs the payload failure response to return.
 proc checkInvalidAncestor*(ben: BeaconEngineRef,
                            check, head: Hash32): Opt[PayloadStatusV1] =
+  proc latestValidHash(chain: ForkedChainRef, invalid: auto): Hash32 =
+    let parent = chain.headerByHash(invalid.parentHash).valueOr:
+      return invalid.parentHash
+    if parent.difficulty != 0.u256:
+      return default(Hash32)
+    invalid.parentHash
+
   # If the hash to check is unknown, return valid
   ben.invalidTipsets.withValue(check, invalid) do:
     # If the bad hash was hit too many times, evict it and try to reprocess in
@@ -292,16 +242,9 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 
       ben.invalidTipsets[head] = invalid[]
 
-    var lastValid = invalid.parentHash
-
     # If the last valid hash is the terminal pow block, return 0x0 for latest valid hash
-    var header: Header
-    if ben.com.db.getBlockHeader(invalid.parentHash, header):
-      if header.difficulty != 0.u256:
-        lastValid = default(Hash32)
-
+    let lastValid = latestValidHash(ben.chain, invalid)
     return Opt.some invalidStatus(lastValid, "links to previously rejected block")
-
   do:
     return Opt.none(PayloadStatusV1)
 

@@ -15,12 +15,8 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/[blocks_staged, db, headers_staged, headers_unproc,
-            start_stop, update],
+  ./worker/[blocks_staged, headers_staged, headers_unproc, start_stop, update],
   ./worker_desc
-
-logScope:
-  topics = "beacon"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -38,61 +34,60 @@ proc bodiesToFetchOk(buddy: BeaconBuddyRef): bool =
 
 proc napUnlessSomethingToFetch(
     buddy: BeaconBuddyRef;
-    info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.pool.importRunningOk or
-     not (buddy.headersToFetchOk() or
+  if buddy.ctx.pool.blockImportOk or             # currently importing blocks
+     buddy.ctx.hibernate or                      # not activated yet?
+     not (buddy.headersToFetchOk() or            # something on TODO list
           buddy.bodiesToFetchOk()):
-    debug info & ": idly wasting time", peer=buddy.peer
-    await sleepAsync workerIdleWaitInterval
+    try:
+      await sleepAsync workerIdleWaitInterval
+    except CancelledError:
+      buddy.ctrl.zombie = true
     return true
-  return false
+  else:
+    return false
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
-proc setup*(ctx: BeaconCtxRef): bool =
+proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Global set up
-  debug "RUNSETUP"
-  ctx.setupRpcMagic()
+  ctx.setupRpcMagic info
 
   # Load initial state from database if there is any
-  ctx.setupDatabase()
+  ctx.setupDatabase info
 
   # Debugging stuff, might be an empty template
   ctx.setupTicker()
-
-  # Enable background daemon
-  ctx.daemon = true
   true
 
-proc release*(ctx: BeaconCtxRef) =
+proc release*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global clean up
-  debug "RUNRELEASE"
   ctx.destroyRpcMagic()
   ctx.destroyTicker()
 
 
-proc start*(buddy: BeaconBuddyRef): bool =
+proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
   ## Initialise worker peer
-  const info = "RUNSTART"
+  let peer = buddy.peer
 
   if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
-    debug info & " peer limit reached", peer=buddy.peer
+    if not buddy.ctx.hibernate: debug info & ": peers limit reached", peer
     return false
 
   if not buddy.startBuddy():
-    debug info & " failed", peer=buddy.peer
+    if not buddy.ctx.hibernate: debug info & ": failed", peer
     return false
 
-  debug info, peer=buddy.peer
+  if not buddy.ctx.hibernate: debug info & ": new peer", peer
   true
 
-proc stop*(buddy: BeaconBuddyRef) =
+proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
-  debug "RUNSTOP", peer=buddy.peer, nInvocations=buddy.only.nMultiLoop,
+  if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
+    ctrl=buddy.ctrl.state, nInvocations=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 
@@ -100,19 +95,23 @@ proc stop*(buddy: BeaconBuddyRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
+proc runDaemon*(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ) {.async: (raises: []).} =
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true`. If that job was stopped due to re-setting
   ## `ctx.daemon` to `false`, it will be restarted next after it was reset
   ## as `true` not before there is some activity on the `runPool()`,
   ## `runSingle()`, or `runMulti()` functions.
   ##
-  const info = "RUNDAEMON"
-  debug info
-
+  ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
+  ## first usable request from the CL (via RPC) stumbles in.
+  ##
   # Check for a possible header layout and body request changes
-  ctx.updateSyncStateLayout info
-  ctx.updateBlockRequests info
+  ctx.updateSyncState info
+  if ctx.hibernate:
+    return
 
   # Execute staged block records.
   if ctx.blocksStagedCanImportOk():
@@ -122,20 +121,26 @@ proc runDaemon*(ctx: BeaconCtxRef) {.async.} =
       # place. So there might be some peers active. If they are waiting for
       # a message reply, this will most probably time out as all processing
       # power is usurped by the import task here.
-      ctx.pool.importRunningOk = true
-      defer: ctx.pool.importRunningOk = false
+      ctx.pool.blockImportOk = true
+      defer: ctx.pool.blockImportOk = false
 
       # Import from staged queue.
       while await ctx.blocksStagedImport(info):
-        ctx.updateMetrics()
+        if not ctx.daemon:
+          # Implied by external sync shutdown?
+          return
 
   # At the end of the cycle, leave time to trigger refill headers/blocks
-  await sleepAsync daemonWaitInterval
+  try: await sleepAsync daemonWaitInterval
+  except CancelledError: discard
 
-  ctx.updateMetrics()
 
-
-proc runPool*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+proc runPool*(
+    buddy: BeaconBuddyRef;
+    last: bool;
+    laps: int;
+    info: static[string];
+      ): bool =
   ## Once started, the function `runPool()` is called for all worker peers in
   ## sequence as long as this function returns `false`. There will be no other
   ## `runPeer()` functions activated while `runPool()` is active.
@@ -150,31 +155,26 @@ proc runPool*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  const info = "RUNPOOL"
-  #debug info, peer=buddy.peer, laps
-  buddy.ctx.headersStagedReorg info # reorg
+  buddy.ctx.headersStagedReorg info
   true # stop
 
 
-proc runPeer*(buddy: BeaconBuddyRef) {.async.} =
+proc runPeer*(
+    buddy: BeaconBuddyRef;
+    info: static[string];
+      ) {.async: (raises: []).} =
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##
-  const info = "RUNPEER"
-  let peer = buddy.peer
-
   if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
-
-  trace info, peer, nInvocations=buddy.only.nMultiLoop,
-    lastIdleGap=buddy.only.multiRunIdle.toStr
 
   # Update consensus header target when needed. It comes with a finalised
   # header hash where we need to complete the block number.
   await buddy.headerStagedUpdateTarget info
 
-  if not await buddy.napUnlessSomethingToFetch info:
+  if not await buddy.napUnlessSomethingToFetch():
     #
     # Layout of a triple of linked header chains (see `README.md`)
     # ::

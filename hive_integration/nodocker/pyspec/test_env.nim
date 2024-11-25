@@ -13,7 +13,6 @@ import
   stew/[byteutils],
   json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/[
-    config,
     constants,
     transaction,
     db/ledger,
@@ -47,10 +46,10 @@ proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
   stateDB.persist()
   doAssert stateDB.getStateRoot == genesisHeader.stateRoot
 
-  doAssert com.db.persistHeader(genesisHeader,
-              com.proofOfStake(genesisHeader))
-  doAssert(com.db.getCanonicalHead().blockHash ==
-              genesisHeader.blockHash)
+  com.db.persistHeader(genesisHeader,
+    com.proofOfStake(genesisHeader)).expect("persistHeader no error")
+  let head = com.db.getCanonicalHead().expect("canonical head exists")
+  doAssert(head.blockHash == genesisHeader.blockHash)
 
   let
     txPool  = TxPoolRef.new(com)
@@ -59,7 +58,7 @@ proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
     rpcServer = newRpcHttpServer(["127.0.0.1:0"])
     rpcClient = newRpcHttpClient()
 
-  setupServerAPI(serverApi, rpcServer)
+  setupServerAPI(serverApi, rpcServer, newEthContext())
   setupEngineAPI(beaconEngine, rpcServer)
 
   rpcServer.start()

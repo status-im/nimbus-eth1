@@ -22,7 +22,7 @@ const
     ## The row cache is disabled by default as the rdb lru caches do a better
     ## job at a similar abstraction level - ie they work at the same granularity
     ## as the rocksdb row cache but with less overhead
-  defaultBlockCacheSize* = 4 * 1024 * 1024 * 1024
+  defaultBlockCacheSize* = 1024 * 1024 * 1024 * 5 div 2
     ## The block cache is used to cache indicies, ribbon filters and
     ## decompressed data, roughly in that priority order. At the time of writing
     ## we have about 2 giga-entries in the MPT - with the ribbon filter
@@ -32,10 +32,8 @@ const
     ## MPT root computations suffer because of filter evictions and subsequent
     ## re-reads from file.
     ##
-    ## We have two "principal" tables, AriVtx and AriKey - since they live in
-    ## separate column families, they have separate filters meaning that we need
-    ## double the total index and ribbon filter size for good performance.
-  defaultRdbVtxCacheSize* = 512 * 1024 * 1024
+    ## A bit of space on top of the filter is left for data block caching
+  defaultRdbVtxCacheSize* = 768 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultRdbKeyCacheSize* = 256 * 1024 * 1024
     ## Hashes of the above

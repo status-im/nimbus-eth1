@@ -89,7 +89,7 @@ proc customGenesisTest() =
       let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
       let stateRoot = hash32"d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
       let genesisHash = hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
-      let ttd = "46_089_003_871_917_200_000_000".parse(Uint256)
+      let ttd = "46_089_003_871_917_200_000_000".parse(UInt256)
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.ttd.get == ttd
@@ -102,7 +102,7 @@ proc customGenesisTest() =
       let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
       let stateRoot = hash32"d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
       let genesisHash = hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
-      let ttd = "46_089_003_871_917_200_000_000".parse(Uint256)
+      let ttd = "46_089_003_871_917_200_000_000".parse(UInt256)
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.ttd.get == ttd

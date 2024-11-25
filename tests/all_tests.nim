@@ -15,10 +15,10 @@ cliBuilder:
           ./test_evm_support,
           ./test_genesis,
           ./test_precompiles,
+          ./test_rpc,
           ./test_generalstate_json,
           ./test_tracer_json,
           #./test_persistblock_json,               -- fails
-          #./test_rpc,                             -- fails
           ./test_filters,
           ./test_op_arith,
           ./test_op_bit,

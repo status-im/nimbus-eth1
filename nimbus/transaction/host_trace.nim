@@ -115,7 +115,7 @@ proc showEvmcArgsExpr(fn: NimNode, callName: string): auto =
     if (types[i].repr == "ptr byte" or types[i].repr == "ptr HostTopic") and
        (i < args.len-1 and types[i+1].repr == "HostSize"):
       skip = i+1
-      arg = newPar(args[i], args[i+1])
+      arg = newNimNode(nnkTupleConstr).add(args[i], args[i+1])
     msgExpr = quote do:
       `msgExpr` & `argNameString` & $(`arg`)
   return (msgExpr, args)

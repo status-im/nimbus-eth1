@@ -9,6 +9,7 @@
 
 import
   chronicles,
+  chronos,
   eth/p2p/discoveryv5/random2,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/beacon_clock,

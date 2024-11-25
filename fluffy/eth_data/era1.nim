@@ -13,7 +13,7 @@ import
   stew/[endians2, io2, byteutils, arrayops],
   stint,
   snappy,
-  eth/common/[headers, blocks_rlp, receipts_rlp],
+  eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   beacon_chain/spec/beacon_time,
   ssz_serialization,
   ncli/e2store,
@@ -184,7 +184,7 @@ proc fromCompressedRlpBytes(bytes: openArray[byte], T: type): Result[T, string] 
   try:
     ok(rlp.decode(decodeFramed(bytes, checkIntegrity = false), T))
   except RlpError as e:
-    err("Invalid Compressed RLP data" & e.msg)
+    err("Invalid compressed RLP data for " & $T & ": " & e.msg)
 
 proc init*(T: type Era1Group, f: IoHandle, startNumber: uint64): Result[T, string] =
   discard ?f.appendHeader(E2Version, 0)
@@ -498,7 +498,7 @@ iterator era1BlockHeaders*(f: Era1File): headers.Header =
 
   for blockNumber in startNumber .. endNumber:
     let header = f.getBlockHeader(blockNumber).valueOr:
-      raiseAssert("Failed to read block header")
+      raiseAssert("Failed to read block header: " & error)
     yield header
 
 iterator era1BlockTuples*(f: Era1File): BlockTuple =
@@ -508,5 +508,5 @@ iterator era1BlockTuples*(f: Era1File): BlockTuple =
 
   for blockNumber in startNumber .. endNumber:
     let blockTuple = f.getBlockTuple(blockNumber).valueOr:
-      raiseAssert("Failed to read block header")
+      raiseAssert("Failed to read block tuple: " & error)
     yield blockTuple

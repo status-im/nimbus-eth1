@@ -47,7 +47,7 @@ declareHistogram portal_lookup_node_requests,
   labels = ["protocol_id"],
   buckets = requestBuckets
 declareHistogram portal_lookup_content_requests,
-  "Portal wire protocol amount of requests per node lookup",
+  "Portal wire protocol amount of requests per content lookup",
   labels = ["protocol_id"],
   buckets = requestBuckets
 declareCounter portal_lookup_content_failures,
@@ -125,20 +125,6 @@ const
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
-  # These are the concurrent offers per Portal wire protocol that is running.
-  # Using the `offerQueue` allows for limiting the amount of offers send and
-  # thus how many streams can be started.
-  # TODO:
-  # More thought needs to go into this as it is currently on a per network
-  # basis. Keep it simple like that? Or limit it better at the stream transport
-  # level? In the latter case, this might still need to be checked/blocked at
-  # the very start of sending the offer, because blocking/waiting too long
-  # between the received accept message and actually starting the stream and
-  # sending data could give issues due to timeouts on the other side.
-  # And then there are still limits to be applied also for FindContent and the
-  # incoming directions.
-  concurrentOffers = 50
-
 type
   ToContentIdHandler* =
     proc(contentKey: ContentKeyByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
@@ -151,13 +137,17 @@ type
     contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
   ) {.raises: [], gcsafe.}
 
+  DbContainsHandler* = proc(contentKey: ContentKeyByteList, contentId: ContentId): bool {.
+    raises: [], gcsafe
+  .}
+
   DbRadiusHandler* = proc(): UInt256 {.raises: [], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
 
-  RadiusCache* = LRUCache[NodeId, UInt256]
+  RadiusCache* = LruCache[NodeId, UInt256]
 
-  ContentCache = LRUCache[ContentId, seq[byte]]
+  ContentCache = LruCache[ContentId, seq[byte]]
 
   ContentKV* = object
     contentKey*: ContentKeyByteList
@@ -183,6 +173,7 @@ type
     contentCache: ContentCache
     dbGet*: DbGetHandler
     dbPut*: DbStoreHandler
+    dbContains*: DbContainsHandler
     dataRadius*: DbRadiusHandler
     bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
@@ -319,7 +310,7 @@ func inRange(
   let distance = p.distance(nodeId, contentId)
   distance <= nodeRadius
 
-proc inRange*(p: PortalProtocol, contentId: ContentId): bool =
+template inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius(), contentId)
 
 func truncateEnrs(
@@ -474,7 +465,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       )
 
       if p.inRange(contentId):
-        if p.dbGet(contentKey, contentId).isErr:
+        if not p.dbContains(contentKey, contentId):
           contentKeysBitList.setBit(i)
           discard contentKeys.add(contentKey)
     else:
@@ -561,6 +552,7 @@ proc new*(
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
     dbPut: DbStoreHandler,
+    dbContains: DbContainsHandler,
     dbRadius: DbRadiusHandler,
     stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
@@ -580,11 +572,12 @@ proc new*(
       ContentCache.init(if config.disableContentCache: 0 else: config.contentCacheSize),
     dbGet: dbGet,
     dbPut: dbPut,
+    dbContains: dbContains,
     dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
     radiusCache: RadiusCache.init(256),
-    offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
+    offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
   )
@@ -978,9 +971,9 @@ proc offer(
 
     return ok(m.contentKeys)
   else:
-    warn "Offer failed due to accept request failure ",
+    debug "Offer failed due to accept request failure ",
       error = acceptMessageResponse.error
-    return err("No accept response")
+    return err("No or invalid accept response: " & acceptMessageResponse.error)
 
 proc offer*(
     p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
@@ -1132,13 +1125,30 @@ proc contentLookup*(
     p: PortalProtocol, target: ContentKeyByteList, targetId: UInt256
 ): Future[Opt[ContentLookupResult]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
-  ## target. Maximum value for n is `BUCKET_SIZE`.
+  ## target.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
   var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
+
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
+
+  # Sort closestNodes so that nodes that are in range of the target content
+  # are queried first
+  proc nodesCmp(x, y: Node): int =
+    let
+      xRadius = p.radiusCache.get(x.id)
+      yRadius = p.radiusCache.get(y.id)
+
+    if xRadius.isSome() and p.inRange(x.id, xRadius.unsafeGet(), targetId):
+      -1
+    elif yRadius.isSome() and p.inRange(y.id, yRadius.unsafeGet(), targetId):
+      1
+    else:
+      0
+
+  closestNodes.sort(nodesCmp)
 
   var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
@@ -1627,7 +1637,6 @@ proc getLocalContent*(
   # Check first if content is in range, as this is a cheaper operation
   # than the database lookup.
   if p.inRange(contentId):
-    doAssert(p.dbGet != nil)
     p.dbGet(contentKey, contentId)
   else:
     Opt.none(seq[byte])
@@ -1735,7 +1744,19 @@ proc start*(p: PortalProtocol) =
   p.refreshLoop = refreshLoop(p)
   p.revalidateLoop = revalidateLoop(p)
 
-  for i in 0 ..< concurrentOffers:
+  # These are the concurrent offers per Portal wire protocol that is running.
+  # Using the `offerQueue` allows for limiting the amount of offers send and
+  # thus how many streams can be started.
+  # TODO:
+  # More thought needs to go into this as it is currently on a per network
+  # basis. Keep it simple like that? Or limit it better at the stream transport
+  # level? In the latter case, this might still need to be checked/blocked at
+  # the very start of sending the offer, because blocking/waiting too long
+  # between the received accept message and actually starting the stream and
+  # sending data could give issues due to timeouts on the other side.
+  # And then there are still limits to be applied also for FindContent and the
+  # incoming directions.
+  for i in 0 ..< p.config.maxConcurrentOffers:
     p.offerWorkers.add(offerWorker(p))
 
 proc stop*(p: PortalProtocol) {.async: (raises: []).} =
