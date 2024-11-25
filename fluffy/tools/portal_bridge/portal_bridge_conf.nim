@@ -191,6 +191,13 @@ type
         name: "verify-gossip"
       .}: bool
 
+      skipGossipForExisting* {.
+        desc:
+          "Enable skipping gossip of each content value which is successfully fetched from the network",
+        defaultValue: true,
+        name: "skip-gossip-for-existing"
+      .}: bool
+
       gossipWorkersCount* {.
         desc:
           "The number of workers to use for gossiping the state into the portal network",
