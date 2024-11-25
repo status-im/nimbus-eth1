@@ -16,10 +16,25 @@
 echo
 printf "Do you want to run the checks in terminal or visit the assertoor URL? (terminal/url) "
 read reply
+if [[ "$reply" != "terminal" && "$reply" != "url" ]]; then
+  echo "Invalid input: '$reply'. Please enter 'terminal' or 'url'."
+  exit 1
+fi
 
 echo
 printf "Build new changes (yes/no)? "
 read use_previous_image
+if [[ "$use_previous_image" != "yes" && "$use_previous_image" != "no" ]]; then
+  echo "Invalid input: '$use_previous_image'. Please enter 'yes' or 'no'."
+  exit 1
+fi
+
+# Set dockerfile_name based on --debug argument
+if [[ "$1" == "--debug" ]]; then
+    dockerfile_name="Dockerfile.debug"
+else
+    dockerfile_name="Dockerfile"
+fi
 
 # ------------------------------------------------
 #             Installation Checks
@@ -71,7 +86,7 @@ if [[ "$use_previous_image" == "no" ]]; then
 else
   echo "Starting the Docker Build!"
   # Build the docker Image
-  sudo docker build . -t localtestnet
+  sudo docker build -t localtestnet -f $dockerfile_name .
   # The new el_image value
   new_el_image="localtestnet"
 fi
@@ -82,8 +97,7 @@ fi
 # ------------------------------------------------
 
 # Use sed to replace the el_image value in the file
-cat kurtosis-network-params.yml | envsubst > assertoor.yaml
-sed -i "s/el_image: .*/el_image: $new_el_image/" assertoor.yaml
+sed "s/el_image: .*/el_image: $new_el_image/" kurtosis-network-params.yml > assertoor.yaml
 
 sudo kurtosis run \
   --enclave nimbus-localtestnet \
