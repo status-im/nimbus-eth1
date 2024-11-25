@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises:[].}
+
 import
   std/times,
   eth/common,
@@ -39,6 +41,7 @@ type
     expectedBlobVersionedHashes*: Opt[seq[Hash32]]
     parentBeaconBlockRoot*: Opt[Hash32]
     executionRequests*: Opt[array[3, seq[byte]]]
+    targetBlobsPerBlock*: Opt[Quantity]
 
   TestSpec = object
     name: string
@@ -53,10 +56,13 @@ const
   mekongGenesisFile = "tests/customgenesis/mekong.json"
 
 proc setupConfig(genesisFile: string): NimbusConf =
-  makeConfig(@[
-    "--custom-network:" & genesisFile,
-    "--listen-address: 127.0.0.1",
-  ])
+  try:
+    return makeConfig(@[
+      "--custom-network:" & genesisFile,
+      "--listen-address: 127.0.0.1",
+    ])
+  except CatchableError as exc:
+    doAssert(false, exc.msg)
 
 proc setupCom(conf: NimbusConf): CommonRef =
   CommonRef.new(
@@ -66,12 +72,16 @@ proc setupCom(conf: NimbusConf): CommonRef =
   )
 
 proc setupClient(port: Port): RpcHttpClient =
-  let client = newRpcHttpClient()
-  waitFor client.connect("127.0.0.1", port, false)
-  return client
+  try:
+    let client = newRpcHttpClient()
+    waitFor client.connect("127.0.0.1", port, false)
+    return client
+  except CatchableError as exc:
+    doAssert(false, exc.msg)
 
 proc setupEnv(envFork: HardFork = MergeFork,
-              genesisFile: string = defaultGenesisFile): TestEnv =
+              genesisFile: string = defaultGenesisFile):
+                TestEnv {.raises: [CatchableError].} =
   doAssert(envFork >= MergeFork)
 
   let
@@ -118,7 +128,7 @@ proc setupEnv(envFork: HardFork = MergeFork,
     chain  : chain,
   )
 
-proc close(env: TestEnv) =
+proc close(env: TestEnv) {.raises: [CatchableError].} =
   waitFor env.client.close()
   waitFor env.server.closeWait()
 
@@ -163,14 +173,22 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
       prevRandao:            default(Bytes32),
       suggestedFeeRecipient: default(Address),
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
-      parentBeaconBlockRoot: Opt.some(default(Hash32))
+      parentBeaconBlockRoot: Opt.some(default(Hash32)),
+      targetBlobsPerBlock:   Opt.some(w3Qty(1'u64)),
+      maxBlobsPerBlock:      Opt.some(w3Qty(1'u64)),
     )
-    fcuRes = ? client.forkchoiceUpdated(Version.V3, update, Opt.some(attr))
+
+    fcuRes = ? client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
     payload = ? client.getPayload(Version.V4, fcuRes.payloadId.get)
-    res = ? client.newPayloadV4(payload.executionPayload,
+    res = ? client.newPayloadV4(
+      payload.executionPayload,
       Opt.some(default(seq[Hash32])),
       attr.parentBeaconBlockRoot,
-      payload.executionRequests)
+      payload.executionRequests,
+      attr.targetBlobsPerBlock)
+
+  if res.validationError.isSome:
+    return err("validationError should empty: " & res.validationError.get)
 
   if res.status != PayloadExecutionStatus.valid:
     return err("res.status should equals to PayloadExecutionStatus.valid")
@@ -179,10 +197,15 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
      res.latestValidHash.get != payload.executionPayload.blockHash:
     return err("lastestValidHash mismatch")
 
-  if res.validationError.isSome:
-    return err("validationError should empty")
-
   ok()
+
+proc loadParams(paramsFile: string): Result[NewPayloadV4Params, string] =
+  try:
+    return ok(JrpcConv.loadFile(paramsFile, NewPayloadV4Params))
+  except IOError as exc:
+    return err(exc.msg)
+  except SerializationError as exc:
+    return err(exc.msg)
 
 proc newPayloadV4ParamsTest(env: TestEnv): Result[void, string] =
   const
@@ -190,21 +213,22 @@ proc newPayloadV4ParamsTest(env: TestEnv): Result[void, string] =
 
   let
     client = env.client
-    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    params = ? loadParams(paramsFile)
     res = ? client.newPayloadV4(
       params.payload,
       params.expectedBlobVersionedHashes,
       params.parentBeaconBlockRoot,
-      params.executionRequests)
+      params.executionRequests,
+      params.targetBlobsPerBlock)
+
+  if res.validationError.isSome:
+    return err("validationError should empty: " & res.validationError.get)
 
   if res.status != PayloadExecutionStatus.syncing:
     return err("res.status should equals to PayloadExecutionStatus.syncing")
 
   if res.latestValidHash.isSome:
     return err("lastestValidHash should empty")
-
-  if res.validationError.isSome:
-    return err("validationError should empty")
 
   ok()
 
@@ -214,7 +238,7 @@ proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
 
   let
     client = env.client
-    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    params = ? loadParams(paramsFile)
     res = ? client.newPayloadV3(
       params.payload,
       params.expectedBlobVersionedHashes,

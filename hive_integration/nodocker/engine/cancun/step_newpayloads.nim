@@ -73,7 +73,7 @@ proc verifyPayload(step: NewPayloads,
       excessBlobGas: Opt.some(parentExcessBlobGas),
       blobGasUsed: Opt.some(parentBlobGasUsed)
     )
-    expectedExcessBlobGas = calcExcessBlobGas(parent)
+    expectedExcessBlobGas = calcExcessBlobGas(parent, Opt.none(uint64))
 
   if com.isCancunOrLater(payload.timestamp.EthTime):
     if payload.excessBlobGas.isNone:
@@ -96,7 +96,7 @@ proc verifyPayload(step: NewPayloads,
 
     var
       totalBlobCount = 0
-      expectedBlobGasPrice = getBlobBaseFee(expectedExcessBlobGas)
+      expectedBlobGasPrice = getBlobBaseFee(expectedExcessBlobGas, Opt.none(uint64))
 
     for tx in blobTxsInPayload:
       let blobCount = tx.versionedHashes.len

@@ -43,6 +43,10 @@ proc computePayloadId*(blockHash: common.Hash32,
       ctx.update(wd)
   if params.parentBeaconBlockRoot.isSome:
     ctx.update(distinctBase params.parentBeaconBlockRoot.get)
+  if params.targetBlobsPerBlock.isSome:
+    ctx.update(toBytesBE distinctBase params.targetBlobsPerBlock.get)
+  if params.maxBlobsPerBlock.isSome:
+    ctx.update(toBytesBE distinctBase params.maxBlobsPerBlock.get)
   ctx.finish dest.data
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]

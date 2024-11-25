@@ -71,6 +71,7 @@ type
     parentBlobGasUsed*: Opt[Quantity]
     parentExcessBlobGas*: Opt[Quantity]
     parentBeaconBlockRoot*: Opt[Hash32]
+    currentTargetBlobsPerBlock*: Opt[Quantity]
 
   BCTInput* = object
     alloc: JsonString
@@ -140,6 +141,7 @@ proc toBctEnv(parentBlock, currentBlock: Block, hashes: BCTHashes): BCTEnv =
   result.parentExcessBlobGas = w3Qty(parent.excessBlobGas)
   result.withdrawals         = w3Withdrawals(currentBlock.withdrawals)
   result.blockHashes         = hashes
+  result.currentTargetBlobsPerBlock = w3Qty(current.targetBlobsPerBlock)
 
 func toInput(prevAlloc: JsonString,
              prevBlock, currBlock: Block,

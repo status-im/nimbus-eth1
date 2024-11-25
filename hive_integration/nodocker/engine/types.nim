@@ -61,6 +61,7 @@ type
     beaconRoot*  : Opt[Hash32]
     versionedHashes*: Opt[seq[Hash32]]
     executionRequests*: Opt[array[3, seq[byte]]]
+    targetBlobsPerBlock*: Opt[Quantity]
 
 const
   DefaultTimeout* = 60 # seconds
@@ -347,4 +348,3 @@ func toExecutableData*(payload: ExecutionPayload, attr: PayloadAttributes): Exec
     beaconRoot: attr.parentBeaconBlockRoot,
     versionedHashes: Opt.some(collectBlobHashes(payload.transactions)),
   )
-  

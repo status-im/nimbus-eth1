@@ -90,9 +90,6 @@ type
     onSafeBlockChange *        : proc(): bool {.gcsafe.}
     onFinalizedBlockChange*    : proc(): bool {.gcsafe.}
 
-
-
-
 func latestExecutableData*(cl: CLMocker): ExecutableData =
   ExecutableData(
     basePayload: cl.latestPayloadBuilt,
@@ -100,6 +97,7 @@ func latestExecutableData*(cl: CLMocker): ExecutableData =
     attr       : cl.latestPayloadAttributes,
     versionedHashes: Opt.some(collectBlobHashes(cl.latestPayloadBuilt.transactions)),
     executionRequests: cl.latestExecutionRequests,
+    targetBlobsPerBlock: cl.latestPayloadAttributes.targetBlobsPerBlock,
   )
 
 func latestPayloadNumber*(h: Table[uint64, ExecutionPayload]): uint64 =
@@ -344,8 +342,10 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestExecutionRequests = x.executionRequests
 
   let parentBeaconBlockRoot = cl.latestPayloadAttributes.parentBeaconBlockRoot
+  let targetBlobsPerBlock = cl.latestPayloadAttributes.targetBlobsPerBlock
   let requestsHash = calcRequestsHash(x.executionRequests)
-  let header = blockHeader(cl.latestPayloadBuilt, parentBeaconBlockRoot, requestsHash)
+  let header = blockHeader(cl.latestPayloadBuilt, parentBeaconBlockRoot, requestsHash, targetBlobsPerBlock)
+
   let blockHash = header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",

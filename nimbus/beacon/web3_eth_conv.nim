@@ -35,7 +35,7 @@ type
 # Pretty printers
 # ------------------------------------------------------------------------------
 
-proc `$`*(x: Opt[common.Hash32]): string =
+proc `$`*(x: Opt[Hash32]): string =
   if x.isNone: "none"
   else: x.get().data.toHex
 

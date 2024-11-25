@@ -47,6 +47,7 @@ type
     coinbase*         : Address
     excessBlobGas*    : uint64
     parentHash*       : Hash32
+    targetBlobsPerBlock*  : Opt[uint64]
 
   TxContext* = object
     origin*         : Address

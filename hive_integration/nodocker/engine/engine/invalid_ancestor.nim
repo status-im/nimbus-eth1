@@ -194,7 +194,7 @@ method getName(cs: InvalidMissingAncestorReOrgSyncTest): string =
 
 func blockHeader(ex: ExecutableData): Header =
   let requestsHash = calcRequestsHash(ex.executionRequests)
-  blockHeader(ex.basePayload, ex.beaconRoot, requestsHash)
+  blockHeader(ex.basePayload, ex.beaconRoot, requestsHash, ex.targetBlobsPerBlock)
 
 func blockBody(ex: ExecutableData): BlockBody =
   blockBody(ex.basePayload)

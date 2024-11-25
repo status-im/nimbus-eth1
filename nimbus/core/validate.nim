@@ -276,6 +276,7 @@ proc validateTransaction*(
     maxLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
     excessBlobGas: uint64;     ## excessBlobGas from parent block header
+    targetBlobsCount: Opt[uint64];
     fork:     EVMFork): Result[void, string] =
 
   ? validateTxBasic(tx, fork)
@@ -332,7 +333,7 @@ proc validateTransaction*(
 
   if tx.txType >= TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
-    let blobGasPrice = getBlobBaseFee(excessBlobGas)
+    let blobGasPrice = getBlobBaseFee(excessBlobGas, targetBlobsCount)
     if tx.maxFeePerBlobGas < blobGasPrice:
       return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
         &"maxFeePerBlobGas={tx.maxFeePerBlobGas}, blobGasPrice={blobGasPrice}")

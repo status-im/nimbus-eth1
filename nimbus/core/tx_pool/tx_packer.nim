@@ -37,7 +37,7 @@ type
     vmState: BaseVMState
     txDB: TxTabsRef
     cleanState: bool
-    numBlobPerBlock: int
+    numBlobPerBlock: uint64
 
     # Packer results
     blockValue: UInt256
@@ -81,10 +81,11 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit
     tx = item.tx.eip1559TxNormalization(baseFee.truncate(GasInt))
-    excessBlobGas = calcExcessBlobGas(vmState.parent)
+    excessBlobGas = vmState.blockCtx.excessBlobGas
+    targetBlobsPerBlock = vmState.blockCtx.targetBlobsPerBlock
 
   roDB.validateTransaction(
-    tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
+    tx, item.sender, gasLimit, baseFee, excessBlobGas, targetBlobsPerBlock, fork).isOk
 
 proc classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
@@ -181,7 +182,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string]
   let packer = TxPacker(
     vmState: xp.vmState,
     txDB: xp.txDB,
-    numBlobPerBlock: 0,
+    numBlobPerBlock: 0'u64,
     blockValue: 0.u256,
     stateRoot: xp.vmState.parent.stateRoot,
   )
@@ -209,14 +210,21 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
     discard pst.txDB.dispose(item, txInfoChainIdMismatch)
     return ContinueWithNextAccount
 
-  # EIP-4844
-  if pst.numBlobPerBlock + item.tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
+  # EIP-4844 + EIP-7742
+  let
+    maxBlobsPerBlock = if vmState.fork >= FkPrague:
+                         vmState.com.pos.maxBlobsPerBlock
+                       else: MAX_BLOBS_PER_BLOCK.uint64
+    blobNum = item.tx.versionedHashes.len.uint64
+  if pst.numBlobPerBlock + blobNum > maxBlobsPerBlock:
     return ContinueWithNextAccount
-  pst.numBlobPerBlock += item.tx.versionedHashes.len
+  pst.numBlobPerBlock += blobNum
 
   let blobGasUsed = item.tx.getTotalBlobGas
-  if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-    return ContinueWithNextAccount
+  if vmState.fork < FkPrague:
+    # Per EIP-7742: any logic related to MAX_BLOB_GAS_PER_BLOCK can be deprecated.
+    if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+      return ContinueWithNextAccount
   vmState.blobGasUsed += blobGasUsed
 
   # Verify we have enough gas in gasPool
@@ -356,6 +364,7 @@ proc assembleHeader*(pst: TxPacker): Header =
     let requestsHash = calcRequestsHash(pst.depositReqs,
       pst.withdrawalReqs, pst.consolidationReqs)
     result.requestsHash = Opt.some(requestsHash)
+    result.targetBlobsPerBlock = Opt.some(pos.targetBlobsPerBlock)
 
 func blockValue*(pst: TxPacker): UInt256 =
   pst.blockValue

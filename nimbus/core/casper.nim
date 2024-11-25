@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 import
-  eth/common/blocks 
+  eth/common/blocks
 
 type
   CasperRef* = ref object
@@ -16,6 +16,8 @@ type
     prevRandao  : Bytes32
     withdrawals : seq[Withdrawal] ## EIP-4895
     beaconRoot  : Hash32 ## EIP-4788
+    targetBlobsPerBlock*: uint64
+    maxBlobsPerBlock*: uint64
 
 # ------------------------------------------------------------------------------
 # Getters
@@ -36,6 +38,12 @@ proc withdrawals*(ctx: CasperRef): seq[Withdrawal] =
 func parentBeaconBlockRoot*(ctx: CasperRef): Hash32 =
   ctx.beaconRoot
 
+func targetBlobsPerBlock*(ctx: CasperRef): uint64 =
+  ctx.targetBlobsPerBlock
+
+func maxBlobsPerBlock*(ctx: CasperRef): uint64 =
+  ctx.maxBlobsPerBlock
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
@@ -54,3 +62,9 @@ proc `withdrawals=`*(ctx: CasperRef, val: sink seq[Withdrawal]) =
 
 proc `parentBeaconBlockRoot=`*(ctx: CasperRef, val: Hash32) =
   ctx.beaconRoot = val
+
+proc `targetBlobsPerBlock=`*(ctx: CasperRef, val: uint64) =
+  ctx.targetBlobsPerBlock = val
+
+proc `maxBlobsPerBlock=`*(ctx: CasperRef, val: uint64) =
+  ctx.maxBlobsPerBlock = val

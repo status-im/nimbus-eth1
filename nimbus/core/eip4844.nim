@@ -81,15 +81,25 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   ok()
 
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(parent: Header): uint64 =
+proc calcExcessBlobGas*(parent: Header; targetBlobsPerBlock: Opt[uint64]): uint64 =
   let
     excessBlobGas = parent.excessBlobGas.get(0'u64)
     blobGasUsed = parent.blobGasUsed.get(0'u64)
 
-  if excessBlobGas + blobGasUsed < TARGET_BLOB_GAS_PER_BLOCK:
-    0'u64
+  if targetBlobsPerBlock.isNone:
+    if excessBlobGas + blobGasUsed < TARGET_BLOB_GAS_PER_BLOCK:
+      0'u64
+    else:
+      excessBlobGas + blobGasUsed - TARGET_BLOB_GAS_PER_BLOCK
   else:
-    excessBlobGas + blobGasUsed - TARGET_BLOB_GAS_PER_BLOCK
+    # Per EIP-7742: any reference to TARGET_BLOB_GAS_PER_BLOCK from EIP-4844
+    # can be derived by taking the target_blob_count from the CL and
+    # multiplying by GAS_PER_BLOB as given in EIP-4844.
+    let targetBlobGasPerBlock = targetBlobsPerBlock.get * GAS_PER_BLOB
+    if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
+      0'u64
+    else:
+      excessBlobGas + blobGasUsed - targetBlobGasPerBlock
 
 # fakeExponential approximates factor * e ** (num / denom) using a taylor expansion
 # as described in the EIP-4844 spec.
@@ -113,17 +123,27 @@ proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
   GAS_PER_BLOB * versionedHashesLen.uint64
 
 # getBlobBaseFee implements get_data_gas_price from EIP-4844
-func getBlobBaseFee*(excessBlobGas: uint64): UInt256 =
-  fakeExponential(
-    MIN_BLOB_GASPRICE.u256,
-    excessBlobGas.u256,
-    BLOB_GASPRICE_UPDATE_FRACTION.u256
-  )
+func getBlobBaseFee*(excessBlobGas: uint64, targetBlobsPerBlock: Opt[uint64]): UInt256 =
+  if targetBlobsPerBlock.isSome:
+    const BLOB_BASE_FEE_UPDATE_FRACTION_PER_TARGET_BLOB = 1112825'u64
+    let updateFraction = BLOB_BASE_FEE_UPDATE_FRACTION_PER_TARGET_BLOB * targetBlobsPerBlock.get
+    fakeExponential(
+      MIN_BLOB_GASPRICE.u256,
+      excessBlobGas.u256,
+      updateFraction.u256
+    )
+  else:
+    fakeExponential(
+      MIN_BLOB_GASPRICE.u256,
+      excessBlobGas.u256,
+      BLOB_GASPRICE_UPDATE_FRACTION.u256
+    )
 
 proc calcDataFee*(versionedHashesLen: int,
-                  excessBlobGas: uint64): UInt256 =
+                  excessBlobGas: uint64,
+                  targetBlobsPerBlock: Opt[uint64]): UInt256 =
   getTotalBlobGas(versionedHashesLen).u256 *
-    getBlobBaseFee(excessBlobGas)
+    getBlobBaseFee(excessBlobGas, targetBlobsPerBlock)
 
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:
@@ -153,10 +173,12 @@ func validateEip4844Header*(
     headerBlobGasUsed = header.blobGasUsed.get()
     blobGasUsed = blobGasUsed(txs)
     headerExcessBlobGas = header.excessBlobGas.get
-    excessBlobGas = calcExcessBlobGas(parentHeader)
+    excessBlobGas = calcExcessBlobGas(parentHeader, header.targetBlobsPerBlock)
 
-  if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-    return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+  if header.targetBlobsPerBlock.isNone:
+    # Per EIP-7742: any logic related to MAX_BLOB_GAS_PER_BLOCK can be deprecated.
+    if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+      return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
 
   if headerBlobGasUsed != blobGasUsed:
     return err("calculated blobGas not equal header.blobGasUsed")

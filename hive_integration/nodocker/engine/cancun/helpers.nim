@@ -46,7 +46,7 @@ func getMinExcessBlobGasForBlobGasPrice(data_gas_price: uint64): uint64 =
 
   while current_data_gas_price < data_gas_price:
     current_excess_data_gas += GAS_PER_BLOB.uint64
-    current_data_gas_price = getBlobBaseFee(current_excess_data_gas).truncate(uint64)
+    current_data_gas_price = getBlobBaseFee(current_excess_data_gas, Opt.none(uint64)).truncate(uint64)
 
   return current_excess_data_gas
 

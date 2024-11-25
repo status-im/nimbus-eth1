@@ -112,7 +112,12 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
   # do hardfork transition before
   # BaseVMState querying any hardfork/consensus from CommonRef
 
-  let pos = com.pos
+  let
+    pos = com.pos
+    targetBlobsPerBlock = if com.isPragueOrLater(pos.timestamp):
+                        Opt.some(pos.targetBlobsPerBlock)
+                      else:
+                        Opt.none(uint64)
 
   let blockCtx = BlockContext(
     timestamp    : pos.timestamp,
@@ -121,8 +126,9 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
     prevRandao   : pos.prevRandao,
     difficulty   : UInt256.zero(),
     coinbase     : pos.feeRecipient,
-    excessBlobGas: calcExcessBlobGas(parent),
+    excessBlobGas: calcExcessBlobGas(parent, targetBlobsPerBlock),
     parentHash   : parent.blockHash,
+    targetBlobsPerBlock: targetBlobsPerBlock,
   )
 
   BaseVMState.new(
@@ -203,6 +209,9 @@ func gasLimit*(xp: TxPoolRef): GasInt =
 
 func excessBlobGas*(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
+
+func targetBlobsPerBlock*(xp: TxPoolRef): Opt[uint64] =
+  xp.vmState.blockCtx.targetBlobsPerBlock
 
 proc getBalance*(xp: TxPoolRef; account: Address): UInt256 =
   ## Wrapper around `vmState.readOnlyStateDB.getBalance()` for a `vmState`

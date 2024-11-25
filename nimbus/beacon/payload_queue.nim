@@ -36,7 +36,6 @@ type
     blockValue*: UInt256
     blobsBundle*: Opt[BlobsBundleV1]
     executionRequests*: Opt[array[3, seq[byte]]]
-    targetBlobsPerBlock*: Opt[Quantity]
 
   PayloadItem = object
     id: Bytes8
