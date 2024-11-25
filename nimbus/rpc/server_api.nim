@@ -213,7 +213,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   proc getLogsForBlock(
       chain: ForkedChainRef, header: Header, opts: FilterOptions
-  ): seq[FilterLog] {.gcsafe, raises: [].} =
+  ): Opt[seq[FilterLog]] {.gcsafe, raises: [].} =
     if headerBloomFilter(header, opts.address, opts.topics):
       let (receipts, txs) =
         if api.chain.isInMemory(header.blockHash):
@@ -221,20 +221,24 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
           (blk.receipts, blk.blk.transactions)
         else:
           let rcs = chain.db.getReceipts(header.receiptsRoot).valueOr:
-            return @[]
+            return Opt.some(newSeq[FilterLog](0))
           let txs = chain.db.getTransactions(header.txRoot).valueOr:
-            return @[]
+            return Opt.some(newSeq[FilterLog](0))
           (rcs, txs)
       # Note: this will hit assertion error if number of block transactions
       # do not match block receipts.
       # Although this is fine as number of receipts should always match number
       # of transactions
-      let logs = deriveLogs(header, txs, receipts).valueOr:
-        return @[]
+      if txs.len != receipts.len:
+        warn "Transactions and receipts length mismatch",
+          number = header.number, hash = header.blockHash.short,
+          txs = txs.len, receipts = receipts.len
+        return Opt.none(seq[FilterLog])
+      let logs = deriveLogs(header, txs, receipts)
       let filteredLogs = filterLogs(logs, opts.address, opts.topics)
-      return filteredLogs
+      return Opt.some(filteredLogs)
     else:
-      return @[]
+      return Opt.some(newSeq[FilterLog](0))
 
   proc getLogsForRange(
       chain: ForkedChainRef,
@@ -250,7 +254,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       let
         header = chain.headerByNumber(blockNum).valueOr:
           return logs
-        filtered = chain.getLogsForBlock(header, opts)
+        filtered = chain.getLogsForBlock(header, opts).valueOr:
+          return logs
       logs.add(filtered)
       blockNum = blockNum + 1
     return logs
@@ -270,7 +275,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
         hash = filterOptions.blockHash.expect("blockHash")
         header = api.chain.headerByHash(hash).valueOr:
           raise newException(ValueError, "Block not found")
-      return getLogsForBlock(api.chain, header, filterOptions)
+        logs = getLogsForBlock(api.chain, header, filterOptions).valueOr:
+          raise newException(ValueError, "getLogsForBlock error")
+      return logs
     else:
       # TODO: do something smarter with tags. It would be the best if
       # tag would be an enum (Earliest, Latest, Pending, Number), and all operations

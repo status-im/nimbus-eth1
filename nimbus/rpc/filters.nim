@@ -18,13 +18,10 @@ export rpc_types
 
 {.push raises: [].}
 
-proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[Receipt]): Opt[seq[FilterLog]] =
+proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[Receipt]): seq[FilterLog] =
   ## Derive log fields, does not deal with pending log, only the logs with
   ## full data set
-  if len(transactions) == len(receipts):
-    warn "Transactions and receipts length mismatch",
-      txs = transactions.len, receipts = receipts.len
-    return Opt.none(seq[FilterLog])
+  doAssert(len(transactions) == len(receipts))
 
   var resLogs: seq[FilterLog] = @[]
   var logIndex = 0'u64
@@ -51,7 +48,7 @@ proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[R
       inc logIndex
       resLogs.add(filterLog)
 
-  return Opt.some(resLogs)
+  return resLogs
 
 func participateInFilter(x: AddressOrList): bool =
   if x.kind == slkNull:
