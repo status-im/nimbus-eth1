@@ -105,7 +105,7 @@ sudo kurtosis run \
   --args-file assertoor.yaml
 
 enclave_dump=$(kurtosis enclave inspect nimbus-localtestnet)
-assertoor_url=$(echo "$enclave_dump" | grep assertoor | grep http | sed 's/.*\(http:\/\/[0-9.:]\+\).*/\1/')
+assertoor_url=$(echo "$enclave_dump" | grep assertoor | grep -Eo "http://[0-9.:]+")
 
 # ------------------------------------------------
 #               Remove Generated File
