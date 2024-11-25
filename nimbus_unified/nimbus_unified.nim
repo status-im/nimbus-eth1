@@ -48,7 +48,8 @@ proc executionLayerHandler(parameters: TaskParameters) {.thread.} =
 ## Consensus Layer handler
 proc consensusLayerHandler(parameters: TaskParameters) {.thread.} =
   info "Started task:", task = parameters.name
-  consensusWrapper(parameters)
+  {.gcsafe.}:
+    consensusWrapper(parameters)
   info "\tExiting task:", task = parameters.name
 
 ## Waits for tasks to finish (joinThreads)
