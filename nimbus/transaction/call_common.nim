@@ -120,7 +120,10 @@ proc setupHost(call: CallParams): TransactionHost =
     else:
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
-      code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
+      if host.vmState.fork >= FkPrague:
+        code = host.vmState.readOnlyStateDB.resolveCode(host.msg.code_address.fromEvmc)
+      else:
+        code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
       if call.input.len > 0:
         host.msg.input_size = call.input.len.csize_t
         # Must copy the data so the `host.msg.input_data` pointer
@@ -129,7 +132,8 @@ proc setupHost(call: CallParams): TransactionHost =
         host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg, code)
+    host.computation = newComputation(vmState, call.sysCall, cMsg, code,
+      authorizationList = call.authorizationList)
 
     host.code = code
 
@@ -142,7 +146,8 @@ proc setupHost(call: CallParams): TransactionHost =
       host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg)
+    host.computation = newComputation(vmState, call.sysCall, cMsg,
+      authorizationList = call.authorizationList)
 
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
