@@ -17,8 +17,7 @@ COPY ./ /nimbus-eth1
 
 WORKDIR /nimbus-eth1
 
-RUN  --mount=type=cache,target=/nimbus-eth1/build \
-  make -j${NPROC} nimbus_execution_client && \
+RUN make -j${NPROC} nimbus_execution_client && \
   mv build/nimbus_execution_client /usr/local/bin/nimbus_execution_client
 
 # --------------------------------- #
