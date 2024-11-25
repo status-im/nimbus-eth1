@@ -482,6 +482,9 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   if header.parentHash notin c.blocks:
     # If it's parent is an invalid block
     # there is no hope the descendant is valid
+    debug "Parent block not found",
+      blockHash = header.blockHash.short,
+      parentHash = header.parentHash.short
     return err("Block is not part of valid chain")
 
   # TODO: If engine API keep importing blocks
