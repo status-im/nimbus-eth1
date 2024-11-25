@@ -19,7 +19,6 @@ import
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
-  eth/trie/trie_defs,
   eth/common/transaction_utils,
   unittest2,
   stew/byteutils,
@@ -79,7 +78,7 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success:
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
     com    = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
-    parent = Header(stateRoot: emptyRlpHash)
+    parent = Header(stateRoot: emptyRoot)
     tracer = if ctx.trace:
                newLegacyTracer({})
              else:

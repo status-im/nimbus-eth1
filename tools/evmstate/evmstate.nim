@@ -16,7 +16,6 @@ import
   stew/byteutils,
   results,
   stint,
-  eth/trie/[trie_defs],
   ../../nimbus/[evm/types, evm/state],
   ../../nimbus/db/ledger,
   ../../nimbus/transaction,

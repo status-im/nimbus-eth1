@@ -13,7 +13,6 @@ import
   eth/common/keys,
   eth/common/headers,
   eth/common/transactions,
-  eth/trie/trie_defs,
   stint,
   stew/byteutils,
   ../../nimbus/transaction,
@@ -113,7 +112,7 @@ proc parseHeader*(n: JsonNode): Header =
     number     : required(BlockNumber, "currentNumber"),
     gasLimit   : required(GasInt, "currentGasLimit"),
     timestamp  : required(EthTime, "currentTimestamp"),
-    stateRoot  : emptyRlpHash,
+    stateRoot  : emptyRoot,
     mixHash    : omitZero(Bytes32, "currentRandom"),
     baseFeePerGas  : optional(UInt256, "currentBaseFee"),
     withdrawalsRoot: optional(Hash32, "currentWithdrawalsRoot"),
@@ -123,7 +122,7 @@ proc parseHeader*(n: JsonNode): Header =
 
 proc parseParentHeader*(n: JsonNode): Header =
   Header(
-    stateRoot: emptyRlpHash,
+    stateRoot: emptyRoot,
     excessBlobGas: optional(uint64, "parentExcessBlobGas"),
     blobGasUsed: optional(uint64, "parentBlobGasUsed"),
   )
