@@ -168,6 +168,8 @@ proc procBlkEpilogue(
       # TODO replace logging with better error
       debug "wrong state root in block",
         blockNumber = header.number,
+        blockHash = header.blockHash,
+        parentHash = header.parentHash,
         expected = header.stateRoot,
         actual = stateRoot,
         arrivedFrom = vmState.parent.stateRoot
