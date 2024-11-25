@@ -61,11 +61,12 @@ const
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
-template shouldNotKeyError(body: untyped) =
+
+template shouldNotKeyError(info: string, body: untyped) =
   try:
     body
   except KeyError as exc:
-    raiseAssert exc.msg
+    raiseAssert info & ": name=" & $exc.name & " msg=" & exc.msg
 
 proc processBlock(c: ForkedChainRef,
                   parent: Header,
@@ -169,7 +170,7 @@ proc replaySegment*(c: ForkedChainRef, target: Hash32) =
     prevHash = target
     chain = newSeq[Block]()
 
-  shouldNotKeyError:
+  shouldNotKeyError "replaySegment(target)":
     while prevHash != c.baseHash:
       chain.add c.blocks[prevHash].blk
       prevHash = chain[^1].header.parentHash
@@ -193,7 +194,7 @@ proc replaySegment(c: ForkedChainRef,
     prevHash = target
     chain = newSeq[Block]()
 
-  shouldNotKeyError:
+  shouldNotKeyError "replaySegment(target,parent)":
     while prevHash != parentHash:
       chain.add c.blocks[prevHash].blk
       prevHash = chain[^1].header.parentHash
@@ -210,7 +211,7 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
   template header(): Header =
     blk.blk.header
 
-  shouldNotKeyError:
+  shouldNotKeyError "writeBaggage":
     var prevHash = target
     var count = 0'u64
     while prevHash != c.baseHash:
@@ -289,7 +290,7 @@ func findCanonicalHead(c: ForkedChainRef,
     # because it not point to any active chain
     return ok(CanonicalDesc(cursorHash: c.baseHash, header: c.baseHeader))
 
-  shouldNotKeyError:
+  shouldNotKeyError "findCanonicalHead":
    # Find hash belong to which chain
    for cursor in c.cursorHeads:
      var prevHash = cursor.hash
@@ -307,7 +308,7 @@ func canonicalChain(c: ForkedChainRef,
   if hash == c.baseHash:
     return ok(c.baseHeader)
 
-  shouldNotKeyError:
+  shouldNotKeyError "canonicalChain":
     var prevHash = headHash
     while prevHash != c.baseHash:
       var header = c.blocks[prevHash].blk.header
@@ -331,7 +332,7 @@ func calculateNewBase(c: ForkedChainRef,
   if targetNumber <= c.baseHeader.number + c.baseDistance:
     return BaseDesc(hash: c.baseHash, header: c.baseHeader)
 
-  shouldNotKeyError:
+  shouldNotKeyError "calculateNewBase":
     var prevHash = headHash
     while prevHash != c.baseHash:
       var header = c.blocks[prevHash].blk.header
@@ -345,7 +346,7 @@ func trimCanonicalChain(c: ForkedChainRef,
                         head: CanonicalDesc,
                         headHash: Hash32) =
   # Maybe the current active chain is longer than canonical chain
-  shouldNotKeyError:
+  shouldNotKeyError "trimCanonicalChain":
     var prevHash = head.cursorHash
     while prevHash != c.baseHash:
       let header = c.blocks[prevHash].blk.header
@@ -668,7 +669,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
   if number < c.baseHeader.number:
     return c.db.getBlockHeader(number)
 
-  shouldNotKeyError:
+  shouldNotKeyError "headerByNumber":
     var prevHash = c.cursorHeader.parentHash
     while prevHash != c.baseHash:
       let header = c.blocks[prevHash].blk.header
@@ -702,7 +703,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
   if number < c.baseHeader.number:
     return c.db.getEthBlock(number)
 
-  shouldNotKeyError:
+  shouldNotKeyError "blockByNumber":
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:
       c.blocks.withValue(prevHash, item):
@@ -713,7 +714,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
 
 func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
   # return block in reverse order
-  shouldNotKeyError:
+  shouldNotKeyError "blockFromBaseTo":
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:
       c.blocks.withValue(prevHash, item):
@@ -725,7 +726,7 @@ func isCanonical*(c: ForkedChainRef, blockHash: Hash32): bool =
   if blockHash == c.baseHash:
     return true
 
-  shouldNotKeyError:
+  shouldNotKeyError "isCanonical":
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:
       c.blocks.withValue(prevHash, item):
@@ -745,7 +746,7 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
   if c.baseHeader.number < c.cursorHeader.number:
     # The current canonical chain in memory is headed by
     # cursorHeader
-    shouldNotKeyError:
+    shouldNotKeyError "isCanonicalAncestor":
       var prevHash = c.cursorHeader.parentHash
       while prevHash != c.baseHash:
         var header = c.blocks[prevHash].blk.header
