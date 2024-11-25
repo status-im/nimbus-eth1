@@ -180,6 +180,10 @@ proc procBlkEpilogue(
       let bloom = createBloom(vmState.receipts)
 
       if header.logsBloom != bloom:
+        debug "wrong logsBloom in block",
+          blockNumber = header.number,
+          actual = bloom,
+          expected = header.logsBloom
         return err("bloom mismatch")
 
       let receiptsRoot = calcReceiptsRoot(vmState.receipts)
@@ -187,6 +191,7 @@ proc procBlkEpilogue(
         # TODO replace logging with better error
         debug "wrong receiptRoot in block",
           blockNumber = header.number,
+          blockHash = header.blockHash.short,
           actual = receiptsRoot,
           expected = header.receiptsRoot
         return err("receiptRoot mismatch")
