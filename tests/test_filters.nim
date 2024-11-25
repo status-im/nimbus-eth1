@@ -17,7 +17,7 @@ import
 
 type Address = primitives.Address
 
-let allLogs = deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995)
+let allLogs = deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995).get()
 
 proc filtersMain*() =
   # All magic numbers and addresses in following tests are confirmed with geth eth_getLogs,
