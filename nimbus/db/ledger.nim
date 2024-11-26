@@ -521,6 +521,12 @@ proc resolveCodeSize*(ac: LedgerRef, address: Address): int =
     return code.len
   ac.getCodeSize(delegateTo)
 
+proc getDelegateAddress*(ac: LedgerRef, address: Address): Address =
+  let code = ac.getCode(address)
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return
+  delegateTo
+  
 proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
@@ -953,6 +959,7 @@ proc getStorageProof*(db: ReadOnlyStateDB, address: Address, slots: openArray[UI
 proc resolveCodeHash*(db: ReadOnlyStateDB, address: Address): Hash32 = resolveCodeHash(distinctBase db, address)
 proc resolveCode*(db: ReadOnlyStateDB, address: Address): CodeBytesRef = resolveCode(distinctBase db, address)
 proc resolveCodeSize*(db: ReadOnlyStateDB, address: Address): int = resolveCodeSize(distinctBase db, address)
+proc getDelegateAddress*(db: ReadOnlyStateDB, address: Address): Address = getDelegateAddress(distinctBase db, address)
 
 # ------------------------------------------------------------------------------
 # End

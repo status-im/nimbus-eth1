@@ -179,10 +179,7 @@ proc getBalance(host: TransactionHost, address: HostAddress): HostBalance {.show
 proc getCodeSize(host: TransactionHost, address: HostAddress): HostSize {.show.} =
   # TODO: Check this `HostSize`, it was copied as `uint` from other code.
   # Note: Old `evmc_host` uses `getCode(address).len` instead.
-  if host.vmState.fork >= FkPrague:
-    host.vmState.readOnlyStateDB.resolveCodeSize(address).HostSize
-  else:
-    host.vmState.readOnlyStateDB.getCodeSize(address).HostSize
+  host.vmState.readOnlyStateDB.getCodeSize(address).HostSize
 
 proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash {.show.} =
   let db = host.vmState.readOnlyStateDB
@@ -191,10 +188,7 @@ proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash {.show.}
   if not db.accountExists(address) or db.isEmptyAccount(address):
     default(HostHash)
   else:
-    if host.vmState.fork >= FkPrague:
-      db.resolveCodeHash(address)
-    else:
-      db.getCodeHash(address)
+    db.getCodeHash(address)
 
 proc copyCode(host: TransactionHost, address: HostAddress,
               code_offset: HostSize, buffer_data: ptr byte,
@@ -211,11 +205,7 @@ proc copyCode(host: TransactionHost, address: HostAddress,
   #
   # Note, when there is no code, `getCode` result is empty `seq`.  It was `nil`
   # when the DB was first implemented, due to Nim language changes since then.
-  let code = if host.vmState.fork >= FkPrague:
-               host.vmState.readOnlyStateDB.resolveCode(address)
-             else:
-               host.vmState.readOnlyStateDB.getCode(address)
-
+  let code = host.vmState.readOnlyStateDB.getCode(address)
   var safe_len: int = code.len # It's safe to assume >= 0.
 
   if code_offset >= safe_len.HostSize:
@@ -312,6 +302,10 @@ proc setTransientStorage(host: TransactionHost, address: HostAddress,
   host.vmState.mutateStateDB:
     db.setTransientStorage(address, key, newVal)
 
+proc getDelegateAddress(host: TransactionHost, address: HostAddress): HostAddress {.show.} =
+  let db = host.vmState.readOnlyStateDB
+  db.getDelegateAddress(address)
+
 when use_evmc_glue:
   {.pop: inline.}
   const included_from_host_services {.used.} = true
@@ -319,4 +313,4 @@ when use_evmc_glue:
 else:
   export
     accountExists, getStorage, storage, getBalance, getCodeSize, getCodeHash,
-    copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog
+    copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog, getDelegateAddress
