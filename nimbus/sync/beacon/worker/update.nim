@@ -13,159 +13,336 @@
 import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
-  pkg/stew/sorted_set,
+  pkg/stew/[byteutils, sorted_set],
+  ../../../core/chain,
   ../worker_desc,
   ./update/metrics,
-  "."/[blocks_unproc, db, headers_staged, headers_unproc]
-
-logScope:
-  topics = "beacon update"
+  ./blocks_staged/staged_queue,
+  ./headers_staged/staged_queue,
+  "."/[blocks_unproc, db, headers_unproc, helpers]
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc updateTargetChange(ctx: BeaconCtxRef; info: static[string]): bool =
+func syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
+  ## Calculate `SyncLayoutState` from the download context
+
+  let
+    b = ctx.chain.baseNumber()
+    l = ctx.chain.latestNumber()
+    c = ctx.layout.coupler
+    d = ctx.layout.dangling
+    h = ctx.layout.head
+
+  # See clause *(8)* in `README.md`:
+  # ::
+  #     0               H    L
+  #     o---------------o----o
+  #     | <--- imported ---> |
+  #
+  # where `H << L` with `L` is the `latest` (aka cursor) parameter from
+  # `FC` the logic will be updated to (see clause *(9)* in `README.md`):
+  #
+  if h <= c or h <= l:                 # empty interval `(C,H]` or nothing to do
+    return idleSyncState
+
+  # See clauses *(9)* and *(10)* in `README.md`:
+  # ::
+  #   0               B
+  #   o---------------o----o
+  #   | <--- imported ---> |
+  #                C                     D                H
+  #                o---------------------o----------------o
+  #                | <-- unprocessed --> | <-- linked --> |
+  #
+  # where *B* is the **base** entity of the `FC` module and `C` is sort of
+  # a placehoder with block number equal to *B* at some earlier time (the
+  # value *B* increases over time.)
+  #
+  # It is already known that `C < H` (see first check)
+  #
+  if c <= b:                           # check for `C <= B` as sketched above
+
+    # Case `C < D-1` => not ready yet
+    if c + 1 < d:
+      return collectingHeaders
+
+    # Case `C == D-1` => just finished the download
+    if c + 1 == d:
+      return finishedHeaders
+
+    # Case `C == D` => see below for general case
+
+  # Case `C == D` => set to import blocks (see *(10)* in `README.md`):
+  # ::
+  #   0                    L
+  #   o--------------------o
+  #   | <--- imported ---> |
+  #                     D
+  #                     C                                H
+  #                     o--------------------------------o
+  #                     | <-- blocks to be completed --> |
+  #
+  # It is known already (see first check) that `L <`H`
+  #
+  if c == d:
+    return processingBlocks
+
+  # Case `B < C` oops:
+  # ::
+  #     0               B
+  #     o---------------o----o
+  #     | <--- imported ---> |
+  #                        C                     D                H
+  #                        o---------------------o----------------o
+  #                        | <-- unprocessed --> | <-- linked --> |
+  #
+  trace info & ": inconsistent state",
+    B=(if b == c: "C" else: b.bnStr),
+    C=(if c == l: "L" else: c.bnStr),
+    L=(if l == d: "D" else: l.bnStr),
+    D=(if d == h: "H" else: d.bnStr),
+    H=h.bnStr
+
+  idleSyncState
+
+# ------------
+
+proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
+  ## Clean up target bucket and await a new target.
   ##
-  ## Layout (see (3) in README):
+  ctx.sst.reset # => target.reset, layout.reset
+  ctx.headersUnprocClear()
+  ctx.blocksUnprocClear()
+  ctx.headersStagedQueueClear()
+  ctx.blocksStagedQueueClear()
+  ctx.dbHeadersClear()
+
+  ctx.hibernate = true
+
+  trace info & ": suspending syncer", L=ctx.chain.latestNumber.bnStr
+
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
+
+
+proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
+  ## Set up sync target (see clause *(9)* in `README.md`) by modifying
+  ## layout to:
   ## ::
-  ##     0             C==D==E                  T
-  ##     o----------------o---------------------o---->
-  ##     | <-- linked --> |
+  ##   0            B
+  ##   o------------o-------o
+  ##   | <--- imported ---> |                           D
+  ##                C                                   H
+  ##                o-----------------------------------o
+  ##                | <--------- unprocessed ---------> |
   ##
-  ## or
+  ## where *B* is the **base** entity of the `FC` module and `C ~ B`. The
+  ## parameter `H` is set to the new sync head target `T`.
+  ##
+  let
+    c = ctx.chain.baseNumber()
+    h = ctx.target.consHead.number
+
+  if c+1 < h:                                 # header chain interval is `(C,H]`
+    doAssert ctx.headersUnprocTotal() == 0
+    doAssert ctx.headersUnprocBorrowed() == 0
+    doAssert ctx.headersStagedQueueIsEmpty()
+    doAssert ctx.blocksUnprocTotal() == 0
+    doAssert ctx.blocksUnprocBorrowed() == 0
+    doAssert ctx.blocksStagedQueueIsEmpty()
+
+    ctx.sst.layout = SyncStateLayout(
+      coupler:   c,
+      dangling:  h,
+      final:     ctx.target.final,
+      finalHash: ctx.target.finalHash,
+      head:      h,
+      lastState: collectingHeaders)           # state transition
+
+    # Save this header on the database so it needs not be fetched again from
+    # somewhere else.
+    ctx.dbHeadersStash(h, @[rlp.encode(ctx.target.consHead)], info)
+
+    # Save state
+    ctx.dbStoreSyncStateLayout info
+
+    # Update range
+    ctx.headersUnprocSet(c+1, h-1)
+
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
+
+    # Mark target used, reset for re-fill
+    ctx.target.changed = false
+
+    trace info & ": new header target", C=c.bnStr, D="H", H="T", T=h.bnStr
+
+
+proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
+  ## Link `(C,H]` into the `FC` logic. If successful, `true` is returned.
+  ## Otherwise the chain `(C,H]` must be discarded.
+  ##
+  ## Condider the following layout (see clause *(10)* in `README.md`):
   ## ::
-  ##    0==T           C==D==E
-  ##     o----------------o-------------------------->
-  ##     | <-- linked --> |
+  ##   0             B  Y    L
+  ##   o-------------o--o----o
+  ##   | <--- imported ----> |
+  ##                C    Z                                H
+  ##                o----o--------------------------------o
+  ##                | <------------- linked ------------> |
   ##
-  ## with `T == target.header.number` or `T == 0`
+  ## for some `Y` in `[B,L]` and `Z` in `(C,H]` where `Y<-Z` with `L` the
+  ## `latest` and `B` the `base` entity of the `FC` logic.
   ##
-  ## to be updated to
+  ## If there are such `Y <- Z`, then update the sync state to (see chause
+  ## *(11)* in `README.md`):
   ## ::
-  ##     0               C==D                 D'==E'
-  ##     o----------------o---------------------o---->
-  ##     | <-- linked --> | <-- unprocessed --> |
+  ##   0                Y
+  ##   o----------------o----o
+  ##   | <--- imported ----> |
+  ##                   D
+  ##                   C Z                              H
+  ##                   o-o------------------------------o
+  ##                   | <-- blocks to be completed --> |
   ##
-  var target = ctx.lhc.target.header.number
+  ## where `C==Y`, `(C,H]==[Z,H]`, `C<-Z`
+  ##
+  ## Otherwise, if *Z* does not exists then reset to idle state.
+  ##
+  let
+    b = ctx.chain.baseNumber()
+    l = ctx.chain.latestNumber()
+    c = ctx.layout.coupler
+    h = ctx.layout.head
 
-  # Need: `E < T` and `C == D`
-  if target != 0 and target <= ctx.layout.endBn:      # violates `E < T`
-    trace info & ": not applicable", E=ctx.layout.endBn.bnStr, T=target.bnStr
-    return false
+  if l < h:
+    # Try to find a parent in the `FC` data domain. For practical reasons the
+    # loop does not go further back than the base `B`. Blocks below/older than
+    # that will not be handled by the `FC`.
+    for bn in (l+1).countdown(max(b,c)):
 
-  if ctx.layout.coupler != ctx.layout.dangling: # violates `C == D`
-    trace info & ": not applicable",
-      C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr
-    return false
+      # The syncer cache holds headers for `(C,H]`. It starts with checking
+      # whether `L<-Z` holds (i.e. `Y==L` can be chosen.)
+      let
+        yHash = ctx.dbHeaderParentHash(bn).expect "Hash32"     # maybe `Y`
+        yHdr = ctx.chain.headerByHash(yHash).valueOr: continue # test for `Y`
+        yNum = yHdr.number                                     # == bn-1
 
-  # Check consistency: `C == D <= E` for maximal `C` => `D == E`
-  doAssert ctx.layout.dangling == ctx.layout.endBn
+      ctx.layout.coupler = yNum                                # parent of `Z`
+      ctx.layout.dangling = yNum                               # .. ditto
 
-  let rlpHeader = rlp.encode(ctx.lhc.target.header)
+      trace info & ": linked into FC", B=b.bnStr,
+        C=(if yNum==l: "L" else: yNum.bnStr), L=l.bnStr, H=h.bnStr
 
-  ctx.lhc.layout = LinkedHChainsLayout(
-    coupler:        ctx.layout.coupler,
-    couplerHash:    ctx.layout.couplerHash,
-    dangling:       target,
-    danglingParent: ctx.lhc.target.header.parentHash,
-    endBn:          target,
-    endHash:        rlpHeader.keccak256)
+      # Save layout state
+      ctx.dbStoreSyncStateLayout info
 
-  # Save this header on the database so it needs not be fetched again from
-  # somewhere else.
-  ctx.dbStashHeaders(target, @[rlpHeader])
+      # Update, so it can be followed nicely
+      ctx.updateMetrics()
+      return true
 
-  # Save state
-  discard ctx.dbStoreLinkedHChainsLayout()
+  trace info & ": cannot link into FC", B=b.bnStr, L=l.bnStr,
+    C=c.bnStr, H=h.bnStr
+  false
 
-  # Update range
+
+proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.headersUnprocTotal() == 0
   doAssert ctx.headersUnprocBorrowed() == 0
   doAssert ctx.headersStagedQueueIsEmpty()
-  ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
+  doAssert ctx.blocksUnprocTotal() == 0
+  doAssert ctx.blocksUnprocBorrowed() == 0
+  doAssert ctx.blocksStagedQueueIsEmpty()
 
-  trace info & ": updated", C=ctx.layout.coupler.bnStr,
-    uTop=ctx.headersUnprocTop(),
-    D=ctx.layout.dangling.bnStr, E=ctx.layout.endBn.bnStr, T=target.bnStr
-  true
+  let
+    c = ctx.layout.coupler
+    h = ctx.layout.head
 
+  # Update blocks `(C,H]`
+  ctx.blocksUnprocCommit(0, c+1, h)
 
-proc mergeAdjacentChains(ctx: BeaconCtxRef; info: static[string]): bool =
-  ## Merge if `C+1` == `D`
-  ##
-  if ctx.lhc.layout.coupler+1 < ctx.lhc.layout.dangling or # gap btw. `C` & `D`
-     ctx.lhc.layout.coupler == ctx.lhc.layout.dangling:    # merged already
-    return false
+  # State transition
+  ctx.layout.lastState = processingBlocks
 
-  # No overlap allowed!
-  doAssert ctx.lhc.layout.coupler+1 == ctx.lhc.layout.dangling
-
-  # Verify adjacent chains
-  if ctx.lhc.layout.couplerHash != ctx.lhc.layout.danglingParent:
-    # FIXME: Oops -- any better idea than to defect?
-    raiseAssert info & ": hashes do not match" &
-      " C=" & ctx.lhc.layout.coupler.bnStr &
-      " D=" & $ctx.lhc.layout.dangling.bnStr
-
-  trace info & ": merging", C=ctx.lhc.layout.coupler.bnStr,
-    D=ctx.lhc.layout.dangling.bnStr
-
-  # Merge adjacent linked chains
-  ctx.lhc.layout = LinkedHChainsLayout(
-    coupler:        ctx.layout.endBn,               # `C`
-    couplerHash:    ctx.layout.endHash,
-    dangling:       ctx.layout.endBn,               # `D`
-    danglingParent: ctx.dbPeekParentHash(ctx.layout.endBn).expect "Hash32",
-    endBn:          ctx.layout.endBn,               # `E`
-    endHash:        ctx.layout.endHash)
-
-  # Save state
-  discard ctx.dbStoreLinkedHChainsLayout()
-
-  true
+  trace info & ": collecting block bodies", iv=BnRange.new(c+1, h)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc updateLinkedHChainsLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
-  ## Update layout
+proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Update internal state when needed
+  let
+    prevState = ctx.layout.lastState     # previous state
+    thisState = ctx.syncState info       # currently observed state
 
-  # Check whether there is something to do regarding beacon node change
-  if ctx.lhc.target.changed:
-    ctx.lhc.target.changed = false
-    result = ctx.updateTargetChange info
+  if thisState == prevState:
+    # Check whether the system has been idle and a new header download
+    # session can be set up
+    if prevState == idleSyncState and
+       ctx.target.changed and            # and there is a new target from CL
+       ctx.target.final != 0:            # .. ditto
+      ctx.setupCollectingHeaders info    # set up new header sync
+    return
+    # Notreached
 
-  # Check whether header downloading is done
-  if ctx.mergeAdjacentChains info:
-    result = true
+  trace info & ": sync state changed", prevState, thisState,
+    L=ctx.chain.latestNumber.bnStr,
+    C=(if ctx.layout.coupler == ctx.layout.dangling: "D"
+       else: ctx.layout.coupler.bnStr),
+    D=(if ctx.layout.dangling == ctx.layout.head: "H"
+       else: ctx.layout.dangling.bnStr),
+    H=ctx.layout.head.bnStr
+
+  # So there is a states transition. The only relevant transition here
+  # is `collectingHeaders -> finishedHeaders` which will be continued
+  # as `finishedHeaders -> processingBlocks`.
+  #
+  if prevState == collectingHeaders and
+     thisState == finishedHeaders and
+     ctx.linkIntoFc(info):               # commit downloading headers
+    ctx.setupProcessingBlocks info       # start downloading block bodies
+    trace info & ": sync state changed",
+      prevState=thisState, thisState=ctx.syncState(info)
+    return
+    # Notreached
+
+  # Final sync target reached or inconsistent/impossible state
+  ctx.startHibernating info
 
 
-proc updateBlockRequests*(ctx: BeaconCtxRef; info: static[string]): bool =
-  ## Update block requests if there staged block queue is empty
-  let base = ctx.dbStateBlockNumber()
-  if base < ctx.layout.coupler:   # so half open interval `(B,C]` is not empty
+proc updateFinalBlockHeader*(
+    ctx: BeaconCtxRef;
+    finHdr: Header;
+    finHash: Hash32;
+    info: static[string];
+      ) =
+  ## Update the finalised header cache. If the finalised header is acceptable,
+  ## the syncer will be activated from hibernation if necessary.
+  ##
+  let
+    b = ctx.chain.baseNumber()
+    f = finHdr.number
+  if f < b:
+    trace info & ": finalised block # too low",
+      B=b.bnStr, finalised=f.bnStr, delta=(b - f)
 
-    # One can fill/import/execute blocks by number from `(B,C]`
-    if ctx.blk.topRequest < ctx.layout.coupler:
-      # So there is some space
-      trace info & ": updating", B=base.bnStr, topReq=ctx.blk.topRequest.bnStr,
-        C=ctx.layout.coupler.bnStr
+    ctx.target.reset
 
-      ctx.blocksUnprocCommit(
-        0, max(base, ctx.blk.topRequest) + 1, ctx.layout.coupler)
-      ctx.blk.topRequest = ctx.layout.coupler
-      return true
+  else:
+    ctx.target.final = f
+    ctx.target.finalHash = finHash
 
-  false
+    # Activate running (unless done yet)
+    if ctx.hibernate:
+      ctx.hibernate = false
+      trace info & ": activating syncer", B=b.bnStr,
+        finalised=f.bnStr, head=ctx.target.consHead.bnStr
 
-
-proc updateMetrics*(ctx: BeaconCtxRef) =
-  let now = Moment.now()
-  if ctx.pool.nextUpdate < now:
-    ctx.updateMetricsImpl()
-    ctx.pool.nextUpdate = now + metricsUpdateInterval
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # End

@@ -28,7 +28,7 @@ import
   ./rpc/[
     rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_common_api,
     rpc_portal_history_api, rpc_portal_beacon_api, rpc_portal_state_api,
-    rpc_portal_debug_history_api,
+    rpc_portal_nimbus_beacon_api, rpc_portal_debug_history_api,
   ],
   ./database/content_db,
   ./portal_node,
@@ -181,9 +181,9 @@ proc run(
   ## Portal node setup
   let
     portalProtocolConfig = PortalProtocolConfig.init(
-      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
-      config.disablePoke, config.maxGossipNodes, config.contentCacheSize,
-      config.disableContentCache,
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.alpha,
+      config.radiusConfig, config.disablePoke, config.maxGossipNodes,
+      config.contentCacheSize, config.disableContentCache, config.maxConcurrentOffers,
     )
 
     portalNodeConfig = PortalNodeConfig(
@@ -196,6 +196,7 @@ proc run(
       portalConfig: portalProtocolConfig,
       dataDir: string config.dataDir,
       storageCapacity: config.storageCapacityMB * 1_000_000,
+      contentRequestRetries: config.contentRequestRetries.int,
     )
 
     node = PortalNode.new(
@@ -272,6 +273,7 @@ proc run(
           rpcServer.installPortalBeaconApiHandlers(
             node.beaconNetwork.value.portalProtocol
           )
+          rpcServer.installPortalNimbusBeaconApiHandlers(node.beaconNetwork.value)
         if node.stateNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
             node.stateNetwork.value.portalProtocol, PortalSubnetwork.state
@@ -294,9 +296,8 @@ proc run(
       let
         ta = initTAddress(config.rpcAddress, config.rpcPort)
         rpcHttpServer = RpcHttpServer.new()
-      # Note: Set maxRequestBodySize to 4MB instead of 1MB as there are blocks
-      # that reach that limit (in hex, for gossip method).
-      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+      # 16mb to comfortably fit 2-3mb blocks + blobs + json overhead
+      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
       setupRpcServer(rpcHttpServer)
 
       Opt.some(rpcHttpServer)

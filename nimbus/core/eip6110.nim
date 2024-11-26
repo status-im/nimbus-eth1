@@ -11,21 +11,23 @@
 {.push raises: [].}
 
 import
-  eth/common,
+  eth/common/receipts,
+  stew/assign2,
   stew/arrayops,
-  stew/endians2,
-  results,
-  ../constants
+  results
 
 # -----------------------------------------------------------------------------
 # Private helpers
 # -----------------------------------------------------------------------------
 
-# UnpackIntoDeposit unpacks a serialized DepositEvent.
-func unpackIntoDeposit(data: openArray[byte]): Result[Request, string] =
-  if data.len != 576:
-    return err("deposit wrong length: want 576, have " & $data.len)
+const
+  depositRequestSize = 192
 
+type
+  DepositRequest = array[depositRequestSize, byte]
+
+# UnpackIntoDeposit unpacks a serialized DepositEvent.
+func depositLogToRequest(data: openArray[byte]): DepositRequest =
   # The ABI encodes the position of dynamic elements first. Since there
   # are 5 elements, skip over the positional data. The first 32 bytes of
   # dynamic elements also encode their actual length. Skip over that value too.
@@ -35,39 +37,46 @@ func unpackIntoDeposit(data: openArray[byte]): Result[Request, string] =
     d = c + 32 + 32
     e = d + 8 + 24 + 32
     f = e + 96 + 32
+    pubkeyOffset         = 0
+    withdrawalCredOffset = pubkeyOffset + 48
+    amountOffset         = withdrawalCredOffset + 32
+    signatureOffset      = amountOffset + 8
+    indexOffset          = signatureOffset + 96
 
-  let res = Request(
-    requestType: DepositRequestType,
-    deposit: DepositRequest(
-      # PublicKey is the first element. ABI encoding pads values to 32 bytes,
-      # so despite BLS public keys being length 48, the value length
-      # here is 64. Then skip over the next length value.
-      pubkey: Bytes48.copyFrom(data, b),
+  template copyFrom(tgtOffset, srcOffset, len) =
+    assign(result.toOpenArray(tgtOffset, tgtOffset+len-1),
+      data.toOpenArray(srcOffset, srcOffset+len-1))
 
-      # WithdrawalCredentials is 32 bytes. Read that value then skip over next
-      # length.
-      withdrawalCredentials: Bytes32.copyFrom(data, c),
+  # PublicKey is the first element. ABI encoding pads values to 32 bytes,
+  # so despite BLS public keys being length 48, the value length
+  # here is 64. Then skip over the next length value.
+  copyFrom(pubkeyOffset, b, 48)
 
-      # Amount is 8 bytes, but it is padded to 32. Skip over it and the next
-      # length.
-      amount: uint64.fromBytesLE(data.toOpenArray(d, d+7)),
+  # WithdrawalCredentials is 32 bytes. Read that value then skip over next
+  # length.
+  copyFrom(withdrawalCredOffset, c, 32)
 
-      # Signature is 96 bytes. Skip over it and the next length.
-      signature: Bytes96.copyFrom(data, e),
+  # Amount is 8 bytes, but it is padded to 32. Skip over it and the next
+  # length.
+  copyFrom(amountOffset, d, 8)
 
-      # Amount is 8 bytes.
-      index: uint64.fromBytesLE(data.toOpenArray(f, f+7)),
-    )
-  )
-  ok(res)
+  # Signature is 96 bytes. Skip over it and the next length.
+  copyFrom(signatureOffset, e, 96)
+
+  # Amount is 8 bytes.
+  copyFrom(indexOffset, f, 8)
 
 # -----------------------------------------------------------------------------
 # Public functions
 # -----------------------------------------------------------------------------
 
-func parseDepositLogs*(logs: openArray[Log]): Result[seq[Request], string] =
-  var res: seq[Request]
-  for log in logs:
-    if log.address == DEPOSIT_CONTRACT_ADDRESS:
-      res.add ?unpackIntoDeposit(log.data)
-  ok(res)
+func parseDepositLogs*(logs: openArray[Log], depositContractAddress: Address): Result[seq[byte], string] =
+  var res = newSeqOfCap[byte](logs.len*depositRequestSize)
+  for i, log in logs:
+    if log.address != depositContractAddress:
+      continue
+    if log.data.len != 576:
+      return err("deposit wrong length: want 576, have " & $log.data.len)
+    res.add depositLogToRequest(log.data)
+
+  ok(move(res))

@@ -83,11 +83,6 @@ proc blocksUnprocCovered*(ctx: BeaconCtxRef; pt: BlockNumber): bool =
   ctx.blk.unprocessed.covered(pt, pt) == 1
 
 
-proc blocksUnprocTop*(ctx: BeaconCtxRef): BlockNumber =
-  let iv = ctx.blk.unprocessed.le().valueOr:
-    return BlockNumber(0)
-  iv.maxPt
-
 proc blocksUnprocBottom*(ctx: BeaconCtxRef): BlockNumber =
   let iv = ctx.blk.unprocessed.ge().valueOr:
     return high(BlockNumber)
@@ -111,6 +106,18 @@ proc blocksUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
 proc blocksUnprocInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.blk.unprocessed = BnRangeSet.init()
+
+proc blocksUnprocClear*(ctx: BeaconCtxRef) =
+  ## Clear
+  ctx.blk.unprocessed.clear()
+  ctx.blk.borrowed = 0u
+
+proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
+  ## Set up new unprocessed range
+  ctx.blocksUnprocClear()
+  # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
+  if minPt <= maxPt:
+    discard ctx.blk.unprocessed.merge(minPt, maxPt)
 
 # ------------------------------------------------------------------------------
 # End

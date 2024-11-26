@@ -13,122 +13,145 @@
 import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
-  pkg/stew/[byteutils, interval_set, sorted_set],
+  pkg/stew/[interval_set, sorted_set],
   pkg/results,
-  ../../../db/storage_types,
-  ../../../common,
+  "../../.."/[common, core/chain, db/storage_types],
   ../worker_desc,
   ./headers_unproc
 
-logScope:
-  topics = "beacon db"
-
 const
   LhcStateKey = 1.beaconStateKey
-
-type
-  SavedDbStateSpecs = tuple
-    number: BlockNumber
-    hash: Hash32
-    parent: Hash32
-
-# ------------------------------------------------------------------------------
-# Private debugging & logging helpers
-# ------------------------------------------------------------------------------
-
-formatIt(Hash32):
-  it.data.toHex
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc fetchLinkedHChainsLayout(ctx: BeaconCtxRef): Opt[LinkedHChainsLayout] =
+proc fetchSyncStateLayout(ctx: BeaconCtxRef): Opt[SyncStateLayout] =
   let data = ctx.db.ctx.getKvt().get(LhcStateKey.toOpenArray).valueOr:
     return err()
   try:
-    result = ok(rlp.decode(data, LinkedHChainsLayout))
+    return ok(rlp.decode(data, SyncStateLayout))
   except RlpError:
-    return err()
-
-
-proc fetchSavedState(ctx: BeaconCtxRef): Opt[SavedDbStateSpecs] =
-  let db = ctx.db
-  var val: SavedDbStateSpecs
-  val.number = db.getSavedStateBlockNumber()
-
-  if db.getBlockHash(val.number, val.hash):
-    var header: Header
-    if db.getBlockHeader(val.hash, header):
-      val.parent = header.parentHash
-      return ok(val)
-
+    discard
   err()
+
+
+proc deleteStaleHeadersAndState(
+    ctx: BeaconCtxRef;
+    upTo: BlockNumber;
+    info: static[string];
+      ) =
+  ## Delete stale headers and state
+  let
+    kvt = ctx.db.ctx.getKvt()
+    stateNum = ctx.db.getSavedStateBlockNumber() # for persisting
+
+  var bn = upTo
+  while 0 < bn and kvt.hasKey(beaconHeaderKey(bn).toOpenArray):
+    discard kvt.del(beaconHeaderKey(bn).toOpenArray)
+    bn.dec
+
+    # Occasionallly persist the deleted headers. This will succeed if
+    # this function is called early enough after restart when there is
+    # no database transaction pending.
+    if (upTo - bn) mod 8192 == 0:
+      ctx.db.persistent(stateNum).isOkOr:
+        debug info & ": cannot persist deleted sync headers", error=($$error)
+        # So be it, stop here.
+        return
+
+  # Delete persistent state, there will be no use of it anymore
+  discard kvt.del(LhcStateKey.toOpenArray)
+  ctx.db.persistent(stateNum).isOkOr:
+    debug info & ": cannot persist deleted sync headers", error=($$error)
+    return
+
+  if bn < upTo:
+    debug info & ": deleted stale sync headers", iv=BnRange.new(bn+1,upTo)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc dbStoreLinkedHChainsLayout*(ctx: BeaconCtxRef): bool =
+proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Save chain layout to persistent db
-  const info = "dbStoreLinkedHChainsLayout"
-  if ctx.layout == ctx.lhc.lastLayout:
-    return false
-
   let data = rlp.encode(ctx.layout)
   ctx.db.ctx.getKvt().put(LhcStateKey.toOpenArray, data).isOkOr:
     raiseAssert info & " put() failed: " & $$error
 
   # While executing blocks there are frequent save cycles. Otherwise, an
   # extra save request might help to pick up an interrupted sync session.
-  let txLevel = ctx.db.level()
-  if txLevel == 0:
+  if ctx.db.level() == 0 and ctx.stash.len == 0:
     let number = ctx.db.getSavedStateBlockNumber()
     ctx.db.persistent(number).isOkOr:
-      debug info & ": failed to save persistently", error=($$error)
-      return false
+      raiseAssert info & " persistent() failed: " & $$error
+
+
+proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
+  ## Restore chain layout from persistent db. It returns `true` if a previous
+  ## state could be loaded, and `false` if a new state was created.
+  let
+    rc = ctx.fetchSyncStateLayout()
+    latest = ctx.chain.latestNumber()
+
+  # If there was a manual import after a previous sync, then saved state
+  # might be outdated.
+  if rc.isOk and
+     # The base number is the least record of the FCU chains/tree. So the
+     # finalised entry must not be smaller.
+     ctx.chain.baseNumber() <= rc.value.final and
+
+     # If the latest FCU number is not larger than the head, there is nothing
+     # to do (might also happen after a manual import.)
+     latest < rc.value.head and
+
+     # Can only resume a header download. Blocks need to be set up from scratch.
+     rc.value.lastState == collectingHeaders:
+
+    # Assign saved sync state
+    ctx.sst.layout = rc.value
+
+    # Add interval of unprocessed header range `(C,D)` from `README.md`
+    ctx.headersUnprocSet(ctx.layout.coupler+1, ctx.layout.dangling-1)
+
+    trace info & ": restored syncer state", L=latest.bnStr,
+      C=ctx.layout.coupler.bnStr, D=ctx.layout.dangling.bnStr,
+      H=ctx.layout.head.bnStr
+
+    true
+
   else:
-    trace info & ": not saved, tx pending", txLevel
-    return false
+    ctx.sst.layout = SyncStateLayout() # empty layout
 
-  trace info & ": saved pesistently on DB"
-  true
+    if rc.isOk:
+      # Some stored headers might have become stale, so delete them. Even
+      # though it is not critical, stale headers just stay on the database
+      # forever occupying space without purpose. Also, delete the state record.
+      # After deleting headers, the state record becomes stale as well.
+      if rc.value.head <= latest:
+        # After manual import, the `latest` state might be ahead of the old
+        # `head` which leaves a gap `(rc.value.head,latest)` of missing headers.
+        # So the `deleteStaleHeadersAndState()` clean up routine needs to start
+        # at the `head` and work backwards.
+        ctx.deleteStaleHeadersAndState(rc.value.head, info)
+      else:
+        # Delete stale headers with block numbers starting at to `latest` while
+        # working backwards.
+        ctx.deleteStaleHeadersAndState(latest, info)
 
-
-proc dbLoadLinkedHChainsLayout*(ctx: BeaconCtxRef) =
-  ## Restore chain layout from persistent db
-  const info = "dbLoadLinkedHChainsLayout"
-
-  let rc = ctx.fetchLinkedHChainsLayout()
-  if rc.isOk:
-    ctx.lhc.layout = rc.value
-    let (uMin,uMax) = (rc.value.coupler+1, rc.value.dangling-1)
-    if uMin <= uMax:
-      # Add interval of unprocessed block range `(C,D)` from `README.md`
-      ctx.headersUnprocSet(uMin, uMax)
-    trace info & ": restored layout", C=rc.value.coupler.bnStr,
-      D=rc.value.dangling.bnStr, E=rc.value.endBn.bnStr
-  else:
-    let val = ctx.fetchSavedState().expect "saved states"
-    ctx.lhc.layout = LinkedHChainsLayout(
-      coupler:        val.number,
-      couplerHash:    val.hash,
-      dangling:       val.number,
-      danglingParent: val.parent,
-      endBn:          val.number,
-      endHash:        val.hash)
-    trace info & ": new layout", B=val.number, C=rc.value.coupler.bnStr,
-      D=rc.value.dangling.bnStr, E=rc.value.endBn.bnStr
-
-  ctx.lhc.lastLayout = ctx.layout
-
+    false
 
 # ------------------
 
-proc dbStashHeaders*(
+proc dbHeadersClear*(ctx: BeaconCtxRef) =
+  ## Clear stashed in-memory headers
+  ctx.stash.clear
+
+proc dbHeadersStash*(
     ctx: BeaconCtxRef;
     first: BlockNumber;
     revBlobs: openArray[seq[byte]];
+    info: static[string];
       ) =
   ## Temporarily store header chain to persistent db (oblivious of the chain
   ## layout.) The headers should not be stashed if they are imepreted and
@@ -141,17 +164,29 @@ proc dbStashHeaders*(
   ##    #(first+1) -- revBlobs[^2]
   ##    ..
   ##
-  const info = "dbStashHeaders"
   let
-    kvt = ctx.db.ctx.getKvt()
+    txLevel = ctx.db.level()
     last = first + revBlobs.len.uint64 - 1
-  for n,data in revBlobs:
-    let key = beaconHeaderKey(last - n.uint64)
-    kvt.put(key.toOpenArray, data).isOkOr:
-      raiseAssert info & ": put() failed: " & $$error
+  if 0 < txLevel:
+    # Need to cache it because FCU has blocked writing through to disk.
+    for n,data in revBlobs:
+      ctx.stash[last - n.uint64] = data
+  else:
+    let kvt = ctx.db.ctx.getKvt()
+    for n,data in revBlobs:
+      let key = beaconHeaderKey(last - n.uint64)
+      kvt.put(key.toOpenArray, data).isOkOr:
+        raiseAssert info & ": put() failed: " & $$error
 
-proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
+proc dbHeaderPeek*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
+  # Try cache first
+  ctx.stash.withValue(num, val):
+    try:
+      return ok(rlp.decode(val[], Header))
+    except RlpError:
+      discard
+  # Use persistent storage next
   let
     key = beaconHeaderKey(num)
     rc = ctx.db.ctx.getKvt().get(key.toOpenArray)
@@ -162,20 +197,16 @@ proc dbPeekHeader*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
       discard
   err()
 
-proc dbPeekParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
+proc dbHeaderParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
   ## Retrieve some stashed parent hash.
-  ok (? ctx.dbPeekHeader num).parentHash
+  ok (? ctx.dbHeaderPeek num).parentHash
 
-proc dbUnstashHeader*(ctx: BeaconCtxRef; bn: BlockNumber) =
+proc dbHeaderUnstash*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
+  ctx.stash.withValue(bn, _):
+    ctx.stash.del bn
+    return
   discard ctx.db.ctx.getKvt().del(beaconHeaderKey(bn).toOpenArray)
-
-# ------------------
-
-proc dbStateBlockNumber*(ctx: BeaconCtxRef): BlockNumber =
-  ## Currently only a wrapper around the function returning the current
-  ## database state block number
-  ctx.db.getSavedStateBlockNumber()
 
 # ------------------------------------------------------------------------------
 # End

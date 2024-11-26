@@ -64,14 +64,15 @@ proc read(rlp: var Rlp; T: type PrfNode): T {.gcsafe, raises: [RlpError].} =
     let (isLeaf, pathSegment) = NibblesBuf.fromHexPrefix blobs[0]
     if isLeaf:
       return PrfNode(
-        prfType:   ignore,
+        prfType:   ignore, )
 
-        vtx: VertexRef(
-          vType:     Leaf,
-          pfx:      pathSegment,
-          lData:     LeafPayload(
-            pType:   RawData,
-            rawBlob: blobs[1])))
+        # TODO interpret the blob (?)
+        # vtx: VertexRef(
+        #   vType:     Leaf,
+        #   pfx:      pathSegment,
+        #   lData:     LeafPayload(
+        #     pType:   RawData,
+        #     rawBlob: blobs[1])))
     else:
       var node = PrfNode(
         prfType: isExtension,
@@ -145,7 +146,9 @@ func toNodesTab*(
         # Decode payload to deficated format for storage or accounts
         var pyl: PrfPayload
         try:
-          pyl = rlp.decode(nd.vtx.lData.rawBlob, PrfPayload)
+          # TODO interpret the blob
+          # pyl = rlp.decode(nd.vtx.lData.rawBlob, PrfPayload)
+          pyl = PrfPayload(prfType: isError, error: PartRlpPayloadException)
         except RlpError:
           pyl = PrfPayload(prfType: isError, error: PartRlpPayloadException)
 

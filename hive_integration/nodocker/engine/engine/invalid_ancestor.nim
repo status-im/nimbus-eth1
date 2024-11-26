@@ -117,12 +117,12 @@ method execute(cs: InvalidMissingAncestorReOrgTest, env: TestEnv): bool =
           blockHash=shadow.payloads[i].blockHash.short,
           number=shadow.payloads[i].blockNumber.uint64
 
-        let version = env.engine.version(shadow.payloads[i].timestamp)
-        let r = env.engine.client.newPayload(version, shadow.payloads[i])
+        let r = env.engine.newPayload(shadow.payloads[i])
         let fcState = ForkchoiceStateV1(
           headblockHash: shadow.payloads[i].blockHash,
         )
-        let p = env.engine.client.forkchoiceUpdated(version, fcState)
+        let timeVer = shadow.payloads[i].timestamp
+        let p = env.engine.forkchoiceUpdated(timeVer, fcState)
 
         if i == cs.invalidIndex:
           # If this is the first payload after the common ancestor, and this is the payload we invalidated,
@@ -147,8 +147,8 @@ method execute(cs: InvalidMissingAncestorReOrgTest, env: TestEnv): bool =
           p.expectLatestValidHash(shadow.payloads[i].blockHash)
 
       # Resend the latest correct fcU
-      let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
+      let timeVer = env.clMock.latestPayloadBuilt.timestamp
+      let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice)
       r.expectNoError()
       # After this point, the CL Mock will send the next payload of the canonical chain
       return true
@@ -192,10 +192,11 @@ method getName(cs: InvalidMissingAncestorReOrgSyncTest): string =
   "Invalid Missing Ancestor Syncing ReOrg, $1, EmptyTxs=$2, CanonicalReOrg=$3, Invalid P$4" % [
     $cs.invalidField, $cs.emptyTransactions, $cs.reOrgFromCanonical, $cs.invalidIndex]
 
-func blockHeader(ex: ExecutableData): common.BlockHeader =
-  blockHeader(ex.basePayload, ex.beaconRoot)
+func blockHeader(ex: ExecutableData): Header =
+  let requestsHash = calcRequestsHash(ex.executionRequests)
+  blockHeader(ex.basePayload, ex.beaconRoot, requestsHash)
 
-func blockBody(ex: ExecutableData): common.BlockBody =
+func blockBody(ex: ExecutableData): BlockBody =
   blockBody(ex.basePayload)
 
 method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
@@ -307,14 +308,14 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
 
         if i < cs.invalidIndex:
           let p = shadow.payloads[i]
-          let version = sec.version(p.timestamp)
-          let r = sec.client.newPayload(version, p)
+          let r = sec.newPayload(p)
           #r.ExpectationDescription = "Sent modified payload to secondary client, expected to be accepted"
           r.expectStatusEither([PayloadExecutionStatus.valid, PayloadExecutionStatus.accepted])
           let fcu = ForkchoiceStateV1(
             headblockHash: p.blockHash,
           )
-          let s = sec.client.forkchoiceUpdated(version, fcu)
+          let timeVer = sec.version(p.timestamp)
+          let s = sec.forkchoiceUpdated(timeVer, fcu)
           #s.ExpectationDescription = "Sent modified payload forkchoice updated to secondary client, expected to be accepted"
           s.expectStatusEither([PayloadExecutionStatus.valid, PayloadExecutionStatus.syncing])
 
@@ -361,14 +362,14 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
       # If we are syncing through p2p, we need to keep polling until the client syncs the missing payloads
       let period = chronos.milliseconds(500)
       while true:
-        let version = env.engine.version(shadow.payloads[shadow.n].timestamp)
-        let r = env.engine.client.newPayload(version, shadow.payloads[shadow.n])
+        let r = env.engine.newPayload(shadow.payloads[shadow.n])
         info "Response from main client", status=r.get.status
 
         let fcu = ForkchoiceStateV1(
           headblockHash: shadow.payloads[shadow.n].blockHash,
         )
-        let s = env.engine.client.forkchoiceUpdated(version, fcu)
+        let timeVer = shadow.payloads[shadow.n].timestamp
+        let s = env.engine.forkchoiceUpdated(timeVer, fcu)
         info "Response from main client fcu", status=s.get.payloadStatus.status
 
         if r.get.status == PayloadExecutionStatus.invalid:
@@ -412,12 +413,12 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
         for i in start..stop:
           if env.clMock.executedPayloadHistory.hasKey(i):
             let payload = env.clMock.executedPayloadHistory[i]
-            let r = env.engine.client.newPayload(payload)
+            let r = env.engine.newPayload(payload)
             r.expectStatus(PayloadExecutionStatus.valid)
 
       # Resend the latest correct fcU
-      let version = env.engine.version(env.clMock.latestPayloadBuilt.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice)
+      let timeVer = env.clMock.latestPayloadBuilt.timestamp
+      let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice)
       r.expectNoError()
       # After this point, the CL Mock will send the next payload of the canonical chain
       return true

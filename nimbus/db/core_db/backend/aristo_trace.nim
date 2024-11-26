@@ -35,7 +35,6 @@ type
     TrpOops = 0
     TrpKvt
     TrpAccounts
-    TrpGeneric
     TrpStorage
 
   TraceRequest* = enum
@@ -176,8 +175,6 @@ when CoreDbNoisyCaptJournal:
       $$(key.toOpenArray(0, key.len - 1))
     of TrpAccounts:
       "1:" & $$(key.toOpenArray(0, key.len - 1))
-    of TrpGeneric:
-      $key[0] & ":" & $$(key.toOpenArray(1, key.len - 1))
     of TrpStorage:
       "1:" & $$(key.toOpenArray(0, min(31, key.len - 1))) & ":" &
         (if 32 < key.len: $$(key.toOpenArray(32, key.len - 1)) else: "")
@@ -235,21 +232,6 @@ proc jLogger(
 
 proc jLogger(
     tr: TraceRecorderRef;
-    root: VertexID;
-    path: openArray[byte];
-    ti: TraceDataItemRef;
-      ) =
-  tr.jLogger(@[root.byte] & @path, ti)
-
-proc jLogger(
-    tr: TraceRecorderRef;
-    root: VertexID;
-    ti: TraceDataItemRef;
-      ) =
-  tr.jLogger(@[root.byte], ti)
-
-proc jLogger(
-    tr: TraceRecorderRef;
     accPath: Hash32;
     stoPath: Hash32;
     ti: TraceDataItemRef;
@@ -261,18 +243,12 @@ proc jLogger(
 func to(w: AristoApiProfNames; T: type TracePfx): T =
   case w:
   of AristoApiProfFetchAccountRecordFn,
-     AristoApiProfFetchAccountStateFn,
+     AristoApiProfFetchStateRootFn,
      AristoApiProfDeleteAccountRecordFn,
      AristoApiProfMergeAccountRecordFn:
     return TrpAccounts
-  of AristoApiProfFetchGenericDataFn,
-     AristoApiProfFetchGenericStateFn,
-     AristoApiProfDeleteGenericDataFn,
-     AristoApiProfDeleteGenericTreeFn,
-     AristoApiProfMergeGenericDataFn:
-    return TrpGeneric
   of AristoApiProfFetchStorageDataFn,
-     AristoApiProfFetchStorageStateFn,
+     AristoApiProfFetchStorageRootFn,
      AristoApiProfDeleteStorageDataFn,
      AristoApiProfDeleteStorageTreeFn,
      AristoApiProfMergeStorageDataFn:
@@ -349,7 +325,7 @@ func logRecord(
 func logRecord(
     info: AristoApiProfNames;
     req: TraceRequest;
-    sto: Uint256;
+    sto: UInt256;
       ): TraceDataItemRef =
   TraceDataItemRef(
     pfx:    info.to(TracePfx),
@@ -490,79 +466,32 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
         debug logTxt $info, level, accPath, accRec
       ok accRec
 
-  tracerApi.fetchAccountState =
+  tracerApi.fetchStateRoot =
     proc(mpt: AristoDbRef;
-         updateOk: bool;
         ): Result[Hash32,AristoError] =
-      const info = AristoApiProfFetchAccountStateFn
+      const info = AristoApiProfFetchStateRootFn
 
       when CoreDbNoisyCaptJournal:
         let level = tr.topLevel()
 
       # Find entry on DB
-      let state = api.fetchAccountState(mpt, updateOk).valueOr:
+      let state = api.fetchStateRoot(mpt).valueOr:
         when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, updateOk, error
+          debug logTxt $info, level, error
         tr.jLogger logRecord(info, TrqFind, error)
         return err(error)
 
       tr.jLogger logRecord(info, TrqFind, state)
 
       when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, updateOk, state
-      ok state
-
-  tracerApi.fetchGenericData =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[seq[byte],AristoError] =
-      const info = AristoApiProfFetchGenericDataFn
-
-      when CoreDbNoisyCaptJournal:
-        let level = tr.topLevel()
-
-      # Find entry on DB
-      let data = api.fetchGenericData(mpt, root, path).valueOr:
-        when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, root, path=($$path), error
-        tr.jLogger(root, path, logRecord(info, TrqFind, error))
-        return err(error)
-
-      tr.jLogger(root, path, logRecord(info, TrqFind, data))
-
-      when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, root, path=($$path), data
-      ok data
-
-  tracerApi.fetchGenericState =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         updateOk: bool;
-        ): Result[Hash32,AristoError] =
-      const info = AristoApiProfFetchGenericStateFn
-
-      when CoreDbNoisyCaptJournal:
-        let level = tr.topLevel()
-
-      # Find entry on DB
-      let state = api.fetchAccountState(mpt, updateOk).valueOr:
-        when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, root, updateOk, error
-        tr.jLogger(root, logRecord(info, TrqFind, error))
-        return err(error)
-
-      tr.jLogger(root, logRecord(info, TrqFind, state))
-
-      when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, root, updateOk, state
+        debug logTxt $info, level, state
       ok state
 
   tracerApi.fetchStorageData =
     proc(mpt: AristoDbRef;
          accPath: Hash32;
          stoPath: Hash32;
-        ): Result[Uint256,AristoError] =
+        ): Result[UInt256,AristoError] =
       const info = AristoApiProfFetchStorageDataFn
 
       when CoreDbNoisyCaptJournal:
@@ -581,27 +510,26 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
         debug logTxt $info, level, accPath, stoPath, stoData
       ok stoData
 
-  tracerApi.fetchStorageState =
+  tracerApi.fetchStorageRoot =
     proc(mpt: AristoDbRef;
          accPath: Hash32;
-         updateOk: bool;
         ): Result[Hash32,AristoError] =
-      const info = AristoApiProfFetchStorageStateFn
+      const info = AristoApiProfFetchStorageRootFn
 
       when CoreDbNoisyCaptJournal:
         let level = tr.topLevel()
 
       # Find entry on DB
-      let state = api.fetchStorageState(mpt, accPath, updateOk).valueOr:
+      let state = api.fetchStorageRoot(mpt, accPath).valueOr:
         when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, accPath, updateOk, error
+          debug logTxt $info, level, accPath, error
         tr.jLogger(accPath, logRecord(info, TrqFind, error))
         return err(error)
 
       tr.jLogger(accPath, logRecord(info, TrqFind, state))
 
       when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, accPath, updateOk, state
+        debug logTxt $info, level, accPath, state
       ok state
 
   tracerApi.deleteAccountRecord =
@@ -638,66 +566,6 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
 
       when CoreDbNoisyCaptJournal:
         debug logTxt $info, level, accPath
-      ok()
-
-  tracerApi.deleteGenericData =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[bool,AristoError] =
-      const info = AristoApiProfDeleteGenericDataFn
-
-      when CoreDbNoisyCaptJournal:
-        let level = tr.topLevel()
-
-      # Find entry on DB (for comprehensive log record)
-      let tiRec = block:
-        let rc = api.fetchGenericData(mpt, root, path)
-        if rc.isOk:
-          logRecord(info, TrqDelete, rc.value)
-        elif rc.error == FetchPathNotFound:
-          logRecord(info, TrqDelete)
-        else:
-          when CoreDbNoisyCaptJournal:
-            debug logTxt $info, level, root, path=($$path), error=rc.error
-          tr.jLogger(root, path, logRecord(info, TrqDelete, rc.error))
-          return err(rc.error)
-
-      # Delete from DB
-      let emptyTrie = api.deleteGenericData(mpt, root, path).valueOr:
-        when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, root, path=($$path), error
-        tr.jLogger(root, path, logRecord(info, TrqDelete, error))
-        return err(error)
-
-      # Log on journal
-      tr.jLogger(root, path, tiRec)
-
-      when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, root, path=($$path), emptyTrie
-      ok emptyTrie
-
-  tracerApi.deleteGenericTree =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-        ): Result[void,AristoError] =
-      const info = AristoApiProfDeleteGenericTreeFn
-
-      when CoreDbNoisyCaptJournal:
-        let level = tr.topLevel()
-
-      # Delete from DB
-      api.deleteGenericTree(mpt, root).isOkOr:
-        when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, root, error
-        tr.jLogger(root, logRecord(info, TrqDelete, error))
-        return err(error)
-
-      # Log on journal
-      tr.jLogger(root, logRecord(info, TrqDelete))
-
-      when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, root
       ok()
 
   tracerApi.deleteStorageData =
@@ -792,40 +660,6 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
         debug logTxt $info, level, accPath, accRec, hadPath, updated
       ok updated
 
-  tracerApi.mergeGenericData =
-    proc(mpt: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-         data: openArray[byte];
-        ): Result[bool,AristoError] =
-      const info = AristoApiProfMergeGenericDataFn
-
-      when CoreDbNoisyCaptJournal:
-        let level = tr.topLevel()
-
-      # Find entry on DB (for comprehensive log record)
-      let
-        hadPath = api.hasPathGeneric(mpt, root, path).valueOr:
-          when CoreDbNoisyCaptJournal:
-            debug logTxt $info, level, root, path, error
-          tr.jLogger(root, path, logRecord(info, TrqAdd, error))
-          return err(error)
-        mode = if hadPath: TrqModify else: TrqAdd
-
-      # Do the merge
-      let updated = api.mergeGenericData(mpt, root, path, data).valueOr:
-        when CoreDbNoisyCaptJournal:
-          debug logTxt $info, level, root, path, error
-        tr.jLogger(root, path, logRecord(info, mode, error))
-        return err(error)
-
-      # Log on journal
-      tr.jLogger(root, path, logRecord(info, mode, data))
-
-      when CoreDbNoisyCaptJournal:
-        debug logTxt $info, level, root, path, data=($$data), hadPath, updated
-      ok updated
-
   tracerApi.mergeStorageData =
     proc(mpt: AristoDbRef;
          accPath: Hash32;
@@ -909,8 +743,6 @@ iterator ariLog*(log: TraceLogInstRef): (VertexID,seq[byte],TraceDataItemRef) =
         case pfx:
         of TrpAccounts,TrpStorage:
           (VertexID(1), p.key[1..^1])
-        of TrpGeneric:
-          (VertexID(p.key[1]), p.key[2..^1])
         else:
           continue
     yield (root, key, p.data)

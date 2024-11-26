@@ -15,7 +15,7 @@ import
   eth/common/eth_types_rlp,
   chronicles,
   stew/byteutils,
-  kzg4844/kzg_ex as kzg,
+  kzg4844/kzg,
   ../types,
   ../engine_client,
   ../../../../nimbus/constants,
@@ -56,21 +56,6 @@ func getMinExcessBlobsForBlobGasPrice*(data_gas_price: uint64): uint64 =
 proc addBlobTransaction*(pool: TestBlobTxPool, tx: PooledTransaction) =
   let txHash = rlpHash(tx)
   pool.transactions[txHash] = tx
-
-proc `==`(a: openArray[AccessTuple], b: openArray[AccessPair]): bool =
-  if a.len != b.len:
-    return false
-
-  for i in 0..<a.len:
-    if a[i].address != b[i].address:
-      return false
-    if a[i].storageKeys.len != b[i].storageKeys.len:
-      return false
-    for j in 0..<a[i].storageKeys.len:
-      if a[i].storageKeys[j].StorageKey != b[i].storageKeys[j]:
-        return false
-
-  return true
 
 # Test two different transactions with the same blob, and check the blob bundle.
 proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void, string] =
@@ -149,7 +134,7 @@ type
   BlobWrapData* = object
     versionedHash*: Hash32
     blob*         : kzg.KzgBlob
-    commitment*   : kzg.KZGCommitment
+    commitment*   : kzg.KzgCommitment
     proof*        : kzg.KzgProof
 
   BlobData* = ref object
@@ -164,7 +149,7 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
     # Unmarshal the tx from the payload, which should be the minimal version
     # of the blob transaction
     let txData = rlp.decode(distinctBase binaryTx, Transaction)
-    if txData.txType != TxEIP4844:
+    if txData.txType != TxEip4844:
       continue
 
     let txHash = rlpHash(txData)
@@ -186,9 +171,9 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
     for i in 0..<blobTx.tx.versionedHashes.len:
       blobData.data.add BlobWrapData(
         versionedHash: blobTx.tx.versionedHashes[i],
-        commitment   : kzg.KzgCommitment(bytes: np.commitments[i]),
+        commitment   : kzg.KzgCommitment(bytes: np.commitments[i].data),
         blob         : kzg.KzgBlob(bytes: np.blobs[i]),
-        proof        : kzg.KzgProof(bytes: np.proofs[i]),
+        proof        : kzg.KzgProof(bytes: np.proofs[i].data),
       )
     blobData.txs.add blobTx.tx
 
@@ -217,10 +202,10 @@ proc verifyBeaconRootStorage*(client: RpcClient, payload: ExecutionPayload): boo
   # Verify the beacon root key
   r = client.storageAt(precompileAddress, beaconRootKey, blockNumber)
   let parentBeaconBlockRoot = timestampToBeaconRoot(payload.timestamp)
-  if parentBeaconBlockRoot != r.get:
+  if parentBeaconBlockRoot.data != r.get.data:
     error "verifyBeaconRootStorage storage 2",
-      expect=parentBeaconBlockRoot.toHex,
-      get=r.get.toHex
+      expect=parentBeaconBlockRoot,
+      get=r.get
     return false
 
   return true

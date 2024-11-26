@@ -14,11 +14,11 @@ import
   pkg/[chronicles, chronos, eth/p2p, results],
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
-  ./beacon/[worker, worker_desc],
+  ./beacon/[worker, worker_desc, worker/db],
   "."/[sync_desc, sync_sched, protocol]
 
 logScope:
-  topics = "beacon"
+  topics = "beacon sync"
 
 type
   BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
@@ -28,25 +28,25 @@ type
 # ------------------------------------------------------------------------------
 
 proc runSetup(ctx: BeaconCtxRef): bool =
-  worker.setup(ctx)
+  worker.setup(ctx, "RunSetup")
 
 proc runRelease(ctx: BeaconCtxRef) =
-  worker.release(ctx)
+  worker.release(ctx, "RunRelease")
 
-proc runDaemon(ctx: BeaconCtxRef) {.async.} =
-  await worker.runDaemon(ctx)
+proc runDaemon(ctx: BeaconCtxRef) {.async: (raises: []).} =
+  await worker.runDaemon(ctx, "RunDaemon")
 
 proc runStart(buddy: BeaconBuddyRef): bool =
-  worker.start(buddy)
+  worker.start(buddy, "RunStart")
 
 proc runStop(buddy: BeaconBuddyRef) =
-  worker.stop(buddy)
+  worker.stop(buddy, "RunStop")
 
 proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
-  worker.runPool(buddy, last, laps)
+  worker.runPool(buddy, last, laps, "RunPool")
 
-proc runPeer(buddy: BeaconBuddyRef) {.async.} =
-  await worker.runPeer(buddy)
+proc runPeer(buddy: BeaconBuddyRef) {.async: (raises: []).} =
+  await worker.runPeer(buddy, "RunPeer")
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -57,21 +57,19 @@ proc init*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    chunkSize: int;
+    chunkSize = 0;
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.nBodiesBatch = chunkSize
-  # Initalise for `persistBlocks()`
-  desc.ctx.pool.chain = chain.com.newChain()
+  desc.ctx.pool.chain = chain
   desc
 
-proc start*(ctx: BeaconSyncRef) =
-  ## Beacon Sync always begin with stop mode
-  doAssert ctx.startSync()      # Initialize subsystems
+proc start*(desc: BeaconSyncRef): bool =
+  desc.startSync()
 
-proc stop*(ctx: BeaconSyncRef) =
-  ctx.stopSync()
+proc stop*(desc: BeaconSyncRef) =
+  desc.stopSync()
 
 # ------------------------------------------------------------------------------
 # End

@@ -14,7 +14,7 @@ import
   pkg/chronos
 
 const
-  enableTicker* = true
+  enableTicker* = false
     ## Log regular status updates similar to metrics. Great for debugging.
 
   runsThisManyPeersOnly* = 8
@@ -43,7 +43,7 @@ const
   workerIdleWaitInterval* = chronos.seconds(10)
     ## Sleep some time in multi-mode if there is nothing to do
 
-  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(10)
+  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
 
   # ----------------------
@@ -92,8 +92,8 @@ const
   nFetchBodiesRequest* = 128
     ## Similar to `nFetchHeadersRequest`
 
-  fetchBodiesReqThresholdZombie* = chronos.seconds(2)
-  fetchBodiesReqThresholdCount* = 3
+  fetchBodiesReqThresholdZombie* = chronos.seconds(4)
+  fetchBodiesReqThresholdCount* = 5
     ## Similar to `fetchHeadersReqThreshold*`
 
   fetchBodiesReqMinResponsePC* = 10
@@ -120,6 +120,10 @@ const
     ## staged blocks queue. (The `+1` is exceptional, appears when the least
     ## entry block number is too high and so leaves a gap to the ledger state
     ## block number.)
+
+  finaliserChainLengthMax* = 32
+    ## When importing with `importBlock()`, finalise after at most this many
+    ## invocations of `importBlock()`.
 
   # ----------------------
 

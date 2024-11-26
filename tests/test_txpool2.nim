@@ -9,11 +9,14 @@
 # according to those terms.
 
 import
-  std/tables,
+  std/[tables, math],
   eth/common/keys,
-  results, unittest2,
+  results,
+  unittest2,
+  ../hive_integration/nodocker/engine/tx_sender,
   ../nimbus/db/ledger,
   ../nimbus/core/chain,
+  ../nimbus/core/eip4844,
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
   ../nimbus/core/tx_pool/tx_desc,
@@ -29,15 +32,14 @@ const
   repoDir = [".", "customgenesis"]
   genesisFile = "merge.json"
 
-type
-  TestEnv = object
-    nonce   : uint64
-    chainId : ChainId
-    vaultKey: PrivateKey
-    conf    : NimbusConf
-    com     : CommonRef
-    chain   : ForkedChainRef
-    xp      : TxPoolRef
+type TestEnv = object
+  nonce: uint64
+  chainId: ChainId
+  vaultKey: PrivateKey
+  conf: NimbusConf
+  com: CommonRef
+  chain: ForkedChainRef
+  xp: TxPoolRef
 
 const
   # signerKeyHex = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
@@ -45,9 +47,9 @@ const
   recipient = address"0000000000000000000000000000000000000318"
   feeRecipient = address"0000000000000000000000000000000000000212"
   contractCode = evmByteCode:
-    PrevRandao    # VAL
-    Push1 "0x11"  # KEY
-    Sstore        # OP
+    PrevRandao # VAL
+    Push1 "0x11" # KEY
+    Sstore # OP
     Stop
 
 proc privKey(keyHex: string): PrivateKey =
@@ -59,41 +61,56 @@ proc privKey(keyHex: string): PrivateKey =
   kRes.get()
 
 func makeTx(
-    t: var TestEnv, recipient: Address, amount: UInt256,
-    payload: openArray[byte] = []): Transaction =
+    t: var TestEnv, recipient: Address, amount: UInt256, payload: openArray[byte] = []
+): Transaction =
   const
     gasLimit = 75000.GasInt
     gasPrice = 30.gwei
 
   let tx = Transaction(
-    txType  : TxLegacy,
-    chainId : t.chainId,
-    nonce   : AccountNonce(t.nonce),
+    txType: TxLegacy,
+    chainId: t.chainId,
+    nonce: AccountNonce(t.nonce),
     gasPrice: gasPrice,
     gasLimit: gasLimit,
-    to      : Opt.some(recipient),
-    value   : amount,
-    payload : @payload
+    to: Opt.some(recipient),
+    value: amount,
+    payload: @payload,
   )
 
   inc t.nonce
   signTransaction(tx, t.vaultKey, eip155 = true)
 
-func signTxWithNonce(
-    t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
+proc createPooledTransactionWithBlob(
+    t: var TestEnv, recipient: Address, amount: UInt256
+): PooledTransaction =
+  # Create the transaction
+  let
+    tc = BlobTx(
+      recipient: Opt.some(recipient),
+      gasLimit: 100000.GasInt,
+      gasTip: GasInt(10 ^ 9),
+      gasFee: GasInt(10 ^ 9),
+      blobGasFee: u256(1),
+      blobCount: 1,
+      blobID: 1,
+    )
+    params = MakeTxParams(chainId: t.chainId, key: t.vaultKey, nonce: t.nonce)
+
+  inc t.nonce
+  params.makeTx(tc)
+
+func signTxWithNonce(t: TestEnv, tx: Transaction, nonce: AccountNonce): Transaction =
   var tx = tx
   tx.nonce = nonce
   signTransaction(tx, t.vaultKey, eip155 = true)
 
 proc initEnv(envFork: HardFork): TestEnv =
-  var
-    conf = makeConfig(@[
-      "--custom-network:" & genesisFile.findFilePath(baseDir,repoDir).value
-    ])
-
-  conf.networkParams.genesis.alloc[recipient] = GenesisAccount(
-    code: contractCode
+  var conf = makeConfig(
+    @["--custom-network:" & genesisFile.findFilePath(baseDir, repoDir).value]
   )
+
+  conf.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
 
   if envFork >= MergeFork:
     conf.networkParams.config.mergeForkBlock = Opt.some(0'u64)
@@ -106,11 +123,8 @@ proc initEnv(envFork: HardFork): TestEnv =
     conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
 
   let
-    com = CommonRef.new(
-      newCoreDbRef DefaultDbMemory,
-      conf.networkId,
-      conf.networkParams
-    )
+    com =
+      CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
     chain = newForkedChain(com, com.genesisHeader)
 
   result = TestEnv(
@@ -120,7 +134,7 @@ proc initEnv(envFork: HardFork): TestEnv =
     xp: TxPoolRef.new(com),
     vaultKey: privKey(vaultKeyHex),
     chainId: conf.networkParams.config.chainId,
-    nonce: 0'u64
+    nonce: 0'u64,
   )
 
 const
@@ -129,8 +143,7 @@ const
   prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
 
 proc runTxPoolPosTest() =
-  var
-    env = initEnv(MergeFork)
+  var env = initEnv(MergeFork)
 
   var
     tx = env.makeTx(recipient, amount)
@@ -159,10 +172,7 @@ proc runTxPoolPosTest() =
         return
 
       blk = r.get.blk
-      body = BlockBody(
-        transactions: blk.txs,
-        uncles: blk.uncles
-      )
+      body = BlockBody(transactions: blk.txs, uncles: blk.uncles)
       check blk.txs.len == 1
 
     test "PoS persistBlocks":
@@ -170,24 +180,23 @@ proc runTxPoolPosTest() =
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
-      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      var sdb = LedgerRef.init(com.db)
       let val = sdb.getStorage(recipient, slot)
       let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      var sdb = LedgerRef.init(com.db)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
 proc runTxPoolBlobhashTest() =
-  var
-    env = initEnv(Cancun)
+  var env = initEnv(Cancun)
 
   var
-    tx1 = env.makeTx(recipient, amount)
-    tx2 = env.makeTx(recipient, amount)
+    tx1 = env.createPooledTransactionWithBlob(recipient, amount)
+    tx2 = env.createPooledTransactionWithBlob(recipient, amount)
     xp = env.xp
     com = env.com
     chain = env.chain
@@ -196,8 +205,8 @@ proc runTxPoolBlobhashTest() =
 
   suite "Test TxPool with blobhash block":
     test "TxPool jobCommit":
-      xp.add(PooledTransaction(tx: tx1))
-      xp.add(PooledTransaction(tx: tx2))
+      xp.add(tx1)
+      xp.add(tx2)
       check xp.nItems.total == 2
 
     test "TxPool ethBlock":
@@ -216,38 +225,41 @@ proc runTxPoolBlobhashTest() =
       body = BlockBody(
         transactions: blk.txs,
         uncles: blk.uncles,
-        withdrawals: Opt.some(newSeq[Withdrawal]())
+        withdrawals: Opt.some(newSeq[Withdrawal]()),
       )
       check blk.txs.len == 2
 
       let
         gasUsed1 = xp.vmState.receipts[0].cumulativeGasUsed
         gasUsed2 = xp.vmState.receipts[1].cumulativeGasUsed - gasUsed1
-        blockValue = gasUsed1.u256 * tx1.effectiveGasTip(blk.header.baseFeePerGas).u256 +
-          gasUsed2.u256 * tx2.effectiveGasTip(blk.header.baseFeePerGas).u256
+        totalBlobGasUsed = tx1.tx.getTotalBlobGas + tx2.tx.getTotalBlobGas
+        blockValue =
+          gasUsed1.u256 * tx1.tx.effectiveGasTip(blk.header.baseFeePerGas).u256 +
+          gasUsed2.u256 * tx2.tx.effectiveGasTip(blk.header.baseFeePerGas).u256
 
       check blockValue == bundle.blockValue
+      check totalBlobGasUsed == blk.header.blobGasUsed.get()
 
     test "Blobhash persistBlocks":
       let rr = chain.importBlock(EthBlock.init(blk.header, body))
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
-      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      var sdb = LedgerRef.init(com.db)
       let val = sdb.getStorage(recipient, slot)
       let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = LedgerRef.init(com.db, blk.header.stateRoot)
+      var sdb = LedgerRef.init(com.db)
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
     test "add tx with nonce too low":
       let
         tx3 = env.makeTx(recipient, amount)
-        tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce-2))
+        tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce - 2))
         xp = env.xp
 
       check xp.smartHead(blk.header, chain)
@@ -265,7 +277,7 @@ proc runTxHeadDelta(noisy = true) =
         xp = env.xp
         com = env.com
         chain = env.chain
-        head = com.db.getCanonicalHead()
+        head = com.db.getCanonicalHead().expect("canonical head exists")
         timestamp = head.timestamp
 
       const
@@ -275,20 +287,20 @@ proc runTxHeadDelta(noisy = true) =
       # setTraceLevel()
 
       block:
-        for n in 0..<numBlocks:
-
-          for tn in 0..<txPerblock:
+        for n in 0 ..< numBlocks:
+          for tn in 0 ..< txPerblock:
             let tx = env.makeTx(recipient, amount)
             xp.add(PooledTransaction(tx: tx))
 
-          noisy.say "***", "txDB",
+          noisy.say "***",
+            "txDB",
             &" n={n}",
             # pending/staged/packed : total/disposed
             &" stats={xp.nItems.pp}"
 
           timestamp = timestamp + 1
           com.pos.prevRandao = prevRandao
-          com.pos.timestamp  = timestamp
+          com.pos.timestamp = timestamp
           com.pos.feeRecipient = feeRecipient
 
           let r = xp.assembleBlock()
@@ -298,9 +310,7 @@ proc runTxHeadDelta(noisy = true) =
             return
 
           let blk = r.get.blk
-          let body = BlockBody(
-            transactions: blk.txs,
-            uncles: blk.uncles)
+          let body = BlockBody(transactions: blk.txs, uncles: blk.uncles)
 
           # Commit to block chain
           check chain.importBlock(EthBlock.init(blk.header, body)).isOk
@@ -317,9 +327,9 @@ proc runTxHeadDelta(noisy = true) =
           setErrorLevel() # in case we set trace level
 
       check com.syncCurrent == 10.BlockNumber
-      head = com.db.getBlockHeader(com.syncCurrent)
+      head = com.db.getBlockHeader(com.syncCurrent).expect("block header exists")
       let
-        sdb = LedgerRef.init(com.db, head.stateRoot)
+        sdb = LedgerRef.init(com.db)
         expected = u256(txPerblock * numBlocks) * amount
         balance = sdb.getBalance(recipient)
       check balance == expected
@@ -383,8 +393,9 @@ proc runGetBlockBodyTest() =
       check env.chain.forkChoice(currHash, currHash).isOk
 
 proc txPool2Main*() =
-  const
-    noisy = defined(debug)
+  const noisy = defined(debug)
+
+  loadKzgTrustedSetup().expect("Failed to load KZG trusted setup")
 
   setErrorLevel() # mute logger
 

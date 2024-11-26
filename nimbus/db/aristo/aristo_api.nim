@@ -57,27 +57,6 @@ type
       ## this leaf entry referres to a storage tree, this one will be deleted
       ## as well.
 
-  AristoApiDeleteGenericDataFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[bool,AristoError]
-        {.noRaise.}
-      ## Delete the leaf data entry addressed by the argument `path`.  The MPT
-      ## sub-tree the leaf data entry is subsumed under is passed as argument
-      ## `root` which must be greater than `VertexID(1)` and smaller than
-      ## `LEAST_FREE_VID`.
-      ##
-      ## The return value is `true` if the argument `path` deleted was the last
-      ## one and the tree does not exist anymore.
-
-  AristoApiDeleteGenericTreeFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
-
   AristoApiDeleteStorageDataFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
@@ -114,49 +93,27 @@ type
         {.noRaise.}
       ## Fetch an account record from the database indexed by `accPath`.
 
-  AristoApiFetchAccountStateFn* =
+  AristoApiFetchStateRootFn* =
     proc(db: AristoDbRef;
-         updateOk: bool;
         ): Result[Hash32,AristoError]
         {.noRaise.}
-      ## Fetch the Merkle hash of the account root. Force update if the
-      ## argument `updateOK` is set `true`.
-
-  AristoApiFetchGenericDataFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[seq[byte],AristoError]
-        {.noRaise.}
-      ## For a generic sub-tree starting at `root`, fetch the data record
-      ## indexed by `path`.
-
-  AristoApiFetchGenericStateFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         updateOk: bool;
-        ): Result[Hash32,AristoError]
-        {.noRaise.}
-      ## Fetch the Merkle hash of the argument `root`. Force update if the
-      ## argument `updateOK` is set `true`.
+      ## Fetch the Merkle hash of the account root.
 
   AristoApiFetchStorageDataFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
          stoPath: Hash32;
-        ): Result[Uint256,AristoError]
+        ): Result[UInt256,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, fetch the data
       ## record from the database indexed by `stoPath`.
 
-  AristoApiFetchStorageStateFn* =
+  AristoApiFetchStorageRootFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
-         updateOk: bool;
         ): Result[Hash32,AristoError]
         {.noRaise.}
-      ## Fetch the Merkle hash of the storage root related to `accPath`. Force
-      ## update if the argument `updateOK` is set `true`.
+      ## Fetch the Merkle hash of the storage root related to `accPath`.
 
   AristoApiFindTxFn* =
     proc(db: AristoDbRef;
@@ -245,15 +202,6 @@ type
       ## For an account record indexed by `accPath` query whether this record
       ## exists on the database.
 
-  AristoApiHasPathGenericFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[bool,AristoError]
-        {.noRaise.}
-      ## For a generic sub-tree starting at `root` and indexed by `path`,
-      ## mquery whether this record exists on the database.
-
   AristoApiHasPathStorageFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
@@ -306,16 +254,6 @@ type
       ## not on the database already or the value differend from `accRec`, and
       ## `false` otherwise.
 
-  AristoApiMergeGenericDataFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-         data: openArray[byte];
-        ): Result[bool,AristoError]
-        {.noRaise.}
-      ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
-      ## `root` greater than `VertexID(1)` and smaller than `LEAST_FREE_VID`.
-
   AristoApiMergeStorageDataFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
@@ -338,17 +276,6 @@ type
       ## a partial path will be returned follwed by a `false` value.
       ##
       ## Errors will only be returned for invalid paths.
-
-  AristoApiPartGenericTwig* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[(seq[seq[byte]],bool), AristoError]
-        {.noRaise.}
-      ## Variant of `partAccountTwig()`.
-      ##
-      ## Note: This function provides a functionality comparable to the
-      ## `getBranch()` function from `hexary.nim`
 
   AristoApiPartStorageTwig* =
     proc(db: AristoDbRef;
@@ -488,26 +415,21 @@ type
     commit*: AristoApiCommitFn
 
     deleteAccountRecord*: AristoApiDeleteAccountRecordFn
-    deleteGenericData*: AristoApiDeleteGenericDataFn
-    deleteGenericTree*: AristoApiDeleteGenericTreeFn
     deleteStorageData*: AristoApiDeleteStorageDataFn
     deleteStorageTree*: AristoApiDeleteStorageTreeFn
 
     fetchLastSavedState*: AristoApiFetchLastSavedStateFn
 
     fetchAccountRecord*: AristoApiFetchAccountRecordFn
-    fetchAccountState*: AristoApiFetchAccountStateFn
-    fetchGenericData*: AristoApiFetchGenericDataFn
-    fetchGenericState*: AristoApiFetchGenericStateFn
+    fetchStateRoot*: AristoApiFetchStateRootFn
     fetchStorageData*: AristoApiFetchStorageDataFn
-    fetchStorageState*: AristoApiFetchStorageStateFn
+    fetchStorageRoot*: AristoApiFetchStorageRootFn
 
     findTx*: AristoApiFindTxFn
     finish*: AristoApiFinishFn
     forget*: AristoApiForgetFn
     forkTx*: AristoApiForkTxFn
     hasPathAccount*: AristoApiHasPathAccountFn
-    hasPathGeneric*: AristoApiHasPathGenericFn
     hasPathStorage*: AristoApiHasPathStorageFn
     hasStorageData*: AristoApiHasStorageDataFn
 
@@ -516,11 +438,9 @@ type
     nForked*: AristoApiNForkedFn
 
     mergeAccountRecord*: AristoApiMergeAccountRecordFn
-    mergeGenericData*: AristoApiMergeGenericDataFn
     mergeStorageData*: AristoApiMergeStorageDataFn
 
     partAccountTwig*: AristoApiPartAccountTwig
-    partGenericTwig*: AristoApiPartGenericTwig
     partStorageTwig*: AristoApiPartStorageTwig
     partUntwigGeneric*: AristoApiPartUntwigGeneric
     partUntwigGenericOk*: AristoApiPartUntwigGenericOk
@@ -542,19 +462,15 @@ type
     AristoApiProfCommitFn               = "commit"
 
     AristoApiProfDeleteAccountRecordFn  = "deleteAccountRecord"
-    AristoApiProfDeleteGenericDataFn    = "deleteGnericData"
-    AristoApiProfDeleteGenericTreeFn    = "deleteGnericTree"
     AristoApiProfDeleteStorageDataFn    = "deleteStorageData"
     AristoApiProfDeleteStorageTreeFn    = "deleteStorageTree"
 
     AristoApiProfFetchLastSavedStateFn  = "fetchLastSavedState"
 
     AristoApiProfFetchAccountRecordFn   = "fetchAccountRecord"
-    AristoApiProfFetchAccountStateFn    = "fetchAccountState"
-    AristoApiProfFetchGenericDataFn     = "fetchGenericData"
-    AristoApiProfFetchGenericStateFn    = "fetchGenericState"
+    AristoApiProfFetchStateRootFn = "fetchStateRoot"
     AristoApiProfFetchStorageDataFn     = "fetchStorageData"
-    AristoApiProfFetchStorageStateFn    = "fetchStorageState"
+    AristoApiProfFetchStorageRootFn     = "fetchStorageRoot"
 
     AristoApiProfFindTxFn               = "findTx"
     AristoApiProfFinishFn               = "finish"
@@ -562,7 +478,6 @@ type
     AristoApiProfForkTxFn               = "forkTx"
 
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
-    AristoApiProfHasPathGenericFn       = "hasPathGeneric"
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
     AristoApiProfHasStorageDataFn       = "hasStorageData"
 
@@ -571,14 +486,10 @@ type
     AristoApiProfNForkedFn              = "nForked"
 
     AristoApiProfMergeAccountRecordFn   = "mergeAccountRecord"
-    AristoApiProfMergeGenericDataFn     = "mergeGenericData"
     AristoApiProfMergeStorageDataFn     = "mergeStorageData"
 
     AristoApiProfPartAccountTwigFn      = "partAccountTwig"
-    AristoApiProfPartGenericTwigFn      = "partGenericTwig"
     AristoApiProfPartStorageTwigFn      = "partStorageTwig"
-    AristoApiProfPartUntwigGenericFn    = "partUntwigGeneric"
-    AristoApiProfPartUntwigGenericOkFn  = "partUntwigGenericOk"
     AristoApiProfPartUntwigPathFn       = "partUntwigPath"
     AristoApiProfPartUntwigPathOkFn     = "partUntwigPathOk"
 
@@ -595,7 +506,6 @@ type
     AristoApiProfBeGetTuvFn             = "be/getTuv"
     AristoApiProfBeGetLstFn             = "be/getLst"
     AristoApiProfBePutVtxFn             = "be/putVtx"
-    AristoApiProfBePutKeyFn             = "be/putKey"
     AristoApiProfBePutTuvFn             = "be/putTuv"
     AristoApiProfBePutLstFn             = "be/putLst"
     AristoApiProfBePutEndFn             = "be/putEnd"
@@ -614,19 +524,15 @@ when AutoValidateApiHooks:
     doAssert not api.commit.isNil
 
     doAssert not api.deleteAccountRecord.isNil
-    doAssert not api.deleteGenericData.isNil
-    doAssert not api.deleteGenericTree.isNil
     doAssert not api.deleteStorageData.isNil
     doAssert not api.deleteStorageTree.isNil
 
     doAssert not api.fetchLastSavedState.isNil
 
     doAssert not api.fetchAccountRecord.isNil
-    doAssert not api.fetchAccountState.isNil
-    doAssert not api.fetchGenericData.isNil
-    doAssert not api.fetchGenericState.isNil
+    doAssert not api.fetchStateRoot.isNil
     doAssert not api.fetchStorageData.isNil
-    doAssert not api.fetchStorageState.isNil
+    doAssert not api.fetchStorageRoot.isNil
 
     doAssert not api.findTx.isNil
     doAssert not api.finish.isNil
@@ -634,7 +540,6 @@ when AutoValidateApiHooks:
     doAssert not api.forkTx.isNil
 
     doAssert not api.hasPathAccount.isNil
-    doAssert not api.hasPathGeneric.isNil
     doAssert not api.hasPathStorage.isNil
     doAssert not api.hasStorageData.isNil
 
@@ -643,14 +548,10 @@ when AutoValidateApiHooks:
     doAssert not api.nForked.isNil
 
     doAssert not api.mergeAccountRecord.isNil
-    doAssert not api.mergeGenericData.isNil
     doAssert not api.mergeStorageData.isNil
 
     doAssert not api.partAccountTwig.isNil
-    doAssert not api.partGenericTwig.isNil
     doAssert not api.partStorageTwig.isNil
-    doAssert not api.partUntwigGeneric.isNil
-    doAssert not api.partUntwigGenericOk.isNil
     doAssert not api.partUntwigPath.isNil
     doAssert not api.partUntwigPathOk.isNil
 
@@ -690,19 +591,15 @@ func init*(api: var AristoApiObj) =
   api.commit = commit
 
   api.deleteAccountRecord = deleteAccountRecord
-  api.deleteGenericData = deleteGenericData
-  api.deleteGenericTree = deleteGenericTree
   api.deleteStorageData = deleteStorageData
   api.deleteStorageTree = deleteStorageTree
 
   api.fetchLastSavedState = fetchLastSavedState
 
   api.fetchAccountRecord = fetchAccountRecord
-  api.fetchAccountState = fetchAccountState
-  api.fetchGenericData = fetchGenericData
-  api.fetchGenericState = fetchGenericState
+  api.fetchStateRoot = fetchStateRoot
   api.fetchStorageData = fetchStorageData
-  api.fetchStorageState = fetchStorageState
+  api.fetchStorageRoot = fetchStorageRoot
 
   api.findTx = findTx
   api.finish = finish
@@ -710,7 +607,6 @@ func init*(api: var AristoApiObj) =
   api.forkTx = forkTx
 
   api.hasPathAccount = hasPathAccount
-  api.hasPathGeneric = hasPathGeneric
   api.hasPathStorage = hasPathStorage
   api.hasStorageData = hasStorageData
 
@@ -719,14 +615,10 @@ func init*(api: var AristoApiObj) =
   api.nForked = nForked
 
   api.mergeAccountRecord = mergeAccountRecord
-  api.mergeGenericData = mergeGenericData
   api.mergeStorageData = mergeStorageData
 
   api.partAccountTwig = partAccountTwig
-  api.partGenericTwig = partGenericTwig
   api.partStorageTwig = partStorageTwig
-  api.partUntwigGeneric = partUntwigGeneric
-  api.partUntwigGenericOk = partUntwigGenericOk
   api.partUntwigPath = partUntwigPath
   api.partUntwigPathOk = partUntwigPathOk
 
@@ -749,18 +641,14 @@ func dup*(api: AristoApiRef): AristoApiRef =
     commit:               api.commit,
 
     deleteAccountRecord:  api.deleteAccountRecord,
-    deleteGenericData:    api.deleteGenericData,
-    deleteGenericTree:    api.deleteGenericTree,
     deleteStorageData:    api.deleteStorageData,
     deleteStorageTree:    api.deleteStorageTree,
 
     fetchLastSavedState:  api.fetchLastSavedState,
     fetchAccountRecord:   api.fetchAccountRecord,
-    fetchAccountState:    api.fetchAccountState,
-    fetchGenericData:     api.fetchGenericData,
-    fetchGenericState:    api.fetchGenericState,
+    fetchStateRoot: api.fetchStateRoot,
     fetchStorageData:     api.fetchStorageData,
-    fetchStorageState:    api.fetchStorageState,
+    fetchStorageRoot:     api.fetchStorageRoot,
 
     findTx:               api.findTx,
     finish:               api.finish,
@@ -768,7 +656,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
     forkTx:               api.forkTx,
 
     hasPathAccount:       api.hasPathAccount,
-    hasPathGeneric:       api.hasPathGeneric,
     hasPathStorage:       api.hasPathStorage,
     hasStorageData:       api.hasStorageData,
 
@@ -777,14 +664,10 @@ func dup*(api: AristoApiRef): AristoApiRef =
     nForked:              api.nForked,
 
     mergeAccountRecord:   api.mergeAccountRecord,
-    mergeGenericData:     api.mergeGenericData,
     mergeStorageData:     api.mergeStorageData,
 
     partAccountTwig:      api.partAccountTwig,
-    partGenericTwig:      api.partGenericTwig,
     partStorageTwig:      api.partStorageTwig,
-    partUntwigGeneric:    api.partUntwigGeneric,
-    partUntwigGenericOk:  api.partUntwigGenericOk,
     partUntwigPath:       api.partUntwigPath,
     partUntwigPathOk:     api.partUntwigPathOk,
 
@@ -835,16 +718,6 @@ func init*(
       AristoApiProfDeleteAccountRecordFn.profileRunner:
         result = api.deleteAccountRecord(a, b)
 
-  profApi.deleteGenericData =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfDeleteGenericDataFn.profileRunner:
-        result = api.deleteGenericData(a, b, c)
-
-  profApi.deleteGenericTree =
-    proc(a: AristoDbRef; b: VertexID): auto =
-      AristoApiProfDeleteGenericTreeFn.profileRunner:
-        result = api.deleteGenericTree(a, b)
-
   profApi.deleteStorageData =
     proc(a: AristoDbRef; b: Hash32, c: Hash32): auto =
       AristoApiProfDeleteStorageDataFn.profileRunner:
@@ -865,30 +738,20 @@ func init*(
       AristoApiProfFetchAccountRecordFn.profileRunner:
         result = api.fetchAccountRecord(a, b)
 
-  profApi.fetchAccountState =
+  profApi.fetchStateRoot =
     proc(a: AristoDbRef; b: bool): auto =
-      AristoApiProfFetchAccountStateFn.profileRunner:
-        result = api.fetchAccountState(a, b)
-
-  profApi.fetchGenericData =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfFetchGenericDataFn.profileRunner:
-        result = api.fetchGenericData(a, b, c)
-
-  profApi.fetchGenericState =
-    proc(a: AristoDbRef; b: VertexID; c: bool): auto =
-      AristoApiProfFetchGenericStateFn.profileRunner:
-        result = api.fetchGenericState(a, b, c)
+      AristoApiProfFetchStateRootFn.profileRunner:
+        result = api.fetchStateRoot(a, b)
 
   profApi.fetchStorageData =
     proc(a: AristoDbRef; b, stoPath: Hash32): auto =
       AristoApiProfFetchStorageDataFn.profileRunner:
         result = api.fetchStorageData(a, b, stoPath)
 
-  profApi.fetchStorageState =
-    proc(a: AristoDbRef; b: Hash32; c: bool): auto =
-      AristoApiProfFetchStorageStateFn.profileRunner:
-        result = api.fetchStorageState(a, b, c)
+  profApi.fetchStorageRoot =
+    proc(a: AristoDbRef; b: Hash32): auto =
+      AristoApiProfFetchStorageRootFn.profileRunner:
+        result = api.fetchStorageRoot(a, b)
 
   profApi.findTx =
     proc(a: AristoDbRef; b: RootedVertexID; c: HashKey): auto =
@@ -914,11 +777,6 @@ func init*(
     proc(a: AristoDbRef; b: Hash32): auto =
       AristoApiProfHasPathAccountFn.profileRunner:
         result = api.hasPathAccount(a, b)
-
-  profApi.hasPathGeneric =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfHasPathGenericFn.profileRunner:
-        result = api.hasPathGeneric(a, b, c)
 
   profApi.hasPathStorage =
     proc(a: AristoDbRef; b, c: Hash32): auto =
@@ -950,13 +808,8 @@ func init*(
       AristoApiProfMergeAccountRecordFn.profileRunner:
         result = api.mergeAccountRecord(a, b, c)
 
-  profApi.mergeGenericData =
-    proc(a: AristoDbRef; b: VertexID, c, d: openArray[byte]): auto =
-      AristoApiProfMergeGenericDataFn.profileRunner:
-        result = api.mergeGenericData(a, b, c, d)
-
   profApi.mergeStorageData =
-    proc(a: AristoDbRef; b, c: Hash32, d: Uint256): auto =
+    proc(a: AristoDbRef; b, c: Hash32, d: UInt256): auto =
       AristoApiProfMergeStorageDataFn.profileRunner:
         result = api.mergeStorageData(a, b, c, d)
 
@@ -965,25 +818,10 @@ func init*(
       AristoApiProfPartAccountTwigFn.profileRunner:
         result = api.partAccountTwig(a, b)
 
-  profApi.partGenericTwig =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfPartGenericTwigFn.profileRunner:
-        result = api.partGenericTwig(a, b, c)
-
   profApi.partStorageTwig =
     proc(a: AristoDbRef; b: Hash32; c: Hash32): auto =
       AristoApiProfPartStorageTwigFn.profileRunner:
         result = api.partStorageTwig(a, b, c)
-
-  profApi.partUntwigGeneric =
-    proc(a: openArray[seq[byte]]; b: Hash32; c: openArray[byte]): auto =
-      AristoApiProfPartUntwigGenericFn.profileRunner:
-        result = api.partUntwigGeneric(a, b, c)
-
-  profApi.partUntwigGenericOk =
-    proc(a: openArray[seq[byte]]; b:Hash32; c:openArray[byte]; d:Opt[seq[byte]]): auto =
-      AristoApiProfPartUntwigGenericOkFn.profileRunner:
-        result = api.partUntwigGenericOk(a, b, c, d)
 
   profApi.partUntwigPath =
     proc(a: openArray[seq[byte]]; b, c: Hash32): auto =
@@ -1064,12 +902,6 @@ func init*(
         AristoApiProfBePutVtxFn.profileRunner:
           be.putVtxFn(a, b, c)
     data.list[AristoApiProfBePutVtxFn.ord].masked = true
-
-    beDup.putKeyFn =
-      proc(a: PutHdlRef; b: RootedVertexID, c: HashKey) =
-        AristoApiProfBePutKeyFn.profileRunner:
-          be.putKeyFn(a, b, c)
-    data.list[AristoApiProfBePutKeyFn.ord].masked = true
 
     beDup.putTuvFn =
       proc(a: PutHdlRef; b: VertexID) =

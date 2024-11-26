@@ -55,8 +55,8 @@ type
     payloadIDHistory        : Table[string, Bytes8]
 
     # PoS Chain History Information
-    prevRandaoHistory*      : Table[uint64, Hash32]
-    executedPayloadHistory* : Table[uint64, ExecutionPayload]
+    prevRandaoHistory*      : Table[uint64, Bytes32]
+    executedPayloadHistory* : Table[uint64, ExecutableData]
     headHashHistory         : seq[Hash32]
 
     # Latest broadcasted data using the PoS Engine API
@@ -69,6 +69,7 @@ type
     latestPayloadAttributes*: PayloadAttributes
     latestExecutedPayload*  : ExecutableData
     latestForkchoice*       : ForkchoiceStateV1
+    latestExecutionRequests*: Opt[array[3, seq[byte]]]
 
     # Merge related
     firstPoSBlockNumber*      : Opt[uint64]
@@ -90,11 +91,7 @@ type
     onFinalizedBlockChange*    : proc(): bool {.gcsafe.}
 
 
-proc collectBlobHashes(list: openArray[Web3Tx]): seq[Hash32] =
-  for w3tx in list:
-    let tx = ethTx(w3tx)
-    for h in tx.versionedHashes:
-      result.add h
+
 
 func latestExecutableData*(cl: CLMocker): ExecutableData =
   ExecutableData(
@@ -102,6 +99,7 @@ func latestExecutableData*(cl: CLMocker): ExecutableData =
     beaconRoot : cl.latestPayloadAttributes.parentBeaconBlockRoot,
     attr       : cl.latestPayloadAttributes,
     versionedHashes: Opt.some(collectBlobHashes(cl.latestPayloadBuilt.transactions)),
+    executionRequests: cl.latestExecutionRequests,
   )
 
 func latestPayloadNumber*(h: Table[uint64, ExecutionPayload]): uint64 =
@@ -235,6 +233,10 @@ func isCancun(cl: CLMocker, timestamp: Quantity): bool =
   let ts = EthTime(timestamp.uint64)
   cl.com.isCancunOrLater(ts)
 
+func isPrague(cl: CLMocker, timestamp: Quantity): bool =
+  let ts = EthTime(timestamp.uint64)
+  cl.com.isPragueOrLater(ts)
+
 # Picks the next payload producer from the set of clients registered
 proc pickNextPayloadProducer(cl: CLMocker): bool =
   doAssert cl.clients.len != 0
@@ -269,12 +271,12 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
 
 proc generatePayloadAttributes(cl: CLMocker) =
   # Generate a random value for the PrevRandao field
-  let nextPrevRandao = Hash32.randomBytes()
+  let nextPrevRandao = Bytes32.randomBytes()
   let timestamp = Quantity cl.getNextBlockTimestamp.uint64
   cl.latestPayloadAttributes = PayloadAttributes(
     timestamp:             timestamp,
-    prevRandao:            FixedBytes[32] nextPrevRandao.data,
-    suggestedFeeRecipient: Address cl.nextFeeRecipient,
+    prevRandao:            nextPrevRandao,
+    suggestedFeeRecipient: cl.nextFeeRecipient,
   )
 
   if cl.isShanghai(timestamp):
@@ -284,6 +286,8 @@ proc generatePayloadAttributes(cl: CLMocker) =
     # Write a deterministic hash based on the block number
     let beaconRoot = timestampToBeaconRoot(timestamp)
     cl.latestPayloadAttributes.parentBeaconBlockRoot = Opt.some(beaconRoot)
+
+  #if cl.isPrague(timestamp):
 
   # Save random value
   let number = cl.latestHeader.number + 1
@@ -309,19 +313,21 @@ proc requestNextPayload(cl: CLMocker): bool =
       head=cl.latestForkchoice.headBlockHash
     return false
 
-  doAssert s.payLoadID.isSome
-  cl.nextPayloadID = s.payloadID.get()
+  doAssert s.payloadId.isSome
+  cl.nextPayloadID = s.payloadId.get()
   return true
 
 proc getPayload(cl: CLMocker, payloadId: Bytes8): Result[GetPayloadResponse, string] =
   let ts = cl.latestPayloadAttributes.timestamp
   let client = cl.nextBlockProducer.client
-  if cl.isCancun(ts):
-    client.getPayload(payloadId, Version.V3)
+  if cl.isPrague(ts):
+    client.getPayload(Version.V4, payloadId)
+  elif cl.isCancun(ts):
+    client.getPayload(Version.V3, payloadId)
   elif cl.isShanghai(ts):
-    client.getPayload(payloadId, Version.V2)
+    client.getPayload(Version.V2, payloadId)
   else:
-    client.getPayload(payloadId, Version.V1)
+    client.getPayload(Version.V1, payloadId)
 
 proc getNextPayload(cl: CLMocker): bool =
   let res = cl.getPayload(cl.nextPayloadID)
@@ -335,9 +341,11 @@ proc getNextPayload(cl: CLMocker): bool =
   cl.latestBlockValue = x.blockValue
   cl.latestBlobsBundle = x.blobsBundle
   cl.latestShouldOverrideBuilder = x.shouldOverrideBuilder
+  cl.latestExecutionRequests = x.executionRequests
 
-  let beaconRoot = cl.latestPayloadAttributes.parentBeaconblockRoot
-  let header = blockHeader(cl.latestPayloadBuilt, beaconRoot = beaconRoot)
+  let parentBeaconBlockRoot = cl.latestPayloadAttributes.parentBeaconBlockRoot
+  let requestsHash = calcRequestsHash(x.executionRequests)
+  let header = blockHeader(cl.latestPayloadBuilt, parentBeaconBlockRoot, requestsHash)
   let blockHash = header.blockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",
@@ -377,29 +385,9 @@ proc getNextPayload(cl: CLMocker): bool =
 
   return true
 
-func versionedHashes(payload: ExecutionPayload): seq[Hash32] =
-  result = newSeqOfCap[Hash32](payload.transactions.len)
-  for x in payload.transactions:
-    let tx = rlp.decode(distinctBase(x), Transaction)
-    for vs in tx.versionedHashes:
-      result.add vs
-
-proc broadcastNewPayload(cl: CLMocker,
-                         eng: EngineEnv,
-                         payload: ExecutionPayload): Result[PayloadStatusV1, string] =
-  case payload.version
-  of Version.V1: return eng.client.newPayloadV1(payload.V1)
-  of Version.V2: return eng.client.newPayloadV2(payload.V2)
-  of Version.V3: return eng.client.newPayloadV3(payload.V3,
-    versionedHashes(payload),
-    cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
-  of Version.V4: return eng.client.newPayloadV4(payload.V4,
-    versionedHashes(payload),
-    cl.latestPayloadAttributes.parentBeaconBlockRoot.get)
-
 proc broadcastNextNewPayload(cl: CLMocker): bool =
   for eng in cl.clients:
-    let res = cl.broadcastNewPayload(eng, cl.latestPayloadBuilt)
+    let res = eng.newPayload(cl.latestExecutedPayload)
     if res.isErr:
       error "CLMocker: broadcastNewPayload Error", msg=res.error
       return false
@@ -449,21 +437,19 @@ proc broadcastNextNewPayload(cl: CLMocker): bool =
 
   cl.latestExecutedPayload = cl.latestExecutableData()
   let number = uint64 cl.latestPayloadBuilt.blockNumber
-  cl.executedPayloadHistory[number] = cl.latestPayloadBuilt
+  cl.executedPayloadHistory[number] = cl.latestExecutedPayload
   return true
 
 proc broadcastForkchoiceUpdated(cl: CLMocker,
                                 eng: EngineEnv,
-                                version: Version,
                                 update: ForkchoiceStateV1):
                                   Result[ForkchoiceUpdatedResponse, string] =
+  let version = eng.version(cl.latestExecutedPayload.basePayload.timestamp)
   eng.client.forkchoiceUpdated(version, update, Opt.none(PayloadAttributes))
 
-proc broadcastForkchoiceUpdated*(cl: CLMocker,
-                                 version: Version,
-                                 update: ForkchoiceStateV1): bool =
+proc broadcastLatestForkchoice*(cl: CLMocker): bool =
   for eng in cl.clients:
-    let res = cl.broadcastForkchoiceUpdated(eng, version, update)
+    let res = cl.broadcastForkchoiceUpdated(eng, cl.latestForkchoice)
     if res.isErr:
       error "CLMocker: broadcastForkchoiceUpdated Error", msg=res.error
       return false
@@ -486,16 +472,12 @@ proc broadcastForkchoiceUpdated*(cl: CLMocker,
         msg=s.payloadStatus.validationError.get
       return false
 
-    if s.payloadID.isSome:
+    if s.payloadId.isSome:
       error "CLMocker: Expected empty PayloadID",
-        msg=s.payloadID.get.toHex
+        msg=s.payloadId.get.toHex
       return false
 
   return true
-
-proc broadcastLatestForkchoice(cl: CLMocker): bool =
-  let version = cl.latestExecutedPayload.version
-  cl.broadcastForkchoiceUpdated(version, cl.latestForkchoice)
 
 func w3Address(x: int): Address =
   var res: array[20, byte]
@@ -653,7 +635,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     return false
 
   # mixHash == prevRandao
-  if newHeader.mixHash != Bytes32 cl.prevRandaoHistory[cl.latestHeadNumber]:
+  if newHeader.mixHash != cl.prevRandaoHistory[cl.latestHeadNumber]:
     error "CLMocker: Client produced a new header with incorrect mixHash",
       get = newHeader.mixHash,
       expect = cl.prevRandaoHistory[cl.latestHeadNumber]

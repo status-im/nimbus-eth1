@@ -37,15 +37,20 @@ method withMainFork(cs: UniquePayloadIDTest, fork: EngineFork): BaseSpec =
 method getName(cs: UniquePayloadIDTest): string =
   "Unique Payload ID - " & $cs.fieldModification
 
-func plusOne(x: FixedBytes[32]): FixedBytes[32] =
-  var z = x.bytes
+func plusOne[T:Bytes32|Hash32|Address](x: T): T =
+  var z = x.data
   z[0] = z[0] + 1.byte
-  FixedBytes[32](z)
+  T(z)
 
-func plusOne(x: Address): Address =
-  var z = distinctBase x
-  z[0] = z[0] + 1.byte
-  Address(z)
+#func plusOne(x: Hash32): Hash32 =
+#  var z = x.data
+#  z[0] = z[0] + 1.byte
+#  Hash32(z)
+#
+#func plusOne(x: Address): Address =
+#  var z = distinctBase x
+#  z[0] = z[0] + 1.byte
+#  Address(z)
 
 # Check that the payload id returned on a forkchoiceUpdated call is different
 # when the attributes change
@@ -106,10 +111,10 @@ method execute(cs: UniquePayloadIDTest, env: TestEnv): bool =
         attr.parentBeaconBlockRoot = Opt.some(newBeaconRoot)
 
       # Request the payload with the modified attributes and add the payload ID to the list of known IDs
-      let version = env.engine.version(env.clMock.latestHeader.timestamp)
-      let r = env.engine.client.forkchoiceUpdated(version, env.clMock.latestForkchoice, Opt.some(attr))
+      let timeVer = env.clMock.latestHeader.timestamp
+      let r = env.engine.forkchoiceUpdated(timeVer, env.clMock.latestForkchoice, attr)
       r.expectNoError()
-      testCond env.clMock.addPayloadID(env.engine, r.get.payloadID.get)
+      testCond env.clMock.addPayloadID(env.engine, r.get.payloadId.get)
       return true
   ))
   testCond pbRes

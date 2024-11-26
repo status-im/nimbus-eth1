@@ -12,40 +12,37 @@
 import
   ./web3_eth_conv,
   web3/execution_types,
-  ../utils/utils,
-  eth/common/eth_types_rlp
+  eth/common/eth_types_rlp,
+  eth/trie/ordered_trie
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func wdRoot(list: openArray[WithdrawalV1]): Hash32
-             {.gcsafe, raises:[].} =
-  {.noSideEffect.}:
-    calcWithdrawalsRoot(ethWithdrawals list)
+template append(w: var RlpWriter, typedTransaction: TypedTransaction) =
+  w.appendRawBytes(distinctBase typedTransaction)
 
-func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[Hash32]
-             {.gcsafe, raises:[].} =
-  {.noSideEffect.}:
-    if x.isNone: Opt.none(Hash32)
-    else: Opt.some(wdRoot x.get)
+template append(w: var RlpWriter, withdrawalV1: WithdrawalV1) =
+  w.append blocks.Withdrawal(
+    index: distinctBase(withdrawalV1.index),
+    validatorIndex: distinctBase(withdrawalV1.validatorIndex),
+    address: withdrawalV1.address,
+    amount: distinctBase(withdrawalV1.amount),
+  )
 
-func txRoot(list: openArray[Web3Tx]): Hash32
-             {.gcsafe, raises:[RlpError].} =
-  {.noSideEffect.}:
-    calcTxRoot(ethTxs(list))
+func wdRoot(list: openArray[WithdrawalV1]): Hash32 =
+  orderedTrieRoot(list)
 
-func requestsRoot(p: ExecutionPayload): Opt[Hash32]
-             {.gcsafe, raises:[].} =
-  {.noSideEffect.}:
-    let reqs = ethRequests(p)
-    if reqs.isNone: Opt.none(Hash32)
-    else: Opt.some(calcRequestsRoot reqs.get)
+func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[Hash32] =
+  if x.isNone: Opt.none(Hash32)
+  else: Opt.some(wdRoot x.get)
+
+func txRoot(list: openArray[Web3Tx]): Hash32 =
+  orderedTrieRoot(list)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-{.push gcsafe, raises:[].}
 
 func executionPayload*(blk: Block): ExecutionPayload =
   ExecutionPayload(
@@ -66,9 +63,6 @@ func executionPayload*(blk: Block): ExecutionPayload =
     withdrawals  : w3Withdrawals blk.withdrawals,
     blobGasUsed  : w3Qty blk.header.blobGasUsed,
     excessBlobGas: w3Qty blk.header.excessBlobGas,
-    depositRequests: w3DepositRequests blk.requests,
-    withdrawalRequests: w3WithdrawalRequests blk.requests,
-    consolidationRequests: w3ConsolidationRequests blk.requests,
   )
 
 func executionPayloadV1V2*(blk: Block): ExecutionPayloadV1OrV2 =
@@ -91,8 +85,9 @@ func executionPayloadV1V2*(blk: Block): ExecutionPayloadV1OrV2 =
   )
 
 func blockHeader*(p: ExecutionPayload,
-                  beaconRoot: Opt[Hash32]):
-                    Header {.gcsafe, raises:[RlpError].} =
+                  parentBeaconBlockRoot: Opt[Hash32],
+                  requestsHash: Opt[Hash32]):
+                    Header =
   Header(
     parentHash     : p.parentHash,
     ommersHash     : EMPTY_UNCLE_HASH,
@@ -113,8 +108,8 @@ func blockHeader*(p: ExecutionPayload,
     withdrawalsRoot: wdRoot p.withdrawals,
     blobGasUsed    : u64(p.blobGasUsed),
     excessBlobGas  : u64(p.excessBlobGas),
-    parentBeaconBlockRoot: beaconRoot,
-    requestsHash   : requestsRoot(p),
+    parentBeaconBlockRoot: parentBeaconBlockRoot,
+    requestsHash   : requestsHash,
   )
 
 func blockBody*(p: ExecutionPayload):
@@ -123,16 +118,15 @@ func blockBody*(p: ExecutionPayload):
     uncles      : @[],
     transactions: ethTxs p.transactions,
     withdrawals : ethWithdrawals p.withdrawals,
-    requests    : ethRequests(p),
   )
 
 func ethBlock*(p: ExecutionPayload,
-               beaconRoot: Opt[Hash32]):
+               parentBeaconBlockRoot: Opt[Hash32],
+               requestsHash: Opt[Hash32]):
                  Block {.gcsafe, raises:[RlpError].} =
   Block(
-    header      : blockHeader(p, beaconRoot),
+    header      : blockHeader(p, parentBeaconBlockRoot, requestsHash),
     uncles      : @[],
     transactions: ethTxs p.transactions,
     withdrawals : ethWithdrawals p.withdrawals,
-    requests    : ethRequests(p),
   )

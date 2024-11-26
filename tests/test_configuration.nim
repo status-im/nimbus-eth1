@@ -9,12 +9,12 @@
 # according to those terms.
 
 import
-  std/[os],
+  std/[os, strutils],
   pkg/[unittest2],
   eth/common/[base, keys],
   stew/byteutils,
   ../nimbus/config,
-  ../nimbus/common/[chain_config, context],
+  ../nimbus/common/[chain_config, context, manager],
   ./test_helpers
 
 proc configurationMain*() =
@@ -127,15 +127,6 @@ proc configurationMain*() =
       let cc = makeConfig(@["--ws-api:eth,debug"])
       let cx = cc.getWsFlags()
       check { RpcFlag.Eth, RpcFlag.Debug } == cx
-
-    test "protocols":
-      let conf = makeTestConfig()
-      let flags = conf.getProtocolFlags()
-      check ProtocolFlag.Eth in flags
-
-      let bb = makeConfig(@["--protocols:eth"])
-      let bx = bb.getProtocolFlags()
-      check ProtocolFlag.Eth in bx
 
     test "bootstrap-node and bootstrap-file":
       let conf = makeTestConfig()
@@ -294,6 +285,18 @@ proc configurationMain*() =
       let conf = makeConfig(@["--key-store:banana"])
       check conf.dataDir.string == defaultDataDir()
       check conf.keyStore.string == "banana"
+
+    test "loadKeystores missing address":
+      var am = AccountsManager.init()
+      let res = am.loadKeystores("tests/invalid_keystore/missingaddress")
+      check res.isErr
+      check res.error.find("no 'address' field in keystore data:") == 0
+
+    test "loadKeystores not an object":
+      var am = AccountsManager.init()
+      let res = am.loadKeystores("tests/invalid_keystore/notobject")
+      check res.isErr
+      check res.error.find("expect json object of keystore data:") == 0
 
 when isMainModule:
   configurationMain()

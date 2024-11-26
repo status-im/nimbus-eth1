@@ -52,7 +52,7 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block): Block =
       amount: 1,
     )
 
-  let ledger = LedgerRef.init(com.db, parent.stateRoot)
+  let ledger = LedgerRef.init(com.db)
   for wd in wds:
     ledger.addBalance(wd.address, wd.weiAmount)
 
@@ -69,7 +69,7 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block): Block =
     difficulty : 0.u256,
     timestamp  : parent.timestamp + 1,
     gasLimit   : parent.gasLimit,
-    stateRoot  : ledger.state,
+    stateRoot  : ledger.getStateRoot(),
     transactionsRoot     : parent.txRoot,
     baseFeePerGas  : parent.baseFeePerGas,
     receiptsRoot   : parent.receiptsRoot,
@@ -88,14 +88,15 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block, extraData: b
   blk
 
 proc headHash(c: CommonRef): Hash32 =
-  c.db.getCanonicalHead().blockHash
+  c.db.getCanonicalHead().expect("canonical head exists").blockHash
 
 func blockHash(x: Block): Hash32 =
   x.header.blockHash
 
 proc wdWritten(com: CommonRef, blk: Block): int =
   if blk.header.withdrawalsRoot.isSome:
-    com.db.getWithdrawals(blk.header.withdrawalsRoot.get).len
+    com.db.getWithdrawals(blk.header.withdrawalsRoot.get).
+      expect("withdrawals exists").len
   else:
     0
 
@@ -418,6 +419,22 @@ proc forkedChainMain*() =
       # from cache
       check chain.headerByNumber(5).expect("OK").number == 5
       check chain.headerByNumber(5).expect("OK").blockHash == blk5.blockHash
+
+    test "Import after Replay Segment":
+      let com = env.newCom()
+      var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
+
+      check chain.importBlock(blk1).isOk
+      check chain.importBlock(blk2).isOk
+      check chain.importBlock(blk3).isOk
+      check chain.importBlock(blk4).isOk
+      check chain.importBlock(blk5).isOk
+
+      chain.replaySegment(blk2.header.blockHash)
+      chain.replaySegment(blk5.header.blockHash)
+
+      check chain.importBlock(blk6).isOk
+      check chain.importBlock(blk7).isOk
 
 when isMainModule:
   forkedChainMain()

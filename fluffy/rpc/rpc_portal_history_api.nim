@@ -81,9 +81,13 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
         raise invalidKeyErr()
+      maybeContent = p.getLocalContent(key, contentId)
 
-      contentResult = (await p.contentLookup(key, contentId)).valueOr:
-        raise contentNotFoundErr()
+    if maybeContent.isSome():
+      return ContentInfo(content: maybeContent.get().to0xHex(), utpTransfer: false)
+
+    let contentResult = (await p.contentLookup(key, contentId)).valueOr:
+      raise contentNotFoundErr()
 
     return ContentInfo(
       content: contentResult.content.to0xHex(), utpTransfer: contentResult.utpTransfer
@@ -96,8 +100,12 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       key = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(key).valueOr:
         raise invalidKeyErr()
+      maybeContent = p.getLocalContent(key, contentId)
 
-      res = await p.traceContentLookup(key, contentId)
+    if maybeContent.isSome():
+      return TraceContentLookupResult(content: maybeContent, utpTransfer: false)
+
+    let res = await p.traceContentLookup(key, contentId)
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.

@@ -90,12 +90,12 @@ func pp*(elapsed: Duration): string =
       result = elapsed.ppMins
     elif 0 < times.inSeconds(elapsed):
       result = elapsed.ppSecs
-    elif 0 < times.inMilliSeconds(elapsed):
+    elif 0 < times.inMilliseconds(elapsed):
       result = elapsed.ppMs
-    elif 0 < times.inMicroSeconds(elapsed):
+    elif 0 < times.inMicroseconds(elapsed):
       result = elapsed.ppUs
     else:
-      result = $elapsed.inNanoSeconds & "ns"
+      result = $elapsed.inNanoseconds & "ns"
   except ValueError:
     result = $elapsed
 

@@ -20,7 +20,6 @@ import
   ../../[aristo_blobify, aristo_desc],
   ../init_common,
   ./rdb_desc,
-  metrics,
   std/concurrency/atomics
 
 const
@@ -34,48 +33,52 @@ when extraTraceMessages:
   logScope:
     topics = "aristo-rocksdb"
 
-type
-  RdbVtxLruCounter = ref object of Counter
-  RdbKeyLruCounter = ref object of Counter
-
-var
-  rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
-    "aristo_rdb_vtx_lru_total",
-    "Vertex LRU lookup (hit/miss, world/account, branch/leaf)",
-    labels = ["state", "vtype", "hit"],
-  )
-  rdbKeyLruStatsMetric {.used.} = RdbKeyLruCounter.newCollector(
-    "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
-  )
-
-method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
-  let timestamp = collector.now()
-
-  # We don't care about synchronization between each type of metric or between
-  # the metrics thread and others since small differences like this don't matter
-  for state in RdbStateType:
-    for vtype in VertexType:
+when defined(metrics):
+  import
+    metrics
+  
+  type
+    RdbVtxLruCounter = ref object of Counter
+    RdbKeyLruCounter = ref object of Counter
+  
+  var
+    rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
+      "aristo_rdb_vtx_lru_total",
+      "Vertex LRU lookup (hit/miss, world/account, branch/leaf)",
+      labels = ["state", "vtype", "hit"],
+    )
+    rdbKeyLruStatsMetric {.used.} = RdbKeyLruCounter.newCollector(
+      "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
+    )
+  
+  method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
+    let timestamp = collector.now()
+  
+    # We don't care about synchronization between each type of metric or between
+    # the metrics thread and others since small differences like this don't matter
+    for state in RdbStateType:
+      for vtype in VertexType:
+        for hit in [false, true]:
+          output(
+            name = "aristo_rdb_vtx_lru_total",
+            value = float64(rdbVtxLruStats[state][vtype].get(hit)),
+            labels = ["state", "vtype", "hit"],
+            labelValues = [$state, $vtype, $ord(hit)],
+            timestamp = timestamp,
+          )
+  
+  method collect*(collector: RdbKeyLruCounter, output: MetricHandler) =
+    let timestamp = collector.now()
+  
+    for state in RdbStateType:
       for hit in [false, true]:
         output(
-          name = "aristo_rdb_vtx_lru_total",
-          value = float64(rdbVtxLruStats[state][vtype].get(hit)),
-          labels = ["state", "vtype", "hit"],
-          labelValues = [$state, $vtype, $ord(hit)],
+          name = "aristo_rdb_key_lru_total",
+          value = float64(rdbKeyLruStats[state].get(hit)),
+          labels = ["state", "hit"],
+          labelValues = [$state, $ord(hit)],
           timestamp = timestamp,
         )
-
-method collect*(collector: RdbKeyLruCounter, output: MetricHandler) =
-  let timestamp = collector.now()
-
-  for state in RdbStateType:
-    for hit in [false, true]:
-      output(
-        name = "aristo_rdb_key_lru_total",
-        value = float64(rdbKeyLruStats[state].get(hit)),
-        labels = ["state", "hit"],
-        labelValues = [$state, $ord(hit)],
-        timestamp = timestamp,
-      )
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -103,7 +106,7 @@ proc getKey*(
       ): Result[HashKey,(AristoError,string)] =
   # Try LRU cache first
   var rc = rdb.rdKeyLru.get(rvid.vid)
-  if rc.isOK:
+  if rc.isOk:
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
     return ok(move(rc.value))
 
@@ -113,19 +116,17 @@ proc getKey*(
   # A threadvar is used to avoid allocating an environment for onData
   var res{.threadvar.}: Opt[HashKey]
   let onData = proc(data: openArray[byte]) =
-    res = HashKey.fromBytes(data)
+    res = data.deblobify(HashKey)
 
-  let gotData = rdb.keyCol.get(rvid.blobify().data(), onData).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
      const errSym = RdbBeDriverGetKeyError
      when extraTraceMessages:
        trace logTxt "getKey", rvid, error=errSym, info=error
      return err((errSym,error))
 
   # Correct result if needed
-  if not gotData:
+  if not gotData or res.isNone():
     res.ok(VOID_HASH_KEY)
-  elif res.isErr():
-    return err((RdbHashKeyExpected,"")) # Parsing failed
 
   # Update cache and return
   rdb.rdKeyLru.put(rvid.vid, res.value())
@@ -144,7 +145,7 @@ proc getVtx*(
     else:
       rdb.rdVtxLru.get(rvid.vid)
 
-  if rc.isOK:
+  if rc.isOk:
     rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
     return ok(move(rc.value))
 

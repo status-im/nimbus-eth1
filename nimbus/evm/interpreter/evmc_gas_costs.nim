@@ -57,9 +57,8 @@ func storageCostSpec(): array[EVMFork, StorageCostSpec] {.compileTime.} =
     netCost: true, warmAccess: WarmStorageReadCost, sset: 20000,
       reset: 5000 - ColdSloadCost, clear: 4800)
 
-  result[FkParis]    = result[FkLondon]
-  result[FkShanghai] = result[FkLondon]
-  result[FkCancun]   = result[FkLondon]
+  for fork in FkParis..EVMFork.high:
+    result[fork]   = result[FkLondon]
 
 proc legacySStoreCost(e: var SstoreCosts,
                       c: StorageCostSpec) {.compileTime.} =

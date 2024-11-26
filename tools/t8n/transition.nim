@@ -64,16 +64,14 @@ proc dispatch(dis: var Dispatch, baseDir, fName, name: string, obj: JsonNode) =
                  fName
     writeFile(path, obj.pretty)
 
-proc dispatchOutput(ctx: var TransContext, conf: T8NConf, res: ExecOutput) =
+proc dispatchOutput(ctx: TransContext, conf: T8NConf, res: ExecOutput) =
   var dis = Dispatch.init()
   createDir(conf.outputBaseDir)
 
   dis.dispatch(conf.outputBaseDir, conf.outputAlloc, "alloc", @@(res.alloc))
   dis.dispatch(conf.outputBaseDir, conf.outputResult, "result", @@(res.result))
 
-  let chainId = conf.stateChainId.ChainId
-  let txList = ctx.txList(chainId)
-
+  let txList = ctx.filterGoodTransactions()
   let body = @@(rlp.encode(txList))
   dis.dispatch(conf.outputBaseDir, conf.outputBody, "body", body)
 
@@ -152,7 +150,7 @@ proc defaultTraceStreamFilename(conf: T8NConf,
                                 txIndex: int,
                                 txHash: Hash32): (string, string) =
   let
-    txHash = "0x" & toLowerAscii($txHash)
+    txHash = toLowerAscii($txHash)
     baseDir = if conf.outputBaseDir.len > 0:
                 conf.outputBaseDir
               else:
@@ -169,8 +167,9 @@ proc traceToFileStream(path: string, txIndex: int): Stream =
   # replace whatever `.ext` to `-${txIndex}.jsonl`
   let
     file = path.splitFile
-    fName = "$1/$2-$3.jsonl" % [file.dir, file.name, $txIndex]
-  createDir(file.dir)
+    folder = if file.dir.len == 0: "." else: file.dir
+    fName = "$1/$2-$3.jsonl" % [folder, file.name, $txIndex]
+  if file.dir.len > 0: createDir(file.dir)
   newFileStream(fName, fmWrite)
 
 proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMState): bool =
@@ -216,16 +215,14 @@ proc closeTrace(vmState: BaseVMState, closeStream: bool) =
   if tracer.isNil.not and closeStream:
     tracer.close()
 
-proc exec(ctx: var TransContext,
+proc exec(ctx: TransContext,
           vmState: BaseVMState,
           stateReward: Option[UInt256],
           header: Header,
           conf: T8NConf): ExecOutput =
 
-  let txList = ctx.parseTxs(vmState.com.chainId)
-
   var
-    receipts = newSeqOfCap[TxReceipt](txList.len)
+    receipts = newSeqOfCap[TxReceipt](ctx.txList.len)
     rejected = newSeq[RejectedTx]()
     includedTx = newSeq[Transaction]()
 
@@ -234,7 +231,7 @@ proc exec(ctx: var TransContext,
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
-  vmState.receipts = newSeqOfCap[Receipt](txList.len)
+  vmState.receipts = newSeqOfCap[Receipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
@@ -253,7 +250,7 @@ proc exec(ctx: var TransContext,
     vmState.processParentBlockHash(prevHash).isOkOr:
       raise newError(ErrorConfig, error)
 
-  for txIndex, txRes in txList:
+  for txIndex, txRes in ctx.txList:
     if txRes.isErr:
       rejected.add RejectedTx(
         index: txIndex,
@@ -321,18 +318,18 @@ proc exec(ctx: var TransContext,
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
 
   var
-    withdrawalReqs: seq[Request]
-    consolidationReqs: seq[Request]
+    withdrawalReqs: seq[byte]
+    consolidationReqs: seq[byte]
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
-    # Execute EIP-7002 and EIP-7251 before calculating rootHash
+    # Execute EIP-7002 and EIP-7251 before calculating stateRoot
     withdrawalReqs = processDequeueWithdrawalRequests(vmState)
     consolidationReqs = processDequeueConsolidationRequests(vmState)
 
   let stateDB = vmState.stateDB
   stateDB.postState(result.alloc)
   result.result = ExecutionResult(
-    stateRoot   : stateDB.rootHash,
+    stateRoot   : stateDB.getStateRoot(),
     txRoot      : includedTx.calcTxRoot,
     receiptsRoot: calcReceiptsRoot(vmState.receipts),
     logsHash    : calcLogsHash(vmState.receipts),
@@ -358,25 +355,12 @@ proc exec(ctx: var TransContext,
     var allLogs: seq[Log]
     for rec in result.result.receipts:
       allLogs.add rec.logs
-    let reqs = parseDepositLogs(allLogs).valueOr:
-      raise newError(ErrorEVM, error)
-    result.result.requestsRoot = Opt.some(calcRequestsRoot(reqs))
-    var deposits: seq[DepositRequest]
-    for req in reqs:
-      # all requests produced by parseDepositLogs
-      # should be DepositRequest
-      deposits.add req.deposit
-    result.result.depositRequests = Opt.some(deposits)
-
-    var withdrawals: seq[WithdrawalRequest]
-    for req in withdrawalReqs:
-      withdrawals.add req.withdrawal
-    result.result.withdrawalRequests = Opt.some(withdrawals)
-
-    var consolidations: seq[ConsolidationRequest]
-    for req in consolidationReqs:
-      consolidations.add req.consolidation
-    result.result.consolidationRequests = Opt.some(consolidations)
+    let
+      depositReqs = parseDepositLogs(allLogs, vmState.com.depositContractAddress).valueOr:
+        raise newError(ErrorEVM, error)
+      requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
+    result.result.requestsHash = Opt.some(requestsHash)
+    result.result.requests = Opt.some([depositReqs, withdrawalReqs, consolidationReqs])
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -442,11 +426,6 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
       raise newError(ErrorConfig, "either one of input is needeed(alloc, txs, or env)")
 
-    let config = parseChainConfig(conf.stateFork)
-    config.chainId = conf.stateChainId.ChainId
-
-    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
-
     # We need to load three things: alloc, env and transactions.
     # May be either in stdin input or in files.
 
@@ -456,20 +435,17 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       ctx.parseInputFromStdin()
 
     if conf.inputAlloc != stdinSelector and conf.inputAlloc.len > 0:
-      let n = json.parseFile(conf.inputAlloc)
-      ctx.parseAlloc(n)
+      ctx.parseAlloc(conf.inputAlloc)
 
     if conf.inputEnv != stdinSelector and conf.inputEnv.len > 0:
-      let n = json.parseFile(conf.inputEnv)
-      ctx.parseEnv(n)
+      ctx.parseEnv(conf.inputEnv)
 
     if conf.inputTxs != stdinSelector and conf.inputTxs.len > 0:
       if conf.inputTxs.endsWith(".rlp"):
         let data = readFile(conf.inputTxs)
-        ctx.parseTxsRlp(data.strip(chars={'"'}))
+        ctx.parseTxsRlp(data.strip(chars={'"', ' ', '\r', '\n', '\t'}))
       else:
-        let n = json.parseFile(conf.inputTxs)
-        ctx.parseTxs(n)
+        ctx.parseTxsJson(conf.inputTxs)
 
     let uncleHash = if ctx.env.parentUncleHash == default(Hash32):
                       EMPTY_UNCLE_HASH
@@ -485,6 +461,12 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       blobGasUsed: ctx.env.parentBlobGasUsed,
       excessBlobGas: ctx.env.parentExcessBlobGas,
     )
+
+    let config = parseChainConfig(conf.stateFork)
+    config.depositContractAddress = ctx.env.depositContractAddress
+    config.chainId = conf.stateChainId.ChainId
+
+    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
 
     # Sanity check, to not `panic` in state_transition
     if com.isLondonOrLater(ctx.env.currentNumber):
@@ -560,6 +542,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       db.setupAlloc(ctx.alloc)
       db.persist(clearEmptyAccount = false)
 
+    ctx.parseTxs(com.chainId)
     let res = exec(ctx, vmState, conf.stateReward, header, conf)
 
     if vmState.hashError.len > 0:

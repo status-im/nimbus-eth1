@@ -63,8 +63,8 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     await nimbus.networkLoop.cancelAndWait()
   if nimbus.peerManager.isNil.not:
     await nimbus.peerManager.stop()
-  #if nimbus.snapSyncRef.isNil.not:
-  #  nimbus.snapSyncRef.stop()
+  if nimbus.beaconSyncRef.isNil.not:
+    nimbus.beaconSyncRef.stop()
   if nimbus.metricsServer.isNil.not:
     await nimbus.metricsServer.stop()
 

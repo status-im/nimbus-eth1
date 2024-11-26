@@ -40,7 +40,7 @@ proc bless*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
     ctx.validate
   ctx
 
-proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbMptRef | CoreDbTxRef): auto =
+proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbTxRef): auto =
   dsc.ctx = ctx
   when CoreDbAutoValidateDescriptors:
     dsc.validate
@@ -58,13 +58,13 @@ template ctx*(kvt: CoreDbKvtRef): CoreDbCtxRef =
 
 # ---------------
 
-template call*(api: KvtApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(api: KvtApiRef; fn: untyped; args: varargs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
   else:
     fn(args)
 
-template call*(kvt: CoreDbKvtRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(kvt: CoreDbKvtRef; fn: untyped; args: varargs[untyped]): untyped =
   CoreDbCtxRef(kvt).parent.kvtApi.call(fn, args)
 
 # ---------------
@@ -80,7 +80,7 @@ func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
 # Public Aristo helpers
 # ------------------------------------------------------------------------------
 
-template mpt*(dsc: CoreDbAccRef | CoreDbMptRef): AristoDbRef =
+template mpt*(dsc: CoreDbAccRef): AristoDbRef =
   CoreDbCtxRef(dsc).mpt
 
 template mpt*(tx: CoreDbTxRef): AristoDbRef =
@@ -91,16 +91,16 @@ template ctx*(acc: CoreDbAccRef): CoreDbCtxRef =
 
 # ---------------
 
-template call*(api: AristoApiRef; fn: untyped; args: varArgs[untyped]): untyped =
+template call*(api: AristoApiRef; fn: untyped; args: varargs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
     api.fn(args)
   else:
     fn(args)
 
 template call*(
-    acc: CoreDbAccRef | CoreDbMptRef;
+    acc: CoreDbAccRef;
     fn: untyped;
-    args: varArgs[untyped];
+    args: varargs[untyped];
       ): untyped =
   CoreDbCtxRef(acc).parent.ariApi.call(fn, args)
 

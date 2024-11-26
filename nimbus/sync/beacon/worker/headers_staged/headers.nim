@@ -19,9 +19,6 @@ import
   ../../../protocol/eth/eth_types,
   ../../worker_desc
 
-logScope:
-  topics = "beacon headers"
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -41,7 +38,7 @@ proc headersFetchReversed*(
     topHash: Hash32;
     info: static[string];
       ): Future[Result[seq[Header],void]]
-      {.async.} =
+      {.async: (raises: []).} =
   ## Get a list of headers in reverse order.
   let
     peer = buddy.peer
@@ -77,7 +74,7 @@ proc headersFetchReversed*(
     # reliably be used in a `withTimeout()` directive. It would rather crash
     # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
     resp = await peer.getBlockHeaders(req)
-  except TransportError as e:
+  except CatchableError as e:
     buddy.registerError()
     `info` info & " error", peer, ivReq, nReq=req.maxResults, useHash,
       elapsed=(Moment.now() - start).toStr, error=($e.name), msg=e.msg,

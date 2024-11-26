@@ -12,7 +12,7 @@ import
   ../web3_eth_conv,
   eth/common/hashes,
   ../beacon_engine,
-  web3/execution_types,
+  web3/[execution_types, primitives],
   ../payload_conv,
   ./api_utils,
   chronicles
@@ -34,47 +34,48 @@ func validateVersionedHashed(payload: ExecutionPayload,
       return false
   true
 
-template validateVersion(com, timestamp, version, apiVersion) =
+template validateVersion(com, timestamp, payloadVersion, apiVersion) =
   if apiVersion == Version.V4:
     if not com.isPragueOrLater(timestamp):
       raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
 
   if com.isPragueOrLater(timestamp):
-    if version != Version.V4:
+    if payloadVersion != Version.V3:
       raise invalidParams("if timestamp is Prague or later, " &
-        "payload must be ExecutionPayloadV4, got ExecutionPayload" & $version)
+        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
 
   if apiVersion == Version.V3:
     if not com.isCancunOrLater(timestamp):
       raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
 
   if com.isCancunOrLater(timestamp):
-    if version != Version.V3:
+    if payloadVersion != Version.V3:
       raise invalidParams("if timestamp is Cancun or later, " &
-        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $version)
+        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
 
   elif com.isShanghaiOrLater(timestamp):
-    if version != Version.V2:
+    if payloadVersion != Version.V2:
       raise invalidParams("if timestamp is Shanghai or later, " &
-        "payload must be ExecutionPayloadV2, got ExecutionPayload" & $version)
+        "payload must be ExecutionPayloadV2, got ExecutionPayload" & $payloadVersion)
 
-  elif version != Version.V1:
+  elif payloadVersion != Version.V1:
     raise invalidParams("if timestamp is earlier than Shanghai, " &
-      "payload must be ExecutionPayloadV1, got ExecutionPayload" & $version)
+      "payload must be ExecutionPayloadV1, got ExecutionPayload" & $payloadVersion)
 
-  if apiVersion >= Version.V3:
-    if version != apiVersion:
+  if apiVersion == Version.V3 or apiVersion == Version.V4:
+    # both newPayloadV3 and newPayloadV4 expect ExecutionPayloadV3
+    if payloadVersion != Version.V3:
       raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayload" & $apiVersion &
-      " but got ExecutionPayload" & $version)
+      " expect ExecutionPayload3" &
+      " but got ExecutionPayload" & $payloadVersion)
 
-template validatePayload(apiVersion, version, payload) =
-  if version >= Version.V2:
+template validatePayload(apiVersion, payloadVersion, payload) =
+  if payloadVersion >= Version.V2:
     if payload.withdrawals.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "withdrawals is expected from execution payload")
 
-  if apiVersion >= Version.V3 or version >= Version.V3:
+  if apiVersion >= Version.V3 or payloadVersion >= Version.V3:
     if payload.blobGasUsed.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "blobGasUsed is expected from execution payload")
@@ -82,23 +83,12 @@ template validatePayload(apiVersion, version, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
 
-  if apiVersion >= Version.V4 or version >= Version.V4:
-    if payload.depositRequests.isNone:
-      raise invalidParams("newPayload" & $apiVersion &
-        "depositRequests is expected from execution payload")
-    if payload.withdrawalRequests.isNone:
-      raise invalidParams("newPayload" & $apiVersion &
-        "withdrawalRequests is expected from execution payload")
-    if payload.consolidationRequests.isNone:
-      raise invalidParams("newPayload" & $apiVersion &
-        "consolidationRequests is expected from execution payload")
-
-
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
-                 beaconRoot = Opt.none(Hash32)): PayloadStatusV1 =
+                 beaconRoot = Opt.none(Hash32),
+                 executionRequests = Opt.none(array[3, seq[byte]])): PayloadStatusV1 =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -109,16 +99,22 @@ proc newPayload*(ben: BeaconEngineRef,
     if beaconRoot.isNone:
       raise invalidParams("newPayloadV3 expect beaconRoot but got none")
 
+  if apiVersion >= Version.V4:
+    if executionRequests.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": executionRequests is expected from execution payload")
+
   let
     com = ben.com
     db  = com.db
     timestamp = ethTime payload.timestamp
     version = payload.version
+    requestsHash = calcRequestsHash(executionRequests)
 
   validatePayload(apiVersion, version, payload)
   validateVersion(com, timestamp, version, apiVersion)
 
-  var blk = ethBlock(payload, beaconRoot = beaconRoot)
+  var blk = ethBlock(payload, beaconRoot, requestsHash)
   template header: Header = blk.header
 
   if apiVersion >= Version.V3:
@@ -196,8 +192,21 @@ proc newPayload*(ben: BeaconEngineRef,
     hash = blockHash, number = header.number
   let vres = ben.chain.importBlock(blk)
   if vres.isErr:
+    warn "Error importing block",
+      number = header.number,
+      hash = blockHash.short,
+      parent = header.parentHash.short, 
+      error = vres.error()
     ben.setInvalidAncestor(header, blockHash)
     let blockHash = latestValidHash(db, parent, ttd)
     return invalidStatus(blockHash, vres.error())
+
+  info "New payload received and validated",
+    number = header.number,
+    hash = blockHash.short,
+    parent = header.parentHash.short,
+    txs = blk.transactions.len,
+    gasUsed = header.gasUsed,
+    blobGas = header.blobGasUsed.get(0'u64)
 
   return validStatus(blockHash)

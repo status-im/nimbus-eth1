@@ -28,8 +28,27 @@ template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
 template calcReceiptsRoot*(receipts: openArray[Receipt]): Root =
   orderedTrieRoot(receipts)
 
-template calcRequestsRoot*(requests: openArray[Request]): Root =
-  orderedTrieRoot(requests)
+func calcRequestsHash*(requests: varargs[seq[byte]]): Hash32 =
+  func calcHash(reqType: byte, data: openArray[byte]): Hash32 =
+    var ctx: sha256
+    ctx.init()
+    ctx.update([reqType]) # request type
+    ctx.update data
+    ctx.finish(result.data)
+    ctx.clear()
+
+  var ctx: sha256
+  ctx.init()
+  for i, data in requests:
+    ctx.update(calcHash(i.byte, data).data)
+  ctx.finish(result.data)
+  ctx.clear()
+
+func calcRequestsHash*(reqs: Opt[array[3, seq[byte]]]): Opt[Hash32] =
+  if reqs.isNone:
+    Opt.none(Hash32)
+  else:
+    Opt.some(calcRequestsHash(reqs.get()[0], reqs.get()[1], reqs.get()[2]))
 
 func sumHash*(hashes: varargs[Hash32]): Hash32 =
   var ctx: sha256

@@ -13,8 +13,6 @@
 import
   std/strformat,
   results,
-  stew/arrayops,
-  stew/endians2,
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,
@@ -189,14 +187,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
   statedb.persist(clearEmptyAccount = true)
   ok()
 
-func parseWithdrawalRequest(data: openArray[byte]): WithdrawalRequest =
-  WithdrawalRequest(
-    sourceAddress: Address.copyFrom(data, 0),
-    validatorPubkey: Bytes48.copyFrom(data, 20),
-    amount: uint64.fromBytesLE(data.toOpenArray(68, 68+7)),
-  )
-
-proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[Request] =
+proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
@@ -206,7 +197,7 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[Request] =
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
-      to       : WITHDRAWAL_REQUEST_ADDRESS,
+      to       : WITHDRAWAL_QUEUE_ADDRESS,
 
       # It's a systemCall, no need for other knicks knacks
       sysCall     : true,
@@ -217,23 +208,10 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[Request] =
     )
 
   # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(seq[byte])
+  result = call.runComputation(seq[byte])
   statedb.persist(clearEmptyAccount = true)
 
-  for i in 0..<res.len div 76:
-    result.add Request(
-      requestType: WithdrawalRequestType,
-      withdrawal: parseWithdrawalRequest(res.toOpenArray(i, i + 75))
-    )
-
-func parseConsolidationRequest(data: openArray[byte]): ConsolidationRequest =
-  ConsolidationRequest(
-    sourceAddress: Address.copyFrom(data, 0),
-    sourcePubkey: Bytes48.copyFrom(data, 20),
-    targetPubkey: Bytes48.copyFrom(data, 68),
-  )
-
-proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[Request] =
+proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
@@ -243,7 +221,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[Request] =
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
-      to       : CONSOLIDATION_REQUEST_ADDRESS,
+      to       : CONSOLIDATION_QUEUE_ADDRESS,
 
       # It's a systemCall, no need for other knicks knacks
       sysCall     : true,
@@ -254,15 +232,8 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[Request] =
     )
 
   # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(seq[byte])
+  result = call.runComputation(seq[byte])
   statedb.persist(clearEmptyAccount = true)
-
-  for i in 0..<res.len div 116:
-    let start = i * 116
-    result.add Request(
-      requestType: ConsolidationRequestType,
-      consolidation: parseConsolidationRequest(res.toOpenArray(i, i + 115))
-    )
 
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction

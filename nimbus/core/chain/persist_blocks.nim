@@ -12,7 +12,6 @@
 
 import
   results,
-  ../../db/ledger,
   ../../evm/state,
   ../../evm/types,
   ../executor,
@@ -157,10 +156,9 @@ proc persistBlocksImpl(
 
     let blockHash = header.blockHash()
     if NoPersistHeader notin flags:
-      if not c.db.persistHeader(
-        blockHash, header, c.com.proofOfStake(header), c.com.startOfHistory
-      ):
-        return err("Could not persist header")
+      ?c.db.persistHeader(
+        blockHash, header,
+        c.com.proofOfStake(header), c.com.startOfHistory)
 
     if NoPersistTransactions notin flags:
       c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
@@ -199,46 +197,6 @@ proc persistBlocksImpl(
       c.db.purgeOlderBlocksFromHistory(fromBlock - CleanUpEpoch)
 
   ok((blks, txs, gas))
-
-# ------------------------------------------------------------------------------
-# Public `ChainDB` methods
-# ------------------------------------------------------------------------------
-
-proc insertBlockWithoutSetHead*(c: ChainRef, blk: Block): Result[void, string] =
-  discard ?c.persistBlocksImpl([blk], {NoPersistHeader, NoPersistReceipts})
-
-  if not c.db.persistHeader(blk.header.blockHash, blk.header, c.com.startOfHistory):
-    return err("Could not persist header")
-
-  ok()
-
-proc setCanonical*(c: ChainRef, header: Header): Result[void, string] =
-  if header.parentHash == default(Hash32):
-    if not c.db.setHead(header):
-      return err("setHead failed")
-    return ok()
-
-  var body: BlockBody
-  if not c.db.getBlockBody(header, body):
-    debug "Failed to get BlockBody", hash = header.blockHash
-    return err("Could not get block body")
-
-  discard
-    ?c.persistBlocksImpl(
-      [Block.init(header, move(body))], {NoPersistHeader, NoPersistTransactions}
-    )
-
-  if not c.db.setHead(header):
-    return err("setHead failed")
-  ok()
-
-proc setCanonical*(c: ChainRef, blockHash: Hash32): Result[void, string] =
-  var header: Header
-  if not c.db.getBlockHeader(blockHash, header):
-    debug "Failed to get Header", hash = blockHash
-    return err("Could not get block header")
-
-  setCanonical(c, header)
 
 proc persistBlocks*(
     c: ChainRef, blocks: openArray[Block], flags: PersistBlockFlags = {}

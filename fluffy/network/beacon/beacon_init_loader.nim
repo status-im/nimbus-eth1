@@ -11,9 +11,10 @@ import
   chronicles,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/altair,
   beacon_chain/beacon_clock,
   beacon_chain/conf
+
+export beacon_clock, network_metadata
 
 type NetworkInitData* = object
   clock*: BeaconClock

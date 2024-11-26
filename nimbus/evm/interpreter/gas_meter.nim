@@ -19,16 +19,17 @@ func init*(m: var GasMeter, startGas: GasInt) =
   m.gasRemaining = startGas
   m.gasRefunded = 0
 
-func consumeGas*(
-    gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid {.inline.} =
+template consumeGas*(
+    gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid =
   # consumeGas is a hotspot in the vm due to it being called for every
   # instruction
   # TODO report reason - consumeGas is a hotspot in EVM execution so it has to
   #      be done carefully
   if amount > gasMeter.gasRemaining:
-    return err(gasErr(OutOfGas))
-  gasMeter.gasRemaining -= amount
-  ok()
+    EvmResultVoid.err(gasErr(OutOfGas))
+  else:
+    gasMeter.gasRemaining -= amount
+    EvmResultVoid.ok()
 
 func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRemaining += amount

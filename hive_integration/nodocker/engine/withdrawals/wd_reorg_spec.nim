@@ -20,7 +20,8 @@ import
   ../engine_client,
   ../types,
   ../base_spec,
-  ../../../../nimbus/beacon/web3_eth_conv
+  ../../../../nimbus/beacon/web3_eth_conv,
+  ../../../../nimbus/utils/utils
 
 # Withdrawals re-org spec:
 # Specifies a withdrawals test where the withdrawals re-org can happen
@@ -38,8 +39,8 @@ type
     startAccount: UInt256
     nextIndex   : int
     wdHistory   : WDHistory
-    sidechain   : Table[uint64, ExecutionPayload]
-    payloadId   : PayloadID
+    sidechain   : Table[uint64, ExecutableData]
+    payloadId   : Bytes8
     height      : uint64
     attr        : Opt[PayloadAttributes]
 
@@ -91,7 +92,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       startAccount: 1.u256 shl 160,
       nextIndex   : 0,
       wdHistory   : WDHistory(),
-      sidechain   : Table[uint64, ExecutionPayload]()
+      sidechain   : Table[uint64, ExecutableData]()
     )
 
   # Sidechain withdraws on the max account value range 0xffffffffffffffffffffffffffffffffffffffff
@@ -176,38 +177,39 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
           number=env.clMock.currentPayloadNumber
 
         sidechain.attr = Opt.some(attr)
-        let r = sec.client.forkchoiceUpdated(fcState, attr)
+        let r = sec.forkchoiceUpdated(attr.timestamp, fcState, attr)
         r.expectNoError()
         r.expectPayloadStatus(PayloadExecutionStatus.valid)
-        testCond r.get().payloadID.isSome:
+        testCond r.get().payloadId.isSome:
           error "Unable to get a payload ID on the sidechain"
-        sidechain.payloadId = r.get().payloadID.get()
+        sidechain.payloadId = r.get().payloadId.get()
 
       return true
     ,
     onGetPayload: proc(): bool =
       var
-        payload: ExecutionPayload
+        payload: ExecutableData
 
       if env.clMock.latestPayloadBuilt.blockNumber.uint64 >= ws.getSidechainSplitHeight().uint64:
         # This payload is built by the secondary client, hence need to manually fetch it here
         doAssert(sidechain.attr.isSome)
-        let version = sidechain.attr.get().version
-        let r = sec.client.getPayload(sidechain.payloadId, version)
+        let attr = sidechain.attr.get()
+        let timeVer = attr.timestamp
+        let r = sec.getPayload(timeVer, sidechain.payloadId)
         r.expectNoError()
-        payload = r.get().executionPayload
+        payload = r.get().toExecutableData(attr)
         sidechain.sidechain[payload.blockNumber.uint64] = payload
       else:
         # This block is part of both chains, simply forward it to the secondary client
-        payload = env.clMock.latestPayloadBuilt
+        payload = env.clMock.latestExecutedPayload
 
-      let r = sec.client.newPayload(payload)
+      let r = sec.newPayload(payload)
       r.expectStatus(PayloadExecutionStatus.valid)
 
       let fcState = ForkchoiceStateV1(
         headBlockHash: payload.blockHash,
       )
-      let p = sec.client.forkchoiceUpdated(payload.version, fcState)
+      let p = sec.forkchoiceUpdated(payload.timestamp, fcState)
       p.expectPayloadStatus(PayloadExecutionStatus.valid)
       return true
   ))
@@ -246,7 +248,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       let r = sec.client.forkchoiceUpdatedV2(fcState, Opt.some(attr))
       r.expectPayloadStatus(PayloadExecutionStatus.valid)
 
-      let p = sec.client.getPayloadV2(r.get().payloadID.get)
+      let p = sec.client.getPayloadV2(r.get().payloadId.get)
       p.expectNoError()
 
       let z = p.get()
@@ -259,7 +261,8 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       q.expectPayloadStatus(PayloadExecutionStatus.valid)
 
       inc sidechain.height
-      sidechain.sidechain[sidechain.height] = executionPayload(z.executionPayload)
+      let tmp = executionPayload(z.executionPayload)
+      sidechain.sidechain[sidechain.height] = tmp.toExecutableData(attr)
 
   # Check the withdrawals on the latest
   let res = ws.wdHistory.verifyWithdrawals(sidechain.height, Opt.none(uint64), env.client)
@@ -278,7 +281,7 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
       ws.timeoutSeconds = DefaultTimeout
 
     while loop < ws.timeoutSeconds:
-      let r = env.client.newPayloadV2(payload.V2)
+      let r = env.client.newPayloadV2(payload.basePayload.V2)
       r.expectNoError()
       let fcState = ForkchoiceStateV1(headBlockHash: sideHash)
       let p = env.client.forkchoiceUpdatedV2(fcState)
@@ -312,11 +315,11 @@ proc execute*(ws: ReorgSpec, env: TestEnv): bool =
         hash=payload.blockHash.short,
         parentHash=payload.parentHash.short
 
-      let r = env.client.newPayload(payload)
+      let r = env.engine.newPayload(version, payload)
       r.expectStatusEither([PayloadExecutionStatus.valid, PayloadExecutionStatus.accepted])
 
       let fcState = ForkchoiceStateV1(headBlockHash: payload.blockHash)
-      let p = env.client.forkchoiceUpdated(version, fcState)
+      let p = env.engine.forkchoiceUpdated(version, fcState)
       p.expectPayloadStatus(PayloadExecutionStatus.valid)
       inc payloadNumber
 

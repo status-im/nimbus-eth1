@@ -277,7 +277,7 @@ method getVersionedHashes(cust: ExtraVersionedHash,
   for i, h in baseVersionedHashes:
     v[i] = h
 
-  var extraHash = common.Hash32.randomBytes()
+  var extraHash = Hash32.randomBytes()
   extraHash.data[0] = VERSIONED_HASH_VERSION_KZG
   v[^1] = extraHash
   Opt.some(v)
@@ -336,7 +336,8 @@ func getTimestamp*(cust: CustomPayloadData, basePayload: ExecutionPayload): uint
 # Construct a customized payload by taking an existing payload as base and mixing it CustomPayloadData
 # blockHash is calculated automatically.
 proc customizePayload*(cust: CustomPayloadData, data: ExecutableData): ExecutableData {.gcsafe.} =
-  var customHeader = blockHeader(data.basePayload, beaconRoot = data.beaconRoot)
+  let requestsHash = calcRequestsHash(data.executionRequests)
+  var customHeader = blockHeader(data.basePayload, data.beaconRoot, requestsHash)
   if cust.transactions.isSome:
     customHeader.transactionsRoot = calcTxRoot(cust.transactions.get)
 
@@ -538,11 +539,6 @@ func scramble(data: Hash32): Opt[Hash32] =
   h.data[^1] = byte(255 - h.data[^1])
   Opt.some(h)
 
-func scramble(data: Bytes32): Opt[Hash32] =
-  var h = Hash32 data
-  h.data[0] = byte(255 - h.data[0])
-  Opt.some(h)
-
 # This function generates an invalid payload by taking a base payload and modifying the specified field such that it ends up being invalid.
 # One small consideration is that the payload needs to contain transactions and specially transactions using the PREVRANDAO opcode for all the fields to be compatible with this function.
 proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadField: InvalidPayloadBlockField): ExecutableData =
@@ -585,7 +581,7 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
   of InvalidPrevRandao:
     # This option potentially requires a transaction that uses the PREVRANDAO opcode.
     # Otherwise the payload will still be valid.
-    let randomHash = common.Hash32.randomBytes()
+    let randomHash = Hash32.randomBytes()
     customPayloadMod = CustomPayloadData(
       prevRandao: Opt.some(Bytes32 randomHash.data),
     )

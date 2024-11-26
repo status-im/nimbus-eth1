@@ -390,7 +390,7 @@ proc setHead(xp: TxPoolRef; val: Header)
 # ------------------------------------------------------------------------------
 
 proc new*(T: type TxPoolRef; com: CommonRef): T
-    {.gcsafe,raises: [CatchableError].} =
+    {.gcsafe,raises: [].} =
   ## Constructor, returns a new tx-pool descriptor.
   new result
   result.init(com)
@@ -460,15 +460,16 @@ func com*(xp: TxPoolRef): CommonRef =
   ## Getter
   xp.vmState.com
 
-type EthBlockAndBlobsBundle* = object
+type AssembledBlock* = object
   blk*: EthBlock
   blobsBundle*: Opt[BlobsBundle]
   blockValue*: UInt256
+  executionRequests*: Opt[array[3, seq[byte]]]
 
 proc assembleBlock*(
     xp: TxPoolRef,
     someBaseFee: bool = false
-): Result[EthBlockAndBlobsBundle, string] {.gcsafe,raises: [CatchableError].} =
+): Result[AssembledBlock, string] {.gcsafe,raises: [CatchableError].} =
   ## Getter, retrieves a packed block ready for mining and signing depending
   ## on the internally cached block chain head, the txs in the pool and some
   ## tuning parameters. The following block header fields are left
@@ -481,7 +482,7 @@ proc assembleBlock*(
   ## Note that this getter runs *ad hoc* all the txs through the VM in
   ## order to build the block.
 
-  let pst = xp.packerVmExec().valueOr:       # updates vmState
+  var pst = xp.packerVmExec().valueOr:       # updates vmState
     return err(error)
 
   var blk = EthBlock(
@@ -500,6 +501,7 @@ proc assembleBlock*(
           blobsBundle.proofs.add p
         for blob in tx.networkPayload.blobs:
           blobsBundle.blobs.add blob
+  blk.header.transactionsRoot = calcTxRoot(blk.txs)
 
   let com = xp.vmState.com
   if com.isShanghaiOrLater(blk.header.timestamp):
@@ -519,10 +521,17 @@ proc assembleBlock*(
     # make sure baseFee always has something
     blk.header.baseFeePerGas = Opt.some(blk.header.baseFeePerGas.get(0.u256))
 
-  ok EthBlockAndBlobsBundle(
+  let executionRequestsOpt =
+    if com.isPragueOrLater(blk.header.timestamp):
+      Opt.some(pst.executionRequests)
+    else:
+      Opt.none(array[3, seq[byte]])
+
+  ok AssembledBlock(
     blk: blk,
     blobsBundle: blobsBundleOpt,
-    blockValue: pst.blockValue)
+    blockValue: pst.blockValue,
+    executionRequests: executionRequestsOpt)
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {

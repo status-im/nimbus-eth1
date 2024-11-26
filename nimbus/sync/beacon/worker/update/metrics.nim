@@ -11,13 +11,18 @@
 {.push raises:[].}
 
 import
-  pkg/metrics,
+  pkg/[chronos, metrics],
+  ../../../../core/chain,
   ../../worker_desc,
-  ".."/[db, blocks_staged, headers_staged]
-
+  ../blocks_staged/staged_queue,
+  ../headers_staged/staged_queue,
+  ".."/[blocks_unproc, headers_unproc]
 
 declareGauge beacon_base, "" &
-  "Max block number of imported/executed blocks"
+  "Max block number of imported finalised blocks"
+
+declareGauge beacon_latest, "" &
+  "Block number of latest imported blocks"
   
 declareGauge beacon_coupler, "" &
   "Max block number for header chain starting at genesis"
@@ -25,7 +30,7 @@ declareGauge beacon_coupler, "" &
 declareGauge beacon_dangling, "" &
   "Starting/min block number for higher up headers chain"
 
-declareGauge beacon_end, "" &
+declareGauge beacon_head, "" &
   "Ending/max block number of higher up headers chain"
 
 declareGauge beacon_target, "" &
@@ -49,12 +54,13 @@ declareGauge beacon_buddies, "" &
   "Number of currently active worker instances"
 
 
-template updateMetricsImpl*(ctx: BeaconCtxRef) =
-  metrics.set(beacon_base, ctx.dbStateBlockNumber().int64)
+template updateMetricsImpl(ctx: BeaconCtxRef) =
+  metrics.set(beacon_base, ctx.chain.baseNumber().int64)
+  metrics.set(beacon_latest, ctx.chain.latestNumber().int64)
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_dangling, ctx.layout.dangling.int64)
-  metrics.set(beacon_end, ctx.layout.endBn.int64)
-  metrics.set(beacon_target, ctx.lhc.target.header.number.int64)
+  metrics.set(beacon_head, ctx.layout.head.int64)
+  metrics.set(beacon_target, ctx.target.consHead.number.int64)
 
   metrics.set(beacon_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(beacon_headers_unprocessed,
@@ -65,5 +71,13 @@ template updateMetricsImpl*(ctx: BeaconCtxRef) =
               (ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed()).int64)
 
   metrics.set(beacon_buddies, ctx.pool.nBuddies)
+
+# ---------------
+
+proc updateMetrics*(ctx: BeaconCtxRef) =
+  let now = Moment.now()
+  if ctx.pool.nextUpdate < now:
+    ctx.updateMetricsImpl()
+    ctx.pool.nextUpdate = now + metricsUpdateInterval
 
 # End

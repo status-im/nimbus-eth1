@@ -14,12 +14,32 @@
 
 import
   pkg/chronos,
-  pkg/eth/common
+  pkg/eth/common,
+  pkg/stew/interval_set,
+  ../../../utils/utils
 
-proc bnStr*(w: BlockNumber): string =
+export
+  short
+
+func bnStr*(w: BlockNumber): string =
   "#" & $w
 
+func bnStr*(h: Header): string =
+  h.number.bnStr
+
+func bnStr*(b: EthBlock): string =
+  b.header.bnStr
+
+func bnStr*(w: Interval[BlockNumber,uint64]): string =
+  if w.len == 1: w.minPt.bnStr else: w.minPt.bnStr & ".." & w.maxPt.bnStr
+
 func toStr*(a: chronos.Duration): string =
-  a.toString 2
+  var s = a.toString 2
+  if s.len == 0: s="0"
+  s
+
+
+proc `$`*(w: Interval[BlockNumber,uint64]): string =
+  w.bnStr
 
 # End

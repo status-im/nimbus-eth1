@@ -110,7 +110,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     # Update sync header (if any)
     com.syncReqNewHead(header)
-    com.reqBeaconSyncTargetCB(header)
+    com.reqBeaconSyncTargetCB(header, update.finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)
 
@@ -124,11 +124,12 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   if apiVersion == Version.V1:
     let blockNumber = header.number
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
-      var
-        td, ptd: DifficultyInt
+      let
+        td  = db.getScore(blockHash)
+        ptd = db.getScore(header.parentHash)
         ttd = com.ttd.get(high(UInt256))
 
-      if not db.getTd(blockHash, td) or (blockNumber > 0'u64 and not db.getTd(header.parentHash, ptd)):
+      if td.isNone or (blockNumber > 0'u64 and ptd.isNone):
         error "TDs unavailable for TTD check",
           number = blockNumber,
           hash = blockHash.short,
@@ -137,12 +138,12 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
           ptd = ptd
         return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
 
-      if td < ttd or (blockNumber > 0'u64 and ptd > ttd):
+      if td.get < ttd or (blockNumber > 0'u64 and ptd.get > ttd):
         notice "Refusing beacon update to pre-merge",
           number = blockNumber,
           hash = blockHash.short,
           diff = header.difficulty,
-          ptd = ptd,
+          ptd = ptd.get,
           ttd = ttd
 
         return invalidFCU("Refusing beacon update to pre-merge")
@@ -176,7 +177,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     db.safeHeaderHash(safeBlockHash)
 
   chain.forkChoice(blockHash, finalizedBlockHash).isOkOr:
-    return invalidFCU(error, com, header)
+    return invalidFCU(error, chain, header)
 
   # If payload generation was requested, create a new block to be potentially
   # sealed by the beacon client. The payload will be requested later, and we
@@ -185,19 +186,29 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let attrs = attrsOpt.get()
     validateVersion(attrs, com, apiVersion)
 
-    let bundle = ben.generatePayload(attrs).valueOr:
+    let bundle = ben.generateExecutionBundle(attrs).valueOr:
       error "Failed to create sealing payload", err = error
       raise invalidAttr(error)
 
     let id = computePayloadId(blockHash, attrs)
-    ben.put(id, bundle.blockValue, bundle.executionPayload, bundle.blobsBundle)
+    ben.put(id, bundle)
 
-    info "Created payload for sealing",
+    info "Created payload for block proposal",
+      number = bundle.payload.blockNumber,
+      hash = bundle.payload.blockHash.short,
+      txs = bundle.payload.transactions.len,
+      gasUsed = bundle.payload.gasUsed,
+      blobGasUsed = bundle.payload.blobGasUsed.get(Quantity(0)),
       id = id.toHex,
-      hash = bundle.executionPayload.blockHash.short,
-      number = bundle.executionPayload.blockNumber,
-      attr = attrs
+      attrs = attrs
 
     return validFCU(Opt.some(id), blockHash)
+
+  info "Fork choice updated",
+    requested = header.number,
+    hash = blockHash.short,
+    head = ben.chain.latestNumber,
+    base = ben.chain.baseNumber,
+    baseHash = ben.chain.baseHash.short
 
   return validFCU(Opt.none(Bytes8), blockHash)

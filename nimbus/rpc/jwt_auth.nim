@@ -257,8 +257,7 @@ proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
     return err(jwtCreationError)
 
 proc httpJwtAuth*(key: JwtSharedKey): RpcAuthHook =
-  proc handler(req: HttpRequestRef): Future[HttpResponseRef]
-         {.gcsafe, async: (raises: [CatchableError]).} =
+  proc handler(req: HttpRequestRef): Future[HttpResponseRef] {.async: (raises: [CatchableError]).} =
     let auth = req.headers.getString("Authorization", "?")
     if auth.len < 9 or auth[0..6].cmpIgnoreCase("Bearer ") != 0:
       return await req.respond(Http403, "Missing authorization token")

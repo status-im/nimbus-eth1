@@ -62,17 +62,17 @@ import
 from beacon_chain/gossip_processing/block_processor import newExecutionPayload
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
-template append(w: var RlpWriter, t: TypedTransaction) =
-  w.appendRawBytes(distinctBase t)
+template append(w: var RlpWriter, typedTransaction: TypedTransaction) =
+  w.appendRawBytes(distinctBase typedTransaction)
 
-template append(w: var RlpWriter, t: WithdrawalV1) =
+template append(w: var RlpWriter, withdrawalV1: WithdrawalV1) =
   # TODO: Since Capella we can also access ExecutionPayloadHeader and thus
   # could get the Roots through there instead.
   w.append blocks.Withdrawal(
-    index: distinctBase(t.index),
-    validatorIndex: distinctBase(t.validatorIndex),
-    address: t.address,
-    amount: distinctBase(t.amount),
+    index: distinctBase(withdrawalV1.index),
+    validatorIndex: distinctBase(withdrawalV1.validatorIndex),
+    address: withdrawalV1.address,
+    amount: distinctBase(withdrawalV1.amount),
   )
 
 proc asPortalBlockData*(
@@ -117,7 +117,7 @@ proc asPortalBlockData*(
   (payload.blockHash, headerWithProof, body)
 
 proc asPortalBlockData*(
-    payload: ExecutionPayloadV2 | ExecutionPayloadV3 | ExecutionPayloadV4
+    payload: ExecutionPayloadV2 | ExecutionPayloadV3
 ): (Hash32, BlockHeaderWithProof, PortalBlockBodyShanghai) =
   let
     txRoot = orderedTrieRoot(payload.transactions)

@@ -16,7 +16,6 @@ import
   stew/byteutils,
   results,
   stint,
-  eth/trie/[trie_defs],
   ../../nimbus/[evm/types, evm/state],
   ../../nimbus/db/ledger,
   ../../nimbus/transaction,
@@ -137,7 +136,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     db.persist(clearEmptyAccount = false) # settle accounts storage
 
   defer:
-    let stateRoot = vmState.readOnlyStateDB.rootHash
+    let stateRoot = vmState.readOnlyStateDB.getStateRoot()
     ctx.verifyResult(vmState, stateRoot)
     result = StateResult(
       name : ctx.name,

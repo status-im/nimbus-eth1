@@ -17,21 +17,33 @@ import
   ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
-  "."/[blocks_unproc, db]
+  ./update/metrics,
+  "."/[blocks_unproc, db, helpers]
 
-logScope:
-  topics = "beacon blocks"
+# ------------------------------------------------------------------------------
+# Private debugging & logging helpers
+# ------------------------------------------------------------------------------
+
+formatIt(Hash32):
+  it.data.short
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+func getNthHash(blk: BlocksForImport; n: int): Hash32 =
+  if n + 1 < blk.blocks.len:
+    blk.blocks[n + 1].header.parentHash
+  else:
+    rlp.encode(blk.blocks[n].header).keccak256
+
 
 proc fetchAndCheck(
     buddy: BeaconBuddyRef;
     ivReq: BnRange;
     blk: ref BlocksForImport; # update in place
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async: (raises: []).} =
 
   let
     ctx = buddy.ctx
@@ -45,11 +57,16 @@ proc fetchAndCheck(
   blk.blocks.setLen(offset + ivReq.len)
   var blockHash = newSeq[Hash32](ivReq.len)
   for n in 1u ..< ivReq.len:
-    let header = ctx.dbPeekHeader(ivReq.minPt + n).expect "stashed header"
+    let header = ctx.dbHeaderPeek(ivReq.minPt + n).valueOr:
+      # There is nothing one can do here
+      raiseAssert info & " stashed header missing: n=" & $n &
+        " ivReq=" & $ivReq & " nth=" & (ivReq.minPt + n).bnStr
     blockHash[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
-  blk.blocks[offset].header =
-    ctx.dbPeekHeader(ivReq.minPt).expect "stashed header"
+  blk.blocks[offset].header = ctx.dbHeaderPeek(ivReq.minPt).valueOr:
+    # There is nothing one can do here
+    raiseAssert info & " stashed header missing: n=0" &
+      " ivReq=" & $ivReq & " nth=" & ivReq.minPt.bnStr
   blockHash[ivReq.len - 1] =
     rlp.encode(blk.blocks[offset + ivReq.len - 1].header).keccak256
 
@@ -86,7 +103,6 @@ proc fetchAndCheck(
       blk.blocks[offset + n].transactions = bodies[n].transactions
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
-      blk.blocks[offset + n].requests     = bodies[n].requests
 
   return offset < blk.blocks.len.uint64
 
@@ -110,6 +126,7 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
 
   false
 
+
 func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
@@ -131,7 +148,7 @@ func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
 proc blocksStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async: (raises: []).} =
   ## Collect bodies and stage them.
   ##
   if buddy.ctx.blocksUnprocIsEmpty():
@@ -172,21 +189,28 @@ proc blocksStagedCollect*(
 
     # Fetch and extend staging record
     if not await buddy.fetchAndCheck(ivReq, blk, info):
+
+      # Throw away first time block fetch data. Keep other data for a
+      # partially assembled list.
       if nBlkBlocks == 0:
-        if 0 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped:
+        buddy.only.nBdyRespErrors.inc
+
+        if (1 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped) or
+           fetchBodiesReqThresholdCount < buddy.only.nBdyRespErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
-        trace info & ": completely failed", peer, iv, ivReq,
+        trace info & ": current block list discarded", peer, iv, ivReq,
           ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nBdyRespErrors
         ctx.blocksUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.
-        await sleepAsync asyncThreadSwitchTimeSlot
+        try: await sleepAsync asyncThreadSwitchTimeSlot
+        except CancelledError: discard
         return false
 
       # So there were some bodies downloaded already. Turn back unused data
       # and proceed with staging.
-      trace info & ": partially failed", peer, iv, ivReq,
+      trace info & ": list partially failed", peer, iv, ivReq,
         unused=BnRange.new(ivBottom,iv.maxPt)
       # There is some left over to store back
       ctx.blocksUnprocCommit(iv.len, ivBottom, iv.maxPt)
@@ -218,59 +242,110 @@ proc blocksStagedCollect*(
   return true
 
 
-proc blocksStagedImport*(ctx: BeaconCtxRef; info: static[string]): bool =
+proc blocksStagedImport*(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ): Future[bool]
+      {.async: (raises: []).} =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
     return false
 
   # Fetch least record, accept only if it matches the global ledger state
-  let base = ctx.dbStateBlockNumber()
-  if qItem.key != base + 1:
-    trace info & ": there is a gap", B=base.bnStr, stagedBottom=qItem.key.bnStr
-    return false
+  block:
+    let imported = ctx.chain.latestNumber()
+    if imported + 1 < qItem.key:
+      trace info & ": there is a gap L vs. staged",
+        B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr,
+        C=ctx.layout.coupler.bnStr
+      return false
 
   # Remove from queue
   discard ctx.blk.staged.delete qItem.key
 
-  # Execute blocks
-  let stats = ctx.pool.chain.persistBlocks(qItem.data.blocks).valueOr:
-    # FIXME: should that be rather an `raiseAssert` here?
-    warn info & ": block exec error", B=base.bnStr,
-      iv=BnRange.new(qItem.key,qItem.key+qItem.data.blocks.len.uint64-1),
-      error=error
-    doAssert base == ctx.dbStateBlockNumber()
-    return false
+  let
+    nBlocks = qItem.data.blocks.len
+    iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
-  trace info & ": imported staged blocks", B=ctx.dbStateBlockNumber.bnStr,
-    first=qItem.key.bnStr, stats
+  trace info & ": import blocks ..", iv, nBlocks,
+    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
 
-  # Remove stashed headers
-  for bn in qItem.key ..< qItem.key + qItem.data.blocks.len.uint64:
-    ctx.dbUnstashHeader bn
+  var maxImport = iv.maxPt
+  block importLoop:
+    for n in 0 ..< nBlocks:
+      # It is known that `key <= imported + 1`. This means that some blocks
+      # potentally overlap with what is already known by `FC` (e.g. due to
+      # concurrently running `importBlock()` by a `newPayload` RPC requests.)
+      #
+      # It is not left to `FC` to ignore this record. Passing a block before
+      # the `base` (which also might have changed) is responded by `FC` with
+      # an error. This would cause throwing away all `nBlocks` rather than
+      # ignoring the first some.
+      #
+      let nBn = qItem.data.blocks[n].header.number
+      if nBn <= ctx.chain.baseNumber:
+        trace info & ": ignoring block <= base", n, iv,
+          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n)
+        continue
+      ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
+        warn info & ": import block error", n, iv,
+          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n), `error`=error
+        # Restore what is left over below
+        maxImport = ctx.chain.latestNumber()
+        break importLoop
 
-  true
+      # Allow pseudo/async thread switch.
+      try: await sleepAsync asyncThreadSwitchTimeSlot
+      except CancelledError: discard
+      if not ctx.daemon:
+        # Shutdown?
+        maxImport = ctx.chain.latestNumber()
+        break importLoop
 
+      # Update, so it can be followed nicely
+      ctx.updateMetrics()
 
-func blocksStagedBottomKey*(ctx: BeaconCtxRef): BlockNumber =
-  ## Retrieve to staged block number
-  let qItem = ctx.blk.staged.ge(0).valueOr:
-    return high(BlockNumber)
-  qItem.key
+      # Occasionally mark the chain finalized
+      if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
+        let
+          nthHash = qItem.data.getNthHash(n)
+          finHash = if nBn < ctx.layout.final: nthHash
+                    else: ctx.layout.finalHash
 
-func blocksStagedQueueLen*(ctx: BeaconCtxRef): int =
-  ## Number of staged records
-  ctx.blk.staged.len
+        doAssert nBn == ctx.chain.latestNumber()
+        ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
+          warn info & ": fork choice error", n, iv,
+            B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+            F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash,
+            finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
+          # Restore what is left over below
+          maxImport = ctx.chain.latestNumber()
+          break importLoop
 
-func blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
-  ## `true` iff no data are on the queue.
-  ctx.blk.staged.len == 0
+        # Allow pseudo/async thread switch.
+        try: await sleepAsync asyncThreadSwitchTimeSlot
+        except CancelledError: discard
+        if not ctx.daemon:
+          maxImport = ctx.chain.latestNumber()
+          break importLoop
 
-# ----------------
+  # Import probably incomplete, so a partial roll back may be needed
+  if maxImport < iv.maxPt:
+    ctx.blocksUnprocCommit(0, maxImport+1, qItem.data.blocks[^1].header.number)
 
-func blocksStagedInit*(ctx: BeaconCtxRef) =
-  ## Constructor
-  ctx.blk.staged = StagedBlocksQueue.init()
+  # Remove stashed headers for imported blocks
+  for bn in iv.minPt .. maxImport:
+    ctx.dbHeaderUnstash bn
+
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
+
+  trace info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
+    L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
+  return true
 
 # ------------------------------------------------------------------------------
 # End

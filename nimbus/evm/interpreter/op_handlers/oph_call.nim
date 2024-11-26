@@ -18,6 +18,7 @@ import
   ../../../constants,
   ../../evm_errors,
   ../../../common/evmforks,
+  ../../../core/eip7702,
   ../../computation,
   ../../memory,
   ../../stack,
@@ -59,8 +60,20 @@ type
     memOffset:       int
     memLength:       int
     contractAddress: Address
-    gasCallEIP2929:  GasInt
+    gasCallEIPs:     GasInt
 
+proc gasCallEIP2929(c: Computation, address: Address): GasInt =
+  when evmc_enabled:
+    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
+      return ColdAccountAccessCost - WarmStorageReadCost
+  else:
+    c.vmState.mutateStateDB:
+      if not db.inAccessList(address):
+        db.accessList(address)
+
+        # The WarmStorageReadCostEIP2929 (100) is already deducted in
+        # the form of a constant `gasCall`
+        return ColdAccountAccessCost - WarmStorageReadCost
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
@@ -81,17 +94,12 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
   #           because it will affect `c.gasMeter.gasRemaining`
   #           and further `childGasLimit`
   if FkBerlin <= c.fork:
-    when evmc_enabled:
-      if c.host.accessAccount(q.codeAddress) == EVMC_ACCESS_COLD:
-        q.gasCallEIP2929 = ColdAccountAccessCost - WarmStorageReadCost
-    else:
-      c.vmState.mutateStateDB:
-        if not db.inAccessList(q.codeAddress):
-          db.accessList(q.codeAddress)
+    q.gasCallEIPs = gasCallEIP2929(c, q.codeAddress)
 
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in
-          # the form of a constant `gasCall`
-          q.gasCallEIP2929 = ColdAccountAccessCost - WarmStorageReadCost
+  if FkPrague <= c.fork:
+    let delegateTo = parseDelegationAddress(c.getCode(q.codeAddress))
+    if delegateTo.isSome:
+      q.gasCallEIPs += gasCallEIP2929(c, delegateTo[])
 
 proc callParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for callOp()
@@ -203,10 +211,10 @@ else:
         c.gasMeter.refundGas(child.gasMeter.gasRefunded)
         c.stack.lsTop(1)
 
-      c.returnData = child.output
       let actualOutputSize = min(memLen, child.output.len)
       if actualOutputSize > 0:
         ? c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
+      c.returnData = move(child.output)
       ok()
 
 # ------------------------------------------------------------------------------
@@ -228,7 +236,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
         kind:           Call,
         isNewAccount:   not cpt.accountExists(p.contractAddress),
         gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIP2929: p.gasCallEIP2929,
+        gasCallEIPs:    p.gasCallEIPs,
         contractGas:    p.gas,
         currentMemSize: cpt.memory.len,
         memOffset:      p.memOffset,
@@ -300,7 +308,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
         kind:           CallCode,
         isNewAccount:   not cpt.accountExists(p.contractAddress),
         gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIP2929: p.gasCallEIP2929,
+        gasCallEIPs:    p.gasCallEIPs,
         contractGas:    p.gas,
         currentMemSize: cpt.memory.len,
         memOffset:      p.memOffset,
@@ -373,7 +381,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
         kind:           DelegateCall,
         isNewAccount:   not cpt.accountExists(p.contractAddress),
         gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIP2929: p.gasCallEIP2929,
+        gasCallEIPs:    p.gasCallEIPs,
         contractGas:    p.gas,
         currentMemSize: cpt.memory.len,
         memOffset:      p.memOffset,
@@ -440,7 +448,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
         kind:           StaticCall,
         isNewAccount:   not cpt.accountExists(p.contractAddress),
         gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIP2929: p.gasCallEIP2929,
+        gasCallEIPs:    p.gasCallEIPs,
         contractGas:    p.gas,
         currentMemSize: cpt.memory.len,
         memOffset:      p.memOffset,

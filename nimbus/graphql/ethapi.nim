@@ -11,7 +11,7 @@ import
   std/[strutils],
   stew/byteutils, stint,
   results,
-  eth/common/transaction_utils, 
+  eth/common/transaction_utils,
   chronos,
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
@@ -23,7 +23,7 @@ import
   ../core/[tx_pool, tx_pool/tx_item],
   ../common/common,
   web3/eth_api_types
- 
+
 from eth/p2p import EthereumNode
 export httpserver
 
@@ -146,46 +146,41 @@ proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
     wd: wd
   )
 
-proc getStateDB(com: CommonRef, header: Header): LedgerRef =
+proc getStateDB(com: CommonRef, header: Header): LedgerRef  {.deprecated: "LedgerRef does not support loading a particular state".} =
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
-  LedgerRef.init(com.db, header.stateRoot)
+  # TODO the ledger initialized here refers to the base, not the given header!
+  LedgerRef.init(com.db)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
   try:
-    ok(headerNode(ctx, getBlockHeader(ctx.chainDB, toBlockNumber(number))))
-  except CatchableError as e:
-    err(e.msg)
+    let header = ?ctx.chainDB.getBlockHeader(toBlockNumber(number))
+    ok(headerNode(ctx, header))
+  except ValueError as exc:
+    err(exc.msg)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: base.BlockNumber): RespResult =
-  try:
-    ok(headerNode(ctx, getBlockHeader(ctx.chainDB, number)))
-  except CatchableError as e:
-    err(e.msg)
+  let header = ?ctx.chainDB.getBlockHeader(number)
+  ok(headerNode(ctx, header))
 
 proc getBlockByHash(ctx: GraphqlContextRef, hash: Node): RespResult =
   try:
-    ok(headerNode(ctx, getBlockHeader(ctx.chainDB, toHash(hash))))
-  except CatchableError as e:
-    err(e.msg)
+    let header = ?ctx.chainDB.getBlockHeader(toHash(hash))
+    ok(headerNode(ctx, header))
+  except ValueError as exc:
+    err(exc.msg)
 
 proc getBlockByHash(ctx: GraphqlContextRef, hash: Hash32): RespResult =
-  try:
-    ok(headerNode(ctx, getBlockHeader(ctx.chainDB, hash)))
-  except CatchableError as e:
-    err(e.msg)
+  let header = ?ctx.chainDB.getBlockHeader(hash)
+  ok(headerNode(ctx, header))
 
 proc getLatestBlock(ctx: GraphqlContextRef): RespResult =
-  try:
-    ok(headerNode(ctx, getCanonicalHead(ctx.chainDB)))
-  except CatchableError as e:
-    err("can't get latest block: " & e.msg)
+  let header = ?ctx.chainDB.getCanonicalHead()
+  ok(headerNode(ctx, header))
 
 proc getTxCount(ctx: GraphqlContextRef, txRoot: Hash32): RespResult =
-  try:
-    ok(resp(getTransactionCount(ctx.chainDB, txRoot)))
-  except CatchableError as e:
-    err("can't get txcount: " & e.msg)
+  let txCount = ctx.chainDB.getTransactionCount(txRoot)
+  ok(resp(txCount))
 
 proc longNode(val: uint64 | int64): RespResult =
   ok(Node(kind: nkInt, intVal: $val, pos: Pos()))
@@ -243,106 +238,85 @@ proc getTotalDifficulty(ctx: GraphqlContextRef, blockHash: Hash32): RespResult =
   bigIntNode(score)
 
 proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: Hash32): RespResult =
-  try:
-    ok(resp(getUnclesCount(ctx.chainDB, ommersHash)))
-  except CatchableError as e:
-    err("can't get ommers count: " & e.msg)
+  let ommers = ?ctx.chainDB.getUnclesCount(ommersHash)
+  ok(resp(ommers))
 
 proc getOmmers(ctx: GraphqlContextRef, ommersHash: Hash32): RespResult =
-  try:
-    let uncles = getUncles(ctx.chainDB, ommersHash)
-    when false:
-      # EIP 1767 says no ommers == null
-      # but hive test case want empty array []
-      if uncles.len == 0:
-        return ok(respNull())
-    var list = respList()
-    for n in uncles:
-      list.add headerNode(ctx, n)
-    ok(list)
-  except CatchableError as e:
-    err("can't get ommers: " & e.msg)
-
-proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: Hash32, index: int): RespResult =
-  try:
-    let uncles = getUncles(ctx.chainDB, ommersHash)
+  let uncles = ?ctx.chainDB.getUncles(ommersHash)
+  when false:
+    # EIP 1767 says no ommers == null
+    # but hive test case want empty array []
     if uncles.len == 0:
       return ok(respNull())
-    if index < 0 or index >= uncles.len:
-      return ok(respNull())
-    ok(headerNode(ctx, uncles[index]))
-  except CatchableError as e:
-    err("can't get ommer: " & e.msg)
+  var list = respList()
+  for n in uncles:
+    list.add headerNode(ctx, n)
+  ok(list)
+
+proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: Hash32, index: int): RespResult =
+  let uncles = ?ctx.chainDB.getUncles(ommersHash)
+  if uncles.len == 0:
+    return ok(respNull())
+  if index < 0 or index >= uncles.len:
+    return ok(respNull())
+  ok(headerNode(ctx, uncles[index]))
 
 proc getTxs(ctx: GraphqlContextRef, header: Header): RespResult =
-  try:
-    let txCount = getTransactionCount(ctx.chainDB, header.txRoot)
-    if txCount == 0:
-      return ok(respNull())
-    var list = respList()
-    var index = 0'u64
-    for n in getBlockTransactionData(ctx.chainDB, header.txRoot):
-      let tx = decodeTx(n)
-      list.add txNode(ctx, tx, index, header.number, header.baseFeePerGas)
-      inc index
+  let txCount = getTransactionCount(ctx.chainDB, header.txRoot)
+  if txCount == 0:
+    return ok(respNull())
+  var list = respList()
+  var index = 0'u64
 
-    index = 0'u64
-    var prevUsed = 0.GasInt
-    for r in getReceipts(ctx.chainDB, header.receiptsRoot):
-      let tx = TxNode(list.sons[index])
-      tx.receipt = r
-      tx.gasUsed = r.cumulativeGasUsed - prevUsed
-      prevUsed = r.cumulativeGasUsed
-      inc index
+  let txList = ?ctx.chainDB.getTransactions(header.txRoot)
+  for tx in txList:
+    list.add txNode(ctx, tx, index, header.number, header.baseFeePerGas)
+    inc index
 
-    ok(list)
-  except CatchableError as e:
-    err("can't get transactions: " & e.msg)
+  index = 0'u64
+  var prevUsed = 0.GasInt
+  let receiptList = ?ctx.chainDB.getReceipts(header.receiptsRoot)
+  for r in receiptList:
+    let tx = TxNode(list.sons[index])
+    tx.receipt = r
+    tx.gasUsed = r.cumulativeGasUsed - prevUsed
+    prevUsed = r.cumulativeGasUsed
+    inc index
+
+  ok(list)
 
 proc getWithdrawals(ctx: GraphqlContextRef, header: Header): RespResult =
-  try:
-    if header.withdrawalsRoot.isSome:
-      let wds = getWithdrawals(ctx.chainDB, header.withdrawalsRoot.get)
-      var list = respList()
-      for wd in wds:
-        list.add wdNode(ctx, wd)
-      ok(list)
-    else:
-      ok(respNull())
-  except CatchableError as e:
-    err("can't get transactions: " & e.msg)
+  if header.withdrawalsRoot.isNone:
+    return ok(respNull())
+
+  let wds = ?ctx.chainDB.getWithdrawals(header.withdrawalsRoot.get)
+  var list = respList()
+  for wd in wds:
+    list.add wdNode(ctx, wd)
+  ok(list)
 
 proc getTxAt(ctx: GraphqlContextRef, header: Header, index: uint64): RespResult =
-  try:
-    var tx: Transaction
-    if getTransactionByIndex(ctx.chainDB, header.txRoot, index.uint16, tx):
-      let txn = txNode(ctx, tx, index, header.number, header.baseFeePerGas)
+  let tx = ctx.chainDB.getTransactionByIndex(header.txRoot, index.uint16).valueOr:
+    return ok(respNull())
 
-      var i = 0'u64
-      var prevUsed = 0.GasInt
-      for r in getReceipts(ctx.chainDB, header.receiptsRoot):
-        if i == index:
-          let tx = TxNode(txn)
-          tx.receipt = r
-          tx.gasUsed = r.cumulativeGasUsed - prevUsed
-        prevUsed = r.cumulativeGasUsed
-        inc i
-
-      ok(txn)
-    else:
-      ok(respNull())
-  except CatchableError as exc:
-    err("can't get transaction by index '" & $index & "': " & exc.msg)
-  except RlpError as exc:
-    err("can't get transaction by index '" & $index & "': " & exc.msg)
+  let txn = txNode(ctx, tx, index, header.number, header.baseFeePerGas)
+  var i = 0'u64
+  var prevUsed = 0.GasInt
+  let receiptList = ?ctx.chainDB.getReceipts(header.receiptsRoot)
+  for r in receiptList:
+    if i == index:
+      let tx = TxNode(txn)
+      tx.receipt = r
+      tx.gasUsed = r.cumulativeGasUsed - prevUsed
+    prevUsed = r.cumulativeGasUsed
+    inc i
+  ok(txn)
 
 proc getTxByHash(ctx: GraphqlContextRef, hash: Hash32): RespResult =
-  try:
-    let (blockNumber, index) = getTransactionKey(ctx.chainDB, hash)
-    let header = getBlockHeader(ctx.chainDB, blockNumber)
-    getTxAt(ctx, header, index)
-  except CatchableError as e:
-    err("can't get transaction by hash '" & hash.data.toHex & "': $2" & e.msg)
+  let
+    txKey = ?ctx.chainDB.getTransactionKey(hash)
+    header = ?ctx.chainDB.getBlockHeader(txKey.blockNumber)
+  getTxAt(ctx, header, txKey.index)
 
 proc accountNode(ctx: GraphqlContextRef, header: Header, address: Address): RespResult =
   try:
@@ -782,14 +756,14 @@ proc txAccessList(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
 
 proc txMaxFeePerBlobGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType < TxEIP4844:
+  if tx.tx.txType < TxEip4844:
     ok(respNull())
   else:
     longNode(tx.tx.maxFeePerBlobGas)
 
 proc txVersionedHashes(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let tx = TxNode(parent)
-  if tx.tx.txType < TxEIP4844:
+  if tx.tx.txType < TxEip4844:
     ok(respNull())
   else:
     var list = respList()

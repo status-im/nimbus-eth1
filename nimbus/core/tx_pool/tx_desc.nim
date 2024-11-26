@@ -122,6 +122,7 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
     difficulty   : UInt256.zero(),
     coinbase     : pos.feeRecipient,
     excessBlobGas: calcExcessBlobGas(parent),
+    parentHash   : parent.blockHash,
   )
 
   BaseVMState.new(
@@ -136,12 +137,12 @@ proc update(xp: TxPoolRef; parent: Header) =
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: TxPoolRef; com: CommonRef)
-    {.gcsafe,raises: [CatchableError].} =
+proc init*(xp: TxPoolRef; com: CommonRef) =
   ## Constructor, returns new tx-pool descriptor.
   xp.startDate = getTime().utc.toTime
 
-  xp.vmState = setupVMState(com, com.db.getCanonicalHead)
+  let head = com.db.getCanonicalHead.expect("Canonicalhead exists")
+  xp.vmState = setupVMState(com, head)
   xp.txDB = TxTabsRef.new
 
   xp.lifeTime = txItemLifeTime

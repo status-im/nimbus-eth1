@@ -13,7 +13,7 @@ func xorDistance(a: openArray[byte], b: openArray[byte]): seq[byte] =
   doAssert(a.len == b.len)
 
   let length = a.len
-  var distance: seq[byte] = newSeq[byte](length)
+  var distance: seq[byte] = newSeqUninitialized[byte](length)
   for i in 0 ..< length:
     distance[i] = a[i] xor b[i]
 

@@ -23,18 +23,6 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-func mustBeGeneric(
-    root: VertexID;
-      ): Result[void,AristoError] =
-  ## Verify that `root` is neither from an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(FetchRootVidMissing)
-  elif root == VertexID(1):
-    return err(FetchAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(FetchStoRootNotAccepted)
-  ok()
-
 proc retrieveLeaf(
     db: AristoDbRef;
     root: VertexID;
@@ -92,34 +80,14 @@ proc retrieveAccountLeaf(
 proc retrieveMerkleHash(
     db: AristoDbRef;
     root: VertexID;
-    updateOk: bool;
       ): Result[Hash32,AristoError] =
   let key =
-    if updateOk:
-      db.computeKey((root, root)).valueOr:
-        if error == GetVtxNotFound:
-          return ok(EMPTY_ROOT_HASH)
-        return err(error)
-    else:
-      let (key, _) = db.getKeyRc((root, root)).valueOr:
-        if error == GetKeyNotFound:
-          return ok(EMPTY_ROOT_HASH) # empty sub-tree
-        return err(error)
-      key
+    db.computeKey((root, root)).valueOr:
+      if error == GetVtxNotFound:
+        return ok(EMPTY_ROOT_HASH)
+      return err(error)
+
   ok key.to(Hash32)
-
-
-proc hasPayload(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
-  let error = db.retrieveLeaf(root, path).errorOr:
-    return ok(true)
-
-  if error == FetchPathNotFound:
-    return ok(false)
-  err(error)
 
 proc hasAccountPayload(
     db: AristoDbRef;
@@ -244,12 +212,11 @@ proc fetchAccountRecord*(
 
   ok leafVtx.lData.account
 
-proc fetchAccountState*(
+proc fetchStateRoot*(
     db: AristoDbRef;
-    updateOk: bool;
       ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the account root.
-  db.retrieveMerkleHash(VertexID(1), updateOk)
+  db.retrieveMerkleHash(VertexID(1))
 
 proc hasPathAccount*(
     db: AristoDbRef;
@@ -259,38 +226,6 @@ proc hasPathAccount*(
   ## on the database.
   ##
   db.hasAccountPayload(accPath)
-
-proc fetchGenericData*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[seq[byte],AristoError] =
-  ## For a generic sub-tree starting at `root`, fetch the data record
-  ## indexed by `path`.
-  ##
-  ? root.mustBeGeneric()
-  let pyl = ? db.retrieveLeaf(root, path)
-  assert pyl.lData.pType == RawData   # debugging only
-  ok pyl.lData.rawBlob
-
-proc fetchGenericState*(
-    db: AristoDbRef;
-    root: VertexID;
-    updateOk: bool;
-      ): Result[Hash32,AristoError] =
-  ## Fetch the Merkle hash of the argument `root`.
-  db.retrieveMerkleHash(root, updateOk)
-
-proc hasPathGeneric*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
-  ## For a generic sub-tree starting at `root` and indexed by `path`, query
-  ## whether this record exists on the database.
-  ##
-  ? root.mustBeGeneric()
-  db.hasPayload(root, path)
 
 proc fetchStorageData*(
     db: AristoDbRef;
@@ -302,17 +237,16 @@ proc fetchStorageData*(
   ##
   db.retrieveStoragePayload(accPath, stoPath)
 
-proc fetchStorageState*(
+proc fetchStorageRoot*(
     db: AristoDbRef;
     accPath: Hash32;
-    updateOk: bool;
       ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the storage root related to `accPath`.
   let stoID = db.fetchStorageIdImpl(accPath).valueOr:
     if error == FetchPathNotFound:
       return ok(EMPTY_ROOT_HASH) # no sub-tree
     return err(error)
-  db.retrieveMerkleHash(stoID, updateOk)
+  db.retrieveMerkleHash(stoID)
 
 proc hasPathStorage*(
     db: AristoDbRef;

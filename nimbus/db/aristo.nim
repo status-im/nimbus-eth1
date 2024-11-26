@@ -32,7 +32,6 @@ export
   leftPairs, # iterators
   rightPairs,
   rightPairsAccount,
-  rightPairsGeneric,
   rightPairsStorage
 
 import

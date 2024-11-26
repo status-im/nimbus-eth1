@@ -26,11 +26,8 @@ export
 type
   Web3Quantity*      = web3types.Quantity
   Web3ExtraData*     = web3types.DynamicBytes[0, 32]
-  Web3BlockNumber*   = Quantity
   Web3Tx*            = engine_api_types.TypedTransaction
   Web3Blob*          = engine_api_types.Blob
-  Web3KZGProof*      = engine_api_types.KZGProof
-  Web3KZGCommitment* = engine_api_types.KZGCommitment
 
 {.push gcsafe, raises:[].}
 
@@ -57,36 +54,35 @@ func u64*(x: Opt[Web3Quantity]): Opt[uint64] =
   if x.isNone: Opt.none(uint64)
   else: Opt.some(uint64 x.get)
 
-func u256*(x: Web3BlockNumber): UInt256 =
+func u256*(x: Web3Quantity): UInt256 =
   u256(x.uint64)
 
-func u256*(x: common.FixedBytes[32]): UInt256 =
+func u256*(x: FixedBytes[32]): UInt256 =
   UInt256.fromBytesBE(x.data)
 
-func ethTime*(x: Web3Quantity): common.EthTime =
-  common.EthTime(x)
-
-func ethGasInt*(x: Web3Quantity): common.GasInt =
-  common.GasInt x
+func ethTime*(x: Web3Quantity): EthTime =
+  EthTime(x)
 
 func ethBlob*(x: Web3ExtraData): seq[byte] =
   distinctBase x
 
-func ethWithdrawal*(x: WithdrawalV1): common.Withdrawal =
-  result.index = x.index.uint64
-  result.validatorIndex = x.validatorIndex.uint64
-  result.address = x.address.Address
-  result.amount = x.amount.uint64
+func ethWithdrawal*(x: WithdrawalV1): Withdrawal =
+  Withdrawal(
+    index: x.index.uint64,
+    validatorIndex: x.validatorIndex.uint64,
+    address: x.address,
+    amount: x.amount.uint64,
+  )
 
 func ethWithdrawals*(list: openArray[WithdrawalV1]):
-                       seq[common.Withdrawal] =
-  result = newSeqOfCap[common.Withdrawal](list.len)
+                       seq[Withdrawal] =
+  result = newSeqOfCap[Withdrawal](list.len)
   for x in list:
     result.add ethWithdrawal(x)
 
 func ethWithdrawals*(x: Opt[seq[WithdrawalV1]]):
-                       Opt[seq[common.Withdrawal]] =
-  if x.isNone: Opt.none(seq[common.Withdrawal])
+                       Opt[seq[Withdrawal]] =
+  if x.isNone: Opt.none(seq[Withdrawal])
   else: Opt.some(ethWithdrawals x.get)
 
 func ethTx*(x: Web3Tx): common.Transaction {.gcsafe, raises:[RlpError].} =
@@ -98,16 +94,26 @@ func ethTxs*(list: openArray[Web3Tx]):
   for x in list:
     result.add ethTx(x)
 
-func ethAccessList*(list: openArray[AccessTuple]): common.AccessList =
-  for x in list:
-    result.add common.AccessPair(
-      address    : x.address,
-      storageKeys: x.storageKeys,
-    )
+func ethAuth*(x: AuthorizationObject): Authorization =
+  Authorization(
+    chainId: ChainId x.chainId,
+    address: x.address,
+    nonce: distinctBase x.nonce,
+    v: distinctBase x.v,
+    r: x.r,
+    s: x.s,
+  )
 
-func ethAccessList*(x: Opt[seq[AccessTuple]]): common.AccessList =
-  if x.isSome:
-    return ethAccessList(x.get)
+func ethAuthList*(list: openArray[AuthorizationObject]):
+                       seq[Authorization] =
+  result = newSeqOfCap[Authorization](list.len)
+  for x in list:
+    result.add ethAuth(x)
+
+func ethAuthList*(x: Opt[seq[AuthorizationObject]]):
+                       Opt[seq[Authorization]] =
+  if x.isNone: Opt.none(seq[Authorization])
+  else: Opt.some(ethAuthList x.get)
 
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
@@ -116,10 +122,10 @@ func ethAccessList*(x: Opt[seq[AccessTuple]]): common.AccessList =
 func w3Qty*(x: UInt256): Web3Quantity =
   Web3Quantity x.truncate(uint64)
 
-func w3Qty*(x: common.EthTime): Web3Quantity =
+func w3Qty*(x: EthTime): Web3Quantity =
   Web3Quantity x.uint64
 
-func w3Qty*(x: common.EthTime, y: int): Web3Quantity =
+func w3Qty*(x: EthTime, y: int): Web3Quantity =
   Web3Quantity(x + y.EthTime)
 
 func w3Qty*(x: Web3Quantity, y: int): Web3Quantity =
@@ -140,16 +146,6 @@ func w3Qty*(x: uint64): Web3Quantity =
 
 func w3Qty*(x: int64): Web3Quantity =
   Web3Quantity(x)
-
-func w3BlockNumber*(x: Opt[uint64]): Opt[Web3BlockNumber] =
-  if x.isNone: Opt.none(Web3BlockNumber)
-  else: Opt.some(Web3BlockNumber x.get)
-
-func w3BlockNumber*(x: uint64): Web3BlockNumber =
-  Web3BlockNumber(x)
-
-func w3BlockNumber*(x: UInt256): Web3BlockNumber =
-  Web3BlockNumber x.truncate(uint64)
 
 func w3ExtraData*(x: seq[byte]): Web3ExtraData =
   Web3ExtraData x
@@ -179,125 +175,5 @@ func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
   result = newSeqOfCap[Web3Tx](list.len)
   for tx in list:
     result.add w3Tx(tx)
-
-proc w3AccessTuple*(ac: AccessPair): AccessTuple =
-  AccessTuple(
-    address: ac.address,
-    storageKeys: ac.storageKeys
-  )
-
-proc w3AccessList*(list: openArray[AccessPair]): seq[AccessTuple] =
-  result = newSeqOfCap[AccessTuple](list.len)
-  for x in list:
-    result.add w3AccessTuple(x)
-
-func w3DepositRequest*(x: DepositRequest): DepositRequestV1 =
-  DepositRequestV1(
-    pubkey: x.pubkey,
-    withdrawalCredentials: x.withdrawalCredentials,
-    amount: w3Qty x.amount,
-    signature: x.signature,
-    index: w3Qty x.index,
-  )
-
-func w3DepositRequests*(reqs: Opt[seq[Request]]): Opt[seq[DepositRequestV1]] =
-  if reqs.isNone:
-    return Opt.none(seq[DepositRequestV1])
-
-  var res: seq[DepositRequestV1]
-  for req in reqs.get:
-    if req.requestType == DepositRequestType:
-      res.add w3DepositRequest req.deposit
-
-  ok(res)
-
-func w3WithdrawalRequest*(x: WithdrawalRequest): WithdrawalRequestV1 =
-  WithdrawalRequestV1(
-    sourceAddress: x.sourceAddress,
-    validatorPubkey: x.validatorPubkey,
-    amount: w3Qty x.amount,
-  )
-
-func w3WithdrawalRequests*(reqs: Opt[seq[Request]]): Opt[seq[WithdrawalRequestV1]] =
-  if reqs.isNone:
-    return Opt.none(seq[WithdrawalRequestV1])
-
-  var res: seq[WithdrawalRequestV1]
-  for req in reqs.get:
-    if req.requestType == WithdrawalRequestType:
-      res.add w3WithdrawalRequest req.withdrawal
-
-  ok(res)
-
-func w3ConsolidationRequest*(x: ConsolidationRequest): ConsolidationRequestV1 =
-  ConsolidationRequestV1(
-    sourceAddress: x.sourceAddress,
-    sourcePubkey: x.sourcePubkey,
-    targetPubkey: x.targetPubkey,
-  )
-
-func w3ConsolidationRequests*(reqs: Opt[seq[Request]]): Opt[seq[ConsolidationRequestV1]] =
-  if reqs.isNone:
-    return Opt.none(seq[ConsolidationRequestV1])
-
-  var res: seq[ConsolidationRequestV1]
-  for req in reqs.get:
-    if req.requestType == ConsolidationRequestType:
-      res.add w3ConsolidationRequest req.consolidation
-
-  ok(res)
-
-func ethRequest*(x: DepositRequestV1): Request =
-  Request(
-    requestType: DepositRequestType,
-    deposit: DepositRequest(
-      pubkey: x.pubkey,
-      withdrawalCredentials: x.withdrawalCredentials,
-      amount: uint64 x.amount,
-      signature: x.signature,
-      index: uint64 x.index,
-    )
-  )
-
-func ethRequest*(x: WithdrawalRequestV1): Request =
-  Request(
-    requestType: WithdrawalRequestType,
-    withdrawal: WithDrawalRequest(
-      sourceAddress: x.sourceAddress,
-      validatorPubkey: x.validatorPubkey,
-      amount: uint64 x.amount,
-    )
-  )
-
-func ethRequest*(x: ConsolidationRequestV1): Request =
-  Request(
-    requestType: ConsolidationRequestType,
-    consolidation: ConsolidationRequest(
-      sourceAddress: x.sourceAddress,
-      sourcePubkey: x.sourcePubkey,
-      targetPubkey: x.targetPubkey,
-    )
-  )
-
-func ethRequests*(p: ExecutionPayload): Opt[seq[Request]] =
-  if p.depositRequests.isNone and
-     p.withdrawalRequests.isNone and
-     p.consolidationRequests.isNone:
-    return Opt.none(seq[Request])
-
-  var res: seq[Request]
-  if p.depositRequests.isSome:
-    for x in p.depositRequests.get:
-      res.add ethRequest(x)
-
-  if p.withdrawalRequests.isSome:
-    for x in p.withdrawalRequests.get:
-      res.add ethRequest(x)
-
-  if p.consolidationRequests.isSome:
-    for x in p.consolidationRequests.get:
-      res.add ethRequest(x)
-
-  ok(res)
 
 chronicles.formatIt(Quantity): $(distinctBase it)

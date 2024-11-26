@@ -59,7 +59,7 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.pre = node["pre"]
 
 proc rootExists(db: CoreDbRef; root: Hash32): bool =
-  let state = db.ctx.getAccounts().state(updateOk=true).valueOr:
+  let state = db.ctx.getAccounts().getStateRoot().valueOr:
     return false
   state == root
 
@@ -67,19 +67,20 @@ proc executeCase(node: JsonNode): bool =
   let
     env     = parseEnv(node)
     memDB   = newCoreDbRef DefaultDbMemory
-    stateDB = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
+    stateDB = LedgerRef.init(memDB)
     config  = getChainConfig(env.network)
     com     = CommonRef.new(memDB, config)
 
   setupStateDB(env.pre, stateDB)
   stateDB.persist()
 
-  if not com.db.persistHeader(env.genesisHeader,
-                              com.proofOfStake(env.genesisHeader)):
-    debugEcho "Failed to put genesis header into database"
+  com.db.persistHeader(env.genesisHeader,
+                       com.proofOfStake(env.genesisHeader)).isOkOr:
+    debugEcho "Failed to put genesis header into database: ", error
     return false
 
-  if com.db.getCanonicalHead().blockHash != env.genesisHeader.blockHash:
+  let chead = com.db.getCanonicalHead().expect("canonicalHead exists")
+  if chead.blockHash != env.genesisHeader.blockHash:
     debugEcho "Genesis block hash in database is different with expected genesis block hash"
     return false
 
@@ -102,7 +103,7 @@ proc executeCase(node: JsonNode): bool =
     debugEcho error
     return false
 
-  let head = com.db.getCanonicalHead()
+  let head = com.db.getCanonicalHead().expect("canonicalHead exists")
   let headHash = head.blockHash
   if headHash != env.lastBlockHash:
     debugEcho "lastestBlockHash mismatch, get: ", headHash,

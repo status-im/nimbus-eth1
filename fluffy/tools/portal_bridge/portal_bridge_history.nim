@@ -15,12 +15,12 @@ import
   results,
   stew/byteutils,
   eth/common/keys,
-  eth/common/[base, headers_rlp, blocks_rlp],
+  eth/common/[base, headers_rlp, blocks_rlp, receipts],
   eth/p2p/discoveryv5/random2,
   ../../../nimbus/beacon/web3_eth_conv,
   ../../../hive_integration/nodocker/engine/engine_client,
   ../../rpc/portal_rpc_client,
-  ../../network/history/[history_content, history_network],
+  ../../network/history/[history_content, history_type_conversions, history_validation],
   ../../network_metadata,
   ../../eth_data/[era1, history_data_ssz_e2s, history_data_seeding],
   ../../database/era1_db,
@@ -30,6 +30,11 @@ from stew/objects import checkedEnumAssign
 from eth/common/eth_types_rlp import rlpHash
 
 const newHeadPollInterval = 6.seconds # Slot with potential block is every 12s
+
+type PortalHistoryBridge = ref object
+  portalClient: RpcClient
+  web3Client: RpcClient
+  gossipQueue: AsyncQueue[(seq[byte], seq[byte])]
 
 ## Conversion functions for Block and Receipts
 
@@ -79,9 +84,9 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
   var logs: seq[Log]
   if receiptObject.logs.len > 0:
     for log in receiptObject.logs:
-      var topics: seq[Topic]
+      var topics: seq[receipts.Topic]
       for topic in log.topics:
-        topics.add(Topic(topic))
+        topics.add(topic)
 
       logs.add(Log(address: log.address, data: log.data, topics: topics))
 
@@ -139,63 +144,34 @@ proc getBlockReceipts(
 ## Portal JSON-RPC API helper calls for pushing block and receipts
 
 proc gossipBlockHeader(
-    client: RpcClient, id: Hash32 | uint64, headerWithProof: BlockHeaderWithProof
-): Future[Result[void, string]] {.async: (raises: []).} =
-  let
-    contentKey = blockHeaderContentKey(id)
-    encodedContentKeyHex = contentKey.encode.asSeq().toHex()
+    bridge: PortalHistoryBridge,
+    id: Hash32 | uint64,
+    headerWithProof: BlockHeaderWithProof,
+): Future[void] {.async: (raises: [CancelledError]).} =
+  let contentKey = blockHeaderContentKey(id)
 
-    peers =
-      try:
-        await client.portal_historyGossip(
-          encodedContentKeyHex, SSZ.encode(headerWithProof).toHex()
-        )
-      except CatchableError as e:
-        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
-
-  info "Block header gossiped", peers, contentKey = encodedContentKeyHex
-  return ok()
+  await bridge.gossipQueue.addLast(
+    (contentKey.encode.asSeq(), SSZ.encode(headerWithProof))
+  )
 
 proc gossipBlockBody(
-    client: RpcClient,
+    bridge: PortalHistoryBridge,
     hash: Hash32,
     body: PortalBlockBodyLegacy | PortalBlockBodyShanghai,
-): Future[Result[void, string]] {.async: (raises: []).} =
-  let
-    contentKey = blockBodyContentKey(hash)
-    encodedContentKeyHex = contentKey.encode.asSeq().toHex()
+): Future[void] {.async: (raises: [CancelledError]).} =
+  let contentKey = blockBodyContentKey(hash)
 
-    peers =
-      try:
-        await client.portal_historyGossip(
-          encodedContentKeyHex, SSZ.encode(body).toHex()
-        )
-      except CatchableError as e:
-        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
-
-  info "Block body gossiped", peers, contentKey = encodedContentKeyHex
-  return ok()
+  await bridge.gossipQueue.addLast((contentKey.encode.asSeq(), SSZ.encode(body)))
 
 proc gossipReceipts(
-    client: RpcClient, hash: Hash32, receipts: PortalReceipts
-): Future[Result[void, string]] {.async: (raises: []).} =
-  let
-    contentKey = receiptsContentKey(hash)
-    encodedContentKeyHex = contentKey.encode.asSeq().toHex()
+    bridge: PortalHistoryBridge, hash: Hash32, receipts: PortalReceipts
+): Future[void] {.async: (raises: [CancelledError]).} =
+  let contentKey = receiptsContentKey(hash)
 
-    peers =
-      try:
-        await client.portal_historyGossip(
-          encodedContentKeyHex, SSZ.encode(receipts).toHex()
-        )
-      except CatchableError as e:
-        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
-
-  info "Receipts gossiped", peers, contentKey = encodedContentKeyHex
-  return ok()
+  await bridge.gossipQueue.addLast((contentKey.encode.asSeq(), SSZ.encode(receipts)))
 
 proc runLatestLoop(
-    portalClient: RpcClient, web3Client: RpcClient, validate = false
+    bridge: PortalHistoryBridge, validate = false
 ) {.async: (raises: [CancelledError]).} =
   ## Loop that requests the latest block + receipts and pushes them into the
   ## Portal network.
@@ -211,14 +187,14 @@ proc runLatestLoop(
   var lastBlockNumber = 0'u64
   while true:
     let t0 = Moment.now()
-    let blockObject = (await getBlockByNumber(web3Client, blockId)).valueOr:
+    let blockObject = (await bridge.web3Client.getBlockByNumber(blockId)).valueOr:
       error "Failed to get latest block", error
       await sleepAsync(1.seconds)
       continue
 
     let blockNumber = distinctBase(blockObject.number)
     if blockNumber > lastBlockNumber:
-      let receiptObjects = (await web3Client.getBlockReceipts(blockNumber)).valueOr:
+      let receiptObjects = (await bridge.web3Client.getBlockReceipts(blockNumber)).valueOr:
         error "Failed to get latest receipts", error
         await sleepAsync(1.seconds)
         continue
@@ -239,7 +215,7 @@ proc runLatestLoop(
 
       let hash = blockObject.hash
       if validate:
-        if validateBlockHeaderBytes(headerWithProof.header.asSeq(), hash).isErr():
+        if validateHeaderBytes(headerWithProof.header.asSeq(), hash).isErr():
           error "Block header is invalid"
           continue
         if validateBlockBody(body, ethBlock.header).isErr():
@@ -250,11 +226,9 @@ proc runLatestLoop(
           continue
 
       # gossip block header by hash
-      (await portalClient.gossipBlockHeader(hash, headerWithProof)).isOkOr:
-        error "Failed to gossip block header", error, hash
+      await bridge.gossipBlockHeader(hash, headerWithProof)
       # gossip block header by number
-      (await portalClient.gossipBlockHeader(blockNumber, headerWithProof)).isOkOr:
-        error "Failed to gossip block header", error, hash
+      await bridge.gossipBlockHeader(blockNumber, headerWithProof)
 
       # For bodies & receipts to get verified, the header needs to be available
       # on the network. Wait a little to get the headers propagated through
@@ -262,12 +236,9 @@ proc runLatestLoop(
       await sleepAsync(2.seconds)
 
       # gossip block body
-      (await portalClient.gossipBlockBody(hash, body)).isOkOr:
-        error "Failed to gossip block body", error, hash
-
+      await bridge.gossipBlockBody(hash, body)
       # gossip receipts
-      (await portalClient.gossipReceipts(hash, portalReceipts)).isOkOr:
-        error "Failed to gossip receipts", error, hash
+      await bridge.gossipReceipts(hash, portalReceipts)
 
     # Making sure here that we poll enough times not to miss a block.
     # We could also do some work without awaiting it, e.g. the gossiping or
@@ -281,11 +252,11 @@ proc runLatestLoop(
       warn "Block gossip took longer than slot interval"
 
 proc gossipHeadersWithProof(
-    portalClient: RpcClient,
+    bridge: PortalHistoryBridge,
     era1File: string,
     epochRecordFile: Opt[string] = Opt.none(string),
     verifyEra = false,
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let f = ?Era1File.open(era1File)
 
   if verifyEra:
@@ -296,54 +267,59 @@ proc gossipHeadersWithProof(
   # UX hassle it adds to provide the accumulator ssz files.
   let epochRecord =
     if epochRecordFile.isNone:
+      info "Building accumulator from era1 file", era1File
       ?f.buildAccumulator()
     else:
       ?readEpochRecordCached(epochRecordFile.get())
 
-  for (contentKey, contentValue) in f.headersWithProof(epochRecord):
-    let peers =
-      try:
-        await portalClient.portal_historyGossip(
-          contentKey.asSeq.toHex(), contentValue.toHex()
-        )
-      except CatchableError as e:
-        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
-    info "Block header gossiped", peers, contentKey
+  info "Gossip headers from era1 file", era1File
 
+  for blockHeader in f.era1BlockHeaders:
+    doAssert blockHeader.isPreMerge()
+
+    let
+      headerWithProof = buildHeaderWithProof(blockHeader, epochRecord).valueOr:
+        raiseAssert "Failed to build header with proof: " & $blockHeader.number
+      blockHash = blockHeader.rlpHash()
+
+    # gossip block header by hash
+    await bridge.gossipBlockHeader(blockHash, headerWithProof)
+    # gossip block header by number
+    await bridge.gossipBlockHeader(blockHeader.number, headerWithProof)
+
+  info "Succesfully put headers from era1 file in gossip queue", era1File
   ok()
 
 proc gossipBlockContent(
-    portalClient: RpcClient, era1File: string, verifyEra = false
-): Future[Result[void, string]] {.async: (raises: []).} =
+    bridge: PortalHistoryBridge, era1File: string, verifyEra = false
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let f = ?Era1File.open(era1File)
 
   if verifyEra:
     let _ = ?f.verify()
 
-  for (contentKey, contentValue) in f.blockContent():
-    let peers =
-      try:
-        await portalClient.portal_historyGossip(
-          contentKey.asSeq.toHex(), contentValue.toHex()
-        )
-      except CatchableError as e:
-        return err("JSON-RPC portal_historyGossip failed: " & $e.msg)
-    info "Block content gossiped", peers, contentKey
+  info "Gossip bodies and receipts from era1 file", era1File
 
+  for (header, body, receipts, _) in f.era1BlockTuples:
+    let blockHash = header.rlpHash()
+
+    # gossip block body
+    await bridge.gossipBlockBody(blockHash, PortalBlockBodyLegacy.fromBlockBody(body))
+    # gossip receipts
+    await bridge.gossipReceipts(blockHash, PortalReceipts.fromReceipts(receipts))
+
+  info "Succesfully put bodies and receipts from era1 file in gossip queue", era1File
   ok()
 
 proc runBackfillLoop(
-    portalClient: RpcClient, web3Client: RpcClient, era1Dir: string
+    bridge: PortalHistoryBridge, era1Dir: string, startEra: uint64, endEra: uint64
 ) {.async: (raises: [CancelledError]).} =
-  let
-    rng = newRng()
-    accumulator = loadAccumulator()
-  while true:
+  let accumulator = loadAccumulator()
+
+  for era in startEra .. endEra:
     let
-      # Grab a random era1 to backfill
-      era = rng[].rand(int(era(network_metadata.mergeBlockNumber - 1)))
       root = accumulator.historicalEpochs[era]
-      eraFile = era1Dir / era1FileName("mainnet", Era1(era), Digest(data: root))
+      era1File = era1Dir / era1FileName("mainnet", Era1(era), Digest(data: root))
 
     # Note:
     # There are two design options here:
@@ -360,42 +336,38 @@ proc runBackfillLoop(
     # new era1 can be gossiped (might need another custom json-rpc that checks
     # the offer queue)
     when false:
-      info "Gossip headers from era1 file", eraFile
+      info "Gossip headers from era1 file", era1File
       let headerRes =
         try:
-          await portalClient.portal_debug_historyGossipHeaders(eraFile)
+          await bridge.portalClient.portal_debug_historyGossipHeaders(era1File)
         except CatchableError as e:
           error "JSON-RPC portal_debug_historyGossipHeaders failed", error = e.msg
           false
 
       if headerRes:
-        info "Gossip block content from era1 file", eraFile
+        info "Gossip block content from era1 file", era1File
         let res =
           try:
-            await portalClient.portal_debug_historyGossipBlockContent(eraFile)
+            await bridge.portalClient.portal_debug_historyGossipBlockContent(era1File)
           except CatchableError as e:
             error "JSON-RPC portal_debug_historyGossipBlockContent failed",
               error = e.msg
             false
         if res:
-          error "Failed to gossip block content from era1 file", eraFile
+          error "Failed to gossip block content from era1 file", era1File
       else:
-        error "Failed to gossip headers from era1 file", eraFile
+        error "Failed to gossip headers from era1 file", era1File
     else:
-      info "Gossip headers from era1 file", eraFile
-      (await portalClient.gossipHeadersWithProof(eraFile)).isOkOr:
-        error "Failed to gossip headers from era1 file", error, eraFile
+      (await bridge.gossipHeadersWithProof(era1File)).isOkOr:
+        error "Failed to gossip headers from era1 file", error, era1File
         continue
 
-      info "Gossip block content from era1 file", eraFile
-      (await portalClient.gossipBlockContent(eraFile)).isOkOr:
-        error "Failed to gossip block content from era1 file", error, eraFile
+      (await bridge.gossipBlockContent(era1File)).isOkOr:
+        error "Failed to gossip block content from era1 file", error, era1File
         continue
-
-      info "Succesfully gossiped era1 file", eraFile
 
 proc runBackfillLoopAuditMode(
-    portalClient: RpcClient, web3Client: RpcClient, era1Dir: string
+    bridge: PortalHistoryBridge, era1Dir: string
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
@@ -422,7 +394,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyGetContent(
+              await bridge.portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content
@@ -454,7 +426,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyGetContent(
+              await bridge.portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content
@@ -482,7 +454,7 @@ proc runBackfillLoopAuditMode(
         contentHex =
           try:
             (
-              await portalClient.portal_historyGetContent(
+              await bridge.portalClient.portal_historyGetContent(
                 contentKey.encode.asSeq().toHex()
               )
             ).content
@@ -512,43 +484,59 @@ proc runBackfillLoopAuditMode(
           raiseAssert "Failed to build header with proof: " & error
 
       # gossip block header by hash
-      (await portalClient.gossipBlockHeader(blockHash, headerWithProof)).isOkOr:
-        error "Failed to gossip block header", error, blockHash
+      await bridge.gossipBlockHeader(blockHash, headerWithProof)
       # gossip block header by number
-      (await portalClient.gossipBlockHeader(blockNumber, headerWithProof)).isOkOr:
-        error "Failed to gossip block header", error, blockHash
+      await bridge.gossipBlockHeader(blockNumber, headerWithProof)
     if not bodySuccess:
-      (
-        await portalClient.gossipBlockBody(
-          blockHash, PortalBlockBodyLegacy.fromBlockBody(body)
-        )
-      ).isOkOr:
-        error "Failed to gossip block body", error, blockHash
+      await bridge.gossipBlockBody(blockHash, PortalBlockBodyLegacy.fromBlockBody(body))
     if not receiptsSuccess:
-      (
-        await portalClient.gossipReceipts(
-          blockHash, PortalReceipts.fromReceipts(receipts)
-        )
-      ).isOkOr:
-        error "Failed to gossip receipts", error, blockHash
+      await bridge.gossipReceipts(blockHash, PortalReceipts.fromReceipts(receipts))
 
     await sleepAsync(2.seconds)
 
 proc runHistory*(config: PortalBridgeConf) =
-  let
-    portalClient = newRpcClientConnect(config.portalRpcUrl)
-    web3Client = newRpcClientConnect(config.web3Url)
+  let bridge = PortalHistoryBridge(
+    portalClient: newRpcClientConnect(config.portalRpcUrl),
+    web3Client: newRpcClientConnect(config.web3Url),
+    gossipQueue: newAsyncQueue[(seq[byte], seq[byte])](config.gossipConcurrency),
+  )
+
+  proc gossipWorker(bridge: PortalHistoryBridge) {.async: (raises: []).} =
+    try:
+      while true:
+        let
+          (contentKey, contentValue) = await bridge.gossipQueue.popFirst()
+          contentKeyHex = contentKey.toHex()
+          contentValueHex = contentValue.toHex()
+
+        try:
+          let peers = await bridge.portalClient.portal_historyGossip(
+            contentKeyHex, contentValueHex
+          )
+          debug "Content gossiped", peers, contentKey = contentKeyHex
+        except CancelledError as e:
+          trace "Cancelled gossipWorker"
+          raise e
+        except CatchableError as e:
+          error "JSON-RPC portal_historyGossip failed",
+            error = $e.msg, contentKey = contentKeyHex
+    except CancelledError:
+      trace "gossipWorker canceled"
+
+  var workers: seq[Future[void]] = @[]
+  for i in 0 ..< config.gossipConcurrency:
+    workers.add bridge.gossipWorker()
 
   if config.latest:
-    asyncSpawn runLatestLoop(portalClient, web3Client, config.blockVerify)
+    asyncSpawn bridge.runLatestLoop(config.blockVerify)
 
   if config.backfill:
     if config.audit:
-      asyncSpawn runBackfillLoopAuditMode(
-        portalClient, web3Client, config.era1Dir.string
-      )
+      asyncSpawn bridge.runBackfillLoopAuditMode(config.era1Dir.string)
     else:
-      asyncSpawn runBackfillLoop(portalClient, web3Client, config.era1Dir.string)
+      asyncSpawn bridge.runBackfillLoop(
+        config.era1Dir.string, config.startEra, config.endEra
+      )
 
   while true:
     poll()

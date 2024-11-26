@@ -51,14 +51,6 @@ proc toJson*(receipts: seq[Receipt]): JsonNode {.gcsafe.}
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template safeTracer(info: string; code: untyped) =
-  try:
-    code
-  except CatchableError as e:
-    raiseAssert info & " name=" & $e.name & " msg=" & e.msg
-
-# -------------------
-
 proc init(
     T: type CaptCtxRef;
     com: CommonRef;
@@ -75,9 +67,9 @@ proc init(
     T: type CaptCtxRef;
     com: CommonRef;
     topHeader: Header;
-      ): T
-      {.raises: [CatchableError].} =
-  T.init(com, com.db.getBlockHeader(topHeader.parentHash).stateRoot)
+      ): T =
+  let header = com.db.getBlockHeader(topHeader.parentHash).expect("top header parent exists")
+  T.init(com, header.stateRoot)
 
 proc activate(cc: CaptCtxRef): CaptCtxRef {.discardable.} =
   ## Install/activate new context `cc.ctx`, old one in `cc.restore`
@@ -113,10 +105,11 @@ proc toJson(receipt: Receipt): JsonNode =
 proc dumpReceiptsImpl(
     chainDB: CoreDbRef;
     header: Header;
-      ): JsonNode
-      {.raises: [CatchableError].} =
+      ): JsonNode =
   result = newJArray()
-  for receipt in chainDB.getReceipts(header.receiptsRoot):
+  let receiptList = chainDB.getReceipts(header.receiptsRoot).
+    expect("receipts exists")
+  for receipt in receiptList:
     result.add receipt.toJson
 
 # ------------------------------------------------------------------------------
@@ -160,8 +153,7 @@ proc traceTransactionImpl(
     transactions: openArray[Transaction];
     txIndex: uint64;
     tracerFlags: set[TracerFlags] = {};
-      ): JsonNode
-      {.raises: [CatchableError].}=
+      ): JsonNode =
   if header.txRoot == EMPTY_ROOT_HASH:
     return newJNull()
 
@@ -196,27 +188,27 @@ proc traceTransactionImpl(
       before.captureAccount(stateDb, recipient, recipientName)
       before.captureAccount(stateDb, miner, minerName)
       stateDb.persist()
-      stateDiff["beforeRoot"] = %(stateDb.rootHash.toHex)
-      discard com.db.ctx.getAccounts.state(updateOk=true) # lazy hashing!
-      stateCtx = CaptCtxRef.init(com, stateDb.rootHash)
+      stateDiff["beforeRoot"] = %(stateDb.getStateRoot().toHex)
+      discard com.db.ctx.getAccounts.getStateRoot() # lazy hashing!
+      stateCtx = CaptCtxRef.init(com, stateDb.getStateRoot())
 
     let rc = vmState.processTransaction(tx, sender, header)
     gasUsed = if rc.isOk: rc.value else: 0
 
     if idx.uint64 == txIndex:
-      discard com.db.ctx.getAccounts.state(updateOk=true) # lazy hashing!
+      discard com.db.ctx.getAccounts.getStateRoot() # lazy hashing!
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, miner, minerName)
       tracerInst.removeTracedAccounts(sender, recipient, miner)
       stateDb.persist()
-      stateDiff["afterRoot"] = %(stateDb.rootHash.toHex)
+      stateDiff["afterRoot"] = %(stateDb.getStateRoot().toHex)
       break
 
   # internal transactions:
   let
     cx = activate stateCtx
-    ldgBefore = LedgerRef.init(com.db, cx.root, storeSlotHash = true)
+    ldgBefore = LedgerRef.init(com.db, storeSlotHash = true)
   defer: cx.release()
 
   for idx, acc in tracedAccountsPairs(tracerInst):
@@ -240,13 +232,11 @@ proc dumpBlockStateImpl(
     com: CommonRef;
     blk: EthBlock;
     dumpState = false;
-      ): JsonNode
-      {.raises: [CatchableError].} =
+      ): JsonNode =
   template header: Header = blk.header
 
   let
     cc = activate CaptCtxRef.init(com, header)
-    parent = com.db.getBlockHeader(header.parentHash)
 
     # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
@@ -260,7 +250,7 @@ proc dumpBlockStateImpl(
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = LedgerRef.init(com.db, parent.stateRoot, storeSlotHash = true)
+    stateBefore = LedgerRef.init(com.db, storeSlotHash = true)
 
   for idx, tx in blk.transactions:
     let sender = tx.recoverSender().expect("valid signature")
@@ -308,8 +298,7 @@ proc traceBlockImpl(
     com: CommonRef;
     blk: EthBlock;
     tracerFlags: set[TracerFlags] = {};
-      ): JsonNode
-      {.raises: [CatchableError].} =
+      ): JsonNode =
   template header: Header = blk.header
 
   let
@@ -344,8 +333,7 @@ proc traceTransactionsImpl(
     com: CommonRef;
     header: Header;
     transactions: openArray[Transaction];
-      ): JsonNode
-      {.raises: [CatchableError].} =
+      ): JsonNode =
   result = newJArray()
   for i in 0 ..< transactions.len:
     result.add traceTransactionImpl(
@@ -360,8 +348,7 @@ proc traceBlock*(
     blk: EthBlock;
     tracerFlags: set[TracerFlags] = {};
       ): JsonNode =
-  "traceBlock".safeTracer:
-    result = com.traceBlockImpl(blk, tracerFlags)
+  com.traceBlockImpl(blk, tracerFlags)
 
 proc toJson*(receipts: seq[Receipt]): JsonNode =
   result = newJArray()
@@ -375,8 +362,7 @@ proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) =
   node["state"] = n
 
 proc dumpReceipts*(chainDB: CoreDbRef, header: Header): JsonNode =
-  "dumpReceipts".safeTracer:
-    result = chainDB.dumpReceiptsImpl header
+  chainDB.dumpReceiptsImpl header
 
 proc traceTransaction*(
     com: CommonRef;
@@ -385,24 +371,21 @@ proc traceTransaction*(
     txIndex: uint64;
     tracerFlags: set[TracerFlags] = {};
       ): JsonNode =
-  "traceTransaction".safeTracer:
-      result = com.traceTransactionImpl(header, txs, txIndex,tracerFlags)
+  com.traceTransactionImpl(header, txs, txIndex,tracerFlags)
 
 proc dumpBlockState*(
     com: CommonRef;
     blk: EthBlock;
     dumpState = false;
       ): JsonNode =
-  "dumpBlockState".safeTracer:
-    result = com.dumpBlockStateImpl(blk, dumpState)
+  com.dumpBlockStateImpl(blk, dumpState)
 
 proc traceTransactions*(
     com: CommonRef;
     header: Header;
     transactions: openArray[Transaction];
       ): JsonNode =
-  "traceTransactions".safeTracer:
-    result = com.traceTransactionsImpl(header, transactions)
+  com.traceTransactionsImpl(header, transactions)
 
 # ------------------------------------------------------------------------------
 # End

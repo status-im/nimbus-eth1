@@ -9,7 +9,7 @@
 
 import
   std/[typetraits, strutils],
-  eth/rlp,
+  web3/execution_types,
   json_rpc/errors,
   nimcrypto/sha2,
   stew/endians2,
@@ -18,7 +18,7 @@ import
   ../../db/core_db,
   ../../utils/utils,
   ../../common/common,
-  web3/execution_types,
+  ../../core/chain,
   ../web3_eth_conv
 
 {.push gcsafe, raises:[].}
@@ -48,10 +48,10 @@ proc computePayloadId*(blockHash: common.Hash32,
   (distinctBase result)[0..7] = dest.data[0..7]
 
 proc validateBlockHash*(header: common.Header,
-                        gotHash: common.Hash32,
+                        wantHash: common.Hash32,
                         version: Version): Result[void, PayloadStatusV1]
                           {.gcsafe, raises: [ValueError].} =
-  let wantHash = header.blockHash
+  let gotHash = header.blockHash
   if wantHash != gotHash:
     let status = if version == Version.V1:
                    PayloadExecutionStatus.invalid_block_hash
@@ -173,28 +173,25 @@ proc tooLargeRequest*(msg: string): ref InvalidRequest =
   )
 
 proc latestValidHash*(db: CoreDbRef,
-                      parent: common.Header,
-                      ttd: DifficultyInt): common.Hash32 =
+                      parent: Header,
+                      ttd: DifficultyInt): Hash32 =
   if parent.isGenesis:
-    return default(common.Hash32)
+    return default(Hash32)
   let ptd = db.getScore(parent.parentHash).valueOr(0.u256)
   if ptd >= ttd:
     parent.blockHash
   else:
     # If the most recent valid ancestor is a PoW block,
     # latestValidHash MUST be set to ZERO
-    default(common.Hash32)
+    default(Hash32)
 
 proc invalidFCU*(validationError: string,
-                 com: CommonRef,
-                 header: common.Header): ForkchoiceUpdatedResponse =
-  var parent: common.Header
-  if not com.db.getBlockHeader(header.parentHash, parent):
+                 chain: ForkedChainRef,
+                 header: Header): ForkchoiceUpdatedResponse =
+  let parent = chain.headerByHash(header.parentHash).valueOr:
     return invalidFCU(validationError)
 
-  let blockHash = try:
-    latestValidHash(com.db, parent, com.ttd.get(high(UInt256)))
-  except RlpError:
-    default(common.Hash32)
+  let blockHash =
+    latestValidHash(chain.db, parent, chain.com.ttd.get(high(UInt256)))
 
   invalidFCU(validationError, blockHash)

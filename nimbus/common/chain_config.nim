@@ -68,13 +68,10 @@ createJsonFlavor JGenesis,
   allowUnknownFields = true,
   skipNullFields = true
 
-template derefType(T: type): untyped =
-  typeof(T()[])
-
 NetworkParams.useDefaultReaderIn JGenesis
 GenesisAccount.useDefaultReaderIn JGenesis
-derefType(Genesis).useDefaultReaderIn JGenesis
-derefType(ChainConfig).useDefaultReaderIn JGenesis
+Genesis.useDefaultReaderIn JGenesis
+ChainConfig.useDefaultReaderIn JGenesis
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -448,7 +445,9 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
 
   result = case id
   of MainNet:
-    const mainNetTTD = parse("58750000000000000000000",UInt256)
+    const
+      mainNetTTD = parse("58750000000000000000000",UInt256)
+      MAINNET_DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cbb839cbe05303d7705fa"
     ChainConfig(
       chainId:             MainNet.ChainId,
       # Genesis (Frontier):                                # 2015-07-30 15:26:13 UTC
@@ -473,6 +472,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: Opt.some(mainNetTTD),
       shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
       cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC
+      depositContractAddress: Opt.some(MAINNET_DEPOSIT_CONTRACT_ADDRESS),
     )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
@@ -543,7 +543,7 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
       difficulty: 0x01.u256,
       gasLimit: 0x17D7840,
       nonce: uint64(0x1234).to(Bytes8),
-      timestamp: EthTime(1_695_902_100),
+      timestamp: EthTime(0x65156994),
       alloc: decodePrealloc(holeskyAllocData)
     )
   else:

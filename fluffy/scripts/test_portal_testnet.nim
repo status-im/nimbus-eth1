@@ -14,7 +14,7 @@ import
   chronos,
   stew/byteutils,
   eth/p2p/discoveryv5/random2,
-  eth/keys,
+  eth/common/keys,
   ../common/common_types,
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
@@ -79,7 +79,8 @@ proc withRetries[A](
       if tries > numRetries:
         # if we reached max number of retries fail
         let msg =
-          "Call failed with msg: " & exc.msg & ", for node with idx: " & $nodeIdx
+          "Call failed with msg: " & exc.msg & ", for node with idx: " & $nodeIdx &
+          ", after " & $tries & " tries."
         raise newException(ValueError, msg)
 
     inc tries
@@ -94,7 +95,7 @@ proc retryUntil[A](
     f: FutureCallback[A], c: CheckCallback[A], checkFailMessage: string, nodeIdx: int
 ): Future[A] =
   # some reasonable limits, which will cause waits as: 1, 2, 4, 8, 16, 32 seconds
-  return withRetries(f, c, 1, seconds(1), checkFailMessage, nodeIdx)
+  return withRetries(f, c, 3, seconds(1), checkFailMessage, nodeIdx)
 
 # Note:
 # When doing json-rpc requests following `RpcPostError` can occur:
@@ -261,9 +262,20 @@ procSuite "Portal testnet tests":
 
     # Gossiping all block headers with proof first, as bodies and receipts
     # require them for validation.
-    for (content, contentKey) in blockHeadersWithProof:
-      discard
-        (await clients[0].portal_historyGossip(content.toHex(), contentKey.toHex()))
+    for (contentKey, contentValue) in blockHeadersWithProof:
+      discard (
+        await clients[0].portal_historyGossip(contentKey.toHex(), contentValue.toHex())
+      )
+
+    # TODO: Fix iteration order: Because the blockData gets parsed into a
+    # BlockDataTable, iterating over this result in gossiping the block bodies
+    # and receipts of block in a different order than the headers.
+    # Because of this, block bodies and receipts for block
+    # 0x6251d65b8a8668efabe2f89c96a5b6332d83b3bbe585089ea6b2ab9b6754f5e9
+    # come right after the headers with proof. This is likely to cause validation
+    # failures on the nodes, as the block bodies and receipts require the header
+    # to get validated.
+    await sleepAsync(seconds(1))
 
     # Gossiping all block bodies and receipts.
     for b in blocks(blockData, false):
