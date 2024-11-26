@@ -199,7 +199,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           elif consensusFork == ConsensusFork.Capella:
             Opt.none(PayloadAttributesV2)
           elif consensusFork == ConsensusFork.Deneb or
-            consensusFork == ConsensusFork.Electra:
+            consensusFork == ConsensusFork.Electra or
+            consensusFork == ConsensusFork.Fulu:
             Opt.none(PayloadAttributesV3)
           else:
             static: doAssert(false, "Unsupported consensus fork")
@@ -247,7 +248,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             response = payloadResponse,
             payload = payload,
             versionedHashes = versioned_hashes
-        elif consensusFork == ConsensusFork.Electra:
+        elif consensusFork == ConsensusFork.Electra or
+          consensusFork == ConsensusFork.Fulu:
           # Calculate the versioned hashes from the kzg commitments
           let versioned_hashes = mapIt(
             forkyBlck.message.body.blob_kzg_commitments,
