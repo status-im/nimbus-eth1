@@ -50,6 +50,9 @@ template fromJson(T: type uint64, n: JsonNode): uint64 =
 template fromJson(T: type EthTime, n: JsonNode): EthTime =
   EthTime(fromHex[uint64](n.getStr))
 
+template fromJson(T: type ChainId, n: JsonNode): ChainId =
+  ChainId(fromHex[uint64](n.getStr))
+
 proc fromJson(T: type PrivateKey, n: JsonNode): PrivateKey =
   var secretKey = n.getStr
   removePrefix(secretKey, "0x")
@@ -78,13 +81,13 @@ template required(T: type, nField: string): auto =
 template required(T: type, nField: string, index: int): auto =
   fromJson(T, n[nField][index])
 
-template omitZero(T: type, nField: string): auto =
+template defaultZero(T: type, nField: string): auto =
   if n.hasKey(nField):
     fromJson(T, n[nField])
   else:
     default(T)
 
-template omitZero(T: type, nField: string, index: int): auto =
+template defaultZero(T: type, nField: string, index: int): auto =
   if n.hasKey(nField):
     fromJson(T, n[nField][index])
   else:
@@ -96,7 +99,23 @@ template optional(T: type, nField: string): auto =
   else:
     Opt.none(T)
 
+proc fromJson(T: type Authorization, n: JsonNode): Authorization =
+  Authorization(
+    chainId: required(ChainId, "chainId"),
+    address: required(Address, "address"),
+    nonce: required(AccountNonce, "nonce"),
+    v: required(uint64, "v"),
+    r: required(UInt256, "r"),
+    s: required(UInt256, "s"),
+  )
+
+proc fromJson(T: type seq[Authorization], list: JsonNode): T =
+  for x in list:
+    result.add Authorization.fromJson(x)
+
 proc txType(n: JsonNode): TxType =
+  if "authorizationList" in n:
+    return TxEip7702
   if "blobVersionedHashes" in n:
     return TxEip4844
   if "gasPrice" notin n:
@@ -113,7 +132,7 @@ proc parseHeader*(n: JsonNode): Header =
     gasLimit   : required(GasInt, "currentGasLimit"),
     timestamp  : required(EthTime, "currentTimestamp"),
     stateRoot  : emptyRoot,
-    mixHash    : omitZero(Bytes32, "currentRandom"),
+    mixHash    : defaultZero(Bytes32, "currentRandom"),
     baseFeePerGas  : optional(UInt256, "currentBaseFee"),
     withdrawalsRoot: optional(Hash32, "currentWithdrawalsRoot"),
     excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
@@ -135,12 +154,13 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     value   : required(UInt256, "value", valueIndex),
     payload : required(seq[byte], "data", dataIndex),
     chainId : ChainId(1),
-    gasPrice: omitZero(GasInt, "gasPrice"),
-    maxFeePerGas        : omitZero(GasInt, "maxFeePerGas"),
-    accessList          : omitZero(AccessList, "accessLists", dataIndex),
-    maxPriorityFeePerGas: omitZero(GasInt, "maxPriorityFeePerGas"),
-    maxFeePerBlobGas    : omitZero(UInt256, "maxFeePerBlobGas"),
-    versionedHashes     : omitZero(seq[Hash32], "blobVersionedHashes")
+    gasPrice: defaultZero(GasInt, "gasPrice"),
+    maxFeePerGas        : defaultZero(GasInt, "maxFeePerGas"),
+    accessList          : defaultZero(AccessList, "accessLists", dataIndex),
+    maxPriorityFeePerGas: defaultZero(GasInt, "maxPriorityFeePerGas"),
+    maxFeePerBlobGas    : defaultZero(UInt256, "maxFeePerBlobGas"),
+    versionedHashes     : defaultZero(seq[Hash32], "blobVersionedHashes"),
+    authorizationList   : defaultZero(seq[Authorization], "authorizationList"),
   )
 
   let rawTo = n["to"].getStr

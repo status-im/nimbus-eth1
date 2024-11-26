@@ -18,6 +18,7 @@ import
   ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
+  ../core/eip7702,
   ./host_types,
   ./call_types
 
@@ -61,6 +62,10 @@ proc initialAccessListEIP2929(call: CallParams) =
     # access list itself, after calculating the new contract address.
     if not call.isCreate:
       db.accessList(call.to)
+      # If the `call.to` has a delegation, also warm its target.
+      let target = parseDelegationAddress(db.getCode(call.to))
+      if target.isSome:
+        db.accessList(target[])
 
     # EIP3651 adds coinbase to the list of addresses that should start warm.
     if vmState.fork >= FkShanghai:
@@ -75,6 +80,57 @@ proc initialAccessListEIP2929(call: CallParams) =
       db.accessList(account.address)
       for key in account.storageKeys:
         db.accessList(account.address, key.to(UInt256))
+
+proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
+  var gasRefund = 0
+  let ledger = vmState.stateDB
+
+  if not call.isCreate:
+    ledger.incNonce(call.sender)
+
+  # EIP-7702
+  for auth in call.authorizationList:
+    # 1. Verify the chain id is either 0 or the chain's current ID.
+    if not(auth.chainId == 0.ChainId or auth.chainId == vmState.com.chainId):
+      continue
+
+    # 2. authority = ecrecover(keccak(MAGIC || rlp([chain_id, address, nonce])), y_parity, r, s]
+    let authority = authority(auth).valueOr:
+      continue
+
+    # 3. Add authority to accessed_addresses (as defined in EIP-2929.)
+    ledger.accessList(authority)
+
+    # 4. Verify the code of authority is either empty or already delegated.
+    let code = ledger.getCode(authority)
+    if code.len > 0:
+      if not parseDelegation(code):
+        continue
+
+    # 5. Verify the nonce of authority is equal to nonce.
+    if ledger.getNonce(authority) != auth.nonce:
+      continue
+
+    # 6. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
+    if ledger.accountExists(authority):
+      gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
+
+    # 7. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
+    if auth.address == default(eth_types.Address):
+      ledger.setCode(authority, @[])
+    else:
+      ledger.setCode(authority, @(addressToDelegation(auth.address)))
+
+    # 8. Increase the nonce of authority by one.
+    ledger.setNonce(authority, auth.nonce + 1)
+
+    # Usually the transaction destination and delegation target are added to
+    # the access list in initialAccessListEIP2929, however if the delegation is in
+    # the same transaction we need add here as to reduce calling slow ecrecover.
+    if call.to == authority:
+      ledger.accessList(auth.address)
+
+  gasRefund
 
 proc setupHost(call: CallParams): TransactionHost =
   let vmState = call.vmState
@@ -104,6 +160,9 @@ proc setupHost(call: CallParams): TransactionHost =
     # All other defaults in `TransactionHost` are fine.
   )
 
+  let gasRefund = if call.sysCall: 0
+                  else: preExecComputation(vmState, call)
+
   # Generate new contract address, prepare code, and update message `recipient`
   # with the contract address.  This differs from the previous Nimbus EVM API.
   # Guarded under `evmc_enabled` for now so it doesn't break vm2.
@@ -132,9 +191,7 @@ proc setupHost(call: CallParams): TransactionHost =
         host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg, code,
-      authorizationList = call.authorizationList)
-
+    host.computation = newComputation(vmState, call.sysCall, cMsg, code)
     host.code = code
 
   else:
@@ -146,9 +203,9 @@ proc setupHost(call: CallParams): TransactionHost =
       host.msg.input_data = host.input[0].addr
 
     let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg,
-      authorizationList = call.authorizationList)
+    host.computation = newComputation(vmState, call.sysCall, cMsg)
 
+  host.computation.gasMeter.refundGas(gasRefund)
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
                        call.gasLimit, call.value)

@@ -22,8 +22,7 @@ import
   ../common/common,
   eth/common/eth_types_rlp,
   chronicles, chronos,
-  sets,
-  stew/assign2
+  sets
 
 export
   common
@@ -249,8 +248,7 @@ template resolveCode*(c: Computation, address: Address): CodeBytesRef =
     c.vmState.readOnlyStateDB.resolveCode(address)
 
 proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
-                     salt: ContractSalt = ZERO_CONTRACTSALT,
-                     authorizationList: openArray[Authorization] = []): Computation =
+                     salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -271,11 +269,9 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
     else:
       result.code = CodeStream.init(
         vmState.readOnlyStateDB.getCode(message.codeAddress))
-  assign(result.authorizationList, authorizationList)
 
 func newComputation*(vmState: BaseVMState, sysCall: bool,
-                     message: Message, code: CodeBytesRef,
-                     authorizationList: openArray[Authorization] = []): Computation =
+                     message: Message, code: CodeBytesRef): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -285,7 +281,6 @@ func newComputation*(vmState: BaseVMState, sysCall: bool,
   result.gasMeter.init(message.gas)
   result.code = CodeStream.init(code)
   result.sysCall = sysCall
-  assign(result.authorizationList, authorizationList)
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts

@@ -75,6 +75,20 @@ proc gasCallEIP2929(c: Computation, address: Address): GasInt =
         # the form of a constant `gasCall`
         return ColdAccountAccessCost - WarmStorageReadCost
 
+proc delegateResolutionCost(c: Computation, address: Address): GasInt =
+  when evmc_enabled:
+    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
+      ColdAccountAccessCost
+    else:
+      WarmStorageReadCost
+  else:
+    c.vmState.mutateStateDB:
+      if not db.inAccessList(address):
+        db.accessList(address)
+        return ColdAccountAccessCost
+      else:
+        return WarmStorageReadCost
+
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
 
@@ -99,7 +113,7 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
   if FkPrague <= c.fork:
     let delegateTo = parseDelegationAddress(c.getCode(q.codeAddress))
     if delegateTo.isSome:
-      q.gasCallEIPs += gasCallEIP2929(c, delegateTo[])
+      q.gasCallEIPs += delegateResolutionCost(c, delegateTo[])
 
 proc callParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for callOp()
