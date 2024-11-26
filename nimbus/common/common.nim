@@ -203,7 +203,8 @@ proc init(com         : CommonRef,
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
 
-  com.initializeDb()
+  if genesis.isNil.not:
+    com.initializeDb()
 
 proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
   if com.config.terminalTotalDifficulty.isNone:

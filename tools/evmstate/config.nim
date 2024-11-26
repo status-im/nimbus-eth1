@@ -76,6 +76,7 @@ type
 
     inputFile* {.
       desc: "json file contains state test data"
+      defaultValue: ""
       argument }: string
 
 const
