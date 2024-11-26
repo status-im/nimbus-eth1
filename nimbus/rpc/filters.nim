@@ -6,7 +6,6 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles,
   std/options,
   eth/common/eth_types_rlp,
   web3/eth_api_types,
