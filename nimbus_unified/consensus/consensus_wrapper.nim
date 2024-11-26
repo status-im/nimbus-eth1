@@ -2468,9 +2468,9 @@ proc handleStartingOption(config: var BeaconNodeConf) {.raises: [CatchableError]
 
   # More options can be added, might be out of scope given that they exist in eth2
   case config.cmd
-  of BNSStartUpCmd.noCommand:
+  of BNStartUpCmd.noCommand:
     doRunBeaconNode(config, rng)
-  of BNSStartUpCmd.trustedNodeSync:
+  of BNStartUpCmd.trustedNodeSync:
     if config.blockId.isSome():
       error "--blockId option has been removed - use --state-id instead!"
       quit 1
@@ -2480,17 +2480,20 @@ proc handleStartingOption(config: var BeaconNodeConf) {.raises: [CatchableError]
       db = BeaconChainDB.new(config.databaseDir, metadata.cfg, inMemory = false)
       genesisState = waitFor fetchGenesisState(metadata)
     waitFor db.doRunTrustedNodeSync(
-      config.databaseDir, config.eraDir, config.trustedNodeUrl, config.stateId,
-      config.lcTrustedBlockRoot, config.backfillBlocks, config.reindex,
+      metadata, config.databaseDir, config.eraDir, config.trustedNodeUrl,
+      config.stateId, config.lcTrustedBlockRoot, config.backfillBlocks, config.reindex,
       config.downloadDepositSnapshot, genesisState,
     )
     db.close()
+  else:
+    notice("unknonw option")
+    isShutDownRequired.store(true)
 
-## Consensus wrapper
 proc consensusWrapper*(parameters: TaskParameters) {.raises: [CatchableError].} =
   var config = parameters.beaconNodeConfigs
+
   try:
-    doRunBeaconNode(config, rng)
+    handleStartingOption(config)
   except CatchableError as e:
     fatal "error", message = e.msg
     isShutDownRequired.store(true)
