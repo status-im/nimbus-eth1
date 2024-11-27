@@ -13,7 +13,7 @@ import
   stew/ptrops,
   stew/saturation_arith,
   stint,
-  ../evm/types,
+  ../evm/[types, precompiles],
   ../evm/interpreter_dispatch,
   ../utils/utils,
   "."/[host_types, host_trace]
@@ -34,8 +34,9 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
     value: m.value.fromEvmc,
     data: @(makeOpenArray(m.input_data, m.input_size.int))
   )
-  return newComputation(host.vmState, false, childMsg,
-                        cast[ContractSalt](m.create2_salt), keepStack = false)
+  return newComputation(host.vmState, false, childMsg, isPrecompile = false,
+                        keepStack = false,
+                        cast[ContractSalt](m.create2_salt))
 
 proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
                                res: var EvmcResult) {.inline.} =
@@ -71,7 +72,8 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
     data: @(makeOpenArray(m.input_data, m.input_size.int)),
     flags: m.flags,
   )
-  return newComputation(host.vmState, false, childMsg, keepStack = false)
+  let isPrecompile = getPrecompile(host.vmState.fork, childMsg.codeAddress).isSome()
+  newComputation(host.vmState, false, childMsg, isPrecompile = isPrecompile, keepStack = false)
 
 proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
                              res: var EvmcResult) {.inline.} =
