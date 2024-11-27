@@ -41,7 +41,6 @@ type
     index: int
     tracerFlags: set[TracerFlags]
     error: string
-    trustedSetupLoaded: bool
 
   StateResult = object
     name : string
@@ -113,14 +112,6 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
               else:
                 JsonTracer(nil)
 
-  if com.isCancunOrLater(ctx.header.timestamp):
-    if not ctx.trustedSetupLoaded:
-      let res = loadKzgTrustedSetup()
-      if res.isErr:
-        echo "FATAL: ", res.error
-        quit(QuitFailure)
-      ctx.trustedSetupLoaded = true
-
   let vmState = TestVMState()
   vmState.init(
     parent = ctx.parent,
@@ -156,8 +147,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     if rc.isOk:
       gasUsed = rc.value
 
-    let miner = ctx.header.coinbase
-    coinbaseStateClearing(vmState, miner)
+    coinbaseStateClearing(vmState, ctx.header.coinbase)
   except CatchableError as ex:
     echo "FATAL: ", ex.msg
     quit(QuitFailure)
@@ -178,9 +168,12 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
 template hasError(ctx: StateContext): bool =
   ctx.error.len > 0
 
-proc prepareAndRun(ctx: var StateContext, conf: StateConf): bool =
+proc prepareAndRun(inputFile: string, conf: StateConf): bool =
+  var
+    ctx: StateContext
+
   let
-    fixture = json.parseFile(conf.inputFile)
+    fixture = json.parseFile(inputFile)
     n       = ctx.extractNameAndFixture(fixture)
     txData  = n["transaction"]
     post    = n["post"]
@@ -262,8 +255,20 @@ proc main() =
   let conf = StateConf.init()
   when defined(chronicles_runtime_filtering):
     setVerbosity(conf.verbosity)
-  var ctx: StateContext
-  if not ctx.prepareAndRun(conf):
+
+  loadKzgTrustedSetup().isOkOr:
+    echo "FATAL: ", error
     quit(QuitFailure)
+
+  if conf.inputFile.len > 0:
+    if not prepareAndRun(conf.inputFile, conf):
+      quit(QuitFailure)
+  else:
+    var noError = true
+    for inputFile in lines(stdin):
+      let res = prepareAndRun(inputFile, conf)
+      noError = noError and res
+    if not noError:
+      quit(QuitFailure)
 
 main()
