@@ -155,11 +155,16 @@ func updateCursor(c: ForkedChainRef,
 
   c.cursorHeader = header
   c.cursorHash = header.blockHash
-  c.blocks[c.cursorHash] = BlockDesc(
-    blk: blk,
-    receipts: move(receipts)
-  )
-  c.updateCursorHeads(c.cursorHash, header)
+
+  c.blocks.withValue(c.cursorHash, val):
+    # Block exists alrady, so update only
+    val.receipts = receipts
+  do:
+    # New block => update head
+    c.blocks[c.cursorHash] = BlockDesc(
+      blk: blk,
+      receipts: move(receipts))
+    c.updateCursorHeads(c.cursorHash, header)
 
 proc validateBlock(c: ForkedChainRef,
           parent: Header,
