@@ -22,7 +22,7 @@ const
   DelegationPrefix = [0xef.byte, 0x01, 0x00]
 
 const
-  PER_AUTH_BASE_COST* = 12500
+  PER_AUTH_BASE_COST* = 2500
   PER_EMPTY_ACCOUNT_COST* = 25000
 
 func authority*(auth: Authorization): Opt[Address] =

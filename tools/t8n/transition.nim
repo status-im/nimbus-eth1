@@ -344,16 +344,13 @@ proc exec(ctx: TransContext,
     withdrawalsRoot  : header.withdrawalsRoot
   )
 
-  var excessBlobGas = Opt.none(GasInt)
-  if ctx.env.currentExcessBlobGas.isSome:
-    excessBlobGas = ctx.env.currentExcessBlobGas
-  elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
-    excessBlobGas = Opt.some calcExcessBlobGas(vmState.parent)
-      
-  if excessBlobGas.isSome:
+  if vmState.com.isCancunOrLater(ctx.env.currentTimestamp):
     result.result.blobGasUsed = Opt.some vmState.blobGasUsed
-    result.result.currentExcessBlobGas = excessBlobGas
-    
+    if ctx.env.currentExcessBlobGas.isSome:
+      result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
+    elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
+      result.result.currentExcessBlobGas = Opt.some calcExcessBlobGas(vmState.parent)
+
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     var allLogs: seq[Log]
     for rec in result.result.receipts:

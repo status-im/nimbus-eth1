@@ -14,7 +14,6 @@ import
   ../common/evmforks,
   ../evm/types,
   ../evm/internals,
-  ../core/eip7702,
   ./host_types
 
 type
@@ -80,8 +79,5 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): GasInt =
     for account in call.accessList:
       gas += ACCESS_LIST_ADDRESS_COST
       gas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
-
-  if fork >= FkPrague:
-    gas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
 
   return gas.GasInt

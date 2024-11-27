@@ -17,8 +17,9 @@ import
   ../transaction/call_types,
   ../transaction,
   ../utils/utils,
-  "."/[dao, eip4844, eip7702, gaslimit, withdrawals],
+  "."/[dao, eip4844, gaslimit, withdrawals],
   ./pow/[difficulty, header],
+  nimcrypto/utils as cryptoutils,
   stew/objects,
   results
 
@@ -341,11 +342,9 @@ proc validateTransaction*(
   # Clients might choose to disable this rule for RPC calls like
   # `eth_call` and `eth_estimateGas`
   # EOA = Externally Owned Account
-  let
-    code = roDB.getCode(sender)
-    delegated = code.parseDelegation()
-  if code.len > 0 and not delegated:
-    return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")
+  let codeHash = roDB.getCodeHash(sender)
+  if codeHash != EMPTY_CODE_HASH:
+    return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeHash={codeHash.data.toHex}")
 
   if tx.txType == TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
