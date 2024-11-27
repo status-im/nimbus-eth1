@@ -789,6 +789,7 @@ const
     FkShanghai: ShanghaiGasFees,
     FkCancun: ShanghaiGasFees,
     FkPrague: ShanghaiGasFees,
+    FkOsaka: ShanghaiGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)
