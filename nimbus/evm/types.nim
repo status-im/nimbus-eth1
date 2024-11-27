@@ -14,6 +14,8 @@ import
   ../db/ledger,
   ../common/[common, evmforks]
 
+export stack, memory
+
 # this import not guarded by `when defined(evmc_enabled)`
 # because we want to use evmc types such as evmc_call_kind
 # and evmc_flags
@@ -76,7 +78,6 @@ type
     msg*:                   Message
     memory*:                EvmMemory
     stack*:                 EvmStack
-    returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
     output*:                seq[byte]
@@ -93,6 +94,7 @@ type
       parent*, child*:      Computation
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     sysCall*:               bool
+    keepStack*:             bool
 
   Error* = ref object
     evmcStatus*: evmc_status_code

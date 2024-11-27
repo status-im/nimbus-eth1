@@ -48,6 +48,8 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
     )
     let tx = signTransaction(unsignedTx, privateKey, false)
     let fixtureResult = testCallEvm(tx, tx.recoverSender().expect("valid signature"), vmState)
+    if fixtureResult.stack != nil:
+      fixtureResult.stack.dispose()
 
     if expectedErr:
       check fixtureResult.isError

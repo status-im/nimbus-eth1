@@ -8,182 +8,200 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+# Type managing the EVM stack that comprises of 1024 256-bit words.
+#
+# The stack is a hot spot in EVM execution since it's used for practically every
+# opcode. We use custom-allocated memory for several reasons, chiefly
+# performance (at the time of writing, using a seq carried about 5% overhead on
+# total EVM execution time):
+#
+# * no zeromem - the way the EVM uses the stack, it always writes full words
+#   meaning that whatever zeroing was done gets overwritten anyway - compilers
+#   are typically not smart enough to get rid of all of this
+# * no reallocation - since we can allocate memory without zeroing, we can
+#   allocate the full stack length on creation and never grow / reallocate
+# * less redundant range checking - we have to perform range checks manually and
+#   the compiler is not able to remove them consistently even though we range
+#   check manually
+# * 32-byte alignment helps vector instruction optimization
+#
+# After calling `init`, the stack must be freed manually using `dispose`!
+
 {.push raises: [].}
 
 import
+  system/ansi_c,
+  stew/[assign2, ptrops],
   stint,
   eth/common/[base, addresses, hashes],
-  std/[macros],
+  std/typetraits,
   ./evm_errors,
   ./interpreter/utils/utils_numeric
 
+const evmStackSize = 1024
+  ## https://ethereum.org/en/developers/docs/evm/#evm-instructions
+
 type
   EvmStack* = ref object
-    values: seq[EvmStackElement]
+    values: ptr EvmStackElement
+    memory: pointer
+    len*: int
 
-  EvmStackElement = UInt256
+  EvmStackElement = object
+    data {.align: 32.}: UInt256
+
   EvmStackInts = uint64 | uint | int | GasInt
-  EvmStackBytes32 = array[32, byte]
 
-func len*(stack: EvmStack): int {.inline.} =
-  len(stack.values)
+static:
+  # A few sanity checks because we skip the GC / parts of the nim type system:
+  doAssert sizeof(UInt256) == 32, "no padding etc"
+  doAssert supportsCopyMem(EvmStackElement), "byte-based ops must work sanely"
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-template toStackElem(v: UInt256, elem: EvmStackElement) =
+template `[]`*(s: EvmStack, i: int): EvmStackElement =
+  s.values.offset(i)[]
+
+template `[]`*(s: EvmStack, i: BackwardsIndex): EvmStackElement =
+  s.values.offset(s.len - int(i))[]
+
+template `[]=`*(s: EvmStack, i: int, v: EvmStackElement) =
+  assign(s[i], v)
+
+template `[]=`*(s: EvmStack, i: BackwardsIndex, v: EvmStackElement) =
+  assign(s[i], v)
+
+template toStackElem(v: EvmStackElement, elem: EvmStackElement) =
   elem = v
 
+template toStackElem(v: UInt256, elem: EvmStackElement) =
+  elem.data = v
+
 template toStackElem(v: EvmStackInts, elem: EvmStackElement) =
-  elem = v.u256
+  elem.data = v.u256
 
 template toStackElem(v: Address, elem: EvmStackElement) =
-  elem.initFromBytesBE(v.data)
+  elem.data.initFromBytesBE(v.data)
 
 template toStackElem(v: Hash32, elem: EvmStackElement) =
-  elem.initFromBytesBE(v.data)
+  elem.data.initFromBytesBE(v.data)
 
 template toStackElem(v: openArray[byte], elem: EvmStackElement) =
-  doAssert(v.len <= 32)
-  elem.initFromBytesBE(v)
+  elem.data.initFromBytesBE(v)
 
 template fromStackElem(elem: EvmStackElement, _: type UInt256): UInt256 =
-  elem
+  elem.data
 
 func fromStackElem(elem: EvmStackElement, _: type Address): Address =
-  elem.to(Bytes32).to(Address)
+  elem.data.to(Bytes32).to(Address)
 
 template fromStackElem(elem: EvmStackElement, _: type Hash32): Hash32 =
-  Hash32(elem.toBytesBE())
+  Hash32(elem.data.toBytesBE())
 
-template fromStackElem(elem: EvmStackElement, _: type EvmStackBytes32): EvmStackBytes32 =
-  elem.toBytesBE()
-
-func pushAux[T](stack: var EvmStack, value: T): EvmResultVoid =
-  if len(stack.values) > 1023:
-    return err(stackErr(StackFull))
-  stack.values.setLen(stack.values.len + 1)
-  toStackElem(value, stack.values[^1])
-  ok()
+template fromStackElem(elem: EvmStackElement, _: type Bytes32): Bytes32 =
+  elem.data.toBytesBE().to(Bytes32)
 
 func ensurePop(stack: EvmStack, expected: int): EvmResultVoid =
-  if stack.values.len < expected:
+  if stack.len < expected:
     return err(stackErr(StackInsufficient))
   ok()
 
-func popAux(stack: var EvmStack, T: type): EvmResult[T] =
+func popAux(stack: EvmStack, T: type): EvmResult[T] =
   ? ensurePop(stack, 1)
-  result = ok(fromStackElem(stack.values[^1], T))
-  stack.values.setLen(stack.values.len - 1)
-
-func internalPopTuple(stack: var EvmStack, T: type, tupleLen: static[int]): EvmResult[T] =
-  ? ensurePop(stack, tupleLen)
-  var
-    i = 0
-    v: T
-  let sz = stack.values.high
-  for f in fields(v):
-    f = fromStackElem(stack.values[sz - i], UInt256)
-    inc i
-  stack.values.setLen(sz - tupleLen + 1)
-  ok(v)
-
-macro genTupleType(len: static[int], elemType: untyped): untyped =
-  result = nnkTupleConstr.newNimNode()
-  for i in 0 ..< len: result.add(elemType)
+  stack.len -= 1
+  ok(fromStackElem(stack[stack.len], T))
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-func push*(stack: var EvmStack,
-           value: EvmStackInts | UInt256 | Address | Hash32): EvmResultVoid =
-  pushAux(stack, value)
+func push*(stack: EvmStack,
+           value: EvmStackElement | EvmStackInts | UInt256 | Address | Hash32): EvmResultVoid =
+  let len = stack.len
+  if len > 1023:
+    return err(stackErr(StackFull))
+  toStackElem(value, stack[len])
+  stack.len = len + 1
+  ok()
 
-func push*(stack: var EvmStack, value: openArray[byte]): EvmResultVoid =
-  pushAux(stack, value)
-
-func popInt*(stack: var EvmStack): EvmResult[UInt256] =
+func popInt*(stack: EvmStack): EvmResult[UInt256] =
   popAux(stack, UInt256)
 
-func popSafeInt*(stack: var EvmStack): EvmResult[int] =
-  ? ensurePop(stack, 1)
-  result = ok(fromStackElem(stack.values[^1], UInt256).safeInt)
-  stack.values.setLen(stack.values.len - 1)
-
-func popMemRef*(stack: var EvmStack): EvmResult[int] =
-  ? ensurePop(stack, 1)
-  result = ok(fromStackElem(stack.values[^1], UInt256).cleanMemRef)
-  stack.values.setLen(stack.values.len - 1)
-
-func popInt*(stack: var EvmStack, numItems: static[int]): auto =
-  type T = genTupleType(numItems, UInt256)
-  stack.internalPopTuple(T, numItems)
-
-func popAddress*(stack: var EvmStack): EvmResult[Address] =
+func popAddress*(stack: EvmStack): EvmResult[Address] =
   popAux(stack, Address)
 
-func popTopic*(stack: var EvmStack): EvmResult[EvmStackBytes32] =
-  popAux(stack, EvmStackBytes32)
+proc init*(_: type EvmStack): EvmStack =
+  let memory = c_malloc(evmStackSize * sizeof(EvmStackElement) + 31)
 
-func init*(_: type EvmStack): EvmStack =
   EvmStack(
-    values: newSeqOfCap[EvmStackElement](128)
+    values: cast[ptr EvmStackElement](((cast[uint](memory) + 31) div 32) * 32) ,
+    memory: memory, # Need to free the same pointer that we got from malloc
+    len: 0,
   )
 
-func swap*(stack: var EvmStack, position: int): EvmResultVoid =
-  ##  Perform a SWAP operation on the stack
-  let idx = position + 1
-  if idx < stack.values.len + 1:
-    (stack.values[^1], stack.values[^idx]) = (stack.values[^idx], stack.values[^1])
+proc dispose*(stack: EvmStack) =
+  if stack[].memory != nil:
+    c_free(stack[].memory)
+    stack[].reset()
+
+func swap*(stack: EvmStack, position: static int): EvmResultVoid =
+  ## Swap the `top` and `top - position` items
+  let
+    idx = position + 1 # locals help compiler reason about overflows
+    len = stack.len
+  if stack.len >= idx:
+    let
+      l1 = len - 1
+      li = len - idx
+    let tmp {.noinit.} = stack[l1]
+    stack[l1] = stack[li]
+    stack[li] = tmp
     ok()
   else:
     err(stackErr(StackInsufficient))
 
-func dup*(stack: var EvmStack, position: int): EvmResultVoid =
-  ## Perform a DUP operation on the stack
+func dup*(stack: EvmStack, position: int): EvmResultVoid =
+  ## Push copy of item at `top - position`
   if position in 1 .. stack.len:
-    stack.push(stack.values[^position])
+    stack.push(stack[^position])
   else:
     err(stackErr(StackInsufficient))
 
 func peek*(stack: EvmStack): EvmResult[UInt256] =
-  if stack.values.len == 0:
-    return err(stackErr(StackInsufficient))
-  ok(fromStackElem(stack.values[^1], UInt256))
+  ? ensurePop(stack, 1)
+  ok(fromStackElem(stack[^1], UInt256))
 
 func peekSafeInt*(stack: EvmStack): EvmResult[int] =
-  if stack.values.len == 0:
-    return err(stackErr(StackInsufficient))
-  ok(fromStackElem(stack.values[^1], UInt256).safeInt)
+  ? ensurePop(stack, 1)
+  ok(fromStackElem(stack[^1], UInt256).safeInt)
 
 func `[]`*(stack: EvmStack, i: BackwardsIndex, T: typedesc): EvmResult[T] =
   ? ensurePop(stack, int(i))
-  ok(fromStackElem(stack.values[i], T))
+  ok(fromStackElem(stack[i], T))
 
 func peekInt*(stack: EvmStack): EvmResult[UInt256] =
   ? ensurePop(stack, 1)
-  ok(fromStackElem(stack.values[^1], UInt256))
+  ok(fromStackElem(stack[^1], UInt256))
 
 func peekAddress*(stack: EvmStack): EvmResult[Address] =
   ? ensurePop(stack, 1)
-  ok(fromStackElem(stack.values[^1], Address))
+  ok(fromStackElem(stack[^1], Address))
 
 func top*(stack: EvmStack,
           value: EvmStackInts | UInt256 | Address | Hash32): EvmResultVoid =
-  if stack.values.len == 0:
-    return err(stackErr(StackInsufficient))
-  toStackElem(value, stack.values[^1])
+  ? ensurePop(stack, 1)
+  toStackElem(value, stack[^1])
   ok()
 
 iterator items*(stack: EvmStack): UInt256 =
-  for v in stack.values:
-    yield v
+  for i in 0..<stack.len:
+    yield stack[i].data
 
 iterator pairs*(stack: EvmStack): (int, UInt256) =
-  for i, v in stack.values:
-    yield (i, v)
+  for i in 0..<stack.len:
+    yield (i, stack[i].data)
 
 # ------------------------------------------------------------------------------
 # Public functions with less safety
@@ -194,63 +212,77 @@ template lsCheck*(stack: EvmStack, expected: int): EvmResultVoid =
 
 func lsTop*(stack: EvmStack,
             value: EvmStackInts | UInt256 | Address | Hash32) =
-  toStackElem(value, stack.values[^1])
+  toStackElem(value, stack[^1])
 
-func lsTop*(stack: var EvmStack, value: openArray[byte]) =
-  toStackElem(value, stack.values[^1])
+func lsTop*(stack: EvmStack, value: openArray[byte]) =
+  toStackElem(value, stack[^1])
 
 func lsPeekInt*(stack: EvmStack, i: BackwardsIndex): UInt256 =
-  fromStackElem(stack.values[i], UInt256)
+  fromStackElem(stack[i], UInt256)
 
 func lsPeekAddress*(stack: EvmStack, i: BackwardsIndex): Address =
-  fromStackElem(stack.values[i], Address)
+  fromStackElem(stack[i], Address)
 
 func lsPeekMemRef*(stack: EvmStack, i: BackwardsIndex): int =
-  fromStackElem(stack.values[i], UInt256).cleanMemRef
+  fromStackElem(stack[i], UInt256).cleanMemRef
 
 func lsPeekSafeInt*(stack: EvmStack, i: BackwardsIndex): int =
-  fromStackElem(stack.values[i], UInt256).safeInt
+  fromStackElem(stack[i], UInt256).safeInt
 
-func lsPeekTopic*(stack: EvmStack, i: BackwardsIndex): EvmStackBytes32 =
-  fromStackElem(stack.values[i], EvmStackBytes32)
+func lsPeekTopic*(stack: EvmStack, i: BackwardsIndex): Bytes32 =
+  fromStackElem(stack[i], Bytes32)
 
 func lsShrink*(stack: EvmStack, x: int) =
-  stack.values.setLen(stack.values.len - x)
+  stack.len -= x
 
 template binaryOp*(stack: EvmStack, binOp): EvmResultVoid =
-  if stack.values.len >= 2:
-    stack.values[^2] = binOp(stack.values[^1], stack.values[^2])
-    stack.values.setLen(stack.values.len - 1)
+  let len = stack.len
+  if len >= 2:
+    let
+      l1 = len - 1
+      l2 = len - 2
+    stack[l2].data = binOp(stack[l1].data, stack[l2].data)
+    stack.len = l1
     EvmResultVoid.ok()
   else:
     EvmResultVoid.err(stackErr(StackInsufficient))
 
 template unaryOp*(stack: EvmStack, unOp): EvmResultVoid =
-  if stack.values.len >= 1:
-    stack.values[^1] = unOp(stack.values[^1])
+  let len = stack.len
+  if len >= 1:
+    let l1 = len - 1
+    stack[l1].data = unOp(stack[l1].data)
     EvmResultVoid.ok()
   else:
     EvmResultVoid.err(stackErr(StackInsufficient))
 
 template binaryWithTop*(stack: EvmStack, binOp): EvmResultVoid =
-  if stack.values.len >= 2:
-    binOp(stack.values[^2], stack.values[^1], stack.values[^2])
-    stack.values.setLen(stack.values.len - 1)
+  let len = stack.len
+  if len >= 2:
+    let
+      l1 = len - 1
+      l2 = len - 2
+    binOp(stack[l2].data, stack[l1].data, stack[l2].data)
+    stack.len = l1
     EvmResultVoid.ok()
   else:
     EvmResultVoid.err(stackErr(StackInsufficient))
 
 template unaryWithTop*(stack: EvmStack, unOp): EvmResultVoid =
-  if stack.values.len >= 1:
-    unOp(stack.values[^1], stack.values[^1], toStackElem)
+  let len = stack.len
+  if len >= 1:
+    let l1 = len - 1
+    unOp(stack[l1], stack[l1].data, toStackElem)
     EvmResultVoid.ok()
   else:
     EvmResultVoid.err(stackErr(StackInsufficient))
 
 template unaryAddress*(stack: EvmStack, unOp): EvmResultVoid =
-  if stack.values.len >= 1:
-    let address = fromStackElem(stack.values[^1], Address)
-    toStackElem(unOp(address), stack.values[^1])
+  let len = stack.len
+  if len >= 1:
+    let l1 = len - 1
+    let address = fromStackElem(stack[l1], Address)
+    toStackElem(unOp(address), stack[l1])
     EvmResultVoid.ok()
   else:
     EvmResultVoid.err(stackErr(StackInsufficient))

@@ -281,7 +281,7 @@ proc initVMEnv*(network: string): BaseVMState =
 
   BaseVMState.new(parent, header, com)
 
-proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult): bool =
+proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallResult): bool =
   let com = vmState.com
   if not asmResult.isError:
     if boa.success == false:
@@ -307,6 +307,8 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
     if actual != val:
       error "different stack value", idx=i, expected=val, actual=actual
       return false
+
+  asmResult.stack.dispose()
 
   const chunkLen = 32
   let numChunks = asmResult.memory.len div chunkLen

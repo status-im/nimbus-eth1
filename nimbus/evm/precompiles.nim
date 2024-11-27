@@ -70,10 +70,6 @@ func getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
 func validPrecompileAddr(addrByte, maxPrecompileAddr: byte): bool =
   (addrByte in PrecompileAddresses.low.byte .. maxPrecompileAddr)
 
-func validPrecompileAddr(addrByte: byte, fork: EVMFork): bool =
-  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
-  validPrecompileAddr(addrByte, maxPrecompileAddr.byte)
-
 func getSignature(c: Computation): EvmResult[SigRes]  =
   # input is Hash, V, R, S
   template data: untyped = c.msg.data
@@ -719,16 +715,21 @@ func activePrecompilesList*(fork: EVMFork): seq[Address] =
   for address in activePrecompiles(fork):
     result.add address
 
-proc execPrecompiles*(c: Computation, fork: EVMFork): bool =
+proc getPrecompile*(fork: EVMFork, b: byte): Opt[PrecompileAddresses] =
+  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
+  if validPrecompileAddr(b, maxPrecompileAddr.byte):
+    Opt.some(PrecompileAddresses(b))
+  else:
+    Opt.none(PrecompileAddresses)
+
+proc getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[PrecompileAddresses] =
   for i in 0..18:
-    if c.msg.codeAddress.data[i] != 0:
-      return false
+    if codeAddress.data[i] != 0:
+      return Opt.none(PrecompileAddresses)
+  getPrecompile(fork, codeAddress.data[19])
 
-  let lb = c.msg.codeAddress.data[19]
-  if not validPrecompileAddr(lb, fork):
-    return false
-
-  let precompile = PrecompileAddresses(lb)
+proc execPrecompile*(c: Computation, precompile: PrecompileAddresses) =
+  let fork = c.fork
   let res = case precompile
     of paEcRecover: ecRecover(c)
     of paSha256: sha256(c)
@@ -759,5 +760,3 @@ proc execPrecompiles*(c: Computation, fork: EVMFork): bool =
       else:
         # swallow any other precompiles errors
         debug "execPrecompiles validation error", errCode = $res.error.code
-
-  true

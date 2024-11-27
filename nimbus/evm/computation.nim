@@ -260,39 +260,44 @@ template resolveCode*(c: Computation, address: Address): CodeBytesRef =
     c.vmState.readOnlyStateDB.resolveCode(address)
 
 proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
-                     salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
+                     isPrecompile, keepStack: bool, salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
   new result
   result.vmState = vmState
   result.msg = message
-  result.memory = EvmMemory.init()
-  result.stack = EvmStack.init()
-  result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.sysCall = sysCall
+  result.keepStack = keepStack
 
-  if result.msg.isCreate():
-    result.msg.contractAddress = result.generateContractAddress(salt)
-    result.code = CodeStream.init(message.data)
-    message.data = @[]
-  else:
-    if vmState.fork >= FkPrague:
-      result.code = CodeStream.init(
-        vmState.readOnlyStateDB.resolveCode(message.codeAddress))
+  if not isPrecompile:
+    result.memory = EvmMemory.init()
+    result.stack = EvmStack.init()
+
+    if result.msg.isCreate():
+      result.msg.contractAddress = result.generateContractAddress(salt)
+      result.code = CodeStream.init(message.data)
+      message.data = @[]
     else:
-      result.code = CodeStream.init(
-        vmState.readOnlyStateDB.getCode(message.codeAddress))
+      if vmState.fork >= FkPrague:
+        result.code = CodeStream.init(
+          vmState.readOnlyStateDB.resolveCode(message.codeAddress))
+      else:
+        result.code = CodeStream.init(
+          vmState.readOnlyStateDB.getCode(message.codeAddress))
+
 
 func newComputation*(vmState: BaseVMState, sysCall: bool,
-                     message: Message, code: CodeBytesRef): Computation =
+                     message: Message, code: CodeBytesRef, isPrecompile, keepStack: bool, ): Computation =
   new result
   result.vmState = vmState
   result.msg = message
-  result.memory = EvmMemory.init()
-  result.stack = EvmStack.init()
-  result.returnStack = @[]
   result.gasMeter.init(message.gas)
-  result.code = CodeStream.init(code)
   result.sysCall = sysCall
+  result.keepStack = keepStack
+
+  if not isPrecompile:
+    result.code = CodeStream.init(code)
+    result.memory = EvmMemory.init()
+    result.stack = EvmStack.init()
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
@@ -317,6 +322,9 @@ proc commit*(c: Computation) =
 
 proc dispose*(c: Computation) =
   c.vmState.stateDB.safeDispose(c.savePoint)
+  if not c.keepStack and c.stack != nil:
+    c.stack.dispose()
+    c.stack = nil
   c.savePoint = nil
 
 proc rollback*(c: Computation) =

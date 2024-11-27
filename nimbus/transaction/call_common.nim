@@ -132,7 +132,7 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
 
   gasRefund
 
-proc setupHost(call: CallParams): TransactionHost =
+proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
   let vmState = call.vmState
   vmState.txCtx = TxContext(
     origin         : call.origin.get(call.sender),
@@ -162,6 +162,8 @@ proc setupHost(call: CallParams): TransactionHost =
 
   let gasRefund = if call.sysCall: 0
                   else: preExecComputation(vmState, call)
+  let isPrecompile =
+    not call.isCreate and vmState.fork.getPrecompile(host.msg.code_address.fromEvmc).isSome()
 
   # Generate new contract address, prepare code, and update message `recipient`
   # with the contract address.  This differs from the previous Nimbus EVM API.
@@ -179,7 +181,9 @@ proc setupHost(call: CallParams): TransactionHost =
     else:
       # TODO: Share the underlying data, but only after checking this does not
       # cause problems with the database.
-      if host.vmState.fork >= FkPrague:
+      if isPrecompile:
+        code = nil
+      elif host.vmState.fork >= FkPrague:
         code = host.vmState.readOnlyStateDB.resolveCode(host.msg.code_address.fromEvmc)
       else:
         code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
@@ -190,8 +194,10 @@ proc setupHost(call: CallParams): TransactionHost =
         host.input = call.input
         host.msg.input_data = host.input[0].addr
 
-    let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg, code)
+    let
+      cMsg = hostToComputationMessage(host.msg)
+    host.computation = newComputation(
+      vmState, call.sysCall, cMsg, code, isPrecompile = isPrecompile, keepStack = keepStack)
     host.code = code
 
   else:
@@ -202,8 +208,10 @@ proc setupHost(call: CallParams): TransactionHost =
       host.input = call.input
       host.msg.input_data = host.input[0].addr
 
-    let cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(vmState, call.sysCall, cMsg)
+    let
+      cMsg = hostToComputationMessage(host.msg)
+    host.computation = newComputation(
+      vmState, call.sysCall, cMsg, isPrecompile = isPrecompile, keepStack = keepStack)
 
   host.computation.gasMeter.refundGas(gasRefund)
   vmState.captureStart(host.computation, call.sender, call.to,
@@ -290,7 +298,7 @@ proc finishRunningComputation(
   let gasUsed = host.msg.gas.GasInt - gasRemaining
   host.vmState.captureEnd(c, c.output, gasUsed, c.errorOpt)
 
-  when T is CallResult:
+  when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing
     # transactions
     if c.isError:
@@ -299,8 +307,10 @@ proc finishRunningComputation(
     result.output = system.move(c.output)
     result.contractAddress = if call.isCreate: c.msg.contractAddress
                             else: default(HostAddress)
-    result.stack = move(c.stack)
-    result.memory = move(c.memory)
+
+    when T is DebugCallResult:
+      result.stack = move(c.stack)
+      result.memory = move(c.memory)
   elif T is GasInt:
     result = call.gasLimit - gasRemaining
   elif T is string:
@@ -312,7 +322,7 @@ proc finishRunningComputation(
     {.error: "Unknown computation output".}
 
 proc runComputation*(call: CallParams, T: type): T =
-  let host = setupHost(call)
+  let host = setupHost(call, keepStack = T is DebugCallResult)
   prepareToRunComputation(host, call)
 
   when defined(evmc_enabled):
