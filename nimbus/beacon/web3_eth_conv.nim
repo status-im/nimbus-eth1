@@ -94,27 +94,6 @@ func ethTxs*(list: openArray[Web3Tx]):
   for x in list:
     result.add ethTx(x)
 
-func ethAuth*(x: AuthorizationObject): Authorization =
-  Authorization(
-    chainId: ChainId x.chainId,
-    address: x.address,
-    nonce: distinctBase x.nonce,
-    v: distinctBase x.v,
-    r: x.r,
-    s: x.s,
-  )
-
-func ethAuthList*(list: openArray[AuthorizationObject]):
-                       seq[Authorization] =
-  result = newSeqOfCap[Authorization](list.len)
-  for x in list:
-    result.add ethAuth(x)
-
-func ethAuthList*(x: Opt[seq[AuthorizationObject]]):
-                       Opt[seq[Authorization]] =
-  if x.isNone: Opt.none(seq[Authorization])
-  else: Opt.some(ethAuthList x.get)
-
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
 # ------------------------------------------------------------------------------
