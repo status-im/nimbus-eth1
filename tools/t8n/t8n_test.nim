@@ -646,6 +646,24 @@ const
       output: T8nOutput(result: true),
       expOut: "exp3.json",
     ),
+    TestSpec(
+      name: "More cancun test, plus example of rlp-transaction that cannot be decoded properly",
+      base: "testdata/30",
+      input: t8nInput(
+        "alloc.json", "txs_more.rlp", "env.json", "Cancun", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Prague test, EIP-7702 transaction",
+      base: "testdata/33",
+      input: t8nInput(
+        "alloc.json", "txs.json", "env.json", "Prague", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =
