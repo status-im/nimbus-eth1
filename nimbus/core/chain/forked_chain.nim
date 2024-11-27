@@ -59,7 +59,7 @@ const
   BaseDistance = 128
 
 # ------------------------------------------------------------------------------
-# Private
+# Private helpers
 # ------------------------------------------------------------------------------
 
 template shouldNotKeyError(info: string, body: untyped) =
@@ -67,6 +67,23 @@ template shouldNotKeyError(info: string, body: untyped) =
     body
   except KeyError as exc:
     raiseAssert info & ": name=" & $exc.name & " msg=" & exc.msg
+
+proc deleteLineage(c: ForkedChainRef; top: Hash32) =
+  ## Starting at argument `top`, delete all entries from `c.blocks[]` along
+  ## the ancestor chain.
+  ##
+  var parent = top
+  while true:
+    c.blocks.withValue(parent, val):
+      let w = parent
+      parent = val.blk.header.parentHash
+      c.blocks.del(w)
+      continue
+    break
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 proc processBlock(c: ForkedChainRef,
                   parent: Header,
@@ -238,47 +255,41 @@ func updateBase(c: ForkedChainRef,
                 newBaseHash: Hash32,
                 newBaseHeader: Header,
                 canonicalCursorHash: Hash32) =
-  var cursorHeadsLen = c.cursorHeads.len
-  # Remove obsolete chains, example:
-  #     -- A1 - A2 - A3      -- D5 - D6
-  #    /                    /
-  # base - B1 - B2 - [B3] - B4
-  #             \
-  #              --- C3 - C4
-  # If base move to B3, both A and C will be removed
-  # but not D
+  ## Remove obsolete chains, example:
+  ##
+  ##     A1 - A2 - A3          D5 - D6
+  ##    /                     /
+  ## base - B1 - B2 - [B3] - B4 - B5
+  ##         \          \
+  ##          C2 - C3    E4 - E5
+  ##
+  ## where `B5` is the `canonicalCursor` head. When the `base` is moved to
+  ## position `[B3]`, both chains `A` and `C` will be removed but not so for
+  ## `D` and `E`, and chain `B` will be curtailed below `B4`.
+  ##
+  var newCursorHeads: seq[CursorDesc]       # Will become new `c.cursorHeads`
+  for ch in c.cursorHeads:
+    if newBaseHeader.number < ch.forkJunction:
+      # On the example, this would be any of chain `D` or `E`.
+      newCursorHeads.add ch
 
-  for i in 0..<cursorHeadsLen:
-    if c.cursorHeads[i].forkJunction <= newBaseHeader.number and
-       c.cursorHeads[i].hash != canonicalCursorHash:
-      var prevHash = c.cursorHeads[i].hash
-      while prevHash != c.baseHash:
-        c.blocks.withValue(prevHash, val) do:
-          let rmHash = prevHash
-          prevHash = val.blk.header.parentHash
-          c.blocks.del(rmHash)
-        do:
-          # Older chain segment have been deleted
-          # by previous head
-          break
-      c.cursorHeads.del(i)
-      # If we use `c.cursorHeads.len` in the for loop,
-      # the sequence length will not updated
-      dec cursorHeadsLen
+    elif ch.hash == canonicalCursorHash:
+      # On the example, this would be chain `B`.
+      newCursorHeads.add CursorDesc(
+        hash:         ch.hash,
+        forkJunction: newBaseHeader.number + 1)
+
+    else:
+      # On the example, this would be either chain `A` or `B`.
+      c.deleteLineage ch.hash
 
   # Cleanup in-memory blocks starting from newBase backward
   # while blocks from newBase+1 to canonicalCursor not deleted
   # e.g. B4 onward
-  var prevHash = newBaseHash
-  while prevHash != c.baseHash:
-    c.blocks.withValue(prevHash, val) do:
-      let rmHash = prevHash
-      prevHash = val.blk.header.parentHash
-      c.blocks.del(rmHash)
-    do:
-      # Older chain segment have been deleted
-      # by previous head
-      break
+  c.deleteLineage newBaseHash
+
+  # Implied deletion of chain heads (if any)
+  c.cursorHeads.swap newCursorHeads
 
   c.baseHeader = newBaseHeader
   c.baseHash = newBaseHash
@@ -291,14 +302,14 @@ func findCanonicalHead(c: ForkedChainRef,
     return ok(CanonicalDesc(cursorHash: c.baseHash, header: c.baseHeader))
 
   shouldNotKeyError "findCanonicalHead":
-   # Find hash belong to which chain
-   for cursor in c.cursorHeads:
-     var prevHash = cursor.hash
-     while prevHash != c.baseHash:
-       let header = c.blocks[prevHash].blk.header
-       if prevHash == hash:
-         return ok(CanonicalDesc(cursorHash: cursor.hash, header: header))
-       prevHash = header.parentHash
+    # Find hash belong to which chain
+    for cursor in c.cursorHeads:
+      var prevHash = cursor.hash
+      while prevHash != c.baseHash:
+        let header = c.blocks[prevHash].blk.header
+        if prevHash == hash:
+          return ok(CanonicalDesc(cursorHash: cursor.hash, header: header))
+        prevHash = header.parentHash
 
   err("Block hash is not part of any active chain")
 
