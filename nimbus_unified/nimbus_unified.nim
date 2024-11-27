@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[atomics, os, exitprocs],
+  std/[atomics, os],
   chronicles,
   stew/io2,
   consensus/consensus_wrapper,
@@ -14,6 +14,7 @@ import
   beacon_chain/[conf, conf_common],
   beacon_chain/[beacon_chain_db],
   beacon_chain/validators/keystore_management,
+  beacon_chain/nimbus_binary_common,
   version
 
 ## Constants
@@ -156,7 +157,7 @@ when isMainModule:
   var tasksList: NimbusTasks = NimbusTasks.new
 
   var beaconNodeConfig = makeBannerAndConfig(
-    clientId, copyrights, nimBanner, SPEC_VERSION, [], BeaconNodeConf
+    clientName, versionAsStr, nimBanner, "", [], BeaconNodeConf
   ).valueOr:
     stderr.write error
     quit QuitFailure
@@ -166,7 +167,7 @@ when isMainModule:
 
   setupFileLimits()
 
-  setupLogging(config.logLevel, config.logStdout, config.logFile)
+  # setupLogging(config.logLevel, config.logStdout, config.logFile)
 
   createPidFile(beaconNodeConfig.databaseDir.string / "unified.pid")
 
