@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, sets],
   chronos,
   stew/[byteutils, leb128, endians2],
   chronicles,
@@ -35,6 +35,7 @@ const
   talkReqOverhead = getTalkReqOverhead(utpProtocolId)
   utpHeaderOverhead = 20
   maxUtpPayloadSize = maxDiscv5PacketSize - talkReqOverhead - utpHeaderOverhead
+  maxPendingTransfersPerPeer = 50
 
 type
   ContentRequest = object
@@ -47,6 +48,7 @@ type
     connectionId: uint16
     nodeId: NodeId
     contentKeys: ContentKeysList
+    contentIds: seq[ContentId]
     timeout: Moment
 
   PortalStream* = ref object
@@ -69,12 +71,71 @@ type
     connectionTimeout: Duration
     contentReadTimeout*: Duration
     rng: ref HmacDrbgContext
+    pendingTransfers: TableRef[NodeId, HashSet[ContentId]]
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
 
   StreamManager* = ref object
     transport: UtpDiscv5Protocol
     streams: seq[PortalStream]
     rng: ref HmacDrbgContext
+
+proc canAddPendingTransfer(
+    transfers: TableRef[NodeId, HashSet[ContentId]],
+    nodeId: NodeId,
+    contentId: ContentId,
+    limit: int,
+): bool =
+  if not transfers.contains(nodeId):
+    return true
+
+  try:
+    (transfers[nodeId].len() < limit) and not transfers[nodeId].contains(contentId)
+  except KeyError as e:
+    raiseAssert(e.msg)
+
+proc addPendingTransfer(
+    transfers: TableRef[NodeId, HashSet[ContentId]],
+    nodeId: NodeId,
+    contentId: ContentId,
+) =
+  if not transfers.contains(nodeId):
+    transfers[nodeId] = initHashSet[ContentId]()
+
+  try:
+    transfers[nodeId].incl(contentId)
+  except KeyError as e:
+    raiseAssert(e.msg)
+
+proc removePendingTransfer(
+    transfers: TableRef[NodeId, HashSet[ContentId]],
+    nodeId: NodeId,
+    contentId: ContentId,
+) =
+  doAssert transfers.contains(nodeId)
+
+  try:
+    transfers[nodeId].excl(contentId)
+
+    if transfers[nodeId].len() == 0:
+      transfers.del(nodeId)
+  except KeyError as e:
+    raiseAssert(e.msg)
+
+template canAddPendingTransfer(
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId
+) =
+  stream.pendingTransfers.canAddPendingTransfer(
+    srcId, contentId, maxPendingTransfersPerPeer
+  )
+
+template addPendingTransfer(stream: PortalStream, nodeId: NodeId, contentId: ContentId) =
+  addPendingTransfer(stream.pendingTransfers, nodeId, contentId)
+
+template removePendingTransfer(
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId
+) =
+  removePendingTransfer(stream.pendingTransfers, nodeId, contentId)
+
 
 proc pruneAllowedConnections(stream: PortalStream) =
   # Prune requests and offers that didn't receive a connection request
@@ -90,7 +151,7 @@ proc pruneAllowedConnections(stream: PortalStream) =
   )
 
 proc addContentOffer*(
-    stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList
+    stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList, contentIds: seq[ContentId]
 ): Bytes2 =
   stream.pruneAllowedConnections()
 
@@ -108,6 +169,7 @@ proc addContentOffer*(
     connectionId: id,
     nodeId: nodeId,
     contentKeys: contentKeys,
+    contentIds: contentIds,
     timeout: Moment.now() + stream.connectionTimeout,
   )
   stream.contentOffers.add(contentOffer)
@@ -285,6 +347,7 @@ proc new(
     transport: transport,
     connectionTimeout: connectionTimeout,
     contentReadTimeout: contentReadTimeout,
+    pendingTransfers: newTable[NodeId, HashSet[ContentId]](),
     contentQueue: contentQueue,
     rng: rng,
   )
@@ -324,7 +387,11 @@ proc handleIncomingConnection(
       if offer.connectionId == socket.connectionId and
           offer.nodeId == socket.remoteAddress.nodeId:
         let fut = socket.readContentOffer(stream, offer)
+
+        for contentId in offer.contentIds:
+          stream.removePendingTransfer(offer.nodeId, contentId)
         stream.contentOffers.del(i)
+
         return noCancel(fut)
 
   # TODO: Is there a scenario where this can happen,

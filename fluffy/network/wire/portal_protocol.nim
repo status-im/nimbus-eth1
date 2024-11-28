@@ -446,8 +446,10 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       )
     )
 
-  var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
-  var contentKeys = ContentKeysList.init(@[])
+  var
+    contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
+    contentKeys = ContentKeysList.init(@[])
+    contentIds = newSeq[ContentId]()
   # TODO: Do we need some protection against a peer offering lots (64x) of
   # content that fits our Radius but is actually bogus?
   # Additional TODO, but more of a specification clarification: What if we don't
@@ -463,17 +465,19 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
         int64(logDistance), labelValues = [$p.protocolId]
       )
 
-      if p.inRange(contentId):
-        if not p.dbContains(contentKey, contentId):
-          contentKeysBitList.setBit(i)
-          discard contentKeys.add(contentKey)
+      if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId) and
+          not p.dbContains(contentKey, contentId):
+        p.stream.addPendingTransfer(srcId, contentId)
+        contentKeysBitList.setBit(i)
+        discard contentKeys.add(contentKey)
+        contentIds.add(contentId)
     else:
       # Return empty response when content key validation fails
       return @[]
 
   let connectionId =
     if contentKeysBitList.countOnes() != 0:
-      p.stream.addContentOffer(srcId, contentKeys)
+      p.stream.addContentOffer(srcId, contentKeys, contentIds)
     else:
       # When the node does not accept any of the content offered, reply with an
       # all zeroes bitlist and connectionId.
