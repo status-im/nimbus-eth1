@@ -41,14 +41,15 @@ type
   ContentRequest = object
     connectionId: uint16
     nodeId: NodeId
+    contentId: ContentId
     content: seq[byte]
     timeout: Moment
 
   ContentOffer = object
     connectionId: uint16
     nodeId: NodeId
-    contentKeys: ContentKeysList
     contentIds: seq[ContentId]
+    contentKeys: ContentKeysList
     timeout: Moment
 
   PortalStream* = ref object
@@ -142,10 +143,12 @@ proc pruneAllowedConnections(stream: PortalStream) =
   # Prune requests and offers that didn't receive a connection request
   # before `connectionTimeout`.
   let now = Moment.now()
-  stream.contentRequests.keepIf(
-    proc(x: ContentRequest): bool =
-      x.timeout > now
-  )
+
+  for i, request in stream.contentRequests:
+    if request.timeout <= now:
+      stream.removePendingTransfer(request.nodeId, request.contentId)
+      stream.contentRequests.del(i)
+
   for i, offer in stream.contentOffers:
     if offer.timeout <= now:
       for contentId in offer.contentIds:
@@ -173,8 +176,8 @@ proc addContentOffer*(
   let contentOffer = ContentOffer(
     connectionId: id,
     nodeId: nodeId,
-    contentKeys: contentKeys,
     contentIds: contentIds,
+    contentKeys: contentKeys,
     timeout: Moment.now() + stream.connectionTimeout,
   )
   stream.contentOffers.add(contentOffer)
@@ -182,7 +185,7 @@ proc addContentOffer*(
   return connectionId
 
 proc addContentRequest*(
-    stream: PortalStream, nodeId: NodeId, content: seq[byte]
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId, content: seq[byte]
 ): Bytes2 =
   stream.pruneAllowedConnections()
 
@@ -196,6 +199,7 @@ proc addContentRequest*(
   let contentRequest = ContentRequest(
     connectionId: id,
     nodeId: nodeId,
+    contentId: contentId,
     content: content,
     timeout: Moment.now() + stream.connectionTimeout,
   )
@@ -385,6 +389,8 @@ proc handleIncomingConnection(
       if request.connectionId == socket.connectionId and
           request.nodeId == socket.remoteAddress.nodeId:
         let fut = socket.writeContentRequest(stream, request)
+
+        stream.removePendingTransfer(request.nodeId, request.contentId)
         stream.contentRequests.del(i)
         return noCancel(fut)
 
@@ -396,7 +402,6 @@ proc handleIncomingConnection(
         for contentId in offer.contentIds:
           stream.removePendingTransfer(offer.nodeId, contentId)
         stream.contentOffers.del(i)
-
         return noCancel(fut)
 
   # TODO: Is there a scenario where this can happen,

@@ -406,7 +406,7 @@ proc handleFindContent(
   )
 
   # Check first if content is in range, as this is a cheaper operation
-  if p.inRange(contentId):
+  if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId):
     let contentResult = p.dbGet(fc.contentKey, contentId)
     if contentResult.isOk():
       let content = contentResult.get()
@@ -417,7 +417,8 @@ proc handleFindContent(
           )
         )
       else:
-        let connectionId = p.stream.addContentRequest(srcId, content)
+        p.stream.addPendingTransfer(srcId, contentId)
+        let connectionId = p.stream.addContentRequest(srcId, contentId, content)
 
         return encodeMessage(
           ContentMessage(
