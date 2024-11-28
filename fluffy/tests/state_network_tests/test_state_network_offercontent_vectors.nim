@@ -90,8 +90,8 @@ procSuite "State Network - Offer Content":
       check:
         stateNode1.containsId(contentId)
         getRes.isOk()
-        getRes.get() == contentValue.toRetrievalValue()
-        getRes.get().node == contentValue.toRetrievalValue().node
+        getRes.get() == contentValue.toRetrieval()
+        getRes.get().node == contentValue.toRetrieval().node
 
       await stateNode1.stop()
 
@@ -159,8 +159,8 @@ procSuite "State Network - Offer Content":
       check:
         stateNode1.containsId(contentId)
         getRes.isOk()
-        getRes.get() == contentValue.toRetrievalValue()
-        getRes.get().node == contentValue.toRetrievalValue().node
+        getRes.get() == contentValue.toRetrieval()
+        getRes.get().node == contentValue.toRetrieval().node
 
       await stateNode1.stop()
 
@@ -227,8 +227,8 @@ procSuite "State Network - Offer Content":
       check:
         stateNode1.containsId(contentId)
         getRes.isOk()
-        getRes.get() == contentValue.toRetrievalValue()
-        getRes.get().code == contentValue.toRetrievalValue().code
+        getRes.get() == contentValue.toRetrieval()
+        getRes.get().code == contentValue.toRetrieval().code
 
       await stateNode1.stop()
 
@@ -277,8 +277,8 @@ procSuite "State Network - Offer Content":
       check:
         stateNode2.containsId(contentId)
         getRes.isOk()
-        getRes.get() == contentValue.toRetrievalValue()
-        getRes.get().node == contentValue.toRetrievalValue().node
+        getRes.get() == contentValue.toRetrieval()
+        getRes.get().node == contentValue.toRetrieval().node
 
       await stateNode1.stop()
       await stateNode2.stop()
@@ -327,8 +327,8 @@ procSuite "State Network - Offer Content":
       check:
         stateNode2.containsId(contentId)
         getRes.isOk()
-        getRes.get() == contentValue.toRetrievalValue()
-        getRes.get().node == contentValue.toRetrievalValue().node
+        getRes.get() == contentValue.toRetrieval()
+        getRes.get().node == contentValue.toRetrieval().node
 
       await stateNode1.stop()
       await stateNode2.stop()
@@ -376,8 +376,8 @@ procSuite "State Network - Offer Content":
       check:
         stateNode2.containsId(contentId)
         getRes.isOk()
-        getRes.get() == contentValue.toRetrievalValue()
-        getRes.get().code == contentValue.toRetrievalValue().code
+        getRes.get() == contentValue.toRetrieval()
+        getRes.get().code == contentValue.toRetrieval().code
 
       await stateNode1.stop()
       await stateNode2.stop()

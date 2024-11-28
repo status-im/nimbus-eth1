@@ -81,8 +81,9 @@ proc new*(
 
 proc getContent(
     n: StateNetwork,
-    key: AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey,
+    key: ContentKeyType,
     V: type ContentRetrievalType,
+    maybeParentOffer: Opt[ContentOfferType],
 ): Future[Opt[V]] {.async: (raises: [CancelledError]).} =
   let
     contentKeyBytes = key.toContentKey().encode()
@@ -118,42 +119,54 @@ proc getContent(
       contentKeyBytes, contentId, contentValueBytes, cacheContent = true
     )
 
+    if maybeParentOffer.isSome():
+      let offer = contentValue.toOffer(maybeParentOffer.get())
+      n.portalProtocol.triggerPoke(
+        contentLookupResult.nodesInterestedInContent, contentKeyBytes, offer.encode()
+      )
+
     return Opt.some(contentValue)
 
   # Content was requested `1 + requestRetries` times and all failed on validation
   Opt.none(V)
 
 proc getAccountTrieNode*(
-    n: StateNetwork, key: AccountTrieNodeKey
+    n: StateNetwork,
+    key: AccountTrieNodeKey,
+    maybeParentOffer = Opt.none(AccountTrieNodeOffer),
 ): Future[Opt[AccountTrieNodeRetrieval]] {.
     async: (raw: true, raises: [CancelledError])
 .} =
-  n.getContent(key, AccountTrieNodeRetrieval)
+  n.getContent(key, AccountTrieNodeRetrieval, maybeParentOffer)
 
 proc getContractTrieNode*(
-    n: StateNetwork, key: ContractTrieNodeKey
+    n: StateNetwork,
+    key: ContractTrieNodeKey,
+    maybeParentOffer = Opt.none(ContractTrieNodeOffer),
 ): Future[Opt[ContractTrieNodeRetrieval]] {.
     async: (raw: true, raises: [CancelledError])
 .} =
-  n.getContent(key, ContractTrieNodeRetrieval)
+  n.getContent(key, ContractTrieNodeRetrieval, maybeParentOffer)
 
 proc getContractCode*(
-    n: StateNetwork, key: ContractCodeKey
+    n: StateNetwork,
+    key: ContractCodeKey,
+    maybeParentOffer = Opt.none(ContractCodeOffer),
 ): Future[Opt[ContractCodeRetrieval]] {.async: (raw: true, raises: [CancelledError]).} =
-  n.getContent(key, ContractCodeRetrieval)
+  n.getContent(key, ContractCodeRetrieval, maybeParentOffer)
 
-proc getStateRootByBlockNumOrHash*(
+proc getBlockHeaderByBlockNumOrHash*(
     n: StateNetwork, blockNumOrHash: uint64 | Hash32
-): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
+): Future[Opt[Header]] {.async: (raises: [CancelledError]).} =
   let hn = n.historyNetwork.valueOr:
     warn "History network is not available"
-    return Opt.none(Hash32)
+    return Opt.none(Header)
 
   let header = (await hn.getVerifiedBlockHeader(blockNumOrHash)).valueOr:
     warn "Failed to get block header from history", blockNumOrHash
-    return Opt.none(Hash32)
+    return Opt.none(Header)
 
-  Opt.some(header.stateRoot)
+  Opt.some(header)
 
 proc processOffer*(
     n: StateNetwork,
@@ -168,9 +181,9 @@ proc processOffer*(
       return err("Unable to decode offered content value")
     validationRes =
       if n.validateStateIsCanonical:
-        let stateRoot = (await n.getStateRootByBlockNumOrHash(contentValue.blockHash)).valueOr:
-          return err("Failed to get state root by block hash")
-        validateOffer(Opt.some(stateRoot), contentKey, contentValue)
+        let header = (await n.getBlockHeaderByBlockNumOrHash(contentValue.blockHash)).valueOr:
+          return err("Failed to get block header by hash")
+        validateOffer(Opt.some(header.stateRoot), contentKey, contentValue)
       else:
         # Skip state root validation
         validateOffer(Opt.none(Hash32), contentKey, contentValue)
@@ -182,7 +195,7 @@ proc processOffer*(
     return err("Received offered content with invalid content key")
 
   n.portalProtocol.storeContent(
-    contentKeyBytes, contentId, contentValue.toRetrievalValue().encode()
+    contentKeyBytes, contentId, contentValue.toRetrieval().encode()
   )
 
   await gossipOffer(
