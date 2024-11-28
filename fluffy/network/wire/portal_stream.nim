@@ -121,21 +121,22 @@ proc removePendingTransfer(
   except KeyError as e:
     raiseAssert(e.msg)
 
-template canAddPendingTransfer(
+template canAddPendingTransfer*(
     stream: PortalStream, nodeId: NodeId, contentId: ContentId
-) =
+): bool =
   stream.pendingTransfers.canAddPendingTransfer(
     srcId, contentId, maxPendingTransfersPerPeer
   )
 
-template addPendingTransfer(stream: PortalStream, nodeId: NodeId, contentId: ContentId) =
+template addPendingTransfer*(
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId
+) =
   addPendingTransfer(stream.pendingTransfers, nodeId, contentId)
 
-template removePendingTransfer(
+template removePendingTransfer*(
     stream: PortalStream, nodeId: NodeId, contentId: ContentId
 ) =
   removePendingTransfer(stream.pendingTransfers, nodeId, contentId)
-
 
 proc pruneAllowedConnections(stream: PortalStream) =
   # Prune requests and offers that didn't receive a connection request
@@ -145,13 +146,17 @@ proc pruneAllowedConnections(stream: PortalStream) =
     proc(x: ContentRequest): bool =
       x.timeout > now
   )
-  stream.contentOffers.keepIf(
-    proc(x: ContentOffer): bool =
-      x.timeout > now
-  )
+  for i, offer in stream.contentOffers:
+    if offer.timeout <= now:
+      for contentId in offer.contentIds:
+        stream.removePendingTransfer(offer.nodeId, contentId)
+      stream.contentOffers.del(i)
 
 proc addContentOffer*(
-    stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList, contentIds: seq[ContentId]
+    stream: PortalStream,
+    nodeId: NodeId,
+    contentKeys: ContentKeysList,
+    contentIds: seq[ContentId],
 ): Bytes2 =
   stream.pruneAllowedConnections()
 
