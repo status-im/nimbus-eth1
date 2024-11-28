@@ -38,6 +38,8 @@ type
     header: Header
 
   CanonicalDesc = object
+    ## Designate some `header` entry on a `CursorDesc` sub-chain named
+    ## `cursorDesc` identified by `cursorHash == cursorDesc.hash`.
     cursorHash: Hash32
     header: Header
 
@@ -296,20 +298,24 @@ func updateBase(c: ForkedChainRef,
 
 func findCanonicalHead(c: ForkedChainRef,
                        hash: Hash32): Result[CanonicalDesc, string] =
+  ## Find the `cursor` arc that contains the block relative to the
+  ## argument `hash`.
   if hash == c.baseHash:
     # The cursorHash here should not be used for next step
     # because it not point to any active chain
     return ok(CanonicalDesc(cursorHash: c.baseHash, header: c.baseHeader))
 
-  shouldNotKeyError "findCanonicalHead":
-    # Find hash belong to which chain
-    for cursor in c.cursorHeads:
-      var prevHash = cursor.hash
-      while prevHash != c.baseHash:
-        let header = c.blocks[prevHash].blk.header
-        if prevHash == hash:
-          return ok(CanonicalDesc(cursorHash: cursor.hash, header: header))
-        prevHash = header.parentHash
+  for ch in c.cursorHeads:
+    var top = ch.hash
+    while true:
+      c.blocks.withValue(top, val):
+        if ch.forkJunction <= val.blk.header.number:
+          if top == hash:
+            return ok CanonicalDesc(cursorHash: ch.hash, header: val.blk.header)
+          if ch.forkJunction < val.blk.header.number:
+            top = val.blk.header.parentHash
+            continue
+      break
 
   err("Block hash is not part of any active chain")
 
