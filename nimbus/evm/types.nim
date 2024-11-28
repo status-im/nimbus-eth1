@@ -95,6 +95,7 @@ type
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     sysCall*:               bool
     keepStack*:             bool
+    finalStack*:            seq[UInt256]
 
   Error* = ref object
     evmcStatus*: evmc_status_code

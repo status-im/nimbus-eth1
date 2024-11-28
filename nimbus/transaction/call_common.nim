@@ -309,7 +309,7 @@ proc finishRunningComputation(
                             else: default(HostAddress)
 
     when T is DebugCallResult:
-      result.stack = move(c.stack)
+      result.stack = move(c.finalStack)
       result.memory = move(c.memory)
   elif T is GasInt:
     result = call.gasLimit - gasRemaining

@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   ".."/[db/ledger, constants],
   "."/[code_stream, memory, message, stack, state],
   "."/[types],
@@ -21,8 +22,7 @@ import
   ../utils/utils,
   ../common/common,
   eth/common/eth_types_rlp,
-  chronicles, chronos,
-  sets
+  chronicles, chronos
 
 export
   common
@@ -322,7 +322,10 @@ proc commit*(c: Computation) =
 
 proc dispose*(c: Computation) =
   c.vmState.stateDB.safeDispose(c.savePoint)
-  if not c.keepStack and c.stack != nil:
+  if c.stack != nil:
+    if c.keepStack:
+      c.finalStack = toSeq(c.stack.items())
+
     c.stack.dispose()
     c.stack = nil
   c.savePoint = nil

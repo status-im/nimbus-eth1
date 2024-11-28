@@ -49,7 +49,7 @@ type
     output*:          seq[byte]         # Output data.
 
   DebugCallResult* = object of CallResult
-    stack*:           EvmStack          # EVM stack on return (for test only).
+    stack*:           seq[UInt256]      # EVM stack on return (for test only).
     memory*:          EvmMemory         # EVM memory on return (for test only).
 
 template isCreate(tx: Transaction): bool =

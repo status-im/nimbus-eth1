@@ -363,7 +363,6 @@ proc runTestOverflow() =
     let privateKey = PrivateKey.fromHex("0000000000000000000000000000000000000000000000000000001000000000")[]
     let tx = signTransaction(unsignedTx, privateKey, false)
     let res = testCallEvm(tx, tx.recoverSender().expect("valid signature"), s)
-    res.stack.dispose()
 
     when defined(evmc_enabled):
       check res.error == "EVMC_FAILURE"

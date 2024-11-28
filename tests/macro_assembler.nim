@@ -308,8 +308,6 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
       error "different stack value", idx=i, expected=val, actual=actual
       return false
 
-  asmResult.stack.dispose()
-
   const chunkLen = 32
   let numChunks = asmResult.memory.len div chunkLen
 
