@@ -27,6 +27,8 @@ import
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
+from std/times import epochTime # For system timestamp in traceContentLookup
+
 export messages, routing_table, protocol
 
 declareCounter portal_message_requests_incoming,
@@ -1249,12 +1251,15 @@ proc traceContentLookup*(
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
+  let startedAt = Moment.now()
+  # Need to use a system clock and not the mono clock for this.
+  let startedAtMs = int64(times.epochTime() * 1000)
+
   var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
 
-  let ts = now(chronos.Moment)
   var responses = Table[string, TraceResponse]()
   var metadata = Table[string, NodeMetadata]()
 
@@ -1324,7 +1329,7 @@ proc traceContentLookup*(
 
       case content.kind
       of Nodes:
-        let duration = chronos.milliseconds(now(chronos.Moment) - ts)
+        let duration = chronos.milliseconds(Moment.now() - startedAt)
 
         let maybeRadius = p.radiusCache.get(content.src.id)
         if maybeRadius.isSome() and
@@ -1365,7 +1370,7 @@ proc traceContentLookup*(
         metadata["0x" & $content.src.id] =
           NodeMetadata(enr: content.src.record, distance: distance)
       of Content:
-        let duration = chronos.milliseconds(now(chronos.Moment) - ts)
+        let duration = chronos.milliseconds(Moment.now() - startedAt)
 
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
@@ -1399,8 +1404,7 @@ proc traceContentLookup*(
             responses: responses,
             metadata: metadata,
             cancelled: pendingNodeIds,
-            startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000,
-              # nanoseconds to milliseconds
+            startedAtMs: startedAtMs,
           ),
         )
     else:
@@ -1419,8 +1423,7 @@ proc traceContentLookup*(
       responses: responses,
       metadata: metadata,
       cancelled: newSeq[NodeId](),
-      startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000,
-        # nanoseconds to milliseconds
+      startedAtMs: startedAtMs,
     ),
   )
 
