@@ -35,7 +35,7 @@ const
   talkReqOverhead = getTalkReqOverhead(utpProtocolId)
   utpHeaderOverhead = 20
   maxUtpPayloadSize = maxDiscv5PacketSize - talkReqOverhead - utpHeaderOverhead
-  maxPendingTransfersPerPeer = 50
+  maxPendingTransfersPerPeer = 128
 
 type
   ContentRequest = object
