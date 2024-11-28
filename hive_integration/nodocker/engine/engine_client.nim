@@ -276,9 +276,9 @@ func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
   if x.isNone: return
   else: x.get
 
-func authList(x: Opt[seq[Authorization]]): seq[Authorization] =
+func authList(x: Opt[seq[AuthorizationObject]]): seq[Authorization] =
   if x.isNone: return
-  else: x.get
+  else: ethAuthList x.get
 
 proc toTransaction(tx: TransactionObject): Transaction =
   Transaction(
@@ -305,6 +305,24 @@ proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
   for x in txs:
     doAssert x.kind == tohTx
     result.add toTransaction(x.tx)
+
+proc toWithdrawal(wd: WithdrawalObject): Withdrawal =
+  Withdrawal(
+    index: wd.index.uint64,
+    validatorIndex: wd.validatorIndex.uint64,
+    address: wd.address,
+    amount: wd.amount.uint64,
+  )
+
+proc toWithdrawals(list: seq[WithdrawalObject]): seq[Withdrawal] =
+  result = newSeqOfCap[Withdrawal](list.len)
+  for wd in list:
+    result.add toWithdrawal(wd)
+
+proc toWithdrawals*(list: Opt[seq[WithdrawalObject]]): Opt[seq[Withdrawal]] =
+  if list.isNone:
+    return Opt.none(seq[Withdrawal])
+  Opt.some(toWithdrawals(list.get))
 
 type
   RPCReceipt* = object
@@ -397,7 +415,7 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
       Opt.some(vHashes tx.blobVersionedHashes)
     else:
       Opt.none(seq[VersionedHash]),
-    authorizationList: tx.authorizationList,
+    authorizationList: ethAuthList(tx.authorizationList),
   )
 
 proc waitForTTD*(client: RpcClient,
@@ -451,7 +469,7 @@ proc latestBlock*(client: RpcClient): Result[Block, string] =
     let output = Block(
       header: toBlockHeader(res),
       transactions: toTransactions(res.transactions),
-      withdrawals: res.withdrawals,
+      withdrawals: toWithdrawals(res.withdrawals),
     )
     return ok(output)
 

@@ -90,9 +90,42 @@ proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNon
 
   return res
 
+proc toWd(wd: Withdrawal): WithdrawalObject =
+  WithdrawalObject(
+    index: Quantity(wd.index),
+    validatorIndex: Quantity wd.validatorIndex,
+    address: wd.address,
+    amount: Quantity wd.amount,
+  )
+
+proc toWdList(list: openArray[Withdrawal]): seq[WithdrawalObject] =
+  result = newSeqOfCap[WithdrawalObject](list.len)
+  for x in list:
+    result.add toWd(x)
+
+func toWdList(x: Opt[seq[Withdrawal]]):
+                     Opt[seq[WithdrawalObject]] =
+  if x.isNone: Opt.none(seq[WithdrawalObject])
+  else: Opt.some(toWdList x.get)
+
+func toAuth*(x: Authorization): AuthorizationObject =
+  AuthorizationObject(
+    chainId: Quantity(x.chainId),
+    address: x.address,
+    nonce: Quantity(x.nonce),
+    v: Quantity(x.v),
+    r: x.r,
+    s: x.s,
+  )
+
+proc toAuthList(list: openArray[Authorization]): seq[AuthorizationObject] =
+  result = newSeqOfCap[AuthorizationObject](list.len)
+  for x in list:
+    result.add toAuth(x)
+
 proc populateTransactionObject*(tx: Transaction,
-                                optionalHash: Opt[Hash32] = Opt.none(Hash32),
-                                optionalNumber: Opt[uint64] = Opt.none(uint64),
+                                optionalHash: Opt[eth_types.Hash32] = Opt.none(eth_types.Hash32),
+                                optionalNumber: Opt[eth_types.BlockNumber] = Opt.none(eth_types.BlockNumber),
                                 txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
@@ -125,9 +158,9 @@ proc populateTransactionObject*(tx: Transaction,
     result.blobVersionedHashes = Opt.some(tx.versionedHashes)
 
   if tx.txType >= TxEip7702:
-    result.authorizationList = Opt.some(tx.authorizationList)
+    result.authorizationList = Opt.some(toAuthList(tx.authorizationList))
 
-proc populateBlockObject*(blockHash: Hash32,
+proc populateBlockObject*(blockHash: eth_types.Hash32,
                           blk: Block,
                           totalDifficulty: UInt256,
                           fullTx: bool,
@@ -174,7 +207,7 @@ proc populateBlockObject*(blockHash: Hash32,
       result.transactions.add txOrHash(txHash)
 
   result.withdrawalsRoot = header.withdrawalsRoot
-  result.withdrawals = blk.withdrawals
+  result.withdrawals = toWdList blk.withdrawals
   result.parentBeaconBlockRoot = header.parentBeaconBlockRoot
   result.blobGasUsed = w3Qty(header.blobGasUsed)
   result.excessBlobGas = w3Qty(header.excessBlobGas)
