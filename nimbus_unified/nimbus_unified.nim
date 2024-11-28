@@ -169,7 +169,7 @@ when isMainModule:
 
   # setupLogging(config.logLevel, config.logStdout, config.logFile)
 
-  createPidFile(beaconNodeConfig.databaseDir.string / "unified.pid")
+  createPidFile(beaconNodeConfig.dataDir.string / "unified.pid")
 
   ## Graceful shutdown by handling of Ctrl+C signal
   proc controlCHandler() {.noconv.} =
