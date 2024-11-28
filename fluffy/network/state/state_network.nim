@@ -94,17 +94,15 @@ proc getContent(
     let contentValue = V.decode(maybeLocalContent.get()).valueOr:
       raiseAssert("Unable to decode state local content value")
 
-    info "Fetched state local content value"
+    debug "Fetched state local content value"
     return Opt.some(contentValue)
 
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
-      contentLookupResult = (
-        await n.portalProtocol.contentLookup(contentKeyBytes, contentId)
-      ).valueOr:
+      lookupRes = (await n.portalProtocol.contentLookup(contentKeyBytes, contentId)).valueOr:
         warn "Failed fetching state content from the network"
         return Opt.none(V)
-      contentValueBytes = contentLookupResult.content
+      contentValueBytes = lookupRes.content
 
     let contentValue = V.decode(contentValueBytes).valueOr:
       error "Unable to decode state content value from content lookup"
@@ -114,15 +112,18 @@ proc getContent(
       error "Validation of retrieved state content failed"
       continue
 
-    info "Fetched valid state content from the network"
+    debug "Fetched valid state content from the network"
     n.portalProtocol.storeContent(
       contentKeyBytes, contentId, contentValueBytes, cacheContent = true
     )
 
-    if maybeParentOffer.isSome():
+    if maybeParentOffer.isSome() and lookupRes.nodesInterestedInContent.len() > 0:
+      debug "Sending content to interested nodes",
+        interestedNodesCount = lookupRes.nodesInterestedInContent.len()
+
       let offer = contentValue.toOffer(maybeParentOffer.get())
       n.portalProtocol.triggerPoke(
-        contentLookupResult.nodesInterestedInContent, contentKeyBytes, offer.encode()
+        lookupRes.nodesInterestedInContent, contentKeyBytes, offer.encode()
       )
 
     return Opt.some(contentValue)
