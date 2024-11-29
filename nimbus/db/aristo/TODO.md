@@ -1,4 +1,4 @@
-* Some comletions might be needed for the `aristo_part` module which is a
+* Some completions might be needed for the `aristo_part` module which is a
   re-implementation of the module supporting *proof-mode*/partial trees.
   + Complete `partMergeStorageData()`. This function might not be needed at
     all unless *snap-sync* is really revived.
