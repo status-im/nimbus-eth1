@@ -336,28 +336,57 @@ func canonicalChain(c: ForkedChainRef,
   err("Block hash not in canonical chain")
 
 func calculateNewBase(c: ForkedChainRef,
-               finalizedHeader: Header,
+               finalized: BlockNumber,
                headHash: Hash32,
-               headHeader: Header): BaseDesc =
+               head: CanonicalDesc): BaseDesc =
+  ## Search for `finalized` searching backwards starting at `head` to find an
+  ## entry with this block number on the arc (or leg) terminating at `head`.
+  ##
+  ## It is required that `finalized` is within the `head` arc, i.e.
+  ## `cursorHead.forkJunction <= finalized` for the relevant `cursorHead`.
+  ##
+  ## The `finalized` entry might be moved backwards so that a minimum
+  ## distance applies.
+  ##
+  ## Discussion:
+  ##   If the distance `finalized..head` is too short, `finalized` will be
+  ##   adjusted backwards and may fall outside the `head` arc. In that case,
+  ##   base remains un-moved.
+  ##
   # It's important to have base at least `baseDistance` behind head
   # so we can answer state queries about history that deep.
 
-  let targetNumber = min(finalizedHeader.number,
-    max(headHeader.number, c.baseDistance) - c.baseDistance)
+  let target = min(finalized,
+    max(head.header.number, c.baseDistance) - c.baseDistance)
 
   # The distance is less than `baseDistance`, don't move the base
-  if targetNumber <= c.baseHeader.number + c.baseDistance:
+  if target <= c.baseHeader.number + c.baseDistance:
     return BaseDesc(hash: c.baseHash, header: c.baseHeader)
 
-  shouldNotKeyError "calculateNewBase":
-    var prevHash = headHash
-    while prevHash != c.baseHash:
-      var header = c.blocks[prevHash].blk.header
-      if header.number == targetNumber:
-        return BaseDesc(hash: prevHash, header: move(header))
-      prevHash = header.parentHash
+  # Verify that `target` does not fall outside the `head` arc. It is
+  # assumed that `finalized` is within the `head` arc.
+  if target < finalized:
+    block verifyTarget:
+      # Find cursor realive to the `head` argument
+      for ch in c.cursorHeads:
+        if ch.hash == head.cursorHash:
+          if ch.forkJunction <= target:
+            break verifyTarget
+          break
+      # Noting to do here
+      return BaseDesc(hash: c.baseHash, header: c.baseHeader)
 
-  doAssert(false, "Unreachable code")
+  var prevHash = headHash
+  while true:
+    c.blocks.withValue(prevHash, val):
+      # Note that `cursorHead.forkJunction <= target`
+      if target == val.blk.header.number:
+        return BaseDesc(hash: prevHash, header: val.blk.header)
+      prevHash = val.blk.header.parentHash
+      continue
+    break
+
+  doAssert(false, "Unreachable code, finalized block outside cursor arc")
 
 func trimCanonicalChain(c: ForkedChainRef,
                         head: CanonicalDesc,
@@ -535,8 +564,7 @@ proc forkChoice*(c: ForkedChainRef,
   # Finalized block must be part of canonical chain
   let finalizedHeader = ?c.canonicalChain(finalizedHash, headHash)
 
-  let newBase = c.calculateNewBase(
-    finalizedHeader, headHash, head.header)
+  let newBase = c.calculateNewBase(finalizedHeader.number, headHash, head)
 
   if newBase.hash == c.baseHash:
     # The base is not updated but the cursor maybe need update
