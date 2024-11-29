@@ -40,8 +40,7 @@ func calcRequestsHash*(requests: varargs[seq[byte]]): Hash32 =
   var ctx: sha256
   ctx.init()
   for i, data in requests:
-    if data.len > 0:
-      ctx.update(calcHash(i.byte, data).data)
+    ctx.update(calcHash(i.byte, data).data)
   ctx.finish(result.data)
   ctx.clear()
 
