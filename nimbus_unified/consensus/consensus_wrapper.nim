@@ -9,7 +9,7 @@
 import
   std/[os, atomics, random, terminal, times, exitprocs, sequtils],
   metrics,
-  beacon_chain/nimbus_binary_common,
+  beacon_chain/[nimbus_beacon_node, nimbus_binary_common],
   beacon_chain/spec/forks,
   beacon_chain/[beacon_chain_db, trusted_node_sync],
   beacon_chain/networking/network_metadata_downloads,
@@ -2357,7 +2357,7 @@ proc start*(node: BeaconNode) {.raises: [CatchableError].} =
 
 ## runs beacon node
 ## adapted from nimbus-eth2
-proc doRunBeaconNode(
+proc doRunBeaconNodeLocal(
     config: var BeaconNodeConf, rng: ref HmacDrbgContext
 ) {.raises: [CatchableError].} =
   # TODO: Define this varaibles somewhere

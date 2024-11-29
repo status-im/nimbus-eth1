@@ -6,15 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[atomics, os],
+  std/[atomics, os, exitprocs],
   chronicles,
   stew/io2,
   consensus/consensus_wrapper,
   execution/execution_wrapper,
-  beacon_chain/[conf, conf_common],
-  beacon_chain/[beacon_chain_db],
+  beacon_chain/[nimbus_binary_common, conf, conf_common],
   beacon_chain/validators/keystore_management,
-  beacon_chain/nimbus_binary_common,
   version
 
 ## Constants
