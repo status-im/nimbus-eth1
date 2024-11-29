@@ -10,20 +10,12 @@
 
 import
   ../constants,
-  ../db/ledger,
   ./computation,
   ./interpreter_dispatch,
-  ./message,
   ./state,
   ./types
 
 {.push raises: [].}
-
-# Using `proc` as `incNonce()` might be `proc` in logging mode
-proc preExecComputation(c: Computation) =
-  if not c.msg.isCreate:
-    c.vmState.mutateStateDB:
-      db.incNonce(c.msg.sender)
 
 proc postExecComputation(c: Computation) =
   if c.isSuccess:
@@ -33,7 +25,6 @@ proc postExecComputation(c: Computation) =
   c.vmState.status = c.isSuccess
 
 proc execComputation*(c: Computation) =
-  c.preExecComputation()
   c.execCallOrCreate()
   c.postExecComputation()
 

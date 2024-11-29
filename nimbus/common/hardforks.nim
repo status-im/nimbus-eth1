@@ -37,6 +37,7 @@ type
     Shanghai
     Cancun
     Prague
+    Osaka
 
 const lastPurelyBlockNumberBasedFork* = GrayGlacier
 # MergeFork is special because of TTD.
@@ -52,7 +53,7 @@ type
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Opt[BlockNumber]]
     mergeForkTransitionThreshold*: MergeForkTransitionThreshold
-    timeThresholds*: array[Shanghai..Prague, Opt[EthTime]]
+    timeThresholds*: array[Shanghai..Osaka, Opt[EthTime]]
 
   # Starting with Shanghai, forking is based on timestamp
   # rather than block number.
@@ -173,6 +174,7 @@ type
     shanghaiTime*       : Opt[EthTime]
     cancunTime*         : Opt[EthTime]
     pragueTime*         : Opt[EthTime]
+    osakaTime*          : Opt[EthTime]
 
     terminalTotalDifficulty*: Opt[UInt256]
     terminalTotalDifficultyPassed*: Opt[bool]
@@ -265,6 +267,7 @@ func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.timeThresholds[Shanghai] = conf.shanghaiTime
   result.timeThresholds[Cancun] = conf.cancunTime
   result.timeThresholds[Prague] = conf.pragueTime
+  result.timeThresholds[Osaka] = conf.osakaTime
 
 func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
   conf.homesteadBlock      = t.blockNumberThresholds[HardFork.Homestead]
@@ -289,6 +292,7 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
   conf.cancunTime          = t.timeThresholds[HardFork.Cancun]
   conf.pragueTime          = t.timeThresholds[HardFork.Prague]
+  conf.osakaTime           = t.timeThresholds[HardFork.Osaka]
 
 # ------------------------------------------------------------------------------
 # Map HardFork to EVM/EVMC Fork
@@ -314,6 +318,7 @@ const
     FkShanghai,       # Shanghai
     FkCancun,         # Cancun
     FkPrague,         # Prague
+    FkOsaka,          # Osaka
   ]
 
 # ------------------------------------------------------------------------------

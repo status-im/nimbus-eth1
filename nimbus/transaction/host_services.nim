@@ -302,6 +302,10 @@ proc setTransientStorage(host: TransactionHost, address: HostAddress,
   host.vmState.mutateStateDB:
     db.setTransientStorage(address, key, newVal)
 
+proc getDelegateAddress(host: TransactionHost, address: HostAddress): HostAddress {.show.} =
+  let db = host.vmState.readOnlyStateDB
+  db.getDelegateAddress(address)
+
 when use_evmc_glue:
   {.pop: inline.}
   const included_from_host_services {.used.} = true
@@ -309,4 +313,4 @@ when use_evmc_glue:
 else:
   export
     accountExists, getStorage, storage, getBalance, getCodeSize, getCodeHash,
-    copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog
+    copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog, getDelegateAddress

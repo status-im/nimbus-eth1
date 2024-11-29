@@ -14,6 +14,7 @@ import
   ../common/evmforks,
   ../evm/types,
   ../evm/internals,
+  ../core/eip7702,
   ./host_types
 
 type
@@ -30,6 +31,7 @@ type
     input*:        seq[byte]            # Input data.
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
+    authorizationList*: seq[Authorization] # EIP-7702 (Prague) authorization list
     noIntrinsic*:  bool                 # Don't charge intrinsic gas.
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
@@ -78,5 +80,8 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): GasInt =
     for account in call.accessList:
       gas += ACCESS_LIST_ADDRESS_COST
       gas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
+
+  if fork >= FkPrague:
+    gas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
 
   return gas.GasInt

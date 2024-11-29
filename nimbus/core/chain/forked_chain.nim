@@ -482,6 +482,9 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   if header.parentHash notin c.blocks:
     # If it's parent is an invalid block
     # there is no hope the descendant is valid
+    debug "Parent block not found",
+      blockHash = header.blockHash.short,
+      parentHash = header.parentHash.short
     return err("Block is not part of valid chain")
 
   # TODO: If engine API keep importing blocks
@@ -643,13 +646,14 @@ proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
   do:
-    # This can happen if block pointed by cursorHash is not loaded yet
     result = c.db.getEthBlock(c.cursorHash).expect("cursorBlock exists")
-    c.blocks[c.cursorHash] = BlockDesc(
-      blk: result,
-      receipts: c.db.getReceipts(result.header.receiptsRoot).
-        expect("receipts exists"),
-    )
+    if c.cursorHash != c.baseHash:
+      # This can happen if the block pointed to by cursorHash is not loaded yet
+      c.blocks[c.cursorHash] = BlockDesc(
+        blk: result,
+        receipts: c.db.getReceipts(result.header.receiptsRoot).
+          expect("receipts exists"),
+      )
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.cursorHeader.number:

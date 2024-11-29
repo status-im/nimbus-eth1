@@ -11,7 +11,6 @@
 
 import
   chronicles,
-  eth/trie/trie_defs,
   ../core/casper,
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils, ec_recover],

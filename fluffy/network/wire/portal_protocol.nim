@@ -27,6 +27,8 @@ import
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
+from std/times import epochTime # For system timestamp in traceContentLookup
+
 export messages, routing_table, protocol
 
 declareCounter portal_message_requests_incoming,
@@ -116,7 +118,6 @@ logScope:
   topics = "portal_wire"
 
 const
-  alpha = 3 ## Kademlia concurrency factor
   enrsResultLimit* = 32 ## Maximum amount of ENRs in the total Nodes messages
   ## that will be processed
   refreshInterval = 5.minutes ## Interval of launching a random query to
@@ -407,7 +408,7 @@ proc handleFindContent(
   )
 
   # Check first if content is in range, as this is a cheaper operation
-  if p.inRange(contentId):
+  if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId):
     let contentResult = p.dbGet(fc.contentKey, contentId)
     if contentResult.isOk():
       let content = contentResult.get()
@@ -418,7 +419,8 @@ proc handleFindContent(
           )
         )
       else:
-        let connectionId = p.stream.addContentRequest(srcId, content)
+        p.stream.addPendingTransfer(srcId, contentId)
+        let connectionId = p.stream.addContentRequest(srcId, contentId, content)
 
         return encodeMessage(
           ContentMessage(
@@ -447,8 +449,10 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       )
     )
 
-  var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
-  var contentKeys = ContentKeysList.init(@[])
+  var
+    contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
+    contentKeys = ContentKeysList.init(@[])
+    contentIds = newSeq[ContentId]()
   # TODO: Do we need some protection against a peer offering lots (64x) of
   # content that fits our Radius but is actually bogus?
   # Additional TODO, but more of a specification clarification: What if we don't
@@ -464,17 +468,19 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
         int64(logDistance), labelValues = [$p.protocolId]
       )
 
-      if p.inRange(contentId):
-        if not p.dbContains(contentKey, contentId):
-          contentKeysBitList.setBit(i)
-          discard contentKeys.add(contentKey)
+      if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId) and
+          not p.dbContains(contentKey, contentId):
+        p.stream.addPendingTransfer(srcId, contentId)
+        contentKeysBitList.setBit(i)
+        discard contentKeys.add(contentKey)
+        contentIds.add(contentId)
     else:
       # Return empty response when content key validation fails
       return @[]
 
   let connectionId =
     if contentKeysBitList.countOnes() != 0:
-      p.stream.addContentOffer(srcId, contentKeys)
+      p.stream.addContentOffer(srcId, contentKeys, contentIds)
     else:
       # When the node does not accept any of the content offered, reply with an
       # all zeroes bitlist and connectionId.
@@ -1035,14 +1041,15 @@ proc lookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](p.config.alpha)
   var requestAmount = 0'i64
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -1156,17 +1163,18 @@ proc contentLookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries =
-    newSeqOfCap[Future[PortalResult[FoundContent]].Raising([CancelledError])](alpha)
+  var pendingQueries = newSeqOfCap[
+    Future[PortalResult[FoundContent]].Raising([CancelledError])
+  ](p.config.alpha)
   var requestAmount = 0'i64
 
   var nodesWithoutContent: seq[Node] = newSeq[Node]()
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.findContent(n, target))
@@ -1248,12 +1256,15 @@ proc traceContentLookup*(
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
+  let startedAt = Moment.now()
+  # Need to use a system clock and not the mono clock for this.
+  let startedAtMs = int64(times.epochTime() * 1000)
+
   var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
 
-  let ts = now(chronos.Moment)
   var responses = Table[string, TraceResponse]()
   var metadata = Table[string, NodeMetadata]()
 
@@ -1277,8 +1288,9 @@ proc traceContentLookup*(
     metadata["0x" & $cn.id] =
       NodeMetadata(enr: cn.record, distance: p.distance(cn.id, targetId))
 
-  var pendingQueries =
-    newSeqOfCap[Future[PortalResult[FoundContent]].Raising([CancelledError])](alpha)
+  var pendingQueries = newSeqOfCap[
+    Future[PortalResult[FoundContent]].Raising([CancelledError])
+  ](p.config.alpha)
   var pendingNodes = newSeq[Node]()
   var requestAmount = 0'i64
 
@@ -1286,9 +1298,9 @@ proc traceContentLookup*(
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.findContent(n, target))
@@ -1322,7 +1334,7 @@ proc traceContentLookup*(
 
       case content.kind
       of Nodes:
-        let duration = chronos.milliseconds(now(chronos.Moment) - ts)
+        let duration = chronos.milliseconds(Moment.now() - startedAt)
 
         let maybeRadius = p.radiusCache.get(content.src.id)
         if maybeRadius.isSome() and
@@ -1363,7 +1375,7 @@ proc traceContentLookup*(
         metadata["0x" & $content.src.id] =
           NodeMetadata(enr: content.src.record, distance: distance)
       of Content:
-        let duration = chronos.milliseconds(now(chronos.Moment) - ts)
+        let duration = chronos.milliseconds(Moment.now() - startedAt)
 
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
@@ -1397,8 +1409,7 @@ proc traceContentLookup*(
             responses: responses,
             metadata: metadata,
             cancelled: pendingNodeIds,
-            startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000,
-              # nanoseconds to milliseconds
+            startedAtMs: startedAtMs,
           ),
         )
     else:
@@ -1417,8 +1428,7 @@ proc traceContentLookup*(
       responses: responses,
       metadata: metadata,
       cancelled: newSeq[NodeId](),
-      startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000,
-        # nanoseconds to milliseconds
+      startedAtMs: startedAtMs,
     ),
   )
 
@@ -1439,11 +1449,12 @@ proc query*(
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](p.config.alpha)
 
   while true:
     var i = 0
-    while i < min(queryBuffer.len, k) and pendingQueries.len < alpha:
+    while i < min(queryBuffer.len, k) and pendingQueries.len < p.config.alpha:
       let n = queryBuffer[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))

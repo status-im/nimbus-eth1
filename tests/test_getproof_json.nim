@@ -12,7 +12,7 @@ import
   web3/eth_api,
   nimcrypto/[keccak, hash],
   eth/common/[keys, eth_types_rlp],
-  eth/[rlp, trie/trie_defs, trie/hexary_proof_verification],
+  eth/[rlp, trie/hexary_proof_verification],
   ../nimbus/db/[ledger, core_db],
   ../nimbus/common/chain_config,
   ../nimbus/rpc/server_api

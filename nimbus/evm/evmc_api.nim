@@ -86,7 +86,9 @@ type
                        key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe, raises: [].}
     set_transient_storage*: proc(context: evmc_host_context, address: ptr evmc_address,
                        key, value: ptr evmc_uint256be) {.cdecl, gcsafe, raises: [].}
-
+    get_delegate_address*: proc(context: evmc_host_context, address: ptr evmc_address): evmc_address 
+                            {.cdecl, gcsafe, raises: [].}
+                       
 proc nim_host_get_interface*(): ptr nimbus_host_interface {.importc, cdecl.}
 proc nim_host_create_context*(vmstate: pointer, msg: ptr evmc_message): evmc_host_context {.importc, cdecl.}
 proc nim_host_destroy_context*(ctx: evmc_host_context) {.importc, cdecl.}
@@ -190,6 +192,10 @@ proc setTransientStorage*(ctx: HostContext, address: Address,
     value = toEvmc(value)
   ctx.host.set_transient_storage(ctx.context, address.addr, key.addr, value.addr)
 
+proc getDelegateAddress*(ctx: HostContext, address: Address): Address =
+  var address = toEvmc(address)
+  fromEvmc ctx.host.get_delegate_address(ctx.context, address.addr)
+                 
 # The following two templates put here because the stupid style checker
 # complaints about block_number vs blockNumber and chain_id vs chainId
 # if they are written directly in computation.nim

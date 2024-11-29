@@ -42,6 +42,7 @@ proc commitOrRollbackDependingOnGasUsed(
     tx: Transaction;
     gasBurned: GasInt;
     priorityFee: GasInt;
+    blobGasUsed: GasInt;
       ): Result[GasInt, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
@@ -59,6 +60,7 @@ proc commitOrRollbackDependingOnGasUsed(
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
     vmState.gasPool += tx.gasLimit - gasBurned
+    vmState.blobGasUsed += blobGasUsed
     ok(gasBurned)
 
 proc processTransactionImpl(
@@ -85,11 +87,11 @@ proc processTransactionImpl(
 
   vmState.gasPool -= tx.gasLimit
 
+  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let blobGasUsed = tx.getTotalBlobGas
   if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
-  vmState.blobGasUsed += blobGasUsed
 
   # Actually, the eip-1559 reference does not mention an early exit.
   #
@@ -110,7 +112,7 @@ proc processTransactionImpl(
         gasBurned = tx.txCallEvm(sender, vmState, baseFee)
       vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
-      commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
+      commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee, blobGasUsed)
     else:
       err(txRes.error)
 

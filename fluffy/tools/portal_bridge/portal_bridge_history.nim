@@ -42,9 +42,10 @@ func asEthBlock(blockObject: BlockObject): EthBlock =
   let
     header = blockObject.toBlockHeader()
     transactions = toTransactions(blockObject.transactions)
-    withdrawals = toWithdrawals(blockObject.withdrawals)
 
-  EthBlock(header: header, transactions: transactions, withdrawals: withdrawals)
+  EthBlock(
+    header: header, transactions: transactions, withdrawals: blockObject.withdrawals
+  )
 
 func asPortalBlock(
     ethBlock: EthBlock

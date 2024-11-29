@@ -38,6 +38,7 @@ type
   PortalProtocolConfig* = object
     tableIpLimits*: TableIpLimits
     bitsPerHop*: int
+    alpha*: int
     radiusConfig*: RadiusConfig
     disablePoke*: bool
     maxGossipNodes*: int
@@ -53,11 +54,13 @@ const
   defaultContentCacheSize* = 100
   defaultDisableContentCache* = false
   defaultMaxConcurrentOffers* = 50
+  defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
     bitsPerHop: DefaultBitsPerHop,
+    alpha: defaultAlpha,
     radiusConfig: defaultRadiusConfig,
     disablePoke: defaultDisablePoke,
     maxGossipNodes: defaultMaxGossipNodes,
@@ -71,6 +74,7 @@ proc init*(
     tableIpLimit: uint,
     bucketIpLimit: uint,
     bitsPerHop: int,
+    alpha: int,
     radiusConfig: RadiusConfig,
     disablePoke: bool,
     maxGossipNodes: int,
@@ -82,6 +86,7 @@ proc init*(
     tableIpLimits:
       TableIpLimits(tableIpLimit: tableIpLimit, bucketIpLimit: bucketIpLimit),
     bitsPerHop: bitsPerHop,
+    alpha: alpha,
     radiusConfig: radiusConfig,
     disablePoke: disablePoke,
     maxGossipNodes: maxGossipNodes,

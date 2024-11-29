@@ -181,9 +181,9 @@ proc run(
   ## Portal node setup
   let
     portalProtocolConfig = PortalProtocolConfig.init(
-      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
-      config.disablePoke, config.maxGossipNodes, config.contentCacheSize,
-      config.disableContentCache, config.maxConcurrentOffers,
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.alpha,
+      config.radiusConfig, config.disablePoke, config.maxGossipNodes,
+      config.contentCacheSize, config.disableContentCache, config.maxConcurrentOffers,
     )
 
     portalNodeConfig = PortalNodeConfig(

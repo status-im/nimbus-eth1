@@ -224,6 +224,41 @@ template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
     c.vmState.readOnlyStateDB.
       getTransientStorage(c.msg.contractAddress, slot)
 
+template resolveCodeSize*(c: Computation, address: Address): uint =
+  when evmc_enabled:
+    let delegateTo = c.host.getDelegateAddress(address)
+    if delegateTo == default(common.Address):
+      c.host.getCodeSize(address)
+    else:
+      c.host.getCodeSize(delegateTo)
+  else:
+    uint(c.vmState.readOnlyStateDB.resolveCodeSize(address))
+
+template resolveCodeHash*(c: Computation, address: Address): Hash32=
+  when evmc_enabled:
+    let delegateTo = c.host.getDelegateAddress(address)
+    if delegateTo == default(common.Address):
+      c.host.getCodeHash(address)
+    else:
+      c.host.getCodeHash(delegateTo)
+  else:
+    let
+      db = c.vmState.readOnlyStateDB
+    if not db.accountExists(address) or db.isEmptyAccount(address):
+      default(Hash32)
+    else:
+      db.resolveCodeHash(address)
+
+template resolveCode*(c: Computation, address: Address): CodeBytesRef =
+  when evmc_enabled:
+    let delegateTo = c.host.getDelegateAddress(address)
+    if delegateTo == default(common.Address):
+      CodeBytesRef.init(c.host.copyCode(address))
+    else:
+      CodeBytesRef.init(c.host.copyCode(delegateTo))
+  else:
+    c.vmState.readOnlyStateDB.resolveCode(address)
+
 proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
                      salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
   new result
@@ -240,8 +275,12 @@ proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
     result.code = CodeStream.init(message.data)
     message.data = @[]
   else:
-    result.code = CodeStream.init(
-      vmState.readOnlyStateDB.getCode(message.codeAddress))
+    if vmState.fork >= FkPrague:
+      result.code = CodeStream.init(
+        vmState.readOnlyStateDB.resolveCode(message.codeAddress))
+    else:
+      result.code = CodeStream.init(
+        vmState.readOnlyStateDB.getCode(message.codeAddress))
 
 func newComputation*(vmState: BaseVMState, sysCall: bool,
                      message: Message, code: CodeBytesRef): Computation =
