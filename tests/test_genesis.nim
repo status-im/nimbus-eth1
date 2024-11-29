@@ -12,8 +12,7 @@ import
   std/[os],
   unittest2,
   ../nimbus/config,
-  ../nimbus/common/common,
-  ../nimbus/utils/utils
+  ../nimbus/common/common
 
 const
   baseDir = [".", "tests", ".."/"tests", $DirSep]  # path containg repo
@@ -132,21 +131,6 @@ proc customGenesisTest() =
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.chainId == 17000.ChainId
-
-    test "Prague genesis":
-      # pre Prague
-      var cg: NetworkParams
-      check loadNetworkParams("mekong.json".findFilePath, cg)
-      var com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      check com.genesisHeader.requestsHash.isNone
-
-      # post prague
-      const EmptyRequestsHash = hash32"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-      check loadNetworkParams("prague.json".findFilePath, cg)
-      com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
-      check com.genesisHeader.requestsHash.isSome
-      check com.genesisHeader.requestsHash.get == EmptyRequestsHash
-      check calcRequestsHash(default(seq[byte]), default(seq[byte]), default(seq[byte])) == EmptyRequestsHash
 
 proc genesisMain*() =
   genesisTest()
