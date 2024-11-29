@@ -90,7 +90,8 @@ proc canAddPendingTransfer(
     return true
 
   try:
-    (transfers[nodeId].len() < limit) and not transfers[nodeId].contains(contentId)
+    let contentIds = transfers[nodeId]
+    (contentIds.len() < limit) and not contentIds.contains(contentId)
   except KeyError as e:
     raiseAssert(e.msg)
 
@@ -99,13 +100,15 @@ proc addPendingTransfer(
     nodeId: NodeId,
     contentId: ContentId,
 ) =
-  if not transfers.contains(nodeId):
-    transfers[nodeId] = initHashSet[ContentId]()
-
-  try:
-    transfers[nodeId].incl(contentId)
-  except KeyError as e:
-    raiseAssert(e.msg)
+  if transfers.contains(nodeId):
+    try:
+      transfers[nodeId].incl(contentId)
+    except KeyError as e:
+      raiseAssert(e.msg)
+  else:
+    var contentIds = initHashSet[ContentId]()
+    contentIds.incl(contentId)
+    transfers[nodeId] = contentIds
 
 proc removePendingTransfer(
     transfers: TableRef[NodeId, HashSet[ContentId]],
