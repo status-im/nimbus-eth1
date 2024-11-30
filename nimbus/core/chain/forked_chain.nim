@@ -696,15 +696,7 @@ func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[Transaction] =
 proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
-  do:
-    result = c.db.getEthBlock(c.cursorHash).expect("cursorBlock exists")
-    if c.cursorHash != c.baseHash:
-      # This can happen if the block pointed to by cursorHash is not loaded yet
-      c.blocks[c.cursorHash] = BlockDesc(
-        blk: result,
-        receipts: c.db.getReceipts(result.header.receiptsRoot).
-          expect("receipts exists"),
-      )
+  c.db.getEthBlock(c.cursorHash).expect("cursorBlock exists")
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.cursorHeader.number:
