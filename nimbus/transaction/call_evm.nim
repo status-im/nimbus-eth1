@@ -204,6 +204,6 @@ proc txCallEvm*(tx: Transaction,
 
 proc testCallEvm*(tx: Transaction,
                   sender: Address,
-                  vmState: BaseVMState): CallResult =
+                  vmState: BaseVMState): DebugCallResult =
   let call = callParamsForTest(tx, sender, vmState)
-  runComputation(call, CallResult)
+  runComputation(call, DebugCallResult)

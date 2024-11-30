@@ -17,6 +17,8 @@ import
   ../core/eip7702,
   ./host_types
 
+export types
+
 type
   # Standard call parameters.
   CallParams* = object
@@ -40,12 +42,14 @@ type
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
-  CallResult* = object
+  CallResult* = object of RootObj
     error*:           string            # Something if the call failed.
     gasUsed*:         GasInt            # Gas used by the call.
     contractAddress*: Address           # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
-    stack*:           EvmStack          # EVM stack on return (for test only).
+
+  DebugCallResult* = object of CallResult
+    stack*:           seq[UInt256]      # EVM stack on return (for test only).
     memory*:          EvmMemory         # EVM memory on return (for test only).
 
 template isCreate(tx: Transaction): bool =

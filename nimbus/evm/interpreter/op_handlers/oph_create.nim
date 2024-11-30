@@ -67,7 +67,7 @@ else:
 
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     var
-      child = newComputation(c.vmState, false, childMsg, salt)
+      child = newComputation(c.vmState, false, childMsg, false, false, salt)
 
     c.chainTo(child):
       if not child.shouldBurnGas:

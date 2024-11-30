@@ -453,7 +453,6 @@ proc getNonce*(ac: LedgerRef, address: Address): AccountNonce =
 proc getCode*(ac: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
-  # Always returns non-nil!
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     when returnHash:
@@ -526,7 +525,7 @@ proc getDelegateAddress*(ac: LedgerRef, address: Address): Address =
   let delegateTo = parseDelegationAddress(code).valueOr:
     return
   delegateTo
-  
+
 proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
