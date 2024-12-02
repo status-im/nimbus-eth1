@@ -127,8 +127,8 @@ proc runDaemon*(
 
       # Import from staged queue.
       while await ctx.blocksStagedImport(info):
-        if not ctx.daemon:
-          # Implied by external sync shutdown?
+        if not ctx.daemon or   # Implied by external sync shutdown?
+           ctx.poolMode:       # Oops, re-org needed?
           return
 
   # At the end of the cycle, leave time to trigger refill headers/blocks

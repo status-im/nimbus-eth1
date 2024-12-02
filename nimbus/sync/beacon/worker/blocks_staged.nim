@@ -127,6 +127,10 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
   ## Check whether the queue is at its maximum size so import can start with
   ## a full queue.
   ##
+  if ctx.poolMode:
+    # Re-org is scheduled
+    return false
+
   if 0 < ctx.blk.staged.len:
     # Import if what is on the queue is all we have got. Note that the function
     # `blocksUnprocIsEmpty()` returns `true` only if all blocks possible have
@@ -289,21 +293,17 @@ proc blocksStagedImport*(
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
+    # Empty queue
     return false
 
-  # Fetch least record, accept only if it matches the global ledger state
-  block:
-    let imported = ctx.chain.latestNumber()
-    if imported + 1 < qItem.key:
-      # If there is a gap, the `FC` module data area might have been re-set (or
-      # some problem occured due to concurrent collection.) In any case, the
-      # missing block numbers are added to the range of blocks that need to be
-      # fetched.
-      ctx.blocksUnprocAppend(imported + 1, qItem.key - 1)
-      trace info & ": there is a gap L vs. staged",
-        B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr,
-        C=ctx.layout.coupler.bnStr
-      return false
+  # Make sure that the lowest block is available, already. Or the other way
+  # round: no unprocessed block number range precedes the least staged block.
+  let uBottom = ctx.blocksUnprocTotalBottom()
+  if uBottom < qItem.key:
+    trace info & ": block queue not ready yet", nBuddies=ctx.pool.nBuddies,
+      unprocBottom=uBottom.bnStr, least=qItem.key.bnStr
+    return false
+
   # Remove from queue
   discard ctx.blk.staged.delete qItem.key
 
@@ -318,32 +318,27 @@ proc blocksStagedImport*(
   var maxImport = iv.maxPt
   block importLoop:
     for n in 0 ..< nBlocks:
-      # It is known that `key <= imported + 1`. This means that some blocks
-      # potentally overlap with what is already known by `FC` (e.g. due to
-      # concurrently running `importBlock()` by a `newPayload` RPC requests.)
-      #
-      # It is not left to `FC` to ignore this record. Passing a block before
-      # the `base` (which also might have changed) is responded by `FC` with
-      # an error. This would cause throwing away all `nBlocks` rather than
-      # ignoring the first some.
-      #
       let nBn = qItem.data.blocks[n].header.number
       if nBn <= ctx.chain.baseNumber:
-        trace info & ": ignoring block <= base", n, iv,
+        trace info & ": ignoring block less eq. base", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
           nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short
         continue
       ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
-        warn info & ": import block error", n, iv,
+        # The way out here is simply to re-compile the block queue. At any
+        # point, the `FC` module data area might have been moved to a new
+        # canonocal branch.
+        #
+        ctx.poolMode = true
+        warn info & ": import block error (reorg triggered)", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short, `error`=error
-        # Restore what is left over below
-        maxImport = ctx.chain.latestNumber()
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short,
+          `error`=error
         break importLoop
 
       # Allow pseudo/async thread switch.
       (await ctx.updateAsyncTasks()).isOkOr:
-        maxImport = ctx.chain.latestNumber()
+        maxImport = nBn # shutdown?
         break importLoop
 
       # Occasionally mark the chain finalized
@@ -355,17 +350,17 @@ proc blocksStagedImport*(
 
         doAssert nBn == ctx.chain.latestNumber()
         ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
-          warn info & ": fork choice error", n, iv,
+          warn info & ": fork choice error (reorg triggered)", n, iv,
             B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
             F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
             finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
           # Restore what is left over below
-          maxImport = ctx.chain.latestNumber()
+          ctx.poolMode = true
           break importLoop
 
         # Allow pseudo/async thread switch.
         (await ctx.updateAsyncTasks()).isOkOr:
-          maxImport = ctx.chain.latestNumber()
+          maxImport = nBn # shutdown?
           break importLoop
 
   # Import probably incomplete, so a partial roll back may be needed
