@@ -228,10 +228,7 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
       baseNumber = c.baseHeader.number,
       baseHash = c.baseHash.short
 
-func updateBase(c: ForkedChainRef,
-                newBaseHash: Hash32,
-                newBaseHeader: Header,
-                canonicalCursorHash: Hash32) =
+func updateBase(c: ForkedChainRef, pvarc: PivotArc) =
   ## Remove obsolete chains, example:
   ##
   ##     A1 - A2 - A3          D5 - D6
@@ -240,21 +237,23 @@ func updateBase(c: ForkedChainRef,
   ##         \          \
   ##          C2 - C3    E4 - E5
   ##
-  ## where `B5` is the `canonicalCursor` head. When the `base` is moved to
-  ## position `[B3]`, both chains `A` and `C` will be removed but not so for
-  ## `D` and `E`, and chain `B` will be curtailed below `B4`.
+  ## where `B1..B5` is the `pvarc.cursor` arc and `[B5]` is the `pvarc.pv`.
+  #
+  ## The `base` will be moved to position `[B3]`. Both chains `A` and `C`
+  ## will be removed but not so for `D` and `E`, and `pivot` arc `B` will
+  ## be curtailed below `B4`.
   ##
   var newCursorHeads: seq[CursorDesc]       # Will become new `c.cursorHeads`
   for ch in c.cursorHeads:
-    if newBaseHeader.number < ch.forkJunction:
+    if pvarc.pvHeader.number < ch.forkJunction:
       # On the example, this would be any of chain `D` or `E`.
       newCursorHeads.add ch
 
-    elif ch.hash == canonicalCursorHash:
+    elif ch.hash == pvarc.cursor.hash:
       # On the example, this would be chain `B`.
       newCursorHeads.add CursorDesc(
         hash:         ch.hash,
-        forkJunction: newBaseHeader.number + 1)
+        forkJunction: pvarc.pvHeader.number + 1)
 
     else:
       # On the example, this would be either chain `A` or `B`.
@@ -263,13 +262,13 @@ func updateBase(c: ForkedChainRef,
   # Cleanup in-memory blocks starting from newBase backward
   # while blocks from newBase+1 to canonicalCursor not deleted
   # e.g. B4 onward
-  c.deleteLineage newBaseHash
+  c.deleteLineage pvarc.pvHash
 
   # Implied deletion of chain heads (if any)
   c.cursorHeads.swap newCursorHeads
 
-  c.baseHeader = newBaseHeader
-  c.baseHash = newBaseHash
+  c.baseHeader = pvarc.pvHeader
+  c.baseHash = pvarc.pvHash
 
 func findCursorArc(c: ForkedChainRef, hash: Hash32): Result[PivotArc, string] =
   ## Find the `cursor` arc that contains the block relative to the
@@ -308,6 +307,7 @@ func findHeader(
     headHash: Hash32;
       ): Result[Header, string] =
   ## Find header for argument `itHash` on argument `headHash` ancestor chain.
+  ##
   if itHash == c.baseHash:
     return ok(c.baseHeader)
 
@@ -518,7 +518,6 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32): Result[void, string] =
-
   if headHash == c.cursorHash and finalizedHash == static(default(Hash32)):
     # Do nothing if the new head already our current head
     # and there is no request to new finality
@@ -561,7 +560,10 @@ proc forkChoice*(c: ForkedChainRef,
     c.stagingTx = nil
 
     # Move base to newBase
-    c.updateBase(newBase.hash, c.cursorHeader, pvarc.cursor.hash)
+    c.updateBase PivotArc(
+      pvHash:   newBase.hash,
+      pvHeader: newBase.header,
+      cursor:   pvarc.cursor)
 
     # Save and record the block number before the last saved block state.
     c.db.persistent(newBase.header.number).isOkOr:
@@ -584,7 +586,10 @@ proc forkChoice*(c: ForkedChainRef,
     c.stagingTx.commit()
     c.stagingTx = nil
     # Update base forward to newBase
-    c.updateBase(newBase.hash, newBase.header, pvarc.cursor.hash)
+    c.updateBase PivotArc(
+      pvHash:   newBase.hash,
+      pvHeader: newBase.header,
+      cursor:   pvarc.cursor)
     c.db.persistent(newBase.header.number).isOkOr:
       return err("Failed to save state: " & $$error)
 
