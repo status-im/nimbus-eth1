@@ -68,7 +68,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
   when evmc_enabled:
     var topics: array[4, evmc_bytes32]
     for i in 0 ..< topicCount:
-      topics[i].bytes = c.stack.lsPeekTopic(^(i+3))
+      topics[i].bytes = c.stack.lsPeekTopic(^(i+3)).data
 
     c.host.emitLog(c.msg.contractAddress,
       c.memory.read(memPos, len),
@@ -77,7 +77,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
     var log: Log
     log.topics = newSeqOfCap[Topic](topicCount)
     for i in 0 ..< topicCount:
-      log.topics.add Bytes32 c.stack.lsPeekTopic(^(i+3))
+      log.topics.add c.stack.lsPeekTopic(^(i+3))
 
     assign(log.data, c.memory.read(memPos, len))
     log.address = c.msg.contractAddress

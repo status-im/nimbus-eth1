@@ -37,13 +37,7 @@ type
     tx: TransactionRef
     updatedCache: TrieDatabaseRef
 
-  PreimagesBackendRef = ref object of RootObj
-    cfHandle: ColFamilyHandleRef
-    tx: TransactionRef
-    updatedCache: TrieDatabaseRef
-
-  DatabaseBackendRef =
-    AccountsBackendRef | StorageBackendRef | BytecodeBackendRef | PreimagesBackendRef
+  DatabaseBackendRef = AccountsBackendRef | StorageBackendRef | BytecodeBackendRef
 
   DatabaseRef* = ref object
     rocksDb: OptimisticTxDbRef
@@ -51,7 +45,6 @@ type
     accountsBackend: AccountsBackendRef
     storageBackend: StorageBackendRef
     bytecodeBackend: BytecodeBackendRef
-    preimagesBackend: PreimagesBackendRef
 
 proc init*(T: type DatabaseRef, baseDir: string): Result[T, string] =
   let dbPath = baseDir / "db"
@@ -79,9 +72,6 @@ proc init*(T: type DatabaseRef, baseDir: string): Result[T, string] =
     bytecodeBackend = BytecodeBackendRef(
       cfHandle: db.getColFamilyHandle(COL_FAMILY_NAME_BYTECODE).get()
     )
-    preimagesBackend = PreimagesBackendRef(
-      cfHandle: db.getColFamilyHandle(COL_FAMILY_NAME_PREIMAGES).get()
-    )
 
   ok(
     T(
@@ -90,7 +80,6 @@ proc init*(T: type DatabaseRef, baseDir: string): Result[T, string] =
       accountsBackend: accountsBackend,
       storageBackend: storageBackend,
       bytecodeBackend: bytecodeBackend,
-      preimagesBackend: preimagesBackend,
     )
   )
 
@@ -138,9 +127,6 @@ proc getStorageBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
 proc getBytecodeBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   trieDB(db.bytecodeBackend)
 
-proc getPreimagesBackend*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
-  trieDB(db.preimagesBackend)
-
 proc getAccountsUpdatedCache*(db: DatabaseRef): TrieDatabaseRef {.inline.} =
   db.accountsBackend.updatedCache
 
@@ -179,12 +165,10 @@ proc beginTransaction*(db: DatabaseRef): Result[void, string] =
   db.accountsBackend.tx = tx
   db.storageBackend.tx = tx
   db.bytecodeBackend.tx = tx
-  db.preimagesBackend.tx = tx
 
   db.accountsBackend.updatedCache = newMemoryDB()
   db.storageBackend.updatedCache = newMemoryDB()
   db.bytecodeBackend.updatedCache = newMemoryDB()
-  db.preimagesBackend.updatedCache = nil # not used
 
   ok()
 

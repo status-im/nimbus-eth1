@@ -197,8 +197,11 @@ proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
   let fork = c.fork
 
   block blockOne:
-    if c.continuation.isNil and c.execPrecompiles(fork):
-      break blockOne
+    if c.continuation.isNil:
+      let precompile = c.fork.getPrecompile(c.msg.codeAddress)
+      if precompile.isSome:
+        c.execPrecompile(precompile[])
+        break blockOne
 
     let cont = c.continuation
     if not cont.isNil:

@@ -178,7 +178,7 @@ proc mstore8Op(cpt: VmCpt): EvmResultVoid =
 proc sloadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x54, Load word from storage.
   template sload256(top, slot, conv) =
-    top = cpt.getStorage(slot)
+    conv(cpt.getStorage(slot), top)
   cpt.stack.unaryWithTop(sload256)
 
 proc sloadEIP2929Op(cpt: VmCpt): EvmResultVoid =
@@ -186,7 +186,7 @@ proc sloadEIP2929Op(cpt: VmCpt): EvmResultVoid =
   template sloadEIP2929(top, slot, conv) =
     let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
     ? cpt.opcodeGasCost(Sload, gasCost, reason = "sloadEIP2929")
-    top = cpt.getStorage(slot)
+    conv(cpt.getStorage(slot), top)
   cpt.stack.unaryWithTop(sloadEIP2929)
 
 # -------

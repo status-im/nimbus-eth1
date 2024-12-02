@@ -129,9 +129,9 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult =
 
   result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
                         evmc_revision(host.vmState.fork.ord), host.msg,
-                        if host.code.len > 0: host.code.bytes[0].unsafeAddr
+                        if host.code != nil and host.code.len > 0: host.code.bytes[0].unsafeAddr
                         else: nil,
-                        host.code.len.csize_t)
+                        if host.code != nil: host.code.len.csize_t else: 0)
 
   host.showCallReturn(result)
 

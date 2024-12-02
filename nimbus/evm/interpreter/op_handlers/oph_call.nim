@@ -21,6 +21,7 @@ import
   ../../../core/eip7702,
   ../../computation,
   ../../memory,
+  ../../precompiles,
   ../../stack,
   ../../types,
   ../gas_costs,
@@ -215,7 +216,9 @@ else:
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     # <memPos> and <memLen> are provided by value and need not be captured
     var
-      child = newComputation(c.vmState, false, childMsg)
+      precompile = getPrecompile(c.fork, childMsg.codeAddress)
+      child = newComputation(
+        c.vmState, false, childMsg, isPrecompile = precompile.isSome(), keepStack = false)
 
     c.chainTo(child):
       if not child.shouldBurnGas:
