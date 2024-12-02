@@ -71,13 +71,11 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 # Fluffy debugging tools + testing tools
 FLUFFY_TOOLS := \
 	portal_bridge \
-	beacon_lc_bridge \
 	eth_data_exporter \
 	blockwalk \
 	portalcli \
 	fcli_db
 FLUFFY_TOOLS_DIRS := \
-	fluffy/tools/beacon_lc_bridge \
 	fluffy/tools/portal_bridge \
 	fluffy/tools/state_bridge \
 	fluffy/tools
