@@ -25,11 +25,9 @@ import
 # Private constructor
 # ------------------------------------------------------------------------------
 
-const
-  lruOverhead = 20
-    # Approximate LRU cache overhead per entry based on minilru sizes
+const lruOverhead = 20 # Approximate LRU cache overhead per entry based on minilru sizes
 
-proc dumpCacheStats(keySize, vtxSize: int) =
+proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
   block vtx:
     var misses, hits: uint64
     echo "vtxLru(", vtxSize, ")"
@@ -67,14 +65,33 @@ proc dumpCacheStats(keySize, vtxSize: int) =
     let hitRate = float64(hits * 100) / (float64(hits + misses))
     echo &"     all {misses:>10} {hits:>10} {misses+hits:>10} {hitRate:>5.2f}%"
 
+  block key:
+    var misses, hits: uint64
+    echo "branchLru(", branchSize, ") "
+
+    echo "   state       miss        hit      total hitrate"
+
+    for state in RdbStateType:
+      let
+        (miss, hit) =
+          (rdbBranchLruStats[state].get(false), rdbBranchLruStats[state].get(true))
+        hitRate = float64(hit * 100) / (float64(hit + miss))
+      misses += miss
+      hits += hit
+
+      echo &"{state:>8} {miss:>10} {hit:>10} {miss+hit:>10} {hitRate:>5.2f}%"
+
+    let hitRate = float64(hits * 100) / (float64(hits + misses))
+    echo &"     all {misses:>10} {hits:>10} {misses+hits:>10} {hitRate:>5.2f}%"
+
 proc initImpl(
-    rdb: var RdbInst;
-    basePath: string;
-    opts: DbOptions;
+    rdb: var RdbInst,
+    basePath: string,
+    opts: DbOptions,
     dbOpts: DbOptionsRef,
-    cfOpts: ColFamilyOptionsRef;
-    guestCFs: openArray[ColFamilyDescriptor] = [];
-      ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
+    cfOpts: ColFamilyOptionsRef,
+    guestCFs: openArray[ColFamilyDescriptor] = [],
+): Result[seq[ColFamilyReadWrite], (AristoError, string)] =
   ## Database backend constructor
   const initFailed = "RocksDB/init() failed"
 
@@ -84,23 +101,30 @@ proc initImpl(
   rdb.rdKeySize =
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
   rdb.rdVtxSize =
-    opts.rdbVtxCacheSize div (sizeof(VertexID) + sizeof(default(VertexRef)[]) + lruOverhead)
+    opts.rdbVtxCacheSize div
+    (sizeof(VertexID) + sizeof(default(VertexRef)[]) + lruOverhead)
+
+  rdb.rdBranchSize =
+    opts.rdbBranchCacheSize div (sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)
 
   rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
   rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
+  rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
 
   if opts.rdbPrintStats:
     let
       ks = rdb.rdKeySize
       vs = rdb.rdVtxSize
+      bs = rdb.rdBranchSize
     # TODO instead of dumping at exit, these stats could be logged or written
     #      to a file for better tracking over time - that said, this is mainly
     #      a debug utility at this point
-    addExitProc(proc() =
-      dumpCacheStats(ks, vs))
+    addExitProc(
+      proc() =
+        dumpCacheStats(ks, vs, bs)
+    )
 
-  let
-    dataDir = rdb.dataDir
+  let dataDir = rdb.dataDir
   try:
     dataDir.createDir
   except OSError, IOError:
@@ -132,7 +156,7 @@ proc initImpl(
   let cfs = useCFs.toSeq.mapIt(it.initColFamilyDescriptor cfOpts) & guestCFq
 
   # Open database for the extended family :)
-  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies=cfs).valueOr:
+  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies = cfs).valueOr:
     raiseAssert initFailed & " cannot create base descriptor: " & error
 
   # Initialise column handlers (this stores implicitely `baseDb`)
@@ -148,18 +172,17 @@ proc initImpl(
 # ------------------------------------------------------------------------------
 
 proc init*(
-    rdb: var RdbInst;
-    basePath: string;
-    opts: DbOptions;
-    dbOpts: DbOptionsRef;
-    cfOpts: ColFamilyOptionsRef;
-    guestCFs: openArray[ColFamilyDescriptor];
-      ): Result[seq[ColFamilyReadWrite],(AristoError,string)] =
+    rdb: var RdbInst,
+    basePath: string,
+    opts: DbOptions,
+    dbOpts: DbOptionsRef,
+    cfOpts: ColFamilyOptionsRef,
+    guestCFs: openArray[ColFamilyDescriptor],
+): Result[seq[ColFamilyReadWrite], (AristoError, string)] =
   ## Temporarily define a guest CF list here.
   rdb.initImpl(basePath, opts, dbOpts, cfOpts, guestCFs)
 
-
-proc destroy*(rdb: var RdbInst; eradicate: bool) =
+proc destroy*(rdb: var RdbInst, eradicate: bool) =
   ## Destructor
   rdb.baseDb.close()
 
@@ -174,7 +197,6 @@ proc destroy*(rdb: var RdbInst; eradicate: bool) =
           if 0 < w.len and w[^1] != '~':
             break done
         rdb.baseDir.removeDir
-
     except CatchableError:
       discard
 
