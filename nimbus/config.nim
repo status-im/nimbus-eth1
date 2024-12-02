@@ -386,17 +386,23 @@ type
       defaultValueDesc: $defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
 
+    rdbVtxCacheSize {.
+      hidden
+      defaultValue: defaultRdbVtxCacheSize
+      defaultValueDesc: $defaultRdbVtxCacheSize
+      name: "debug-rdb-vtx-cache-size".}: int
+
     rdbKeyCacheSize {.
       hidden
       defaultValue: defaultRdbKeyCacheSize
       defaultValueDesc: $defaultRdbKeyCacheSize
       name: "debug-rdb-key-cache-size".}: int
 
-    rdbVtxCacheSize {.
+    rdbBranchCacheSize {.
       hidden
-      defaultValue: defaultRdbVtxCacheSize
-      defaultValueDesc: $defaultRdbVtxCacheSize
-      name: "debug-rdb-vtx-cache-size".}: int
+      defaultValue: defaultRdbBranchCacheSize
+      defaultValueDesc: $defaultRdbBranchCacheSize
+      name: "debug-rdb-branch-cache-size".}: int
 
     rdbPrintStats {.
       hidden
@@ -773,11 +779,13 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rowCacheSize = conf.rocksdbRowCacheSize,
     blockCacheSize = conf.rocksdbBlockCacheSize,
     rdbKeyCacheSize =
-      if noKeyCache: 0 else: conf.rdbKeyCacheSize ,
-    rdbVtxCacheSize =
-      # The import command does not use the key cache - better give it to vtx
-      if noKeyCache: conf.rdbKeyCacheSize + conf.rdbVtxCacheSize
-      else: conf.rdbVtxCacheSize,
+      if noKeyCache: 0 else: conf.rdbKeyCacheSize,
+    rdbVtxCacheSize = conf.rdbVtxCacheSize,
+    rdbBranchCacheSize =
+      # The import command does not use the key cache - better give it to branch
+      if noKeyCache: conf.rdbKeyCacheSize + conf.rdbBranchCacheSize
+      else: conf.rdbBranchCacheSize,
+
     rdbPrintStats = conf.rdbPrintStats,
   )
 
