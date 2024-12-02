@@ -116,7 +116,7 @@ type
   BlocksImportSync* = object
     ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
-    borrowed*: uint64                ## Total of temp. fetched ranges
+    borrowed*: BnRangeSet            ## Total of temp. fetched ranges
     staged*: StagedBlocksQueue       ## Blocks ready for import
 
   # -------------------

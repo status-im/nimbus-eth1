@@ -251,7 +251,7 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
     h = ctx.layout.head
 
   # Update blocks `(C,H]`
-  ctx.blocksUnprocCommit(0, c+1, h)
+  ctx.blocksUnprocSet(c+1, h)
 
   # State transition
   ctx.layout.lastState = processingBlocks

@@ -203,7 +203,7 @@ proc blocksStagedCollect*(
     if not await buddy.fetchAndCheck(ivReq, blk, info):
       if ctx.poolMode:
         # Reorg requested?
-        ctx.blocksUnprocCommit(iv.len, iv)
+        ctx.blocksUnprocCommit(iv, iv)
         return false
 
       haveError = true
@@ -222,7 +222,7 @@ proc blocksStagedCollect*(
           nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
           bdyErrors=buddy.bdyErrors
 
-        ctx.blocksUnprocCommit(iv.len, iv)
+        ctx.blocksUnprocCommit(iv, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.
         try: await sleepAsync asyncThreadSwitchTimeSlot
@@ -234,14 +234,14 @@ proc blocksStagedCollect*(
       trace info & ": list partially failed", peer, iv, ivReq,
         unused=BnRange.new(ivBottom,iv.maxPt)
       # There is some left over to store back
-      ctx.blocksUnprocCommit(iv.len, ivBottom, iv.maxPt)
+      ctx.blocksUnprocCommit(iv, ivBottom, iv.maxPt)
       break
 
     # Update remaining interval
     let ivRespLen = blk.blocks.len - nBlkBlocks
     if iv.maxPt < ivBottom + ivRespLen.uint64:
       # All collected
-      ctx.blocksUnprocCommit(iv.len)
+      ctx.blocksUnprocCommit(iv)
       break
 
     ivBottom += ivRespLen.uint64 # will mostly result into `ivReq.maxPt+1`
@@ -249,7 +249,7 @@ proc blocksStagedCollect*(
     if buddy.ctrl.stopped:
       # There is some left over to store back. And `ivBottom <= iv.maxPt`
       # because of the check against `ivRespLen` above.
-      ctx.blocksUnprocCommit(iv.len, ivBottom, iv.maxPt)
+      ctx.blocksUnprocCommit(iv, ivBottom, iv.maxPt)
       break
 
   # Store `blk` chain on the `staged` queue
@@ -286,12 +286,11 @@ proc blocksStagedImport*(
       # some problem occured due to concurrent collection.) In any case, the
       # missing block numbers are added to the range of blocks that need to be
       # fetched.
-      ctx.blocksUnprocAmend(imported + 1, qItem.key - 1)
+      ctx.blocksUnprocAppend(imported + 1, qItem.key - 1)
       trace info & ": there is a gap L vs. staged",
         B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr,
         C=ctx.layout.coupler.bnStr
       return false
-
   # Remove from queue
   discard ctx.blk.staged.delete qItem.key
 
@@ -358,7 +357,7 @@ proc blocksStagedImport*(
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:
-    ctx.blocksUnprocCommit(0, maxImport+1, qItem.data.blocks[^1].header.number)
+    ctx.blocksUnprocAppend(maxImport+1, iv.maxPt)
 
   # Remove stashed headers for imported blocks
   for bn in iv.minPt .. maxImport:
