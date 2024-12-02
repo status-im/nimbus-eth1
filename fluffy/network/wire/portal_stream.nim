@@ -91,7 +91,11 @@ proc canAddPendingTransfer(
 
   try:
     let contentIds = transfers[nodeId]
-    (contentIds.len() < limit) and not contentIds.contains(contentId)
+    if (contentIds.len() < limit) and not contentIds.contains(contentId):
+      return true
+    else:
+      debug "Pending transfer limit reached for peer", nodeId, contentId
+      return false
   except KeyError as e:
     raiseAssert(e.msg)
 
