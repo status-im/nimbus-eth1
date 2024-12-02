@@ -462,6 +462,50 @@ proc updateHeadIfNecessary(c: ForkedChainRef, pvarc: PivotArc) =
 
   c.setHead(pvarc)
 
+proc autoUpdateBase(c: ForkedChainRef): Result[void, string] =
+  ## To be called after`importBlock()` for implied `base` update so that
+  ## there is no need to know about a finalised block. Here the `base` is
+  ## kept at a certain distance from the current `latest` cursor head.
+  ##
+  # This function code is a tweaked version of `importBlockBlindly()`
+  # from draft PR #2845.
+  #
+  let
+    distanceFromBase = c.cursorHeader.number - c.baseHeader.number
+    hysteresis = max(1'u64, min(c.baseDistance div 4'u64, 32'u64))
+  # Finalizer threshold is baseDistance + 25% of baseDistancce capped at 32.
+  if distanceFromBase < c.baseDistance + hysteresis:
+    return ok()
+
+  # Move the base forward and stay away `baseDistance` blocks from
+  # the top block.
+  let
+    target = c.cursorHeader.number - c.baseDistance
+    pvarc = ?c.findCursorArc(c.cursorHash)
+    newBase = c.calculateNewBase(target, pvarc)
+
+  doAssert newBase.pvHash != c.baseHash
+
+  # Write segment from base+1 to newBase into database
+  c.stagingTx.rollback()
+  c.stagingTx = c.db.ctx.txFrameBegin()
+  c.replaySegment(newBase.pvHash)
+  c.writeBaggage(newBase.pvHash)
+  c.stagingTx.commit()
+  c.stagingTx = nil
+
+  # Update base forward to newBase
+  c.updateBase(newBase)
+  c.db.persistent(newBase.pvNumber).isOkOr:
+    return err("Failed to save state: " & $$error)
+
+  # Move chain state forward to current head
+  c.stagingTx = c.db.ctx.txFrameBegin()
+  c.replaySegment(pvarc.pvHash)
+  c.setHead(pvarc)
+
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -523,7 +567,11 @@ proc newForkedChain*(com: CommonRef,
   com.syncStart = baseHeader.number
   chain
 
-proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
+proc importBlock*(
+    c: ForkedChainRef;
+    blk: Block;
+    autoRebase = false;
+      ): Result[void, string] =
   # Try to import block to canonical or side chain.
   # return error if the block is invalid
   if c.stagingTx.isNil:
@@ -533,7 +581,10 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
     blk.header
 
   if header.parentHash == c.cursorHash:
-    return c.validateBlock(c.cursorHeader, blk)
+    ?c.validateBlock(c.cursorHeader, blk)
+    if autoRebase:
+      return c.autoUpdateBase()
+    return ok()
 
   if header.parentHash == c.baseHash:
     c.stagingTx.rollback()
@@ -555,7 +606,12 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   # `base` is the point of no return, we only update it on finality.
 
   c.replaySegment(header.parentHash)
-  c.validateBlock(c.cursorHeader, blk)
+  ?c.validateBlock(c.cursorHeader, blk)
+  if autoRebase:
+    return c.autoUpdateBase()
+
+  ok()
+
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
