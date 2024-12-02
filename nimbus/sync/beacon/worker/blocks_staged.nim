@@ -173,6 +173,9 @@ proc blocksStagedCollect*(
     # so that `async` can capture that properly.
     blk = (ref BlocksForImport)()
 
+    # Flag, not to reset error count
+    haveError = false
+
   # nFetchBodiesRequest
   while true:
     # Extract bottom range interval and fetch/stage it
@@ -196,15 +199,20 @@ proc blocksStagedCollect*(
       # Throw away first time block fetch data. Keep other data for a
       # partially assembled list.
       if nBlkBlocks == 0:
-        buddy.only.nBdyRespErrors.inc
+        buddy.only.nBdyProcErrors.inc
+        haveError = true
 
-        if (1 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped) or
-           fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
+        if ((0 < buddy.only.nBdyRespErrors or
+             0 < buddy.only.nBdyProcErrors) and buddy.ctrl.stopped) or
+           fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors or
+           fetchBodiesProcessErrThresholdCount < buddy.only.nBdyProcErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
+
         trace info & ": current block list discarded", peer, iv, ivReq,
           nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
-          nRespErrors=buddy.only.nBdyRespErrors
+          bdyErrors=buddy.bdyErrors
+
         ctx.blocksUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.
@@ -240,8 +248,13 @@ proc blocksStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = blk[]
 
+  # Reset block process errors (not too many consecutive failures this time)
+  if not haveError:
+    buddy.only.nBdyProcErrors = 0
+
   trace info & ": staged blocks", peer, bottomBlock=iv.minPt.bnStr,
-    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state
+    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
+    bdyErrors=buddy.bdyErrors
 
   # Update, so it can be followed nicely
   ctx.updateMetrics()

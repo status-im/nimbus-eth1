@@ -29,6 +29,14 @@ proc registerError(buddy: BeaconBuddyRef) =
     buddy.ctrl.zombie = true # abandon slow peer
 
 # ------------------------------------------------------------------------------
+# Public debugging & logging helpers
+# ------------------------------------------------------------------------------
+
+func hdrErrors*(buddy: BeaconBuddyRef): string =
+  $buddy.only.nHdrRespErrors & "/" & $buddy.only.nHdrProcErrors
+
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -63,7 +71,7 @@ proc headersFetchReversed*(
     start = Moment.now()
 
   trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
-    nReq=req.maxResults, useHash, nRespErrors=buddy.only.nHdrRespErrors
+    nReq=req.maxResults, useHash, hdrErrors=buddy.hdrErrors
 
   # Fetch headers from peer
   var resp: Option[blockHeadersObj]
@@ -78,7 +86,7 @@ proc headersFetchReversed*(
     buddy.registerError()
     `info` info & " error", peer, ivReq, nReq=req.maxResults, useHash,
       elapsed=(Moment.now() - start).toStr, error=($e.name), msg=e.msg,
-      nRespErrors=buddy.only.nHdrRespErrors
+      hdrErrors=buddy.hdrErrors
     return err()
 
   let elapsed = Moment.now() - start
@@ -88,7 +96,7 @@ proc headersFetchReversed*(
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
       nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nHdrRespErrors
+      hdrErrors=buddy.hdrErrors
     return err()
 
   let h: seq[Header] = resp.get.headers
@@ -96,7 +104,7 @@ proc headersFetchReversed*(
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
       nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nHdrRespErrors
+      hdrErrors=buddy.hdrErrors
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
@@ -109,8 +117,7 @@ proc headersFetchReversed*(
 
   trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
     ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
-    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-    nRespErrors=buddy.only.nHdrRespErrors
+    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
 
   return ok(h)
 

@@ -60,6 +60,10 @@ const
     ## exceeds this threshold for more than `fetchHeadersReqThresholdCount`
     ## times in a row, then this peer will be banned for a while.
 
+  fetchHeadersProcessErrThresholdCount* = 3
+    ## Similar to `fetchHeadersReqErrThresholdCount` but for the later part
+    ## when errors occur while block headers are queued and further processed.
+
   fetchHeadersReqMinResponsePC* = 10
     ## Some peers only returned one header at a time. If these peers sit on a
     ## farm, they might collectively slow down the download process. So this
@@ -95,6 +99,9 @@ const
   fetchBodiesReqErrThresholdZombie* = chronos.seconds(4)
   fetchBodiesReqErrThresholdCount* = 3
     ## Similar to `fetchHeadersReqThreshold*`
+
+  fetchBodiesProcessErrThresholdCount* = 3
+    ## Similar to `fetchHeadersProcessErrThresholdCount`.
 
   fetchBodiesReqMinResponsePC* = 10
     ## Similar to `fetchHeadersReqMinResponsePC`
