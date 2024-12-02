@@ -344,18 +344,11 @@ func calculateNewBase(c: ForkedChainRef,
   if target <= c.baseHeader.number + c.baseDistance:
     return BaseDesc(hash: c.baseHash, header: c.baseHeader)
 
-  # Verify that `target` does not fall outside the `head` arc. It is
+  # Verify that `target` does not fall outside the `head` segment. It is
   # assumed that `finalized` is within the `head` arc.
-  if target < finalized:
-    block verifyTarget:
-      # Find cursor realive to the `head` argument
-      for ch in c.cursorHeads:
-        if ch.hash == head.cursor.hash:
-          if ch.forkJunction <= target:
-            break verifyTarget
-          break
-      # Noting to do here
-      return BaseDesc(hash: c.baseHash, header: c.baseHeader)
+  if target < head.cursor.forkJunction:
+    # Noting to do here
+    return BaseDesc(hash: c.baseHash, header: c.baseHeader)
 
   var prevHash = head.pvHash
   while true:
