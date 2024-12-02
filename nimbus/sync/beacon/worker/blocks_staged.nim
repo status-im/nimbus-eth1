@@ -312,7 +312,7 @@ proc blocksStagedImport*(
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
           nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short
         continue
-      ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
+      ctx.pool.chain.importBlock(qItem.data.blocks[n], autoRebase=true).isOkOr:
         warn info & ": import block error", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
           nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short, `error`=error
@@ -330,30 +330,6 @@ proc blocksStagedImport*(
         # Shutdown?
         maxImport = ctx.chain.latestNumber()
         break importLoop
-
-      # Occasionally mark the chain finalized
-      if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
-        let
-          nthHash = qItem.data.getNthHash(n)
-          finHash = if nBn < ctx.layout.final: nthHash
-                    else: ctx.layout.finalHash
-
-        doAssert nBn == ctx.chain.latestNumber()
-        ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
-          warn info & ": fork choice error", n, iv,
-            B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-            F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
-            finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
-          # Restore what is left over below
-          maxImport = ctx.chain.latestNumber()
-          break importLoop
-
-        # Allow pseudo/async thread switch.
-        try: await sleepAsync asyncThreadSwitchTimeSlot
-        except CancelledError: discard
-        if not ctx.daemon:
-          maxImport = ctx.chain.latestNumber()
-          break importLoop
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:
