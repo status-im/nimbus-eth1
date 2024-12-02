@@ -271,10 +271,10 @@ func updateBase(c: ForkedChainRef,
   c.baseHeader = newBaseHeader
   c.baseHash = newBaseHash
 
-func findCanonicalHead(c: ForkedChainRef,
-                       hash: Hash32): Result[PivotArc, string] =
+func findCursorArc(c: ForkedChainRef, hash: Hash32): Result[PivotArc, string] =
   ## Find the `cursor` arc that contains the block relative to the
   ## argument `hash`.
+  ##
   if hash == c.baseHash:
     # The cursorHash here should not be used for next step
     # because it not point to any active chain
@@ -302,21 +302,26 @@ func findCanonicalHead(c: ForkedChainRef,
 
   err("Block hash is not part of any active chain")
 
-func canonicalChain(c: ForkedChainRef,
-                    hash: Hash32,
-                    headHash: Hash32): Result[Header, string] =
-  if hash == c.baseHash:
+func findHeader(
+    c: ForkedChainRef;
+    itHash: Hash32;
+    headHash: Hash32;
+      ): Result[Header, string] =
+  ## Find header for argument `itHash` on argument `headHash` ancestor chain.
+  if itHash == c.baseHash:
     return ok(c.baseHeader)
 
-  shouldNotKeyError "canonicalChain":
-    var prevHash = headHash
-    while prevHash != c.baseHash:
-      var header = c.blocks[prevHash].blk.header
-      if prevHash == hash:
-        return ok(header)
-      prevHash = header.parentHash
+  # Find `pvHash` on the ancestor lineage of `headHash`
+  var prevHash = headHash
+  while true:
+    c.blocks.withValue(prevHash, val):
+      if prevHash == itHash:
+        return ok(val.blk.header)
+      prevHash = val.blk.header.parentHash
+      continue
+    break
 
-  err("Block hash not in canonical chain")
+  err("Block not in argument head ancestor lineage")
 
 func calculateNewBase(c: ForkedChainRef,
                finalized: BlockNumber,
@@ -361,7 +366,9 @@ func calculateNewBase(c: ForkedChainRef,
 
   doAssert(false, "Unreachable code, finalized block outside cursor arc")
 
-func trimCanonicalChain(c: ForkedChainRef, pvarc: PivotArc) =
+func trimCursorArc(c: ForkedChainRef, pvarc: PivotArc) =
+  ## Curb argument `pvarc.cursor` head so that it ends up at `pvarc.pv`.
+  ##
   # Maybe the current active chain is longer than canonical chain
   shouldNotKeyError "trimCanonicalChain":
     var prevHash = pvarc.cursor.hash
@@ -402,7 +409,7 @@ proc updateHeadIfNecessary(c: ForkedChainRef, pvarc: PivotArc) =
     c.stagingTx = c.db.ctx.newTransaction()
     c.replaySegment(pvarc.pvHash)
 
-  c.trimCanonicalChain(pvarc)
+  c.trimCursorArc(pvarc)
   if c.cursorHash != pvarc.pvHash:
     c.cursorHeader = pvarc.pvHeader
     c.cursorHash = pvarc.pvHash
@@ -518,7 +525,7 @@ proc forkChoice*(c: ForkedChainRef,
     return ok()
 
   # Find the unique cursor arc where `headHash` is a member of.
-  let pvarc = ?c.findCanonicalHead(headHash)
+  let pvarc = ?c.findCursorArc(headHash)
 
   if finalizedHash == static(default(Hash32)):
     # skip newBase calculation and skip chain finalization
@@ -526,9 +533,9 @@ proc forkChoice*(c: ForkedChainRef,
     c.updateHeadIfNecessary(pvarc)
     return ok()
 
-  # Finalized block must be part of canonical chain
-  let finalizedHeader = ?c.canonicalChain(finalizedHash, pvarc.pvHash)
-
+  # Finalized block must be parent or on the new canonical chain which is
+  # represented by `pvarc`.
+  let finalizedHeader = ?c.findHeader(finalizedHash, pvarc.pvHash)
 
   let newBase = c.calculateNewBase(finalizedHeader.number, pvarc)
 
@@ -593,7 +600,7 @@ proc forkChoice*(c: ForkedChainRef,
   c.setHead(pvarc)
 
   # Move cursor to current head
-  c.trimCanonicalChain(pvarc)
+  c.trimCursorArc(pvarc)
   if c.cursorHash != pvarc.pvHash:
     c.cursorHeader = pvarc.pvHeader
     c.cursorHash = pvarc.pvHash
