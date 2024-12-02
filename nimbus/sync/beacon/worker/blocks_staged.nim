@@ -104,7 +104,11 @@ proc fetchAndCheck(
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
 
-  return offset < blk.blocks.len.uint64
+  if offset < blk.blocks.len.uint64:
+    return true
+
+  buddy.only.nBdyProcErrors.inc
+  return false
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -195,13 +199,11 @@ proc blocksStagedCollect*(
 
     # Fetch and extend staging record
     if not await buddy.fetchAndCheck(ivReq, blk, info):
+      haveError = true
 
       # Throw away first time block fetch data. Keep other data for a
       # partially assembled list.
       if nBlkBlocks == 0:
-        buddy.only.nBdyProcErrors.inc
-        haveError = true
-
         if ((0 < buddy.only.nBdyRespErrors or
              0 < buddy.only.nBdyProcErrors) and buddy.ctrl.stopped) or
            fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors or

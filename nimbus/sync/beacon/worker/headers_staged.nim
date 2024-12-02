@@ -44,6 +44,7 @@ proc fetchAndCheck(
   # While assembling a `LinkedHChainRef`, verify that the `revHeaders` list
   # was sound, i.e. contiguous, linked, etc.
   if not revHeaders.extendLinkedHChain(buddy, ivReq.maxPt, lhc):
+    buddy.only.nHdrProcErrors.inc
     return false
 
   return true
@@ -150,13 +151,11 @@ proc headersStagedCollect*(
 
     # Fetch and extend chain record
     if not await buddy.fetchAndCheck(ivReq, lhc, info):
+      haveError = true
 
       # Throw away opportunistic data (or first time header fetch.) Keep
       # other data for a partially assembled list.
       if isOpportunistic or nLhcHeaders == 0:
-        buddy.only.nHdrProcErrors.inc
-        haveError = true
-
         if ((0 < buddy.only.nHdrRespErrors or
              0 < buddy.only.nHdrProcErrors) and buddy.ctrl.stopped) or
            fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors or
