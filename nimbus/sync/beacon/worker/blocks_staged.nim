@@ -109,6 +109,9 @@ proc fetchAndCheck(
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
 
+      # Remove stashed header
+      ctx.dbHeaderUnstash blk.blocks[offset + n].header.number
+
   if offset < blk.blocks.len.uint64:
     return true
 
@@ -368,12 +371,9 @@ proc blocksStagedImport*(
   if maxImport < iv.maxPt:
     ctx.blocksUnprocAppend(maxImport+1, iv.maxPt)
 
-  # Remove stashed headers for imported blocks
-  for bn in iv.minPt .. maxImport:
-    ctx.dbHeaderUnstash bn
-
   info "Import done", iv, nBlocks, base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, target=ctx.layout.final.bnStr
+
   return true
 
 
