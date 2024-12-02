@@ -18,44 +18,14 @@ import
   ../../evm/types,
   ../../evm/state,
   ../validate,
-  ../executor/process_block
+  ../executor/process_block,
+  ./forked_chain/chain_desc
 
 export
+  BlockDesc,
+  ForkedChainRef,
   common,
   core_db
-
-type
-  CursorDesc = object
-    forkJunction: BlockNumber
-    hash: Hash32
-
-  BlockDesc* = object
-    blk*: Block
-    receipts*: seq[Receipt]
-
-  BaseDesc = object
-    hash: Hash32
-    header: Header
-
-  CanonicalDesc = object
-    ## Designate some `header` entry on a `CursorDesc` sub-chain named
-    ## `cursorDesc` identified by `cursorHash == cursorDesc.hash`.
-    cursorHash: Hash32
-    header: Header
-
-  ForkedChainRef* = ref object
-    stagingTx: CoreDbTxRef
-    db: CoreDbRef
-    com: CommonRef
-    blocks: Table[Hash32, BlockDesc]
-    txRecords: Table[Hash32, (Hash32, uint64)]
-    baseHash: Hash32
-    baseHeader: Header
-    cursorHash: Hash32
-    cursorHeader: Header
-    cursorHeads: seq[CursorDesc]
-    extraValidation: bool
-    baseDistance: uint64
 
 const
   BaseDistance = 128
@@ -487,8 +457,7 @@ proc init*(
     baseHash:        baseHash,
     cursorHeader:    baseHeader,
     extraValidation: extraValidation,
-    baseDistance:    baseDistance,
-    txRecords:       initTable[Hash32, (Hash32, uint64)]())
+    baseDistance:    baseDistance)
 
 proc newForkedChain*(com: CommonRef,
                      baseHeader: Header,
@@ -506,9 +475,7 @@ proc newForkedChain*(com: CommonRef,
     baseHash    : baseHash,
     cursorHeader: baseHeader,
     extraValidation: extraValidation,
-    baseDistance: baseDistance,
-    txRecords: initTable[Hash32, (Hash32, uint64)]()
-  )
+    baseDistance: baseDistance)
 
   # update global syncStart
   com.syncStart = baseHeader.number
